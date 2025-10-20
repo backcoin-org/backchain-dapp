@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-g">
+    <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Backchain | Dashboard</title>
 
@@ -45,7 +45,8 @@
         ::-webkit-scrollbar-thumb:hover { background: var(--bg-card); }
 
         .tab-btn {
-            padding: 0.75rem 1.5rem; font-size: 1rem; font-weight: 600; color: var(--text-secondary); border-bottom: 2px solid transparent; transition: color 0.2s, border-color 0.2s; cursor: pointer; background: none; border-top: none; border-left: none; border-right: none;
+            /* Removido o padding lateral para melhorar o ajuste em mobile */
+            padding: 0.75rem 1rem; font-size: 1rem; font-weight: 600; color: var(--text-secondary); border-bottom: 2px solid transparent; transition: color 0.2s, border-color 0.2s; cursor: pointer; background: none; border-top: none; border-left: none; border-right: none;
         }
         .tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); }
         .tab-content { display: none; }
@@ -277,29 +278,47 @@
                         <div class="grid grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 mb-8">
                             <div class="bg-sidebar border border-border-color rounded-xl p-4 flex items-center gap-4">
                                 <i class="fa-solid fa-coins text-2xl text-cyan-400 w-8 text-center"></i>
-                                <div><p class="text-zinc-400 text-sm">Total Supply</p><p id="statTotalSupply" class="text-base sm:text-xl font-bold mt-1 whitespace-nowrap overflow-hidden text-ellipsis">--</p></div>
+                                <div class="min-w-0">
+                                    <p class="text-zinc-400 text-sm">Total Supply</p>
+                                    <p id="statTotalSupply" class="text-base sm:text-xl font-bold mt-1 truncate">--</p>
+                                </div>
                             </div>
 
                             <div class="bg-sidebar border border-border-color rounded-xl p-4 flex items-center gap-4">
                                 <i class="fa-solid fa-coins text-2xl text-amber-400 w-8 text-center"></i>
-                                <div><p class="text-zinc-400 text-sm">My $BKC Balance</p><p id="statUserBalance" class="text-base sm:text-xl font-bold mt-1 whitespace-nowrap overflow-hidden text-ellipsis">--</p></div>
+                                <div class="min-w-0">
+                                    <p class="text-zinc-400 text-sm">$BKC</p>
+                                    <p id="statUserBalance" class="text-base sm:text-xl font-bold mt-1 truncate">--</p>
+                                </div>
                             </div>
 
                             <div class="bg-sidebar border border-border-color rounded-xl p-4 flex items-center gap-4">
                                 <i class="fa-solid fa-users text-2xl text-green-400 w-8 text-center"></i>
-                                <div><p class="text-zinc-400 text-sm">Validators</p><p id="statValidators" class="text-base sm:text-xl font-bold mt-1 whitespace-nowrap overflow-hidden text-ellipsis">--</p></div>
+                                <div class="min-w-0">
+                                    <p class="text-zinc-400 text-sm">Validators</p>
+                                    <p id="statValidators" class="text-base sm:text-xl font-bold mt-1 truncate">--</p>
+                                </div>
                             </div>
                             <div class="bg-sidebar border border-border-color rounded-xl p-4 flex items-center gap-4">
                                 <i class="fa-solid fa-shield-halved text-2xl text-purple-400 w-8 text-center"></i>
-                                <div><p class="text-zinc-400 text-sm">Network pStake</p><p id="statTotalPStake" class="text-base sm:text-xl font-bold mt-1 whitespace-nowrap overflow-hidden text-ellipsis">--</p></div>
+                                <div class="min-w-0">
+                                    <p class="text-zinc-400 text-sm">Net pStake</p>
+                                    <p id="statTotalPStake" class="text-base sm:text-xl font-bold mt-1 truncate">--</p>
+                                </div>
                             </div>
                             <div class="bg-sidebar border border-border-color rounded-xl p-4 flex items-center gap-4">
                                 <i class="fa-solid fa-vault text-2xl text-cyan-400 w-8 text-center"></i>
-                                <div><p class="text-zinc-400 text-sm">Total Locked %</p><p id="statLockedPercentage" class="text-base sm:text-xl font-bold mt-1 whitespace-nowrap overflow-hidden text-ellipsis">--</p></div>
+                                <div class="min-w-0">
+                                    <p class="text-zinc-400 text-sm">Locked %</p>
+                                    <p id="statLockedPercentage" class="text-base sm:text-xl font-bold mt-1 truncate">--</p>
+                                </div>
                             </div>
                             <div class="bg-sidebar border border-border-color rounded-xl p-4 flex items-center gap-4">
                                 <i class="fa-solid fa-fire text-2xl text-amber-400 w-8 text-center"></i>
-                                <div><p class="text-zinc-400 text-sm">Scarcity Rate</p><p id="statScarcity" class="text-base sm:text-xl font-bold mt-1 whitespace-nowrap overflow-hidden text-ellipsis">--</p></div>
+                                <div class="min-w-0">
+                                    <p class="text-zinc-400 text-sm">Scarcity Rate</p>
+                                    <p id="statScarcity" class="text-base sm:text-xl font-bold mt-1 truncate">--</p>
+                                </div>
                             </div>
                         </div>
 
@@ -310,7 +329,7 @@
 
                                     <div id="user-activity-container">
                                         <div class="border-b border-border-color mb-5">
-                                            <nav id="user-activity-tabs" class="-mb-px flex gap-6">
+                                            <nav id="user-activity-tabs" class="-mb-px flex gap-6 overflow-x-auto whitespace-nowrap">
                                                 <button class="tab-btn active" data-target="tab-overview">Overview</button>
                                                 <button class="tab-btn" data-target="tab-delegations">Delegations</button>
                                                 <button class="tab-btn" data-target="tab-certificates">Certificates</button>
@@ -432,6 +451,7 @@
 
                     <section id="faucet" class="hidden">
                         </section>
+
 
                     <section id="about" class="hidden"></section>
                     <section id="admin" class="hidden"></section>

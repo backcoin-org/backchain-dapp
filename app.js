@@ -137,16 +137,16 @@ function updateUIState() {
         DOMElements.userInfo?.classList.remove('hidden');
         DOMElements.userInfo?.classList.add('flex');
         
-        // --- CORREÇÃO AQUI ---
-        // Esconde os elementos duplicados, mantendo o botão de desconectar
+        // --- CORREÇÃO DE DUPLICAÇÃO DE ENDEREÇO ---
         if (DOMElements.walletAddressEl) DOMElements.walletAddressEl.classList.add('hidden'); 
         if (DOMElements.userBalanceEl) DOMElements.userBalanceEl.classList.add('hidden');
-        // --- FIM DA CORREÇÃO ---
+        // ------------------------------------------
 
         const balanceNum = formatBigNumber(State.currentUserBalance);
-        const balanceString = `${balanceNum.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} $BKC`;
+        // AJUSTE: Remove $BKC do valor para a caixa de estatísticas
+        const balanceString = `${balanceNum.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
-        // (Manter a lógica do balance do dashboard)
+        if (DOMElements.userBalanceEl) DOMElements.userBalanceEl.textContent = balanceString;
         if (statUserBalanceEl) statUserBalanceEl.textContent = balanceString;
 
         // Ensure Earn tabs elements exist before accessing style
@@ -158,7 +158,7 @@ function updateUIState() {
         } else if (adminLinkContainer) {
             adminLinkContainer.style.display = 'none';
         }
-        // Esta função agora controla o único indicador (o verde)
+        // Exibe o endereço no único indicador verde
         updateConnectionStatus('connected', formatAddress(State.userAddress));
         
     } else {
@@ -168,7 +168,6 @@ function updateUIState() {
         DOMElements.userInfo?.classList.remove('flex');
 
         // --- GARANTIA DE RESET ---
-        // Garante que eles reapareçam se a lógica mudar
         if (DOMElements.walletAddressEl) DOMElements.walletAddressEl.classList.remove('hidden');
         if (DOMElements.userBalanceEl) DOMElements.userBalanceEl.classList.remove('hidden');
         // --- FIM DA GARANTIA ---
@@ -200,34 +199,19 @@ function updateUIState() {
 
 // --- ATUALIZADO: Handler de Mudança do Web3Modal ---
 
-/**
- * Esta função é o *único* ponto de entrada para todas as atualizações de estado da carteira.
- * Ela é chamada pelo wallet.js sempre que o Web3Modal relata uma mudança.
- * @param {object} newState - O novo estado vindo do Web3Modal
- */
 async function onWalletStateChange(newState) {
     console.log("onWalletStateChange:", newState);
     
-    // newState é apenas um sinal. O 'State' (global) já foi limpo/preenchido pelo wallet.js
-    
     if (!newState.isConnected) {
-        // O estado já foi limpo em wallet.js.
-        // Apenas mostre o toast (se relevante) e ATUALIZE A UI.
-        
-        // 'wasConnected' é o flag que definimos em wallet.js
         if (newState.wasConnected) { 
             showToast("Wallet disconnected.", "info");
         }
-        updateUIState(); // Isso irá renderizar o estado desconectado
+        updateUIState();
     } else {
-        // O estado já foi preenchido em wallet.js.
-        // Apenas mostre o toast (se relevante) e ATUALIZE A UI.
-        
-        // 'isNewConnection' é o flag que definimos
         if (newState.isNewConnection) { 
             showToast("Wallet connected successfully!", "success");
         }
-        updateUIState(); // Isso irá renderizar o estado conectado
+        updateUIState();
     }
 }
 
@@ -259,8 +243,6 @@ function setupGlobalListeners() {
     });
 
     DOMElements.disconnectButton?.addEventListener('click', () => {
-        // CORRETO: Apenas pede para desconectar.
-        // O subscription (wallet.js) e o onWalletStateChange (aqui) farão o resto.
         disconnectWallet();
     });
 

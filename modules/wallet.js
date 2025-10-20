@@ -44,6 +44,13 @@ const ethersConfig = defaultConfig({
     defaultChainId: Number(sepoliaChainId)
 });
 
+// NOVO: Define os Wallets em destaque
+const featuredWallets = [
+    { name: 'MetaMask', id: 'metamask' },
+    { name: 'Binance Wallet', id: 'binance' },
+    { name: 'WalletConnect', id: 'walletConnect' } // Garante que o WC também esteja lá
+];
+
 // AVISO: Não exporte 'web3modal' diretamente se o app.js for importá-lo,
 // pois o app.js pode carregar antes desta linha.
 // A função disconnectWallet() é o wrapper seguro.
@@ -54,18 +61,23 @@ const web3modal = createWeb3Modal({
     enableAnalytics: false,
     themeMode: 'dark',
     themeVariables: {
-        '--w3m-accent': '#f59e0b', // --accent
+        '--w3m-accent': '#f59e0b', // Cor de destaque
         '--w3m-color-mix': '#3f3f46', // --bg-card
         '--w3m-color-mix-strength': 20,
         '--w3m-font-family': 'Inter, sans-serif',
         '--w3m-border-radius-master': '0.375rem', // rounded-md
         '--w3m-z-index': 100 // Garante que fique acima de outros elementos
-    }
+    },
+    // Adiciona o destaque de carteiras para o modal de seleção
+    featuredWalletIds: featuredWallets.map(w => w.id),
+    // Adiciona as carteiras para o modal mobile (MetaMask e Binance)
+    mobileWallets: [
+        'metamask',
+        'binance'
+    ]
 });
 
 // --- Funções Auxiliares Internas ---
-
-// REMOVIDO: updateConnectionStatusUI (Agora é 100% responsabilidade do app.js)
 
 function instantiateContracts(signerOrProvider) {
     try {
@@ -106,14 +118,12 @@ async function setupSignerAndLoadData(provider, address) {
         instantiateContracts(State.signer);
         await loadUserData();
         State.isConnected = true;
-        // REMOVIDO: updateConnectionStatusUI
         return true;
     } catch (error) {
          console.error("Error during setupSignerAndLoadData:", error);
          if (error.code === 'ACTION_REJECTED') { showToast("Operation rejected by user.", "info"); }
          else if (error.message.includes("Firebase")) { showToast("Firebase authentication failed.", "error"); }
          else { showToast(`Connection failed: ${error.message || 'Unknown error'}`, "error"); }
-         // Não chama disconnectWallet() para evitar loop. Apenas retorna false.
          return false;
     }
 }
@@ -138,8 +148,6 @@ export async function initPublicProvider() {
  * @param {function} callback - A função em app.js que lidará com as mudanças.
  */
 export function subscribeToWalletChanges(callback) {
-    // REMOVIDO: updateConnectionStatusUI('connecting', 'Initializing...');
-    
     let wasPreviouslyConnected = web3modal.getIsConnected(); // Checa estado inicial
 
     web3modal.subscribeProvider(async ({ provider, address, chainId, isConnected }) => {
@@ -157,7 +165,12 @@ export function subscribeToWalletChanges(callback) {
             const success = await setupSignerAndLoadData(ethersProvider, address);
             
             if (success) {
-                // Passa o novo estado para o app.js
+                // --- AJUSTE DE RECONEXÃO: PEQUENO DELAY APÓS O LOADUserData ---
+                // Isso garante que a UI do Dashboard tenha tempo de carregar os saldos e o pStake
+                // antes que o app.js renderize. Essencial para reconexão em F5.
+                await new Promise(resolve => setTimeout(resolve, 500)); // Espera 500ms
+                // -------------------------------------------------------------
+                
                 callback({ 
                     isConnected: true, 
                     address, 
@@ -168,17 +181,15 @@ export function subscribeToWalletChanges(callback) {
             } else {
                 // Falha no setup (ex: Firebase)
                 await web3modal.disconnect();
-                // O evento de desconexão será disparado
             }
 
         } else {
-            // --- CORREÇÃO ESTÁ AQUI ---
-            // Desconectado. Esta é a fonte da verdade.
+            // Desconectado.
             console.log("Web3Modal reports disconnection. Clearing app state.");
             
-            const wasConnected = State.isConnected; // Verifica se o app *achava* que estava conectado
+            const wasConnected = State.isConnected;
 
-            // Limpa o estado do App AQUI e EM NENHUM OUTRO LUGAR
+            // Limpa o estado do App
             State.provider = null; State.signer = null; State.userAddress = null;
             State.isConnected = false;
             State.currentUserBalance = 0n;
@@ -188,15 +199,13 @@ export function subscribeToWalletChanges(callback) {
             State.myBoosters = [];
             State.userTotalPStake = 0n;
         
-            // Re-instancia contratos com o provider público (somente leitura)
             if(State.publicProvider) {
                 instantiateContracts(State.publicProvider);
             }
             
-            // Chama o callback do app.js
             callback({ 
                 isConnected: false,
-                wasConnected: wasConnected // Sinaliza que uma desconexão ocorreu
+                wasConnected: wasConnected
             });
             wasPreviouslyConnected = false;
         }
@@ -212,7 +221,6 @@ export function openConnectModal() {
 
 /**
  * Pede ao Web3Modal para desconectar.
- * O subscription (acima) vai lidar com a limpeza do estado.
  */
 export async function disconnectWallet() {
     console.log("Telling Web3Modal to disconnect...");
