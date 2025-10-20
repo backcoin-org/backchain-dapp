@@ -1,6 +1,6 @@
 // modules/wallet.js
 
-const ethers = window.ethers;
+const ethers = window.ethers; // Manter esta única declaração e uso.
 
 import { State } from '../state.js';
 import { DOMElements } from '../dom-elements.js';
@@ -11,7 +11,11 @@ import {
     rewardBoosterABI, nftBondingCurveABI, actionsManagerABI
 } from '../config.js';
 import { loadPublicData, loadUserData } from './data.js';
-import { formatBigNumber } from '../utils.js';
+import { formatBigNumber, formatAddress } from '../utils.js';
+// Importa o serviço de autenticação do Firebase
+import { signIn } from './firebase-auth-service.js';
+
+// --- Funções Auxiliares Internas ---
 
 function updateConnectionStatus(status, message) {
     const statuses = {
@@ -25,18 +29,52 @@ function updateConnectionStatus(status, message) {
 }
 
 function instantiateContracts(signerOrProvider) {
-    State.bkcTokenContract = new ethers.Contract(addresses.bkcToken, bkcTokenABI, signerOrProvider);
-    State.delegationManagerContract = new ethers.Contract(addresses.delegationManager, delegationManagerABI, signerOrProvider);
-    State.rewardManagerContract = new ethers.Contract(addresses.rewardManager, rewardManagerABI, signerOrProvider);
-    State.actionsManagerContract = new ethers.Contract(addresses.actionsManager, actionsManagerABI, signerOrProvider);
+    // Garante que os contratos só sejam instanciados se os endereços existirem, prevenindo erros do Ethers.
+    if (addresses.bkcToken)
+        State.bkcTokenContract = new ethers.Contract(addresses.bkcToken, bkcTokenABI, signerOrProvider);
     
-    if (ethers.isAddress(addresses.rewardBoosterNFT)) {
+    if (addresses.delegationManager)
+        State.delegationManagerContract = new ethers.Contract(addresses.delegationManager, delegationManagerABI, signerOrProvider);
+    
+    if (addresses.rewardManager)
+        State.rewardManagerContract = new ethers.Contract(addresses.rewardManager, rewardManagerABI, signerOrProvider);
+        
+    if (addresses.actionsManager)
+        State.actionsManagerContract = new ethers.Contract(addresses.actionsManager, actionsManagerABI, signerOrProvider);
+    
+    // Verificações adicionais para contratos opcionais/NFTs
+    if (addresses.rewardBoosterNFT) {
         State.rewardBoosterContract = new ethers.Contract(addresses.rewardBoosterNFT, rewardBoosterABI, signerOrProvider);
     }
-    if (ethers.isAddress(addresses.nftBondingCurve)) {
+    if (addresses.nftBondingCurve) {
         State.nftBondingCurveContract = new ethers.Contract(addresses.nftBondingCurve, nftBondingCurveABI, signerOrProvider);
     }
 }
+
+async function setupSignerAndLoadData() {
+    State.signer = await State.provider.getSigner();
+    State.userAddress = await State.signer.getAddress(); // Garante que o endereço é obtido
+    
+    // IMPORTANTE: Faz o login anônimo no Firebase e cria a sessão segura
+    try {
+        // Passa o endereço da carteira para o serviço Firebase
+        await signIn(State.userAddress); 
+    } catch (error) {
+        showToast("Falha na autenticação do Firebase.", "error");
+        console.error("Erro de Auth do Firebase:", error);
+        disconnectWallet(); 
+        return false;
+    }
+
+    instantiateContracts(State.signer);
+    await loadUserData();
+    State.isConnected = true;
+    updateConnectionStatus('connected', formatAddress(State.userAddress));
+    return true;
+}
+
+
+// --- Funções Exportadas ---
 
 export async function initPublicProvider() {
      try {
@@ -49,30 +87,30 @@ export async function initPublicProvider() {
     }
 }
 
-export async function connectWallet(routerCallback) {
+export async function checkInitialConnection() {
+    if (typeof window.ethereum === 'undefined') {
+        return false;
+    }
+    try {
+        State.provider = new ethers.BrowserProvider(window.ethereum);
+        const accounts = await State.provider.listAccounts();
+        if (accounts.length > 0) {
+            console.log("Existing connection found. Auto-connecting...");
+            return await setupSignerAndLoadData();
+        }
+        return false;
+    } catch (error) {
+        console.warn("Could not check initial connection:", error);
+        return false;
+    }
+}
+
+export async function connectWallet() {
     const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
 
     if (typeof window.ethereum === 'undefined') {
-        if (isMobile) {
-            // CORREÇÃO: Detecta o domínio atual automaticamente
-            const dappUrl = window.location.hostname;
-            const metamaskDeeplink = `https://metamask.app.link/dapp/${dappUrl}`;
-            
-            openModal(`
-                <div class="text-center">
-                    <i class="fa-solid fa-mobile-screen-button text-5xl text-amber-400 mb-4"></i>
-                    <h3 class="text-xl font-bold mb-2">Wallet Browser Required</h3>
-                    <p class="text-zinc-400 mb-6">To connect on mobile, please open this site directly within your wallet's built-in dApp browser.</p>
-                    <a href="${metamaskDeeplink}" class="block w-full bg-orange-500 hover:bg-orange-600 text-white font-bold py-3 px-4 rounded-md transition-colors">
-                        <i class="fa-solid fa-arrow-up-right-from-square mr-2"></i>Try Opening in MetaMask
-                    </a>
-                </div>
-            `);
-            return;
-        }
-        
-        showToast('MetaMask (or another wallet) is not installed.', 'error');
-        return;
+        openModal('Install MetaMask', 'Please install MetaMask or another Web3 wallet to connect.', 'Install MetaMask', 'https://metamask.io/download/');
+        return false;
     }
     
     DOMElements.connectButton.disabled = true;
@@ -81,42 +119,25 @@ export async function connectWallet(routerCallback) {
 
     try {
         State.provider = new ethers.BrowserProvider(window.ethereum);
+        await State.provider.send("eth_requestAccounts", []);
+        
         const network = await State.provider.getNetwork();
         if (network.chainId !== sepoliaChainId) {
             showToast('Please switch to the Sepolia network.', 'info');
             await window.ethereum.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: '0xaa36a7' }] });
         }
         
-        State.signer = await State.provider.getSigner();
-        State.userAddress = await State.signer.getAddress();
-        
-        instantiateContracts(State.signer);
-        
-        DOMElements.walletAddressEl.textContent = `${State.userAddress.substring(0, 6)}...${State.userAddress.substring(State.userAddress.length - 4)}`;
-        DOMElements.connectButton.classList.add('hidden');
-        DOMElements.userInfo.classList.remove('hidden');
-        DOMElements.userInfo.classList.add('flex');
-        
-        document.getElementById('pop-mining-tab').style.display = 'block';
-        document.getElementById('validator-section-tab').style.display = 'block';
-        
-        await loadUserData(); 
-        
-        if (DOMElements.userBalanceEl) {
-             const balanceNum = formatBigNumber(State.currentUserBalance);
-             DOMElements.userBalanceEl.textContent = `${balanceNum.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} $BKC`;
+        const success = await setupSignerAndLoadData();
+        if(success) {
+            showToast('Wallet connected successfully!', 'success');
         }
-        
-        updateConnectionStatus('connected', 'Connected');
-        State.isConnected = true;
-        showToast('Wallet connected successfully!', 'success');
-        
-        if (routerCallback) routerCallback();
+        return success;
 
     } catch (error) {
         console.error('Error connecting wallet:', error);
         showToast(`Error connecting: ${error.message || 'User rejected the connection.'}`, 'error');
         disconnectWallet();
+        return false;
     } finally {
         DOMElements.connectButton.disabled = false;
         DOMElements.connectButton.innerHTML = '<i class="fa-solid fa-wallet mr-2"></i>Connect Wallet';
@@ -130,17 +151,6 @@ export function disconnectWallet() {
     instantiateContracts(State.publicProvider);
     
     updateConnectionStatus('disconnected', 'Disconnected');
-    DOMElements.connectButton.classList.remove('hidden');
-    DOMElements.userInfo.classList.add('hidden');
-    DOMElements.userInfo.classList.remove('flex');
-    document.getElementById('pop-mining-tab').style.display = 'none';
-    document.getElementById('validator-section-tab').style.display = 'none';
-    
-    document.getElementById('userBalanceEl').textContent = '-- $BKC';
-    document.getElementById('statUserPStake').textContent = '--';
-    document.getElementById('statUserRewards').textContent = '--';
-    document.getElementById('dashboardClaimBtn').classList.add('opacity-0', 'btn-disabled');
-    document.getElementById('dashboardClaimBtn').disabled = true;
     
     showToast('Wallet disconnected.', 'info');
     

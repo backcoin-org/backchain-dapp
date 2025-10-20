@@ -59,10 +59,15 @@ export const delegationManagerABI = [
     "function unstake(uint256 _delegationIndex)", 
     "function forceUnstake(uint256 _delegationIndex)", 
     "function claimDelegatorReward()",
-    "function getMinValidatorStake() view returns (uint256)"
+    "function getMinValidatorStake() view returns (uint256)",
+
+    // Adicionando eventos para a busca de txHash (embora não usados no log atual, é uma boa prática)
+    "event Delegated(address indexed user, address indexed validator, uint256 delegationIndex, uint256 amount, uint256 feePaid)",
+    "event Unstaked(address indexed user, uint256 delegationIndex, uint256 amount, uint256 feePaid)"
 ];
 
 export const rewardManagerABI = [ 
+    // Funções
     "function balanceOf(address owner) view returns (uint256)", 
     "function vestingPositions(uint256) view returns (uint256 totalAmount, uint256 startTime)", 
     "function VESTING_DURATION() view returns (uint256)", 
@@ -71,7 +76,13 @@ export const rewardManagerABI = [
     "function INITIAL_PENALTY_BIPS() view returns (uint256)", 
     "function withdraw(uint256 _tokenId)", 
     "function claimMinerRewards()", 
-    "function createVestingCertificate(address _recipient, uint256 _grossAmount)" 
+    "function createVestingCertificate(address _recipient, uint256 _grossAmount)",
+    "function tokenOfOwnerByIndex(address owner, uint256 index) view returns (uint256)",
+    
+    // --- CORREÇÃO: Adicionando os eventos que faltavam ---
+    "event VestingCertificateCreated(uint256 indexed tokenId, address indexed recipient, uint256 netAmount)",
+    "event CertificateWithdrawn(uint256 indexed tokenId, address indexed owner, uint256 amountToOwner, uint256 penaltyAmount)",
+    "event MinerRewardClaimed(address indexed miner, uint256 amount)"
 ];
 
 export const rewardBoosterABI = [ 
@@ -89,7 +100,11 @@ export const nftBondingCurveABI = [
     "function getBuyPrice(uint256 _boostBips) view returns (uint256)", 
     "function getSellPrice(uint256 _boostBips) view returns (uint256)", 
     "function buyNFT(uint256 _boostBips, uint256 _tokenId)", 
-    "function sellNFT(uint256 _tokenId)" 
+    "function sellNFT(uint256 _tokenId)",
+    
+    // Adicionando eventos para a busca de txHash (embora não usados no log atual, é uma boa prática)
+    "event NFTBought(address indexed buyer, uint256 indexed boostBips, uint256 tokenId, uint256 price)",
+    "event NFTSold(address indexed seller, uint256 indexed boostBips, uint256 tokenId, uint256 payout, uint256 feePaid)"
 ];
 
 export const actionsManagerABI = [
@@ -100,3 +115,6 @@ export const actionsManagerABI = [
     "function participate(uint256 _actionId, uint256 _bkcAmount)",
     "function finalizeAction(uint256 _actionId)",
 ];
+
+// ABI da PublicSale (de presale.html)
+export const publicSaleABI = [{"inputs":[{"internalType":"address","name":"_nftContractAddress","type":"address"},{"internalType":"address","name":"_initialOwner","type":"address"},{"internalType":"address","name":"_treasury","type":"address"}],"stateMutability":"nonpayable","type":"constructor"},{"inputs":[],"name":"OwnableInvalidOwner","type":"error"},{"inputs":[{"internalType":"address","name":"account","type":"address"}],"name":"OwnableUnauthorizedAccount","type":"error"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"owner","type":"address"},{"indexed":true,"internalType":"uint256","name":"tierId","type":"uint256"},{"indexed":true,"internalType":"uint256","name":"tokenId","type":"uint256"}],"name":"NFTRescued","type":"event"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"buyer","type":"address"},{"indexed":true,"internalType":"uint256","name":"tierId","type":"uint256"},{"indexed":true,"internalType":"uint256","name":"tokenId","type":"uint256"},{"indexed":false,"internalType":"uint256","name":"price","type":"uint256"}],"name":"NFTSold","type":"event"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"previousOwner","type":"address"},{"indexed":true,"internalType":"address","name":"newOwner","type":"address"}],"name":"OwnershipTransferred","type":"event"},{"inputs":[{"internalType":"uint256","name":"_tierId","type":"uint256"}],"name":"buyNFT","outputs":[],"stateMutability":"payable","type":"function"},{"inputs":[{"internalType":"uint256","name":"_tierId","type":"uint256"},{"internalType":"uint256","name":"_quantity","type":"uint256"}],"name":"buyMultipleNFTs","outputs":[],"stateMutability":"payable","type":"function"},{"inputs":[],"name":"nftContract","outputs":[{"internalType":"contract IERC721","name":"","type":"address"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"address","name":"","type":"address"},{"internalType":"address","name":"","type":"address"},{"internalType":"uint256","name":"","type":"uint256"},{"internalType":"bytes","name":"","type":"bytes"}],"name":"onERC721Received","outputs":[{"internalType":"bytes4","name":"","type":"bytes4"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"owner","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"renounceOwnership","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"uint256","name":"_tierId","type":"uint256"},{"internalType":"uint256","name":"_tokenId","type":"uint256"}],"name":"rescueNFT","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"uint256","name":"_tierId","type":"uint256"},{"internalType":"uint256","name":"_priceInWei","type":"uint256"},{"internalType":"uint256[]","name":"_tokenIds","type":"uint256[]"}],"name":"setTier","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"uint256","name":"","type":"uint256"}],"name":"tiers","outputs":[{"internalType":"uint256","name":"priceInWei","type":"uint256"},{"internalType":"uint256","name":"nextTokenIndex","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"address","name":"newOwner","type":"address"}],"name":"transferOwnership","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[],"name":"withdrawFunds","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"uint256","name":"_tierId","type":"uint256"}],"name":"withdrawUnsoldNFTs","outputs":[],"stateMutability":"nonpayable","type":"function"}];

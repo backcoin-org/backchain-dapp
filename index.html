@@ -4,31 +4,39 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Backchain | Dashboard</title>
-    
+
     <link rel="icon" href="./assets/bkc_logo_3d.png" type="image/png">
-    
+
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" />
-    
-    <script defer src="https://cdn.jsdelivr.net/npm/ethers@6.4.0/dist/ethers.umd.min.js"></script>
-    
+
+    <script src="https://cdn.jsdelivr.net/npm/ethers@6.4.0/dist/ethers.umd.min.js"></script>
+
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+        /* Estilos anteriores omitidos para brevidade... */
+         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
         :root {
             --bg-main: #18181b; --bg-sidebar: #27272a; --bg-card: #3f3f46; --border-color: #52525b; --text-primary: #f4f4f5; --text-secondary: #a1a1aa; --accent: #f59e0b; --accent-hover: #d97706;
+
+            /* Variáveis da Presale mescladas */
+            --presale-bg-main: #0a0a0a;
+            --presale-bg-darker: #000000;
+            --presale-bg-card: #1a1a1a;
+            --presale-border-color: #2a2a2a;
         }
         body { font-family: 'Inter', sans-serif; background-color: var(--bg-main); color: var(--text-primary); }
         .sidebar-link.active { background-color: var(--accent); color: var(--bg-main); font-weight: 600; }
         .btn-disabled { background-color: #3f3f46 !important; color: #71717a !important; cursor: not-allowed !important; }
         .loader { border: 2px solid var(--border-color); border-radius: 50%; border-top: 2px solid var(--accent); width: 20px; height: 20px; animation: spin 1s linear infinite; }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-        
+
         .form-input {
             background-color: var(--bg-main); border: 1px solid var(--border-color); border-radius: 0.375rem; padding: 0.75rem 1rem; color: var(--text-primary); width: 100%; transition: border-color 0.2s, box-shadow 0.2s;
         }
         .form-input:focus {
             outline: none; border-color: var(--accent); box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.4);
         }
+        .form-input:disabled { background-color: #27272a; cursor: not-allowed; }
         .form-input[type="date"]::-webkit-calendar-picker-indicator { filter: invert(0.8); }
 
         ::-webkit-scrollbar { width: 8px; }
@@ -37,12 +45,19 @@
         ::-webkit-scrollbar-thumb:hover { background: var(--bg-card); }
 
         .tab-btn {
-            padding: 0.75rem 1.5rem; font-size: 1rem; font-weight: 600; color: var(--text-secondary); border-bottom: 2px solid transparent; transition: color 0.2s, border-color 0.2s;
+            padding: 0.75rem 1.5rem; font-size: 1rem; font-weight: 600; color: var(--text-secondary); border-bottom: 2px solid transparent; transition: color 0.2s, border-color 0.2s; cursor: pointer; background: none; border-top: none; border-left: none; border-right: none;
         }
         .tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); }
         .tab-content { display: none; }
         .tab-content.active { display: block; animation: fadeIn 0.5s; }
         @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+        .text-gradient {
+            background: linear-gradient(to right, #f59e0b, #facc15);
+            -webkit-background-clip: text;
+            background-clip: text; /* Propriedade padrão para compatibilidade */
+            -webkit-text-fill-color: transparent;
+        }
 
         .pagination-btn { height: 36px; width: 36px; display: inline-flex; align-items: center; justify-content: center; background-color: var(--bg-card); border-radius: 0.375rem; transition: background-color 0.2s; }
         .pagination-btn:hover { background-color: #52525b; }
@@ -57,6 +72,97 @@
             transform: scale(1.05);
             box-shadow: 0 0 15px rgba(245, 158, 11, 0.4);
         }
+
+        /* Estilos da Página Presale */
+        #presale {
+            background-color: var(--presale-bg-main);
+        }
+        #presale .loader {
+            border: 2px solid #fff; border-top: 2px solid var(--accent);
+            width: 16px; height: 16px; margin-right: 8px;
+        }
+        #presale .btn-primary {
+            background: linear-gradient(90deg, var(--accent), var(--accent-hover));
+            box-shadow: 0 0 15px rgba(245, 158, 11, 0.4);
+            transition: all 0.3s ease-in-out;
+            color: #1a1a1a; /* Texto escuro para botões primários da presale */
+        }
+        #presale .btn-primary:hover:not(:disabled) {
+            transform: translateY(-3px) scale(1.05);
+            box-shadow: 0 0 25px rgba(245, 158, 11, 0.6);
+        }
+        #presale .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+        #presale .presale-text-gradient {
+            background: linear-gradient(90deg, var(--accent-hover), var(--accent));
+            -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
+        }
+        #presale .fade-in-section { opacity: 0; transform: translateY(40px); transition: opacity 0.8s ease-out, transform 0.8s ease-out; }
+        #presale .fade-in-section.is-visible { opacity: 1; transform: translateY(0); }
+
+        #presale .nft-card {
+            background: var(--presale-bg-card);
+            backdrop-filter: blur(10px);
+            border: 1px solid var(--presale-border-color);
+            transition: transform 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease;
+        }
+        #presale .nft-card:hover {
+            transform: translateY(-10px);
+            border-color: var(--accent);
+            box-shadow: 0 20px 30px rgba(0,0,0,0.4);
+        }
+        #presale .nft-card-image { transition: transform 0.4s ease; }
+        #presale .nft-card:hover .nft-card-image { transform: scale(1.1); }
+
+        #presale .roadmap-item { position: relative; }
+        #presale .roadmap-item::before {
+            content: ''; position: absolute; left: -31px; top: 5px; width: 22px; height: 22px;
+            border-radius: 50%; background-color: var(--presale-bg-card);
+            border: 4px solid var(--presale-border-color); transition: background-color 0.3s, border-color 0.3s;
+        }
+        #presale .roadmap-item.is-visible::before { background-color: var(--accent); border-color: var(--accent-hover); }
+
+        #presale .quantity-selector { display: flex; align-items: center; justify-content: center; gap: 0.5rem; }
+        #presale .quantity-btn {
+            background-color: var(--presale-border-color); color: var(--text-primary);
+            width: 32px; height: 32px; border-radius: 50%;
+            font-size: 1.25rem; font-weight: bold; transition: background-color 0.2s;
+        }
+        #presale .quantity-btn:hover { background-color: var(--accent); color: var(--presale-bg-darker); }
+        #presale .quantity-input {
+            background-color: transparent; border: none; color: var(--text-primary); text-align: center;
+            width: 40px; font-size: 1.25rem; font-weight: bold;
+            -moz-appearance: textfield; appearance: textfield;
+        }
+        #presale .quantity-input::-webkit-outer-spin-button,
+        #presale .quantity-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+
+         /* Estilo para o botão de plataforma UGC */
+        .ugc-platform-btn {
+            background-color: var(--bg-card);
+            border: 1px solid var(--border-color);
+            padding: 1.5rem 1rem;
+            border-radius: 0.5rem;
+            text-align: center;
+            transition: all 0.2s ease-in-out;
+            cursor: pointer;
+        }
+        .ugc-platform-btn:hover {
+            background-color: var(--border-color);
+            transform: translateY(-3px);
+            box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+        }
+        .ugc-platform-btn i { font-size: 2rem; margin-bottom: 0.75rem; display: block; }
+        .ugc-platform-btn span { font-weight: 600; }
+
+        /* Estilo para posts flagged */
+        .flagged-submission-card {
+            background-color: var(--bg-main);
+            border: 1px dashed #e53e3e; /* Borda tracejada vermelha */
+            padding: 1rem;
+            border-radius: 0.5rem;
+            margin-bottom: 1rem;
+            opacity: 0.9;
+        }
     </style>
 </head>
 <body class="antialiased">
@@ -64,7 +170,7 @@
     <div id="toast-container" class="fixed bottom-4 right-4 z-[60] flex flex-col gap-2"></div>
 
     <div class="relative min-h-screen lg:flex">
-        <div id="sidebar-backdrop" class="fixed inset-0 bg-black/60 z-30 hidden lg:hidden"></div>
+        <div id="sidebar-backdrop" class="fixed inset-0 bg-black/90 z-30 hidden lg:hidden"></div>
 
         <aside id="sidebar" class="fixed top-0 left-0 z-40 w-64 h-full bg-sidebar p-4 flex flex-col transition-transform duration-300 ease-in-out -translate-x-full lg:translate-x-0">
             <div class="flex items-center gap-3 px-2 mb-8">
@@ -85,19 +191,44 @@
                     <a data-target="rewards" class="sidebar-link flex items-center gap-4 py-2.5 px-4 rounded-lg transition-colors text-zinc-400 hover:text-white hover:bg-zinc-700">
                         <i class="fa-solid fa-id-card-clip w-5 text-center"></i><span>My Rewards</span>
                     </a>
-                     <a data-target="actions" class="sidebar-link flex items-center gap-4 py-2.5 px-4 rounded-lg transition-colors text-zinc-400 hover:text-white hover:bg-zinc-700">
-                        <i class="fa-solid fa-dice w-5 text-center"></i><span>Decentralized Actions </span>
+                    <a data-target="actions" class="sidebar-link flex items-center gap-4 py-2.5 px-4 rounded-lg transition-colors text-zinc-400 hover:text-white hover:bg-zinc-700">
+                        <i class="fa-solid fa-dice w-5 text-center"></i><span>Decentralized Actions</span>
+                    </a>
+                    <a data-target="airdrop" class="sidebar-link flex items-center gap-4 py-2.5 px-4 rounded-lg transition-colors text-zinc-400 hover:text-white hover:bg-zinc-700">
+                        <i class="fa-solid fa-parachute-box w-5 text-center"></i><span>Airdrop</span>
+                    </a>
+                    <a data-target="dao" class="sidebar-link flex items-center gap-4 py-2.5 px-4 rounded-lg transition-colors text-zinc-400 hover:text-white hover:bg-zinc-700">
+                        <i class="fa-solid fa-landmark w-5 text-center"></i><span>DAO</span>
                     </a>
                 </div>
-                
+
+                <div id="admin-link-container" class="mt-4 pt-4 border-t border-zinc-700" style="display: none;">
+                    <a data-target="admin" id="admin-link" class="sidebar-link flex items-center gap-4 py-2.5 px-4 rounded-lg transition-colors text-red-400 hover:text-white hover:bg-red-500/50">
+                        <i class="fa-solid fa-user-shield w-5 text-center"></i><span>Admin Panel</span>
+                    </a>
+                </div>
+
                 <div class="mt-auto pt-4 border-t border-zinc-700 space-y-2">
-                    <a data-target="about" class="sidebar-link flex items-center gap-4 py-2.5 px-4 rounded-lg transition-colors text-zinc-400 hover:text-white hover:bg-zinc-700">
+                    <div class="px-4 pt-2 pb-4 text-center">
+                        <div class="flex items-center justify-center gap-6">
+                            <a href="https://x.com/backcoin" target="_blank" rel="noopener noreferrer" title="Follow on X" class="text-zinc-400 hover:text-white transition-colors text-xl">
+                                <i class="fa-brands fa-twitter"></i>
+                            </a>
+                            <a href="https://web.telegram.org/k/#@BackCoinorg" target="_blank" rel="noopener noreferrer" title="Join Telegram" class="text-zinc-400 hover:text-white transition-colors text-xl">
+                                <i class="fa-brands fa-telegram"></i>
+                            </a>
+                            <a href="https://www.youtube.com/@Backcoin" target="_blank" rel="noopener noreferrer" title="Subscribe on YouTube" class="text-zinc-400 hover:text-white transition-colors text-xl">
+                                <i class="fa-brands fa-youtube"></i>
+                            </a>
+                        </div>
+                    </div>
+                    <a data-target="about" class="sidebar-link flex items-center gap-4 py-2.5 px-4 rounded-lg transition-colors text-amber-400 hover:text-amber-300 hover:bg-zinc-700">
                         <i class="fa-solid fa-circle-info w-5 text-center"></i><span>About the Project</span>
                     </a>
                     <a href="#" id="shareProjectBtn" class="sidebar-link flex items-center gap-4 py-2.5 px-4 rounded-lg transition-colors text-zinc-400 hover:text-white hover:bg-zinc-700">
                         <i class="fa-solid fa-share-nodes w-5 text-center"></i><span>Share Project</span>
                     </a>
-                    <a href="./presale.html" target="_blank" rel="noopener noreferrer" class="sidebar-link flex items-center gap-4 py-2.5 px-4 rounded-lg transition-colors text-amber-400 hover:text-amber-300 hover:bg-zinc-700">
+                    <a data-target="presale" class="sidebar-link flex items-center gap-4 py-2.5 px-4 rounded-lg transition-colors text-amber-400 hover:text-amber-300 hover:bg-zinc-700">
                         <i class="fa-solid fa-tags w-5 text-center"></i><span>NFT Presale</span>
                     </a>
                 </div>
@@ -106,21 +237,31 @@
 
         <div class="lg:ml-64 flex-1 flex flex-col min-h-screen">
             <header class="sticky top-0 z-20 flex justify-between items-center p-4 bg-sidebar/80 backdrop-blur-sm border-b border-border-color">
-                <button id="menu-btn" class="lg:hidden text-xl text-zinc-400 hover:text-white h-10 w-10">
-                    <i class="fa-solid fa-bars"></i>
-                </button>
+                <div class="flex items-center gap-3">
+                    <button id="menu-btn" class="lg:hidden text-xl text-zinc-400 hover:text-white h-10 w-10">
+                        <i class="fa-solid fa-bars"></i>
+                    </button>
+                    <div class="flex items-center gap-2 lg:hidden">
+                        <img src="./assets/bkc_logo_3d.png" alt="Backchain Logo" class="h-8 w-auto rounded-full">
+                        <span class="text-xl font-bold text-amber-400">Backchain</span>
+                    </div>
+                </div>
+
                 <div id="connectionStatus" class="hidden sm:inline-flex items-center gap-2 py-1.5 px-3 rounded-full text-sm font-medium bg-red-500/20 text-red-400">
                     <i class="fa-solid fa-circle text-xs"></i>
                     <span>Disconnected</span>
                 </div>
+
                 <div>
                     <button id="connectButton" class="bg-amber-500 hover:bg-amber-600 text-zinc-900 font-bold py-2 px-4 rounded-md transition-colors">
                         <i class="fa-solid fa-wallet mr-2"></i>Connect Wallet
                     </button>
                     <div id="userInfo" class="hidden items-center gap-3">
-                         <span id="userBalanceEl" class="font-bold text-md text-amber-400">-- $BKC</span>
-                         <span id="walletAddressEl" class="font-mono bg-zinc-900/50 text-zinc-400 text-sm py-2 px-3 rounded-md"></span>
-                         <button id="disconnectButton" title="Disconnect" class="h-9 w-9 bg-zinc-700 hover:bg-red-500/80 text-zinc-400 hover:text-white rounded-md transition-colors">
+                         <span id="userBalanceEl" class="font-bold text-md text-amber-400 hidden">-- $BKC</span>
+
+                         <span id="walletAddressEl" class="font-mono bg-blue-500/20 text-blue-400 text-sm py-2 px-3 rounded-md"></span>
+
+                         <button id="disconnectButton" title="Disconnect" class="h-9 w-9 bg-red-600 hover:bg-red-700 text-white rounded-md transition-colors">
                             <i class="fa-solid fa-power-off"></i>
                          </button>
                      </div>
@@ -128,66 +269,100 @@
             </header>
             <main class="flex-1 overflow-y-auto bg-main p-4 sm:p-6 lg:p-8">
                 <div class="container mx-auto max-w-7xl">
-                    
+
                     <section id="dashboard">
-                        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 sm:gap-6 mb-8">
-                            <div class="bg-sidebar border border-border-color rounded-xl p-4 flex items-center gap-4 col-span-full lg:col-span-1">
-                                <i class="fa-solid fa-coins text-2xl text-cyan-400 w-8 text-center"></i> 
-                                <div><p class="text-zinc-400 text-sm">Total Supply</p><p id="statTotalSupply" class="text-xl font-bold mt-1">--</p></div>
+                        <div class="grid grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 mb-8">
+                            <div class="bg-sidebar border border-border-color rounded-xl p-4 flex items-center gap-4">
+                                <i class="fa-solid fa-coins text-2xl text-cyan-400 w-8 text-center"></i>
+                                <div><p class="text-zinc-400 text-sm">Total Supply</p><p id="statTotalSupply" class="text-base sm:text-xl font-bold mt-1 whitespace-nowrap overflow-hidden text-ellipsis">--</p></div>
                             </div>
+
+                            <div class="bg-sidebar border border-border-color rounded-xl p-4 flex items-center gap-4">
+                                <i class="fa-solid fa-coins text-2xl text-amber-400 w-8 text-center"></i>
+                                <div><p class="text-zinc-400 text-sm">My $BKC Balance</p><p id="statUserBalance" class="text-base sm:text-xl font-bold mt-1 whitespace-nowrap overflow-hidden text-ellipsis">--</p></div>
+                            </div>
+
                             <div class="bg-sidebar border border-border-color rounded-xl p-4 flex items-center gap-4">
                                 <i class="fa-solid fa-users text-2xl text-green-400 w-8 text-center"></i>
-                                <div><p class="text-zinc-400 text-sm">Validators</p><p id="statValidators" class="text-xl font-bold mt-1">--</p></div>
+                                <div><p class="text-zinc-400 text-sm">Validators</p><p id="statValidators" class="text-base sm:text-xl font-bold mt-1 whitespace-nowrap overflow-hidden text-ellipsis">--</p></div>
                             </div>
                             <div class="bg-sidebar border border-border-color rounded-xl p-4 flex items-center gap-4">
                                 <i class="fa-solid fa-shield-halved text-2xl text-purple-400 w-8 text-center"></i>
-                                <div><p class="text-zinc-400 text-sm">Network pStake</p><p id="statTotalPStake" class="text-xl font-bold mt-1">--</p></div>
+                                <div><p class="text-zinc-400 text-sm">Network pStake</p><p id="statTotalPStake" class="text-base sm:text-xl font-bold mt-1 whitespace-nowrap overflow-hidden text-ellipsis">--</p></div>
                             </div>
                             <div class="bg-sidebar border border-border-color rounded-xl p-4 flex items-center gap-4">
                                 <i class="fa-solid fa-vault text-2xl text-cyan-400 w-8 text-center"></i>
-                                <div><p class="text-zinc-400 text-sm">Total Locked %</p><p id="statLockedPercentage" class="text-xl font-bold mt-1">--</p></div>
+                                <div><p class="text-zinc-400 text-sm">Total Locked %</p><p id="statLockedPercentage" class="text-base sm:text-xl font-bold mt-1 whitespace-nowrap overflow-hidden text-ellipsis">--</p></div>
                             </div>
                             <div class="bg-sidebar border border-border-color rounded-xl p-4 flex items-center gap-4">
                                 <i class="fa-solid fa-fire text-2xl text-amber-400 w-8 text-center"></i>
-                                <div><p class="text-zinc-400 text-sm">Scarcity Rate</p><p id="statScarcity" class="text-xl font-bold mt-1">--</p></div>
+                                <div><p class="text-zinc-400 text-sm">Scarcity Rate</p><p id="statScarcity" class="text-base sm:text-xl font-bold mt-1 whitespace-nowrap overflow-hidden text-ellipsis">--</p></div>
                             </div>
                         </div>
-                        <div class="flex flex-col xl:flex-row gap-8">
-                            <div class="w-full xl:w-1/2 flex flex-col gap-8">
-                                <div class="bg-sidebar border border-border-color rounded-xl p-6 h-full flex flex-col">
+
+                        <div class="grid grid-cols-1 xl:grid-cols-2 gap-8">
+                            <div class="flex flex-col gap-8">
+                                <div class="bg-sidebar border border-border-color rounded-xl p-6 flex flex-col">
                                     <h2 class="text-xl font-bold mb-4">My Position</h2>
-                                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-5 mb-6">
-                                        <div class="bg-main border border-border-color rounded-xl p-5">
-                                            <p class="text-zinc-400 text-sm">Your Total pStake</p><p id="statUserPStake" class="text-3xl font-bold mt-1 text-purple-400">--</p>
+
+                                    <div id="user-activity-container">
+                                        <div class="border-b border-border-color mb-5">
+                                            <nav id="user-activity-tabs" class="-mb-px flex gap-6">
+                                                <button class="tab-btn active" data-target="tab-overview">Overview</button>
+                                                <button class="tab-btn" data-target="tab-delegations">Delegations</button>
+                                                <button class="tab-btn" data-target="tab-certificates">Certificates</button>
+                                            </nav>
                                         </div>
-                                        <div class="bg-main border border-border-color rounded-xl p-5">
-                                            <p class="text-zinc-400 text-sm">Claimable Rewards</p>
-                                            <div class="flex justify-between items-end mt-1">
-                                                <p id="statUserRewards" class="text-3xl font-bold text-amber-400">--</p>
-                                                <button id="dashboardClaimBtn" class="bg-amber-500 hover:bg-amber-600 text-zinc-900 font-bold py-1 px-3 rounded-md text-sm transition-opacity opacity-0 btn-disabled" disabled><i class="fa-solid fa-gift"></i> Claim</button>
+
+                                        <div id="user-activity-content">
+
+                                            <div id="tab-overview" class="tab-content active space-y-6">
+                                                <div class="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                                                    <div class="bg-main border border-border-color rounded-xl p-5">
+                                                        <p class="text-zinc-400 text-sm">Your Total pStake</p>
+                                                        <p id="statUserPStake" class="text-2xl sm:text-3xl font-bold mt-1 text-purple-400 whitespace-nowrap overflow-hidden text-ellipsis">--</p>
+                                                    </div>
+                                                    <div class="bg-main border border-border-color rounded-xl p-5 flex flex-col justify-between">
+                                                        <p class="text-zinc-400 text-sm">Claimable Rewards</p>
+                                                        <p id="statUserRewards" class="text-2xl sm:text-3xl font-bold text-amber-400 mt-1 whitespace-nowrap overflow-hidden text-ellipsis">--</p>
+                                                        <button id="dashboardClaimBtn" class="bg-amber-500 hover:bg-amber-600 text-zinc-900 font-bold py-2.5 px-3 rounded-md text-sm transition-opacity opacity-0 btn-disabled mt-3 w-full" disabled><i class="fa-solid fa-gift mr-1"></i> Claim</button>
+                                                    </div>
+                                                </div>
+
+                                                <div id="reward-efficiency-panel"></div>
+
+                                                <div class="mt-8 pt-6 border-t border-border-color">
+                                                    <h3 class="text-lg font-bold mb-4">Recent Activity</h3>
+                                                    <div id="activity-history-list-container">
+                                                        </div>
+                                                </div>
+                                                </div>
+
+                                            <div id="tab-delegations" class="tab-content hidden">
+                                                <h3 class="text-lg font-bold mb-3">Active Delegations</h3>
+                                                <div id="my-delegations-list" class="space-y-4"></div>
                                             </div>
-                                        </div>
-                                    </div>
-                                    <div id="reward-efficiency-panel" class="mb-6"></div>
-                                    <div id="my-certificates-dashboard" class="hidden mb-6">
-                                        <h3 class="text-lg font-bold mb-3">Recent Certificates</h3><div id="my-certificates-list" class="space-y-3"></div>
-                                    </div>
-                                    <div id="my-delegations-dashboard" class="hidden">
-                                        <h3 class="text-lg font-bold mb-3">Active Delegations</h3><div id="my-delegations-list" class="space-y-4"></div>
+
+                                            <div id="tab-certificates" class="tab-content hidden">
+                                                <h3 class="text-lg font-bold mb-3">My Certificates</h3>
+                                                <div id="my-certificates-list" class="space-y-3"></div>
+                                            </div>
+
+                                            </div>
                                     </div>
                                 </div>
-                                <div id="activity-history-dashboard" class="hidden">
-                                    <h3 class="text-lg font-bold mb-4">Recent Activity</h3><div id="activity-history-list-container"></div>
                                 </div>
-                            </div>
-                            <div id="top-validators-dashboard" class="w-full xl:w-1/2">
-                                <div class="bg-sidebar border border-border-color rounded-xl p-6 h-full">
+
+                            <div class="flex flex-col gap-8">
+                                <div id="top-validators-dashboard" class="bg-sidebar border border-border-color rounded-xl p-6">
                                     <div class="flex justify-between items-center mb-4">
-                                        <h3 class="text-xl font-bold">Network Validators</h3><p class="text-sm text-zinc-400">Sorted by lowest pStake</p>
+                                        <h3 class="text-xl font-bold">Network Validators</h3>
+                                        <p class="text-sm text-zinc-400">Sorted by highest pStake</p>
                                     </div>
                                     <div id="top-validators-list" class="space-y-3"></div>
                                 </div>
-                            </div>
+
+                                </div>
                         </div>
                     </section>
 
@@ -204,7 +379,7 @@
                         <div id="distribute-tab" class="tab-content"><div id="pop-mining-content" class="bg-sidebar border border-border-color rounded-xl max-w-3xl mx-auto overflow-hidden"></div></div>
                         <div id="validator-tab" class="tab-content"><div id="validator-content-wrapper" class="max-w-3xl mx-auto"></div></div>
                     </section>
-                    
+
                     <section id="store" class="hidden">
                         <h1 class="text-2xl md:text-3xl font-bold mb-6">Reward Booster Store</h1>
                         <p class="text-zinc-400 max-w-3xl mb-8">Increase your reward claim efficiency from a 50% base up to 100% by purchasing a Booster NFT. Prices are dynamic and increase as NFTs are sold.</p>
@@ -217,7 +392,7 @@
                             </div>
                         </div>
                     </section>
-                    
+
                     <section id="rewards" class="hidden">
                         <h1 class="text-2xl md:text-3xl font-bold mb-6">My Rewards & Certificates</h1>
                         <div id="claimable-rewards-panel" class="mb-8 p-6 bg-sidebar border border-border-color rounded-xl max-w-2xl mx-auto">
@@ -239,16 +414,33 @@
                          </div>
                          <div id="actions-list-container"></div>
                     </section>
+
+                    <section id="airdrop" class="hidden">
+                        <h1 class="text-3xl font-bold mb-8 text-white">Airdrop & Community Rewards</h1>
+                        <div id="airdrop-loading-placeholder"></div>
+                        <div id="airdrop-tabs-container"></div>
+                        <div id="airdrop-content-wrapper" class="pt-4">
+                            <div id="active-tab-content"></div>
+                        </div>
+                    </section>
                     
+                    <section id="dao" class="hidden">
+                        <!-- Conteúdo da DAO será renderizado aqui -->
+                    </section>
+
                     <section id="about" class="hidden"></section>
+                    <section id="admin" class="hidden"></section>
+
+                    <section id="presale" class="hidden" style="background-color: var(--presale-bg-main); margin: -1.5rem;"></section>
 
                 </div>
             </main>
         </div>
     </div>
-    
+
     <div id="modal-container"></div>
-    
+
     <script type="module" src="./app.js"></script>
 </body>
 </html>
+
