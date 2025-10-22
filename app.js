@@ -21,6 +21,7 @@ import { AdminPage } from './pages/AdminPage.js';
 import { PresalePage } from './pages/PresalePage.js';
 import { DaoPage } from './pages/DaoPage.js';
 import { FaucetPage } from './pages/FaucetPage.js';
+import { TokenomicsPage } from './pages/TokenomicsPage.js'; // <-- LINHA ADICIONADA
 
 
 const routes = {
@@ -35,6 +36,7 @@ const routes = {
     'presale': PresalePage,
     'dao': DaoPage,
     'faucet': FaucetPage,
+    'tokenomics': TokenomicsPage, // Registra a nova rota
 };
 let activePageId = 'dashboard';
 const ADMIN_WALLET = "0x03aC69873293cD6ddef7625AfC91E3Bd5434562a";

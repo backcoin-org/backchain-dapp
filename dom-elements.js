@@ -43,6 +43,7 @@ export const DOMElements = {
     dao: document.getElementById('dao'),         // Adicionado DAO
     about: document.getElementById('about'),     // Adicionado About
     admin: document.getElementById('admin'),     // Adicionado Admin
+    tokenomics: document.getElementById('tokenomics'), // <-- ADICIONADO AQUI
 
     // Dashboard Stats (Public)
     statTotalSupply: document.getElementById('statTotalSupply'),
