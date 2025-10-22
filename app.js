@@ -165,13 +165,13 @@ function updateUIState() {
     const divDesktopInfo = checkElement(DOMElements.desktopConnectedInfo, 'DOMElements.desktopConnectedInfo');
     const spanDesktopAddress = checkElement(DOMElements.desktopUserAddress, 'DOMElements.desktopUserAddress');
     const spanDesktopBalance = checkElement(DOMElements.desktopUserBalance, 'DOMElements.desktopUserBalance');
-    const btnBuyCryptoDesktop = checkElement(DOMElements.customBuyCryptoBtn, 'DOMElements.customBuyCryptoBtn');
+    // REMOVIDO: btnBuyCryptoDesktop
 
     // Elementos do Header (Mobile)
     const btnMobileConnect = checkElement(DOMElements.connectButtonMobile, 'DOMElements.connectButtonMobile');
     const spanMobileDisplay = checkElement(DOMElements.mobileAppDisplay, 'DOMElements.mobileAppDisplay'); // Nome ou Saldo
     const btnMobileSettings = checkElement(DOMElements.mobileSettingsButton, 'DOMElements.mobileSettingsButton'); // Engrenagem
-    const btnBuyCryptoMobile = checkElement(DOMElements.customBuyCryptoBtnMobile, 'DOMElements.customBuyCryptoBtnMobile');
+    // REMOVIDO: btnBuyCryptoMobile
 
     // Elemento de Saldo no Dashboard
     const statUserBalanceEl = document.getElementById('statUserBalance');
@@ -190,7 +190,7 @@ function updateUIState() {
         if(spanDesktopBalance) spanDesktopBalance.textContent = `${balanceString} $BKC`;
         // Clicar na info conectada abre o modal do Web3Modal (para desconectar, trocar conta, etc.)
         if(btnDesktopContainer) btnDesktopContainer.onclick = () => web3modal.open(); // Usa a instância global
-        btnBuyCryptoDesktop?.classList.remove('hidden'); // Mostra botão Buy Crypto
+        // REMOVIDO: btnBuyCryptoDesktop?.classList.remove('hidden');
 
         // Mobile Header
         btnMobileConnect?.classList.add('hidden');
@@ -201,7 +201,7 @@ function updateUIState() {
             spanMobileDisplay.classList.add('text-amber-400');
             spanMobileDisplay.classList.remove('text-white');
         }
-        btnBuyCryptoMobile?.classList.remove('hidden'); // Mostra botão Buy Crypto
+        // REMOVIDO: btnBuyCryptoMobile?.classList.remove('hidden');
 
         // Outros
         if (statUserBalanceEl) statUserBalanceEl.textContent = balanceString;
@@ -218,7 +218,7 @@ function updateUIState() {
         btnDesktopConnect?.classList.remove('hidden'); // Mostra botão Connect
         divDesktopInfo?.classList.add('hidden');
         if(btnDesktopContainer) btnDesktopContainer.onclick = () => openConnectModal(); // Botão container abre o modal para conectar
-        btnBuyCryptoDesktop?.classList.add('hidden'); // Esconde botão Buy Crypto
+        // REMOVIDO: btnBuyCryptoDesktop?.classList.add('hidden');
 
         // Mobile Header
         btnMobileConnect?.classList.remove('hidden'); // Mostra botão Connect
@@ -229,7 +229,7 @@ function updateUIState() {
             spanMobileDisplay.classList.add('text-amber-400');
             spanMobileDisplay.classList.remove('text-white');
         }
-        btnBuyCryptoMobile?.classList.add('hidden'); // Esconde botão Buy Crypto
+        // REMOVIDO: btnBuyCryptoMobile?.classList.add('hidden');
 
         // Outros
         if (statUserBalanceEl) statUserBalanceEl.textContent = '--';
@@ -327,9 +327,9 @@ function setupGlobalListeners() {
     checkElement(DOMElements.mobileSettingsButton, 'DOMElements.mobileSettingsButton')?.addEventListener('click', () => web3modal.open()); // Engrenagem abre o modal
 
     // --- Botões "Buy Crypto" ---
-    // A visibilidade é controlada por updateUIState. A ação abre o modal do W3M na aba Onramp.
-    checkElement(DOMElements.customBuyCryptoBtn, 'DOMElements.customBuyCryptoBtn')?.addEventListener('click', () => web3modal.open({ view: 'Onramp' }));
-    checkElement(DOMElements.customBuyCryptoBtnMobile, 'DOMElements.customBuyCryptoBtnMobile')?.addEventListener('click', () => web3modal.open({ view: 'Onramp' }));
+    // REMOVIDO
+    // checkElement(DOMElements.customBuyCryptoBtn, 'DOMElements.customBuyCryptoBtn')?.addEventListener('click', () => web3modal.open({ view: 'Onramp' }));
+    // checkElement(DOMElements.customBuyCryptoBtnMobile, 'DOMElements.customBuyCryptoBtnMobile')?.addEventListener('click', () => web3modal.open({ view: 'Onramp' }));
 
 
     // --- Fechar Modal ---
@@ -402,7 +402,7 @@ async function init() {
 
     // A primeira chamada `updateUIState` acontecerá quando `subscribeToWalletChanges`
     // receber o estado inicial do Web3Modal (conectado ou desconectado).
-    // Isso evita o "piscar" inicial do botão conectar.
+    // Isso evitará o "piscar" inicial do botão conectar.
 
     console.log("Application initialized. Waiting for wallet state...");
 }
