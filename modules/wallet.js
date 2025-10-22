@@ -75,7 +75,7 @@ const web3modal = createWeb3Modal({
     // Habilita a funcionalidade "Onramp" (Buy Crypto)
     // Isso fará com que o modal busque os provedores (Coinbase, MoonPay)
     // que você ativou no seu painel do WalletConnect Cloud.
-    enableOnramp: true
+    enableOnramp: false // <-- ALTERADO PARA false
     // --- *** FIM DA CORREÇÃO *** ---
 });
 

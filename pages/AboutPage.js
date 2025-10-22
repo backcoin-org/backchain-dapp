@@ -18,13 +18,24 @@ const renderAboutContent = () => {
             <section id="philosophy" class="mb-20">
                 <div class="bg-sidebar border border-border-color rounded-xl p-8 md:p-12">
                     <div class="grid grid-cols-1 md:grid-cols-3 gap-8 items-center">
-                        <div class="text-center"><i class="fa-solid fa-hand-fist text-9xl text-amber-400/10"></i></div>
+                        <div class="text-center"><i class="fa-solid fa-hand-fist text-9xl text-amber-400/20"></i></div>
                         <div class="md:col-span-2">
                             <h3 class="text-3xl font-bold text-gradient mb-4">The Fair Launch Philosophy</h3>
-                            <p class="text-zinc-400 mb-6">Backchain was founded on a simple principle: true decentralization. There is no central owner, no corporate entity, and **no reserved token supply for developers or early investors.**</p>
+                            
+                            <p class="text-zinc-400 mb-6">
+                                Backchain was born from the idea of a group of experts united by a central principle: true decentralization. Using their own resources, they initiated a project *for* the community. There is no central owner, no corporate entity, <strong>no reserved token supply, and no seed investors.</strong>
+                            </p>
+                            
                             <ul class="space-y-4">
                                 <li class="flex items-start"><i class="fa-solid fa-check-circle text-green-400 mt-1 mr-3"></i><div><strong class="text-white">NFT-Funded Ecosystem:</strong> The entire initial funding for liquidity, marketing, and development comes from one transparent source: the public sale of our utility NFTs. These aren't just collectibles; they are power assets that grant special abilities within the dApp and can be sold at any time in our native liquidity pool.</div></li>
-                                <li class="flex items-start"><i class="fa-solid fa-check-circle text-green-400 mt-1 mr-3"></i><div><strong class="text-white">Community First:</strong> To ensure maximum decentralization from day one, **35% of the initial token supply (TGE)** will be distributed for free to community members who help promote and build the rebellion.</div></li>
+                                <li class="flex items-start"><i class="fa-solid fa-check-circle text-green-400 mt-1 mr-3"></i><div><strong class="text-white">Community First:</strong> To ensure maximum decentralization from day one, <strong>35% of the initial token supply (TGE)</strong> will be distributed for free to community members who help promote and build the rebellion.</div></li>
+                                
+                                <li class="flex items-start">
+                                    <i class="fa-solid fa-landmark text-cyan-400 mt-1 mr-3"></i>
+                                    <div>
+                                        <strong class="text-white">Community-Led Future:</strong> The community will decide the direction and usability of the project. Backchain was built to be governed by its participants, ensuring it evolves to meet collective needs.
+                                    </div>
+                                </li>
                             </ul>
                         </div>
                     </div>
@@ -87,12 +98,12 @@ const renderAboutContent = () => {
                                     <li class="flex items-start"><i class="fa-solid fa-circle-check text-green-400 mt-1 mr-3"></i><div><strong class="text-white">Amplify with Time:</strong> The pStake calculation rewards long-term commitment. The longer you lock your tokens, the greater your share of the reward pool.</div></li>
                                 </ul>
                             </div>
-                            <div class="text-center"><i class="fa-solid fa-users text-9xl text-purple-400/10"></i></div>
+                            <div class="text-center"><i class="fa-solid fa-users text-9xl text-purple-400/20"></i></div>
                         </div>
                     </div>
                     <div class="bg-sidebar border border-border-color rounded-xl p-8 md:p-12">
                         <div class="grid grid-cols-1 md:grid-cols-3 gap-8 items-center">
-                            <div class="text-center md:order-2"><i class="fa-solid fa-user-shield text-9xl text-cyan-400/10"></i></div>
+                            <div class="text-center md:order-2"><i class="fa-solid fa-user-shield text-9xl text-cyan-400/20"></i></div>
                             <div class="md:col-span-2 md:order-1">
                                 <h3 class="text-3xl font-bold text-gradient mb-4">The Validator: The Guardian</h3>
                                 <p class="text-zinc-400 mb-6">Validators run the network's infrastructure. This role requires a higher commitment (a dynamic minimum self-stake) but comes with greater rewards.</p>
@@ -124,9 +135,20 @@ const renderAboutContent = () => {
 
 // Adiciona a lógica para o botão de compartilhar
 const setupAboutPageListeners = () => {
-    const shareButton = document.getElementById('shareProjectBtn');
+    // Tenta encontrar o botão de compartilhar nesta página específica
+    const pageContainer = document.getElementById('about');
+    if (!pageContainer) return;
+
+    const shareButton = pageContainer.querySelector('#shareProjectBtn');
+    
     if (shareButton) {
-        shareButton.addEventListener('click', () => {
+        // Remove listener antigo para evitar duplicatas, se houver
+        // A melhor forma é clonar o nó e substituí-lo
+        const newShareButton = shareButton.cloneNode(true);
+        shareButton.parentNode.replaceChild(newShareButton, shareButton);
+        
+        // Adiciona o novo listener
+        newShareButton.addEventListener('click', () => {
             const url = window.location.origin; // Pega a URL base (ex: https://seusite.com)
             navigator.clipboard.writeText(url).then(() => {
                 showToast('Project link copied to clipboard!', 'success');
@@ -142,5 +164,15 @@ export const AboutPage = {
     render() {
         renderAboutContent();
         setupAboutPageListeners(); // Garante que o listener seja ativado
+    },
+    // Adiciona um método init que também chama o setup (boa prática para consistência)
+    init() {
+        setupAboutPageListeners();
+    },
+    // Adiciona um método update (boa prática para consistência)
+    update(isConnected) {
+        // A página "About" não tem conteúdo dinâmico baseado na conexão
+        // Mas podemos garantir que os listeners estejam ativos
+        setupAboutPageListeners();
     }
 };

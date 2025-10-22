@@ -98,7 +98,16 @@
                     <a data-target="faucet" class="sidebar-link flex items-center gap-4 py-2.5 px-4 rounded-lg transition-colors text-cyan-400 hover:text-white hover:bg-zinc-700"><i class="fa-solid fa-faucet w-5 text-center"></i><span>Testnet Faucet</span></a>
                 </div>
                 <div id="admin-link-container" class="mt-4 pt-4 border-t border-zinc-700" style="display: none;"><a data-target="admin" id="admin-link" class="sidebar-link flex items-center gap-4 py-2.5 px-4 rounded-lg transition-colors text-red-400 hover:text-white hover:bg-red-500/50"><i class="fa-solid fa-user-shield w-5 text-center"></i><span>Admin Panel</span></a></div>
-                <div class="mt-auto pt-4 border-t border-zinc-700 space-y-2"><div class="px-4 pt-2 pb-4 text-center"><div class="flex items-center justify-center gap-6"><a href="https://x.com/backcoin" target="_blank" rel="noopener noreferrer" title="Follow on X" class="text-zinc-400 hover:text-white transition-colors text-xl"><i class="fa-brands fa-twitter"></i></a><a href="https://web.telegram.org/k/#@BackCoinorg" target="_blank" rel="noopener noreferrer" title="Join Telegram" class="text-zinc-400 hover:text-white transition-colors text-xl"><i class="fa-brands fa-telegram"></i></a><a href="https://www.youtube.com/@Backcoin" target="_blank" rel="noopener noreferrer" title="Subscribe on YouTube" class="text-zinc-400 hover:text-white transition-colors text-xl"><i class="fa-brands fa-youtube"></i></a></div></div><a data-target="about" class="sidebar-link flex items-center gap-4 py-2.5 px-4 rounded-lg transition-colors text-amber-400 hover:text-amber-300 hover:bg-zinc-700"><i class="fa-solid fa-circle-info w-5 text-center"></i><span>About the Project</span></a><a href="#" id="shareProjectBtn" class="sidebar-link flex items-center gap-4 py-2.5 px-4 rounded-lg transition-colors text-zinc-400 hover:text-white hover:bg-zinc-700"><i class="fa-solid fa-share-nodes w-5 text-center"></i><span>Share Project</span></a><a data-target="presale" class="sidebar-link flex items-center gap-4 py-2.5 px-4 rounded-lg transition-colors text-amber-400 hover:text-amber-300 hover:bg-zinc-700"><i class="fa-solid fa-tags w-5 text-center"></i><span>NFT Presale</span></a></div>
+                <div class="mt-auto pt-4 border-t border-zinc-700 space-y-2"><div class="px-4 pt-2 pb-4 text-center"><div class="flex items-center justify-center gap-6"><a href="https://x.com/backcoin" target="_blank" rel="noopener noreferrer" title="Follow on X" class="text-zinc-400 hover:text-white transition-colors text-xl"><i class="fa-brands fa-twitter"></i></a><a href="https://web.telegram.org/k/#@BackCoinorg" target="_blank" rel="noopener noreferrer" title="Join Telegram" class="text-zinc-400 hover:text-white transition-colors text-xl"><i class="fa-brands fa-telegram"></i></a><a href="https://www.youtube.com/@Backcoin" target="_blank" rel="noopener noreferrer" title="Subscribe on YouTube" class="text-zinc-400 hover:text-white transition-colors text-xl"><i class="fa-brands fa-youtube"></i></a></div></div>
+                    <a data-target="about" class="sidebar-link flex items-center gap-4 py-2.5 px-4 rounded-lg transition-colors text-amber-400 hover:text-amber-300 hover:bg-zinc-700"><i class="fa-solid fa-circle-info w-5 text-center"></i><span>About the Project</span></a>
+                    
+                    <a data-target="tokenomics" class="sidebar-link flex items-center gap-4 py-2.5 px-4 rounded-lg transition-colors text-amber-400 hover:text-amber-300 hover:bg-zinc-700">
+                        <i class="fa-solid fa-chart-line w-5 text-center"></i>
+                        <span>Tokenomics</span>
+                    </a>
+                    <a href="#" id="shareProjectBtn" class="sidebar-link flex items-center gap-4 py-2.5 px-4 rounded-lg transition-colors text-zinc-400 hover:text-white hover:bg-zinc-700"><i class="fa-solid fa-share-nodes w-5 text-center"></i><span>Share Project</span></a>
+                    <a data-target="presale" class="sidebar-link flex items-center gap-4 py-2.5 px-4 rounded-lg transition-colors text-amber-400 hover:text-amber-300 hover:bg-zinc-700"><i class="fa-solid fa-tags w-5 text-center"></i><span>NFT Presale</span></a>
+                </div>
             </nav>
         </aside>
 
@@ -109,9 +118,6 @@
                 <div class="flex items-center ml-auto">
                     <div id="desktop-connection-controls" class="hidden lg:flex items-center">
 
-                        <button id="customBuyCryptoBtn" class="hidden items-center justify-center gap-2 rounded-md transition-colors text-sm bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 mr-3">
-                            <i class="fa-solid fa-wallet"></i> Buy Crypto
-                        </button>
                         <button id="connectButtonDesktop" class="flex items-center justify-center gap-2 rounded-md transition-colors text-sm">
                             <span id="desktopDisconnected" class="flex items-center gap-2 bg-amber-500 hover:bg-amber-600 text-zinc-900 font-bold py-2 px-4 rounded-md">Connect</span>
                             <span id="desktopConnectedInfo" class="hidden items-center bg-amber-500 hover:bg-amber-600 text-zinc-900 font-bold rounded-md px-3 py-2">
@@ -123,9 +129,6 @@
                     </div>
                     <div id="mobile-connection-controls" class="flex items-center lg:hidden">
 
-                        <button id="customBuyCryptoBtnMobile" class="hidden items-center justify-center h-10 w-10 text-xl text-blue-400 hover:text-white mr-2">
-                            <i class="fa-solid fa-wallet"></i>
-                        </button>
                         <button id="connectButtonMobile" class="bg-amber-500 hover:bg-amber-600 text-zinc-900 font-bold py-2 px-4 rounded-md transition-colors text-sm">Connect</button>
                         <button id="mobileSettingsButton" class="hidden text-xl text-zinc-400 hover:text-white h-10 w-10 items-center justify-center"><i class="fa-solid fa-gear"></i></button>
                     </div>
@@ -184,7 +187,8 @@
                     <section id="admin" class="hidden"></section>
                     <section id="presale" class="hidden" style="background-color: var(--presale-bg-main); margin: -1.5rem;"></section>
 
-                </div>
+                    <section id="tokenomics" class="hidden"></section>
+                    </div>
             </main>
             </div>
     </div>
