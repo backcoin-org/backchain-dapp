@@ -22,10 +22,10 @@ const WALLETCONNECT_PROJECT_ID = 'cd4bdedee7a7e909ebd3df8bbc502aed';
 
 const sepolia = {
     chainId: Number(sepoliaChainId), // 11155111
-    name: 'Sepolia',
-    currency: 'ETH',
-    explorerUrl: 'https://sepolia.etherscan.io',
-    rpcUrl: sepoliaRpcUrl
+    name: 'Sepolia', //
+    currency: 'ETH', //
+    explorerUrl: 'https://sepolia.etherscan.io', //
+    rpcUrl: sepoliaRpcUrl //
 };
 
 const metadata = {
@@ -156,13 +156,80 @@ export function subscribeToWalletChanges(callback) {
         console.log("Web3Modal State Change:", { isConnected, address, chainId });
 
         if (isConnected) {
-            // Conectado
+            
+            // =================================================================
+            // --- INÍCIO DA MODIFICAÇÃO: LÓGICA PARA TROCAR DE REDE ---
+            // =================================================================
+            
+            // Verifica se o chainId conectado é diferente do chainId esperado (Sepolia)
             if (chainId !== Number(sepoliaChainId)) {
-                showToast(`Wrong Network. Please switch to Sepolia.`, 'error');
-                await web3modal.disconnect();
-                return; // O evento de desconexão será disparado
+                showToast(`Rede errada. Trocando para Sepolia...`, 'error');
+                
+                // Converte o ID da chain (11155111) para o formato hexadecimal
+                const expectedChainIdHex = '0x' + (Number(sepoliaChainId)).toString(16);
+
+                try {
+                    // 1. Tenta trocar a rede
+                    await provider.request({
+                        method: 'wallet_switchEthereumChain',
+                        params: [{ chainId: expectedChainIdHex }],
+                    });
+                    
+                    // Se a troca for bem-sucedida, o Web3Modal/MetaMask
+                    // irá disparar um novo evento. A função será executada novamente
+                    // já com o chainId correto.
+                    return;
+
+                } catch (switchError) {
+                    
+                    // Erro 4902: A rede Sepolia não está na MetaMask do usuário
+                    if (switchError.code === 4902) {
+                        showToast('Rede Sepolia não encontrada. Adicionando...', 'info');
+                        try {
+                            // 2. Tenta adicionar a rede Sepolia
+                            // Usamos o objeto 'sepolia' já definido no topo deste arquivo
+                            await provider.request({
+                                method: 'wallet_addEthereumChain',
+                                params: [
+                                    {
+                                        chainId: expectedChainIdHex,
+                                        chainName: sepolia.name,
+                                        rpcUrls: [sepolia.rpcUrl],
+                                        nativeCurrency: {
+                                            name: sepolia.currency,
+                                            symbol: sepolia.currency,
+                                            decimals: 18,
+                                        },
+                                        blockExplorerUrls: [sepolia.explorerUrl],
+                                    },
+                                ],
+                            });
+                            // Se adicionar com sucesso, o MetaMask geralmente troca.
+                            // Um novo evento será disparado.
+                            return;
+
+                        } catch (addError) {
+                            // Usuário rejeitou a adição
+                            console.error("Falha ao adicionar rede Sepolia:", addError);
+                            showToast('Você precisa adicionar e conectar-se à rede Sepolia.', 'error');
+                            await web3modal.disconnect(); // Desconecta se o usuário recusar
+                            return;
+                        }
+                    }
+
+                    // Outro erro (ex: usuário rejeitou a troca)
+                    console.error("Falha ao trocar de rede:", switchError);
+                    showToast('Você precisa estar na rede Sepolia para usar o dApp.', 'error');
+                    await web3modal.disconnect(); // Desconecta se o usuário recusar
+                    return;
+                }
             }
             
+            // =================================================================
+            // --- FIM DA MODIFICAÇÃO ---
+            // =================================================================
+
+            // Se o chainId ESTIVER correto, continua normalmente
             const ethersProvider = new ethers.BrowserProvider(provider);
             const success = await setupSignerAndLoadData(ethersProvider, address);
             
