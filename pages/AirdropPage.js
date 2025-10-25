@@ -25,7 +25,7 @@ let airdropState = {
 const DEFAULT_HASHTAGS = "#Backchain #BKC #Web3 #Crypto #Airdrop";
 const AUTO_APPROVE_HOURS = 2; // VISUAL delay for submission approval
 
-// --- UI Mappings ---
+// --- UI Mappings (EXPANDIDO: TikTok, Reddit, LinkedIn adicionados) ---
 // Used for consistent status and platform styling
 const statusUI = {
     pending: { text: 'Pending Review', color: 'text-amber-400', bgColor: 'bg-amber-900/50', icon: 'fa-clock' },
@@ -38,8 +38,14 @@ const statusUI = {
 };
 const platformUI = {
     'YouTube': { icon: 'fa-youtube', color: 'text-red-500' },
+    'YouTube Shorts': { icon: 'fa-youtube', color: 'text-red-500' },
     'Instagram': { icon: 'fa-instagram', color: 'text-pink-500' },
-    'X/Twitter': { icon: 'fa-twitter', color: 'text-blue-400' },
+    'X/Twitter': { icon: 'fa-x-twitter', color: 'text-white' },
+    'Facebook': { icon: 'fa-facebook', color: 'text-blue-600' }, 
+    'Telegram': { icon: 'fa-telegram', color: 'text-cyan-400' },
+    'TikTok': { icon: 'fa-tiktok', color: 'text-zinc-100' }, // Ícone do TikTok
+    'Reddit': { icon: 'fa-reddit', color: 'text-orange-500' }, // Ícone do Reddit
+    'LinkedIn': { icon: 'fa-linkedin', color: 'text-blue-700' }, // Ícone do LinkedIn
     'Other': { icon: 'fa-globe', color: 'text-gray-400' },
 };
 
@@ -60,9 +66,18 @@ async function loadAirdropData() {
         const publicData = await db.getPublicAirdropData();
 
         airdropState.systemConfig = publicData.config;
-        // Load base points from config, with fallback
+        // Load base points from config, com suporte expandido para novas redes
         airdropState.basePoints = publicData.config?.ugcBasePoints || { 
-            'YouTube': 5000, 'Instagram': 3000, 'X/Twitter': 1500, 'Other': 1000
+            'YouTube': 5000, 
+            'YouTube Shorts': 2500, 
+            'Instagram': 3000, 
+            'X/Twitter': 1500, 
+            'Facebook': 2000, 
+            'Telegram': 1000,
+            'TikTok': 3500, // Novo valor base
+            'Reddit': 1800,  // Novo valor base
+            'LinkedIn': 2200, // Novo valor base
+            'Other': 1000
         };
         airdropState.leaderboards = publicData.leaderboards;
         airdropState.dailyTasks = publicData.dailyTasks;
@@ -167,7 +182,7 @@ const formatTimeLeft = (ms) => {
 // --- Handle Daily Task Click ---
 async function handleGoToTask(e) {
     const cardLink = e.target.closest('.task-card-link');
-    if (!cardLink || cardLink.classList.contains('task-disabled')) return;
+    if (!cardLink) return;
 
     e.preventDefault();
 
@@ -178,43 +193,49 @@ async function handleGoToTask(e) {
     if (!task) return showToast("Task not found.", "error");
     if (!airdropState.user) return showToast("User profile not loaded.", "error");
 
-    // O elemento de status é o badge na lateral do cartão
+    // Abrir link no navegador, independentemente do status de elegibilidade
+    if (taskUrl && taskUrl.startsWith('http')) {
+        window.open(taskUrl, '_blank', 'noopener,noreferrer');
+    }
+
+    // Se não for elegível (em cooldown), não tentar pontuar, apenas abrir o link
+    if (!airdropState.dailyTasks.find(t => t.id === taskId)?.eligible) {
+        return showToast("Task link opened. Cannot earn points yet (cooldown active).", "info");
+    }
+
+    // --- Processo de pontuação (apenas se for elegível) ---
+    
     const statusBadge = cardLink.querySelector('.task-status-badge');
     const originalStatusHTML = statusBadge ? statusBadge.innerHTML : '';
     
     if (statusBadge) renderLoading(statusBadge, 'Processing...');
-
+    
+    // Desabilitar o card *visualmente* e iniciar o processo de pontuação
     cardLink.classList.add('task-disabled', 'opacity-60', 'cursor-not-allowed');
 
     try {
+        // Tenta registrar a conclusão e pontuar (o backend deve checar a elegibilidade novamente)
         const pointsEarned = await db.recordDailyTaskCompletion(task, airdropState.user.pointsMultiplier);
         showToast(`Task complete! +${pointsEarned} points!`, "success");
 
-        // Open link in new tab (if provided)
-        if (taskUrl && taskUrl.startsWith('http')) {
-            window.open(taskUrl, '_blank', 'noopener,noreferrer');
-        }
-
-        // Update local state and start visual timer
+        // Atualizar o estado local e iniciar o timer visual
         const taskIndex = airdropState.dailyTasks.findIndex(t => t.id === taskId);
         if (taskIndex > -1) {
             const cooldownMs = task.cooldownHours * 3600000;
             airdropState.dailyTasks[taskIndex].eligible = false;
             airdropState.dailyTasks[taskIndex].timeLeftMs = cooldownMs;
             
-            // Re-render o status do card
             if (statusBadge) {
-                statusBadge.innerHTML = formatTimeLeft(cooldownMs);
+                statusBadge.innerHTML = formatTimeLeft(cooldownMs).replace('Cooldown: ', '');
                 statusBadge.classList.remove('bg-amber-600', 'hover:bg-amber-700', 'text-white');
-                statusBadge.classList.add('bg-zinc-700', 'text-zinc-400'); // Removida a classe cursor-not-allowed
-                // O cardLink é passado como o elemento a ter o timer, mas o statusBadge é o elemento visual a ser atualizado
+                statusBadge.classList.add('bg-zinc-700', 'text-zinc-400');
                 startIndividualCooldownTimer(cardLink, statusBadge, cooldownMs);
             }
         }
-        // Reload general data after a short delay
+        
+        // Recarregar dados após um curto delay
         setTimeout(async () => {
             await loadAirdropData();
-            // Re-render only if still on the tasks sub-tab
             if (airdropState.activeSubmitTab === 'daily-tasks') {
                  const contentEl = document.getElementById('airdrop-content-wrapper').querySelector('#active-tab-content');
                  if(contentEl) renderSubmitEarnContent(contentEl);
@@ -225,22 +246,24 @@ async function handleGoToTask(e) {
         if (error.message.includes("Cooldown period is still active")) {
              showToast("Cooldown active. Cannot complete this task yet.", "error");
              const eligibility = await db.isTaskEligible(task.id, task.cooldownHours);
-             if (statusBadge && document.body.contains(statusBadge)) statusBadge.innerHTML = formatTimeLeft(eligibility.timeLeft);
+             if (statusBadge && document.body.contains(statusBadge)) statusBadge.innerHTML = formatTimeLeft(eligibility.timeLeft).replace('Cooldown: ', '');
         } else {
              showToast(`Failed to record task: ${error.message}`, "error");
              console.error("Go To Task Error:", error);
              if (statusBadge && document.body.contains(statusBadge)) statusBadge.innerHTML = originalStatusHTML;
         }
+        
+        // Reverter o estado visual do card
         if(document.body.contains(cardLink)) {
             cardLink.classList.remove('task-disabled', 'opacity-60', 'cursor-not-allowed');
         }
-        // Reverter o estado do botão de ação em caso de erro
         if (statusBadge && document.body.contains(statusBadge)) {
-             statusBadge.classList.remove('task-disabled', 'opacity-60');
+             statusBadge.classList.remove('bg-zinc-700', 'text-zinc-400');
              statusBadge.classList.add('bg-amber-600', 'hover:bg-amber-700', 'text-white');
         }
     }
 }
+
 
 // --- Timer Visual for Task Cooldown ---
 function startIndividualCooldownTimer(cardLink, statusBadge, initialMs) {
@@ -277,7 +300,7 @@ function startIndividualCooldownTimer(cardLink, statusBadge, initialMs) {
                 }
             }
         } else {
-            statusBadge.innerHTML = formatTimeLeft(countdownMs).replace('Cooldown: ', ''); // Remove 'Cooldown: ' para caber melhor
+            statusBadge.innerHTML = formatTimeLeft(countdownMs).replace('Cooldown: ', '');
             statusBadge.classList.remove('bg-amber-600', 'hover:bg-amber-700', 'text-white');
             statusBadge.classList.add('bg-zinc-700', 'text-zinc-400');
         }
@@ -416,6 +439,7 @@ async function handleSubmitUgcClick(e) {
         renderAirdropContent();
 
     } catch (error) {
+        // Assume que a validação do backend foi corrigida para Shorts, mas mantém o aviso genérico
         showToast(`Submission failed: ${error.message}`, "error");
         console.error("Content Submit Error:", error);
     } finally {
@@ -448,7 +472,7 @@ function renderSectionContainer(title, iconClass, contentHtml) {
     `;
 }
 
-// --- Content Submission Flow (4 Steps) (FINAL: Sem 'Continue', Botões aprimorados) ---
+// --- Content Submission Flow (4 Steps) ---
 function renderContentSubmissionFlow() {
     if (!airdropState.isConnected || !airdropState.user) {
         return renderNoData(null, 'Connect your wallet to submit content.');
@@ -744,6 +768,7 @@ function renderSubmissionPanelContent() {
             }
 
             const uiStatus = statusUI[displayStatusKey] || statusUI.pending;
+            // Usa o novo mapping expandido
             const uiPlatform = platformUI[sub.platform] || platformUI.Other;
             let pointsDisplay = '';
             
@@ -762,7 +787,9 @@ function renderSubmissionPanelContent() {
                     <div class="flex items-start gap-3 flex-grow min-w-0">
                         <i class="fa-brands ${uiPlatform.icon} ${uiPlatform.color} text-2xl mt-1 w-6 text-center shrink-0"></i>
                         <div class="min-w-0">
-                            <a href="${sub.url}" target="_blank" rel="noopener noreferrer" class="text-blue-400 hover:text-blue-300 font-semibold break-words block text-sm leading-snug">${sub.url}</a>
+                            <a href="${sub.url}" target="_blank" rel="noopener noreferrer" class="font-mono text-blue-400 hover:text-blue-300 break-words block text-xs leading-snug">
+                                ${sub.url}
+                            </a>
                             <p class="text-xs text-zinc-400 mt-1.5">Submitted: ${sub.submittedAt ? sub.submittedAt.toLocaleString('en-US') : 'N/A'}</p>
                         </div>
                     </div>
@@ -790,7 +817,7 @@ function renderSubmissionPanelContent() {
     `;
 }
 
-// --- SUB-TAB 2.2: Daily Tasks Panel (FINAL: Cartão Clicável e Layout Centralizado SEM botão interno) ---
+// --- SUB-TAB 2.2: Daily Tasks Panel (REDESENHADO) ---
 function renderDailyTasksPanelContent() {
      // Clear timers when switching away from this panel
      document.querySelectorAll('.task-card-link').forEach(card => {
@@ -809,7 +836,7 @@ function renderDailyTasksPanelContent() {
         // Determine initial status text/state
         let statusHTML;
         // Status chip class (discreto e lateral)
-        let statusClass = 'task-status-badge font-bold text-xs py-2 px-3 rounded-lg transition-colors duration-200 shrink-0';
+        let statusClass = 'task-status-badge font-bold text-xs py-2 px-3 rounded-xl transition-colors duration-200 shrink-0';
         // O card inteiro é o link clicável
         let cardClass = 'task-card-link bg-main border border-border-color rounded-2xl p-5 flex flex-col sm:flex-row items-center justify-between gap-4 transition-all duration-200 hover:bg-zinc-800/50 hover:border-amber-500/50 cursor-pointer block decoration-none focus:outline-none focus:ring-2 focus:ring-amber-500 focus:ring-offset-2 focus:ring-offset-sidebar';
         
@@ -817,26 +844,22 @@ function renderDailyTasksPanelContent() {
              statusHTML = task.url ? 'Go & Earn' : 'Earn Points';
              statusClass += ' bg-amber-600 hover:bg-amber-700 text-white';
         } else {
-            statusHTML = formatTimeLeft(task.timeLeftMs).replace('Cooldown: ', '');
-            cardClass += ' task-disabled opacity-60 cursor-not-allowed';
+            // Remove 'Cooldown: ' para evitar quebra de linha no badge
+            statusHTML = formatTimeLeft(task.timeLeftMs).replace('Cooldown: ', ''); 
+            // O card em cooldown tem opacidade e o cursor-not-allowed
+            cardClass += ' task-disabled opacity-80 cursor-not-allowed';
             statusClass += ' bg-zinc-700 text-zinc-400';
         }
-
+        
         // Task Card as an `<a>` link
         return `
             <a href="${task.url || '#'}" ${task.url ? 'target="_blank" rel="noopener noreferrer"' : ''}
                class="${cardClass}"
                data-task-id="${task.id}"
                data-task-url="${task.url || ''}"
-               onclick="return false;" >
-                
-                <div class="flex-shrink-0 w-32 hidden sm:flex items-center justify-center h-full order-2 sm:order-3">
-                    <span class="${statusClass} text-center w-full">
-                        ${statusHTML}
-                    </span>
-                </div>
+               onclick="return false;" > 
 
-                <div class="flex flex-col flex-grow items-center text-center min-w-0 w-full order-1 sm:order-2">
+                <div class="flex flex-col flex-grow items-center text-center min-w-0 pr-4">
                     <h4 class="font-extrabold text-xl text-white truncate w-full">${task.title}</h4>
                     <p class="text-sm text-zinc-300 mt-1 mb-3">${task.description || 'Complete the required action.'}</p>
                     
@@ -847,7 +870,7 @@ function renderDailyTasksPanelContent() {
                     </div>
                 </div>
                 
-                <div class="flex-shrink-0 w-full sm:hidden flex items-center justify-center mt-3 order-3 sm:order-4">
+                <div class="flex-shrink-0 w-full sm:w-40 h-full flex items-center justify-center order-2 sm:order-3 mt-3 sm:mt-0">
                     <span class="${statusClass} text-center w-full">
                         ${statusHTML}
                     </span>

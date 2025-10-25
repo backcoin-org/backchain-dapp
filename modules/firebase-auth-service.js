@@ -318,9 +318,9 @@ export async function recordDailyTaskCompletion(task, currentMultiplier) {
 }
 
 
-// --- Helper Interno: Detecta Plataforma, Valida URL e Busca Pontos Base ---
+// --- Helper Interno: Detecta Plataforma, Valida URL e Busca Pontos Base (CORRIGIDO) ---
 /**
- * Analisa uma URL, detecta a plataforma (YouTube, Instagram, X/Twitter, Other),
+ * Analisa uma URL, detecta a plataforma (YouTube, YouTube Shorts, Instagram, X/Twitter, Other),
  * valida o formato (ex: YouTube deve ser vídeo), e busca os pontos base na config.
  * @param {string} url A URL enviada pelo usuário.
  * @returns {Promise<{platform: string, basePoints: number, isValid: boolean, normalizedUrl: string}>}
@@ -332,7 +332,19 @@ async function detectPlatformAndValidate(url) {
     let isValid = true; // Assume válido
 
     // 1. Detecção e Validação Específica
-    if (normalizedUrl.includes('youtube.com/watch?v=') || normalizedUrl.includes('youtu.be/')) { //
+    
+    // ** CORREÇÃO 1: Trata YouTube Shorts primeiro (youtube.com/shorts/...) **
+    if (normalizedUrl.includes('youtube.com/shorts/')) {
+        platform = 'YouTube Shorts';
+        // Validação extra: ID do Short (deve ter algo após /shorts/)
+        const shortIdMatch = normalizedUrl.match(/\/shorts\/([a-zA-Z0-9_-]+)/);
+        if (!shortIdMatch || !shortIdMatch[1]) {
+            isValid = false;
+            throw new Error("Invalid YouTube Shorts URL: Video ID not found or incorrect format.");
+        }
+    }
+    // ** CORREÇÃO 2: Trata Vídeo Regular do YouTube (youtube.com/watch?v=... ou youtu.be/...) **
+    else if (normalizedUrl.includes('youtube.com/watch?v=') || normalizedUrl.includes('youtu.be/')) { //
         platform = 'YouTube'; //
         // Validação extra: ID do vídeo
         const videoIdMatch = normalizedUrl.match(/(?:v=|\/)([a-zA-Z0-9_-]{11})(?:[?&]|$)/); //
@@ -340,17 +352,23 @@ async function detectPlatformAndValidate(url) {
             isValid = false; //
             throw new Error("Invalid YouTube URL: Video ID not found or incorrect format."); //
         }
-    } else if (normalizedUrl.includes('youtube.com/')) { // Outros links do YouTube
-        platform = 'YouTube'; // Ainda é YouTube...
-        isValid = false;      // ...mas inválido para submissão
-        throw new Error("Invalid YouTube URL: Only video links (youtube.com/watch?v=... or youtu.be/...) are accepted."); //
-    } else if (normalizedUrl.includes('instagram.com/p/') || normalizedUrl.includes('instagram.com/reel/')) { //
+    }
+    // ** CORREÇÃO 3: Lógica de erro de validação para outros links do YouTube **
+    else if (normalizedUrl.includes('youtube.com/')) { // Outros links do YouTube (canais, playlists, etc.)
+        platform = 'YouTube';
+        isValid = false;
+        throw new Error("Invalid YouTube URL: Only video links (youtube.com/watch?v=... or youtu.be/...) or Shorts links are accepted.");
+    }
+    // Instagram
+    else if (normalizedUrl.includes('instagram.com/p/') || normalizedUrl.includes('instagram.com/reel/')) { //
         platform = 'Instagram'; //
         // Validação básica de ID (qualquer coisa após /p/ ou /reel/)
         const postIdMatch = normalizedUrl.match(/\/(?:p|reel)\/([a-zA-Z0-9_.-]+)/); //
         if (!postIdMatch || !postIdMatch[1]) isValid = false; // Se não houver ID, marca inválido
 
-    } else if (normalizedUrl.includes('twitter.com/') || normalizedUrl.includes('x.com/')) { //
+    } 
+    // X/Twitter
+    else if (normalizedUrl.includes('twitter.com/') || normalizedUrl.includes('x.com/')) { //
         // Tenta identificar se é um link de status/tweet
         if (normalizedUrl.match(/(\w+)\/(?:status|statuses)\/(\d+)/)) { //
              platform = 'X/Twitter'; //
@@ -476,7 +494,6 @@ export async function addSubmission(url) { // Recebe apenas URL
  * Busca o histórico de submissões de um usuário.
  * @returns {Promise<Array<object>>} Lista de submissões.
  */
-// *** CORREÇÃO APLICADA: Adicionado 'export' ***
 export async function getUserSubmissions() {
     ensureAuthenticated(); //
     const submissionsCol = collection(db, "airdrop_users", currentUser.uid, "submissions"); //
@@ -499,7 +516,6 @@ export async function getUserSubmissions() {
  * Busca as submissões flagradas de um usuário que precisam de resolução.
  * @returns {Promise<Array<object>>} Lista de submissões flagradas.
  */
-// *** CORREÇÃO APLICADA: Adicionado 'export' ***
 export async function getUserFlaggedSubmissions() {
     ensureAuthenticated(); //
     const submissionsCol = collection(db, "airdrop_users", currentUser.uid, "submissions"); //
@@ -606,16 +622,97 @@ export async function resolveFlaggedSubmission(submissionId, resolution) {
 }
 
 
-// --- COMENTADA: Não é mais necessária para a lógica principal ---
-/*
-export async function autoApproveSubmission(submissionId) {
-    // A lógica agora é apenas visual no frontend.
-    // Esta função poderia ser usada pela Cloud Function Agendada para
-    // realmente MUDAR o status no banco após 2h, se desejado,
-    // mas não é essencial para a pontuação/ranking.
-    console.warn("autoApproveSubmission called. Note: Approval logic is primarily visual now.");
+/**
+ * Permite ao usuário confirmar que a submissão, após auditoria visual, é legítima.
+ * O status é alterado de 'pending_confirmation' (visual) para 'approved' (real).
+ * Nota: Como o `addSubmission` já concede os pontos, esta função apenas finaliza o status.
+ * @param {string} userId ID do usuário Firebase.
+ * @param {string} submissionId ID da submissão.
+ */
+export async function confirmSubmission(userId, submissionId) {
+    ensureAuthenticated();
+    
+    // Referências necessárias
+    const submissionRef = doc(db, "airdrop_users", userId, "submissions", submissionId);
+    const logSubmissionRef = doc(db, "all_submissions_log", submissionId);
+
+    // Usa um batch para garantir atomicidade das atualizações
+    const batch = writeBatch(db);
+
+    // Atualiza status para 'approved' na subcoleção do usuário
+    batch.update(submissionRef, { 
+        status: 'approved',
+        resolvedAt: serverTimestamp() 
+    });
+
+    // Atualiza status para 'approved' no log central
+    batch.update(logSubmissionRef, { 
+        status: 'approved',
+        resolvedAt: serverTimestamp()
+    });
+
+    // Executa as atualizações
+    await batch.commit();
 }
-*/
+
+
+/**
+ * Permite ao usuário deletar uma submissão reportada como erro (ou rejeitada),
+ * descontando os pontos e a contagem que foram adicionados em addSubmission.
+ * @param {string} userId ID do usuário Firebase.
+ * @param {string} submissionId ID da submissão.
+ */
+export async function deleteSubmission(userId, submissionId) {
+    ensureAuthenticated();
+    
+    const userRef = doc(db, "airdrop_users", userId);
+    const submissionRef = doc(db, "airdrop_users", userId, "submissions", submissionId);
+    const logSubmissionRef = doc(db, "all_submissions_log", submissionId);
+
+    const submissionSnap = await getDoc(submissionRef);
+    if (!submissionSnap.exists()) {
+        throw new Error("Submission not found.");
+    }
+    
+    const submissionData = submissionSnap.data();
+    const currentStatus = submissionData.status;
+
+    // Apenas permite deletar/descontar se o status for 'pending', 'auditing' ou 'pending_confirmation'
+    if (currentStatus !== 'pending' && currentStatus !== 'auditing') {
+        // Para simplificar, o frontend deve garantir que a ação só seja possível em status pré-aprovados.
+        // Se o status for 'approved', o usuário não pode simplesmente deletar.
+        if (currentStatus === 'approved') {
+            throw new Error("Approved submissions cannot be deleted by the user.");
+        }
+    }
+
+    const batch = writeBatch(db);
+    
+    // --- DESCONTO de pontos/contagem ---
+    // Pontos e contagem foram adicionados em addSubmission, então precisamos reverter
+    const pointsToDecrement = submissionData._pointsCalculated || 0;
+    
+    if (pointsToDecrement > 0) {
+        batch.update(userRef, { 
+            totalPoints: increment(-pointsToDecrement),
+            approvedSubmissionsCount: increment(-1) // Reverte o incremento
+        });
+    }
+
+    // Deleta o documento na subcoleção do usuário
+    batch.delete(submissionRef);
+
+    // Atualiza o log central para 'deleted' e zera pontos
+    if (await getDoc(logSubmissionRef).then(s => s.exists())) {
+         batch.update(logSubmissionRef, {
+             status: 'deleted_by_user',
+             resolvedAt: serverTimestamp(),
+             pointsAwarded: 0 // Garante que a pontuação no log seja 0
+         });
+    }
+
+    await batch.commit();
+}
 
 
 // =======================================================
@@ -738,7 +835,7 @@ export async function updateSubmissionStatus(userId, submissionId, status) {
 
     // Lê os 3 documentos
     const [userSnap, submissionSnap, logSnap] = await Promise.all([ //
-         getDoc(userRef), getDoc(submissionRef), getDoc(logSnap) //
+         getDoc(userRef), getDoc(submissionRef), getDoc(logSubmissionRef) //
     ]);
 
     if (!submissionSnap.exists()) throw new Error("Submission not found in user collection."); //

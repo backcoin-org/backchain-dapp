@@ -70,7 +70,8 @@ function animateClaimableRewards() {
         displayedRewardValue = targetRewardValue;
     } else if (difference !== 0n) {
         // Move mais devagar: 1% da diferença a cada frame (easing suave)
-        const movement = difference / 100n; // Divisor aumentado de 20n para 100n
+        // AJUSTE: Divisor aumentado de 100n para 500n para Easing mais lento
+        const movement = difference / 500n; 
         displayedRewardValue += (movement === 0n && difference !== 0n) ? (difference > 0n ? 1n : -1n) : movement;
     }
 
@@ -79,7 +80,8 @@ function animateClaimableRewards() {
         displayedRewardValue = 0n;
     }
 
-    rewardsEl.textContent = `${formatBigNumber(displayedRewardValue).toFixed(4)} $BKC`; // Atualiza UI
+    // AJUSTE: Mudar para toFixed(3) e diminuir a fonte do $BKC
+    rewardsEl.innerHTML = `${formatBigNumber(displayedRewardValue).toFixed(3)} <span class="text-xl">$BKC</span>`; // Atualiza UI
 
     animationFrameId = requestAnimationFrame(animateClaimableRewards);
 }
@@ -416,7 +418,7 @@ async function renderRewardEfficiencyPanel(efficiencyData) {
                     <p class="font-bold text-2xl text-white mb-2">Boost Your Earnings!</p>
                     <p class="text-md text-zinc-400 max-w-sm mb-4">Acquire a <strong>Booster NFT</strong> to increase your reward claim rate from 50% up to 100%!</p>
                     ${totalRewards > 0n ?
-                        `<p class="text-sm text-zinc-400 mt-3">You are leaving <strong class="text-red-400">${potentialGain.toFixed(2)} $BKC</strong> on the table without a booster!</p>
+                        `<p class="text-sm text-zinc-400 mt-3">You are leaving <strong class="text-red-400">${potentialGain.toFixed(2)} <span class="text-sm">$BKC</span></strong> on the table without a booster!</p>
                          <p class="text-xs text-zinc-500 mt-1">Don't miss out - maximize your rewards.</p>`
                         : '<p class="text-sm text-zinc-400 mt-3">Start delegating and get a Booster NFT to maximize future rewards!</p>'
                     }
@@ -544,7 +546,7 @@ async function renderMyDelegations() {
                             <p class="text-sm text-zinc-400">To: <span class="font-mono">${formatAddress(d.validator)}</span></p>
                         </div>
                         <div class="text-right">
-                            <p class="font-bold text-xl text-purple-400">${formatPStake(pStake)}</p> {/* Usa o pStake recalculado */}
+                            <p class="font-bold text-xl text-purple-400">${formatPStake(pStake)}</p> 
                             <p class="text-sm text-zinc-400">pStake</p>
                         </div>
                     </div>
@@ -558,7 +560,9 @@ async function renderMyDelegations() {
                                 <p class="text-xs text-zinc-500">${unlockDate}</p>
                             </div>
                             <div class="flex gap-2 w-full sm:w-auto justify-end">
-                                ${isLocked ? `<button title="Force unstake with 50% penalty" class="bg-red-900/50 hover:bg-red-900/80 text-red-400 font-bold py-2 px-3 rounded-md text-sm force-unstake-btn flex-1 sm:flex-none" data-index="${d.index}"><i class="fa-solid fa-triangle-exclamation mr-1"></i> Force</button>` : ''}
+                                ${isLocked 
+                                    ? `<button title="Force unstake with 50% penalty" class="bg-red-900/50 hover:bg-red-900/80 text-red-400 font-bold py-2 px-3 rounded-md text-sm force-unstake-btn flex-1 sm:flex-none" data-index="${d.index}"><i class="fa-solid fa-lock mr-1"></i> Force</button>` 
+                                    : ''}
                                 <button class="${isLocked ? 'btn-disabled' : 'bg-amber-500 hover:bg-amber-600 text-zinc-900'} font-bold py-2 px-3 rounded-md text-sm unstake-btn flex-1 sm:flex-none" data-index="${d.index}" ${isLocked ? 'disabled' : ''}><i class="fa-solid fa-unlock mr-1"></i> Unstake</button>
                             </div>
                         </div>
@@ -590,7 +594,7 @@ async function renderMyCertificatesDashboard() {
 
         if (!certificates || certificates.length === 0) { renderNoData(listEl, "No vesting certificates found."); return; }
 
-        const certificatePromises = certificates.map(async ({ tokenId }) => { /* ... HTML como antes ... */
+        const certificatePromises = certificates.map(async ({ tokenId }) => { 
              const position = await safeContractCall(State.rewardManagerContract, 'vestingPositions', [tokenId], {totalAmount: 0n, startTime: 0n});
             if (position.startTime === 0n) return ''; // Skip if position data is invalid
 
@@ -656,6 +660,7 @@ function renderActivityItem(item) {
     switch(item.type) {
         case 'Delegation': title = `Delegation`; icon = 'fa-shield-halved'; color = 'text-purple-400'; details = `Delegated ${formatBigNumber(item.amount).toFixed(2)} to ${formatAddress(item.details.validator)}`; itemId = item.details.index; break;
         case 'Unstake': title = `Unstake`; icon = 'fa-unlock'; color = 'text-green-400'; details = `Unstaked ${formatBigNumber(item.amount).toFixed(2)} (#${item.details.index})`; itemId = item.details.index; break;
+        // AJUSTE: Manteve o ícone 'fa-triangle-exclamation' para Forçada, pois 'fa-lock' foi para o botão
         case 'ForceUnstake': title = `Forced Unstake`; icon = 'fa-triangle-exclamation'; color = 'text-red-400'; details = `Penalty ${formatBigNumber(item.amount).toFixed(2)} (#${item.details.index})`; itemId = item.details.index; break;
         case 'ClaimRewards': title = `Rewards Claimed`; icon = 'fa-gift'; color = 'text-amber-400'; details = `Received ${formatBigNumber(item.amount).toFixed(2)} $BKC`; itemId = null; break;
         case 'VestingCertReceived': title = `Certificate Received`; icon = 'fa-id-card-clip'; color = 'text-cyan-400'; details = `Vesting ${formatBigNumber(item.amount).toFixed(2)} (#${item.details.tokenId})`; itemId = item.details.tokenId; break;
