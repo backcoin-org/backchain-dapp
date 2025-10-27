@@ -41,7 +41,9 @@ const routes = {
     'faucet': FaucetPage,
     'tokenomics': TokenomicsPage, // <-- Rota da nova página
 };
-let activePageId = 'dashboard';
+
+// --- MUDANÇA: 'presale' AGORA É A PÁGINA ATIVA PADRÃO ---
+let activePageId = 'presale';
 const ADMIN_WALLET = "0x03aC69873293cD6ddef7625AfC91E3Bd5434562a";
 
 // --- Funções de UI e Navegação ---
@@ -52,8 +54,48 @@ function updateConnectionStatus(status, message) {
 }
 
 function navigateTo(targetId) {
-    // ... (função sem alterações) ...
-    if (!routes[targetId]) { console.warn(`Route not found: ${targetId}. Navigating to dashboard.`); targetId = 'dashboard'; } if (targetId === 'admin' && (!State.userAddress || State.userAddress.toLowerCase() !== ADMIN_WALLET.toLowerCase())) { showToast("Access Denied. You are not an administrator.", "error"); return; } activePageId = targetId; document.querySelectorAll('main section').forEach(section => { if (section) section.classList.add('hidden'); }); const targetSection = document.getElementById(targetId); if (targetSection) { targetSection.classList.remove('hidden'); } else { console.error(`Target section #${targetId} not found! Navigating to dashboard.`); activePageId = 'dashboard'; document.getElementById('dashboard')?.classList.remove('hidden'); document.querySelectorAll('.sidebar-link').forEach(l => l.classList.remove('active')); document.querySelector(`.sidebar-link[data-target="dashboard"]`)?.classList.add('active'); routes['dashboard']?.render(); return; } document.querySelectorAll('.sidebar-link').forEach(l => { if(!l.hasAttribute('data-target')) return; l.classList.remove('active'); }); const activeLink = document.querySelector(`.sidebar-link[data-target="${targetId}"]`); if(activeLink) { activeLink.classList.add('active'); } if (routes[targetId] && typeof routes[targetId].render === 'function') { routes[targetId].render(); if (typeof routes[targetId].init === 'function') { routes[targetId].init(); } if (typeof routes[targetId].update === 'function') { routes[targetId].update(State.isConnected); } } else { console.warn(`No render function found for route: ${targetId}`); if (targetSection) targetSection.classList.remove('hidden'); }
+    // ... (lógica de verificação e navegação anterior) ...
+    if (!routes[targetId]) { console.warn(`Route not found: ${targetId}. Navigating to dashboard.`); targetId = 'dashboard'; }
+    if (targetId === 'admin' && (!State.userAddress || State.userAddress.toLowerCase() !== ADMIN_WALLET.toLowerCase())) { showToast("Access Denied. You are not an administrator.", "error"); return; }
+    
+    // Se o alvo for nulo/vazio (acontece no primeiro load se activePageId falhar), define 'presale' como padrão
+    if (!targetId) {
+        targetId = 'presale';
+    }
+
+    activePageId = targetId;
+    document.querySelectorAll('main section').forEach(section => { if (section) section.classList.add('hidden'); });
+    
+    const targetSection = document.getElementById(targetId);
+    if (targetSection) { 
+        targetSection.classList.remove('hidden'); 
+    } else { 
+        console.error(`Target section #${targetId} not found! Navigating to presale.`); 
+        activePageId = 'presale'; 
+        document.getElementById('presale')?.classList.remove('hidden'); 
+        document.querySelectorAll('.sidebar-link').forEach(l => l.classList.remove('active')); 
+        document.querySelector(`.sidebar-link[data-target="presale"]`)?.classList.add('active'); 
+        routes['presale']?.render(); 
+        return; 
+    }
+    
+    document.querySelectorAll('.sidebar-link').forEach(l => { if(!l.hasAttribute('data-target')) return; l.classList.remove('active'); });
+    const activeLink = document.querySelector(`.sidebar-link[data-target="${targetId}"]`);
+    if(activeLink) { activeLink.classList.add('active'); }
+    
+    // --- AJUSTE APLICADO AQUI ---
+    // A chamada .update() foi removida para evitar o "pisca-pisca"
+    // O 'init()' de cada página agora tem um "guarda" para rodar só uma vez.
+    if (routes[targetId] && typeof routes[targetId].render === 'function') {
+        routes[targetId].render();
+        if (typeof routes[targetId].init === 'function') {
+            routes[targetId].init();
+        }
+        // LINHA REMOVIDA: if (typeof routes[targetId].update === 'function') { ... }
+    } else {
+        console.warn(`No render function found for route: ${targetId}`);
+        if (targetSection) targetSection.classList.remove('hidden');
+    }
 }
 
 function toggleSidebar() {
@@ -131,7 +173,7 @@ function updateUIState() {
         updateConnectionStatus('disconnected', 'Disconnected');
     }
 
-    if (routes[activePageId]) { if (typeof routes[activePageId].update === 'function') { routes[activePageId].update(State.isConnected); } else if (typeof routes[activePageId].render === 'function') { routes[activePageId].render(); } } else { console.error(`Route handler for ${activePageId} not found during UI update.`); navigateTo('dashboard'); }
+    if (routes[activePageId]) { if (typeof routes[activePageId].update === 'function') { routes[activePageId].update(State.isConnected); } else if (typeof routes[activePageId].render === 'function') { routes[activePageId].render(); } } else { console.error(`Route handler for ${activePageId} not found during UI update.`); navigateTo('presale'); } // Padrão 'presale'
 }
 
 
@@ -175,7 +217,7 @@ async function init() {
     
     // Esta chamada agora ocorrerá DEPOIS que o estado da carteira
     // (conectado ou desconectado) já foi estabelecido.
-    navigateTo(activePageId); 
+    navigateTo(activePageId); // 'activePageId' agora é 'presale'
 
     console.log("Application initialized.");
 }

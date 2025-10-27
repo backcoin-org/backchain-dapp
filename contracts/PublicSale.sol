@@ -1,135 +1,141 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.28;
 
-import "@openzeppelin/contracts/token/ERC721/IERC721.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
-import "@openzeppelin/contracts/token/ERC721/IERC721Receiver.sol";
+import "./EcosystemManager.sol"; // Precisamos do Hub para a tesouraria
 
-contract PublicSale is Ownable, IERC721Receiver {
-    IERC721 public immutable nftContract;
-    address public treasuryWallet;
+// --- Interface Mínima do RewardBoosterNFT ---
+interface IRewardBoosterNFT {
+    /**
+     * @notice Minta um novo Booster NFT. Chamado pelo PublicSale.
+     * @param to O endereço que receberá o NFT (o comprador).
+     * @param boostInBips O valor do boost associado ao tier.
+     * @param metadataFile O nome/URI do arquivo de metadados para este tier.
+     * @return tokenId O ID do token recém-criado.
+     */
+    function mintFromSale(
+        address to,
+        uint256 boostInBips,
+        string calldata metadataFile
+    ) external returns (uint256);
+}
+
+/**
+ * @title PublicSale (V3 - Venda Ilimitada)
+ * @dev Vende NFTs mintando-os sob demanda, pagando em BNB.
+ * @notice Venda sem maxSupply. A contagem é apenas informativa.
+ */
+contract PublicSale is Ownable {
+    IRewardBoosterNFT public immutable rewardBoosterNFT;
+    IEcosystemManager public immutable ecosystemManager;
 
     struct Tier {
-        uint256 priceInWei;
-        uint256[] tokenIds;
-        uint256 nextTokenIndex;
+        uint256 priceInWei;     // Preço em Wei (BNB)
+        // --- REMOVIDO ---
+        // uint256 maxSupply;      // Não há mais suprimento máximo
+        uint256 mintedCount;    // Quantos já foram vendidos (apenas informativo)
+        uint256 boostBips;      // O boost associado (ex: 5000, 500, 100)
+        string metadataFile;    // Nome/URI do arquivo JSON (ex: "iron_booster.json")
+        bool isConfigured;      // Flag para saber se o tier foi setado
     }
 
     mapping(uint256 => Tier) public tiers;
-
     event NFTSold(address indexed buyer, uint256 indexed tierId, uint256 indexed tokenId, uint256 price);
-    event NFTRescued(address indexed owner, uint256 indexed tierId, uint256 indexed tokenId);
 
-    constructor(address _nftContractAddress, address _initialOwner, address _treasury) Ownable(_initialOwner) {
-        nftContract = IERC721(_nftContractAddress);
-        treasuryWallet = _treasury;
+    /**
+     * @dev Construtor recebe o endereço do RewardBoosterNFT e do Hub.
+     */
+    constructor(
+        address _rewardBoosterAddress, // <-- Endereço do contrato que MINTA
+        address _ecosystemManagerAddress,
+        address _initialOwner
+    ) Ownable(_initialOwner) {
+        require(_rewardBoosterAddress != address(0), "Sale: Booster NFT Contract inválido");
+        require(_ecosystemManagerAddress != address(0), "Sale: Hub inválido");
+
+        rewardBoosterNFT = IRewardBoosterNFT(_rewardBoosterAddress);
+        ecosystemManager = IEcosystemManager(_ecosystemManagerAddress);
     }
 
     /**
-     * @notice (Dono) Configura um tier de venda: define o preço e deposita os NFTs.
-     * @param _tierId O ID do tier (0 para Diamond, 1 para Platinum, etc.).
-     * @param _priceInWei O preço do NFT em Wei.
-     * @param _tokenIds A lista de IDs dos NFTs que serao vendidos neste tier.
+     * @notice (Dono) Configura um tier de venda: preço, boost e metadados.
+     * @param _tierId O ID do tier (ex: 0 para Diamond, 5 para Iron, 6 para Crystal).
+     * @param _priceInWei O preço do NFT em Wei (BNB).
+     * @param _boostBips O valor do boost em BIPS (ex: 500 para Iron, 100 para Crystal).
+     * @param _metadataFile O nome/URI do arquivo JSON dos metadados.
      */
-    function setTier(uint256 _tierId, uint256 _priceInWei, uint256[] calldata _tokenIds) external onlyOwner {
+    function setTier(
+        uint256 _tierId,
+        uint256 _priceInWei,
+        // --- REMOVIDO ---
+        // uint256 _maxSupply,
+        uint256 _boostBips,
+        string calldata _metadataFile
+    ) external onlyOwner {
         Tier storage tier = tiers[_tierId];
         tier.priceInWei = _priceInWei;
-        tier.tokenIds = _tokenIds;
-        tier.nextTokenIndex = 0;
-
-        for (uint i = 0; i < _tokenIds.length; i++) {
-            require(nftContract.ownerOf(_tokenIds[i]) == msg.sender, "Dono deve possuir todos os NFTs para lista-los");
-            nftContract.safeTransferFrom(msg.sender, address(this), _tokenIds[i]);
-        }
+        // --- REMOVIDO ---
+        // tier.maxSupply = _maxSupply;
+        tier.mintedCount = 0; // Reseta a contagem se reconfigurar
+        tier.boostBips = _boostBips;
+        tier.metadataFile = _metadataFile;
+        tier.isConfigured = true; // Marca como configurado
     }
 
     /**
-     * @notice (Usuario) Compra um unico NFT de um tier.
-     * @param _tierId O ID do tier que o usuario deseja comprar.
+     * @notice (Usuário) Compra um único NFT de um tier, pagando em BNB.
      */
     function buyNFT(uint256 _tierId) external payable {
         buyMultipleNFTs(_tierId, 1);
     }
 
     /**
-     * @notice (Usuario) Compra uma quantidade especifica de NFTs de um tier.
-     * @param _tierId O ID do tier que o usuario deseja comprar.
-     * @param _quantity A quantidade de NFTs a serem comprados.
+     * @notice (Usuário) Compra múltiplos NFTs de um tier, pagando em BNB.
+     * @dev Chama a função de mint no RewardBoosterNFT.
      */
     function buyMultipleNFTs(uint256 _tierId, uint256 _quantity) public payable {
-        require(_quantity > 0, "Venda: A quantidade deve ser maior que zero");
+        require(_quantity > 0, "Venda: Quantidade deve ser > 0");
+        
         Tier storage tier = tiers[_tierId];
-        require(tier.priceInWei > 0, "Venda: Tier nao configurado");
-        
-        uint256 totalPrice = tier.priceInWei * _quantity;
-        require(msg.value == totalPrice, "Venda: Valor em ETH incorreto para a quantidade solicitada");
-        
-        require(tier.nextTokenIndex + _quantity <= tier.tokenIds.length, "Venda: Quantidade solicitada excede o estoque!");
+        require(tier.isConfigured, "Venda: Tier não configurado");
 
+        uint256 totalPrice = tier.priceInWei * _quantity;
+        require(msg.value == totalPrice, "Venda: Valor BNB incorreto");
+        
+        // --- REMOVIDO ---
+        // Checagem de estoque foi removida para permitir venda ilimitada.
+        // require(tier.mintedCount + _quantity <= tier.maxSupply, "Venda: Estoque esgotado para este tier");
+
+        // Atualiza a contagem (apenas informativo)
+        tier.mintedCount += _quantity;
+
+        // Chama a função de mint no RewardBoosterNFT para cada unidade
         for (uint i = 0; i < _quantity; i++) {
-            uint256 tokenIdToSell = tier.tokenIds[tier.nextTokenIndex];
-            tier.nextTokenIndex++;
-            emit NFTSold(msg.sender, _tierId, tokenIdToSell, tier.priceInWei);
-            nftContract.safeTransferFrom(address(this), msg.sender, tokenIdToSell);
+            // Chama a função externa no RewardBoosterNFT
+            uint256 newTokenId = rewardBoosterNFT.mintFromSale(
+                msg.sender,         // 'to' (o comprador)
+                tier.boostBips,     // Boost do tier
+                tier.metadataFile   // Metadados do tier
+            );
+            // Emite o evento com o ID do token retornado
+            emit NFTSold(msg.sender, _tierId, newTokenId, tier.priceInWei);
         }
     }
 
     /**
-     * @notice (Dono) Resgata os fundos em ETH acumulados no contrato.
+     * @notice (Dono) Resgata os fundos em BNB acumulados no contrato.
+     * @dev Busca o endereço da tesouraria no Hub.
      */
     function withdrawFunds() external onlyOwner {
-        (bool success, ) = treasuryWallet.call{value: address(this).balance}("");
-        require(success, "Saque falhou");
-    }
+        // Busca endereço no Hub
+        address treasuryWallet = ecosystemManager.getTreasuryAddress();
+        require(treasuryWallet != address(0), "Sale: Tesouraria não configurada no Hub");
 
-    /**
-     * @notice (Dono) Resgata todos os NFTs que ainda nao foram vendidos de um tier especifico.
-     * @param _tierId O ID do tier do qual voce quer resgatar os NFTs.
-     */
-    function withdrawUnsoldNFTs(uint256 _tierId) external onlyOwner {
-        Tier storage tier = tiers[_tierId];
-        uint256 remaining = tier.tokenIds.length - tier.nextTokenIndex;
-        require(remaining > 0, "Nenhum NFT nao vendido neste tier");
-
-        for (uint i = tier.nextTokenIndex; i < tier.tokenIds.length; i++) {
-            nftContract.safeTransferFrom(address(this), owner(), tier.tokenIds[i]);
+        uint256 balance = address(this).balance;
+        if (balance > 0) {
+            // Envia o saldo em BNB para a tesouraria
+            (bool success, ) = treasuryWallet.call{value: balance}("");
+            require(success, "Saque falhou");
         }
-        
-        tier.nextTokenIndex = tier.tokenIds.length;
-    }
-
-    /**
-     * @notice (Dono) Resgata um NFT especifico que esta listado para venda.
-     * @param _tierId O ID do tier onde o NFT esta listado.
-     * @param _tokenId O ID do token especifico a ser resgatado.
-     */
-    function rescueNFT(uint256 _tierId, uint256 _tokenId) external onlyOwner {
-        Tier storage tier = tiers[_tierId];
-        uint256 totalTokens = tier.tokenIds.length;
-        require(totalTokens > 0, "Tier nao tem tokens");
-
-        uint256 tokenIndex = type(uint256).max;
-        for (uint i = 0; i < totalTokens; i++) {
-            if (tier.tokenIds[i] == _tokenId) {
-                tokenIndex = i;
-                break;
-            }
-        }
-        require(tokenIndex != type(uint256).max, "Token nao encontrado no tier");
-
-        uint256 lastTokenId = tier.tokenIds[totalTokens - 1];
-        tier.tokenIds[tokenIndex] = lastTokenId;
-        tier.tokenIds.pop();
-
-        if (tokenIndex < tier.nextTokenIndex) {
-            tier.nextTokenIndex--;
-        }
-
-        emit NFTRescued(owner(), _tierId, _tokenId);
-        nftContract.safeTransferFrom(address(this), owner(), _tokenId);
-    }
-
-    function onERC721Received(address, address, uint256, bytes memory) public virtual override returns (bytes4) {
-        return this.onERC721Received.selector;
     }
 }

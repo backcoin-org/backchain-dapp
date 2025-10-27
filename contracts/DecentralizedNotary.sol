@@ -6,23 +6,27 @@ import "@openzeppelin/contracts/token/ERC721/extensions/ERC721Enumerable.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "./BKCToken.sol";
-import "./DelegationManager.sol";
+// <-- NOVO: Importa as interfaces do Hub e do DM
+import "./EcosystemManager.sol"; 
 
 /**
  * @title DecentralizedNotary
- * @dev Contrato corrigido: Ajustado override(ERC721) para tokenURI.
+ * @dev Contrato "Spoke" refatorado para usar o EcosystemManager.
+ * @notice Todas as taxas, requisitos de pStake e descontos são agora
+ * gerenciados pelo EcosystemManager (Hub).
  */
 contract DecentralizedNotary is ERC721Enumerable, Ownable, ReentrancyGuard {
 
     // --- Contratos do Ecossistema ---
     BKCToken public immutable bkcToken;
-    DelegationManager public immutable delegationManager;
-    address public immutable treasuryWallet;
+    // <-- NOVO: O Hub que gerencia as regras
+    IEcosystemManager public immutable ecosystemManager;
 
-    // --- Configurações do Cartório ---
-    uint256 public minimumPStakeRequired;
-    uint256 public notarizeFeeBKC;
-    uint256 public treasuryFeeBips;
+    // <-- REMOVIDO: delegationManager
+    // <-- REMOVIDO: treasuryWallet
+    // <-- REMOVIDO: minimumPStakeRequired
+    // <-- REMOVIDO: notarizeFeeBKC
+    // <-- REMOVIDO: treasuryFeeBips
 
     // --- Armazenamento dos NFTs ---
     uint256 private _tokenIdCounter;
@@ -38,83 +42,92 @@ contract DecentralizedNotary is ERC721Enumerable, Ownable, ReentrancyGuard {
         string documentURI,
         uint256 feePaid
     );
-    event NotarySettingsChanged(
-        uint256 newMinPStake,
-        uint256 newFee,
-        uint256 newTreasuryBips
-    );
+    // <-- REMOVIDO: event NotarySettingsChanged
 
     /**
      * @dev Construtor do contrato.
+     * @notice Agora recebe o endereço do Hub (EcosystemManager) e do Token.
      */
     constructor(
         address _bkcTokenAddress,
-        address _delegationManagerAddress,
-        address _treasuryAddress,
+        address _ecosystemManagerAddress, // <-- NOVO
         address _initialOwner
     ) ERC721("Backchain Notary Certificate", "BKCN") Ownable(_initialOwner) {
 
         require(
             _bkcTokenAddress != address(0) &&
-            _delegationManagerAddress != address(0) &&
-            _treasuryAddress != address(0),
-            "Notary: Invalid addresses"
+            _ecosystemManagerAddress != address(0), // <-- NOVO
+            "Notary: Endereços inválidos"
         );
 
         bkcToken = BKCToken(_bkcTokenAddress);
-        delegationManager = DelegationManager(_delegationManagerAddress);
-        treasuryWallet = _treasuryAddress;
-
-        minimumPStakeRequired = 1000;
-        notarizeFeeBKC = 100 * 10**18;
-        treasuryFeeBips = 5000;
+        ecosystemManager = IEcosystemManager(_ecosystemManagerAddress); // <-- NOVO
     }
 
     // --- Função Principal (para Usuários) ---
-    function notarizeDocument(string calldata _documentURI) external nonReentrant {
-        require(bytes(_documentURI).length > 0, "Notary: Document URI cannot be empty");
 
-        uint256 fee = notarizeFeeBKC;
-        uint256 pStake = delegationManager.userTotalPStake(msg.sender);
+    /**
+     * @notice Registra um documento no blockchain.
+     * @dev O usuário DEVE ter o pStake mínimo definido no Hub.
+     * @dev A taxa é definida no Hub e o desconto do booster é aplicado.
+     * @param _documentURI O hash ou URI do documento (ex: "ipfs://...").
+     * @param _boosterTokenId O tokenId do Booster NFT do usuário (enviado pelo frontend).
+     * Envie 0 se o usuário não tiver ou não quiser usar um booster.
+     */
+    function notarizeDocument(
+        string calldata _documentURI,
+        uint256 _boosterTokenId // <-- NOVO
+    ) external nonReentrant {
+        require(bytes(_documentURI).length > 0, "Notary: URI não pode ser vazia");
 
-        require(pStake >= minimumPStakeRequired, "Notary: Insufficient pStake delegation");
-        require(bkcToken.balanceOf(msg.sender) >= fee, "Notary: Insufficient BKC balance for fee");
+        // 1. CHAVE MESTRA: Autoriza e calcula a taxa em UMA chamada
+        // Esta chamada verifica o pStake (reverte se insuficiente)
+        // e retorna a taxa final com desconto aplicado.
+        uint256 finalFee = ecosystemManager.authorizeService(
+            "NOTARY_SERVICE", // Chave do Serviço (você define no Hub)
+            msg.sender,       // O usuário a ser verificado
+            _boosterTokenId   // O "cupom de desconto"
+        );
 
-        uint256 treasuryAmount = (fee * treasuryFeeBips) / 10000;
-        uint256 delegatorAmount = fee - treasuryAmount;
+        require(finalFee >= 0, "Notary: Taxa inválida");
 
-        require(bkcToken.transferFrom(msg.sender, address(this), fee), "Notary: Fee transfer failed");
+        // 2. PEGA ENDEREÇOS ATUALIZADOS DO HUB
+        address treasuryWallet = ecosystemManager.getTreasuryAddress();
+        address delegationManager = ecosystemManager.getDelegationManagerAddress();
+        require(treasuryWallet != address(0) && delegationManager != address(0), "Notary: Hub não configurado");
 
+        // 3. COLETA E DISTRIBUIÇÃO (Regra 50/50)
+        
+        // Puxa a taxa final (já com desconto) do usuário
+        require(bkcToken.transferFrom(msg.sender, address(this), finalFee), "Notary: Falha ao transferir taxa");
+
+        uint256 treasuryAmount = finalFee / 2;
+        uint256 delegatorAmount = finalFee - treasuryAmount;
+
+        // A. Envia 50% para a Tesouraria
         if (treasuryAmount > 0) {
-            require(bkcToken.transfer(treasuryWallet, treasuryAmount), "Notary: Treasury transfer failed");
+            require(bkcToken.transfer(treasuryWallet, treasuryAmount), "Notary: Falha ao enviar para Tesouraria");
         }
 
+        // B. Envia 50% para o pool de Delegadores (CORREÇÃO DO BUG)
         if (delegatorAmount > 0) {
-            bkcToken.approve(address(delegationManager), delegatorAmount);
-            delegationManager.depositRewards(0, delegatorAmount);
+            // Aprova o DM para ele puxar os tokens
+            bkcToken.approve(delegationManager, delegatorAmount);
+            // Chama o DM, que agora irá puxar os tokens deste contrato
+            IDelegationManager(delegationManager).depositRewards(0, delegatorAmount);
         }
 
+        // 4. MINT DO NFT (Lógica original)
         uint256 tokenId = _tokenIdCounter++;
         _documentURIs[tokenId] = _documentURI;
         _safeMint(msg.sender, tokenId);
 
-        emit DocumentNotarized(msg.sender, tokenId, _documentURI, fee);
+        emit DocumentNotarized(msg.sender, tokenId, _documentURI, finalFee);
     }
 
     // --- Funções de Administração (Owner) ---
-    function setNotarySettings(
-        uint256 _newMinPStake,
-        uint256 _newFeeBKC,
-        uint256 _newTreasuryBips
-    ) external onlyOwner {
-        require(_newTreasuryBips <= 10000, "Notary: Bips cannot exceed 10000");
 
-        minimumPStakeRequired = _newMinPStake;
-        notarizeFeeBKC = _newFeeBKC;
-        treasuryFeeBips = _newTreasuryBips;
-
-        emit NotarySettingsChanged(_newMinPStake, _newFeeBKC, _newTreasuryBips);
-    }
+    // <-- REMOVIDO: setNotarySettings (Agora é feito no EcosystemManager)
 
     function setBaseURI(string calldata newBaseURI) external onlyOwner {
         _baseTokenURI = newBaseURI;
@@ -128,22 +141,21 @@ contract DecentralizedNotary is ERC721Enumerable, Ownable, ReentrancyGuard {
 
     /**
      * @notice Retorna o URI completo do token.
-     * @dev CORREÇÃO: Usa override(ERC721).
      */
-    function tokenURI(uint256 tokenId) public view override(ERC721) returns (string memory) { // <-- CORREÇÃO AQUI
+    function tokenURI(uint256 tokenId) public view override(ERC721) returns (string memory) {
         require(ownerOf(tokenId) != address(0), "ERC721: URI query for nonexistent token");
-
         string memory base = _baseURI();
         string memory docURI = _documentURIs[tokenId];
 
         if (bytes(base).length == 0) {
             return docURI;
         }
-
+        
+        // Lógica para concatenar URI base e URI do documento (como antes)
         if (! (bytes(docURI).length > 7 && (
                  (bytes(docURI)[0] == 'i' && bytes(docURI)[1] == 'p' && bytes(docURI)[2] == 'f' && bytes(docURI)[3] == 's' && bytes(docURI)[4] == ':' && bytes(docURI)[5] == '/' && bytes(docURI)[6] == '/') ||
                  (bytes(docURI)[0] == 'h' && bytes(docURI)[1] == 't' && bytes(docURI)[2] == 't' && bytes(docURI)[3] == 'p' && bytes(docURI)[4] == 's' && bytes(docURI)[5] == ':' && bytes(docURI)[6] == '/') ||
-                 (bytes(docURI)[0] == 'h' && bytes(docURI)[1] == 't' && bytes(docURI)[2] == 't' && bytes(docURI)[3] == 'p' && bytes(docURI)[4] == ':' && bytes(docURI)[5] == '/' && bytes(docURI)[6] == '/')
+                 (bytes(docURI)[0] == 'h' && bytes(docURI)[1] == 't' && bytes(docURI)[2] == 't' && bytes(docURI)[3] == 'p' && bytes(docURI)[4. == ':' && bytes(docURI)[5] == '/' && bytes(docURI)[6] == '/')
              ))) {
             return string(abi.encodePacked(base, docURI));
         }
@@ -151,13 +163,12 @@ contract DecentralizedNotary is ERC721Enumerable, Ownable, ReentrancyGuard {
         return docURI;
     }
 
-    // --- Funções Internas ---
-    // Override _update from ERC721Enumerable for compatibility if needed elsewhere,
-    // otherwise the base _update from ERC721 is sufficient.
-    // Keeping _increaseBalance override as it's required by ERC721Enumerable inheritance.
+    // --- Funções Internas (Overrides do ERC721Enumerable) ---
+    // (Permanecem exatamente como estavam)
+    
     function _update(address to, uint256 tokenId, address auth)
         internal
-        override(ERC721Enumerable) // Keep this override specific to Enumerable's version if used
+        override(ERC721Enumerable)
         returns (address)
     {
         return super._update(to, tokenId, auth);
@@ -173,7 +184,7 @@ contract DecentralizedNotary is ERC721Enumerable, Ownable, ReentrancyGuard {
     function supportsInterface(bytes4 interfaceId)
         public
         view
-        override(ERC721Enumerable) // Keep this override specific to Enumerable
+        override(ERC721Enumerable)
         returns (bool)
     {
         return super.supportsInterface(interfaceId);

@@ -15,6 +15,7 @@ import {
     renderNoData, ipfsGateway, renderPaginatedList, renderError
 } from '../utils.js';
 import { startCountdownTimers, openModal, showToast, addNftToWallet, closeModal } from '../ui-feedback.js';
+// AJUSTE: boosterTiers é necessário para o novo renderActivityHistory
 import { addresses, boosterTiers } from '../config.js';
 
 // Base URI for Vesting Certificate metadata
@@ -646,9 +647,15 @@ async function renderMyCertificatesDashboard() {
     }
 }
 
-// (renderActivityItem e renderActivityHistory como na resposta anterior)
+// ====================================================================
+// ### INÍCIO DA SUBSTITUIÇÃO ###
+// As duas funções a seguir (`renderActivityItem` e `renderActivityHistory`)
+// são as versões corrigidas para buscar eventos reais.
+// ====================================================================
+
 /**
  * Renderiza um item de atividade (Histórico).
+ * (VERSÃO ATUALIZADA PARA SUPORTAR NOVOS TIPOS DE EVENTOS)
  */
 function renderActivityItem(item) {
     const timestamp = Number(item.timestamp);
@@ -657,29 +664,68 @@ function renderActivityItem(item) {
 
     let title = 'On-chain Action', icon = 'fa-exchange-alt', color = 'text-zinc-500', details = 'General transaction.', itemId = null;
 
+    // Tenta formatar o valor, tratando 'undefined' ou 'null'
+    const itemAmount = item.amount || 0n;
+    const formattedAmount = formatBigNumber(itemAmount).toFixed(2);
+
     switch(item.type) {
-        case 'Delegation': title = `Delegation`; icon = 'fa-shield-halved'; color = 'text-purple-400'; details = `Delegated ${formatBigNumber(item.amount).toFixed(2)} to ${formatAddress(item.details.validator)}`; itemId = item.details.index; break;
-        case 'Unstake': title = `Unstake`; icon = 'fa-unlock'; color = 'text-green-400'; details = `Unstaked ${formatBigNumber(item.amount).toFixed(2)} (#${item.details.index})`; itemId = item.details.index; break;
-        // AJUSTE: Manteve o ícone 'fa-triangle-exclamation' para Forçada, pois 'fa-lock' foi para o botão
-        case 'ForceUnstake': title = `Forced Unstake`; icon = 'fa-triangle-exclamation'; color = 'text-red-400'; details = `Penalty ${formatBigNumber(item.amount).toFixed(2)} (#${item.details.index})`; itemId = item.details.index; break;
-        case 'ClaimRewards': title = `Rewards Claimed`; icon = 'fa-gift'; color = 'text-amber-400'; details = `Received ${formatBigNumber(item.amount).toFixed(2)} $BKC`; itemId = null; break;
-        case 'VestingCertReceived': title = `Certificate Received`; icon = 'fa-id-card-clip'; color = 'text-cyan-400'; details = `Vesting ${formatBigNumber(item.amount).toFixed(2)} (#${item.details.tokenId})`; itemId = item.details.tokenId; break;
+        // --- Tipos existentes ---
+        case 'Delegation': title = `Delegation`; icon = 'fa-shield-halved'; color = 'text-purple-400'; details = `Delegated ${formattedAmount} to ${formatAddress(item.details.validator)}`; itemId = item.details.index; break;
+        case 'VestingCertReceived': title = `Certificate Received`; icon = 'fa-id-card-clip'; color = 'text-cyan-400'; details = `Vesting ${formattedAmount} (#${item.details.tokenId})`; itemId = item.details.tokenId; break;
         case 'BoosterNFT': title = `Booster Acquired`; icon = 'fa-gem'; color = 'text-green-400'; details = `Tier: ${item.details.tierName}`; itemId = item.details.tokenId; break;
-        // Adicionar outros tipos aqui...
+        
+        // --- Novos Tipos (Eventos Reais) ---
+        case 'Unstake': 
+            title = `Unstake`; icon = 'fa-unlock'; color = 'text-green-400'; 
+            details = `Unstaked ${formattedAmount} $BKC`; 
+            if(item.details.feePaid && item.details.feePaid > 0n) {
+                details += ` (Fee: ${formatBigNumber(item.details.feePaid).toFixed(2)})`;
+            }
+            itemId = item.details.index; 
+            break;
+            
+        case 'ForceUnstake': // Este tipo é derivado do evento Unstaked mas podemos diferenciá-lo
+            title = `Forced Unstake`; icon = 'fa-triangle-exclamation'; color = 'text-red-400'; 
+            details = `Received ${formattedAmount} $BKC (Penalty: ${formatBigNumber(item.details.feePaid).toFixed(2)})`; 
+            itemId = item.details.index; 
+            break;
+
+        case 'DelegatorRewardClaimed': 
+            title = `Rewards Claimed`; icon = 'fa-gift'; color = 'text-amber-400'; 
+            details = `Claimed ${formattedAmount} $BKC from staking`; 
+            itemId = null; // Não há ID único para este item
+            break;
+            
+        case 'CertificateWithdrawn': 
+            title = `Certificate Withdrawn`; icon = 'fa-money-bill-transfer'; color = 'text-cyan-400'; 
+            details = `Withdrew ${formattedAmount} $BKC (#${item.details.tokenId})`;
+            if(item.details.penaltyAmount && item.details.penaltyAmount > 0n) {
+                 details += ` (Penalty: ${formatBigNumber(item.details.penaltyAmount).toFixed(2)})`;
+            }
+            itemId = item.details.tokenId; 
+            break;
+            
+        case 'MinerRewardClaimed': 
+            title = `Miner Rewards Claimed`; icon = 'fa-pickaxe'; color = 'text-blue-400'; 
+            details = `Claimed ${formattedAmount} $BKC from mining`; 
+            itemId = null; 
+            break;
     }
 
     const txHash = item.txHash;
     let Tag, tagAttributes, hoverClass, cursorClass, actionIndicator = '';
-    const supportsLazySearch = ['Delegation', 'VestingCertReceived' /*, 'Unstake', 'ForceUnstake'*/].includes(item.type);
+    
+    // Deixamos a busca 'lazy' para os tipos que a suportam
+    const supportsLazySearch = ['Delegation', 'VestingCertReceived', 'Unstake', 'ForceUnstake', 'CertificateWithdrawn'].includes(item.type);
 
-    if (txHash) { // Link Direto
+    if (txHash) { // Link Direto (se o evento já o forneceu)
         Tag = 'a'; tagAttributes = `href="${EXPLORER_BASE_URL}${txHash}" target="_blank" rel="noopener noreferrer" title="View Transaction on Explorer"`; hoverClass = 'hover:bg-main/70 group'; cursorClass = 'cursor-pointer';
         actionIndicator = `<span class="text-xs text-blue-400/80 group-hover:text-blue-300 transition-colors ml-auto">View Tx <i class="fa-solid fa-arrow-up-right-from-square ml-1"></i></span>`;
     } else if (supportsLazySearch && itemId !== undefined && itemId !== null) { // Botão Lazy
         Tag = 'button'; tagAttributes = `data-type="${item.type}" data-id="${itemId}" title="Click to find transaction (may take time)"`; hoverClass = 'hover:bg-main/70 group lazy-tx-link'; cursorClass = 'cursor-pointer';
         actionIndicator = `<span class="text-xs text-amber-500/80 group-hover:text-amber-400 transition-colors ml-auto">Find Tx <i class="fa-solid fa-magnifying-glass ml-1"></i></span>`;
-    } else { // Div Não Clicável
-        Tag = 'div'; tagAttributes = `title="Transaction details unavailable"`; hoverClass = ''; cursorClass = 'cursor-default opacity-80';
+    } else { // Div Não Clicável (para claims que não têm lazy search)
+        Tag = 'div'; tagAttributes = `title="Transaction details"`; hoverClass = ''; cursorClass = 'cursor-default';
     }
 
     return `
@@ -700,6 +746,10 @@ function renderActivityItem(item) {
 }
 
 
+/**
+ * Renderiza o Histórico de Atividades.
+ * (VERSÃO ATUALIZADA - Consulta eventos reais do blockchain)
+ */
 async function renderActivityHistory() {
     const listEl = document.getElementById('activity-history-list-container');
     if (!listEl) { console.warn("History container not found"); return; }
@@ -709,37 +759,151 @@ async function renderActivityHistory() {
 
     try {
         await loadMyBoosters(); // Garante que boosters estejam carregados
+        if (!State.userDelegations || State.userDelegations.length === 0) {
+             await loadUserData(); // Garante que delegações e certificados estejam carregados
+        }
 
         const allActivities = [];
-        const now = Math.floor(Date.now() / 1000);
+        const userAddress = State.userAddress;
 
-        // Delegações
+        // 1. Itens baseados no ESTADO ATUAL (Delegações, Certificados, Boosters)
+        // (Isso mostra quando eles foram criados)
         State.userDelegations?.forEach(d => {
             const startTime = Number(d.unlockTime) - Number(d.lockDuration);
-            allActivities.push({ type: 'Delegation', amount: d.amount, timestamp: startTime, details: { validator: d.validator, index: d.index }, txHash: null, itemId: d.index });
+            allActivities.push({ 
+                type: 'Delegation', 
+                amount: d.amount, 
+                timestamp: startTime, 
+                details: { validator: d.validator, index: d.index }, 
+                txHash: null, 
+                itemId: d.index 
+            });
         });
 
-        // Certificados
         const certPromises = State.myCertificates?.map(async (cert) => {
             const position = await safeContractCall(State.rewardManagerContract, 'vestingPositions', [cert.tokenId], {totalAmount: 0n, startTime: 0n});
             if (position.startTime > 0) {
-                 allActivities.push({ type: 'VestingCertReceived', amount: position.totalAmount, timestamp: Number(position.startTime), details: { tokenId: cert.tokenId.toString() }, txHash: null, itemId: cert.tokenId.toString() });
+                 allActivities.push({ 
+                     type: 'VestingCertReceived', 
+                     amount: position.totalAmount, 
+                     timestamp: Number(position.startTime), 
+                     details: { tokenId: cert.tokenId.toString() }, 
+                     txHash: null, 
+                     itemId: cert.tokenId.toString() 
+                 });
             }
         }) || [];
         await Promise.all(certPromises);
 
-        // Boosters
         State.myBoosters?.forEach(b => {
             const tier = boosterTiers.find(t => t.boostBips === b.boostBips);
-            allActivities.push({ type: 'BoosterNFT', amount: 0n, timestamp: b.acquisitionTime || now, details: { tokenId: b.tokenId.toString(), tierName: tier?.name || 'Unknown' }, txHash: b.txHash || null, itemId: b.tokenId.toString() });
+            allActivities.push({ 
+                type: 'BoosterNFT', 
+                amount: 0n, 
+                timestamp: b.acquisitionTime || Math.floor(Date.now() / 1000), 
+                details: { tokenId: b.tokenId.toString(), tierName: tier?.name || 'Unknown' }, 
+                txHash: b.txHash || null, 
+                itemId: b.tokenId.toString() 
+            });
         });
 
-        // Claim Simulado (usando o valor alvo da animação)
-        if (targetRewardValue > 0n) {
-             const CLAIM_SIMULATION_TIME = now - 604800; // Simula 1 semana atrás
-             allActivities.push({ type: 'ClaimRewards', amount: targetRewardValue, timestamp: CLAIM_SIMULATION_TIME, details: {}, txHash: null, itemId: null });
+        // 2. Itens baseados em EVENTOS PASSADOS (Saques, Resgates)
+        // Usamos 'safeContractCall' para 'queryFilter' para segurança
+        const blockTimestampCache = {};
+        const getTimestamp = async (blockNumber) => {
+            if (blockTimestampCache[blockNumber]) return blockTimestampCache[blockNumber];
+            try {
+                const block = await State.publicProvider.getBlock(blockNumber);
+                if (block) {
+                    blockTimestampCache[blockNumber] = block.timestamp;
+                    return block.timestamp;
+                }
+            } catch (e) { console.warn(`Failed to get block ${blockNumber}`, e); }
+            return Math.floor(Date.now() / 1000); // Fallback
+        };
+
+        // Eventos de Saque (Unstake)
+        const unstakeFilter = State.delegationManagerContract.filters.Unstaked(userAddress);
+        const unstakeEvents = await safeContractCall(State.delegationManagerContract, 'queryFilter', [unstakeFilter, -200000], []); // Últimos 200k blocos
+        
+        for (const event of unstakeEvents) {
+            const { user, delegationIndex, amount, feePaid } = event.args;
+            const timestamp = await getTimestamp(event.blockNumber);
+            
+            // Determina se foi 'ForceUnstake' (penalidade > 1%) ou 'Unstake' normal
+            const originalAmount = amount + feePaid;
+            // A taxa de unstake normal é 100 BIPS (1%). A de force unstake é 5000 BIPS (50%).
+            // Se a "taxa" (penalidade) for maior que 1% do valor original, é force unstake.
+            const isForceUnstake = feePaid > (originalAmount / 100n); 
+
+            allActivities.push({
+                type: isForceUnstake ? 'ForceUnstake' : 'Unstake',
+                amount: amount, // Valor que o usuário recebeu
+                timestamp: timestamp,
+                details: { 
+                    index: delegationIndex.toString(), 
+                    feePaid: feePaid // Em 'ForceUnstake' isso é a penalidade, em 'Unstake' é a taxa
+                },
+                txHash: event.transactionHash,
+                itemId: delegationIndex.toString()
+            });
         }
 
+        // Eventos de Resgate de Recompensas de Staking
+        const claimFilter = State.delegationManagerContract.filters.DelegatorRewardClaimed(userAddress);
+        const claimEvents = await safeContractCall(State.delegationManagerContract, 'queryFilter', [claimFilter, -200000], []);
+        
+        for (const event of claimEvents) {
+            const { delegator, amount } = event.args;
+            const timestamp = await getTimestamp(event.blockNumber);
+            allActivities.push({
+                type: 'DelegatorRewardClaimed',
+                amount: amount,
+                timestamp: timestamp,
+                details: {},
+                txHash: event.transactionHash,
+                itemId: null
+            });
+        }
+
+        // Eventos de Saque de Certificado
+        const withdrawFilter = State.rewardManagerContract.filters.CertificateWithdrawn(null, userAddress); // O dono é o segundo índice
+        const withdrawEvents = await safeContractCall(State.rewardManagerContract, 'queryFilter', [withdrawFilter, -200000], []);
+
+        for (const event of withdrawEvents) {
+            const { tokenId, owner, amountToOwner, penaltyAmount } = event.args;
+            const timestamp = await getTimestamp(event.blockNumber);
+            allActivities.push({
+                type: 'CertificateWithdrawn',
+                amount: amountToOwner,
+                timestamp: timestamp,
+                details: { 
+                    tokenId: tokenId.toString(),
+                    penaltyAmount: penaltyAmount
+                },
+                txHash: event.transactionHash,
+                itemId: tokenId.toString()
+            });
+        }
+        
+        // (Opcional) Eventos de Resgate de Recompensas de Minerador
+        const minerClaimFilter = State.rewardManagerContract.filters.MinerRewardClaimed(userAddress);
+        const minerClaimEvents = await safeContractCall(State.rewardManagerContract, 'queryFilter', [minerClaimFilter, -200000], []);
+
+        for (const event of minerClaimEvents) {
+            const { miner, amount } = event.args;
+            const timestamp = await getTimestamp(event.blockNumber);
+            allActivities.push({
+                type: 'MinerRewardClaimed',
+                amount: amount,
+                timestamp: timestamp,
+                details: {},
+                txHash: event.transactionHash,
+                itemId: null
+            });
+        }
+
+        // 3. Ordenar e Renderizar
         allActivities.sort((a, b) => b.timestamp - a.timestamp);
 
         if (allActivities.length === 0) {
@@ -757,6 +921,11 @@ async function renderActivityHistory() {
         renderError(listEl, "Failed to load activity history."); // Usa renderError importado
     }
 }
+
+// ====================================================================
+// ### FIM DA SUBSTITUIÇÃO ###
+// O resto do arquivo (Main Page Rendering Function) permanece o mesmo.
+// ====================================================================
 
 
 // --- Main Page Rendering Function ---

@@ -15,38 +15,41 @@ let airdropState = {
     user: null,
     dailyTasks: [], // Active tasks with eligibility status
     userSubmissions: [], // User's content submission history
-    flaggedSubmissions: [], // Submissions requiring user review
+    // flaggedSubmissions: [], // <-- REMOVIDO, agora parte de userSubmissions
     isBanned: false, // User ban status
     activeMainTab: 'profile', // Default tab: Profile
     activeSubmitTab: 'content-submission', // Default sub-tab: Content Submission
+    activeHistoryTab: 'pending', // NOVA Sub-sub-tab: 'pending' ou 'finalized'
 };
 
 // --- Constants ---
 const DEFAULT_HASHTAGS = "#Backchain #BKC #Web3 #Crypto #Airdrop";
 const AUTO_APPROVE_HOURS = 2; // VISUAL delay for submission approval
 
-// --- UI Mappings (EXPANDIDO: TikTok, Reddit, LinkedIn adicionados) ---
+// --- UI Mappings (Ícones expandidos para melhor UX) ---
 // Used for consistent status and platform styling
 const statusUI = {
     pending: { text: 'Pending Review', color: 'text-amber-400', bgColor: 'bg-amber-900/50', icon: 'fa-clock' },
     auditing: { text: 'Auditing', color: 'text-blue-400', bgColor: 'bg-blue-900/50', icon: 'fa-magnifying-glass' },
     approved: { text: 'Approved', color: 'text-green-400', bgColor: 'bg-green-900/50', icon: 'fa-check-circle' },
     rejected: { text: 'Rejected', color: 'text-red-400', bgColor: 'bg-red-900/50', icon: 'fa-times-circle' },
+    deleted_by_user: { text: 'Error Reported', color: 'text-zinc-400', bgColor: 'bg-zinc-700/50', icon: 'fa-trash-alt' }, // NOVO STATUS
     flagged_suspicious: { text: 'Flagged - Review!', color: 'text-red-300', bgColor: 'bg-red-800/60', icon: 'fa-flag' },
     // NEW VISUAL STATUS AFTER 2H AUDIT: AWAITING USER CONFIRMATION
-    pending_confirmation: { text: 'Action Required: Confirm', color: 'text-cyan-400', bgColor: 'bg-cyan-900/50', icon: 'fa-clipboard-check' } 
+    pending_confirmation: { text: 'Action Required', color: 'text-cyan-400', bgColor: 'bg-cyan-900/50', icon: 'fa-clipboard-check' } 
 };
+// NOVO MAPEAMENTO DE ÍCONES (COM 'type': 'brands' ou 'solid')
 const platformUI = {
-    'YouTube': { icon: 'fa-youtube', color: 'text-red-500' },
-    'YouTube Shorts': { icon: 'fa-youtube', color: 'text-red-500' },
-    'Instagram': { icon: 'fa-instagram', color: 'text-pink-500' },
-    'X/Twitter': { icon: 'fa-x-twitter', color: 'text-white' },
-    'Facebook': { icon: 'fa-facebook', color: 'text-blue-600' }, 
-    'Telegram': { icon: 'fa-telegram', color: 'text-cyan-400' },
-    'TikTok': { icon: 'fa-tiktok', color: 'text-zinc-100' }, // Ícone do TikTok
-    'Reddit': { icon: 'fa-reddit', color: 'text-orange-500' }, // Ícone do Reddit
-    'LinkedIn': { icon: 'fa-linkedin', color: 'text-blue-700' }, // Ícone do LinkedIn
-    'Other': { icon: 'fa-globe', color: 'text-gray-400' },
+    'YouTube': { icon: 'fa-youtube', color: 'text-red-500', type: 'brands' },
+    'YouTube Shorts': { icon: 'fa-youtube', color: 'text-red-500', type: 'brands' },
+    'Instagram': { icon: 'fa-instagram', color: 'text-pink-500', type: 'brands' },
+    'X/Twitter': { icon: 'fa-x-twitter', color: 'text-white', type: 'brands' },
+    'Facebook': { icon: 'fa-facebook', color: 'text-blue-600', type: 'brands' }, 
+    'Telegram': { icon: 'fa-telegram', color: 'text-cyan-400', type: 'brands' },
+    'TikTok': { icon: 'fa-tiktok', color: 'text-zinc-100', type: 'brands' },
+    'Reddit': { icon: 'fa-reddit', color: 'text-orange-500', type: 'brands' },
+    'LinkedIn': { icon: 'fa-linkedin', color: 'text-blue-700', type: 'brands' },
+    'Other': { icon: 'fa-globe', color: 'text-gray-400', type: 'solid' }, // <-- CORRIGIDO para 'solid'
 };
 
 // =======================================================
@@ -57,7 +60,7 @@ async function loadAirdropData() {
     airdropState.isConnected = State.isConnected;
     airdropState.user = null;
     airdropState.userSubmissions = [];
-    airdropState.flaggedSubmissions = [];
+    // airdropState.flaggedSubmissions = []; // <-- REMOVIDO
     airdropState.isBanned = false;
     airdropState.basePoints = null;
 
@@ -66,7 +69,7 @@ async function loadAirdropData() {
         const publicData = await db.getPublicAirdropData();
 
         airdropState.systemConfig = publicData.config;
-        // Load base points from config, com suporte expandido para novas redes
+        // Load base points from config, com suporte expandido
         airdropState.basePoints = publicData.config?.ugcBasePoints || { 
             'YouTube': 5000, 
             'YouTube Shorts': 2500, 
@@ -74,9 +77,9 @@ async function loadAirdropData() {
             'X/Twitter': 1500, 
             'Facebook': 2000, 
             'Telegram': 1000,
-            'TikTok': 3500, // Novo valor base
-            'Reddit': 1800,  // Novo valor base
-            'LinkedIn': 2200, // Novo valor base
+            'TikTok': 3500, 
+            'Reddit': 1800, 
+            'LinkedIn': 2200, 
             'Other': 1000
         };
         airdropState.leaderboards = publicData.leaderboards;
@@ -84,14 +87,15 @@ async function loadAirdropData() {
 
         // If connected, fetch user data
         if (airdropState.isConnected && State.userAddress) {
-            const [user, submissions, flagged] = await Promise.all([
+            // Busca usuário e TODAS as submissões
+            const [user, submissions] = await Promise.all([
                 db.getAirdropUser(State.userAddress),
-                db.getUserSubmissions(),
-                db.getUserFlaggedSubmissions()
+                db.getUserSubmissions(), // <-- Agora busca TUDO
+                // db.getUserFlaggedSubmissions() // <-- REMOVIDO
             ]);
             airdropState.user = user;
             airdropState.userSubmissions = submissions;
-            airdropState.flaggedSubmissions = flagged;
+            // airdropState.flaggedSubmissions = flagged; // <-- REMOVIDO
 
             // Check for ban
             if (user.isBanned) {
@@ -147,7 +151,10 @@ function handleMainTabSwitch(e) {
             });
             airdropState.activeMainTab = targetTab;
             // Reset Submit & Earn sub-tab if switching back to it
-            if(targetTab === 'submissions') airdropState.activeSubmitTab = 'content-submission';
+            if(targetTab === 'submissions') {
+                 airdropState.activeSubmitTab = 'content-submission';
+                 airdropState.activeHistoryTab = 'pending'; // Reseta também a sub-sub-aba
+            }
             renderAirdropContent(); // Re-render everything
         }
     }
@@ -160,8 +167,31 @@ function handleSubmitTabSwitch(e) {
         const targetTab = button.getAttribute('data-target');
         if (targetTab && airdropState.activeSubmitTab !== targetTab) {
             airdropState.activeSubmitTab = targetTab;
+            airdropState.activeHistoryTab = 'pending'; // Reseta sub-sub-aba ao trocar
             // Garantir que renderSubmitEarnContent seja chamado com o wrapper correto
             renderSubmitEarnContent(document.getElementById('airdrop-content-wrapper').querySelector('#active-tab-content'));
+        }
+    }
+}
+
+// --- NOVA: History Sub-Sub-Tab Switch ---
+function handleHistoryTabSwitch(e) {
+    const button = e.target.closest('.history-tab-btn');
+    if (button) {
+        const targetTab = button.getAttribute('data-target'); // 'pending' ou 'finalized'
+        if (targetTab && airdropState.activeHistoryTab !== targetTab) {
+            airdropState.activeHistoryTab = targetTab;
+            // Apenas re-renderiza o painel de submissão (que contém essas abas)
+            const contentWrapper = document.getElementById('submit-earn-tab-content-wrapper');
+            if (contentWrapper) {
+                 contentWrapper.innerHTML = renderSubmissionPanelContent();
+                 // Re-attach listeners
+                 document.getElementById('copyReferralBtn_submitArea')?.addEventListener('click', handleCopyReferralLink);
+                 document.querySelector('.submission-step-4 .submitContentLinkBtn')?.addEventListener('click', handleSubmitUgcClick);
+                 document.getElementById('ugc-submission-history-tabs')?.addEventListener('click', handleHistoryTabSwitch); // Listener para as novas abas
+                 document.getElementById('pending-submissions-list')?.addEventListener('click', handleSubmissionAction); // Listener para Ações Pendentes
+                 document.getElementById('pending-submissions-list')?.addEventListener('click', handleResolveSubmission); // Listener para Ações Flagradas
+            }
         }
     }
 }
@@ -177,6 +207,56 @@ const formatTimeLeft = (ms) => {
     // Format HH:MM:SS
     return `Cooldown: ${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
 };
+
+// --- (NOVO) Utility for Animating Numbers ---
+function animateValue(element, start, end, duration, isPoints = true) {
+    if (!element) return;
+    // Se não há mudança, apenas defina o valor final
+    if (start === end) {
+         element.textContent = isPoints ? end.toLocaleString('en-US') : `${end.toFixed(1)}x`;
+         return;
+    }
+
+    let startTime = null;
+    
+    // Easing function (ease-out-quad) para desaceleração suave
+    const ease = (t) => t * (2 - t);
+
+    const step = (timestamp) => {
+        if (!startTime) startTime = timestamp;
+        const progress = timestamp - startTime;
+        let t = Math.min(progress / duration, 1); // Progresso de 0 a 1
+        let easedT = ease(t); // Aplicar easing
+        
+        const currentValue = start + (end - start) * easedT;
+        
+        // Atualizar o texto
+        if (isPoints) {
+            element.textContent = Math.floor(currentValue).toLocaleString('en-US');
+        } else {
+            element.textContent = `${currentValue.toFixed(1)}x`;
+        }
+
+        // Continuar a animação
+        if (t < 1) {
+            requestAnimationFrame(step);
+        } else {
+             // Garantir que o valor final exato seja definido no final
+             if (isPoints) {
+                element.textContent = end.toLocaleString('en-US');
+             } else {
+                element.textContent = `${end.toFixed(1)}x`;
+             }
+             // Adicionar um efeito de "pop" no final
+             element.classList.add('animate-pop');
+             setTimeout(() => {
+                 if(element) element.classList.remove('animate-pop');
+             }, 200);
+        }
+    };
+    
+    requestAnimationFrame(step);
+}
 
 
 // --- Handle Daily Task Click ---
@@ -345,13 +425,14 @@ async function handleResolveSubmission(e) {
     const resolution = button.dataset.resolution;
     if (!submissionId || !resolution) return;
 
-    const card = button.closest('.flagged-submission-card');
-    const buttonsContainer = card?.querySelector('.resolve-buttons');
+    const card = button.closest('.submission-history-card'); // Atualizado
+    const buttonsContainer = card?.querySelector('.action-buttons-container'); // Atualizado
     if(buttonsContainer) renderLoading(buttonsContainer);
 
     try {
+        // A função resolveFlaggedSubmission agora concede pontos se 'not_fraud'
         await db.resolveFlaggedSubmission(submissionId, resolution);
-        showToast(`Submission marked as '${resolution}'.`, resolution === 'not_fraud' ? 'success' : 'info');
+        showToast(`Submission marked as '${resolution}' and processed.`, resolution === 'not_fraud' ? 'success' : 'info');
         await loadAirdropData();
         renderAirdropContent();
     } catch (error) {
@@ -361,16 +442,21 @@ async function handleResolveSubmission(e) {
     }
 }
 
-// --- Handle Post-Audit Confirmation/Error Report ---
+// --- (MODIFICADO) Handle Post-Audit Confirmation/Error Report (Com Animação) ---
 async function handleSubmissionAction(e) {
     const button = e.target.closest('.submission-action-btn');
     if (!button || button.disabled) return;
     
     const submissionId = button.dataset.submissionId;
     const action = button.dataset.action; // 'confirm' or 'report_error'
-    const userId = State.userAddress;
 
-    if (!submissionId || !action || !userId) return;
+    if (!submissionId || !action) return;
+
+    // --- (NOVO) Captura o estado antigo para animação ---
+    const oldTotalPoints = airdropState.user?.totalPoints || 0;
+    const oldApprovedCount = airdropState.user?.approvedSubmissionsCount || 0;
+    const oldMultiplier = Math.min(10.0, oldApprovedCount * 0.1);
+    // --- Fim da Captura ---
 
     const card = button.closest('.submission-history-card');
     const buttonsContainer = card?.querySelector('.action-buttons-container');
@@ -380,22 +466,61 @@ async function handleSubmissionAction(e) {
 
     try {
         if (action === 'confirm') {
-            // Backend function to APPROVE and consolidate score
-            await db.confirmSubmission(userId, submissionId); 
+            // Tentativa de confirmação (agora concede os pontos)
+            await db.confirmSubmission(submissionId); 
             showToast("Points confirmed and awarded!", "success");
+            
+            // Atualiza o estado para mover o item e obter novos totais
+            await loadAirdropData();
+            // Renderiza o conteúdo (isso recria os elementos de exibição)
+            renderAirdropContent(); 
+
+            // --- (NOVO) Aciona a Animação ---
+            const newTotalPoints = airdropState.user?.totalPoints || 0;
+            const newApprovedCount = airdropState.user?.approvedSubmissionsCount || 0;
+            const newMultiplier = Math.min(10.0, newApprovedCount * 0.1);
+
+            // Encontra os elementos recém-renderizados
+            const pointsDisplayEl = document.getElementById('history-total-points-display');
+            const multiplierDisplayEl = document.getElementById('history-multiplier-display');
+
+            // Anima os Pontos
+            if (pointsDisplayEl && newTotalPoints > oldTotalPoints) {
+                // Anima de (antigo) para (novo) em 1000ms
+                animateValue(pointsDisplayEl, oldTotalPoints, newTotalPoints, 1000, true);
+            }
+            
+            // Anima o Multiplicador
+            if (multiplierDisplayEl && newMultiplier > oldMultiplier) {
+                // Usa uma duração ligeiramente diferente para dessincronizar
+                animateValue(multiplierDisplayEl, oldMultiplier, newMultiplier, 800, false);
+            }
+            // --- Fim da Animação ---
+
         } else if (action === 'report_error') {
-            // Backend function to DELETE (or reject and zero out points)
-            await db.deleteSubmission(userId, submissionId); 
+            // Tentativa de deleção/remoção (agora é neutra)
+            await db.deleteSubmission(submissionId); 
             showToast("Submission deleted. You can re-submit a correct link.", "info");
+            
+            // Recarregamento padrão sem animação
+            await loadAirdropData();
+            renderAirdropContent(); 
         }
 
-        await loadAirdropData();
-        renderAirdropContent(); 
-
     } catch (error) {
+        // Trata a falha de concorrência ou "já processado"
+        if (error.message.includes("Document not found or already processed") || error.message.includes("already in status")) {
+             showToast(`Action failed: This submission was already processed or deleted. Refreshing...`, "warning");
+             // Força um recarregamento total para remover o elemento obsoleto do DOM
+             await loadAirdropData(); // Recarrega os dados para pegar o estado atualizado
+             renderAirdropContent(); // Renderiza para remover o elemento obsoleto
+             return;
+        }
+
         showToast(`Failed to process action: ${error.message}`, "error");
         console.error("Submission Action Error:", error);
         
+        // Restaura os botões em caso de erro não-fatal
         if (buttonsContainer && document.body.contains(buttonsContainer)) {
              buttonsContainer.innerHTML = originalButtonsHtml;
              button.disabled = false;
@@ -431,15 +556,19 @@ async function handleSubmitUgcClick(e) {
     renderLoading(submitButton, 'Submitting...');
 
     try {
-        await db.addSubmission(url);
+        // addSubmission agora NÃO concede pontos
+        await db.addSubmission(url); 
 
-        showToast("Link submitted successfully! Pending review.", "success");
+        showToast("Link submitted! It will appear for confirmation shortly.", "success");
         urlInput.value = '';
         await loadAirdropData();
+        
+        // MUDA para a aba de "Aguardando Confirmação"
+        airdropState.activeHistoryTab = 'pending';
         renderAirdropContent();
 
     } catch (error) {
-        // Assume que a validação do backend foi corrigida para Shorts, mas mantém o aviso genérico
+        // Aviso genérico para erro de submissão
         showToast(`Submission failed: ${error.message}`, "error");
         console.error("Content Submit Error:", error);
     } finally {
@@ -472,7 +601,7 @@ function renderSectionContainer(title, iconClass, contentHtml) {
     `;
 }
 
-// --- Content Submission Flow (4 Steps) ---
+// --- (MODIFICADO) Content Submission Flow (4 Steps) - Correção Asteriscos ---
 function renderContentSubmissionFlow() {
     if (!airdropState.isConnected || !airdropState.user) {
         return renderNoData(null, 'Connect your wallet to submit content.');
@@ -496,12 +625,12 @@ function renderContentSubmissionFlow() {
                 <li class="submission-step-2 border-l-4 border-zinc-500 pl-4 py-1">
                     <p class="font-bold text-lg text-white mb-2 flex items-center gap-2"><span class="bg-zinc-500 text-zinc-900 font-extrabold w-6 h-6 flex items-center justify-center rounded-full text-sm">2</span> Create Your Social Media Post</p>
                     <p class="text-zinc-400 text-sm">Create a post (video, tweet, reel, etc.) on your preferred platform (YouTube, X/Twitter, Instagram, etc.).</p>
-                    <p class="text-zinc-400 text-sm mt-1">**MUST** include your referral link (copied in Step 1) and the hashtags: <span class="font-mono text-amber-400 text-xs">${DEFAULT_HASHTAGS}</span></p>
+                    <p class="text-zinc-400 text-sm mt-1"><strong class="text-amber-400">MUST</strong> include your referral link (copied in Step 1) and the hashtags: <span class="font-mono text-amber-400 text-xs">${DEFAULT_HASHTAGS}</span></p>
                 </li>
 
                 <li class="submission-step-3 border-l-4 border-zinc-500 pl-4 py-1">
                     <p class="font-bold text-lg text-white mb-2 flex items-center gap-2"><span class="bg-zinc-500 text-zinc-900 font-extrabold w-6 h-6 flex items-center justify-center rounded-full text-sm">3</span> Publish the Content</p>
-                    <p class="text-zinc-400 text-sm">Publish your post and ensure it is set to **Public** for verification.</p>
+                    <p class="text-zinc-400 text-sm">Publish your post and ensure it is set to <strong class="text-amber-400">Public</strong> for verification.</p>
                 </li>
 
                 <li class="submission-step-4 border-l-4 border-red-500 pl-4 py-1">
@@ -541,51 +670,20 @@ function renderProfileContent(el) {
         return;
     }
 
-    const { user, flaggedSubmissions, userSubmissions } = airdropState;
+    const { user, userSubmissions } = airdropState; // Removido flaggedSubmissions
     const totalPoints = user.totalPoints || 0;
     const approvedCount = user.approvedSubmissionsCount || 0;
     const rejectedCount = user.rejectedCount || 0;
-    const multiplier = Math.min(10.0, approvedCount * 0.1);
+    const multiplier = Math.min(10.0, approvedCount * 0.1); // Multiplicador é baseado em *aprovados*
     const multiplierDisplay = `${multiplier.toFixed(1)}x`;
     
+    // Calcula pontos pendentes (baseado na nova lógica)
     const pendingPoints = userSubmissions
-        .filter(sub => sub.status === 'pending' || sub.status === 'auditing')
-        .reduce((sum, sub) => sum + (sub.basePoints || 0), 0);
+        .filter(sub => ['pending', 'auditing', 'flagged_suspicious'].includes(sub.status))
+        .reduce((sum, sub) => sum + (sub._pointsCalculated || 0), 0); // <-- Usa _pointsCalculated
 
-    // Block for Required Action (Flagged)
-    const flaggedReviewBlock = flaggedSubmissions.length > 0 ? `
-        <div class="bg-red-900/40 border-2 border-red-500/80 rounded-xl p-6 mb-6 animate-pulse-slow">
-            <h3 class="text-xl font-bold text-red-300 mb-4 flex items-center gap-2">
-                <i class="fa-solid fa-triangle-exclamation"></i> Action Required: Review Submissions
-            </h3>
-            <p class="text-sm text-zinc-200 mb-5">Our system flagged the following submissions. Please review them:</p>
-            <div id="flagged-submissions-list" class="space-y-4">
-                ${flaggedSubmissions.map(sub => {
-                     const ui = platformUI[sub.platform] || platformUI['Other'];
-                     return `
-                        <div class="flagged-submission-card bg-main border border-red-600/70 p-4 rounded-lg flex flex-col sm:flex-row justify-between items-start gap-4">
-                           <div class="flex items-start gap-3 flex-grow min-w-0">
-                                <i class="fa-brands ${ui.icon} ${ui.color} text-2xl mt-1 w-6 text-center shrink-0"></i>
-                                <div class="min-w-0">
-                                    <a href="${sub.url}" target="_blank" rel="noopener noreferrer" class="text-blue-400 hover:text-blue-300 font-semibold break-all block text-sm">
-                                        ${sub.url}
-                                    </a>
-                                    <p class="text-xs text-zinc-400 mt-1">Submitted: ${sub.submittedAt ? sub.submittedAt.toLocaleDateString('en-US') : 'N/A'}</p>
-                                </div>
-                            </div>
-                            <div class="resolve-buttons flex gap-2 mt-2 sm:mt-0 shrink-0 self-end sm:self-center">
-                                <button data-submission-id="${sub.submissionId}" data-resolution="not_fraud" class="resolve-flagged-btn btn btn-success btn-xs">
-                                    <i class="fa-solid fa-check mr-1"></i> Legitimate
-                                </button>
-                                <button data-submission-id="${sub.submissionId}" data-resolution="is_fraud" class="resolve-flagged-btn btn btn-danger btn-xs">
-                                    <i class="fa-solid fa-times mr-1"></i> Fraud/Spam
-                                </button>
-                            </div>
-                        </div>
-                    `;}).join('')}
-            </div>
-        </div>
-    ` : '';
+    // Bloco de Ação Flagrada REMOVIDO daqui
+    const flaggedReviewBlock = ''; 
 
     // Main Profile Stats Block
     const profileStatsHtml = `
@@ -594,19 +692,19 @@ function renderProfileContent(el) {
                  <div class="bg-main border border-border-color rounded-xl p-5 text-center shadow-inner">
                     <p class="text-sm text-zinc-400 mb-1 font-semibold uppercase tracking-wider">Total Points</p>
                     <p class="text-5xl font-extrabold text-yellow-400 tracking-tight">${totalPoints.toLocaleString('en-US')}</p>
-                    <p class="text-xs text-zinc-500 mt-1">(Tasks + Content)</p>
+                    <p class="text-xs text-zinc-500 mt-1">(Confirmed Tasks + Content)</p>
                 </div>
                 <div class="bg-main border border-border-color rounded-xl p-5 text-center shadow-inner">
                     <p class="text-sm text-zinc-400 mb-1 font-semibold uppercase tracking-wider">Content Multiplier</p>
                     <p class="text-4xl font-bold text-green-400">${multiplierDisplay}</p>
-                    <p class="text-xs text-zinc-500 mt-1">(${approvedCount} approved posts)</p>
+                    <p class="text-xs text-zinc-500 mt-1">(${approvedCount} confirmed posts)</p>
                 </div>
             </div>
             <div class="md:col-span-2 space-y-4">
                  <div class="bg-main border border-border-color rounded-xl p-5 text-center shadow-inner">
-                    <p class="text-sm text-zinc-400 mb-1 font-semibold uppercase tracking-wider">Pending Points</p>
+                    <p class="text-sm text-zinc-400 mb-1 font-semibold uppercase tracking-wider">Points Awaiting Confirmation</p>
                     <p class="text-4xl font-bold text-amber-400">${pendingPoints.toLocaleString('en-US')}</p>
-                     <p class="text-xs text-zinc-500 mt-1">(Estimated base points pending review)</p>
+                     <p class="text-xs text-zinc-500 mt-1">(Go to 'Submit & Earn' to confirm)</p>
                 </div>
                 <div class="bg-main border border-border-color rounded-xl p-5 text-center shadow-inner">
                     <p class="text-sm text-zinc-400 mb-1 font-semibold uppercase tracking-wider">Rejections</p>
@@ -617,7 +715,7 @@ function renderProfileContent(el) {
         </div>
     `;
 
-    // Combine Blocks: Flags + Stats + Submission Area
+    // Combine Blocks: Stats + Submission Area
     el.innerHTML = `
         ${flaggedReviewBlock}
         ${renderSectionContainer('Your Airdrop Stats', 'fa-chart-simple', profileStatsHtml)}
@@ -626,7 +724,7 @@ function renderProfileContent(el) {
     // --- Add Listeners ---
     document.getElementById('copyReferralBtn_submitArea')?.addEventListener('click', handleCopyReferralLink); 
     document.querySelector('.submission-step-4 .submitContentLinkBtn')?.addEventListener('click', handleSubmitUgcClick);
-    document.getElementById('flagged-submissions-list')?.addEventListener('click', handleResolveSubmission);
+    // Listener de flag removido
 }
 
 
@@ -682,7 +780,10 @@ function renderSubmitEarnContent(el) {
              // Re-attach listeners for submission flow
              document.getElementById('copyReferralBtn_submitArea')?.addEventListener('click', handleCopyReferralLink);
              document.querySelector('.submission-step-4 .submitContentLinkBtn')?.addEventListener('click', handleSubmitUgcClick);
-             document.getElementById('ugc-submission-history')?.addEventListener('click', handleSubmissionAction);
+             // Adiciona listener para as NOVAS abas de histórico
+             document.getElementById('ugc-submission-history-tabs')?.addEventListener('click', handleHistoryTabSwitch);
+             document.getElementById('pending-submissions-list')?.addEventListener('click', handleSubmissionAction); // Listener para Ações Pendentes
+             document.getElementById('pending-submissions-list')?.addEventListener('click', handleResolveSubmission); // Listener para Ações Flagradas
 
          } else if (airdropState.activeSubmitTab === 'daily-tasks') {
              contentWrapper.innerHTML = renderDailyTasksPanelContent();
@@ -705,113 +806,210 @@ function renderSubmitEarnContent(el) {
     }
 }
 
-// --- SUB-TAB 2.1: Content Submission Panel (Main content and History) ---
+// --- (MODIFICADO) SUB-TAB 2.1: Content Submission Panel (Tradução e Layout de Card) ---
 function renderSubmissionPanelContent() {
-    // Calculate Stats
+    // Calculate Stats (Box)
     const stats = { total: 0, pending: 0, approved: 0, rejected: 0 };
+    let pendingPoints = 0; // Pontos aguardando confirmação
     if (airdropState.userSubmissions) {
          airdropState.userSubmissions.forEach(sub => {
             stats.total++;
             if (sub.status === 'approved') stats.approved++;
-            else if (sub.status === 'rejected' || sub.status === 'flagged_suspicious') stats.rejected++;
-            else if (sub.status === 'pending' || sub.status === 'auditing') stats.pending++;
+            else if (sub.status === 'rejected' || sub.status === 'flagged_suspicious' || sub.status === 'deleted_by_user') stats.rejected++;
+            else if (sub.status === 'pending' || sub.status === 'auditing') {
+                stats.pending++;
+                pendingPoints += (sub._pointsCalculated || 0);
+            }
         });
      }
+     
+    // --- Obter dados do usuário para os contadores do cabeçalho ---
+    const user = airdropState.user;
+    let headerTotalPoints = 0;
+    let headerMultiplierDisplay = '0.0x';
+    if (user) {
+        headerTotalPoints = user.totalPoints || 0;
+        const approvedCount = user.approvedSubmissionsCount || 0;
+        const multiplier = Math.min(10.0, approvedCount * 0.1);
+        headerMultiplierDisplay = `${multiplier.toFixed(1)}x`;
+    }
+     
     const statsHtml = `
         <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
             <div class="stat-card">
                 <p>Total Submissions</p><p class="text-white">${stats.total}</p>
             </div>
             <div class="stat-card border-green-500/50">
-                <p>Approved</p><p class="text-green-400">${stats.approved}</p>
+                <p>Confirmed</p><p class="text-green-400">${stats.approved}</p>
             </div>
             <div class="stat-card border-amber-500/50">
-                <p>Pending Review</p><p class="text-amber-400">${stats.pending}</p>
+                <p>Awaiting Confirmation</p><p class="text-amber-400">${stats.pending}</p>
             </div>
             <div class="stat-card border-red-500/50">
-                <p>Rejected</p><p class="text-red-400">${stats.rejected}</p>
+                <p>Rejected / Reported</p><p class="text-red-400">${stats.rejected}</p>
             </div>
         </div>
         <style>
             .stat-card { background-color: var(--bg-main); border: 1px solid var(--border-color); border-radius: 0.75rem; padding: 1rem; text-align: center; }
             .stat-card p:first-child { text-sm text-zinc-400 mb-1 font-semibold uppercase tracking-wider; }
             .stat-card p:last-child { text-3xl font-extrabold; }
+            
+            /* --- Animação Keyframe --- */
+            @keyframes pop {
+                0% { transform: scale(1); }
+                50% { transform: scale(1.15); }
+                100% { transform: scale(1); }
+            }
+            .animate-pop {
+                animation: pop 0.2s ease-out;
+            }
         </style>`;
 
-    // Render History (WITH VISUAL DELAY AND ACTIONS)
-    const renderSubmissionHistory = () => {
-        if (!airdropState.userSubmissions || airdropState.userSubmissions.length === 0) {
-            return renderNoData(null, 'You have not submitted any content yet.');
-        }
-        const sortedSubs = [...airdropState.userSubmissions].sort((a, b) => (b.submittedAt?.getTime() || 0) - (a.submittedAt?.getTime() || 0));
-        const totalSubmissions = sortedSubs.length;
-        const nowMs = Date.now();
-        const twoHoursMs = AUTO_APPROVE_HOURS * 60 * 60 * 1000;
+    // --- Render Submission History Tabs ---
+    const getHistoryTabBtnClass = (tabName) => {
+        const baseClass = 'history-tab-btn flex-1 sm:flex-none text-center sm:text-left justify-center sm:justify-start flex items-center gap-2 py-2 px-4 text-sm font-semibold transition-colors border-b-2 focus:outline-none rounded-t-md';
+        return airdropState.activeHistoryTab === tabName
+            ? `${baseClass} border-amber-500 text-amber-400 bg-main`
+            : `${baseClass} text-zinc-400 hover:text-white border-transparent hover:border-zinc-500/50`;
+    };
 
-        return sortedSubs.map((sub, index) => {
-            const submittedAtMs = sub.submittedAt?.getTime();
-            let displayStatusKey = sub.status;
-            let actionButtonsHtml = '';
+    // Filtra as listas
+    const nowMs = Date.now();
+    const twoHoursMs = AUTO_APPROVE_HOURS * 60 * 60 * 1000;
+    
+    const pendingSubmissions = airdropState.userSubmissions.filter(sub => 
+        ['pending', 'auditing', 'flagged_suspicious'].includes(sub.status)
+    ).sort((a, b) => (b.submittedAt?.getTime() || 0) - (a.submittedAt?.getTime() || 0));
+    
+    const finalizedSubmissions = airdropState.userSubmissions.filter(sub => 
+        ['approved', 'rejected', 'deleted_by_user'].includes(sub.status)
+    ).sort((a, b) => (b.submittedAt?.getTime() || 0) - (a.submittedAt?.getTime() || 0));
 
-            // PSYCHOLOGICAL DELAY LOGIC:
-            if (sub.status === 'pending' && submittedAtMs && (nowMs - submittedAtMs >= twoHoursMs)) {
-                // Real status in DB is 'pending', but visually shows need for confirmation
+
+    // --- (MODIFICADO) Renderiza o item do histórico (função helper genérica) ---
+    const renderHistoryItem = (sub, index, total, isPendingList) => {
+        let displayStatusKey = sub.status;
+        let actionButtonsHtml = '';
+        const submittedAtMs = sub.submittedAt?.getTime();
+
+        const uiStatus = statusUI[displayStatusKey] || statusUI.pending;
+        const uiPlatform = platformUI[sub.platform] || platformUI.Other;
+        const iconClass = uiPlatform.type === 'brands' ? `fa-brands ${uiPlatform.icon}` : `fa-solid ${uiPlatform.icon}`;
+        
+        let pointsDisplay = '';
+
+        if (isPendingList) {
+            // --- Logic for "Pending Confirmation" Tab ---
+            const pointsToShow = sub._pointsCalculated || 0;
+            pointsDisplay = `(${pointsToShow.toLocaleString('en-US')} Pts)`;
+
+            if (displayStatusKey === 'flagged_suspicious') {
+                // Flag buttons
+                actionButtonsHtml = `
+                    <div class="action-buttons-container flex gap-2 mt-2">
+                        <button data-submission-id="${sub.submissionId}" data-resolution="not_fraud" class="resolve-flagged-btn bg-green-600 hover:bg-green-700 text-white text-xs font-bold py-1 px-2 rounded transition-colors"><i class="fa-solid fa-check mr-1"></i> Legitimate</button>
+                        <button data-submission-id="${sub.submissionId}" data-resolution="is_fraud" class="resolve-flagged-btn bg-red-600 hover:bg-red-700 text-white text-xs font-bold py-1 px-2 rounded transition-colors"><i class="fa-solid fa-times mr-1"></i> Fraud/Spam</button>
+                    </div>`;
+            } else if (submittedAtMs && (nowMs - submittedAtMs >= twoHoursMs)) {
+                // Visual delay passed, show Confirmation buttons
                 displayStatusKey = 'pending_confirmation'; 
                 actionButtonsHtml = `
-                    <div class="action-buttons-container flex gap-2 mt-2 sm:mt-0 shrink-0 self-start sm:self-center">
+                    <div class="action-buttons-container flex gap-2 mt-2">
                         <button data-submission-id="${sub.submissionId}" data-action="confirm" class="submission-action-btn bg-green-600 hover:bg-green-700 text-white text-xs font-bold py-1 px-2 rounded transition-colors"><i class="fa-solid fa-check mr-1"></i> Confirm Points</button>
                         <button data-submission-id="${sub.submissionId}" data-action="report_error" class="submission-action-btn bg-red-600 hover:bg-red-700 text-white text-xs font-bold py-1 px-2 rounded transition-colors"><i class="fa-solid fa-trash mr-1"></i> Report Error</button>
-                    </div>
-                `;
-            } else if (['pending', 'auditing'].includes(sub.status)) {
-                actionButtonsHtml = `<p class="text-xs text-zinc-500 mt-1">Audit in progress...</p>`;
+                    </div>`;
+            } else {
+                // Still auditing (less than 2h)
+                actionButtonsHtml = `<p class="text-xs text-zinc-500 mt-2">Audit in progress...</p>`;
             }
-
-            const uiStatus = statusUI[displayStatusKey] || statusUI.pending;
-            // Usa o novo mapping expandido
-            const uiPlatform = platformUI[sub.platform] || platformUI.Other;
-            let pointsDisplay = '';
-            
-            // POINTS: Show base value during audit/confirmation
-            if (displayStatusKey === 'approved') { // REAL approval
-                 const pointsToShow = sub.pointsAwarded !== undefined ? sub.pointsAwarded : (sub.basePoints || 0);
-                 pointsDisplay = `(+${pointsToShow.toLocaleString('en-US')} Pts)`;
-            } else if (['pending', 'auditing', 'flagged_suspicious', 'pending_confirmation'].includes(displayStatusKey)) {
-                pointsDisplay = `(${sub.basePoints || 0} base pts)`;
+        } else {
+            // --- Logic for "Finalized" Tab ---
+            if (displayStatusKey === 'approved') {
+                 pointsDisplay = `(+${(sub.pointsAwarded || 0).toLocaleString('en-US')} Pts)`;
+            } else {
+                 pointsDisplay = `(0 Pts)`;
             }
+             actionButtonsHtml = ''; // No actions for finalized items
+        }
+        
+        const finalUiStatus = statusUI[displayStatusKey] || statusUI.pending;
 
-            // History Card
-            return `
-                <div class="submission-history-card bg-main border border-border-color rounded-lg p-4 mb-3 flex flex-col sm:flex-row items-start gap-4 transition-colors hover:bg-zinc-800/50">
-                    <div class="flex-shrink-0 w-10 text-center pt-1"><span class="text-lg font-bold text-zinc-500">#${totalSubmissions - index}</span></div>
-                    <div class="flex items-start gap-3 flex-grow min-w-0">
-                        <i class="fa-brands ${uiPlatform.icon} ${uiPlatform.color} text-2xl mt-1 w-6 text-center shrink-0"></i>
-                        <div class="min-w-0">
-                            <a href="${sub.url}" target="_blank" rel="noopener noreferrer" class="font-mono text-blue-400 hover:text-blue-300 break-words block text-xs leading-snug">
-                                ${sub.url}
-                            </a>
-                            <p class="text-xs text-zinc-400 mt-1.5">Submitted: ${sub.submittedAt ? sub.submittedAt.toLocaleString('en-US') : 'N/A'}</p>
-                        </div>
-                    </div>
-                    <div class="text-left sm:text-right mt-2 sm:mt-0 shrink-0 flex flex-col items-end min-w-[120px] self-start sm:self-center">
-                        <span class="inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-0.5 rounded-full ${uiStatus.bgColor} ${uiStatus.color}"><i class="fa-solid ${uiStatus.icon}"></i> ${uiStatus.text}</span>
-                        <p class="text-sm font-bold ${uiStatus.color} mt-1">${pointsDisplay}</p>
-                        ${actionButtonsHtml}
-                    </div>
-                </div>`;
-        }).join('');
+        // --- New History Card Layout ---
+        return `
+            <div class="submission-history-card bg-main border border-border-color rounded-lg p-4 mb-3 flex flex-row items-center gap-4 transition-colors hover:bg-zinc-800/50">
+                
+                <div class="flex-shrink-0">
+                    <i class="${iconClass} ${uiPlatform.color} text-3xl w-8 text-center"></i>
+                </div>
+
+                <div class="flex-grow min-w-0">
+                    <a href="${sub.url}" target="_blank" rel="noopener noreferrer" class="font-mono text-blue-400 hover:text-blue-300 break-all block text-sm leading-snug">
+                        ${sub.url}
+                    </a>
+                    <p class="text-xs text-zinc-400 mt-1.5">
+                        <span class="font-bold text-zinc-500 mr-3">#${total - index}</span>
+                        Submitted: ${sub.submittedAt ? sub.submittedAt.toLocaleString('en-US') : 'N/A'}
+                    </p>
+                </div>
+
+                <div class="flex-shrink-0 flex flex-col items-end min-w-[150px] gap-1 text-right">
+                    <span class="inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-0.5 rounded-full ${finalUiStatus.bgColor} ${finalUiStatus.color}">
+                        <i class="fa-solid ${finalUiStatus.icon}"></i> ${finalUiStatus.text}
+                    </span>
+                    <p class="text-sm font-bold ${finalUiStatus.color} mt-1">${pointsDisplay}</p>
+                    ${actionButtonsHtml}
+                </div>
+            </div>`;
     };
+    
+    // --- Cabeçalho do Histórico com Contadores Estilizados ---
+    const historyHeaderHtml = `
+        <div class="flex flex-col sm:flex-row sm:items-end sm:justify-between mt-8 border-t border-border-color pt-6 mb-4 gap-4">
+            <h3 class="text-xl font-bold text-white mb-2 sm:mb-0">Your Submission History</h3>
+            
+            <div class="flex items-stretch gap-3"> 
+                <div class="bg-main border border-border-color rounded-xl p-3 text-center shadow-inner flex-1 min-w-[140px]">
+                    <span class="text-xs text-zinc-400 uppercase font-semibold block mb-1">Total Points</span>
+                    <p id="history-total-points-display" class="text-2xl font-bold text-yellow-400 leading-none">${headerTotalPoints.toLocaleString('en-US')}</p>
+                </div>
+                <div class="bg-main border border-border-color rounded-xl p-3 text-center shadow-inner flex-1 min-w-[140px]">
+                    <span class="text-xs text-zinc-400 uppercase font-semibold block mb-1">Multiplier</span>
+                    <p id="history-multiplier-display" class="text-2xl font-bold text-green-400 leading-none">${headerMultiplierDisplay}</p>
+                </div>
+            </div>
+        </div>`;
 
 
     // Main Content
     return `
-        <p class="text-sm text-zinc-400 mb-6">Submit links to content you created about Backchain. Earn points and increase your multiplier.</p>
+        <p class="text-sm text-zinc-400 mb-6">Submit links to content you created about Backchain. Confirm your submissions after 2 hours to earn points.</p>
         ${statsHtml}
         ${renderContentSubmissionFlow()} 
         <div>
-            <h3 class="text-xl font-bold mb-4 text-white mt-8 border-t border-border-color pt-6">Your Submission History</h3>
-            <div id="ugc-submission-history">
-                ${renderSubmissionHistory()}
+            ${historyHeaderHtml}
+            
+            <div class="border-b border-zinc-700 mb-4">
+                <nav id="ugc-submission-history-tabs" class="-mb-px flex flex-wrap gap-x-4 gap-y-1">
+                    <button class="${getHistoryTabBtnClass('pending')}" data-target="pending">
+                        <i class="fa-solid fa-hourglass-half fa-fw"></i> Pending Confirmation (${pendingSubmissions.length})
+                    </button>
+                    <button class="${getHistoryTabBtnClass('finalized')}" data-target="finalized">
+                        <i class="fa-solid fa-archive fa-fw"></i> Finalized (${finalizedSubmissions.length})
+                    </button>
+                </nav>
+            </div>
+            
+            <div id="ugc-submission-history-content">
+                <div id="pending-submissions-list" class="${airdropState.activeHistoryTab === 'pending' ? '' : 'hidden'}">
+                    ${pendingSubmissions.length > 0 
+                        ? pendingSubmissions.map((sub, index) => renderHistoryItem(sub, index, pendingSubmissions.length, true)).join('') 
+                        : renderNoData(null, 'You have no submissions awaiting confirmation.')} 
+                </div>
+                <div id="finalized-submissions-list" class="${airdropState.activeHistoryTab === 'finalized' ? '' : 'hidden'}">
+                    ${finalizedSubmissions.length > 0
+                        ? finalizedSubmissions.map((sub, index) => renderHistoryItem(sub, index, finalizedSubmissions.length, false)).join('')
+                        : renderNoData(null, 'You have no finalized submissions.')}
+                </div>
             </div>
         </div>
     `;

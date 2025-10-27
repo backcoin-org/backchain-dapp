@@ -318,7 +318,7 @@ export async function recordDailyTaskCompletion(task, currentMultiplier) {
 }
 
 
-// --- Helper Interno: Detecta Plataforma, Valida URL e Busca Pontos Base (CORRIGIDO) ---
+// --- Helper Interno: Detecta Plataforma, Valida URL e Busca Pontos Base (CORRIGIDO PARA MÚLTIPLAS REDES E SHORTS) ---
 /**
  * Analisa uma URL, detecta a plataforma (YouTube, YouTube Shorts, Instagram, X/Twitter, Other),
  * valida o formato (ex: YouTube deve ser vídeo), e busca os pontos base na config.
@@ -333,28 +333,26 @@ async function detectPlatformAndValidate(url) {
 
     // 1. Detecção e Validação Específica
     
-    // ** CORREÇÃO 1: Trata YouTube Shorts primeiro (youtube.com/shorts/...) **
+    // YOUTUBE SHORTS
     if (normalizedUrl.includes('youtube.com/shorts/')) {
         platform = 'YouTube Shorts';
-        // Validação extra: ID do Short (deve ter algo após /shorts/)
         const shortIdMatch = normalizedUrl.match(/\/shorts\/([a-zA-Z0-9_-]+)/);
         if (!shortIdMatch || !shortIdMatch[1]) {
             isValid = false;
             throw new Error("Invalid YouTube Shorts URL: Video ID not found or incorrect format.");
         }
     }
-    // ** CORREÇÃO 2: Trata Vídeo Regular do YouTube (youtube.com/watch?v=... ou youtu.be/...) **
+    // VÍDEO REGULAR DO YOUTUBE
     else if (normalizedUrl.includes('youtube.com/watch?v=') || normalizedUrl.includes('youtu.be/')) { //
         platform = 'YouTube'; //
-        // Validação extra: ID do vídeo
         const videoIdMatch = normalizedUrl.match(/(?:v=|\/)([a-zA-Z0-9_-]{11})(?:[?&]|$)/); //
         if (!videoIdMatch || videoIdMatch[1].length !== 11) { //
             isValid = false; //
             throw new Error("Invalid YouTube URL: Video ID not found or incorrect format."); //
         }
     }
-    // ** CORREÇÃO 3: Lógica de erro de validação para outros links do YouTube **
-    else if (normalizedUrl.includes('youtube.com/')) { // Outros links do YouTube (canais, playlists, etc.)
+    // OUTROS LINKS DO YOUTUBE
+    else if (normalizedUrl.includes('youtube.com/')) { 
         platform = 'YouTube';
         isValid = false;
         throw new Error("Invalid YouTube URL: Only video links (youtube.com/watch?v=... or youtu.be/...) or Shorts links are accepted.");
@@ -362,20 +360,36 @@ async function detectPlatformAndValidate(url) {
     // Instagram
     else if (normalizedUrl.includes('instagram.com/p/') || normalizedUrl.includes('instagram.com/reel/')) { //
         platform = 'Instagram'; //
-        // Validação básica de ID (qualquer coisa após /p/ ou /reel/)
         const postIdMatch = normalizedUrl.match(/\/(?:p|reel)\/([a-zA-Z0-9_.-]+)/); //
         if (!postIdMatch || !postIdMatch[1]) isValid = false; // Se não houver ID, marca inválido
-
     } 
     // X/Twitter
     else if (normalizedUrl.includes('twitter.com/') || normalizedUrl.includes('x.com/')) { //
-        // Tenta identificar se é um link de status/tweet
         if (normalizedUrl.match(/(\w+)\/(?:status|statuses)\/(\d+)/)) { //
              platform = 'X/Twitter'; //
-        } else {
-             // Deixamos cair em 'Other'
-        }
+        } 
     }
+    // Facebook
+    else if (normalizedUrl.includes('facebook.com/') && normalizedUrl.includes('/posts/')) {
+        platform = 'Facebook';
+    } 
+    // Telegram (links de postagem/canais públicos)
+    else if (normalizedUrl.includes('t.me/') || normalizedUrl.includes('telegram.org/')) {
+        platform = 'Telegram';
+    } 
+    // TikTok
+    else if (normalizedUrl.includes('tiktok.com/')) {
+        platform = 'TikTok';
+    } 
+    // Reddit
+    else if (normalizedUrl.includes('reddit.com/r/')) {
+        platform = 'Reddit';
+    } 
+    // LinkedIn
+    else if (normalizedUrl.includes('linkedin.com/posts/')) {
+        platform = 'LinkedIn';
+    }
+
     // Links não identificados permanecem como 'Other'
 
     // 2. Busca Pontos Base da Configuração Pública
@@ -396,7 +410,7 @@ async function detectPlatformAndValidate(url) {
 
 /**
  * Adiciona uma submissão UGC, detectando plataforma, validando, verificando duplicatas,
- * salvando em dois locais (usuário e log) e aplicando pontos/contagem imediatamente.
+ * e salvando-a como 'pending' sem conceder pontos imediatamente.
  * @param {string} url URL da postagem.
  * @throws {Error} Se a URL for inválida, duplicada, ou outro erro ocorrer.
  */
@@ -430,7 +444,7 @@ export async function addSubmission(url) { // Recebe apenas URL
     // --- Verificação de Duplicatas no Log Central ---
     const qLog = query(logSubmissionsCol, //
         where("normalizedUrl", "==", normalizedUrl), //
-        // Verifica se já existe com status que não seja 'rejected'
+        // Verifica se já existe com status que não seja 'rejected' ou 'deleted_by_user'
         where("status", "in", ["pending", "approved", "auditing", "flagged_suspicious"]) //
     );
     const logSnapshot = await getDocs(qLog); //
@@ -446,8 +460,8 @@ export async function addSubmission(url) { // Recebe apenas URL
 
     // --- Calcula Pontos e Multiplicador ---
     const currentApprovedCount = userData.approvedSubmissionsCount || 0; //
-    // Multiplicador baseado na contagem + 1
-    const multiplierApplied = Math.min(10.0, (currentApprovedCount + 1) * 0.1); //
+    // Multiplicador baseado na contagem ATUAL (não +1, pois esta não foi aprovada ainda)
+    const multiplierApplied = Math.min(10.0, currentApprovedCount * 0.1); //
     const pointsAwarded = Math.round(basePoints * multiplierApplied); //
 
     // --- Prepara Dados para Salvar ---
@@ -456,11 +470,11 @@ export async function addSubmission(url) { // Recebe apenas URL
     const submissionDataUser = { //
         url: trimmedUrl, // URL Original
         platform: platform, // Plataforma Detectada
-        status: 'pending', // Status inicial é PENDING (para UI)
+        status: 'pending', // Status inicial é PENDING
         basePoints: basePoints, //
-        _pointsCalculated: pointsAwarded, // Guarda pontos calculados
+        _pointsCalculated: pointsAwarded, // Guarda pontos (base * multiplicador)
         _multiplierApplied: multiplierApplied, // Guarda multiplicador usado
-        pointsAwarded: 0, // Zera na submissão (UI mostra baseado no _pointsCalculated e status visual)
+        pointsAwarded: 0, // Pontos ainda não foram concedidos
         submittedAt: submissionTimestamp, //
         resolvedAt: null, //
     };
@@ -476,17 +490,15 @@ export async function addSubmission(url) { // Recebe apenas URL
         resolvedAt: null, //
     };
 
-    // --- Salva submissão E ATUALIZA PONTOS/contagem do usuário ---
+    // --- Salva submissão (SEM ATUALIZAR PONTOS/CONTAGEM) ---
     const batch = writeBatch(db); //
     const newUserSubmissionRef = doc(userSubmissionsCol); // Gera ID
     batch.set(newUserSubmissionRef, submissionDataUser); // Salva na subcoleção
     const newLogSubmissionRef = doc(logSubmissionsCol, newUserSubmissionRef.id); // Usa mesmo ID no log
     batch.set(newLogSubmissionRef, submissionDataLog); // Salva no log
-    // Atualiza perfil do usuário imediatamente
-    batch.update(userRef, { //
-        totalPoints: increment(pointsAwarded), //
-        approvedSubmissionsCount: increment(1) // Incrementa contagem
-    });
+    
+    // NENHUMA ATUALIZAÇÃO NO PERFIL DO USUÁRIO AQUI
+    
     await batch.commit(); // Executa
 }
 
@@ -497,6 +509,7 @@ export async function addSubmission(url) { // Recebe apenas URL
 export async function getUserSubmissions() {
     ensureAuthenticated(); //
     const submissionsCol = collection(db, "airdrop_users", currentUser.uid, "submissions"); //
+    // Busca TUDO, ordenado
     const q = query(submissionsCol, orderBy("submittedAt", "desc")); // Mais recentes primeiro
     const snapshot = await getDocs(q); //
     // Mapeia e converte timestamps
@@ -514,6 +527,7 @@ export async function getUserSubmissions() {
 
 /**
  * Busca as submissões flagradas de um usuário que precisam de resolução.
+ * (Esta função não é mais necessária, mas mantida por segurança)
  * @returns {Promise<Array<object>>} Lista de submissões flagradas.
  */
 export async function getUserFlaggedSubmissions() {
@@ -552,36 +566,44 @@ export async function resolveFlaggedSubmission(submissionId, resolution) {
     }
 
     const submissionData = submissionSnap.data(); //
-    // Determina o novo status baseado na resolução do usuário
-    const newStatus = resolution === 'not_fraud' ? 'pending' : 'rejected'; // Volta para pending ou rejeita
-
     const batch = writeBatch(db); // Usa batch para atualizações
 
-    if (newStatus === 'pending') { //
-        // Se o usuário diz que não é fraude, apenas voltamos o status para pending
-        // Os pontos já foram dados em addSubmission, não fazemos nada no perfil
-        batch.update(submissionRef, { //
-            status: newStatus, //
-            resolvedAt: serverTimestamp() // Marca como resolvido (pelo usuário)
+    if (resolution === 'not_fraud') {
+        // --- AGE COMO 'confirmSubmission' ---
+        // Usuário diz que é legítimo, então APROVA e DÁ OS PONTOS
+        const pointsToAward = submissionData._pointsCalculated || 0;
+        
+        // Atualiza perfil do usuário
+        batch.update(userRef, {
+            totalPoints: increment(pointsToAward),
+            approvedSubmissionsCount: increment(1)
         });
-        batch.update(logSubmissionRef, { //
-            status: newStatus, //
-            resolvedAt: serverTimestamp() //
+
+        // Atualiza submissão
+        batch.update(submissionRef, {
+            status: 'approved',
+            pointsAwarded: pointsToAward, // Salva os pontos concedidos
+            resolvedAt: serverTimestamp()
         });
-    } else { // resolution === 'is_fraud' -> newStatus === 'rejected'
-        // --- APLICA A LÓGICA DE REJEIÇÃO (DESCONTO) ---
+
+        // Atualiza log
+        if (await getDoc(logSubmissionRef).then(s => s.exists())) {
+            batch.update(logSubmissionRef, {
+                status: 'approved',
+                resolvedAt: serverTimestamp()
+            });
+        }
+
+    } else { // resolution === 'is_fraud'
+        // --- AGE COMO 'deleteSubmission' (mas para rejeição) ---
+        // Usuário diz que é fraude, então REJEITA.
+        // Nenhum ponto é dado (pois nunca foi dado).
+        // Apenas incrementa a contagem de rejeição.
+        
         const userSnap = await getDoc(userRef); //
         if (!userSnap.exists()) throw new Error("User profile not found."); //
         const userData = userSnap.data(); //
         const userUpdates = {}; //
-
-        // Desconta pontos e contagem se foram dados (status era 'flagged', que veio de 'pending')
-        const pointsToDecrement = submissionData._pointsCalculated || 0; //
-        if (pointsToDecrement > 0) { //
-             userUpdates.totalPoints = increment(-pointsToDecrement); //
-        }
-        // Decrementa contagem de aprovados (foi incrementada no addSubmission)
-        userUpdates.approvedSubmissionsCount = increment(-1); //
 
         // Incrementa rejeição e aplica banimento
         const currentRejectedCount = userData.rejectedCount || 0; //
@@ -590,11 +612,6 @@ export async function resolveFlaggedSubmission(submissionId, resolution) {
             userUpdates.isBanned = true; //
         }
 
-        // Garante que contagens/pontos não fiquem negativos
-        if (userUpdates.approvedSubmissionsCount?.operand < 0 && (userData.approvedSubmissionsCount || 0) <= 0) userUpdates.approvedSubmissionsCount = 0; //
-        if (userUpdates.rejectedCount?.operand < 0 && (userData.rejectedCount || 0) <= 0) userUpdates.rejectedCount = 0; //
-        if (userUpdates.totalPoints?.operand < 0 && (userData.totalPoints || 0) < Math.abs(userUpdates.totalPoints.operand)) userUpdates.totalPoints = 0; //
-
         // Aplica atualizações no usuário
         if (Object.keys(userUpdates).length > 0) { //
             batch.update(userRef, userUpdates); //
@@ -602,17 +619,16 @@ export async function resolveFlaggedSubmission(submissionId, resolution) {
 
         // Atualiza submissão do usuário para 'rejected'
         batch.update(submissionRef, { //
-            status: newStatus, //
-            pointsAwarded: 0, // Zera pontos na submissão
-            multiplierApplied: 0, // Zera multiplicador na submissão
+            status: 'rejected', //
+            pointsAwarded: 0, //
+            multiplierApplied: 0, //
             resolvedAt: serverTimestamp() //
         });
 
         // Atualiza log central para 'rejected'
-        const logSnap = await getDoc(logSubmissionRef); // Verifica se existe
-        if (logSnap.exists()) { //
+        if (await getDoc(logSubmissionRef).then(s => s.exists())) { //
              batch.update(logSubmissionRef, { //
-                status: newStatus, //
+                status: 'rejected', //
                 resolvedAt: serverTimestamp() //
             });
         }
@@ -624,32 +640,59 @@ export async function resolveFlaggedSubmission(submissionId, resolution) {
 
 /**
  * Permite ao usuário confirmar que a submissão, após auditoria visual, é legítima.
- * O status é alterado de 'pending_confirmation' (visual) para 'approved' (real).
- * Nota: Como o `addSubmission` já concede os pontos, esta função apenas finaliza o status.
- * @param {string} userId ID do usuário Firebase.
+ * O status é alterado de 'pending' para 'approved' E CONCEDE OS PONTOS.
  * @param {string} submissionId ID da submissão.
  */
-export async function confirmSubmission(userId, submissionId) {
+export async function confirmSubmission(submissionId) { 
     ensureAuthenticated();
+    const userId = currentUser.uid; 
     
     // Referências necessárias
+    const userRef = doc(db, "airdrop_users", userId); // Ref ao perfil do usuário
     const submissionRef = doc(db, "airdrop_users", userId, "submissions", submissionId);
     const logSubmissionRef = doc(db, "all_submissions_log", submissionId);
 
+    // --- 1. Verificar a existência do documento ANTES de iniciar o batch ---
+    const submissionSnap = await getDoc(submissionRef);
+    if (!submissionSnap.exists()) {
+        throw new Error("Cannot confirm submission: Document not found or already processed.");
+    }
+    
+    const submissionData = submissionSnap.data();
+    const currentStatus = submissionData.status;
+    
+    // Se já estiver aprovado ou rejeitado, não processar novamente.
+    if (currentStatus === 'approved' || currentStatus === 'rejected') {
+        throw new Error(`Submission is already in status: ${currentStatus}.`);
+    }
+
+    // Pega os pontos a serem concedidos
+    const pointsToAward = submissionData._pointsCalculated || 0;
+
     // Usa um batch para garantir atomicidade das atualizações
     const batch = writeBatch(db);
+    
+    // --- 2. ATUALIZA O PERFIL DO USUÁRIO ---
+    // Concede os pontos e incrementa a contagem de aprovação
+    batch.update(userRef, {
+        totalPoints: increment(pointsToAward),
+        approvedSubmissionsCount: increment(1)
+    });
 
-    // Atualiza status para 'approved' na subcoleção do usuário
+    // 3. Atualiza status para 'approved' na subcoleção do usuário
     batch.update(submissionRef, { 
         status: 'approved',
+        pointsAwarded: pointsToAward, // Salva o valor concedido
         resolvedAt: serverTimestamp() 
     });
 
-    // Atualiza status para 'approved' no log central
-    batch.update(logSubmissionRef, { 
-        status: 'approved',
-        resolvedAt: serverTimestamp()
-    });
+    // 4. Atualiza status para 'approved' no log central (se existir)
+    if (await getDoc(logSubmissionRef).then(s => s.exists())) {
+        batch.update(logSubmissionRef, { 
+            status: 'approved',
+            resolvedAt: serverTimestamp()
+        });
+    }
 
     // Executa as atualizações
     await batch.commit();
@@ -657,52 +700,46 @@ export async function confirmSubmission(userId, submissionId) {
 
 
 /**
- * Permite ao usuário deletar uma submissão reportada como erro (ou rejeitada),
- * descontando os pontos e a contagem que foram adicionados em addSubmission.
- * @param {string} userId ID do usuário Firebase.
+ * Permite ao usuário deletar uma submissão reportada como erro (Report Error).
+ * Nenhum ponto é descontado (pois nunca foram dados).
  * @param {string} submissionId ID da submissão.
  */
-export async function deleteSubmission(userId, submissionId) {
+export async function deleteSubmission(submissionId) { 
     ensureAuthenticated();
+    const userId = currentUser.uid; 
     
-    const userRef = doc(db, "airdrop_users", userId);
     const submissionRef = doc(db, "airdrop_users", userId, "submissions", submissionId);
     const logSubmissionRef = doc(db, "all_submissions_log", submissionId);
 
     const submissionSnap = await getDoc(submissionRef);
     if (!submissionSnap.exists()) {
-        throw new Error("Submission not found.");
+        // Se já não existe, apenas retorna sucesso para evitar erros no frontend.
+        return console.warn(`Delete submission skipped: Document ${submissionId} not found.`);
     }
     
-    const submissionData = submissionSnap.data();
-    const currentStatus = submissionData.status;
+    const currentStatus = submissionSnap.data().status;
 
-    // Apenas permite deletar/descontar se o status for 'pending', 'auditing' ou 'pending_confirmation'
-    if (currentStatus !== 'pending' && currentStatus !== 'auditing') {
-        // Para simplificar, o frontend deve garantir que a ação só seja possível em status pré-aprovados.
-        // Se o status for 'approved', o usuário não pode simplesmente deletar.
-        if (currentStatus === 'approved') {
-            throw new Error("Approved submissions cannot be deleted by the user.");
-        }
+    // Apenas permite deletar se AINDA não foi processado
+    if (currentStatus === 'approved' || currentStatus === 'rejected') {
+        throw new Error(`This submission was already ${currentStatus} and cannot be deleted.`);
     }
-
+    if (currentStatus === 'flagged_suspicious') {
+        throw new Error("Flagged submissions must be resolved, not deleted.");
+    }
+    
     const batch = writeBatch(db);
     
-    // --- DESCONTO de pontos/contagem ---
-    // Pontos e contagem foram adicionados em addSubmission, então precisamos reverter
-    const pointsToDecrement = submissionData._pointsCalculated || 0;
-    
-    if (pointsToDecrement > 0) {
-        batch.update(userRef, { 
-            totalPoints: increment(-pointsToDecrement),
-            approvedSubmissionsCount: increment(-1) // Reverte o incremento
-        });
-    }
+    // --- NENHUMA MUDANÇA EM PONTOS/CONTAGEM ---
+    // (Apenas muda o status)
 
-    // Deleta o documento na subcoleção do usuário
-    batch.delete(submissionRef);
+    // Deleta o documento na subcoleção do usuário (ou marca como deleted)
+    // Vamos marcar como 'deleted' para manter no histórico "Finalizados"
+    batch.update(submissionRef, {
+        status: 'deleted_by_user',
+        resolvedAt: serverTimestamp()
+    });
 
-    // Atualiza o log central para 'deleted' e zera pontos
+    // Atualiza o log central
     if (await getDoc(logSubmissionRef).then(s => s.exists())) {
          batch.update(logSubmissionRef, {
              status: 'deleted_by_user',
@@ -823,7 +860,7 @@ export async function getAllSubmissionsForAdmin() {
 
 /**
  * Atualiza o status de uma submissão (pelo Admin).
- * Se rejeitar, desconta pontos/contagem que foram dados no envio.
+ * Se aprovar, concede os pontos. Se rejeitar, apenas incrementa a rejeição.
  * @param {string} userId ID do usuário Firebase.
  * @param {string} submissionId ID da submissão.
  * @param {string} status Novo status ('approved' ou 'rejected').
@@ -854,43 +891,37 @@ export async function updateSubmissionStatus(userId, submissionId, status) {
 
     const batch = writeBatch(db); //
     const userUpdates = {}; // Atualizações para o perfil do usuário
-    // Assume que os pontos/multiplicador na submissão serão os calculados (se aprovar) ou 0 (se rejeitar)
-    let finalPointsAwarded = submissionData._pointsCalculated || 0; //
+    let finalPointsAwarded = 0; // Padrão é 0
     let finalMultiplier = submissionData._multiplierApplied || 0; //
 
     // --- Lógica de Aprovação pelo Admin ---
     if (status === 'approved') { //
-        // Se estava 'rejected' e o admin aprova: RE-ADICIONA pontos/contagem.
-        if (currentStatus === 'rejected') { //
-             // Usa os pontos salvos em _pointsCalculated ou default 0
-             const pointsToReAdd = submissionData._pointsCalculated || 0; //
-             // Incrementa pontos e contagem de aprovados, decrementa rejeição
-             if(pointsToReAdd > 0) userUpdates.totalPoints = increment(pointsToReAdd); //
-             userUpdates.approvedSubmissionsCount = increment(1); //
+        // Se estava 'rejected', 'pending', 'auditing', 'flagged' (qualquer estado que não 'approved')
+        // CONCEDE OS PONTOS E INCREMENTA A CONTAGEM
+        
+        const pointsToAward = submissionData._pointsCalculated || 0;
+        finalPointsAwarded = pointsToAward;
+
+        userUpdates.totalPoints = increment(pointsToAward);
+        userUpdates.approvedSubmissionsCount = increment(1);
+        
+        // Se estava 'rejected' anteriormente, reverte a contagem de rejeição
+        if (currentStatus === 'rejected') {
              userUpdates.rejectedCount = increment(-1); // Reduz contagem de rejeição
         }
-        // Se estava 'pending', 'auditing', 'flagged', só muda o status na submissão/log.
-        // Os pontos já foram dados no addSubmission. Mantemos os _pointsCalculated/_multiplierApplied.
 
     // --- Lógica de Rejeição pelo Admin ---
     } else if (status === 'rejected') { //
-        // --- DESCONTO de pontos/contagem ---
-        // Verifica se os pontos foram adicionados anteriormente (status NÃO era 'rejected')
-        if (currentStatus !== 'rejected') { //
-            const pointsToDecrement = submissionData._pointsCalculated || 0; //
-            if (pointsToDecrement > 0) { //
-                 userUpdates.totalPoints = increment(-pointsToDecrement); // Desconta
-            }
-            // Decrementa contagem de aprovados (foi incrementada no addSubmission)
-            userUpdates.approvedSubmissionsCount = increment(-1); //
-        }
-        // --- FIM DESCONTO ---
+        
+        // NENHUM PONTO É DESCONTADO (pois nunca foram dados)
 
-        // Incrementa rejeição e aplica banimento
-        const currentRejectedCount = userData.rejectedCount || 0; //
-        userUpdates.rejectedCount = increment(1); //
-        if (currentRejectedCount + 1 >= 3) { // Limite para banimento
-            userUpdates.isBanned = true; //
+        // Incrementa rejeição e aplica banimento, *apenas se não estava rejeitado antes*
+        if (currentStatus !== 'rejected') {
+            const currentRejectedCount = userData.rejectedCount || 0; //
+            userUpdates.rejectedCount = increment(1); //
+            if (currentRejectedCount + 1 >= 3) { // Limite para banimento
+                userUpdates.isBanned = true; //
+            }
         }
 
         // Zera os campos na submissão ao rejeitar

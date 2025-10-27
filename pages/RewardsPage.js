@@ -83,7 +83,7 @@ async function getFullCertificateHTML(certificate) {
     return `
         <div class="bg-sidebar border border-border-color rounded-xl p-6 certificate-card flex flex-col h-full">
             <div class="flex items-start gap-4 mb-4">
-                 <img src="${imageUrl}" alt="${displayName}" class="w-16 h-16 rounded-lg object-cover border border-zinc-700 nft-clickable-image" data-address="${addresses.rewardManager}" data-tokenid="${tokenId.toString()}"> {/* */}
+                 <img src="${imageUrl}" alt="${displayName}" class="w-16 h-16 rounded-lg object-cover border border-zinc-700 nft-clickable-image" data-address="${addresses.rewardManager}" data-tokenid="${tokenId.toString()}">
                 <div>
                     <h3 class="font-bold text-lg ${tierColor}">${displayName}</h3>
                     <p class="text-2xl font-bold text-amber-400">${formattedAmount.toFixed(2)} $BKC</p>
@@ -98,7 +98,7 @@ async function getFullCertificateHTML(certificate) {
                 </div>
                 <div class="flex justify-between">
                     <span class="text-zinc-400">Penalty (Pre-Vest):</span>
-                    <span class="text-red-400">${initialPenaltyBips / 100}% (~${formatBigNumber(penaltyAmount).toFixed(2)} $BKC)</span> {/* */}
+                    <span class="text-red-400">${initialPenaltyBips / 100}% (~${formatBigNumber(penaltyAmount).toFixed(2)} $BKC)</span>
                 </div>
             </div>
 
@@ -112,7 +112,7 @@ async function getFullCertificateHTML(certificate) {
             <button class="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-2.5 px-4 rounded-md transition-colors withdraw-btn mt-auto" data-tokenid="${tokenId.toString()}">
                 <i class="fa-solid fa-money-bill-transfer mr-2"></i> Withdraw
             </button>
-            <p class="text-xs text-center text-zinc-400 mt-2">You will receive ~${formatBigNumber(amountToOwner).toFixed(4)} $BKC</p> {/* */}
+            <p class="text-xs text-center text-zinc-400 mt-2">You will receive ~${formatBigNumber(amountToOwner).toFixed(4)} $BKC</p>
         </div>
     `;
 }

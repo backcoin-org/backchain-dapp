@@ -4,18 +4,22 @@ pragma solidity ^0.8.28;
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "./BKCToken.sol";
-import "./DelegationManager.sol";
+// <-- NOVO: Importa as interfaces do Hub e do DM
+import "./EcosystemManager.sol"; 
 
 /**
- * @title FortuneTiger (ActionManager)
- * @dev Contrato final para Ações Descentralizadas, com taxas fixas e sorteio automatizado.
- * @notice ALTERADO: Em Ações Beneficentes, a recompensa de 4% do criador foi removida e incorporada
- * ao prêmio da causa, que agora é de 92% do total.
+ * @title FortuneTiger (ActionsManager)
+ * @dev Contrato "Spoke" refatorado para usar o EcosystemManager.
+ * @notice Taxas, pStake mínimo e distribuição são gerenciados pelo Hub.
  */
 contract FortuneTiger is Ownable, ReentrancyGuard {
+    
+    // <-- NOVO: O Hub e o Token
+    IEcosystemManager public immutable ecosystemManager;
     BKCToken public immutable bkcToken;
-    DelegationManager public immutable delegationManager;
-    address public immutable treasuryWallet;
+
+    // <-- REMOVIDO: delegationManager
+    // <-- REMOVIDO: treasuryWallet
 
     enum ActionType { Esportiva, Beneficente }
     enum Status { Open, Finalized }
@@ -45,45 +49,67 @@ contract FortuneTiger is Ownable, ReentrancyGuard {
     uint256 public constant COUPONS_PER_BKC = 1000;
     uint256 public constant DRAW_MAX_OFFSET_BLOCKS = 100;
 
-    // --- TAXAS DE AÇÃO BENEFICENTE (TOTAL 8%) ---
-    uint256 public constant BENEFICENT_CAUSE_BIPS = 9200; // ALTERADO: 92% para a Causa
-    uint256 public constant BENEFICENT_DELEGATOR_BIPS = 400; // 4% para Delegadores
-    uint256 public constant BENEFICENT_TREASURY_BIPS = 400; // 4% para Tesouraria
-    uint256 public constant BENEFICENT_CREATOR_BIPS = 0; // ALTERADO: Recompensa do criador é zerada
+    // <-- REMOVIDO: Todas as constantes ..._BIPS (taxas)
     
-    // --- TAXAS DE AÇÃO ESPORTIVA (TOTAL 12%) ---
-    uint256 public constant SPORT_WINNER_BIPS = 8800;
-    uint256 public constant SPORT_CREATOR_BIPS = 400;
-    uint256 public constant SPORT_DELEGATOR_BIPS = 400;
-    uint256 public constant SPORT_TREASURY_BIPS = 400;
-
     event ActionCreated(uint256 indexed actionId, address indexed creator, ActionType actionType, uint256 endTime, string description);
     event Participation(uint256 indexed actionId, address indexed participant, uint256 bkcAmount, uint256 couponsIssued);
     event ActionFinalized(uint256 indexed actionId, address indexed finalRecipient, uint256 prizeAmount);
     event StakeReturned(uint256 indexed actionId, address indexed creator, uint256 stakeAmount);
+    // <-- NOVO: Evento para taxa de criação
+    event CreationFeePaid(address indexed creator, uint256 feeAmount);
 
+    /**
+     * @dev Construtor agora recebe o Hub.
+     */
     constructor(
-        address _bkcTokenAddress,
-        address _delegationManagerAddress,
-        address _treasuryAddress,
+        address _ecosystemManagerAddress,
         address _initialOwner
     ) Ownable(_initialOwner) {
+        require(_ecosystemManagerAddress != address(0), "FT: Hub não pode ser zero");
+        ecosystemManager = IEcosystemManager(_ecosystemManagerAddress);
+        
+        address _bkcTokenAddress = ecosystemManager.getBKCTokenAddress();
+        require(_bkcTokenAddress != address(0), "FT: Token não configurado no Hub");
         bkcToken = BKCToken(_bkcTokenAddress);
-        delegationManager = DelegationManager(_delegationManagerAddress);
-        treasuryWallet = _treasuryAddress;
     }
 
+    /**
+     * @notice Pega o stake mínimo do criador (lógica antiga mantida).
+     */
     function getMinCreatorStake() public view returns (uint256) {
         uint256 stake = bkcToken.totalSupply() / 1_000_000;
         return stake > 0 ? stake : 1;
     }
 
+    /**
+     * @notice Cria uma nova Ação.
+     * @dev ALTERADO: Agora verifica pStake mínimo e cobra uma taxa de criação (opcional).
+     * @param _boosterTokenId O ID do booster do usuário (0 se não tiver) para desconto na taxa.
+     */
     function createAction(
         uint256 _duration,
         ActionType _actionType,
         uint256 _charityStake,
-        string calldata _description
+        string calldata _description,
+        uint256 _boosterTokenId // <-- NOVO
     ) external nonReentrant {
+        
+        // --- 1. AUTORIZAÇÃO E TAXA DE CRIAÇÃO (NOVO) ---
+        // Verifica pStake mínimo e calcula a taxa (pode ser 0)
+        uint256 creationFee = ecosystemManager.authorizeService(
+            "ACTION_CREATE_SERVICE", // Chave do Serviço
+            msg.sender,
+            _boosterTokenId
+        );
+
+        // Se houver taxa de criação, coleta e distribui
+        if (creationFee > 0) {
+            require(bkcToken.transferFrom(msg.sender, address(this), creationFee), "FT: Falha ao pagar taxa de criação");
+            _distributeFees(creationFee); // Distribui 50/50
+            emit CreationFeePaid(msg.sender, creationFee);
+        }
+
+        // --- 2. LÓGICA DE STAKE (Antiga) ---
         actionCounter++;
         uint256 newActionId = actionCounter;
         uint256 stakeAmount;
@@ -105,25 +131,52 @@ contract FortuneTiger is Ownable, ReentrancyGuard {
         
         require(bkcToken.transferFrom(msg.sender, address(this), stakeAmount), "Stake transfer failed");
 
+        // --- 3. CRIA A AÇÃO (Antiga) ---
         actions[newActionId] = Action({
             id: newActionId, creator: msg.sender, description: finalDescription, actionType: _actionType,
             status: Status.Open, endTime: block.timestamp + _duration, totalPot: 0, creatorStake: stakeAmount,
             isStakeReturned: false, beneficiary: beneficiary, totalCoupons: 0, winner: address(0),
             closingBlock: 0, winningCoupon: 0
         });
-
+        
         emit ActionCreated(newActionId, msg.sender, _actionType, actions[newActionId].endTime, finalDescription);
     }
 
-    function participate(uint256 _actionId, uint256 _bkcAmount) external nonReentrant {
+    /**
+     * @notice Participa de uma Ação.
+     * @dev ALTERADO: Agora verifica pStake e cobra taxa de participação (opcional).
+     * @param _boosterTokenId O ID do booster do usuário (0 se não tiver) para desconto na taxa.
+     */
+    function participate(
+        uint256 _actionId, 
+        uint256 _bkcAmount,
+        uint256 _boosterTokenId // <-- NOVO
+    ) external nonReentrant {
         Action storage action = actions[_actionId];
         require(action.status == Status.Open, "Action is not open");
         require(block.timestamp < action.endTime, "Participation time has ended");
         require(_bkcAmount > 0, "Amount must be positive");
-        require(bkcToken.transferFrom(msg.sender, address(this), _bkcAmount), "Token transfer failed");
+
+        // --- 1. AUTORIZAÇÃO E TAXA DE PARTICIPAÇÃO (NOVO) ---
+        uint256 participationFee = ecosystemManager.authorizeService(
+            "ACTION_PARTICIPATE_SERVICE", // Chave do Serviço
+            msg.sender,
+            _boosterTokenId
+        );
         
-        action.totalPot += _bkcAmount;
+        // 2. COLETA TOTAL (Taxa + Valor do Pot)
+        uint256 totalAmount = _bkcAmount + participationFee;
+        require(bkcToken.transferFrom(msg.sender, address(this), totalAmount), "Token transfer failed");
+
+        // 3. DISTRIBUI TAXA (se houver)
+        if (participationFee > 0) {
+            _distributeFees(participationFee);
+        }
+
+        // --- 4. LÓGICA DE PARTICIPAÇÃO (Antiga) ---
+        action.totalPot += _bkcAmount; // Apenas _bkcAmount vai para o pot
         uint256 couponsToIssue = 0;
+        
         if (action.actionType == ActionType.Esportiva) {
             couponsToIssue = _bkcAmount * COUPONS_PER_BKC / (10**18);
             require(couponsToIssue > 0, "Amount too small for coupons");
@@ -131,9 +184,14 @@ contract FortuneTiger is Ownable, ReentrancyGuard {
             couponOwners[_actionId].push(msg.sender);
             couponRanges[_actionId].push(action.totalCoupons);
         }
+        
         emit Participation(_actionId, msg.sender, _bkcAmount, couponsToIssue);
     }
     
+    /**
+     * @notice Finaliza uma Ação.
+     * @dev ALTERADO: A divisão de taxas do pot agora é buscada no Hub.
+     */
     function finalizeAction(uint256 _actionId) external nonReentrant {
         Action storage action = actions[_actionId];
         require(action.status == Status.Open, "Action not open or already finalized");
@@ -144,6 +202,7 @@ contract FortuneTiger is Ownable, ReentrancyGuard {
         uint256 prizeAmount;
 
         if (action.actionType == ActionType.Esportiva) {
+            // Lógica de Sorteio (antiga)
             action.closingBlock = block.number;
             uint256 randomSeed = uint256(blockhash(action.closingBlock));
             require(randomSeed != 0, "Closing blockhash not available yet");
@@ -157,41 +216,113 @@ contract FortuneTiger is Ownable, ReentrancyGuard {
             action.winner = _findCouponOwner(_actionId, winningCouponNumber);
             require(action.winner != address(0), "Could not find winner");
 
+            // Lógica de Distribuição (nova)
             finalRecipient = action.winner;
-            prizeAmount = (pot * SPORT_WINNER_BIPS) / 10000;
+            uint256 winnerBips = ecosystemManager.getFee("ACTION_SPORT_WINNER_BIPS");
+            prizeAmount = (pot * winnerBips) / 10000;
             _distributeSportFees(pot, action.creator);
-        } else {
+        
+        } else { // Beneficente
             finalRecipient = action.beneficiary;
-            prizeAmount = (pot * BENEFICENT_CAUSE_BIPS) / 10000;
+            uint256 causeBips = ecosystemManager.getFee("ACTION_CAUSE_BIPS");
+            prizeAmount = (pot * causeBips) / 10000;
             _distributeBeneficentFees(pot, action.creator);
         }
 
         action.status = Status.Finalized;
         _returnCreatorStake(action);
+        
         if (prizeAmount > 0) {
             bkcToken.transfer(finalRecipient, prizeAmount);
         }
+        
         emit ActionFinalized(_actionId, finalRecipient, prizeAmount);
     }
+
+    /**
+     * @notice (NOVO) Função interna de distribuição de taxas 50/50.
+     * @dev Usada pelas taxas de *serviço* (criação, participação).
+     */
+    function _distributeFees(uint256 _amount) internal {
+        if (_amount == 0) return;
+
+        address treasury = ecosystemManager.getTreasuryAddress();
+        address dm = ecosystemManager.getDelegationManagerAddress();
+        require(treasury != address(0) && dm != address(0), "FT: Hub não configurado");
+
+        uint256 treasuryAmount = _amount / 2;
+        uint256 delegatorAmount = _amount - treasuryAmount;
+
+        if (treasuryAmount > 0) {
+            require(bkcToken.transfer(treasury, treasuryAmount), "FT: Fee to Treasury failed");
+        }
+        if (delegatorAmount > 0) {
+            bkcToken.approve(dm, delegatorAmount);
+            IDelegationManager(dm).depositRewards(0, delegatorAmount);
+        }
+    }
     
+    /**
+     * @dev Distribui as porcentagens do *pot* Beneficente.
+     * @notice ALTERADO: Busca BIPS e endereços do Hub.
+     */
     function _distributeBeneficentFees(uint256 _pot, address _creator) internal {
-        uint256 delegatorAmount = (_pot * BENEFICENT_DELEGATOR_BIPS) / 10000;
-        uint256 treasuryAmount = (_pot * BENEFICENT_TREASURY_BIPS) / 10000;
-        uint256 creatorAmount = (_pot * BENEFICENT_CREATOR_BIPS) / 10000; // Será zero
+        // Pega endereços do Hub
+        address dm = ecosystemManager.getDelegationManagerAddress();
+        address treasury = ecosystemManager.getTreasuryAddress();
+        require(dm != address(0) && treasury != address(0), "FT: Hub não configurado");
+
+        // Pega BIPS do Hub
+        uint256 delegatorBips = ecosystemManager.getFee("ACTION_CAUSE_DELEGATOR_BIPS");
+        uint256 treasuryBips = ecosystemManager.getFee("ACTION_CAUSE_TREASURY_BIPS");
+        uint256 creatorBips = ecosystemManager.getFee("ACTION_CAUSE_CREATOR_BIPS");
+
+        uint256 delegatorAmount = (_pot * delegatorBips) / 10000;
+        uint256 treasuryAmount = (_pot * treasuryBips) / 10000;
+        uint256 creatorAmount = (_pot * creatorBips) / 10000;
+        
         if (creatorAmount > 0) bkcToken.transfer(_creator, creatorAmount);
-        if (delegatorAmount > 0) delegationManager.depositRewards(0, delegatorAmount);
-        if (treasuryAmount > 0) bkcToken.transfer(treasuryWallet, treasuryAmount);
+        if (treasuryAmount > 0) bkcToken.transfer(treasury, treasuryAmount);
+        
+        // CORREÇÃO DO BUG: Aprova o DM antes de chamar
+        if (delegatorAmount > 0) {
+            bkcToken.approve(dm, delegatorAmount);
+            IDelegationManager(dm).depositRewards(0, delegatorAmount);
+        }
     }
 
+    /**
+     * @dev Distribui as porcentagens do *pot* Esportivo.
+     * @notice ALTERADO: Busca BIPS e endereços do Hub.
+     */
     function _distributeSportFees(uint256 _pot, address _creator) internal {
-        uint256 creatorAmount = (_pot * SPORT_CREATOR_BIPS) / 10000;
-        uint256 delegatorAmount = (_pot * SPORT_DELEGATOR_BIPS) / 10000;
-        uint256 treasuryAmount = (_pot * SPORT_TREASURY_BIPS) / 10000;
+        // Pega endereços do Hub
+        address dm = ecosystemManager.getDelegationManagerAddress();
+        address treasury = ecosystemManager.getTreasuryAddress();
+        require(dm != address(0) && treasury != address(0), "FT: Hub não configurado");
+        
+        // Pega BIPS do Hub
+        uint256 creatorBips = ecosystemManager.getFee("ACTION_SPORT_CREATOR_BIPS");
+        uint256 delegatorBips = ecosystemManager.getFee("ACTION_SPORT_DELEGATOR_BIPS");
+        uint256 treasuryBips = ecosystemManager.getFee("ACTION_SPORT_TREASURY_BIPS");
+
+        uint256 creatorAmount = (_pot * creatorBips) / 10000;
+        uint256 delegatorAmount = (_pot * delegatorBips) / 10000;
+        uint256 treasuryAmount = (_pot * treasuryBips) / 10000;
+        
         if (creatorAmount > 0) bkcToken.transfer(_creator, creatorAmount);
-        if (delegatorAmount > 0) delegationManager.depositRewards(0, delegatorAmount);
-        if (treasuryAmount > 0) bkcToken.transfer(treasuryWallet, treasuryAmount);
+        if (treasuryAmount > 0) bkcToken.transfer(treasury, treasuryAmount);
+        
+        // CORREÇÃO DO BUG: Aprova o DM antes de chamar
+        if (delegatorAmount > 0) {
+            bkcToken.approve(dm, delegatorAmount);
+            IDelegationManager(dm).depositRewards(0, delegatorAmount);
+        }
     }
     
+    /**
+     * @dev Retorna o stake ao criador (lógica antiga mantida).
+     */
     function _returnCreatorStake(Action storage action) internal {
         if (!action.isStakeReturned && action.creatorStake > 0) {
             action.isStakeReturned = true;
@@ -200,6 +331,9 @@ contract FortuneTiger is Ownable, ReentrancyGuard {
         }
     }
     
+    /**
+     * @dev Encontra o dono do cupom (lógica antiga mantida).
+     */
     function _findCouponOwner(uint256 _actionId, uint256 _couponNumber) internal view returns (address) {
         uint256[] memory ranges = couponRanges[_actionId];
         uint256 low = 0;

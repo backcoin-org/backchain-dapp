@@ -1,5 +1,49 @@
 // pages/TokenomicsPage.js
 
+/**
+ * Adiciona os listeners de evento para o modal do whitepaper.
+ * Usamos cloneNode(true) e replaceChild para evitar a duplicação de listeners
+ * caso a função render() seja chamada múltiplas vezes.
+ */
+const setupTokenomicsListeners = () => {
+    const container = document.getElementById('tokenomics');
+    if (!container) return;
+
+    const modal = container.querySelector('#whitepaperModal');
+    const openBtn = container.querySelector('#openWhitepaperModalBtn');
+    
+    if (modal && openBtn) {
+        // Clona o botão de abrir e substitui o antigo
+        const newOpenBtn = openBtn.cloneNode(true);
+        openBtn.parentNode.replaceChild(newOpenBtn, openBtn);
+        
+        // Clona o modal e substitui o antigo (para listeners de backdrop/fechar)
+        const newModal = modal.cloneNode(true);
+        modal.parentNode.replaceChild(newModal, modal);
+
+        const closeBtn = newModal.querySelector('#closeModalBtn');
+
+        // Funções para controlar o novo modal clonado
+        const openModal = () => newModal.classList.remove('hidden');
+        const closeModal = () => newModal.classList.add('hidden');
+
+        // Adiciona listeners
+        newOpenBtn.addEventListener('click', openModal);
+        
+        if (closeBtn) {
+            closeBtn.addEventListener('click', closeModal);
+        }
+
+        // Adiciona listener para fechar ao clicar no backdrop (fundo)
+        newModal.addEventListener('click', (e) => {
+            if (e.target === newModal) {
+                closeModal();
+            }
+        });
+    }
+};
+
+
 const renderTokenomicsContent = () => {
     const container = document.getElementById('tokenomics'); // O ID da <section>
     if (!container) return;
@@ -18,12 +62,10 @@ const renderTokenomicsContent = () => {
                 </p>
 
                 <div class="mt-10">
-                    <a href="./assets/Backchain ($BKC) en V2.pdf" 
-                       target="_blank" 
-                       rel="noopener noreferrer" 
-                       class="bg-amber-500 hover:bg-amber-600 text-zinc-900 font-bold py-3 px-8 rounded-lg text-lg transition-transform hover:scale-105 inline-block">
+                    <button id="openWhitepaperModalBtn" 
+                       class="bg-amber-500 hover:bg-amber-600 text-zinc-900 font-bold py-3 px-8 rounded-lg text-lg transition-transform hover:scale-105 inline-block cursor-pointer">
                         <i class="fa-solid fa-file-lines mr-2"></i> Download Whitepaper
-                    </a>
+                    </button>
                 </div>
             </div>
 
@@ -201,17 +243,46 @@ const renderTokenomicsContent = () => {
                 </div>
             </section>
         </div>
+
+        <div id="whitepaperModal" class="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center p-4 z-50 hidden" style="backdrop-filter: blur(5px);">
+            <div class="bg-sidebar border border-border-color rounded-xl p-8 md:p-12 w-full max-w-lg relative text-left shadow-lg">
+                
+                <button id="closeModalBtn" class="absolute top-4 right-5 text-zinc-500 hover:text-white text-3xl leading-none">&times;</button>
+                
+                <h3 class="text-2xl font-bold text-white mb-6">Download Whitepaper</h3>
+                <p class="text-zinc-400 mb-8">Please select which document you would like to view.</p>
+                
+                <div class="space-y-4">
+                    <a href="./assets/Backchain ($BKC) en V2.pdf" 
+                       target="_blank" 
+                       rel="noopener noreferrer" 
+                       class="bg-amber-500 hover:bg-amber-600 text-zinc-900 font-bold py-3 px-6 rounded-lg text-lg transition-transform hover:scale-105 w-full text-center inline-block">
+                        <i class="fa-solid fa-file-lines mr-2"></i> $BKC Tokenomics Whitepaper
+                    </a>
+                    
+                    <a href="./assets/whitepaper_bkc_ecosystem_english.pdf" 
+                       target="_blank" 
+                       rel="noopener noreferrer" 
+                       class="bg-cyan-500 hover:bg-cyan-600 text-zinc-900 font-bold py-3 px-6 rounded-lg text-lg transition-transform hover:scale-105 w-full text-center inline-block">
+                        <i class="fa-solid fa-sitemap mr-2"></i> Backchain Ecosystem Whitepaper
+                    </a>
+                </div>
+            </div>
+        </div>
     `;
 };
 
 export const TokenomicsPage = {
     render() {
         renderTokenomicsContent();
+        setupTokenomicsListeners(); // Adiciona os listeners após o render
     },
     init() {
-        // Initialization logic, if needed (e.g., interactive charts)
+        // Initialization logic, if needed
+        setupTokenomicsListeners(); // Garante que os listeners sejam adicionados na inicialização
     },
     update(isConnected) {
         // Update logic, if needed
+        setupTokenomicsListeners(); // Garante que os listeners sejam re-aplicados no update
     }
 };

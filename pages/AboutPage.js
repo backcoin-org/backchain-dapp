@@ -13,6 +13,13 @@ const renderAboutContent = () => {
                 <p class="text-lg md:text-xl text-zinc-400 max-w-3xl mx-auto">
                     An overview of the self-sustaining economic engine designed to reward every participant and challenge the status quo of Web3.
                 </p>
+
+                <div class="mt-10">
+                    <button id="openWhitepaperModalBtn" 
+                       class="bg-amber-500 hover:bg-amber-600 text-zinc-900 font-bold py-3 px-8 rounded-lg text-lg transition-transform hover:scale-105 inline-block cursor-pointer">
+                        <i class="fa-solid fa-file-lines mr-2"></i> Download Whitepaper
+                    </button>
+                </div>
             </div>
 
             <section id="philosophy" class="mb-20">
@@ -130,26 +137,51 @@ const renderAboutContent = () => {
                 </button>
             </section>
         </div>
+
+        <div id="whitepaperModal" class="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center p-4 z-50 hidden" style="backdrop-filter: blur(5px);">
+            <div class="bg-sidebar border border-border-color rounded-xl p-8 md:p-12 w-full max-w-lg relative text-left shadow-lg">
+                
+                <button id="closeModalBtn" class="absolute top-4 right-5 text-zinc-500 hover:text-white text-3xl leading-none">&times;</button>
+                
+                <h3 class="text-2xl font-bold text-white mb-6">Download Whitepaper</h3>
+                <p class="text-zinc-400 mb-8">Please select which document you would like to view.</p>
+                
+                <div class="space-y-4">
+                    <a href="./assets/Backchain ($BKC) en V2.pdf" 
+                       target="_blank" 
+                       rel="noopener noreferrer" 
+                       class="bg-amber-500 hover:bg-amber-600 text-zinc-900 font-bold py-3 px-6 rounded-lg text-lg transition-transform hover:scale-105 w-full text-center inline-block">
+                        <i class="fa-solid fa-file-lines mr-2"></i> $BKC Tokenomics Whitepaper
+                    </a>
+                    
+                    <a href="./assets/whitepaper_bkc_ecosystem_english.pdf" 
+                       target="_blank" 
+                       rel="noopener noreferrer" 
+                       class="bg-cyan-500 hover:bg-cyan-600 text-zinc-900 font-bold py-3 px-6 rounded-lg text-lg transition-transform hover:scale-105 w-full text-center inline-block">
+                        <i class="fa-solid fa-sitemap mr-2"></i> Backchain Ecosystem Whitepaper
+                    </a>
+                </div>
+            </div>
+        </div>
     `;
 };
 
-// Adiciona a lógica para o botão de compartilhar
+// FUNÇÃO ATUALIZADA: Adiciona a lógica para o botão de compartilhar E o modal
 const setupAboutPageListeners = () => {
-    // Tenta encontrar o botão de compartilhar nesta página específica
+    // Tenta encontrar o container desta página específica
     const pageContainer = document.getElementById('about');
     if (!pageContainer) return;
 
+    // --- Lógica do Botão Share (Existente) ---
     const shareButton = pageContainer.querySelector('#shareProjectBtn');
-    
     if (shareButton) {
-        // Remove listener antigo para evitar duplicatas, se houver
-        // A melhor forma é clonar o nó e substituí-lo
+        // Remove listener antigo para evitar duplicatas
         const newShareButton = shareButton.cloneNode(true);
         shareButton.parentNode.replaceChild(newShareButton, shareButton);
         
         // Adiciona o novo listener
         newShareButton.addEventListener('click', () => {
-            const url = window.location.origin; // Pega a URL base (ex: https://seusite.com)
+            const url = window.location.origin; // Pega a URL base
             navigator.clipboard.writeText(url).then(() => {
                 showToast('Project link copied to clipboard!', 'success');
             }).catch(err => {
@@ -158,12 +190,46 @@ const setupAboutPageListeners = () => {
             });
         });
     }
+
+    // --- Lógica do Modal Whitepaper (Nova) ---
+    const modal = pageContainer.querySelector('#whitepaperModal');
+    const openBtn = pageContainer.querySelector('#openWhitepaperModalBtn');
+    
+    if (modal && openBtn) {
+        // Clona o botão de abrir e substitui o antigo
+        const newOpenBtn = openBtn.cloneNode(true);
+        openBtn.parentNode.replaceChild(newOpenBtn, openBtn);
+        
+        // Clona o modal e substitui o antigo
+        const newModal = modal.cloneNode(true);
+        modal.parentNode.replaceChild(newModal, modal);
+
+        const closeBtn = newModal.querySelector('#closeModalBtn');
+
+        // Funções para controlar o novo modal clonado
+        const openModal = () => newModal.classList.remove('hidden');
+        const closeModal = () => newModal.classList.add('hidden');
+
+        // Adiciona listeners
+        newOpenBtn.addEventListener('click', openModal);
+        
+        if (closeBtn) {
+            closeBtn.addEventListener('click', closeModal);
+        }
+
+        // Adiciona listener para fechar ao clicar no backdrop (fundo)
+        newModal.addEventListener('click', (e) => {
+            if (e.target === newModal) {
+                closeModal();
+            }
+        });
+    }
 };
 
 export const AboutPage = {
     render() {
         renderAboutContent();
-        setupAboutPageListeners(); // Garante que o listener seja ativado
+        setupAboutPageListeners(); // Garante que AMBOS os listeners sejam ativados
     },
     // Adiciona um método init que também chama o setup (boa prática para consistência)
     init() {
