@@ -6,7 +6,8 @@ import { State } from '../state.js';
 import { showToast } from '../ui-feedback.js';
 import { addresses, publicSaleABI } from '../config.js';
 
-// --- V8.5 (User Request): English-only translations, all bold tags corrected ---
+// --- V8.8 (User Request): Revolutionary Features & Enthusiast Developer Narrative ---
+// --- V8.9 (User Request): Changed #advantage section ID to #decentralized-notary and removed footer ---
 
 const PRESALE_CONFIG = {
     countdownDate: "2025-11-20T23:59:59",
@@ -24,11 +25,13 @@ const PRESALE_CONFIG = {
             insufficientFunds: "Insufficient funds...", userRejected: "Transaction rejected...",
             soldOut: "Sale Error. Please try again later.", 
             txPending: "Awaiting confirmation...", txSuccess: "Purchase successful!", txError: "Transaction Error:", buyAlert: "Please connect your wallet first.", saleContractNotConfigured: "Sale contract address not configured.", invalidQuantity: "Please select a valid quantity (1 or more).", txRejected: "Transaction rejected.",
-            heroTitle1: "Get Your Ecosystem Power.",
-            heroTitle2: `Presale Event.`, 
-            heroSubtitle: `This is Batch 1: Acquire your Booster NFT at <strong>50% OFF</strong>. More than a collectible, it's your key to <strong>maximized rewards</strong>, <strong>lower fees</strong>, and <strong>instant liquidity</strong> on our dedicated pool.`,
-            heroBtn1: "Secure My Advantage (50% OFF)",
+            
+            heroTitle1: "This is Not Just Another Project.",
+            heroTitle2: `This is the Backchain Revolution.`, 
+            heroSubtitle: `Built by a passionate group of crypto developers over <strong>thousands of hours</strong>, Backchain is a <strong>revolutionary decentralized ecosystem</strong> for the $BKC utility token. We are self-funded (No VCs, No team tokens) and <strong>100% of this sale funds liquidity and marketing</strong>. This is your chance to acquire a <strong>rare item with guaranteed value</strong> and join a project with features never seen in crypto. Don't be left out.`,
+            heroBtn1: "Join the Revolution (50% OFF)",
             heroBtn2: "What is 'Guaranteed Liquidity'?",
+            
             heroStockBar: "Batch 1 Progress:", 
             liquidityTag: "THE END OF 'STUCK' NFTS",
             liquidityTitle: "Guaranteed Immediate Liquidity.",
@@ -39,17 +42,18 @@ const PRESALE_CONFIG = {
             liquidityCol2Title: "The Backchain Way (Instant & Fair)",
             liquidityCol2Desc: "Sell <strong>instantly</strong>, 24/7, directly to our AMM pool with a low, predictable ecosystem fee. No waiting, no haggling.",
             
-            advantageTag: "YOUR STRATEGIC EDGE",
-            advantageTitle: "What Do These 'Special Powers' Do?",
-            advantageSubtitle: `Your Booster is a <strong>core ecosystem collectible</strong>. It's a key that unlocks permanent benefits and, with our AMM pool, holds <strong>dynamic value</strong> with real appreciation potential.`,
-            advantage1Title: "Maximize Rewards",
-            advantage1Desc: "Amplify your $BKC earnings from staking and Proof-of-Purchase mining. <strong>More rewards, faster.</strong>",
-            advantage2Title: "Reduce Service Fees",
-            advantage2Desc: "Pay <strong>less fees</strong> on all platform services, like creating Actions or using the Notary.",
-            advantage3Title: "Trading Discounts",
-            advantage3Desc: "Sell your NFTs in the Liquidity Pool paying <strong>less tax</strong>. Your Booster pays for itself.",
-            advantage4Title: "Scarcity & Liquidity",
-            advantage4Desc: `After this presale, the minting capability will be <strong>permanently disabled</strong>. This one-time event (scarcity), combined with a <strong>dedicated liquidity pool</strong> (liquidity), is designed to build <strong>long-term value and appreciation potential</strong>.`,
+            advantageTag: "A TRULY REVOLUTIONARY ECOSYSTEM",
+            advantageTitle: "Pioneering Decentralized Features.",
+            advantageSubtitle: `The $BKC ecosystem is already live with features you won't find anywhere else. Your Booster NFT is the key to maximizing all of them.`,
+            advantage1Title: "Decentralized Notary",
+            advantage1Desc: "A first-in-crypto feature. Anyone can register documents on the blockchain, decentralized and immutable, creating irrefutable proof of existence.",
+            advantage2Title: "Decentralized Campaigns",
+            advantage2Desc: "Create or join sports and lottery campaigns. A 100% decentralized and <strong>fraud-proof 'Tigrinho'</strong> where $BKC is the prize, and the draw is fully automated by smart contract.",
+            advantage3Title: "Charitable Campaigns",
+            advantage3Desc: "Launch or fund transparent, decentralized fundraising campaigns for social causes, ensuring trust and traceability of every donation.",
+            advantage4Title: "Your Rare NFT (Guaranteed Value)",
+            advantage4Desc: `After this presale, minting is <strong>permanently disabled</strong>. This one-time item (scarcity) has <strong>guaranteed $BKC value appreciation</strong> built into its dedicated liquidity pool.`,
+
             saleTag: "BATCH 1: 50% DISCOUNT",
             saleTitle: "Choose Your Power",
             saleTimerTitle: "Batch 1 (50% OFF) Ends In:",
@@ -57,10 +61,14 @@ const PRESALE_CONFIG = {
             cardPriceBatch2: "Batch 2 Price:",
             cardPriceBatch1: "Batch 1 (50% OFF):",
             cardQuantityLabel: "Quantity:", 
-            cardAdvTitle: "Special Powers:",
-            cardAdv1: "Multiplies Stake/PoP Rewards",
-            cardAdv2: "Reduces Ecosystem Service Fees",
+            
+            cardAdvTitle: "Core Advantages:",
+            cardAdv1: "<strong>Multiplies Stake/PoP Rewards</strong>",
+            cardAdv2: "<strong>Reduces Ecosystem Service Fees</strong>",
             cardAdv3: "Guaranteed Immediate Pool Liquidity",
+            cardAdv4: "<strong>Rare & Fundamental</strong> ecosystem key",
+            cardAdv5: "<strong>Guaranteed $BKC Value</strong>: A fee from every trade feeds the pool, constantly raising the NFT's floor price.",
+            
             cardBtnConnect: "Connect Wallet to Buy",
             cardBtnBuy: "Acquire Now",
             anchorBtn: "Secure Your NFT",
@@ -73,8 +81,11 @@ const PRESALE_CONFIG = {
             funding2Desc: `Funds to attract thousands of new users. More users = more transactions = <strong>higher demand for the Boosters.</strong>`,
             funding3Title: "Fair Launch Commitment",
             funding3Desc: "No VCs. No private allocations. This sale funds a truly community-driven and fair launch.",
-            roadmapTag: "OUR FLIGHT PLAN", roadmapTitle: "Building the Future, Together.",
-            roadmapSubtitle: "This presale is just the beginning...",
+            
+            roadmapTag: "OUR FLIGHT PLAN", 
+            roadmapTitle: "Building the Future, Together.",
+            roadmapSubtitle: "The future is promising for $BKC, don't be left out. This presale is just the beginning...",
+            
             roadmap1Title: "<i class='fa-solid fa-check-circle mr-3'></i>Phase 1: Foundation (Completed)",
             roadmap1Desc: "Core smart contracts developed, audited, and rigorously tested.",
             roadmap2Title: "<i class='fa-solid fa-rocket mr-3'></i>Phase 2: Launch & Liquidity (You Are Here)",
@@ -83,7 +94,8 @@ const PRESALE_CONFIG = {
             roadmap3Desc: "Launch Community Actions, integrate partners, pursue major exchange listings.",
             roadmap4Title: "<i class='fa-solid fa-landmark-flag mr-3'></i>Phase 4: True Decentralization",
             roadmap4Desc: "Full DAO implementation, handing over protocol governance to the $BKC holders.",
-            footerText: "&copy; 2025 Backchain. The revolution will not be centralized.",
+            
+            // footerText removido
         }
     }
 };
@@ -265,11 +277,15 @@ function renderMarketplace() {
                 <p class="text-3xl font-bold text-green-400 mb-4">${tier.boost}</p>
                 <div class="w-full text-left bg-presale-bg-main p-4 rounded-lg my-2">
                     <p class="text-sm font-bold text-amber-400 mb-2" data-translate="cardAdvTitle"></p>
+                    
                     <ul class="space-y-2 text-sm list-none list-inside text-text-secondary">
-                        <li class="flex items-center gap-2"><i class="fa-solid fa-check text-green-500 w-4 text-center"></i><span data-translate="cardAdv1"></span></li>
-                        <li class="flex items-center gap-2"><i class="fa-solid fa-check text-green-500 w-4 text-center"></i><span data-translate="cardAdv2"></span></li>
+                        <li class="flex items-center gap-2"><i class="fa-solid fa-star text-amber-400 w-4 text-center"></i><span data-translate="cardAdv1"></span></li>
+                        <li class="flex items-center gap-2"><i class="fa-solid fa-star text-amber-400 w-4 text-center"></i><span data-translate="cardAdv2"></span></li>
                         <li class="flex items-center gap-2"><i class="fa-solid fa-check text-green-500 w-4 text-center"></i><span data-translate="cardAdv3"></span></li>
+                        <li class="flex items-center gap-2"><i class="fa-solid fa-gem text-cyan-400 w-4 text-center"></i><span data-translate="cardAdv4"></span></li>
+                        <li class="flex items-center gap-2"><i class="fa-solid fa-arrow-trend-up text-green-400 w-4 text-center"></i><span data-translate="cardAdv5"></span></li>
                     </ul>
+                    
                 </div>
                 <div class="w-full bg-presale-bg-main p-3 rounded-lg text-center my-2">
                     <p class="text-sm text-text-secondary line-through">
@@ -356,31 +372,32 @@ export const PresalePage = {
                     </div>
                 </section>
 
-                <section id="advantage" class="py-20 lg:py-28 px-4 fade-in-section">
-                     <div class="container mx-auto max-w-7xl">
+                <section id="decentralized-notary" class="py-20 lg:py-28 px-4 fade-in-section">
+                <div class="container mx-auto max-w-7xl">
                         <div class="text-center mb-16">
                             <span class="text-sm font-bold text-cyan-400 tracking-widest" data-translate="advantageTag"></span>
                             <h2 class="text-4xl md:text-5xl font-bold my-4" data-translate="advantageTitle"></h2>
                             <p class="text-lg text-text-secondary max-w-3xl mx-auto" data-translate="advantageSubtitle"></p>
                         </div>
+                        
                         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
                             <div class="p-8 bg-presale-bg-card rounded-lg border border-presale-border-color transform hover:-translate-y-2 transition-transform duration-300">
-                                <i class="fa-solid fa-sack-dollar text-4xl text-green-400 mb-5"></i>
+                                <i class="fa-solid fa-file-signature text-4xl text-blue-400 mb-5"></i>
                                 <h3 class="text-2xl font-bold mb-3" data-translate="advantage1Title"></h3>
                                 <p class="text-text-secondary" data-translate="advantage1Desc"></p>
                             </div>
                             <div class="p-8 bg-presale-bg-card rounded-lg border border-presale-border-color transform hover:-translate-y-2 transition-transform duration-300">
-                                <i class="fa-solid fa-receipt text-4xl text-blue-400 mb-5"></i>
+                                <i class="fa-solid fa-trophy text-4xl text-amber-400 mb-5"></i>
                                 <h3 class="text-2xl font-bold mb-3" data-translate="advantage2Title"></h3>
                                 <p class="text-text-secondary" data-translate="advantage2Desc"></p>
                             </div>
                              <div class="p-8 bg-presale-bg-card rounded-lg border border-presale-border-color transform hover:-translate-y-2 transition-transform duration-300">
-                                <i class="fa-solid fa-percent text-4xl text-cyan-400 mb-5"></i>
+                                <i class="fa-solid fa-hand-holding-heart text-4xl text-pink-400 mb-5"></i>
                                 <h3 class="text-2xl font-bold mb-3" data-translate="advantage3Title"></h3>
                                 <p class="text-text-secondary" data-translate="advantage3Desc"></p>
                             </div>
                             <div class="p-8 bg-presale-bg-card rounded-lg border border-presale-border-color transform hover:-translate-y-2 transition-transform duration-300">
-                                <i class="fa-solid fa-gem text-4xl text-purple-400 mb-5"></i>
+                                <i class="fa-solid fa-gem text-4xl text-green-400 mb-5"></i>
                                 <h3 class="text-2xl font-bold mb-3" data-translate="advantage4Title"></h3>
                                 <p class="text-text-secondary" data-translate="advantage4Desc"></p>
                             </div>
@@ -465,11 +482,7 @@ export const PresalePage = {
                     </div>
                 </section>
 
-                <footer class="text-center p-8 border-t border-presale-border-color" style="background-color: var(--presale-bg-darker);">
-                    <p class="text-text-secondary" data-translate="footerText"></p>
-                </footer>
-
-                 <a href="#sale" title="Secure Your NFT" class="fixed bottom-6 right-6 z-30 btn-primary p-4 rounded-full text-xl shadow-lg transform hover:scale-110 transition-transform duration-300">
+                <a href="#sale" title="Secure Your NFT" class="fixed bottom-6 right-6 z-30 btn-primary p-4 rounded-full text-xl shadow-lg transform hover:scale-110 transition-transform duration-300">
                     <i class="fa-solid fa-tags"></i>
                     <span class="sr-only" data-translate="anchorBtn"></span>
                 </a>

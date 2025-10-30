@@ -37,6 +37,7 @@ export interface RewardManagerInterface extends Interface {
       | "claimMinerRewards"
       | "createVestingCertificate"
       | "delegationManager"
+      | "ecosystemManager"
       | "getApproved"
       | "isApprovedForAll"
       | "minerRewardsOwed"
@@ -109,6 +110,10 @@ export interface RewardManagerInterface extends Interface {
   ): string;
   encodeFunctionData(
     functionFragment: "delegationManager",
+    values?: undefined
+  ): string;
+  encodeFunctionData(
+    functionFragment: "ecosystemManager",
     values?: undefined
   ): string;
   encodeFunctionData(
@@ -189,7 +194,7 @@ export interface RewardManagerInterface extends Interface {
   ): string;
   encodeFunctionData(
     functionFragment: "withdraw",
-    values: [BigNumberish]
+    values: [BigNumberish, BigNumberish]
   ): string;
 
   decodeFunctionResult(
@@ -216,6 +221,10 @@ export interface RewardManagerInterface extends Interface {
   ): Result;
   decodeFunctionResult(
     functionFragment: "delegationManager",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
+    functionFragment: "ecosystemManager",
     data: BytesLike
   ): Result;
   decodeFunctionResult(
@@ -495,6 +504,8 @@ export interface RewardManager extends BaseContract {
 
   delegationManager: TypedContractMethod<[], [string], "view">;
 
+  ecosystemManager: TypedContractMethod<[], [string], "view">;
+
   getApproved: TypedContractMethod<[tokenId: BigNumberish], [string], "view">;
 
   isApprovedForAll: TypedContractMethod<
@@ -584,7 +595,11 @@ export interface RewardManager extends BaseContract {
     "view"
   >;
 
-  withdraw: TypedContractMethod<[_tokenId: BigNumberish], [void], "nonpayable">;
+  withdraw: TypedContractMethod<
+    [_tokenId: BigNumberish, _boosterTokenId: BigNumberish],
+    [void],
+    "nonpayable"
+  >;
 
   getFunction<T extends ContractMethod = ContractMethod>(
     key: string | FunctionFragment
@@ -630,6 +645,9 @@ export interface RewardManager extends BaseContract {
   >;
   getFunction(
     nameOrSignature: "delegationManager"
+  ): TypedContractMethod<[], [string], "view">;
+  getFunction(
+    nameOrSignature: "ecosystemManager"
   ): TypedContractMethod<[], [string], "view">;
   getFunction(
     nameOrSignature: "getApproved"
@@ -736,7 +754,11 @@ export interface RewardManager extends BaseContract {
   >;
   getFunction(
     nameOrSignature: "withdraw"
-  ): TypedContractMethod<[_tokenId: BigNumberish], [void], "nonpayable">;
+  ): TypedContractMethod<
+    [_tokenId: BigNumberish, _boosterTokenId: BigNumberish],
+    [void],
+    "nonpayable"
+  >;
 
   getEvent(
     key: "Approval"

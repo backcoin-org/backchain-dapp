@@ -29,13 +29,11 @@ export interface DecentralizedNotaryInterface extends Interface {
       | "approve"
       | "balanceOf"
       | "bkcToken"
-      | "delegationManager"
+      | "ecosystemManager"
       | "getApproved"
       | "isApprovedForAll"
-      | "minimumPStakeRequired"
       | "name"
       | "notarizeDocument"
-      | "notarizeFeeBKC"
       | "owner"
       | "ownerOf"
       | "renounceOwnership"
@@ -43,7 +41,6 @@ export interface DecentralizedNotaryInterface extends Interface {
       | "safeTransferFrom(address,address,uint256,bytes)"
       | "setApprovalForAll"
       | "setBaseURI"
-      | "setNotarySettings"
       | "supportsInterface"
       | "symbol"
       | "tokenByIndex"
@@ -52,8 +49,6 @@ export interface DecentralizedNotaryInterface extends Interface {
       | "totalSupply"
       | "transferFrom"
       | "transferOwnership"
-      | "treasuryFeeBips"
-      | "treasuryWallet"
   ): FunctionFragment;
 
   getEvent(
@@ -61,7 +56,6 @@ export interface DecentralizedNotaryInterface extends Interface {
       | "Approval"
       | "ApprovalForAll"
       | "DocumentNotarized"
-      | "NotarySettingsChanged"
       | "OwnershipTransferred"
       | "Transfer"
   ): EventFragment;
@@ -76,7 +70,7 @@ export interface DecentralizedNotaryInterface extends Interface {
   ): string;
   encodeFunctionData(functionFragment: "bkcToken", values?: undefined): string;
   encodeFunctionData(
-    functionFragment: "delegationManager",
+    functionFragment: "ecosystemManager",
     values?: undefined
   ): string;
   encodeFunctionData(
@@ -87,18 +81,10 @@ export interface DecentralizedNotaryInterface extends Interface {
     functionFragment: "isApprovedForAll",
     values: [AddressLike, AddressLike]
   ): string;
-  encodeFunctionData(
-    functionFragment: "minimumPStakeRequired",
-    values?: undefined
-  ): string;
   encodeFunctionData(functionFragment: "name", values?: undefined): string;
   encodeFunctionData(
     functionFragment: "notarizeDocument",
-    values: [string]
-  ): string;
-  encodeFunctionData(
-    functionFragment: "notarizeFeeBKC",
-    values?: undefined
+    values: [string, BigNumberish]
   ): string;
   encodeFunctionData(functionFragment: "owner", values?: undefined): string;
   encodeFunctionData(
@@ -122,10 +108,6 @@ export interface DecentralizedNotaryInterface extends Interface {
     values: [AddressLike, boolean]
   ): string;
   encodeFunctionData(functionFragment: "setBaseURI", values: [string]): string;
-  encodeFunctionData(
-    functionFragment: "setNotarySettings",
-    values: [BigNumberish, BigNumberish, BigNumberish]
-  ): string;
   encodeFunctionData(
     functionFragment: "supportsInterface",
     values: [BytesLike]
@@ -155,20 +137,12 @@ export interface DecentralizedNotaryInterface extends Interface {
     functionFragment: "transferOwnership",
     values: [AddressLike]
   ): string;
-  encodeFunctionData(
-    functionFragment: "treasuryFeeBips",
-    values?: undefined
-  ): string;
-  encodeFunctionData(
-    functionFragment: "treasuryWallet",
-    values?: undefined
-  ): string;
 
   decodeFunctionResult(functionFragment: "approve", data: BytesLike): Result;
   decodeFunctionResult(functionFragment: "balanceOf", data: BytesLike): Result;
   decodeFunctionResult(functionFragment: "bkcToken", data: BytesLike): Result;
   decodeFunctionResult(
-    functionFragment: "delegationManager",
+    functionFragment: "ecosystemManager",
     data: BytesLike
   ): Result;
   decodeFunctionResult(
@@ -179,17 +153,9 @@ export interface DecentralizedNotaryInterface extends Interface {
     functionFragment: "isApprovedForAll",
     data: BytesLike
   ): Result;
-  decodeFunctionResult(
-    functionFragment: "minimumPStakeRequired",
-    data: BytesLike
-  ): Result;
   decodeFunctionResult(functionFragment: "name", data: BytesLike): Result;
   decodeFunctionResult(
     functionFragment: "notarizeDocument",
-    data: BytesLike
-  ): Result;
-  decodeFunctionResult(
-    functionFragment: "notarizeFeeBKC",
     data: BytesLike
   ): Result;
   decodeFunctionResult(functionFragment: "owner", data: BytesLike): Result;
@@ -211,10 +177,6 @@ export interface DecentralizedNotaryInterface extends Interface {
     data: BytesLike
   ): Result;
   decodeFunctionResult(functionFragment: "setBaseURI", data: BytesLike): Result;
-  decodeFunctionResult(
-    functionFragment: "setNotarySettings",
-    data: BytesLike
-  ): Result;
   decodeFunctionResult(
     functionFragment: "supportsInterface",
     data: BytesLike
@@ -239,14 +201,6 @@ export interface DecentralizedNotaryInterface extends Interface {
   ): Result;
   decodeFunctionResult(
     functionFragment: "transferOwnership",
-    data: BytesLike
-  ): Result;
-  decodeFunctionResult(
-    functionFragment: "treasuryFeeBips",
-    data: BytesLike
-  ): Result;
-  decodeFunctionResult(
-    functionFragment: "treasuryWallet",
     data: BytesLike
   ): Result;
 }
@@ -309,28 +263,6 @@ export namespace DocumentNotarizedEvent {
     tokenId: bigint;
     documentURI: string;
     feePaid: bigint;
-  }
-  export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
-  export type Filter = TypedDeferredTopicFilter<Event>;
-  export type Log = TypedEventLog<Event>;
-  export type LogDescription = TypedLogDescription<Event>;
-}
-
-export namespace NotarySettingsChangedEvent {
-  export type InputTuple = [
-    newMinPStake: BigNumberish,
-    newFee: BigNumberish,
-    newTreasuryBips: BigNumberish
-  ];
-  export type OutputTuple = [
-    newMinPStake: bigint,
-    newFee: bigint,
-    newTreasuryBips: bigint
-  ];
-  export interface OutputObject {
-    newMinPStake: bigint;
-    newFee: bigint;
-    newTreasuryBips: bigint;
   }
   export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
   export type Filter = TypedDeferredTopicFilter<Event>;
@@ -422,7 +354,7 @@ export interface DecentralizedNotary extends BaseContract {
 
   bkcToken: TypedContractMethod<[], [string], "view">;
 
-  delegationManager: TypedContractMethod<[], [string], "view">;
+  ecosystemManager: TypedContractMethod<[], [string], "view">;
 
   getApproved: TypedContractMethod<[tokenId: BigNumberish], [string], "view">;
 
@@ -432,17 +364,13 @@ export interface DecentralizedNotary extends BaseContract {
     "view"
   >;
 
-  minimumPStakeRequired: TypedContractMethod<[], [bigint], "view">;
-
   name: TypedContractMethod<[], [string], "view">;
 
   notarizeDocument: TypedContractMethod<
-    [_documentURI: string],
+    [_documentURI: string, _boosterTokenId: BigNumberish],
     [void],
     "nonpayable"
   >;
-
-  notarizeFeeBKC: TypedContractMethod<[], [bigint], "view">;
 
   owner: TypedContractMethod<[], [string], "view">;
 
@@ -474,16 +402,6 @@ export interface DecentralizedNotary extends BaseContract {
   >;
 
   setBaseURI: TypedContractMethod<[newBaseURI: string], [void], "nonpayable">;
-
-  setNotarySettings: TypedContractMethod<
-    [
-      _newMinPStake: BigNumberish,
-      _newFeeBKC: BigNumberish,
-      _newTreasuryBips: BigNumberish
-    ],
-    [void],
-    "nonpayable"
-  >;
 
   supportsInterface: TypedContractMethod<
     [interfaceId: BytesLike],
@@ -517,10 +435,6 @@ export interface DecentralizedNotary extends BaseContract {
     "nonpayable"
   >;
 
-  treasuryFeeBips: TypedContractMethod<[], [bigint], "view">;
-
-  treasuryWallet: TypedContractMethod<[], [string], "view">;
-
   getFunction<T extends ContractMethod = ContractMethod>(
     key: string | FunctionFragment
   ): T;
@@ -539,7 +453,7 @@ export interface DecentralizedNotary extends BaseContract {
     nameOrSignature: "bkcToken"
   ): TypedContractMethod<[], [string], "view">;
   getFunction(
-    nameOrSignature: "delegationManager"
+    nameOrSignature: "ecosystemManager"
   ): TypedContractMethod<[], [string], "view">;
   getFunction(
     nameOrSignature: "getApproved"
@@ -552,17 +466,15 @@ export interface DecentralizedNotary extends BaseContract {
     "view"
   >;
   getFunction(
-    nameOrSignature: "minimumPStakeRequired"
-  ): TypedContractMethod<[], [bigint], "view">;
-  getFunction(
     nameOrSignature: "name"
   ): TypedContractMethod<[], [string], "view">;
   getFunction(
     nameOrSignature: "notarizeDocument"
-  ): TypedContractMethod<[_documentURI: string], [void], "nonpayable">;
-  getFunction(
-    nameOrSignature: "notarizeFeeBKC"
-  ): TypedContractMethod<[], [bigint], "view">;
+  ): TypedContractMethod<
+    [_documentURI: string, _boosterTokenId: BigNumberish],
+    [void],
+    "nonpayable"
+  >;
   getFunction(
     nameOrSignature: "owner"
   ): TypedContractMethod<[], [string], "view">;
@@ -602,17 +514,6 @@ export interface DecentralizedNotary extends BaseContract {
     nameOrSignature: "setBaseURI"
   ): TypedContractMethod<[newBaseURI: string], [void], "nonpayable">;
   getFunction(
-    nameOrSignature: "setNotarySettings"
-  ): TypedContractMethod<
-    [
-      _newMinPStake: BigNumberish,
-      _newFeeBKC: BigNumberish,
-      _newTreasuryBips: BigNumberish
-    ],
-    [void],
-    "nonpayable"
-  >;
-  getFunction(
     nameOrSignature: "supportsInterface"
   ): TypedContractMethod<[interfaceId: BytesLike], [boolean], "view">;
   getFunction(
@@ -644,12 +545,6 @@ export interface DecentralizedNotary extends BaseContract {
   getFunction(
     nameOrSignature: "transferOwnership"
   ): TypedContractMethod<[newOwner: AddressLike], [void], "nonpayable">;
-  getFunction(
-    nameOrSignature: "treasuryFeeBips"
-  ): TypedContractMethod<[], [bigint], "view">;
-  getFunction(
-    nameOrSignature: "treasuryWallet"
-  ): TypedContractMethod<[], [string], "view">;
 
   getEvent(
     key: "Approval"
@@ -671,13 +566,6 @@ export interface DecentralizedNotary extends BaseContract {
     DocumentNotarizedEvent.InputTuple,
     DocumentNotarizedEvent.OutputTuple,
     DocumentNotarizedEvent.OutputObject
-  >;
-  getEvent(
-    key: "NotarySettingsChanged"
-  ): TypedContractEvent<
-    NotarySettingsChangedEvent.InputTuple,
-    NotarySettingsChangedEvent.OutputTuple,
-    NotarySettingsChangedEvent.OutputObject
   >;
   getEvent(
     key: "OwnershipTransferred"
@@ -726,17 +614,6 @@ export interface DecentralizedNotary extends BaseContract {
       DocumentNotarizedEvent.InputTuple,
       DocumentNotarizedEvent.OutputTuple,
       DocumentNotarizedEvent.OutputObject
-    >;
-
-    "NotarySettingsChanged(uint256,uint256,uint256)": TypedContractEvent<
-      NotarySettingsChangedEvent.InputTuple,
-      NotarySettingsChangedEvent.OutputTuple,
-      NotarySettingsChangedEvent.OutputObject
-    >;
-    NotarySettingsChanged: TypedContractEvent<
-      NotarySettingsChangedEvent.InputTuple,
-      NotarySettingsChangedEvent.OutputTuple,
-      NotarySettingsChangedEvent.OutputObject
     >;
 
     "OwnershipTransferred(address,address)": TypedContractEvent<

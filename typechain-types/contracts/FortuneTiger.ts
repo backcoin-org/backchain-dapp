@@ -23,82 +23,95 @@ import type {
   TypedContractMethod,
 } from "../common";
 
+export declare namespace FortuneTiger {
+  export type ActionStruct = {
+    id: BigNumberish;
+    creator: AddressLike;
+    description: string;
+    actionType: BigNumberish;
+    status: BigNumberish;
+    endTime: BigNumberish;
+    totalPot: BigNumberish;
+    creatorStake: BigNumberish;
+    isStakeReturned: boolean;
+    beneficiary: AddressLike;
+    totalCoupons: BigNumberish;
+    winner: AddressLike;
+    closingBlock: BigNumberish;
+    winningCoupon: BigNumberish;
+  };
+
+  export type ActionStructOutput = [
+    id: bigint,
+    creator: string,
+    description: string,
+    actionType: bigint,
+    status: bigint,
+    endTime: bigint,
+    totalPot: bigint,
+    creatorStake: bigint,
+    isStakeReturned: boolean,
+    beneficiary: string,
+    totalCoupons: bigint,
+    winner: string,
+    closingBlock: bigint,
+    winningCoupon: bigint
+  ] & {
+    id: bigint;
+    creator: string;
+    description: string;
+    actionType: bigint;
+    status: bigint;
+    endTime: bigint;
+    totalPot: bigint;
+    creatorStake: bigint;
+    isStakeReturned: boolean;
+    beneficiary: string;
+    totalCoupons: bigint;
+    winner: string;
+    closingBlock: bigint;
+    winningCoupon: bigint;
+  };
+}
+
 export interface FortuneTigerInterface extends Interface {
   getFunction(
     nameOrSignature:
-      | "BENEFICENT_CAUSE_BIPS"
-      | "BENEFICENT_CREATOR_BIPS"
-      | "BENEFICENT_DELEGATOR_BIPS"
-      | "BENEFICENT_TREASURY_BIPS"
       | "COUPONS_PER_BKC"
       | "DRAW_MAX_OFFSET_BLOCKS"
-      | "SPORT_CREATOR_BIPS"
-      | "SPORT_DELEGATOR_BIPS"
-      | "SPORT_TREASURY_BIPS"
-      | "SPORT_WINNER_BIPS"
       | "actionCounter"
       | "actions"
       | "bkcToken"
       | "couponOwners"
       | "couponRanges"
       | "createAction"
-      | "delegationManager"
+      | "ecosystemManager"
       | "finalizeAction"
+      | "getAction"
       | "getMinCreatorStake"
+      | "getParticipants"
       | "owner"
       | "participate"
       | "renounceOwnership"
       | "transferOwnership"
-      | "treasuryWallet"
   ): FunctionFragment;
 
   getEvent(
     nameOrSignatureOrTopic:
       | "ActionCreated"
       | "ActionFinalized"
+      | "CreationFeePaid"
       | "OwnershipTransferred"
       | "Participation"
       | "StakeReturned"
   ): EventFragment;
 
   encodeFunctionData(
-    functionFragment: "BENEFICENT_CAUSE_BIPS",
-    values?: undefined
-  ): string;
-  encodeFunctionData(
-    functionFragment: "BENEFICENT_CREATOR_BIPS",
-    values?: undefined
-  ): string;
-  encodeFunctionData(
-    functionFragment: "BENEFICENT_DELEGATOR_BIPS",
-    values?: undefined
-  ): string;
-  encodeFunctionData(
-    functionFragment: "BENEFICENT_TREASURY_BIPS",
-    values?: undefined
-  ): string;
-  encodeFunctionData(
     functionFragment: "COUPONS_PER_BKC",
     values?: undefined
   ): string;
   encodeFunctionData(
     functionFragment: "DRAW_MAX_OFFSET_BLOCKS",
-    values?: undefined
-  ): string;
-  encodeFunctionData(
-    functionFragment: "SPORT_CREATOR_BIPS",
-    values?: undefined
-  ): string;
-  encodeFunctionData(
-    functionFragment: "SPORT_DELEGATOR_BIPS",
-    values?: undefined
-  ): string;
-  encodeFunctionData(
-    functionFragment: "SPORT_TREASURY_BIPS",
-    values?: undefined
-  ): string;
-  encodeFunctionData(
-    functionFragment: "SPORT_WINNER_BIPS",
     values?: undefined
   ): string;
   encodeFunctionData(
@@ -120,10 +133,10 @@ export interface FortuneTigerInterface extends Interface {
   ): string;
   encodeFunctionData(
     functionFragment: "createAction",
-    values: [BigNumberish, BigNumberish, BigNumberish, string]
+    values: [BigNumberish, BigNumberish, BigNumberish, string, BigNumberish]
   ): string;
   encodeFunctionData(
-    functionFragment: "delegationManager",
+    functionFragment: "ecosystemManager",
     values?: undefined
   ): string;
   encodeFunctionData(
@@ -131,13 +144,21 @@ export interface FortuneTigerInterface extends Interface {
     values: [BigNumberish]
   ): string;
   encodeFunctionData(
+    functionFragment: "getAction",
+    values: [BigNumberish]
+  ): string;
+  encodeFunctionData(
     functionFragment: "getMinCreatorStake",
     values?: undefined
+  ): string;
+  encodeFunctionData(
+    functionFragment: "getParticipants",
+    values: [BigNumberish]
   ): string;
   encodeFunctionData(functionFragment: "owner", values?: undefined): string;
   encodeFunctionData(
     functionFragment: "participate",
-    values: [BigNumberish, BigNumberish]
+    values: [BigNumberish, BigNumberish, BigNumberish]
   ): string;
   encodeFunctionData(
     functionFragment: "renounceOwnership",
@@ -147,49 +168,13 @@ export interface FortuneTigerInterface extends Interface {
     functionFragment: "transferOwnership",
     values: [AddressLike]
   ): string;
-  encodeFunctionData(
-    functionFragment: "treasuryWallet",
-    values?: undefined
-  ): string;
 
-  decodeFunctionResult(
-    functionFragment: "BENEFICENT_CAUSE_BIPS",
-    data: BytesLike
-  ): Result;
-  decodeFunctionResult(
-    functionFragment: "BENEFICENT_CREATOR_BIPS",
-    data: BytesLike
-  ): Result;
-  decodeFunctionResult(
-    functionFragment: "BENEFICENT_DELEGATOR_BIPS",
-    data: BytesLike
-  ): Result;
-  decodeFunctionResult(
-    functionFragment: "BENEFICENT_TREASURY_BIPS",
-    data: BytesLike
-  ): Result;
   decodeFunctionResult(
     functionFragment: "COUPONS_PER_BKC",
     data: BytesLike
   ): Result;
   decodeFunctionResult(
     functionFragment: "DRAW_MAX_OFFSET_BLOCKS",
-    data: BytesLike
-  ): Result;
-  decodeFunctionResult(
-    functionFragment: "SPORT_CREATOR_BIPS",
-    data: BytesLike
-  ): Result;
-  decodeFunctionResult(
-    functionFragment: "SPORT_DELEGATOR_BIPS",
-    data: BytesLike
-  ): Result;
-  decodeFunctionResult(
-    functionFragment: "SPORT_TREASURY_BIPS",
-    data: BytesLike
-  ): Result;
-  decodeFunctionResult(
-    functionFragment: "SPORT_WINNER_BIPS",
     data: BytesLike
   ): Result;
   decodeFunctionResult(
@@ -211,15 +196,20 @@ export interface FortuneTigerInterface extends Interface {
     data: BytesLike
   ): Result;
   decodeFunctionResult(
-    functionFragment: "delegationManager",
+    functionFragment: "ecosystemManager",
     data: BytesLike
   ): Result;
   decodeFunctionResult(
     functionFragment: "finalizeAction",
     data: BytesLike
   ): Result;
+  decodeFunctionResult(functionFragment: "getAction", data: BytesLike): Result;
   decodeFunctionResult(
     functionFragment: "getMinCreatorStake",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
+    functionFragment: "getParticipants",
     data: BytesLike
   ): Result;
   decodeFunctionResult(functionFragment: "owner", data: BytesLike): Result;
@@ -233,10 +223,6 @@ export interface FortuneTigerInterface extends Interface {
   ): Result;
   decodeFunctionResult(
     functionFragment: "transferOwnership",
-    data: BytesLike
-  ): Result;
-  decodeFunctionResult(
-    functionFragment: "treasuryWallet",
     data: BytesLike
   ): Result;
 }
@@ -284,6 +270,19 @@ export namespace ActionFinalizedEvent {
     actionId: bigint;
     finalRecipient: string;
     prizeAmount: bigint;
+  }
+  export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
+  export type Filter = TypedDeferredTopicFilter<Event>;
+  export type Log = TypedEventLog<Event>;
+  export type LogDescription = TypedLogDescription<Event>;
+}
+
+export namespace CreationFeePaidEvent {
+  export type InputTuple = [creator: AddressLike, feeAmount: BigNumberish];
+  export type OutputTuple = [creator: string, feeAmount: bigint];
+  export interface OutputObject {
+    creator: string;
+    feeAmount: bigint;
   }
   export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
   export type Filter = TypedDeferredTopicFilter<Event>;
@@ -394,25 +393,9 @@ export interface FortuneTiger extends BaseContract {
     event?: TCEvent
   ): Promise<this>;
 
-  BENEFICENT_CAUSE_BIPS: TypedContractMethod<[], [bigint], "view">;
-
-  BENEFICENT_CREATOR_BIPS: TypedContractMethod<[], [bigint], "view">;
-
-  BENEFICENT_DELEGATOR_BIPS: TypedContractMethod<[], [bigint], "view">;
-
-  BENEFICENT_TREASURY_BIPS: TypedContractMethod<[], [bigint], "view">;
-
   COUPONS_PER_BKC: TypedContractMethod<[], [bigint], "view">;
 
   DRAW_MAX_OFFSET_BLOCKS: TypedContractMethod<[], [bigint], "view">;
-
-  SPORT_CREATOR_BIPS: TypedContractMethod<[], [bigint], "view">;
-
-  SPORT_DELEGATOR_BIPS: TypedContractMethod<[], [bigint], "view">;
-
-  SPORT_TREASURY_BIPS: TypedContractMethod<[], [bigint], "view">;
-
-  SPORT_WINNER_BIPS: TypedContractMethod<[], [bigint], "view">;
 
   actionCounter: TypedContractMethod<[], [bigint], "view">;
 
@@ -473,13 +456,14 @@ export interface FortuneTiger extends BaseContract {
       _duration: BigNumberish,
       _actionType: BigNumberish,
       _charityStake: BigNumberish,
-      _description: string
+      _description: string,
+      _boosterTokenId: BigNumberish
     ],
     [void],
     "nonpayable"
   >;
 
-  delegationManager: TypedContractMethod<[], [string], "view">;
+  ecosystemManager: TypedContractMethod<[], [string], "view">;
 
   finalizeAction: TypedContractMethod<
     [_actionId: BigNumberish],
@@ -487,12 +471,28 @@ export interface FortuneTiger extends BaseContract {
     "nonpayable"
   >;
 
+  getAction: TypedContractMethod<
+    [_actionId: BigNumberish],
+    [FortuneTiger.ActionStructOutput],
+    "view"
+  >;
+
   getMinCreatorStake: TypedContractMethod<[], [bigint], "view">;
+
+  getParticipants: TypedContractMethod<
+    [_actionId: BigNumberish],
+    [[string[], bigint[]]],
+    "view"
+  >;
 
   owner: TypedContractMethod<[], [string], "view">;
 
   participate: TypedContractMethod<
-    [_actionId: BigNumberish, _bkcAmount: BigNumberish],
+    [
+      _actionId: BigNumberish,
+      _bkcAmount: BigNumberish,
+      _boosterTokenId: BigNumberish
+    ],
     [void],
     "nonpayable"
   >;
@@ -505,41 +505,15 @@ export interface FortuneTiger extends BaseContract {
     "nonpayable"
   >;
 
-  treasuryWallet: TypedContractMethod<[], [string], "view">;
-
   getFunction<T extends ContractMethod = ContractMethod>(
     key: string | FunctionFragment
   ): T;
 
   getFunction(
-    nameOrSignature: "BENEFICENT_CAUSE_BIPS"
-  ): TypedContractMethod<[], [bigint], "view">;
-  getFunction(
-    nameOrSignature: "BENEFICENT_CREATOR_BIPS"
-  ): TypedContractMethod<[], [bigint], "view">;
-  getFunction(
-    nameOrSignature: "BENEFICENT_DELEGATOR_BIPS"
-  ): TypedContractMethod<[], [bigint], "view">;
-  getFunction(
-    nameOrSignature: "BENEFICENT_TREASURY_BIPS"
-  ): TypedContractMethod<[], [bigint], "view">;
-  getFunction(
     nameOrSignature: "COUPONS_PER_BKC"
   ): TypedContractMethod<[], [bigint], "view">;
   getFunction(
     nameOrSignature: "DRAW_MAX_OFFSET_BLOCKS"
-  ): TypedContractMethod<[], [bigint], "view">;
-  getFunction(
-    nameOrSignature: "SPORT_CREATOR_BIPS"
-  ): TypedContractMethod<[], [bigint], "view">;
-  getFunction(
-    nameOrSignature: "SPORT_DELEGATOR_BIPS"
-  ): TypedContractMethod<[], [bigint], "view">;
-  getFunction(
-    nameOrSignature: "SPORT_TREASURY_BIPS"
-  ): TypedContractMethod<[], [bigint], "view">;
-  getFunction(
-    nameOrSignature: "SPORT_WINNER_BIPS"
   ): TypedContractMethod<[], [bigint], "view">;
   getFunction(
     nameOrSignature: "actionCounter"
@@ -607,27 +581,46 @@ export interface FortuneTiger extends BaseContract {
       _duration: BigNumberish,
       _actionType: BigNumberish,
       _charityStake: BigNumberish,
-      _description: string
+      _description: string,
+      _boosterTokenId: BigNumberish
     ],
     [void],
     "nonpayable"
   >;
   getFunction(
-    nameOrSignature: "delegationManager"
+    nameOrSignature: "ecosystemManager"
   ): TypedContractMethod<[], [string], "view">;
   getFunction(
     nameOrSignature: "finalizeAction"
   ): TypedContractMethod<[_actionId: BigNumberish], [void], "nonpayable">;
   getFunction(
+    nameOrSignature: "getAction"
+  ): TypedContractMethod<
+    [_actionId: BigNumberish],
+    [FortuneTiger.ActionStructOutput],
+    "view"
+  >;
+  getFunction(
     nameOrSignature: "getMinCreatorStake"
   ): TypedContractMethod<[], [bigint], "view">;
+  getFunction(
+    nameOrSignature: "getParticipants"
+  ): TypedContractMethod<
+    [_actionId: BigNumberish],
+    [[string[], bigint[]]],
+    "view"
+  >;
   getFunction(
     nameOrSignature: "owner"
   ): TypedContractMethod<[], [string], "view">;
   getFunction(
     nameOrSignature: "participate"
   ): TypedContractMethod<
-    [_actionId: BigNumberish, _bkcAmount: BigNumberish],
+    [
+      _actionId: BigNumberish,
+      _bkcAmount: BigNumberish,
+      _boosterTokenId: BigNumberish
+    ],
     [void],
     "nonpayable"
   >;
@@ -637,9 +630,6 @@ export interface FortuneTiger extends BaseContract {
   getFunction(
     nameOrSignature: "transferOwnership"
   ): TypedContractMethod<[newOwner: AddressLike], [void], "nonpayable">;
-  getFunction(
-    nameOrSignature: "treasuryWallet"
-  ): TypedContractMethod<[], [string], "view">;
 
   getEvent(
     key: "ActionCreated"
@@ -654,6 +644,13 @@ export interface FortuneTiger extends BaseContract {
     ActionFinalizedEvent.InputTuple,
     ActionFinalizedEvent.OutputTuple,
     ActionFinalizedEvent.OutputObject
+  >;
+  getEvent(
+    key: "CreationFeePaid"
+  ): TypedContractEvent<
+    CreationFeePaidEvent.InputTuple,
+    CreationFeePaidEvent.OutputTuple,
+    CreationFeePaidEvent.OutputObject
   >;
   getEvent(
     key: "OwnershipTransferred"
@@ -698,6 +695,17 @@ export interface FortuneTiger extends BaseContract {
       ActionFinalizedEvent.InputTuple,
       ActionFinalizedEvent.OutputTuple,
       ActionFinalizedEvent.OutputObject
+    >;
+
+    "CreationFeePaid(address,uint256)": TypedContractEvent<
+      CreationFeePaidEvent.InputTuple,
+      CreationFeePaidEvent.OutputTuple,
+      CreationFeePaidEvent.OutputObject
+    >;
+    CreationFeePaid: TypedContractEvent<
+      CreationFeePaidEvent.InputTuple,
+      CreationFeePaidEvent.OutputTuple,
+      CreationFeePaidEvent.OutputObject
     >;
 
     "OwnershipTransferred(address,address)": TypedContractEvent<

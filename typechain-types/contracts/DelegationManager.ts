@@ -47,17 +47,13 @@ export declare namespace DelegationManager {
 export interface DelegationManagerInterface extends Interface {
   getFunction(
     nameOrSignature:
-      | "DELEGATION_FEE_BIPS"
       | "DYNAMIC_STAKE_BIPS"
-      | "FORCE_UNSTAKE_PENALTY_BIPS"
       | "MAX_LOCK_DURATION"
       | "MAX_SUPPLY"
       | "MINT_POOL"
       | "MIN_LOCK_DURATION"
-      | "ONTIME_UNSTAKE_FEE_BIPS"
       | "SAFETY_MARGIN_BIPS"
       | "TGE_SUPPLY"
-      | "VALIDATOR_FEE_BIPS"
       | "VALIDATOR_LOCK_DURATION"
       | "accDelegatorRewardPerStake"
       | "accValidatorRewardPerStake"
@@ -66,6 +62,7 @@ export interface DelegationManagerInterface extends Interface {
       | "delegate"
       | "delegatorRewardDebt"
       | "depositRewards"
+      | "ecosystemManager"
       | "forceUnstake"
       | "getAllValidators"
       | "getDelegationsOf"
@@ -80,7 +77,6 @@ export interface DelegationManagerInterface extends Interface {
       | "setRewardManager"
       | "totalNetworkPStake"
       | "transferOwnership"
-      | "treasuryWallet"
       | "unstake"
       | "userDelegations"
       | "userTotalPStake"
@@ -101,15 +97,7 @@ export interface DelegationManagerInterface extends Interface {
   ): EventFragment;
 
   encodeFunctionData(
-    functionFragment: "DELEGATION_FEE_BIPS",
-    values?: undefined
-  ): string;
-  encodeFunctionData(
     functionFragment: "DYNAMIC_STAKE_BIPS",
-    values?: undefined
-  ): string;
-  encodeFunctionData(
-    functionFragment: "FORCE_UNSTAKE_PENALTY_BIPS",
     values?: undefined
   ): string;
   encodeFunctionData(
@@ -126,19 +114,11 @@ export interface DelegationManagerInterface extends Interface {
     values?: undefined
   ): string;
   encodeFunctionData(
-    functionFragment: "ONTIME_UNSTAKE_FEE_BIPS",
-    values?: undefined
-  ): string;
-  encodeFunctionData(
     functionFragment: "SAFETY_MARGIN_BIPS",
     values?: undefined
   ): string;
   encodeFunctionData(
     functionFragment: "TGE_SUPPLY",
-    values?: undefined
-  ): string;
-  encodeFunctionData(
-    functionFragment: "VALIDATOR_FEE_BIPS",
     values?: undefined
   ): string;
   encodeFunctionData(
@@ -171,8 +151,12 @@ export interface DelegationManagerInterface extends Interface {
     values: [BigNumberish, BigNumberish]
   ): string;
   encodeFunctionData(
+    functionFragment: "ecosystemManager",
+    values?: undefined
+  ): string;
+  encodeFunctionData(
     functionFragment: "forceUnstake",
-    values: [BigNumberish]
+    values: [BigNumberish, BigNumberish]
   ): string;
   encodeFunctionData(
     functionFragment: "getAllValidators",
@@ -224,10 +208,6 @@ export interface DelegationManagerInterface extends Interface {
     values: [AddressLike]
   ): string;
   encodeFunctionData(
-    functionFragment: "treasuryWallet",
-    values?: undefined
-  ): string;
-  encodeFunctionData(
     functionFragment: "unstake",
     values: [BigNumberish]
   ): string;
@@ -253,15 +233,7 @@ export interface DelegationManagerInterface extends Interface {
   ): string;
 
   decodeFunctionResult(
-    functionFragment: "DELEGATION_FEE_BIPS",
-    data: BytesLike
-  ): Result;
-  decodeFunctionResult(
     functionFragment: "DYNAMIC_STAKE_BIPS",
-    data: BytesLike
-  ): Result;
-  decodeFunctionResult(
-    functionFragment: "FORCE_UNSTAKE_PENALTY_BIPS",
     data: BytesLike
   ): Result;
   decodeFunctionResult(
@@ -275,18 +247,10 @@ export interface DelegationManagerInterface extends Interface {
     data: BytesLike
   ): Result;
   decodeFunctionResult(
-    functionFragment: "ONTIME_UNSTAKE_FEE_BIPS",
-    data: BytesLike
-  ): Result;
-  decodeFunctionResult(
     functionFragment: "SAFETY_MARGIN_BIPS",
     data: BytesLike
   ): Result;
   decodeFunctionResult(functionFragment: "TGE_SUPPLY", data: BytesLike): Result;
-  decodeFunctionResult(
-    functionFragment: "VALIDATOR_FEE_BIPS",
-    data: BytesLike
-  ): Result;
   decodeFunctionResult(
     functionFragment: "VALIDATOR_LOCK_DURATION",
     data: BytesLike
@@ -311,6 +275,10 @@ export interface DelegationManagerInterface extends Interface {
   ): Result;
   decodeFunctionResult(
     functionFragment: "depositRewards",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
+    functionFragment: "ecosystemManager",
     data: BytesLike
   ): Result;
   decodeFunctionResult(
@@ -364,10 +332,6 @@ export interface DelegationManagerInterface extends Interface {
   ): Result;
   decodeFunctionResult(
     functionFragment: "transferOwnership",
-    data: BytesLike
-  ): Result;
-  decodeFunctionResult(
-    functionFragment: "treasuryWallet",
     data: BytesLike
   ): Result;
   decodeFunctionResult(functionFragment: "unstake", data: BytesLike): Result;
@@ -560,11 +524,7 @@ export interface DelegationManager extends BaseContract {
     event?: TCEvent
   ): Promise<this>;
 
-  DELEGATION_FEE_BIPS: TypedContractMethod<[], [bigint], "view">;
-
   DYNAMIC_STAKE_BIPS: TypedContractMethod<[], [bigint], "view">;
-
-  FORCE_UNSTAKE_PENALTY_BIPS: TypedContractMethod<[], [bigint], "view">;
 
   MAX_LOCK_DURATION: TypedContractMethod<[], [bigint], "view">;
 
@@ -574,13 +534,9 @@ export interface DelegationManager extends BaseContract {
 
   MIN_LOCK_DURATION: TypedContractMethod<[], [bigint], "view">;
 
-  ONTIME_UNSTAKE_FEE_BIPS: TypedContractMethod<[], [bigint], "view">;
-
   SAFETY_MARGIN_BIPS: TypedContractMethod<[], [bigint], "view">;
 
   TGE_SUPPLY: TypedContractMethod<[], [bigint], "view">;
-
-  VALIDATOR_FEE_BIPS: TypedContractMethod<[], [bigint], "view">;
 
   VALIDATOR_LOCK_DURATION: TypedContractMethod<[], [bigint], "view">;
 
@@ -614,8 +570,10 @@ export interface DelegationManager extends BaseContract {
     "nonpayable"
   >;
 
+  ecosystemManager: TypedContractMethod<[], [string], "view">;
+
   forceUnstake: TypedContractMethod<
-    [_delegationIndex: BigNumberish],
+    [_delegationIndex: BigNumberish, _boosterTokenId: BigNumberish],
     [void],
     "nonpayable"
   >;
@@ -670,8 +628,6 @@ export interface DelegationManager extends BaseContract {
     "nonpayable"
   >;
 
-  treasuryWallet: TypedContractMethod<[], [string], "view">;
-
   unstake: TypedContractMethod<
     [_delegationIndex: BigNumberish],
     [void],
@@ -720,13 +676,7 @@ export interface DelegationManager extends BaseContract {
   ): T;
 
   getFunction(
-    nameOrSignature: "DELEGATION_FEE_BIPS"
-  ): TypedContractMethod<[], [bigint], "view">;
-  getFunction(
     nameOrSignature: "DYNAMIC_STAKE_BIPS"
-  ): TypedContractMethod<[], [bigint], "view">;
-  getFunction(
-    nameOrSignature: "FORCE_UNSTAKE_PENALTY_BIPS"
   ): TypedContractMethod<[], [bigint], "view">;
   getFunction(
     nameOrSignature: "MAX_LOCK_DURATION"
@@ -741,16 +691,10 @@ export interface DelegationManager extends BaseContract {
     nameOrSignature: "MIN_LOCK_DURATION"
   ): TypedContractMethod<[], [bigint], "view">;
   getFunction(
-    nameOrSignature: "ONTIME_UNSTAKE_FEE_BIPS"
-  ): TypedContractMethod<[], [bigint], "view">;
-  getFunction(
     nameOrSignature: "SAFETY_MARGIN_BIPS"
   ): TypedContractMethod<[], [bigint], "view">;
   getFunction(
     nameOrSignature: "TGE_SUPPLY"
-  ): TypedContractMethod<[], [bigint], "view">;
-  getFunction(
-    nameOrSignature: "VALIDATOR_FEE_BIPS"
   ): TypedContractMethod<[], [bigint], "view">;
   getFunction(
     nameOrSignature: "VALIDATOR_LOCK_DURATION"
@@ -789,9 +733,12 @@ export interface DelegationManager extends BaseContract {
     "nonpayable"
   >;
   getFunction(
+    nameOrSignature: "ecosystemManager"
+  ): TypedContractMethod<[], [string], "view">;
+  getFunction(
     nameOrSignature: "forceUnstake"
   ): TypedContractMethod<
-    [_delegationIndex: BigNumberish],
+    [_delegationIndex: BigNumberish, _boosterTokenId: BigNumberish],
     [void],
     "nonpayable"
   >;
@@ -842,9 +789,6 @@ export interface DelegationManager extends BaseContract {
   getFunction(
     nameOrSignature: "transferOwnership"
   ): TypedContractMethod<[newOwner: AddressLike], [void], "nonpayable">;
-  getFunction(
-    nameOrSignature: "treasuryWallet"
-  ): TypedContractMethod<[], [string], "view">;
   getFunction(
     nameOrSignature: "unstake"
   ): TypedContractMethod<

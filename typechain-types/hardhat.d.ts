@@ -98,17 +98,25 @@ declare module "hardhat/types/runtime" {
       signerOrOptions?: ethers.Signer | FactoryOptions
     ): Promise<Contracts.DelegationManager__factory>;
     getContractFactory(
-      name: "FortuneTiger",
+      name: "EcosystemManager",
       signerOrOptions?: ethers.Signer | FactoryOptions
-    ): Promise<Contracts.FortuneTiger__factory>;
+    ): Promise<Contracts.EcosystemManager__factory>;
     getContractFactory(
       name: "IDelegationManager",
       signerOrOptions?: ethers.Signer | FactoryOptions
     ): Promise<Contracts.IDelegationManager__factory>;
     getContractFactory(
+      name: "IEcosystemManager",
+      signerOrOptions?: ethers.Signer | FactoryOptions
+    ): Promise<Contracts.IEcosystemManager__factory>;
+    getContractFactory(
       name: "IRewardBoosterNFT",
       signerOrOptions?: ethers.Signer | FactoryOptions
     ): Promise<Contracts.IRewardBoosterNFT__factory>;
+    getContractFactory(
+      name: "FortuneTiger",
+      signerOrOptions?: ethers.Signer | FactoryOptions
+    ): Promise<Contracts.FortuneTiger__factory>;
     getContractFactory(
       name: "NFTLiquidityPool",
       signerOrOptions?: ethers.Signer | FactoryOptions
@@ -236,20 +244,30 @@ declare module "hardhat/types/runtime" {
       signer?: ethers.Signer
     ): Promise<Contracts.DelegationManager>;
     getContractAt(
-      name: "FortuneTiger",
+      name: "EcosystemManager",
       address: string | ethers.Addressable,
       signer?: ethers.Signer
-    ): Promise<Contracts.FortuneTiger>;
+    ): Promise<Contracts.EcosystemManager>;
     getContractAt(
       name: "IDelegationManager",
       address: string | ethers.Addressable,
       signer?: ethers.Signer
     ): Promise<Contracts.IDelegationManager>;
     getContractAt(
+      name: "IEcosystemManager",
+      address: string | ethers.Addressable,
+      signer?: ethers.Signer
+    ): Promise<Contracts.IEcosystemManager>;
+    getContractAt(
       name: "IRewardBoosterNFT",
       address: string | ethers.Addressable,
       signer?: ethers.Signer
     ): Promise<Contracts.IRewardBoosterNFT>;
+    getContractAt(
+      name: "FortuneTiger",
+      address: string | ethers.Addressable,
+      signer?: ethers.Signer
+    ): Promise<Contracts.FortuneTiger>;
     getContractAt(
       name: "NFTLiquidityPool",
       address: string | ethers.Addressable,
@@ -361,17 +379,25 @@ declare module "hardhat/types/runtime" {
       signerOrOptions?: ethers.Signer | DeployContractOptions
     ): Promise<Contracts.DelegationManager>;
     deployContract(
-      name: "FortuneTiger",
+      name: "EcosystemManager",
       signerOrOptions?: ethers.Signer | DeployContractOptions
-    ): Promise<Contracts.FortuneTiger>;
+    ): Promise<Contracts.EcosystemManager>;
     deployContract(
       name: "IDelegationManager",
       signerOrOptions?: ethers.Signer | DeployContractOptions
     ): Promise<Contracts.IDelegationManager>;
     deployContract(
+      name: "IEcosystemManager",
+      signerOrOptions?: ethers.Signer | DeployContractOptions
+    ): Promise<Contracts.IEcosystemManager>;
+    deployContract(
       name: "IRewardBoosterNFT",
       signerOrOptions?: ethers.Signer | DeployContractOptions
     ): Promise<Contracts.IRewardBoosterNFT>;
+    deployContract(
+      name: "FortuneTiger",
+      signerOrOptions?: ethers.Signer | DeployContractOptions
+    ): Promise<Contracts.FortuneTiger>;
     deployContract(
       name: "NFTLiquidityPool",
       signerOrOptions?: ethers.Signer | DeployContractOptions
@@ -499,20 +525,30 @@ declare module "hardhat/types/runtime" {
       signerOrOptions?: ethers.Signer | DeployContractOptions
     ): Promise<Contracts.DelegationManager>;
     deployContract(
-      name: "FortuneTiger",
+      name: "EcosystemManager",
       args: any[],
       signerOrOptions?: ethers.Signer | DeployContractOptions
-    ): Promise<Contracts.FortuneTiger>;
+    ): Promise<Contracts.EcosystemManager>;
     deployContract(
       name: "IDelegationManager",
       args: any[],
       signerOrOptions?: ethers.Signer | DeployContractOptions
     ): Promise<Contracts.IDelegationManager>;
     deployContract(
+      name: "IEcosystemManager",
+      args: any[],
+      signerOrOptions?: ethers.Signer | DeployContractOptions
+    ): Promise<Contracts.IEcosystemManager>;
+    deployContract(
       name: "IRewardBoosterNFT",
       args: any[],
       signerOrOptions?: ethers.Signer | DeployContractOptions
     ): Promise<Contracts.IRewardBoosterNFT>;
+    deployContract(
+      name: "FortuneTiger",
+      args: any[],
+      signerOrOptions?: ethers.Signer | DeployContractOptions
+    ): Promise<Contracts.FortuneTiger>;
     deployContract(
       name: "NFTLiquidityPool",
       args: any[],

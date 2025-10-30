@@ -1,5 +1,7 @@
 // app.js
 
+// LINHA REMOVIDA: import { inject } from '@vercel/speed-insights';
+
 const ethers = window.ethers;
 
 import { DOMElements } from './dom-elements.js';
@@ -25,6 +27,7 @@ import { FaucetPage } from './pages/FaucetPage.js';
 import { TokenomicsPage } from './pages/TokenomicsPage.js'; // <-- Importação da nova página
 import { NotaryPage } from './pages/NotaryPage.js'; // <-- IMPORTAÇÃO DA NOVA PÁGINA
 
+// LINHA REMOVIDA: inject();
 
 const routes = {
     'dashboard': DashboardPage,

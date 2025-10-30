@@ -28,20 +28,23 @@ export interface RewardBoosterNFTInterface extends Interface {
     nameOrSignature:
       | "approve"
       | "balanceOf"
-      | "batchSafeMintWithBoost"
       | "batchTransferFrom"
       | "boostBips"
       | "getApproved"
       | "getHighestBoost"
       | "isApprovedForAll"
+      | "mintFromSale"
       | "name"
       | "owner"
+      | "ownerMintBatch"
       | "ownerOf"
       | "renounceOwnership"
       | "safeTransferFrom(address,address,uint256)"
       | "safeTransferFrom(address,address,uint256,bytes)"
+      | "saleContractAddress"
       | "setApprovalForAll"
       | "setBaseURI"
+      | "setSaleContractAddress"
       | "supportsInterface"
       | "symbol"
       | "tokenMetadataFile"
@@ -57,6 +60,7 @@ export interface RewardBoosterNFTInterface extends Interface {
       | "ApprovalForAll"
       | "BoosterMinted"
       | "OwnershipTransferred"
+      | "SaleContractAddressSet"
       | "Transfer"
   ): EventFragment;
 
@@ -67,10 +71,6 @@ export interface RewardBoosterNFTInterface extends Interface {
   encodeFunctionData(
     functionFragment: "balanceOf",
     values: [AddressLike]
-  ): string;
-  encodeFunctionData(
-    functionFragment: "batchSafeMintWithBoost",
-    values: [AddressLike, BigNumberish, BigNumberish, string]
   ): string;
   encodeFunctionData(
     functionFragment: "batchTransferFrom",
@@ -92,8 +92,16 @@ export interface RewardBoosterNFTInterface extends Interface {
     functionFragment: "isApprovedForAll",
     values: [AddressLike, AddressLike]
   ): string;
+  encodeFunctionData(
+    functionFragment: "mintFromSale",
+    values: [AddressLike, BigNumberish, string]
+  ): string;
   encodeFunctionData(functionFragment: "name", values?: undefined): string;
   encodeFunctionData(functionFragment: "owner", values?: undefined): string;
+  encodeFunctionData(
+    functionFragment: "ownerMintBatch",
+    values: [AddressLike, BigNumberish, BigNumberish, string]
+  ): string;
   encodeFunctionData(
     functionFragment: "ownerOf",
     values: [BigNumberish]
@@ -111,10 +119,18 @@ export interface RewardBoosterNFTInterface extends Interface {
     values: [AddressLike, AddressLike, BigNumberish, BytesLike]
   ): string;
   encodeFunctionData(
+    functionFragment: "saleContractAddress",
+    values?: undefined
+  ): string;
+  encodeFunctionData(
     functionFragment: "setApprovalForAll",
     values: [AddressLike, boolean]
   ): string;
   encodeFunctionData(functionFragment: "setBaseURI", values: [string]): string;
+  encodeFunctionData(
+    functionFragment: "setSaleContractAddress",
+    values: [AddressLike]
+  ): string;
   encodeFunctionData(
     functionFragment: "supportsInterface",
     values: [BytesLike]
@@ -144,10 +160,6 @@ export interface RewardBoosterNFTInterface extends Interface {
   decodeFunctionResult(functionFragment: "approve", data: BytesLike): Result;
   decodeFunctionResult(functionFragment: "balanceOf", data: BytesLike): Result;
   decodeFunctionResult(
-    functionFragment: "batchSafeMintWithBoost",
-    data: BytesLike
-  ): Result;
-  decodeFunctionResult(
     functionFragment: "batchTransferFrom",
     data: BytesLike
   ): Result;
@@ -164,8 +176,16 @@ export interface RewardBoosterNFTInterface extends Interface {
     functionFragment: "isApprovedForAll",
     data: BytesLike
   ): Result;
+  decodeFunctionResult(
+    functionFragment: "mintFromSale",
+    data: BytesLike
+  ): Result;
   decodeFunctionResult(functionFragment: "name", data: BytesLike): Result;
   decodeFunctionResult(functionFragment: "owner", data: BytesLike): Result;
+  decodeFunctionResult(
+    functionFragment: "ownerMintBatch",
+    data: BytesLike
+  ): Result;
   decodeFunctionResult(functionFragment: "ownerOf", data: BytesLike): Result;
   decodeFunctionResult(
     functionFragment: "renounceOwnership",
@@ -180,10 +200,18 @@ export interface RewardBoosterNFTInterface extends Interface {
     data: BytesLike
   ): Result;
   decodeFunctionResult(
+    functionFragment: "saleContractAddress",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
     functionFragment: "setApprovalForAll",
     data: BytesLike
   ): Result;
   decodeFunctionResult(functionFragment: "setBaseURI", data: BytesLike): Result;
+  decodeFunctionResult(
+    functionFragment: "setSaleContractAddress",
+    data: BytesLike
+  ): Result;
   decodeFunctionResult(
     functionFragment: "supportsInterface",
     data: BytesLike
@@ -283,6 +311,18 @@ export namespace OwnershipTransferredEvent {
   export type LogDescription = TypedLogDescription<Event>;
 }
 
+export namespace SaleContractAddressSetEvent {
+  export type InputTuple = [saleContract: AddressLike];
+  export type OutputTuple = [saleContract: string];
+  export interface OutputObject {
+    saleContract: string;
+  }
+  export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
+  export type Filter = TypedDeferredTopicFilter<Event>;
+  export type Log = TypedEventLog<Event>;
+  export type LogDescription = TypedLogDescription<Event>;
+}
+
 export namespace TransferEvent {
   export type InputTuple = [
     from: AddressLike,
@@ -352,17 +392,6 @@ export interface RewardBoosterNFT extends BaseContract {
 
   balanceOf: TypedContractMethod<[owner: AddressLike], [bigint], "view">;
 
-  batchSafeMintWithBoost: TypedContractMethod<
-    [
-      to: AddressLike,
-      quantity: BigNumberish,
-      boostInBips: BigNumberish,
-      metadataFile: string
-    ],
-    [void],
-    "nonpayable"
-  >;
-
   batchTransferFrom: TypedContractMethod<
     [from: AddressLike, to: AddressLike, tokenIds: BigNumberish[]],
     [void],
@@ -381,9 +410,26 @@ export interface RewardBoosterNFT extends BaseContract {
     "view"
   >;
 
+  mintFromSale: TypedContractMethod<
+    [to: AddressLike, boostInBips: BigNumberish, metadataFile: string],
+    [bigint],
+    "nonpayable"
+  >;
+
   name: TypedContractMethod<[], [string], "view">;
 
   owner: TypedContractMethod<[], [string], "view">;
+
+  ownerMintBatch: TypedContractMethod<
+    [
+      to: AddressLike,
+      quantity: BigNumberish,
+      boostInBips: BigNumberish,
+      metadataFile: string
+    ],
+    [void],
+    "nonpayable"
+  >;
 
   ownerOf: TypedContractMethod<[tokenId: BigNumberish], [string], "view">;
 
@@ -406,6 +452,8 @@ export interface RewardBoosterNFT extends BaseContract {
     "nonpayable"
   >;
 
+  saleContractAddress: TypedContractMethod<[], [string], "view">;
+
   setApprovalForAll: TypedContractMethod<
     [operator: AddressLike, approved: boolean],
     [void],
@@ -413,6 +461,12 @@ export interface RewardBoosterNFT extends BaseContract {
   >;
 
   setBaseURI: TypedContractMethod<[newBaseURI: string], [void], "nonpayable">;
+
+  setSaleContractAddress: TypedContractMethod<
+    [_saleAddress: AddressLike],
+    [void],
+    "nonpayable"
+  >;
 
   supportsInterface: TypedContractMethod<
     [interfaceId: BytesLike],
@@ -463,18 +517,6 @@ export interface RewardBoosterNFT extends BaseContract {
     nameOrSignature: "balanceOf"
   ): TypedContractMethod<[owner: AddressLike], [bigint], "view">;
   getFunction(
-    nameOrSignature: "batchSafeMintWithBoost"
-  ): TypedContractMethod<
-    [
-      to: AddressLike,
-      quantity: BigNumberish,
-      boostInBips: BigNumberish,
-      metadataFile: string
-    ],
-    [void],
-    "nonpayable"
-  >;
-  getFunction(
     nameOrSignature: "batchTransferFrom"
   ): TypedContractMethod<
     [from: AddressLike, to: AddressLike, tokenIds: BigNumberish[]],
@@ -498,11 +540,30 @@ export interface RewardBoosterNFT extends BaseContract {
     "view"
   >;
   getFunction(
+    nameOrSignature: "mintFromSale"
+  ): TypedContractMethod<
+    [to: AddressLike, boostInBips: BigNumberish, metadataFile: string],
+    [bigint],
+    "nonpayable"
+  >;
+  getFunction(
     nameOrSignature: "name"
   ): TypedContractMethod<[], [string], "view">;
   getFunction(
     nameOrSignature: "owner"
   ): TypedContractMethod<[], [string], "view">;
+  getFunction(
+    nameOrSignature: "ownerMintBatch"
+  ): TypedContractMethod<
+    [
+      to: AddressLike,
+      quantity: BigNumberish,
+      boostInBips: BigNumberish,
+      metadataFile: string
+    ],
+    [void],
+    "nonpayable"
+  >;
   getFunction(
     nameOrSignature: "ownerOf"
   ): TypedContractMethod<[tokenId: BigNumberish], [string], "view">;
@@ -529,6 +590,9 @@ export interface RewardBoosterNFT extends BaseContract {
     "nonpayable"
   >;
   getFunction(
+    nameOrSignature: "saleContractAddress"
+  ): TypedContractMethod<[], [string], "view">;
+  getFunction(
     nameOrSignature: "setApprovalForAll"
   ): TypedContractMethod<
     [operator: AddressLike, approved: boolean],
@@ -538,6 +602,9 @@ export interface RewardBoosterNFT extends BaseContract {
   getFunction(
     nameOrSignature: "setBaseURI"
   ): TypedContractMethod<[newBaseURI: string], [void], "nonpayable">;
+  getFunction(
+    nameOrSignature: "setSaleContractAddress"
+  ): TypedContractMethod<[_saleAddress: AddressLike], [void], "nonpayable">;
   getFunction(
     nameOrSignature: "supportsInterface"
   ): TypedContractMethod<[interfaceId: BytesLike], [boolean], "view">;
@@ -597,6 +664,13 @@ export interface RewardBoosterNFT extends BaseContract {
     OwnershipTransferredEvent.OutputObject
   >;
   getEvent(
+    key: "SaleContractAddressSet"
+  ): TypedContractEvent<
+    SaleContractAddressSetEvent.InputTuple,
+    SaleContractAddressSetEvent.OutputTuple,
+    SaleContractAddressSetEvent.OutputObject
+  >;
+  getEvent(
     key: "Transfer"
   ): TypedContractEvent<
     TransferEvent.InputTuple,
@@ -647,6 +721,17 @@ export interface RewardBoosterNFT extends BaseContract {
       OwnershipTransferredEvent.InputTuple,
       OwnershipTransferredEvent.OutputTuple,
       OwnershipTransferredEvent.OutputObject
+    >;
+
+    "SaleContractAddressSet(address)": TypedContractEvent<
+      SaleContractAddressSetEvent.InputTuple,
+      SaleContractAddressSetEvent.OutputTuple,
+      SaleContractAddressSetEvent.OutputObject
+    >;
+    SaleContractAddressSet: TypedContractEvent<
+      SaleContractAddressSetEvent.InputTuple,
+      SaleContractAddressSetEvent.OutputTuple,
+      SaleContractAddressSetEvent.OutputObject
     >;
 
     "Transfer(address,address,uint256)": TypedContractEvent<

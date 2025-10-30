@@ -1,20 +1,22 @@
-// modules/wallet.js
+// modules/wallet.js - VERSÃO DE DEBUG
+// O código foi modificado para depurar o erro "TypeError: Cannot read properties of undefined (reading 'match')"
+// que ocorre na função instantiateContracts ao tentar instanciar um contrato.
+// Este erro geralmente indica que um dos ABIs (Application Binary Interface) importados
+// não é uma string JSON válida ou é 'undefined'.
 
 const ethers = window.ethers;
 
 // --- NOVA IMPORTAÇÃO DO WEB3MODAL via CDN ESM (AJUSTADA) ---
-// Mudado de 5.0.3 para @latest para corrigir o erro 404 Not Found do esm.sh
 import { createWeb3Modal, defaultConfig } from 'https://esm.sh/@web3modal/ethers@latest';
 
 import { State } from '../state.js';
 import { showToast } from '../ui-feedback.js';
-// REMOVIDO: formatAddress (não é mais usado aqui)
 import {
     addresses, sepoliaRpcUrl, sepoliaChainId,
     bkcTokenABI, delegationManagerABI, rewardManagerABI,
     rewardBoosterABI, nftBondingCurveABI, actionsManagerABI, publicSaleABI,
     faucetABI,
-    decentralizedNotaryABI // <--- IMPORTA O ABI DO NOTARY
+    decentralizedNotaryABI
 } from '../config.js';
 import { loadPublicData, loadUserData } from './data.js';
 import { signIn } from './firebase-auth-service.js';
@@ -81,50 +83,57 @@ let wasPreviouslyConnected = web3modal.getIsConnected();
 function instantiateContracts(signerOrProvider) {
     console.log("Instantiating contracts with:", signerOrProvider);
     try {
-        if (addresses.bkcToken)
-            State.bkcTokenContract = new ethers.Contract(addresses.bkcToken, bkcTokenABI, signerOrProvider);
-        if (addresses.delegationManager)
-            State.delegationManagerContract = new ethers.Contract(addresses.delegationManager, delegationManagerABI, signerOrProvider);
-        if (addresses.rewardManager)
-            State.rewardManagerContract = new ethers.Contract(addresses.rewardManager, rewardManagerABI, signerOrProvider);
-        if (addresses.actionsManager)
-            State.actionsManagerContract = new ethers.Contract(addresses.actionsManager, actionsManagerABI, signerOrProvider);
-        if (addresses.rewardBoosterNFT) {
-            State.rewardBoosterContract = new ethers.Contract(addresses.rewardBoosterNFT, rewardBoosterABI, signerOrProvider);
-        }
-        if (addresses.nftBondingCurve) {
-            State.nftBondingCurveContract = new ethers.Contract(addresses.nftBondingCurve, nftBondingCurveABI, signerOrProvider);
-        }
-         if (addresses.publicSale) {
-             State.publicSaleContract = new ethers.Contract(addresses.publicSale, publicSaleABI, signerOrProvider);
-         }
-         if (addresses.faucet && addresses.faucet !== "0x0000000000000000000000000000000000000000") {
-             State.faucetContract = new ethers.Contract(addresses.faucet, faucetABI, signerOrProvider);
-         }
+        // --- INÍCIO DO BLOCO DE DEBUG ---
+        const contractsToInstantiate = [
+            { name: "bkcToken", address: addresses.bkcToken, abi: bkcTokenABI, stateProp: "bkcTokenContract" },
+            { name: "delegationManager", address: addresses.delegationManager, abi: delegationManagerABI, stateProp: "delegationManagerContract" },
+            { name: "rewardManager", address: addresses.rewardManager, abi: rewardManagerABI, stateProp: "rewardManagerContract" },
+            { name: "actionsManager", address: addresses.actionsManager, abi: actionsManagerABI, stateProp: "actionsManagerContract" },
+            { name: "rewardBoosterNFT", address: addresses.rewardBoosterNFT, abi: rewardBoosterABI, stateProp: "rewardBoosterContract" },
+            { name: "nftBondingCurve", address: addresses.nftBondingCurve, abi: nftBondingCurveABI, stateProp: "nftBondingCurveContract" },
+            { name: "publicSale", address: addresses.publicSale, abi: publicSaleABI, stateProp: "publicSaleContract" },
+            { name: "faucet", address: addresses.faucet, abi: faucetABI, stateProp: "faucetContract", ignoreZero: true },
+            { name: "decentralizedNotary", address: addresses.decentralizedNotary, abi: decentralizedNotaryABI, stateProp: "decentralizedNotaryContract", ignoreZero: true }
+        ];
 
-        // --- Instanciação do Contrato DescentralizedNotary ---
-        if (addresses.decentralizedNotary && addresses.decentralizedNotary !== "0x0000000000000000000000000000000000000000") {
-            console.log("Instantiating DecentralizedNotary...");
-            State.decentralizedNotaryContract = new ethers.Contract(
-                addresses.decentralizedNotary,
-                decentralizedNotaryABI,
-                signerOrProvider
-            );
-            console.log("DecentralizedNotary instance:", State.decentralizedNotaryContract);
-        } else {
-             console.warn("Decentralized Notary address not set or is placeholder in config.js");
+        for (const contractInfo of contractsToInstantiate) {
+            const { name, address, abi, stateProp, ignoreZero } = contractInfo;
+            
+            if (address) {
+                if (ignoreZero && address === "0x0000000000000000000000000000000000000000") {
+                    console.warn(`${name} address is placeholder. Skipping instantiation.`);
+                    continue;
+                }
+
+                // *** PONTO DE VERIFICAÇÃO CRÍTICO ***
+                if (!abi || typeof abi !== 'object' || abi.length === 0) {
+                    console.error(`ABI for ${name} is invalid or missing! Type: ${typeof abi}, Value: ${abi}`);
+                    showToast(`Critical Error: ABI for ${name} is invalid. Check config.js.`, "error");
+                    // Lança um erro para parar a execução e evitar o TypeError
+                    throw new Error(`Invalid ABI for ${name}`); 
+                }
+                // *** FIM DO PONTO DE VERIFICAÇÃO CRÍTICO ***
+
+                console.log(`Instantiating ${name}...`);
+                State[stateProp] = new ethers.Contract(address, abi, signerOrProvider);
+                console.log(`${name} instance created.`);
+            } else {
+                console.warn(`${name} address is missing in config.js. Skipping instantiation.`);
+            }
         }
-        // --- Fim da Instanciação do Contrato ---
+        // --- FIM DO BLOCO DE DEBUG ---
 
         console.log("Contracts instantiated:", State);
 
     } catch (e) {
          console.error("Error instantiating contracts:", e);
-         showToast("Error setting up contracts. Check console.", "error");
+         // O showToast agora será mais específico se o erro for um ABI inválido
+         showToast(`Error setting up contracts: ${e.message}`, "error"); 
     }
 }
 
 async function setupSignerAndLoadData(provider, address) {
+    // ... (Restante do código da função setupSignerAndLoadData sem alterações)
     try {
         State.provider = provider;
         State.signer = await provider.getSigner();
@@ -134,7 +143,7 @@ async function setupSignerAndLoadData(provider, address) {
         const normalizedAddress = address.toLowerCase();
         State.userAddress = normalizedAddress; // <-- MUDANÇA (salva o endereço minúsculo)
         // --- FIM DA CORREÇÃO ---
-
+        
         // --- CORREÇÃO: Autentica no Firebase usando a CARTEIRA como ID primário ---
         await signIn(State.userAddress); // <-- MUDANÇA (agora passa o endereço minúsculo)
         // --- FIM DA CORREÇÃO ---
@@ -167,7 +176,7 @@ export async function initPublicProvider() {
     }
 }
 
-// --- LÓGICA DE TRATAMENTO DE CONEXÃO (sem alterações aqui) ---
+// --- LÓGICA DE TRATAMENTO DE CONEXÃO (sem alterações) ---
 
 async function handleProviderChange(state, callback) {
     const { provider, address, chainId, isConnected } = state;
@@ -282,39 +291,12 @@ export async function initializeWalletState(callback) {
                  await handleProviderChange({ isConnected: false, provider: null, address: null, chainId: null }, callback);
             }
         } catch (e) {
-            console.error("Error during initial wallet check (Web3Modal):", e);
             await handleProviderChange({ isConnected: false, provider: null, address: null, chainId: null }, callback);
         }
 
-    } else if (window.ethereum && window.ethereum.isMetaMask) { // Verifica se é MetaMask
-        console.log("Web3Modal state is disconnected. Forcing check with window.ethereum (MetaMask)...");
-        try {
-            const accounts = await window.ethereum.request({ method: 'eth_accounts' });
-            if (accounts && accounts.length > 0) {
-                console.log("Forced check successful. Found account:", accounts[0]);
-                const ethersProvider = new ethers.BrowserProvider(window.ethereum);
-                const network = await ethersProvider.getNetwork();
-                const userAddress = ethers.getAddress(accounts[0]);
-                wasPreviouslyConnected = true;
-
-                await handleProviderChange(
-                    { isConnected: true, provider: window.ethereum, address: userAddress, chainId: Number(network.chainId) },
-                    callback
-                );
-            } else {
-                console.log("Forced check failed (no accounts). Initial state: Not connected.");
-                 // Garante que o estado desconectado seja propagado se o app iniciou antes
-                 if (State.isConnected) {
-                      await handleProviderChange({ isConnected: false, provider: null, address: null, chainId: null }, callback);
-                 }
-            }
-        } catch (e) {
-            console.error("Error during forced check with window.ethereum:", e);
-             await handleProviderChange({ isConnected: false, provider: null, address: null, chainId: null }, callback);
-        }
-
     } else {
-        console.log("Initial check: Not connected (no Web3Modal connection or MetaMask).");
+        // Confia no estado do Web3Modal.
+        console.log("Initial check: Not connected (relying on Web3Modal state).");
          // Garante que o estado desconectado seja propagado
          if (State.isConnected) {
              await handleProviderChange({ isConnected: false, provider: null, address: null, chainId: null }, callback);
@@ -330,4 +312,16 @@ export function openConnectModal() {
 export async function disconnectWallet() {
     console.log("Telling Web3Modal to disconnect...");
     await web3modal.disconnect();
+}
+
+// --- CORREÇÃO V2: Adiciona um bloco para garantir que não haja referências a window.web3 ---
+// Este bloco é uma medida de segurança para garantir que o código não tente usar a API obsoleta
+// mesmo que ela ainda esteja sendo injetada por alguma outra biblioteca ou script.
+if (window.web3) {
+    console.warn("Found window.web3. Attempting to clear the shim to prevent MetaMask warning.");
+    try {
+        delete window.web3;
+    } catch (e) {
+        console.warn("Could not delete window.web3 property.");
+    }
 }

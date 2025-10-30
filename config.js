@@ -123,7 +123,25 @@ export const actionsManagerABI = [ // FortuneTiger ABI
     "function finalizeAction(uint256 _actionId)",
 ];
 
-export const publicSaleABI = [{"inputs":[{"internalType":"address","name":"_nftContractAddress","type":"address"},{"internalType":"address","name":"_initialOwner","type":"address"},{"internalType":"address","name":"_treasury","typeA":"address"}],"stateMutability":"nonpayable","type":"constructor"},{"inputs":[],"name":"OwnableInvalidOwner","type":"error"},{"inputs":[{"internalType":"address","name":"account","type":"address"}],"name":"OwnableUnauthorizedAccount","type":"error"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"owner","type":"address"},{"indexed":true,"internalType":"uint256","name":"tierId","type":"uint256"},{"indexed":true,"internalType":"uint256","name":"tokenId","type":"uint256"}],"name":"NFTRescued","type":"event"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"buyer","type":"address"},{"indexed":true,"internalType":"uint256","name":"tierId","type":"uint256"},{"indexed":true,"internalType":"uint256","name":"tokenId","type":"uint256"},{"indexed":false,"internalType":"uint256","name":"price","type":"uint256"}],"name":"NFTSold","type":"event"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"previousOwner","type":"address"},{"indexed":true,"internalType":"address","name":"newOwner","type":"address"}],"name":"OwnershipTransferred","type":"event"},{"inputs":[{"internalType":"uint256","name":"_tierId","type":"uint256"}],"name":"buyNFT","outputs":[],"stateMutability":"payable","type":"function"},{"inputs":[{"internalType":"uint256","name":"_tierId","type":"uint256"},{"internalType":"uint256","name":"_quantity","type":"uint256"}],"name":"buyMultipleNFTs","outputs":[],"stateMutability":"payable","type":"function"},{"inputs":[],"name":"nftContract","outputs":[{"internalType":"contract IERC721","name":"","type":"address"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"address","name":"","type":"address"},{"internalType":"address","name":"","type":"address"},{"internalType":"uint256","name":"","type":"uint256"},{"internalType":"bytes","name":"","type":"bytes"}],"name":"onERC7Z1Received","outputs":[{"internalType":"bytes4","name":"","type":"bytes4"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"owner","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"renounceOwnership","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"uint256","name":"_tierId","type":"uint256"},{"internalType":"uint256","name":"_tokenId","type":"uint256"}],"name":"rescueNFT","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"uint256","name":"_tierId","type":"uint256"},{"internalType":"uint256","name":"_priceInWei","type":"uint256"},{"internalType":"uint256[]","name":"_tokenIds","type":"uint256[]"}],"name":"setTier","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"uint256","name":"","type":"uint256"}],"name":"tiers","outputs":[{"internalType":"uint256","name":"priceInWei","type":"uint256"},{"internalType":"uint256","name":"nextTokenIndex","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"address","name":"newOwner","type":"address"}],"name":"transferOwnership","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[],"name":"withdrawFunds","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"uint256","name":"_tierId","type":"uint256"}],"name":"withdrawUnsoldNFTs","outputs":[],"stateMutability":"nonpayable","type":"function"}];
+export const publicSaleABI = [
+    // Funções de Leitura (View)
+    "function tiers(uint256) view returns (uint256 priceInWei, uint256 maxSupply, uint256 mintedCount, uint256 boostBips, string metadataFile, bool isConfigured)",
+    "function rewardBoosterNFT() view returns (address)",
+    "function ecosystemManager() view returns (address)",
+    "function owner() view returns (address)",
+
+    // Funções de Escrita (Write)
+    "function setTier(uint256 _tierId, uint256 _priceInWei, uint256 _maxSupply, uint256 _boostBips, string calldata _metadataFile)",
+    "function buyNFT(uint256 _tierId) payable",
+    "function buyMultipleNFTs(uint256 _tierId, uint256 _quantity) payable",
+    "function withdrawFunds()",
+    "function renounceOwnership()",
+    "function transferOwnership(address newOwner)",
+
+    // Eventos
+    "event NFTSold(address indexed buyer, uint256 indexed tierId, uint256 indexed tokenId, uint256 price)",
+    "event TierSet(uint256 indexed tierId, uint256 price, uint256 maxSupply)"
+];
 
 // --- NOVO ABI: DecentralizedNotary (CORRIGIDO) ---
 export const decentralizedNotaryABI = [

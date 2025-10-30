@@ -28,21 +28,18 @@ export interface PublicSaleInterface extends Interface {
     nameOrSignature:
       | "buyMultipleNFTs"
       | "buyNFT"
-      | "nftContract"
-      | "onERC721Received"
+      | "ecosystemManager"
       | "owner"
       | "renounceOwnership"
-      | "rescueNFT"
+      | "rewardBoosterNFT"
       | "setTier"
       | "tiers"
       | "transferOwnership"
-      | "treasuryWallet"
       | "withdrawFunds"
-      | "withdrawUnsoldNFTs"
   ): FunctionFragment;
 
   getEvent(
-    nameOrSignatureOrTopic: "NFTRescued" | "NFTSold" | "OwnershipTransferred"
+    nameOrSignatureOrTopic: "NFTSold" | "OwnershipTransferred" | "TierSet"
   ): EventFragment;
 
   encodeFunctionData(
@@ -54,12 +51,8 @@ export interface PublicSaleInterface extends Interface {
     values: [BigNumberish]
   ): string;
   encodeFunctionData(
-    functionFragment: "nftContract",
+    functionFragment: "ecosystemManager",
     values?: undefined
-  ): string;
-  encodeFunctionData(
-    functionFragment: "onERC721Received",
-    values: [AddressLike, AddressLike, BigNumberish, BytesLike]
   ): string;
   encodeFunctionData(functionFragment: "owner", values?: undefined): string;
   encodeFunctionData(
@@ -67,12 +60,12 @@ export interface PublicSaleInterface extends Interface {
     values?: undefined
   ): string;
   encodeFunctionData(
-    functionFragment: "rescueNFT",
-    values: [BigNumberish, BigNumberish]
+    functionFragment: "rewardBoosterNFT",
+    values?: undefined
   ): string;
   encodeFunctionData(
     functionFragment: "setTier",
-    values: [BigNumberish, BigNumberish, BigNumberish[]]
+    values: [BigNumberish, BigNumberish, BigNumberish, BigNumberish, string]
   ): string;
   encodeFunctionData(functionFragment: "tiers", values: [BigNumberish]): string;
   encodeFunctionData(
@@ -80,16 +73,8 @@ export interface PublicSaleInterface extends Interface {
     values: [AddressLike]
   ): string;
   encodeFunctionData(
-    functionFragment: "treasuryWallet",
-    values?: undefined
-  ): string;
-  encodeFunctionData(
     functionFragment: "withdrawFunds",
     values?: undefined
-  ): string;
-  encodeFunctionData(
-    functionFragment: "withdrawUnsoldNFTs",
-    values: [BigNumberish]
   ): string;
 
   decodeFunctionResult(
@@ -98,11 +83,7 @@ export interface PublicSaleInterface extends Interface {
   ): Result;
   decodeFunctionResult(functionFragment: "buyNFT", data: BytesLike): Result;
   decodeFunctionResult(
-    functionFragment: "nftContract",
-    data: BytesLike
-  ): Result;
-  decodeFunctionResult(
-    functionFragment: "onERC721Received",
+    functionFragment: "ecosystemManager",
     data: BytesLike
   ): Result;
   decodeFunctionResult(functionFragment: "owner", data: BytesLike): Result;
@@ -110,7 +91,10 @@ export interface PublicSaleInterface extends Interface {
     functionFragment: "renounceOwnership",
     data: BytesLike
   ): Result;
-  decodeFunctionResult(functionFragment: "rescueNFT", data: BytesLike): Result;
+  decodeFunctionResult(
+    functionFragment: "rewardBoosterNFT",
+    data: BytesLike
+  ): Result;
   decodeFunctionResult(functionFragment: "setTier", data: BytesLike): Result;
   decodeFunctionResult(functionFragment: "tiers", data: BytesLike): Result;
   decodeFunctionResult(
@@ -118,35 +102,9 @@ export interface PublicSaleInterface extends Interface {
     data: BytesLike
   ): Result;
   decodeFunctionResult(
-    functionFragment: "treasuryWallet",
-    data: BytesLike
-  ): Result;
-  decodeFunctionResult(
     functionFragment: "withdrawFunds",
     data: BytesLike
   ): Result;
-  decodeFunctionResult(
-    functionFragment: "withdrawUnsoldNFTs",
-    data: BytesLike
-  ): Result;
-}
-
-export namespace NFTRescuedEvent {
-  export type InputTuple = [
-    owner: AddressLike,
-    tierId: BigNumberish,
-    tokenId: BigNumberish
-  ];
-  export type OutputTuple = [owner: string, tierId: bigint, tokenId: bigint];
-  export interface OutputObject {
-    owner: string;
-    tierId: bigint;
-    tokenId: bigint;
-  }
-  export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
-  export type Filter = TypedDeferredTopicFilter<Event>;
-  export type Log = TypedEventLog<Event>;
-  export type LogDescription = TypedLogDescription<Event>;
 }
 
 export namespace NFTSoldEvent {
@@ -180,6 +138,24 @@ export namespace OwnershipTransferredEvent {
   export interface OutputObject {
     previousOwner: string;
     newOwner: string;
+  }
+  export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
+  export type Filter = TypedDeferredTopicFilter<Event>;
+  export type Log = TypedEventLog<Event>;
+  export type LogDescription = TypedLogDescription<Event>;
+}
+
+export namespace TierSetEvent {
+  export type InputTuple = [
+    tierId: BigNumberish,
+    price: BigNumberish,
+    maxSupply: BigNumberish
+  ];
+  export type OutputTuple = [tierId: bigint, price: bigint, maxSupply: bigint];
+  export interface OutputObject {
+    tierId: bigint;
+    price: bigint;
+    maxSupply: bigint;
   }
   export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
   export type Filter = TypedDeferredTopicFilter<Event>;
@@ -238,29 +214,21 @@ export interface PublicSale extends BaseContract {
 
   buyNFT: TypedContractMethod<[_tierId: BigNumberish], [void], "payable">;
 
-  nftContract: TypedContractMethod<[], [string], "view">;
-
-  onERC721Received: TypedContractMethod<
-    [arg0: AddressLike, arg1: AddressLike, arg2: BigNumberish, arg3: BytesLike],
-    [string],
-    "nonpayable"
-  >;
+  ecosystemManager: TypedContractMethod<[], [string], "view">;
 
   owner: TypedContractMethod<[], [string], "view">;
 
   renounceOwnership: TypedContractMethod<[], [void], "nonpayable">;
 
-  rescueNFT: TypedContractMethod<
-    [_tierId: BigNumberish, _tokenId: BigNumberish],
-    [void],
-    "nonpayable"
-  >;
+  rewardBoosterNFT: TypedContractMethod<[], [string], "view">;
 
   setTier: TypedContractMethod<
     [
       _tierId: BigNumberish,
       _priceInWei: BigNumberish,
-      _tokenIds: BigNumberish[]
+      _maxSupply: BigNumberish,
+      _boostBips: BigNumberish,
+      _metadataFile: string
     ],
     [void],
     "nonpayable"
@@ -268,7 +236,16 @@ export interface PublicSale extends BaseContract {
 
   tiers: TypedContractMethod<
     [arg0: BigNumberish],
-    [[bigint, bigint] & { priceInWei: bigint; nextTokenIndex: bigint }],
+    [
+      [bigint, bigint, bigint, bigint, string, boolean] & {
+        priceInWei: bigint;
+        maxSupply: bigint;
+        mintedCount: bigint;
+        boostBips: bigint;
+        metadataFile: string;
+        isConfigured: boolean;
+      }
+    ],
     "view"
   >;
 
@@ -278,15 +255,7 @@ export interface PublicSale extends BaseContract {
     "nonpayable"
   >;
 
-  treasuryWallet: TypedContractMethod<[], [string], "view">;
-
   withdrawFunds: TypedContractMethod<[], [void], "nonpayable">;
-
-  withdrawUnsoldNFTs: TypedContractMethod<
-    [_tierId: BigNumberish],
-    [void],
-    "nonpayable"
-  >;
 
   getFunction<T extends ContractMethod = ContractMethod>(
     key: string | FunctionFragment
@@ -303,15 +272,8 @@ export interface PublicSale extends BaseContract {
     nameOrSignature: "buyNFT"
   ): TypedContractMethod<[_tierId: BigNumberish], [void], "payable">;
   getFunction(
-    nameOrSignature: "nftContract"
+    nameOrSignature: "ecosystemManager"
   ): TypedContractMethod<[], [string], "view">;
-  getFunction(
-    nameOrSignature: "onERC721Received"
-  ): TypedContractMethod<
-    [arg0: AddressLike, arg1: AddressLike, arg2: BigNumberish, arg3: BytesLike],
-    [string],
-    "nonpayable"
-  >;
   getFunction(
     nameOrSignature: "owner"
   ): TypedContractMethod<[], [string], "view">;
@@ -319,19 +281,17 @@ export interface PublicSale extends BaseContract {
     nameOrSignature: "renounceOwnership"
   ): TypedContractMethod<[], [void], "nonpayable">;
   getFunction(
-    nameOrSignature: "rescueNFT"
-  ): TypedContractMethod<
-    [_tierId: BigNumberish, _tokenId: BigNumberish],
-    [void],
-    "nonpayable"
-  >;
+    nameOrSignature: "rewardBoosterNFT"
+  ): TypedContractMethod<[], [string], "view">;
   getFunction(
     nameOrSignature: "setTier"
   ): TypedContractMethod<
     [
       _tierId: BigNumberish,
       _priceInWei: BigNumberish,
-      _tokenIds: BigNumberish[]
+      _maxSupply: BigNumberish,
+      _boostBips: BigNumberish,
+      _metadataFile: string
     ],
     [void],
     "nonpayable"
@@ -340,29 +300,25 @@ export interface PublicSale extends BaseContract {
     nameOrSignature: "tiers"
   ): TypedContractMethod<
     [arg0: BigNumberish],
-    [[bigint, bigint] & { priceInWei: bigint; nextTokenIndex: bigint }],
+    [
+      [bigint, bigint, bigint, bigint, string, boolean] & {
+        priceInWei: bigint;
+        maxSupply: bigint;
+        mintedCount: bigint;
+        boostBips: bigint;
+        metadataFile: string;
+        isConfigured: boolean;
+      }
+    ],
     "view"
   >;
   getFunction(
     nameOrSignature: "transferOwnership"
   ): TypedContractMethod<[newOwner: AddressLike], [void], "nonpayable">;
   getFunction(
-    nameOrSignature: "treasuryWallet"
-  ): TypedContractMethod<[], [string], "view">;
-  getFunction(
     nameOrSignature: "withdrawFunds"
   ): TypedContractMethod<[], [void], "nonpayable">;
-  getFunction(
-    nameOrSignature: "withdrawUnsoldNFTs"
-  ): TypedContractMethod<[_tierId: BigNumberish], [void], "nonpayable">;
 
-  getEvent(
-    key: "NFTRescued"
-  ): TypedContractEvent<
-    NFTRescuedEvent.InputTuple,
-    NFTRescuedEvent.OutputTuple,
-    NFTRescuedEvent.OutputObject
-  >;
   getEvent(
     key: "NFTSold"
   ): TypedContractEvent<
@@ -377,19 +333,15 @@ export interface PublicSale extends BaseContract {
     OwnershipTransferredEvent.OutputTuple,
     OwnershipTransferredEvent.OutputObject
   >;
+  getEvent(
+    key: "TierSet"
+  ): TypedContractEvent<
+    TierSetEvent.InputTuple,
+    TierSetEvent.OutputTuple,
+    TierSetEvent.OutputObject
+  >;
 
   filters: {
-    "NFTRescued(address,uint256,uint256)": TypedContractEvent<
-      NFTRescuedEvent.InputTuple,
-      NFTRescuedEvent.OutputTuple,
-      NFTRescuedEvent.OutputObject
-    >;
-    NFTRescued: TypedContractEvent<
-      NFTRescuedEvent.InputTuple,
-      NFTRescuedEvent.OutputTuple,
-      NFTRescuedEvent.OutputObject
-    >;
-
     "NFTSold(address,uint256,uint256,uint256)": TypedContractEvent<
       NFTSoldEvent.InputTuple,
       NFTSoldEvent.OutputTuple,
@@ -410,6 +362,17 @@ export interface PublicSale extends BaseContract {
       OwnershipTransferredEvent.InputTuple,
       OwnershipTransferredEvent.OutputTuple,
       OwnershipTransferredEvent.OutputObject
+    >;
+
+    "TierSet(uint256,uint256,uint256)": TypedContractEvent<
+      TierSetEvent.InputTuple,
+      TierSetEvent.OutputTuple,
+      TierSetEvent.OutputObject
+    >;
+    TierSet: TypedContractEvent<
+      TierSetEvent.InputTuple,
+      TierSetEvent.OutputTuple,
+      TierSetEvent.OutputObject
     >;
   };
 }

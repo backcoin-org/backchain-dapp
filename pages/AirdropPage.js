@@ -1297,7 +1297,14 @@ function renderDailyTasksPanelContent() {
             // 3. Simplifica a lógica de status, pois a tarefa é SEMPRE elegível
             let statusHTML = task.url ? '<i class="fa-solid fa-arrow-up-right-from-square mr-1"></i> Go & Earn' : '<i class="fa-solid fa-check mr-1"></i> Earn Points';
             let statusClass = 'task-status-badge font-bold text-xs py-2 px-3 rounded-xl transition-colors duration-200 shrink-0';
-            let cardClass = 'task-card-link bg-main border border-border-color rounded-2xl p-5 flex flex-col sm:flex-row items-center justify-between gap-4 transition-all duration-200 hover:bg-zinc-800/50 hover:border-amber-500/50 cursor-pointer block decoration-none focus:outline-none focus:ring-2 focus:ring-amber-500 focus:ring-offset-2 focus:ring-offset-sidebar';
+            
+            // ==========================================================
+            //  INÍCIO DA ALTERAÇÃO (Responsividade)
+            // ==========================================================
+            
+            // ANTES: items-center
+            // DEPOIS: items-center sm:items-start
+            let cardClass = 'task-card-link bg-main border border-border-color rounded-2xl p-5 flex flex-col sm:flex-row items-center sm:items-start justify-between gap-4 transition-all duration-200 hover:bg-zinc-800/50 hover:border-amber-500/50 cursor-pointer block decoration-none focus:outline-none focus:ring-2 focus:ring-amber-500 focus:ring-offset-2 focus:ring-offset-sidebar';
 
             statusClass += ' bg-amber-600 hover:bg-amber-700 text-white';
             // O 'else' branch (que renderizava o timer e desabilitava o card) foi removido.
@@ -1310,20 +1317,20 @@ function renderDailyTasksPanelContent() {
                    data-task-url="${task.url || ''}"
                    onclick="return false;" >
 
-                    <div class="flex flex-col flex-grow items-center text-center min-w-0 pr-4">
-                        <h4 class="font-extrabold text-xl text-white truncate w-full">${task.title}</h4>
+                    <div class="flex flex-col flex-grow items-center text-center sm:items-start sm:text-left min-w-0">
+                        <h4 class="font-extrabold text-xl text-white break-words">${task.title}</h4>
                         
                         <p class="text-sm text-zinc-300 mt-1 mb-3 break-words">
                             ${task.description || 'Complete the required action.'}
                         </p>
 
-                        <div class="flex items-center gap-4 text-xs text-zinc-500 flex-wrap justify-center">
+                        <div class="flex items-center gap-4 text-xs text-zinc-500 flex-wrap justify-center sm:justify-start">
                             <span class="text-yellow-500 font-semibold"><i class="fa-solid fa-star mr-1"></i> +${points.toLocaleString('en-US')} Points</span>
                             <span><i class="fa-solid fa-clock mr-1"></i> Cooldown: ${task.cooldownHours}h</span>
                             <span><i class="fa-solid fa-calendar-times mr-1"></i> Expires: ${expiryDate}</span>
                         </div>
                     </div>
-
+                    
                     <div class="flex-shrink-0 w-full sm:w-40 h-full flex items-center justify-center order-2 sm:order-3 mt-3 sm:mt-0">
                         <span class="${statusClass} text-center w-full">
                             ${statusHTML}
