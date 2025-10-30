@@ -1,4 +1,4 @@
-// modules/wallet.js - Final
+// modules/wallet.js - Final (Refatorado para Robustez Mobile)
 
 // --- INÍCIO DA CORREÇÃO: Mover a limpeza do window.web3 para o topo ---
 if (window.web3) {
@@ -32,7 +32,7 @@ import {
     addresses, sepoliaRpcUrl, sepoliaChainId,
     bkcTokenABI, delegationManagerABI, rewardManagerABI,
     rewardBoosterABI, nftBondingCurveABI, actionsManagerABI, publicSaleABI,
-    faucetABI, decentralizedNotaryABI, ecosystemManagerABI // <-- ADICIONADO HUB
+    faucetABI, decentralizedNotaryABI, ecosystemManagerABI 
 } from '../config.js';
 import { loadPublicData, loadUserData } from './data.js';
 import { signIn } from './firebase-auth-service.js';
@@ -97,7 +97,6 @@ let wasPreviouslyConnected = web3modal.getIsConnected();
 
 // --- FUNÇÃO AUXILIAR PARA DESCONEXÃO SEGURA (NOVA) ---
 async function safeDisconnect() {
-    // Verifica se web3modal existe e se o método disconnect está disponível
     if (typeof web3modal === 'object' && web3modal !== null && typeof web3modal.disconnect === 'function') {
         try {
             await web3modal.disconnect();
@@ -164,7 +163,8 @@ function instantiateContracts(signerOrProvider) {
 async function setupSignerAndLoadData(provider, address) {
     try {
         State.provider = provider;
-        State.signer = await provider.getSigner();
+        // CORREÇÃO 1: Tenta obter o signer. Se falhar, o erro é capturado abaixo.
+        State.signer = await provider.getSigner(); 
         
         const normalizedAddress = address.toLowerCase();
         State.userAddress = normalizedAddress;
@@ -173,11 +173,14 @@ async function setupSignerAndLoadData(provider, address) {
 
         instantiateContracts(State.signer); // Instancia com o signer
         await loadUserData();
-        State.isConnected = true;
+        State.isConnected = true; // Define a conexão APENAS após o loadUserData ser bem-sucedido
         return true;
     } catch (error) {
          console.error("Error during setupSignerAndLoadData:", error);
-         if (error.code === 'ACTION_REJECTED') { showToast("Operation rejected by user.", "info"); }
+         // Se o setup falhar, garante que o estado local esteja desconectado.
+         State.isConnected = false; 
+         State.userAddress = null;
+         if (error.code === 'ACTION_REJECTED' || error.message.includes("cancelled")) { showToast("Operation rejected by user.", "info"); }
          else if (error.message.includes("Firebase")) { showToast("Firebase authentication failed.", "error"); }
          else { showToast(`Connection failed: ${error.message || 'Unknown error'}`, "error"); }
          return false;
@@ -191,7 +194,7 @@ export async function initPublicProvider() {
      try {
         State.publicProvider = new ethers.JsonRpcProvider(sepoliaRpcUrl);
         instantiateContracts(State.publicProvider); // Instancia com o provider público
-        await loadPublicData(); // <-- Isto causará erro, corrija a ABI no config.js
+        await loadPublicData(); 
         console.log("Public provider initialized. Contracts instantiated with public provider.");
     } catch (e) {
         console.error("Failed to initialize public provider:", e);
@@ -209,7 +212,7 @@ async function handleProviderChange(state, callback) {
         const providerToUse = provider || await web3modal.getWalletProvider();
         if (!providerToUse) {
             console.error("Connected, but failed to get wallet provider.");
-            await safeDisconnect(); // USANDO safeDisconnect
+            await safeDisconnect(); 
             return;
         }
 
@@ -217,14 +220,16 @@ async function handleProviderChange(state, callback) {
             showToast(`Wrong network. Switching to Sepolia...`, 'info');
             const expectedChainIdHex = '0x' + (Number(sepoliaChainId)).toString(16);
             try {
+                // Tenta fazer o switch de rede
                 await providerToUse.request({
                     method: 'wallet_switchEthereumChain',
                     params: [{ chainId: expectedChainIdHex }],
                 });
-                return;
+                return; // O switch acionará um novo evento 'subscribeProvider'
             } catch (switchError) {
                 if (switchError.code === 4902) {
                     showToast('Sepolia network not found. Adding it...', 'info');
+                    // Lógica para adicionar a rede (já existente)
                     try {
                         await providerToUse.request({
                             method: 'wallet_addEthereumChain',
@@ -234,7 +239,7 @@ async function handleProviderChange(state, callback) {
                     } catch (addError) {
                         console.error("Failed to add Sepolia network:", addError);
                         showToast('Please add and switch to the Sepolia network manually.', 'error');
-                        await safeDisconnect(); // USANDO safeDisconnect
+                        await safeDisconnect(); 
                         return;
                     }
                 }
@@ -244,12 +249,12 @@ async function handleProviderChange(state, callback) {
                  } else {
                      showToast('Network switch rejected by user.', 'info');
                  }
-                await safeDisconnect(); // USANDO safeDisconnect
+                await safeDisconnect(); 
                 return;
             }
         }
 
-        // Se chainId correto, continua
+        // Se chainId correto, tenta configurar o signer e carregar dados
         const ethersProvider = new ethers.BrowserProvider(providerToUse);
         const success = await setupSignerAndLoadData(ethersProvider, address);
 
@@ -257,7 +262,8 @@ async function handleProviderChange(state, callback) {
             callback({ isConnected: true, address, chainId, isNewConnection: !wasPreviouslyConnected });
             wasPreviouslyConnected = true;
         } else {
-            await safeDisconnect(); // USANDO safeDisconnect
+            // Se setupSignerAndLoadData falhou (ex: user rejeitou o getSigner()), desconecta
+            await safeDisconnect(); 
         }
 
     } else {
@@ -265,6 +271,7 @@ async function handleProviderChange(state, callback) {
         console.log("Web3Modal reports disconnection. Clearing app state.");
         const wasConnected = State.isConnected;
 
+        // Limpeza de estado (mantida)
         State.provider = null; State.signer = null; State.userAddress = null;
         State.isConnected = false;
         State.currentUserBalance = 0n;
@@ -287,14 +294,14 @@ async function handleProviderChange(state, callback) {
     }
 }
 
-
+// CORREÇÃO 2: Força uma nova verificação de estado APÓS a subscrição
 export async function initializeWalletState(callback) {
     // 1. Assina as mudanças FUTURAS
     web3modal.subscribeProvider(async (state) => {
         await handleProviderChange(state, callback);
     });
 
-    // 2. VERIFICA O ESTADO ATUAL
+    // 2. CORREÇÃO: Força a verificação do estado ATUAL do Web3Modal
     const currentState = web3modal.getState();
     wasPreviouslyConnected = currentState.isConnected;
 
@@ -303,24 +310,26 @@ export async function initializeWalletState(callback) {
         try {
             const provider = await web3modal.getWalletProvider();
             if (provider) {
+                // Chama o handler diretamente com o provider para sincronização imediata
                 await handleProviderChange(
                     { ...currentState, provider: provider },
                     callback
                 );
             } else {
                 console.warn("Initial state is connected, but no provider found. Disconnecting.");
-                await safeDisconnect(); // USANDO safeDisconnect
+                // Se o Web3Modal diz que está conectado mas não há provider, forçamos a desconexão
+                await safeDisconnect(); 
                 await handleProviderChange({ isConnected: false, provider: null, address: null, chainId: null }, callback);
             }
         } catch (e) {
+            console.error("Error during initial connection check:", e);
             await handleProviderChange({ isConnected: false, provider: null, address: null, chainId: null }, callback);
         }
 
     } else {
-        console.log("Initial check: Not connected (relying on Web3Modal state).");
-         if (State.isConnected) {
-             await handleProviderChange({ isConnected: false, provider: null, address: null, chainId: null }, callback);
-         }
+        console.log("Initial check: Not connected. Syncing disconnected state.");
+        // Garante que o estado desconectado seja processado pelo callback
+        await handleProviderChange({ isConnected: false, provider: null, address: null, chainId: null }, callback);
     }
 }
 
@@ -331,5 +340,5 @@ export function openConnectModal() {
 
 export async function disconnectWallet() {
     console.log("Telling Web3Modal to disconnect...");
-    await safeDisconnect(); // USANDO safeDisconnect
+    await safeDisconnect(); 
 }
