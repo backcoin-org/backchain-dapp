@@ -1,43 +1,59 @@
 // config.js
 
-// --- CONTRACTS SETUP ---
-export const addresses = {
-    // Endereços do deploy.ts:
-    bkcToken: "0x3d178F42c948646BB5a5eA74DF8F5fE2185bFD95",
-    delegationManager: "0x6C4EF8fc2D2dcA25e3eB2AB2F21b9E7E554442bF",
-    rewardManager: "0xe5440738D6C7e27c43A3FCECf7cf32eCf55101bA",
-    rewardBoosterNFT: "0x5aE62209c1635C150573c318BC8d3B36EecFe177",
-    nftBondingCurve: "0x1471D83065A6bC1A849f0d4D362b1a86a023D6FB", // NFTLiquidityPool
-    actionsManager: "0xB35ab889f12f05F3c17457055989cd5b8406CE43", // FortuneTiger
+// --- (CORRIGIDO!) IMPORTAÇÃO DE ENDEREÇOS ---
+export const addresses = {};
 
-    // Endereço do deploySale.ts (PublicSale)
-    publicSale: "0xbD544F8F954Dd7b82B6d0f406a375F80AAD27793",
+export async function loadAddresses() {
+    try {
+        const response = await fetch('../deployment-addresses.json');
+        if (!response.ok) {
+            throw new Error(`Falha ao buscar deployment-addresses.json: ${response.statusText}`);
+        }
+        const jsonAddresses = await response.json();
 
-    // --- ENDEREÇO DO CONTRATO FAUCET ---
-    faucet: "0x33811433E5DB3952Cf34Fadaef88bc8b1eDA184B",
-    
-    // --- NOVO CONTRATO: DECENTRALIZED NOTARY ---
-    decentralizedNotary: "0x8DB100284F2304dc8958c4d58ECA00A1d341656C" // <-- ENDEREÇO ATUALIZADO
-};
+        addresses.bkcToken = jsonAddresses.bkcToken;
+        addresses.delegationManager = jsonAddresses.delegationManager;
+        addresses.rewardManager = jsonAddresses.rewardManager;
+        addresses.rewardBoosterNFT = jsonAddresses.rewardBoosterNFT;
+        addresses.publicSale = jsonAddresses.publicSale;
+        addresses.faucet = jsonAddresses.faucet;
+        addresses.decentralizedNotary = jsonAddresses.decentralizedNotary;
+        addresses.nftBondingCurve = jsonAddresses.nftLiquidityPool;
+        addresses.actionsManager = jsonAddresses.fortuneTiger;
+        addresses.ecosystemManager = jsonAddresses.ecosystemManager; // <-- O Hub
+
+        return true;
+
+    } catch (error) {
+        console.error("ERRO CRÍTICO: Não foi possível carregar os endereços dos contratos.", error);
+        document.body.innerHTML = `<div style="color: red; padding: 20px; font-family: sans-serif; font-size: 1.2rem; background: #222; border: 1px solid red; margin: 20px;">
+            <b>Erro:</b> Não foi possível carregar <code>deployment-addresses.json</code>.
+            <br><br><b>Solução:</b> Verifique se o arquivo está na raiz do projeto e atualize a página.
+            <br><br><small>${error.message}</small></div>`;
+        return false;
+    }
+}
+
 
 // --- Constante do Faucet ---
 export const FAUCET_AMOUNT_WEI = 12500000000000000000000n; // 12.500 $BKC
 
-export const sepoliaRpcUrl = "https://eth-sepolia.g.alchemy.com/v2/GNfs8FTc-lBMgbTvpudoz"; // Considere usar uma chave API própria
+export const sepoliaRpcUrl = "https://eth-sepolia.g.alchemy.com/v2/GNfs8FTc-lBMgbTvpudoz";
 export const ipfsGateway = "https://ipfs.io/ipfs/";
-export const sepoliaChainId = 11155111n; // Sepolia Chain ID: 11155111
+export const sepoliaChainId = 11155111n;
 
-// --- Booster Tiers ---
 export const boosterTiers = [
     { name: "Diamond", boostBips: 5000, color: "text-cyan-400", img: "https://ipfs.io/ipfs/bafybeign2k73pq5pdicg2v2jdgumavw6kjmc4nremdenzvq27ngtcusv5i", borderColor: "border-cyan-400/50", glowColor: "bg-cyan-500/10" },
     { name: "Platinum", boostBips: 4000, color: "text-gray-300", img: "https://ipfs.io/ipfs/bafybeiag32gp4wssbjbpxjwxewer64fecrtjryhmnhhevgec74p4ltzrau", borderColor: "border-gray-300/50", glowColor: "bg-gray-400/10" },
     { name: "Gold", boostBips: 3000, color: "text-amber-400", img: "https://ipfs.io/ipfs/bafybeido6ah36xn4rpzkvl5avicjzf225ndborvx726sjzpzbpvoogntem", borderColor: "border-amber-400/50", glowColor: "bg-amber-500/10" },
     { name: "Silver", boostBips: 2000, color: "text-gray-400", img: "https://ipfs.io/ipfs/bafybeiaktaw4op7zrvsiyx2sghphrgm6sej6xw362mxgu326ahljjyu3gu", borderColor: "border-gray-400/50", glowColor: "bg-gray-500/10" },
     { name: "Bronze", boostBips: 1000, color: "text-yellow-600", img: "https://ipfs.io/ipfs/bafybeifkke3zepb4hjutntcv6vor7t2e4k5oseaur54v5zsectcepgseye", borderColor: "border-yellow-600/50", glowColor: "bg-yellow-600/10" },
+    { name: "Iron", boostBips: 500, color: "text-slate-500", img: "https://ipfs.io/ipfs/bafybeidta4mytpfqtnnrspzij63m4lcnkp6l42m7hnhyjxioci5jhcf3vm", borderColor: "border-slate-500/50", glowColor: "bg-slate-600/10" },
+    { name: "Crystal", boostBips: 100, color: "text-indigo-300", img: "https://ipfs.io/ipfs/bafybeiela7zrsnyva47pymhmnr6dj2aurrkwxhpwo7eaasx3t24y6n3aay", borderColor: "border-indigo-300/50", glowColor: "bg-indigo-300/10" }
 ];
 
 
-// --- ABIs --- 
+// --- ABIs CORRIGIDAS --- 
 
 export const bkcTokenABI = [
     "function totalSupply() view returns (uint256)",
@@ -47,10 +63,12 @@ export const bkcTokenABI = [
     "function name() view returns (string)",
     "function symbol() view returns (string)",
     "function allowance(address owner, address spender) view returns (uint256)",
-    "function mint(address to, uint256 amount)"
+    "function mint(address to, uint256 amount)",
+    // CORRIGIDO: Adicionadas constantes públicas do BKCToken
+    "function MAX_SUPPLY() view returns (uint256)", 
+    "function TGE_SUPPLY() view returns (uint256)" 
 ];
 
-// ### ABI CORRIGIDA ###
 export const delegationManagerABI = [
     "function totalNetworkPStake() view returns (uint256)",
     "function getAllValidators() view returns (address[])",
@@ -58,24 +76,22 @@ export const delegationManagerABI = [
     "function userTotalPStake(address) view returns (uint256)",
     "function getDelegationsOf(address _user) view returns (tuple(uint256 amount, uint256 unlockTime, uint256 lockDuration, address validator)[])",
     "function pendingDelegatorRewards(address _user) public view returns (uint256)",
-    "function DELEGATION_FEE_BIPS() view returns (uint256)",
     "function VALIDATOR_LOCK_DURATION() view returns (uint256)",
     "function hasPaidRegistrationFee(address) view returns (bool)",
-    "function getDelegationPStake(address _delegator, uint256 _index) view returns (uint256)",
     "function MIN_LOCK_DURATION() view returns (uint256)",
     "function MAX_LOCK_DURATION() view returns (uint256)",
-    "function MINT_POOL() view returns (uint256)",
-    "function TGE_SUPPLY() view returns (uint256)",
     "function payRegistrationFee()",
     "function registerValidator(address _validatorAddress)",
     "function delegate(address _validatorAddress, uint256 _totalAmount, uint256 _lockDuration)",
     "function unstake(uint256 _delegationIndex)",
-    "function forceUnstake(uint256 _delegationIndex)",
+    "function forceUnstake(uint256 _delegationIndex, uint256 _boosterTokenId)",
     "function claimDelegatorReward()",
     "function getMinValidatorStake() view returns (uint256)",
     "event Delegated(address indexed user, address indexed validator, uint256 delegationIndex, uint256 amount, uint256 feePaid)",
     "event Unstaked(address indexed user, uint256 delegationIndex, uint256 amount, uint256 feePaid)",
-    "event DelegatorRewardClaimed(address indexed delegator, uint256 amount)" // <-- AJUSTE APLICADO AQUI
+    "event DelegatorRewardClaimed(address indexed delegator, uint256 amount)"
+    // MINT_POOL, TGE_SUPPLY, MAX_SUPPLY não são mais necessárias publicamente aqui,
+    // pois o RewardManager as define e não as expõe na ABI
 ];
 
 export const rewardManagerABI = [
@@ -85,7 +101,7 @@ export const rewardManagerABI = [
     "function tokenURI(uint256 _tokenId) view returns (string)",
     "function minerRewardsOwed(address) view returns (uint256)",
     "function INITIAL_PENALTY_BIPS() view returns (uint256)",
-    "function withdraw(uint256 _tokenId)",
+    "function withdraw(uint256 _tokenId, uint256 _boosterTokenId)",
     "function claimMinerRewards()",
     "function createVestingCertificate(address _recipient, uint256 _grossAmount)",
     "function tokenOfOwnerByIndex(address owner, uint256 index) view returns (uint256)",
@@ -101,74 +117,52 @@ export const rewardBoosterABI = [
     "function tokenURI(uint256 tokenId) view returns (string)",
     "function ownerOf(uint256 tokenId) view returns (address)",
     "function approve(address to, uint256 tokenId)",
-    "function getHighestBoost(address user) view returns (uint256)"
 ];
 
-export const nftBondingCurveABI = [ // NFTLiquidityPool ABI
+export const nftBondingCurveABI = [ 
     "function pools(uint256 boostBips) view returns (uint256 tokenBalance, uint256 nftCount, uint256 k, bool isInitialized)",
     "function getBuyPrice(uint256 _boostBips) view returns (uint256)",
     "function getSellPrice(uint256 _boostBips) view returns (uint256)",
-    "function buyNFT(uint256 _boostBips, uint256 _tokenId)",
-    "function sellNFT(uint256 _tokenId)",
+    "function buyNFT(uint256 _boostBips, uint256 _boosterTokenId)", 
+    "function sellNFT(uint256 _tokenId, uint256 _boosterTokenId)",
+    "function PSTAKE_SERVICE_KEY() view returns (string)",
     "event NFTBought(address indexed buyer, uint256 indexed boostBips, uint256 tokenId, uint256 price)",
     "event NFTSold(address indexed seller, uint256 indexed boostBips, uint256 tokenId, uint256 payout, uint256 feePaid)"
 ];
 
-export const actionsManagerABI = [ // FortuneTiger ABI
+export const actionsManagerABI = [ 
     "function actionCounter() view returns (uint256)",
     "function actions(uint256) view returns (uint256 id, address creator, string description, uint8 actionType, uint8 status, uint256 endTime, uint256 totalPot, uint256 creatorStake, bool isStakeReturned, address beneficiary, uint256 totalCoupons, address winner, uint256 closingBlock, uint256 winningCoupon)",
     "function getMinCreatorStake() view returns (uint256)",
-    "function createAction(uint256 _duration, uint8 _actionType, uint256 _charityStake, string calldata _description)",
-    "function participate(uint256 _actionId, uint256 _bkcAmount)",
+    "function createAction(uint256 _duration, uint8 _actionType, uint256 _charityStake, string calldata _description, uint256 _boosterTokenId)",
+    "function participate(uint256 _actionId, uint256 _bkcAmount, uint256 _boosterTokenId)",
     "function finalizeAction(uint256 _actionId)",
 ];
 
 export const publicSaleABI = [
-    // Funções de Leitura (View)
     "function tiers(uint256) view returns (uint256 priceInWei, uint256 maxSupply, uint256 mintedCount, uint256 boostBips, string metadataFile, bool isConfigured)",
     "function rewardBoosterNFT() view returns (address)",
     "function ecosystemManager() view returns (address)",
     "function owner() view returns (address)",
-
-    // Funções de Escrita (Write)
-    "function setTier(uint256 _tierId, uint256 _priceInWei, uint256 _maxSupply, uint256 _boostBips, string calldata _metadataFile)",
+    "function setTier(uint256 _tierId, uint256 _maxSupply, uint256 _priceInWei, uint256 _boostBips, string calldata _metadataFile)",
     "function buyNFT(uint256 _tierId) payable",
     "function buyMultipleNFTs(uint256 _tierId, uint256 _quantity) payable",
     "function withdrawFunds()",
     "function renounceOwnership()",
     "function transferOwnership(address newOwner)",
-
-    // Eventos
     "event NFTSold(address indexed buyer, uint256 indexed tierId, uint256 indexed tokenId, uint256 price)",
     "event TierSet(uint256 indexed tierId, uint256 price, uint256 maxSupply)"
 ];
 
-// --- NOVO ABI: DecentralizedNotary (CORRIGIDO) ---
 export const decentralizedNotaryABI = [
-  // Construtor
-  "constructor(address _bkcTokenAddress, address _delegationManagerAddress, address _treasuryAddress, address _initialOwner)",
-  
-  // Eventos
   "event DocumentNotarized(address indexed user, uint256 indexed tokenId, string documentURI, uint256 feePaid)",
-  "event NotarySettingsChanged(uint256 newMinPStake, uint256 newFee, uint256 newTreasuryBips)",
-  
-  // Funções de Leitura (View)
-  "function minimumPStakeRequired() view returns (uint256)",
-  "function notarizeFeeBKC() view returns (uint256)",
-  "function treasuryFeeBips() view returns (uint256)",
-  
-  // Funções ERC721Enumerable (Leitura)
   "function balanceOf(address owner) view returns (uint256)",
   "function tokenOfOwnerByIndex(address owner, uint256 index) view returns (uint256)",
   "function tokenURI(uint256 tokenId) view returns (string)",
-  
-  // Funções de Escrita (Write)
-  "function notarizeDocument(string calldata _documentURI)",
-  "function setNotarySettings(uint256 _newMinPStake, uint256 _newFeeBKC, uint256 _newTreasuryBips)",
+  "function notarizeDocument(string calldata _documentURI, uint256 _boosterTokenId)",
   "function setBaseURI(string calldata newBaseURI)"
 ];
 
-// --- ABI do Faucet (SimpleBKCFaucet) ---
 export const faucetABI = [
   "constructor(address _tokenAddress)",
   "event OwnershipTransferred(address indexed previousOwner, address indexed newOwner)",
@@ -182,4 +176,15 @@ export const faucetABI = [
   "function transferOwnership(address newOwner)",
   "function withdrawETH()",
   "function withdrawRemainingTokens()"
+];
+
+// ABI do Hub (EcosystemManager) para chamadas de provedor
+export const ecosystemManagerABI = [
+    "function getServiceRequirements(string calldata _serviceKey) external view returns (uint256 fee, uint256 pStake)",
+    "function getFee(string calldata _serviceKey) external view returns (uint256)",
+    "function getBoosterDiscount(uint256 _boostBips) external view returns (uint256)",
+    "function getTreasuryAddress() external view returns (address)",
+    "function getDelegationManagerAddress() external view returns (address)",
+    "function getBKCTokenAddress() external view returns (address)",
+    "function getBoosterAddress() external view returns (address)"
 ];

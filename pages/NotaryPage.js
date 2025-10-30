@@ -95,35 +95,57 @@ function renderNotaryPageLayout() {
 }
 
 /**
- * Carrega os dados públicos (taxa, pStake) do contrato de Cartório. (Sem alterações)
+ * ==================================================================
+ * ======================= INÍCIO DA CORREÇÃO 1 =======================
+ * ==================================================================
+ * * Carrega os dados públicos (taxa, pStake) do **EcosystemManager (Hub)**.
+ * As funções 'minimumPStakeRequired' e 'notarizeFeeBKC' não existem mais no
+ * 'DecentralizedNotary.sol', elas foram movidas para o Hub[cite: 345].
  */
 async function loadNotaryPublicData() {
     const statsEl = document.getElementById('notary-stats-container');
     if (!statsEl) return false;
     statsEl.innerHTML = '<div class="text-center p-4"><div class="loader inline-block"></div> Loading Requirements...</div>';
 
-    if (!State.decentralizedNotaryContract) {
-        console.error("loadNotaryPublicData: State.decentralizedNotaryContract is not available.");
-        renderError(statsEl, "Notary contract instance not found.");
+    // MUDANÇA: Agora precisamos verificar o 'ecosystemManagerContract'
+    if (!State.ecosystemManagerContract) {
+        console.error("loadNotaryPublicData: State.ecosystemManagerContract is not available.");
+        renderError(statsEl, "Ecosystem Hub contract not found.");
         return false;
     }
 
     try {
-        console.log("loadNotaryPublicData: Fetching data from contract...");
-        const [minPStake, fee] = await Promise.all([
-            safeContractCall(State.decentralizedNotaryContract, 'minimumPStakeRequired', [], 0n),
-            safeContractCall(State.decentralizedNotaryContract, 'notarizeFeeBKC', [], 0n)
+        console.log("loadNotaryPublicData: Fetching data from EcosystemManager (Hub)...");
+
+        // MUDANÇA: Chamamos 'getServiceRequirements' do Hub usando a chave de serviço.
+        // Esta chave "NOTARY_SERVICE" é a mesma usada em 'notarizeDocument' no Solidity[cite: 360].
+        const [fee, minPStake] = await Promise.all([
+            safeContractCall(State.ecosystemManagerContract, 'getFee', ["NOTARY_SERVICE"], 0n), // [cite: 101, 162]
+            safeContractCall(State.ecosystemManagerContract, 'getServiceRequirements', ["NOTARY_SERVICE"], [0n, 0n]) // [cite: 99, 159]
+                .then(result => [result[0], result[1]]) // Ajusta para Promise.all
         ]);
-        console.log("loadNotaryPublicData: Data fetched:", { minPStake, fee });
 
-        State.notaryMinPStake = minPStake;
-        State.notaryFee = fee;
+        // Nota: O safeContractCall para 'getServiceRequirements' retorna um array [fee, pStake]
+        // Estamos usando 'getFee' e 'getServiceRequirements' para compatibilidade,
+        // mas 'getServiceRequirements' sozinho já resolveria. Vamos simplificar:
 
-        if (minPStake === 0n && fee === 0n) {
+        const [baseFee, pStakeRequirement] = await safeContractCall(
+            State.ecosystemManagerContract,
+            'getServiceRequirements',
+            ["NOTARY_SERVICE"], // Chave do serviço [cite: 360]
+            [0n, 0n] // Valor de fallback caso a chamada falhe
+        );
+
+        console.log("loadNotaryPublicData: Data fetched from Hub:", { baseFee, pStakeRequirement });
+
+        State.notaryMinPStake = pStakeRequirement;
+        State.notaryFee = baseFee; // Esta é a TAXA BASE (antes de descontos)
+
+        if (pStakeRequirement === 0n && baseFee === 0n) {
              console.warn("loadNotaryPublicData: Both fee and minimum pStake are 0.");
              statsEl.innerHTML = `
                 <div class="flex justify-between items-center text-sm">
-                    <span class="text-zinc-400">Registration Fee:</span>
+                    <span class="text-zinc-400">Registration Fee (Base):</span>
                     <span class="font-bold text-amber-400 text-lg">0 $BKC <i title="Value is currently 0 on-chain" class="fa-solid fa-triangle-exclamation text-yellow-500 ml-1"></i></span>
                 </div>
                 <div class="flex justify-between items-center text-sm">
@@ -135,28 +157,37 @@ async function loadNotaryPublicData() {
         } else {
              statsEl.innerHTML = `
                 <div class="flex justify-between items-center text-sm">
-                    <span class="text-zinc-400">Registration Fee:</span>
-                    <span class="font-bold text-amber-400 text-lg">${formatBigNumber(fee)} $BKC</span>
+                    <span class="text-zinc-400">Registration Fee (Base):</span>
+                    <span class="font-bold text-amber-400 text-lg">${formatBigNumber(baseFee)} $BKC</span>
                 </div>
                 <div class="flex justify-between items-center text-sm">
                     <span class="text-zinc-400">Minimum pStake Required:</span>
-                    <span class="font-bold text-purple-400 text-lg">${formatPStake(minPStake)}</span>
+                    <span class="font-bold text-purple-400 text-lg">${formatPStake(pStakeRequirement)}</span>
                 </div>
+                <p class="text-xs text-zinc-400 mt-2 text-center font-semibold">Note: Fee is the base price. Booster NFT discounts will be applied at transaction time.</p>
             `;
         }
         return true;
 
     } catch (e) {
-        console.error("Error loading notary public data:", e);
+        console.error("Error loading notary public data from Hub:", e);
         renderError(statsEl, "Failed to load notary requirements.");
         State.notaryMinPStake = undefined;
         State.notaryFee = undefined;
         return false;
     }
 }
+/**
+ * ==================================================================
+ * ======================== FIM DA CORREÇÃO 1 =========================
+ * ==================================================================
+ */
+
 
 /**
- * Atualiza o status do usuário E habilita/desabilita o botão. (Sem alterações)
+ * Atualiza o status do usuário E habilita/desabilita o botão.
+ * (Sem alterações lógicas, pois 'State.notaryFee' agora é
+ * preenchido corretamente pela função 'loadNotaryPublicData' corrigida).
  */
 function updateNotaryUserStatus() {
     const userStatusEl = document.getElementById('notary-user-status');
@@ -183,6 +214,8 @@ function updateNotaryUserStatus() {
     const meetsPStakeRequirement = userPStake >= State.notaryMinPStake;
     const hasEnoughPStake = State.notaryMinPStake === 0n || meetsPStakeRequirement;
     const needsFee = State.notaryFee > 0n;
+    // Checa se o usuário tem saldo para a TAXA BASE.
+    // O contrato vai cobrar o valor com desconto, mas isso é uma boa checagem de UI.
     const hasEnoughFee = !needsFee || userBalance >= State.notaryFee;
     const isFileUploaded = !!currentUploadedIPFS_URI;
 
@@ -199,7 +232,7 @@ function updateNotaryUserStatus() {
         <div class="flex items-center justify-between text-sm">
             <span class="text-zinc-400 flex items-center">
                 <i class="fa-solid ${hasEnoughFee ? 'fa-check-circle text-green-400' : 'fa-times-circle text-red-400'} w-5 mr-2"></i>
-                Your $BKC (${needsFee ? formatBigNumber(State.notaryFee) : '0'} needed):
+                Your $BKC (${needsFee ? formatBigNumber(State.notaryFee) : '0'} base needed):
             </span>
             <span class="font-bold ${hasEnoughFee ? 'text-green-400' : 'text-red-400'} text-base">
                 ${formatBigNumber(userBalance).toFixed(2)}
@@ -219,7 +252,7 @@ function updateNotaryUserStatus() {
      if (needsFee && !hasEnoughFee) {
           statusHTML += `
                <p class="text-xs text-red-400 mt-2 font-semibold text-center">
-                    <i class="fa-solid fa-triangle-exclamation mr-1"></i> You need at least ${formatBigNumber(State.notaryFee)} $BKC to pay the registration fee. Acquire more $BKC.
+                    <i class="fa-solid fa-triangle-exclamation mr-1"></i> You need at least ${formatBigNumber(State.notaryFee)} $BKC (base fee) to pay the registration fee. Acquire more $BKC.
                </p>
           `;
      }
@@ -314,8 +347,7 @@ async function renderMyNotarizedDocuments() {
 }
 
 /**
- * Tenta inicializar o cliente NFTStorage **SE** a biblioteca global estiver disponível.
- * Chamada única, geralmente no init da página.
+ * Tenta inicializar o cliente NFTStorage **SE** a biblioteca global estiver disponível. (Sem alterações)
  */
 function attemptNFTStorageInitialization() {
     // Só tenta se a lib parece existir E ainda não inicializamos
@@ -366,7 +398,7 @@ function attemptNFTStorageInitialization() {
 
 
 /**
- * Função que lida com o upload do arquivo para o IPFS via nft.storage. (Sem alterações lógicas)
+ * Função que lida com o upload do arquivo para o IPFS via nft.storage. (Sem alterações)
  */
 async function handleFileUpload(file) {
     // Adiciona verificação explícita no início da função
@@ -427,7 +459,12 @@ async function handleFileUpload(file) {
 
 
 /**
- * Adiciona listeners para a página de Cartório. (Sem alterações lógicas)
+ * ==================================================================
+ * ======================= INÍCIO DA CORREÇÃO 2 =======================
+ * ==================================================================
+ * * Adiciona listeners para a página de Cartório.
+ * A função de contrato 'notarizeDocument' agora espera o '_boosterTokenId'
+ * em vez da taxa[cite: 358].
  */
 function initNotaryListeners() {
     const fileInput = document.getElementById('notary-file-upload');
@@ -465,14 +502,23 @@ function initNotaryListeners() {
             const userPStake = State.userTotalPStake || 0n;
             const userBalance = State.currentUserBalance || 0n;
             const hasEnoughPStake = State.notaryMinPStake === 0n || userPStake >= State.notaryMinPStake;
+            // Checa contra a taxa BASE. Se o usuário tiver, ele tem o suficiente (pois o desconto só diminui a taxa)
             const hasEnoughFee = State.notaryFee === 0n || userBalance >= State.notaryFee;
 
             if (!hasEnoughPStake) return showToast("Insufficient pStake.", "error");
-            if (!hasEnoughFee) return showToast("Insufficient $BKC balance for fee.", "error");
+            if (!hasEnoughFee) return showToast("Insufficient $BKC balance for base fee.", "error");
 
+            // MUDANÇA: Obter o Booster ID do Estado Global.
+            // (Você deve garantir que 'State.userBoosterId' seja carregado quando
+            // o usuário conecta a carteira, lendo o contrato RewardBoosterNFT).
+            const boosterId = State.userBoosterId || 0n; // Use 0n se nenhum booster for encontrado
+
+            // MUDANÇA: A função 'executeNotarizeDocument' (do seu arquivo transactions.js)
+            // deve ser atualizada para aceitar 'boosterId' como segundo argumento,
+            // em vez de 'State.notaryFee'.
             const success = await executeNotarizeDocument(
                 currentUploadedIPFS_URI,
-                State.notaryFee,
+                boosterId, // <-- NOVO PARÂMETRO (em vez de State.notaryFee) [cite: 358]
                 submitBtn
             );
 
@@ -487,12 +533,20 @@ function initNotaryListeners() {
                 statusEl.classList.add('hidden');
                 statusEl.innerHTML = '';
 
+                // Recarrega os documentos do usuário e atualiza o status
                 await renderMyNotarizedDocuments();
+                // Opcional: Recarregar dados do usuário (saldo)
+                // await loadUserData(); 
                 updateNotaryUserStatus();
             }
         });
     }
 }
+/**
+ * ==================================================================
+ * ======================== FIM DA CORREÇÃO 2 =========================
+ * ==================================================================
+ */
 
 
 export const NotaryPage = {
@@ -503,15 +557,18 @@ export const NotaryPage = {
         // Tenta inicializar a lib AGORA, antes de carregar dados
         attemptNFTStorageInitialization();
 
+        // MUDANÇA: Esta função agora consulta o Hub
         const loadedPublicData = await loadNotaryPublicData();
 
         if (State.isConnected && loadedPublicData) {
             updateNotaryUserStatus();
             await renderMyNotarizedDocuments();
         } else {
+             // Se os dados públicos não carregaram, atualiza o status para refletir isso
              this.update(State.isConnected);
         }
 
+        // MUDANÇA: Esta função agora passa o boosterId
         initNotaryListeners();
 
         // Mostra erro da lib se necessário APÓS renderizar tudo E se a tentativa falhou
@@ -554,6 +611,7 @@ export const NotaryPage = {
         // Tenta inicializar a lib se ainda não foi
         if (!isNFTStorageInitialized) attemptNFTStorageInitialization();
 
+        // MUDANÇA: Esta função agora consulta o Hub
         const loadedPublicData = await loadNotaryPublicData();
 
         if (isConnected && loadedPublicData) {
@@ -568,12 +626,14 @@ export const NotaryPage = {
              if(docsEl) renderNoData(docsEl, "Connect your wallet to view your documents.");
              if(submitBtn) { submitBtn.classList.add('btn-disabled'); submitBtn.disabled = true; }
 
+             // Limpa o estado de upload se desconectado
              currentFileToUpload = null; currentUploadedIPFS_URI = null;
               const uploadPromptEl = document.getElementById('notary-upload-prompt');
               const uploadStatusEl = document.getElementById('notary-upload-status');
               if(uploadPromptEl) uploadPromptEl.classList.remove('hidden');
               if(uploadStatusEl) { uploadStatusEl.classList.add('hidden'); uploadStatusEl.innerHTML = ''; }
         }
+
          // Garante que a UI de erro/desabilitado do upload seja atualizada
          const libErrorEl = document.getElementById('notary-lib-error');
          const dropzone = document.getElementById('notary-file-dropzone');
@@ -583,6 +643,7 @@ export const NotaryPage = {
              dropzone.classList.add('cursor-not-allowed', 'opacity-50');
              fileInput.disabled = true;
          } else if (isNFTStorageInitialized && libErrorEl && dropzone && fileInput) {
+             // Se foi inicializado com sucesso, garante que o erro está escondido
              libErrorEl.classList.add('hidden');
              dropzone.classList.remove('cursor-not-allowed', 'opacity-50');
              fileInput.disabled = false;

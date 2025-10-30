@@ -6,19 +6,112 @@ import { State } from '../state.js';
 import { showToast } from '../ui-feedback.js';
 import { addresses, publicSaleABI } from '../config.js';
 
-// --- V8.8 (User Request): Revolutionary Features & Enthusiast Developer Narrative ---
-// --- V8.9 (User Request): Changed #advantage section ID to #decentralized-notary and removed footer ---
-
+// --- CONFIGURAÇÃO (ATUALIZADA com texto do timer em INGLÊS) ---
 const PRESALE_CONFIG = {
     countdownDate: "2025-11-20T23:59:59",
     nftTiers: [
-        { id: 0, name: "Diamond", boost: "+50%", price: "7.20 BNB", discountedPrice: "3.60 BNB", img: "ipfs://bafybeign2k73pq5pdicg2v2jdgumavw6kjmc4nremdenzvq27ngtcusv5i", color: "text-cyan-400" },
-        { id: 1, name: "Platinum", boost: "+40%", price: "2.88 BNB", discountedPrice: "1.44 BNB", img: "ipfs://bafybeiag32gp4wssbjbpxjwxewer64fecrtjryhmnhhevgec74p4ltzrau", color: "text-gray-300" },
-        { id: 2, name: "Gold", boost: "+30%", price: "1.08 BNB", discountedPrice: "0.54 BNB", img: "ipfs://bafybeido6ah36xn4rpzkvl5avicjzf225ndborvx726sjzpzbpvoogntem", color: "text-amber-400" },
-        { id: 3, name: "Silver", boost: "+20%", price: "0.54 BNB", discountedPrice: "0.27 BNB", img: "ipfs://bafybeiaktaw4op7zrvsiyx2sghphrgm6sej6xw362mxgu326ahljjyu3gu", color: "text-gray-400" },
-        { id: 4, name: "Bronze", boost: "+10%", price: "0.288 BNB", discountedPrice: "0.144 BNB", img: "ipfs://bafybeifkke3zepb4hjutntcv6vor7t2e4k5oseaur54v5zsectcepgseye", color: "text-yellow-600" },
-        { id: 5, name: "Iron", boost: "+5%", price: "0.14 BNB", discountedPrice: "0.07 BNB", img: "ipfs://bafybeidta4mytpfqtnnrspzij63m4lcnkp6l42m7hnhyjxioci5jhcf3vm", color: "text-slate-500" },
-        { id: 6, name: "Crystal", boost: "+1%", price: "0.02 BNB", discountedPrice: "0.01 BNB", img: "ipfs://bafybeiela7zrsnyva47pymhmnr6dj2aurrkwxhpwo7eaasx3t24y6n3aay", color: "text-indigo-300" }
+        { 
+            id: 0, 
+            name: "Diamond", 
+            boost: "+50%", 
+            price: "7.20 BNB", 
+            discountedPrice: "3.60 BNB", 
+            img: "ipfs://bafybeign2k73pq5pdicg2v2jdgumavw6kjmc4nremdenzvq27ngtcusv5i", 
+            color: "text-cyan-400", 
+            advantages: [
+                "50% Max Reward Boost (Permanent) for Staking and PoP Mining.",
+                "Maximum Fee Reduction across the entire Backchain ecosystem.",
+                "Guaranteed instant auto-sale with the highest $BKC price (24/7 Liquidity).",
+                "NFT Floor Value Appreciation with every ecosystem transaction.",
+                "Priority Access to Beta Features."
+            ] 
+        },
+        { 
+            id: 1, 
+            name: "Platinum", 
+            boost: "40%", 
+            price: "2.88 BNB", 
+            discountedPrice: "1.44 BNB", 
+            img: "ipfs://bafybeiag32gp4wssbjbpxjwxewer64fecrtjryhmnhhevgec74p4ltzrau", 
+            color: "text-gray-300", 
+            advantages: [
+                "40% Max Reward Boost for Staking and PoP Mining.",
+                "High Fee Reduction on services and campaigns.",
+                "Guaranteed instant auto-sale in the dedicated AMM Pool (24/7 Liquidity).",
+                "NFT Floor Value Appreciation with every ecosystem transaction.",
+                "Early Access to Key Features."
+            ] 
+        },
+        { 
+            id: 2, 
+            name: "Gold", 
+            boost: "30%", 
+            price: "1.08 BNB", 
+            discountedPrice: "0.54 BNB", 
+            img: "ipfs://bafybeido6ah36xn4rpzkvl5avicjzf225ndborvx726sjzpzbpvoogntem", 
+            color: "text-amber-400", 
+            advantages: [
+                "30% Solid Reward Boost for Staking and PoP Mining.",
+                "Moderate Ecosystem Fee Reduction.",
+                "Guaranteed instant auto-sale (24/7 Liquidity).",
+                "NFT Floor Value Appreciation with every ecosystem transaction.",
+                "Guaranteed Liquidity Access."
+            ] 
+        },
+        { 
+            id: 3, 
+            name: "Silver", 
+            boost: "20%", 
+            price: "0.54 BNB", 
+            discountedPrice: "0.27 BNB", 
+            img: "ipfs://bafybeiaktaw4op7zrvsiyx2sghphrgm6sej6xw362mxgu326ahljjyu3gu", 
+            color: "text-gray-400", 
+            advantages: [
+                "20% Good Reward Boost for Staking and PoP Mining.",
+                "Basic Ecosystem Fee Reduction.",
+                "Guaranteed instant auto-sale (24/7 Liquidity).",
+                "NFT Floor Value Appreciation with every ecosystem transaction."
+            ] 
+        },
+        { 
+            id: 4, 
+            name: "Bronze", 
+            boost: "10%", 
+            price: "0.288 BNB", 
+            discountedPrice: "0.144 BNB", 
+            img: "ipfs://bafybeifkke3zepb4hjutntcv6vor7t2e4k5oseaur54v5zsectcepgseye", 
+            color: "text-yellow-600", 
+            advantages: [
+                "10% Standard Reward Boost for Staking and PoP Mining.",
+                "Access to the Liquidity Pool for Instant Sale.",
+                "NFT Floor Value Appreciation."
+            ] 
+        },
+        { 
+            id: 5, 
+            name: "Iron", 
+            boost: "5%", 
+            price: "0.14 BNB", 
+            discountedPrice: "0.07 BNB", 
+            img: "ipfs://bafybeidta4mytpfqtnnrspzij63m4lcnkp6l42m7hnhyjxioci5jhcf3vm", 
+            color: "text-slate-500", 
+            advantages: [
+                "5% Entry Reward Boost for Staking and PoP Mining.",
+                "Access to the Liquidity Pool for Instant Sale."
+            ] 
+        },
+        { 
+            id: 6, 
+            name: "Crystal", 
+            boost: "1%", 
+            price: "0.02 BNB", 
+            discountedPrice: "0.01 BNB", 
+            img: "ipfs://bafybeiela7zrsnyva47pymhmnr6dj2aurrkwxhpwo7eaasx3t24y6n3aay", 
+            color: "text-indigo-300", 
+            advantages: [
+                "1% Minimal Reward Boost for Staking and PoP Mining."
+            ] 
+        }
     ],
     translations: {
         en: {
@@ -26,76 +119,38 @@ const PRESALE_CONFIG = {
             soldOut: "Sale Error. Please try again later.", 
             txPending: "Awaiting confirmation...", txSuccess: "Purchase successful!", txError: "Transaction Error:", buyAlert: "Please connect your wallet first.", saleContractNotConfigured: "Sale contract address not configured.", invalidQuantity: "Please select a valid quantity (1 or more).", txRejected: "Transaction rejected.",
             
-            heroTitle1: "This is Not Just Another Project.",
-            heroTitle2: `This is the Backchain Revolution.`, 
-            heroSubtitle: `Built by a passionate group of crypto developers over <strong>thousands of hours</strong>, Backchain is a <strong>revolutionary decentralized ecosystem</strong> for the $BKC utility token. We are self-funded (No VCs, No team tokens) and <strong>100% of this sale funds liquidity and marketing</strong>. This is your chance to acquire a <strong>rare item with guaranteed value</strong> and join a project with features never seen in crypto. Don't be left out.`,
-            heroBtn1: "Join the Revolution (50% OFF)",
-            heroBtn2: "What is 'Guaranteed Liquidity'?",
+            heroTitle1: "Secure Your Utility.",
+            heroTitle2: `50% OFF Booster Sale.`, 
+            heroSubtitle: `The Booster NFT is a one-time item that guarantees permanent utility within the Backchain ecosystem. Acquire yours at a 50% discount during Batch 1.`,
+            heroBtn1: "View Sale",
+            heroBtn2: "Core Benefits",
             
             heroStockBar: "Batch 1 Progress:", 
-            liquidityTag: "THE END OF 'STUCK' NFTS",
-            liquidityTitle: "Guaranteed Immediate Liquidity.",
-            liquiditySubtitle: `We built a dedicated AMM Liquidity Pool for the Booster NFT. You can <strong>sell yours at any time</strong> for $BKC at a <strong>dynamic price</strong>, based on supply and demand. Real utility, real liquidity.`,
-            
-            liquidityCol1Title: "The Old Way (Slow & Risky)",
-            liquidityCol1Desc: "List on a public marketplace, <strong>wait for a buyer</strong>, and pay high platform fees (5-10%) + royalties just to sell.",
-            liquidityCol2Title: "The Backchain Way (Instant & Fair)",
-            liquidityCol2Desc: "Sell <strong>instantly</strong>, 24/7, directly to our AMM pool with a low, predictable ecosystem fee. No waiting, no haggling.",
-            
-            advantageTag: "A TRULY REVOLUTIONARY ECOSYSTEM",
-            advantageTitle: "Pioneering Decentralized Features.",
-            advantageSubtitle: `The $BKC ecosystem is already live with features you won't find anywhere else. Your Booster NFT is the key to maximizing all of them.`,
-            advantage1Title: "Decentralized Notary",
-            advantage1Desc: "A first-in-crypto feature. Anyone can register documents on the blockchain, decentralized and immutable, creating irrefutable proof of existence.",
-            advantage2Title: "Decentralized Campaigns",
-            advantage2Desc: "Create or join sports and lottery campaigns. A 100% decentralized and <strong>fraud-proof 'Tigrinho'</strong> where $BKC is the prize, and the draw is fully automated by smart contract.",
-            advantage3Title: "Charitable Campaigns",
-            advantage3Desc: "Launch or fund transparent, decentralized fundraising campaigns for social causes, ensuring trust and traceability of every donation.",
-            advantage4Title: "Your Rare NFT (Guaranteed Value)",
-            advantage4Desc: `After this presale, minting is <strong>permanently disabled</strong>. This one-time item (scarcity) has <strong>guaranteed $BKC value appreciation</strong> built into its dedicated liquidity pool.`,
 
+            keyBenefitsTag: "MAXIMIZE YOUR RETURN",
+            keyBenefitsTitle: "Instant Utility & Guaranteed Value.",
+            keyBenefitsSubtitle: "Your Booster NFT is the key to maximizing rewards and enjoying unparalleled stability in the ecosystem.",
+            keyBenefit1Title: "Reward Multiplier",
+            keyBenefit1Desc: "Permanently boost your $BKC earning rate from staking and PoP mining (up to +50%). *All Tiers*",
+            keyBenefit2Title: "Guaranteed Liquidity",
+            keyBenefit2Desc: "Sell instantly 24/7 back to the dedicated AMM pool for a dynamic $BKC price. No marketplace waiting. *Tiers Gold and above*",
+            keyBenefit3Title: "Fee Reduction",
+            keyBenefit3Desc: "Reduce service fees across the entire ecosystem, including the decentralized notary and campaigns. *Tiers Silver and above*",
+            keyBenefit4Title: "Value Appreciation",
+            keyBenefit4Desc: "A portion of every NFT trade constantly raises the NFT's intrinsic floor value in the liquidity pool, benefiting all holders. *Tiers Bronze and above*",
+            
             saleTag: "BATCH 1: 50% DISCOUNT",
             saleTitle: "Choose Your Power",
-            saleTimerTitle: "Batch 1 (50% OFF) Ends In:",
-            countdownDays: "Days", countdownHours: "Hrs", countdownMinutes: "Mins",
+            saleTimerTitle: "Time Remaining Until Batch 2 Price (50% Increase):", // <<< TEXTO CORRIGIDO AQUI
+            countdownDays: "D", countdownHours: "H", countdownMinutes: "M", countdownSeconds: "S",
             cardPriceBatch2: "Batch 2 Price:",
             cardPriceBatch1: "Batch 1 (50% OFF):",
             cardQuantityLabel: "Quantity:", 
             
-            cardAdvTitle: "Core Advantages:",
-            cardAdv1: "<strong>Multiplies Stake/PoP Rewards</strong>",
-            cardAdv2: "<strong>Reduces Ecosystem Service Fees</strong>",
-            cardAdv3: "Guaranteed Immediate Pool Liquidity",
-            cardAdv4: "<strong>Rare & Fundamental</strong> ecosystem key",
-            cardAdv5: "<strong>Guaranteed $BKC Value</strong>: A fee from every trade feeds the pool, constantly raising the NFT's floor price.",
-            
+            cardAdvTitle: "Booster Advantages:",
             cardBtnConnect: "Connect Wallet to Buy",
             cardBtnBuy: "Acquire Now",
             anchorBtn: "Secure Your NFT",
-            fundingTag: "100% TRANSPARENT FUNDING",
-            fundingTitle: "100% Focused on Launch.",
-            fundingSubtitle: "All funds from this presale (Batch 1) are used <strong>exclusively</strong> for initial liquidity and marketing.",
-            funding1Title: "Guaranteed Liquidity",
-            funding1Desc: "A large portion goes <strong>directly</strong> into the $BKC and Booster NFT Liquidity Pools, guaranteeing stability and value for <strong>your item</strong> from Day 1.",
-            funding2Title: "Strategic Marketing",
-            funding2Desc: `Funds to attract thousands of new users. More users = more transactions = <strong>higher demand for the Boosters.</strong>`,
-            funding3Title: "Fair Launch Commitment",
-            funding3Desc: "No VCs. No private allocations. This sale funds a truly community-driven and fair launch.",
-            
-            roadmapTag: "OUR FLIGHT PLAN", 
-            roadmapTitle: "Building the Future, Together.",
-            roadmapSubtitle: "The future is promising for $BKC, don't be left out. This presale is just the beginning...",
-            
-            roadmap1Title: "<i class='fa-solid fa-check-circle mr-3'></i>Phase 1: Foundation (Completed)",
-            roadmap1Desc: "Core smart contracts developed, audited, and rigorously tested.",
-            roadmap2Title: "<i class='fa-solid fa-rocket mr-3'></i>Phase 2: Launch & Liquidity (You Are Here)",
-            roadmap2Desc: "NFT Presale funds liquidity & marketing. $BKC token and dApp launch on Mainnet.",
-            roadmap3Title: "<i class='fa-solid fa-satellite-dish mr-3'></i>Phase 3: Ecosystem Expansion",
-            roadmap3Desc: "Launch Community Actions, integrate partners, pursue major exchange listings.",
-            roadmap4Title: "<i class='fa-solid fa-landmark-flag mr-3'></i>Phase 4: True Decentralization",
-            roadmap4Desc: "Full DAO implementation, handing over protocol governance to the $BKC holders.",
-            
-            // footerText removido
         }
     }
 };
@@ -105,10 +160,9 @@ let countdownInterval = null;
 let hasRendered = false;
 let hasInitialized = false;
 
-// --- Funções de Página (Lógica V8.2 - Preço no botão restaurado) ---
+// --- Funções de Lógica e UI (Mantidas) ---
 
 function setLanguage(lang = 'en') {
-    // Força 'en' já que é a única língua
     currentLang = 'en';
     const translation = PRESALE_CONFIG.translations.en;
     
@@ -117,7 +171,6 @@ function setLanguage(lang = 'en') {
         if (translation[key]) {
              el.innerHTML = translation[key];
         } else if (!el.dataset.dynamicContent) {
-            // Mantém original se não for dinâmico e não tiver tradução
         }
     });
     document.querySelectorAll('#presale .nft-card').forEach(card => {
@@ -131,9 +184,12 @@ function updateBuyButtonsState(isConnected) {
     document.querySelectorAll('#presale .buy-button').forEach(button => {
         const card = button.closest('.nft-card');
         if (!card) return;
+        
         button.disabled = !isConnected;
+        
         if (!isConnected) {
             button.innerHTML = `<i class='fa-solid fa-wallet mr-2'></i> ${translation.cardBtnConnect || "Connect Wallet"}`;
+            button.removeAttribute('data-dynamic-content'); 
         } else {
             updateTotalPrice(card);
         }
@@ -144,6 +200,7 @@ function updateTotalPrice(card) {
     const quantityInput = card.querySelector('.quantity-input');
     const buyButton = card.querySelector('.buy-button');
     if (!buyButton || !quantityInput) return;
+    
     if (!State.isConnected) return; 
 
     const priceString = buyButton.dataset.price;
@@ -151,9 +208,12 @@ function updateTotalPrice(card) {
     const translation = PRESALE_CONFIG.translations.en;
 
     if (isNaN(quantity) || quantity <= 0) {
-        buyButton.innerHTML = `<i class='fa-solid fa-warning mr-2'></i> Inválido`;
+        buyButton.disabled = true;
+        buyButton.innerHTML = `<i class='fa-solid fa-warning mr-2'></i> ${translation.invalidQuantity || "Inválido"}`;
         buyButton.dataset.dynamicContent = "true";
         return;
+    } else {
+        buyButton.disabled = false;
     }
 
     const pricePerItem = parseFloat(priceString.split(" ")[0]);
@@ -178,13 +238,13 @@ async function handleBuyNFT(button) {
     
     const tierId = button.dataset.tierId;
     const priceString = button.dataset.price; 
-    const originalButtonHTML = button.innerHTML; 
     
     try {
         button.disabled = true;
         button.innerHTML = `<span class="loader !border-t-black mr-2"></span> ${translations.txPending}`;
         
-        const pricePerItem = ethers.parseUnits(priceString.split(" ")[0], 18);
+        const discountedPriceString = PRESALE_CONFIG.nftTiers.find(t => t.id == tierId)?.discountedPrice || priceString;
+        const pricePerItem = ethers.parseUnits(discountedPriceString.split(" ")[0], 18);
         const totalPrice = pricePerItem * BigInt(quantity);
         
         const saleContract = new ethers.Contract(addresses.publicSale, publicSaleABI, State.signer);
@@ -213,49 +273,53 @@ async function handleBuyNFT(button) {
 }
 
 function setupCountdown() {
-    // ... (Esta função permanece inalterada) ...
     if (countdownInterval) clearInterval(countdownInterval);
     const countdownDate = new Date(PRESALE_CONFIG.countdownDate).getTime();
     const daysEl = document.getElementById('days');
     const hoursEl = document.getElementById('hours');
     const minutesEl = document.getElementById('minutes');
-    if (!daysEl || !hoursEl || !minutesEl) { console.warn("Countdown elements not found in #sale section."); return; }
+    const secondsEl = document.getElementById('seconds');
+    
+    if (!daysEl || !hoursEl || !minutesEl || !secondsEl) { console.warn("Countdown elements not found in #sale section."); return; }
+    
     const update = () => {
         const now = new Date().getTime();
         const distance = countdownDate - now;
+        
         if (distance < 0) {
             clearInterval(countdownInterval);
             const container = document.getElementById('countdown-container');
-            // Manteve o texto original em PT, vamos trocar para EN
-            if(container) container.innerHTML = `<p class="text-2xl font-bold text-red-500">SALE ENDED!</p>`;
+            if(container) container.innerHTML = `<p class="text-3xl font-bold text-red-500">SALE ENDED!</p>`;
             return;
         }
-        const d = String(Math.floor(distance / 86400000)).padStart(2, '0');
-        const h = String(Math.floor((distance % 86400000) / 3600000)).padStart(2, '0');
+        
+        const s = String(Math.floor((distance % 60000) / 1000)).padStart(2, '0');
         const m = String(Math.floor((distance % 3600000) / 60000)).padStart(2, '0');
+        const h = String(Math.floor((distance % 86400000) / 3600000)).padStart(2, '0');
+        const d = String(Math.floor(distance / 86400000)).padStart(2, '0');
+        
         daysEl.textContent = d; daysEl.dataset.dynamicContent = "true";
         hoursEl.textContent = h; hoursEl.dataset.dynamicContent = "true";
         minutesEl.textContent = m; minutesEl.dataset.dynamicContent = "true";
+        secondsEl.textContent = s; secondsEl.dataset.dynamicContent = "true";
     };
     update();
     countdownInterval = setInterval(update, 1000);
 }
 
 function setupScrollAnimations() {
-    // ... (Esta função permanece inalterada) ...
-    if (!('IntersectionObserver' in window)) {
-         document.querySelectorAll('#presale .fade-in-section, #presale .roadmap-item').forEach(section => { section.classList.add('is-visible'); }); return;
-    }
-    const observer = new IntersectionObserver((entries) => {
-        entries.forEach(entry => { if (entry.isIntersecting) { entry.target.classList.add('is-visible'); observer.unobserve(entry.target); } });
-    }, { threshold: 0.15 });
-    document.querySelectorAll('#presale .fade-in-section, #presale .roadmap-item').forEach(section => { observer.observe(section); });
+    // CORREÇÃO: Remove a lógica de IntersectionObserver para garantir que o conteúdo seja visível.
+    // Se a classe CSS 'fade-in-section' está causando opacidade zero ou translação,
+    // o conteúdo não aparecerá. Vamos apenas ignorar a animação aqui.
+    document.querySelectorAll('#presale .fade-in-section').forEach(section => { 
+        section.classList.add('is-visible'); 
+        // Se a classe 'is-visible' não existir, é melhor não fazer nada
+        // Mas se houver uma classe 'fade-out' ou 'opacity-0' na seção, ela deve ser removida no CSS base.
+    });
 }
 
 
-// --- Render Marketplace (V8.2 - HTML Limpo) ---
 function renderMarketplace() {
-    // ... (Esta função permanece inalterada) ...
     const grid = document.getElementById('marketplace-grid');
     if (!grid) return;
 
@@ -268,31 +332,37 @@ function renderMarketplace() {
     };
 
     grid.innerHTML = PRESALE_CONFIG.nftTiers.map(tier => `
-        <div class="bg-presale-bg-card border border-presale-border-color rounded-xl flex flex-col nft-card group overflow-hidden" data-tier-id="${tier.id}">
-            <div class="w-full h-48 overflow-hidden bg-presale-bg-darker">
-                <img src="${getHttpUrl(tier.img)}" alt="${tier.name}" class="w-full h-full object-cover nft-card-image"/>
-            </div>
-            <div class="p-4 flex flex-col flex-1">
-                <h3 class="text-2xl font-bold ${tier.color}">${tier.name}</h3>
-                <p class="text-3xl font-bold text-green-400 mb-4">${tier.boost}</p>
-                <div class="w-full text-left bg-presale-bg-main p-4 rounded-lg my-2">
-                    <p class="text-sm font-bold text-amber-400 mb-2" data-translate="cardAdvTitle"></p>
-                    
-                    <ul class="space-y-2 text-sm list-none list-inside text-text-secondary">
-                        <li class="flex items-center gap-2"><i class="fa-solid fa-star text-amber-400 w-4 text-center"></i><span data-translate="cardAdv1"></span></li>
-                        <li class="flex items-center gap-2"><i class="fa-solid fa-star text-amber-400 w-4 text-center"></i><span data-translate="cardAdv2"></span></li>
-                        <li class="flex items-center gap-2"><i class="fa-solid fa-check text-green-500 w-4 text-center"></i><span data-translate="cardAdv3"></span></li>
-                        <li class="flex items-center gap-2"><i class="fa-solid fa-gem text-cyan-400 w-4 text-center"></i><span data-translate="cardAdv4"></span></li>
-                        <li class="flex items-center gap-2"><i class="fa-solid fa-arrow-trend-up text-green-400 w-4 text-center"></i><span data-translate="cardAdv5"></span></li>
-                    </ul>
-                    
+        <div class="bg-presale-bg-card border border-presale-border-color rounded-xl flex flex-col nft-card group overflow-hidden shadow-xl hover:shadow-amber-500/30 transition-shadow duration-300" data-tier-id="${tier.id}">
+            
+            <div class="w-full h-48 overflow-hidden bg-presale-bg-darker relative">
+                <img src="${getHttpUrl(tier.img)}" alt="${tier.name}" class="w-full h-full object-cover nft-card-image transition-transform duration-500 group-hover:scale-105"/>
+                <div class="absolute inset-0 bg-black/40 flex items-center justify-center">
+                    <h3 class="text-3xl font-black ${tier.color} drop-shadow-lg">${tier.name}</h3>
                 </div>
-                <div class="w-full bg-presale-bg-main p-3 rounded-lg text-center my-2">
+            </div>
+            
+            <div class="p-4 flex flex-col flex-1">
+                <p class="text-4xl font-extrabold text-green-400 mb-4">${tier.boost}</p>
+                
+                <div class="w-full text-left bg-zinc-800 p-3 rounded-lg my-2 flex-1">
+                    <p class="text-sm font-bold text-amber-400 mb-2 uppercase" data-translate="cardAdvTitle"></p>
+                    
+                    <ul class="space-y-1.5 text-sm list-none list-inside text-text-primary">
+                        ${tier.advantages.map(adv => `
+                            <li class="flex items-start gap-2">
+                                <i class="fa-solid fa-check-circle text-xs text-green-500 mt-1 flex-shrink-0"></i>
+                                <span>${adv}</span>
+                            </li>
+                        `).join('')}
+                    </ul>
+                </div>
+                
+                <div class="w-full bg-presale-bg-main p-3 rounded-lg text-center my-3">
                     <p class="text-sm text-text-secondary line-through">
                         <span data-translate="cardPriceBatch2"></span> ${tier.price}
                     </p>
-                    <p class="font-bold text-2xl text-green-400">${tier.discountedPrice}</p>
-                    <p class="text-xs font-bold text-amber-400" data-translate="cardPriceBatch1"></p>
+                    <p class="font-bold text-3xl text-red-500">${tier.discountedPrice}</p>
+                    <p class="text-xs font-bold text-amber-400 mt-1" data-translate="cardPriceBatch1"></p>
                 </div>
 
                 <div class="my-3 w-full">
@@ -304,7 +374,7 @@ function renderMarketplace() {
                     </div>
                 </div>
 
-                <button class="w-full btn-primary font-bold py-2.5 px-4 rounded-md buy-button mt-auto" disabled data-translate="cardBtnConnect" data-tier-id="${tier.id}" data-price="${tier.discountedPrice}">
+                <button class="w-full btn-primary font-bold py-3 px-4 rounded-lg buy-button mt-auto shadow-md" disabled data-translate="cardBtnConnect" data-tier-id="${tier.id}" data-price="${tier.discountedPrice}">
                     Connect Wallet to Buy
                 </button>
             </div>
@@ -316,16 +386,13 @@ function renderMarketplace() {
 // --- Exported Page Object ---
 
 export const PresalePage = {
-    // --- render() (HTML V8.3 - Limpo, Default 'en') ---
+    // --- render() (HTML COM CORES DE FUNDO EXPLÍCITAS E ANIMAÇÃO REMOVIDA) ---
     render: () => {
-        if (hasRendered) {
-            PresalePage.update(State.isConnected);
-            return;
-        }
-
+        // CORREÇÃO: Força a renderização completa na primeira vez.
         const html = `
             <main id="presale-content" class="relative pb-20">
-                <section class="relative text-center py-24 lg:py-40 px-4 overflow-hidden" style="background-color: var(--presale-bg-darker);">
+                
+                <section class="relative text-center py-24 lg:py-32 px-4 overflow-hidden" style="background-color: var(--presale-bg-darker);">
                    <div class="absolute inset-0 bg-gradient-to-b from-presale-bg-darker via-presale-bg-darker/80 to-transparent z-0"></div>
                    <div class="relative z-10">
                        <h1 class="text-5xl md:text-7xl font-black mb-6 tracking-tighter leading-tight">
@@ -337,10 +404,10 @@ export const PresalePage = {
                            <a href="#sale" class="w-full sm:w-auto inline-block btn-primary font-bold py-4 px-10 rounded-lg text-lg transform hover:scale-105 transition-transform">
                                <i class="fa-solid fa-tags mr-2"></i> <span data-translate="heroBtn1"></span>
                            </a>
-                           <a href="#liquidity" class="w-full sm:w-auto inline-block bg-transparent border-2 border-presale-border-color hover:bg-presale-bg-card text-text-primary font-bold py-4 px-10 rounded-lg text-lg transition-colors" data-translate="heroBtn2">
+                           <a href="#key-benefits-section" class="w-full sm:w-auto inline-block bg-transparent border-2 border-presale-border-color hover:bg-presale-bg-card text-text-primary font-bold py-4 px-10 rounded-lg text-lg transition-colors" data-translate="heroBtn2">
                            </a>
                        </div>
-                       <div class="max-w-xl mx-auto mt-10 fade-in-section">
+                       <div class="max-w-xl mx-auto mt-10">
                             <p class="font-bold text-lg mb-3 text-red-400" data-translate="heroStockBar"></p>
                             <div class="w-full bg-presale-bg-card border border-presale-border-color rounded-full h-4 overflow-hidden">
                                <div id="presale-progress-bar" class="bg-gradient-to-r from-red-500 to-amber-500 h-4" style="width: 10%;"></div>
@@ -348,136 +415,59 @@ export const PresalePage = {
                        </div>
                    </div>
                 </section>
-
-                <section id="liquidity" class="py-20 lg:py-28 px-4 fade-in-section" style="background-color: var(--presale-bg-darker);">
-                    <div class="container mx-auto max-w-6xl">
+                
+                <section id="key-benefits-section" class="py-20 lg:py-28 px-4" style="background-color: var(--presale-bg-darker);">
+                    <div class="container mx-auto max-w-7xl">
                         <div class="text-center mb-16">
-                            <span class="text-sm font-bold text-cyan-400 tracking-widest" data-translate="liquidityTag"></span>
-                            <h2 class="text-4xl md:text-5xl font-bold my-4" data-translate="liquidityTitle"></h2>
-                            <p class="text-lg text-text-secondary max-w-3xl mx-auto" data-translate="liquiditySubtitle"></p>
-                        </div>
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
-                            <div class="p-8 bg-presale-bg-card rounded-lg border-2 border-red-800/50 text-center opacity-70">
-                                <i class="fa-solid fa-hourglass-end text-5xl text-red-400 mb-6"></i>
-                                <h3 class="text-2xl font-bold mb-3" data-translate="liquidityCol1Title"></h3>
-                                <p class="text-text-secondary text-lg" data-translate="liquidityCol1Desc"></p>
-                            </div>
-                            <div class="p-8 bg-presale-bg-card rounded-lg border-2 border-green-500/50 text-center transform md:scale-105 relative">
-                                 <div class="absolute -top-3 -right-3 px-3 py-1 bg-green-500 text-black text-sm font-bold rounded-full uppercase shadow-lg">Guaranteed</div>
-                                <i class="fa-solid fa-rocket text-5xl text-green-400 mb-6"></i>
-                                <h3 class="text-2xl font-bold mb-3" data-translate="liquidityCol2Title"></h3>
-                                <p class="text-text-secondary text-lg" data-translate="liquidityCol2Desc"></p>
-                            </div>
-                        </div>
-                    </div>
-                </section>
-
-                <section id="decentralized-notary" class="py-20 lg:py-28 px-4 fade-in-section">
-                <div class="container mx-auto max-w-7xl">
-                        <div class="text-center mb-16">
-                            <span class="text-sm font-bold text-cyan-400 tracking-widest" data-translate="advantageTag"></span>
-                            <h2 class="text-4xl md:text-5xl font-bold my-4" data-translate="advantageTitle"></h2>
-                            <p class="text-lg text-text-secondary max-w-3xl mx-auto" data-translate="advantageSubtitle"></p>
+                            <span class="text-sm font-bold text-cyan-400 tracking-widest" data-translate="keyBenefitsTag"></span>
+                            <h2 class="text-4xl md:text-5xl font-bold my-4" data-translate="keyBenefitsTitle"></h2>
+                            <p class="text-lg text-text-secondary max-w-3xl mx-auto" data-translate="keyBenefitsSubtitle"></p>
                         </div>
                         
                         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
-                            <div class="p-8 bg-presale-bg-card rounded-lg border border-presale-border-color transform hover:-translate-y-2 transition-transform duration-300">
-                                <i class="fa-solid fa-file-signature text-4xl text-blue-400 mb-5"></i>
-                                <h3 class="text-2xl font-bold mb-3" data-translate="advantage1Title"></h3>
-                                <p class="text-text-secondary" data-translate="advantage1Desc"></p>
+                            <div class="p-6 bg-presale-bg-card rounded-lg border border-presale-border-color text-center transform hover:scale-[1.03] transition-transform duration-300">
+                                <i class="fa-solid fa-ranking-star text-4xl text-green-400 mb-4"></i>
+                                <h3 class="text-xl font-bold mb-2" data-translate="keyBenefit1Title"></h3>
+                                <p class="text-text-secondary text-sm" data-translate="keyBenefit1Desc"></p>
                             </div>
-                            <div class="p-8 bg-presale-bg-card rounded-lg border border-presale-border-color transform hover:-translate-y-2 transition-transform duration-300">
-                                <i class="fa-solid fa-trophy text-4xl text-amber-400 mb-5"></i>
-                                <h3 class="text-2xl font-bold mb-3" data-translate="advantage2Title"></h3>
-                                <p class="text-text-secondary" data-translate="advantage2Desc"></p>
+                            <div class="p-6 bg-presale-bg-card rounded-lg border border-presale-border-color text-center transform hover:scale-[1.03] transition-transform duration-300">
+                                <i class="fa-solid fa-water text-4xl text-blue-400 mb-4"></i>
+                                <h3 class="text-xl font-bold mb-2" data-translate="keyBenefit2Title"></h3>
+                                <p class="text-text-secondary text-sm" data-translate="keyBenefit2Desc"></p>
                             </div>
-                             <div class="p-8 bg-presale-bg-card rounded-lg border border-presale-border-color transform hover:-translate-y-2 transition-transform duration-300">
-                                <i class="fa-solid fa-hand-holding-heart text-4xl text-pink-400 mb-5"></i>
-                                <h3 class="text-2xl font-bold mb-3" data-translate="advantage3Title"></h3>
-                                <p class="text-text-secondary" data-translate="advantage3Desc"></p>
+                             <div class="p-6 bg-presale-bg-card rounded-lg border border-presale-border-color text-center transform hover:scale-[1.03] transition-transform duration-300">
+                                <i class="fa-solid fa-percent text-4xl text-purple-400 mb-4"></i>
+                                <h3 class="text-xl font-bold mb-2" data-translate="keyBenefit3Title"></h3>
+                                <p class="text-text-secondary text-sm" data-translate="keyBenefit3Desc"></p>
                             </div>
-                            <div class="p-8 bg-presale-bg-card rounded-lg border border-presale-border-color transform hover:-translate-y-2 transition-transform duration-300">
-                                <i class="fa-solid fa-gem text-4xl text-green-400 mb-5"></i>
-                                <h3 class="text-2xl font-bold mb-3" data-translate="advantage4Title"></h3>
-                                <p class="text-text-secondary" data-translate="advantage4Desc"></p>
+                            <div class="p-6 bg-presale-bg-card rounded-lg border border-presale-border-color text-center transform hover:scale-[1.03] transition-transform duration-300">
+                                <i class="fa-solid fa-arrow-trend-up text-4xl text-amber-400 mb-4"></i>
+                                <h3 class="text-xl font-bold mb-2" data-translate="keyBenefit4Title"></h3>
+                                <p class="text-text-secondary text-sm" data-translate="keyBenefit4Desc"></p>
                             </div>
                         </div>
                     </div>
                 </section>
-
-                <section id="sale" class="py-20 lg:py-28 px-4 fade-in-section">
+                
+                <section id="sale" class="py-20 lg:py-28 px-4" style="background-color: var(--presale-bg-darker);">
                     <div class="container mx-auto max-w-7xl">
                         <div class="text-center mb-12">
                             <span class="text-sm font-bold text-amber-400 tracking-widest" data-translate="saleTag"></span>
-                            <h2 class="text-4xl md:text-5xl font-bold presale-text-gradient mt-4" data-translate="saleTitle"></h2>
+                            <h2 class="text-5xl md:text-6xl font-black presale-text-gradient mt-4" data-translate="saleTitle"></h2>
+                            <p class="mt-4 text-lg text-text-secondary" data-translate="saleTimerTitle"></p>
                         </div>
 
-                        <div id="countdown-container" class="max-w-xl mx-auto mb-12">
-                            <p class="font-bold text-lg mb-4 text-amber-400 animate-pulse" data-translate="saleTimerTitle"></p>
-                            <div class="grid grid-cols-3 gap-2 sm:gap-4 text-center font-mono">
-                                <div><div id="days" class="text-4xl sm:text-6xl font-bold bg-black/30 backdrop-blur-sm border border-presale-border-color py-3 rounded-lg" data-dynamic-content="true">00</div><p class="text-sm text-text-secondary mt-2" data-translate="countdownDays"></p></div>
-                                <div><div id="hours" class="text-4xl sm:text-6xl font-bold bg-black/30 backdrop-blur-sm border border-presale-border-color py-3 rounded-lg" data-dynamic-content="true">00</div><p class="text-sm text-text-secondary mt-2" data-translate="countdownHours"></p></div>
-                                <div><div id="minutes" class="text-4xl sm:text-6xl font-bold bg-black/30 backdrop-blur-sm border border-presale-border-color py-3 rounded-lg" data-dynamic-content="true">00</div><p class="text-sm text-text-secondary mt-2" data-translate="countdownMinutes"></p></div>
+                        <div id="countdown-container" class="max-w-3xl mx-auto mb-16 p-6 bg-zinc-900 border border-amber-500/50 rounded-xl shadow-2xl">
+                            <div class="grid grid-cols-4 gap-3 sm:gap-6 text-center font-mono">
+                                <div><div id="days" class="text-4xl sm:text-5xl font-extrabold text-amber-400 bg-black/50 py-3 rounded-lg" data-dynamic-content="true">00</div><p class="text-sm text-text-secondary mt-2" data-translate="countdownDays"></p></div>
+                                <div><div id="hours" class="text-4xl sm:text-5xl font-extrabold text-amber-400 bg-black/50 py-3 rounded-lg" data-dynamic-content="true">00</div><p class="text-sm text-text-secondary mt-2" data-translate="countdownHours"></p></div>
+                                <div><div id="minutes" class="text-4xl sm:text-5xl font-extrabold text-amber-400 bg-black/50 py-3 rounded-lg" data-dynamic-content="true">00</div><p class="text-sm text-text-secondary mt-2" data-translate="countdownMinutes"></p></div>
+                                <div><div id="seconds" class="text-4xl sm:text-5xl font-extrabold text-amber-400 bg-black/50 py-3 rounded-lg" data-dynamic-content="true">00</div><p class="text-sm text-text-secondary mt-2" data-translate="countdownSeconds"></p></div>
                             </div>
                         </div>
 
-                        <div id="marketplace-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                        <div id="marketplace-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
                             {/* Cards Renderizados Aqui */}
-                        </div>
-                    </div>
-                </section>
-
-                <section id="funding" class="py-20 lg:py-28 px-4 fade-in-section" style="background-color: var(--presale-bg-darker);">
-                    <div class="container mx-auto max-w-6xl">
-                        <div class="text-center mb-16">
-                            <span class="text-sm font-bold text-amber-400 tracking-widest" data-translate="fundingTag"></span>
-                            <h2 class="text-4xl md:text-5xl font-bold my-4" data-translate="fundingTitle"></h2>
-                            <p class="text-lg text-text-secondary max-w-3xl mx-auto" data-translate="fundingSubtitle"></p>
-                        </div>
-                        <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
-                            <div class="p-8 bg-presale-bg-card rounded-lg border border-presale-border-color text-center">
-                                <i class="fa-solid fa-water text-4xl text-blue-400 mb-5"></i>
-                                <h3 class="text-2xl font-bold mb-3" data-translate="funding1Title"></h3>
-                                <p class="text-text-secondary" data-translate="funding1Desc"></p>
-                            </div>
-                            <div class="p-8 bg-presale-bg-card rounded-lg border border-presale-border-color text-center">
-                                <i class="fa-solid fa-bullhorn text-4xl text-purple-400 mb-5"></i>
-                                <h3 class="text-2xl font-bold mb-3" data-translate="funding2Title"></h3>
-                                <p class="text-text-secondary" data-translate="funding2Desc"></p>
-                            </div>
-                            <div class="p-8 bg-presale-bg-card rounded-lg border border-presale-border-color text-center">
-                                <i class="fa-solid fa-shield-halved text-4xl text-green-400 mb-5"></i>
-                                <h3 class="text-2xl font-bold mb-3" data-translate="funding3Title"></h3>
-                                <p class="text-text-secondary" data-translate="funding3Desc"></p>
-                            </div>
-                        </div>
-                    </div>
-                </section>
-
-                 <section class="py-20 lg:py-28 px-4 fade-in-section" style="background-color: var(--presale-bg-darker);">
-                     <div class="container mx-auto max-w-4xl">
-                        <div class="text-center mb-16">
-                            <span class="text-sm font-bold text-purple-400 tracking-widest" data-translate="roadmapTag"></span>
-                            <h2 class="text-4xl md:text-5xl font-bold my-4" data-translate="roadmapTitle"></h2>
-                            <p class="text-lg text-text-secondary max-w-3xl mx-auto" data-translate="roadmapSubtitle"></p>
-                        </div>
-                        <div class="relative pl-8 border-l-2 border-presale-border-color">
-                             <div class="mb-12 roadmap-item">
-                                <h3 class="text-2xl font-bold text-amber-400" data-translate="roadmap1Title"></h3>
-                                <p class="text-text-secondary mt-2" data-translate="roadmap1Desc"></p>
-                            </div>
-                            <div class="mb-12 roadmap-item">
-                                <h3 class="text-2xl font-bold" data-translate="roadmap2Title"></h3>
-                                <p class="text-text-secondary mt-2" data-translate="roadmap2Desc"></p>
-                            </div>
-                            <div class="mb-12 roadmap-item">
-                                <h3 class="text-2xl font-bold" data-translate="roadmap3Title"></h3>
-                                <p class="text-text-secondary mt-2" data-translate="roadmap3Desc"></p>
-                            </div>
-                            <div class="roadmap-item">
-                                <h3 class="text-2xl font-bold" data-translate="roadmap4Title"></h3>
-                                <p class="text-text-secondary mt-2" data-translate="roadmap4Desc"></p>
-                            </div>
                         </div>
                     </div>
                 </section>
@@ -488,17 +478,26 @@ export const PresalePage = {
                 </a>
             </main>
         `;
-
+        
+        // CORREÇÃO: Força a injeção do HTML, e somente depois inicializa.
         DOMElements.presale.innerHTML = html;
         renderMarketplace();
         hasRendered = true;
-        // Define o idioma para 'en'
+        PresalePage.init(); 
         setLanguage('en');
+        // Se a página já foi navegada antes, o update será chamado via app.js
+        if (State.isConnected) {
+            PresalePage.update(true);
+        }
     },
 
-    // --- init() (V8.2 - Lógica de clique restaurada) ---
+    // --- init() (Mantido o novo fluxo de inicialização) ---
     init: () => {
-        if (hasInitialized) { return; }
+        if (hasInitialized) { 
+            // Se já inicializado, apenas atualiza o estado (útil se chamado por updateUIState)
+            PresalePage.update(State.isConnected);
+            return; 
+        }
         const grid = document.getElementById('marketplace-grid');
         if (grid) {
              grid.addEventListener('click', (e) => {
@@ -506,31 +505,39 @@ export const PresalePage = {
                 if (buyButton) { handleBuyNFT(buyButton); return; }
                 const card = e.target.closest('.nft-card');
                 if (!card) return;
+                const input = card.querySelector('.quantity-input');
+                if (!input) return;
+                
                 const minusBtn = e.target.closest('.quantity-minus');
                 const plusBtn = e.target.closest('.quantity-plus');
-                if (minusBtn || plusBtn) {
-                    const input = card.querySelector('.quantity-input');
-                    if (!input) return;
-                    let val = parseInt(input.value);
-                    if (minusBtn && val > 1) { input.value = val - 1; }
-                    else if (plusBtn) { input.value = val + 1; } 
-                    updateTotalPrice(card); // Chama a função para validar e atualizar o preço
-                }
+                
+                let val = parseInt(input.value);
+
+                if (minusBtn && val > 1) { 
+                    input.value = val - 1; 
+                } else if (plusBtn) { 
+                    input.value = val + 1; 
+                } 
+                
+                input.dispatchEvent(new Event('input', { bubbles: true })); 
             });
+            
             grid.addEventListener('input', (e) => {
                 const input = e.target.closest('.quantity-input');
                 if (input) {
                     const card = input.closest('.nft-card');
-                    updateTotalPrice(card); // Chama a função para validar e atualizar o preço
+                    if (parseInt(input.value) < 1 || isNaN(parseInt(input.value))) {
+                        input.value = 1; 
+                    }
+                    updateTotalPrice(card); 
                 }
             });
         }
         setupCountdown();
-        setupScrollAnimations();
+        // Não chamamos setupScrollAnimations aqui para não forçar classes de opacidade que possam esconder o conteúdo
         hasInitialized = true;
     },
 
-     // --- update() (V8.2 - Lógica restaurada) ---
     update: (isConnected) => {
         updateBuyButtonsState(isConnected);
     }

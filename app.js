@@ -1,18 +1,16 @@
-// app.js
-
-// LINHA REMOVIDA: import { inject } from '@vercel/speed-insights';
+// app.js (AJUSTADO)
 
 const ethers = window.ethers;
 
 import { DOMElements } from './dom-elements.js';
 import { State } from './state.js';
-// CORREÇÃO: Importa 'initializeWalletState' em vez de 'subscribeToWalletChanges'
+// Assumimos que initializeWalletState e openConnectModal contêm a lógica de reconexão
 import { initPublicProvider, initializeWalletState, disconnectWallet, openConnectModal } from './modules/wallet.js';
-import { showToast, showShareModal } from './ui-feedback.js';
+import { showToast, showShareModal, showWelcomeModal } from './ui-feedback.js';
 import { formatBigNumber, formatAddress } from './utils.js';
+import { loadAddresses } from './config.js'; 
 
-// Importações das Páginas
-// ... (imports como antes) ...
+// Importações das Páginas (mantidas)
 import { DashboardPage } from './pages/DashboardPage.js';
 import { EarnPage } from './pages/EarnPage.js';
 import { StorePage } from './pages/StorePage.js';
@@ -24,10 +22,8 @@ import { AdminPage } from './pages/AdminPage.js';
 import { PresalePage } from './pages/PresalePage.js';
 import { DaoPage } from './pages/DaoPage.js';
 import { FaucetPage } from './pages/FaucetPage.js';
-import { TokenomicsPage } from './pages/TokenomicsPage.js'; // <-- Importação da nova página
-import { NotaryPage } from './pages/NotaryPage.js'; // <-- IMPORTAÇÃO DA NOVA PÁGINA
-
-// LINHA REMOVIDA: inject();
+import { TokenomicsPage } from './pages/TokenomicsPage.js';
+import { NotaryPage } from './pages/NotaryPage.js';
 
 const routes = {
     'dashboard': DashboardPage,
@@ -40,31 +36,40 @@ const routes = {
     'admin': AdminPage,
     'presale': PresalePage,
     'dao': DaoPage,
-    'notary': NotaryPage, // <-- ROTA DA NOVA PÁGINA
+    'notary': NotaryPage,
     'faucet': FaucetPage,
-    'tokenomics': TokenomicsPage, // <-- Rota da nova página
+    'tokenomics': TokenomicsPage,
 };
 
-// --- MUDANÇA: 'presale' AGORA É A PÁGINA ATIVA PADRÃO ---
-let activePageId = 'presale';
+// Página inicial padrão: Dashboard
+let activePageId = 'dashboard';
 const ADMIN_WALLET = "0x03aC69873293cD6ddef7625AfC91E3Bd5434562a";
 
-// --- Funções de UI e Navegação ---
+
+// --- Funções de UI e Navegação (mantidas as correções anteriores) ---
 
 function updateConnectionStatus(status, message) {
-    // ... (função sem alterações) ...
     const statuses = { disconnected: { bg: 'bg-red-500/20', text: 'text-red-400', icon: 'fa-circle' }, connecting: { bg: 'bg-amber-500/20', text: 'text-amber-400', icon: 'fa-spinner fa-spin' }, connected: { bg: 'bg-green-500/20', text: 'text-green-400', icon: 'fa-circle' }, }; const { bg, text, icon } = statuses[status]; const statusEl = DOMElements.connectionStatus; if (statusEl) { statusEl.className = `hidden sm:inline-flex lg:hidden items-center gap-2 py-1.5 px-3 rounded-full text-sm font-medium ${bg} ${text}`; statusEl.innerHTML = `<i class="fa-solid ${icon} text-xs"></i><span>${message}</span>`; }
 }
 
 function navigateTo(targetId) {
-    // ... (lógica de verificação e navegação anterior) ...
-    if (!routes[targetId]) { console.warn(`Route not found: ${targetId}. Navigating to dashboard.`); targetId = 'dashboard'; }
-    if (targetId === 'admin' && (!State.userAddress || State.userAddress.toLowerCase() !== ADMIN_WALLET.toLowerCase())) { showToast("Access Denied. You are not an administrator.", "error"); return; }
-    
-    // Se o alvo for nulo/vazio (acontece no primeiro load se activePageId falhar), define 'presale' como padrão
-    if (!targetId) {
-        targetId = 'presale';
+    // Verifica se a rota é válida.
+    if (!routes[targetId]) { 
+        console.warn(`Route not found: ${targetId}. Navigating to dashboard.`); 
+        targetId = 'dashboard'; 
     }
+    
+    // Fallback para 'dashboard' se targetId for nulo (após a verificação de rota)
+    if (!targetId) {
+        targetId = 'dashboard';
+    }
+    
+    // Restrição de acesso ao Admin
+    if (targetId === 'admin' && (!State.userAddress || State.userAddress.toLowerCase() !== ADMIN_WALLET.toLowerCase())) { 
+        showToast("Access Denied. You are not an administrator.", "error"); 
+        return; 
+    }
+    
 
     activePageId = targetId;
     document.querySelectorAll('main section').forEach(section => { if (section) section.classList.add('hidden'); });
@@ -73,28 +78,28 @@ function navigateTo(targetId) {
     if (targetSection) { 
         targetSection.classList.remove('hidden'); 
     } else { 
-        console.error(`Target section #${targetId} not found! Navigating to presale.`); 
-        activePageId = 'presale'; 
-        document.getElementById('presale')?.classList.remove('hidden'); 
+        // Se a seção alvo não for encontrada, o problema é sério (DOM Structure).
+        console.error(`Target section #${targetId} not found! Navigating to dashboard.`); 
+        activePageId = 'dashboard'; 
+        document.getElementById('dashboard')?.classList.remove('hidden'); 
         document.querySelectorAll('.sidebar-link').forEach(l => l.classList.remove('active')); 
-        document.querySelector(`.sidebar-link[data-target="presale"]`)?.classList.add('active'); 
-        routes['presale']?.render(); 
+        document.querySelector(`.sidebar-link[data-target="dashboard"]`)?.classList.add('active'); 
+        routes['dashboard']?.render(); 
         return; 
     }
     
+    // Atualiza o link ativo na barra lateral
     document.querySelectorAll('.sidebar-link').forEach(l => { if(!l.hasAttribute('data-target')) return; l.classList.remove('active'); });
     const activeLink = document.querySelector(`.sidebar-link[data-target="${targetId}"]`);
     if(activeLink) { activeLink.classList.add('active'); }
     
-    // --- AJUSTE APLICADO AQUI ---
-    // A chamada .update() foi removida para evitar o "pisca-pisca"
-    // O 'init()' de cada página agora tem um "guarda" para rodar só uma vez.
+    // Renderiza a página
     if (routes[targetId] && typeof routes[targetId].render === 'function') {
         routes[targetId].render();
-        if (typeof routes[targetId].init === 'function') {
-            routes[targetId].init();
-        }
-        // LINHA REMOVIDA: if (typeof routes[targetId].update === 'function') { ... }
+        
+        // NOTA: A lógica de init() foi movida para dentro do render() da PresalePage
+        // e é controlada por hasInitialized. Não chamamos init aqui para evitar duplicidade.
+
     } else {
         console.warn(`No render function found for route: ${targetId}`);
         if (targetSection) targetSection.classList.remove('hidden');
@@ -110,7 +115,6 @@ function closeSidebar() {
     DOMElements.sidebarBackdrop?.classList.add('hidden');
 }
 
-// *** FUNÇÃO updateUIState (sem alterações da versão anterior) ***
 function updateUIState() {
     const adminLinkContainer = document.getElementById('admin-link-container');
     const statUserBalanceEl = document.getElementById('statUserBalance'); // Dashboard balance
@@ -133,7 +137,6 @@ function updateUIState() {
         const balanceString = `${balanceNum.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
         const addressFormatted = formatAddress(State.userAddress);
 
-        // Desktop
         checkElement(desktopDisconnected, 'desktopDisconnected')?.classList.add('hidden');
         const desktopInfoEl = checkElement(desktopConnectedInfo, 'desktopConnectedInfo');
         if (desktopInfoEl) { desktopInfoEl.classList.remove('hidden'); desktopInfoEl.classList.remove('text-white'); desktopInfoEl.classList.add('text-zinc-900'); }
@@ -142,7 +145,6 @@ function updateUIState() {
         const desktopBalEl = checkElement(desktopUserBalance, 'desktopUserBalance');
         if (desktopBalEl) desktopBalEl.textContent = `${balanceString} $BKC`;
 
-        // Mobile
         checkElement(connectButtonMobile, 'connectButtonMobile')?.classList.add('hidden');
         checkElement(mobileSettingsButton, 'mobileSettingsButton')?.classList.remove('hidden');
         const mobileDisplayEl = checkElement(mobileAppDisplay, 'mobileAppDisplay');
@@ -176,18 +178,38 @@ function updateUIState() {
         updateConnectionStatus('disconnected', 'Disconnected');
     }
 
-    if (routes[activePageId]) { if (typeof routes[activePageId].update === 'function') { routes[activePageId].update(State.isConnected); } else if (typeof routes[activePageId].render === 'function') { routes[activePageId].render(); } } else { console.error(`Route handler for ${activePageId} not found during UI update.`); navigateTo('presale'); } // Padrão 'presale'
+    // A atualização da página ativa deve ser feita após a atualização do estado da conexão.
+    if (routes[activePageId]) { 
+        if (typeof routes[activePageId].update === 'function') { 
+            routes[activePageId].update(State.isConnected); 
+        } else if (typeof routes[activePageId].render === 'function') { 
+            // CORREÇÃO: Chama render, que por sua vez chama init (se necessário)
+            routes[activePageId].render(); 
+        } 
+    } else { 
+        console.error(`Route handler for ${activePageId} not found during UI update.`); 
+        navigateTo('dashboard'); 
+    }
 }
 
 
-// --- Handler de Mudança do Web3Modal (Sem alterações) ---
 async function onWalletStateChange(newState) {
     console.log("onWalletStateChange:", newState);
-    if (!newState.isConnected) { if (newState.wasConnected) showToast("Wallet disconnected.", "info"); updateUIState(); } else { if (newState.isNewConnection) showToast("Wallet connected successfully!", "success"); updateUIState(); }
+    
+    // AQUI É ONDE SE GARANTE QUE A UI É ATUALIZADA APÓS QUALQUER MUDANÇA DE ESTADO
+    if (!newState.isConnected) { 
+        if (newState.wasConnected) showToast("Wallet disconnected.", "info"); 
+        updateUIState(); 
+        // Se desconectou, volta para o dashboard
+        navigateTo('dashboard');
+    } else { 
+        if (newState.isNewConnection) showToast("Wallet connected successfully!", "success"); 
+        updateUIState(); 
+    }
 }
 
 
-// --- SETUP PRINCIPAL ---
+// --- SETUP PRINCIPAL (CORRIGIDO E OTIMIZADO) ---
 function setupGlobalListeners() {
     DOMElements.menuBtn?.addEventListener('click', toggleSidebar);
     DOMElements.sidebarBackdrop?.addEventListener('click', closeSidebar);
@@ -207,20 +229,38 @@ async function init() {
         return;
     }
 
-    setupGlobalListeners();
-    await initPublicProvider();
+    try {
+        console.log("Carregando endereços dos contratos...");
+        const addressesLoaded = await loadAddresses(); 
+        
+        if (!addressesLoaded) {
+            console.error("Falha ao carregar endereços. A aplicação não pode continuar.");
+            return; 
+        }
+        console.log("Endereços carregados com sucesso.");
     
-    // --- CORREÇÃO APLICADA AQUI ---
-    // Trocamos 'subscribeToWalletChanges' por 'await initializeWalletState'.
-    // Isso garante que o app espera a verificação inicial da carteira
-    // antes de continuar e renderizar a página.
+    } catch (error) {
+        console.error("Falha crítica ao carregar endereços:", error);
+        document.body.innerHTML = `<div style="color: red; padding: 20px;">Falha ao carregar endereços: ${error.message}</div>`;
+        return;
+    }
+    
+    setupGlobalListeners();
+
+    // 1. Inicializa o Provedor Público
+    await initPublicProvider(); 
+
+    // 2. Tenta a RECONEXÃO AUTOMÁTICA (se o State for persistido via initializeWalletState)
+    // O onWalletStateChange será chamado APÓS a verificação (se conectado ou desconectado)
     await initializeWalletState(onWalletStateChange);
 
-    // A chamada inicial 'updateUIState()' foi corretamente removida.
-    
-    // Esta chamada agora ocorrerá DEPOIS que o estado da carteira
-    // (conectado ou desconectado) já foi estabelecido.
-    navigateTo(activePageId); // 'activePageId' agora é 'presale'
+    // 3. Mostra o modal de boas-vindas. O modal deve aparecer com o idioma padrão (en)
+    showWelcomeModal();
+
+    // 4. E navega para a página padrão (Dashboard, já que activePageId='dashboard')
+    // A navegação acontece agora para garantir que a página correta seja renderizada logo
+    // após o estado da carteira ser estabelecido (mesmo que desconectado).
+    navigateTo(activePageId); 
 
     console.log("Application initialized.");
 }

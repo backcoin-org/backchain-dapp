@@ -50,14 +50,12 @@ export const safeContractCall = async (contract, method, args = [], fallbackValu
 };
 
 // ====================================================================
-// INÍCIO: NOVA FUNÇÃO HÍBRIDA (LAZY LOADING)
+// FUNÇÕES HÍBRIDAS (LAZY LOADING)
 // ====================================================================
 
 /**
  * Busca o txHash de um item específico sob demanda, consultando o histórico de eventos.
- * Esta é a função de "carregamento lento" que é chamada quando o usuário clica em um item
- * de histórico que não tinha um txHash pré-carregado.
- * * @param {string} itemType 'delegation', 'certificate', etc.
+ * @param {string} itemType 'delegation', 'certificate', etc.
  * @param {string} itemId O ID do item (delegationIndex ou tokenId).
  * @param {string} userAddress O endereço do usuário (para filtrar eventos).
  * @returns {string | null} O hash da transação ou nulo se não for encontrado.
@@ -73,32 +71,23 @@ export async function findTxHashForItem(itemType, itemId, userAddress) {
         switch (itemType) {
             case 'Delegation':
                 contract = State.delegationManagerContract;
-                // Filtra pelo evento 'Delegated'
-                // Precisamos filtrar por usuário (msg.sender) e pelo índice
-                // Infelizmente, 'delegationIndex' não é 'indexed' no evento.
-                // Vamos filtrar por usuário e encontrar o índice manualmente.
                 eventFilter = contract.filters.Delegated(userAddress, null); 
                 idKey = 'delegationIndex';
                 break;
                 
             case 'VestingCertReceived':
                 contract = State.rewardManagerContract;
-                // Filtra pelo evento 'VestingCertificateCreated'
-                // Filtra por 'recipient' e 'tokenId'
-                eventFilter = contract.filters.VestingCertificateCreated(null, userAddress, BigInt(itemId));
+                eventFilter = contract.filters.VestingCertificateCreated(null, userAddress);
                 idKey = 'tokenId';
                 break;
-            
-            // Adicionar outros tipos aqui se necessário (ex: Unstake)
             
             default:
                 console.warn(`findTxHashForItem: Tipo de item desconhecido: ${itemType}`);
                 return null;
         }
 
-        // Define um range de blocos (ex: últimos 50000 blocos) para não sobrecarregar
         const latestBlock = await State.publicProvider.getBlockNumber();
-        const fromBlock = Math.max(0, latestBlock - 50000); // Ajuste este range se necessário
+        const fromBlock = Math.max(0, latestBlock - 50000); 
 
         const events = await contract.queryFilter(eventFilter, fromBlock, 'latest');
 
@@ -107,14 +96,20 @@ export async function findTxHashForItem(itemType, itemId, userAddress) {
             return null;
         }
 
-        // Procura o evento específico
-        // (O filtro já deve ter feito isso para o Certificado, mas fazemos de novo para garantir)
-        for (let i = events.length - 1; i >= 0; i--) { // Começa do mais recente
+        for (let i = events.length - 1; i >= 0; i--) { 
             const event = events[i];
-            const eventId = event.args[idKey];
+            let eventId;
+            
+            if (itemType === 'VestingCertReceived') {
+                 // Para VestingCert, checamos o tokenId que não é indexado
+                 eventId = event.args.tokenId;
+            } else {
+                 // Para outros, checamos o argumento não-indexado correspondente
+                 eventId = event.args[idKey]; 
+            }
             
             if (eventId && eventId.toString() === itemId.toString()) {
-                return event.transactionHash; // Encontramos!
+                return event.transactionHash; 
             }
         }
         
@@ -128,9 +123,8 @@ export async function findTxHashForItem(itemType, itemId, userAddress) {
 }
 
 // ====================================================================
-// FIM: NOVA FUNÇÃO HÍBRIDA
+// LÓGICA DE DADOS PÚBLICOS E PRIVADOS
 // ====================================================================
-
 
 export async function loadPublicData() {
     // Garante que os provedores e contratos públicos estejam inicializados
@@ -140,33 +134,37 @@ export async function loadPublicData() {
         const publicDelegationContract = State.delegationManagerContract;
         const publicBkcContract = State.bkcTokenContract;
 
-        // Busca o total supply de forma segura
-        let totalSupply = await safeContractCall(publicBkcContract, 'totalSupply', [], 0n);
-
-        // Busca vários dados públicos em paralelo
         const [
-            totalPStake_BUGGY, validators, MINT_POOL, TGE_SUPPLY, // Renomeado totalPStake para _BUGGY
-            delegatedManagerBalance, nftPoolBalance, rewardManagerBalance, actionsManagerBalance
+            totalSupply, 
+            validators, 
+            MAX_SUPPLY, 
+            TGE_SUPPLY,
+            delegatedManagerBalance, 
+            nftPoolBalance, 
+            rewardManagerBalance, 
+            actionsManagerBalance
         ] = await Promise.all([
-            // Busca o pStake total da rede
-            safeContractCall(publicDelegationContract, 'totalNetworkPStake', [], 0n),
+            // Saldo total atual (o real)
+            safeContractCall(publicBkcContract, 'totalSupply', [], 0n), 
             // Busca a lista de validadores registrados
             safeContractCall(publicDelegationContract, 'getAllValidators', [], []),
-            // Busca a constante MINT_POOL (total minerável)
-            safeContractCall(publicDelegationContract, 'MINT_POOL', [], 0n),
-            // Busca a constante TGE_SUPPLY (supply inicial)
-            safeContractCall(publicDelegationContract, 'TGE_SUPPLY', [], 0n),
+            // Busca a constante MAX_SUPPLY (do BKCToken)
+            safeContractCall(publicBkcContract, 'MAX_SUPPLY', [], 0n), 
+            // Busca a constante TGE_SUPPLY (do BKCToken)
+            safeContractCall(publicBkcContract, 'TGE_SUPPLY', [], 0n), 
 
             // Busca os saldos de BKC nos contratos relevantes para calcular o % bloqueado
-            safeBalanceOf(publicBkcContract, addresses.delegationManager), // Saldo do DelegationManager
-            safeBalanceOf(publicBkcContract, addresses.nftBondingCurve), // Saldo do NFTLiquidityPool
-            safeBalanceOf(publicBkcContract, addresses.rewardManager), // Saldo do RewardManager
-            safeBalanceOf(publicBkcContract, addresses.actionsManager) // Saldo do FortuneTiger (ActionsManager)
+            safeBalanceOf(publicBkcContract, addresses.delegationManager), 
+            safeBalanceOf(publicBkcContract, addresses.nftBondingCurve), 
+            safeBalanceOf(publicBkcContract, addresses.rewardManager), 
+            safeBalanceOf(publicBkcContract, addresses.actionsManager)
         ]);
+
+        // Calcula MINT_POOL no frontend (MINT_POOL = MAX_SUPPLY - TGE_SUPPLY)
+        const MINT_POOL = MAX_SUPPLY > TGE_SUPPLY ? MAX_SUPPLY - TGE_SUPPLY : 0n;
 
         // Se a busca direta do totalSupply falhar, usa o TGE_SUPPLY como fallback
         if (totalSupply === 0n && TGE_SUPPLY > 0n) {
-             totalSupply = TGE_SUPPLY;
              console.warn("Usando TGE_SUPPLY como estimativa de Total Supply devido à falha na chamada totalSupply().");
         }
 
@@ -181,7 +179,6 @@ export async function loadPublicData() {
 
         // Atualiza os elementos do DOM com os dados públicos
         DOMElements.statTotalSupply.textContent = `${formatBigNumber(totalSupply).toLocaleString('en-US', { maximumFractionDigits: 0 })}`;
-        
         DOMElements.statValidators.textContent = validators.length;
 
         const lockedEl = document.getElementById('statLockedPercentage');
@@ -191,14 +188,13 @@ export async function loadPublicData() {
         // Calcula quanto já foi minerado além do TGE
         const currentMinted = totalSupply > TGE_SUPPLY ? totalSupply - TGE_SUPPLY : 0n;
         // Calcula quanto ainda pode ser minerado
-        const remainingMintable = MINT_POOL - currentMinted;
+        const remainingMintable = MINT_POOL > currentMinted ? MINT_POOL - currentMinted : 0n;
 
         // Calcula a taxa de escassez (quanto % do pool de mineração ainda resta)
         let scarcityRate = 0n;
         if (MINT_POOL > 0n) { // Evita divisão por zero
             scarcityRate = (remainingMintable * 10000n) / MINT_POOL;
         } else {
-             // Caso MINT_POOL seja 0, a escassez é 100% se nada foi mintado, 0% caso contrário
              scarcityRate = (totalSupply === 0n && remainingMintable > 0n) ? 10000n : 0n;
         }
 
@@ -211,19 +207,13 @@ export async function loadPublicData() {
         } else {
             const validatorDataPromises = validators.map(async (addr) => {
                 const fallbackStruct = { isRegistered: false, selfStakeAmount: 0n, totalDelegatedAmount: 0n, totalPStake: 0n };
-                // Busca informações do validador (stake próprio, stake delegado)
                 const validatorInfo = await safeContractCall(publicDelegationContract, 'validators', [addr], fallbackStruct);
                 
-                // =================================================================
-                // CORREÇÃO DO BUG (Pedido 4): Usar `validatorInfo.totalPStake`
-                // O pStake total do validador (self-stake + delegações recebidas) está em 'validatorInfo.totalPStake'.
-                // A chamada 'userTotalPStake' era incorreta para este contexto.
-                // =================================================================
-                const pStake = validatorInfo.totalPStake;
+                const pStake = validatorInfo.totalPStake; 
 
                 return {
                     addr,
-                    pStake, // <-- CORRIGIDO
+                    pStake, 
                     selfStake: validatorInfo.selfStakeAmount,
                     delegatedStake: validatorInfo.totalDelegatedAmount
                 };
@@ -232,11 +222,8 @@ export async function loadPublicData() {
         }
 
         // --- CORREÇÃO BUG 1 (pStake Inconsistente) ---
-        // O totalNetworkPStake do contrato está incorreto (não é atualizado no registerValidator)
-        // Recalculamos o total somando o pStake de todos os validadores
         const recalculatedTotalPStake = State.allValidatorsData.reduce((acc, val) => acc + val.pStake, 0n);
         
-        // Usamos o valor recalculado (mais preciso) em vez do valor do contrato (totalPStake_BUGGY)
         DOMElements.statTotalPStake.textContent = formatPStake(recalculatedTotalPStake);
         // --- FIM DA CORREÇÃO ---
 
@@ -268,18 +255,15 @@ export async function loadUserData() {
         State.currentUserBalance = balance;
         
         // Mapeia os dados brutos das delegações para um formato mais fácil de usar
-        // NOTA: delegationsRaw (do contrato) não inclui txHash.
         State.userDelegations = delegationsRaw.map((d, index) => ({
             amount: d[0], unlockTime: d[1],
             lockDuration: d[2], validator: d[3], index,
             txHash: null // <-- txHash será buscado sob demanda (lazy loading)
         }));
         
-        // *** ADIÇÃO PARA CORRIGIR BUG 2 ***
         // Armazena o pStake total do usuário no estado
         State.userTotalPStake = totalUserPStake;
-        // *** FIM DA ADIÇÃO ***
-
+        
         // Atualiza os elementos do DOM relacionados à posição do usuário
         if(statUserPStake) statUserPStake.textContent = formatPStake(totalUserPStake);
 
@@ -323,6 +307,47 @@ export async function calculateUserTotalRewards() {
     }
 }
 
+/**
+ * Calcula o valor líquido de reivindicação de recompensas, considerando o Booster.
+ * @returns {object} { netClaimAmount, feeAmount, discountPercent, totalRewards, basePenaltyPercent }
+ */
+export async function calculateClaimDetails() {
+    if (!State.delegationManagerContract || !State.ecosystemManagerContract || !State.userAddress) {
+        return { netClaimAmount: 0n, feeAmount: 0n, discountPercent: 0, totalRewards: 0n, basePenaltyPercent: 0 };
+    }
+    
+    // 1. Busca Recompensas Totais Pendentes (Bruto)
+    const { totalRewards } = await calculateUserTotalRewards();
+    if (totalRewards === 0n) {
+        return { netClaimAmount: 0n, feeAmount: 0n, discountPercent: 0, totalRewards: 0n, basePenaltyPercent: 0 };
+    }
+
+    // 2. Busca a taxa base de reivindicação do Hub
+    const baseFeeBips = await safeContractCall(State.ecosystemManagerContract, 'getFee', ["CLAIM_REWARD_FEE_BIPS"], 50n); // Ex: 50 BIPS (0.5%)
+    const baseFeePercent = Number(baseFeeBips) / 100;
+    
+    // 3. Busca o melhor Booster do usuário e o desconto configurado
+    const boosterData = await getHighestBoosterBoost();
+    const discountBips = await safeContractCall(State.ecosystemManagerContract, 'getBoosterDiscount', [BigInt(boosterData.highestBoost)], 0n);
+    const discountPercent = Number(discountBips) / 100;
+
+    // 4. Calcula a penalidade final (Taxa Base - Desconto, min 0)
+    const finalFeeBips = baseFeeBips > discountBips ? baseFeeBips - discountBips : 0n;
+    const finalFeeAmount = (totalRewards * finalFeeBips) / 10000n;
+    
+    // 5. Calcula o valor líquido e o valor total "perdido" devido à taxa
+    const netClaimAmount = totalRewards - finalFeeAmount;
+    
+    return { 
+        netClaimAmount, 
+        feeAmount: finalFeeAmount, 
+        discountPercent, 
+        totalRewards, 
+        basePenaltyPercent: baseFeePercent 
+    };
+}
+
+
 export async function getHighestBoosterBoost() {
     // Garante que o contrato booster e o endereço do usuário estejam disponíveis
     if (!State.rewardBoosterContract || !State.userAddress) {
@@ -345,9 +370,8 @@ export async function getHighestBoosterBoost() {
         const highestBoost = highestBooster.boostBips;
         const bestTokenId = highestBooster.tokenId;
 
-        // Calcula a eficiência final (base 50% + boost, máximo 100%)
         const boostPercent = highestBoost / 100;
-        const finalEfficiency = Math.min(50 + boostPercent, 100);
+        const finalEfficiency = Math.min(50 + boostPercent, 100); 
 
         // Encontra os detalhes do tier (imagem, nome) com base no boostBips
         const tier = boosterTiers.find(t => t.boostBips === highestBoost);
@@ -399,7 +423,8 @@ export async function loadMyCertificates() {
         // Itera para buscar o ID de cada certificado do usuário
         for (let i = 0; i < count; i++) {
             try {
-                // Chama a função da ABI corrigida
+                // CHAMADA CORRIGIDA: Usa tokenOfOwnerByIndex, que exige o contrato ERC721Enumerable
+                // Esta chamada deve funcionar, mas é sensível a erros de RPC
                 const tokenId = await safeContractCall(State.rewardManagerContract, 'tokenOfOwnerByIndex', [State.userAddress, i], 0n);
 
                 if (tokenId !== 0n) {
@@ -409,13 +434,15 @@ export async function loadMyCertificates() {
                      break;
                 }
             } catch (e) {
+                // Tratamento de erro mais robusto para TokenOfOwnerByIndex
                 console.error(`Falha ao carregar certificado de índice ${i}. Abortando listagem.`, e);
-                State.myCertificates = []; // Limpa para evitar dados parciais
-                return State.myCertificates; // Retorna imediatamente em caso de erro
+                // Assume que falhou e retorna o que já encontrou, ou limpa
+                if (tokenIds.length > 0) break; 
+                State.myCertificates = []; 
+                return State.myCertificates;
             }
         }
         
-        // NOTA: Esta função também não pode buscar o txHash de forma eficiente.
         State.myCertificates = tokenIds.reverse().map(id => ({ 
             tokenId: id,
             txHash: null // <-- txHash será buscado sob demanda (lazy loading)
@@ -423,7 +450,7 @@ export async function loadMyCertificates() {
         return State.myCertificates;
 
     } catch (e) {
-        console.error("Erro ao carregar certificados de vesting:", e);
+        console.error("Erro ao carregar certificados de vesting (Catch principal):", e);
         State.myCertificates = []; // Garante estado limpo em caso de erro
         return [];
     }
@@ -467,11 +494,6 @@ export async function loadMyBoosters() {
         // Processa os eventos para determinar quais NFTs o usuário possui atualmente
         const ownedTokens = new Map();
         
-        // =================================================================
-        // CORREÇÃO (Pedido 3): Capturar txHash e timestamp dos eventos
-        // =================================================================
-
-        // 1. Processa eventos "PARA" o usuário, buscando o timestamp
         const toEventsWithData = await Promise.all(toEvents.map(async (event) => ({
             tokenId: event.args.tokenId,
             txHash: event.transactionHash,
@@ -489,10 +511,7 @@ export async function loadMyBoosters() {
             ownedTokens.delete(tokenId.toString());
         });
 
-        // Converte o Map de tokens possuídos em um array de IDs e dados
-        // 'ownedTokens.values()' agora contém { tokenId, txHash, timestamp }
         const currentOwnedTokenData = Array.from(ownedTokens.values());
-
 
         // Se não encontrou tokens no intervalo de blocos consultado
         if (currentOwnedTokenData.length === 0) {
@@ -507,8 +526,8 @@ export async function loadMyBoosters() {
             return {
                 tokenId: tokenData.tokenId,
                 boostBips: Number(boostBips),
-                txHash: tokenData.txHash,           // <-- Passa o txHash
-                acquisitionTime: tokenData.timestamp // <-- Passa o timestamp
+                txHash: tokenData.txHash,
+                acquisitionTime: tokenData.timestamp
             };
         });
 
@@ -518,25 +537,19 @@ export async function loadMyBoosters() {
         // Armazena os detalhes dos boosters no estado global
         State.myBoosters = boosterDetails;
         console.log(`Found ${boosterDetails.length} boosters for user.`);
-        return boosterDetails; // Retorna os boosters encontrados
+        return boosterDetails;
 
-    // <<< CORREÇÃO APLICADA AQUI: Removido ': any' do catch >>>
     } catch (e) {
-        // AJUSTE CRÍTICO: Captura o erro específico de limite RPC (-32005)
-        // O erro original 'e' pode ser um erro genérico do Ethers ('UNKNOWN_ERROR')
-        // precisamos olhar dentro dele para achar o código RPC real.
-        const rpcErrorCode = e?.error?.code ?? e?.code; // Tenta acessar o código RPC interno
+        const rpcErrorCode = e?.error?.code ?? e?.code; 
 
         if (rpcErrorCode === -32005) {
-            // Código -32005 é o erro "query returned more than 10000 results"
             console.warn("Could not load boosters due to RPC query limit. Booster functionality might be affected.", e.message);
-            State.myBoosters = []; // Garante que a lista está vazia
-            return []; // Retorna array vazio, *sem lançar o erro* para não travar o app
+            State.myBoosters = []; 
+            return []; 
         } else {
-            // Para outros erros inesperados, registra e lança
             console.error("CRITICAL Error loading My Boosters via event query:", e);
             State.myBoosters = [];
-            throw e; // Lança outros erros para depuração, pois podem indicar problemas reais
+            throw e; 
         }
     }
 }

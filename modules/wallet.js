@@ -1,12 +1,29 @@
-// modules/wallet.js - VERSÃO DE DEBUG
-// O código foi modificado para depurar o erro "TypeError: Cannot read properties of undefined (reading 'match')"
-// que ocorre na função instantiateContracts ao tentar instanciar um contrato.
-// Este erro geralmente indica que um dos ABIs (Application Binary Interface) importados
-// não é uma string JSON válida ou é 'undefined'.
+// modules/wallet.js - Final
+
+// --- INÍCIO DA CORREÇÃO: Mover a limpeza do window.web3 para o topo ---
+if (window.web3) {
+    console.warn("Found window.web3. Attempting to clear the shim to prevent MetaMask warning.");
+    try {
+        // Tenta redefinir a propriedade para undefined
+        Object.defineProperty(window, 'web3', {
+            value: undefined,
+            configurable: true
+        });
+        console.log("Successfully cleared window.web3 property.");
+    } catch (e) {
+        // Fallback para o método delete, caso o primeiro falhe
+        try {
+            delete window.web3; 
+        } catch (e2) {
+             console.warn("Could not delete window.web3 property (fallback failed).");
+        }
+    }
+}
+// --- FIM DA CORREÇÃO ---
+
 
 const ethers = window.ethers;
 
-// --- NOVA IMPORTAÇÃO DO WEB3MODAL via CDN ESM (AJUSTADA) ---
 import { createWeb3Modal, defaultConfig } from 'https://esm.sh/@web3modal/ethers@latest';
 
 import { State } from '../state.js';
@@ -15,8 +32,7 @@ import {
     addresses, sepoliaRpcUrl, sepoliaChainId,
     bkcTokenABI, delegationManagerABI, rewardManagerABI,
     rewardBoosterABI, nftBondingCurveABI, actionsManagerABI, publicSaleABI,
-    faucetABI,
-    decentralizedNotaryABI
+    faucetABI, decentralizedNotaryABI, ecosystemManagerABI // <-- ADICIONADO HUB
 } from '../config.js';
 import { loadPublicData, loadUserData } from './data.js';
 import { signIn } from './firebase-auth-service.js';
@@ -78,13 +94,31 @@ const web3modal = createWeb3Modal({
 
 let wasPreviouslyConnected = web3modal.getIsConnected();
 
+
+// --- FUNÇÃO AUXILIAR PARA DESCONEXÃO SEGURA (NOVA) ---
+async function safeDisconnect() {
+    // Verifica se web3modal existe e se o método disconnect está disponível
+    if (typeof web3modal === 'object' && web3modal !== null && typeof web3modal.disconnect === 'function') {
+        try {
+            await web3modal.disconnect();
+        } catch (e) {
+            console.error("Safe Disconnect failed:", e);
+        }
+    } else {
+        console.warn("web3modal object not fully initialized, skipping disconnect.");
+    }
+}
+// --- FIM DA FUNÇÃO AUXILIAR ---
+
+
 // --- Funções Auxiliares Internas ---
 
 function instantiateContracts(signerOrProvider) {
     console.log("Instantiating contracts with:", signerOrProvider);
     try {
-        // --- INÍCIO DO BLOCO DE DEBUG ---
         const contractsToInstantiate = [
+            // Instancia o Hub primeiro
+            { name: "ecosystemManager", address: addresses.ecosystemManager, abi: ecosystemManagerABI, stateProp: "ecosystemManagerContract" },
             { name: "bkcToken", address: addresses.bkcToken, abi: bkcTokenABI, stateProp: "bkcTokenContract" },
             { name: "delegationManager", address: addresses.delegationManager, abi: delegationManagerABI, stateProp: "delegationManagerContract" },
             { name: "rewardManager", address: addresses.rewardManager, abi: rewardManagerABI, stateProp: "rewardManagerContract" },
@@ -99,54 +133,43 @@ function instantiateContracts(signerOrProvider) {
         for (const contractInfo of contractsToInstantiate) {
             const { name, address, abi, stateProp, ignoreZero } = contractInfo;
             
-            if (address) {
+            if (address) { 
                 if (ignoreZero && address === "0x0000000000000000000000000000000000000000") {
                     console.warn(`${name} address is placeholder. Skipping instantiation.`);
                     continue;
                 }
 
-                // *** PONTO DE VERIFICAÇÃO CRÍTICO ***
                 if (!abi || typeof abi !== 'object' || abi.length === 0) {
                     console.error(`ABI for ${name} is invalid or missing! Type: ${typeof abi}, Value: ${abi}`);
                     showToast(`Critical Error: ABI for ${name} is invalid. Check config.js.`, "error");
-                    // Lança um erro para parar a execução e evitar o TypeError
                     throw new Error(`Invalid ABI for ${name}`); 
                 }
-                // *** FIM DO PONTO DE VERIFICAÇÃO CRÍTICO ***
 
                 console.log(`Instantiating ${name}...`);
                 State[stateProp] = new ethers.Contract(address, abi, signerOrProvider);
-                console.log(`${name} instance created.`);
+                console.log(`${name} instance created at ${address}.`);
             } else {
                 console.warn(`${name} address is missing in config.js. Skipping instantiation.`);
             }
         }
-        // --- FIM DO BLOCO DE DEBUG ---
 
         console.log("Contracts instantiated:", State);
 
     } catch (e) {
          console.error("Error instantiating contracts:", e);
-         // O showToast agora será mais específico se o erro for um ABI inválido
          showToast(`Error setting up contracts: ${e.message}`, "error"); 
     }
 }
 
 async function setupSignerAndLoadData(provider, address) {
-    // ... (Restante do código da função setupSignerAndLoadData sem alterações)
     try {
         State.provider = provider;
         State.signer = await provider.getSigner();
         
-        // --- INÍCIO DA CORREÇÃO ---
-        // Força o endereço para minúsculas ANTES de salvá-lo no State.
         const normalizedAddress = address.toLowerCase();
-        State.userAddress = normalizedAddress; // <-- MUDANÇA (salva o endereço minúsculo)
-        // --- FIM DA CORREÇÃO ---
+        State.userAddress = normalizedAddress;
         
-        // --- CORREÇÃO: Autentica no Firebase usando a CARTEIRA como ID primário ---
-        await signIn(State.userAddress); // <-- MUDANÇA (agora passa o endereço minúsculo)
-        // --- FIM DA CORREÇÃO ---
+        await signIn(State.userAddress);
 
         instantiateContracts(State.signer); // Instancia com o signer
         await loadUserData();
@@ -168,7 +191,7 @@ export async function initPublicProvider() {
      try {
         State.publicProvider = new ethers.JsonRpcProvider(sepoliaRpcUrl);
         instantiateContracts(State.publicProvider); // Instancia com o provider público
-        await loadPublicData();
+        await loadPublicData(); // <-- Isto causará erro, corrija a ABI no config.js
         console.log("Public provider initialized. Contracts instantiated with public provider.");
     } catch (e) {
         console.error("Failed to initialize public provider:", e);
@@ -176,7 +199,7 @@ export async function initPublicProvider() {
     }
 }
 
-// --- LÓGICA DE TRATAMENTO DE CONEXÃO (sem alterações) ---
+// --- LÓGICA DE TRATAMENTO DE CONEXÃO ---
 
 async function handleProviderChange(state, callback) {
     const { provider, address, chainId, isConnected } = state;
@@ -186,7 +209,7 @@ async function handleProviderChange(state, callback) {
         const providerToUse = provider || await web3modal.getWalletProvider();
         if (!providerToUse) {
             console.error("Connected, but failed to get wallet provider.");
-            await web3modal.disconnect();
+            await safeDisconnect(); // USANDO safeDisconnect
             return;
         }
 
@@ -211,7 +234,7 @@ async function handleProviderChange(state, callback) {
                     } catch (addError) {
                         console.error("Failed to add Sepolia network:", addError);
                         showToast('Please add and switch to the Sepolia network manually.', 'error');
-                        await web3modal.disconnect();
+                        await safeDisconnect(); // USANDO safeDisconnect
                         return;
                     }
                 }
@@ -221,7 +244,7 @@ async function handleProviderChange(state, callback) {
                  } else {
                      showToast('Network switch rejected by user.', 'info');
                  }
-                await web3modal.disconnect();
+                await safeDisconnect(); // USANDO safeDisconnect
                 return;
             }
         }
@@ -234,7 +257,7 @@ async function handleProviderChange(state, callback) {
             callback({ isConnected: true, address, chainId, isNewConnection: !wasPreviouslyConnected });
             wasPreviouslyConnected = true;
         } else {
-            await web3modal.disconnect();
+            await safeDisconnect(); // USANDO safeDisconnect
         }
 
     } else {
@@ -286,18 +309,15 @@ export async function initializeWalletState(callback) {
                 );
             } else {
                 console.warn("Initial state is connected, but no provider found. Disconnecting.");
-                await web3modal.disconnect();
-                // Chama o handler explicitamente para limpar o estado do app
-                 await handleProviderChange({ isConnected: false, provider: null, address: null, chainId: null }, callback);
+                await safeDisconnect(); // USANDO safeDisconnect
+                await handleProviderChange({ isConnected: false, provider: null, address: null, chainId: null }, callback);
             }
         } catch (e) {
             await handleProviderChange({ isConnected: false, provider: null, address: null, chainId: null }, callback);
         }
 
     } else {
-        // Confia no estado do Web3Modal.
         console.log("Initial check: Not connected (relying on Web3Modal state).");
-         // Garante que o estado desconectado seja propagado
          if (State.isConnected) {
              await handleProviderChange({ isConnected: false, provider: null, address: null, chainId: null }, callback);
          }
@@ -311,17 +331,5 @@ export function openConnectModal() {
 
 export async function disconnectWallet() {
     console.log("Telling Web3Modal to disconnect...");
-    await web3modal.disconnect();
-}
-
-// --- CORREÇÃO V2: Adiciona um bloco para garantir que não haja referências a window.web3 ---
-// Este bloco é uma medida de segurança para garantir que o código não tente usar a API obsoleta
-// mesmo que ela ainda esteja sendo injetada por alguma outra biblioteca ou script.
-if (window.web3) {
-    console.warn("Found window.web3. Attempting to clear the shim to prevent MetaMask warning.");
-    try {
-        delete window.web3;
-    } catch (e) {
-        console.warn("Could not delete window.web3 property.");
-    }
+    await safeDisconnect(); // USANDO safeDisconnect
 }

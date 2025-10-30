@@ -44,6 +44,7 @@ export const DOMElements = {
     about: document.getElementById('about'),     // Adicionado About
     admin: document.getElementById('admin'),     // Adicionado Admin
     tokenomics: document.getElementById('tokenomics'), // <-- ADICIONADO AQUI
+    notary: document.getElementById('notary'), // <-- (NOVO) ADICIONE ESTA LINHA
 
     // Dashboard Stats (Public)
     statTotalSupply: document.getElementById('statTotalSupply'),

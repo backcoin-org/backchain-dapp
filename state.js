@@ -17,6 +17,7 @@ export const State = {
     actionsManagerContract: null, 
     faucetContract: null, // <-- NOVO
     decentralizedNotaryContract: null, // <-- NOVO
+    ecosystemManagerContract: null, // <-- (NOVO) ADICIONE ESTA LINHA
 
     // User Data
     currentUserBalance: 0n,

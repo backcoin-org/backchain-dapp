@@ -87,12 +87,16 @@
 
             <nav id="nav-links" class="flex flex-col flex-1 overflow-y-auto">
                  <div class="space-y-2">
-                    <a data-target="presale" class="sidebar-link flex items-center gap-4 py-2.5 px-4 rounded-lg transition-colors hover:bg-zinc-700 active">
+                    <a data-target="dashboard" class="sidebar-link flex items-center gap-4 py-2.5 px-4 rounded-lg transition-colors active">
+                        <i class="fa-solid fa-chart-pie w-5 text-center"></i>
+                        <span>Dashboard</span>
+                    </a>
+                    
+                    <a data-target="presale" class="sidebar-link flex items-center gap-4 py-2.5 px-4 rounded-lg transition-colors text-zinc-400 hover:text-white hover:bg-zinc-700">
                         <i class="fa-solid fa-hourglass-half w-5 text-center"></i>
                         <span>Booster 50% OFF</span>
                     </a>
 
-                    <a data-target="dashboard" class="sidebar-link flex items-center gap-4 py-2.5 px-4 rounded-lg transition-colors text-zinc-400 hover:text-white hover:bg-zinc-700"><i class="fa-solid fa-chart-pie w-5 text-center"></i><span>Dashboard</span></a>
                     <a data-target="earn" class="sidebar-link flex items-center gap-4 py-2.5 px-4 rounded-lg transition-colors text-zinc-400 hover:text-white hover:bg-zinc-700"><i class="fa-solid fa-coins w-5 text-center"></i><span>Earn</span></a>
                     <a data-target="store" class="sidebar-link flex items-center gap-4 py-2.5 px-4 rounded-lg transition-colors text-zinc-400 hover:text-white hover:bg-zinc-700"><i class="fa-solid fa-store w-5 text-center"></i><span>Booster Store</span></a>
                     <a data-target="rewards" class="sidebar-link flex items-center gap-4 py-2.5 px-4 rounded-lg transition-colors text-zinc-400 hover:text-white hover:bg-zinc-700"><i class="fa-solid fa-id-card-clip w-5 text-center"></i><span>My Rewards</span></a>
@@ -128,8 +132,14 @@
 
         <div class="lg:ml-64 flex-1 flex flex-col min-h-screen">
             <header class="sticky top-0 z-20 flex justify-between items-center p-4 bg-sidebar/80 backdrop-blur-sm border-b border-border-color">
-                <div class="flex items-center gap-3"><button id="menu-btn" class="lg:hidden text-xl text-zinc-400 hover:text-white h-10 w-10"><i class="fa-solid fa-bars"></i></button><img src="./assets/bkc_logo_3d.png" alt="Backchain Logo" class="h-8 w-auto rounded-full lg:hidden"><span id="mobileAppDisplay" class="text-xl font-bold text-amber-400 lg:hidden">Backchain</span></div>
-                <div id="connectionStatus" class="hidden sm:inline-flex lg:hidden items-center gap-2 py-1.5 px-3 rounded-full text-sm font-medium bg-red-500/20 text-red-400"><i class="fa-solid fa-circle text-xs"></i><span>Disconnected</span></div>
+                <div class="flex items-center gap-3">
+                    <button id="menu-btn" class="lg:hidden text-xl text-zinc-400 hover:text-white h-10 w-10"><i class="fa-solid fa-bars"></i></button>
+                    <img src="./assets/bkc_logo_3d.png" alt="Backchain Logo" class="h-8 w-auto rounded-full lg:hidden">
+                    <span id="mobileAppDisplay" class="text-xl font-bold text-amber-400 lg:hidden">Backchain</span>
+                </div>
+                <div id="connectionStatus" class="hidden sm:inline-flex lg:hidden items-center gap-2 py-1.5 px-3 rounded-full text-sm font-medium bg-red-500/20 text-red-400">
+                    <i class="fa-solid fa-circle text-xs"></i><span>Disconnected</span>
+                </div>
                 <div class="flex items-center ml-auto">
                     <div id="desktop-connection-controls" class="hidden lg:flex items-center">
 
@@ -159,7 +169,8 @@
             <main class="flex-1 overflow-y-auto bg-main p-4 sm:p-6 lg:p-8">
                 <div class="container mx-auto max-w-7xl">
 
-                    <section id="dashboard" class="hidden"> <div class="grid grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 mb-8">
+                    <section id="dashboard" class=""> 
+                        <div class="grid grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 mb-8">
                             <div class="bg-sidebar border border-border-color rounded-xl p-4 flex items-center gap-4"><i class="fa-solid fa-coins text-2xl text-cyan-400 w-8 text-center"></i><div class="min-w-0"><p class="text-zinc-400 text-sm">Total Supply</p><p id="statTotalSupply" class="text-base sm:text-xl font-bold mt-1 truncate">--</p></div></div>
                             <div class="bg-sidebar border border-border-color rounded-xl p-4 flex items-center gap-4"><i class="fa-solid fa-coins text-2xl text-amber-400 w-8 text-center"></i><div class="min-w-0"><p class="text-zinc-400 text-sm">$BKC</p><p id="statUserBalance" class="text-base sm:text-xl font-bold mt-1 truncate">--</p></div></div>
                             <div class="bg-sidebar border border-border-color rounded-xl p-4 flex items-center gap-4"><i class="fa-solid fa-users text-2xl text-green-400 w-8 text-center"></i><div class="min-w-0"><p class="text-zinc-400 text-sm">Validators</p><p id="statValidators" class="text-base sm:text-xl font-bold mt-1 truncate">--</p></div></div>
@@ -193,6 +204,7 @@
                             </div>
                         </div>
                     </section>
+                    <section id="presale" style="background-color: var(--presale-bg-main); margin: -1.5rem;" class="hidden"></section>
 
                     <section id="earn" class="hidden"><h1 class="text-2xl md:text-3xl font-bold mb-6">Earn Rewards</h1><div class="border-b border-border-color mb-6"><nav id="earn-tabs" class="-mb-px flex gap-6"><button class="tab-btn active" data-target="delegate-tab">Delegate (pStake)</button><button class="tab-btn" data-target="distribute-tab" id="pop-mining-tab" style="display: none;">PoP Mining</button><button class="tab-btn" data-target="validator-tab" id="validator-section-tab" style="display: none;">Become a Validator</button></nav></div><div id="delegate-tab" class="tab-content active"><div id="validatorsList" class="grid grid-cols-1 lg:grid-cols-2 gap-6"></div></div><div id="distribute-tab" class="tab-content"><div id="pop-mining-content" class="bg-sidebar border border-border-color rounded-xl max-w-3xl mx-auto overflow-hidden"></div></div><div id="validator-tab" class="tab-content"><div id="validator-content-wrapper" class="max-w-3xl mx-auto"></div></div></section>
                     <section id="store" class="hidden"><h1 class="text-2xl md:text-3xl font-bold mb-6">Reward Booster Store</h1><p class="text-zinc-400 max-w-3xl mb-8">Increase your reward claim efficiency from a 50% base up to 100% by purchasing a Booster NFT. Prices are dynamic and increase as NFTs are sold.</p><div id="store-content-wrapper"><h2 class="text-xl font-bold mb-4">Booster Pools</h2><div id="store-items-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6"></div><div class="mt-12"><h2 class="text-xl font-bold mb-4">My Locked & Ineligible Boosters</h2><div id="my-locked-boosters-container"></div></div></div></section>
@@ -208,8 +220,6 @@
                     <section id="about" class="hidden"></section>
                     <section id="admin" class="hidden"></section>
 
-                    <section id="presale" style="background-color: var(--presale-bg-main); margin: -1.5rem;"></section>
-
                 </div>
             </main>
             </div>
@@ -219,6 +229,5 @@
 
     <script type="module" src="./app.js"></script>
     
-    <script defer src="/_vercel/insights/script.js"></script>
-</body>
+    </body>
 </html>
