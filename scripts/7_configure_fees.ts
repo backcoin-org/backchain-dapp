@@ -12,13 +12,51 @@ const CONFIG_DELAY_MS = 1500; // 1.5-second delay
 // ###               CONFIGURAÇÃO MANUAL DO JOGO E FUNDOS              ###
 // ######################################################################
 
-// --- Liquidez Inicial Solicitada ---
+// ====================================================================
+// =================== INÍCIO DA MODIFICAÇÃO (4 PISCINAS) ===================
+// ====================================================================
+
+// --- Liquidez Inicial Solicitada (MODIFICADA PARA 4 PISCINAS) ---
 const LIQUIDITY_CONFIG = [
-    { poolId: 2, multiplier: 1000, chanceDenominator: 1000, bipsContribution: 500, amount: ethers.parseEther("1000000") }, // 1M BKC (1000x)
-    { poolId: 1, multiplier: 100, chanceDenominator: 100, bipsContribution: 1000, amount: ethers.parseEther("500000") },   // 500K BKC (100x)
-    { poolId: 0, multiplier: 10, chanceDenominator: 10, bipsContribution: 8500, amount: ethers.parseEther("100000") },    // 100K BKC (10x)
+    // Piscinas Antigas (Contribuição ajustada)
+    { 
+        poolId: 0, 
+        multiplier: 10, 
+        chanceDenominator: 10, // 10% de chance
+        bipsContribution: 2000, // 20% da contribuição
+        amount: ethers.parseEther("100000") // 100K BKC
+    },
+    { 
+        poolId: 1, 
+        multiplier: 100, 
+        chanceDenominator: 100, // 1% de chance
+        bipsContribution: 700, // 7% da contribuição
+        amount: ethers.parseEther("500000") // 500K BKC
+    },
+    { 
+        poolId: 2, 
+        multiplier: 1000, 
+        chanceDenominator: 1000, // 0.1% de chance
+        bipsContribution: 300, // 3% da contribuição
+        amount: ethers.parseEther("1000000") // 1M BKC
+    },
+    
+    // --- SUA NOVA PISCINA (Pool 3) ---
+    { 
+      poolId: 3, 
+      multiplier: 4, // Multiplicador 4x (como solicitado)
+      chanceDenominator: 4, // 1 em 4 = 25% de chance (como solicitado)
+      bipsContribution: 7000, // Recebe 70% dos fundos (fração adequada para alta frequência)
+      amount: ethers.parseEther("20000") // 20K BKC de liquidez inicial (como solicitado)
+    }
 ];
+// Total BIPS = 2000 + 700 + 300 + 7000 = 10000 BIPS (100%)
 const TOTAL_INITIAL_LIQUIDITY = LIQUIDITY_CONFIG.reduce((sum, pool) => sum + pool.amount, 0n);
+
+// ==================================================================
+// =================== FIM DA MODIFICAÇÃO ===========================
+// ==================================================================
+
 
 // --- CONFIGURAÇÃO DE SERVIÇOS (TAXAS) ---
 const SERVICE_SETTINGS = {
@@ -98,11 +136,14 @@ export async function runScript(hre: HardhatRuntimeEnvironment) {
     console.log("   ✅ Aprovação do BKC bem-sucedida.");
 
     // 2b. Configurando as Piscinas (Multiplicadores, Chances e Contribuição)
-    console.log("\n2. Configurando as 3 piscinas de prêmios (85%/10%/5% de contribuição)...");
+    console.log("\n2. Configurando as 4 piscinas de prêmios (com a nova distribuição)...");
     
-    const multipliers = LIQUIDITY_CONFIG.map(c => c.multiplier);
-    const denominators = LIQUIDITY_CONFIG.map(c => c.chanceDenominator);
-    const bips = LIQUIDITY_CONFIG.map(c => c.bipsContribution);
+    // Garante que a ordem está correta para os IDs (0, 1, 2, 3)
+    const sortedConfig = LIQUIDITY_CONFIG.sort((a, b) => a.poolId - b.poolId);
+
+    const multipliers = sortedConfig.map(c => c.multiplier);
+    const denominators = sortedConfig.map(c => c.chanceDenominator);
+    const bips = sortedConfig.map(c => c.bipsContribution);
 
     tx = await fortuneTiger.setPools(multipliers, denominators, bips);
     await tx.wait();
@@ -110,8 +151,8 @@ export async function runScript(hre: HardhatRuntimeEnvironment) {
 
 
     // 2c. Adicionando Liquidez Inicial Pool por Pool
-    console.log("\n3. Adicionando liquidez inicial às 3 piscinas...");
-    for (const pool of LIQUIDITY_CONFIG) {
+    console.log("\n3. Adicionando liquidez inicial às 4 piscinas...");
+    for (const pool of sortedConfig) { // Usa a config ordenada
         tx = await fortuneTiger.addInitialLiquidity(pool.poolId, pool.amount);
         await tx.wait();
         console.log(`   ✅ Pool x${pool.multiplier} (ID ${pool.poolId}) financiada com ${ethers.formatEther(pool.amount)} $BKC.`);

@@ -4,7 +4,8 @@ pragma solidity ^0.8.28;
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "./BKCToken.sol"; // Importa BKCToken
-import "./EcosystemManager.sol"; // Importa Hub e suas interfaces (incluindo IDelegationManager)
+import "./EcosystemManager.sol";
+// Importa Hub e suas interfaces (incluindo IDelegationManager)
 
 // --- INTERFACE IRewardManager (MANUTIDA, pois é específica do jogo) ---
 
@@ -20,8 +21,6 @@ interface IRewardManager {
 
 // A interface IDelegationManager FOI REMOVIDA para resolver o erro de compilação.
 // Ela é acessada diretamente via IEcosystemManager(dm).depositRewards().
-
-
 /**
  * @title FortuneTiger (TigerGame - Refatorado)
  * @dev Contrato refatorado para implementar o jogo de múltiplas piscinas de prêmios.
@@ -34,21 +33,32 @@ contract FortuneTiger is Ownable, ReentrancyGuard {
     IRewardManager public immutable rewardManager; 
 
     // --- CONSTANTES DO JOGO E DISTRIBUIÇÃO ---
-    uint256 public constant SERVICE_FEE_BIPS = 1000; // 10% de taxa
-    uint256 public constant PRIZE_POOL_SHARE_BIPS = 9000; // 90% para as piscinas
-    uint256 public constant TREASURY_FEE_BIPS = 500; // 5% Tesouraria (50% da taxa)
-    uint256 public constant DELEGATOR_FEE_BIPS = 500; // 5% Delegadores (50% da taxa)
-    uint256 public constant TOTAL_SHARE_BIPS = 10000; // 100%
-    uint256 public constant MAX_PRIZE_POOL_BIPS = 8000; // 80% LIMITE DE PAGAMENTO DA PISCINA
+    uint256 public constant SERVICE_FEE_BIPS = 1000;
+    // 10% de taxa
+    uint256 public constant PRIZE_POOL_SHARE_BIPS = 9000;
+    // 90% para as piscinas
+    uint256 public constant TREASURY_FEE_BIPS = 500;
+    // 5% Tesouraria (50% da taxa)
+    uint256 public constant DELEGATOR_FEE_BIPS = 500;
+    // 5% Delegadores (50% da taxa)
+    uint256 public constant TOTAL_SHARE_BIPS = 10000;
+    // 100%
+    uint256 public constant MAX_PRIZE_POOL_BIPS = 8000;
+    // 80% LIMITE DE PAGAMENTO DA PISCINA
 
     // --- ESTRUTURA DE DADOS DAS PISCINAS ---
     struct PrizePool {
-        uint256 multiplier; // Ex: 10, 100, 1000
-        uint256 chanceDenominator; // Ex: 10, 100, 1000
-        uint256 balance; // Liquidez atual em BKC
-        uint256 contributionShareBips; // % do fundo de 90% (Ex: 8500, 1000, 500)
+        uint256 multiplier;
+        // Ex: 10, 100, 1000
+        uint256 chanceDenominator;
+        // Ex: 10, 100, 1000
+        uint256 balance;
+        // Liquidez atual em BKC
+        uint256 contributionShareBips;
+        // % do fundo de 90% (Ex: 8500, 1000, 500)
     }
-    mapping(uint256 => PrizePool) public prizePools; // 0, 1, 2 para as 3 piscinas
+    mapping(uint256 => PrizePool) public prizePools;
+    // 0, 1, 2, 3 para as 4 piscinas
 
     // --- EVENTOS ---
     event GamePlayed(address indexed user, uint256 amountWagered, uint256 totalPrizeWon);
@@ -66,7 +76,6 @@ contract FortuneTiger is Ownable, ReentrancyGuard {
 
         require(_bkcToken != address(0), "FT: Token not configured in Hub");
         bkcToken = BKCToken(_bkcToken);
-        
         require(_rewardManager != address(0), "FT: RewardManager cannot be zero");
         rewardManager = IRewardManager(_rewardManager);
     }
@@ -74,17 +83,20 @@ contract FortuneTiger is Ownable, ReentrancyGuard {
     // --- FUNÇÕES DE ADMINISTRAÇÃO ---
     
     /**
-     * @notice (Owner) Configura as 3 piscinas de prêmios (10x, 100x, 1000x).
+     * @notice (Owner) Configura as 4 piscinas de prêmios.
      */
     function setPools(
         uint256[] calldata _multipliers,
         uint256[] calldata _denominators,
         uint256[] calldata _contributionBips
     ) external onlyOwner {
-        require(_multipliers.length == 3 && _denominators.length == 3 && _contributionBips.length == 3, "Game: Deve ter 3 piscinas");
-
+        // ======================= MODIFICAÇÃO 1 =======================
+        // Alterado de 3 para 4
+        require(_multipliers.length == 4 && _denominators.length == 4 && _contributionBips.length == 4, "Game: Deve ter 4 piscinas");
+        // ===================== FIM DA MODIFICAÇÃO ======================
+        
         uint256 totalBips = 0;
-        for (uint256 i = 0; i < 3; i++) {
+        for (uint256 i = 0; i < 4; i++) { // Alterado de 3 para 4
             require(_multipliers[i] > 0 && _denominators[i] > 0, "Game: Valores invalidos");
             prizePools[i] = PrizePool({
                 multiplier: _multipliers[i],
@@ -102,7 +114,11 @@ contract FortuneTiger is Ownable, ReentrancyGuard {
      * @notice (Owner) Adiciona liquidez inicial às piscinas.
      */
     function addInitialLiquidity(uint256 _poolId, uint256 _amount) external onlyOwner {
-        require(_poolId < 3, "Game: Invalid pool ID");
+        // ======================= MODIFICAÇÃO 2 =======================
+        // Alterado de < 3 para < 4
+        require(_poolId < 4, "Game: Invalid pool ID");
+        // ===================== FIM DA MODIFICAÇÃO ======================
+        
         require(_amount > 0, "Game: Amount must be positive");
         
         // Assume que o owner já transferiu o BKC para este contrato.
@@ -116,17 +132,17 @@ contract FortuneTiger is Ownable, ReentrancyGuard {
      */
     function play(uint256 _amount, uint256 _boosterTokenId) external nonReentrant {
         require(_amount > 0, "Game: Aposta deve ser positiva");
-        
         // 1. AUTORIZAÇÃO E PSTAKE
-        ecosystemManager.authorizeService("TIGER_GAME_SERVICE", msg.sender, _boosterTokenId); 
-        
+        ecosystemManager.authorizeService("TIGER_GAME_SERVICE", msg.sender, _boosterTokenId);
         // Transfere o valor total da aposta para o contrato
         require(bkcToken.transferFrom(msg.sender, address(this), _amount), "Game: Transferencia de aposta falhou");
-
         // 2. CÁLCULO E DISTRIBUIÇÃO DA TAXA DE SERVIÇO (10%)
-        uint256 treasuryAmount = (_amount * TREASURY_FEE_BIPS) / TOTAL_SHARE_BIPS; // 5%
-        uint256 delegatorFeeAmount = (_amount * DELEGATOR_FEE_BIPS) / TOTAL_SHARE_BIPS; // 5%
-        uint256 prizePoolAmount = _amount - treasuryAmount - delegatorFeeAmount; // 90% (Fundo de Prêmio)
+        uint256 treasuryAmount = (_amount * TREASURY_FEE_BIPS) / TOTAL_SHARE_BIPS;
+        // 5%
+        uint256 delegatorFeeAmount = (_amount * DELEGATOR_FEE_BIPS) / TOTAL_SHARE_BIPS;
+        // 5%
+        uint256 prizePoolAmount = _amount - treasuryAmount - delegatorFeeAmount;
+        // 90% (Fundo de Prêmio)
 
         // A. Tesouraria (5%)
         if (treasuryAmount > 0) {
@@ -142,15 +158,16 @@ contract FortuneTiger is Ownable, ReentrancyGuard {
         }
         
         // 3. MINERAÇÃO POR COMPRA (POP MINING)
-        rewardManager.performGameMiningAndDistribution(_amount); 
-
+        rewardManager.performGameMiningAndDistribution(_amount);
         // 4. DISTRIBUIÇÃO PARA AS PISCINAS (90%) e SORTEIO
         uint256 totalPrizeWon = 0;
         uint256 randomSeed = uint256(blockhash(block.number - 1));
 
-        for (uint256 poolId = 0; poolId < 3; poolId++) {
+        // ======================= MODIFICAÇÃO 3 =======================
+        // Alterado de < 3 para < 4
+        for (uint256 poolId = 0; poolId < 4; poolId++) {
+        // ===================== FIM DA MODIFICAÇÃO ======================
             PrizePool storage pool = prizePools[poolId];
-            
             // A. Reabastecimento da Piscina 
             uint256 contribution = (prizePoolAmount * pool.contributionShareBips) / TOTAL_SHARE_BIPS;
             pool.balance += contribution;
@@ -160,17 +177,16 @@ contract FortuneTiger is Ownable, ReentrancyGuard {
                 
                 // C. CÁLCULO DO PRÊMIO SUSTENTÁVEL (80% da piscina ou Teto Multiplicador)
                 
+            
                 // 1. O Teto Multiplicador: valor apostado * X
                 uint256 maxPrizeMultiplier = _amount * pool.multiplier;
-                
                 // 2. O Limite de Sustentabilidade (80% da liquidez da piscina)
                 uint256 maxPrizeSustainability = (pool.balance * MAX_PRIZE_POOL_BIPS) / 10000;
-                
                 // O prêmio a ser pago é o MÍNIMO dos dois limites:
                 uint256 prizeAmount = (maxPrizeMultiplier < maxPrizeSustainability) 
-                                        ? maxPrizeMultiplier 
+                                        ?
+                                        maxPrizeMultiplier
                                         : maxPrizeSustainability;
-                
                 if (prizeAmount > 0) {
                     // D. Pagamento Imediato 
                     pool.balance -= prizeAmount;

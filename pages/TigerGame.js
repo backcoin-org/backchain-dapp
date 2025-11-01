@@ -1,4 +1,5 @@
 // pages/TigerGame.js - Versão V5: Correção da Renderização Silenciosa e Inicialização
+// ARQUIVO AJUSTADO PARA 4 PISCINAS E TRADUZIDO (INTERNACIONAL)
 
 import { State } from '../state.js';
 import { loadUserData } from '../modules/data.js';
@@ -37,7 +38,7 @@ const gameState = {
     lastWin: 0,
     // NOVO: Estado de Giros Múltiplos
     currentSpinRound: 0,
-    maxSpinRounds: 3,
+    maxSpinRounds: 4, // (4 Piscinas)
 };
 
 // Persistir streak no localStorage (para produção, considere backend ou wallet)
@@ -58,15 +59,16 @@ loadGameState(); // Carregar ao iniciar
 // ============================================
 
 const PRIZE_POOLS_CONFIG = [
-    { poolId: 0, multiplier: 10, chance: '1 em 10', style: 'bg-yellow-800 border-yellow-500/50' },
-    { poolId: 1, multiplier: 100, chance: '1 em 100', style: 'bg-orange-800 border-orange-500/50' },
-    { poolId: 2, multiplier: 1000, chance: '1 em 1000', style: 'bg-red-800 border-red-500/50' },
+    { poolId: 3, multiplier: 4, chance: '1 in 4', style: 'bg-blue-800 border-blue-500/50' }, // (Piscina de 25% chance)
+    { poolId: 0, multiplier: 10, chance: '1 in 10', style: 'bg-yellow-800 border-yellow-500/50' },
+    { poolId: 1, multiplier: 100, chance: '1 in 100', style: 'bg-orange-800 border-orange-500/50' },
+    { poolId: 2, multiplier: 1000, chance: '1 in 1000', style: 'bg-red-800 border-red-500/50' },
 ];
 
 // ATENÇÃO: Corrigido o caminho/extensão da imagem e do áudio para corresponder ao padrão esperado pelo navegador (geralmente .png e .mp3).
 // Se seus arquivos NÃO têm extensão, você deve RENOMEÁ-LOS no disco para bkc_logo_3d.png, spin.mp3 e win.mp3
 const WINNING_SYMBOL_HTML = '<div class="bkc-logo-symbol"><img src="./assets/bkc_logo_3d.png" alt="BKC" style="width: 70%; height: 70%; object-fit: contain;"></div>';
-const FALLBACK_SYMBOLS = ['🍒', '💰', '💎', '🍋', '7️⃣', '🔔', '🐯', WINNING_SYMBOL_HTML]; 
+const FALLBACK_SYMBOLS = ['🍋', '🍒', '💰', '💎', '7️⃣', '🔔', '🐯', WINNING_SYMBOL_HTML]; // Adicionado 🍋 para a piscina x4
 const REEL_COUNT = 3;
 const SYMBOL_HEIGHT_PX = 120; 
 const MAX_PRIZE_POOL_BIPS = 8000; 
@@ -138,6 +140,8 @@ async function processGameResult(receipt, amountWagered) {
                 
                 if (prizeFloat > 0) {
                     const calculatedMultiplier = prizeFloat / wagerFloat;
+                    // Ajustado para incluir o multiplicador x4
+                    if (calculatedMultiplier >= 3.8) wonMultipliers.push(4); // (Tolerância)
                     if (calculatedMultiplier >= 9.5) wonMultipliers.push(10);
                     if (calculatedMultiplier >= 95) wonMultipliers.push(100);
                     if (calculatedMultiplier >= 950) wonMultipliers.push(1000);
@@ -162,6 +166,7 @@ async function processGameResult(receipt, amountWagered) {
 // ============================================
 
 function getWinningSymbol(multiplier) {
+    if (multiplier === 4) return '🍋'; // <-- Símbolo para x4
     if (multiplier === 10) return '🍒'; 
     if (multiplier === 100) return '💰';
     if (multiplier === 1000) return WINNING_SYMBOL_HTML;
@@ -303,13 +308,13 @@ function stopSlotAnimationOnError() {
 // V. FUNÇÃO PRINCIPAL DE JOGO (Contrato e Sequência de Giros)
 // ============================================
 
-// NOVO: Gerencia a sequência de 3 giros após a chamada do contrato, associando cada spin a uma piscina.
-async function startThreeSpinSequence(prizeWon) {
+async function startFourSpinSequence(prizeWon) {
     let totalPrizeWonFloat = formatBigNumber(prizeWon.totalPrizeWon);
     const wagerInput = document.getElementById('wagerInput');
     const wager = parseFloat(wagerInput?.value) || 0;
     const potentials = calculatePrizePotentials(wager);
-    const poolTargets = [10, 100, 1000]; // Associar Spin 1: x10, Spin 2: x100, Spin 3: x1000
+    
+    const poolTargets = [4, 10, 100, 1000]; // Associar Spin 1: x4, Spin 2: x10, Spin 3: x100, Spin 4: x1000
     
     for (let i = 1; i <= gameState.maxSpinRounds; i++) {
         gameState.currentSpinRound = i;
@@ -317,14 +322,12 @@ async function startThreeSpinSequence(prizeWon) {
         
         // Atualiza display com piscina alvo e prêmio potencial
         const resultDisplay = document.getElementById('resultDisplay');
-        resultDisplay.innerHTML = `<h3>SPINNING for x${targetMultiplier} Pool... (Potential: ${potentials[targetMultiplier].toLocaleString('en-US', { maximumFractionDigits: 2 })} $BKC)</h3>`;
+        const potentialPrize = potentials[targetMultiplier] !== undefined ? potentials[targetMultiplier] : 0;
+        resultDisplay.innerHTML = `<h3>SPINNING for x${targetMultiplier} Pool... (Potential: ${potentialPrize.toLocaleString('en-US', { maximumFractionDigits: 2 })} $BKC)</h3>`;
         
-        // Determina se este é o spin de vitória (apenas no último spin, ou em um aleatório, ou sempre no 3º)
-        // Para simplificar e garantir a vitória visual: SÓ NO ÚLTIMO GIRO.
+        // Determina se este é o spin de vitória
         const isFinalWinningSpin = (i === gameState.maxSpinRounds && prizeWon.highestMultiplier > 0);
         
-        // Se este for o spin de vitória, usamos os resultados reais do contrato.
-        // Caso contrário, simulamos uma perda no carretel (apenas visual)
         const currentSpinResult = isFinalWinningSpin ? prizeWon : { highestMultiplier: 0 };
         
         startSlotAnimation(); // Inicia o giro
@@ -353,7 +356,8 @@ async function startThreeSpinSequence(prizeWon) {
             await new Promise(resolve => setTimeout(resolve, 1500));
             
         } else if (i < gameState.maxSpinRounds) {
-            resultDisplay.innerHTML = `<h3>Miss on x${targetMultiplier}! Prepare-se para o Spin ${i + 1}.</h3>`;
+            // <-- AJUSTE TRADUÇÃO
+            resultDisplay.innerHTML = `<h3>Miss on x${targetMultiplier}! Prepare for Spin ${i + 1}.</h3>`;
             await new Promise(resolve => setTimeout(resolve, 1000));
         }
     }
@@ -434,8 +438,8 @@ async function executeSpinGame() {
         // 4. Processa o resultado real do contrato
         const prizeWon = await processGameResult(receipt, amountWei);
         
-        // 5. INICIA A NOVA SEQUÊNCIA DE 3 GIROS
-        await startThreeSpinSequence(prizeWon); 
+        // 5. INICIA A NOVA SEQUÊNCIA DE 4 GIROS
+        await startFourSpinSequence(prizeWon); 
 
     } catch (error) {
         console.error("Game error:", error);
@@ -476,10 +480,12 @@ export const TigerGamePage = {
             return;
         }
 
-        // 1. CÓDIGO HTML (mantido, mas será atribuído)
+        // 1. CÓDIGO HTML (ajustado)
+        
+        // <-- AJUSTE TRADUÇÃO
         const prizePotentialsHTML = PRIZE_POOLS_CONFIG.map(pool => `
             <div class="info-row">
-                <span class="info-label">Potencial x${pool.multiplier} (Max)</span>
+                <span class="info-label">x${pool.multiplier} Potential (Max)</span>
                 <span class="info-value text-amber-400" id="potentialPrize-${pool.multiplier}">-- $BKC</span>
             </div>
         `).join('');
@@ -503,16 +509,20 @@ export const TigerGamePage = {
                     </div>
 
                     <div class="pools-info">
+                        <div class="pool-item" title="x4 Pool: 1/4 chance, up to 4x wager">
+                            <span class="pool-label">x4 Liquidity</span>
+                            <span class="pool-value" id="pool4">0.00</span>
+                        </div>
                         <div class="pool-item" title="x10 Pool: 1/10 chance, up to 10x wager">
-                            <span class="pool-label">x10 Liquidez</span>
+                            <span class="pool-label">x10 Liquidity</span>
                             <span class="pool-value" id="pool10">0.00</span>
                         </div>
                         <div class="pool-item" title="x100 Pool: 1/100 chance, up to 100x wager">
-                            <span class="pool-label">x100 Liquidez</span>
+                            <span class="pool-label">x100 Liquidity</span>
                             <span class="pool-value" id="pool100">0.00</span>
                         </div>
                         <div class="pool-item" title="x1000 Pool: 1/1000 chance, up to 1000x wager">
-                            <span class="pool-label">x1000 Liquidez</span>
+                            <span class="pool-label">x1000 Liquidity</span>
                             <span class="pool-value" id="pool1000">0.00</span>
                         </div>
                     </div>
@@ -529,7 +539,7 @@ export const TigerGamePage = {
                     </div>
 
                     <div class="result-display" id="resultDisplay">
-                        <h3><span id="spinRoundDisplay">Spin: 0 / 3</span> - GOOD LUCK, HUNTER.</h3>
+                        <h3><span id="spinRoundDisplay">Spin: 0 / 4</span> - GOOD LUCK</h3>
                     </div>
                 </section>
 
@@ -598,10 +608,11 @@ export const TigerGamePage = {
                                 <p>Enter your wager amount and click "SPIN THE REELS" to begin. The game will spin three reels with various symbols. Match symbols to win prizes based on the multiplier pools.</p>
                                 
                                 <h3>Multiplier Pools</h3>
-                                <p><strong>x10 Pool:</strong> 1 in 10 chance. Win up to 10x your wager (capped at 80% pool liquidity). Símbolo: 🍒 (Cereja)</p>
-                                <p><strong>x100 Pool:</strong> 1 in 100 chance. Win up to 100x your wager (capped at 80% pool liquidity). Símbolo: 💰 (Moedas)</p>
-                                <p><strong>x1000 Pool:</strong> 1 in 1000 chance. Win up to 1000x your wager (capped at 80% pool liquidity). Símbolo: $BKC (Logo)</p>
-                                <p><strong>Pool Mechanics:</strong> Each spin sequence targets pools progressively: Spin 1 aims for x10, Spin 2 for x100, Spin 3 for x1000. Prizes are calculated based on your wager and pool liquidity.</p>
+                                <p><strong>x4 Pool:</strong> 1 in 4 chance (25%). Win up to 4x your wager (capped at 80% pool liquidity). Symbol: 🍋 (Lemon)</p>
+                                <p><strong>x10 Pool:</strong> 1 in 10 chance. Win up to 10x your wager (capped at 80% pool liquidity). Symbol: 🍒 (Cherry)</p>
+                                <p><strong>x100 Pool:</strong> 1 in 100 chance. Win up to 100x your wager (capped at 80% pool liquidity). Symbol: 💰 (Coins)</p>
+                                <p><strong>x1000 Pool:</strong> 1 in 1000 chance. Win up to 1000x your wager (capped at 80% pool liquidity). Symbol: $BKC (Logo)</p>
+                                <p><strong>Pool Mechanics:</strong> Each spin sequence targets pools progressively: Spin 1 aims for x4, Spin 2 for x10, Spin 3 for x100, Spin 4 for x1000. Prizes are calculated based on your wager and pool liquidity.</p>
                                 
                                 <h3>Tiger's Legacy</h3>
                                 <p>Every spin earns XP. Level up to unlock rewards and boosters!</p>
@@ -698,18 +709,18 @@ export const TigerGamePage = {
     loadPoolBalances, 
 
     updatePoolDisplay() {
+        const pool4 = document.getElementById('pool4');
         const pool10 = document.getElementById('pool10');
         const pool100 = document.getElementById('pool100');
         const pool1000 = document.getElementById('pool1000');
 
+        if (pool4) pool4.textContent = formatBigNumber(gameState.poolBalances[4] || 0n).toLocaleString('en-US', { maximumFractionDigits: 2 });
         if (pool10) pool10.textContent = formatBigNumber(gameState.poolBalances[10] || 0n).toLocaleString('en-US', { maximumFractionDigits: 2 });
         if (pool100) pool100.textContent = formatBigNumber(gameState.poolBalances[100] || 0n).toLocaleString('en-US', { maximumFractionDigits: 2 });
         if (pool1000) pool1000.textContent = formatBigNumber(gameState.poolBalances[1000] || 0n).toLocaleString('en-US', { maximumFractionDigits: 2 });
     },
     
-    // CORREÇÃO: Função transformada em async para permitir o uso de 'await'
     async checkPStakeStatus() {
-        // Código mantido, mas movido para função separada se necessário
         const pstakeStatusEl = document.getElementById('pstakeStatus');
         const spinButton = document.getElementById('spinButton');
         if (!pstakeStatusEl || !State.ecosystemManagerContract) return;
@@ -722,7 +733,6 @@ export const TigerGamePage = {
         pstakeStatusEl.innerHTML = '<span class="status-icon">...</span> Checking';
         
         try {
-            // Linha 717 (agora 712) que precisava do 'await' (e, portanto, da função ser 'async')
             const [ignoredFee, pStakeReq] = await safeContractCall( 
                 State.ecosystemManagerContract, 
                 'getServiceRequirements', 

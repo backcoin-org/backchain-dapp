@@ -105,11 +105,13 @@
     color: var(--tiger-text-secondary);
 }
 
+/* ================== AJUSTE 4 PISCINAS ================== */
 .pools-info {
     display: grid;
-    grid-template-columns: repeat(3, 1fr);
+    grid-template-columns: repeat(4, 1fr); /* <-- AJUSTADO DE 3 PARA 4 */
     gap: 8px;
 }
+/* ================== FIM DO AJUSTE ================== */
 
 .pool-item {
     background: rgba(0, 255, 127, 0.05);
@@ -756,10 +758,12 @@
         font-size: 18px;
     }
 
+    /* ================== AJUSTE 4 PISCINAS (Responsivo) ================== */
     .pools-info {
-        grid-template-columns: repeat(3, 1fr);
+        grid-template-columns: repeat(4, 1fr); /* <-- AJUSTADO DE 3 PARA 4 */
         gap: 4px;
     }
+    /* ================== FIM DO AJUSTE ================== */
 
     .pool-item {
         padding: 6px 4px;

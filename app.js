@@ -1,4 +1,4 @@
-// app.js (AJUSTADO: Resolvendo o erro de rota e garantindo a atualização do estado da UI)
+// app.js (AJUSTADO: Adicionada a lógica global de troca de abas)
 
 const ethers = window.ethers;
 
@@ -291,6 +291,59 @@ function setupGlobalListeners() {
             sidebarBackdrop.classList.add('hidden');
         });
     }
+
+    // ==================================================================
+    // === INÍCIO DA CORREÇÃO: LÓGICA DE TROCA DE ABAS (FALTANTE) ===
+    // ==================================================================
+    
+    // Este listener global irá gerenciar todas as trocas de abas da aplicação
+    document.body.addEventListener('click', (e) => {
+        const tabButton = e.target.closest('.tab-btn');
+        
+        if (!tabButton) return; // O clique não foi em um botão de aba
+        if (tabButton.classList.contains('active')) return; // A aba já está ativa
+        
+        e.preventDefault();
+        
+        const targetId = tabButton.dataset.target;
+        const targetContent = document.getElementById(targetId);
+        
+        if (!targetContent) {
+            console.warn(`Conteúdo da aba (targetId: '${targetId}') não encontrado.`);
+            return;
+        }
+
+        // 1. Encontra o container de navegação (pai dos botões)
+        const nav = tabButton.closest('nav');
+        if (nav) {
+            // Remove 'active' de todos os botões irmãos
+            nav.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+        }
+        
+        // 2. Ativa o botão clicado
+        tabButton.classList.add('active');
+
+        // 3. Encontra o container de conteúdo (pai dos .tab-content)
+        // Isso assume que os .tab-content são irmãos do targetContent
+        const contentHost = targetContent.parentElement;
+        if (contentHost) {
+            // Esconde todos os .tab-content irmãos
+            Array.from(contentHost.children).forEach(child => {
+                if (child.classList.contains('tab-content')) {
+                    child.classList.add('hidden'); // O CSS usa 'hidden'
+                    child.classList.remove('active'); // O CSS também usa 'active'
+                }
+            });
+        }
+        
+        // 4. Mostra o conteúdo alvo
+        targetContent.classList.remove('hidden');
+        targetContent.classList.add('active');
+    });
+
+    // ==================================================================
+    // === FIM DA CORREÇÃO ===
+    // ==================================================================
 
     console.log("Global listeners attached.");
 }

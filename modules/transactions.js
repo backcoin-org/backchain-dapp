@@ -103,7 +103,7 @@ async function ensureApproval(spenderAddress, requiredAmount, btnElement, purpos
     const resetBtn = () => {
          if(btnElement && originalText) {
              btnElement.innerHTML = originalText;
-             // A re-habilitação depende do contexto, então não forçamos aqui
+             // A re-habilitação depende do contexto, então não forçamos here
          }
     };
 
@@ -126,7 +126,7 @@ async function ensureApproval(spenderAddress, requiredAmount, btnElement, purpos
         resetBtn(); // Restaura o botão em caso de erro na aprovação
         return false;
     }
-    // Não precisa de finally aqui, o reset é feito no catch
+    // Não precisa de finally here, o reset é feito no catch
 }
 
 
@@ -394,31 +394,53 @@ export async function executeFaucetClaim(btnElement) {
     );
 }
 
-// --- NOVO: NOTARY ---
+// =======================================================
+//  INÍCIO DA CORREÇÃO PARA O NOTARY
+// =======================================================
+
 /**
- * Executa a transação para notarizar um documento.
- * Cobra a taxa (via approve) e chama o contrato.
+ * Executa a transação para notarizar um documento (V2 - Corrigido).
+ * Esta versão busca a TAXA BASE do State (carregada pelo NotaryPage) para
+ * aprovação, e passa o BOOSTER ID para o contrato.
  * @param {string} documentURI - O URI 'ipfs://...' do documento.
- * @param {BigInt} feeAmount - O valor da taxa em Wei.
+ * @param {BigInt} boosterId - O ID do Booster NFT do usuário (0n se não houver).
  * @param {HTMLElement} submitButton - O botão de submit para mostrar loading.
  * @returns {Promise<boolean>} - True se a transação for bem-sucedida.
  */
-export async function executeNotarizeDocument(documentURI, feeAmount, submitButton) {
+export async function executeNotarizeDocument(documentURI, boosterId, submitButton) {
     if (!State.signer || !State.bkcTokenContract || !State.decentralizedNotaryContract) {
         showToast("Wallet not connected or contracts not loaded.", "error");
         return false;
     }
 
-    // 1. Verificar Saldo (feito antes no ensureApproval implícito)
-    // 2. Garantir Aprovação
+    // 1. Busca a Taxa Base (não descontada) que o NotaryPage.js carregou no State.
+    // Esta é a taxa máxima que o usuário pode pagar.
+    const baseFee = State.notaryFee; 
+    if (typeof baseFee === 'undefined') {
+        showToast("Notary base fee not loaded. Please refresh.", "error");
+        return false;
+    }
+
+    // 2. Garantir Aprovação (Approval)
+    // O usuário deve aprovar o contrato do Cartório para gastar a TAXA BASE.
+    // O contrato (DecentralizedNotary.sol) irá calcular a taxa final
+    // (com desconto) e puxar (transferFrom) apenas o valor necessário.
+    // Como a taxa final será sempre <= à taxa base, esta aprovação é segura.
     const notaryAddress = await State.decentralizedNotaryContract.getAddress();
-    const approved = await ensureApproval(notaryAddress, feeAmount, submitButton, "Notary Fee");
-    if (!approved) return false; // Sai se a aprovação falhar ou for rejeitada
+    
+    // Só precisa de aprovação se a taxa base for maior que zero
+    if (baseFee > 0n) {
+        const approved = await ensureApproval(notaryAddress, baseFee, submitButton, "Notary Fee");
+        if (!approved) return false; // Sai se a aprovação falhar ou for rejeitada
+    }
 
     // 3. Executar a Transação de Notarização
-    // A função ensureApproval já pode ter mudado o texto do botão,
-    // então passamos o texto específico para executeTransaction
-    const notarizeTxPromise = State.decentralizedNotaryContract.notarizeDocument(documentURI);
+    // Agora passamos os DOIS argumentos corretos para o contrato,
+    // conforme definido no ABI
+    const notarizeTxPromise = State.decentralizedNotaryContract.notarizeDocument(
+        documentURI, // 1º argumento: string
+        boosterId    // 2º argumento: uint256
+    );
 
     // Usa o wrapper executeTransaction para lidar com a transação e feedback
     const success = await executeTransaction(
@@ -430,3 +452,7 @@ export async function executeNotarizeDocument(documentURI, feeAmount, submitButt
 
     return success; // Retorna true ou false
 }
+
+// =======================================================
+//  FIM DA CORREÇÃO PARA O NOTARY
+// =======================================================
