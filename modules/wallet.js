@@ -1,6 +1,8 @@
 // modules/wallet.js
 
-const ethers = window.ethers;
+// --- CORREÇÃO: Importar ethers v6 via CDN ESM ---
+// Esta é a forma moderna e evita o aviso da MetaMask sobre "window.ethers"
+import { ethers } from 'https://esm.sh/ethers@6.11.1';
 
 // --- NOVA IMPORTAÇÃO DO WEB3MODAL via CDN ESM ---
 import { createWeb3Modal, defaultConfig } from 'https://esm.sh/@web3modal/ethers@5.0.3';

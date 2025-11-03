@@ -189,7 +189,19 @@ function renderValidatorsList() {
     }
     // --- FIM DA CORREÇÃO ---
 
-    const sortedData = [...State.allValidatorsData].sort((a, b) => b.pStake - a.pStake);
+    // =================================================================
+    // --- INÍCIO DA CORREÇÃO: ERRO BigInt.sort() ---
+    // A função .sort() não pode receber um BigInt (b.pStake - a.pStake).
+    // Ela deve receber um Number (1, -1, ou 0).
+    // =================================================================
+    const sortedData = [...State.allValidatorsData].sort((a, b) => {
+        if (b.pStake > a.pStake) return 1;
+        if (b.pStake < a.pStake) return -1;
+        return 0;
+    });
+    // =================================================================
+    // --- FIM DA CORREÇÃO ---
+    // =================================================================
 
     const generateValidatorHtml = (validator) => {
         const { addr, pStake, selfStake, totalDelegatedAmount } = validator;
@@ -447,7 +459,7 @@ function renderValidatorRegisterPanel(stakeAmount, el) {
                         <p class="text-sm text-zinc-400">Step 2 of 2</p>
                     </div>
                     <div class="w-full flex-1 space-y-4">
-                        <h3 class="xl font-bold">Self-Stake & Register</h3>
+                        <h3 classxl font-bold">Self-Stake & Register</h3>
                         <p class="text-sm text-zinc-400">Your fee is paid. Now, lock <span class="font-bold text-amber-400">${formatBigNumber(stakeAmount).toFixed(8)} $BKC</span> as self-stake to finalize your registration. This amount will be locked for 5 years.</p>
                         <button id="registerValidatorBtn" class="bg-green-500 hover:bg-green-600 text-white font-bold py-3 px-4 rounded-md transition-colors w-full text-lg">
                             <i class="fa-solid fa-lock mr-2"></i>Approve & Register Validator
