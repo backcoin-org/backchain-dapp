@@ -1,6 +1,11 @@
 {
+  "build": {
+    "env": {
+      "NODE_VERSION": "18"
+    }
+  },
   "functions": {
-    "api/upload.js": {
+    "api/**/*.js": {
       "runtime": "nodejs18.x"
     }
   },
