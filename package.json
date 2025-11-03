@@ -38,6 +38,7 @@
     "@vercel/speed-insights": "^1.2.0",
     "dotenv": "^16.4.5",
     "formidable": "^3.5.4",
-    "merkletreejs": "^0.6.0"
+    "merkletreejs": "^0.6.0",
+    "nft.storage": "^7.1.1"
   }
 }
