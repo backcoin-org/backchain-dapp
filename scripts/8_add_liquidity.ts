@@ -4,13 +4,12 @@
 // LÓGICA: Cunha NFTs "não vendidos" (95% - Vendidos) e adiciona-os ao AMM de NFT.
 
 import { HardhatRuntimeEnvironment } from "hardhat/types";
-import addressesJson from "../deployment-addresses.json";
+// REMOVIDO: import addressesJson from "../deployment-addresses.json";
 import { LogDescription, ContractTransactionReceipt, ethers, Log } from "ethers";
 import fs from "fs";
 import path from "path";
 
-// Type assertion for the addresses object
-const addresses: { [key: string]: string } = addressesJson;
+// REMOVIDO: const addresses: { [key: string]: string } = addressesJson;
 
 // Helper function for delays
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -80,6 +79,15 @@ const CHUNK_SIZE_BIGINT = BigInt(CHUNK_SIZE);
 export async function runScript(hre: HardhatRuntimeEnvironment) {
   const { ethers } = hre;
   const [deployer] = await ethers.getSigners();
+
+  // --- Carregar Endereços (CORRIGIDO: Carregamento dinâmico) ---
+  const addressesFilePath = path.join(__dirname, "../deployment-addresses.json");
+  if (!fs.existsSync(addressesFilePath)) {
+    console.error("❌ Erro: 'deployment-addresses.json' não encontrado. O deploy master (passos 1-7) foi executado?");
+    throw new Error("Missing deployment-addresses.json");
+  }
+  const addresses: { [key: string]: string } = JSON.parse(fs.readFileSync(addressesFilePath, "utf8"));
+
 
   // --- Carregar Contratos ---
   const hub = await ethers.getContractAt(
@@ -257,4 +265,23 @@ export async function runScript(hre: HardhatRuntimeEnvironment) {
     "\n🎉🎉🎉 CUNHAGEM PÓS-VENDA E INICIALIZAÇÃO DA LIQUIDEZ CONCLUÍDAS! 🎉🎉🎉"
   );
   console.log("\n✅ O ecossistema está totalmente configurado e o mercado secundário de NFT está ATIVO.");
+}
+
+// ====================================================================
+// Ponto de entrada para execução standalone (se necessário)
+// ====================================================================
+// (Removido o bloco de execução automática para garantir que seja chamado apenas pelo run_master.ts)
+
+// ADICIONADO BLOCO DE CORREÇÃO:
+if (require.main === module) {
+  console.log("Executando 8_add_liquidity.ts como script standalone...");
+  // Precisamos importar o 'hre' (Hardhat Runtime Environment)
+  import("hardhat").then(hre => {
+    runScript(hre) // Chama a função principal do script
+      .then(() => process.exit(0))
+      .catch((error) => {
+        console.error(error);
+        process.exit(1);
+      });
+  });
 }

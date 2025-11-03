@@ -13,7 +13,7 @@ const CONFIG_DELAY_MS = 1500; // 1.5-second delay
 // ######################################################################
 
 // ====================================================================
-// =================== INÍCIO DA MODIFICAÇÃO (4 PISCINAS) ===================
+// =================== INÍCIO DA MODIFICAÇÃO (Regra 3x) ===================
 // ====================================================================
 
 // --- Liquidez Inicial Solicitada (MODIFICADA PARA 4 PISCINAS) ---
@@ -44,10 +44,10 @@ const LIQUIDITY_CONFIG = [
     // --- SUA NOVA PISCINA (Pool 3) ---
     { 
       poolId: 3, 
-      multiplier: 4, // Multiplicador 4x (como solicitado)
-      chanceDenominator: 4, // 1 em 4 = 25% de chance (como solicitado)
-      bipsContribution: 7000, // Recebe 70% dos fundos (fração adequada para alta frequência)
-      amount: ethers.parseEther("20000") // 20K BKC de liquidez inicial (como solicitado)
+      multiplier: 3, // ATUALIZADO: Multiplicador 3x (Era 4)
+      chanceDenominator: 3, // ATUALIZADO: 1 em 3 = ~33.3% de chance (Era 4)
+      bipsContribution: 7000, // Recebe 70% dos fundos
+      amount: ethers.parseEther("20000") // 20K BKC de liquidez inicial
     }
 ];
 // Total BIPS = 2000 + 700 + 300 + 7000 = 10000 BIPS (100%)
@@ -59,22 +59,23 @@ const TOTAL_INITIAL_LIQUIDITY = LIQUIDITY_CONFIG.reduce((sum, pool) => sum + poo
 
 
 // --- CONFIGURAÇÃO DE SERVIÇOS (TAXAS) ---
+// (O teto de 50% do prêmio é definido no TigerGame.sol, não aqui)
 const SERVICE_SETTINGS = {
   // --- DecentralizedNotary ---
   NOTARY_FEE: ethers.parseUnits("100", 18), // 100 BKC
-  NOTARY_SERVICE_PSTAKE: 10000, // Requer 10,000 pStake (AJUSTADO)
+  NOTARY_SERVICE_PSTAKE: 10000, // Requer 10,000 pStake
 
-  // --- NOVO: TIGER GAME SERVICE ---
+  // --- TIGER GAME SERVICE ---
   TIGER_GAME_SERVICE_FEE: 0, 
-  TIGER_GAME_SERVICE_PSTAKE: 10000, // Requer 10,000 pStake (AJUSTADO)
+  TIGER_GAME_SERVICE_PSTAKE: 10000, // Requer 10,000 pStake
 
   // --- Taxas do DelegationManager ---
-  UNSTAKE_FEE_BIPS: 100, // 1% (MANTIDO)
-  FORCE_UNSTAKE_PENALTY_BIPS: 5000, // 50% (AJUSTADO)
+  UNSTAKE_FEE_BIPS: 100, // 1%
+  FORCE_UNSTAKE_PENALTY_BIPS: 5000, // 50%
   CLAIM_REWARD_FEE_BIPS: 50, // 0.5%
 
   // --- NFTLiquidityPool ---
-  NFT_POOL_ACCESS_PSTAKE: 10000, // Requer 10,000 pStake (AJUSTADO)
+  NFT_POOL_ACCESS_PSTAKE: 10000, // Requer 10,000 pStake
   NFT_POOL_TAX_BIPS: 1000, // 10%
   NFT_POOL_TAX_TREASURY_SHARE_BIPS: 4000, // 40% da taxa
   NFT_POOL_TAX_DELEGATOR_SHARE_BIPS: 4000, // 40% da taxa
@@ -98,7 +99,7 @@ export async function runScript(hre: HardhatRuntimeEnvironment) {
     console.error("❌ Erro: 'deployment-addresses.json' não encontrado.");
     throw new Error("Missing deployment-addresses.json");
   }
-  const addresses = JSON.parse(fs.readFileSync(addressesFilePath, "utf8"));
+  const addresses: { [key: string]: string } = JSON.parse(fs.readFileSync(addressesFilePath, "utf8"));
 
   if (!addresses.ecosystemManager || !addresses.fortuneTiger || !addresses.bkcToken) {
       console.error("❌ Erro: 'ecosystemManager', 'fortuneTiger', ou 'bkcToken' não encontrado.");
@@ -136,7 +137,7 @@ export async function runScript(hre: HardhatRuntimeEnvironment) {
     console.log("   ✅ Aprovação do BKC bem-sucedida.");
 
     // 2b. Configurando as Piscinas (Multiplicadores, Chances e Contribuição)
-    console.log("\n2. Configurando as 4 piscinas de prêmios (com a nova distribuição)...");
+    console.log("\n2. Configurando as 4 piscinas de prêmios (com a regra 3x)...");
     
     // Garante que a ordem está correta para os IDs (0, 1, 2, 3)
     const sortedConfig = LIQUIDITY_CONFIG.sort((a, b) => a.poolId - b.poolId);
@@ -175,7 +176,7 @@ export async function runScript(hre: HardhatRuntimeEnvironment) {
       SERVICE_SETTINGS.NOTARY_SERVICE_PSTAKE
     );
 
-    // NOVO: Tiger Game Service 
+    // TIGER GAME SERVICE 
     await setService(
         ecosystemManager,
         "TIGER_GAME_SERVICE",
@@ -242,4 +243,19 @@ async function setService(manager: any, serviceKey: string, feeValue: number | b
     console.log(`\nConfigurando Serviço: ${serviceKey}...`);
     await setFee(manager, serviceKey, feeValue);
     await setPStake(manager, serviceKey, pStakeValue);
+}
+
+// ====================================================================
+// =================== Bloco de execução standalone ==================
+// ====================================================================
+if (require.main === module) {
+  console.log("Executando 7_configure_fees.ts como script standalone...");
+  import("hardhat").then(hre => {
+    runScript(hre)
+      .then(() => process.exit(0))
+      .catch((error) => {
+        console.error(error);
+        process.exit(1);
+      });
+  });
 }

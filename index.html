@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    
     <title>Backchain | Dashboard</title>
 
     <link rel="icon" href="./assets/bkc_logo_3d.png" type="image/png">
@@ -11,6 +12,9 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" />
     
     <link rel="stylesheet" href="./styles/tiger-game-styles.css">
+
+    <link rel="stylesheet" href="./styles/trade.css">
+
 
     <script src="https://cdn.jsdelivr.net/npm/ethers@6.4.0/dist/ethers.umd.min.js"></script>
 
@@ -209,41 +213,39 @@
         </aside>
 
         <div class="lg:ml-64 flex-1 flex flex-col min-h-screen">
+            
             <header class="sticky top-0 z-20 flex justify-between items-center p-4 bg-sidebar/80 backdrop-blur-sm border-b border-border-color">
                 <div class="flex items-center gap-3">
                     <button id="menu-btn" class="lg:hidden text-xl text-zinc-400 hover:text-white h-10 w-10"><i class="fa-solid fa-bars"></i></button>
                     <img src="./assets/bkc_logo_3d.png" alt="Backchain Logo" class="h-8 w-auto rounded-full lg:hidden">
                     <span id="mobileAppDisplay" class="text-xl font-bold text-amber-400 lg:hidden">Backchain</span>
                 </div>
-                <div id="connectionStatus" class="hidden sm:inline-flex lg:hidden items-center gap-2 py-1.5 px-3 rounded-full text-sm font-medium bg-red-500/20 text-red-400">
-                    <i class="fa-solid fa-circle text-xs"></i><span>Disconnected</span>
-                </div>
-                <div class="flex items-center ml-auto">
-                    <div id="desktop-connection-controls" class="hidden lg:flex items-center">
+                
+                <div class="flex items-center ml-auto gap-2 sm:gap-3">
+                    
+                    <div id="desktop-connection-controls" class="hidden lg:flex items-center gap-3">
 
-                        <button id="customBuyCryptoBtn" class="hidden items-center justify-center gap-2 rounded-md transition-colors text-sm bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 mr-3">
+                        <button id="customBuyCryptoBtn" class="hidden items-center justify-center gap-2 rounded-md transition-colors text-sm bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4">
                             <i class="fa-solid fa-wallet"></i> Buy Crypto
                         </button>
-                        <button id="connectButtonDesktop" class="flex items-center justify-center gap-2 rounded-md transition-colors text-sm">
-                            <span id="desktopDisconnected" class="flex items-center gap-2 bg-amber-500 hover:bg-amber-600 text-zinc-900 font-bold py-2 px-4 rounded-md">Connect</span>
-                            <span id="desktopConnectedInfo" class="hidden items-center bg-amber-500 hover:bg-amber-600 text-zinc-900 font-bold rounded-md px-3 py-2">
-                                <span class="font-mono text-sm" id="desktopUserAddress"></span>
-                                <span class="mx-1 text-amber-800">|</span>
-                                <span class="text-sm" id="desktopUserBalance"></span>
-                            </span>
+
+                        <button id="connectButtonDesktop" class="bg-amber-500 hover:bg-amber-600 text-zinc-900 font-bold py-2 px-4 rounded-md transition-colors text-sm font-mono text-center">
+                            Connect
                         </button>
                     </div>
-                    <div id="mobile-connection-controls" class="flex items-center lg:hidden">
+                    
+                    <div id="mobile-connection-controls" class="flex items-center lg:hidden gap-2">
 
-                        <button id="customBuyCryptoBtnMobile" class="hidden items-center justify-center h-10 w-10 text-xl text-blue-400 hover:text-white mr-2">
+                        <button id="customBuyCryptoBtnMobile" class="hidden items-center justify-center h-10 w-10 text-xl text-blue-400 hover:text-white">
                             <i class="fa-solid fa-wallet"></i>
                         </button>
-                        <button id="connectButtonMobile" class="bg-amber-500 hover:bg-amber-600 text-zinc-900 font-bold py-2 px-4 rounded-md transition-colors text-sm">Connect</button>
-                        <button id="mobileSettingsButton" class="hidden text-xl text-zinc-400 hover:text-white h-10 w-10 items-center justify-center"><i class="fa-solid fa-gear"></i></button>
+
+                        <button id="connectButtonMobile" class="bg-amber-500 hover:bg-amber-600 text-zinc-900 font-bold py-2 px-3 rounded-md transition-colors text-sm font-mono text-center">
+                            Connect
+                        </button>
                     </div>
                 </div>
             </header>
-
             <main class="flex-1 overflow-y-auto bg-main p-4 sm:p-6 lg:p-8">
                 <div class="container mx-auto max-w-7xl">
 

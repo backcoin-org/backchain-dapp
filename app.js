@@ -1,15 +1,17 @@
-// app.js (AJUSTADO: Adicionada a lógica global de troca de abas)
+// app.js (AJUSTADO: Saldo e Endereço no mesmo botão)
 
 const ethers = window.ethers;
 
 import { DOMElements } from './dom-elements.js';
 import { State } from './state.js';
-import { initPublicProvider, initializeWalletState, disconnectWallet, openConnectModal } from './modules/wallet.js';
+// --- CORREÇÃO 1: 'initializeWalletState' alterado para 'subscribeToWalletChanges' ---
+import { initPublicProvider, subscribeToWalletChanges, disconnectWallet, openConnectModal } from './modules/wallet.js';
 import { showToast, showShareModal, showWelcomeModal } from './ui-feedback.js';
-import { formatBigNumber, formatAddress } from './utils.js';
+// Importa o formatBigNumber original (de Wei para número)
+import { formatBigNumber } from './utils.js'; 
 import { loadAddresses } from './config.js'; 
 
-// Importações das Páginas (CORRIGIDO: O nome do componente importado DEVE ser 'TigerGamePage')
+// Importações das Páginas
 import { DashboardPage } from './pages/DashboardPage.js';
 import { EarnPage } from './pages/EarnPage.js';
 import { StorePage } from './pages/StorePage.js';
@@ -23,6 +25,47 @@ import { DaoPage } from './pages/DaoPage.js';
 import { FaucetPage } from './pages/FaucetPage.js';
 import { TokenomicsPage } from './pages/TokenomicsPage.js';
 import { NotaryPage } from './pages/NotaryPage.js';
+
+
+// ==================================================================
+// --- FUNÇÕES DE FORMATAÇÃO (AJUSTADAS) ---
+// ==================================================================
+
+/**
+ * Formata o endereço da carteira para 0x + 2 chars... + 3 chars
+ * (Ex: 0x03...562a)
+ */
+function formatAddress(addr) {
+    if (!addr || addr.length < 42) return '...';
+    // --- CORREÇÃO: "dois primeiros" (0x) + "3 ultimos" (62a) ---
+    // slice(0, 2) = "0x"
+    // slice(-3) = "62a"
+    return `${addr.slice(0, 2)}...${addr.slice(-3)}`; 
+}
+
+/**
+ * Formata o saldo (já convertido de Wei) para M (Milhões) ou B (Bilhões)
+ * @param {bigint} bigNum - O valor em Wei (ex: 30000000000000000000000000n)
+ * @returns {string} - O valor formatado (ex: "30.00M")
+ */
+function formatLargeBalance(bigNum) {
+    // 1. Usa a função importada para converter de Wei para número
+    const num = formatBigNumber(bigNum); // Ex: 30000000.00
+    
+    if (num >= 1_000_000_000) {
+        return (num / 1_000_000_000).toFixed(2) + 'B'; // Bilhões
+    }
+    if (num >= 1_000_000) {
+        return (num / 1_000_000).toFixed(2) + 'M'; // Milhões
+    }
+    if (num >= 10_000) {
+        // Acima de 10k, mostrar número inteiro (sem centavos)
+        return num.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+    }
+    // Menor que 10k, mostrar com 2 casas decimais
+    return num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+// ==================================================================
 
 
 // Mapeamento de rotas
@@ -55,6 +98,7 @@ function onWalletStateChange(changes) {
     updateUIState();
     
     if (isConnected && isNewConnection) {
+        // Usa a nova função de formatação no Toast
         showToast(`Connected: ${formatAddress(address)}`, "success");
     } else if (!isConnected && wasConnected) {
         showToast("Wallet disconnected.", "info");
@@ -115,106 +159,83 @@ function navigateTo(pageId) {
 }
 window.navigateTo = navigateTo;
 
-function updateConnectionStatus(status, text) {
-    const mobileStatusEl = document.getElementById('connectionStatus');
-    if (!mobileStatusEl) return;
-
-    const icon = mobileStatusEl.querySelector('i');
-    const textSpan = mobileStatusEl.querySelector('span:last-child');
-    if(!icon || !textSpan) return;
-
-    textSpan.textContent = text;
-    mobileStatusEl.classList.remove('bg-red-500/20', 'text-red-400');
-    
-    if (status === 'connected') {
-        mobileStatusEl.classList.remove('hidden');
-        mobileStatusEl.classList.add('bg-green-500/20', 'text-green-400');
-        icon.classList.add('text-green-400');
-        icon.classList.remove('text-red-400');
-    } else if (status === 'disconnected') {
-        mobileStatusEl.classList.remove('hidden');
-        mobileStatusEl.classList.add('bg-red-500/20', 'text-red-400');
-        icon.classList.add('text-red-400');
-        icon.classList.remove('text-green-400');
-    } else {
-        mobileStatusEl.classList.add('hidden');
-    }
-}
-
 
 /**
  * Atualiza todos os elementos da UI com base no State global (conectado/desconectado, saldos, etc.).
  */
 function updateUIState() {
     const adminLinkContainer = document.getElementById('admin-link-container');
-    const statUserBalanceEl = document.getElementById('statUserBalance'); 
+    const statUserBalanceEl = document.getElementById('statUserBalance'); // No Dashboard
 
-    const desktopDisconnected = document.getElementById('desktopDisconnected');
-    const desktopConnectedInfo = document.getElementById('desktopConnectedInfo');
-    const desktopUserAddress = document.getElementById('desktopUserAddress');
-    const desktopUserBalance = document.getElementById('desktopUserBalance');
+    // --- INÍCIO DA CORREÇÃO ---
+    // Elementos do Cabeçalho (index.html)
+    const connectButtonDesktop = document.getElementById('connectButtonDesktop');
     const connectButtonMobile = document.getElementById('connectButtonMobile');
-    const mobileAppDisplay = document.getElementById('mobileAppDisplay');
-    const mobileSettingsButton = document.getElementById('mobileSettingsButton');
+    
+    // REMOVIDOS: desktopBalanceDisplay, mobileBalanceDisplay, etc.
+    
+    const mobileAppDisplay = document.getElementById('mobileAppDisplay'); // O texto "Backchain"
+    // --- FIM DA CORREÇÃO ---
+
+    // Abas
     const popMiningTab = document.getElementById('pop-mining-tab');
     const validatorSectionTab = document.getElementById('validator-section-tab');
 
+    // Helper para evitar erros
     const checkElement = (el, name) => { if (!el) console.warn(`Element ${name} not found in DOM during UI update.`); return el; };
 
     if (State.isConnected && State.userAddress) {
         // --- ESTADO CONECTADO ---
-        const balanceNum = formatBigNumber(State.currentUserBalance);
-        const balanceString = `${balanceNum.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+        
+        // --- INÍCIO DAS CORREÇÕES (V3) ---
+        const balanceString = formatLargeBalance(State.currentUserBalance);
         const addressFormatted = formatAddress(State.userAddress);
 
-        // Desktop Conectado
-        checkElement(desktopDisconnected, 'desktopDisconnected')?.classList.add('hidden');
-        const desktopInfoEl = checkElement(desktopConnectedInfo, 'desktopConnectedInfo');
-        if (desktopInfoEl) { 
-            desktopInfoEl.classList.remove('hidden'); 
-            desktopInfoEl.classList.add('flex'); 
-            desktopInfoEl.style.display = 'flex';
-        }
-        checkElement(desktopUserAddress, 'desktopUserAddress').textContent = addressFormatted;
-        checkElement(desktopUserBalance, 'desktopUserBalance').textContent = `${balanceString} $BKC`;
+        // Combina Saldo e Endereço no mesmo botão
+        const buttonText = `${balanceString} $BKC | ${addressFormatted}`;
 
-        // Mobile Conectado
-        checkElement(connectButtonMobile, 'connectButtonMobile')?.classList.add('hidden');
-        checkElement(mobileSettingsButton, 'mobileSettingsButton')?.classList.remove('hidden');
+        // Atualiza os botões para mostrar o texto combinado
+        checkElement(connectButtonDesktop, 'connectButtonDesktop').textContent = buttonText;
+        checkElement(connectButtonMobile, 'connectButtonMobile').textContent = buttonText;
+        
+        // Restaura o título mobile para "Backchain" para evitar duplicidade
         const mobileDisplayEl = checkElement(mobileAppDisplay, 'mobileAppDisplay');
-        if (mobileDisplayEl) { mobileDisplayEl.textContent = `${balanceString} $BKC`; mobileDisplayEl.classList.remove('text-amber-400'); mobileDisplayEl.classList.add('text-white'); }
+        if (mobileDisplayEl) { 
+            mobileDisplayEl.textContent = 'Backchain'; 
+            mobileDisplayEl.classList.add('text-amber-400'); 
+            mobileDisplayEl.classList.remove('text-white'); 
+        }
+        // --- FIM DAS CORREÇÕES (V3) ---
 
-        // Elementos de contexto
-        if (statUserBalanceEl) statUserBalanceEl.textContent = balanceString;
+
+        // Elementos de contexto (Lógica mantida)
+        // Atualiza o saldo do Dashboard (este pode manter a formatação completa)
+        const fullBalanceNum = formatBigNumber(State.currentUserBalance);
+        if (statUserBalanceEl) statUserBalanceEl.textContent = fullBalanceNum.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        
         if (popMiningTab) popMiningTab.style.display = 'block';
         if (validatorSectionTab) validatorSectionTab.style.display = 'block';
         if (adminLinkContainer) { adminLinkContainer.style.display = (State.userAddress.toLowerCase() === ADMIN_WALLET.toLowerCase()) ? 'block' : 'none'; }
-        updateConnectionStatus('connected', addressFormatted);
-
+        
     } else {
         // --- ESTADO DESCONECTADO ---
         
-        // Desktop Desconectado
-        checkElement(desktopDisconnected, 'desktopDisconnected')?.classList.remove('hidden');
-        const desktopInfoEl = checkElement(desktopConnectedInfo, 'desktopConnectedInfo');
-        if (desktopInfoEl) { 
-            desktopInfoEl.classList.add('hidden'); 
-            desktopInfoEl.classList.remove('flex');
-            desktopInfoEl.style.display = 'none';
-        }
-
-        // Mobile Desconectado
-        checkElement(connectButtonMobile, 'connectButtonMobile')?.classList.remove('hidden');
-        checkElement(mobileSettingsButton, 'mobileSettingsButton')?.classList.add('hidden');
+        // --- INÍCIO DAS CORREÇÕES (V3) ---
+        // Atualiza os botões para mostrar "Connect"
+        checkElement(connectButtonDesktop, 'connectButtonDesktop').textContent = "Connect";
+        checkElement(connectButtonMobile, 'connectButtonMobile').textContent = "Connect";
+        
+        // Restaura o título mobile para "Backchain"
         const mobileDisplayEl = checkElement(mobileAppDisplay, 'mobileAppDisplay');
         if (mobileDisplayEl) { mobileDisplayEl.textContent = 'Backchain'; mobileDisplayEl.classList.add('text-amber-400'); mobileDisplayEl.classList.remove('text-white'); }
+        // --- FIM DAS CORREÇÕES (V3) ---
 
-        // Elementos de contexto
+
+        // Elementos de contexto (Lógica mantida)
         if (popMiningTab) popMiningTab.style.display = 'none';
         if (validatorSectionTab) validatorSectionTab.style.display = 'none';
         if (adminLinkContainer) adminLinkContainer.style.display = 'none';
         if (statUserBalanceEl) statUserBalanceEl.textContent = '--';
-        updateConnectionStatus('disconnected', 'Disconnected');
     }
 
     // A atualização da página ativa deve ser feita após a atualização do estado da conexão.
@@ -232,7 +253,6 @@ function setupGlobalListeners() {
     const sidebarBackdrop = document.getElementById('sidebar-backdrop');
     const connectButton = document.getElementById('connectButtonDesktop');
     const connectButtonMobile = document.getElementById('connectButtonMobile');
-    const desktopConnectedInfo = document.getElementById('desktopConnectedInfo');
     const shareButton = document.getElementById('shareProjectBtn');
 
     // 1. Navegação Lateral (Sidebar)
@@ -255,7 +275,7 @@ function setupGlobalListeners() {
         console.warn("No sidebar navigation items found.");
     }
     
-    // 2. Botões de Conexão
+    // 2. Botões de Conexão (Desktop e Mobile)
     if (connectButton) {
         connectButton.addEventListener('click', openConnectModal);
     }
@@ -263,14 +283,7 @@ function setupGlobalListeners() {
         connectButtonMobile.addEventListener('click', openConnectModal);
     }
     
-    // 3. Botão de Configurações/Logout (Desktop - o wrapper)
-    if (desktopConnectedInfo) {
-        desktopConnectedInfo.addEventListener('click', () => {
-            openConnectModal(); // Abre o modal do Web3Modal (que permite desconectar)
-        });
-    }
-
-    // 4. Botão de Compartilhar
+    // 3. Botão de Compartilhar
     if (shareButton) {
         shareButton.addEventListener('click', () => {
             showShareModal(State.userAddress);
@@ -278,7 +291,7 @@ function setupGlobalListeners() {
     }
 
 
-    // 5. Botão de menu mobile
+    // 4. Botão de menu mobile
     if (menuButton && sidebar && sidebarBackdrop) {
         menuButton.addEventListener('click', () => {
             sidebar.classList.toggle('-translate-x-full');
@@ -292,16 +305,12 @@ function setupGlobalListeners() {
         });
     }
 
-    // ==================================================================
-    // === INÍCIO DA CORREÇÃO: LÓGICA DE TROCA DE ABAS (FALTANTE) ===
-    // ==================================================================
-    
-    // Este listener global irá gerenciar todas as trocas de abas da aplicação
+    // 5. Lógica de Troca de Abas (Global)
     document.body.addEventListener('click', (e) => {
         const tabButton = e.target.closest('.tab-btn');
         
-        if (!tabButton) return; // O clique não foi em um botão de aba
-        if (tabButton.classList.contains('active')) return; // A aba já está ativa
+        if (!tabButton) return; 
+        if (tabButton.classList.contains('active')) return; 
         
         e.preventDefault();
         
@@ -313,37 +322,26 @@ function setupGlobalListeners() {
             return;
         }
 
-        // 1. Encontra o container de navegação (pai dos botões)
         const nav = tabButton.closest('nav');
         if (nav) {
-            // Remove 'active' de todos os botões irmãos
             nav.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
         }
         
-        // 2. Ativa o botão clicado
         tabButton.classList.add('active');
 
-        // 3. Encontra o container de conteúdo (pai dos .tab-content)
-        // Isso assume que os .tab-content são irmãos do targetContent
         const contentHost = targetContent.parentElement;
         if (contentHost) {
-            // Esconde todos os .tab-content irmãos
             Array.from(contentHost.children).forEach(child => {
                 if (child.classList.contains('tab-content')) {
-                    child.classList.add('hidden'); // O CSS usa 'hidden'
-                    child.classList.remove('active'); // O CSS também usa 'active'
+                    child.classList.add('hidden'); 
+                    child.classList.remove('active');
                 }
             });
         }
         
-        // 4. Mostra o conteúdo alvo
         targetContent.classList.remove('hidden');
         targetContent.classList.add('active');
     });
-
-    // ==================================================================
-    // === FIM DA CORREÇÃO ===
-    // ==================================================================
 
     console.log("Global listeners attached.");
 }
@@ -376,14 +374,13 @@ document.addEventListener('DOMContentLoaded', async () => {
     await initPublicProvider(); 
 
     // 2. Tenta a RECONEXÃO AUTOMÁTICA
-    await initializeWalletState(onWalletStateChange);
+    // --- CORREÇÃO 2: 'await initializeWalletState' alterado para 'subscribeToWalletChanges' (e removido o 'await') ---
+    subscribeToWalletChanges(onWalletStateChange);
 
     // 3. Mostra o modal de boas-vindas. 
     showWelcomeModal();
 
     // 4. Navega para a página padrão.
-    // Note: A chamada a navigateTo dentro de updateUIState garante que a renderização final
-    // ocorra após o estado da carteira ser conhecido.
     navigateTo(activePageId); 
 
     console.log("Application initialized.");

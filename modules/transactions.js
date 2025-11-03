@@ -6,8 +6,8 @@ import { State } from '../state.js';
 import { showToast, closeModal } from '../ui-feedback.js';
 import { addresses, FAUCET_AMOUNT_WEI } from '../config.js';
 import { formatBigNumber } from '../utils.js';
-import { loadUserData } from './data.js'; // <- loadUserData importado
-import { safeContractCall } from './data.js';
+// --- CORREÇÃO: Importar getHighestBoosterBoost ---
+import { loadUserData, getHighestBoosterBoost, safeContractCall } from './data.js';
 
 // --- Constantes de Tolerância ---
 const APPROVAL_TOLERANCE_BIPS = 100; // 1% em BIPS
@@ -151,11 +151,26 @@ export async function executeUnstake(index) {
         btnElement
     );
 }
+
+// ====================================================================
+//  AJUSTE 1: executeForceUnstake
+// ====================================================================
 export async function executeForceUnstake(index) {
     if (!State.signer) return showToast("Wallet not connected.", "error");
-    if (!confirm("Are you sure? This action will incur a 50% penalty on your principal.")) return false;
+
+    // --- CORREÇÃO: Obter o ID do booster para o desconto de penalidade ---
+    const { tokenId: boosterTokenId } = await getHighestBoosterBoost();
+    const boosterIdToSend = boosterTokenId ? BigInt(boosterTokenId) : 0n;
+    // --- FIM DA CORREÇÃO ---
+    
+    // O 'confirm' deve ser movido para o event listener da UI, mas mantemos a lógica
+    if (!confirm("Are you sure? This action will incur a penalty (which may be reduced by your Booster NFT).")) return false;
+    
     const btnElement = document.querySelector(`.force-unstake-btn[data-index='${index}']`)
-    const forceUnstakeTxPromise = State.delegationManagerContract.forceUnstake(index);
+    
+    // Passa o boosterIdToSend como segundo argumento
+    const forceUnstakeTxPromise = State.delegationManagerContract.forceUnstake(index, boosterIdToSend); 
+    
     return await executeTransaction(
         forceUnstakeTxPromise,
         'Force unstake successful!',
@@ -163,6 +178,8 @@ export async function executeForceUnstake(index) {
         btnElement
     );
 }
+// ====================================================================
+
 
 // --- VALIDADOR ---
 export async function payValidatorFee(feeAmount, btnElement) {
@@ -200,11 +217,25 @@ export async function createVestingCertificate(recipientAddress, amount, btnElem
     }
     return success;
 }
+
+// ====================================================================
+//  AJUSTE 2: executeWithdraw
+// ====================================================================
 export async function executeWithdraw(tokenId, btnElement) {
     if (!State.signer) return showToast("Wallet not connected.", "error");
-    const withdrawTxPromise = State.rewardManagerContract.withdraw(tokenId);
+
+    // --- CORREÇÃO: Obter o ID do booster para o desconto de penalidade ---
+    const { tokenId: boosterTokenId } = await getHighestBoosterBoost();
+    const boosterIdToSend = boosterTokenId ? BigInt(boosterTokenId) : 0n;
+    // --- FIM DA CORREÇÃO ---
+
+    // Passa o boosterIdToSend como segundo argumento
+    const withdrawTxPromise = State.rewardManagerContract.withdraw(tokenId, boosterIdToSend); 
+    
     return await executeTransaction(withdrawTxPromise, 'Withdrawal successful!', 'Error during withdrawal', btnElement);
 }
+// ====================================================================
+
 
 // --- CLAIM DE RECOMPENSAS ---
 export async function executeUniversalClaim(stakingRewards, minerRewards, btnElement) {
@@ -254,6 +285,10 @@ export async function executeUniversalClaim(stakingRewards, minerRewards, btnEle
 }
 
 // --- BOOSTER STORE ---
+
+// ====================================================================
+//  AJUSTE 3: executeBuyBooster
+// ====================================================================
 export async function executeBuyBooster(boostBips, price, btnElement) {
     if (!State.signer) return showToast("Wallet not connected.", "error");
     const originalText = btnElement ? btnElement.innerHTML : 'Buy';
@@ -263,26 +298,17 @@ export async function executeBuyBooster(boostBips, price, btnElement) {
     }
     try {
         showToast("Finding an available NFT in the pool...", "info");
-        // Lógica para encontrar o NFT (simplificada, assumindo que há um)
-        // A lógica original de buscar eventos pode ser reintroduzida se necessário,
-        // mas é complexa e pode falhar. Uma abordagem melhor seria o contrato emitir
-        // um evento com o próximo ID disponível ou ter uma função de view.
-        // Por ora, vamos assumir que o contrato lida com a seleção.
-        // A função buyNFT no contrato atual não precisa de um tokenId específico.
-        // Mas a ABI no frontend ainda tem, então precisamos ajustar isso.
         
-        // --- AJUSTE: Tentativa de encontrar um tokenId (pode ser instável) ---
+        // --- Lógica de placeholder original (problemática, mas mantida) ---
          let availableTokenId = null;
          const poolInfo = await safeContractCall(State.nftBondingCurveContract, 'pools', [boostBips], {nftCount: 0});
          if(poolInfo.nftCount > 0) {
-             // Tentar obter um tokenId que pertence ao pool (pode exigir lógica off-chain mais complexa ou ajuste no contrato)
-             // Por enquanto, vamos simular que o contrato pega o primeiro disponível
-             console.warn("Using placeholder logic for tokenId selection in buyBooster. Contract might need adjustment.");
-             availableTokenId = 0; // Placeholder - O contrato precisa gerenciar isso internamente
+             console.warn("Using placeholder logic (ID 0) for tokenId selection in buyBooster.");
+             availableTokenId = 0n; // Placeholder 
          } else {
              throw new Error("No NFTs available in this pool.");
          }
-        // --- FIM AJUSTE ---
+        // --- FIM LÓGICA PLACEHOLDER ---
 
         const priceWei = BigInt(price); // Preço já vem como BigInt da StorePage
         const approved = await ensureApproval(addresses.nftBondingCurve, priceWei, btnElement, "NFT Purchase");
@@ -291,23 +317,24 @@ export async function executeBuyBooster(boostBips, price, btnElement) {
         // Se a aprovação foi ok, atualiza o botão para "Buying"
         if (btnElement) btnElement.innerHTML = '<div class="loader inline-block"></div> Buying...';
 
+        // --- CORREÇÃO: Obter o ID do booster para a verificação de pStake ---
+        const { tokenId: boosterTokenId } = await getHighestBoosterBoost();
+        const boosterIdToSend = boosterTokenId ? BigInt(boosterTokenId) : 0n;
+        // --- FIM DA CORREÇÃO ---
+
         showToast("Submitting buy transaction...", "info");
-        // --- AJUSTE NA CHAMADA: Removido o tokenId, se o contrato não precisar ---
-        // Se o contrato NFTLiquidityPool foi atualizado para *não* precisar do _tokenId em buyNFT:
-        // const buyTxPromise = State.nftBondingCurveContract.buyNFT(boostBips);
-        // Se o contrato *ainda* precisa do _tokenId (como na ABI atual):
-        const buyTxPromise = State.nftBondingCurveContract.buyNFT(boostBips, availableTokenId); // Usando o placeholder
+
+        // A função buyNFT (Contrato V3) espera 3 argumentos [boostBips, tokenId, boosterTokenId]
+        const buyTxPromise = State.nftBondingCurveContract.buyNFT(
+            boostBips, 
+            availableTokenId, // <-- Este é o placeholder da lógica original
+            boosterIdToSend   // <-- Este é o 3º argumento que faltava
+        ); 
 
         const success = await executeTransaction(buyTxPromise, 'Purchase successful!', 'Error during purchase', btnElement);
 
         if (success) {
-            // Tenta adicionar ao Metamask (pode falhar se o usuário rejeitar)
-            // Precisamos buscar o tokenId do evento 'NFTBought'
-            // Isso requer uma lógica mais complexa para ouvir eventos após a tx.
             console.log("Purchase successful. Add-to-wallet requires event listening implementation.");
-            // import('../ui-feedback.js').then(module => {
-            //     // module.addNftToWallet(addresses.rewardBoosterNFT, tokenIdFromEvent);
-            // });
         }
         return success;
     } catch (e) {
@@ -327,6 +354,11 @@ export async function executeBuyBooster(boostBips, price, btnElement) {
          }
     }
 }
+// ====================================================================
+
+// ====================================================================
+//  AJUSTE 4: executeSellBooster
+// ====================================================================
 export async function executeSellBooster(tokenId, btnElement) {
     if (!State.signer) return showToast("Wallet not connected.", "error");
     const originalText = btnElement ? btnElement.innerHTML : 'Sell NFT';
@@ -355,7 +387,16 @@ export async function executeSellBooster(tokenId, btnElement) {
         // 2. Chamar a função de venda no Pool
         if (btnElement) btnElement.innerHTML = '<div class="loader inline-block"></div> Selling...';
         showToast("Submitting sell transaction...", "info");
-        const sellTxPromise = State.nftBondingCurveContract.sellNFT(tokenIdBigInt);
+
+        // --- CORREÇÃO: Obter o ID do booster para pStake e desconto de taxa ---
+        // Nota: O usuário pode querer usar um booster diferente do que está vendendo.
+        // Usar o 'highest' é a melhor lógica padrão.
+        const { tokenId: boosterTokenId } = await getHighestBoosterBoost();
+        const boosterIdToSend = boosterTokenId ? BigInt(boosterTokenId) : 0n;
+        // --- FIM DA CORREÇÃO ---
+
+        // Passa o boosterIdToSend como segundo argumento
+        const sellTxPromise = State.nftBondingCurveContract.sellNFT(tokenIdBigInt, boosterIdToSend);
 
         // Usa o wrapper executeTransaction
         const success = await executeTransaction(sellTxPromise, 'Sale successful!', 'Error during sale', btnElement);
@@ -377,6 +418,8 @@ export async function executeSellBooster(tokenId, btnElement) {
         }
     }
 }
+// ====================================================================
+
 
 // --- FAUCET CLAIM ---
 export async function executeFaucetClaim(btnElement) {
@@ -394,9 +437,7 @@ export async function executeFaucetClaim(btnElement) {
     );
 }
 
-// =======================================================
-//  INÍCIO DA CORREÇÃO PARA O NOTARY
-// =======================================================
+// =A função executeNotarizeDocument já estava correta e foi mantida como estava =
 
 /**
  * Executa a transação para notarizar um documento (V2 - Corrigido).
@@ -423,9 +464,6 @@ export async function executeNotarizeDocument(documentURI, boosterId, submitButt
 
     // 2. Garantir Aprovação (Approval)
     // O usuário deve aprovar o contrato do Cartório para gastar a TAXA BASE.
-    // O contrato (DecentralizedNotary.sol) irá calcular a taxa final
-    // (com desconto) e puxar (transferFrom) apenas o valor necessário.
-    // Como a taxa final será sempre <= à taxa base, esta aprovação é segura.
     const notaryAddress = await State.decentralizedNotaryContract.getAddress();
     
     // Só precisa de aprovação se a taxa base for maior que zero
@@ -435,8 +473,7 @@ export async function executeNotarizeDocument(documentURI, boosterId, submitButt
     }
 
     // 3. Executar a Transação de Notarização
-    // Agora passamos os DOIS argumentos corretos para o contrato,
-    // conforme definido no ABI
+    // Passa os DOIS argumentos corretos para o contrato
     const notarizeTxPromise = State.decentralizedNotaryContract.notarizeDocument(
         documentURI, // 1º argumento: string
         boosterId    // 2º argumento: uint256
@@ -452,7 +489,3 @@ export async function executeNotarizeDocument(documentURI, boosterId, submitButt
 
     return success; // Retorna true ou false
 }
-
-// =======================================================
-//  FIM DA CORREÇÃO PARA O NOTARY
-// =======================================================

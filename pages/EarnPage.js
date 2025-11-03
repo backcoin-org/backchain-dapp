@@ -68,6 +68,14 @@ function updateDelegationFeedback() {
  */
 async function loadScarcityRate() {
     try {
+        // --- CORREÇÃO: Adicionada verificação de contrato ANTES da chamada ---
+        if (!State.rewardManagerContract) {
+            console.warn("loadScarcityRate: RewardManagerContract não está pronto. Usando fallback.");
+            currentScarcityRate = 0.9999;
+            return;
+        }
+        // --- FIM DA CORREÇÃO ---
+
         const totalMintForOneToken = await safeContractCall(
             State.rewardManagerContract, 
             'getMintRate', 
@@ -174,6 +182,13 @@ function renderValidatorsList() {
     const listEl = document.getElementById('validatorsList');
     if (!listEl) return;
     
+    // --- CORREÇÃO: Adicionada verificação de 'allValidatorsData' ---
+    if (!State.allValidatorsData) {
+        listEl.innerHTML = renderLoading(listEl);
+        return;
+    }
+    // --- FIM DA CORREÇÃO ---
+
     const sortedData = [...State.allValidatorsData].sort((a, b) => b.pStake - a.pStake);
 
     const generateValidatorHtml = (validator) => {
@@ -260,10 +275,17 @@ async function renderPopMiningPanel() {
     await loadScarcityRate(); 
 
     const el = document.getElementById('pop-mining-content');
-    if (!el || !State.isConnected) {
-        if(el) el.innerHTML = ''; 
+    
+    // --- INÍCIO DA CORREÇÃO 1 ---
+    // Adiciona verificação de contrato (EcosystemManager) e conexão
+    if (!el || !State.isConnected || !State.ecosystemManagerContract) {
+        if(el) {
+            el.innerHTML = renderNoData(el, 'Connect wallet and wait for contracts to load.');
+        } 
         return;
     }
+    // --- FIM DA CORREÇÃO 1 ---
+
     renderLoading(el);
 
     const minBalance = ethers.parseEther("1");
@@ -278,6 +300,7 @@ async function renderPopMiningPanel() {
     let feeDisplay = "0.00 $BKC";
 
     try {
+        // Esta chamada agora é segura por causa da verificação no início da função
         const [fee, pStake] = await safeContractCall(
             State.ecosystemManagerContract, 
             'getServiceRequirements', 
@@ -290,6 +313,10 @@ async function renderPopMiningPanel() {
 
     } catch(e) {
         console.warn("Could not load service requirements from Hub:", e);
+        // O erro 'Cannot read properties of null' não deve mais acontecer aqui.
+        // Se falhar por outro motivo, renderiza um erro.
+        renderError(el, "Failed to load mining requirements.");
+        return;
     }
     
     // 2. Montar o painel
@@ -434,13 +461,21 @@ function renderValidatorRegisterPanel(stakeAmount, el) {
 
 async function renderValidatorPanel() {
     const el = document.getElementById('validator-content-wrapper');
-    if (!el || !State.isConnected) {
-        if(el) el.innerHTML = '';
+    
+    // --- INÍCIO DA CORREÇÃO 2 ---
+    // Adiciona verificação de contrato (DelegationManager e EcosystemManager) e conexão
+    if (!el || !State.isConnected || !State.delegationManagerContract || !State.ecosystemManagerContract) {
+        if(el) {
+            el.innerHTML = renderNoData(el, 'Connect wallet and wait for contracts to load.');
+        }
         return;
     }
+    // --- FIM DA CORREÇÃO 2 ---
+
     renderLoading(el);
 
     try {
+        // Estas chamadas agora são seguras por causa da verificação acima
         const fallbackValidatorStruct = { isRegistered: false, selfStakeAmount: 0n, totalDelegatedAmount: 0n };
         const validatorInfo = await safeContractCall(State.delegationManagerContract, 'validators', [State.userAddress], fallbackValidatorStruct);
         
@@ -616,6 +651,8 @@ export const EarnPage = {
             return;
         }
         
+        // --- CORREÇÃO: Movido 'renderValidatorsList' para ser chamado ANTES ---
+        // dos painéis assíncronos, para renderizar o que já pode.
         if(validatorsList) renderValidatorsList();
         
         // O POP Mining é assíncrono e deve ser esperado para garantir a taxa de escassez

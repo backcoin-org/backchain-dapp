@@ -3,10 +3,9 @@ import { HardhatRuntimeEnvironment } from "hardhat/types";
 import { ethers, LogDescription, Log } from "ethers";
 import fs from "fs";
 import path from "path";
-import addressesJson from "../deployment-addresses.json";
+// REMOVIDO: import addressesJson from "../deployment-addresses.json";
 
-// Type assertion for the addresses object
-const addresses: { [key: string]: string } = addressesJson;
+// REMOVIDO: const addresses: { [key: string]: string } = addressesJson;
 
 // Helper function for delays
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -38,7 +37,14 @@ export async function runScript(hre: HardhatRuntimeEnvironment) {
   console.log(`Usando a conta: ${deployer.address}`);
   console.log("----------------------------------------------------");
 
-  // --- 1. Carregar Endereços ---
+  // --- 1. Carregar Endereços (CORRIGIDO: Carregamento dinâmico) ---
+  const addressesFilePath = path.join(__dirname, "../deployment-addresses.json");
+  if (!fs.existsSync(addressesFilePath)) {
+    console.error("❌ Erro: 'deployment-addresses.json' não encontrado. O Passo 1 falhou?");
+    throw new Error("Missing deployment-addresses.json");
+  }
+  const addresses: { [key: string]: string } = JSON.parse(fs.readFileSync(addressesFilePath, "utf8"));
+  
   const saleContractAddress = addresses.publicSale;
   const boosterAddress = addresses.rewardBoosterNFT;
   const hubAddress = addresses.ecosystemManager;
@@ -111,11 +117,13 @@ export async function runScript(hre: HardhatRuntimeEnvironment) {
     console.log(`   ✅ ${fivePercent} (${tier.metadata}) NFTs da Tesouraria cunhados.`);
   }
   
+  // Salva o JSON na raiz do projeto
+  const treasuryIdsPath = path.join(__dirname, "../treasury-nft-ids.json");
   fs.writeFileSync(
-    "treasury-nft-ids.json",
+    treasuryIdsPath,
     JSON.stringify(allTreasuryTokenIds, null, 2)
   );
-  console.log("\n✅ IDs dos NFTs da Tesouraria (5%) salvos em treasury-nft-ids.json");
+  console.log(`\n✅ IDs dos NFTs da Tesouraria (5%) salvos em ${treasuryIdsPath}`);
   console.log("----------------------------------------------------");
 
 

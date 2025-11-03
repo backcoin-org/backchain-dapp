@@ -1,5 +1,4 @@
-// pages/TigerGame.js - Versão V5: Correção da Renderização Silenciosa e Inicialização
-// ARQUIVO AJUSTADO PARA 4 PISCINAS E TRADUZIDO (INTERNACIONAL)
+// pages/TigerGame.js - Versão V6: Ajuste de Piscinas (3x, 10x, 100x, 1000x) e Limite de 50%
 
 import { State } from '../state.js';
 import { loadUserData } from '../modules/data.js';
@@ -58,8 +57,9 @@ loadGameState(); // Carregar ao iniciar
 // II. CONFIGURAÇÕES E CONSTANTES
 // ============================================
 
+// ======================= MODIFICAÇÃO (Novas Piscinas) =======================
 const PRIZE_POOLS_CONFIG = [
-    { poolId: 3, multiplier: 4, chance: '1 in 4', style: 'bg-blue-800 border-blue-500/50' }, // (Piscina de 25% chance)
+    { poolId: 3, multiplier: 3, chance: '1 in 3', style: 'bg-blue-800 border-blue-500/50' }, // (Piscina de ~33% chance)
     { poolId: 0, multiplier: 10, chance: '1 in 10', style: 'bg-yellow-800 border-yellow-500/50' },
     { poolId: 1, multiplier: 100, chance: '1 in 100', style: 'bg-orange-800 border-orange-500/50' },
     { poolId: 2, multiplier: 1000, chance: '1 in 1000', style: 'bg-red-800 border-red-500/50' },
@@ -68,10 +68,12 @@ const PRIZE_POOLS_CONFIG = [
 // ATENÇÃO: Corrigido o caminho/extensão da imagem e do áudio para corresponder ao padrão esperado pelo navegador (geralmente .png e .mp3).
 // Se seus arquivos NÃO têm extensão, você deve RENOMEÁ-LOS no disco para bkc_logo_3d.png, spin.mp3 e win.mp3
 const WINNING_SYMBOL_HTML = '<div class="bkc-logo-symbol"><img src="./assets/bkc_logo_3d.png" alt="BKC" style="width: 70%; height: 70%; object-fit: contain;"></div>';
-const FALLBACK_SYMBOLS = ['🍋', '🍒', '💰', '💎', '7️⃣', '🔔', '🐯', WINNING_SYMBOL_HTML]; // Adicionado 🍋 para a piscina x4
+const FALLBACK_SYMBOLS = ['🍋', '🍒', '💰', '💎', '7️⃣', '🔔', '🐯', WINNING_SYMBOL_HTML]; // 🍋 agora é 3x
 const REEL_COUNT = 3;
 const SYMBOL_HEIGHT_PX = 100; // AJUSTADO PARA MOBILE (100px no CSS) 
-const MAX_PRIZE_POOL_BIPS = 8000; 
+
+// ======================= MODIFICAÇÃO (Limite 50%) =======================
+const MAX_PRIZE_POOL_BIPS = 5000; // (Original era 8000)
 
 // Opcional: Áudio para realismo (adicione assets spin.mp3 e win.mp3 no diretório)
 const spinSound = new Audio('./assets/spin.mp3');
@@ -91,6 +93,7 @@ async function loadPoolBalances() {
                 [pool.poolId], 
                 [0n, 0n, 0n, 0n]
             );
+            // Armazena o saldo [2] usando o multiplicador como chave
             gameState.poolBalances[pool.multiplier] = poolInfo[2]; 
         }
         TigerGamePage.updatePoolDisplay(); 
@@ -114,6 +117,7 @@ function calculatePrizePotentials(amount) {
         const poolBalanceFloat = formatBigNumber(poolBalance);
         
         const maxPrizeMultiplier = amountFloat * multiplier; 
+        // Usa a nova constante de 50%
         const maxPrizeSustainability = poolBalanceFloat * (MAX_PRIZE_POOL_BIPS / 10000); 
         const potentialPrize = Math.min(maxPrizeMultiplier, maxPrizeSustainability);
 
@@ -140,8 +144,10 @@ async function processGameResult(receipt, amountWagered) {
                 
                 if (prizeFloat > 0) {
                     const calculatedMultiplier = prizeFloat / wagerFloat;
-                    // Ajustado para incluir o multiplicador x4
-                    if (calculatedMultiplier >= 3.8) wonMultipliers.push(4); // (Tolerância)
+                    
+                    // ======================= MODIFICAÇÃO (Novas Piscinas) =======================
+                    // Ajustado para incluir o multiplicador x3 (com tolerância)
+                    if (calculatedMultiplier >= 2.8) wonMultipliers.push(3); // (Era 3.8 -> 4)
                     if (calculatedMultiplier >= 9.5) wonMultipliers.push(10);
                     if (calculatedMultiplier >= 95) wonMultipliers.push(100);
                     if (calculatedMultiplier >= 950) wonMultipliers.push(1000);
@@ -166,7 +172,8 @@ async function processGameResult(receipt, amountWagered) {
 // ============================================
 
 function getWinningSymbol(multiplier) {
-    if (multiplier === 4) return '🍋'; // <-- Símbolo para x4
+    // ======================= MODIFICAÇÃO (Novas Piscinas) =======================
+    if (multiplier === 3) return '🍋'; // <-- Símbolo para x3 (Era 4)
     if (multiplier === 10) return '🍒'; 
     if (multiplier === 100) return '💰';
     if (multiplier === 1000) return WINNING_SYMBOL_HTML;
@@ -313,7 +320,8 @@ async function startFourSpinSequence(prizeWon) {
     const wager = parseFloat(wagerInput?.value) || 0;
     const potentials = calculatePrizePotentials(wager);
     
-    const poolTargets = [4, 10, 100, 1000]; // Associar Spin 1: x4, Spin 2: x10, Spin 3: x100, Spin 4: x1000
+    // ======================= MODIFICAÇÃO (Novas Piscinas) =======================
+    const poolTargets = [3, 10, 100, 1000]; // Associar Spin 1: x3, Spin 2: x10, Spin 3: x100, Spin 4: x1000
     
     for (let i = 1; i <= gameState.maxSpinRounds; i++) {
         gameState.currentSpinRound = i;
@@ -387,6 +395,14 @@ async function executeSpinGame() {
         showToast("Connect wallet first.", "error");
         return;
     }
+
+    // --- INÍCIO DA CORREÇÃO ---
+    // Adiciona esta verificação para os contratos (Correção do Bug 3)
+    if (!State.ecosystemManagerContract || !State.bkcTokenContract || !State.actionsManagerContract) {
+        showToast("Contracts are still loading. Please wait a moment and try again.", "error");
+        return;
+    }
+    // --- FIM DA CORREÇÃO ---
 
     const wagerInput = document.getElementById('wagerInput');
     const spinButton = document.getElementById('spinButton');
@@ -489,6 +505,7 @@ export const TigerGamePage = {
             </div>
         `).join('');
         
+        // ======================= MODIFICAÇÃO (HTML das Piscinas) =======================
         const htmlContent = `
             <div class="tiger-game-wrapper">
                 <header class="tiger-header">
@@ -508,9 +525,9 @@ export const TigerGamePage = {
                     </div>
 
                     <div class="pools-info">
-                        <div class="pool-item" title="x4 Pool: 1/4 chance, up to 4x wager">
-                            <span class="pool-label">x4 Liquidity</span>
-                            <span class="pool-value" id="pool4">0.00</span>
+                        <div class="pool-item" title="x3 Pool: 1/3 chance, up to 3x wager">
+                            <span class="pool-label">x3 Liquidity</span>
+                            <span class="pool-value" id="pool3">0.00</span>
                         </div>
                         <div class="pool-item" title="x10 Pool: 1/10 chance, up to 10x wager">
                             <span class="pool-label">x10 Liquidity</span>
@@ -607,17 +624,17 @@ export const TigerGamePage = {
                                 <p>Enter your wager amount and click "SPIN THE REELS" to begin. The game will spin three reels with various symbols. Match symbols to win prizes based on the multiplier pools.</p>
                                 
                                 <h3>Multiplier Pools</h3>
-                                <p><strong>x4 Pool:</strong> 1 in 4 chance (25%). Win up to 4x your wager (capped at 80% pool liquidity). Symbol: 🍋 (Lemon)</p>
-                                <p><strong>x10 Pool:</strong> 1 in 10 chance. Win up to 10x your wager (capped at 80% pool liquidity). Symbol: 🍒 (Cherry)</p>
-                                <p><strong>x100 Pool:</strong> 1 in 100 chance. Win up to 100x your wager (capped at 80% pool liquidity). Symbol: 💰 (Coins)</p>
-                                <p><strong>x1000 Pool:</strong> 1 in 1000 chance. Win up to 1000x your wager (capped at 80% pool liquidity). Symbol: $BKC (Logo)</p>
-                                <p><strong>Pool Mechanics:</strong> Each spin sequence targets pools progressively: Spin 1 aims for x4, Spin 2 for x10, Spin 3 for x100, Spin 4 for x1000. Prizes are calculated based on your wager and pool liquidity.</p>
+                                <p><strong>x3 Pool:</strong> 1 in 3 chance (~33%). Win up to 3x your wager (capped at 50% pool liquidity). Symbol: 🍋 (Lemon)</p>
+                                <p><strong>x10 Pool:</strong> 1 in 10 chance. Win up to 10x your wager (capped at 50% pool liquidity). Symbol: 🍒 (Cherry)</p>
+                                <p><strong>x100 Pool:</strong> 1 in 100 chance. Win up to 100x your wager (capped at 50% pool liquidity). Symbol: 💰 (Coins)</p>
+                                <p><strong>x1000 Pool:</strong> 1 in 1000 chance. Win up to 1000x your wager (capped at 50% pool liquidity). Symbol: $BKC (Logo)</p>
+                                <p><strong>Pool Mechanics:</strong> Each spin sequence targets pools progressively: Spin 1 aims for x3, Spin 2 for x10, Spin 3 for x100, Spin 4 for x1000. Prizes are calculated based on your wager and pool liquidity.</p>
                                 
                                 <h3>Tiger's Legacy</h3>
                                 <p>Every spin earns XP. Level up to unlock rewards and boosters!</p>
                                 
                                 <h3>Important Notes</h3>
-                                <p>Maximum payout is capped at 80% of the liquidity pool to ensure sustainability. You must have sufficient pStake to play.</p>
+                                <p>Maximum payout is capped at 50% of the liquidity pool to ensure sustainability. You must have sufficient pStake to play.</p>
                             </div>
                         </div>
                     </div>
@@ -708,12 +725,13 @@ export const TigerGamePage = {
     loadPoolBalances, 
 
     updatePoolDisplay() {
-        const pool4 = document.getElementById('pool4');
+        // ======================= MODIFICAÇÃO (Novas Piscinas) =======================
+        const pool3 = document.getElementById('pool3');
         const pool10 = document.getElementById('pool10');
         const pool100 = document.getElementById('pool100');
         const pool1000 = document.getElementById('pool1000');
 
-        if (pool4) pool4.textContent = formatBigNumber(gameState.poolBalances[4] || 0n).toLocaleString('en-US', { maximumFractionDigits: 2 });
+        if (pool3) pool3.textContent = formatBigNumber(gameState.poolBalances[3] || 0n).toLocaleString('en-US', { maximumFractionDigits: 2 });
         if (pool10) pool10.textContent = formatBigNumber(gameState.poolBalances[10] || 0n).toLocaleString('en-US', { maximumFractionDigits: 2 });
         if (pool100) pool100.textContent = formatBigNumber(gameState.poolBalances[100] || 0n).toLocaleString('en-US', { maximumFractionDigits: 2 });
         if (pool1000) pool1000.textContent = formatBigNumber(gameState.poolBalances[1000] || 0n).toLocaleString('en-US', { maximumFractionDigits: 2 });

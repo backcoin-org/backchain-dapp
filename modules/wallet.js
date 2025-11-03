@@ -1,55 +1,34 @@
-// modules/wallet.js - Final (Refatorado para Robustez Mobile)
-
-// --- INÍCIO DA CORREÇÃO: Mover a limpeza do window.web3 para o topo ---
-if (window.web3) {
-    console.warn("Found window.web3. Attempting to clear the shim to prevent MetaMask warning.");
-    try {
-        // Tenta redefinir a propriedade para undefined
-        Object.defineProperty(window, 'web3', {
-            value: undefined,
-            configurable: true
-        });
-        console.log("Successfully cleared window.web3 property.");
-    } catch (e) {
-        // Fallback para o método delete, caso o primeiro falhe
-        try {
-            delete window.web3; 
-        } catch (e2) {
-             console.warn("Could not delete window.web3 property (fallback failed).");
-        }
-    }
-}
-// --- FIM DA CORREÇÃO ---
-
+// modules/wallet.js
 
 const ethers = window.ethers;
 
-import { createWeb3Modal, defaultConfig } from 'https://esm.sh/@web3modal/ethers@latest';
+// --- NOVA IMPORTAÇÃO DO WEB3MODAL via CDN ESM ---
+import { createWeb3Modal, defaultConfig } from 'https://esm.sh/@web3modal/ethers@5.0.3';
 
 import { State } from '../state.js';
 import { showToast } from '../ui-feedback.js';
+// REMOVIDO: formatAddress (não é mais usado aqui)
 import {
     addresses, sepoliaRpcUrl, sepoliaChainId,
     bkcTokenABI, delegationManagerABI, rewardManagerABI,
-    rewardBoosterABI, nftBondingCurveABI, actionsManagerABI, publicSaleABI,
-    faucetABI, decentralizedNotaryABI, ecosystemManagerABI,
-    // ######################################################
-    // ### CORREÇÃO 2: IMPORTAÇÃO DO ABI CORRETO DO JOGO DO TIGRE ###
-    // ######################################################
-    fortuneTigerABI 
+    rewardBoosterABI, nftBondingCurveABI, 
+    fortuneTigerABI, // <-- CORREÇÃO 1: Importar o ABI correto (fortuneTigerABI)
+    publicSaleABI,
+    faucetABI,
+    ecosystemManagerABI // <-- CORREÇÃO: Adicionada importação faltante do EcosystemManager
 } from '../config.js';
 import { loadPublicData, loadUserData } from './data.js';
 import { signIn } from './firebase-auth-service.js';
 
-// --- CONFIGURAÇÃO DO WEB3MODAL (MANTIDA) ---
+// --- CONFIGURAÇÃO DO WEB3MODAL ---
 const WALLETCONNECT_PROJECT_ID = 'cd4bdedee7a7e909ebd3df8bbc502aed';
 
 const sepolia = {
-    chainId: Number(sepoliaChainId),
-    name: 'Sepolia',
-    currency: 'ETH',
-    explorerUrl: 'https://sepolia.etherscan.io',
-    rpcUrl: sepoliaRpcUrl
+    chainId: Number(sepoliaChainId), // 11155111
+    name: 'Sepolia', //
+    currency: 'ETH', //
+    explorerUrl: 'https://sepolia.etherscan.io', //
+    rpcUrl: sepoliaRpcUrl //
 };
 
 const metadata = {
@@ -68,10 +47,11 @@ const ethersConfig = defaultConfig({
     defaultChainId: Number(sepoliaChainId)
 });
 
+// NOVO: Define os Wallets em destaque
 const featuredWallets = [
     { name: 'MetaMask', id: 'metamask' },
     { name: 'Binance Wallet', id: 'binance' },
-    { name: 'WalletConnect', id: 'walletConnect' }
+    { name: 'WalletConnect', id: 'walletConnect' } // Garante que o WC também esteja lá
 ];
 
 const web3modal = createWeb3Modal({
@@ -81,117 +61,78 @@ const web3modal = createWeb3Modal({
     enableAnalytics: false,
     themeMode: 'dark',
     themeVariables: {
-        '--w3m-accent': '#f59e0b',
-        '--w3m-color-mix': '#3f3f46',
+        '--w3m-accent': '#f59e0b', // Cor de destaque
+        '--w3m-color-mix': '#3f3f46', // --bg-card
         '--w3m-color-mix-strength': 20,
         '--w3m-font-family': 'Inter, sans-serif',
-        '--w3m-border-radius-master': '0.375rem',
-        '--w3m-z-index': 100
+        '--w3m-border-radius-master': '0.375rem', // rounded-md
+        '--w3m-z-index': 100 // Garante que fique acima de outros elementos
     },
     featuredWalletIds: featuredWallets.map(w => w.id),
     mobileWallets: [
         'metamask',
         'binance'
     ],
-    enableOnramp: false
+
+    // --- *** CORREÇÃO ADICIONADA AQUI *** ---
+    // Habilita a funcionalidade "Onramp" (Buy Crypto)
+    // Isso fará com que o modal busque os provedores (Coinbase, MoonPay)
+    // que você ativou no seu painel do WalletConnect Cloud.
+    enableOnramp: false // <-- ALTERADO PARA false
+    // --- *** FIM DA CORREÇÃO *** ---
 });
-
-let wasPreviouslyConnected = web3modal.getIsConnected();
-
-
-// --- FUNÇÃO AUXILIAR PARA DESCONEXÃO SEGURA (MANTIDA) ---
-async function safeDisconnect() {
-    if (typeof web3modal === 'object' && web3modal !== null && typeof web3modal.disconnect === 'function') {
-        try {
-            await web3modal.disconnect();
-        } catch (e) {
-            console.error("Safe Disconnect failed:", e);
-        }
-    } else {
-        console.warn("web3modal object not fully initialized, skipping disconnect.");
-    }
-}
-// --- FIM DA FUNÇÃO AUXILIAR ---
-
 
 // --- Funções Auxiliares Internas ---
 
 function instantiateContracts(signerOrProvider) {
-    console.log("Instantiating contracts with:", signerOrProvider);
     try {
-        const contractsToInstantiate = [
-            // Instancia o Hub primeiro
-            { name: "ecosystemManager", address: addresses.ecosystemManager, abi: ecosystemManagerABI, stateProp: "ecosystemManagerContract" },
-            { name: "bkcToken", address: addresses.bkcToken, abi: bkcTokenABI, stateProp: "bkcTokenContract" },
-            { name: "delegationManager", address: addresses.delegationManager, abi: delegationManagerABI, stateProp: "delegationManagerContract" },
-            { name: "rewardManager", address: addresses.rewardManager, abi: rewardManagerABI, stateProp: "rewardManagerContract" },
-            
-            // ######################################################
-            // ### CORREÇÃO 1: USA fortuneTigerABI PARA O ACTIONS MANAGER ###
-            // ######################################################
-            { name: "actionsManager", address: addresses.actionsManager, abi: fortuneTigerABI, stateProp: "actionsManagerContract" },
-            // NOTA: Se você tiver um contrato Actions/DAO separado, ele usaria actionsManagerABI
-            // aqui. Como addresses.actionsManager aponta para FortuneTiger, o ABI deve ser fortuneTigerABI.
-            
-            { name: "rewardBoosterNFT", address: addresses.rewardBoosterNFT, abi: rewardBoosterABI, stateProp: "rewardBoosterContract" },
-            { name: "nftBondingCurve", address: addresses.nftBondingCurve, abi: nftBondingCurveABI, stateProp: "nftBondingCurveContract" },
-            { name: "publicSale", address: addresses.publicSale, abi: publicSaleABI, stateProp: "publicSaleContract" },
-            { name: "faucet", address: addresses.faucet, abi: faucetABI, stateProp: "faucetContract", ignoreZero: true },
-            { name: "decentralizedNotary", address: addresses.decentralizedNotary, abi: decentralizedNotaryABI, stateProp: "decentralizedNotaryContract", ignoreZero: true }
-        ];
-
-        for (const contractInfo of contractsToInstantiate) {
-            const { name, address, abi, stateProp, ignoreZero } = contractInfo;
-            
-            if (address) { 
-                if (ignoreZero && address === "0x0000000000000000000000000000000000000000") {
-                    console.warn(`${name} address is placeholder. Skipping instantiation.`);
-                    continue;
-                }
-
-                if (!abi || typeof abi !== 'object' || abi.length === 0) {
-                    console.error(`ABI for ${name} is invalid or missing! Type: ${typeof abi}, Value: ${abi}`);
-                    showToast(`Critical Error: ABI for ${name} is invalid. Check config.js.`, "error");
-                    throw new Error(`Invalid ABI for ${name}`); 
-                }
-
-                console.log(`Instantiating ${name}...`);
-                State[stateProp] = new ethers.Contract(address, abi, signerOrProvider);
-                console.log(`${name} instance created at ${address}.`);
-            } else {
-                console.warn(`${name} address is missing in config.js. Skipping instantiation.`);
-            }
+        if (addresses.bkcToken)
+            State.bkcTokenContract = new ethers.Contract(addresses.bkcToken, bkcTokenABI, signerOrProvider);
+        if (addresses.delegationManager)
+            State.delegationManagerContract = new ethers.Contract(addresses.delegationManager, delegationManagerABI, signerOrProvider);
+        if (addresses.rewardManager)
+            State.rewardManagerContract = new ethers.Contract(addresses.rewardManager, rewardManagerABI, signerOrProvider);
+        if (addresses.actionsManager)
+            // <-- CORREÇÃO 2: Usar o 'fortuneTigerABI' (correto) em vez do 'actionsManagerABI' (errado)
+            State.actionsManagerContract = new ethers.Contract(addresses.actionsManager, fortuneTigerABI, signerOrProvider);
+        if (addresses.rewardBoosterNFT) {
+            State.rewardBoosterContract = new ethers.Contract(addresses.rewardBoosterNFT, rewardBoosterABI, signerOrProvider);
         }
-
-        console.log("Contracts instantiated:", State);
+        if (addresses.nftBondingCurve) {
+            State.nftBondingCurveContract = new ethers.Contract(addresses.nftBondingCurve, nftBondingCurveABI, signerOrProvider);
+        }
+         if (addresses.publicSale) {
+             State.publicSaleContract = new ethers.Contract(addresses.publicSale, publicSaleABI, signerOrProvider);
+         }
+         if (addresses.faucet && !addresses.faucet.startsWith('0x...')) {
+             State.faucetContract = new ethers.Contract(addresses.faucet, faucetABI, signerOrProvider);
+         }
+         // <-- CORREÇÃO: Adicionada inicialização faltante do EcosystemManager
+         if (addresses.ecosystemManager) {
+            State.ecosystemManagerContract = new ethers.Contract(addresses.ecosystemManager, ecosystemManagerABI, signerOrProvider);
+         }
 
     } catch (e) {
          console.error("Error instantiating contracts:", e);
-         showToast(`Error setting up contracts: ${e.message}`, "error"); 
+         showToast("Error setting up contracts. Check console.", "error");
     }
 }
 
 async function setupSignerAndLoadData(provider, address) {
     try {
         State.provider = provider;
-        // Tenta obter o signer - Ponto sensível a rejeição do usuário/problemas de rede
-        State.signer = await provider.getSigner(); 
-        
-        const normalizedAddress = address.toLowerCase();
-        State.userAddress = normalizedAddress;
-        
-        await signIn(State.userAddress);
+        State.signer = await provider.getSigner();
+        State.userAddress = address;
 
-        instantiateContracts(State.signer); // Instancia com o signer
+        await signIn(State.userAddress); // Autentica no Firebase
+
+        instantiateContracts(State.signer);
         await loadUserData();
-        State.isConnected = true; // Define a conexão APENAS após o loadUserData ser bem-sucedido
+        State.isConnected = true;
         return true;
     } catch (error) {
          console.error("Error during setupSignerAndLoadData:", error);
-         // Se o setup falhar, garante que o estado local esteja desconectado.
-         State.isConnected = false; 
-         State.userAddress = null;
-         if (error.code === 'ACTION_REJECTED' || error.message.includes("cancelled")) { showToast("Operation rejected by user.", "info"); }
+         if (error.code === 'ACTION_REJECTED') { showToast("Operation rejected by user.", "info"); }
          else if (error.message.includes("Firebase")) { showToast("Firebase authentication failed.", "error"); }
          else { showToast(`Connection failed: ${error.message || 'Unknown error'}`, "error"); }
          return false;
@@ -204,152 +145,159 @@ async function setupSignerAndLoadData(provider, address) {
 export async function initPublicProvider() {
      try {
         State.publicProvider = new ethers.JsonRpcProvider(sepoliaRpcUrl);
-        instantiateContracts(State.publicProvider); // Instancia com o provider público
-        await loadPublicData(); 
-        console.log("Public provider initialized. Contracts instantiated with public provider.");
+        instantiateContracts(State.publicProvider); 
+        await loadPublicData();
+        console.log("Public provider and Web3Modal initialized.");
     } catch (e) {
         console.error("Failed to initialize public provider:", e);
         showToast("Could not connect to the blockchain network.", "error");
     }
 }
 
-// --- LÓGICA DE TRATAMENTO DE CONEXÃO ---
+/**
+ * Assina as mudanças de estado do Web3Modal.
+ * @param {function} callback - A função em app.js que lidará com as mudanças.
+ */
+export function subscribeToWalletChanges(callback) {
+    let wasPreviouslyConnected = web3modal.getIsConnected(); // Checa estado inicial
 
-async function handleProviderChange(state, callback) {
-    const { provider, address, chainId, isConnected } = state;
-    console.log("Handling Provider Change:", { isConnected, address, chainId });
+    web3modal.subscribeProvider(async ({ provider, address, chainId, isConnected }) => {
+        console.log("Web3Modal State Change:", { isConnected, address, chainId });
 
-    if (isConnected) {
-        const providerToUse = provider || await web3modal.getWalletProvider();
-        if (!providerToUse) {
-            console.error("Connected, but failed to get wallet provider.");
-            await safeDisconnect(); 
-            return;
-        }
+        if (isConnected) {
+            
+            // =================================================================
+            // --- INÍCIO DA MODIFICAÇÃO: LÓGICA PARA TROCAR DE REDE ---
+            // =================================================================
+            
+            // Verifica se o chainId conectado é diferente do chainId esperado (Sepolia)
+            if (chainId !== Number(sepoliaChainId)) {
+                showToast(`Rede errada. Trocando para Sepolia...`, 'error');
+                
+                // Converte o ID da chain (11155111) para o formato hexadecimal
+                const expectedChainIdHex = '0x' + (Number(sepoliaChainId)).toString(16);
 
-        if (chainId !== Number(sepoliaChainId)) {
-            showToast(`Wrong network. Switching to Sepolia...`, 'info');
-            const expectedChainIdHex = '0x' + (Number(sepoliaChainId)).toString(16);
-            try {
-                // Tenta fazer o switch de rede
-                await providerToUse.request({
-                    method: 'wallet_switchEthereumChain',
-                    params: [{ chainId: expectedChainIdHex }],
-                });
-                return; // O switch acionará um novo evento 'subscribeProvider'
-            } catch (switchError) {
-                if (switchError.code === 4902) {
-                    showToast('Sepolia network not found. Adding it...', 'info');
-                    // Lógica para adicionar a rede (já existente)
-                    try {
-                        await providerToUse.request({
-                            method: 'wallet_addEthereumChain',
-                            params: [ { chainId: expectedChainIdHex, chainName: sepolia.name, rpcUrls: [sepolia.rpcUrl], nativeCurrency: { name: sepolia.currency, symbol: sepolia.currency, decimals: 18, }, blockExplorerUrls: [sepolia.explorerUrl], }, ],
-                        });
-                        return;
-                    } catch (addError) {
-                        console.error("Failed to add Sepolia network:", addError);
-                        showToast('Please add and switch to the Sepolia network manually.', 'error');
-                        await safeDisconnect(); 
-                        return;
+                try {
+                    // 1. Tenta trocar a rede
+                    await provider.request({
+                        method: 'wallet_switchEthereumChain',
+                        params: [{ chainId: expectedChainIdHex }],
+                    });
+                    
+                    // Se a troca for bem-sucedida, o Web3Modal/MetaMask
+                    // irá disparar um novo evento. A função será executada novamente
+                    // já com o chainId correto.
+                    return;
+
+                } catch (switchError) {
+                    
+                    // Erro 4902: A rede Sepolia não está na MetaMask do usuário
+                    if (switchError.code === 4902) {
+                        showToast('Rede Sepolia não encontrada. Adicionando...', 'info');
+                        try {
+                            // 2. Tenta adicionar a rede Sepolia
+                            // Usamos o objeto 'sepolia' já definido no topo deste arquivo
+                            await provider.request({
+                                method: 'wallet_addEthereumChain',
+                                params: [
+                                    {
+                                        chainId: expectedChainIdHex,
+                                        chainName: sepolia.name,
+                                        rpcUrls: [sepolia.rpcUrl],
+                                        nativeCurrency: {
+                                            name: sepolia.currency,
+                                            symbol: sepolia.currency,
+                                            decimals: 18,
+                                        },
+                                        blockExplorerUrls: [sepolia.explorerUrl],
+                                    },
+                                ],
+                            });
+                            // Se adicionar com sucesso, o MetaMask geralmente troca.
+                            // Um novo evento será disparado.
+                            return;
+
+                        } catch (addError) {
+                            // Usuário rejeitou a adição
+                            console.error("Falha ao adicionar rede Sepolia:", addError);
+                            showToast('Você precisa adicionar e conectar-se à rede Sepolia.', 'error');
+                            await web3modal.disconnect(); // Desconecta se o usuário recusar
+                            return;
+                        }
                     }
+
+                    // Outro erro (ex: usuário rejeitou a troca)
+                    console.error("Falha ao trocar de rede:", switchError);
+                    showToast('Você precisa estar na rede Sepolia para usar o dApp.', 'error');
+                    await web3modal.disconnect(); // Desconecta se o usuário recusar
+                    return;
                 }
-                console.error("Failed to switch network:", switchError);
-                 if (switchError.code !== 4001) {
-                      showToast('Failed to switch network. Please do it manually.', 'error');
-                 } else {
-                     showToast('Network switch rejected by user.', 'info');
-                 }
-                await safeDisconnect(); 
-                return;
             }
-        }
+            
+            // =================================================================
+            // --- FIM DA MODIFICAÇÃO ---
+            // =================================================================
 
-        // Se chainId correto, tenta configurar o signer e carregar dados
-        const ethersProvider = new ethers.BrowserProvider(providerToUse);
-        const success = await setupSignerAndLoadData(ethersProvider, address);
-
-        if (success) {
-            callback({ isConnected: true, address, chainId, isNewConnection: !wasPreviouslyConnected });
-            wasPreviouslyConnected = true;
-        } else {
-            // Se setupSignerAndLoadData falhou (ex: user rejeitou o getSigner()), desconecta
-            await safeDisconnect(); 
-        }
-
-    } else {
-        // Desconectado
-        console.log("Web3Modal reports disconnection. Clearing app state.");
-        const wasConnected = State.isConnected;
-
-        // Limpeza de estado (mantida)
-        State.provider = null; State.signer = null; State.userAddress = null;
-        State.isConnected = false;
-        State.currentUserBalance = 0n;
-        State.userDelegations = [];
-        State.activityHistory = [];
-        State.myCertificates = [];
-        State.myBoosters = [];
-        State.userTotalPStake = 0n;
-
-        // Reinstancia contrator com provider público ao desconectar
-        if(State.publicProvider) {
-            instantiateContracts(State.publicProvider);
-             console.log("Contracts re-instantiated with public provider after disconnect.");
-        } else {
-             console.error("Public provider not available during disconnect cleanup!");
-        }
-
-        callback({ isConnected: false, wasConnected: wasConnected });
-        wasPreviouslyConnected = false;
-    }
-}
-
-// CORREÇÃO 2: Força uma nova verificação de estado APÓS a subscrição
-export async function initializeWalletState(callback) {
-    // 1. Assina as mudanças FUTURAS
-    web3modal.subscribeProvider(async (state) => {
-        await handleProviderChange(state, callback);
-    });
-
-    // 2. CORREÇÃO: Força a verificação do estado ATUAL do Web3Modal
-    const currentState = web3modal.getState();
-    wasPreviouslyConnected = currentState.isConnected;
-
-    if (currentState.isConnected) {
-        console.log("Running initial connection check (Web3Modal state is connected)...");
-        try {
-            const provider = await web3modal.getWalletProvider();
-            if (provider) {
-                // Chama o handler diretamente com o provider para sincronização imediata
-                await handleProviderChange(
-                    { ...currentState, provider: provider },
-                    callback
-                );
+            // Se o chainId ESTIVER correto, continua normalmente
+            const ethersProvider = new ethers.BrowserProvider(provider);
+            const success = await setupSignerAndLoadData(ethersProvider, address);
+            
+            if (success) {
+                // --- AJUSTE DE RECONEXÃO: PEQUENO DELAY APÓS O LOADUserData ---
+                // *** CORREÇÃO: Delay de 500ms REMOVIDO para consertar o "flicker" do F5 ***
+                
+                callback({ 
+                    isConnected: true, 
+                    address, 
+                    chainId,
+                    isNewConnection: !wasPreviouslyConnected // Sinaliza se é uma nova conexão
+                });
+                wasPreviouslyConnected = true;
             } else {
-                console.warn("Initial state is connected, but no provider found. Disconnecting.");
-                // Se o Web3Modal diz que está conectado mas não há provider, forçamos a desconexão
-                await safeDisconnect(); 
-                await handleProviderChange({ isConnected: false, provider: null, address: null, chainId: null }, callback);
+                // Falha no setup (ex: Firebase)
+                await web3modal.disconnect();
             }
-        } catch (e) {
-            console.error("Error during initial connection check:", e);
-            await handleProviderChange({ isConnected: false, provider: null, address: null, chainId: null }, callback);
-        }
 
-    } else {
-        console.log("Initial check: Not connected. Syncing disconnected state.");
-        // Garante que o estado desconectado seja processado pelo callback
-        await handleProviderChange({ isConnected: false, provider: null, address: null, chainId: null }, callback);
-    }
+        } else {
+            // Desconectado.
+            console.log("Web3Modal reports disconnection. Clearing app state.");
+            
+            const wasConnected = State.isConnected;
+
+            // Limpa o estado do App
+            State.provider = null; State.signer = null; State.userAddress = null;
+            State.isConnected = false;
+            State.currentUserBalance = 0n;
+            State.userDelegations = [];
+            State.activityHistory = [];
+            State.myCertificates = [];
+            State.myBoosters = [];
+            State.userTotalPStake = 0n;
+        
+            if(State.publicProvider) {
+                instantiateContracts(State.publicProvider);
+            }
+            
+            callback({ 
+                isConnected: false,
+                wasConnected: wasConnected
+            });
+            wasPreviouslyConnected = false;
+        }
+    });
 }
 
-
+/**
+ * Abre o modal de conexão.
+ */
 export function openConnectModal() {
     web3modal.open();
 }
 
+/**
+ * Pede ao Web3Modal para desconectar.
+ */
 export async function disconnectWallet() {
     console.log("Telling Web3Modal to disconnect...");
-    await safeDisconnect(); 
+    await web3modal.disconnect();
 }

@@ -2,10 +2,9 @@
 import { HardhatRuntimeEnvironment } from "hardhat/types";
 import fs from "fs";
 import path from "path";
-import addressesJson from "../deployment-addresses.json";
+// REMOVIDO: import addressesJson from "../deployment-addresses.json";
 
-// Type assertion for the addresses object
-const addresses: { [key: string]: string } = addressesJson;
+// REMOVIDO: const addresses: { [key: string]: string } = addressesJson;
 
 // --- ⚙️ CONFIGURATION ---
 // Esta lista DEVE corresponder aos descontos imutáveis
@@ -31,7 +30,14 @@ export async function runScript(hre: HardhatRuntimeEnvironment) {
   console.log(`Usando a conta: ${deployer.address}`);
   console.log("----------------------------------------------------");
 
-  // --- 1. Carregar Endereço ---
+  // --- 1. Carregar Endereço (MOVIDO PARA DENTRO DA FUNÇÃO) ---
+  const addressesFilePath = path.join(__dirname, "../deployment-addresses.json");
+  if (!fs.existsSync(addressesFilePath)) {
+    console.error("❌ Erro: 'deployment-addresses.json' não encontrado. O Passo 1 falhou?");
+    throw new Error("Missing deployment-addresses.json");
+  }
+  const addresses: { [key: string]: string } = JSON.parse(fs.readFileSync(addressesFilePath, "utf8"));
+  
   const poolAddress = addresses.nftLiquidityPool;
   if (!poolAddress) {
     console.error("❌ Erro: Endereço 'nftLiquidityPool' não encontrado em deployment-addresses.json.");

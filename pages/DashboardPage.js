@@ -1,5 +1,7 @@
 // pages/DashboardPage.js
 // CORREÇÃO: TVL agora é carregado no estado desconectado (chamada movida em render())
+// CORREÇÃO: Corrigido State.nftPoolContract para State.nftBondingCurveContract
+// CORREÇÃO 2: Corrigido 'getPoolInfo' para 'pools' na função loadAndRenderProtocolTVL
 
 const ethers = window.ethers;
 
@@ -839,9 +841,10 @@ async function renderActivityHistory() {
             }
 
             // 2. Buscar Compras no NFTLiquidityPool
-            if (State.nftPoolContract) {
-                const buyFilter = State.nftPoolContract.filters.NFTBought(userAddress); //
-                const buyEvents = await safeContractCall(State.nftPoolContract, 'queryFilter', [buyFilter, -200000], []);
+            // **** CORREÇÃO: Usa State.nftBondingCurveContract ****
+            if (State.nftBondingCurveContract) {
+                const buyFilter = State.nftBondingCurveContract.filters.NFTBought(userAddress); //
+                const buyEvents = await safeContractCall(State.nftBondingCurveContract, 'queryFilter', [buyFilter, -200000], []);
                 for (const event of buyEvents) {
                     const { buyer, boostBips, tokenId, price } = event.args; //
                     const timestamp = await getTimestamp(event.blockNumber);
@@ -856,8 +859,9 @@ async function renderActivityHistory() {
                 }
 
                 // 3. Buscar Vendas no NFTLiquidityPool
-                const sellFilter = State.nftPoolContract.filters.NFTSold(userAddress); //
-                const sellEvents = await safeContractCall(State.nftPoolContract, 'queryFilter', [sellFilter, -200000], []);
+                // **** CORREÇÃO: Usa State.nftBondingCurveContract ****
+                const sellFilter = State.nftBondingCurveContract.filters.NFTSold(userAddress); //
+                const sellEvents = await safeContractCall(State.nftBondingCurveContract, 'queryFilter', [sellFilter, -200000], []);
                 for (const event of sellEvents) {
                     const { seller, boostBips, tokenId, payout, taxPaid } = event.args; //
                     const timestamp = await getTimestamp(event.blockNumber);
@@ -871,7 +875,8 @@ async function renderActivityHistory() {
                     });
                 }
             } else {
-                 console.warn("Dashboard: State.nftPoolContract not found, skipping NFT pool history.");
+                 // **** CORREÇÃO: Mensagem de log correta ****
+                 console.warn("Dashboard: State.nftBondingCurveContract not found, skipping NFT pool history.");
             }
         } catch (err) {
             console.warn("Failed to fetch additional contract events (Game/Pool):", err);
@@ -963,16 +968,26 @@ async function loadAndRenderProtocolTVL() {
         }
 
         // 4. Fundos no NFTLiquidityPool
-        if (State.nftPoolContract && boosterTiers) {
+        // **** CORREÇÃO: Usa State.nftBondingCurveContract ****
+        if (State.nftBondingCurveContract && boosterTiers) {
             for (const tier of boosterTiers) { 
-                const poolInfo = await safeContractCall(State.nftPoolContract, 'getPoolInfo', [tier.boostBips], { isInitialized: false, tokenBalance: 0n });
+                
+                // ===================================================================
+                // ### CORREÇÃO PRINCIPAL DESTE ARQUIVO ###
+                // Trocado 'getPoolInfo' por 'pools' (conforme ABI em config.js)
+                // ===================================================================
+                const poolInfo = await safeContractCall(State.nftBondingCurveContract, 'pools', [tier.boostBips], { isInitialized: false, tokenBalance: 0n });
+                
+                // A lógica de acesso (poolInfo.isInitialized e poolInfo.tokenBalance) está correta
+                // porque Ethers.js retorna um objeto com propriedades nomeadas.
                 if (poolInfo.isInitialized) {
                     poolLocked += poolInfo.tokenBalance; 
                 }
             }
             totalLocked += poolLocked;
         } else {
-             console.warn("Dashboard: State.nftPoolContract not found, skipping TVL for NFT Pools.");
+             // **** CORREÇÃO: Mensagem de log correta ****
+             console.warn("Dashboard: State.nftBondingCurveContract not found, skipping TVL for NFT Pools.");
         }
 
         // 5. Calcular Porcentagem
@@ -984,7 +999,7 @@ async function loadAndRenderProtocolTVL() {
         tvlPercEl.textContent = `${lockedPercentage}% of Total Supply Locked`;
         
         // Renderizar detalhes (opcional, se os IDs existirem)
-        if(tvlStakingEl) tvlStakingEl.textContent = `${formatBigNumber(stakingLocked).toFixed(0)} $BKC`;
+        if(tvlStakingEl) tvlStakingEl.textContent = `${formatBigNumber(stakingLocked).toFixed(0)} $BKK`;
         if(tvlVestingEl) tvlVestingEl.textContent = `${formatBigNumber(vestingLocked).toFixed(0)} $BKC`;
         if(tvlGameEl) tvlGameEl.textContent = `${formatBigNumber(gameLocked).toFixed(0)} $BKC`;
         if(tvlPoolEl) tvlPoolEl.textContent = `${formatBigNumber(poolLocked).toFixed(0)} $BKC`;

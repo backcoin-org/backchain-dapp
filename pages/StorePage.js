@@ -4,118 +4,196 @@ const ethers = window.ethers;
 
 import { State } from '../state.js';
 import { DOMElements } from '../dom-elements.js';
-import { loadUserData, loadMyBoosters } from '../modules/data.js';
+// Importa loadUserData para checar o pStake e safeContractCall
+import { loadUserData, loadMyBoosters, safeContractCall } from '../modules/data.js';
 import { executeBuyBooster, executeSellBooster } from '../modules/transactions.js';
 import { formatBigNumber, renderLoading, renderError } from '../utils.js';
 import { boosterTiers } from '../config.js';
-import { safeContractCall } from '../modules/data.js';
 
-async function renderLiquidityPools() {
+// --- Estado da página de Trade (CORRIGIDO) ---
+const TradeState = {
+    activeTab: 'buy', // 'buy' ou 'sell'
+};
+
+// Chave do serviço vinda do contrato NFTLiquidityPool.sol
+// const PSTAKE_SERVICE_KEY = "NFT_POOL_ACCESS"; // <-- NÃO É MAIS USADO
+
+/**
+ * Renderiza a interface de trade principal (Abas e Lista de Ativos)
+ */
+async function renderTradeInterface() {
     const el = document.getElementById('store-items-grid');
     if (!el) return;
 
+    // 1. Renderiza o "Shell" da UI (Abas + Container)
+    el.innerHTML = `
+        <div class="trade-container">
+            <div class="trade-tabs">
+                <button class="trade-tab ${TradeState.activeTab === 'buy' ? 'active' : ''}" data-tab="buy">
+                    Buy
+                </button>
+                <button class="trade-tab ${TradeState.activeTab === 'sell' ? 'active' : ''}" data-tab="sell">
+                    Sell
+                </button>
+            </div>
+            <div id="trade-content-area" class="trade-content">
+                </div>
+        </div>
+    `;
+
+    // 2. Renderiza o conteúdo da aba ativa
+    await renderActiveTabContent();
+}
+
+/**
+ * Renderiza o conteúdo da aba selecionada (Buy ou Sell)
+ */
+async function renderActiveTabContent() {
+    const el = document.getElementById('trade-content-area');
+    if (!el) return;
+
+    // Adicionada verificação do ecosystemManagerContract
+    // *** CORREÇÃO: Removida a verificação do ecosystemManagerContract, pois não precisamos mais dele para pStake ***
     if (!State.isConnected || !State.nftBondingCurveContract || !State.rewardBoosterContract) {
-        const message = !State.isConnected ? 'Connect your wallet to see the store.' : 'Store configuration is incomplete.';
-        renderError(el, message);
+        const message = !State.isConnected ? 'Connect wallet to trade.' : 'Store config incomplete.';
+        el.innerHTML = `<p class="${!State.isConnected ? 'error-message' : 'loading-message'}">${message}</p>`;
         return;
     }
-    renderLoading(el);
+
+    // --- LÓGICA DE VERIFICAÇÃO DE PSTAKE (REMOVIDA) ---
+    // O bloco de código que verificava 'PSTAKE_SERVICE_KEY'
+    // e comparava 'userPStake < MIN_PSTAKE_REQ' foi totalmente removido.
+    // --- FIM DA REMOÇÃO ---
+
+    el.innerHTML = `<p class="loading-message">Loading booster data...</p>`;
     
-    await loadMyBoosters();
+    try {
+        await loadMyBoosters(); // Carrega os boosters do usuário (necessário para a aba "Sell")
 
-    const renderPromises = boosterTiers.map(async (tier) => {
-        try {
-            // --- Pool Information ---
-            const fallbackPoolStruct = { tokenBalance: 0n, nftCount: 0n, k: 0n, isInitialized: false };
-            const poolInfo = await safeContractCall(State.nftBondingCurveContract, 'pools', [tier.boostBips], fallbackPoolStruct);
-            const availableInPool = Number(poolInfo.nftCount);
-            const buyPriceResult = await safeContractCall(State.nftBondingCurveContract, 'getBuyPrice', [tier.boostBips], ethers.MaxUint256);
-            const sellPrice = await safeContractCall(State.nftBondingCurveContract, 'getSellPrice', [tier.boostBips], 0n);
-            const isBuyDisabled = availableInPool === 0 || buyPriceResult === ethers.MaxUint256;
-            
-            // --- User's Position & Sell Eligibility ---
-            const userOwnedOfTier = State.myBoosters.filter(b => b.boostBips === tier.boostBips);
-            const userOwnedCount = userOwnedOfTier.length;
-            
-            let sellableTokenId = null;
-            if (userOwnedCount > 0) {
-                const lockDuration = await safeContractCall(State.nftBondingCurveContract, 'LOCK_DURATION', [], 30n * 86400n);
-                const now = Math.floor(Date.now() / 1000);
-                
-                // Find the first sellable token for this tier
-                for (const token of userOwnedOfTier) {
-                    const purchaseTimestamp = await safeContractCall(State.nftBondingCurveContract, 'nftPurchaseTimestamp', [token.tokenId], 0n);
-                    if (purchaseTimestamp > 0n) { // Token was bought from the pool
-                        const unlockTime = Number(purchaseTimestamp) + Number(lockDuration);
-                        if (now >= unlockTime) {
-                            sellableTokenId = token.tokenId.toString();
-                            break; // Found a sellable token, no need to check others
-                        }
-                    }
-                }
-            }
+        let contentPromises;
 
-            const isSellDisabled = sellableTokenId === null;
+        if (TradeState.activeTab === 'buy') {
+            // --- MODO COMPRA ---
+            contentPromises = boosterTiers.map(async (tier) => {
+                try {
+                    const poolInfo = await safeContractCall(State.nftBondingCurveContract, 'pools', [tier.boostBips], { nftCount: 0n });
+                    const buyPrice = await safeContractCall(State.nftBondingCurveContract, 'getBuyPrice', [tier.boostBips], ethers.MaxUint256);
 
-            return `
-                <div class="relative z-0 h-full w-full bg-sidebar border border-border-color rounded-xl p-5 flex flex-col overflow-hidden">
-                    <div class="absolute -top-1/4 -right-1/4 w-[250px] h-[250px] ${tier.glowColor} opacity-30 blur-3xl rounded-full -z-10"></div>
-                    <div class="relative z-10 flex flex-col h-full">
-                        
-                        <div class="text-center mb-4">
-                            <img src="${tier.img}" alt="${tier.name}" class="w-24 h-24 mx-auto mb-3"/>
-                            <h3 class="text-xl font-bold ${tier.color}">${tier.name} Booster</h3>
-                            <p class="text-2xl font-bold text-green-400">+${tier.boostBips / 100}% Efficiency</p>
-                        </div>
-                        
-                        <div class="bg-main/50 p-3 rounded-lg my-2 text-center">
-                             <p class="text-xs text-zinc-400">Pool Liquidity</p>
-                            <div class="grid grid-cols-2 gap-2 mt-2">
-                                <div>
-                                    <p class="font-bold text-lg">${availableInPool}</p>
-                                    <p class="text-xs text-zinc-500">NFTs Available</p>
-                                </div>
-                                <div>
-                                    <p class="font-bold text-lg">${formatBigNumber(poolInfo.tokenBalance).toFixed(0)}</p>
-                                    <p class="text-xs text-zinc-500">$BKC in Pool</p>
-                                </div>
+                    const availableInPool = Number(poolInfo.nftCount);
+                    const isBuyDisabled = availableInPool === 0 || buyPrice === ethers.MaxUint256;
+                    const priceFormatted = isBuyDisabled ? '--' : formatBigNumber(buyPrice).toFixed(2);
+
+                    return `
+                        <div class="trade-row">
+                            <div class="trade-row-icon">
+                                <img src="${tier.img}" alt="${tier.name}"/>
                             </div>
-                        </div>
-                        
-                        <div class="bg-main/50 p-3 rounded-lg my-2 text-center">
-                             <p class="text-xs text-zinc-400">Your Position</p>
-                            <p class="font-bold text-2xl text-amber-400 mt-1">${userOwnedCount}</p>
-                             <p class="text-sm text-zinc-500">You Own</p>
-                        </div>
-
-                        <div class="mt-auto pt-4 space-y-3">
-                            <div class="p-2 border border-border-color rounded-md text-center">
-                                <span class="text-xs text-zinc-400">Buy Price</span>
-                                <p class="font-mono font-semibold">${isBuyDisabled ? '--' : formatBigNumber(buyPriceResult).toFixed(2)} $BKC</p>
-                                <button class="w-full mt-2 font-bold py-2 px-4 rounded-md transition-colors buy-booster-btn ${isBuyDisabled ? 'btn-disabled' : 'bg-green-600 hover:bg-green-700 text-white'}" data-boostbips="${tier.boostBips}" data-price="${buyPriceResult.toString()}" ${isBuyDisabled ? 'disabled' : ''}>
+                            <div class="trade-row-info">
+                                <h4>${tier.name}</h4>
+                                <p class="${tier.color}">+${tier.boostBips / 100}% Efficiency</p>
+                            </div>
+                            <div class="trade-row-stats">
+                                <div class="stat-label">Price</div>
+                                <div class="stat-value">${priceFormatted} BKC</div>
+                                <div class="stat-label" style="margin-top: 4px;">Available: ${availableInPool}</div>
+                            </div>
+                            <div class="trade-row-action">
+                                <button class="trade-action-btn buy buy-booster-btn" 
+                                        data-boostbips="${tier.boostBips}" 
+                                        data-price="${buyPrice.toString()}" 
+                                        ${isBuyDisabled ? 'disabled' : ''}>
                                     Buy
                                 </button>
                             </div>
-                            
-                            <div class="p-2 border border-border-color rounded-md text-center">
-                                <span class="text-xs text-zinc-400">Sell Value</span>
-                                <p class="font-mono font-semibold">${isSellDisabled ? '--' : formatBigNumber(sellPrice).toFixed(2)} $BKC</p>
-                                <button class="w-full mt-2 font-bold py-2 px-4 rounded-md transition-colors sell-booster-btn ${isSellDisabled ? 'btn-disabled' : 'bg-red-600 hover:bg-red-700 text-white'}" data-tokenid="${sellableTokenId}" ${isSellDisabled ? 'disabled' : ''}>
+                        </div>
+                    `;
+                } catch (error) {
+                    console.error(`Error loading buy data for tier ${tier.name}:`, error);
+                    return `
+                        <div class="trade-row">
+                            <div class="trade-row-icon"><img src="${tier.img}" alt="${tier.name}"/></div>
+                            <div class="trade-row-info">
+                                <h4>${tier.name}</h4>
+                                <p class="${tier.color}">+${tier.boostBips / 100}% Efficiency</p>
+                            </div>
+                            <div class="trade-row-stats text-red-400">
+                                <div class="stat-label">Error</div>
+                                <div class="stat-value">Failed to load</div>
+                            </div>
+                            <div class="trade-row-action">
+                                <button class="trade-action-btn buy" disabled>Buy</button>
+                            </div>
+                        </div>
+                    `;
+                }
+            });
+        } else {
+            // --- MODO VENDA ---
+            const userBoosters = State.myBoosters;
+
+            if (userBoosters.length === 0) {
+                el.innerHTML = `<p class="text-center text-zinc-400 p-4">You do not own any Booster NFTs to sell.</p>`;
+                return;
+            }
+
+            contentPromises = userBoosters.map(async (booster) => {
+                try {
+                    const tier = boosterTiers.find(t => t.boostBips === booster.boostBips) || { name: 'Unknown', color: 'text-zinc-400', img: '' };
+                    const sellPrice = await safeContractCall(State.nftBondingCurveContract, 'getSellPrice', [booster.boostBips], 0n);
+                    const isSellDisabled = sellPrice === 0n;
+                    const priceFormatted = isSellDisabled ? '--' : formatBigNumber(sellPrice).toFixed(2);
+
+                    return `
+                        <div class="trade-row">
+                            <div class="trade-row-icon">
+                                <img src="${tier.img}" alt="${tier.name}"/>
+                            </div>
+                            <div class="trade-row-info">
+                                <h4>${tier.name}</h4>
+                                <p class="text-zinc-400" style="font-size: 0.8rem;">Token ID #${booster.tokenId}</p>
+                            </div>
+                            <div class="trade-row-stats">
+                                <div class="stat-label">Sell Value</div>
+                                <div class="stat-value">${priceFormatted} BKC</div>
+                            </div>
+                            <div class="trade-row-action">
+                                <button class="trade-action-btn sell sell-booster-btn" 
+                                        data-tokenid="${booster.tokenId}" 
+                                        ${isSellDisabled ? 'disabled' : ''}>
                                     Sell
                                 </button>
                             </div>
                         </div>
-
-                    </div>
-                </div>
-            `;
-        } catch (e) {
-            console.error(`Error loading tier ${tier.name}:`, e);
-            return `<div class="bg-sidebar border border-border-color rounded-xl p-4 text-center text-red-400"><p>Failed to load ${tier.name} tier</p></div>`;
+                    `;
+                } catch (error) {
+                    console.error(`Error loading sell data for booster ID ${booster.tokenId}:`, error);
+                    const tier = boosterTiers.find(t => t.boostBips === booster.boostBips) || { name: 'Unknown', color: 'text-zinc-400', img: '' };
+                    return `
+                        <div class="trade-row">
+                            <div class="trade-row-icon"><img src="${tier.img}" alt="${tier.name}"/></div>
+                            <div class="trade-row-info">
+                                <h4>${tier.name}</h4>
+                                <p class="text-zinc-400" style="font-size: 0.8rem;">Token ID #${booster.tokenId}</p>
+                            </div>
+                            <div class="trade-row-stats text-red-400">
+                                <div class="stat-label">Error</div>
+                                <div class="stat-value">Failed to load</div>
+                            </div>
+                            <div class="trade-row-action">
+                                <button class="trade-action-btn sell" disabled>Sell</button>
+                            </div>
+                        </div>
+                    `;
+                }
+            });
         }
-    });
 
-    el.innerHTML = (await Promise.all(renderPromises)).join('');
+        el.innerHTML = (await Promise.all(contentPromises)).join('');
+
+    } catch (err) {
+        console.error("Error in renderActiveTabContent:", err);
+        renderError(el, "Failed to load store data. Please refresh.");
+    }
 }
 
 
@@ -124,46 +202,58 @@ async function renderLiquidityPools() {
 function setupStorePageListeners() {
     DOMElements.store.addEventListener('click', async (e) => {
         const button = e.target.closest('button');
-        if (button) {
-            if (button.classList.contains('buy-booster-btn')) {
-                e.preventDefault();
-                const { boostbips, price } = button.dataset;
-                const success = await executeBuyBooster(boostbips, price, button);
-                if (success) {
-                    State.myBoosters = []; // Força o recarregamento dos boosters
-                    await loadUserData();
-                    await StorePage.render(true);
-                }
-                return;
+        if (!button) return;
+
+        // 1. Listener para as ABAS
+        if (button.classList.contains('trade-tab')) {
+            e.preventDefault();
+            const newTab = button.dataset.tab;
+            if (newTab !== TradeState.activeTab) {
+                TradeState.activeTab = newTab;
+                await renderTradeInterface();
             }
-            
-            if (button.classList.contains('sell-booster-btn')) {
-                e.preventDefault();
-                const { tokenid } = button.dataset;
-                const success = await executeSellBooster(tokenid, button);
-                if (success) {
-                    State.myBoosters = []; // Força o recarregamento dos boosters
-                    await loadUserData();
-                    await StorePage.render(true);
-                }
-                return;
+            return;
+        }
+
+        // 2. Listener para o botão de COMPRA
+        if (button.classList.contains('buy-booster-btn')) {
+            e.preventDefault();
+            const { boostbips, price } = button.dataset;
+            const success = await executeBuyBooster(boostbips, price, button);
+            if (success) {
+                State.myBoosters = [];
+                await loadUserData(); // Recarrega os dados do usuário *depois* da compra
+                await renderActiveTabContent();
             }
+            return;
+        }
+
+        // 3. Listener para o botão de VENDA
+        if (button.classList.contains('sell-booster-btn')) {
+            e.preventDefault();
+            const { tokenid } = button.dataset;
+            const success = await executeSellBooster(tokenid, button);
+            if (success) {
+                State.myBoosters = [];
+                await loadUserData(); // Recarrega os dados do usuário *depois* da venda
+                await renderActiveTabContent();
+            }
+            return;
         }
     });
 }
 
+// Inicializa os listeners apenas uma vez
 if (!DOMElements.store._listenersInitialized) {
     setupStorePageListeners();
     DOMElements.store._listenersInitialized = true;
 }
 
+// Exporta a função render principal
 export const StorePage = {
     async render(isUpdate = false) {
-        const myBoostersContainer = document.getElementById('my-boosters-list-container');
-        if (myBoostersContainer) {
-            myBoostersContainer.innerHTML = '';
-        }
-        
-        await renderLiquidityPools();
+        // A lógica de carregamento de dados foi movida para 'renderActiveTabContent'
+        // para garantir que os dados estejam prontos antes de renderizar.
+        await renderTradeInterface();
     }
 }

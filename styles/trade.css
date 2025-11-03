@@ -1,0 +1,160 @@
+/* Seu arquivo styles/trade.css */
+
+/* Remove a grade antiga e centraliza o novo container de trade */
+#store-items-grid {
+    display: block;
+    max-width: 600px; /* Mantém a largura máxima */
+    margin: 2rem auto;
+    padding: 0;
+}
+
+/* O container principal da "caixa de swap" */
+.trade-container {
+    background: #1a1e2b; /* Cor de fundo principal (dark) */
+    border: 1px solid #33394b; /* Borda sutil */
+    border-radius: 16px;
+    overflow: hidden;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+}
+
+/* Abas de Compra/Venda */
+.trade-tabs {
+    display: flex;
+    background: #202434; /* Fundo das abas */
+}
+
+.trade-tab {
+    flex: 1;
+    padding: 1rem;
+    text-align: center;
+    font-size: 1rem;
+    font-weight: 600;
+    color: #8c96c4; /* Cor inativa */
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    border-bottom: 3px solid transparent;
+}
+
+.trade-tab:hover {
+    color: #ffffff;
+}
+
+.trade-tab.active {
+    color: #ffffff;
+    background: #1a1e2b; /* Fundo da aba ativa (mesmo do container) */
+    border-bottom: 3px solid #f59e0b; /* Laranja da sua paleta */
+}
+
+/* Conteúdo (lista de ativos) */
+.trade-content {
+    padding: 1rem;
+}
+
+/* Linha de cada ativo (NFT Tier) */
+.trade-row {
+    display: grid;
+    grid-template-columns: 50px 1fr 1fr 100px; /* Icon | Info | Stats | Button */
+    gap: 1rem;
+    align-items: center;
+    padding: 1rem;
+    border-radius: 12px;
+    transition: background 0.2s ease;
+    border-bottom: 1px solid #2a2e41;
+}
+
+.trade-row:last-child {
+    border-bottom: none;
+}
+
+.trade-row:hover {
+    background: #202434; /* Fundo de hover */
+}
+
+/* Colunas */
+.trade-row-icon img {
+    width: 50px;
+    height: 50px;
+    border-radius: 8px; /* Bordas arredondadas para os ícones */
+}
+
+.trade-row-info h4 {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: #ffffff;
+    margin: 0;
+}
+.trade-row-info p {
+    font-size: 0.9rem;
+    font-weight: 600;
+    margin: 0;
+    /* As cores (e.g., text-green-400) são aplicadas via classe no JS */
+}
+
+.trade-row-stats {
+    text-align: right;
+    font-size: 0.9rem;
+}
+.trade-row-stats .stat-label {
+    color: #8c96c4; /* Cinza/azul claro */
+    font-size: 0.8rem;
+    margin-bottom: 4px;
+}
+.trade-row-stats .stat-value {
+    color: #ffffff;
+    font-weight: 600;
+    font-family: 'Inter', sans-serif; /* Usar a fonte principal */
+}
+
+/* Botões de Ação */
+.trade-action-btn {
+    width: 100%;
+    padding: 0.75rem;
+    border: none;
+    border-radius: 8px;
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    color: #ffffff;
+}
+
+.trade-action-btn.buy {
+    background: #f59e0b; /* Laranja da sua paleta */
+}
+.trade-action-btn.buy:hover:not(:disabled) {
+    background: #fbbf24; /* Laranja mais claro no hover */
+}
+
+.trade-action-btn.sell {
+    background: #dc2626; /* Vermelho mais forte */
+}
+.trade-action-btn.sell:hover:not(:disabled) {
+    background: #ef4444; /* Vermelho mais claro no hover */
+}
+
+/* Estado desabilitado */
+.trade-action-btn:disabled {
+    background: #444a63; /* Cinza escuro */
+    color: #7a82a0;
+    cursor: not-allowed;
+    opacity: 0.6;
+}
+
+/* Mensagem de erro/carregamento dentro do container de trade */
+.trade-content .loading-message,
+.trade-content .error-message {
+    padding: 2rem;
+    text-align: center;
+    color: #8c96c4;
+}
+.trade-content .error-message {
+    color: #e63946;
+}
+
+/* Estilo para quando não há NFTs para vender */
+.trade-content p.text-center {
+    padding: 2rem;
+    color: #8c96c4;
+}
