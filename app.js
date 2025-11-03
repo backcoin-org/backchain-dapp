@@ -1,7 +1,7 @@
 // app.js (AJUSTADO: Saldo e Endereço no mesmo botão)
 
 // --- INÍCIO DA CORREÇÃO: VERCEL ANALYTICS ---
-import { inject } from '@vercel/analytics';
+import { inject } from 'https://esm.sh/@vercel/analytics';
 inject();
 // --- FIM DA CORREÇÃO ---
 
