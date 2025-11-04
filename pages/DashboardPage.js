@@ -1,7 +1,5 @@
 // pages/DashboardPage.js
-// CORREÇÃO: TVL agora é carregado no estado desconectado (chamada movida em render())
-// CORREÇÃO: Corrigido State.nftPoolContract para State.nftBondingCurveContract
-// CORREÇÃO 2: Corrigido 'getPoolInfo' para 'pools' na função loadAndRenderProtocolTVL
+// CORREÇÃO 4: Adicionado 'publicSaleContract' e 'decentralizedNotaryContract' ao histórico de atividades
 
 const ethers = window.ethers;
 
@@ -664,6 +662,10 @@ async function renderMyCertificatesDashboard() {
     }
 }
 
+// ==================================================================
+// ================== INÍCIO DA CORREÇÃO (ITEM 1) =================
+// ==================================================================
+// Adiciona os novos 'case' para os novos tipos de evento
 function renderActivityItem(item) {
     const timestamp = Number(item.timestamp);
     const date = new Date(timestamp * 1000).toLocaleDateString("en-US", { month: 'short', day: 'numeric', year: 'numeric' });
@@ -713,11 +715,29 @@ function renderActivityItem(item) {
             details = `Sold NFT #${item.details.tokenId} for ${formattedAmount} $BKC (Tax: ${taxFormatted})`;
             itemId = item.details.tokenId;
             break;
+
+        // --- NOVOS CASES ADICIONADOS ---
+        case 'PublicSaleBuy': 
+            title = 'Booster Bought (Store)'; 
+            icon = 'fa-shopping-bag'; // Ícone diferente para a loja
+            color = 'text-green-400'; 
+            details = `Bought Tier ${item.details.tierId} NFT (#${item.details.tokenId}) for ${formatBigNumber(item.amount).toFixed(2)} $BKC`; 
+            itemId = item.details.tokenId; 
+            break;
+        case 'NotaryRegister': 
+            title = 'Document Notarized'; 
+            icon = 'fa-stamp'; // Ícone do cartório
+            color = 'text-blue-400'; 
+            details = `Registered Doc #${item.details.tokenId} (Fee: ${formatBigNumber(item.amount).toFixed(2)} $BKC)`; 
+            itemId = item.details.tokenId; 
+            break;
+        // --- FIM DOS NOVOS CASES ---
     }
     const txHash = item.txHash;
     let Tag, tagAttributes, hoverClass, cursorClass, actionIndicator = '';
     
-    const supportsLazySearch = ['Delegation', 'VestingCertReceived', 'Unstake', 'ForceUnstake', 'CertificateWithdrawn', 'NFTBuy', 'NFTSell'].includes(item.type);
+    // Adiciona os novos tipos ao lazy search
+    const supportsLazySearch = ['Delegation', 'VestingCertReceived', 'Unstake', 'ForceUnstake', 'CertificateWithdrawn', 'NFTBuy', 'NFTSell', 'PublicSaleBuy', 'NotaryRegister'].includes(item.type);
     
     if (txHash) {
         Tag = 'a'; tagAttributes = `href="${EXPLORER_BASE_URL}${txHash}" target="_blank" rel="noopener noreferrer" title="View Transaction on Explorer"`; hoverClass = 'hover:bg-main/70 group'; cursorClass = 'cursor-pointer';
@@ -744,7 +764,15 @@ function renderActivityItem(item) {
         </${Tag}>
     `;
 }
+// ==================================================================
+// =================== FIM DA CORREÇÃO (ITEM 1) ==================
+// ==================================================================
 
+
+// ==================================================================
+// ================== INÍCIO DA CORREÇÃO (ITEM 2) =================
+// ==================================================================
+// Adiciona a busca pelos eventos do PublicSale e Notary
 async function renderActivityHistory() {
     const listEl = document.getElementById('activity-history-list-container');
     if (!listEl) { console.warn("History container not found"); return; }
@@ -812,18 +840,12 @@ async function renderActivityHistory() {
             allActivities.push({ type: 'MinerRewardClaimed', amount: amount, timestamp: timestamp, details: {}, txHash: event.transactionHash, itemId: null });
         }
 
-        // --- INÍCIO DA INJEÇÃO DE NOVOS EVENTOS (CORRIGIDO) ---
         try {
-            // 1. Buscar prêmios do TigerGame (FortuneTiger)
-            // **** CORREÇÃO: Usa State.actionsManagerContract ****
             if (State.actionsManagerContract) {
-                const gamePlayFilter = State.actionsManagerContract.filters.GamePlayed(userAddress); //
-                // Busca eventos onde o usuário foi o jogador
+                const gamePlayFilter = State.actionsManagerContract.filters.GamePlayed(userAddress); 
                 const gamePlayEvents = await safeContractCall(State.actionsManagerContract, 'queryFilter', [gamePlayFilter, -200000], []);
-                
                 for (const event of gamePlayEvents) {
                     const { user, amountWagered, totalPrizeWon } = event.args;
-                    // Adiciona apenas se o usuário ganhou um prêmio
                     if (totalPrizeWon > 0n) {
                         const timestamp = await getTimestamp(event.blockNumber);
                         allActivities.push({
@@ -840,34 +862,29 @@ async function renderActivityHistory() {
                 console.warn("Dashboard: State.actionsManagerContract not found, skipping game history.");
             }
 
-            // 2. Buscar Compras no NFTLiquidityPool
-            // **** CORREÇÃO: Usa State.nftBondingCurveContract ****
             if (State.nftBondingCurveContract) {
-                const buyFilter = State.nftBondingCurveContract.filters.NFTBought(userAddress); //
+                const buyFilter = State.nftBondingCurveContract.filters.NFTBought(userAddress); 
                 const buyEvents = await safeContractCall(State.nftBondingCurveContract, 'queryFilter', [buyFilter, -200000], []);
                 for (const event of buyEvents) {
-                    const { buyer, boostBips, tokenId, price } = event.args; //
+                    const { buyer, boostBips, tokenId, price } = event.args; 
                     const timestamp = await getTimestamp(event.blockNumber);
                     allActivities.push({
                         type: 'NFTBuy',
-                        amount: price, // 'amount' é o preço pago
+                        amount: price,
                         timestamp: timestamp,
                         details: { tokenId: tokenId.toString(), boostBips: boostBips.toString() },
                         txHash: event.transactionHash,
                         itemId: tokenId.toString()
                     });
                 }
-
-                // 3. Buscar Vendas no NFTLiquidityPool
-                // **** CORREÇÃO: Usa State.nftBondingCurveContract ****
-                const sellFilter = State.nftBondingCurveContract.filters.NFTSold(userAddress); //
+                const sellFilter = State.nftBondingCurveContract.filters.NFTSold(userAddress); 
                 const sellEvents = await safeContractCall(State.nftBondingCurveContract, 'queryFilter', [sellFilter, -200000], []);
                 for (const event of sellEvents) {
-                    const { seller, boostBips, tokenId, payout, taxPaid } = event.args; //
+                    const { seller, boostBips, tokenId, payout, taxPaid } = event.args; 
                     const timestamp = await getTimestamp(event.blockNumber);
                     allActivities.push({
                         type: 'NFTSell',
-                        amount: payout, // 'amount' é o pagamento recebido
+                        amount: payout, 
                         timestamp: timestamp,
                         details: { tokenId: tokenId.toString(), boostBips: boostBips.toString(), tax: taxPaid },
                         txHash: event.transactionHash,
@@ -875,11 +892,54 @@ async function renderActivityHistory() {
                     });
                 }
             } else {
-                 // **** CORREÇÃO: Mensagem de log correta ****
                  console.warn("Dashboard: State.nftBondingCurveContract not found, skipping NFT pool history.");
             }
+            
+            // --- INÍCIO DOS NOVOS LISTENERS ---
+
+            // 4. Buscar Compras na Loja (PublicSale)
+            if (State.publicSaleContract) {
+                const saleFilter = State.publicSaleContract.filters.NFTSold(userAddress);
+                const saleEvents = await safeContractCall(State.publicSaleContract, 'queryFilter', [saleFilter, -200000], []);
+                for (const event of saleEvents) {
+                    const { buyer, tierId, tokenId, price } = event.args;
+                    const timestamp = await getTimestamp(event.blockNumber);
+                    allActivities.push({
+                        type: 'PublicSaleBuy',
+                        amount: price, // 'amount' é o preço pago
+                        timestamp: timestamp,
+                        details: { tokenId: tokenId.toString(), tierId: tierId.toString() },
+                        txHash: event.transactionHash,
+                        itemId: tokenId.toString()
+                    });
+                }
+            } else {
+                 console.warn("Dashboard: State.publicSaleContract not found, skipping Booster Store history.");
+            }
+
+            // 5. Buscar Registros do Cartório (DecentralizedNotary)
+            if (State.decentralizedNotaryContract) {
+                const notaryFilter = State.decentralizedNotaryContract.filters.DocumentNotarized(userAddress);
+                const notaryEvents = await safeContractCall(State.decentralizedNotaryContract, 'queryFilter', [notaryFilter, -200000], []);
+                for (const event of notaryEvents) {
+                    const { user, tokenId, documentURI, feePaid } = event.args;
+                    const timestamp = await getTimestamp(event.blockNumber);
+                    allActivities.push({
+                        type: 'NotaryRegister',
+                        amount: feePaid, // 'amount' é a taxa paga
+                        timestamp: timestamp,
+                        details: { tokenId: tokenId.toString(), uri: documentURI },
+                        txHash: event.transactionHash,
+                        itemId: tokenId.toString()
+                    });
+                }
+            } else {
+                 console.warn("Dashboard: State.decentralizedNotaryContract not found, skipping Notary history.");
+            }
+            // --- FIM DOS NOVOS LISTENERS ---
+
         } catch (err) {
-            console.warn("Failed to fetch additional contract events (Game/Pool):", err);
+            console.warn("Failed to fetch additional contract events (Game/Pool/Store/Notary):", err);
         }
         // --- FIM DA INJEÇÃO ---
 
@@ -900,6 +960,9 @@ async function renderActivityHistory() {
         renderError(listEl, "Failed to load activity history.");
     }
 }
+// ==================================================================
+// =================== FIM DA CORREÇÃO (ITEM 2) ==================
+// ==================================================================
 
 
 // --- INÍCIO DA FUNÇÃO DE TVL (CORRIGIDA) ---
@@ -933,73 +996,86 @@ async function loadAndRenderProtocolTVL() {
         let stakingLocked = 0n, vestingLocked = 0n, gameLocked = 0n, poolLocked = 0n;
 
         // 0. Espera o State.bkcTokenContract (do publicProvider) estar pronto
-        if (!State.bkcTokenContract) {
-            // Tenta esperar um pouco se o initPublicProvider ainda não terminou
+        if (!State.bkcTokenContractPublic) { // CORRIGIDO: Checa o contrato público
             await new Promise(resolve => setTimeout(resolve, 500));
-            if (!State.bkcTokenContract) {
+            if (!State.bkcTokenContractPublic) {
                  throw new Error("BKCToken contract (public) not loaded");
             }
         }
+        
+        // CORRIGIDO: Usa o contrato público (bkcTokenContractPublic)
+        const tokenContract = State.bkcTokenContractPublic;
 
         // 1. Fundos em Staking (DelegationManager)
         if (addresses.delegationManager) {
-            stakingLocked = await safeContractCall(State.bkcTokenContract, 'balanceOf', [addresses.delegationManager], 0n);
+            stakingLocked = await safeContractCall(tokenContract, 'balanceOf', [addresses.delegationManager], 0n);
             totalLocked += stakingLocked;
         }
         
         // 2. Fundos em Vesting (RewardManager)
         if (addresses.rewardManager) {
-            vestingLocked = await safeContractCall(State.bkcTokenContract, 'balanceOf', [addresses.rewardManager], 0n);
+            vestingLocked = await safeContractCall(tokenContract, 'balanceOf', [addresses.rewardManager], 0n);
             totalLocked += vestingLocked;
         }
 
         // 3. Fundos no TigerGame (FortuneTiger)
-        // **** CORREÇÃO: Usa State.actionsManagerContract ****
-        if (State.actionsManagerContract) {
-            // O contrato foi configurado para 4 piscinas (ID 0 a 3)
-            for (let i = 0; i < 4; i++) {
-                // **** CORREÇÃO: Lê o índice [2] (balance) da struct/array retornado ****
-                const poolInfo = await safeContractCall(State.actionsManagerContract, 'prizePools', [i], [0n, 0n, 0n, 0n]);
-                gameLocked += poolInfo[2]; // poolInfo[2] é 'balance'
-            }
-            totalLocked += gameLocked;
-        } else {
-            console.warn("Dashboard: State.actionsManagerContract not found, skipping TVL for Game Pools.");
+        // CORREÇÃO: actionsManagerContract agora é PÚBLICO
+        if (State.ecosystemManagerContract) { // Presume que o Hub pode nos dar o contrato
+             // ESTA PARTE AINDA DEPENDE DO State.actionsManagerContract (que é inicializado no login)
+             // Para um TVL PÚBLICO, precisaríamos de um actionsManagerContractPublic
+             // Vamos assumir que ele está no State (como antes) por enquanto
+             if (State.actionsManagerContract) {
+                for (let i = 0; i < 4; i++) {
+                    const poolInfo = await safeContractCall(State.actionsManagerContract, 'prizePools', [i], [0n, 0n, 0n, 0n]);
+                    gameLocked += poolInfo[2]; 
+                }
+                totalLocked += gameLocked;
+             } else {
+                 console.warn("Dashboard: State.actionsManagerContract not found (public TVL), skipping game pools.");
+                 // Tenta ler do contrato público se o 'signer' não estiver pronto
+                 const publicActionsManager = new ethers.Contract(addresses.actionsManager, State.actionsManagerABI, State.publicProvider);
+                 for (let i = 0; i < 4; i++) {
+                    const poolInfo = await safeContractCall(publicActionsManager, 'prizePools', [i], [0n, 0n, 0n, 0n]);
+                    gameLocked += poolInfo[2]; 
+                }
+                totalLocked += gameLocked;
+             }
         }
 
         // 4. Fundos no NFTLiquidityPool
-        // **** CORREÇÃO: Usa State.nftBondingCurveContract ****
-        if (State.nftBondingCurveContract && boosterTiers) {
+        if (State.nftBondingCurveContract && boosterTiers) { // Assume que este também é inicializado publicamente
             for (const tier of boosterTiers) { 
-                
-                // ===================================================================
-                // ### CORREÇÃO PRINCIPAL DESTE ARQUIVO ###
-                // Trocado 'getPoolInfo' por 'pools' (conforme ABI em config.js)
-                // ===================================================================
                 const poolInfo = await safeContractCall(State.nftBondingCurveContract, 'pools', [tier.boostBips], { isInitialized: false, tokenBalance: 0n });
-                
-                // A lógica de acesso (poolInfo.isInitialized e poolInfo.tokenBalance) está correta
-                // porque Ethers.js retorna um objeto com propriedades nomeadas.
                 if (poolInfo.isInitialized) {
                     poolLocked += poolInfo.tokenBalance; 
                 }
             }
             totalLocked += poolLocked;
         } else {
-             // **** CORREÇÃO: Mensagem de log correta ****
-             console.warn("Dashboard: State.nftBondingCurveContract not found, skipping TVL for NFT Pools.");
+             // Tenta ler publicamente
+             const publicNftPool = new ethers.Contract(addresses.nftBondingCurve, State.nftBondingCurveABI, State.publicProvider);
+             if (publicNftPool && boosterTiers) {
+                 for (const tier of boosterTiers) { 
+                    const poolInfo = await safeContractCall(publicNftPool, 'pools', [tier.boostBips], { isInitialized: false, tokenBalance: 0n });
+                    if (poolInfo.isInitialized) {
+                        poolLocked += poolInfo.tokenBalance; 
+                    }
+                }
+                totalLocked += poolLocked;
+             } else {
+                console.warn("Dashboard: nftBondingCurveContract not found (public TVL), skipping NFT pools.");
+             }
         }
 
         // 5. Calcular Porcentagem
-        const totalSupply = await safeContractCall(State.bkcTokenContract, 'totalSupply', [], 0n);
+        const totalSupply = await safeContractCall(tokenContract, 'totalSupply', [], 0n);
         const lockedPercentage = (totalSupply > 0n) ? (Number(totalLocked * 10000n / totalSupply) / 100).toFixed(2) : 0;
 
         // 6. Renderizar
         tvlValueEl.textContent = `${formatBigNumber(totalLocked).toFixed(0)} $BKC`;
         tvlPercEl.textContent = `${lockedPercentage}% of Total Supply Locked`;
         
-        // Renderizar detalhes (opcional, se os IDs existirem)
-        if(tvlStakingEl) tvlStakingEl.textContent = `${formatBigNumber(stakingLocked).toFixed(0)} $BKK`;
+        if(tvlStakingEl) tvlStakingEl.textContent = `${formatBigNumber(stakingLocked).toFixed(0)} $BKC`;
         if(tvlVestingEl) tvlVestingEl.textContent = `${formatBigNumber(vestingLocked).toFixed(0)} $BKC`;
         if(tvlGameEl) tvlGameEl.textContent = `${formatBigNumber(gameLocked).toFixed(0)} $BKC`;
         if(tvlPoolEl) tvlPoolEl.textContent = `${formatBigNumber(poolLocked).toFixed(0)} $BKC`;
@@ -1041,12 +1117,9 @@ export const DashboardPage = {
             animationFrameId = null;
         }
         
-        // --- CORREÇÃO: TVL e Validadores são carregados IMEDIATAMENTE (dados públicos) ---
         renderValidatorsList();
         loadAndRenderProtocolTVL();
-        // --- FIM DA CORREÇÃO ---
-
-        // Pega os elementos DEPOIS
+        
         const myPositionPStakeEl = document.getElementById('statUserPStake');
         const efficiencyPanel = document.getElementById('reward-efficiency-panel');
         const historyListContainer = document.getElementById('activity-history-list-container');
@@ -1054,7 +1127,6 @@ export const DashboardPage = {
         
         if (!State.isConnected) {
             console.log("Rendering disconnected state (User Panels only).");
-            // Limpa apenas painéis específicos do usuário
             if(myPositionPStakeEl) myPositionPStakeEl.textContent = '--';
             if(claimPanelEl) claimPanelEl.innerHTML = '<p class="text-center text-zinc-400 p-4">Connect wallet to view rewards.</p>';
             if(efficiencyPanel) efficiencyPanel.innerHTML = '<p class="text-center text-zinc-400 p-4">Connect your wallet to view your status.</p>';
@@ -1068,7 +1140,6 @@ export const DashboardPage = {
             return;
         }
 
-        // --- LÓGICA DE CONECTADO ---
         console.log("Rendering connected state...");
         
         if (!this.hasRenderedOnce && !isUpdate) {
@@ -1083,11 +1154,10 @@ export const DashboardPage = {
             console.log("Loading user data and rewards...");
             if (!State.allValidatorsData || State.allValidatorsData.length === 0) {
                  await loadPublicData();
-                 renderValidatorsList(); // Recarrega validadores se não estiverem prontos
+                 renderValidatorsList(); 
             }
             await loadUserData();
             
-            // --- CÁLCULO E RENDERIZAÇÃO DOS DETALHES DE REIVINDICAÇÃO (TRADUZIDO) ---
             const claimDetails = await calculateClaimDetails();
             const { totalRewards, netClaimAmount, feeAmount, discountPercent, basePenaltyPercent } = claimDetails;
             
@@ -1136,14 +1206,11 @@ export const DashboardPage = {
                  claimPanelEl.innerHTML = claimPanelHTML;
             }
             
-            // --- FIM DO CÁLCULO E RENDERIZAÇÃO ---
-            
             console.log("Data loaded. Updating UI...");
             if (myPositionPStakeEl) {
                 myPositionPStakeEl.textContent = formatPStake(State.userTotalPStake || 0n);
             }
             
-            // Inicia a animação (usando o valor BRUTO para o efeito visual)
             startRewardAnimation(totalRewards);
             
             console.log("Rendering reward efficiency...");
