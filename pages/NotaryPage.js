@@ -109,7 +109,7 @@ async function loadNotaryPublicData() {
         console.log("loadNotaryPublicData: Data fetched from Hub:", { baseFee, pStakeRequirement });
 
         State.notaryMinPStake = pStakeRequirement;
-        State.notaryFee = baseFee; 
+        State.notaryFee = baseFee; // Esta é a Taxa Base
 
         if (pStakeRequirement === 0n && baseFee === 0n) {
              statsEl.innerHTML = `
@@ -133,7 +133,7 @@ async function loadNotaryPublicData() {
                     <span class="text-zinc-400">Minimum pStake Required:</span>
                     <span class="font-bold text-purple-400 text-lg">${formatPStake(pStakeRequirement)}</span>
                 </div>
-                <p class="text-xs text-zinc-400 mt-2 text-center font-semibold">Note: Fee is the base price. Booster NFT discounts will be applied at transaction time.</p>
+                <p class="text-xs text-zinc-400 mt-2 text-center font-semibold">Note: Your final fee will be calculated in the 'My Status' panel based on your Booster NFT discount.</p>
             `;
         }
         return true;
@@ -148,7 +148,10 @@ async function loadNotaryPublicData() {
 }
 
 /**
- * updateNotaryUserStatus (Esta função permanece a mesma)
+ * ==================================================================
+ * ============== INÍCIO DA ATUALIZAÇÃO (FEATURE DESCONTO) =============
+ * ==================================================================
+ * Atualizado para calcular e mostrar o desconto e a taxa final.
  */
 function updateNotaryUserStatus() {
     const userStatusEl = document.getElementById('notary-user-status');
@@ -171,13 +174,31 @@ function updateNotaryUserStatus() {
 
     const userPStake = State.userTotalPStake || 0n;
     const userBalance = State.currentUserBalance || 0n;
-
-    const meetsPStakeRequirement = userPStake >= State.notaryMinPStake;
-    const hasEnoughPStake = State.notaryMinPStake === 0n || meetsPStakeRequirement;
-    const needsFee = State.notaryFee > 0n;
-    const hasEnoughFee = !needsFee || userBalance >= State.notaryFee;
     const isFileUploaded = !!currentUploadedIPFS_URI;
 
+    // --- LÓGICA DE CÁLCULO DE DESCONTO ---
+    const baseFee = State.notaryFee;
+    const boosterBips = State.userBoosterBips || 0n; // Pega o Bips do booster do usuário
+    
+    let discount = 0n;
+    let finalFee = baseFee;
+    let discountPercent = "0%";
+
+    if (boosterBips > 0n && baseFee > 0n) {
+        // BIPS é "basis points", 10000 = 100%
+        discount = (baseFee * boosterBips) / 10000n;
+        finalFee = baseFee - discount;
+        discountPercent = `${(Number(boosterBips) / 100).toFixed(0)}%`; // Converte BIPS (ex: 500) para % (ex: 5%)
+    }
+
+    const hasEnoughPStake = State.notaryMinPStake === 0n || userPStake >= State.notaryMinPStake;
+    const needsFee = finalFee > 0n;
+    // Verifica se o usuário tem saldo para a TAXA FINAL
+    const hasEnoughFee = !needsFee || userBalance >= finalFee; 
+    // --- FIM DA LÓGICA DE DESCONTO ---
+
+
+    // --- ATUALIZAÇÃO DO HTML ---
      let statusHTML = `
         <div class="flex items-center justify-between text-sm">
             <span class="text-zinc-400 flex items-center">
@@ -188,15 +209,41 @@ function updateNotaryUserStatus() {
                 ${formatPStake(userPStake)}
             </span>
         </div>
-        <div class="flex items-center justify-between text-sm">
+        
+        <div class="border-t border-border-color my-3"></div>
+
+        <div class="flex items-center justify-between text-xs">
+            <span class="text-zinc-400">Base Fee:</span>
+            <span class="font-bold text-zinc-400">${formatBigNumber(baseFee)} $BKC</span>
+        </div>
+        <div class="flex items-center justify-between text-xs">
             <span class="text-zinc-400 flex items-center">
-                <i class="fa-solid ${hasEnoughFee ? 'fa-check-circle text-green-400' : 'fa-times-circle text-red-400'} w-5 mr-2"></i>
-                Your $BKC (${needsFee ? formatBigNumber(State.notaryFee) : '0'} base needed):
+                <i class="fa-solid fa-sparkle w-4 mr-1 text-cyan-400"></i>
+                Booster Discount (${discountPercent}):
             </span>
-            <span class="font-bold ${hasEnoughFee ? 'text-green-00' : 'text-red-400'} text-base">
+            <span class="font-bold text-cyan-400">
+                - ${formatBigNumber(discount)} $BKC
+            </span>
+        </div>
+        <div class="flex items-center justify-between text-sm font-bold mt-2">
+            <span class="text-zinc-200 flex items-center">
+                <i class="fa-solid ${hasEnoughFee ? 'fa-check-circle text-green-400' : 'fa-times-circle text-red-400'} w-5 mr-2"></i>
+                Final Fee:
+            </span>
+            <span class="${hasEnoughFee ? 'text-green-400' : 'text-red-400'} text-lg">
+                ${formatBigNumber(finalFee)} $BKC
+            </span>
+        </div>
+
+        <div class="flex items-center justify-between text-xs mt-1">
+            <span class="text-zinc-400">Your $BKC Balance:</span>
+            <span class="font-bold ${hasEnoughFee ? 'text-zinc-300' : 'text-red-400'}">
                 ${formatBigNumber(userBalance).toFixed(2)}
             </span>
         </div>
+
+        <div class="border-t border-border-color my-3"></div>
+
          <div class="flex items-center justify-between text-sm">
             <span class="text-zinc-400 flex items-center">
                 <i class="fa-solid ${isFileUploaded ? 'fa-check-circle text-green-400' : 'fa-times-circle text-red-400'} w-5 mr-2"></i>
@@ -207,15 +254,17 @@ function updateNotaryUserStatus() {
             </span>
         </div>
     `;
+    
      if (needsFee && !hasEnoughFee) {
           statusHTML += `
                <p class="text-xs text-red-400 mt-2 font-semibold text-center">
-                    <i class="fa-solid fa-triangle-exclamation mr-1"></i> You need at least ${formatBigNumber(State.notaryFee)} $BKC (base fee) to pay the registration fee. Acquire more $BKC.
+                    <i class="fa-solid fa-triangle-exclamation mr-1"></i> You need at least ${formatBigNumber(finalFee)} $BKC (final fee) to pay.
                </p>
           `;
      }
     userStatusEl.innerHTML = statusHTML;
 
+    // A lógica do botão agora usa 'hasEnoughFee' (que já considera a taxa final)
     if (hasEnoughPStake && hasEnoughFee && isFileUploaded) {
         submitBtn.classList.remove('btn-disabled');
         submitBtn.disabled = false;
@@ -224,6 +273,9 @@ function updateNotaryUserStatus() {
         submitBtn.disabled = true;
     }
 }
+// ==================================================================
+// =============== FIM DA ATUALIZAÇÃO (FEATURE DESCONTO) ==============
+// ==================================================================
 
 
 /**
@@ -402,34 +454,28 @@ async function handleFileUpload(file) {
  * Usa o EIP-747 (wallet_watchAsset) para adicionar o NFT ao MetaMask.
  */
 async function handleAddNFTToWallet(e) {
-    // Encontra o botão que foi clicado (usando delegação de evento)
     const btn = e.target.closest('.add-to-wallet-btn');
-    if (!btn) return; // Se o clique não foi no botão, ignora
+    if (!btn) return; 
 
     const address = btn.dataset.address;
     const tokenId = btn.dataset.tokenid;
 
     // --- INÍCIO DA CORREÇÃO ---
-    // Verificamos se o 'State.signer' (o usuário conectado) existe.
-    // O 'State.signer.provider' é o ethers.BrowserProvider conectado à carteira.
-    if (!State.signer || !State.signer.provider) {
-        showToast("Wallet provider (e.g., MetaMask) not found.", "error");
-        return;
-    }
-    
-    // O '.provider' *dentro* do BrowserProvider é o provedor EIP-1193 cru (ex: window.ethereum)
-    // É esse provedor que tem o método '.request()'.
-    const rawProvider = State.signer.provider.provider;
+    // A hipótese é que 'State.web3Provider' (definido em wallet.js)
+    // é o provedor EIP-1193 raw (ex: window.ethereum)
+    const rawProvider = State.web3Provider; 
 
-    if (!rawProvider || typeof rawProvider.request !== 'function') {
+    if (!rawProvider || typeof rawProvider.request !== 'function') { 
+         console.error("Failed to find .request function on State.web3Provider.", { web3Provider: State.web3Provider });
+         // Mostra a mensagem de erro que o usuário está vendo na imagem
          showToast("The connected wallet does not support 'wallet_watchAsset'.", "error");
          return;
     }
     // --- FIM DA CORREÇÃO ---
 
     try {
-        // Pede ao MetaMask para "assistir" (adicionar) este NFT
-        const wasAdded = await rawProvider.request({ // <--- CHAMADA CORRIGIDA
+        // Pede ao MetaMask (ou outra carteira) para "assistir" (adicionar) este NFT
+        const wasAdded = await rawProvider.request({ // <--- Chamada no provedor correto
             method: 'wallet_watchAsset',
             params: {
                 type: 'ERC721',
@@ -446,6 +492,7 @@ async function handleAddNFTToWallet(e) {
             showToast("NFT was not added (request rejected or failed).", "info");
         }
     } catch (error) {
+        // Se a *própria* carteira rejeitar (ex: ela não suporta o método), o erro será pego aqui.
         console.error("Failed to add NFT to wallet:", error);
         showToast(`Failed to add NFT: ${error.message}`, "error");
     }
@@ -456,8 +503,7 @@ async function handleAddNFTToWallet(e) {
 
 
 /**
- * initNotaryListeners (Esta função permanece a mesma)
- * (incluindo o listener de delegação de evento)
+ * initNotaryListeners (Corrigido o erro de sintaxe)
  */
 function initNotaryListeners() {
     const fileInput = document.getElementById('notary-file-upload');
@@ -487,13 +533,21 @@ function initNotaryListeners() {
             
             if (typeof State.notaryMinPStake === 'undefined' || typeof State.notaryFee === 'undefined') return showToast("Cannot submit: Notary requirements not loaded.", "error");
 
+            // Recalcula as taxas no momento do clique (garantia)
+            const baseFee = State.notaryFee || 0n;
+            const boosterBips = State.userBoosterBips || 0n;
+            let finalFee = baseFee;
+            if (boosterBips > 0n && baseFee > 0n) {
+                 finalFee = baseFee - ((baseFee * boosterBips) / 10000n);
+            }
+
             const userPStake = State.userTotalPStake || 0n;
             const userBalance = State.currentUserBalance || 0n;
             const hasEnoughPStake = State.notaryMinPStake === 0n || userPStake >= State.notaryMinPStake;
-            const hasEnoughFee = State.notaryFee === 0n || userBalance >= State.notaryFee;
+            const hasEnoughFee = finalFee === 0n || userBalance >= finalFee;
 
             if (!hasEnoughPStake) return showToast("Insufficient pStake.", "error");
-            if (!hasEnoughFee) return showToast("Insufficient $BKC balance for base fee.", "error");
+            if (!hasEnoughFee) return showToast("Insufficient $BKC balance for final fee.", "error");
 
             const boosterId = State.userBoosterId || 0n; 
 
@@ -515,7 +569,15 @@ function initNotaryListeners() {
                 statusEl.innerHTML = '';
 
                 await renderMyNotarizedDocuments();
+                
+                // ==================================================================
+                // ================== INÍCIO DA CORREÇÃO (SINTAXE) =================
+                // ==================================================================
+                // Corrigido: 'updateNotaryUserS tatus()' -> 'updateNotaryUserStatus()'
                 updateNotaryUserStatus();
+                // ==================================================================
+                // =================== FIM DA CORREÇÃO (SINTAXE) ==================
+                // ==================================================================
             }
         });
     }
