@@ -1,25 +1,13 @@
 // pages/NotaryPage.js
 
-// ==================================================================
-// ======================= INÍCIO DA CORREÇÃO =======================
-// ==================================================================
-// REMOVIDO: import { NFTStorage } from 'https://esm.sh/nft.storage';
-// REMOVIDA: const NFT_STORAGE_TOKEN = "..."
-// ==================================================================
-// ======================== FIM DA CORREÇÃO =========================
-
 import { State } from '../state.js';
-// ... (outros imports: formatBigNumber, safeContractCall, etc.)
 import { formatBigNumber, formatPStake, renderLoading, renderError, renderNoData, ipfsGateway } from '../utils.js';
 import { safeContractCall } from '../modules/data.js';
 import { showToast } from '../ui-feedback.js';
 import { executeNotarizeDocument } from '../modules/transactions.js';
 
-// REMOVIDO: let clientNFTStorage = null;
 let currentFileToUpload = null;
 let currentUploadedIPFS_URI = null;
-// REMOVIDA: let isNFTStorageInitialized = false; 
-// (Não precisamos mais inicializar nada no cliente)
 
 
 /**
@@ -160,7 +148,7 @@ async function loadNotaryPublicData() {
 }
 
 /**
- * updateNotaryUserStatus (Pequena alteração aqui)
+ * updateNotaryUserStatus (Esta função permanece a mesma)
  */
 function updateNotaryUserStatus() {
     const userStatusEl = document.getElementById('notary-user-status');
@@ -190,7 +178,6 @@ function updateNotaryUserStatus() {
     const hasEnoughFee = !needsFee || userBalance >= State.notaryFee;
     const isFileUploaded = !!currentUploadedIPFS_URI;
 
-    // ... (o HTML interno permanece o mesmo)
      let statusHTML = `
         <div class="flex items-center justify-between text-sm">
             <span class="text-zinc-400 flex items-center">
@@ -229,14 +216,7 @@ function updateNotaryUserStatus() {
      }
     userStatusEl.innerHTML = statusHTML;
 
-    // ==================================================================
-    // ======================= INÍCIO DA CORREÇÃO =======================
-    // ==================================================================
-    // Habilita o botão (Remove a checagem 'isNFTStorageInitialized')
     if (hasEnoughPStake && hasEnoughFee && isFileUploaded) {
-    // ==================================================================
-    // ======================== FIM DA CORREÇÃO =========================
-    // ==================================================================
         submitBtn.classList.remove('btn-disabled');
         submitBtn.disabled = false;
     } else {
@@ -247,7 +227,10 @@ function updateNotaryUserStatus() {
 
 
 /**
- * renderMyNotarizedDocuments (Esta função permanece a mesma)
+ * ==================================================================
+ * ================== INÍCIO DA ATUALIZAÇÃO (IMAGEM) =================
+ * ==================================================================
+ * Atualizado para buscar o Content-Type do IPFS e mostrar a imagem
  */
 async function renderMyNotarizedDocuments() {
     const docsEl = document.getElementById('my-notarized-documents');
@@ -274,28 +257,48 @@ async function renderMyNotarizedDocuments() {
         for (let i = 0; i < Number(balance); i++) {
             const tokenId = await safeContractCall(State.decentralizedNotaryContract, 'tokenOfOwnerByIndex', [State.userAddress, i]);
             const docURI = await safeContractCall(State.decentralizedNotaryContract, 'tokenURI', [tokenId]);
-
-            const isImage = docURI.match(/\.(jpeg|jpg|gif|png|webp)$/i) != null;
-            const isPdf = docURI.match(/\.(pdf)$/i) != null;
-
-            let displayHtml = '';
-            let fileType = 'File';
-            let typeColor = 'text-zinc-400';
+            
             const gatewayLink = docURI.startsWith('ipfs://') ? docURI.replace('ipfs://', ipfsGateway) : docURI;
 
+            // --- LÓGICA DE DETECÇÃO DE TIPO DE ARQUIVO ---
+            let isImage = false;
+            let isPdf = false;
+            let fileType = 'IPFS File';
+            let typeColor = 'text-blue-400';
+            
+            try {
+                // Tenta buscar o cabeçalho do arquivo no IPFS Gateway (sem baixar o arquivo todo)
+                const response = await fetch(gatewayLink, { method: 'HEAD' });
+                if (response.ok) {
+                    const contentType = response.headers.get('Content-Type') || '';
+                    if (contentType.startsWith('image/')) {
+                        isImage = true;
+                        fileType = 'Image';
+                        typeColor = 'text-cyan-400';
+                    } else if (contentType === 'application/pdf') {
+                        isPdf = true;
+                        fileType = 'PDF Document';
+                        typeColor = 'text-red-400';
+                    }
+                } else {
+                     console.warn(`Could not fetch HEAD for ${gatewayLink}. Status: ${response.status}`);
+                }
+            } catch (fetchError) {
+                // Se o HEAD falhar (ex: CORS ou timeout), o IPFS pode estar lento.
+                console.warn(`Could not fetch Content-Type for ${gatewayLink}: ${fetchError.message}. Defaulting to generic icon.`);
+            }
+            // --- FIM DA LÓGICA DE DETECÇÃO ---
+
+
+            let displayHtml = '';
             if (isImage) {
-                fileType = 'Image';
-                typeColor = 'text-cyan-400';
                 displayHtml = `<img src="${gatewayLink}" alt="Document ${tokenId}" class="w-full h-40 object-cover rounded-t-lg">`;
             } else if (isPdf) {
-                fileType = 'PDF Document';
-                typeColor = 'text-red-400';
                 displayHtml = `<div class="w-full h-40 flex items-center justify-center bg-zinc-800 rounded-t-lg">
                                    <i class="fa-solid fa-file-pdf text-5xl text-red-400"></i>
                                </div>`;
             } else {
-                 fileType = 'IPFS File';
-                 typeColor = 'text-blue-400';
+                 // Padrão (Cubo Azul)
                  displayHtml = `<div class="w-full h-40 flex items-center justify-center bg-zinc-800 rounded-t-lg">
                                     <i class="fa-solid fa-cube text-5xl text-blue-400"></i>
                                 </div>`;
@@ -310,7 +313,11 @@ async function renderMyNotarizedDocuments() {
                         <a href="${gatewayLink}" target="_blank" rel="noopener noreferrer" class="text-sm text-amber-400 hover:text-amber-300 mt-2 inline-block">
                             View on IPFS <i class="fa-solid fa-arrow-up-right-from-square text-xs ml-1"></i>
                         </a>
-                    </div>
+                        
+                        <button class="add-to-wallet-btn text-xs text-zinc-400 hover:text-white mt-3 w-full text-left transition-colors" data-address="${State.decentralizedNotaryContract.target}" data-tokenid="${tokenId}">
+                            <i class="fa-solid fa-wallet w-4 mr-1"></i> Add to Wallet
+                        </button>
+                        </div>
                 </div>
             `);
         }
@@ -321,21 +328,13 @@ async function renderMyNotarizedDocuments() {
         renderError(docsEl, "Failed to load your documents.");
     }
 }
-
-/**
- * ==================================================================
- * ======================= INÍCIO DA CORREÇÃO =======================
- * ==================================================================
- * REMOVIDA: A função 'attemptNFTStorageInitialization' não é mais necessária.
- * ==================================================================
- */
+// ==================================================================
+// =================== FIM DA ATUALIZAÇÃO (IMAGEM) ==================
+// ==================================================================
 
 
 /**
- * ==================================================================
- * ======================= INÍCIO DA CORREÇÃO =======================
- * ==================================================================
- * Função que lida com o upload do arquivo para o NOSSO backend (/api/upload).
+ * handleFileUpload (Esta função permanece a mesma)
  */
 async function handleFileUpload(file) {
     const uploadPromptEl = document.getElementById('notary-upload-prompt');
@@ -343,7 +342,6 @@ async function handleFileUpload(file) {
     const uriInput = document.getElementById('notary-document-uri');
     const errorEl = document.getElementById('notary-lib-error');
 
-    // Limpa erros antigos
     if (errorEl) errorEl.classList.add('hidden');
 
     currentFileToUpload = file;
@@ -352,17 +350,15 @@ async function handleFileUpload(file) {
     uploadStatusEl.classList.remove('hidden');
     uploadStatusEl.innerHTML = `
         <div class="loader inline-block"></div>
-        <p class="text-sm text-zinc-300 mt-3">Enviando para o servidor...</p>
+        <p class="text-sm text-zinc-300 mt-3">Sending file to server...</p>
         <p class="text-xs text-zinc-500">${file.name}</p>
     `;
     updateNotaryUserStatus();
 
     try {
-        // Cria um FormData para enviar o arquivo
         const formData = new FormData();
-        formData.append('file', file); // O nome 'file' deve ser o mesmo lido no backend
+        formData.append('file', file); 
 
-        // Envia para o nosso próprio backend na Vercel
         const response = await fetch('/api/upload', {
             method: 'POST',
             body: formData,
@@ -370,14 +366,14 @@ async function handleFileUpload(file) {
 
         if (!response.ok) {
             const errorResult = await response.json();
-            throw new Error(errorResult.error || `Falha no servidor: ${response.statusText}`);
+            throw new Error(errorResult.error || `Server failed: ${response.statusText}`);
         }
 
         const result = await response.json();
         const { ipfsUri, cid } = result;
 
         currentUploadedIPFS_URI = ipfsUri;
-        console.log("Upload via backend com sucesso. CID:", cid);
+        console.log("Upload via backend successful. CID:", cid);
         console.log("IPFS URI:", currentUploadedIPFS_URI);
 
         uriInput.value = currentUploadedIPFS_URI;
@@ -394,7 +390,6 @@ async function handleFileUpload(file) {
         console.error("IPFS Upload Error (via backend):", error);
         showToast(`Upload failed: ${error.message}`, "error");
         
-        // Mostra o erro na UI
         if (errorEl) {
             errorEl.innerText = error.message;
             errorEl.classList.remove('hidden');
@@ -408,15 +403,59 @@ async function handleFileUpload(file) {
 
     updateNotaryUserStatus();
 }
+
+
+// ==================================================================
+// ================= INÍCIO DA ATUALIZAÇÃO (NOVA FUNÇÃO) =================
+// ==================================================================
 /**
- * ==================================================================
- * ======================== FIM DA CORREÇÃO =========================
- * ==================================================================
+ * Manipulador para o clique no botão "Add to Wallet".
+ * Usa o EIP-747 (wallet_watchAsset) para adicionar o NFT ao MetaMask.
  */
+async function handleAddNFTToWallet(e) {
+    // Encontra o botão que foi clicado (usando delegação de evento)
+    const btn = e.target.closest('.add-to-wallet-btn');
+    if (!btn) return; // Se o clique não foi no botão, ignora
+
+    const address = btn.dataset.address;
+    const tokenId = btn.dataset.tokenid;
+
+    // State.web3Provider é o provedor da carteira (ex: MetaMask)
+    if (!State.web3Provider) {
+        showToast("Wallet provider (e.g., MetaMask) not found.", "error");
+        return;
+    }
+
+    try {
+        // Pede ao MetaMask para "assistir" (adicionar) este NFT
+        const wasAdded = await State.web3Provider.request({
+            method: 'wallet_watchAsset',
+            params: {
+                type: 'ERC721',
+                options: {
+                    address: address, // Endereço do contrato NFT
+                    tokenId: tokenId, // ID do token específico
+                },
+            },
+        });
+
+        if (wasAdded) {
+            showToast("NFT successfully added to your wallet!", "success");
+        } else {
+            showToast("NFT was not added (request rejected or failed).", "info");
+        }
+    } catch (error) {
+        console.error("Failed to add NFT to wallet:", error);
+        showToast(`Failed to add NFT: ${error.message}`, "error");
+    }
+}
+// ==================================================================
+// ================== FIM DA ATUALIZAÇÃO (NOVA FUNÇÃO) ==================
+// ==================================================================
 
 
 /**
- * initNotaryListeners (Pequena alteração aqui)
+ * initNotaryListeners (Atualizado para incluir o listener do novo botão)
  */
 function initNotaryListeners() {
     const fileInput = document.getElementById('notary-file-upload');
@@ -426,14 +465,7 @@ function initNotaryListeners() {
         fileInput.addEventListener('change', (e) => {
             try {
                 if (e.target.files && e.target.files.length > 0) {
-                     // ==================================================
-                     // =================== INÍCIO DA CORREÇÃO =================
-                     // ==================================================
-                     // Remove a checagem 'isNFTStorageInitialized'
                      handleFileUpload(e.target.files[0]);
-                     // ==================================================
-                     // =================== FIM DA CORREÇÃO ==================
-                     // ==================================================
                 }
             } catch (error) {
                  console.error("Error in file input change handler:", error);
@@ -449,14 +481,7 @@ function initNotaryListeners() {
 
     if (submitBtn) {
         submitBtn.addEventListener('click', async () => {
-            // ==================================================
-            // =================== INÍCIO DA CORREÇÃO =================
-            // ==================================================
-             // Remove a checagem 'isNFTStorageInitialized'
              if (!currentUploadedIPFS_URI) return showToast("Please upload a file first.", "error");
-            // ==================================================
-            // =================== FIM DA CORREÇÃO ==================
-            // ==================================================
             
             if (typeof State.notaryMinPStake === 'undefined' || typeof State.notaryFee === 'undefined') return showToast("Cannot submit: Notary requirements not loaded.", "error");
 
@@ -492,6 +517,21 @@ function initNotaryListeners() {
             }
         });
     }
+
+    // ==================================================================
+    // ========= INÍCIO DA ATUALIZAÇÃO (LISTENER ADD TO WALLET) =========
+    // ==================================================================
+    // Adiciona o listener na DIV pai (my-notarized-documents)
+    // Isso usa "delegação de evento" para funcionar para todos os botões
+    const docsEl = document.getElementById('my-notarized-documents');
+    if (docsEl) {
+        // Garante que não estamos adicionando múltiplos listeners
+        docsEl.removeEventListener('click', handleAddNFTToWallet); 
+        docsEl.addEventListener('click', handleAddNFTToWallet);
+    }
+    // ==================================================================
+    // ========== FIM DA ATUALIZAÇÃO (LISTENER ADD TO WALLET) ==========
+    // ==================================================================
 }
 
 export const NotaryPage = {
@@ -499,15 +539,9 @@ export const NotaryPage = {
         console.log("Rendering Notary Page...");
         renderNotaryPageLayout();
 
-        // ==================================================
-        // =================== INÍCIO DA CORREÇÃO =================
-        // ==================================================
-        // REMOVIDA: A chamada 'attemptNFTStorageInitialization' não é mais necessária aqui.
-        // Oculta o erro de 'lib' por padrão, pois não estamos mais carregando uma lib
         const libErrorEl = document.getElementById('notary-lib-error');
         if (libErrorEl) libErrorEl.classList.add('hidden');
         
-        // Habilita a dropzone, pois ela não depende mais de inicialização
         const dropzone = document.getElementById('notary-file-dropzone');
         if (dropzone) {
             dropzone.classList.remove('cursor-not-allowed', 'opacity-50');
@@ -515,9 +549,6 @@ export const NotaryPage = {
         }
         const fileInput = document.getElementById('notary-file-upload');
         if (fileInput) fileInput.disabled = false;
-        // ==================================================
-        // =================== FIM DA CORREÇÃO ==================
-        // ==================================================
 
         const loadedPublicData = await loadNotaryPublicData();
 
@@ -537,14 +568,6 @@ export const NotaryPage = {
 
     async update(isConnected) {
         console.log("Updating Notary Page, isConnected:", isConnected);
-
-        // ==================================================
-        // =================== INÍCIO DA CORREÇÃO =================
-        // ==================================================
-        // REMOVIDA: A chamada 'attemptNFTStorageInitialization' não é mais necessária.
-        // ==================================================
-        // =================== FIM DA CORREÇÃO ==================
-        // ==================================================
 
         const loadedPublicData = await loadNotaryPublicData();
 
