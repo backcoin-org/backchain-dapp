@@ -1,4 +1,4 @@
-// app.js (AJUSTADO: Saldo e Endereço no mesmo botão)
+// app.js (AJUSTADO: Removendo o LED e simplificando o updateUIState)
 
 // --- INÍCIO DA CORREÇÃO: VERCEL ANALYTICS ---
 import { inject } from 'https://esm.sh/@vercel/analytics';
@@ -37,7 +37,7 @@ import { NotaryPage } from './pages/NotaryPage.js';
 
 
 // ==================================================================
-// --- FUNÇÕES DE FORMATAÇÃO (AJUSTADAS) ---
+// --- FUNÇÕES DE FORMATAÇÃO (Mantidas) ---
 // ==================================================================
 
 /**
@@ -181,8 +181,7 @@ function updateUIState() {
     const connectButtonDesktop = document.getElementById('connectButtonDesktop');
     const connectButtonMobile = document.getElementById('connectButtonMobile');
     
-    // REMOVIDOS: desktopBalanceDisplay, mobileBalanceDisplay, etc.
-    
+    // LEDs de Status (REMOVIDOS DE FATO)
     const mobileAppDisplay = document.getElementById('mobileAppDisplay'); // O texto "Backchain"
     // --- FIM DA CORREÇÃO ---
 
@@ -193,32 +192,27 @@ function updateUIState() {
     // Helper para evitar erros
     const checkElement = (el, name) => { if (!el) console.warn(`Element ${name} not found in DOM during UI update.`); return el; };
 
+
     if (State.isConnected && State.userAddress) {
         // --- ESTADO CONECTADO ---
         
-        // --- INÍCIO DAS CORREÇÕES (V3) ---
+        // --- INÍCIO DAS CORREÇÕES (V5: Apenas Saldo, sem LED) ---
         const balanceString = formatLargeBalance(State.currentUserBalance);
-        const addressFormatted = formatAddress(State.userAddress);
 
-        // Combina Saldo e Endereço no mesmo botão
-        const buttonText = `${balanceString} $BKC | ${addressFormatted}`;
+        // Atualiza os botões para mostrar APENAS O SALDO
+        checkElement(connectButtonDesktop, 'connectButtonDesktop').textContent = `${balanceString} $BKC`;
+        checkElement(connectButtonMobile, 'connectButtonMobile').textContent = `${balanceString} $BKC`;
 
-        // Atualiza os botões para mostrar o texto combinado
-        checkElement(connectButtonDesktop, 'connectButtonDesktop').textContent = buttonText;
-        checkElement(connectButtonMobile, 'connectButtonMobile').textContent = buttonText;
-        
-        // Restaura o título mobile para "Backchain" para evitar duplicidade
+        // Restaura o título mobile para "Backchain"
         const mobileDisplayEl = checkElement(mobileAppDisplay, 'mobileAppDisplay');
         if (mobileDisplayEl) { 
-            mobileDisplayEl.textContent = 'Backcoin.org'; // Mantém o nome original do HTML
+            mobileDisplayEl.textContent = 'Backcoin.org'; 
             mobileDisplayEl.classList.add('text-amber-400'); 
             mobileDisplayEl.classList.remove('text-white'); 
         }
-        // --- FIM DAS CORREÇÕES (V3) ---
-
+        // --- FIM DAS CORREÇÕES (V5) ---
 
         // Elementos de contexto (Lógica mantida)
-        // Atualiza o saldo do Dashboard (este pode manter a formatação completa)
         const fullBalanceNum = formatBigNumber(State.currentUserBalance);
         if (statUserBalanceEl) statUserBalanceEl.textContent = fullBalanceNum.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
         
@@ -229,7 +223,7 @@ function updateUIState() {
     } else {
         // --- ESTADO DESCONECTADO ---
         
-        // --- INÍCIO DAS CORREÇÕES (V3) ---
+        // --- INÍCIO DAS CORREÇÕES (V5: Apenas Connect, sem LED) ---
         // Atualiza os botões para mostrar "Connect"
         checkElement(connectButtonDesktop, 'connectButtonDesktop').textContent = "Connect";
         checkElement(connectButtonMobile, 'connectButtonMobile').textContent = "Connect";
@@ -237,12 +231,11 @@ function updateUIState() {
         // Restaura o título mobile para "Backchain"
         const mobileDisplayEl = checkElement(mobileAppDisplay, 'mobileAppDisplay');
         if (mobileDisplayEl) { 
-            mobileDisplayEl.textContent = 'Backcoin.org'; // Mantém o nome original do HTML
+            mobileDisplayEl.textContent = 'Backcoin.org'; 
             mobileDisplayEl.classList.add('text-amber-400'); 
             mobileDisplayEl.classList.remove('text-white'); 
         }
-        // --- FIM DAS CORREÇÕES (V3) ---
-
+        // --- FIM DAS CORREÇÕES (V5) ---
 
         // Elementos de contexto (Lógica mantida)
         if (popMiningTab) popMiningTab.style.display = 'none';
