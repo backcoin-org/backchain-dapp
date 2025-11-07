@@ -82,15 +82,16 @@ export default async function handler(req, res) {
         });
 
         // =================================================================
-        // 2. SOLUÇÃO SERVERLESS: Lendo o Buffer do arquivo para a memória
-        // O SERVERLESS Server não confia em caminhos temporários do disco.
-        console.log('📖 Reading file buffer from:', file.filepath);
-        const fileBuffer = fs.readFileSync(file.filepath);
-        console.log('✅ Buffer read successfully. Size:', fileBuffer.length, 'bytes');
+        // 2. SOLUÇÃO SERVERLESS: Criando um Stream de Leitura
+        // O SDK do Piñata espera um Stream, não um Buffer.
+        console.log('📖 Creating file stream from:', file.filepath);
+        const fileStream = fs.createReadStream(file.filepath);
+        console.log('✅ Stream created successfully.');
 
-        // 3. Envia o Buffer para o Piñata
+
+        // 3. Envia o Stream para o Piñata
         console.log('☁️  Uploading to Piñata IPFS...');
-        const result = await pinata.pinFileToIPFS(fileBuffer, {
+        const result = await pinata.pinFileToIPFS(fileStream, { // <-- CORREÇÃO AQUI
             pinataMetadata: {
                 name: file.originalFilename || 'Notary File (Backchain)',
             },
