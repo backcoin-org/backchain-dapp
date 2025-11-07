@@ -44,9 +44,14 @@ export default async function handler(req, res) {
     let file = null;
 
     try {
+        // =================================================================
+        // ### CORREÇÃO 1: Especifica o diretório de upload da Vercel ###
         const form = new Formidable({
             maxFileSize: 50 * 1024 * 1024, // 50MB limite
+            uploadDir: '/tmp',             // Informa ao Formidable para usar o /tmp da Vercel
+            keepExtensions: true,          // Mantém a extensão (ex: .jpg, .pdf)
         });
+        // =================================================================
 
         console.log('📋 Parsing form data...');
 
@@ -78,20 +83,22 @@ export default async function handler(req, res) {
             originalName: file.originalFilename,
             size: file.size,
             mimetype: file.mimetype,
-            filepath: file.filepath
+            filepath: file.filepath // Este caminho agora será /tmp/nome-aleatorio.ext
         });
 
         // =================================================================
+        // ### CORREÇÃO 2: Usar createReadStream (Stream) em vez de readFileSync (Buffer) ###
+        
         // 2. SOLUÇÃO SERVERLESS: Criando um Stream de Leitura
         // O SDK do Piñata espera um Stream, não um Buffer.
         console.log('📖 Creating file stream from:', file.filepath);
-        const fileStream = fs.createReadStream(file.filepath);
+        const fileStream = fs.createReadStream(file.filepath); //
         console.log('✅ Stream created successfully.');
 
 
         // 3. Envia o Stream para o Piñata
         console.log('☁️  Uploading to Piñata IPFS...');
-        const result = await pinata.pinFileToIPFS(fileStream, { // <-- CORREÇÃO AQUI
+        const result = await pinata.pinFileToIPFS(fileStream, { // Passa o Stream
             pinataMetadata: {
                 name: file.originalFilename || 'Notary File (Backchain)',
             },
