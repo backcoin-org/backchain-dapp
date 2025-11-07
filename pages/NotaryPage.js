@@ -12,6 +12,20 @@ import { executeNotarizeDocument } from '../modules/transactions.js';
 let currentFileToUpload = null;
 let currentUploadedIPFS_URI = null;
 
+// =================================================================
+// ### NOVAS CONSTANTES DE SEGURANÇA (SUPORTE A ÁUDIO ADICIONADO) ###
+// =================================================================
+const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024; // 10 MB
+const ALLOWED_MIMES = [
+    'image/jpeg', 'image/png', 'application/pdf', 'image/gif', 'image/webp', 'image/tiff',
+    'audio/mpeg', // MP3
+    'audio/wav',  // WAV
+    'audio/ogg',  // OGG
+    'audio/x-m4a' // M4A/AAC comum
+];
+const DANGEROUS_EXTENSIONS = ['.exe', '.js', '.bat', '.sh', '.vbs', '.scr', '.jar', '.dll', '.com', '.cmd', '.php'];
+// =================================================================
+
 
 /**
  * Renderiza o layout (Mantida)
@@ -35,17 +49,17 @@ function renderNotaryPageLayout() {
 
                 <div class="space-y-6">
                     <div>
-                        <label class="block text-sm font-medium text-zinc-300 mb-2">Select File (Image or PDF)</label>
+                        <label class="block text-sm font-medium text-zinc-300 mb-2">Select File (Image, PDF, or Audio)</label>
                         <div class="flex items-center justify-center w-full">
                             <label id="notary-file-dropzone" for="notary-file-upload" class="flex flex-col items-center justify-center w-full h-48 border-2 border-border-color border-dashed rounded-lg cursor-pointer bg-main hover:bg-zinc-800 transition-colors">
                                 <div id="notary-upload-prompt" class="flex flex-col items-center justify-center pt-5 pb-6 text-center">
                                     <i class="fa-solid fa-cloud-arrow-up text-4xl text-zinc-500 mb-3"></i>
                                     <p class="mb-2 text-sm text-zinc-400"><span class="font-semibold">Click to upload</span> or drag & drop</p>
-                                    <p class="text-xs text-zinc-500">Any Image or PDF (Max 100MB)</p>
+                                    <p class="text-xs text-zinc-500">Image, PDF, or Audio (Max ${MAX_FILE_SIZE_BYTES / (1024 * 1024)}MB)</p>
                                 </div>
                                 <div id="notary-upload-status" class="hidden flex-col items-center justify-center text-center p-4">
                                     </div>
-                                <input id="notary-file-upload" type="file" class="hidden" accept="image/*,.pdf"/>
+                                <input id="notary-file-upload" type="file" class="hidden" accept="image/*,.pdf,audio/*"/>
                             </label>
                         </div>
                         
@@ -314,6 +328,7 @@ async function renderMyNotarizedDocuments() {
 
             let isImage = false;
             let isPdf = false;
+            let isAudio = false; // Novo flag para áudio
             let fileType = 'IPFS File';
             let typeColor = 'text-blue-400';
             
@@ -329,6 +344,10 @@ async function renderMyNotarizedDocuments() {
                         isPdf = true;
                         fileType = 'PDF Document';
                         typeColor = 'text-red-400';
+                    } else if (contentType.startsWith('audio/')) { // Detecção de áudio
+                        isAudio = true;
+                        fileType = 'Audio Track';
+                        typeColor = 'text-green-400'; 
                     }
                 } else {
                      console.warn(`Could not fetch HEAD for ${gatewayLink}. Status: ${response.status}`);
@@ -344,6 +363,11 @@ async function renderMyNotarizedDocuments() {
                 displayHtml = `<div class="w-full h-40 flex items-center justify-center bg-zinc-800 rounded-t-lg">
                                    <i class="fa-solid fa-file-pdf text-5xl text-red-400"></i>
                                </div>`;
+            } else if (isAudio) { // Renderização para áudio
+                 displayHtml = `<div class="w-full h-40 flex flex-col items-center justify-center bg-zinc-800 rounded-t-lg">
+                                    <i class="fa-solid fa-music text-5xl text-green-400 mb-2"></i>
+                                    <audio controls src="${gatewayLink}" class="mt-2 w-11/12"></audio>
+                                </div>`;
             } else {
                  displayHtml = `<div class="w-full h-40 flex items-center justify-center bg-zinc-800 rounded-t-lg">
                                     <i class="fa-solid fa-cube text-5xl text-blue-400"></i>
@@ -377,15 +401,46 @@ async function renderMyNotarizedDocuments() {
 
 
 /**
- * handleFileUpload (Mantida)
+ * handleFileUpload (AJUSTADO: Endpoint Vercel E Validação de Segurança)
  */
 async function handleFileUpload(file) {
     const uploadPromptEl = document.getElementById('notary-upload-prompt');
     const uploadStatusEl = document.getElementById('notary-upload-status');
     const uriInput = document.getElementById('notary-document-uri');
     const errorEl = document.getElementById('notary-lib-error');
-
+    
+    // Reset visual error state
     if (errorEl) errorEl.classList.add('hidden');
+    
+    // --- 1. VALIDAÇÃO DE SEGURANÇA NO FRONTEND ---
+    const fileName = file.name || "";
+    const fileExtension = fileName.substring(fileName.lastIndexOf('.')).toLowerCase();
+    
+    // Checagem de tamanho (10MB)
+    if (file.size > MAX_FILE_SIZE_BYTES) {
+         showToast(`Upload failed: File size exceeds the maximum limit of ${MAX_FILE_SIZE_BYTES / (1024 * 1024)}MB.`, "error");
+         const msg = `File size (${(file.size / 1024 / 1024).toFixed(2)}MB) exceeds 10MB limit.`;
+         if (errorEl) { errorEl.innerText = msg; errorEl.classList.remove('hidden'); }
+         return; 
+    }
+    
+    // Checagem de tipo (MIME Type)
+    if (!ALLOWED_MIMES.includes(file.type) && file.type !== '') {
+        const msg = `File type '${file.type}' not allowed. Only images, PDFs, and Audio files are accepted.`;
+        showToast(`Upload failed: ${msg}`, "error");
+        if (errorEl) { errorEl.innerText = msg; errorEl.classList.remove('hidden'); }
+        return;
+    }
+    
+    // Checagem de extensão perigosa
+    if (DANGEROUS_EXTENSIONS.includes(fileExtension)) {
+         const msg = `File extension '${fileExtension}' is considered dangerous and blocked.`;
+         showToast(`Upload failed: ${msg}`, "error");
+         if (errorEl) { errorEl.innerText = msg; errorEl.classList.remove('hidden'); }
+         return;
+    }
+    // --- FIM DA VALIDAÇÃO DE SEGURANÇA ---
+
 
     currentFileToUpload = file;
     currentUploadedIPFS_URI = null;
@@ -403,11 +458,8 @@ async function handleFileUpload(file) {
         formData.append('file', file); 
 
         // =================================================================
-        // ### APONTANDO PARA A NOVA ROTA VERCEL /api/upload (CORREÇÃO DE MIGRAÇÃO) ###
-        // Se a API for migrada para Vercel API Routes, esta deve ser a URL relativa:
+        // ### ATUALIZAÇÃO CRÍTICA DO ENDPOINT (MIGRAÇÃO PARA VERCEL) ###
         const UPLOAD_URL = '/api/upload'; 
-        // Se mantiver no Cloud Run, use o endpoint COMPLETO:
-        // const UPLOAD_URL = API_ENDPOINTS.uploadFileToIPFS; 
 
         const response = await fetch(UPLOAD_URL, { 
             method: 'POST',
@@ -417,15 +469,14 @@ async function handleFileUpload(file) {
 
         if (!response.ok) {
             const errorResult = await response.json().catch(() => ({ error: 'Unknown JSON error' }));
-            throw new Error(errorResult.error || `Server failed: ${response.statusText} (${response.status})`);
+            throw new Error(errorResult.details || errorResult.error || `Server failed: ${response.statusText} (${response.status})`);
         }
 
         const result = await response.json();
         const { ipfsUri, cid } = result;
 
         currentUploadedIPFS_URI = ipfsUri;
-        console.log("Upload via backend successful. CID:", cid);
-        console.log("IPFS URI:", currentUploadedIPFS_URI);
+        console.log("Upload via Vercel backend successful. CID:", cid);
 
         uriInput.value = currentUploadedIPFS_URI;
 
@@ -438,17 +489,19 @@ async function handleFileUpload(file) {
         showToast("File uploaded to IPFS successfully!", "success");
 
     } catch (error) {
-        console.error("IPFS Upload Error (via backend):", error);
+        console.error("IPFS Upload Error (via Vercel backend):", error);
         showToast(`Upload failed: ${error.message}`, "error");
         
         if (errorEl) {
-            errorEl.innerText = error.message;
+            const errorMessage = error.message.includes('Vercel Internal Server Error') 
+                               ? 'Vercel processing error. Check API logs.' 
+                               : error.message;
+            errorEl.innerText = errorMessage;
             errorEl.classList.remove('hidden');
         }
 
         uploadPromptEl.classList.remove('hidden');
         uploadStatusEl.classList.add('hidden');
-        uploadStatusEl.innerHTML = '';
         currentFileToUpload = null;
     }
 

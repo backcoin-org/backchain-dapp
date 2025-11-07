@@ -2,7 +2,7 @@
 // Vercel API Route para lidar com o upload e Piñata
 import pinataSDK from '@pinata/sdk';
 import { Formidable } from 'formidable';
-import fs from 'fs';
+import fs from 'fs'; 
 
 // Essencial: Desativa o body-parser para que o Formidable possa processar a requisição
 export const config = {
@@ -12,8 +12,6 @@ export const config = {
 };
 
 export default async function handler(req, res) {
-    // CORS é tratado pelo vercel.json ou pela política de segurança padrão.
-
     if (req.method !== 'POST') {
         return res.status(405).json({ error: 'Method Not Allowed' });
     }
@@ -22,44 +20,48 @@ export default async function handler(req, res) {
     const PINATA_JWT = process.env.PINATA_JWT; 
 
     if (!PINATA_JWT) {
+        // Este erro só ocorre se a variável ENV for removida do Vercel
         console.error("Vercel Error: PINATA_JWT key not found.");
         return res.status(500).json({ error: 'Piñata API Key not configured on server (Vercel ENV).' });
     }
     
-    // Inicializa o Piñata SDK com o JWT
     const pinata = new pinataSDK({ pinataJWTKey: PINATA_JWT });
 
+    let file = null;
+
     try {
-        // 1. Processa o arquivo (multipart/form-data)
         const form = new Formidable();
         
-        // O form.parse usa o req original e extrai os arquivos
+        // 1. Processa o arquivo (multipart/form-data)
         const [fields, files] = await new Promise((resolve, reject) => {
+            form.once('error', reject); 
             form.parse(req, (err, fields, files) => {
                 if (err) return reject(err);
                 resolve([fields, files]);
             });
         });
 
-        const file = files.file ? files.file[0] : null; 
+        file = files.file ? files.file[0] : null; 
         if (!file) {
             return res.status(400).json({ error: 'No file received.' });
         }
 
-        // 2. Cria um stream para upload
-        const stream = fs.createReadStream(file.filepath);
+        // =================================================================
+        // 2. SOLUÇÃO SERVERLESS: Lendo o Buffer do arquivo para a memória
+        // O SERVERLESS Server não confia em caminhos temporários do disco.
+        const fileBuffer = fs.readFileSync(file.filepath); 
         
-        const options = {
+        // 3. Envia o Buffer para o Piñata
+        const result = await pinata.pinFileToIPFS(fileBuffer, {
             pinataMetadata: {
                 name: file.originalFilename || 'Notary File (Backchain)',
             },
             pinataOptions: {
-                cidVersion: 1 
+                cidVersion: 1
             }
-        };
+        });
+        // =================================================================
 
-        // 3. Envia para o Piñata
-        const result = await pinata.pinFileToIPFS(stream, options);
 
         // 4. Retorna a URI
         const cid = result.IpfsHash;
@@ -74,5 +76,14 @@ export default async function handler(req, res) {
             error: `Vercel Internal Server Error during upload.`,
             details: error.message || 'Internal error processing Piñata upload.'
         });
+    } finally {
+        // Limpa o arquivo temporário (melhor prática Serverless)
+        if (file && file.filepath) {
+            try {
+                fs.unlinkSync(file.filepath);
+            } catch (e) {
+                console.warn("Could not delete temporary file:", e);
+            }
+        }
     }
 }
