@@ -6,6 +6,8 @@
     
     <title>Backcoin.org | Dashboard</title>
 
+    <script src="https://cdn.tailwindcss.com"></script>
+    
     <meta http-equiv="Content-Security-Policy" content="
         default-src 'self' data: https: wss: ws:; 
         script-src 'self' 'unsafe-inline' 'unsafe-eval' 
@@ -21,9 +23,11 @@
         font-src 'self' https: data: https://fonts.gstatic.com; 
         connect-src 'self' https: wss: ws:; 
         
-        
-        frame-ancestors 'self' http://127.0.0.1 http://localhost:* http://localhost:5500 http://localhost:8080 https://backcoin.org https://www.backcoin.org 
-                        https://secure-mobile.walletconnect.com https://secure.walletconnect.org;
+        /* CORREÇÃO CRÍTICA DO WALLETCONNECT (Curingas) */
+        frame-ancestors 'self' http://127.0.0.1 http://localhost:* http://localhost:5500 http://localhost:8080 
+                             https://backcoin.org https://www.backcoin.org 
+                             https://*.walletconnect.com https://*.walletconnect.org 
+                             https://airdropbackchainnew.firebaseapp.com;
         
         frame-src 'self' https:;
     ">
@@ -42,7 +46,8 @@
     
     <style>
         /* Estilos CSS (sem alterações) */
-         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+        /* [SEUS ESTILOS INLINE AQUI] */
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
         :root {
             --bg-main: #18181b; --bg-sidebar: #27272a; --bg-card: #3f3f46; --border-color: #52525b; --text-primary: #f4f4f5; --text-secondary: #a1a1aa; --accent: #f59e0b; --accent-hover: #d97706;
             --presale-bg-main: #0a0a0a; --presale-bg-darker: #000000; --presale-bg-card: #1a1a1a; --presale-border-color: #2a2a2a;
@@ -314,7 +319,7 @@
                                                         <p id="statUserRewards" class="text-2xl sm:text-3xl font-bold text-amber-400 whitespace-nowrap overflow-hidden text-ellipsis">--</p>
                                                         
                                                         <div id="claimable-rewards-panel-content" class="mt-3">
-                                                            </div>
+                                                             </div>
                                                     </div>
                                                     </div>
                                                 <div id="reward-efficiency-panel"></div>
@@ -363,15 +368,15 @@
                         
                         <div id="delegate-tab" class="tab-content active">
                             <div id="validatorsList" class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                                </div>
+                                 </div>
                         </div>
                         <div id="distribute-tab" class="tab-content hidden">
                             <div id="pop-mining-content" class="bg-sidebar border border-border-color rounded-xl max-w-3xl mx-auto overflow-hidden">
-                                </div>
+                                 </div>
                         </div>
                         <div id="validator-tab" class="tab-content hidden">
                             <div id="validator-content-wrapper" class="max-w-3xl mx-auto">
-                                </div>
+                                 </div>
                         </div>
                     </section>
                     <section id="store" class="hidden"><h1 class="text-2xl md:text-3xl font-bold mb-6">Reward Booster Store</h1><p class="text-zinc-400 max-w-3xl mb-8">Increase your reward claim efficiency from a 50% base up to 100% by purchasing a Booster NFT. Prices are dynamic and increase as NFTs are sold.</p><div id="store-content-wrapper"><h2 class="text-xl font-bold mb-4">Booster Pools</h2><div id="store-items-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6"></div><div class="mt-12"><h2 class="text-xl font-bold mb-4">My Locked & Ineligible Boosters</h2><div id="my-locked-boosters-container"></div></div></div></section>
