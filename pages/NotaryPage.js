@@ -151,7 +151,7 @@ async function loadNotaryPublicData() {
 }
 
 /**
- * updateNotaryUserStatus (Mantida)
+ * updateNotaryUserStatus (AJUSTADA: Adiciona botão de delegar se o pStake for insuficiente)
  */
 function updateNotaryUserStatus() {
     const userStatusEl = document.getElementById('notary-user-status');
@@ -196,7 +196,7 @@ function updateNotaryUserStatus() {
     // --- FIM DA LÓGICA DE DESCONTO ---
 
 
-    // --- ATUALIZAÇÃO DO HTML (Mantida) ---
+    // --- ATUALIZAÇÃO DO HTML ---
      let statusHTML = `
         <div class="flex items-center justify-between text-sm">
             <span class="text-zinc-400 flex items-center">
@@ -208,6 +208,14 @@ function updateNotaryUserStatus() {
             </span>
         </div>
         
+        ${!hasEnoughPStake && State.notaryMinPStake > 0n ? `
+            <div class="mt-2 text-center">
+                <button id="delegate-now-btn" class="bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-md transition-colors text-sm w-full">
+                    <i class="fa-solid fa-arrow-right-from-bracket mr-2"></i> Delegate Now (Earn pStake)
+                </button>
+            </div>
+        ` : ''}
+
         <div class="border-t border-border-color my-3"></div>
 
         <div class="flex items-center justify-between text-xs">
@@ -262,6 +270,7 @@ function updateNotaryUserStatus() {
      }
     userStatusEl.innerHTML = statusHTML;
 
+    // Apenas habilita o botão de notarizar se TUDO estiver OK
     if (hasEnoughPStake && hasEnoughFee && isFileUploaded) {
         submitBtn.classList.remove('btn-disabled');
         submitBtn.disabled = false;
@@ -368,7 +377,7 @@ async function renderMyNotarizedDocuments() {
 
 
 /**
- * handleFileUpload (CORRIGIDO: URL de upload da API)
+ * handleFileUpload (Mantida)
  */
 async function handleFileUpload(file) {
     const uploadPromptEl = document.getElementById('notary-upload-prompt');
@@ -394,9 +403,11 @@ async function handleFileUpload(file) {
         formData.append('file', file); 
 
         // =================================================================
-        // ### CORREÇÃO CRÍTICA DO ERRO 405/CORS ###
-        // Usa o endpoint COMPLETO e ESPECÍFICO do Pinata/Upload
-        const UPLOAD_URL = API_ENDPOINTS.uploadFileToIPFS; 
+        // ### APONTANDO PARA A NOVA ROTA VERCEL /api/upload (CORREÇÃO DE MIGRAÇÃO) ###
+        // Se a API for migrada para Vercel API Routes, esta deve ser a URL relativa:
+        const UPLOAD_URL = '/api/upload'; 
+        // Se mantiver no Cloud Run, use o endpoint COMPLETO:
+        // const UPLOAD_URL = API_ENDPOINTS.uploadFileToIPFS; 
 
         const response = await fetch(UPLOAD_URL, { 
             method: 'POST',
@@ -488,7 +499,7 @@ async function handleAddNFTToWallet(e) {
 
 
 /**
- * initNotaryListeners (Mantida)
+ * initNotaryListeners (AJUSTADA: Adiciona listener para o botão de delegar)
  */
 function initNotaryListeners() {
     const fileInput = document.getElementById('notary-file-upload');
@@ -511,6 +522,17 @@ function initNotaryListeners() {
             }
         });
     }
+    
+    // NOVO LISTENER: Botão de Delegar
+    document.addEventListener('click', (e) => {
+        const delegateBtn = e.target.closest('#delegate-now-btn');
+        if (delegateBtn) {
+            e.preventDefault();
+            // Ação: Mudar para a página Earn (Delegation)
+            document.querySelector('.sidebar-link[data-target="earn"]')?.click();
+            showToast("Redirecting to the Earn page to Delegate and acquire pStake.", "info");
+        }
+    });
 
     if (submitBtn) {
         submitBtn.addEventListener('click', async () => {
