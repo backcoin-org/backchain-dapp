@@ -6,7 +6,8 @@
   "rewardManager": "0xaBD497b5Af8ECDE12cb50471Ea3d45258Ef7a896",
   "decentralizedNotary": "0x49ffAc46eF04557267f8F0ac1c7D55F81B2340b4",
   "publicSale": "0xcFfF757eEBB58FFfCCEbACe2Ca5dB2E8c33b03FC",
-  "faucet": "0xE22cBF803C6f244846388Ad4EA22c4422aC1F368",
+  "faucet": "0xaBD497b5Af8ECDE12cb50471Ea3d45258Ef7a896",
   "nftLiquidityPool": "0xA48eDBe0a863a2e0Cd442890F9D276B2fF319Fed",
-  "fortuneTiger": "0x02247bbd93E6BE1f21890FDbffA4573dbA1F89D6"
+  "fortuneTiger": "0x02247bbd93E6BE1f21890FDbffA4573dbA1F89D6",
+  "swapLink": "https://pancakeswap.finance/swap?outputCurrency=0x743F798DD6dD9c8baA243B83D873dA569Ed74444"
 }

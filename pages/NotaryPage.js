@@ -1,34 +1,25 @@
 // pages/NotaryPage.js
 
+import { addresses } from '../config.js'; 
 import { State } from '../state.js';
 import { formatBigNumber, formatPStake, renderLoading, renderError, renderNoData, ipfsGateway } from '../utils.js';
-// =================================================================
-// ### CORREÇÃO DE IMPORTAÇÃO: Adiciona API_ENDPOINTS
 import { safeContractCall, getHighestBoosterBoostFromAPI, API_ENDPOINTS } from '../modules/data.js';
-// =================================================================
 import { showToast } from '../ui-feedback.js';
 import { executeNotarizeDocument } from '../modules/transactions.js';
 
 let currentFileToUpload = null;
 let currentUploadedIPFS_URI = null;
 
-// =================================================================
-// ### NOVAS CONSTANTES DE SEGURANÇA (SUPORTE A ÁUDIO ADICIONADO) ###
-// =================================================================
 const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024; // 10 MB
 const ALLOWED_MIMES = [
     'image/jpeg', 'image/png', 'application/pdf', 'image/gif', 'image/webp', 'image/tiff',
-    'audio/mpeg', // MP3
-    'audio/wav',  // WAV
-    'audio/ogg',  // OGG
-    'audio/x-m4a' // M4A/AAC comum
+    'audio/mpeg', 'audio/wav', 'audio/ogg', 'audio/x-m4a'
 ];
-const DANGEROUS_EXTENSIONS = ['.exe', '.js', '.bat', '.sh', '.vbs', '.scr', '.jar', '.dll', '.com', '.cmd', '.php'];
-// =================================================================
+const DANGEROUS_EXTENSIONS = ['.exe', '.js', '.bat', '.sh', '.vbs', '.scr', '.jar', '.dll', '.com', 'cmd', '.php'];
 
 
 /**
- * Renderiza o layout (Mantida)
+ * Renderiza o layout
  */
 function renderNotaryPageLayout() {
     const container = document.getElementById('notary');
@@ -69,10 +60,10 @@ function renderNotaryPageLayout() {
 
                     <input type="hidden" id="notary-document-uri">
 
-                    <button id="notarize-submit-btn" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-5 rounded-md transition-colors text-lg btn-disabled shadow-lg" disabled>
+                    <a id="notarize-submit-btn" href="#" class="w-full block text-center bg-blue-600 text-white font-bold py-3 px-5 rounded-md transition-colors text-lg btn-disabled shadow-lg">
                         <i class="fa-solid fa-stamp mr-2"></i> Pay Fee & Notarize
-                    </button>
-                </div>
+                    </a>
+                    </div>
             </div>
 
             <div class="lg:col-span-1 space-y-6">
@@ -100,7 +91,7 @@ function renderNotaryPageLayout() {
 }
 
 /**
- * loadNotaryPublicData (Mantida)
+ * Carrega dados públicos (taxa e pStake)
  */
 async function loadNotaryPublicData() {
     const statsEl = document.getElementById('notary-stats-container');
@@ -114,8 +105,6 @@ async function loadNotaryPublicData() {
     }
 
     try {
-        console.log("loadNotaryPublicData: Fetching data from EcosystemManager (Hub)...");
-        
         const [baseFee, pStakeRequirement] = await safeContractCall(
             State.ecosystemManagerContract,
             'getServiceRequirements',
@@ -123,10 +112,8 @@ async function loadNotaryPublicData() {
             [0n, 0n] 
         );
 
-        console.log("loadNotaryPublicData: Data fetched from Hub:", { baseFee, pStakeRequirement });
-
         State.notaryMinPStake = pStakeRequirement;
-        State.notaryFee = baseFee; // Esta é a Taxa Base
+        State.notaryFee = baseFee; 
 
         if (pStakeRequirement === 0n && baseFee === 0n) {
              statsEl.innerHTML = `
@@ -165,32 +152,45 @@ async function loadNotaryPublicData() {
 }
 
 /**
- * updateNotaryUserStatus (AJUSTADA: Adiciona botão de delegar se o pStake for insuficiente)
+ * ====================================================================
+ * ### ATUALIZAÇÃO 2: Lógica principal da sua solicitação ###
+ * ====================================================================
+ * Atualiza o status do usuário (pStake, saldo, taxas) e o botão principal.
  */
 function updateNotaryUserStatus() {
     const userStatusEl = document.getElementById('notary-user-status');
-    const submitBtn = document.getElementById('notarize-submit-btn');
+    // Agora é um <a>, não um <button>
+    const submitBtn = document.getElementById('notarize-submit-btn'); 
+    
     if (!userStatusEl || !submitBtn) return;
 
+    // --- Lógica de Desconectado ---
     if (!State.isConnected) {
         userStatusEl.innerHTML = renderNoData(userStatusEl, "Connect your wallet to see your status.", true);
         submitBtn.classList.add('btn-disabled');
-        submitBtn.disabled = true;
+        submitBtn.href = '#';
+        submitBtn.target = '';
+        submitBtn.innerHTML = '<i class="fa-solid fa-stamp mr-2"></i> Pay Fee & Notarize';
+        submitBtn.classList.remove('bg-amber-500', 'hover:bg-amber-600');
+        submitBtn.classList.add('bg-blue-600', 'hover:bg-blue-700');
         return;
     }
 
+    // --- Lógica de Carregamento de Requisitos ---
     if (typeof State.notaryMinPStake === 'undefined' || typeof State.notaryFee === 'undefined') {
         userStatusEl.innerHTML = renderError(userStatusEl, "Could not load requirements.", true);
         submitBtn.classList.add('btn-disabled');
-        submitBtn.disabled = true;
+        submitBtn.href = '#';
+        submitBtn.target = '';
         return;
     }
 
+    // --- Cálculo de Estado ---
     const userPStake = State.userTotalPStake || 0n;
     const userBalance = State.currentUserBalance || 0n;
     const isFileUploaded = !!currentUploadedIPFS_URI;
+    const swapLink = addresses.swapLink || '#';
 
-    // --- LÓGICA DE CÁLCULO DE DESCONTO ---
     const baseFee = State.notaryFee;
     const boosterBips = State.userBoosterBips || 0n; 
     
@@ -207,10 +207,8 @@ function updateNotaryUserStatus() {
     const hasEnoughPStake = State.notaryMinPStake === 0n || userPStake >= State.notaryMinPStake;
     const needsFee = finalFee > 0n;
     const hasEnoughFee = !needsFee || userBalance >= finalFee; 
-    // --- FIM DA LÓGICA DE DESCONTO ---
-
-
-    // --- ATUALIZAÇÃO DO HTML ---
+    
+    // --- Renderização do Painel "My Status" (Sem alterações) ---
      let statusHTML = `
         <div class="flex items-center justify-between text-sm">
             <span class="text-zinc-400 flex items-center">
@@ -284,19 +282,39 @@ function updateNotaryUserStatus() {
      }
     userStatusEl.innerHTML = statusHTML;
 
-    // Apenas habilita o botão de notarizar se TUDO estiver OK
+    // --- NOVA LÓGICA DO BOTÃO PRINCIPAL ---
+    
+    // Reseta o botão para o padrão (azul)
+    submitBtn.innerHTML = '<i class="fa-solid fa-stamp mr-2"></i> Pay Fee & Notarize';
+    submitBtn.classList.remove('bg-amber-500', 'hover:bg-amber-600', 'btn-disabled');
+    submitBtn.classList.add('bg-blue-600', 'hover:bg-blue-700');
+    submitBtn.href = '#';
+    submitBtn.target = '';
+
+    // Condição 1: Pronto para Notarizar
     if (hasEnoughPStake && hasEnoughFee && isFileUploaded) {
+        // Estado: Azul, Habilitado, Ação de Notarizar
         submitBtn.classList.remove('btn-disabled');
-        submitBtn.disabled = false;
-    } else {
+    }
+    // Condição 2 (Sua Solicitação): Não tem Saldo
+    else if (!hasEnoughFee && finalFee > 0n) {
+        // Estado: Âmbar, Habilitado, Link para Swap
+        submitBtn.innerHTML = '<i class="fa-solid fa-shopping-cart mr-2"></i> Buy $BKC to Notarize';
+        submitBtn.classList.remove('btn-disabled', 'bg-blue-600', 'hover:bg-blue-700');
+        submitBtn.classList.add('bg-amber-500', 'hover:bg-amber-600');
+        submitBtn.href = swapLink;
+        submitBtn.target = '_blank';
+    }
+    // Condição 3: Outros problemas (Sem pStake, Sem Arquivo)
+    else {
+        // Estado: Cinza, Desabilitado, Ação de Notarizar
         submitBtn.classList.add('btn-disabled');
-        submitBtn.disabled = true;
     }
 }
 
 
 /**
- * renderMyNotarizedDocuments (Mantida)
+ * Renderiza os documentos já notarizados
  */
 async function renderMyNotarizedDocuments() {
     const docsEl = document.getElementById('my-notarized-documents');
@@ -306,7 +324,6 @@ async function renderMyNotarizedDocuments() {
         return renderNoData(docsEl, "Connect your wallet to view your documents.");
     }
     if (!State.decentralizedNotaryContract) {
-         console.error("renderMyNotarizedDocuments: Wallet connected but State.decentralizedNotaryContract is missing.");
         return renderError(docsEl, "Notary contract not loaded.");
     }
 
@@ -326,34 +343,23 @@ async function renderMyNotarizedDocuments() {
             
             const gatewayLink = docURI.startsWith('ipfs://') ? docURI.replace('ipfs://', ipfsGateway) : docURI;
 
-            let isImage = false;
-            let isPdf = false;
-            let isAudio = false; // Novo flag para áudio
-            let fileType = 'IPFS File';
-            let typeColor = 'text-blue-400';
+            let isImage = false, isPdf = false, isAudio = false; 
+            let fileType = 'IPFS File', typeColor = 'text-blue-400';
             
             try {
                 const response = await fetch(gatewayLink, { method: 'HEAD' });
                 if (response.ok) {
                     const contentType = response.headers.get('Content-Type') || '';
                     if (contentType.startsWith('image/')) {
-                        isImage = true;
-                        fileType = 'Image';
-                        typeColor = 'text-cyan-400';
+                        isImage = true; fileType = 'Image'; typeColor = 'text-cyan-400';
                     } else if (contentType === 'application/pdf') {
-                        isPdf = true;
-                        fileType = 'PDF Document';
-                        typeColor = 'text-red-400';
-                    } else if (contentType.startsWith('audio/')) { // Detecção de áudio
-                        isAudio = true;
-                        fileType = 'Audio Track';
-                        typeColor = 'text-green-400'; 
+                        isPdf = true; fileType = 'PDF Document'; typeColor = 'text-red-400';
+                    } else if (contentType.startsWith('audio/')) { 
+                        isAudio = true; fileType = 'Audio Track'; typeColor = 'text-green-400'; 
                     }
-                } else {
-                     console.warn(`Could not fetch HEAD for ${gatewayLink}. Status: ${response.status}`);
                 }
             } catch (fetchError) {
-                console.warn(`Could not fetch Content-Type for ${gatewayLink}: ${fetchError.message}. Defaulting to generic icon.`);
+                 console.warn(`Could not fetch Content-Type for ${gatewayLink}: ${fetchError.message}.`);
             }
 
             let displayHtml = '';
@@ -363,7 +369,7 @@ async function renderMyNotarizedDocuments() {
                 displayHtml = `<div class="w-full h-40 flex items-center justify-center bg-zinc-800 rounded-t-lg">
                                    <i class="fa-solid fa-file-pdf text-5xl text-red-400"></i>
                                </div>`;
-            } else if (isAudio) { // Renderização para áudio
+            } else if (isAudio) { 
                  displayHtml = `<div class="w-full h-40 flex flex-col items-center justify-center bg-zinc-800 rounded-t-lg">
                                     <i class="fa-solid fa-music text-5xl text-green-400 mb-2"></i>
                                     <audio controls src="${gatewayLink}" class="mt-2 w-11/12"></audio>
@@ -401,7 +407,7 @@ async function renderMyNotarizedDocuments() {
 
 
 /**
- * handleFileUpload (AJUSTADO: Endpoint Vercel E Validação de Segurança)
+ * Lida com o upload do arquivo
  */
 async function handleFileUpload(file) {
     const uploadPromptEl = document.getElementById('notary-upload-prompt');
@@ -409,39 +415,29 @@ async function handleFileUpload(file) {
     const uriInput = document.getElementById('notary-document-uri');
     const errorEl = document.getElementById('notary-lib-error');
     
-    // Reset visual error state
     if (errorEl) errorEl.classList.add('hidden');
-    
-    // --- 1. VALIDAÇÃO DE SEGURANÇA NO FRONTEND ---
+
+    // Validação de Segurança
     const fileName = file.name || "";
     const fileExtension = fileName.substring(fileName.lastIndexOf('.')).toLowerCase();
     
-    // Checagem de tamanho (10MB)
     if (file.size > MAX_FILE_SIZE_BYTES) {
-         showToast(`Upload failed: File size exceeds the maximum limit of ${MAX_FILE_SIZE_BYTES / (1024 * 1024)}MB.`, "error");
          const msg = `File size (${(file.size / 1024 / 1024).toFixed(2)}MB) exceeds 10MB limit.`;
          if (errorEl) { errorEl.innerText = msg; errorEl.classList.remove('hidden'); }
          return; 
     }
-    
-    // Checagem de tipo (MIME Type)
     if (!ALLOWED_MIMES.includes(file.type) && file.type !== '') {
         const msg = `File type '${file.type}' not allowed. Only images, PDFs, and Audio files are accepted.`;
-        showToast(`Upload failed: ${msg}`, "error");
         if (errorEl) { errorEl.innerText = msg; errorEl.classList.remove('hidden'); }
         return;
     }
-    
-    // Checagem de extensão perigosa
     if (DANGEROUS_EXTENSIONS.includes(fileExtension)) {
          const msg = `File extension '${fileExtension}' is considered dangerous and blocked.`;
-         showToast(`Upload failed: ${msg}`, "error");
          if (errorEl) { errorEl.innerText = msg; errorEl.classList.remove('hidden'); }
          return;
     }
-    // --- FIM DA VALIDAÇÃO DE SEGURANÇA ---
 
-
+    // Inicia UI de upload
     currentFileToUpload = file;
     currentUploadedIPFS_URI = null;
     uploadPromptEl.classList.add('hidden');
@@ -457,15 +453,12 @@ async function handleFileUpload(file) {
         const formData = new FormData();
         formData.append('file', file); 
 
-        // =================================================================
-        // ### ATUALIZAÇÃO CRÍTICA DO ENDPOINT (MIGRAÇÃO PARA VERCEL) ###
         const UPLOAD_URL = '/api/upload'; 
 
         const response = await fetch(UPLOAD_URL, { 
             method: 'POST',
             body: formData,
         });
-        // =================================================================
 
         if (!response.ok) {
             const errorResult = await response.json().catch(() => ({ error: 'Unknown JSON error' }));
@@ -510,7 +503,7 @@ async function handleFileUpload(file) {
 
 
 /**
- * handleAddNFTToWallet (Mantida)
+ * Lida com o clique em "Add to Wallet"
  */
 async function handleAddNFTToWallet(e) {
     const btn = e.target.closest('.add-to-wallet-btn');
@@ -519,10 +512,20 @@ async function handleAddNFTToWallet(e) {
     const address = btn.dataset.address;
     const tokenId = btn.dataset.tokenid;
 
-    const rawProvider = State.web3Provider; 
+    let rawProvider = State.web3Provider; 
+    if (!rawProvider && State.provider && typeof State.provider.provider === 'object') {
+        rawProvider = State.provider.provider;
+    }
+    if (!rawProvider && typeof window.ethereum === 'object') {
+         rawProvider = window.ethereum;
+    }
 
     if (!rawProvider || typeof rawProvider.request !== 'function') { 
-         console.error("Failed to find .request function on State.web3Provider.", { web3Provider: State.web3Provider });
+         console.error("Failed to find .request function on any provider.", { 
+            stateWeb3Provider: State.web3Provider, 
+            stateProvider: State.provider,
+            windowEthereum: (typeof window.ethereum)
+         });
          showToast("The connected wallet does not support 'wallet_watchAsset'.", "error");
          return;
     }
@@ -532,13 +535,9 @@ async function handleAddNFTToWallet(e) {
             method: 'wallet_watchAsset',
             params: {
                 type: 'ERC721',
-                options: {
-                    address: address, // Endereço do contrato NFT
-                    tokenId: tokenId, // ID do token específico
-                },
+                options: { address: address, tokenId: tokenId },
             },
         });
-
         if (wasAdded) {
             showToast("NFT successfully added to your wallet!", "success");
         } else {
@@ -550,20 +549,60 @@ async function handleAddNFTToWallet(e) {
     }
 }
 
-
 /**
- * initNotaryListeners (AJUSTADA: Adiciona listener para o botão de delegar)
+ * Adiciona os listeners da página
  */
 function initNotaryListeners() {
     const fileInput = document.getElementById('notary-file-upload');
     const submitBtn = document.getElementById('notarize-submit-btn');
+    const errorEl = document.getElementById('notary-lib-error');
 
     if (fileInput) {
-        fileInput.addEventListener('change', (e) => {
-            try {
-                if (e.target.files && e.target.files.length > 0) {
-                     handleFileUpload(e.target.files[0]);
+        // Verifica o saldo no 'click' ANTES de abrir o seletor de arquivos
+        fileInput.addEventListener('click', (e) => {
+            if (errorEl) errorEl.classList.add('hidden'); 
+
+            if (!State.isConnected) {
+                showToast("Please connect your wallet first.", "error");
+                if (errorEl) { errorEl.innerText = "Please connect your wallet first."; errorEl.classList.remove('hidden'); }
+                e.preventDefault(); 
+                return;
+            }
+
+            const baseFee = State.notaryFee || 0n;
+            const boosterBips = State.userBoosterBips || 0n;
+            let finalFee = baseFee;
+            if (boosterBips > 0n && baseFee > 0n) {
+                finalFee = baseFee - ((baseFee * boosterBips) / 10000n);
+            }
+            const userBalance = State.currentUserBalance || 0n;
+            
+            if (finalFee > 0n && userBalance < finalFee) {
+                const swapLink = addresses.swapLink || '#';
+                const msg = `Insufficient $BKC balance. You need ${formatBigNumber(finalFee)} $BKC.`;
+                showToast(msg, "error");
+                
+                if (errorEl) {
+                    errorEl.innerHTML = `
+                        ${msg} 
+                        <a href="${swapLink}" target="_blank" rel="noopener noreferrer" class="text-amber-400 hover:text-amber-300 underline ml-1">
+                            Buy $BKC Here <i class="fa-solid fa-arrow-up-right-from-square text-xs"></i>
+                        </a>
+                    `;
+                    errorEl.classList.remove('hidden');
                 }
+                e.preventDefault(); 
+                return;
+            }
+        });
+
+        // O 'change' só será disparado se o 'click' for bem-sucedido
+        fileInput.addEventListener('change', (e) => {
+            if (!e.target.files || e.target.files.length === 0) {
+                return; 
+            }
+            try {
+                 handleFileUpload(e.target.files[0]);
             } catch (error) {
                  console.error("Error in file input change handler:", error);
                  showToast("An unexpected error occurred selecting the file.", "error");
@@ -571,50 +610,46 @@ function initNotaryListeners() {
                  const statusEl = document.getElementById('notary-upload-status');
                  if(statusEl) { statusEl.classList.add('hidden'); statusEl.innerHTML = ''; }
                  currentFileToUpload = null; currentUploadedIPFS_URI = null;
+                 if(errorEl) { errorEl.innerText = error.message; errorEl.classList.remove('hidden'); }
                  updateNotaryUserStatus();
             }
         });
     }
     
-    // NOVO LISTENER: Botão de Delegar
+    // Listener do botão de Delegar
     document.addEventListener('click', (e) => {
         const delegateBtn = e.target.closest('#delegate-now-btn');
         if (delegateBtn) {
             e.preventDefault();
-            // Ação: Mudar para a página Earn (Delegation)
             document.querySelector('.sidebar-link[data-target="earn"]')?.click();
             showToast("Redirecting to the Earn page to Delegate and acquire pStake.", "info");
         }
     });
 
+    // Listener do botão de Notarizar (agora um <a>)
     if (submitBtn) {
-        submitBtn.addEventListener('click', async () => {
-             if (!currentUploadedIPFS_URI) return showToast("Please upload a file first.", "error");
-            
-            if (typeof State.notaryMinPStake === 'undefined' || typeof State.notaryFee === 'undefined') return showToast("Cannot submit: Notary requirements not loaded.", "error");
-
-            // Recalcula as taxas no momento do clique (garantia)
-            const baseFee = State.notaryFee || 0n;
-            const boosterBips = State.userBoosterBips || 0n;
-            let finalFee = baseFee;
-            if (boosterBips > 0n && baseFee > 0n) {
-                 finalFee = baseFee - ((baseFee * boosterBips) / 10000n);
+        submitBtn.addEventListener('click', async (e) => {
+            // Impede a ação se o botão estiver desabilitado
+            if (submitBtn.classList.contains('btn-disabled')) {
+                e.preventDefault();
+                return;
+            }
+            // Impede a ação se for um link externo (para comprar)
+            if (submitBtn.href !== '#' && submitBtn.target === '_blank') {
+                return; // Deixa o link funcionar
             }
 
-            const userPStake = State.userTotalPStake || 0n;
-            const userBalance = State.currentUserBalance || 0n;
-            const hasEnoughPStake = State.notaryMinPStake === 0n || userPStake >= State.notaryMinPStake;
-            const hasEnoughFee = finalFee === 0n || userBalance >= finalFee;
+            // Se chegou aqui, é uma ação de notarizar
+            e.preventDefault();
 
-            if (!hasEnoughPStake) return showToast("Insufficient pStake.", "error");
-            if (!hasEnoughFee) return showToast("Insufficient $BKC balance for final fee.", "error");
-
+            if (!currentUploadedIPFS_URI) return showToast("Please upload a file first.", "error");
+            
             const boosterId = State.userBoosterId || 0n; 
 
             const success = await executeNotarizeDocument(
                 currentUploadedIPFS_URI,
                 boosterId, 
-                submitBtn
+                submitBtn // Passa o elemento <a> para a função de transação
             );
 
             if (success) {
@@ -629,12 +664,12 @@ function initNotaryListeners() {
                 statusEl.innerHTML = '';
 
                 await renderMyNotarizedDocuments();
-                
                 updateNotaryUserStatus();
             }
         });
     }
     
+    // Listener do botão "Add to Wallet"
     const docsEl = document.getElementById('my-notarized-documents');
     if (docsEl) {
         docsEl.removeEventListener('click', handleAddNFTToWallet); 
@@ -642,19 +677,14 @@ function initNotaryListeners() {
     }
 }
 
+// --- Objeto da Página ---
 export const NotaryPage = {
     async render() {
-        console.log("Rendering Notary Page...");
         renderNotaryPageLayout();
 
         const libErrorEl = document.getElementById('notary-lib-error');
         if (libErrorEl) libErrorEl.classList.add('hidden');
         
-        const dropzone = document.getElementById('notary-file-dropzone');
-        if (dropzone) {
-            dropzone.classList.remove('cursor-not-allowed', 'opacity-50');
-            dropzone.title = "";
-        }
         const fileInput = document.getElementById('notary-file-upload');
         if (fileInput) fileInput.disabled = false;
 
@@ -668,14 +698,14 @@ export const NotaryPage = {
             updateNotaryUserStatus();
             await renderMyNotarizedDocuments();
         } else {
-             this.update(State.isConnected); // Chama a lógica de "desconectado"
+             this.update(State.isConnected); 
         }
 
         initNotaryListeners();
     },
 
     init() {
-        console.log("NotaryPage init called.");
+        // initNotaryListeners() é chamado no final do render()
     },
 
     async update(isConnected) {
@@ -693,17 +723,18 @@ export const NotaryPage = {
         } else {
              const userStatusEl = document.getElementById('notary-user-status');
              const docsEl = document.getElementById('my-notarized-documents');
-             const submitBtn = document.getElementById('notarize-submit-btn');
-
+             
              if(userStatusEl) renderNoData(userStatusEl, "Connect your wallet to see your status.");
              if(docsEl) renderNoData(docsEl, "Connect your wallet to view your documents.");
-             if(submitBtn) { submitBtn.classList.add('btn-disabled'); submitBtn.disabled = true; }
+
+             // Atualiza o botão para o estado desconectado
+             updateNotaryUserStatus(); 
 
              currentFileToUpload = null; currentUploadedIPFS_URI = null;
               const uploadPromptEl = document.getElementById('notary-upload-prompt');
               const uploadStatusEl = document.getElementById('notary-upload-status');
               if(uploadPromptEl) uploadPromptEl.classList.remove('hidden');
-              if(uploadStatusEl) { uploadStatusEl.classList.add('hidden'); uploadStatusEl.innerHTML = ''; }
+              if(uploadStatusEl) { uploadStatusEl.classList.add('hidden'); statusEl.innerHTML = ''; }
         }
     }
 };

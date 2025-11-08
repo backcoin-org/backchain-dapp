@@ -18,20 +18,10 @@ export async function runScript(hre: HardhatRuntimeEnvironment) {
   console.log("----------------------------------------------------");
 
   const addresses: { [key: string]: string } = {};
-  let existingFaucetAddress = "";
 
-  // Verifica se o endereço do Faucet já está no deployment-addresses.json
+  // Garante que o arquivo de endereços esteja limpo ou exista
   const addressesFilePath = path.join(__dirname, "../deployment-addresses.json");
-  try {
-      const existingAddresses = JSON.parse(fs.readFileSync(addressesFilePath, "utf8"));
-      if (existingAddresses.faucet) {
-          existingFaucetAddress = existingAddresses.faucet;
-          console.log(`⚠️ Endereço do Faucet existente (${existingFaucetAddress}) será mantido, mas não será reimplantado.`);
-      }
-  } catch (e) {
-      // Cria um novo arquivo se ele não existir
-      fs.writeFileSync(addressesFilePath, JSON.stringify({}, null, 2));
-  }
+  fs.writeFileSync(addressesFilePath, JSON.stringify({}, null, 2));
 
 
   try {
@@ -124,21 +114,16 @@ export async function runScript(hre: HardhatRuntimeEnvironment) {
     console.log("----------------------------------------------------");
     await sleep(DEPLOY_DELAY_MS);
     
-    // --- 8. Deploy SimpleBKCFaucet (Movido para aqui para o Passo 0 funcionar) ---
-    // Mesmo se a intenção for não reimplantar, precisamos que o endereço exista para o Passo 0
-    if (!existingFaucetAddress) {
-        console.log("8. Implantando SimpleBKCFaucet...");
-        const simpleBKCFaucet = await ethers.deployContract("SimpleBKCFaucet", [
-            addresses.bkcToken,
-        ]);
-        await simpleBKCFaucet.waitForDeployment();
-        addresses.faucet = simpleBKCFaucet.target as string;
-        console.log(`✅ SimpleBKCFaucet implantado em: ${addresses.faucet}`);
-        console.log("----------------------------------------------------");
-        await sleep(DEPLOY_DELAY_MS);
-    } else {
-        addresses.faucet = existingFaucetAddress;
-    }
+    // --- 8. Deploy SimpleBKCFaucet (Sempre reimplantado) ---
+    console.log("8. Implantando SimpleBKCFaucet...");
+    const simpleBKCFaucet = await ethers.deployContract("SimpleBKCFaucet", [
+        addresses.bkcToken, // <-- Passa o NOVO bkcToken (do Passo 2)
+    ]);
+    await simpleBKCFaucet.waitForDeployment();
+    addresses.faucet = simpleBKCFaucet.target as string;
+    console.log(`✅ SimpleBKCFaucet implantado em: ${addresses.faucet}`);
+    console.log("----------------------------------------------------");
+    await sleep(DEPLOY_DELAY_MS);
 
 
   } catch (error: any) {
@@ -146,18 +131,10 @@ export async function runScript(hre: HardhatRuntimeEnvironment) {
     throw error;
   }
 
-  // --- Salva os endereços no arquivo (incluindo o Faucet) ---
-  let finalAddresses = {};
-  try {
-      const existingContent = fs.readFileSync(addressesFilePath, "utf8");
-      finalAddresses = JSON.parse(existingContent);
-  } catch (e) { /* continua com objeto vazio */ }
-  // Sobrescreve/adiciona os novos endereços
-  Object.assign(finalAddresses, addresses);
-
+  // --- Salva os endereços no arquivo ---
   fs.writeFileSync(
     addressesFilePath,
-    JSON.stringify(finalAddresses, null, 2)
+    JSON.stringify(addresses, null, 2)
   );
 
   console.log("\n🎉🎉🎉 CONTRATOS PRINCIPAIS IMPLANTADOS COM SUCESSO! 🎉🎉🎉");

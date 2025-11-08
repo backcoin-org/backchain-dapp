@@ -28,6 +28,7 @@
     "hardhat-gas-reporter": "^1.0.8",
     "live-server": "^1.2.2",
     "solidity-coverage": "^0.8.0",
+    "tailwindcss": "^4.1.17",
     "ts-node": "^10.9.2",
     "typechain": "^8.3.0",
     "typescript": "^5.4.5"

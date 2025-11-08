@@ -21,6 +21,10 @@ export async function loadAddresses() {
         addresses.nftBondingCurve = jsonAddresses.nftLiquidityPool;
         addresses.actionsManager = jsonAddresses.fortuneTiger; // ActionsManager agora aponta para FortuneTiger
         addresses.ecosystemManager = jsonAddresses.ecosystemManager; 
+        
+        // --- ATUALIZAÇÃO AQUI ---
+        // Carrega o link de swap. Se não existir no JSON, usa '#' como fallback.
+        addresses.swapLink = jsonAddresses.swapLink || "#"; 
 
         return true;
 
@@ -89,16 +93,12 @@ export const delegationManagerABI = [
     "function MIN_LOCK_DURATION() view returns (uint256)",
     "function MAX_LOCK_DURATION() view returns (uint256)",
     "function getMinValidatorStake() view returns (uint256)",
-    
-    // Funções de Escrita (Validador e Ações)
     "function payRegistrationFee()",
     "function registerValidator(address _validatorAddress)",
     "function delegate(address _validatorAddress, uint256 _totalAmount, uint256 _lockDuration)",
     "function unstake(uint256 _delegationIndex)",
     "function forceUnstake(uint256 _delegationIndex, uint256 _boosterTokenId)",
     "function claimDelegatorReward()",
-    
-    // Eventos
     "event Delegated(address indexed user, address indexed validator, uint256 delegationIndex, uint256 amount, uint256 feePaid)",
     "event Unstaked(address indexed user, uint256 delegationIndex, uint256 amount, uint256 feePaid)",
     "event DelegatorRewardClaimed(address indexed delegator, uint256 amount)"
@@ -115,10 +115,7 @@ export const rewardManagerABI = [
     "function claimMinerRewards()",
     "function createVestingCertificate(address _recipient, uint256 _grossAmount)",
     "function tokenOfOwnerByIndex(address owner, uint256 index) view returns (uint256)",
-    
-    // CORREÇÃO: ADICIONAR NOVA FUNÇÃO VIEW DO MINT RATE
     "function getMintRate(uint256 _purchaseAmount) view returns (uint256)", 
-    
     "event VestingCertificateCreated(uint256 indexed tokenId, address indexed recipient, uint256 netAmount)",
     "event CertificateWithdrawn(uint256 indexed tokenId, address indexed owner, uint256 amountToOwner, uint256 penaltyAmount)",
     "event MinerRewardClaimed(address indexed miner, uint256 amount)"
@@ -144,7 +141,6 @@ export const nftBondingCurveABI = [
     "event NFTSold(address indexed seller, uint256 indexed boostBips, uint256 tokenId, uint256 payout, uint256 feePaid)"
 ];
 
-// --- NOVO: ABI para o Contrato FortuneTiger (Jogo do Tigre) ---
 export const fortuneTigerABI = [
     "function play(uint256 _amount, uint256 _boosterTokenId)",
     "function prizePools(uint256) view returns (uint256 multiplier, uint256 chanceDenominator, uint256 balance, uint256 contributionShareBips)",
@@ -153,8 +149,6 @@ export const fortuneTigerABI = [
     "event GamePlayed(address indexed user, uint256 amountWagered, uint256 totalPrizeWon)"
 ];
 
-// O ABI actionsManagerABI (originalmente para o jogo do tigre) agora é um placeholder
-// para o contrato de Actions/DAO se for o caso. 
 export const actionsManagerABI = [ 
     "function actionCounter() view returns (uint256)",
     "function actions(uint256) view returns (uint256 id, address creator, string description, uint8 actionType, uint8 status, uint256 endTime, uint256 totalPot, uint256 creatorStake, bool isStakeReturned, address beneficiary, uint256 totalCoupons, address winner, uint256 closingBlock, uint256 winningCoupon)",
@@ -195,7 +189,6 @@ export const faucetABI = [
   "event TokensClaimed(address indexed recipient, uint256 amount)",
   "function claim()",
   "function claimAmount() view returns (uint256)",
-  // REMOVIDO: hasClaimed
   "function owner() view returns (address)",
   "function renounceOwnership()",
   "function token() view returns (address)",
@@ -204,7 +197,6 @@ export const faucetABI = [
   "function withdrawRemainingTokens()"
 ];
 
-// ABI do Hub (EcosystemManager) para chamadas de provedor
 export const ecosystemManagerABI = [
     "function getServiceRequirements(string calldata _serviceKey) external view returns (uint256 fee, uint256 pStake)",
     "function getFee(string calldata _serviceKey) external view returns (uint256)",

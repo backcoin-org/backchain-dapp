@@ -254,6 +254,7 @@
                     </div>
                 </div>
             </header>
+            
             <main class="flex-1 overflow-y-auto bg-main p-4 sm:p-6 lg:p-8">
                 <div class="container mx-auto max-w-7xl">
 
@@ -330,6 +331,7 @@
                             </div>
                         </div>
                     </section>
+                    
                     <section id="presale" style="background-color: var(--presale-bg-main); margin: -1.5rem;" class="hidden"></section>
 
                     <section id="earn" class="hidden">
@@ -359,26 +361,50 @@
                     <section id="store" class="hidden"><h1 class="text-2xl md:text-3xl font-bold mb-6">Reward Booster Store</h1><p class="text-zinc-400 max-w-3xl mb-8">Increase your reward claim efficiency from a 50% base up to 100% by purchasing a Booster NFT. Prices are dynamic and increase as NFTs are sold.</p><div id="store-content-wrapper"><h2 class="text-xl font-bold mb-4">Booster Pools</h2><div id="store-items-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6"></div><div class="mt-12"><h2 class="text-xl font-bold mb-4">My Locked & Ineligible Boosters</h2><div id="my-locked-boosters-container"></div></div></div></section>
                     <section id="rewards" class="hidden"><h1 class="text-2xl md:text-3xl font-bold mb-6">My Rewards & Certificates</h1><div id="claimable-rewards-panel" class="mb-8 p-6 bg-sidebar border border-border-color rounded-xl max-w-2xl mx-auto"><h2 class="text-xl font-bold mb-4">Claimable Rewards</h2><div id="rewards-loader" class="text-center hidden"><div class="loader inline-block"></div></div><div id="rewards-details-content"></div></div><h2 class="text-xl font-bold mb-4">My Vesting Certificates</h2><div id="certificates-list-container"></div></section>
                     
-                    <section id="actions" class="hidden"></section>
+                    <section id="actions" class="hidden">
+                        </section>
 
-                    <section id="airdrop" class="hidden"></section>
-                    <section id="dao" class="hidden"></section>
+                    <section id="airdrop" class="hidden" role="tabpanel" aria-labelledby="nav-airdrop">
+    
+                        <div id="airdrop-loading-placeholder" class="text-center p-12">
+                            <div class="loader inline-block"></div>
+                            <p class="text-zinc-400 mt-4 text-lg">Loading Airdrop...</p>
+                        </div>
+                    
+                        <div id="airdrop-tabs-container">
+                            </div>
+                    
+                        <div id="airdrop-content-wrapper">
+                            
+                            <div id="active-tab-content" role="tabpanel" tabindex="0">
+                                </div>
+                    
+                        </div>
+                    
+                    </section>
+                    <section id="dao" class="hidden">
+                        </section>
 
-                    <section id="notary" class="hidden"></section>
+                    <section id="notary" class="hidden">
+                        </section>
 
-                    <section id="tokenomics" class="hidden"></section>
-                    <section id="faucet" class="hidden"></section>
-                    <section id="about" class="hidden"></section>
-                    <section id="admin" class="hidden"></section>
+                    <section id="tokenomics" class="hidden">
+                        </section>
+                    <section id="faucet" class="hidden">
+                        </section>
+                    <section id="about" class="hidden">
+                        </section>
+                    <section id="admin" class="hidden">
+                         </section>
 
                 </div>
             </main>
-            </div>
+        </div>
     </div>
 
     <div id="modal-container"></div>
 
     <script type="module" src="./app.js"></script>
     
-    </body>
+</body>
 </html>

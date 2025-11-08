@@ -60,6 +60,12 @@ const web3modal = createWeb3Modal({
     chains: [sepolia],
     projectId: WALLETCONNECT_PROJECT_ID,
     enableAnalytics: false,
+
+    // ### CORREÇÃO (BÔNUS) ###
+    // Desativa a busca de avatar do WalletConnect, que causa o erro 404
+    // que você mencionou anteriormente.
+    enableAvatar: false,
+
     themeMode: 'dark',
     themeVariables: {
         '--w3m-accent': '#f59e0b',
@@ -188,8 +194,6 @@ export async function initPublicProvider() {
  */
 export function subscribeToWalletChanges(callback) {
     
-    // VARIÁVEL LOCAL para rastrear o estado anterior, essencial para o Web3Modal
-    // Usa getState() para obter o estado inicial, o que é crucial para a primeira carga.
     let wasPreviouslyConnected = web3modal.getIsConnected(); 
 
     web3modal.subscribeProvider(async ({ provider, address, chainId, isConnected }) => {
@@ -249,6 +253,12 @@ export function subscribeToWalletChanges(callback) {
 
             // Se o chainId ESTIVER correto, continua o setup
             const ethersProvider = new ethers.BrowserProvider(provider);
+            
+            // ### CORREÇÃO 1: (Problema "Adicionar à Carteira") ###
+            // Armazena o provedor 'raw' (EIP-1193) no State.
+            // O NotaryPage.js precisa disso para a função 'wallet_watchAsset'.
+            State.web3Provider = provider; 
+
             const success = await setupSignerAndLoadData(ethersProvider, address);
             
             if (success) {
@@ -274,6 +284,9 @@ export function subscribeToWalletChanges(callback) {
             const wasConnected = State.isConnected; // Salva se o usuário estava logado antes
 
             // Limpa o estado do App
+            // ### CORREÇÃO 1: (Problema "Adicionar à Carteira") ###
+            // Limpa o provedor 'raw' do State ao desconectar.
+            State.web3Provider = null; 
             State.provider = null; State.signer = null; State.userAddress = null;
             State.isConnected = false;
             State.currentUserBalance = 0n;
@@ -298,17 +311,33 @@ export function subscribeToWalletChanges(callback) {
     });
 
     // =================================================================
-    // ### CORREÇÃO DA UX: TENTA FORÇAR A RECONEXÃO SALVA ###
-    // Este bloco garante que, se houver uma sessão salva, ela seja processada
-    // ativamente durante a inicialização da página.
+    // ### CORREÇÃO 2: (Problema de Recarregar a Página) ###
+    // Verifica o estado inicial no carregamento da página. Se o Web3Modal
+    // tiver uma sessão salva, disparamos o 'callback' manualmente
+    // para sincronizar a UI imediatamente, evitando o botão "Desconectado".
     // =================================================================
-    
-    // Tenta obter o estado atual salvo
-    const currentStatus = web3modal.getState();
-    if (currentStatus.isConnected && currentStatus.address) {
-        // Se houver uma sessão salva, dispara o evento manualmente no subscribe
-        // para forçar a reconexão.
-        web3modal.subscribeProvider(currentStatus);
+    try {
+        console.log("Checking initial state on page load...");
+        const currentStatus = web3modal.getState();
+        
+        if (currentStatus.isConnected && currentStatus.address && currentStatus.chainId) {
+            
+            console.log("Found saved session. Manually triggering callback to sync UI.");
+            
+            // Dispara o callback (em app.js) com o estado atual
+            // Isso fará a UI renderizar como "Conectado" imediatamente.
+            callback({
+                isConnected: true,
+                address: currentStatus.address,
+                chainId: currentStatus.chainId,
+                isNewConnection: false // Não é uma 'nova' conexão, é uma reconexão
+            });
+            
+        } else {
+            console.log("No saved session found. UI will remain disconnected.");
+        }
+    } catch (e) {
+         console.error("Error checking initial Web3Modal state:", e);
     }
 }
 
