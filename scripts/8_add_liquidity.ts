@@ -8,6 +8,8 @@ import { LogDescription, ContractTransactionReceipt, ethers, Log } from "ethers"
 import fs from "fs";
 import path from "path";
 
+// --- REMOVIDA A CORREÇÃO ESM (fileURLToPath) ---
+
 // Helper function for delays
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -78,6 +80,7 @@ export async function runScript(hre: HardhatRuntimeEnvironment) {
   const [deployer] = await ethers.getSigners();
 
   // --- Carregar Endereços ---
+  // __dirname agora funciona nativamente (CommonJS)
   const addressesFilePath = path.join(__dirname, "../deployment-addresses.json");
   if (!fs.existsSync(addressesFilePath)) {
     console.error("❌ Erro: 'deployment-addresses.json' não encontrado. O deploy master (passos 1-7) foi executado?");
@@ -267,6 +270,7 @@ export async function runScript(hre: HardhatRuntimeEnvironment) {
 // ====================================================================
 // Ponto de entrada para execução standalone (se necessário)
 // ====================================================================
+// Bloco 'if (require.main === module)' mantido para execução individual
 if (require.main === module) {
   console.log("Executando 8_add_liquidity.ts como script standalone...");
   import("hardhat").then(hre => {

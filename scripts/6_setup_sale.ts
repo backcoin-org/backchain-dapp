@@ -4,6 +4,8 @@ import { ethers, LogDescription, Log } from "ethers";
 import fs from "fs";
 import path from "path";
 
+// --- REMOVIDA A CORREÇÃO ESM (fileURLToPath) ---
+
 // Helper function for delays
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -35,6 +37,7 @@ export async function runScript(hre: HardhatRuntimeEnvironment) {
   console.log("----------------------------------------------------");
 
   // --- 1. Carregar Endereços ---
+  // __dirname agora funciona nativamente (CommonJS)
   const addressesFilePath = path.join(__dirname, "../deployment-addresses.json");
   if (!fs.existsSync(addressesFilePath)) {
     console.error("❌ Erro: 'deployment-addresses.json' não encontrado. O Passo 1 falhou?");
@@ -115,6 +118,7 @@ export async function runScript(hre: HardhatRuntimeEnvironment) {
   }
   
   // Salva o JSON na raiz do projeto
+  // __dirname agora funciona nativamente (CommonJS)
   const treasuryIdsPath = path.join(__dirname, "../treasury-nft-ids.json");
   fs.writeFileSync(
     treasuryIdsPath,

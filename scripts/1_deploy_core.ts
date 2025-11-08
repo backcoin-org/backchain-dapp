@@ -3,6 +3,8 @@ import { HardhatRuntimeEnvironment } from "hardhat/types";
 import fs from "fs";
 import path from "path";
 
+// --- REMOVIDA A CORREÇÃO ESM (fileURLToPath) ---
+
 // Helper function for delays between deployments
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 const DEPLOY_DELAY_MS = 2000; // 2-second delay
@@ -20,6 +22,7 @@ export async function runScript(hre: HardhatRuntimeEnvironment) {
   const addresses: { [key: string]: string } = {};
 
   // Garante que o arquivo de endereços esteja limpo ou exista
+  // __dirname agora funciona nativamente (CommonJS)
   const addressesFilePath = path.join(__dirname, "../deployment-addresses.json");
   fs.writeFileSync(addressesFilePath, JSON.stringify({}, null, 2));
 

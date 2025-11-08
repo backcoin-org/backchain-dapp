@@ -1,36 +1,45 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.28;
 
-// Necessary imports
+// Imports for ERC721, Ownable, Reentrancy
 import "@openzeppelin/contracts/token/ERC721/extensions/ERC721Enumerable.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+
+// --- NEW IMPORTS FOR JSON GENERATION ---
+import "@openzeppelin/contracts/utils/Strings.sol";
+import "@openzeppelin/contracts/utils/Base64.sol";
+
+// Ecosystem Imports
 import "./BKCToken.sol";
-// <-- NEW: Import Hub and DM interfaces
 import "./EcosystemManager.sol";
 
 /**
  * @title DecentralizedNotary
  * @dev "Spoke" contract refactored to use EcosystemManager.
- * @notice All fees, pStake requirements, and discounts are now
- * managed by the EcosystemManager (Hub).
+ * @notice Fees, pStake, and discounts are now managed by the Hub.
+ * @notice NOW INCLUDES: User description and full on-chain metadata.
  */
 contract DecentralizedNotary is ERC721Enumerable, Ownable, ReentrancyGuard {
 
+    // --- NEW TOOLS FOR JSON ---
+    using Strings for uint256;
+
+    // --- Constants ---
+    uint256 public constant MAX_DESCRIPTION_LENGTH = 256;
+    
+    // --- Constante para conversão Hex ---
+    bytes16 private constant _HEX_SYMBOLS = "0123456789abcdef";
+
     // --- Ecosystem Contracts ---
     BKCToken public immutable bkcToken;
-    // <-- NEW: The Hub that manages the rules
     IEcosystemManager public immutable ecosystemManager;
-
-    // <-- REMOVED: delegationManager
-    // <-- REMOVED: treasuryWallet
-    // <-- REMOVED: minimumPStakeRequired
-    // <-- REMOVED: notarizeFeeBKC
-    // <-- REMOVED: treasuryFeeBips
 
     // --- NFT Storage ---
     uint256 private _tokenIdCounter;
     mapping(uint256 => string) private _documentURIs;
+    mapping(uint256 => uint256) private _mintTimestamps;
+    mapping(uint256 => string) private _userDescriptions;
 
     // --- State variable for Base URI ---
     string private _baseTokenURI;
@@ -42,94 +51,87 @@ contract DecentralizedNotary is ERC721Enumerable, Ownable, ReentrancyGuard {
         string documentURI,
         uint256 feePaid
     );
-    // <-- REMOVED: event NotarySettingsChanged
 
     /**
      * @dev Contract constructor.
-     * @notice Now receives the address of the Hub (EcosystemManager) and the Token.
      */
     constructor(
         address _bkcTokenAddress,
-        address _ecosystemManagerAddress, // <-- NEW
+        address _ecosystemManagerAddress,
         address _initialOwner
     ) ERC721("Backchain Notary Certificate", "BKCN") Ownable(_initialOwner) {
-
         require(
             _bkcTokenAddress != address(0) &&
-            _ecosystemManagerAddress != address(0), // <-- NEW
-            "Notary: Invalid addresses" // <-- CORRECTION: Translated message
+            _ecosystemManagerAddress != address(0),
+            "Notary: Invalid addresses"
         );
-
         bkcToken = BKCToken(_bkcTokenAddress);
-        ecosystemManager = IEcosystemManager(_ecosystemManagerAddress); // <-- NEW
+        ecosystemManager = IEcosystemManager(_ecosystemManagerAddress);
     }
 
     // --- Main Function (for Users) ---
 
     /**
-     * @notice Registers a document on the blockchain.
-     * @dev The user MUST have the minimum pStake defined in the Hub.
-     * @dev The fee is defined in the Hub, and the booster discount is applied.
+     * @notice Registers a document on the blockchain with a custom description.
      * @param _documentURI The hash or URI of the document (e.g., "ipfs://...").
-     * @param _boosterTokenId The user's Booster NFT tokenId (sent by the frontend).
-     * Send 0 if the user doesn't have or doesn't want to use a booster.
+     * @param _userDescription A description text up to 256 characters.
+     * @param _boosterTokenId The user's Booster NFT tokenId (0 if none).
      */
     function notarizeDocument(
         string calldata _documentURI,
-        uint256 _boosterTokenId // <-- NEW
+        string calldata _userDescription,
+        uint256 _boosterTokenId
     ) external nonReentrant {
         require(bytes(_documentURI).length > 0, "Notary: URI cannot be empty");
-
-        // 1. MASTER KEY: Authorizes and calculates the fee in ONE call
-        // This call checks pStake (reverts if insufficient)
-        // and returns the final fee with discount applied.
-        uint256 finalFee = ecosystemManager.authorizeService(
-            "NOTARY_SERVICE", // Service Key (you define this in the Hub)
-            msg.sender,       // The user to be checked
-            _boosterTokenId   // The "discount coupon"
+        
+        require(
+            bytes(_userDescription).length <= MAX_DESCRIPTION_LENGTH,
+            "Notary: Description exceeds 256 characters"
         );
-        // Although authorizeService should handle underflow, add check for safety
+
+        // 1. Authorize service and calculate final fee (with discount)
+        uint256 finalFee = ecosystemManager.authorizeService(
+            "NOTARY_SERVICE",
+            msg.sender,
+            _boosterTokenId
+        );
+
         require(finalFee >= 0, "Notary: Invalid fee calculated");
 
-        // 2. GET UPDATED ADDRESSES FROM HUB
+        // 2. Get addresses from Hub
         address treasuryWallet = ecosystemManager.getTreasuryAddress();
         address delegationManager = ecosystemManager.getDelegationManagerAddress();
-        require(treasuryWallet != address(0), "Notary: Treasury not configured in Hub");
-        require(delegationManager != address(0), "Notary: Delegation Manager not configured in Hub");
+        require(treasuryWallet != address(0), "Notary: Treasury not configured");
+        require(delegationManager != address(0), "Notary: DM not configured");
 
+        // 3. Fee Collection and Distribution (50/50)
+        if (finalFee > 0) {
+            require(bkcToken.transferFrom(msg.sender, address(this), finalFee), "Notary: Fee transfer failed");
+            
+            uint256 treasuryAmount = finalFee / 2;
+            uint256 delegatorAmount = finalFee - treasuryAmount;
 
-        // 3. COLLECTION AND DISTRIBUTION (50/50 Rule)
-
-        // Pull the final fee (already discounted) from the user
-        require(bkcToken.transferFrom(msg.sender, address(this), finalFee), "Notary: Fee transfer failed");
-
-        uint256 treasuryAmount = finalFee / 2;
-        uint256 delegatorAmount = finalFee - treasuryAmount; // Remainder goes to delegators
-
-        // A. Send 50% to Treasury
-        if (treasuryAmount > 0) {
-            require(bkcToken.transfer(treasuryWallet, treasuryAmount), "Notary: Treasury transfer failed");
+            if (treasuryAmount > 0) {
+                require(bkcToken.transfer(treasuryWallet, treasuryAmount), "Notary: Treasury transfer failed");
+            }
+            if (delegatorAmount > 0) {
+                bkcToken.approve(delegationManager, delegatorAmount);
+                IDelegationManager(delegationManager).depositRewards(0, delegatorAmount);
+            }
         }
 
-        // B. Send 50% to the Delegator pool (BUG FIX)
-        if (delegatorAmount > 0) {
-            // Approve the DM to pull the tokens
-            bkcToken.approve(delegationManager, delegatorAmount);
-            // Call the DM, which will now pull the tokens from this contract
-            IDelegationManager(delegationManager).depositRewards(0, delegatorAmount);
-        }
-
-        // 4. MINT NFT (Original logic)
+        // 4. Mint NFT and Store Data
         uint256 tokenId = _tokenIdCounter++;
         _documentURIs[tokenId] = _documentURI;
+        _mintTimestamps[tokenId] = block.timestamp;
+        _userDescriptions[tokenId] = _userDescription;
+
         _safeMint(msg.sender, tokenId);
 
         emit DocumentNotarized(msg.sender, tokenId, _documentURI, finalFee);
     }
 
     // --- Admin Functions (Owner) ---
-
-    // <-- REMOVED: setNotarySettings (Now done in EcosystemManager)
 
     function setBaseURI(string calldata newBaseURI) external onlyOwner {
         _baseTokenURI = newBaseURI;
@@ -142,36 +144,84 @@ contract DecentralizedNotary is ERC721Enumerable, Ownable, ReentrancyGuard {
     }
 
     /**
-     * @notice Returns the full token URI.
+     * @notice Returns the full token URI, generating on-chain JSON.
+     * @dev Builds an EIP-721 compatible JSON and Base64 encodes it.
+     * OPTIMIZED: Reduced local variables to avoid "Stack too deep" error.
      */
     function tokenURI(uint256 tokenId) public view override(ERC721) returns (string memory) {
         require(ownerOf(tokenId) != address(0), "ERC721: URI query for nonexistent token");
 
-        string memory base = _baseURI();
-        string memory docURI = _documentURIs[tokenId];
+        // Build JSON in parts to reduce stack pressure
+        return string(abi.encodePacked(
+            "data:application/json;base64,",
+            Base64.encode(bytes(_buildTokenJSON(tokenId)))
+        ));
+    }
+    
+    /**
+     * @dev Internal function to build the JSON metadata.
+     * Separated to reduce stack depth in tokenURI.
+     */
+    function _buildTokenJSON(uint256 tokenId) private view returns (string memory) {
+        // Build the attestation string
+        string memory attestation = string(abi.encodePacked(
+            "Notarized by backcoin.org decentralized notary on ",
+            _mintTimestamps[tokenId].toString(),
+            ", wallet ",
+            _addressToString(ownerOf(tokenId))
+        ));
 
-        // If base URI is not set, return document URI directly
-        if (bytes(base).length == 0) {
-            return docURI;
-        }
-
-        // If docURI is already absolute (starts with ipfs://, http://, https://), return it directly
-        // Corrected the check for http://
-        if (bytes(docURI).length >= 7) {
-            bytes memory docBytes = bytes(docURI);
-            if ((docBytes[0] == 'i' && docBytes[1] == 'p' && docBytes[2] == 'f' && docBytes[3] == 's' && docBytes[4] == ':' && docBytes[5] == '/' && docBytes[6] == '/') ||
-                (docBytes[0] == 'h' && docBytes[1] == 't' && docBytes[2] == 't' && docBytes[3] == 'p' && docBytes[4] == 's' && docBytes[5] == ':' && docBytes[6] == '/') ||
-                (docBytes[0] == 'h' && docBytes[1] == 't' && docBytes[2] == 't' && docBytes[3] == 'p' && docBytes[4] == ':' && docBytes[5] == '/' && docBytes[6] == '/')) {
-                return docURI;
-            }
-        }
-
-        // Otherwise, concatenate base URI and document URI
-        return string(abi.encodePacked(base, docURI));
+        // Build and return the complete JSON
+        return string(abi.encodePacked(
+            _buildJSONPart1(tokenId),
+            _buildJSONPart2(tokenId, attestation)
+        ));
     }
 
+    /**
+     * @dev Build first part of JSON (name, description, image)
+     */
+    function _buildJSONPart1(uint256 tokenId) private view returns (string memory) {
+        return string(abi.encodePacked(
+            '{',
+                '"name": "Backchain Notary Certificate #', tokenId.toString(), '",',
+                '"description": "', _userDescriptions[tokenId], '",',
+                '"image": "', _documentURIs[tokenId], '",'
+        ));
+    }
+
+    /**
+     * @dev Build second part of JSON (attributes)
+     */
+    function _buildJSONPart2(uint256 tokenId, string memory attestation) private view returns (string memory) {
+        return string(abi.encodePacked(
+                '"attributes": [',
+                    '{ "trait_type": "Timestamp", "display_type": "date", "value": ', 
+                    _mintTimestamps[tokenId].toString(), 
+                    ' },',
+                    '{ "trait_type": "Attestation", "value": "', attestation, '" }',
+                ']',
+            '}'
+        ));
+    }
+    
+    /**
+     * @dev Converts an address to its string representation (0x...).
+     */
+    function _addressToString(address account) private pure returns (string memory) {
+        bytes memory buffer = new bytes(42);
+        buffer[0] = "0";
+        buffer[1] = "x";
+        for (uint256 i = 0; i < 20; i++) {
+            uint8 b = uint8(bytes20(account)[i]);
+            buffer[2 + i * 2] = _HEX_SYMBOLS[b >> 4];
+            buffer[3 + i * 2] = _HEX_SYMBOLS[b & 0x0f];
+        }
+        return string(buffer);
+    }
+
+
     // --- Internal Functions (ERC721Enumerable Overrides) ---
-    // (Remain exactly as they were)
 
     function _update(address to, uint256 tokenId, address auth)
         internal

@@ -4,6 +4,8 @@ import fs from "fs";
 import path from "path";
 import { ethers } from "ethers";
 
+// --- REMOVIDA A CORREÇÃO ESM (fileURLToPath) ---
+
 // A FUNÇÃO PRINCIPAL É AGORA EXPORTADA
 export async function runScript(hre: HardhatRuntimeEnvironment) { // Mantendo HardhatRuntimeEnvironment se disponível
   const { ethers } = hre;
@@ -15,6 +17,7 @@ export async function runScript(hre: HardhatRuntimeEnvironment) { // Mantendo Ha
   console.log("----------------------------------------------------");
 
   // --- 1. Carregar Endereços ---
+  // __dirname agora funciona nativamente (CommonJS)
   const addressesFilePath = path.join(__dirname, "../deployment-addresses.json");
   if (!fs.existsSync(addressesFilePath)) {
     console.error("❌ Erro: 'deployment-addresses.json' não encontrado.");

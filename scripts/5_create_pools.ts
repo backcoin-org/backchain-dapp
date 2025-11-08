@@ -3,6 +3,8 @@ import { HardhatRuntimeEnvironment } from "hardhat/types";
 import fs from "fs";
 import path from "path";
 
+// --- REMOVIDA A CORREÇÃO ESM (fileURLToPath) ---
+
 // --- ⚙️ CONFIGURATION ---
 // Esta lista DEVE corresponder aos descontos imutáveis
 // definidos no EcosystemManager.
@@ -28,6 +30,7 @@ export async function runScript(hre: HardhatRuntimeEnvironment) {
   console.log("----------------------------------------------------");
 
   // --- 1. Carregar Endereço ---
+  // __dirname agora funciona nativamente (CommonJS)
   const addressesFilePath = path.join(__dirname, "../deployment-addresses.json");
   if (!fs.existsSync(addressesFilePath)) {
     console.error("❌ Erro: 'deployment-addresses.json' não encontrado. O Passo 1 falhou?");

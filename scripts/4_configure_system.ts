@@ -4,6 +4,8 @@ import { ethers } from "ethers";
 import fs from "fs";
 import path from "path";
 
+// --- REMOVIDA A CORREÇÃO ESM (fileURLToPath) ---
+
 // Helper function for delays between deployments
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 const CONFIG_DELAY_MS = 1500; // 1.5-second delay
@@ -27,6 +29,7 @@ export async function runScript(hre: any) { // Usamos 'any' para facilitar a tip
   // ######################################################
   // ### 1. CARREGAR ENDEREÇOS DO DISCO ###
   // ######################################################
+  // __dirname agora funciona nativamente (CommonJS)
   const addressesFilePath = path.join(__dirname, "../deployment-addresses.json");
   if (!fs.existsSync(addressesFilePath)) {
     throw new Error("Missing deployment-addresses.json");
@@ -34,7 +37,6 @@ export async function runScript(hre: any) { // Usamos 'any' para facilitar a tip
   const addresses: { [key: string]: string } = JSON.parse(fs.readFileSync(addressesFilePath, "utf8"));
   
   // --- Validar CIDs (Verificação de segurança) ---
-  // A verificação de segurança original foi removida/simplificada, pois você forneceu os CIDs
   if (
     IPFS_BASE_URI_VESTING.includes("YOUR_CID") ||
     IPFS_BASE_URI_BOOSTERS.includes("YOUR_CID")

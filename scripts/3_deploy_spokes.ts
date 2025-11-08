@@ -4,6 +4,8 @@ import fs from "fs";
 import path from "path";
 import { ethers } from "ethers";
 
+// --- REMOVIDA A CORREÇÃO ESM (fileURLToPath) ---
+
 // Helper function for delays
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 const DEPLOY_DELAY_MS = 2000; // 2-second delay
@@ -19,6 +21,7 @@ export async function runScript(hre: HardhatRuntimeEnvironment) { // Mantendo Ha
   console.log("----------------------------------------------------");
 
   // --- 1. Carregar Endereços Existentes ---
+  // __dirname agora funciona nativamente (CommonJS)
   const addressesFilePath = path.join(__dirname, "../deployment-addresses.json");
   if (!fs.existsSync(addressesFilePath)) {
     console.error("❌ Erro: 'deployment-addresses.json' não encontrado.");

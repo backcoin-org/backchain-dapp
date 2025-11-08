@@ -11,6 +11,8 @@ import { runScript as run5_create_pools } from "./5_create_pools";
 import { runScript as run6_setup_sale } from "./6_setup_sale";
 import { runScript as run7_configure_fees } from "./7_configure_fees";
 import { runScript as run8_add_liquidity } from "./8_add_liquidity"; // Incluído para completar a lista, mas será executado manualmente.
+// --- ATUALIZAÇÃO: Importação do script 9 ---
+import { runScript as run9_verify_contracts } from "./9_verify_contracts";
 
 
 // --- 📋 SEQUÊNCIA DE EXECUÇÃO ---
@@ -23,6 +25,10 @@ const SCRIPT_SEQUENCE = [
     { name: "5_create_pools.ts", func: run5_create_pools, description: "Criação das Estruturas de Pool AMM" },
     { name: "6_setup_sale.ts", func: run6_setup_sale, description: "Configuração da Pré-Venda e Cunhagem da Tesouraria" },
     { name: "7_configure_fees.ts", func: run7_configure_fees, description: "Definição de Todas as Taxas e pStake Mínimos no Hub" },
+    
+    // --- ATUALIZAÇÃO: Passo 9 adicionado à sequência ---
+    { name: "9_verify_contracts.ts", func: run9_verify_contracts, description: "Verificação dos Contratos no Etherscan/BscScan", isTest: false },
+
     // O Passo 8 é manual (Pós-Venda) e não deve ser executado automaticamente, mas está aqui para referência.
     // { name: "8_add_liquidity.ts", func: run8_add_liquidity, description: "Adição de Liquidez Pós-Venda e Renúncia de Posse", isManual: true },
 ];

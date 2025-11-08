@@ -4,6 +4,8 @@ import fs from "fs";
 import path from "path";
 import { ethers } from "ethers";
 
+// --- REMOVIDA A CORREÇÃO ESM (fileURLToPath) ---
+
 // Helper function for delays
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 const CONFIG_DELAY_MS = 1500; // 1.5-second delay
@@ -93,6 +95,7 @@ export async function runScript(hre: HardhatRuntimeEnvironment) {
   console.log("----------------------------------------------------");
 
   // --- 1. Carregar Endereços ---
+  // __dirname agora funciona nativamente (CommonJS)
   const addressesFilePath = path.join(__dirname, "../deployment-addresses.json");
   if (!fs.existsSync(addressesFilePath)) {
     console.error("❌ Erro: 'deployment-addresses.json' não encontrado.");
@@ -249,8 +252,10 @@ async function setService(manager: any, serviceKey: string, feeValue: number | b
 // ====================================================================
 // =================== Bloco de execução standalone ==================
 // ====================================================================
+// (Bloco 'if (require.main === module)' mantido para execução individual)
 if (require.main === module) {
   console.log("Executando 7_configure_fees.ts como script standalone...");
+  // Importação dinâmica mantida, pois é CJS
   import("hardhat").then(hre => {
     runScript(hre)
       .then(() => process.exit(0))
