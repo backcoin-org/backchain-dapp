@@ -1,6 +1,10 @@
 // pages/DashboardPage.js
 // ARQUIVO CORRIGIDO
 // - Importação de 'loadMyCertificates' atualizada para 'loadMyCertificatesFromAPI'
+// - CORREÇÃO (renderMyCertificatesDashboard): Lógica de busca de imagem corrigida para usar tokenURI individual.
+// - CORREÇÃO (renderMyCertificatesDashboard): Remoção do caractere '}' extra no HTML.
+// - CORREÇÃO (renderMyCertificatesDashboard): Removida lógica de "tierColor" (Bronze, Gold, etc.). Todos os certificados usam a cor padrão.
+// - CORREÇÃO (renderActivityItem): Implementado parser de 'item.amount' robusto (FixedNumber) para ler valores em Wei (10^18) e corrigir bug do "0.00".
 
 const ethers = window.ethers;
 
@@ -562,6 +566,9 @@ async function renderMyDelegations() {
     }
 }
 
+// =================================================================
+// ### INÍCIO DAS CORREÇÕES (Certificados) ###
+// =================================================================
 async function renderMyCertificatesDashboard() {
     const listEl = document.getElementById('my-certificates-list');
     if (!listEl) return;
@@ -573,11 +580,6 @@ async function renderMyCertificatesDashboard() {
         const certificates = State.myCertificates;
 
         if (!certificates || certificates.length === 0) { renderNoData(listEl, "No vesting certificates found."); return; }
-
-        const VESTING_CERT_BASE_URI_FULL = await safeContractCall(State.rewardManagerContract, 'tokenURI', [1], "")
-            .catch(() => "ipfs://bafybeiew62trbumuxfta36hh7tz7pdzhnh73oh6lnsrxx6ivq5mxpwyo24/vesting_cert.json"); // Fallback
-        
-        const VESTING_CERT_BASE_URI = VESTING_CERT_BASE_URI_FULL.substring(0, VESTING_CERT_BASE_URI_FULL.lastIndexOf('/') + 1);
         
         const rewardManagerAddress = State.rewardManagerContract.target || addresses.rewardManager;
         const vestingDuration = Number(await safeContractCall(State.rewardManagerContract, 'VESTING_DURATION', [], 5n * 365n * 86400n));
@@ -587,6 +589,12 @@ async function renderMyCertificatesDashboard() {
             const position = await safeContractCall(State.rewardManagerContract, 'vestingPositions', [tokenId], {totalAmount: 0n, startTime: 0n});
             if (position.startTime === 0n) return '';
 
+            const tokenURI = await safeContractCall(State.rewardManagerContract, 'tokenURI', [tokenId], "");
+            if (!tokenURI) {
+                console.warn(`Could not get tokenURI for certificate ${tokenId}`);
+                return ''; // Pula este certificado se a URI não for encontrada
+            }
+            
             const totalAmount = position.totalAmount;
             const startTime = Number(position.startTime);
             const endTime = startTime + vestingDuration;
@@ -599,17 +607,11 @@ async function renderMyCertificatesDashboard() {
             const isVested = now >= endTime;
             const progress = Math.min(100, Math.floor(((now - startTime) * 100) / vestingDuration));
 
-            let metadataFileName = 'vesting_cert.json'; 
-            let tierColor = 'text-cyan-400';
-            if (formattedAmount > 10000) { metadataFileName = 'diamond.json'; tierColor = 'text-cyan-400';
-            } else if (formattedAmount > 5000) { metadataFileName = 'gold.json'; tierColor = 'text-amber-400';
-            } else if (formattedAmount > 1000) { metadataFileName = 'silver.json'; tierColor = 'text-gray-400';
-            } else { metadataFileName = 'bronze.json'; tierColor = 'text-yellow-600'; }
-
-
-            const tokenURI = VESTING_CERT_BASE_URI + metadataFileName;
-            let imageUrl = './assets/bkc_logo_3d.png'; 
+            let imageUrl = './assets/bkc_logo_3d.png'; // Imagem de fallback
             let displayName = `Vesting Certificate #${tokenId.toString()}`;
+            
+            // [CORREÇÃO]: A cor agora é padronizada, conforme sua observação.
+            let tierColor = 'text-cyan-400'; // Cor padrão para todos os certificados
 
             try {
                 const response = await fetch(tokenURI.replace("ipfs://", ipfsGateway));
@@ -617,8 +619,10 @@ async function renderMyCertificatesDashboard() {
                     const metadata = await response.json();
                     imageUrl = metadata.image ? metadata.image.replace("ipfs://", ipfsGateway) : imageUrl;
                     displayName = metadata.name || displayName;
+                    
+                    // [CORREÇÃO]: Lógica de cor baseada em nome (Bronze, Gold, etc.) foi REMOVIDA.
                 }
-            } catch (e) { console.warn(`Could not fetch certificate metadata (${tokenId}):`, e); }
+            } catch (e) { console.warn(`Could not fetch certificate metadata (${tokenId}) from ${tokenURI}:`, e); }
             
             const initialPenaltyBips = Number(await safeContractCall(State.rewardManagerContract, 'INITIAL_PENALTY_BIPS', [], 5000n));
             let penaltyAmount = 0n;
@@ -634,7 +638,8 @@ async function renderMyCertificatesDashboard() {
                          <img src="${imageUrl}" alt="${displayName}" class="w-12 h-12 rounded-md object-cover nft-clickable-image" data-address="${rewardManagerAddress}" data-tokenid="${tokenId.toString()}">
                          <div class="flex-1 min-w-0">
                             <p class="font-bold ${tierColor} truncate text-lg">${displayName}</p>
-                            <p class="text-xl font-bold text-amber-400 mt-1">${formattedAmount.toFixed(2)} $BKC}</p>
+                            
+                            <p class="text-xl font-bold text-amber-400 mt-1">${formattedAmount.toFixed(2)} $BKC</p>
                         </div>
                     </div>
                     
@@ -671,8 +676,14 @@ async function renderMyCertificatesDashboard() {
         renderError(listEl, "Failed to load certificates.");
     }
 }
+// =================================================================
+// ### FIM DAS CORREÇÕES (Certificados) ###
+// =================================================================
 
-// (Função renderActivityItem - Corrigida)
+
+// =================================================================
+// ### INÍCIO DAS CORREÇÕES (Histórico "0.00") ###
+// =================================================================
 function renderActivityItem(item) {
     let timestamp;
     if (typeof item.timestamp === 'object' && item.timestamp._seconds) {
@@ -685,21 +696,31 @@ function renderActivityItem(item) {
     const time = new Date(timestamp * 1000).toLocaleTimeString("en-US", { hour: '2-digit', minute: '2-digit' });
     let title = 'On-chain Action', icon = 'fa-exchange-alt', color = 'text-zinc-500', details = 'General transaction.';
     
-    // =================================================================
-    // ### CORREÇÃO CRÍTICA DO ReferenceError: itemId is not defined ###
-    let itemId = null; // Inicializa a variável itemId (Correção do ReferenceError)
-    // =================================================================
+    let itemId = null; 
 
+    // [CORREÇÃO]: Lógica de parsing do 'item.amount' substituída por uma versão robusta
+    // que lida com números grandes e notação científica (ex: 1.1e+20) vindos da API.
     let itemAmount = 0n;
     try {
-        if (typeof item.amount === 'string' && item.amount.includes('.')) {
-            itemAmount = ethers.parseUnits(item.amount, 18);
-        } else if (item.amount) {
-            itemAmount = BigInt(item.amount);
+        if (item.amount) {
+            // Converte 'item.amount' para string para garantir.
+            const amountStr = item.amount.toString();
+            
+            // Se for notação científica (ex: "1.1e+20") ou um número com decimal (improvável para Wei, mas seguro)
+            if (amountStr.includes('e') || amountStr.includes('.')) {
+                 // FixedNumber é a forma mais segura de converter para BigInt sem perder precisão.
+                 // Usamos floor() para garantir que peguemos a parte inteira do Wei.
+                 itemAmount = ethers.FixedNumber.fromString(amountStr).floor().toBigInt();
+            } else {
+                 // É um string de inteiro (ex: "110000000000000000000"), BigInt lida com isso.
+                 itemAmount = BigInt(amountStr);
+            }
         }
     } catch (e) {
         console.warn("Could not parse activity amount from API:", item.amount, e);
+        // itemAmount permanece 0n se a conversão falhar
     }
+    // FIM DA CORREÇÃO
     
     const formattedAmount = formatBigNumber(itemAmount).toFixed(2);
     const itemDetails = item.details || {};
@@ -770,14 +791,12 @@ function renderActivityItem(item) {
              icon = 'fa-question-circle';
              color = 'text-zinc-500';
              details = item.description || `Activity of type ${item.type}`;
-             // Garante que itemId seja nulo no caso default
              itemId = null;
              break;
     }
     const txHash = item.txHash;
     let Tag, tagAttributes, hoverClass, cursorClass, actionIndicator = '';
     
-    // A função de busca preguiçosa (lazy search) agora é ativada se txHash não estiver presente
     const supportsLazySearch = ['Delegation', 'VestingCertReceived', 'Unstake', 'ForceUnstake', 'CertificateWithdrawn', 'NFTBuy', 'NFTSell', 'PublicSaleBuy', 'NotaryRegister'].includes(item.type);
     
     if (txHash) {
@@ -805,10 +824,10 @@ function renderActivityItem(item) {
         </${Tag}>
     `;
 }
+// =================================================================
+// ### FIM DAS CORREÇÕES (Histórico "0.00") ###
+// =================================================================
 
-// =================================================================
-// ### FUNÇÃO ATUALIZADA: renderActivityHistory (CORREÇÃO DE URL) ###
-// =================================================================
 async function renderActivityHistory() {
     const listEl = document.getElementById('activity-history-list-container');
     if (!listEl) { console.warn("History container not found"); return; }
@@ -817,13 +836,10 @@ async function renderActivityHistory() {
     renderLoading(listEl);
     
     try {
-        // ### CORREÇÃO: Usa o endpoint COMPLETO e ESPECÍFICO do getHistory ###
         const historyUrl = `${API_ENDPOINTS.getHistory}/${State.userAddress}`;
         const response = await fetch(historyUrl);
-        // ### FIM DA CORREÇÃO ###
         
         if (!response.ok) {
-            // NOTE: A função getHistory usa o novo formato /getHistory/{address}
             throw new Error(`API (getHistory) Error: ${response.statusText} (${response.status})`);
         }
         
@@ -844,9 +860,6 @@ async function renderActivityHistory() {
         renderError(listEl, "Failed to load activity history.");
     }
 }
-// =================================================================
-// ### FIM DA SUBSTITUIÇÃO ###
-// =================================================================
 
 
 // ==================================================================

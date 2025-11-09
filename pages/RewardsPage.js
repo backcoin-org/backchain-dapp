@@ -1,6 +1,4 @@
 // pages/RewardsPage.js
-// ARQUIVO CORRIGIDO
-// - Importação de 'loadMyCertificates' atualizada para 'loadMyCertificatesFromAPI'
 
 import { DOMElements } from '../dom-elements.js'; 
 import { State } from '../state.js';
@@ -14,13 +12,14 @@ import { startCountdownTimers, addNftToWallet } from '../ui-feedback.js';
 import { addresses } from '../config.js';
 
 
-// Base URI para os metadados dos Certificados de Vesting (do configureSystem.ts)
-const VESTING_CERT_BASE_URI = "ipfs://bafybeiew62trbumuxfta36hh7tz7pdzhnh73oh6lnsrxx6ivq5mxpwyo24/";
+// [REMOVIDO]: A VESTING_CERT_BASE_URI não é mais necessária, pois buscamos a URI completa.
 
 let rewardsCurrentPage = 1;
 const ITEMS_PER_PAGE = 6; 
 
-// --- Função Auxiliar para obter HTML do Certificado (Mantida) ---
+// =================================================================
+// ### INÍCIO DA CORREÇÃO (getFullCertificateHTML) ###
+// =================================================================
 async function getFullCertificateHTML(certificate) {
     const { tokenId } = certificate;
 
@@ -41,38 +40,32 @@ async function getFullCertificateHTML(certificate) {
     const elapsedTime = Math.max(0, now - startTime);
     const progress = Math.min(100, Math.floor((elapsedTime * 100) / vestingDuration));
 
-    // Determinar o tier com base no valor
-    let tierName = 'bronze';
-    let metadataFileName = 'bronze.json';
-    let tierColor = 'text-yellow-600';
+    // [CORREÇÃO]: Lógica de "tier" (Bronze, Gold, etc.) baseada em valor foi REMOVIDA.
 
-    if (formattedAmount > 10000) {
-        tierName = 'diamond';
-        metadataFileName = 'diamond.json';
-        tierColor = 'text-cyan-400';
-    } else if (formattedAmount > 5000) {
-        tierName = 'gold';
-        metadataFileName = 'gold.json';
-        tierColor = 'text-amber-400';
-    } else if (formattedAmount > 1000) {
-        tierName = 'silver';
-        metadataFileName = 'silver.json';
-        tierColor = 'text-gray-400';
+    // [CORREÇÃO]: Buscar a tokenURI real do contrato
+    const tokenURI = await safeContractCall(State.rewardManagerContract, 'tokenURI', [tokenId], "");
+    if (!tokenURI) {
+        console.warn(`Could not get tokenURI for certificate ${tokenId}`);
+        return ''; // Não renderiza se a URI não for encontrada
     }
 
-    // Construir a URI e buscar metadados
-    const tokenURI = VESTING_CERT_BASE_URI + metadataFileName;
+    // Definir valores padrão
     let imageUrl = './assets/bkc_logo_3d.png'; 
+    // [CORREÇÃO]: O nome de exibição é sempre o genérico.
     let displayName = `Vesting Certificate #${tokenId.toString()}`; 
+    // [CORREÇÃO]: A cor é sempre a padrão.
+    let tierColor = 'text-cyan-400';
 
     try {
+        // [CORREÇÃO]: Usar a tokenURI real
         const response = await fetch(tokenURI.replace("ipfs://", ipfsGateway)); 
         if (response.ok) {
             const metadata = await response.json();
             imageUrl = metadata.image ? metadata.image.replace("ipfs://", ipfsGateway) : imageUrl; 
-            displayName = metadata.name || displayName;
+            // [CORREÇÃO]: A linha 'displayName = metadata.name || displayName;' foi REMOVIDA
+            // para forçar o nome genérico, mas mantendo a imagem correta.
         } else {
-            console.warn(`Metadata not found for ${tierName} certificate (${tokenId}): ${response.status}`);
+            console.warn(`Metadata not found for certificate (${tokenId}): ${response.status}`);
         }
     } catch (e) {
         console.warn(`Could not fetch certificate metadata for ${tokenId}:`, e);
@@ -127,6 +120,10 @@ async function getFullCertificateHTML(certificate) {
         </div>
     `;
 }
+// =================================================================
+// ### FIM DA CORREÇÃO ###
+// =================================================================
+
 
 // --- Funções de Renderização da Página (Mantidas) ---
 async function renderPaginatedCertificates(page) {

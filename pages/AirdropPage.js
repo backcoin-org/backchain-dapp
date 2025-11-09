@@ -515,10 +515,10 @@ async function handleResolveSubmission(e) {
 }
 
 // ==========================================================
-//  INÍCIO DA ALTERAÇÃO (Modal de Confirmação)
+//  INÍCIO DA CORREÇÃO (Bug do Modal)
 // ==========================================================
 
-// --- [MODAL] Função para abrir o modal de confirmação (MODIFICADO) ---
+// --- [MODAL] Função para abrir o modal de confirmação (CORRIGIDA) ---
 /**
  * Abre o modal de confirmação
  * @param {object} submission O objeto da submissão (contém submissionId e url)
@@ -529,7 +529,15 @@ function openConfirmationModal(submission) {
     }
     
     const modalTitle = "Confirm Post Authenticity";
+    
+    // 1. AQUI ESTÁ A MUDANÇA:
+    // Nós montamos o HTML COMPLETO, incluindo o título, em UMA variável.
     const modalContent = `
+        <div class="flex justify-between items-start mb-6 border-b border-zinc-700 pb-4">
+            <h3 class="text-2xl font-bold text-white">${modalTitle}</h3>
+            <button class="closeModalBtn text-zinc-400 hover:text-white text-3xl leading-none">&times;</button>
+        </div>
+
         <p class="text-zinc-300 text-sm mb-4 text-center">
              Your post must be <strong class="text-amber-400">public</strong> and include your referral link + hashtags.
         </p>
@@ -551,19 +559,17 @@ function openConfirmationModal(submission) {
         </div>
     `;
 
-    // O bug do texto "shadow-2xl..." NÃO é daqui.
-    // Ele provavelmente vem da sua função 'openModal' em 'ui-feedback.js'
-    // ou do seu HTML principal, que pode estar injetando um título antigo ou texto de debug.
-    openModal(modalTitle, modalContent, 'confirm-post-modal');
+    // 2. Chamamos 'openModal' com a assinatura correta: (content, maxWidth)
+    openModal(modalContent, 'max-w-md'); 
+
+    // ==========================================================
+    //  FIM DA CORREÇÃO
+    // ==========================================================
 
     // Adiciona listeners aos botões do modal
     document.getElementById('cancelConfirmBtn')?.addEventListener('click', closeModal);
     document.getElementById('finalConfirmBtn')?.addEventListener('click', handleConfirmAuthenticity);
 }
-
-// ==========================================================
-//  FIM DA ALTERAÇÃO
-// ==========================================================
 
 
 // --- [MODAL] Função chamada pelo botão "Confirm Authenticity" do modal ---

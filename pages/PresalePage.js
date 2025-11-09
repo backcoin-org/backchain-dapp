@@ -1,4 +1,8 @@
 // pages/PresalePage.js
+// ARQUIVO CORRIGIDO
+// - CORREÇÃO: Preços no PRESALE_CONFIG revertidos para "BNB"
+//   conforme a solicitação do usuário.
+// - O loader do botão (fa-spinner) foi mantido.
 
 const ethers = window.ethers;
 import { DOMElements } from '../dom-elements.js';
@@ -6,7 +10,9 @@ import { State } from '../state.js';
 import { showToast } from '../ui-feedback.js';
 import { addresses, publicSaleABI } from '../config.js';
 
-// --- CONFIGURAÇÃO (ATUALIZADA com texto do timer em INGLÊS) ---
+// =================================================================
+// ### INÍCIO DA CORREÇÃO (Preços de BNB) ###
+// =================================================================
 const PRESALE_CONFIG = {
     countdownDate: "2025-11-20T23:59:59",
     nftTiers: [
@@ -14,8 +20,8 @@ const PRESALE_CONFIG = {
             id: 0, 
             name: "Diamond", 
             boost: "+50%", 
-            price: "7.20 BNB", 
-            discountedPrice: "3.60 BNB", 
+            price: "7.20 BNB", // Revertido para BNB
+            discountedPrice: "3.60 BNB", // Revertido para BNB
             img: "ipfs://bafybeign2k73pq5pdicg2v2jdgumavw6kjmc4nremdenzvq27ngtcusv5i", 
             color: "text-cyan-400", 
             advantages: [
@@ -30,8 +36,8 @@ const PRESALE_CONFIG = {
             id: 1, 
             name: "Platinum", 
             boost: "40%", 
-            price: "2.88 BNB", 
-            discountedPrice: "1.44 BNB", 
+            price: "2.88 BNB", // Revertido para BNB
+            discountedPrice: "1.44 BNB", // Revertido para BNB
             img: "ipfs://bafybeiag32gp4wssbjbpxjwxewer64fecrtjryhmnhhevgec74p4ltzrau", 
             color: "text-gray-300", 
             advantages: [
@@ -46,8 +52,8 @@ const PRESALE_CONFIG = {
             id: 2, 
             name: "Gold", 
             boost: "30%", 
-            price: "1.08 BNB", 
-            discountedPrice: "0.54 BNB", 
+            price: "1.08 BNB", // Revertido para BNB
+            discountedPrice: "0.54 BNB", // Revertido para BNB
             img: "ipfs://bafybeido6ah36xn4rpzkvl5avicjzf225ndborvx726sjzpzbpvoogntem", 
             color: "text-amber-400", 
             advantages: [
@@ -62,8 +68,8 @@ const PRESALE_CONFIG = {
             id: 3, 
             name: "Silver", 
             boost: "20%", 
-            price: "0.54 BNB", 
-            discountedPrice: "0.27 BNB", 
+            price: "0.54 BNB", // Revertido para BNB
+            discountedPrice: "0.27 BNB", // Revertido para BNB
             img: "ipfs://bafybeiaktaw4op7zrvsiyx2sghphrgm6sej6xw362mxgu326ahljjyu3gu", 
             color: "text-gray-400", 
             advantages: [
@@ -77,8 +83,8 @@ const PRESALE_CONFIG = {
             id: 4, 
             name: "Bronze", 
             boost: "10%", 
-            price: "0.288 BNB", 
-            discountedPrice: "0.144 BNB", 
+            price: "0.288 BNB", // Revertido para BNB
+            discountedPrice: "0.144 BNB", // Revertido para BNB
             img: "ipfs://bafybeifkke3zepb4hjutntcv6vor7t2e4k5oseaur54v5zsectcepgseye", 
             color: "text-yellow-600", 
             advantages: [
@@ -91,8 +97,8 @@ const PRESALE_CONFIG = {
             id: 5, 
             name: "Iron", 
             boost: "5%", 
-            price: "0.14 BNB", 
-            discountedPrice: "0.07 BNB", 
+            price: "0.14 BNB", // Revertido para BNB
+            discountedPrice: "0.07 BNB", // Revertido para BNB
             img: "ipfs://bafybeidta4mytpfqtnnrspzij63m4lcnkp6l42m7hnhyjxioci5jhcf3vm", 
             color: "text-slate-500", 
             advantages: [
@@ -104,8 +110,8 @@ const PRESALE_CONFIG = {
             id: 6, 
             name: "Crystal", 
             boost: "1%", 
-            price: "0.02 BNB", 
-            discountedPrice: "0.01 BNB", 
+            price: "0.02 BNB", // Revertido para BNB
+            discountedPrice: "0.01 BNB", // Revertido para BNB
             img: "ipfs://bafybeiela7zrsnyva47pymhmnr6dj2aurrkwxhpwo7eaasx3t24y6n3aay", 
             color: "text-indigo-300", 
             advantages: [
@@ -124,9 +130,7 @@ const PRESALE_CONFIG = {
             heroSubtitle: `The Booster NFT is a one-time item that guarantees permanent utility within the Backchain ecosystem. Acquire yours at a 50% discount during Batch 1.`,
             heroBtn1: "View Sale",
             heroBtn2: "Core Benefits",
-            
             heroStockBar: "Batch 1 Progress:", 
-
             keyBenefitsTag: "MAXIMIZE YOUR RETURN",
             keyBenefitsTitle: "Instant Utility & Guaranteed Value.",
             keyBenefitsSubtitle: "Your Booster NFT is the key to maximizing rewards and enjoying unparalleled stability in the ecosystem.",
@@ -141,7 +145,7 @@ const PRESALE_CONFIG = {
             
             saleTag: "BATCH 1: 50% DISCOUNT",
             saleTitle: "Choose Your Power",
-            saleTimerTitle: "Time Remaining Until Batch 2 Price (50% Increase):", // <<< TEXTO CORRIGIDO AQUI
+            saleTimerTitle: "Time Remaining Until Batch 2 Price (50% Increase):", 
             countdownDays: "D", countdownHours: "H", countdownMinutes: "M", countdownSeconds: "S",
             cardPriceBatch2: "Batch 2 Price:",
             cardPriceBatch1: "Batch 1 (50% OFF):",
@@ -154,11 +158,14 @@ const PRESALE_CONFIG = {
         }
     }
 };
+// =================================================================
+// ### FIM DA CORREÇÃO ###
+// =================================================================
+
 
 let currentLang = 'en';
 let countdownInterval = null;
 let hasRendered = false;
-let hasInitialized = false;
 
 // --- Funções de Lógica e UI (Mantidas) ---
 
@@ -217,11 +224,20 @@ function updateTotalPrice(card) {
     }
 
     const pricePerItem = parseFloat(priceString.split(" ")[0]);
-    const totalPrice = (pricePerItem * quantity).toFixed(4);
-    const formattedTotalPrice = parseFloat(totalPrice).toString(); 
-    const buyText = translation.cardBtnBuy || "Acquire Now";
+    const totalPrice = (pricePerItem * quantity);
     
-    buyButton.innerHTML = `<i class='fa-solid fa-cart-shopping mr-2'></i>${buyText} (${formattedTotalPrice} BNB)`;
+    // Formatação mais robusta para números pequenos
+    let formattedTotalPrice;
+    if (totalPrice < 0.0001) {
+        formattedTotalPrice = totalPrice.toExponential(2); 
+    } else {
+        formattedTotalPrice = parseFloat(totalPrice.toFixed(4)).toString(); // Revertido para 4 casas decimais para BNB
+    }
+
+    const buyText = translation.cardBtnBuy || "Acquire Now";
+    const currency = priceString.split(" ")[1] || "BNB"; // Pega a moeda (BNB)
+    
+    buyButton.innerHTML = `<i class='fa-solid fa-cart-shopping mr-2'></i>${buyText} (${formattedTotalPrice} ${currency})`;
     buyButton.dataset.dynamicContent = "true";
 }
 
@@ -241,9 +257,12 @@ async function handleBuyNFT(button) {
     
     try {
         button.disabled = true;
-        button.innerHTML = `<span class="loader !border-t-black mr-2"></span> ${translations.txPending}`;
+        
+        // (Loader spinner mantido)
+        button.innerHTML = `<i class="fa-solid fa-spinner fa-spin mr-2"></i> ${translations.txPending}`;
         
         const discountedPriceString = PRESALE_CONFIG.nftTiers.find(t => t.id == tierId)?.discountedPrice || priceString;
+        
         const pricePerItem = ethers.parseUnits(discountedPriceString.split(" ")[0], 18);
         const totalPrice = pricePerItem * BigInt(quantity);
         
@@ -261,7 +280,8 @@ async function handleBuyNFT(button) {
         if (error.code === 'INSUFFICIENT_FUNDS') { errorMessage = translations.insufficientFunds; }
         else if (error.code === 4001 || error.code === 'ACTION_REJECTED') { errorMessage = translations.userRejected; }
         else if (error.reason) {
-             if (error.reason.includes("Valor BNB incorreto")) { errorMessage = "Incorrect BNB value sent."; }
+             // [CORREÇÃO]: Mensagem de erro revertida para "BNB"
+             if (error.reason.includes("Valor BNB incorreto")) { errorMessage = "Incorrect BNB value sent."; } 
              else { errorMessage = error.reason; }
         } else if (error.data?.message) { errorMessage = error.data.message; }
         else { errorMessage = error.message || translations.txRejected; }
@@ -308,13 +328,8 @@ function setupCountdown() {
 }
 
 function setupScrollAnimations() {
-    // CORREÇÃO: Remove a lógica de IntersectionObserver para garantir que o conteúdo seja visível.
-    // Se a classe CSS 'fade-in-section' está causando opacidade zero ou translação,
-    // o conteúdo não aparecerá. Vamos apenas ignorar a animação aqui.
     document.querySelectorAll('#presale .fade-in-section').forEach(section => { 
         section.classList.add('is-visible'); 
-        // Se a classe 'is-visible' não existir, é melhor não fazer nada
-        // Mas se houver uma classe 'fade-out' ou 'opacity-0' na seção, ela deve ser removida no CSS base.
     });
 }
 
@@ -386,68 +401,9 @@ function renderMarketplace() {
 // --- Exported Page Object ---
 
 export const PresalePage = {
-    // --- render() (HTML COM CORES DE FUNDO EXPLÍCITAS E ANIMAÇÃO REMOVIDA) ---
     render: () => {
-        // CORREÇÃO: Força a renderização completa na primeira vez.
         const html = `
             <main id="presale-content" class="relative pb-20">
-                
-                <section class="relative text-center py-24 lg:py-32 px-4 overflow-hidden" style="background-color: var(--presale-bg-darker);">
-                   <div class="absolute inset-0 bg-gradient-to-b from-presale-bg-darker via-presale-bg-darker/80 to-transparent z-0"></div>
-                   <div class="relative z-10">
-                       <h1 class="text-5xl md:text-7xl font-black mb-6 tracking-tighter leading-tight">
-                           <span data-translate="heroTitle1"></span>
-                           <span class="block presale-text-gradient" data-translate="heroTitle2"></span>
-                       </h1>
-                       <p class="text-lg md:text-xl text-text-secondary max-w-3xl mx-auto mb-10" data-translate="heroSubtitle"></p>
-                       <div class="flex flex-col sm:flex-row items-center justify-center gap-4 mb-10">
-                           <a href="#sale" class="w-full sm:w-auto inline-block btn-primary font-bold py-4 px-10 rounded-lg text-lg transform hover:scale-105 transition-transform">
-                               <i class="fa-solid fa-tags mr-2"></i> <span data-translate="heroBtn1"></span>
-                           </a>
-                           <a href="#key-benefits-section" class="w-full sm:w-auto inline-block bg-transparent border-2 border-presale-border-color hover:bg-presale-bg-card text-text-primary font-bold py-4 px-10 rounded-lg text-lg transition-colors" data-translate="heroBtn2">
-                           </a>
-                       </div>
-                       <div class="max-w-xl mx-auto mt-10">
-                            <p class="font-bold text-lg mb-3 text-red-400" data-translate="heroStockBar"></p>
-                            <div class="w-full bg-presale-bg-card border border-presale-border-color rounded-full h-4 overflow-hidden">
-                               <div id="presale-progress-bar" class="bg-gradient-to-r from-red-500 to-amber-500 h-4" style="width: 10%;"></div>
-                            </div>
-                       </div>
-                   </div>
-                </section>
-                
-                <section id="key-benefits-section" class="py-20 lg:py-28 px-4" style="background-color: var(--presale-bg-darker);">
-                    <div class="container mx-auto max-w-7xl">
-                        <div class="text-center mb-16">
-                            <span class="text-sm font-bold text-cyan-400 tracking-widest" data-translate="keyBenefitsTag"></span>
-                            <h2 class="text-4xl md:text-5xl font-bold my-4" data-translate="keyBenefitsTitle"></h2>
-                            <p class="text-lg text-text-secondary max-w-3xl mx-auto" data-translate="keyBenefitsSubtitle"></p>
-                        </div>
-                        
-                        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
-                            <div class="p-6 bg-presale-bg-card rounded-lg border border-presale-border-color text-center transform hover:scale-[1.03] transition-transform duration-300">
-                                <i class="fa-solid fa-ranking-star text-4xl text-green-400 mb-4"></i>
-                                <h3 class="text-xl font-bold mb-2" data-translate="keyBenefit1Title"></h3>
-                                <p class="text-text-secondary text-sm" data-translate="keyBenefit1Desc"></p>
-                            </div>
-                            <div class="p-6 bg-presale-bg-card rounded-lg border border-presale-border-color text-center transform hover:scale-[1.03] transition-transform duration-300">
-                                <i class="fa-solid fa-water text-4xl text-blue-400 mb-4"></i>
-                                <h3 class="text-xl font-bold mb-2" data-translate="keyBenefit2Title"></h3>
-                                <p class="text-text-secondary text-sm" data-translate="keyBenefit2Desc"></p>
-                            </div>
-                             <div class="p-6 bg-presale-bg-card rounded-lg border border-presale-border-color text-center transform hover:scale-[1.03] transition-transform duration-300">
-                                <i class="fa-solid fa-percent text-4xl text-purple-400 mb-4"></i>
-                                <h3 class="text-xl font-bold mb-2" data-translate="keyBenefit3Title"></h3>
-                                <p class="text-text-secondary text-sm" data-translate="keyBenefit3Desc"></p>
-                            </div>
-                            <div class="p-6 bg-presale-bg-card rounded-lg border border-presale-border-color text-center transform hover:scale-[1.03] transition-transform duration-300">
-                                <i class="fa-solid fa-arrow-trend-up text-4xl text-amber-400 mb-4"></i>
-                                <h3 class="text-xl font-bold mb-2" data-translate="keyBenefit4Title"></h3>
-                                <p class="text-text-secondary text-sm" data-translate="keyBenefit4Desc"></p>
-                            </div>
-                        </div>
-                    </div>
-                </section>
                 
                 <section id="sale" class="py-20 lg:py-28 px-4" style="background-color: var(--presale-bg-darker);">
                     <div class="container mx-auto max-w-7xl">
@@ -479,27 +435,21 @@ export const PresalePage = {
             </main>
         `;
         
-        // CORREÇÃO: Força a injeção do HTML, e somente depois inicializa.
         DOMElements.presale.innerHTML = html;
         renderMarketplace();
         hasRendered = true;
         PresalePage.init(); 
         setLanguage('en');
-        // Se a página já foi navegada antes, o update será chamado via app.js
         if (State.isConnected) {
             PresalePage.update(true);
         }
     },
 
-    // --- init() (Mantido o novo fluxo de inicialização) ---
+    // (Correção de clique mantida)
     init: () => {
-        if (hasInitialized) { 
-            // Se já inicializado, apenas atualiza o estado (útil se chamado por updateUIState)
-            PresalePage.update(State.isConnected);
-            return; 
-        }
         const grid = document.getElementById('marketplace-grid');
-        if (grid) {
+        
+        if (grid && !grid._listenersAttached) { 
              grid.addEventListener('click', (e) => {
                 const buyButton = e.target.closest('.buy-button');
                 if (buyButton) { handleBuyNFT(buyButton); return; }
@@ -532,10 +482,11 @@ export const PresalePage = {
                     updateTotalPrice(card); 
                 }
             });
+
+            grid._listenersAttached = true; 
         }
+        
         setupCountdown();
-        // Não chamamos setupScrollAnimations aqui para não forçar classes de opacidade que possam esconder o conteúdo
-        hasInitialized = true;
     },
 
     update: (isConnected) => {

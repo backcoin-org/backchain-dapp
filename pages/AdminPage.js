@@ -1,4 +1,9 @@
 // pages/AdminPage.js
+// --- NOVO ---
+// Importa o ethers e os endereços dos contratos
+const ethers = window.ethers;
+import { addresses } from '../config.js'; 
+// --- FIM NOVO ---
 
 import { showToast } from '../ui-feedback.js';
 // CORREÇÃO: Importa renderError também, caso necessário
@@ -107,6 +112,85 @@ const loadAdminData = async () => {
         }
     }
 };
+
+// --- (INÍCIO) NOVAS FUNÇÕES DE RESGATE (PRESALE) ---
+
+/**
+ * Busca o saldo do contrato PublicSale e exibe no painel.
+ */
+const loadPresaleBalance = async () => {
+    const balanceEl = document.getElementById('presale-balance-amount');
+    if (!balanceEl) return;
+
+    // Mostra loader
+    balanceEl.innerHTML = '<span class="loader !w-5 !h-5 inline-block"></span>';
+
+    try {
+        if (!State.signer || !State.signer.provider) {
+            throw new Error("Admin provider not found.");
+        }
+        if (!addresses.publicSale) {
+             throw new Error("PublicSale address not configured.");
+        }
+
+        const balanceWei = await State.signer.provider.getBalance(addresses.publicSale);
+        const balanceEth = ethers.formatEther(balanceWei);
+        
+        // Exibe o saldo formatado
+        balanceEl.textContent = `${parseFloat(balanceEth).toFixed(6)} ETH/BNB`;
+    } catch (error) {
+        console.error("Error loading presale balance:", error);
+        balanceEl.textContent = "Error";
+    }
+};
+
+/**
+ * Manipulador para o botão de resgate de fundos da pré-venda.
+ */
+const handleWithdrawPresaleFunds = async (buttonElement) => {
+    if (!State.signer) {
+        showToast("Por favor, conecte a carteira do Owner primeiro.", "error");
+        return;
+    }
+
+    if (!window.confirm("Are you sure you want to withdraw ALL funds from the Presale contract to the Treasury wallet?")) {
+        return;
+    }
+
+    const presaleAbi = ["function withdrawFunds() external"];
+    const saleAddress = addresses.publicSale;
+    
+    const contract = new ethers.Contract(saleAddress, presaleAbi, State.signer);
+    
+    const originalHtml = buttonElement.innerHTML;
+    buttonElement.disabled = true;
+    buttonElement.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-2"></i> Withdrawing...';
+
+    try {
+        console.log(`Calling withdrawFunds() on ${saleAddress}...`);
+        const tx = await contract.withdrawFunds();
+        
+        showToast("Transaction sent. Awaiting confirmation...", "info");
+        const receipt = await tx.wait();
+        
+        console.log("Funds withdrawn successfully!", receipt.hash);
+        showToast("Funds withdrawn successfully!", "success", receipt.hash);
+        
+        // Atualiza o saldo exibido
+        loadPresaleBalance();
+
+    } catch (error) {
+        console.error("Error withdrawing funds:", error);
+        const message = error.reason || error.message || "Transaction failed.";
+        showToast(`Error: ${message}`, "error");
+    } finally {
+        buttonElement.disabled = false;
+        buttonElement.innerHTML = originalHtml;
+    }
+};
+
+// --- (FIM) NOVAS FUNÇÕES DE RESGATE (PRESALE) ---
+
 
 // --- ADMIN ACTION HANDLERS ---
 
@@ -1250,9 +1334,31 @@ const renderAdminPanel = () => {
     const adminContent = document.getElementById('admin-content-wrapper');
     if (!adminContent) return;
 
+    // ==========================================================
+    // INÍCIO DA ATUALIZAÇÃO (Adiciona Painel de Resgate)
+    // ==========================================================
     adminContent.innerHTML = `
-        <h1 class="text-3xl font-bold mb-8">Airdrop Admin Panel</h1>
+        <div id="presale-withdraw-panel" class="mb-8 p-6 bg-zinc-800 rounded-xl border border-border-color flex flex-col md:flex-row gap-4 justify-between items-center">
+            <div>
+                <h3 class="text-xl font-bold text-white">Presale Contract Funds</h3>
+                <p class="text-sm text-zinc-400">Total accumulated in the PublicSale contract available for withdrawal.</p>
+            </div>
+            <div class="flex items-center gap-4">
+                <div class="text-right">
+                    <span class="block text-2xl font-bold text-amber-400" id="presale-balance-amount">
+                        <span class="loader !w-5 !h-5 inline-block"></span>
+                    </span>
+                    <span class="text-xs text-zinc-500">ETH/BNB Balance</span>
+                </div>
+                <button id="withdraw-presale-funds-btn" class="btn-primary py-3 px-5 whitespace-nowrap">
+                    <i class="fa-solid fa-download mr-2"></i> Withdraw Funds
+                </button>
+            </div>
+        </div>
 
+        <h1 class="text-3xl font-bold mb-8">Airdrop Admin Panel</h1>
+    
+    
         <div class="border-b border-border-color mb-6">
             <nav id="admin-tabs" class="-mb-px flex flex-wrap gap-x-6 gap-y-2">
                 <button class="tab-btn ${adminState.activeTab === 'review-submissions' ? 'active' : ''}" data-target="review-submissions">Review Submissions</button>
@@ -1278,6 +1384,20 @@ const renderAdminPanel = () => {
             <div id="manage-tasks-content" class="max-w-4xl mx-auto"></div>
         </div>
     `;
+    // ==========================================================
+    // FIM DA ATUALIZAÇÃO
+    // ==========================================================
+
+    // --- (INÍCIO) NOVOS LISTENERS E CARREGAMENTO DE SALDO ---
+    
+    // Anexa o listener ao novo botão de resgate
+    document.getElementById('withdraw-presale-funds-btn')?.addEventListener('click', (e) => handleWithdrawPresaleFunds(e.target));
+    
+    // Carrega o saldo da pré-venda assim que o painel é renderizado
+    loadPresaleBalance();
+    
+    // --- (FIM) NOVOS LISTENERS ---
+
 
     // Renderiza o conteúdo da aba ativa inicial (CORRIGIDO O TYPO)
     if (adminState.activeTab === 'manage-ugc-points') {
@@ -1358,6 +1478,11 @@ export const AdminPage = {
          if (adminContainer && !adminContainer.classList.contains('hidden')) {
              console.log("Refreshing Admin Page data...");
              loadAdminData();
+             
+             // --- NOVO ---
+             // Também atualiza o saldo da pré-venda se a página de admin for atualizada
+             loadPresaleBalance();
+             // --- FIM NOVO ---
          }
      }
 };

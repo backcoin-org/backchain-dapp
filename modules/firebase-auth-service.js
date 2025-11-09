@@ -362,7 +362,7 @@ export async function isTaskEligible(taskId, cooldownHours) {
     const lastClaimData = lastClaimSnap.data();
     const lastClaimTimestamp = lastClaimData?.timestamp; // Timestamp salvo como string ISO
 
-    // Se timestamp ausente ou inválido, permite claim (corrige dados antigos/inválidos)
+    // Se timestamp ausente ou inválido, permite claim (corrige dados antigos/inválIDOS)
     if (typeof lastClaimTimestamp !== 'string' || lastClaimTimestamp.trim() === '') {
         console.warn(`Missing/invalid timestamp for task ${taskId}. Allowing claim.`);
         return { eligible: true, timeLeft: 0 };
@@ -552,6 +552,47 @@ export async function addSubmission(url) { // Recebe apenas URL
          throw new Error(`The provided URL for ${platform} does not appear valid for submission.`);
     }
     // --- Fim Detecção/Validação ---
+
+    
+    // ==========================================================
+    //  INÍCIO DA ALTERAÇÃO (Rate Limit Global de 5 Minutos)
+    // ==========================================================
+    
+    // Verifica o último post DESTE usuário (QUALQUER plataforma)
+    // Isso não precisa mais do índice composto (platform + submittedAt)
+    const qLastPost = query(userSubmissionsCol,
+        orderBy("submittedAt", "desc"),   // Ordena pela mais recente
+        limit(1)                          // Pega apenas a última
+    );
+    
+    const lastPostSnapshot = await getDocs(qLastPost);
+
+    if (!lastPostSnapshot.empty) {
+        const lastSubmission = lastPostSnapshot.docs[0].data();
+        // Converte o Timestamp do Firebase para um objeto Date do JS
+        const lastSubmittedAt = lastSubmission.submittedAt?.toDate(); 
+        
+        if (lastSubmittedAt) {
+            const now = new Date(); // Data/hora atual
+            const fiveMinutesMs = 5 * 60 * 1000; // 5 minutos em milissegundos
+            const timeSinceLastPost = now.getTime() - lastSubmittedAt.getTime();
+
+            // Se o tempo passado for MENOR que 5 minutos, bloqueia.
+            if (timeSinceLastPost < fiveMinutesMs) {
+                const timeLeftMs = fiveMinutesMs - timeSinceLastPost;
+                // Arredonda para cima para o minuto mais próximo
+                const minutesLeft = Math.ceil(timeLeftMs / 60000); 
+                
+                // --- MENSAGEM GLOBAL ATUALIZADA (EM INGLÊS) ---
+                // Não menciona mais a plataforma específica
+                throw new Error(`We're building a strong community, and we value quality over quantity. To prevent spam, please wait ${minutesLeft} more minute(s) before submitting another post. We appreciate your thoughtful contribution!`);
+            }
+        }
+    }
+    // ==========================================================
+    //  FIM DA ALTERAÇÃO
+    // ==========================================================
+
 
     // --- Verificação de Duplicatas no Log Central ---
     const qLog = query(logSubmissionsCol,
@@ -1045,7 +1086,7 @@ export async function getAllSubmissionsForAdmin() {
         const data = doc.data();
         return {
             // O log já contém userId e walletAddress
-            // <-- NOTA: data.userId AGORA É O ENDEREÇO DA CARTEIRA
+            // <-- NOTA: data.userId AGORA É O ENDERÇO DA CARTEIRA
             userId: data.userId,
             walletAddress: data.walletAddress,
             submissionId: doc.id, // O ID do documento é o ID da submissão

@@ -29,9 +29,7 @@ function renderNotaryPageLayout() {
     container.innerHTML = `
         <h1 class="text-2xl md:text-3xl font-bold mb-6">Decentralized Notary</h1>
         <p class="text-zinc-400 max-w-3xl mb-8">
-            Permanently register the existence of any document or file on the blockchain.
-            The upload (image or PDF) is automatically uploaded to IPFS (InterPlanetary File System)
-            and minted into an NFT (BKCN) proving your authorship and date of registration.
+            Turn any file into undeniable proof of authorship — minted forever on the blockchain as a BKCN NFT.
         </p>
 
         <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
