@@ -89,9 +89,9 @@ function renderScreen_MissingETH() {
                     <p>Your wallet requires Sepolia ETH to pay for transaction fees (gas) before we can send you $BKC.</p>
                     <p class="mt-3 text-sm font-semibold text-white">Follow these 3 actions to get Sepolia ETH:</p>
                     <ol class="list-decimal list-inside text-zinc-300 ml-4 space-y-2 mt-2 text-sm">
-                        <li>**Action 1:** Copy your wallet address.</li>
-                        <li>**Action 2:** Click the button to go to the Sepolia ETH Faucet.</li>
-                        <li>**Action 3:** Paste your address into the Faucet and claim your ETH.</li>
+                        <li>Action 1: Copy your wallet address.</li>
+                        <li>Action 2: Click the button to go to the Sepolia ETH Faucet.</li>
+                        <li>Action 3: Paste your address into the Faucet and claim your ETH.</li>
                     </ol>
                 `,
                 actionHTML: `
@@ -101,7 +101,7 @@ function renderScreen_MissingETH() {
                     <a href="https://cloud.google.com/application/web3/faucet/ethereum/sepolia" target="_blank" rel="noopener noreferrer" class="mt-3 w-full inline-block text-center bg-amber-500 hover:bg-amber-600 text-zinc-900 font-bold py-2 px-4 rounded-md transition-colors text-sm shadow-md">
                         <i class="fa-solid fa-cloud mr-2"></i> Go to ETH Faucet (Action 2)
                     </a>
-                    <p class="text-xs text-zinc-500 mt-4 italic text-center">After receiving ETH, please **refresh this page (F5)** to proceed to the next step.</p>
+                    <p class="text-xs text-zinc-500 mt-4 italic text-center">After receiving ETH, please refresh this page (F5) to proceed to the next step.</p>
                 `
             })}
         </div>
@@ -115,7 +115,7 @@ function renderScreen_ReadyToClaim() {
     const faucetHasEnoughBKC = faucetState.faucetBKCBalance >= FAUCET_AMOUNT_WEI;
 
     let claimStatus = 'active'; // Default
-    let content = `<p class="text-lg">You are ready to claim **${bkcClaimAmountFormatted.toFixed(2)} $BKC** per claim.</p><p class="text-xs text-zinc-400">This action can be performed multiple times to facilitate network testing.</p>`;
+    let content = `<p class="text-lg">You are ready to claim ${bkcClaimAmountFormatted.toFixed(2)} $BKC per claim.</p><p class="text-xs text-zinc-400">This action can be performed multiple times to facilitate network testing.</p>`;
     let actionHTML = `
         <button id="claimFaucetBtn" class="w-full font-bold py-3 px-6 rounded-lg text-lg transition-colors shadow-lg hover:shadow-xl bg-green-500 hover:bg-green-600 text-zinc-900">
             <i class="fa-solid fa-gift mr-2"></i> Claim ${bkcClaimAmountFormatted.toFixed(2)} $BKC

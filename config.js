@@ -174,14 +174,20 @@ export const publicSaleABI = [
     "event TierSet(uint256 indexed tierId, uint256 price, uint256 maxSupply)"
 ];
 
+// =================================================================
+// 🟢 CORREÇÃO APLICADA AQUI
+// O fragmento notarizeDocument foi atualizado para incluir 3 argumentos.
+// =================================================================
 export const decentralizedNotaryABI = [
   "event DocumentNotarized(address indexed user, uint256 indexed tokenId, string documentURI, uint256 feePaid)",
   "function balanceOf(address owner) view returns (uint256)",
   "function tokenOfOwnerByIndex(address owner, uint256 index) view returns (uint256)",
   "function tokenURI(uint256 tokenId) view returns (string)",
-  "function notarizeDocument(string calldata _documentURI, uint256 _boosterTokenId)",
+  "function notarizeDocument(string calldata _documentURI, string calldata _userDescription, uint256 _boosterTokenId)",
   "function setBaseURI(string calldata newBaseURI)"
 ];
+// =================================================================
+
 
 export const faucetABI = [
   "constructor(address _tokenAddress)",

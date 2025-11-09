@@ -23,12 +23,51 @@ const auth = getAuth(app);
 const db = getFirestore(app);
 
 let currentUser = null; // Armazena o usuário Firebase autenticado (para PERMISSÕES)
-// <-- CORREÇÃO: Variáveis para armazenar a ID real (carteira) e o perfil do usuário
 let currentWalletAddress = null; // A "chave primária" real do usuário
 let currentAirdropProfile = null; // Cache do perfil do usuário
 
 // =======================================================
-//  FUNÇÕES DE AUTENTICAÇÃO
+//  FUNÇÕES DE UTILIDADE (AJUSTADA)
+// =======================================================
+
+/**
+ * Converte um valor de token (em WEI, string BigInt) para o formato decimal legível ($BKC$).
+ * USA BigInt nativo para lidar com números grandes com 18 casas decimais.
+ * @param {string} weiString Valor em wei (ex: "300000000000000000").
+ * @param {number} decimals Número de casas decimais (18 para $BKC$).
+ * @returns {string} O valor formatado (ex: "0.3").
+ */
+export function formatWeiToBKC(weiString, decimals = 18) {
+    if (!weiString || weiString === '0') return '0.00';
+    
+    try {
+        const bigIntWei = BigInt(weiString);
+        const divisor = BigInt(10) ** BigInt(decimals);
+        
+        // Simplesmente divide e retorna a parte inteira e decimal com um pouco de precisão
+        const integerPart = (bigIntWei / divisor).toString();
+        
+        // Calcula a parte decimal, preenchendo com zeros à esquerda
+        let decimalPart = (bigIntWei % divisor).toString();
+        const padding = decimals - decimalPart.length;
+        if (padding > 0) {
+            decimalPart = '0'.repeat(padding) + decimalPart;
+        }
+        
+        // Remove zeros desnecessários no final
+        decimalPart = decimalPart.replace(/0+$/, '');
+        
+        return `${integerPart}.${decimalPart || '0'}`; // Retorna a string formatada
+
+    } catch (e) {
+        console.error("Erro ao formatar valor BigInt:", e);
+        return '0.00';
+    }
+}
+
+
+// =======================================================
+//  FUNÇÕES DE AUTENTICAÇÃO (MANTIDAS)
 // =======================================================
 
 /**
@@ -113,7 +152,7 @@ function ensureAuthenticated() {
 
 
 // =======================================================
-//  FUNÇÕES DE DADOS PÚBLICOS
+//  FUNÇÕES DE DADOS PÚBLICOS (MANTIDAS)
 // =======================================================
 
 /**
@@ -167,7 +206,7 @@ export async function getPublicAirdropData() {
 }
 
 // =======================================================
-//  FUNÇÕES DE DADOS DO USUÁRIO
+//  FUNÇÕES DE DADOS DO USUÁRIO (MANTIDAS)
 // =======================================================
 
 /**
@@ -910,7 +949,7 @@ export async function deleteSubmission(submissionId) {
 
 
 // =======================================================
-//  FUNÇÕES DE ADMIN
+//  FUNÇÕES DE ADMIN (MANTIDAS)
 // =======================================================
 
 /**
