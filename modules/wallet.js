@@ -1,5 +1,8 @@
 // modules/wallet.js
 // FIXED: Race conditions, validation, polling fallback
+// REFA: Removed single nftBondingCurve logic, changed ABI import
+// REFA V2: Fixed incorrect ABI for actionsManager
+// REFA V3: Added 'https://' prefix to ESM imports
 
 import { ethers } from 'https://esm.sh/ethers@6.11.1';
 import { createWeb3Modal, defaultConfig } from 'https://esm.sh/@web3modal/ethers@5.0.3';
@@ -9,8 +12,8 @@ import { showToast } from '../ui-feedback.js';
 import {
     addresses, sepoliaRpcUrl, sepoliaChainId,
     bkcTokenABI, delegationManagerABI, rewardManagerABI,
-    rewardBoosterABI, nftBondingCurveABI, 
-    fortuneTigerABI,
+    rewardBoosterABI, nftPoolABI, // <-- Corrigido (de nftBondingCurveABI)
+    actionsManagerABI, // <-- CORRIGIDO (de fortuneTigerABI)
     publicSaleABI,
     faucetABI,
     ecosystemManagerABI,
@@ -108,13 +111,16 @@ function instantiateContracts(signerOrProvider) {
         if (addresses.rewardManager)
             State.rewardManagerContract = new ethers.Contract(addresses.rewardManager, rewardManagerABI, signerOrProvider);
         if (addresses.actionsManager)
-            State.actionsManagerContract = new ethers.Contract(addresses.actionsManager, fortuneTigerABI, signerOrProvider);
+            // --- CORRIGIDO AQUI (usando actionsManagerABI) ---
+            State.actionsManagerContract = new ethers.Contract(addresses.actionsManager, actionsManagerABI, signerOrProvider);
         if (addresses.rewardBoosterNFT) {
             State.rewardBoosterContract = new ethers.Contract(addresses.rewardBoosterNFT, rewardBoosterABI, signerOrProvider);
         }
-        if (addresses.nftBondingCurve) {
-            State.nftBondingCurveContract = new ethers.Contract(addresses.nftBondingCurve, nftBondingCurveABI, signerOrProvider);
-        }
+        
+        // --- (REFA) LÓGICA OBSOLETA REMOVIDA ---
+        // (O bloco 'if (addresses.nftBondingCurve)' foi removido daqui)
+        // O frontend agora deve criar instâncias de pool sob demanda
+
         if (addresses.publicSale) {
             State.publicSaleContract = new ethers.Contract(addresses.publicSale, publicSaleABI, signerOrProvider);
         }
@@ -248,10 +254,11 @@ export async function initPublicProvider() {
         if (addresses.rewardManager)
             State.rewardManagerContractPublic = new ethers.Contract(addresses.rewardManager, rewardManagerABI, State.publicProvider);
         if (addresses.actionsManager)
-            State.actionsManagerContractPublic = new ethers.Contract(addresses.actionsManager, fortuneTigerABI, State.publicProvider);
-        if (addresses.nftBondingCurve) {
-            State.nftBondingCurveContractPublic = new ethers.Contract(addresses.nftBondingCurve, nftBondingCurveABI, State.publicProvider);
-        }
+            // --- CORRIGIDO AQUI (usando actionsManagerABI) ---
+            State.actionsManagerContractPublic = new ethers.Contract(addresses.actionsManager, actionsManagerABI, State.publicProvider);
+        
+        // --- (REFA) LÓGICA OBSOLETA REMOVIDA ---
+        // (O bloco 'if (addresses.nftBondingCurve)' foi removido daqui)
 
         await loadPublicData();
         

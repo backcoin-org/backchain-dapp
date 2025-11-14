@@ -440,8 +440,13 @@ function renderValidatorsList() {
     const listEl = document.getElementById('top-validators-list');
     if (!listEl) return;
 
-    // Se conectado, mas com saldo zero, mostra o card "Buy $BKC"
-    if (State.isConnected && State.currentUserBalance === 0n) {
+    // Se conectado, mas com saldo baixo, mostra o card "Buy $BKC"
+    // --- (REFA) INÍCIO: Lógica de Saldo Baixo Aprimorada ---
+    // (Verifica se o saldo é menor que, por ex, 10 BKC, em vez de apenas === 0)
+    const minBalanceToShowBuy = ethers.parseEther("10"); 
+    if (State.isConnected && State.currentUserBalance < minBalanceToShowBuy) {
+    // --- (REFA) FIM ---
+        
         // AJUSTE: Usar addresses.bkcDexPoolAddress (o novo campo com a URL)
         const buyBkcLink = addresses.bkcDexPoolAddress || '#'; 
         
@@ -880,6 +885,7 @@ async function renderActivityHistory() {
 
 /**
  * Carrega e renderiza o TVL (Total Value Locked) do protocolo.
+ * (AJUSTADO PARA INCLUIR PISCINA DEX)
  */
 async function loadAndRenderProtocolTVL() {
     const tvlPanelEl = document.getElementById('protocol-tvl-panel'); 
@@ -891,6 +897,7 @@ async function loadAndRenderProtocolTVL() {
     const tvlVestingEl = document.getElementById('tvl-detail-vesting');
     const tvlGameEl = document.getElementById('tvl-detail-game');
     const tvlPoolEl = document.getElementById('tvl-detail-nftpool');
+    const tvlDexEl = document.getElementById('tvl-detail-dex'); // <-- NOVO ELEMENTO
 
     if (!tvlValueEl) { 
         console.warn("TVL panel elements not found. Skipping TVL load.");
@@ -904,7 +911,7 @@ async function loadAndRenderProtocolTVL() {
 
     try {
         let totalLocked = 0n;
-        let stakingLocked = 0n, vestingLocked = 0n, gameLocked = 0n, poolLocked = 0n;
+        let stakingLocked = 0n, vestingLocked = 0n, gameLocked = 0n, poolLocked = 0n, dexLocked = 0n; // <-- NOVO
 
         if (!State.bkcTokenContractPublic || !State.delegationManagerContractPublic || !State.rewardManagerContractPublic) {
             throw new Error("Contratos públicos essenciais (bkcTokenContractPublic, etc.) não estão carregados no State.");
@@ -926,27 +933,41 @@ async function loadAndRenderProtocolTVL() {
 
         // 3. Saldo das Pools de Jogo (Fortune Pool / Actions Manager)
         if (State.actionsManagerContractPublic) {
-             for (let i = 0; i < 4; i++) {
-                const poolInfo = await safeContractCall(State.actionsManagerContractPublic, 'prizePools', [i], [0n, 0n, 0n, 0n]);
-                gameLocked += poolInfo[2]; 
-            }
-            totalLocked += gameLocked;
+             gameLocked = await safeContractCall(State.actionsManagerContractPublic, 'prizePoolBalance', [], 0n);
+             totalLocked += gameLocked;
         } else {
              console.warn("Dashboard: State.actionsManagerContractPublic not found, skipping game pools.");
         }
 
         // 4. Saldo das Pools de NFT (NFT Pool / Bonding Curve)
-        if (State.nftBondingCurveContractPublic && boosterTiers) {
-             for (const tier of boosterTiers) { 
-                const poolInfo = await safeContractCall(State.nftBondingCurveContractPublic, 'pools', [tier.boostBips], { isInitialized: false, tokenBalance: 0n });
-                if (poolInfo.isInitialized) {
-                    poolLocked += poolInfo.tokenBalance; 
+        if (boosterTiers) {
+            const poolKeys = Object.keys(addresses).filter(k => k.startsWith('pool_'));
+            // console.log(`Found ${poolKeys.length} AMM pools to check for TVL.`); // Removido para diminuir o spam
+            
+            for (const key of poolKeys) {
+                const poolAddress = addresses[key];
+                if (poolAddress && poolAddress.startsWith('0x')) {
+                    const poolBalance = await safeContractCall(tokenContract, 'balanceOf', [poolAddress], 0n);
+                    poolLocked += poolBalance;
                 }
             }
             totalLocked += poolLocked;
         } else {
-            console.warn("Dashboard: State.nftBondingCurveContractPublic not found, skipping NFT pools.");
+            console.warn("Dashboard: boosterTiers (config.js) not found, skipping NFT pools TVL.");
         }
+
+        // --- (REFA) INÍCIO: Lógica para TVL da DEX ---
+        // 5. Saldo da Piscina DEX (PancakeSwap)
+        const dexPoolAddress = addresses.mainLPPairAddress;
+        if (dexPoolAddress && dexPoolAddress.startsWith('0x') && !dexPoolAddress.includes('...')) {
+            // console.log(`Checking TVL for external DEX pool: ${dexPoolAddress}`); // Removido para diminuir o spam
+            dexLocked = await safeContractCall(tokenContract, 'balanceOf', [dexPoolAddress], 0n);
+            totalLocked += dexLocked;
+        } else {
+            console.warn("Dashboard: mainLPPairAddress not set or is placeholder, skipping DEX TVL.");
+        }
+        // --- (REFA) FIM: Lógica para TVL da DEX ---
+
 
         const totalSupply = await safeContractCall(tokenContract, 'totalSupply', [], 0n);
         const lockedPercentage = (totalSupply > 0n) ? (Number(totalLocked * 10000n / totalSupply) / 100).toFixed(2) : 0;
@@ -965,6 +986,7 @@ async function loadAndRenderProtocolTVL() {
         if(tvlVestingEl) tvlVestingEl.textContent = `${formatBigNumber(vestingLocked).toFixed(0)} $BKC`;
         if(tvlGameEl) tvlGameEl.textContent = `${formatBigNumber(gameLocked).toFixed(0)} $BKC`;
         if(tvlPoolEl) tvlPoolEl.textContent = `${formatBigNumber(poolLocked).toFixed(0)} $BKC`;
+        if(tvlDexEl) tvlDexEl.textContent = `${formatBigNumber(dexLocked).toFixed(0)} $BKC`; // <-- NOVO
 
     } catch (err) {
         console.error("Failed to load protocol TVL:", err);

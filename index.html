@@ -190,13 +190,37 @@
                     </a>
                     
                     <a data-target="airdrop" class="sidebar-link flex items-center gap-4 py-2.5 px-4 rounded-lg transition-colors text-zinc-400 hover:text-white hover:bg-zinc-700"><i class="fa-solid fa-parachute-box w-5 text-center"></i><span>Airdrop</span></a>
-                    <a data-target="dao" class="sidebar-link flex items-center gap-4 py-2.5 px-4 rounded-lg transition-colors text-zinc-400 hover:text-white hover:bg-zinc-700"><i class="fa-solid fa-landmark w-5 text-center"></i><span>DAO</span></a>
+                    
+                    <!-- ### INÍCIO DA REORDENAÇÃO ### -->
+
+                    <!-- Cartório (Notary) movido para cima -->
                     <a data-target="notary" class="sidebar-link flex items-center gap-4 py-2.5 px-4 rounded-lg transition-colors text-zinc-400 hover:text-white hover:bg-zinc-700">
                         <i class="fa-solid fa-stamp w-5 text-center"></i><span>Decentralized Notary</span>
                     </a>
+                    
                     <a data-target="tokenomics" class="sidebar-link flex items-center gap-4 py-2.5 px-4 rounded-lg transition-colors text-zinc-400 hover:text-white hover:bg-zinc-700">
                         <i class="fa-solid fa-chart-line w-5 text-center"></i><span>Tokenomics</span>
                     </a>
+
+                    <!-- Itens "Soon" movidos para o final da lista principal -->
+                    <a title="Coming Soon" class="sidebar-link flex items-center justify-between gap-4 py-2.5 px-4 rounded-lg transition-colors text-zinc-400 opacity-50 cursor-not-allowed">
+                        <div class="flex items-center gap-4">
+                            <i class="fa-solid fa-landmark w-5 text-center"></i>
+                            <span>DAO</span>
+                        </div>
+                        <span class="text-xs bg-zinc-700 text-zinc-300 font-semibold px-2 py-0.5 rounded-full">Soon</span>
+                    </a>
+
+                    <a title="Coming Soon" class="sidebar-link flex items-center justify-between gap-4 py-2.5 px-4 rounded-lg transition-colors text-zinc-400 opacity-50 cursor-not-allowed">
+                        <div class="flex items-center gap-4">
+                            <i class="fa-solid fa-umbrella w-5 text-center"></i>
+                            <span>Insurance</span>
+                        </div>
+                        <span class="text-xs bg-zinc-700 text-zinc-300 font-semibold px-2 py-0.5 rounded-full">Soon</span>
+                    </a>
+                    
+                    <!-- ### FIM DA REORDENAÇÃO ### -->
+
                     </div>
                 <div id="admin-link-container" class="mt-4 pt-4 border-t border-zinc-700" style="display: none;"><a data-target="admin" id="admin-link" class="sidebar-link flex items-center gap-4 py-2.5 px-4 rounded-lg transition-colors text-red-400 hover:text-white hover:bg-red-500/50"><i class="fa-solid fa-user-shield w-5 text-center"></i><span>Admin Panel</span></a></div>
 
@@ -320,12 +344,17 @@
                                     <p id="protocol-tvl-value" class="text-3xl font-bold text-white">--</p>
                                     <p id="protocol-tvl-percentage" class="text-sm text-zinc-500">--% Locked</p>
                                     
+                                    <!-- ### INÍCIO DA MODIFICAÇÃO (TVL) ### -->
                                     <div class="mt-4 pt-4 border-t border-border-color/50 text-xs space-y-1">
                                         <div class="flex justify-between"><span class="text-zinc-400">Staking:</span> <span id="tvl-detail-staking" class="font-mono text-zinc-300">-- $BKC</span></div>
                                         <div class="flex justify-between"><span class="text-zinc-400">Vesting:</span> <span id="tvl-detail-vesting" class="font-mono text-zinc-300">-- $BKC</span></div>
                                         <div class="flex justify-between"><span class="text-zinc-400">Game Pools:</span> <span id="tvl-detail-game" class="font-mono text-zinc-300">-- $BKC</span></div>
                                         <div class="flex justify-between"><span class="text-zinc-400">NFT Pools:</span> <span id="tvl-detail-nftpool" class="font-mono text-zinc-300">-- $BKC</span></div>
+                                        <!-- Nova linha para a Piscina DEX -->
+                                        <div class="flex justify-between"><span class="text-zinc-400">DEX Pool:</span> <span id="tvl-detail-dex" class="font-mono text-zinc-300">-- $BKC</span></div>
                                     </div>
+                                    <!-- ### FIM DA MODIFICAÇÃO (TVL) ### -->
+
                                 </div>
                                 <div id="top-validators-dashboard" class="bg-sidebar border border-border-color rounded-xl p-6"><div class="flex justify-between items-center mb-4"><h3 classs="text-xl font-bold">Network Validators</h3><p class="text-sm text-zinc-400">Sorted by highest pStake</p></div><div id="top-validators-list" class="space-y-3"></div></div>
                             </div>

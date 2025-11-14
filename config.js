@@ -43,10 +43,36 @@ export async function loadAddresses() {
         addresses.publicSale = jsonAddresses.publicSale;
         addresses.decentralizedNotary = jsonAddresses.decentralizedNotary;
         addresses.ecosystemManager = jsonAddresses.ecosystemManager; 
-        addresses.nftBondingCurve = jsonAddresses.nftLiquidityPool; 
+        
+        // --- (REFA) INÍCIO: Lógica da Fábrica para Piscinas ---
+        // Carrega os endereços das piscinas individuais (se existirem)
+        addresses.pool_diamond = jsonAddresses.pool_diamond;
+        addresses.pool_platinum = jsonAddresses.pool_platinum;
+        addresses.pool_gold = jsonAddresses.pool_gold;
+        addresses.pool_silver = jsonAddresses.pool_silver;
+        addresses.pool_bronze = jsonAddresses.pool_bronze;
+        addresses.pool_iron = jsonAddresses.pool_iron;
+        addresses.pool_crystal = jsonAddresses.pool_crystal;
+        // --- (REFA) FIM ---
+
         addresses.actionsManager = jsonAddresses.fortunePool;
-        // CORREÇÃO CRÍTICA: Prioriza bkcDexPoolAddress (que será o '#faucet' em testnet)
-        addresses.mainLPPairAddress = jsonAddresses.bkcDexPoolAddress || jsonAddresses.mainLPPairAddress || "#"; 
+
+        // ##############################################################
+        // ###               💡 INÍCIO DA CORREÇÃO 💡                 ###
+        // ##############################################################
+        // O `bkcDexPoolAddress` continha o link da PancakeSwap.
+        // O `mainLPPairAddress` continha o placeholder do LP (0x...).
+        // O código antigo estava misturando os dois.
+        
+        // Carrega o link da DEX (PancakeSwap)
+        addresses.bkcDexPoolAddress = jsonAddresses.bkcDexPoolAddress || "#"; 
+        
+        // Carrega o endereço real do par LP (quando for criado)
+        addresses.mainLPPairAddress = jsonAddresses.mainLPPairAddress || "0x...[PLEASE UPDATE...]"; 
+        // ##############################################################
+        // ###                💡 FIM DA CORREÇÃO 💡                  ###
+        // ##############################################################
+        
         addresses.miningManager = jsonAddresses.miningManager;
         addresses.oracleWalletAddress = jsonAddresses.oracleWalletAddress;
         addresses.faucet = jsonAddresses.faucet; 
@@ -87,32 +113,40 @@ export async function loadAddresses() {
 
 // ✅ CORREÇÃO: Função para acessar variáveis de ambiente de forma segura
 function getEnv(key) {
+    // Para Vercel/Next.js/React
     if (typeof process !== 'undefined' && process.env && process.env[key]) {
         return process.env[key];
     }
+    // Para Vite
     if (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env[key]) {
         return import.meta.env[key];
     }
     return null; 
 }
 
-// 1. Tenta carregar a URL WSS COMPLETA da variável de ambiente
-// ##############################################################
-// ###               💡 INÍCIO DA CORREÇÃO 💡                 ###
-// ##############################################################
-// O Vercel (e Next.js) SÓ expõe variáveis para o frontend (navegador)
-// se elas tiverem o prefixo NEXT_PUBLIC_
-
-const ENV_WSS_URL = getEnv('NEXT_PUBLIC_ALCHEMY_ENDPOINT_WSS'); // <-- CORRIGIDO AQUI
+// 1. Tenta carregar a URL WSS COMPLETA da variável de ambiente (para Vercel/Produção)
+let ENV_WSS_URL = getEnv('NEXT_PUBLIC_ALCHEMY_ENDPOINT_WSS');
 
 // ##############################################################
-// ###                💡 FIM DA CORREÇÃO 💡                  ###
+// ###           💡 INÍCIO DA CORREÇÃO LOCAL 💡               ###
+// ##############################################################
+// Se a variável de ambiente NÃO for encontrada E estivermos em 'localhost'
+if (!ENV_WSS_URL && isDevelopment) {
+    console.warn("⚠️ Variável de ambiente 'NEXT_PUBLIC_ALCHEMY_ENDPOINT_WSS' não encontrada.");
+    console.warn("Usando fallback de desenvolvimento (chave hardcoded). ISSO NÃO DEVE APARECER EM PRODUÇÃO.");
+    
+    // Use a chave que você confirmou que funciona, no formato WSS
+    ENV_WSS_URL = "wss://eth-sepolia.g.alchemy.com/v2/chSfmmKaeEl_C6O2y17WB";
+}
+// ##############################################################
+// ###            💡 FIM DA CORREÇÃO LOCAL 💡                 ###
 // ##############################################################
 
 
 // 🛡️ NOVO BLOCO DE VALIDAÇÃO DE SEGURANÇA
+// (Agora só falha se a variável não for encontrada E não estivermos em 'isDevelopment')
 if (!ENV_WSS_URL) {
-    const errorKey = "NEXT_PUBLIC_ALCHEMY_ENDPOINT_WSS"; // <-- CORRIGIDO AQUI
+    const errorKey = "NEXT_PUBLIC_ALCHEMY_ENDPOINT_WSS";
     const errorMessage = `❌ ERRO CRÍTICO: ${errorKey} não está definida. Verifique seu .env local ou as variáveis de ambiente do Vercel/Produção.`;
     console.error(errorMessage);
     
@@ -235,17 +269,20 @@ export const rewardBoosterABI = [
     "function approve(address to, uint256 tokenId)",
 ];
 
-export const nftBondingCurveABI = [ 
-    "function pools(uint256 boostBips) view returns (uint256 tokenBalance, uint256 nftCount, uint256 k, bool isInitialized)",
-    "function getBuyPrice(uint256 _boostBips) view returns (uint256)",
-    "function getSellPrice(uint256 _boostBips) view returns (uint256)",
-    "function buyNFT(uint256 _boostBips, uint256 _boosterTokenId)", 
+// --- (REFA) INÍCIO: ABI da Piscina Refatorada ---
+// (Não precisamos mais da ABI inteira, apenas da ABI do Molde)
+export const nftPoolABI = [
+    "function getPoolInfo() view returns (uint256 tokenBalance, uint256 nftCount, uint256 k, bool isInitialized)",
+    "function getBuyPrice() view returns (uint256)",
+    "function getSellPrice() view returns (uint256)",
+    "function buyNextAvailableNFT(uint256 _boosterTokenId)",
     "function sellNFT(uint256 _tokenId, uint256 _boosterTokenId)",
     "function PSTAKE_SERVICE_KEY() view returns (string)",
-    "function getPoolInfo(uint256 _boostBips) view returns (uint256 tokenBalance, uint256 nftCount, uint256 k, bool isInitialized)",
     "event NFTBought(address indexed buyer, uint256 indexed boostBips, uint256 tokenId, uint256 price)",
-    "event NFTSold(address indexed seller, uint256 indexed boostBips, uint256 tokenId, uint256 payout, uint256 feePaid)"
+    "event NFTSold(address indexed seller, uint256 indexed boostBips, uint256 tokenId, uint256 payout, uint256 taxPaid)"
 ];
+
+// --- (REFA) FIM ---
 
 export const fortuneTigerABI = [
     "function play(uint256 _amount, uint256 _boosterTokenId)",
@@ -312,5 +349,8 @@ export const ecosystemManagerABI = [
     "function getTreasuryAddress() external view returns (address)",
     "function getDelegationManagerAddress() external view returns (address)",
     "function getBKCTokenAddress() external view returns (address)",
-    "function getBoosterAddress() external view returns (address)"
+    "function getBoosterAddress() external view returns (address)",
+    // --- (REFA) INÍCIO: ABI da Fábrica ---
+    "function getNFTLiquidityPoolFactoryAddress() external view returns (address)"
+    // --- (REFA) FIM ---
 ];
