@@ -13,6 +13,7 @@ import { executeBuyBooster, executeSellBooster } from '../modules/transactions.j
 import { formatBigNumber, renderLoading, renderError } from '../utils.js';
 // REFA: Importa o 'nftPoolABI' (do molde), 'addresses' e o 'ipfsGateway'
 import { boosterTiers, addresses, nftPoolABI, ipfsGateway } from '../config.js'; 
+import { rewardBoosterABI, ecosystemManagerABI } from '../config.js'; // Fallback ABI
 
 // --- ESTADO LOCAL DA PÁGINA (TradeState) ---
 // Objeto que rastreia o estado da UI de negociação
@@ -36,9 +37,6 @@ const TradeState = {
     isModalOpen: false, // Para o modal de seleção de pool
 };
 
-// --- (REFA) INDEXADOR REMOVIDO ---
-// A função _fetchFirstAvailableTokenIdForBuy foi removida.
-
 // --- (REFA) Helper para Imagem ---
 /**
  * Constrói uma URL de imagem IPFS confiável usando o gateway.
@@ -51,6 +49,12 @@ function buildImageUrl(ipfsIoUrl) {
         const cid = ipfsIoUrl.split('ipfs.io/ipfs/')[1];
         return `${ipfsGateway}${cid}`;
     }
+    // Lida com o formato ipfs://CID
+    if (ipfsIoUrl.startsWith('ipfs://')) {
+        const cid = ipfsIoUrl.substring(7);
+        return `${ipfsGateway}${cid}`;
+    }
+    
     // Fallback se a URL já for um link http ou outro formato
     return ipfsIoUrl;
 }
@@ -74,7 +78,8 @@ async function renderSwapBoxInterface() {
             </div>
             
             <div id="swap-box-content">
-                </div>
+                ${TradeState.isDataLoading ? renderLoading() : ''}
+            </div>
 
             <div id="swap-box-button-container">
                 </div>
@@ -110,6 +115,9 @@ async function renderSwapPanels() {
     const selectedTier = boosterTiers.find(t => t.boostBips === TradeState.selectedPoolBoostBips);
     let fromPanelHtml, toPanelHtml;
     const bkcLogoPath = "assets/bkc_logo_3d.png"; 
+
+    // Garante que o estado do HUB esteja carregado para calcular o desconto
+    const isHubReady = !!State.ecosystemManagerContract;
 
     if (TradeState.tradeDirection === 'buy') {
         // ========== COMPRA (BKC -> NFT) ==========
@@ -149,13 +157,12 @@ async function renderSwapPanels() {
         if (TradeState.sellPrice > 0n) {
             const gross = formatBigNumber(TradeState.sellPrice).toFixed(2);
             
-            // Pega a taxa base (fallback 1000n = 10%)
-            const baseTaxBips = State.ecosystemManagerContract 
+            // Lógica de cálculo de desconto para UI
+            const baseTaxBips = isHubReady 
                 ? await safeContractCall(State.ecosystemManagerContract, 'getFee', ["NFT_POOL_TAX_BIPS"], 1000n) 
                 : 1000n;
             
-            // (REFA) Pega o desconto do booster do State (carregado em loadData)
-            const discountBips = TradeState.bestBoosterBips > 0n 
+            const discountBips = TradeState.bestBoosterBips > 0n && isHubReady 
                 ? await safeContractCall(State.ecosystemManagerContract, 'getBoosterDiscount', [TradeState.bestBoosterBips], 0n)
                 : 0n;
 
@@ -203,7 +210,7 @@ function renderExecuteButton() {
 
     if (TradeState.selectedPoolBoostBips !== null) {
         if (TradeState.tradeDirection === 'buy') {
-            // Lógica de Compra (com nova prioridade)
+            // Lógica de Compra
             
             if (TradeState.buyPrice === 0n) {
                 btnText = "Buy Booster (Price Unavailable)";
@@ -234,6 +241,10 @@ function renderExecuteButton() {
             } else if (TradeState.netSellPrice === 0n) {
                 btnText = "Sell Booster (Price Unavailable)";
                 isDisabled = true;
+            } else if (TradeState.firstAvailableTokenId === null || TradeState.firstAvailableTokenId <= 0n) { 
+                 // CORREÇÃO: Garante que o ID do token selecionado é válido
+                 btnText = "No NFT selected or Token ID is invalid.";
+                 isDisabled = true;
             } else {
                 btnText = "Sell Booster";
                 isDisabled = false;
@@ -245,10 +256,8 @@ function renderExecuteButton() {
     // Se a flag 'isInsufficientBalance' estiver ativa, mostra o link "Buy $BKC"
     if (isInsufficientBalance) {
         
-        // --- (REFA) CORRIGIDO: Usa a variável correta que você confirmou: bkcDexPoolAddress ---
         const buyBkcLink = addresses.bkcDexPoolAddress || '#';
         
-        // Ajustamos os estilos inline para garantir a cor e a visibilidade do padrão âmbar
         buttonEl.innerHTML = `
             <a href="${buyBkcLink}" target="_blank" rel="noopener noreferrer" 
                 class="execute-trade-btn" 
@@ -364,21 +373,30 @@ async function loadDataForSelectedPool() {
 
         // --- (REFA) FIM: Lógica da Fábrica ---
 
-
-        // 3. Carrega os boosters do usuário (necessário para Venda e Desconto)
-        // (REFA) Usamos a nova função genérica
+        // 3. Garante que os dados de tokens/boosters do usuário estejam atualizados
+        await Promise.all([
+            loadUserData(), // Atualiza o balance BKC
+            loadMyBoostersFromAPI() // Atualiza State.myBoosters
+        ]);
+        
+        // 4. Carrega os boosters do usuário (necessário para Venda e Desconto)
         const { highestBoost, tokenId } = await getHighestBoosterBoostFromAPI(); 
         TradeState.bestBoosterTokenId = tokenId ? BigInt(tokenId) : 0n;
         TradeState.bestBoosterBips = BigInt(highestBoost);
 
-        // 4. Filtra os boosters do usuário para o tier selecionado (para Vender)
+        // 5. Filtra os boosters do usuário para o tier selecionado (para Vender)
         const myTierBoosters = State.myBoosters.filter(b => b.boostBips === Number(boostBips));
         TradeState.userBalanceOfSelectedNFT = myTierBoosters.length;
-        TradeState.firstAvailableTokenId = myTierBoosters.length > 0 ? myTierBoosters[0].tokenId : null;
+        
+        // CORREÇÃO CRÍTICA: Salva o tokenId como BigInt
+        TradeState.firstAvailableTokenId = myTierBoosters.length > 0 
+            ? BigInt(myTierBoosters[0].tokenId) 
+            : null;
 
 
-        // 5. Busca os preços e o estoque (IDs) DO POOL CLONE
-        //    (Substitui o antigo indexador lento)
+        // 6. Busca os preços e o estoque (IDs) DO POOL CLONE
+        const isHubReady = !!State.ecosystemManagerContract;
+        
         const [poolInfo, buyPrice, sellPrice, availableTokenIds] = await Promise.all([
             safeContractCall(poolContract, 'getPoolInfo', [], null),
             safeContractCall(poolContract, 'getBuyPrice', [], ethers.MaxUint256),
@@ -390,17 +408,16 @@ async function loadDataForSelectedPool() {
             throw new Error(`Falha ao carregar getPoolInfo do contrato ${poolAddress}`);
         }
 
-        // 6. Atualiza o estado com os dados do contrato
-        // (REFA) Pega o ÚLTIMO token do array (mais rápido para o contrato remover)
+        // 7. Atualiza o estado com os dados do contrato
         TradeState.firstAvailableTokenIdForBuy = (availableTokenIds.length > 0) ? BigInt(availableTokenIds[availableTokenIds.length - 1]) : null;
         TradeState.buyPrice = (buyPrice === ethers.MaxUint256) ? 0n : buyPrice; 
         TradeState.sellPrice = sellPrice;
 
-        // 7. Calcula o preço líquido de venda (com taxas e descontos)
+        // 8. Calcula o preço líquido de venda (com taxas e descontos)
         const TAX_BIPS_KEY = "NFT_POOL_TAX_BIPS";
         const [baseTaxBips, discountBips] = await Promise.all([
-            safeContractCall(State.ecosystemManagerContract, 'getFee', [TAX_BIPS_KEY], 1000n),
-            safeContractCall(State.ecosystemManagerContract, 'getBoosterDiscount', [TradeState.bestBoosterBips], 0n)
+            isHubReady ? safeContractCall(State.ecosystemManagerContract, 'getFee', [TAX_BIPS_KEY], 1000n) : 1000n,
+            isHubReady ? safeContractCall(State.ecosystemManagerContract, 'getBoosterDiscount', [TradeState.bestBoosterBips], 0n) : 0n
         ]);
         
         const finalTaxBips = (baseTaxBips > discountBips) ? (baseTaxBips - discountBips) : 0n;
@@ -515,6 +532,12 @@ function setupStorePageListeners() {
                 }
             } else {
                 // Lógica de Venda
+                // O Token ID para venda é o primeiro da lista do usuário
+                if (TradeState.firstAvailableTokenId === null || TradeState.firstAvailableTokenId <= 0n) {
+                     showToast("No NFT selected or Token ID is invalid.", "error");
+                     return;
+                }
+
                 const success = await executeSellBooster(
                     poolAddress, // (REFA) Passa o endereço do pool
                     TradeState.firstAvailableTokenId, // O NFT que você está vendendo
@@ -542,23 +565,7 @@ if (!DOMElements.store._listenersInitialized) {
 export const StorePage = {
     async render(isUpdate = false) {
         // Garante que os contratos necessários estão carregados (EcosystemManager e RewardBooster)
-        // Esta lógica assume que wallet.js já os carregou em State.publicProvider
-        if (!State.ecosystemManagerContract || !State.rewardBoosterContract) {
-             console.warn("StorePage.render: Contratos principais (EcosystemManager, RewardBooster) não encontrados no State.");
-             // Tenta instanciar publicamente se não existir (fallback)
-             try {
-                 if (!State.ecosystemManagerContract && State.publicProvider && addresses.ecosystemManager) {
-                     State.ecosystemManagerContract = new ethers.Contract(addresses.ecosystemManager, ecosystemManagerABI, State.publicProvider);
-                 }
-                 if (!State.rewardBoosterContract && State.publicProvider && addresses.rewardBoosterNFT) {
-                     State.rewardBoosterContract = new ethers.Contract(addresses.rewardBoosterNFT, rewardBoosterABI, State.publicProvider);
-                 }
-             } catch (e) {
-                 console.error("Falha ao instanciar contratos de fallback na StorePage:", e);
-                 renderError(document.getElementById('store-items-grid'), "Erro crítico: Falha ao carregar contratos.");
-                 return;
-             }
-        }
+        await loadPublicData();
         
         await renderSwapBoxInterface();
         
@@ -566,6 +573,13 @@ export const StorePage = {
         if (TradeState.selectedPoolBoostBips === null && boosterTiers.length > 0) {
             TradeState.selectedPoolBoostBips = boosterTiers[0].boostBips; // Padrão
         }
-        await loadDataForSelectedPool();
+        
+        // Atualiza a UI inicial e, em seguida, carrega os dados do pool
+        if (State.isConnected || isUpdate) {
+             await loadDataForSelectedPool();
+        } else {
+             // Se desconectado, apenas renderiza o shell com o pool padrão
+             await loadDataForSelectedPool(); 
+        }
     }
 }

@@ -72,34 +72,33 @@ export const formatPStake = (pStake) => {
 
 
 // Funções de Renderização com verificação de elemento
-export const renderLoading = (el, text = "Loading...") => {
-    if (!el) { console.warn("renderLoading: Element not found."); return; }
-    el.innerHTML = `<div class="flex items-center justify-center p-4 text-zinc-400"><div class="loader inline-block mr-2"></div> ${text}</div>`;
+// === ALTERADO: Retorna HTML String em vez de manipular o DOM ===
+export const renderLoading = (text = "Loading...") => {
+    return `<div class="flex items-center justify-center p-4 text-zinc-400"><div class="loader inline-block mr-2"></div> ${text}</div>`;
 };
 
-export const renderError = (el, message = "An error occurred.") => {
-    if (!el) { console.warn("renderError: Element not found."); return; }
+export const renderError = (message = "An error occurred.") => {
     // Usa um estilo consistente
-    el.innerHTML = `<div class="bg-red-900/20 border border-red-500/30 rounded-lg p-4 text-center text-red-400">${message}</div>`;
+    return `<div class="bg-red-900/20 border border-red-500/30 rounded-lg p-4 text-center text-red-400">${message}</div>`;
 };
 
-export const renderNoData = (el, message = "No data available.") => {
-    if (!el) { console.warn("renderNoData: Element not found."); return; }
+export const renderNoData = (message = "No data available.") => {
     // Usa um estilo consistente
-    el.innerHTML = `<div class="text-center p-4 bg-main border border-border-color rounded-lg col-span-full"><p class="text-zinc-500 italic">${message}</p></div>`;
+    return `<div class="text-center p-4 bg-main border border-border-color rounded-lg col-span-full"><p class="text-zinc-500 italic">${message}</p></div>`;
 }
+// === FIM DA ALTERAÇÃO ===
 
 // Renderização de Lista Paginada com verificações (Função 'all-in-one' original)
 export const renderPaginatedList = (allItems, containerEl, renderItemFn, itemsPerPage, currentPage = 1, onPageChange, gridClasses = 'space-y-3') => {
     if (!containerEl) { console.warn("renderPaginatedList: Container element not found."); return; }
     if (!Array.isArray(allItems)) {
-         renderError(containerEl, "Invalid data for list.");
+         containerEl.innerHTML = renderError("Invalid data for list.");
          return;
     }
 
     const totalItems = allItems.length;
     if (totalItems === 0) {
-         renderNoData(containerEl, "No items to display."); // Mostra mensagem padrão se vazio
+         containerEl.innerHTML = renderNoData("No items to display."); // Mostra mensagem padrão se vazio
          return;
     }
 
@@ -149,7 +148,7 @@ export const renderPaginatedList = (allItems, containerEl, renderItemFn, itemsPe
 
 
 // =======================================================
-//  INÍCIO DA CORREÇÃO
+//  CORREÇÃO: renderPaginationControls (Mantida)
 // =======================================================
 
 /**
@@ -195,6 +194,6 @@ export function renderPaginationControls(containerEl, currentPage, totalPages, o
         }
     } catch (error) {
         // Se algo der errado, usa a função renderError corretamente.
-        renderError(containerEl, `Failed to render pagination: ${error.message}`);
+        containerEl.innerHTML = renderError(`Failed to render pagination: ${error.message}`);
     }
 }

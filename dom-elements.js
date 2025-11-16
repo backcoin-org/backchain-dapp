@@ -8,10 +8,9 @@ export const DOMElements = {
     navLinks: document.getElementById('nav-links'),
     mainContentSections: document.querySelectorAll('main section'),
     earnTabs: document.getElementById('earn-tabs'),
-    popMiningTab: document.getElementById('pop-mining-tab'),
-    validatorSectionTab: document.getElementById('validator-section-tab'),
+    // As referências a popMiningTab e validatorSectionTab foram removidas por serem muito específicas.
 
-    // Header & Connection (*** NOVOS IDs ***)
+    // Header & Connection
     connectionStatus: document.getElementById('connectionStatus'),
     // Botões principais (Desktop/Mobile)
     connectButtonDesktop: document.getElementById('connectButtonDesktop'),
@@ -39,17 +38,18 @@ export const DOMElements = {
     actions: document.getElementById('actions'),
     presale: document.getElementById('presale'),
     faucet: document.getElementById('faucet'),
-    airdrop: document.getElementById('airdrop'), // Adicionado Airdrop
-    dao: document.getElementById('dao'),         // Adicionado DAO
-    about: document.getElementById('about'),     // Adicionado About
-    admin: document.getElementById('admin'),     // Adicionado Admin
-    tokenomics: document.getElementById('tokenomics'), // <-- ADICIONADO AQUI
-    notary: document.getElementById('notary'), // <-- (NOVO) ADICIONE ESTA LINHA
+    airdrop: document.getElementById('airdrop'), 
+    dao: document.getElementById('dao'),         
+    about: document.getElementById('about'),     
+    admin: document.getElementById('admin'),     
+    tokenomics: document.getElementById('tokenomics'), 
+    notary: document.getElementById('notary'), // <-- Referência para a página Decentralized Notary
 
     // Dashboard Stats (Public)
     statTotalSupply: document.getElementById('statTotalSupply'),
     statValidators: document.getElementById('statValidators'),
     statTotalPStake: document.getElementById('statTotalPStake'),
     statScarcity: document.getElementById('statScarcity'),
-    statLockedPercentage: document.getElementById('statLockedPercentage'), // Adicionado
+    statLockedPercentage: document.getElementById('statLockedPercentage'),
+    statUserBalance: document.getElementById('statUserBalance'),
 };

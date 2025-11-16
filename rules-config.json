@@ -3,13 +3,14 @@
     "COMMENT": "Taxas de Serviço (em BKC/Ether) 💰: Define o custo, em tokens BKC, para o usuário realizar uma ação específica no ecossistema (ex: criar um documento notarial). O valor é inserido em formato decimal (ex: '100' para 100 BKC).",
     "NOTARY_SERVICE": "100",
     "FORTUNE_POOL_SERVICE": "1",
-    "NFT_POOL_ACCESS": "0"
+    "NFT_POOL_ACCESS": "0",
+    "VALIDATOR_REGISTRATION_FEE": "10000" 
   },
   "pStakeMinimums": {
     "COMMENT": "Mínimo de pStake (Valor Bruto) 🔒: É a quantidade MÍNIMA de 'poder de staking' (pStake) que um usuário precisa ter delegado para ser autorizado a usar um determinado serviço. Se o valor for '0', não há restrição.",
-    "NOTARY_SERVICE": "10000000000000000000",
-    "FORTUNE_POOL_SERVICE": "10000000000000000000",
-    "NFT_POOL_ACCESS": "10000000000000000000"
+    "NOTARY_SERVICE": "10000",
+    "FORTUNE_POOL_SERVICE": "10000",
+    "NFT_POOL_ACCESS": "10000"
   },
   "stakingFees": {
     "COMMENT": "Taxas de Staking e Penalidades (em BIPS) 📉: Define as penalidades e taxas para retirar ou reivindicar recompensas do pool de staking. 100 BIPS = 1%. (Exemplo: Se a taxa é 1000 BIPS, o usuário perde 10% do valor).",
@@ -43,6 +44,7 @@
   "miningBonuses": {
     "COMMENT": "Bônus de Mineração (em BIPS) 🎁: É o 'cashback' que o usuário ganha instantaneamente por usar o serviço. O valor é aplicado sobre a 'sobra' do token minerado (após a distribuição para os pools).",
     "NOTARY_SERVICE": "5000",
-    "FORTUNE_POOL_SERVICE": "0"
+    "FORTUNE_POOL_SERVICE": "0",
+    "VALIDATOR_REGISTRATION_FEE": "5000"
   }
 }

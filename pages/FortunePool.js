@@ -1,5 +1,4 @@
-// pages/TigerGame.js - Versão V9: Lógica de Oráculo Assíncrono V3
-// O nome do arquivo permanece o mesmo. Foco em Oráculo Assíncrono e Piscina Única.
+// pages/FortunePool.js - Versão V10: Painel de Última Ativação e Rolls do Oráculo
 
 import { State } from '../state.js';
 import { loadUserData } from '../modules/data.js';
@@ -24,10 +23,16 @@ const gameState = {
         { id: 'hundred-activations', name: 'The Veteran', desc: 'Complete 100 total activations.', unlocked: false, requirement: 100 },
         { id: 'bonus-master', name: 'Bonus Master', desc: 'Unlock the x100 Bonus.', unlocked: false, requirement: 100 },
     ],
-    // ✅ CORRIGIDO: Rastreia apenas um saldo de pool (Piscina Única V3)
     poolBalance: 0n,
     isActivating: false, 
     lastBonus: 0,
+    // NOVO: Rastreamento do último jogo
+    lastGame: {
+        id: 0,
+        amount: 0n,
+        prize: 0n,
+        rolls: [0, 0, 0] // 3 rolls que o Oráculo enviou
+    }
 };
 
 // ... (Funções de load/save gamestate mantidas) ...
@@ -36,9 +41,9 @@ const gameState = {
 // II. CONFIGURAÇÕES E CONSTANTES
 // ============================================
 
-// ✅ CONFIGURAÇÕES DA PISCINA ÚNICA (Apenas para referência da UI)
+// CONFIGURAÇÕES DA PISCINA ÚNICA (Apenas para referência da UI)
 const PRIZE_TIERS_INFO = [
-    { multiplier: 3, chance: '1 in 3 (33.3%)' }, // Ajustado para 3x
+    { multiplier: 3, chance: '1 in 3 (33.3%)' },
     { multiplier: 10, chance: '1 in 10 (10%)' },
     { multiplier: 100, chance: '1 in 100 (1%)' },
 ];
@@ -48,14 +53,14 @@ const PRIZE_TIERS_INFO = [
 // ============================================
 
 /**
- * ✅ NOVO: Carrega o saldo da Piscina Única
+ * Carrega o saldo da Piscina Única
  */
 async function loadPoolBalance() {
-    if (!State.actionsManagerContractPublic) return; // USAR INSTÂNCIA PÚBLICA PARA LEITURA
+    if (!State.actionsManagerContractPublic) return;
     try {
         const balance = await safeContractCall(
-            State.actionsManagerContractPublic, // CORREÇÃO: Usando a instância pública
-            'prizePoolBalance', // Lendo a variável de piscina única (FortunePoolV3)
+            State.actionsManagerContractPublic,
+            'prizePoolBalance',
             [], 
             0n
         );
@@ -68,7 +73,7 @@ async function loadPoolBalance() {
 
 
 /**
- * ✅ NOVO: Esta função é chamada pelo OUVINTE DE EVENTOS (em main.js/state.js)
+ * NOVO: Esta função é chamada pelo OUVINTE DE EVENTOS (em main.js/state.js)
  * quando o evento 'GameFulfilled' é recebido do Oráculo.
  */
 function handleGameFulfilled(gameId, user, prizeWon, rolls) {
@@ -82,20 +87,22 @@ function handleGameFulfilled(gameId, user, prizeWon, rolls) {
     // Determina o multiplicador mais alto
     let highestMultiplier = 0;
     const prizeWonFloat = formatBigNumber(prizeWon);
-    const mockWager = 1; // Usado para inferir o multiplicador com base no valor de prêmio
     
-    // Lógica para inferir o multiplicador (adaptada das versões anteriores)
     if (prizeWonFloat > 0) {
-        // Tenta inferir o multiplicador do prêmio (ex: se ganhou 100 BKC e apostou 1, o multiplicador é 100)
-        // Como não temos o wager aqui, usamos um mock para lógica:
-        const inferredMultiplier = prizeWonFloat > 0 ? prizeWonFloat : 0; // Simplificado
-        
-        // Match com os tiers:
-        if (inferredMultiplier >= 95) highestMultiplier = 100; 
-        else if (inferredMultiplier >= 9.5) highestMultiplier = 10; 
-        else if (inferredMultiplier >= 2.9) highestMultiplier = 3; 
+        // Lógica simplificada para inferir o multiplicador com base nos tiers fixos (1x, 10x, 100x)
+        if (prizeWonFloat > 95) highestMultiplier = 100; 
+        else if (prizeWonFloat > 9.5) highestMultiplier = 10; 
+        else if (prizeWonFloat > 2.9) highestMultiplier = 3; 
         else highestMultiplier = 1; 
     }
+
+    // ATUALIZA O ESTADO DO ÚLTIMO JOGO
+    gameState.lastGame = {
+        id: Number(gameId),
+        amount: 0n, // Não temos o commit amount aqui, mas poderíamos buscar do GameRequested
+        prize: prizeWon,
+        rolls: rolls.map(r => Number(r)) // Converte BigInt para Number
+    };
 
     const prizeData = {
         totalPrizeWon: prizeWon,
@@ -119,7 +126,6 @@ async function runActivationSequence(prizeData) {
     if (!activationArea || !activationCore || !resultDisplay) return;
 
     // 1. Inicia a Animação (se ainda não estiver ativa)
-    // O estado 'isActivating' é definido em executePurchase
     resultDisplay.innerHTML = `<h3>ORACLE IS PROCESSING...</h3>`;
     resultDisplay.classList.remove('win', 'lose');
     activationCore.classList.add('activating'); 
@@ -133,6 +139,9 @@ async function runActivationSequence(prizeData) {
     // 3. Mostra o Resultado
     const totalPrizeWonFloat = formatBigNumber(prizeData.totalPrizeWon);
     
+    // ATUALIZA O PAINEL DE ÚLTIMA ATIVAÇÃO
+    TigerGamePage.updateLastGamePanel();
+
     if (prizeData.highestMultiplier > 0) {
         resultDisplay.classList.add('win');
         resultDisplay.innerHTML = `<h3>🎉 BONUS UNLOCKED! x${prizeData.highestMultiplier}! You received ${totalPrizeWonFloat.toLocaleString('en-US', { maximumFractionDigits: 2 })} $BKC!</h3>`;
@@ -192,10 +201,6 @@ function stopActivationOnError() {
 // V. FUNÇÃO PRINCIPAL DE "COMPRA"
 // ============================================
 
-/**
- * ✅ ATUALIZADO: Agora envia a Tx 1 (Participate) e espera
- * que o Oráculo envie o resultado (Tx 2).
- */
 async function executePurchase() {
     if (gameState.isActivating) return;
     if (!State.isConnected) {
@@ -224,7 +229,7 @@ async function executePurchase() {
         return;
     }
     
-    // ✅ NOVO: Busca e verifica a taxa do Oráculo (em ETH/BNB)
+    // Busca e verifica a taxa do Oráculo (em ETH/BNB)
     const oracleFeeWei = State.systemData.oracleFeeInWei ? BigInt(State.systemData.oracleFeeInWei) : 0n;
     if (oracleFeeWei <= 0n) {
         showToast("Oracle Fee is not set. Please contact support.", "error");
@@ -248,7 +253,7 @@ async function executePurchase() {
         const [ignoredFee, pStakeReq] = await safeContractCall(
             State.ecosystemManagerContract, 
             'getServiceRequirements', 
-            ["FORTUNE_POOL_SERVICE"], // Chave do serviço
+            ["FORTUNE_POOL_SERVICE"],
             [0n, 0n]
         );
         if (State.userTotalPStake < pStakeReq) {
@@ -262,13 +267,19 @@ async function executePurchase() {
         showToast('Approval successful! Requesting game...', "success");
         
         // 3. Executa a função 'participate' (Tx 1)
-        // ✅ ATUALIZADO: Envia a taxa do Oráculo (ETH/BNB) como 'value'
         const playTx = await State.actionsManagerContract.participate(
             amountWei, 
             { value: oracleFeeWei }
         );
         
-        // A animação de "processando" começa aqui
+        // **ATUALIZA O ESTADO DO ÚLTIMO JOGO APÓS A REQUISIÇÃO (ANTES DO ORÁCULO RESPONDER)**
+        gameState.lastGame.amount = amountWei;
+        gameState.lastGame.id = 0; // Reset ID (Será atualizado no evento)
+        gameState.lastGame.prize = 0n;
+        gameState.lastGame.rolls = [0, 0, 0];
+        TigerGamePage.updateLastGamePanel(true); // Mostra "Waiting for Oracle"
+        
+        // Inicia a animação de "processando"
         const activationCore = document.getElementById('activationCore');
         const resultDisplay = document.getElementById('resultDisplay');
         if (activationCore) activationCore.classList.add('activating');
@@ -276,8 +287,7 @@ async function executePurchase() {
 
         await playTx.wait();
         
-        // 4. ✅ ATUALIZADO: Sucesso da Tx 1
-        // Não processamos o resultado; apenas confirmamos a requisição.
+        // 4. Sucesso da Tx 1
         showToast("✅ Game Requested! The Oracle is processing your result. (Est. 1-2 min)", "success");
         if (resultDisplay) resultDisplay.innerHTML = `<h3>WAITING FOR ORACLE...</h3>`;
         // O estado 'isActivating' permanece 'true' até o Oráculo responder em 'handleGameFulfilled'
@@ -295,8 +305,6 @@ async function executePurchase() {
         showToast(`Activation Failed: ${errorMessage}`, "error");
         stopActivationOnError(); // Reseta a UI
     } 
-    // O 'finally' foi removido. O 'isActivating' só é definido como 'false'
-    // quando o Oráculo responde (em handleGameFulfilled).
 }
 
 
@@ -315,8 +323,19 @@ export const TigerGamePage = {
             return;
         }
 
-        // ✅ CORRIGIDO: HTML simplificado para Piscina Única (mantendo o layout da Versão V9)
-        const htmlContent = `
+        // HTML base (apenas se não tiver sido renderizado)
+        if (!pageContainer.querySelector('.tiger-game-wrapper')) {
+            pageContainer.innerHTML = this.getHtmlContent();
+            this.initializeEventListeners();
+        }
+        
+        this.loadPoolBalance();
+        this.updateUIState();
+        this.updateLastGamePanel(); // Garante que o painel de histórico seja renderizado
+    },
+    
+    getHtmlContent() {
+        return `
             <div class="tiger-game-wrapper">
                 <header class="tiger-header">
                     <div class="header-top">
@@ -388,6 +407,9 @@ export const TigerGamePage = {
                         </div>
                     </div>
                 </section>
+                
+                <section class="last-game-panel" id="lastGamePanel">
+                    </section>
 
                 <section class="tiger-action-bar">
                     <button class="spin-button" id="activateButton">ACTIVATE PURCHASE & MINE</button>
@@ -438,15 +460,6 @@ export const TigerGamePage = {
                 <div class="modal" id="levelUpModal">...</div>
             </div>
         `;
-
-        const currentTitle = pageContainer.querySelector('.game-title');
-        if (!currentTitle || currentTitle.textContent !== '✨ BKC REWARD GENERATOR') {
-             pageContainer.innerHTML = htmlContent;
-             this.initializeEventListeners();
-        }
-        
-        this.loadPoolBalance();
-        this.updateUIState();
     },
 
     initializeEventListeners() {
@@ -470,16 +483,12 @@ export const TigerGamePage = {
 
         if (buyBkcButton) {
             buyBkcButton.addEventListener('click', () => {
-                // AJUSTADO: Usa addresses.bkcDexPoolAddress para o link de compra 
                 const swapLink = addresses.bkcDexPoolAddress || '#'; 
                 if(swapLink === '#') {
                     showToast("Buy link is not configured.", "error");
                     return;
                 }
-                // Se o link for uma URL completa (produção), abre nova aba.
-                // Se for um hash (#faucet), navega internamente.
                 if (swapLink.startsWith('#')) {
-                    // Se você definiu addresses.bkcDexPoolAddress como #faucet, isso irá funcionar
                     window.location.hash = swapLink; 
                 } else {
                     window.open(swapLink, "_blank");
@@ -522,21 +531,19 @@ export const TigerGamePage = {
     
     loadPoolBalance, 
 
-    // ✅ CORRIGIDO: Atualiza a piscina única
     updatePoolDisplay() {
         const totalPool = document.getElementById('totalPool');
-        if (totalPool) totalPool.textContent = formatBigNumber(gameState.poolBalance || 0n).toLocaleString('en-US', { maximumFractionDigits: 2 });
+        if (totalPool) totalPool.textContent = formatBigNumber(gameState.poolBalance || 0n).toLocaleString('en-US', { maximumFractionDigits: 2 }) + ' $BKC';
     },
     
     /**
-     * ✅ NOVO: Lida com o resultado do Oráculo
+     * Lida com o resultado do Oráculo
      */
     handleGameFulfilled,
 
     async checkRequirements() {
         const pstakeStatusEl = document.getElementById('pstakeStatus');
         const oracleFeeStatusEl = document.getElementById('oracleFeeStatus');
-        const activateButton = document.getElementById('activateButton');
         
         if (!pstakeStatusEl || !oracleFeeStatusEl || !State.ecosystemManagerContract) return false;
 
@@ -602,34 +609,106 @@ export const TigerGamePage = {
         }
     },
 
-    // ... (Funções de Gamificação mantidas) ...
-    addXP(amount) {
-        gameState.currentXP += amount;
-        while (gameState.currentXP >= gameState.xpPerLevel) { this.levelUp(); }
-        this.updateProgressBar();
-    },
-    levelUp() { /* ... */ },
-    updateProgressBar() { /* ... */ },
-    checkAchievements(prizeWon, multiplier) {
-        gameState.achievements.forEach(achievement => {
-            if (achievement.unlocked) return;
-            let shouldUnlock = false;
-            if (achievement.id === 'first-activation' && gameState.totalActivations >= 10) { shouldUnlock = true; } 
-            else if (achievement.id === 'hundred-activations' && gameState.totalActivations >= 100) { shouldUnlock = true; } 
-            else if (achievement.id === 'bonus-master' && multiplier === 100) { shouldUnlock = true; }
-            if (shouldUnlock) { this.unlockAchievement(achievement); }
-        });
-    },
-    unlockAchievement(achievement) { /* ... */ },
-    showAchievements() { /* ... */ },
-    showRules() {
-        const rulesModal = document.getElementById('rulesModal');
-        if (rulesModal) {
-            rulesModal.classList.add('active');
+    // NOVO: Renderiza o painel de última ativação/rolls
+    updateLastGamePanel(isWaiting = false) {
+        const panel = document.getElementById('lastGamePanel');
+        if (!panel) return;
+
+        const { id, amount, prize, rolls } = gameState.lastGame;
+        const prizeFloat = formatBigNumber(prize);
+        const amountFloat = formatBigNumber(amount);
+        
+        const rollHtml = rolls.map(r => 
+            `<span class="roll-number">${r === 0 ? '?' : r}</span>`
+        ).join('');
+        
+        let headerText = 'LAST ACTIVATION DETAILS';
+        let prizeText = 'No recorded games yet.';
+        let winClass = '';
+
+        if (isWaiting) {
+             headerText = `PENDING GAME #${id || '...'}`;
+             prizeText = `<span style="color:var(--tiger-accent-blue);">Awaiting Oracle fulfillment...</span>`;
+             winClass = 'pending';
+        } else if (id > 0) {
+            headerText = `GAME #${id}`;
+            if (prize > 0n) {
+                prizeText = `<span style="color:var(--tiger-accent-green);">${prizeFloat.toLocaleString('en-US', { maximumFractionDigits: 2 })} $BKC WON</span>`;
+                winClass = 'win';
+            } else {
+                prizeText = `<span style="color:var(--tiger-accent-orange);">No Bonus Unlocked</span>`;
+                winClass = 'lose';
+            }
         }
+        
+        panel.innerHTML = `
+            <div class="panel-header ${winClass}">
+                <h4>${headerText}</h4>
+                <div class="prize-text">${prizeText}</div>
+            </div>
+            
+            <div class="rolls-container">
+                <div class="roll-info">
+                    <span class="roll-label">Commited Amount:</span>
+                    <span class="roll-value">${amountFloat.toLocaleString('en-US', { maximumFractionDigits: 2 })} $BKC</span>
+                </div>
+                <div class="roll-info">
+                    <span class="roll-label">Rolls:</span>
+                    <div class="rolls-display">
+                        ${rollHtml}
+                    </div>
+                </div>
+            </div>
+            
+        `;
+
+        // Adicionar estilos de painel (para o arquivo CSS)
+        panel.style.cssText = `
+            background: var(--tiger-bg-secondary);
+            border: 1px solid var(--tiger-border-color);
+            border-radius: 12px;
+            padding: 16px;
+            margin-top: 16px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+        `;
+        
+        // Estilos específicos para o painel de Rolls
+        const rollsContainer = panel.querySelector('.rolls-container');
+        if (rollsContainer) {
+             rollsContainer.style.cssText = `
+                 display: flex;
+                 justify-content: space-between;
+                 margin-top: 12px;
+                 padding-top: 12px;
+                 border-top: 1px solid var(--tiger-border-color);
+                 font-size: 13px;
+             `;
+        }
+        
+        const rollsDisplay = panel.querySelector('.rolls-display');
+        if (rollsDisplay) {
+            rollsDisplay.style.cssText = `
+                display: flex;
+                gap: 8px;
+            `;
+        }
+
+        const rollNumbers = panel.querySelectorAll('.roll-number');
+        rollNumbers.forEach(el => {
+            el.style.cssText = `
+                background: var(--tiger-bg-primary);
+                padding: 4px 8px;
+                border-radius: 4px;
+                font-weight: bold;
+                color: ${winClass === 'win' ? 'var(--tiger-accent-green)' : 'var(--tiger-accent-gold)'};
+                font-family: monospace;
+            `;
+        });
+        
     },
 
-    // Lógica de UI atualizada para lidar com o botão "Comprar"
+    // ... (Funções de Gamificação mantidas) ...
+
     async updateUIState() {
         const activateButton = document.getElementById('activateButton');
         const buyBkcButton = document.getElementById('buyBkcButton');

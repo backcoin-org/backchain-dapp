@@ -3,9 +3,9 @@
 import { addresses } from '../config.js'; 
 import { State } from '../state.js';
 import { formatBigNumber, formatPStake, renderLoading, renderError, renderNoData, ipfsGateway } from '../utils.js';
-import { safeContractCall, getHighestBoosterBoostFromAPI, API_ENDPOINTS } from '../modules/data.js';
+// É CRÍTICO GARANTIR QUE loadPublicData E loadUserData TRAGAM AS INSTÂNCIAS DE CONTRATO PARA O ESTADO
+import { safeContractCall, getHighestBoosterBoostFromAPI, API_ENDPOINTS, loadPublicData, loadUserData } from '../modules/data.js'; 
 import { showToast } from '../ui-feedback.js';
-// ✅ Assumindo que 'executeNotarizeDocument' será atualizado para aceitar (uri, boosterId, btnEl)
 import { executeNotarizeDocument } from '../modules/transactions.js';
 
 let currentFileToUpload = null;
@@ -21,7 +21,7 @@ const DANGEROUS_EXTENSIONS = ['.exe', '.js', '.bat', '.sh', '.vbs', '.scr', '.ja
 
 
 /**
- * Renderiza o layout
+ * Renderiza o layout (mantido)
  */
 function renderNotaryPageLayout() {
     const container = document.getElementById('notary');
@@ -59,7 +59,7 @@ function renderNotaryPageLayout() {
                     </div>
 
                     <div>
-                        <label for="notary-user-description" class="block text-sm font-medium text-zinc-300 mb-2">2. Add a Public Description (Optional, stored in metadata)</label>
+                        <label for="notary-user-description" class="block text-sm font-medium text-zinc-300 mb-2">2. Add a Public Description (Required for NFT Metadata)</label>
                         
 <textarea id="notary-user-description" 
     rows="3" 
@@ -105,12 +105,15 @@ function renderNotaryPageLayout() {
  * Carrega dados públicos (taxa e pStake)
  */
 async function loadNotaryPublicData() {
+    // CORREÇÃO 1: Garante que os contratos sejam carregados antes de qualquer chamada
+    await loadPublicData(); 
+
     const statsEl = document.getElementById('notary-stats-container');
     if (!statsEl) return false;
     statsEl.innerHTML = '<div class="text-center p-4"><div class="loader inline-block"></div> Loading Requirements...</div>';
 
     if (!State.ecosystemManagerContract) {
-        console.error("loadNotaryPublicData: State.ecosystemManagerContract is not available.");
+        console.error("loadNotaryPublicData: State.ecosystemManagerContract is not available after loadPublicData.");
         renderError(statsEl, "Ecosystem Hub contract not found.");
         return false;
     }
@@ -229,7 +232,12 @@ function updateNotaryUserStatus() {
         return;
     }
 
+    // CORREÇÃO DE FORMATO: Garante que os valores BigInt de pStake sejam processados
     const userPStake = State.userTotalPStake || 0n;
+    const minPStakeFormatted = formatPStake(State.notaryMinPStake || 0n);
+    const userPStakeFormatted = formatPStake(userPStake);
+
+
     const userBalance = State.currentUserBalance || 0n;
     const isFileUploaded = (notaryButtonState === 'upload_ready'); 
 
@@ -244,9 +252,11 @@ function updateNotaryUserStatus() {
     let discountPercent = "0%";
 
     if (boosterBips > 0n && baseFee > 0n) {
-        discount = (baseFee * boosterBips) / 10000n;
-        finalFee = baseFee - discount;
-        discountPercent = `${(Number(boosterBips) / 100).toFixed(0)}%`; 
+        // Simulação do desconto (Para UI, usando a lógica simplificada)
+        const discountBipsSimulated = boosterBips; 
+        discount = (baseFee * discountBipsSimulated) / 10000n; 
+        finalFee = (baseFee > discount) ? baseFee - discount : 0n;
+        discountPercent = `${(Number(discountBipsSimulated) / 100).toFixed(0)}%`; 
     }
 
     const hasEnoughPStake = State.notaryMinPStake === 0n || userPStake >= State.notaryMinPStake;
@@ -257,17 +267,20 @@ function updateNotaryUserStatus() {
         <div class="flex items-center justify-between text-sm">
             <span class="text-zinc-400 flex items-center">
                 <i class="fa-solid ${hasEnoughPStake ? 'fa-check-circle text-green-400' : 'fa-times-circle text-red-400'} w-5 mr-2"></i>
-                Your pStake (${formatPStake(State.notaryMinPStake)} needed):
+                Your pStake (${minPStakeFormatted} needed):
             </span>
             <span class="font-bold ${hasEnoughPStake ? 'text-green-400' : 'text-red-400'} text-base">
-                ${formatPStake(userPStake)}
+                ${userPStakeFormatted}
             </span>
         </div>
         
         ${!hasEnoughPStake && State.notaryMinPStake > 0n ? `
-            <div class="mt-2 text-center">
-                <button id="delegate-now-btn" class="bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-md transition-colors text-sm w-full">
-                    <i class="fa-solid fa-arrow-right-from-bracket mr-2"></i> Delegate Now (Earn pStake)
+            <div class="mt-2 text-center flex gap-3">
+                <button id="delegate-now-btn" class="flex-1 bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-md transition-colors text-sm">
+                    <i class="fa-solid fa-arrow-right-from-bracket mr-2"></i> Delegate Now
+                </button>
+                <button id="pstake-help-btn" class="flex-shrink-0 bg-zinc-600 hover:bg-zinc-700 text-white font-bold py-2 px-4 rounded-md transition-colors text-sm" title="What is pStake and how to earn it?">
+                    <i class="fa-solid fa-question-circle"></i> 
                 </button>
             </div>
         ` : ''}
@@ -326,6 +339,9 @@ function updateNotaryUserStatus() {
      }
     userStatusEl.innerHTML = statusHTML;
 
+    // --- Lógica de Habilitação do Botão Principal ---
+    const isReadyForBlockchain = hasEnoughPStake && hasEnoughFee && isFileUploaded;
+    
     if (!hasEnoughPStake) {
         submitBtn.innerHTML = '<i class="fa-solid fa-arrow-right-from-bracket mr-2"></i> Delegate to Start';
         submitBtn.classList.remove('btn-disabled', 'bg-blue-600', 'bg-green-600', 'bg-amber-500');
@@ -333,18 +349,31 @@ function updateNotaryUserStatus() {
         submitBtn.href = '#'; 
         submitBtn.target = '';
         submitBtn.dataset.delegate = 'true'; 
+        notaryButtonState = 'initial'; // Reinicia o estado do botão
     }
     else if (needsFee && !hasEnoughFee) {
         submitBtn.innerHTML = '<i class="fa-solid fa-shopping-cart mr-2"></i> Buy $BKC to Start';
-        submitBtn.classList.remove('btn-disabled', 'bg-blue-600', 'bg-green-600', 'bg-amber-500');
+        submitBtn.classList.remove('btn-disabled', 'bg-blue-600', 'bg-green-600', 'bg-purple-600');
         submitBtn.classList.add('bg-amber-500', 'hover:bg-amber-600');
         submitBtn.href = swapLink;
         submitBtn.target = '_blank';
         submitBtn.dataset.delegate = 'false';
+        notaryButtonState = 'initial'; // Reinicia o estado do botão
     }
-    else {
-        submitBtn.dataset.delegate = 'false';
-        updateNotaryButtonUI();
+    else if (notaryButtonState === 'file_ready') {
+         submitBtn.dataset.delegate = 'false';
+         updateNotaryButtonUI(); // Deve cair em file_ready
+    }
+    else if (isReadyForBlockchain) {
+         notaryButtonState = 'upload_ready';
+         submitBtn.dataset.delegate = 'false';
+         updateNotaryButtonUI(); // Deve cair em upload_ready
+    }
+    else if (notaryButtonState !== 'uploading' && notaryButtonState !== 'signing' && notaryButtonState !== 'notarizing') {
+         // Se não está pronto, mas o arquivo foi selecionado, retorna ao estado inicial ou file_ready
+         notaryButtonState = currentFileToUpload ? 'file_ready' : 'initial';
+         updateNotaryButtonUI();
+         submitBtn.dataset.delegate = 'false';
     }
 }
 
@@ -488,6 +517,16 @@ async function handleFileUpload(file) {
     const fileName = file.name || "";
     const fileExtension = fileName.substring(fileName.lastIndexOf('.')).toLowerCase();
     
+    // CORREÇÃO: Verifica se a descrição está vazia (pois agora é essencial para o metadado)
+    const descriptionInput = document.getElementById('notary-user-description');
+    if (descriptionInput && (!descriptionInput.value.trim() || descriptionInput.value.length > 256)) {
+        const msg = "Error: Please fix the public description (1-256 chars) before selecting a file.";
+        if (errorEl) { errorEl.innerText = msg; errorEl.classList.remove('hidden'); }
+        // Força a revalidação da descrição
+        if(descriptionInput.value.length > 256) descriptionInput.focus();
+        return; 
+    }
+
     if (file.size > MAX_FILE_SIZE_BYTES) {
          const msg = `File size (${(file.size / 1024 / 1024).toFixed(2)}MB) exceeds 10MB limit.`;
          if (errorEl) { errorEl.innerText = msg; errorEl.classList.remove('hidden'); }
@@ -592,11 +631,21 @@ function initNotaryListeners() {
                 descriptionCounter.classList.remove('text-red-400');
                 descriptionCounter.classList.add('text-zinc-500');
             }
+            // Atualiza o estado do botão se o arquivo já estiver selecionado
+            if (currentFileToUpload) {
+                if (length > 0 && length <= 256) {
+                    notaryButtonState = 'file_ready';
+                } else {
+                    // Desabilita o fluxo se a descrição for inválida
+                    notaryButtonState = 'initial'; 
+                }
+                updateNotaryButtonUI();
+                updateNotaryUserStatus();
+            }
         });
     }
     
-    // --- REMOVIDO: O listener da 'notary-main-box' (agora é tratado por <label>) ---
-
+    // --- Listener de Seleção de Arquivo ---
     if (fileInput) {
         fileInput.addEventListener('change', (e) => {
             if (!e.target.files || e.target.files.length === 0) {
@@ -626,8 +675,15 @@ function initNotaryListeners() {
         
         if (delegateBtn) {
             e.preventDefault();
-            document.querySelector('.sidebar-link[data-target="earn"]')?.click();
-            showToast("Redirecting to the Earn page to Delegate and acquire pStake.", "info");
+            // CORREÇÃO: O data-target para a página de mineração agora é 'mine'
+            document.querySelector('.sidebar-link[data-target="mine"]')?.click();
+            showToast("Redirecting to the Mining page to Delegate and acquire pStake.", "info");
+        }
+
+        // NOVO: Listener para o botão de ajuda do pStake
+        if (e.target.closest('#pstake-help-btn')) {
+            e.preventDefault();
+            showToast("pStake is your Power Stake—your overall influence in the Backchain ecosystem, calculated by your delegated $BKC amount multiplied by the lock duration.", "info", 10000);
         }
     });
 
@@ -636,6 +692,7 @@ function initNotaryListeners() {
         submitBtn.addEventListener('click', async (e) => {
             e.preventDefault();
             
+            // Verifica estado de desabilitação e links de terceiros
             if (submitBtn.classList.contains('btn-disabled')) return;
             if (submitBtn.href !== '#' && submitBtn.target === '_blank') return;
             if (submitBtn.dataset.delegate === 'true') return;
@@ -646,6 +703,15 @@ function initNotaryListeners() {
             
             const signer = await State.provider.getSigner();
             const userAddress = State.userAddress;
+            const descriptionInput = document.getElementById('notary-user-description');
+            const description = descriptionInput ? descriptionInput.value : '';
+
+            if (description.length === 0 || description.length > 256) {
+                 showToast("Error: Public description must be between 1 and 256 characters.", "error");
+                 descriptionInput.focus();
+                 return;
+            }
+
 
             // --- ESTADO 1: Ficheiro pronto, precisa de Assinatura ---
             if (notaryButtonState === 'file_ready') {
@@ -654,19 +720,13 @@ function initNotaryListeners() {
                 const boosterBips = State.userBoosterBips || 0n;
                 let finalFee = baseFee;
                 if (boosterBips > 0n && baseFee > 0n) {
-                    finalFee = baseFee - ((baseFee * boosterBips) / 10000n);
+                    // Cálculo da taxa final
+                    const maxDiscountBips = await safeContractCall(State.ecosystemManagerContract, 'getBoosterDiscount', [boosterBips], 0n);
+                    finalFee = baseFee - ((baseFee * maxDiscountBips) / 10000n);
                 }
                 const userBalance = State.currentUserBalance || 0n;
                 if (finalFee > 0n && userBalance < finalFee) {
                      return showToast(`Insufficient $BKC balance. You need ${formatBigNumber(finalFee)} $BKC.`, "error");
-                }
-
-                // ✅ CORREÇÃO: Lê a descrição ANTES do upload
-                const description = descriptionInput.value;
-                if (description.length > 256) {
-                    showToast("Error: Description exceeds 256 characters.", "error");
-                    descriptionInput.focus();
-                    return;
                 }
 
                 const message = "I am signing to authenticate my file for notarization on Backchain.";
@@ -685,7 +745,7 @@ function initNotaryListeners() {
                     formData.append('file', currentFileToUpload);
                     formData.append('signature', signature); 
                     formData.append('address', userAddress);
-                    formData.append('description', description); // ✅ CORREÇÃO: Envia a descrição para a API
+                    formData.append('description', description); // Envia a descrição para a API
 
                     // ✅ CORREÇÃO: Usando API_ENDPOINTS
                     const response = await fetch(API_ENDPOINTS.uploadFileToIPFS, { 
@@ -721,45 +781,38 @@ function initNotaryListeners() {
             if (notaryButtonState === 'upload_ready') {
                 
                 if (!currentUploadedIPFS_URI) return showToast("Error: File URI is missing.", "error");
-
-                // ❌ REMOVIDO: A verificação da descrição já foi feita
                 
                 notaryButtonState = 'notarizing';
                 updateNotaryButtonUI();
 
                 const boosterId = State.userBoosterId || 0n; 
                 
-                // ✅ *** INÍCIO DA CORREÇÃO CRÍTICA ***
-                // A definição da função em transactions.js espera 4 argumentos:
-                // (documentURI, description, boosterId, submitButton)
-                // Estávamos passando apenas 3, desalinhando os argumentos.
-                const description = descriptionInput.value; // Pega a descrição (mesmo que não seja usada pela tx, é esperada)
-                
+                // ✅ CHAMADA CORRIGIDA: A função notarize do contrato espera apenas URI e ID do Booster
                 const success = await executeNotarizeDocument(
-                    currentUploadedIPFS_URI, // Arg 1: A URI
-                    description,             // Arg 2: A Descrição
-                    boosterId,               // Arg 3: O ID do Booster
-                    submitBtn                // Arg 4: O elemento do botão
+                    currentUploadedIPFS_URI, // Arg 1: documentMetadataURI
+                    boosterId,               // Arg 2: _boosterTokenId
+                    submitBtn                // Arg 3: O elemento do botão
                 );
-                // ✅ *** FIM DA CORREÇÃO CRÍTICA ***
 
                 if (success) {
+                    // Limpar Estado
                     currentFileToUpload = null;
                     currentUploadedIPFS_URI = null;
                     notaryButtonState = 'initial';
                     document.getElementById('notary-document-uri').value = '';
                     if(fileInput) fileInput.value = '';
                     if(descriptionInput) descriptionInput.value = '';
+                    
+                    const descriptionCounter = document.getElementById('notary-description-counter');
                     if(descriptionCounter) {
                         descriptionCounter.innerText = '0 / 256';
                         descriptionCounter.classList.remove('text-red-400');
                         descriptionCounter.classList.add('text-zinc-500');
                     }
 
-                    document.getElementById('notary-upload-prompt').classList.remove('hidden');
+                    document.getElementById('notary-upload-prompt')?.classList.remove('hidden');
                     const statusEl = document.getElementById('notary-upload-status');
-                    statusEl.classList.add('hidden');
-                    statusEl.innerHTML = '';
+                    if(statusEl) { statusEl.classList.add('hidden'); statusEl.innerHTML = ''; }
                     
                     updateNotaryButtonUI(); 
 
@@ -797,10 +850,16 @@ export const NotaryPage = {
         
         const fileInput = document.getElementById('notary-file-upload');
         if (fileInput) fileInput.disabled = false;
+        
+        // Garante que os contratos sejam carregados antes de tentar carregar dados públicos
+        await loadPublicData(); 
 
         const loadedPublicData = await loadNotaryPublicData();
 
         if (State.isConnected && loadedPublicData) {
+            // Garante que os dados do usuário estejam carregados
+            await loadUserData();
+
             const boosterData = await getHighestBoosterBoostFromAPI();
             State.userBoosterBips = BigInt(boosterData.highestBoost || 0);
             State.userBoosterId = boosterData.tokenId ? BigInt(boosterData.tokenId) : 0n;
@@ -820,10 +879,15 @@ export const NotaryPage = {
 
     async update(isConnected) {
         console.log("Updating Notary Page, isConnected:", isConnected);
+        
+        // CORREÇÃO: Garante que os contratos estejam prontos em 'update'
+        await loadPublicData(); 
 
         const loadedPublicData = await loadNotaryPublicData();
 
         if (isConnected && loadedPublicData) {
+            await loadUserData(); // Garante que State.userTotalPStake esteja atualizado
+
             const boosterData = await getHighestBoosterBoostFromAPI();
             State.userBoosterBips = BigInt(boosterData.highestBoost || 0);
             State.userBoosterId = boosterData.tokenId ? BigInt(boosterData.tokenId) : 0n;

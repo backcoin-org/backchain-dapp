@@ -18,10 +18,12 @@ import { loadAddresses } from './config.js';
 
 // Page imports
 import { DashboardPage } from './pages/DashboardPage.js';
-import { EarnPage } from './pages/EarnPage.js';
+// CORREÇÃO CRÍTICA: O arquivo se chama networkstaking.js, mas a classe é EarnPage (assumindo que EarnPage é exportado de networkstaking.js)
+import { EarnPage } from './pages/networkstaking.js'; 
 import { StorePage } from './pages/StorePage.js';
 import { RewardsPage } from './pages/RewardsPage.js';
-import { TigerGamePage } from './pages/TigerGame.js'; 
+// AJUSTADO: Renomeando o componente importado para FortunePoolPage
+import { TigerGamePage as FortunePoolPage } from './pages/FortunePool.js'; 
 import { AboutPage } from './pages/AboutPage.js';
 import { AirdropPage } from './pages/AirdropPage.js';
 import { AdminPage } from './pages/AdminPage.js';
@@ -67,10 +69,10 @@ function formatLargeBalance(bigNum) {
 
 const routes = {
     'dashboard': DashboardPage,
-    'earn': EarnPage,
+    'mine': EarnPage, // Rota 'mine' já ajustada
     'store': StorePage,
     'rewards': RewardsPage,
-    'actions': TigerGamePage,
+    'actions': FortunePoolPage, 
     'notary': NotaryPage,
     'airdrop': AirdropPage,
     'dao': DaoPage,
@@ -198,8 +200,6 @@ function updateUIState() {
     const connectButtonMobile = document.getElementById('connectButtonMobile');
     const mobileAppDisplay = document.getElementById('mobileAppDisplay');
     
-    // Removido popMiningTab e validatorSectionTab - não existem no HTML
-
     // Helper to check elements
     const checkElement = (el, name) => { 
         if (!el) console.warn(`Element ${name} not found in DOM during UI update.`); 

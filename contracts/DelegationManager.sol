@@ -7,6 +7,7 @@ import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.sol";
 import "./IInterfaces.sol";
 import "./BKCToken.sol";
+
 contract DelegationManager is
     Initializable,
     UUPSUpgradeable,
@@ -19,12 +20,10 @@ contract DelegationManager is
     uint256 public constant MIN_LOCK_DURATION = 1 days;
     uint256 public constant MAX_LOCK_DURATION = 3650 days;
     uint256 public constant VALIDATOR_LOCK_DURATION = 1825 days;
-    uint256 public constant DYNAMIC_STAKE_BIPS = 3;
-    uint256 public constant SAFETY_MARGIN_BIPS = 10100;
-    uint256 public constant TOTAL_BIPS = 10000;
+    
     uint256 private constant E18 = 10**18;
-    // Definindo E18 para consistência
-
+    string public constant VALIDATOR_REGISTRATION_KEY = "VALIDATOR_REGISTRATION_FEE";
+    
     struct Validator {
         bool isRegistered;
         uint256 selfStakeAmount;
@@ -40,20 +39,21 @@ contract DelegationManager is
         address validator;
     }
 
-    mapping(address => bool) public hasPaidRegistrationFee;
+    // REMOVIDO: mapping(address => bool) public hasPaidRegistrationFee;
     mapping(address => Validator) public validators;
     address[] public validatorsArray;
-    uint256 public totalValidatorSelfStake;
+    uint256 public totalValidatorSelfStake; 
     uint256 public accValidatorRewardPerStake;
     mapping(address => uint256) public validatorRewardDebt;
-
     mapping(address => Delegation[]) public userDelegations;
     mapping(address => uint256) public userTotalPStake;
     uint256 public totalNetworkPStake;
     uint256 public accDelegatorRewardPerStake;
     mapping(address => uint256) public delegatorRewardDebt;
-    // Eventos ajustados: pStakeValue é opcional/pode ser 0
-    event ValidatorRegistered(address indexed validator, uint256 selfStake);
+    mapping(address => uint256) public pendingRegistrationBonus; // Bônus de registro não reivindicado
+    
+    // Eventos ajustados
+    event ValidatorRegistered(address indexed validator, uint256 selfStake, uint256 feePaid); // ADD feePaid
     event ValidatorUnregistered(address indexed validator, uint256 selfStakeReturned);
     event Delegated(
         address indexed user,
@@ -75,9 +75,8 @@ contract DelegationManager is
     );
     event ValidatorRewardClaimed(address indexed validator, uint256 amount);
     event DelegatorRewardClaimed(address indexed delegator, uint256 amount);
+    event RegistrationBonusClaimed(address indexed user, uint256 amount);
     
-    // CONSTRUTOR REMOVIDO PARA EVITAR ERRO DE UPGRADE DE SEGURANÇA
-
     function initialize(
         address _initialOwner,
         address _ecosystemManagerAddress
@@ -146,51 +145,74 @@ contract DelegationManager is
             emit RewardsDeposited(msg.sender, 0, _delegatorAmount);
         }
     }
-
-    function getMinValidatorStake() public view returns (uint256) {
-        uint256 dynamicStake = (bkcToken.totalSupply() * DYNAMIC_STAKE_BIPS) / 10000;
-        return (dynamicStake * SAFETY_MARGIN_BIPS) / 10000;
-    }
-
-    function payRegistrationFee() external nonReentrant {
-        uint256 stakeAmount = getMinValidatorStake();
-        require(!hasPaidRegistrationFee[msg.sender], "DM: Fee already paid");
+    
+    // REMOVIDO: function payRegistrationFee() ... { ... }
+    
+    function claimRegistrationBonus() external nonReentrant {
+        uint256 amount = pendingRegistrationBonus[msg.sender];
+        require(amount > 0, "DM: No pending bonus to claim");
         
-        address treasury = ecosystemManager.getTreasuryAddress();
-        require(treasury != address(0), "DM: Treasury not set in Brain");
-        require(
-            bkcToken.transferFrom(msg.sender, treasury, stakeAmount),
-            "DM: Fee transfer failed"
-        );
-        hasPaidRegistrationFee[msg.sender] = true;
+        pendingRegistrationBonus[msg.sender] = 0;
+        
+        require(bkcToken.transfer(msg.sender, amount), "DM: Bonus transfer failed");
+        emit RegistrationBonusClaimed(msg.sender, amount);
     }
 
+    // FUNDIDO: Lógica de payRegistrationFee() movida para cá.
     function registerValidator(address _validatorAddress) external nonReentrant {
-        uint256 stakeAmount = getMinValidatorStake();
         require(msg.sender == _validatorAddress, "DM: Can only register self");
-        require(hasPaidRegistrationFee[msg.sender], "DM: Must pay registration fee first");
         require(!validators[_validatorAddress].isRegistered, "DM: Validator already registered");
-        _claimDelegatorReward(msg.sender, 0);
         
+        // 1. Cobrança da Taxa (Lógica movida de payRegistrationFee)
+        uint256 feeToPay = ecosystemManager.getFee(VALIDATOR_REGISTRATION_KEY);
+        require(feeToPay > 0, "DM: Registration fee is zero or not configured");
+        
+        // 1.1. Transferir Taxa TOTAL do Usuário para o DM
         require(
-            bkcToken.transferFrom(msg.sender, address(this), stakeAmount),
-            "DM: Stake transfer failed"
+            bkcToken.transferFrom(msg.sender, address(this), feeToPay),
+            "DM: Fee transfer failed or insufficient allowance"
         );
+
+        // 1.2. Distribuição Simples da Taxa
+        address treasury = ecosystemManager.getTreasuryAddress();
+        require(treasury != address(0), "DM: Treasury not set in Hub");
+        
+        uint256 treasuryAmount = feeToPay / 2;
+        uint256 delegatorAmount = feeToPay - treasuryAmount;
+
+        // 1.3. Transferência para Tesouraria
+        if (treasuryAmount > 0) {
+            // Transferência direta do DM (que recebeu os tokens)
+            require(bkcToken.transfer(treasury, treasuryAmount), "DM: Fee to Treasury failed");
+        }
+        
+        // 1.4. Transferência para o Pool de Delegadores (Acumula em accDelegatorRewardPerStake)
+        if (delegatorAmount > 0) {
+            if (totalNetworkPStake > 0) {
+                 accDelegatorRewardPerStake += (delegatorAmount * E18) / totalNetworkPStake;
+            }
+            emit RewardsDeposited(address(this), 0, delegatorAmount);
+        }
+        
+        // 2. Registro do Validador
+        
+        // Claim de recompensas (para atualizar o debt antes do registro)
+        _claimDelegatorReward(msg.sender, 0);
+
         validators[_validatorAddress] = Validator({
             isRegistered: true,
-            selfStakeAmount: stakeAmount,
-            selfStakeUnlockTime: block.timestamp + VALIDATOR_LOCK_DURATION,
+            selfStakeAmount: 0, // Stake é ZERO
+            selfStakeUnlockTime: block.timestamp, // Desbloqueio Imediato (sem stake)
             totalPStake: 0,
             totalDelegatedAmount: 0
         });
         validatorsArray.push(_validatorAddress);
 
-        totalValidatorSelfStake += stakeAmount;
-        validatorRewardDebt[_validatorAddress] =
-            (stakeAmount * accValidatorRewardPerStake) / E18;
-        emit ValidatorRegistered(_validatorAddress, stakeAmount);
+        // 3. Emite o evento de Registro
+        emit ValidatorRegistered(_validatorAddress, 0, feeToPay); // ADD feePaid
     }
 
+    // ... (restante das funções inalteradas, pois não dependem de hasPaidRegistrationFee) ...
     function delegate(
         address _validatorAddress, 
         uint256 _totalAmount, 
@@ -379,7 +401,7 @@ contract DelegationManager is
                 
                 if (discountBips > 0) {
                     return (_baseFeeBips > discountBips) ?
-                        _baseFeeBips - discountBips : 0;
+                    _baseFeeBips - discountBips : 0;
                 }
             }
         } catch {

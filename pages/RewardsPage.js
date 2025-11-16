@@ -49,7 +49,10 @@ async function renderClaimPanel() {
         
         // 3. Obter Detalhes do Desconto (para exibição)
         const efficiencyData = await getHighestBoosterBoostFromAPI();
-        const baseFeeAmount = (totalRewards * BigInt(Math.round(basePenaltyPercent * 100))) / 10000n;
+        
+        // CORREÇÃO: Pega a taxa base do claim (assumindo CLAIM_REWARD_FEE_BIPS está carregado no State)
+        const baseClaimFeeBips = State.systemData.claimRewardFeeBips || 0n;
+        const baseFeeAmount = (totalRewards * baseClaimFeeBips) / 10000n;
         
         // O valor real economizado
         const calculatedDiscountAmount = baseFeeAmount > feeAmount 
@@ -57,47 +60,58 @@ async function renderClaimPanel() {
             : 0n;
 
         // Renderiza o painel de recompensas
+        // REDESENHO: Layout elegante e focado em um único card de resumo
         el.innerHTML = `
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-5 mb-5">
-                <div class="bg-main border border-border-color rounded-lg p-4">
-                    <p class="text-zinc-400 text-sm">Staking Rewards (Delegator)</p>
-                    <p class="text-2xl font-bold text-purple-400">${formatBigNumber(totalGrossRewards.stakingRewards).toFixed(4)} $BKC</p>
+            <div class="space-y-4">
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div class="bg-main border border-border-color rounded-xl p-5 shadow-inner">
+                        <p class="text-zinc-400 text-sm flex items-center gap-2">
+                             <i class="fa-solid fa-layer-group text-purple-400"></i> Staking Rewards (Delegator)
+                        </p>
+                        <p class="text-3xl font-bold text-purple-400 mt-1">${formatBigNumber(totalGrossRewards.stakingRewards).toFixed(4)} $BKC</p>
+                    </div>
+                     <div class="bg-main border border-border-color rounded-xl p-5 shadow-inner">
+                        <p class="text-zinc-400 text-sm flex items-center gap-2">
+                            <i class="fa-solid fa-hard-hat text-blue-400"></i> Mining Rewards (PoP)
+                        </p>
+                        <p class="text-3xl font-bold text-blue-400 mt-1">${formatBigNumber(totalGrossRewards.minerRewards).toFixed(4)} $BKC</p>
+                    </div>
                 </div>
-                 <div class="bg-main border border-border-color rounded-lg p-4">
-                    <p class="text-zinc-400 text-sm">Validator Rewards (Miner)</p>
-                    <p class="text-2xl font-bold text-blue-400">${formatBigNumber(totalGrossRewards.minerRewards).toFixed(4)} $BKC</p>
+
+                <div class="p-5 bg-zinc-700/50 border border-amber-500/30 rounded-xl">
+                    <div class="flex justify-between items-center text-lg font-semibold border-b border-zinc-600 pb-2 mb-2">
+                        <span>Total Available (Gross):</span>
+                        <span class="text-amber-400">${formatBigNumber(totalRewards).toFixed(4)} $BKC</span>
+                    </div>
+
+                    <div class="space-y-1">
+                        <div class="flex justify-between text-sm text-zinc-400">
+                            <span>Base Claim Fee (${basePenaltyPercent.toFixed(2)}%):</span>
+                            <span class="${calculatedDiscountAmount > 0n ? 'line-through text-red-400/70' : 'text-red-400'}">-${formatBigNumber(baseFeeAmount).toFixed(4)} $BKC</span>
+                        </div>
+                        
+                        ${efficiencyData.highestBoost > 0n ? 
+                            `<div class="flex justify-between font-semibold text-sm text-cyan-400">
+                                <span>Booster Discount (${efficiencyData.highestBoost / 100}%):</span>
+                                <span>+${formatBigNumber(calculatedDiscountAmount).toFixed(4)} $BKC</span>
+                             </div>` : 
+                            `<div class="flex justify-between text-sm text-zinc-400">
+                                <span>Booster Discount:</span>
+                                <span>0.00%</span>
+                            </div>`
+                        }
+                    </div>
+
+                    <div class="flex justify-between font-bold text-2xl pt-3 mt-3 border-t border-zinc-600">
+                        <span>NET TO RECEIVE:</span>
+                        <span class="${netClaimAmount > 0n ? 'text-green-400' : 'text-zinc-500'}">${formatBigNumber(netClaimAmount).toFixed(4)} $BKC</span>
+                    </div>
                 </div>
             </div>
 
-            <div class="space-y-3 p-4 bg-main border border-border-color rounded-lg">
-                <div class="flex justify-between items-center text-sm">
-                    <span class="text-zinc-400">Total Claimable (Gross):</span>
-                    <span class="font-bold text-amber-400">${formatBigNumber(totalRewards).toFixed(4)} $BKC</span>
-                </div>
-                
-                <div class="flex justify-between items-center text-sm ${discountPercent > 0 ? 'line-through text-red-500/70' : 'text-zinc-400'}">
-                    <span class="text-zinc-400">Base Fee (${basePenaltyPercent.toFixed(2)}%):</span>
-                    <span>-${formatBigNumber(baseFeeAmount).toFixed(4)} $BKC</span>
-                </div>
-                
-                ${discountPercent > 0 ? 
-                    `<div class="flex justify-between font-semibold text-green-400">
-                        <span>Booster Discount (${efficiencyData.highestBoost / 100}%):</span>
-                        <span>+${formatBigNumber(calculatedDiscountAmount).toFixed(4)} $BKC</span>
-                     </div>` : 
-                    `<div class="flex justify-between text-zinc-400">
-                        <span>Booster Discount:</span>
-                        <span>0.00%</span>
-                    </div>`
-                }
-
-                <div class="flex justify-between font-bold text-xl pt-3 border-t border-border-color/50">
-                    <span>Net Amount to Receive:</span>
-                    <span class="${netClaimAmount > 0n ? 'text-white' : 'text-zinc-500'}">${formatBigNumber(netClaimAmount).toFixed(4)} $BKC</span>
-                </div>
-            </div>
-
-            <p class="text-xs text-zinc-500 mt-4">Fees are sent to the Delegator Pool to benefit all pStake holders.</p>
+            <p class="text-xs text-zinc-500 mt-4 text-center">
+                Fees are pooled and distributed to Delegator rewards to reinforce the pStake ecosystem.
+            </p>
 
             <button id="claimAllRewardsBtn" class="w-full bg-amber-500 hover:bg-amber-600 text-zinc-900 font-bold py-3 px-4 rounded-md text-lg transition-opacity mt-5 ${totalRewards === 0n ? 'btn-disabled' : ''}" ${totalRewards === 0n ? 'disabled' : ''}>
                  <i class="fa-solid fa-gift mr-2"></i> Claim All Rewards Now
@@ -129,27 +143,29 @@ export const RewardsPage = {
         const contentWrapper = document.getElementById('rewards');
         if (!contentWrapper) return;
         
-        // Remove ou ajusta o bloco de Certificados no HTML
-        const certsSection = document.getElementById('certificates-list-container');
-        const certsTitle = contentWrapper.querySelector('h2:last-of-type'); // Assuming the h2 is the last one
-        
-        if (certsSection && certsTitle && certsTitle.textContent.includes('Vesting Certificates')) {
-            // Remove o conteúdo e mostra a mensagem de descontinuação
-            certsSection.innerHTML = `
-                <div class="p-8 bg-sidebar/50 border border-red-500/50 rounded-xl text-center">
-                    <i class="fa-solid fa-file-excel text-4xl text-red-400 mb-3"></i>
-                    <h3 class="text-xl font-bold">Vesting Certificates Descontinuados</h3>
-                    <p class="text-zinc-400 mt-2">O sistema de Certificados de Vesting foi removido do protocolo.</p>
+        contentWrapper.innerHTML = `
+            <h1 class="text-2xl md:text-3xl font-bold mb-8">My Rewards Overview</h1>
+
+            <div id="claimable-rewards-panel" class="mb-8 p-6 bg-sidebar border border-border-color rounded-xl max-w-2xl mx-auto shadow-2xl">
+                <h2 class="text-xl font-bold mb-4 text-amber-300">Available Rewards for Claim</h2>
+                <div id="rewards-details-content">
+                    ${State.isConnected ? renderLoading() : renderNoData(null, "Connect your wallet to view rewards.")}
                 </div>
-            `;
-        }
+            </div>
 
-        if (!State.isConnected) {
-            const el = document.getElementById('rewards-details-content');
-            if (el) renderNoData(el, "Connect your wallet to view your rewards and status.");
-            return;
-        }
+            <h2 class="text-xl font-bold mb-4 mt-12">Vesting & Certificates Status</h2>
+            <div id="certificates-list-container" class="p-8 bg-sidebar/50 border border-zinc-700 rounded-xl text-center">
+                <i class="fa-solid fa-triangle-exclamation text-4xl text-yellow-500 mb-3"></i>
+                <h3 class="text-xl font-bold">Vesting Certificates are Deprecated</h3>
+                <p class="text-zinc-400 mt-2">This feature has been consolidated or removed from the current protocol architecture.</p>
+            </div>
+        `;
 
-        await renderClaimPanel();
+
+        if (State.isConnected) {
+            // Garante que o usuário tem os dados mais recentes antes de renderizar
+            await loadUserData(); 
+            await renderClaimPanel();
+        }
     },
 };

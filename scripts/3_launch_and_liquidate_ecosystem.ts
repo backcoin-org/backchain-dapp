@@ -350,10 +350,24 @@ export async function runScript(hre: HardhatRuntimeEnvironment) {
 
     // 2.3. Autorizando Miners no Guardião (MiningManager)
     console.log("\n2.3. Autorizando Spokes no Guardião (MiningManager)...");
-    console.log(`   -> Autorizando TIGER_GAME_SERVICE...`);
+    
+    // Autoriza FortunePool
+    console.log(`   -> Autorizando TIGER_GAME_SERVICE (FortunePool)...`);
     await sendTransactionWithRetries(() => miningManagerInstance.setAuthorizedMiner("TIGER_GAME_SERVICE", addresses.fortunePool)); 
-    console.log(`   -> Autorizando NOTARY_SERVICE...`);
+    
+    // Autoriza Notary
+    console.log(`   -> Autorizando NOTARY_SERVICE (DecentralizedNotary)...`);
     await sendTransactionWithRetries(() => miningManagerInstance.setAuthorizedMiner("NOTARY_SERVICE", addresses.decentralizedNotary)); 
+    
+    // 💡 CORREÇÃO CRÍTICA PARA O ERRO: MM: Caller not authorized for service
+    // O DelegationManager (DM) é quem paga a taxa de registro, logo ele deve ser o minerador autorizado.
+    console.log(`   -> AUTORIZANDO VALIDATOR_REGISTRATION_FEE (DelegationManager)...`);
+    await sendTransactionWithRetries(() => miningManagerInstance.setAuthorizedMiner(
+        "VALIDATOR_REGISTRATION_FEE", 
+        addresses.delegationManager // O DelegationManager é o caller
+    ));
+    // 💡 FIM DA CORREÇÃO
+    
     console.log(`   ✅ Spokes autorizados.`);
 
     // 2.4. Transfer BKCToken Ownership to MiningManager
@@ -453,6 +467,9 @@ export async function runScript(hre: HardhatRuntimeEnvironment) {
         await setService(hub, "FORTUNE_POOL_SERVICE", ethers.parseEther(RULES_TO_APPLY.serviceFees.FORTUNE_POOL_SERVICE), BigInt(RULES_TO_APPLY.pStakeMinimums.FORTUNE_POOL_SERVICE));
         await setService(hub, "NFT_POOL_ACCESS", ethers.parseEther(RULES_TO_APPLY.serviceFees.NFT_POOL_ACCESS), BigInt(RULES_TO_APPLY.pStakeMinimums.NFT_POOL_ACCESS));
         
+        // Taxa de Registro do Validador (NOVA TAXA FIXA - EM WEI)
+        await setServiceFee(hub, "VALIDATOR_REGISTRATION_FEE", ethers.parseEther(RULES_TO_APPLY.serviceFees.VALIDATOR_REGISTRATION_FEE)); 
+
         // Taxas de Staking (BIPS)
         await setServiceFee(hub, "UNSTAKE_FEE_BIPS", BigInt(RULES_TO_APPLY.stakingFees.UNSTAKE_FEE_BIPS));
         await setServiceFee(hub, "FORCE_UNSTAKE_PENALTY_BIPS", BigInt(RULES_TO_APPLY.stakingFees.FORCE_UNSTAKE_PENALTY_BIPS));
@@ -472,6 +489,7 @@ export async function runScript(hre: HardhatRuntimeEnvironment) {
         // Bônus de Mineração (BIPS)
         await setMiningBonusBips(hub, "FORTUNE_POOL_SERVICE", BigInt(RULES_TO_APPLY.miningBonuses.FORTUNE_POOL_SERVICE));
         await setMiningBonusBips(hub, "NOTARY_SERVICE", BigInt(RULES_TO_APPLY.miningBonuses.NOTARY_SERVICE));
+        await setMiningBonusBips(hub, "VALIDATOR_REGISTRATION_FEE", BigInt(RULES_TO_APPLY.miningBonuses.VALIDATOR_REGISTRATION_FEE)); // Novo Bônus
 
         console.log(`   ✅ Todas as regras e taxas iniciais foram definidas no Cérebro.`);
     } catch (e: any) { console.warn(`   ⚠️ Falha ao configurar Taxas/Regras: ${e.message}`); }
@@ -606,7 +624,7 @@ export async function runScript(hre: HardhatRuntimeEnvironment) {
   console.log("\n----------------------------------------------------");
   console.log("\n🎉🎉🎉 LANÇAMENTO DE ECOSSISTEMA E LIQUIDEZ PÓS-VENDA CONCLUÍDOS! 🎉🎉🎉");
   console.log("O ecossistema está totalmente implantado, configurado e abastecido.");
-  console.log("\nPróximo passo: Execute '4_verify_contracts.ts' para verificar os contratos.");
+  console.log("\nPróximo passo: Execute '4_register_validator.ts' para registrar o primeiro validador.");
 }
 
 // Bloco de entrada para execução standalone

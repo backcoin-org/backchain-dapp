@@ -180,7 +180,11 @@
                         <span>NFT Presale</span>
                     </a>
 
-                    <a data-target="earn" class="sidebar-link flex items-center gap-4 py-2.5 px-4 rounded-lg transition-colors text-zinc-400 hover:text-white hover:bg-zinc-700"><i class="fa-solid fa-coins w-5 text-center"></i><span>Earn</span></a>
+                    <a data-target="mine" class="sidebar-link flex items-center gap-4 py-2.5 px-4 rounded-lg transition-colors text-zinc-400 hover:text-white hover:bg-zinc-700">
+                        <i class="fa-solid fa-helmet-safety w-5 text-center"></i>
+                        <span>Network Mining</span>
+                    </a>
+                    
                     <a data-target="store" class="sidebar-link flex items-center gap-4 py-2.5 px-4 rounded-lg transition-colors text-zinc-400 hover:text-white hover:bg-zinc-700"><i class="fa-solid fa-store w-5 text-center"></i><span>NFT Pool</span></a>
                     <a data-target="rewards" class="sidebar-link flex items-center gap-4 py-2.5 px-4 rounded-lg transition-colors text-zinc-400 hover:text-white hover:bg-zinc-700"><i class="fa-solid fa-id-card-clip w-5 text-center"></i><span>My Rewards</span></a>
                     
@@ -365,24 +369,8 @@
                     
                     <section id="presale" style="background-color: var(--presale-bg-main); margin: -1.5rem;" class="hidden"></section>
 
-                    <section id="earn" class="hidden">
-                        <h1 class="text-2xl md:text-3xl font-bold mb-6">Earn Rewards</h1>
-                        
-                        <div class="border-b border-border-color mb-6">
-                            <nav id="earn-tabs" class="-mb-px flex gap-6">
-                                <button class="tab-btn active" data-tab="delegate">Delegate (pStake)</button>
-                                <button class="tab-btn" data-tab="validator">Become a Validator</button>
-                            </nav>
-                        </div>
-                        
-                        <div id="delegate-content" class="tab-content active">
-                            <p class="text-zinc-400 max-w-2xl mb-6">Select an active validator to delegate (stake) your $BKC. This increases your pStake, making you eligible for ecosystem rewards and services.</p>
-                            <div id="validatorsList" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                                 </div>
-                        </div>
-                        <div id="validator-content" class="tab-content hidden">
-                            </div>
-                    </section>
+                    <section id="mine" class="hidden"></section>
+
                     <section id="store" class="hidden"><h1 class="text-2xl md:text-3xl font-bold mb-6">NFT Trading Pool</h1><p class="text-zinc-400 max-w-3xl mb-8">Increase your reward claim efficiency from a 50% base up to 100% by purchasing a Booster NFT. Prices are dynamic and increase as NFTs are sold.</p><div id="store-content-wrapper"><h2 class="text-xl font-bold mb-4">Booster Pools</h2><div id="store-items-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6"></div></div></section>
                     <section id="rewards" class="hidden">
                         <h1 class="text-2xl md:text-3xl font-bold mb-6">My Rewards</h1>

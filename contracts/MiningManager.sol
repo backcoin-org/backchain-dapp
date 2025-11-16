@@ -9,6 +9,7 @@ import "@openzeppelin/contracts-upgradeable/token/ERC20/utils/SafeERC20Upgradeab
 
 import "./IInterfaces.sol";
 import "./BKCToken.sol";
+
 contract MiningManager is
     Initializable,
     UUPSUpgradeable,
@@ -17,19 +18,21 @@ contract MiningManager is
     IMiningManager
 {
     using SafeERC20Upgradeable for BKCToken;
+
     IEcosystemManager public ecosystemManager;
     BKCToken public bkcToken;
     address public bkcTokenAddress;
     
     mapping(string => address) public authorizedMiners;
     bool private tgeMinted;
+
     // Constants for Dynamic Scarcity Logic (160M Max Mintable Supply)
     uint256 private constant E18 = 10**18;
     uint256 private constant MAX_MINTABLE_SUPPLY = 160000000 * E18;
     uint256 private constant THRESHOLD_80M = 80000000 * E18;
     uint256 private constant THRESHOLD_40M = 40000000 * E18;
     uint256 private constant THRESHOLD_20M = 20000000 * E18;
-    
+
     // CONSTRUTOR REMOVIDO PARA EVITAR ERRO DE UPGRADE DE SEGURANÇA (TS9053)
 
     function initialize(
@@ -69,26 +72,26 @@ contract MiningManager is
 
         uint256 totalMintAmount = getMintAmount(_purchaseAmount);
         if (totalMintAmount == 0) return 0;
-        
+
         // --- Distribution Rules from Hub ---
         uint256 treasuryShareBips = ecosystemManager.getMiningDistributionBips("TREASURY");
         uint256 validatorShareBips = ecosystemManager.getMiningDistributionBips("VALIDATOR_POOL");
         uint256 delegatorShareBips = ecosystemManager.getMiningDistributionBips("DELEGATOR_POOL");
         uint256 buyerBonusBips = ecosystemManager.getMiningBonusBips(_serviceKey);
-        
+
         // --- Shares Calculation ---
         uint256 treasuryAmount = (totalMintAmount * treasuryShareBips) / 10000;
         uint256 validatorAmount = (totalMintAmount * validatorShareBips) / 10000;
         uint256 delegatorAmount = (totalMintAmount * delegatorShareBips) / 10000;
         uint256 totalPoolShares = treasuryAmount + validatorAmount + delegatorAmount;
         uint256 baseBonusAmount = totalMintAmount - totalPoolShares;
-        
+
         // Apply Buyer Bonus Bips
         bonusAmount = (baseBonusAmount * buyerBonusBips) / 10000;
-        
+
         // --- Execute Minting and Transfer ---
         uint256 finalMintAmount = totalPoolShares + bonusAmount;
-        
+
         // CRÍTICO: Cunhagem de novos tokens
         bkcToken.mint(address(this), finalMintAmount);
 
