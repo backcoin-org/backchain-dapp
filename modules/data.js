@@ -334,6 +334,6 @@ export async function loadMyBoostersFromAPI() {
     } catch (e) {
         console.error("CRITICAL Error loading My Boosters from API:", e);
         State.myBoosters = [];
-        return []; 
+        return [];
     }
 }
