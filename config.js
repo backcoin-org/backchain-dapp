@@ -150,11 +150,12 @@ export const bkcTokenABI = [
 export const delegationManagerABI = [
     "function totalNetworkPStake() view returns (uint256)",
     "function getAllValidators() view returns (address[])",
-    "function validators(address) view returns (bool isRegistered, uint256 selfStakeAmount, uint256 selfStakeUnlockTime, uint256 totalPStake, uint256 totalDelegatedAmount)",
+    // CORREÇÃO: Removido selfStakeUnlockTime para corresponder à estrutura atual de 4 campos.
+    "function validators(address) view returns (bool isRegistered, uint256 selfStakeAmount, uint256 totalPStake, uint256 totalDelegatedAmount)",
     "function userTotalPStake(address) view returns (uint256)",
     "function getDelegationsOf(address _user) view returns (tuple(uint256 amount, uint256 unlockTime, uint256 lockDuration, address validator)[])",
     "function pendingDelegatorRewards(address _user) public view returns (uint256)",
-    "function pendingValidatorRewards(address _validator) public view returns (uint256)", // Adicionado para consistência
+    "function pendingValidatorRewards(address _validator) public view returns (uint256)", 
     "function VALIDATOR_LOCK_DURATION() view returns (uint256)",
     "function hasPaidRegistrationFee(address) view returns (bool)",
     "function MIN_LOCK_DURATION() view returns (uint256)",

@@ -24,8 +24,8 @@ contract EcosystemManager is
     mapping(string => uint256) public serviceFees;
     mapping(string => uint256) public servicePStakeMinimums;
     mapping(uint256 => uint256) public boosterDiscounts;
-    mapping(string => uint256) public miningDistributionBips;
-    mapping(string => uint256) public miningBonusBips;
+    mapping(string => uint256) public miningDistributionBips; // For newly minted tokens
+    mapping(string => uint256) public feeDistributionBips;    // For original fee tokens
 
     event AddressSet(string indexed key, address indexed newAddress);
     event RuleSet(string indexed key, uint256 newValue);
@@ -97,13 +97,18 @@ contract EcosystemManager is
         emit RuleSet(_poolKey, _bips);
     }
 
-    function setMiningBonusBips(
-        string calldata _serviceKey,
+    /**
+     * @notice Sets the distribution BIPS for *original fee* tokens.
+     */
+    function setFeeDistributionBips(
+        string calldata _poolKey,
         uint256 _bips
     ) external onlyOwner {
-        miningBonusBips[_serviceKey] = _bips;
-        emit RuleSet(_serviceKey, _bips);
+        feeDistributionBips[_poolKey] = _bips;
+        emit RuleSet(_poolKey, _bips);
     }
+
+    // --- VIEW FUNCTIONS ---
 
     function getServiceRequirements(
         string calldata _serviceKey
@@ -148,11 +153,11 @@ contract EcosystemManager is
         return miningManagerAddress;
     }
 
-    function getDecentralizedNotaryAddress() external view returns (address) {
+    function getDecentralizedNotaryAddress() external view override returns (address) {
         return decentralizedNotaryAddress;
     }
 
-    function getFortunePoolAddress() external view returns (address) {
+    function getFortunePoolAddress() external view override returns (address) {
         return fortunePoolAddress;
     }
 
@@ -171,9 +176,12 @@ contract EcosystemManager is
         return miningDistributionBips[_poolKey];
     }
 
-    function getMiningBonusBips(
-        string calldata _serviceKey
+    /**
+     * @notice Returns the distribution BIPS for *original fee* tokens.
+     */
+    function getFeeDistributionBips(
+        string calldata _poolKey
     ) external view override returns (uint256) {
-        return miningBonusBips[_serviceKey];
+        return feeDistributionBips[_poolKey];
     }
 }

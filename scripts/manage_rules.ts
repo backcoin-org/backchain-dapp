@@ -5,16 +5,16 @@ import fs from "fs";
 import path from "path";
 
 // ######################################################################
-// ###               PAINEL DE CONTROLE DE REGRAS                     ###
+// ###               RULES CONTROL PANEL SCRIPT                     ###
 // ######################################################################
 
 // Helper function for delays
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-const DESCRIPTION_KEYS = ["DESCRIPTION", "COMMENT"]; // Chaves a ignorar
+const DESCRIPTION_KEYS = ["DESCRIPTION", "COMMENT"]; // Keys to ignore in JSON
 
 /**
- * Função auxiliar robusta para processar cada categoria de regra.
- * Garante que apenas chaves válidas sejam passadas para o contrato.
+ * Robust helper function to process each rule category.
+ * Ensures only valid keys are passed to the contract.
  */
 async function processRuleCategory(
     hub: any, 
@@ -24,29 +24,34 @@ async function processRuleCategory(
     description: string,
     isBoosterDiscount: boolean = false
 ) {
+    if (!rules) {
+        console.log(`   -> Skipping category ${description} (not found in rules-config.json)`);
+        return;
+    }
+    
     for (const ruleKey of Object.keys(rules)) {
-        // Ignora chaves de comentário (case-insensitive)
+        // Ignore comment keys (case-insensitive)
         if (DESCRIPTION_KEYS.includes(ruleKey.toUpperCase())) continue;
 
         const valueStr = rules[ruleKey];
         if (valueStr && valueStr.trim() !== "") {
             try {
-                // Para descontos de booster, a chave também é um BigInt (o boostBips)
+                // For booster discounts, the key is also a BigInt (the boostBips)
                 const keyForContract = isBoosterDiscount ? converter(ruleKey) : ruleKey;
                 const valueBigInt = converter(valueStr);
                 
-                console.log(`   -> ATUALIZANDO ${description} [${ruleKey}] para ${valueStr}...`);
+                console.log(`   -> UPDATING ${description} [${ruleKey}] to ${valueStr}...`);
                 
-                // Chamada da função setter
+                // Call the setter function
                 const tx = await setter(keyForContract, valueBigInt);
                 await tx.wait();
                 
-                console.log("   ✅ SUCESSO.");
+                console.log("   ✅ SUCCESS.");
                 await sleep(1000);
             } catch (e: any) {
-                 console.error(`   ❌ ERRO ao aplicar regra [${ruleKey}]: ${e.message}`);
-                 // Lançamos o erro para parar a execução e notificar
-                 throw new Error(`Falha na atualização da regra ${ruleKey}: ${e.message}`);
+                 console.error(`   ❌ ERROR applying rule [${ruleKey}]: ${e.message}`);
+                 // We throw to stop execution and notify the user
+                 throw new Error(`Failed on rule update ${ruleKey}: ${e.message}`);
             }
         }
     }
@@ -58,12 +63,12 @@ export async function runScript(hre: HardhatRuntimeEnvironment) {
   const networkName = hre.network.name;
 
   console.log(
-    `🚀 (GERENCIAMENTO) Executando script de atualização de regras na rede: ${networkName}`
+    `🚀 (MANAGEMENT) Running ecosystem rules update script on network: ${networkName}`
   );
-  console.log(`Usando a conta (Owner/MultiSig): ${deployer.address}`);
+  console.log(`Using account (Owner/MultiSig): ${deployer.address}`);
   console.log("----------------------------------------------------");
 
-  // --- 1. Carregar Endereço do Cérebro ---
+  // --- 1. Load Hub Address ---
   const addressesFilePath = path.join(
     __dirname,
     "../deployment-addresses.json"
@@ -80,71 +85,70 @@ export async function runScript(hre: HardhatRuntimeEnvironment) {
     throw new Error("EcosystemManager address not found in JSON.");
   }
 
-  // --- 2. Obter Instância do Cérebro (Hub) ---
+  // --- 2. Get Hub Instance ---
   const hub = await ethers.getContractAt(
     "EcosystemManager",
     hubAddress,
     deployer
   );
-  console.log(`Conectado ao Cérebro (EcosystemManager) em: ${hubAddress}`);
+  console.log(`Connected to Hub (EcosystemManager) at: ${hubAddress}`);
 
-  // --- 3. Carregar Regras do JSON ---
+  // --- 3. Load Rules from JSON ---
   const rulesConfigPath = path.join(__dirname, "../rules-config.json"); 
   if (!fs.existsSync(rulesConfigPath)) {
-    throw new Error("Arquivo 'rules-config.json' não encontrado na raiz do projeto.");
+    throw new Error("File 'rules-config.json' not found in project root.");
   }
   const RULES_TO_APPLY = JSON.parse(fs.readFileSync(rulesConfigPath, "utf8"));
-  console.log("Arquivo 'rules-config.json' carregado.");
+  console.log("'rules-config.json' loaded.");
 
 
   try {
-    // --- 4. Processar Atualizações ---
-    console.log("\nIniciando verificação de regras para aplicar...");
+    // --- 4. Process Updates ---
+    console.log("\nInitiating rule verification and application...");
 
-    // Conversores de valor (para garantir que a tipagem esteja correta)
+    // Value converters (to ensure correct typing)
     const weiConverter = (value: string) => {
         if (!/^\d+(\.\d+)?$/.test(value) && value !== "0") {
-            throw new Error(`Valor não numérico ('${value}') para conversão Wei.`);
+            throw new Error(`Non-numeric value ('${value}') for Wei conversion.`);
         }
         return ethers.parseUnits(value, 18);
     };
     const bigIntConverter = (value: string) => BigInt(value);
     
-    // A. Taxas de Serviço (Valor em Wei) - Chama setServiceFee no contrato [cite: 83]
-    await processRuleCategory(hub, RULES_TO_APPLY.serviceFees, hub.setServiceFee, weiConverter, "Taxa de Serviço (BKC)");
+    // A. Service Fees (Value in Wei) - Calls setServiceFee
+    await processRuleCategory(hub, RULES_TO_APPLY.serviceFees, hub.setServiceFee, weiConverter, "Service Fee (BKC)");
 
-    // B. pStake Mínimo (Valor BigInt) - Chama setPStakeMinimum no contrato [cite: 84]
-    await processRuleCategory(hub, RULES_TO_APPLY.pStakeMinimums, hub.setPStakeMinimum, bigIntConverter, "pStake Mínimo");
+    // B. pStake Minimum (Value BigInt) - Calls setPStakeMinimum
+    await processRuleCategory(hub, RULES_TO_APPLY.pStakeMinimums, hub.setPStakeMinimum, bigIntConverter, "pStake Minimum");
 
-    // C. Taxas de Staking (Valor em BIPS) - Chama setServiceFee [cite: 83]
-    await processRuleCategory(hub, RULES_TO_APPLY.stakingFees, hub.setServiceFee, bigIntConverter, "Taxa de Staking (BIPS)");
+    // C. Staking Fees (Value in BIPS) - Calls setServiceFee
+    await processRuleCategory(hub, RULES_TO_APPLY.stakingFees, hub.setServiceFee, bigIntConverter, "Staking Fee (BIPS)");
     
-    // D. Impostos do AMM (Valor em BIPS) - Chama setServiceFee [cite: 83]
-    await processRuleCategory(hub, RULES_TO_APPLY.ammTaxFees, hub.setServiceFee, bigIntConverter, "Imposto do AMM (BIPS)");
+    // D. AMM Tax Fees (Value in BIPS) - Calls setServiceFee
+    await processRuleCategory(hub, RULES_TO_APPLY.ammTaxFees, hub.setServiceFee, bigIntConverter, "AMM Tax (BIPS)");
 
-    // E. Descontos de Booster (Chave e Valor em BIPS) - Chama setBoosterDiscount [cite: 85]
-    await processRuleCategory(hub, RULES_TO_APPLY.boosterDiscounts, hub.setBoosterDiscount, bigIntConverter, "Desconto de Booster (BIPS)", true);
+    // E. Booster Discounts (Key & Value in BIPS) - Calls setBoosterDiscount
+    await processRuleCategory(hub, RULES_TO_APPLY.boosterDiscounts, hub.setBoosterDiscount, bigIntConverter, "Booster Discount (BIPS)", true);
 
-    // F. Distribuição da Mineração (Valor em BIPS) - Chama setMiningDistributionBips [cite: 86]
-    await processRuleCategory(hub, RULES_TO_APPLY.miningDistribution, hub.setMiningDistributionBips, bigIntConverter, "Distribuição de Mineração (BIPS)");
+    // F. Mining Distribution (Value in BIPS) - Calls setMiningDistributionBips
+    await processRuleCategory(hub, RULES_TO_APPLY.miningDistribution, hub.setMiningDistributionBips, bigIntConverter, "Mining Distribution (BIPS)");
 
-    // G. Bônus de Mineração (Valor em BIPS) - Chama setMiningBonusBips [cite: 87]
-    await processRuleCategory(hub, RULES_TO_APPLY.miningBonuses, hub.setMiningBonusBips, bigIntConverter, "Bônus de Mineração (BIPS)");
-
+    // G. Fee Distribution (Value in BIPS) - Calls setFeeDistributionBips (NEW)
+    await processRuleCategory(hub, RULES_TO_APPLY.feeDistribution, hub.setFeeDistributionBips, bigIntConverter, "Fee Distribution (BIPS)");
 
     console.log("\n----------------------------------------------------");
-    console.log("🎉🎉🎉 ATUALIZAÇÃO DE REGRAS CONCLUÍDA! 🎉🎉🎉");
+    console.log("🎉🎉🎉 RULES UPDATE SCRIPT COMPLETE! 🎉🎉🎉");
   
   } catch (error: any) {
     console.error(
-      "\n❌ Falha grave durante a atualização de regras:",
+      "\n❌ Critical failure during rules update:",
       error.message
     );
     process.exit(1);
   }
 }
 
-// Bloco de entrada para execução standalone
+// Standalone execution block
 if (require.main === module) {
   runScript(require("hardhat")).catch((error) => {
     console.error(error);

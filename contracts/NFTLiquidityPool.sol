@@ -35,9 +35,9 @@ contract NFTLiquidityPool is
     uint256 public boostBips;
     string public constant PSTAKE_SERVICE_KEY = "NFT_POOL_ACCESS";
     string public constant TAX_BIPS_KEY = "NFT_POOL_TAX_BIPS";
-    string public constant TAX_TREASURY_SHARE_KEY = "NFT_POOL_TAX_TREASURY_SHARE_BIPS";
-    string public constant TAX_DELEGATOR_SHARE_KEY = "NFT_POOL_TAX_DELEGATOR_SHARE_BIPS";
-    string public constant TAX_LIQUIDITY_SHARE_KEY = "NFT_POOL_TAX_LIQUIDITY_SHARE_BIPS";
+    // TAX_TREASURY_SHARE_KEY and TAX_DELEGATOR_SHARE_KEY are no longer used here
+    string public constant TAX_LIQUIDITY_SHARE_KEY = "NFT_POOL_TAX_LIQUIDITY_SHARE_KEY";
+    
     event LiquidityAdded(
         uint256 indexed boostBips,
         uint256 nftAmount,
@@ -46,8 +46,6 @@ contract NFTLiquidityPool is
     event NFTsAddedToPool(uint256 indexed boostBips, uint256 nftAmount);
     event NFTBought(address indexed buyer, uint256 indexed boostBips, uint256 tokenId, uint256 price);
     event NFTSold(address indexed seller, uint256 indexed boostBips, uint256 tokenId, uint256 payout, uint256 taxPaid);
-    
-    // CONSTRUTOR REMOVIDO
 
     function initialize(
         address _initialOwner,
@@ -80,7 +78,6 @@ contract NFTLiquidityPool is
         _transferOwnership(_initialOwner);
     }
 
-    // ÚNICA DEFINIÇÃO DE _authorizeUpgrade
     function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
 
     function onERC721Received(
@@ -107,6 +104,7 @@ contract NFTLiquidityPool is
         require(_tokenIds.length > 0, "NLP: Must add at least one NFT");
         require(_bkcAmount > 0, "NLP: Must add BKC liquidity");
         pool.isInitialized = true;
+        
         for (uint i = 0; i < _tokenIds.length; i++) {
             rewardBoosterNFT.safeTransferFrom(
                 msg.sender,
@@ -141,6 +139,7 @@ contract NFTLiquidityPool is
             "NLP: Pool not initialized with liquidity yet"
         );
         require(_tokenIds.length > 0, "NLP: Token IDs array cannot be empty");
+        
         for (uint i = 0; i < _tokenIds.length; i++) {
             rewardBoosterNFT.safeTransferFrom(
                 msg.sender,
@@ -155,20 +154,19 @@ contract NFTLiquidityPool is
         emit NFTsAddedToPool(_tokenIds.length, boostBips);
     }
 
-    // --- CORREÇÃO: BUY NFT (Usando sintaxe de ignorar correta) ---
     function buyNFT(
         uint256 _tokenId,
-        uint256 /* _boosterTokenId */ 
+        uint256 // _boosterTokenId (no longer used for fee)
     ) external nonReentrant {
-        // 1. AUTHORIZATION & PSTAKE CHECK
-        // AJUSTE: Usando (, ...) para ignorar o primeiro valor retornado (fee)
+        // 1. Authorization & pStake Check
         ( , uint256 minPStake) = ecosystemManager.getServiceRequirements(PSTAKE_SERVICE_KEY);
         if (minPStake > 0) {
             uint256 userPStake = IDelegationManager(ecosystemManager.getDelegationManagerAddress()).userTotalPStake(msg.sender);
             require(userPStake >= minPStake, "NLP: Insufficient pStake");
         }
         
-        require(0 == 0, "NLP: Buy service fee should be zero");
+        // No fee is charged on buy, only pStake check
+        
         address rewardBoosterAddress = ecosystemManager.getBoosterAddress();
         require(
             rewardBoosterAddress != address(0),
@@ -188,49 +186,50 @@ contract NFTLiquidityPool is
             rewardBoosterNFT.boostBips(_tokenId) == boostBips,
             "NLP: Token tier mismatch"
         );
+        
         uint256 price = getBuyPrice();
         require(price < type(uint256).max, "NLP: Price calculation error");
+        
         require(
             bkcToken.transferFrom(msg.sender, address(this), price),
             "NLP: BKC transfer failed"
         );
+        
         pool.tokenBalance += price;
         pool.nftCount--;
         pool.k = (pool.nftCount == 0) ? 0 : pool.tokenBalance * pool.nftCount;
         _removeTokenId(pool, _tokenId);
+        
         IERC721Upgradeable(rewardBoosterAddress).safeTransferFrom(
             address(this),
             msg.sender,
             _tokenId
         );
+        
         emit NFTBought(msg.sender, boostBips, _tokenId, price);
     }
 
-    // --- CORREÇÃO: BUY NEXT AVAILABLE NFT (Usando sintaxe de ignorar correta) ---
     function buyNextAvailableNFT(uint256 /* _boosterTokenId */) external nonReentrant {
-        // 1. AUTHORIZATION & PSTAKE CHECK
-        // AJUSTE: Usando (, ...) para ignorar o primeiro valor retornado (fee)
+        // 1. Authorization & pStake Check
         ( , uint256 minPStake) = ecosystemManager.getServiceRequirements(PSTAKE_SERVICE_KEY);
         if (minPStake > 0) {
             uint256 userPStake = IDelegationManager(ecosystemManager.getDelegationManagerAddress()).userTotalPStake(msg.sender);
             require(userPStake >= minPStake, "NLP: Insufficient pStake");
         }
         
-        require(0 == 0, "NLP: Buy service fee should be zero");
         address rewardBoosterAddress = ecosystemManager.getBoosterAddress();
         require(rewardBoosterAddress != address(0), "NLP: Booster not configured in Hub");
         require(pool.isInitialized && pool.nftCount > 0, "NLP: No NFTs available in this pool");
         require(pool.tokenIds.length > 0, "NLP: Pool tracking array is empty, desync");
 
         uint256 tokenIdToSell = pool.tokenIds[pool.tokenIds.length - 1];
-
         uint256 price = getBuyPrice();
+        
         require(bkcToken.transferFrom(msg.sender, address(this), price), "NLP: BKC transfer failed");
 
         pool.tokenBalance += price;
         pool.nftCount--;
-        pool.k = (pool.nftCount == 0) ?
-        0 : pool.tokenBalance * pool.nftCount;
+        pool.k = (pool.nftCount == 0) ? 0 : pool.tokenBalance * pool.nftCount;
 
         delete pool.tokenIdToIndex[tokenIdToSell];
         pool.tokenIds.pop();
@@ -239,16 +238,13 @@ contract NFTLiquidityPool is
         emit NFTBought(msg.sender, boostBips, tokenIdToSell, price);
     }
 
-    // --- CORREÇÃO: SELL NFT (Usando sintaxe de ignorar correta) ---
     function sellNFT(uint256 _tokenId, uint256 _boosterTokenId) external nonReentrant {
-        // 1. AUTHORIZATION & PSTAKE CHECK
-        // AJUSTE: Usando (, ...) para ignorar o primeiro valor retornado (fee)
+        // 1. Authorization & pStake Check
         ( , uint256 minPStake) = ecosystemManager.getServiceRequirements(PSTAKE_SERVICE_KEY);
         if (minPStake > 0) {
             uint256 userPStake = IDelegationManager(ecosystemManager.getDelegationManagerAddress()).userTotalPStake(msg.sender);
             require(userPStake >= minPStake, "NLP: Insufficient pStake");
         }
-        // BaseFee não é usado aqui, pois a taxa de imposto é definida separadamente
         
         address rewardBoosterAddress = ecosystemManager.getBoosterAddress();
         require(rewardBoosterAddress != address(0), "NLP: Booster not configured in Hub");
@@ -262,7 +258,7 @@ contract NFTLiquidityPool is
         uint256 sellValue = getSellPrice();
         require(pool.tokenBalance >= sellValue, "NLP: Pool has insufficient BKC liquidity");
 
-        // --- TAX CALCULATION ---
+        // --- 2. TAX CALCULATION ---
         uint256 taxBipsBase = ecosystemManager.getFee(TAX_BIPS_KEY);
         uint256 discountBips = 0;
 
@@ -277,17 +273,19 @@ contract NFTLiquidityPool is
         }
 
         uint256 finalTaxBips = (taxBipsBase > discountBips)
-            ?
-        taxBipsBase - discountBips
+            ? taxBipsBase - discountBips
             : 0;
+        
         uint256 finalTaxAmount = (sellValue * finalTaxBips) / 10000;
         uint256 payoutToSeller = sellValue - finalTaxAmount;
-        // --- TRANSFERS ---
+        
+        // --- 3. TRANSFERS ---
         IERC721Upgradeable(rewardBoosterAddress).safeTransferFrom(
             msg.sender,
             address(this),
             _tokenId
         );
+        
         if (payoutToSeller > 0) {
             require(
                 bkcToken.transfer(msg.sender, payoutToSeller),
@@ -295,17 +293,21 @@ contract NFTLiquidityPool is
             );
         }
 
-        // --- TAX DISTRIBUTION (Generates POP if liquidity is required) ---
+        // --- 4. TAX DISTRIBUTION (via MiningManager) ---
         if (finalTaxAmount > 0) {
             _distributeTax(finalTaxAmount);
         }
 
-        // --- UPDATE POOL STATE ---
+        // --- 5. UPDATE POOL STATE ---
+        // Calculate the portion of tax that stays in the pool
         uint256 liquidityShareBips = ecosystemManager.getFee(TAX_LIQUIDITY_SHARE_KEY);
         uint256 liquidityAmount = (finalTaxAmount * liquidityShareBips) / 10000;
 
+        // Pool balance is reduced by the full sell value...
         pool.tokenBalance -= sellValue;
+        // ...but increased by the liquidity share of the tax.
         pool.tokenBalance += liquidityAmount;
+        
         pool.nftCount++;
         _addTokenId(pool, _tokenId);
         pool.k = pool.tokenBalance * pool.nftCount; 
@@ -319,7 +321,8 @@ contract NFTLiquidityPool is
         );
     }
 
-    // --- Funções Auxiliares (mantidas) ---
+    // --- Internal Functions ---
+
     function _addTokenId(Pool storage _pool, uint256 _tokenId) internal {
         _pool.tokenIdToIndex[_tokenId] = _pool.tokenIds.length;
         _pool.tokenIds.push(_tokenId);
@@ -338,26 +341,41 @@ contract NFTLiquidityPool is
         delete _pool.tokenIdToIndex[_tokenId];
     }
 
+    /**
+     * @notice Distributes the non-liquidity portion of the tax to the MiningManager funnel.
+     */
     function _distributeTax(uint256 _taxAmount) internal {
         if (_taxAmount == 0) return;
-        address treasury = ecosystemManager.getTreasuryAddress();
-        address dm = ecosystemManager.getDelegationManagerAddress();
-        require(treasury != address(0), "NLP: Treasury not configured in Hub");
-        require(dm != address(0), "NLP: Delegation Manager not configured in Hub");
 
-        uint256 treasuryShareBips = ecosystemManager.getFee(TAX_TREASURY_SHARE_KEY);
-        uint256 delegatorShareBips = ecosystemManager.getFee(TAX_DELEGATOR_SHARE_KEY);
-        uint256 treasuryAmount = (_taxAmount * treasuryShareBips) / 10000;
-        uint256 delegatorAmount = (_taxAmount * delegatorShareBips) / 10000;
-        if (treasuryAmount > 0) {
-            require(bkcToken.transfer(treasury, treasuryAmount), "NLP: Tax to Treasury failed");
+        address miningManagerAddress = ecosystemManager.getMiningManagerAddress();
+        require(miningManagerAddress != address(0), "NLP: MiningManager not configured in Hub");
+
+        // 1. Calculate the portion of the tax that stays in the pool for liquidity
+        uint256 liquidityShareBips = ecosystemManager.getFee(TAX_LIQUIDITY_SHARE_KEY);
+        uint256 liquidityAmount = (_taxAmount * liquidityShareBips) / 10000;
+
+        // 2. The remaining portion of the tax is sent to the MiningManager
+        uint256 popAmount = _taxAmount - liquidityAmount;
+
+        if (popAmount > 0) {
+            // 3. Transfer the PoP amount to the MiningManager
+            // Note: Tokens are already in this contract (accounted for in sellNFT balance update)
+            require(
+                bkcToken.transfer(miningManagerAddress, popAmount),
+                "NLP: Tax transfer to MiningManager failed"
+            );
+
+            // 4. Call the MiningManager to trigger the universal revenue funnel
+            IMiningManager(miningManagerAddress)
+                .performPurchaseMining(
+                    TAX_BIPS_KEY, // Use the tax key as the service key
+                    popAmount
+                );
         }
-        
-        if (delegatorAmount > 0) {
-            bkcToken.approve(address(delegationManager), delegatorAmount);
-            delegationManager.depositRewards(0, delegatorAmount);
-        }
+        // The `liquidityAmount` is handled in the `sellNFT` function, which adds it back to pool.tokenBalance
     }
+
+    // --- View Functions ---
 
     function getBuyPrice() public view returns (uint256) {
         if (!pool.isInitialized || pool.nftCount == 0) return type(uint256).max;
@@ -381,7 +399,7 @@ contract NFTLiquidityPool is
             uint256 nftCount, 
             uint256 k, 
             bool isInitialized
-        ) 
+        )
     {
         return (
             pool.tokenBalance,

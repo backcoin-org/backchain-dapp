@@ -1,7 +1,4 @@
 // pages/RewardsPage.js
-// ✅ ARQUIVO CORRIGIDO
-// - Adicionado 'loadUserData' à lista de importação, corrigindo
-//   o 'ReferenceError' que impedia a página de renderizar.
 
 const ethers = window.ethers;
 
@@ -12,7 +9,7 @@ import {
     calculateClaimDetails,
     getHighestBoosterBoostFromAPI, 
     safeContractCall,
-    loadUserData // ✅ <-- CORREÇÃO AQUI
+    loadUserData
 } from '../modules/data.js'; 
 import { executeUniversalClaim } from '../modules/transactions.js'; 
 import { 
@@ -42,12 +39,10 @@ async function renderClaimPanel() {
     
     rewardsPanel.classList.remove('hidden');
     
-    // ✅ CORREÇÃO: Passa 'el' para renderLoading
     renderLoading(el); 
 
     try {
         // 1. Calcular Detalhes da Reivindicação (Net/Fee)
-        // (Nota: Certifique-se que 'State.systemData' foi substituído por 'State.systemFees' se você mudou isso)
         const claimDetails = await calculateClaimDetails();
         const { totalRewards, netClaimAmount, feeAmount, discountPercent, basePenaltyPercent } = claimDetails;
 
@@ -57,8 +52,7 @@ async function renderClaimPanel() {
         // 3. Obter Detalhes do Desconto (para exibição)
         const efficiencyData = await getHighestBoosterBoostFromAPI();
         
-        // CORREÇÃO: Pega a taxa base do claim
-        // (Nota: 'State.systemData' pode precisar ser 'State.systemFees' dependendo de outros arquivos)
+        // Pega a taxa base do claim (do cache)
         const baseClaimFeeBips = State.systemFees?.["CLAIM_REWARD_FEE_BIPS"] || 0n;
         const baseFeeAmount = (totalRewards * baseClaimFeeBips) / 10000n;
         
@@ -97,7 +91,7 @@ async function renderClaimPanel() {
                             <span class="${calculatedDiscountAmount > 0n ? 'line-through text-red-400/70' : 'text-red-400'}">-${formatBigNumber(baseFeeAmount).toFixed(4)} $BKC</span>
                         </div>
                         
-                        ${efficiencyData.highestBoost > 0 ? // Corrigido de 0n para 0
+                        ${efficiencyData.highestBoost > 0 ? 
                             `<div class="flex justify-between font-semibold text-sm text-cyan-400">
                                 <span>Booster Discount (${efficiencyData.highestBoost / 100}%):</span>
                                 <span>+${formatBigNumber(calculatedDiscountAmount).toFixed(4)} $BKC</span>
@@ -170,8 +164,7 @@ export const RewardsPage = {
 
 
         if (State.isConnected) {
-            // Garante que o usuário tem os dados mais recentes antes de renderizar
-            await loadUserData(); // <-- Esta linha agora funciona
+            await loadUserData(); 
             await renderClaimPanel();
         }
     },

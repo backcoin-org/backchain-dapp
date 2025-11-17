@@ -14,7 +14,7 @@ const BLOCKCHAIN_EXPLORER_TX_URL = "https://sepolia.etherscan.io/tx/";
 let currentFileToUpload = null;
 let currentUploadedIPFS_URI = null; 
 let notaryButtonState = 'initial'; // Controla o botão do Passo 3
-let pageContainer = null; // ✅ Container para listeners
+let pageContainer = null; // ✅ Container para listeners (corrige bug do clique duplo)
 
 const MAX_FILE_SIZE_BYTES = 50 * 1024 * 1024; // 50 MB
 
@@ -453,14 +453,18 @@ function updateNotaryUserStatus() {
 
 
 /**
- * Renderiza os documentos já notarizados (Sem alterações)
+ * ✅ CORREÇÃO BUG 2: Função agora remove a checagem 'State.isConnected'
  */
 async function renderMyNotarizedDocuments() {
     const docsEl = document.getElementById('my-notarized-documents');
     if (!docsEl) return;
-
-    // ✅ CORREÇÃO DO BUG 2: Verificação movida para a função 'update'
-    // A função 'update' agora garante que isso só seja chamado se 'isConnected' for true.
+    
+    // A verificação 'isConnected' foi removida.
+    // A função 'update()' agora é responsável por chamar isso apenas quando conectado.
+    
+    if (!State.decentralizedNotaryContract) {
+         return renderError(docsEl, "Notary contract not loaded.");
+    }
 
     renderLoading(docsEl);
 
@@ -582,7 +586,7 @@ async function renderMyNotarizedDocuments() {
 
 
 /**
- * ✅ ATUALIZADO: Lida com o upload, agora sem restrições de tipo
+ * Lida com o upload do arquivo (sem restrições de tipo)
  */
 async function handleFileUpload(file) {
     const uploadPromptEl = document.getElementById('notary-upload-prompt');
@@ -593,8 +597,6 @@ async function handleFileUpload(file) {
 
     const fileName = file.name || "";
     
-    // A verificação da descrição já aconteceu no Passo 1.
-
     if (file.size > MAX_FILE_SIZE_BYTES) {
          const msg = `File size (${(file.size / 1024 / 1024).toFixed(2)}MB) exceeds 50MB limit.`;
          uploadPromptEl.classList.add('hidden');
@@ -634,7 +636,7 @@ async function handleFileUpload(file) {
 
 
 /**
- * Lida com o clique em "Add to Wallet" (Sem alterações)
+ * Lida com o clique em "Add to Wallet"
  */
 async function handleAddNFTToWallet(e) {
     const btn = e.target.closest('.add-to-wallet-btn');
@@ -681,7 +683,7 @@ async function handleAddNFTToWallet(e) {
 }
 
 /**
- * ✅ ATUALIZADO: Adiciona os listeners da página
+ * ✅ CORREÇÃO BUG 1: Anexa listeners ao 'pageContainer' para evitar duplicatas.
  */
 function initNotaryListeners() {
     const fileInput = document.getElementById('notary-file-upload');
@@ -776,8 +778,13 @@ function initNotaryListeners() {
     }
     
     // ✅ CORREÇÃO BUG 1: Listener de clique agora está anexado ao container da página (pageContainer)
-    // Isso evita listeners duplicados no 'document'.
     if (pageContainer) {
+        // Remove qualquer listener antigo para evitar duplicatas (medida de segurança)
+        pageContainer.replaceWith(pageContainer.cloneNode(true));
+        pageContainer = document.getElementById('notary'); // Re-seleciona o novo nó
+        
+        if (!pageContainer) return; // Segurança
+
         pageContainer.addEventListener('click', async (e) => {
             // Listener para o botão de Delegar (na caixa de Status)
             const delegateBtn = e.target.closest('#delegate-now-btn') || 
@@ -806,13 +813,15 @@ function initNotaryListeners() {
     }
 
     // --- Listener do Botão Principal (Passo 3) ---
-    if (submitBtn) {
-        submitBtn.addEventListener('click', async (e) => {
+    // (Anexado separadamente pois está dentro do 'pageContainer' e não precisa de delegação)
+    const finalSubmitBtn = document.getElementById('notarize-submit-btn');
+    if (finalSubmitBtn) {
+        finalSubmitBtn.addEventListener('click', async (e) => {
             e.preventDefault();
             
-            if (submitBtn.classList.contains('btn-disabled')) return;
-            if (submitBtn.href !== '#' && submitBtn.target === '_blank') return;
-            if (submitBtn.dataset.delegate === 'true') return;
+            if (finalSubmitBtn.classList.contains('btn-disabled')) return;
+            if (finalSubmitBtn.href !== '#' && finalSubmitBtn.target === '_blank') return;
+            if (finalSubmitBtn.dataset.delegate === 'true') return;
 
             if (!State.isConnected || !State.provider) {
                 return showToast("Please connect your wallet first.", "error");
@@ -820,12 +829,12 @@ function initNotaryListeners() {
             
             const signer = await State.provider.getSigner();
             const userAddress = State.userAddress;
-            const description = descriptionInput ? descriptionInput.value : '';
+            const description = document.getElementById('notary-user-description')?.value || '';
 
             if (description.length === 0 || description.length > 256) {
                  showToast("Error: Public description is invalid.", "error");
                  updateNotaryStep(1); 
-                 descriptionInput.focus();
+                 document.getElementById('notary-user-description')?.focus();
                  return;
             }
 
@@ -901,7 +910,7 @@ function initNotaryListeners() {
                 const success = await executeNotarizeDocument(
                     currentUploadedIPFS_URI, 
                     boosterId,               
-                    submitBtn                
+                    finalSubmitBtn                
                 );
 
                 if (success) {
@@ -910,16 +919,17 @@ function initNotaryListeners() {
                     currentUploadedIPFS_URI = null;
                     notaryButtonState = 'initial';
                     if(fileInput) fileInput.value = '';
-                    if(descriptionInput) descriptionInput.value = '';
-                    if(descriptionCounter) descriptionCounter.innerText = '0 / 256';
+                    const descInput = document.getElementById('notary-user-description');
+                    const descCounter = document.getElementById('notary-description-counter');
+                    if(descInput) descInput.value = '';
+                    if(descCounter) descCounter.innerText = '0 / 256';
                     
                     updateNotaryStep(1); // Volta ao início
 
                     showToast("Transaction Confirmed! Refreshing list...", "info");
 
                     setTimeout(async () => {
-                        await renderMyNotarizedDocuments();
-                        // updateNotaryUserStatus(); // Não é mais necessário, pois voltamos ao Passo 1
+                        await renderMyNotarizedDocuments(); // Atualiza a lista
                         showToast("Document list refreshed!", "success");
                     }, 3000);
                 } else {
@@ -950,10 +960,9 @@ export const NotaryPage = {
             State.userBoosterId = boosterData.tokenId ? BigInt(boosterData.tokenId) : 0n;
 
             updateNotaryUserStatus(); 
-            await renderMyNotarizedDocuments();
+            // ✅ CORREÇÃO BUG 2: Documentos são carregados aqui
+            await renderMyNotarizedDocuments(); 
         } else {
-             // A função 'update' será chamada pelo listener de conexão
-             // mas chamamos aqui para definir o estado inicial
              this.update(State.isConnected); 
         }
 
@@ -971,7 +980,6 @@ export const NotaryPage = {
     async update(isConnected) {
         console.log("Updating Notary Page, isConnected:", isConnected);
         
-        // Garante que os dados públicos sejam carregados, mesmo no update
         const loadedPublicData = await loadNotaryPublicData();
 
         if (isConnected && loadedPublicData) {

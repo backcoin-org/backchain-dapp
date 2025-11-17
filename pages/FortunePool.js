@@ -1,5 +1,4 @@
-// pages/FortunePool.js - Versão V10: Painel de Última Ativação e Rolls do Oráculo
-
+// pages/FortunePool.js
 import { State } from '../state.js';
 import { loadUserData } from '../modules/data.js';
 import { formatBigNumber, formatAddress, formatPStake } from '../utils.js';
@@ -26,22 +25,19 @@ const gameState = {
     poolBalance: 0n,
     isActivating: false, 
     lastBonus: 0,
-    // NOVO: Rastreamento do último jogo
+    // Tracking the last game
     lastGame: {
         id: 0,
         amount: 0n,
         prize: 0n,
-        rolls: [0, 0, 0] // 3 rolls que o Oráculo enviou
+        rolls: [0, 0, 0]
     }
 };
 
-// ... (Funções de load/save gamestate mantidas) ...
-
 // ============================================
-// II. CONFIGURAÇÕES E CONSTANTES
+// II. CONFIGURATIONS AND CONSTANTS
 // ============================================
 
-// CONFIGURAÇÕES DA PISCINA ÚNICA (Apenas para referência da UI)
 const PRIZE_TIERS_INFO = [
     { multiplier: 3, chance: '1 in 3 (33.3%)' },
     { multiplier: 10, chance: '1 in 10 (10%)' },
@@ -49,11 +45,11 @@ const PRIZE_TIERS_INFO = [
 ];
 
 // ============================================
-// III. LÓGICA DE CONTRATO E CÁLCULO
+// III. CONTRACT AND CALCULATION LOGIC
 // ============================================
 
 /**
- * Carrega o saldo da Piscina Única
+ * Loads the balance of the Prize Pool (FortunePool)
  */
 async function loadPoolBalance() {
     if (!State.actionsManagerContractPublic) return;
@@ -65,7 +61,7 @@ async function loadPoolBalance() {
             0n
         );
         gameState.poolBalance = balance;
-        TigerGamePage.updatePoolDisplay(); 
+        FortunePoolPage.updatePoolDisplay(); // <-- RENOMEADO
     } catch (e) {
         console.error("Failed to load pool balance:", e);
     }
@@ -73,49 +69,38 @@ async function loadPoolBalance() {
 
 
 /**
- * NOVO: Esta função é chamada pelo OUVINTE DE EVENTOS (em main.js/state.js)
- * quando o evento 'GameFulfilled' é recebido do Oráculo.
+ * Called by the EVENT LISTENER when the 'GameFulfilled' event is received.
  */
 function handleGameFulfilled(gameId, user, prizeWon, rolls) {
-    // Verifica se o evento é para o usuário atual
     if (user.toLowerCase() !== State.userAddress.toLowerCase()) {
         return;
     }
     
-    console.log(`[TigerGame] Recebido resultado do Oráculo para Jogo ${gameId}: Ganhou ${prizeWon}`);
+    console.log(`[FortunePool] Received Oracle result for Game ${gameId}: Won ${prizeWon}`);
     
-    // Determina o multiplicador mais alto
-    let highestMultiplier = 0;
-    const prizeWonFloat = formatBigNumber(prizeWon);
-    
-    if (prizeWonFloat > 0) {
-        // Lógica simplificada para inferir o multiplicador com base nos tiers fixos (1x, 10x, 100x)
-        if (prizeWonFloat > 95) highestMultiplier = 100; 
-        else if (prizeWonFloat > 9.5) highestMultiplier = 10; 
-        else if (prizeWonFloat > 2.9) highestMultiplier = 3; 
-        else highestMultiplier = 1; 
-    }
+    // We assume the prize is correct as sent by the Oracle/Contract.
+    // Multiplier inference logic removed as it's unreliable and against the new architecture.
+    const highestMultiplier = prizeWon > 0n ? 1 : 0; 
 
-    // ATUALIZA O ESTADO DO ÚLTIMO JOGO
+    // UPDATE LAST GAME STATE
     gameState.lastGame = {
         id: Number(gameId),
-        amount: 0n, // Não temos o commit amount aqui, mas poderíamos buscar do GameRequested
+        amount: gameState.lastGame.amount, 
         prize: prizeWon,
-        rolls: rolls.map(r => Number(r)) // Converte BigInt para Number
+        rolls: rolls.map(r => Number(r))
     };
 
     const prizeData = {
         totalPrizeWon: prizeWon,
-        highestMultiplier: highestMultiplier,
+        highestMultiplier: highestMultiplier, // Used only for success/fail display logic
         rolls: rolls 
     };
 
-    // Inicia a sequência de animação com o resultado
     runActivationSequence(prizeData);
 }
 
 // ============================================
-// IV. ANIMAÇÕES DE ATIVAÇÃO
+// IV. ACTIVATION ANIMATIONS
 // ============================================
 
 async function runActivationSequence(prizeData) {
@@ -125,30 +110,29 @@ async function runActivationSequence(prizeData) {
     
     if (!activationArea || !activationCore || !resultDisplay) return;
 
-    // 1. Inicia a Animação (se ainda não estiver ativa)
+    // 1. Start Animation
     resultDisplay.innerHTML = `<h3>ORACLE IS PROCESSING...</h3>`;
     resultDisplay.classList.remove('win', 'lose');
     activationCore.classList.add('activating'); 
     
-    // Mostra "Processando" por um momento antes de revelar o resultado
     await new Promise(resolve => setTimeout(resolve, 3000)); 
 
-    // 2. Para a Animação
+    // 2. Stop Animation
     activationCore.classList.remove('activating');
 
-    // 3. Mostra o Resultado
+    // 3. Show Result
     const totalPrizeWonFloat = formatBigNumber(prizeData.totalPrizeWon);
     
-    // ATUALIZA O PAINEL DE ÚLTIMA ATIVAÇÃO
-    TigerGamePage.updateLastGamePanel();
+    FortunePoolPage.updateLastGamePanel(); // <-- RENOMEADO
 
-    if (prizeData.highestMultiplier > 0) {
+    if (prizeData.totalPrizeWon > 0n) {
         resultDisplay.classList.add('win');
-        resultDisplay.innerHTML = `<h3>🎉 BONUS UNLOCKED! x${prizeData.highestMultiplier}! You received ${totalPrizeWonFloat.toLocaleString('en-US', { maximumFractionDigits: 2 })} $BKC!</h3>`;
+        // MESSAGE CLEANUP: Reflects reward transfer, not 'bonus unlock'
+        resultDisplay.innerHTML = `<h3>🎉 REWARD RECEIVED! You won ${totalPrizeWonFloat.toLocaleString('en-US', { maximumFractionDigits: 2 })} $BKC!</h3>`;
         activationCore.classList.add('win-pulse');
     } else {
         resultDisplay.classList.add('lose');
-        resultDisplay.innerHTML = `<h3>Purchase Registered. No Bonus Unlocked this time.</h3>`;
+        resultDisplay.innerHTML = `<h3>Purchase Registered. No Reward This Time.</h3>`;
         activationCore.classList.add('lose-pulse');
     }
 
@@ -157,23 +141,19 @@ async function runActivationSequence(prizeData) {
     resultDisplay.classList.remove('win', 'lose');
     resultDisplay.innerHTML = `<h3>Ready to Activate</h3>`;
 
-    // 4. Feedback final (Toast e Gamificação)
+    // 4. Final Feedback (Toast and Gamification)
     if (prizeData.totalPrizeWon > 0n) {
-        if (prizeData.highestMultiplier > 1) {
-            showToast(`🎉 ORACLE RESULT: You unlocked a x${prizeData.highestMultiplier} reward!`, 'success');
-        } else {
-            showToast(`ORACLE RESULT: You received a 1x stability reward.`, 'info');
-        }
+        showToast(`ORACLE RESULT: You received ${totalPrizeWonFloat.toLocaleString('en-US', { maximumFractionDigits: 2 })} BKC reward.`, 'success');
     } else {
         showToast('ORACLE RESULT: Purchase registered. Better luck next time!', 'info');
     }
     
-    // 5. Atualiza Estado (AGORA, após o resultado)
+    // 5. Update State
     gameState.isActivating = false;
-    TigerGamePage.updateUIState();
+    FortunePoolPage.updateUIState(); // <-- RENOMEADO
     gameState.totalActivations++;
-    TigerGamePage.addXP(100); 
-    TigerGamePage.checkAchievements(totalPrizeWonFloat, prizeData.highestMultiplier);
+    FortunePoolPage.addXP(100); // <-- RENOMEADO
+    FortunePoolPage.checkAchievements(totalPrizeWonFloat, prizeData.highestMultiplier); // <-- RENOMEADO
     await loadUserData(); 
     await loadPoolBalance(); 
 }
@@ -191,14 +171,13 @@ function stopActivationOnError() {
         resultDisplay.innerHTML = '<h3>⚠️ TRANSACTION FAILED!</h3>';
     }
     
-    // Reseta o estado
     gameState.isActivating = false;
-    TigerGamePage.updateUIState();
+    FortunePoolPage.updateUIState(); // <-- RENOMEADO
 }
 
 
 // ============================================
-// V. FUNÇÃO PRINCIPAL DE "COMPRA"
+// V. MAIN "PURCHASE" FUNCTION
 // ============================================
 
 async function executePurchase() {
@@ -225,11 +204,10 @@ async function executePurchase() {
     
     if (amountWei > State.currentUserBalance) {
         showToast("Insufficient BKC balance for this amount.", "error");
-        TigerGamePage.updateUIState();
+        FortunePoolPage.updateUIState(); // <-- RENOMEADO
         return;
     }
     
-    // Busca e verifica a taxa do Oráculo (em ETH/BNB)
     const oracleFeeWei = State.systemData.oracleFeeInWei ? BigInt(State.systemData.oracleFeeInWei) : 0n;
     if (oracleFeeWei <= 0n) {
         showToast("Oracle Fee is not set. Please contact support.", "error");
@@ -249,7 +227,7 @@ async function executePurchase() {
     }
 
     try {
-        // 1. Verificação de pStake
+        // 1. pStake Verification
         const [ignoredFee, pStakeReq] = await safeContractCall(
             State.ecosystemManagerContract, 
             'getServiceRequirements', 
@@ -272,14 +250,14 @@ async function executePurchase() {
             { value: oracleFeeWei }
         );
         
-        // **ATUALIZA O ESTADO DO ÚLTIMO JOGO APÓS A REQUISIÇÃO (ANTES DO ORÁCULO RESPONDER)**
-        gameState.lastGame.amount = amountWei;
-        gameState.lastGame.id = 0; // Reset ID (Será atualizado no evento)
+        // **UPDATE LAST GAME STATE AFTER REQUEST (BEFORE ORACLE RESPONSE)**
+        gameState.lastGame.amount = amountWei; // Store the committed amount
+        gameState.lastGame.id = 0; 
         gameState.lastGame.prize = 0n;
         gameState.lastGame.rolls = [0, 0, 0];
-        TigerGamePage.updateLastGamePanel(true); // Mostra "Waiting for Oracle"
+        FortunePoolPage.updateLastGamePanel(true); // <-- RENOMEADO
         
-        // Inicia a animação de "processando"
+        // Start "processing" animation
         const activationCore = document.getElementById('activationCore');
         const resultDisplay = document.getElementById('resultDisplay');
         if (activationCore) activationCore.classList.add('activating');
@@ -290,7 +268,6 @@ async function executePurchase() {
         // 4. Sucesso da Tx 1
         showToast("✅ Game Requested! The Oracle is processing your result. (Est. 1-2 min)", "success");
         if (resultDisplay) resultDisplay.innerHTML = `<h3>WAITING FOR ORACLE...</h3>`;
-        // O estado 'isActivating' permanece 'true' até o Oráculo responder em 'handleGameFulfilled'
 
     } catch (error) {
         console.error("Activation error:", error);
@@ -303,16 +280,16 @@ async function executePurchase() {
             errorMessage = "Invalid Oracle Fee. Please refresh the page.";
         }
         showToast(`Activation Failed: ${errorMessage}`, "error");
-        stopActivationOnError(); // Reseta a UI
+        stopActivationOnError(); // Reset UI
     } 
 }
 
 
 // ============================================
-// VI. PAGE COMPONENT EXPORT (UI Redesenhada)
+// VI. PAGE COMPONENT EXPORT
 // ============================================
 
-export const TigerGamePage = {
+export const FortunePoolPage = { // <--- RENOMEADO
     
     render(isActive) {
         if (!isActive) return;
@@ -323,23 +300,23 @@ export const TigerGamePage = {
             return;
         }
 
-        // HTML base (apenas se não tiver sido renderizado)
-        if (!pageContainer.querySelector('.tiger-game-wrapper')) {
+        // HTML base (only if not already rendered)
+        if (!pageContainer.querySelector('.fortune-pool-wrapper')) { // <--- RENOMEADO
             pageContainer.innerHTML = this.getHtmlContent();
             this.initializeEventListeners();
         }
         
         this.loadPoolBalance();
         this.updateUIState();
-        this.updateLastGamePanel(); // Garante que o painel de histórico seja renderizado
+        this.updateLastGamePanel(); // Ensures the history panel is rendered
     },
     
     getHtmlContent() {
         return `
-            <div class="tiger-game-wrapper">
-                <header class="tiger-header">
+            <div class="fortune-pool-wrapper"> // <--- RENOMEADO
+                <header class="fortune-header"> // <--- RENOMEADO
                     <div class="header-top">
-                        <h1 class="game-title">✨ BKC REWARD GENERATOR</h1>
+                        <h1 class="game-title">✨ BKC FORTUNE POOL GENERATOR</h1>
                         <div class="legacy-badge">
                             <span class="legacy-icon">🛠️</span>
                             <span class="legacy-level">Lvl <span id="currentLevel">${gameState.currentLevel}</span></span>
@@ -537,7 +514,7 @@ export const TigerGamePage = {
     },
     
     /**
-     * Lida com o resultado do Oráculo
+     * Handles the Oracle result
      */
     handleGameFulfilled,
 
@@ -560,7 +537,7 @@ export const TigerGamePage = {
         let meetsOracleFee = false;
         
         try {
-            // 1. Checa pStake
+            // 1. Check pStake
             const [ignoredFee, pStakeReq] = await safeContractCall( 
                 State.ecosystemManagerContract, 
                 'getServiceRequirements', 
@@ -580,7 +557,7 @@ export const TigerGamePage = {
                 pstakeStatusEl.classList.add('text-red-400');
             }
             
-            // 2. Checa Taxa do Oráculo
+            // 2. Check Oracle Fee
             const oracleFeeWei = State.systemData.oracleFeeInWei ? BigInt(State.systemData.oracleFeeInWei) : 0n;
             meetsOracleFee = State.currentUserNativeBalance >= oracleFeeWei;
             
@@ -600,7 +577,7 @@ export const TigerGamePage = {
                  oracleFeeStatusEl.classList.add('text-red-400');
             }
             
-            return (meetsPStake && meetsOracleFee); // Retorna o status geral
+            return (meetsPStake && meetsOracleFee); // Returns the general status
 
         } catch (e) {
             pstakeStatusEl.innerHTML = '<span class="status-icon error">⚠️</span> Error Check';
@@ -609,7 +586,7 @@ export const TigerGamePage = {
         }
     },
 
-    // NOVO: Renderiza o painel de última ativação/rolls
+    // Renders the last activation/rolls panel
     updateLastGamePanel(isWaiting = false) {
         const panel = document.getElementById('lastGamePanel');
         if (!panel) return;
@@ -636,7 +613,7 @@ export const TigerGamePage = {
                 prizeText = `<span style="color:var(--tiger-accent-green);">${prizeFloat.toLocaleString('en-US', { maximumFractionDigits: 2 })} $BKC WON</span>`;
                 winClass = 'win';
             } else {
-                prizeText = `<span style="color:var(--tiger-accent-orange);">No Bonus Unlocked</span>`;
+                prizeText = `<span style="color:var(--tiger-accent-orange);">No Reward This Time</span>`;
                 winClass = 'lose';
             }
         }
@@ -662,7 +639,7 @@ export const TigerGamePage = {
             
         `;
 
-        // Adicionar estilos de painel (para o arquivo CSS)
+        // Add panel styles (for the CSS file)
         panel.style.cssText = `
             background: var(--tiger-bg-secondary);
             border: 1px solid var(--tiger-border-color);
@@ -672,7 +649,7 @@ export const TigerGamePage = {
             box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
         `;
         
-        // Estilos específicos para o painel de Rolls
+        // Specific styles for the Rolls panel
         const rollsContainer = panel.querySelector('.rolls-container');
         if (rollsContainer) {
              rollsContainer.style.cssText = `
@@ -707,7 +684,7 @@ export const TigerGamePage = {
         
     },
 
-    // ... (Funções de Gamificação mantidas) ...
+    // ... (Gamification functions maintained) ...
 
     async updateUIState() {
         const activateButton = document.getElementById('activateButton');
@@ -716,7 +693,7 @@ export const TigerGamePage = {
         
         if (!activateButton || !buyBkcButton || !commitInput) return;
 
-        // Esconde os dois botões por padrão
+        // Hide both buttons by default
         activateButton.style.display = 'none';
         buyBkcButton.style.display = 'none';
 
@@ -724,11 +701,11 @@ export const TigerGamePage = {
             activateButton.style.display = 'block';
             activateButton.disabled = true;
             activateButton.innerHTML = 'CONNECT WALLET';
-            this.checkRequirements(); // Atualiza os status mesmo desconectado
+            this.checkRequirements(); // Update status even when disconnected
             return;
         }
 
-        // Checa todos os requisitos (pStake E taxa do oráculo) antes de tudo
+        // Check all requirements (pStake AND oracle fee) first
         const meetsAllRequirements = await this.checkRequirements();
 
         if (gameState.isActivating) {
@@ -738,26 +715,26 @@ export const TigerGamePage = {
             return;
         }
 
-        // Se estiver conectado e não estiver ativando, checa saldos
+        // If connected and not activating, check balances
         const amount = parseFloat(commitInput.value) || 0;
         let amountWei = 0n;
         try {
             if (amount > 0) amountWei = ethers.parseEther(amount.toString());
-        } catch (e) { /* ignora erro de parse */ }
+        } catch (e) { /* ignore parse error */ }
 
         if (amountWei > 0n && amountWei > State.currentUserBalance) {
-            // Caso 1: Digitou um valor MAIOR que o saldo
+            // Case 1: Entered value is GREATER than balance
             buyBkcButton.style.display = 'block';
             buyBkcButton.innerHTML = 'INSUFFICIENT $BKC - CLICK TO BUY';
         } else if (amountWei === 0n && State.currentUserBalance === 0n) {
-            // Caso 2: Não digitou nada E não tem saldo
+            // Case 2: Entered nothing AND has zero balance
             buyBkcButton.style.display = 'block';
             buyBkcButton.innerHTML = 'BUY $BKC TO START';
         } else {
-            // Caso 3: Tem saldo suficiente (ou não digitou nada, mas tem saldo)
+            // Case 3: Has sufficient balance (or entered nothing but has balance)
             activateButton.style.display = 'block';
             activateButton.innerHTML = 'ACTIVATE PURCHASE & MINE';
-            // Desabilita se os requisitos (pStake/Taxa) não forem atendidos OU se o valor for 0
+            // Disable if requirements (pStake/Fee) are not met OR if amount is 0
             activateButton.disabled = !meetsAllRequirements || amountWei === 0n;
         }
     }

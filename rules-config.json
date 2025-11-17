@@ -1,32 +1,30 @@
 {
   "serviceFees": {
-    "COMMENT": "Taxas de Serviço (em BKC/Ether) 💰: Define o custo, em tokens BKC, para o usuário realizar uma ação específica no ecossistema (ex: criar um documento notarial). O valor é inserido em formato decimal (ex: '100' para 100 BKC).",
+    "COMMENT": "Service Fees (in BKC/Ether) 💰: Defines the cost, in BKC tokens, for a user to perform a specific action (e.g., create a notary document). The value is in decimal format (e.g., '100' for 100 BKC).",
     "NOTARY_SERVICE": "100",
     "FORTUNE_POOL_SERVICE": "1",
     "NFT_POOL_ACCESS": "0",
-    "VALIDATOR_REGISTRATION_FEE": "10000" 
+    "VALIDATOR_REGISTRATION_FEE": "10000"
   },
   "pStakeMinimums": {
-    "COMMENT": "Mínimo de pStake (Valor Bruto) 🔒: É a quantidade MÍNIMA de 'poder de staking' (pStake) que um usuário precisa ter delegado para ser autorizado a usar um determinado serviço. Se o valor for '0', não há restrição.",
+    "COMMENT": "pStake Minimum (Raw Value) 🔒: The MINIMUM amount of 'power stake' (pStake) a user must have delegated to be authorized to use a service. If '0', there is no restriction.",
     "NOTARY_SERVICE": "10000",
     "FORTUNE_POOL_SERVICE": "10000",
     "NFT_POOL_ACCESS": "10000"
   },
   "stakingFees": {
-    "COMMENT": "Taxas de Staking e Penalidades (em BIPS) 📉: Define as penalidades e taxas para retirar ou reivindicar recompensas do pool de staking. 100 BIPS = 1%. (Exemplo: Se a taxa é 1000 BIPS, o usuário perde 10% do valor).",
+    "COMMENT": "Staking Fees & Penalties (in BIPS) 📉: Defines penalties and fees for unstaking or claiming rewards. 100 BIPS = 1%. (e.g., 1000 BIPS = 10% penalty).",
     "UNSTAKE_FEE_BIPS": "100",
     "FORCE_UNSTAKE_PENALTY_BIPS": "1000",
     "CLAIM_REWARD_FEE_BIPS": "50"
   },
   "ammTaxFees": {
-    "COMMENT": "Impostos de Venda de NFT (em BIPS) 💸: Define a taxa total cobrada quando um usuário VENDE um NFT de volta para o pool de liquidez, e como essa taxa total é distribuída (para Tesouraria, Delegadores e de volta ao Pool de Liquidez). A soma das três 'shares' deve ser igual à taxa total ('NFT_POOL_TAX_BIPS').",
+    "COMMENT": "NFT Sale Tax (in BIPS) 💸: Defines the total tax charged when a user SELLS an NFT back to the pool, and how much of that tax is retained by the pool for liquidity.",
     "NFT_POOL_TAX_BIPS": "1000",
-    "NFT_POOL_TAX_TREASURY_SHARE_BIPS": "400",
-    "NFT_POOL_TAX_DELEGATOR_SHARE_BIPS": "300",
     "NFT_POOL_TAX_LIQUIDITY_SHARE_BIPS": "300"
   },
   "boosterDiscounts": {
-    "COMMENT": "Descontos de NFT Booster (em BIPS) ⭐: Define o desconto que cada Nível de NFT Booster concede nas taxas/penalidades do sistema (Staking ou AMM). O 'Nome do Campo' (Chave) é o poder do NFT, e o 'Valor' é o desconto concedido (em BIPS).",
+    "COMMENT": "NFT Booster Discounts (in BIPS) ⭐: Defines the discount (in BIPS) that each NFT Booster Tier grants on system fees/penalties. The 'Key' is the NFT's power, the 'Value' is the discount.",
     "5000": "5000",
     "4000": "4000",
     "3000": "3000",
@@ -36,15 +34,15 @@
     "100": "100"
   },
   "miningDistribution": {
-    "COMMENT": "Distribuição da Mineração PoP (em BIPS) ⛏️: Controla como os tokens BKC recém-criados pelo sistema (Mineração Proof-of-Purchase) são divididos entre os pools de recompensa. A SOMA de todas as categorias **DEVE** ser exatamente 10000 BIPS (100%).",
+    "COMMENT": "PoP Mining Distribution (in BIPS) ⛏️: Controls how *newly minted* BKC tokens (from Proof-of-Purchase mining) are split. The SUM of all categories **MUST** be exactly 10000 BIPS (100%).",
     "TREASURY": "1500",
     "VALIDATOR_POOL": "1500",
     "DELEGATOR_POOL": "7000"
   },
-  "miningBonuses": {
-    "COMMENT": "Bônus de Mineração (em BIPS) 🎁: É o 'cashback' que o usuário ganha instantaneamente por usar o serviço. O valor é aplicado sobre a 'sobra' do token minerado (após a distribuição para os pools).",
-    "NOTARY_SERVICE": "5000",
-    "FORTUNE_POOL_SERVICE": "0",
-    "VALIDATOR_REGISTRATION_FEE": "5000"
+  "feeDistribution": {
+    "COMMENT": "Fee Distribution (in BIPS) 💵: Controls how *original fee tokens* (the fees paid by users) are split by the MiningManager. The SUM of all categories **MUST** be exactly 10000 BIPS (100%).",
+    "TREASURY": "5000",
+    "VALIDATOR_POOL": "2500",
+    "DELEGATOR_POOL": "2500"
   }
 }

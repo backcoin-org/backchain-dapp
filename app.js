@@ -1,9 +1,5 @@
 // app.js
 // ✅ ARQUIVO CORRIGIDO
-// - Corrigida a 'race condition' do DOMElements.
-// - O script agora atribui document.getElementById('mine') ao DOMElements.earn
-//   durante o 'window.load', corrigindo o 'null' do dom-elements.js.
-// - Removida a lógica de "espera" (timeout) na inicialização.
 
 import { inject } from 'https://esm.sh/@vercel/analytics';
 
@@ -16,7 +12,6 @@ const ethers = window.ethers;
 
 import { DOMElements } from './dom-elements.js';
 import { State } from './state.js';
-// ✅ CORREÇÃO: Importa 'initWalletSubscriptions' em vez de 'subscribeToWalletChanges'
 import { initPublicProvider, initWalletSubscriptions, disconnectWallet, openConnectModal } from './modules/wallet.js';
 import { showToast, showShareModal, showWelcomeModal } from './ui-feedback.js';
 import { formatBigNumber } from './utils.js'; 
@@ -27,7 +22,7 @@ import { DashboardPage } from './pages/DashboardPage.js';
 import { EarnPage } from './pages/networkstaking.js'; 
 import { StorePage } from './pages/StorePage.js';
 import { RewardsPage } from './pages/RewardsPage.js';
-import { TigerGamePage as FortunePoolPage } from './pages/FortunePool.js'; 
+import { FortunePoolPage } from './pages/FortunePool.js'; 
 import { AboutPage } from './pages/AboutPage.js';
 import { AirdropPage } from './pages/AirdropPage.js';
 import { AdminPage } from './pages/AdminPage.js';
@@ -46,7 +41,7 @@ import { NotaryPage } from './pages/NotaryPage.js';
  */
 function formatAddress(addr) {
     if (!addr || addr.length < 42) return '...';
-    return `${addr.slice(0, 6)}...${addr.slice(-4)}`; // Ajuste o formato para ser mais legível
+    return `${addr.slice(0, 6)}...${addr.slice(-4)}`; 
 }
 
 /**
@@ -73,7 +68,7 @@ function formatLargeBalance(bigNum) {
 
 const routes = {
     'dashboard': DashboardPage,
-    'mine': EarnPage, // Rota 'mine' 
+    'mine': EarnPage, 
     'store': StorePage,
     'rewards': RewardsPage,
     'actions': FortunePoolPage, 
@@ -88,10 +83,8 @@ const routes = {
 };
 
 let activePageId = 'dashboard';
-// O endereço do Admin é usado para controle de acesso ao painel
 const ADMIN_WALLET = '0x03aC69873293cD6ddef7625AfC91E3Bd5434562a'; 
 
-// Track active page cleanup function
 let currentPageCleanup = null;
 
 // ============================================================================
@@ -102,8 +95,6 @@ function onWalletStateChange(changes) {
     const { isConnected, address, isNewConnection, wasConnected } = changes;
     console.log("Wallet State Changed (App):", changes);
 
-    // ✅ CORREÇÃO: Força o recarregamento da página ativa
-    // para garantir que ela obtenha o novo estado (conectado/desconectado).
     updateUIState(true); 
     
     if (isConnected && isNewConnection) {
@@ -119,7 +110,6 @@ function onWalletStateChange(changes) {
 
 /**
  * Navigate to a specific page
- * ✅ CORREÇÃO: Adicionado 'forceUpdate' para lidar com a mudança de estado da carteira
  */
 function navigateTo(pageId, forceUpdate = false) {
     const pageContainer = document.querySelector('main > div.container');
@@ -157,8 +147,6 @@ function navigateTo(pageId, forceUpdate = false) {
         targetPage.classList.remove('hidden');
         targetPage.classList.add('active');
         
-        // ✅ CORREÇÃO: Apenas atualiza o activePageId se ele for diferente
-        // ou se for uma atualização forçada
         const isNewPage = activePageId !== pageId;
         activePageId = pageId;
 
@@ -171,8 +159,6 @@ function navigateTo(pageId, forceUpdate = false) {
 
         // Render page
         if (routes[pageId] && typeof routes[pageId].render === 'function') {
-            // ✅ CORREÇÃO: Passa 'true' se for uma nova página ou
-            // se a atualização for forçada (ex: mudança de carteira)
             routes[pageId].render(isNewPage || forceUpdate);
         }
         
@@ -194,7 +180,6 @@ window.navigateTo = navigateTo;
 
 /**
  * Update all UI elements based on global State
- * ✅ CORREÇÃO: Adicionado 'forcePageUpdate'
  */
 function updateUIState(forcePageUpdate = false) {
     const adminLinkContainer = document.getElementById('admin-link-container');
@@ -244,9 +229,7 @@ function updateUIState(forcePageUpdate = false) {
         if (statUserBalanceEl) statUserBalanceEl.textContent = '--';
     }
 
-    // ✅ CORREÇÃO: Trigger re-render of active page
-    // O 'forcePageUpdate' garante que a página recarregue
-    // seus dados quando a carteira muda.
+    // Trigger re-render of active page
     navigateTo(activePageId, forcePageUpdate); 
 }
 
@@ -269,7 +252,7 @@ function setupGlobalListeners() {
             item.addEventListener('click', () => {
                 const pageId = item.dataset.target;
                 if (pageId) {
-                    navigateTo(pageId, false); // 'false' pois é uma navegação normal
+                    navigateTo(pageId, false); 
                     // Close mobile sidebar
                     if (sidebar.classList.contains('translate-x-0')) {
                         sidebar.classList.remove('translate-x-0');
@@ -322,10 +305,8 @@ function setupGlobalListeners() {
 window.addEventListener('load', async () => {
     console.log("Window 'load' event fired. Starting initialization...");
 
-    // ✅ *** INÍCIO DA CORREÇÃO (Bug DOMElements.earn nulo) ***
     if (!DOMElements.earn) {
         console.warn("DOMElements.earn was null. Attempting re-initialization...");
-        // Atribui o elemento com ID 'mine' ao DOMElements.earn
         DOMElements.earn = document.getElementById('mine'); 
         
         if (DOMElements.earn) {
@@ -334,7 +315,6 @@ window.addEventListener('load', async () => {
             console.error("❌ CRITICAL: Could not find element with ID 'mine' after load.");
         }
     }
-    // ✅ *** FIM DA CORREÇÃO ***
 
     try {
         // 1. Load contract addresses
@@ -360,22 +340,18 @@ window.addEventListener('load', async () => {
     // 2. Initialize public provider (CRITICAL)
     await initPublicProvider(); 
     console.log("Public provider initialized and public data loaded.");
-
+    
+    // CORREÇÃO: Força a primeira renderização após o carregamento de dados públicos
+    // Isso garante que os stats públicos (TVL, Validadores) sejam exibidos imediatamente.
+    updateUIState(true); 
+    
     // 3. Subscribe to wallet changes
-    // ✅ CORREÇÃO: Usando a nova função 'initWalletSubscriptions'
-    // Esta função agora lida com a reconexão E se inscreve em eventos futuros.
-    // Ela chama 'onWalletStateChange' assim que o estado inicial é conhecido.
     initWalletSubscriptions(onWalletStateChange);
 
-    // 4. ✅ CORREÇÃO: REMOVIDO O BLOCO DE 'ESPERA DE 5 SEGUNDOS'
-    // A lógica de 'espera' (timeout) foi removida.
-    
-    // 5. Show welcome modal
+    // 4. Show welcome modal
     showWelcomeModal();
 
-    // 6. Navigate to default page (será atualizado pelo onWalletStateChange)
-    // Chamamos isso para a renderização inicial (estado desconectado).
-    navigateTo(activePageId, true); 
+    // A navegação é acionada por updateUIState()
 
     console.log("Application initialization sequence complete. Waiting for wallet state...");
 });

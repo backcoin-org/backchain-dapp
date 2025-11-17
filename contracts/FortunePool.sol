@@ -7,6 +7,7 @@ import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.sol";
 import "./IInterfaces.sol";
 import "./BKCToken.sol";
+
 contract FortunePool is
     Initializable,
     UUPSUpgradeable,
@@ -16,37 +17,39 @@ contract FortunePool is
     IEcosystemManager public ecosystemManager;
     BKCToken public bkcToken;
     IDelegationManager public delegationManager;
-    address public miningManagerAddress;
+    // VARIÁVEL DE ESTADO
+    address public miningManagerAddress; 
 
     address public oracleAddress;
     uint256 public oracleFeeInWei;
     uint256 public gameCounter;
+
     // Total fee taken from the user's game value (10%)
     uint256 public constant TOTAL_FEE_BIPS = 1000;
     uint256 public constant TOTAL_BIPS = 10000;
     uint256 public constant MAX_PRIZE_PAYOUT_BIPS = 5000;
+
     struct PrizeTier {
         bool isInitialized;
-        uint256 chanceDenominator; 
+        uint256 chanceDenominator;
         uint256 multiplierBips;
     }
-    mapping(uint256 => PrizeTier) public prizeTiers; 
+    mapping(uint256 => PrizeTier) public prizeTiers;
     uint256 public prizePoolBalance;
     uint256 public activeTierCount;
     mapping(uint256 => uint256[3]) public gameResults;
+
     event TierCreated(uint256 indexed tierId, uint256 chance, uint256 multiplier);
     event PrizePoolToppedUp(uint256 amount);
     event OracleAddressSet(address indexed oracle);
     event OracleFeeSet(uint256 newFeeInWei);
     event GameRequested(uint256 indexed gameId, address indexed user, uint256 purchaseAmount);
     event GameFulfilled(
-        uint256 indexed gameId, 
-        address indexed user, 
+        uint256 indexed gameId,
+        address indexed user,
         uint256 prizeWon,
         uint256[3] rolls
     );
-    
-    // CONSTRUTOR REMOVIDO PARA EVITAR ERRO DE UPGRADE DE SEGURANÇA
 
     function initialize(
         address _initialOwner,
@@ -65,15 +68,17 @@ contract FortunePool is
         address _bkcTokenAddress = ecosystemManager.getBKCTokenAddress();
         address _dmAddress = ecosystemManager.getDelegationManagerAddress();
         address _miningManagerAddr = ecosystemManager.getMiningManagerAddress();
+        
         require(
             _bkcTokenAddress != address(0) &&
                 _dmAddress != address(0) &&
                 _miningManagerAddr != address(0),
             "FP: Core contracts not set in Brain"
         );
+        
         bkcToken = BKCToken(_bkcTokenAddress);
         delegationManager = IDelegationManager(_dmAddress);
-        miningManagerAddress = _miningManagerAddr;
+        miningManagerAddress = _miningManagerAddr; // Usa a variável de estado
         
         _transferOwnership(_initialOwner);
     }
@@ -130,9 +135,8 @@ contract FortunePool is
         (bool sent, ) = oracleAddress.call{value: msg.value}("");
         require(sent, "FP: Failed to forward fee to Oracle");
 
-        (uint256 purchaseAmount, uint256 buyerBonus) = _processFeesAndMining(_amount);
-        _addAmountToPool(buyerBonus);
-
+        uint256 purchaseAmount = _processFeesAndMining(_amount);
+        
         gameCounter++;
         uint256 newGameId = gameCounter;
         emit GameRequested(newGameId, msg.sender, purchaseAmount);
@@ -149,6 +153,7 @@ contract FortunePool is
 
         uint256 highestPrizeWon = 0;
         uint256[3] memory rolls;
+        
         for (uint256 tierId = 1; tierId <= activeTierCount; tierId++) {
             PrizeTier storage tier = prizeTiers[tierId];
             if (tier.isInitialized && prizePoolBalance > 0) {
@@ -159,8 +164,7 @@ contract FortunePool is
                     uint256 maxPrizeMultiplier = (_purchaseAmount * tier.multiplierBips) / TOTAL_BIPS;
                     uint256 maxPrizeSustainability = (prizePoolBalance * MAX_PRIZE_PAYOUT_BIPS) / TOTAL_BIPS;
                     uint256 prizeAmount = (maxPrizeMultiplier < maxPrizeSustainability)
-                        ?
-                    maxPrizeMultiplier
+                        ? maxPrizeMultiplier
                         : maxPrizeSustainability;
                     if (prizeAmount > highestPrizeWon) {
                         highestPrizeWon = prizeAmount;
@@ -170,6 +174,7 @@ contract FortunePool is
         }
 
         gameResults[_gameId] = rolls;
+        
         if (highestPrizeWon > 0) {
             prizePoolBalance -= highestPrizeWon;
             bkcToken.transfer(_user, highestPrizeWon);
@@ -178,46 +183,51 @@ contract FortunePool is
         emit GameFulfilled(_gameId, _user, highestPrizeWon, rolls);
     }
 
-    function _processFeesAndMining(uint256 _amount) internal returns (uint256 purchaseAmount, uint256 buyerBonus) {
+    /**
+     * @notice Internal function to process user's BKC commitment.
+     * @dev Splits amount into Prize Pool (90%) and Fees (10%).
+     * @dev The 10% fee is transferred to MiningManager for PoP and fee distribution.
+     */
+    function _processFeesAndMining(uint256 _amount) internal nonReentrant returns (uint256 purchaseAmount) {
+        // 1. Calculate 90% for Prize Pool and 10% for Fees/PoP
         uint256 totalFee = (_amount * TOTAL_FEE_BIPS) / TOTAL_BIPS;
         uint256 prizePoolAmount = _amount - totalFee;
-        purchaseAmount = totalFee;
+        purchaseAmount = totalFee; // The PoP amount is the 10% fee
 
-        address treasury = ecosystemManager.getTreasuryAddress();
-        address dm = ecosystemManager.getDelegationManagerAddress();
-        require(treasury != address(0), "FP: Treasury not set in Brain");
-        require(dm != address(0), "FP: DM not set in Brain");
-        uint256 treasuryFee = totalFee / 2;
-        uint256 delegatorFee = totalFee - treasuryFee; 
+        // ✅ CORREÇÃO APLICADA: Uso direto da variável de estado 'miningManagerAddress'
+        require(miningManagerAddress != address(0), "FP: MM not set in Brain");
 
+        // 2. Pull total amount from user
         bkcToken.transferFrom(msg.sender, address(this), _amount);
 
+        // 3. Add 90% to the Prize Pool
         _addAmountToPool(prizePoolAmount);
-        if (treasuryFee > 0) {
-            bkcToken.transfer(treasury, treasuryFee);
-        }
-
-        if (delegatorFee > 0) {
-            bkcToken.approve(dm, delegatorFee);
-            IDelegationManager(dm).depositRewards(0, delegatorFee);
-        }
-
+        
+        // 4. Transfer the PoP amount (10% fee) to the Mining Manager
+        // This triggers the universal revenue funnel.
         require(
             bkcToken.transfer(miningManagerAddress, purchaseAmount),
             "FP: Transfer to MiningManager failed"
         );
-        buyerBonus = IMiningManager(miningManagerAddress)
+        
+        // 5. Call MiningManager (no longer returns a bonus)
+        IMiningManager(miningManagerAddress)
             .performPurchaseMining("TIGER_GAME_SERVICE", purchaseAmount);
+        
+        return purchaseAmount;
     }
     
     function _addAmountToPool(uint256 _amount) internal {
         if (_amount == 0) return;
+        
+        // If no tiers are set, send funds to treasury to prevent locking
         if (activeTierCount == 0) {
             address treasury = ecosystemManager.getTreasuryAddress();
             require(treasury != address(0), "FP: Treasury not set in Brain");
             bkcToken.transfer(treasury, _amount);
             return;
         }
+        
         prizePoolBalance += _amount;
     }
 }

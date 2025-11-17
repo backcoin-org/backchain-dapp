@@ -10,14 +10,13 @@ interface IDelegationManager {
      * @notice Returns the total pStake of a user.
      */
     function userTotalPStake(address _user) external view returns (uint256);
+
     /**
-     * @notice Deposits the reward shares from the MiningManager (newly minted tokens).
+     * @notice Deposits reward shares from the MiningManager.
+     * @dev This is now the universal function for ALL rewards (both minted tokens and fees).
      */
     function depositMiningRewards(uint256 _validatorShare, uint256 _delegatorShare) external;
-    /**
-     * @notice Deposits fees/penalties into the delegator pool (existing tokens).
-     */
-    function depositRewards(uint256, uint256 _delegatorAmount) external;
+
     /**
      * @notice Returns the total network pStake.
      */
@@ -32,13 +31,14 @@ interface IDelegationManager {
  */
 interface IMiningManager {
     /**
-     * @notice The central point for all "Proof-of-Purchase" mining.
-     * @return bonusAmount The bonus amount (if any) to be sent back to the Buyer (Spoke).
+     * @notice The central point for all "Proof-of-Purchase" mining and fee distribution.
+     * @dev This function triggers both minting (new tokens) and fee distribution (original tokens).
+     * @dev No longer returns a bonus; 100% of revenue is distributed to pools.
      */
     function performPurchaseMining(
         string calldata _serviceKey,
         uint256 _purchaseAmount
-    ) external returns (uint256 bonusAmount);
+    ) external;
 
     /**
      * @notice Calculates the amount of BKC to be minted for a given purchase amount, applying dynamic scarcity.
@@ -50,17 +50,19 @@ interface IMiningManager {
 
 /**
  * @title IRewardBoosterNFT
- * @dev Interface to verify a Booster NFT.
+ * @dev Interface to verify a Booster NFT. (No changes needed)
  */
 interface IRewardBoosterNFT {
     /**
      * @notice Returns the owner of a tokenId.
      */
     function ownerOf(uint256 tokenId) external view returns (address);
+
     /**
      * @notice Returns the Bips value of the booster.
      */
     function boostBips(uint256 tokenId) external view returns (uint256);
+
     /**
      * @notice Mints a single NFT when called by the authorized sale contract.
      */
@@ -75,7 +77,7 @@ interface IRewardBoosterNFT {
 
 /**
  * @title INFTLiquidityPoolFactory
- * @dev Interface for the Factory that creates NFT Liquidity Pools.
+ * @dev Interface for the Factory that creates NFT Liquidity Pools. (No changes needed)
  */
 interface INFTLiquidityPoolFactory {
     /**
@@ -88,7 +90,7 @@ interface INFTLiquidityPoolFactory {
 
 /**
  * @title INFTLiquidityPool
- * @dev Interface for the individual NFT Liquidity Pool contract.
+ * @dev Interface for the individual NFT Liquidity Pool contract. (No changes needed)
  */
 interface INFTLiquidityPool {
     /**
@@ -132,14 +134,15 @@ interface IEcosystemManager {
     function getBoosterDiscount(uint256 _boostBips) external view returns (uint256);
 
     /**
-     * @notice Returns the distribution BIPS for a given mining pool key.
+     * @notice Returns the distribution BIPS for *newly minted* tokens (PoP).
      */
     function getMiningDistributionBips(string calldata _poolKey) external view returns (uint256);
-    
+
     /**
-     * @notice Returns the bonus BIPS for a given service.
+     * @notice Returns the distribution BIPS for *original fee* tokens (PoP).
      */
-    function getMiningBonusBips(string calldata _serviceKey) external view returns (uint256);
+    function getFeeDistributionBips(string calldata _poolKey) external view returns (uint256);
+
 
     // --- Address Getters ---
     function getTreasuryAddress() external view returns (address);

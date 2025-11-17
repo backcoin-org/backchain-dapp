@@ -33,8 +33,6 @@ contract MiningManager is
     uint256 private constant THRESHOLD_40M = 40000000 * E18;
     uint256 private constant THRESHOLD_20M = 20000000 * E18;
 
-    // CONSTRUTOR REMOVIDO PARA EVITAR ERRO DE UPGRADE DE SEGURANÇA (TS9053)
-
     function initialize(
         address _ecosystemManagerAddress
     ) public initializer {
@@ -63,56 +61,78 @@ contract MiningManager is
         bkcToken.mint(to, amount);
     }
 
+    /**
+     * @notice Universal revenue funnel for PoP mining (new tokens) and Fee Distribution (existing tokens).
+     * @dev The calling contract (Spoke) must have transferred the `_purchaseAmount` (fee) to this contract.
+     */
     function performPurchaseMining(
         string calldata _serviceKey,
-        uint256 _purchaseAmount
-    ) external nonReentrant returns (uint256 bonusAmount) {
-        // NOTE: The caller (Spoke) must have transferred _purchaseAmount to this contract BEFORE calling.
+        uint256 _purchaseAmount // This is the original fee paid by the user
+    ) external nonReentrant {
         require(msg.sender == authorizedMiners[_serviceKey], "MM: Caller not authorized for service");
 
-        uint256 totalMintAmount = getMintAmount(_purchaseAmount);
-        if (totalMintAmount == 0) return 0;
-
-        // --- Distribution Rules from Hub ---
-        uint256 treasuryShareBips = ecosystemManager.getMiningDistributionBips("TREASURY");
-        uint256 validatorShareBips = ecosystemManager.getMiningDistributionBips("VALIDATOR_POOL");
-        uint256 delegatorShareBips = ecosystemManager.getMiningDistributionBips("DELEGATOR_POOL");
-        uint256 buyerBonusBips = ecosystemManager.getMiningBonusBips(_serviceKey);
-
-        // --- Shares Calculation ---
-        uint256 treasuryAmount = (totalMintAmount * treasuryShareBips) / 10000;
-        uint256 validatorAmount = (totalMintAmount * validatorShareBips) / 10000;
-        uint256 delegatorAmount = (totalMintAmount * delegatorShareBips) / 10000;
-        uint256 totalPoolShares = treasuryAmount + validatorAmount + delegatorAmount;
-        uint256 baseBonusAmount = totalMintAmount - totalPoolShares;
-
-        // Apply Buyer Bonus Bips
-        bonusAmount = (baseBonusAmount * buyerBonusBips) / 10000;
-
-        // --- Execute Minting and Transfer ---
-        uint256 finalMintAmount = totalPoolShares + bonusAmount;
-
-        // CRÍTICO: Cunhagem de novos tokens
-        bkcToken.mint(address(this), finalMintAmount);
-
         address treasury = ecosystemManager.getTreasuryAddress();
-        if (treasuryAmount > 0) {
-            bkcToken.transfer(treasury, treasuryAmount);
-        }
-
         address dm = ecosystemManager.getDelegationManagerAddress();
-        uint256 totalDMShare = validatorAmount + delegatorAmount;
-        if (totalDMShare > 0) {
-            bkcToken.approve(dm, totalDMShare);
-            IDelegationManager(dm).depositMiningRewards(validatorAmount, delegatorAmount);
-        }
-        
-        // Retorna o bônus para o Spoke chamador
-        if (bonusAmount > 0) {
-            bkcToken.transfer(msg.sender, bonusAmount);
+        require(treasury != address(0) && dm != address(0), "MM: Core addresses not set in Hub");
+
+        // --- 1. MINING DISTRIBUTION (New Tokens) ---
+        uint256 totalMintAmount = getMintAmount(_purchaseAmount);
+
+        if (totalMintAmount > 0) {
+            uint256 miningTreasuryBips = ecosystemManager.getMiningDistributionBips("TREASURY");
+            uint256 miningValidatorBips = ecosystemManager.getMiningDistributionBips("VALIDATOR_POOL");
+            uint256 miningDelegatorBips = ecosystemManager.getMiningDistributionBips("DELEGATOR_POOL");
+
+            require(
+                miningTreasuryBips + miningValidatorBips + miningDelegatorBips == 10000,
+                "MM: Mining Distribution BIPS must equal 10000"
+            );
+
+            uint256 mintTreasuryAmount = (totalMintAmount * miningTreasuryBips) / 10000;
+            uint256 mintValidatorAmount = (totalMintAmount * miningValidatorBips) / 10000;
+            uint256 mintDelegatorAmount = totalMintAmount - mintTreasuryAmount - mintValidatorAmount;
+
+            // Mint the total new amount to this contract
+            bkcToken.mint(address(this), totalMintAmount);
+
+            if (mintTreasuryAmount > 0) {
+                bkcToken.transfer(treasury, mintTreasuryAmount);
+            }
+
+            uint256 totalDMMintShare = mintValidatorAmount + mintDelegatorAmount;
+            if (totalDMMintShare > 0) {
+                bkcToken.approve(dm, totalDMMintShare);
+                IDelegationManager(dm).depositMiningRewards(mintValidatorAmount, mintDelegatorAmount);
+            }
         }
 
-        return bonusAmount;
+        // --- 2. FEE DISTRIBUTION (Original Tokens) ---
+        if (_purchaseAmount > 0) {
+            uint256 feeTreasuryBips = ecosystemManager.getFeeDistributionBips("TREASURY");
+            uint256 feeValidatorBips = ecosystemManager.getFeeDistributionBips("VALIDATOR_POOL");
+            uint256 feeDelegatorBips = ecosystemManager.getFeeDistributionBips("DELEGATOR_POOL");
+
+            require(
+                feeTreasuryBips + feeValidatorBips + feeDelegatorBips == 10000,
+                "MM: Fee Distribution BIPS must equal 10000"
+            );
+
+            uint256 feeTreasuryAmount = (_purchaseAmount * feeTreasuryBips) / 10000;
+            uint256 feeValidatorAmount = (_purchaseAmount * feeValidatorBips) / 10000;
+            uint256 feeDelegatorAmount = _purchaseAmount - feeTreasuryAmount - feeValidatorAmount;
+
+            // Tokens are already in this contract (transferred by the Spoke)
+            if (feeTreasuryAmount > 0) {
+                bkcToken.transfer(treasury, feeTreasuryAmount);
+            }
+
+            uint256 totalDMFeeShare = feeValidatorAmount + feeDelegatorAmount;
+            if (totalDMFeeShare > 0) {
+                bkcToken.approve(dm, totalDMFeeShare);
+                // We use the *same* deposit function, as it just handles distribution
+                IDelegationManager(dm).depositMiningRewards(feeValidatorAmount, feeDelegatorAmount);
+            }
+        }
     }
 
     function getMintAmount(uint256 _purchaseAmount) public view returns (uint256) {
@@ -123,19 +143,18 @@ contract MiningManager is
             return 0;
         }
 
-        // Cálculo da Escassez Dinâmica
+        // Dynamic Scarcity Calculation
         uint256 remainingToMint = maxSupply - currentSupply;
-        uint256 mintRatioBips = 10000; // Default 100%
+        uint256 mintRatioBips = 10000; // Default 100% (1.0x)
 
         if (remainingToMint < THRESHOLD_20M) {
-            mintRatioBips = 1250;
+            mintRatioBips = 1250; // 12.5% (0.125x)
         } else if (remainingToMint < THRESHOLD_40M) {
-            mintRatioBips = 2500;
+            mintRatioBips = 2500; // 25% (0.25x)
         } else if (remainingToMint < THRESHOLD_80M) {
-            mintRatioBips = 5000;
+            mintRatioBips = 5000; // 50% (0.5x)
         }
-        // Se remainingToMint >= 80M, ratio é 100%
-
+        
         return (_purchaseAmount * mintRatioBips) / 10000;
     }
     

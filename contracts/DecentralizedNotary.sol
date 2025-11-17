@@ -18,19 +18,20 @@ contract DecentralizedNotary is
     ReentrancyGuardUpgradeable
 {
     using CountersUpgradeable for CountersUpgradeable.Counter;
+
     IEcosystemManager public ecosystemManager;
     IDelegationManager public delegationManager;
     BKCToken public bkcToken;
     address public miningManagerAddress;
 
     CountersUpgradeable.Counter private _tokenIdCounter;
-    mapping(uint256 => string) public documentMetadataURI;
+    mapping(uint256 => string) public documentMetadataURI; // <-- CORRIGIDO AQUI
     string public constant SERVICE_KEY = "NOTARY_SERVICE";
 
     event NotarizationEvent(
         uint256 indexed tokenId,
         address indexed owner,
-        string indexed documentMetadataHash 
+        string indexed documentMetadataHash
     );
 
     function initialize(
@@ -41,7 +42,7 @@ contract DecentralizedNotary is
         __UUPSUpgradeable_init();
         __ERC721_init("Notary Certificate", "NOTARY");
         __ERC721Enumerable_init();
-        __ReentrancyGuard_init(); 
+        __ReentrancyGuard_init();
 
         require(
             _ecosystemManagerAddress != address(0),
@@ -63,6 +64,7 @@ contract DecentralizedNotary is
                 _miningManagerAddr != address(0),
             "Notary: Core contracts not set in Brain"
         );
+        
         bkcToken = BKCToken(_bkcTokenAddress);
         delegationManager = IDelegationManager(_dmAddress);
         miningManagerAddress = _miningManagerAddr;
@@ -72,11 +74,10 @@ contract DecentralizedNotary is
 
     /**
      * @notice Notarizes a document by minting an NFT linked to its metadata URI.
-     * @dev ✅ CORRIGIDO: Esta função não distribui mais taxas (treasury/delegator) manualmente.
-     * Ela transfere 100% da taxa para o MiningManager, que é o responsável pela distribuição.
+     * @dev 100% of the fee is transferred to the MiningManager to trigger PoP mining.
      */
     function notarize(
-        string calldata _documentMetadataURI, 
+        string calldata _documentMetadataURI,
         uint256 _boosterTokenId
     ) external nonReentrant returns (uint256 tokenId) {
         require(
@@ -109,8 +110,8 @@ contract DecentralizedNotary is
                             feeToPay = (baseFee > discountAmount) ? baseFee - discountAmount : 0;
                         }
                     }
-                } catch { 
-                    // Ignore if NFT is invalid 
+                } catch {
+                    // Ignore if NFT is invalid
                 }
             }
         }
@@ -118,7 +119,7 @@ contract DecentralizedNotary is
         require(feeToPay > 0, "Notary: Fee cannot be zero");
 
         // 4. Pull Fee from User
-        bkcToken.transferFrom(msg.sender, address(this), feeToPay);
+        require(bkcToken.transferFrom(msg.sender, address(this), feeToPay), "Notary: Fee transfer failed or insufficient allowance");
         
         // 5. Transfer 100% Fee to MiningManager (PoP Trigger)
         require(
@@ -126,23 +127,15 @@ contract DecentralizedNotary is
             "Notary: Transfer to MiningManager failed"
         );
         
-        // 6. Call MiningManager. 
-        // O MiningManager cuidará da distribuição (Tesouro/Pools).
-        uint256 bonusReward = IMiningManager(miningManagerAddress)
+        // 6. Call MiningManager to perform PoP mining.
+        // The MiningManager handles all distribution (Treasury/Validator/Delegator).
+        IMiningManager(miningManagerAddress)
             .performPurchaseMining(
                 SERVICE_KEY,
-                feeToPay // A taxa é o valor da compra PoP
+                feeToPay // The fee is the PoP purchase amount
             );
         
-        // 7. ✅ CORREÇÃO: Lógica de divisão de taxas (treasuryFee, delegatorFee) REMOVIDA
-        // A transferência duplicada que causava o erro "exceeds balance" foi removida.
-
-        // 8. Devolve o Bônus de Mineração para o usuário (se houver)
-        if (bonusReward > 0) {
-            bkcToken.transfer(msg.sender, bonusReward);
-        }
-
-        // 9. Mint the Notary NFT
+        // 7. Mint the Notary NFT
         _tokenIdCounter.increment();
         tokenId = _tokenIdCounter.current();
         _safeMint(msg.sender, tokenId);

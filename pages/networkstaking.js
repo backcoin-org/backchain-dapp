@@ -1,31 +1,20 @@
 // pages/networkstaking.js
-// ✅ ARQUIVO CORRIGIDO
-// - Corrigido o bug que não renderizava as abas no estado "desconectado".
-// - 'renderValidatorContent' agora mostra um card "Connect Wallet", espelhando 'renderDelegateContent'.
-// - 'renderValidatorContent' agora usa o cache 'State.systemFees' (da API)  em vez de uma chamada de contrato.
-// - Lógica de renderização de aba simplificada e movida para 'setActiveTab'.
-
 const ethers = window.ethers;
 
 import { State } from '../state.js';
 import { DOMElements } from '../dom-elements.js';
 import { loadUserData, loadPublicData, safeContractCall } from '../modules/data.js';
-// CORREÇÃO: Removendo payValidatorFee (obsoleto)
 import { executeDelegation, registerValidator } from '../modules/transactions.js'; 
 import { formatBigNumber, formatAddress, formatPStake, renderLoading, renderError, renderNoData } from '../utils.js'; 
 import { openModal, showToast, closeModal } from '../ui-feedback.js';
 import { addresses } from '../config.js';
 
-// --- CONSTANTES DO MÓDULO ---
+// --- MODULE CONSTANTS ---
 const ONE_DAY_IN_SECONDS = 86400;
 const VALIDATOR_REGISTRATION_KEY = "VALIDATOR_REGISTRATION_FEE"; 
 const MINERS_PER_PAGE = 10;
 let EarnPageListenersAttached = false; 
 
-// --- (setAmountUtil, updateDelegationFeedback, openDelegateModal - sem alterações) ---
-// ...
-// ... (Copie as funções setAmountUtil, updateDelegationFeedback, e openDelegateModal daqui)
-// ...
 function setAmountUtil(elementId, percentage) {
     const input = document.getElementById(elementId);
     if (State.currentUserBalance !== null && typeof State.currentUserBalance !== 'undefined' && input) {
@@ -56,10 +45,13 @@ function updateDelegationFeedback() {
     const netAmountWei = amountWei; 
     const durationBigInt = BigInt(durationDays);
     const etherDivisor = 1_000_000_000_000_000_000n;
-    const pStake = (netAmountWei * durationBigInt) / etherDivisor;
+    // pStake = (Amount in Ether) * (Duration in Days)
+    const pStake = (netAmountWei / etherDivisor) * durationBigInt;
+    
     netEl.textContent = `${ethers.formatUnits(netAmountWei, 18)} $BKC`;
     pStakeEl.textContent = formatPStake(pStake); 
     bonusTextEl.textContent = `x${durationDays} Day Multiplier`;
+    
     if (durationDays > 3000) { 
          bonusTextEl.className = 'text-sm font-bold text-green-400 mt-1';
     } else if (durationDays > 1000) { 
@@ -119,10 +111,8 @@ function openDelegateModal(validatorAddr) {
 
     const amountInput = document.getElementById('delegateAmountInput');
     const durationSlider = document.getElementById('delegateDurationSlider');
-    const durationDisplay = document.getElementById('delegateDurationDisplay');
     const feeAmountEl = document.getElementById('delegateFeeAmount');
     const netAmountEl = document.getElementById('delegateNetAmount');
-    const pStakeEl = document.getElementById('delegateEstimatedPStake');
     const confirmBtn = document.getElementById('confirmDelegateBtn');
 
     function updateDelegatePreview() {
@@ -147,13 +137,13 @@ function openDelegateModal(validatorAddr) {
             confirmBtn.disabled = true;
             confirmBtn.classList.add('btn-disabled');
         }
-        durationDisplay.textContent = `${durationDays} days`;
+        document.getElementById('delegateDurationDisplay').textContent = `${durationDays} days`;
         feeAmountEl.textContent = `${formatBigNumber(fee).toFixed(4)} $BKC`;
         netAmountEl.textContent = `${formatBigNumber(netAmount).toFixed(4)} $BKC`;
         const durationBigInt = BigInt(durationDays);
         const etherDivisor = 1_000_000_000_000_000_000n;
-        const pStake = (netAmount * durationBigInt) / etherDivisor; 
-        pStakeEl.textContent = formatPStake(pStake);
+        const pStake = (netAmount / etherDivisor) * durationBigInt; 
+        document.getElementById('delegateEstimatedPStake').textContent = formatPStake(pStake);
     }
 
     amountInput.addEventListener('input', updateDelegatePreview);
@@ -236,12 +226,10 @@ function renderPaginationControls(totalPages, currentPage) {
     return html;
 }
 
-// ✅ FUNÇÃO CORRIGIDA (renderDelegateContent)
 function renderDelegateContent() {
     const container = DOMElements.earn.querySelector('#validatorsList');
     if (!container) return;
     
-    // ✅ CORREÇÃO: Lógica de 'Connect Wallet' movida para cá.
     if (!State.isConnected) {
         const connectCard = (title, message, iconClass) => {
             return `
@@ -265,18 +253,17 @@ function renderDelegateContent() {
         return;
     }
     
-    // 2. Estado de No Data/Loading
     if (!Array.isArray(State.allValidatorsData)) {
-        container.innerHTML = renderLoading(); // Mostra o loading se os dados ainda não são um array
+        container.innerHTML = renderLoading(); 
         return;
     }
     
     if (State.allValidatorsData.length === 0) {
+        // CORREÇÃO: Não retorna, apenas preenche o container. O HTML base da aba 'validator' deve estar intacto.
         container.innerHTML = renderNoData("No active validators on the network. Be the first by clicking the 'Become a Full Node / Validator' tab.");
         return;
     }
 
-    // 3. Paginação e Ordenação
     const sortedData = [...State.allValidatorsData].sort((a, b) => b.pStake - a.pStake);
     const totalMiners = sortedData.length;
     const totalPages = Math.ceil(totalMiners / MINERS_PER_PAGE);
@@ -288,7 +275,6 @@ function renderDelegateContent() {
     const endIndex = startIndex + MINERS_PER_PAGE;
     const pageMiners = sortedData.slice(startIndex, endIndex);
 
-    // 4. Renderização da Página Atual
     const minersHtml = pageMiners.map(validator => {
         const { addr, pStake, selfStake, totalDelegatedAmount } = validator;
         return `
@@ -320,7 +306,6 @@ function renderDelegateContent() {
             </div>`;
     }).join('');
 
-    // 5. Combina HTML dos Mineradores e Controles de Paginação
     const paginationHtml = renderPaginationControls(totalPages, currentPage);
     container.innerHTML = minersHtml; 
     
@@ -337,7 +322,6 @@ function renderDelegateContent() {
 
 
 async function renderValidatorPayFeePanel(feeAmount) {
-    // (Função sem alterações)
     return `
         <div class="bg-sidebar border border-border-color rounded-xl overflow-hidden">
             <div class="p-6 md:p-8">
@@ -362,13 +346,11 @@ async function renderValidatorPayFeePanel(feeAmount) {
     `;
 }
 
-// ✅ FUNÇÃO CORRIGIDA (renderValidatorContent)
 async function renderValidatorContent() {
     const buyBkcLink = addresses.bkcDexPoolAddress || '#';
     const contentEl = DOMElements.earn.querySelector('#validator-content');
     if (!contentEl) return;
     
-    // ✅ CORREÇÃO: Lógica de 'Connect Wallet' movida para cá.
     if (!State.isConnected) {
         const connectCard = `
             <div class="col-span-1 lg:col-span-3">
@@ -389,16 +371,22 @@ async function renderValidatorContent() {
         return;
     }
 
-    // Se conectado, mostra o loader
     contentEl.innerHTML = renderLoading();
 
     try {
-        const fallbackValidatorStruct = { isRegistered: false, selfStakeAmount: 0n, totalDelegatedAmount: 0n };
-        const validatorInfo = await safeContractCall(State.delegationManagerContract, 'validators', [State.userAddress], fallbackValidatorStruct);
+        // CORREÇÃO: Lê os dados do validador como um array (4 campos) para evitar o erro BAD_DATA/CALL_EXCEPTION
+        // [0: isRegistered, 1: selfStakeAmount, 2: totalPStake, 3: totalDelegatedAmount]
+        const validatorDataRaw = await safeContractCall(State.delegationManagerContract, 'validators', [State.userAddress], []);
         
-        // ✅ CORREÇÃO: Lê a taxa do cache da API 'State.systemFees' 
+        const validatorInfo = {
+            isRegistered: validatorDataRaw[0] === true,
+            // Outros campos não são estritamente necessários aqui, mas podem ser mapeados se necessário
+            // selfStakeAmount: validatorDataRaw[1],
+            // totalPStake: validatorDataRaw[2],
+            // totalDelegatedAmount: validatorDataRaw[3]
+        };
+        
         const registrationFeeWei = State.systemFees[VALIDATOR_REGISTRATION_KEY] || 0n; 
-        
         const feeAmount = registrationFeeWei;
         
         // Estado 1: Validador Registrado
@@ -443,17 +431,9 @@ async function renderValidatorContent() {
 
 // --- LÓGICA DE RENDERIZAÇÃO DE CONTEÚDO DA ABA ATIVA ---
 
-// ✅ FUNÇÃO REMOVIDA
-// async function renderActiveTabContent(tabId) { ... }
-// A lógica agora está em 'setActiveTab'
-
-
-// --- SETUP DE LISTENERS (RESOLVE O BINDING DO BOTÃO) ---
-
 function setupEarnPageListeners() {
     if (EarnPageListenersAttached) return;
     
-    // ANEXA LISTENER DE AÇÕES AO ELEMENTO RAIZ DA PÁGINA EARN
     DOMElements.earn.addEventListener('click', async (e) => {
         const target = e.target.closest('button') || e.target.closest('a');
         if (!target) return;
@@ -470,13 +450,13 @@ function setupEarnPageListeners() {
         if (target.id === 'registerValidatorBtn') {
             e.preventDefault();
             
-            // ✅ CORREÇÃO: Lê a taxa do cache da API
             const requiredFee = State.systemFees[VALIDATOR_REGISTRATION_KEY] || 0n;
             if (requiredFee === 0n) {
                 return showToast("Registration fee is not set.", "error");
             }
             const validatorAddress = State.userAddress; 
             
+            // NOTE: The imported 'registerValidator' function MUST handle the Approve + Call flow.
             const success = await registerValidator(validatorAddress, requiredFee, target); 
             
             if (success) {
@@ -502,7 +482,7 @@ function setupEarnPageListeners() {
             const newPage = parseInt(target.dataset.page, 10);
             if (newPage >= 1) {
                 EarnPage.currentPage = newPage;
-                renderDelegateContent(); // Re-renderiza apenas a lista
+                renderDelegateContent();
             }
         }
     });
@@ -516,9 +496,8 @@ function setupEarnPageListeners() {
 
 export const EarnPage = {
     activeTab: 'delegate',
-    currentPage: 1, // Página atual da lista de mineradores
+    currentPage: 1,
     
-    // ✅ FUNÇÃO ATUALIZADA (setActiveTab)
     async setActiveTab(tabId) {
         this.activeTab = tabId;
         
@@ -541,12 +520,14 @@ export const EarnPage = {
         });
 
         // 3. Renderiza o conteúdo da nova aba (assíncrono)
-        // ✅ Lógica de 'renderActiveTabContent' movida para cá
         try {
+            // CORREÇÃO: Garante que as duas abas sejam renderizadas se a delegate for a primeira
             if (tabId === 'delegate') {
-                 renderDelegateContent(); // Esta função agora lida com o estado "desconectado"
+                 // Roda o render da aba de registro, mesmo se não for a ativa, para garantir que o HTML exista.
+                 await renderValidatorContent();
+                 renderDelegateContent(); 
             } else if (tabId === 'validator') {
-                 await renderValidatorContent(); // Esta função agora lida com o estado "desconectado"
+                 await renderValidatorContent(); 
             }
         } catch (e) {
             console.error(`Error rendering tab ${tabId}:`, e);
@@ -596,7 +577,6 @@ export const EarnPage = {
         setupEarnPageListeners();
         
         // --- 3. Força a carga inicial de dados (se necessário) ---
-        // (O 'data.js' [cite: 1-13] chama 'loadSystemDataFromAPI' dentro de 'loadPublicData')
         if (!isUpdate || !State.allValidatorsData) {
             try {
                 await Promise.all([

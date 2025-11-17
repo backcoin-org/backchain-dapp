@@ -17,11 +17,10 @@ export const API_ENDPOINTS = {
     getBoosters: 'https://getboosters-4wvdcuoouq-uc.a.run.app',
     getSystemData: 'https://getsystemdata-4wvdcuoouq-uc.a.run.app',
     
-    // ✅ NOVO ENDPOINT: (O URL será este após o deploy do Firebase)
+    // NOVO ENDPOINT: (O URL será este após o deploy do Firebase)
     getNotaryHistory: 'https://getnotaryhistory-4wvdcuoouq-uc.a.run.app',
 
     // 2. API Pinata/Upload (Vercel)
-    // ✅ CORREÇÃO: Apontando para /api/upload, que corresponde ao seu arquivo upload.js
     uploadFileToIPFS: '/api/upload', 
     
     // 3. API Airdrop (Projeto SEPARADO: airdropbackchainnew)
@@ -30,7 +29,7 @@ export const API_ENDPOINTS = {
 
 
 // ====================================================================
-// Funções de Segurança e Resiliência (Sem alterações)
+// Funções de Segurança e Resiliência 
 // ====================================================================
 
 export const safeBalanceOf = async (contract, address) => {
@@ -63,7 +62,7 @@ export const safeContractCall = async (contract, method, args = [], fallbackValu
 };
 
 // ====================================================================
-// loadSystemDataFromAPI (Sem alterações)
+// loadSystemDataFromAPI 
 // ====================================================================
 export async function loadSystemDataFromAPI() {
     
@@ -104,7 +103,7 @@ export async function loadSystemDataFromAPI() {
 
 
 // ====================================================================
-// LÓGICA DE DADOS PÚBLICOS E PRIVADOS (Sem alterações)
+// LÓGICA DE DADOS PÚBLICOS E PRIVADOS 
 // ====================================================================
 
 export async function loadPublicData() {
@@ -134,20 +133,32 @@ export async function loadPublicData() {
         if (validators.length === 0) {
             State.allValidatorsData = [];
         } else {
-            const validatorDataPromises = validators.map(async (addr) => {
-                const fallbackStruct = { isRegistered: false, selfStakeAmount: 0n, totalDelegatedAmount: 0n, totalPStake: 0n };
-                const validatorInfo = await safeContractCall(publicDelegationContract, 'validators', [addr], fallbackStruct);
+            // CORREÇÃO: Otimização para carregar todos os dados dos validadores em paralelo.
+            // LÊ OS 4 CAMPOS DA ESTRUTURA Validator POR ÍNDICE: [isRegistered, selfStakeAmount, totalPStake, totalDelegatedAmount]
+            const pStakePromises = validators.map(addr => 
+                safeContractCall(publicDelegationContract, 'validators', [addr], [])
+            );
+
+            const validatorDataRaw = await Promise.all(pStakePromises);
+            
+            State.allValidatorsData = validators.map((addr, index) => {
+                const data = validatorDataRaw[index];
                 
-                const pStake = validatorInfo.totalPStake; 
+                // Fallback robusto no caso de BAD_DATA (safeContractCall retorna [])
+                if (!data || data.length < 4 || data[0] === false) {
+                     return {
+                        addr, isRegistered: false, pStake: 0n, selfStake: 0n, totalDelegatedAmount: 0n
+                    };
+                }
 
                 return {
                     addr,
-                    pStake, 
-                    selfStake: validatorInfo.selfStakeAmount,
-                    totalDelegatedAmount: validatorInfo.totalDelegatedAmount
+                    isRegistered: data[0] === true,
+                    selfStake: data[1] || 0n,
+                    pStake: data[2] || 0n,
+                    totalDelegatedAmount: data[3] || 0n
                 };
-            });
-            State.allValidatorsData = await Promise.all(validatorDataPromises);
+            }).filter(v => v.isRegistered); // Filtra apenas validadores registrados 
         }
 
         const recalculatedTotalPStake = State.allValidatorsData.reduce((acc, val) => acc + val.pStake, 0n);

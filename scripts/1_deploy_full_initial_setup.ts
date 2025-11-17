@@ -1,4 +1,4 @@
-// scripts/1_deploy_full_initial_setup.ts (FUSÃO: Core + Pré-Venda)
+// scripts/1_deploy_full_initial_setup.ts
 import { HardhatRuntimeEnvironment } from "hardhat/types";
 import fs from "fs";
 import path from "path";
@@ -8,14 +8,10 @@ import { BigNumberish } from "ethers";
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 const DEPLOY_DELAY_MS = 2000;
 
-// ######################################################################
-// ### CONFIGURAÇÃO DA PRÉ-VENDA (FASE 1)
-// ######################################################################
-
+// --- Presale Configuration (Phase 1) ---
 const IPFS_BASE_URI_BOOSTERS =
-  "ipfs://bafybeigf3n2q2cbsnsmqytv57e6dvuimtzsg6pp7iyhhhmqpaxgpzlmgem/"; // SEU CID AQUI
+  "ipfs://bafybeigf3n2q2cbsnsmqytv57e6dvuimtzsg6pp7iyhhhmqpaxgpzlmgem/";
 
-// ✅ ORACLE ADDRESS PADRÃO 
 const DEFAULT_ORACLE_ADDRESS = "0xd7e622124b78a28c4c928b271fc9423285804f98";
 
 const TIERS_TO_SETUP = [
@@ -27,35 +23,32 @@ const TIERS_TO_SETUP = [
   { tierId: 5, maxSupply: 1000000, priceETH: "0.07", boostBips: 500, metadata: "iron_booster.json" },
   { tierId: 6, maxSupply: 1000000, priceETH: "0.01", boostBips: 100, metadata: "crystal_booster.json" },
 ];
-
-// ######################################################################
+// ----------------------------------------
 
 const addressesFilePath = path.join(
     __dirname,
     "../deployment-addresses.json"
 );
 
-// Função para deletar o arquivo de endereços em caso de erro
 function deleteAddressesFileOnError() {
     if (fs.existsSync(addressesFilePath)) {
         fs.unlinkSync(addressesFilePath);
         console.log("\n==========================================================");
-        console.log("🗑️ ARQUIVO 'deployment-addresses.json' DELETADO AUTOMATICAMENTE.");
-        console.log("⚠️ Você pode rodar o script novamente.");
+        console.log("🗑️ 'deployment-addresses.json' file automatically deleted on error.");
+        console.log("⚠️ You can safely re-run the script.");
         console.log("==========================================================");
     }
 }
 
 export async function runScript(hre: HardhatRuntimeEnvironment) {
-  // ✅ CORREÇÃO: Acessando ethers e upgrades via hre
   const { ethers, upgrades } = hre; 
   const [deployer] = await ethers.getSigners();
   const networkName = hre.network.name;
 
   console.log(
-    `🚀 (FUSÃO CORE/PRÉ-VENDA) Implantando e Configurando o Setup Inicial na rede: ${networkName}`
+    `🚀 (Phase 1: Core/Presale) Deploying and Configuring Initial Setup on network: ${networkName}`
   );
-  console.log(`Usando a conta: ${deployer.address}`);
+  console.log(`Using account: ${deployer.address}`);
   console.log("----------------------------------------------------");
 
   if (!IPFS_BASE_URI_BOOSTERS.includes("ipfs://")) {
@@ -64,10 +57,9 @@ export async function runScript(hre: HardhatRuntimeEnvironment) {
 
   const addresses: { [key: string]: string } = {};
   
-  // Garante que o arquivo de endereços é iniciado ou limpo antes do deploy
   if (fs.existsSync(addressesFilePath)) {
        fs.unlinkSync(addressesFilePath);
-       console.log(`(Limpeza: 'deployment-addresses.json' anterior deletado)`);
+       console.log(`(Cleanup: Previous 'deployment-addresses.json' deleted)`);
   }
   fs.writeFileSync(addressesFilePath, JSON.stringify({}, null, 2));
 
@@ -75,16 +67,15 @@ export async function runScript(hre: HardhatRuntimeEnvironment) {
   let boosterNFT: any;
   let saleContract: any;
   let bkcTokenInstance: any;
-  // Variável 'tx' declarada com 'let' para permitir reatribuição
   let tx; 
 
   try {
     // =================================================================
-    // === PASSO 1: IMPLANTAR CONTRATOS CHAVE E PRÉ-VENDA (PROXIES) ===
+    // === STEP 1: DEPLOY KEY CONTRACTS & PRESALE (PROXIES) ===
     // =================================================================
 
     // 1.1. EcosystemManager (Hub)
-    console.log("1.1. Implantando EcosystemManager (Cérebro UUPS)...");
+    console.log("1.1. Deploying EcosystemManager (Hub UUPS)...");
     const EcosystemManager = await ethers.getContractFactory("EcosystemManager");
     const ecosystemManager = await upgrades.deployProxy(
       EcosystemManager,
@@ -93,26 +84,26 @@ export async function runScript(hre: HardhatRuntimeEnvironment) {
     );
     await ecosystemManager.waitForDeployment();
     addresses.ecosystemManager = await ecosystemManager.getAddress();
-    fs.writeFileSync(addressesFilePath, JSON.stringify(addresses, null, 2)); // Salva após cada deploy
-    console.log(`   ✅ EcosystemManager (Proxy) implantado em: ${addresses.ecosystemManager}`);
+    fs.writeFileSync(addressesFilePath, JSON.stringify(addresses, null, 2));
+    console.log(`   ✅ EcosystemManager (Proxy) deployed to: ${addresses.ecosystemManager}`);
     await sleep(DEPLOY_DELAY_MS);
 
-    // 1.2. RewardBoosterNFT (Fábrica)
-    console.log("\n1.2. Implantando RewardBoosterNFT (Fábrica) como Proxy...");
+    // 1.2. RewardBoosterNFT (Factory)
+    console.log("\n1.2. Deploying RewardBoosterNFT (Factory) as Proxy...");
     const RewardBoosterNFT = await ethers.getContractFactory("RewardBoosterNFT");
     boosterNFT = await upgrades.deployProxy(
         RewardBoosterNFT,
-        [deployer.address], // Argumentos para a função initialize
+        [deployer.address], 
         { initializer: "initialize" } 
     );
     await boosterNFT.waitForDeployment();
     addresses.rewardBoosterNFT = await boosterNFT.getAddress();
     fs.writeFileSync(addressesFilePath, JSON.stringify(addresses, null, 2));
-    console.log(`   ✅ RewardBoosterNFT (Proxy) implantado em: ${addresses.rewardBoosterNFT}`);
+    console.log(`   ✅ RewardBoosterNFT (Proxy) deployed to: ${addresses.rewardBoosterNFT}`);
     await sleep(DEPLOY_DELAY_MS);
 
-    // 1.3. PublicSale (Loja)
-    console.log("\n1.3. Implantando PublicSale (Loja UUPS)...");
+    // 1.3. PublicSale (Store)
+    console.log("\n1.3. Deploying PublicSale (Store UUPS)...");
     const PublicSale = await ethers.getContractFactory("PublicSale");
     saleContract = await upgrades.deployProxy(
       PublicSale,
@@ -126,15 +117,15 @@ export async function runScript(hre: HardhatRuntimeEnvironment) {
     await saleContract.waitForDeployment();
     addresses.publicSale = await saleContract.getAddress();
     fs.writeFileSync(addressesFilePath, JSON.stringify(addresses, null, 2));
-    console.log(`   ✅ PublicSale (Proxy) implantado em: ${addresses.publicSale}`);
+    console.log(`   ✅ PublicSale (Proxy) deployed to: ${addresses.publicSale}`);
     await sleep(DEPLOY_DELAY_MS);
 
     // =================================================================
-    // === PASSO 2: IMPLANTAR CORE UTILITIES (FUSÃO DE 1_deploy_core.ts) ===
+    // === STEP 2: DEPLOY CORE UTILITIES ===
     // =================================================================
 
-    // 2.1. BKCToken (Necessário para a Faucet) - Usando Proxy para consistência
-    console.log("\n2.1. Implantando BKCToken (Proxy) (Necessário para a Faucet)...");
+    // 2.1. BKCToken
+    console.log("\n2.1. Deploying BKCToken (Proxy)...");
     const BKCToken = await ethers.getContractFactory("BKCToken");
     bkcTokenInstance = await upgrades.deployProxy(
         BKCToken,
@@ -144,87 +135,78 @@ export async function runScript(hre: HardhatRuntimeEnvironment) {
     await bkcTokenInstance.waitForDeployment();
     addresses.bkcToken = await bkcTokenInstance.getAddress();
     fs.writeFileSync(addressesFilePath, JSON.stringify(addresses, null, 2));
-    console.log(`   ✅ BKCToken (Proxy) implantado em: ${addresses.bkcToken}`);
+    console.log(`   ✅ BKCToken (Proxy) deployed to: ${addresses.bkcToken}`);
     await sleep(DEPLOY_DELAY_MS);
     
     // 2.2. SimpleBKCFaucet
-    console.log("\n2.2. Implantando SimpleBKCFaucet (Utility/Core) como Proxy...");
+    console.log("\n2.2. Deploying SimpleBKCFaucet (Utility) as Proxy...");
     const SimpleBKCFaucet = await ethers.getContractFactory("SimpleBKCFaucet");
-
     const simpleBKCFaucet = await upgrades.deployProxy(
         SimpleBKCFaucet,
-        [addresses.bkcToken, deployer.address], // args para: initialize(address _tokenAddress, address _initialOwner)
+        [addresses.bkcToken, deployer.address],
         { initializer: "initialize", kind: "uups" }
     );
-
     await simpleBKCFaucet.waitForDeployment();
     addresses.faucet = await simpleBKCFaucet.getAddress();
     fs.writeFileSync(addressesFilePath, JSON.stringify(addresses, null, 2));
-    console.log(`   ✅ SimpleBKCFaucet (Proxy) implantado em: ${addresses.faucet}`);
+    console.log(`   ✅ SimpleBKCFaucet (Proxy) deployed to: ${addresses.faucet}`);
     await sleep(DEPLOY_DELAY_MS);
 
-
     // =================================================================
-    // === PASSO 3: SALVAR ENDEREÇOS (INCLUINDO O ORACLE SOLICITADO) ===
+    // === STEP 3: SAVE STATIC ADDRESSES ===
     // =================================================================
     
-    // ✅ Adiciona o Endereço do Oráculo
     addresses.oracleWalletAddress = DEFAULT_ORACLE_ADDRESS;
-    console.log(`\n3.1. Endereço do Oráculo salvo como: ${addresses.oracleWalletAddress}`);
+    console.log(`\n3.1. Default Oracle Address saved: ${addresses.oracleWalletAddress}`);
     
-    // ✅ NOVO: Adiciona o link de swap com a chain ID correta (Solicitado)
     addresses.bkcDexPoolAddress = "https://pancakeswap.finance/swap?chain=bsc";
-    console.log(`   Link DEX (bkcDexPoolAddress) salvo: ${addresses.bkcDexPoolAddress}`);
+    console.log(`   DEX Link (bkcDexPoolAddress) saved: ${addresses.bkcDexPoolAddress}`);
 
-    // Salva o placeholder do endereço do LP
     addresses.mainLPPairAddress = "0x...[PLEASE UPDATE AFTER CREATING LP]...";
     
     fs.writeFileSync(addressesFilePath, JSON.stringify(addresses, null, 2));
-    console.log(`   ✅ Todos os ${Object.keys(addresses).length} endereços (incluindo Oráculo e Link DEX) salvos em JSON.`);
+    console.log(`   ✅ All ${Object.keys(addresses).length} initial addresses saved to JSON.`);
     await sleep(DEPLOY_DELAY_MS);
 
     // =================================================================
-    // === PASSO 4: CONFIGURAR CONTRATOS (DE 1_deploy_presale.ts) ===
+    // === STEP 4: CONFIGURE CONTRACTS ===
     // =================================================================
 
-    console.log("\n--- Configuração de Conexões e Regras ---");
+    console.log("\n--- Configuring Connections & Rules ---");
     const hub = await ethers.getContractAt("EcosystemManager", addresses.ecosystemManager, deployer);
     
-    // 4.1. Configurações do Hub
-    console.log("4.1. Configurando Hub usando a função de lote `setAddresses` (Solução Robusta)...");
-
-    // Usa a função única setAddresses para configurar os endereços principais.
+    // 4.1. Hub Configuration
+    console.log("4.1. Configuring Hub with batch `setAddresses`...");
     tx = await hub.setAddresses(
         addresses.bkcToken,             // _bkcToken
-        deployer.address,               // _treasuryWallet (usando deployer temporariamente)
-        ethers.ZeroAddress,             // _delegationManager (Endereço não implantado na FASE 1)
+        deployer.address,               // _treasuryWallet (using deployer temporarily)
+        ethers.ZeroAddress,             // _delegationManager (Not deployed in Phase 1)
         addresses.rewardBoosterNFT,     // _rewardBooster
-        ethers.ZeroAddress,             // _miningManager (Endereço não implantado na FASE 1)
-        ethers.ZeroAddress,             // _decentralizedNotary (Endereço não implantado na FASE 1)
-        ethers.ZeroAddress,             // _fortunePool (Endereço não implantado na FASE 1)
-        ethers.ZeroAddress              // _nftLiquidityPoolFactory (Endereço não implantado na FASE 1)
+        ethers.ZeroAddress,             // _miningManager (Not deployed in Phase 1)
+        ethers.ZeroAddress,             // _decentralizedNotary (Not deployed in Phase 1)
+        ethers.ZeroAddress,             // _fortunePool (Not deployed in Phase 1)
+        ethers.ZeroAddress              // _nftLiquidityPoolFactory (Not deployed in Phase 1)
     );
     await tx.wait();
-    
-    console.log(`   ✅ Hub configurado (BKCToken, RewardBooster e Treasury).`);
+    console.log(`   ✅ Hub configured (BKCToken, RewardBooster, and Treasury set).`);
     await sleep(DEPLOY_DELAY_MS);
 
-    // 4.2. Autorização e URI do NFT
+    // 4.2. NFT Authorization & URI
     tx = await boosterNFT.setSaleContractAddress(addresses.publicSale);
     await tx.wait();
     tx = await boosterNFT.setBaseURI(IPFS_BASE_URI_BOOSTERS);
     await tx.wait();
-    console.log(`   ✅ Loja autorizada e Base URI do NFT definida.`);
+    console.log(`   ✅ SaleContract authorized and Base URI set on NFT Contract.`);
     await sleep(DEPLOY_DELAY_MS);
 
-    // 4.3. Configurando Tiers de Venda
-    console.log("\n4.3. Configurando os Tiers de Venda na Loja (Preços da Fase 1)...");
+    // 4.3. Presale Tier Configuration
+    console.log("\n4.3. Configuring Sale Tiers in PublicSale (Phase 1 Prices)...");
     
     for (const tier of TIERS_TO_SETUP) {
       const priceInWei = ethers.parseEther(tier.priceETH);
       const maxSupply = BigInt(tier.maxSupply);
       
-      console.log(`   -> Configurando ${tier.metadata} (ID ${tier.tierId}): Preço: ${tier.priceETH} ETH/BNB`);
+      console.log(`   -> Configuring ${tier.metadata} (ID ${tier.tierId}): Price: ${tier.priceETH} ETH/BNB`);
       
       tx = await saleContract.setTier(
         BigInt(tier.tierId),
@@ -234,26 +216,22 @@ export async function runScript(hre: HardhatRuntimeEnvironment) {
         tier.metadata
       );
       await tx.wait();
-      console.log(`   ✅ Tier ${tier.tierId} configurado.`);
+      console.log(`   ✅ Tier ${tier.tierId} configured.`);
     }
 
     console.log("----------------------------------------------------");
-    console.log("\n🎉🎉🎉 SETUP INICIAL (CORE + PRÉ-VENDA) CONCLUÍDO! 🎉🎉🎉");
-    console.log("Os contratos de infraestrutura (Proxies) e de venda foram implantados e o Endereço do Oráculo foi salvo no JSON.");
-    console.log("\nPróximo passo: (Opcional) Rode '2_update_presale_prices.ts' para mudar para a Fase 2.");
-    console.log("Próximo passo: (Principal) Execute '3_launch_and_liquidate_ecosystem.ts' (AGORA FAZ CUNHAGEM E LIQUIDEZ).");
+    console.log("\n🎉🎉🎉 INITIAL SETUP (CORE + PRESALE) COMPLETE! 🎉🎉🎉");
+    console.log("Infrastructure (Proxies) and presale contracts are deployed.");
+    console.log("\nNext Step: Run '3_launch_and_liquidate_ecosystem.ts' to deploy all internal services and activate the economy.");
 
   } catch (error: any) {
-    console.error("\n❌ Falha grave no script de Setup Inicial:", error.message);
-    
-    // Chama a função de limpeza em caso de erro
+    console.error("\n❌ Critical Failure during Initial Setup:", error.message);
     deleteAddressesFileOnError();
-    
     process.exit(1);
   }
 }
 
-// Bloco de entrada para execução standalone
+// Standalone execution block
 if (require.main === module) {
   runScript(require("hardhat")).catch((error) => {
     console.error(error);
