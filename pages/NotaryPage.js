@@ -1,6 +1,7 @@
 // pages/NotaryPage.js
 // ✅ CORRIGIDO: Bugs de listener duplicado e carregamento de documentos.
 // ✅ MELHORADO: Indicadores de passo agora mostram estados 'completo' (verde) e 'ativo' (azul).
+// 🚀 NOVO AJUSTE: Otimização da chamada de dados públicos para reduzir repetições.
 
 import { addresses } from '../config.js'; 
 import { State } from '../state.js';
@@ -17,6 +18,10 @@ let notaryButtonState = 'initial'; // Controla o botão do Passo 3
 let pageContainer = null; // ✅ Container para listeners (corrige bug do clique duplo)
 
 const MAX_FILE_SIZE_BYTES = 50 * 1024 * 1024; // 50 MB
+
+// =========================================================================
+// RENDERIZAÇÃO E NAVEGAÇÃO
+// =========================================================================
 
 /**
  * Renderiza o layout (com novos indicadores de passo)
@@ -187,10 +192,47 @@ function updateNotaryStep(targetStep) {
 
 
 /**
- * Carrega dados públicos (taxa e pStake) - Sem alterações
+ * Carrega dados públicos (taxa e pStake) - AJUSTADO PARA OTIMIZAÇÃO
  */
 async function loadNotaryPublicData() {
-    await loadPublicData(); 
+    // 🚀 OTIMIZAÇÃO 1: Se os dados já estão no State (carregados por loadPublicData no app.js),
+    // não precisamos chamar o contrato novamente.
+    if (State.notaryMinPStake !== undefined && State.notaryFee !== undefined) {
+         // Se os dados estiverem no State, apenas renderiza e retorna true.
+         const statsEl = document.getElementById('notary-stats-container');
+         if (!statsEl) return true; // Se o elemento não existir, ignora o render
+         
+         const pStakeRequirement = State.notaryMinPStake;
+         const baseFee = State.notaryFee;
+
+         // Renderiza os dados imediatamente (código de renderização copiado abaixo)
+         if (pStakeRequirement === 0n && baseFee === 0n) {
+             statsEl.innerHTML = `
+                <div class="flex justify-between items-center text-sm">
+                    <span class="text-zinc-400">Registration Fee (Base):</span>
+                    <span class="font-bold text-amber-400 text-lg">0 $BKC <i title="Value is currently 0 on-chain" class="fa-solid fa-triangle-exclamation text-yellow-500 ml-1"></i></span>
+                </div>
+                <div class="flex justify-between items-center text-sm">
+                    <span class="text-zinc-400">Minimum pStake Required:</span>
+                    <span class="font-bold text-purple-400 text-lg">0 <i title="Value is currently 0 on-chain" class="fa-solid fa-triangle-exclamation text-yellow-500 ml-1"></i></span>
+                </div>
+                 <p class="text-xs text-yellow-500 mt-2 text-center font-semibold">Warning: Requirements are currently set to zero on the contract. Please configure them.</p>
+            `;
+         } else {
+             statsEl.innerHTML = `
+                <div class="flex justify-between items-center text-sm">
+                    <span class="text-zinc-400">Registration Fee (Base):</span>
+                    <span class="font-bold text-amber-400 text-lg">${formatBigNumber(baseFee)} $BKC</span>
+                </div>
+                <div class="flex justify-between items-center text-sm">
+                    <span class="text-zinc-400">Minimum pStake Required:</span>
+                    <span class="font-bold text-purple-400 text-lg">${formatPStake(pStakeRequirement)}</span>
+                </div>
+                <p class="text-xs text-zinc-400 mt-2 text-center font-semibold">Note: Your final fee will be calculated in the 'My Status' panel based on your Booster NFT discount.</p>
+            `;
+         }
+         return true;
+    } 
 
     const statsEl = document.getElementById('notary-stats-container');
     if (!statsEl) return false;
@@ -198,7 +240,8 @@ async function loadNotaryPublicData() {
 
     if (!State.ecosystemManagerContract) {
         console.error("loadNotaryPublicData: State.ecosystemManagerContract is not available after loadPublicData.");
-        renderError(statsEl, "Ecosystem Hub contract not found.");
+        // renderError(statsEl, "Ecosystem Hub contract not found.", true); // Removido o argumento extra
+        statsEl.innerHTML = renderError("Ecosystem Hub contract not found.");
         return false;
     }
 
@@ -242,7 +285,8 @@ async function loadNotaryPublicData() {
 
     } catch (e) {
         console.error("Error loading notary public data from Hub:", e);
-        renderError(statsEl, "Failed to load notary requirements.");
+        // renderError(statsEl, "Failed to load notary requirements.", true); // Removido o argumento extra
+        statsEl.innerHTML = renderError("Failed to load notary requirements.");
         State.notaryMinPStake = undefined;
         State.notaryFee = undefined;
         return false;
@@ -312,7 +356,7 @@ function updateNotaryUserStatus() {
     }
 
     if (typeof State.notaryMinPStake === 'undefined' || typeof State.notaryFee === 'undefined') {
-        userStatusEl.innerHTML = renderError(userStatusEl, "Could not load requirements.", true);
+        userStatusEl.innerHTML = renderError("Could not load requirements.");
         notaryButtonState = 'initial';
         updateNotaryButtonUI();
         return;
@@ -335,6 +379,8 @@ function updateNotaryUserStatus() {
 
     if (boosterBips > 0n && baseFee > 0n) {
         const discountBipsSimulated = boosterBips; 
+        // O cálculo real de desconto deveria vir do EcosystemManager, 
+        // mas aqui estamos simulando o cálculo direto com base nos BIPS do booster
         discount = (baseFee * discountBipsSimulated) / 10000n; 
         finalFee = (baseFee > discount) ? baseFee - discount : 0n;
         discountPercent = `${(Number(discountBipsSimulated) / 100).toFixed(0)}%`; 
@@ -453,34 +499,39 @@ function updateNotaryUserStatus() {
 
 
 /**
- * ✅ CORREÇÃO BUG 2: Função agora remove a checagem 'State.isConnected'
+ * ✅ CORREÇÃO DE LENTIDÃO 2: Garante que esta chamada não bloqueie o render.
+ * Também adiciona tratamento de erro específico para CORS/API.
  */
 async function renderMyNotarizedDocuments() {
     const docsEl = document.getElementById('my-notarized-documents');
     if (!docsEl) return;
     
-    // A verificação 'isConnected' foi removida.
-    // A função 'update()' agora é responsável por chamar isso apenas quando conectado.
-    
-    if (!State.decentralizedNotaryContract) {
-         return renderError(docsEl, "Notary contract not loaded.");
+    if (!State.decentralizedNotaryContract || !State.userAddress) {
+         // O update() lida com o estado desconectado/sem endereço.
+         return; 
     }
 
-    renderLoading(docsEl);
+    renderLoading(docsEl, "Loading documents...");
 
     try {
         const response = await fetch(`${API_ENDPOINTS.getNotaryHistory}/${State.userAddress}`);
+        
         if (!response.ok) {
-            throw new Error(`API Error: ${response.statusText} (${response.status})`);
+            // Se a resposta não for OK (ex: 403, 500, etc.)
+            const errorText = await response.text();
+            throw new Error(`API Error: ${response.status} ${response.statusText} - ${errorText.substring(0, 100)}...`);
         }
+        
         const documents = await response.json();
 
         if (documents.length === 0) {
-            return renderNoData(docsEl, "You have not notarized any documents yet.");
+            return renderNoData("You have not notarized any documents yet.");
         }
-
+        
+        // --- Otimização: Renderiza a lista se houver documentos ---
         let documentsHtml = [];
         
+        // Implementação do for...of para processar metadados em série (pode ser um ponto lento)
         for (const doc of documents) {
             const tokenId = doc.tokenId;
             const metadataURI = doc.metadataURI;
@@ -498,6 +549,7 @@ async function renderMyNotarizedDocuments() {
             let name = `Document #${tokenId}`;
 
             try {
+                // Fetch de metadados de cada documento (POTENCIAL GARGALO, mas necessário)
                 const metaResponse = await fetch(metadataGatewayLink);
                 if (!metaResponse.ok) throw new Error(`HTTP error! status: ${metaResponse.status}`);
                 const metadata = await metaResponse.json();
@@ -579,14 +631,20 @@ async function renderMyNotarizedDocuments() {
         docsEl.innerHTML = documentsHtml.join('');
 
     } catch (e) {
+        // CORREÇÃO: Trata o erro de API para que o DApp continue
         console.error("Error loading notarized documents from API:", e);
-        renderError(docsEl, "Failed to load your documents from the API.");
+        
+        let displayError = "Failed to load your documents from the API.";
+        if (e.message.includes("CORS") || e.message.includes("403") || e.message.includes("Forbidden")) {
+             displayError = "API Connection Error. Please check CORS settings on the API server for Notary History.";
+        }
+        docsEl.innerHTML = renderError(displayError);
     }
 }
 
 
 /**
- * Lida com o upload do arquivo (sem restrições de tipo)
+ * Lida com o upload do arquivo (sem restrições de tipo) - Sem alterações
  */
 async function handleFileUpload(file) {
     const uploadPromptEl = document.getElementById('notary-upload-prompt');
@@ -636,7 +694,7 @@ async function handleFileUpload(file) {
 
 
 /**
- * Lida com o clique em "Add to Wallet"
+ * Lida com o clique em "Add to Wallet" - Sem alterações
  */
 async function handleAddNFTToWallet(e) {
     const btn = e.target.closest('.add-to-wallet-btn');
@@ -683,7 +741,7 @@ async function handleAddNFTToWallet(e) {
 }
 
 /**
- * ✅ CORREÇÃO BUG 1: Anexa listeners ao 'pageContainer' para evitar duplicatas.
+ * ✅ CORREÇÃO BUG 1: Anexa listeners ao 'pageContainer' para evitar duplicatas. - Sem alterações
  */
 function initNotaryListeners() {
     const fileInput = document.getElementById('notary-file-upload');
@@ -944,13 +1002,18 @@ function initNotaryListeners() {
 
 // --- Objeto da Página ---
 export const NotaryPage = {
-    async render() {
+    async render(isNewPage) {
         renderNotaryPageLayout();
         
         const fileInput = document.getElementById('notary-file-upload');
         if (fileInput) fileInput.disabled = false;
         
-        await loadPublicData(); 
+        // 🚀 OTIMIZAÇÃO 2: Chama loadPublicData() APENAS se for uma nova página ou se os dados não existirem.
+        // loadPublicData() agora está otimizado para não bloquear por 10s se já carregou.
+        if (isNewPage || typeof State.notaryFee === 'undefined') {
+            await loadPublicData(); 
+        }
+
         const loadedPublicData = await loadNotaryPublicData();
 
         if (State.isConnected && loadedPublicData) {
@@ -980,6 +1043,9 @@ export const NotaryPage = {
     async update(isConnected) {
         console.log("Updating Notary Page, isConnected:", isConnected);
         
+        // 🚀 OTIMIZAÇÃO 3: Chama loadPublicData() novamente para buscar stats públicos,
+        // mas confia que o data.js o fará de forma otimizada.
+        await loadPublicData();
         const loadedPublicData = await loadNotaryPublicData();
 
         if (isConnected && loadedPublicData) {
@@ -998,7 +1064,7 @@ export const NotaryPage = {
              if(userStatusEl) userStatusEl.innerHTML = `<div class="text-center p-4 text-zinc-500 italic">Please connect your wallet to see your status.</div>`;
              
              // ✅ CORREÇÃO BUG 2: Mostra a mensagem correta se não estiver conectado
-             if(docsEl) renderNoData(docsEl, "Connect your wallet to view your documents.");
+             if(docsEl) docsEl.innerHTML = renderNoData("Connect your wallet to view your documents.");
 
              notaryButtonState = 'initial';
              updateNotaryUserStatus(); 

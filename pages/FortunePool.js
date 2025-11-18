@@ -61,7 +61,7 @@ async function loadPoolBalance() {
             0n
         );
         gameState.poolBalance = balance;
-        FortunePoolPage.updatePoolDisplay(); // <-- RENOMEADO
+        FortunePoolPage.updatePoolDisplay();
     } catch (e) {
         console.error("Failed to load pool balance:", e);
     }
@@ -123,7 +123,7 @@ async function runActivationSequence(prizeData) {
     // 3. Show Result
     const totalPrizeWonFloat = formatBigNumber(prizeData.totalPrizeWon);
     
-    FortunePoolPage.updateLastGamePanel(); // <-- RENOMEADO
+    FortunePoolPage.updateLastGamePanel();
 
     if (prizeData.totalPrizeWon > 0n) {
         resultDisplay.classList.add('win');
@@ -150,10 +150,10 @@ async function runActivationSequence(prizeData) {
     
     // 5. Update State
     gameState.isActivating = false;
-    FortunePoolPage.updateUIState(); // <-- RENOMEADO
+    FortunePoolPage.updateUIState();
     gameState.totalActivations++;
-    FortunePoolPage.addXP(100); // <-- RENOMEADO
-    FortunePoolPage.checkAchievements(totalPrizeWonFloat, prizeData.highestMultiplier); // <-- RENOMEADO
+    FortunePoolPage.addXP(100);
+    FortunePoolPage.checkAchievements(totalPrizeWonFloat, prizeData.highestMultiplier);
     await loadUserData(); 
     await loadPoolBalance(); 
 }
@@ -172,7 +172,7 @@ function stopActivationOnError() {
     }
     
     gameState.isActivating = false;
-    FortunePoolPage.updateUIState(); // <-- RENOMEADO
+    FortunePoolPage.updateUIState();
 }
 
 
@@ -204,7 +204,7 @@ async function executePurchase() {
     
     if (amountWei > State.currentUserBalance) {
         showToast("Insufficient BKC balance for this amount.", "error");
-        FortunePoolPage.updateUIState(); // <-- RENOMEADO
+        FortunePoolPage.updateUIState();
         return;
     }
     
@@ -255,7 +255,7 @@ async function executePurchase() {
         gameState.lastGame.id = 0; 
         gameState.lastGame.prize = 0n;
         gameState.lastGame.rolls = [0, 0, 0];
-        FortunePoolPage.updateLastGamePanel(true); // <-- RENOMEADO
+        FortunePoolPage.updateLastGamePanel(true);
         
         // Start "processing" animation
         const activationCore = document.getElementById('activationCore');
@@ -289,7 +289,7 @@ async function executePurchase() {
 // VI. PAGE COMPONENT EXPORT
 // ============================================
 
-export const FortunePoolPage = { // <--- RENOMEADO
+export const FortunePoolPage = {
     
     render(isActive) {
         if (!isActive) return;
@@ -301,7 +301,7 @@ export const FortunePoolPage = { // <--- RENOMEADO
         }
 
         // HTML base (only if not already rendered)
-        if (!pageContainer.querySelector('.fortune-pool-wrapper')) { // <--- RENOMEADO
+        if (!pageContainer.querySelector('.fortune-pool-wrapper')) {
             pageContainer.innerHTML = this.getHtmlContent();
             this.initializeEventListeners();
         }
@@ -313,8 +313,8 @@ export const FortunePoolPage = { // <--- RENOMEADO
     
     getHtmlContent() {
         return `
-            <div class="fortune-pool-wrapper"> // <--- RENOMEADO
-                <header class="fortune-header"> // <--- RENOMEADO
+            <div class="fortune-pool-wrapper">
+                <header class="fortune-header"> 
                     <div class="header-top">
                         <h1 class="game-title">✨ BKC FORTUNE POOL GENERATOR</h1>
                         <div class="legacy-badge">

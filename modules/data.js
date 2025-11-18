@@ -9,6 +9,36 @@ import { formatBigNumber, formatPStake } from '../utils.js';
 import { addresses, boosterTiers, ipfsGateway } from '../config.js';
 
 // ====================================================================
+// CONSTANTES E UTILITÁRIOS (NOVOS)
+// ====================================================================
+const API_TIMEOUT_MS = 10000; // 10 segundos de timeout para APIs lentas
+
+/**
+ * Executa um fetch com um tempo limite.
+ * Se o tempo limite for atingido, a promise é rejeitada.
+ * @param {string} url
+ * @param {number} timeoutMs
+ * @returns {Promise<Response>}
+ */
+async function fetchWithTimeout(url, timeoutMs) {
+    const controller = new AbortController();
+    const id = setTimeout(() => controller.abort(), timeoutMs);
+
+    try {
+        const response = await fetch(url, { signal: controller.signal });
+        clearTimeout(id);
+        return response;
+    } catch (error) {
+        clearTimeout(id);
+        if (error.name === 'AbortError') {
+            throw new Error('API request timed out.');
+        }
+        throw error;
+    }
+}
+
+
+// ====================================================================
 // ENDPOINTS DE API
 // ====================================================================
 export const API_ENDPOINTS = {
@@ -62,7 +92,7 @@ export const safeContractCall = async (contract, method, args = [], fallbackValu
 };
 
 // ====================================================================
-// loadSystemDataFromAPI 
+// loadSystemDataFromAPI (AJUSTADA COM TIMEOUT)
 // ====================================================================
 export async function loadSystemDataFromAPI() {
     
@@ -71,8 +101,10 @@ export async function loadSystemDataFromAPI() {
     if (!State.boosterDiscounts) State.boosterDiscounts = {};
 
     try {
-        console.log("Loading system rules from API...");
-        const response = await fetch(API_ENDPOINTS.getSystemData); 
+        console.log("Loading system rules from API with 10s timeout...");
+        
+        // CORREÇÃO: Usa fetchWithTimeout
+        const response = await fetchWithTimeout(API_ENDPOINTS.getSystemData, API_TIMEOUT_MS); 
         
         if (!response.ok) {
             throw new Error(`API (getSystemData) Error: ${response.statusText} (${response.status})`);
@@ -95,7 +127,9 @@ export async function loadSystemDataFromAPI() {
         return true;
 
     } catch (e) {
-        console.error("CRITICAL Error loading system data from API:", e);
+        // Agora, se houver falha (CORS ou Timeout), o erro aparece rápido
+        console.error("CRITICAL Error loading system data from API:", e.message);
+        // O restante do loadPublicData() e a UI não serão bloqueados por 1 minuto.
         return false;
     }
 }
@@ -147,8 +181,8 @@ export async function loadPublicData() {
                 // Fallback robusto no caso de BAD_DATA (safeContractCall retorna [])
                 if (!data || data.length < 4 || data[0] === false) {
                      return {
-                        addr, isRegistered: false, pStake: 0n, selfStake: 0n, totalDelegatedAmount: 0n
-                    };
+                         addr, isRegistered: false, pStake: 0n, selfStake: 0n, totalDelegatedAmount: 0n
+                     };
                 }
 
                 return {
@@ -164,7 +198,14 @@ export async function loadPublicData() {
         const recalculatedTotalPStake = State.allValidatorsData.reduce((acc, val) => acc + val.pStake, 0n);
         State.totalNetworkPStake = recalculatedTotalPStake;
         
+        // Chamada à API com Timeout
         await loadSystemDataFromAPI();
+        
+        // Se a chamada acima falhar, o código continua aqui, permitindo que a UI atualize
+        // com os dados on-chain (TVL, Validators, etc.)
+        if (window.updateUIState) {
+            window.updateUIState();
+        }
 
     } catch (e) { 
         console.error("Error loading public data", e)
@@ -314,6 +355,7 @@ export async function loadMyBoostersFromAPI() {
         console.log("Loading user boosters from API...");
         const userAddress = State.userAddress;
         
+        // Uso de fetch original, pois falha na API de Booster é menos crítica que a de SystemData
         const response = await fetch(`${API_ENDPOINTS.getBoosters}/${userAddress}`);
         
         if (!response.ok) {

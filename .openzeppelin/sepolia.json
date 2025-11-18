@@ -2430,6 +2430,106 @@
       "address": "0x0c5F4396F465987f256f2fBA95B95A3F5Be5a533",
       "txHash": "0x7b9b5acb14ad6379ad2833c1c7e7a252fe184537b45ccd9f79aeb5213381a426",
       "kind": "uups"
+    },
+    {
+      "address": "0x4b2a5d557DF16F14391Ae58dD5F9591804afbF61",
+      "txHash": "0xc4a88785a6aa576878d2c63ba013d2703cf9edefb650a912d00a5a19d0a1fc1b",
+      "kind": "uups"
+    },
+    {
+      "address": "0x541078A90a1Ca024d68B87B62987FD12901F2524",
+      "txHash": "0xffb60ffbff10b571247dd21535c9bfc2713ebbb138719a1f7c4e1282c49dfb92",
+      "kind": "uups"
+    },
+    {
+      "address": "0x49720695eA3D6743517CA2F9a5580D8AE9649252",
+      "txHash": "0xdcd1bae18aae2770ad846df46455563ad6257014879fc52d00745c2a9b82b2df",
+      "kind": "uups"
+    },
+    {
+      "address": "0xc0449F780dE96ccDE58Afc64e5a39923fe00EA72",
+      "txHash": "0xb6b85e316fffb9c666465f6b00ad261d04302d8c532f12bb1e57abcc24acb64d",
+      "kind": "transparent"
+    },
+    {
+      "address": "0xAB45c2dEb3B21dd47A9d9374aBfC5AE15f842556",
+      "txHash": "0x1f88cbbde422dc88c70b51e8f0fbe0b05a248fb43c4af24ec0862480c6b6ab3c",
+      "kind": "uups"
+    },
+    {
+      "address": "0xe73788C5A5a772A4586C2398483B8aa2e67A66a7",
+      "txHash": "0x0c5516f584c799d233a95280f42784e9fb1a3a2b56865b7d045889900feaf8cd",
+      "kind": "uups"
+    },
+    {
+      "address": "0xB93d02FdDCaD81527AfBa87F44b3A280ba7AA4a7",
+      "txHash": "0x06f22cdbef8f76cb7b0335bd785ca86c3b6fdfb1d979e50b95f7e000a3174f1f",
+      "kind": "uups"
+    },
+    {
+      "address": "0x0A3C74EE71e3fC3815e27172D8cc3EbE63e5C61C",
+      "txHash": "0x3d2171abd548a6930bdd485bcec94b88a15017a1778925acd700ca10d8054900",
+      "kind": "uups"
+    },
+    {
+      "address": "0x2E27b7Bf01A84dd544B48ea05d5802B4beebaba1",
+      "txHash": "0x0834a889ba1a2fc9ad216fb2d72e34383cb09cd7df2b9ee2cd30bb05fd7f46fa",
+      "kind": "uups"
+    },
+    {
+      "address": "0x6C9B501387455b44c7aDdda7eB97D2F11a660489",
+      "txHash": "0x250c6d01813e4267ff9fb5d6092de34550625e305024504f19933d6dc00ce0c4",
+      "kind": "uups"
+    },
+    {
+      "address": "0x3970914a6f013373D449f4D13c988d8657b1f6A2",
+      "txHash": "0xc8620a43fa146bd8a4a3407d37f45ebe22efc1036298c9d5b786449f3c0feaa6",
+      "kind": "uups"
+    },
+    {
+      "address": "0xaBc554c0Cd5fc5Df5d0D4862B7229F923fCd52Fc",
+      "txHash": "0x21693a540b41b45ccbaed9a0efd218633ddc7053ee0cc94cc7a155a437bf9b8a",
+      "kind": "uups"
+    },
+    {
+      "address": "0x02ebfc3d2Fb9aE8D0cEeFe51f21fA1E0D49Fb018",
+      "txHash": "0x94e51c9a34549c56959ce3c1baef647cb679ecb8dca60aa7a6c80608af577fa1",
+      "kind": "uups"
+    },
+    {
+      "address": "0x386cE73AB1D85C0cf48922CbBAB14Fc0464aF4bd",
+      "txHash": "0xc8c0d9644d808a5d72a9549afb5fc948609dbe3428fceeb5702d08b942a4a8af",
+      "kind": "transparent"
+    },
+    {
+      "address": "0x4a61B330A816821df2CA7CfD425C98319F25d8A4",
+      "txHash": "0xd80e65f938befd6ac7ba7eaa303ec2b1a479b9a462e97c346538f367074015b6",
+      "kind": "uups"
+    },
+    {
+      "address": "0x8eE03E911d99938EF6040eD8e10166AdEC8e0450",
+      "txHash": "0x363b1e42950723d66e12d097e330a92e1f79fe8d8eaa1d8a33d7948477e05188",
+      "kind": "uups"
+    },
+    {
+      "address": "0x3CC283a339eCc2275B1D244df78eEd9263EdAcb8",
+      "txHash": "0xc811b574c7e4be8b2ad0777c008d1a858dcf20d06f7fd5e7431eb64306d6f48e",
+      "kind": "uups"
+    },
+    {
+      "address": "0x3Ec7eF47e3EcE286079A4ECa53DBdB3FF02F1641",
+      "txHash": "0x3280215421f377a6106ab97553500fe4e84f420f61b345568b42a20723c8e0d0",
+      "kind": "uups"
+    },
+    {
+      "address": "0xF1af02a30F7356083Da0890f584430c516D670d4",
+      "txHash": "0x3adcc4a943883573a74df951c9843ddd5c9c03e5ea1e4a5baf4cb02f416cafde",
+      "kind": "uups"
+    },
+    {
+      "address": "0x4886385A480D1059ca0D5Ec12Ba2048DB50aa29A",
+      "txHash": "0xf5918ccd558353126cf98058602aeba856c2a4dec363fda844285d5146cbfaeb",
+      "kind": "uups"
     }
   ],
   "impls": {
@@ -13106,6 +13206,307 @@
             "numberOfBytes": "20"
           },
           "t_contract(IEcosystemManager)3892": {
+            "label": "contract IEcosystemManager",
+            "numberOfBytes": "20"
+          },
+          "t_mapping(t_address,t_array(t_struct(Delegation)2228_storage)dyn_storage)": {
+            "label": "mapping(address => struct DelegationManager.Delegation[])",
+            "numberOfBytes": "32"
+          },
+          "t_mapping(t_address,t_struct(Validator)2219_storage)": {
+            "label": "mapping(address => struct DelegationManager.Validator)",
+            "numberOfBytes": "32"
+          },
+          "t_mapping(t_address,t_uint256)": {
+            "label": "mapping(address => uint256)",
+            "numberOfBytes": "32"
+          },
+          "t_struct(Delegation)2228_storage": {
+            "label": "struct DelegationManager.Delegation",
+            "members": [
+              {
+                "label": "amount",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "0"
+              },
+              {
+                "label": "unlockTime",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "1"
+              },
+              {
+                "label": "lockDuration",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "2"
+              },
+              {
+                "label": "validator",
+                "type": "t_address",
+                "offset": 0,
+                "slot": "3"
+              }
+            ],
+            "numberOfBytes": "128"
+          },
+          "t_struct(Validator)2219_storage": {
+            "label": "struct DelegationManager.Validator",
+            "members": [
+              {
+                "label": "isRegistered",
+                "type": "t_bool",
+                "offset": 0,
+                "slot": "0"
+              },
+              {
+                "label": "selfStakeAmount",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "1"
+              },
+              {
+                "label": "totalPStake",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "2"
+              },
+              {
+                "label": "totalDelegatedAmount",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "3"
+              }
+            ],
+            "numberOfBytes": "128"
+          },
+          "t_uint256": {
+            "label": "uint256",
+            "numberOfBytes": "32"
+          },
+          "t_uint8": {
+            "label": "uint8",
+            "numberOfBytes": "1"
+          }
+        },
+        "namespaces": {}
+      }
+    },
+    "3d59f1d6d4cbeed175b2f69040b8f52646e2e1380fab4e7fb7a5dcdc36890645": {
+      "address": "0xBcD308c2638D92430316CEbc4d2565FC39f5238E",
+      "txHash": "0x383f15957f175624e21ed8b0dbb6cd76e75227f5772f72b0245c20da267615e2",
+      "layout": {
+        "solcVersion": "0.8.28",
+        "storage": [
+          {
+            "label": "_initialized",
+            "offset": 0,
+            "slot": "0",
+            "type": "t_uint8",
+            "contract": "Initializable",
+            "src": "@openzeppelin\\contracts-upgradeable\\proxy\\utils\\Initializable.sol:63",
+            "retypedFrom": "bool"
+          },
+          {
+            "label": "_initializing",
+            "offset": 1,
+            "slot": "0",
+            "type": "t_bool",
+            "contract": "Initializable",
+            "src": "@openzeppelin\\contracts-upgradeable\\proxy\\utils\\Initializable.sol:68"
+          },
+          {
+            "label": "__gap",
+            "offset": 0,
+            "slot": "1",
+            "type": "t_array(t_uint256)50_storage",
+            "contract": "ERC1967UpgradeUpgradeable",
+            "src": "@openzeppelin\\contracts-upgradeable\\proxy\\ERC1967\\ERC1967UpgradeUpgradeable.sol:169"
+          },
+          {
+            "label": "__gap",
+            "offset": 0,
+            "slot": "51",
+            "type": "t_array(t_uint256)50_storage",
+            "contract": "UUPSUpgradeable",
+            "src": "@openzeppelin\\contracts-upgradeable\\proxy\\utils\\UUPSUpgradeable.sol:111"
+          },
+          {
+            "label": "__gap",
+            "offset": 0,
+            "slot": "101",
+            "type": "t_array(t_uint256)50_storage",
+            "contract": "ContextUpgradeable",
+            "src": "@openzeppelin\\contracts-upgradeable\\utils\\ContextUpgradeable.sol:36"
+          },
+          {
+            "label": "_owner",
+            "offset": 0,
+            "slot": "151",
+            "type": "t_address",
+            "contract": "OwnableUpgradeable",
+            "src": "@openzeppelin\\contracts-upgradeable\\access\\OwnableUpgradeable.sol:22"
+          },
+          {
+            "label": "__gap",
+            "offset": 0,
+            "slot": "152",
+            "type": "t_array(t_uint256)49_storage",
+            "contract": "OwnableUpgradeable",
+            "src": "@openzeppelin\\contracts-upgradeable\\access\\OwnableUpgradeable.sol:94"
+          },
+          {
+            "label": "_status",
+            "offset": 0,
+            "slot": "201",
+            "type": "t_uint256",
+            "contract": "ReentrancyGuardUpgradeable",
+            "src": "@openzeppelin\\contracts-upgradeable\\security\\ReentrancyGuardUpgradeable.sol:38"
+          },
+          {
+            "label": "__gap",
+            "offset": 0,
+            "slot": "202",
+            "type": "t_array(t_uint256)49_storage",
+            "contract": "ReentrancyGuardUpgradeable",
+            "src": "@openzeppelin\\contracts-upgradeable\\security\\ReentrancyGuardUpgradeable.sol:88"
+          },
+          {
+            "label": "ecosystemManager",
+            "offset": 0,
+            "slot": "251",
+            "type": "t_contract(IEcosystemManager)3890",
+            "contract": "DelegationManager",
+            "src": "contracts\\DelegationManager.sol:17"
+          },
+          {
+            "label": "bkcToken",
+            "offset": 0,
+            "slot": "252",
+            "type": "t_contract(BKCToken)2165",
+            "contract": "DelegationManager",
+            "src": "contracts\\DelegationManager.sol:18"
+          },
+          {
+            "label": "validators",
+            "offset": 0,
+            "slot": "253",
+            "type": "t_mapping(t_address,t_struct(Validator)2219_storage)",
+            "contract": "DelegationManager",
+            "src": "contracts\\DelegationManager.sol:43"
+          },
+          {
+            "label": "validatorsArray",
+            "offset": 0,
+            "slot": "254",
+            "type": "t_array(t_address)dyn_storage",
+            "contract": "DelegationManager",
+            "src": "contracts\\DelegationManager.sol:44"
+          },
+          {
+            "label": "totalValidatorSelfStake",
+            "offset": 0,
+            "slot": "255",
+            "type": "t_uint256",
+            "contract": "DelegationManager",
+            "src": "contracts\\DelegationManager.sol:45"
+          },
+          {
+            "label": "accValidatorRewardPerStake",
+            "offset": 0,
+            "slot": "256",
+            "type": "t_uint256",
+            "contract": "DelegationManager",
+            "src": "contracts\\DelegationManager.sol:46"
+          },
+          {
+            "label": "validatorRewardDebt",
+            "offset": 0,
+            "slot": "257",
+            "type": "t_mapping(t_address,t_uint256)",
+            "contract": "DelegationManager",
+            "src": "contracts\\DelegationManager.sol:47"
+          },
+          {
+            "label": "userDelegations",
+            "offset": 0,
+            "slot": "258",
+            "type": "t_mapping(t_address,t_array(t_struct(Delegation)2228_storage)dyn_storage)",
+            "contract": "DelegationManager",
+            "src": "contracts\\DelegationManager.sol:48"
+          },
+          {
+            "label": "userTotalPStake",
+            "offset": 0,
+            "slot": "259",
+            "type": "t_mapping(t_address,t_uint256)",
+            "contract": "DelegationManager",
+            "src": "contracts\\DelegationManager.sol:49"
+          },
+          {
+            "label": "totalNetworkPStake",
+            "offset": 0,
+            "slot": "260",
+            "type": "t_uint256",
+            "contract": "DelegationManager",
+            "src": "contracts\\DelegationManager.sol:50"
+          },
+          {
+            "label": "pendingRegistrationBonus",
+            "offset": 0,
+            "slot": "261",
+            "type": "t_mapping(t_address,t_uint256)",
+            "contract": "DelegationManager",
+            "src": "contracts\\DelegationManager.sol:51"
+          },
+          {
+            "label": "accDelegatorRewardPerStake",
+            "offset": 0,
+            "slot": "262",
+            "type": "t_uint256",
+            "contract": "DelegationManager",
+            "src": "contracts\\DelegationManager.sol:52"
+          },
+          {
+            "label": "delegatorRewardDebt",
+            "offset": 0,
+            "slot": "263",
+            "type": "t_mapping(t_address,t_uint256)",
+            "contract": "DelegationManager",
+            "src": "contracts\\DelegationManager.sol:53"
+          }
+        ],
+        "types": {
+          "t_address": {
+            "label": "address",
+            "numberOfBytes": "20"
+          },
+          "t_array(t_address)dyn_storage": {
+            "label": "address[]",
+            "numberOfBytes": "32"
+          },
+          "t_array(t_struct(Delegation)2228_storage)dyn_storage": {
+            "label": "struct DelegationManager.Delegation[]",
+            "numberOfBytes": "32"
+          },
+          "t_array(t_uint256)49_storage": {
+            "label": "uint256[49]",
+            "numberOfBytes": "1568"
+          },
+          "t_array(t_uint256)50_storage": {
+            "label": "uint256[50]",
+            "numberOfBytes": "1600"
+          },
+          "t_bool": {
+            "label": "bool",
+            "numberOfBytes": "1"
+          },
+          "t_contract(BKCToken)2165": {
+            "label": "contract BKCToken",
+            "numberOfBytes": "20"
+          },
+          "t_contract(IEcosystemManager)3890": {
             "label": "contract IEcosystemManager",
             "numberOfBytes": "20"
           },

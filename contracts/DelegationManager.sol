@@ -105,11 +105,12 @@ contract DelegationManager is
 
     /**
      * @notice The universal entry point for ALL rewards (minted + fees) from the MiningManager.
+     * @dev REMOVED nonReentrant to allow reentrancy from MiningManager flow.
      */
     function depositMiningRewards(
         uint256 _validatorShare,
         uint256 _delegatorShare
-    ) external nonReentrant {
+    ) external { 
         require(
             msg.sender == ecosystemManager.getMiningManagerAddress(),
             "DM: Caller is not the authorized MiningManager"
@@ -177,7 +178,7 @@ contract DelegationManager is
             );
 
         // 5. Register the Validator (with zero self-stake)
-        // NOTE: The call to _claimDelegatorReward was removed to prevent reentrancy.
+        // NOTE: The internal call to _claimDelegatorReward was removed.
         
         validators[_validatorAddress] = Validator({
             isRegistered: true,

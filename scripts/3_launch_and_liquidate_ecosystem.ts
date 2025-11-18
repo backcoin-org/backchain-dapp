@@ -59,20 +59,27 @@ const TGE_SUPPLY_AMOUNT = 40_000_000n * 10n**18n;
 // --- Helper Functions ---
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-async function sendTransactionWithRetries(txFunction: () => Promise<any>, retries = 3): Promise<ContractTransactionReceipt> {
+async function sendTransactionWithRetries(txFunction: () => Promise<any>, description: string, retries = 3): Promise<ContractTransactionReceipt | null> {
   for (let i = 0; i < retries; i++) {
     try {
       const tx = await txFunction();
       const receipt = await tx.wait();
       if (!receipt) { throw new Error("Transaction sent but null receipt returned."); }
+      console.log(`   ✅ SUCESSO. TX Hash: ${receipt.hash}`);
       await sleep(1500);
       return receipt as ContractTransactionReceipt;
     } catch (error: any) {
       if ((error.message.includes("nonce") || error.message.includes("in-flight")) && i < retries - 1) {
         console.warn(`   ⚠️ Nonce issue detected. Retrying in 5s...`);
         await sleep(5000);
+      } else if (error.message.includes("Validator already registered")) {
+        console.log("   ⚠️ AVISO: Validador já registrado. Processo concluído.");
+        return null;
+      } else if (error.message.includes("ReentrancyGuard: reentrant call")) {
+        // Log específico para o erro de reentrância que estamos tentando corrigir
+        throw new Error(`❌ FALHA na transação (${description}): execution reverted: ReentrancyGuard: reentrant call. VERIFIQUE SE O CONTRATO DM CORRIGIDO FOI DEPLOYADO.`);
       } else {
-        throw error;
+        throw new Error(`❌ FALHA na transação (${description}): ${error.message}`);
       }
     }
   }
@@ -81,13 +88,13 @@ async function sendTransactionWithRetries(txFunction: () => Promise<any>, retrie
 
 // --- Rule Setting Helpers (NEW LOGIC) ---
 async function setServiceFee(manager: any, key: string, value: number | bigint) {
-    await sendTransactionWithRetries(() => manager.setServiceFee(key, value));
+    await sendTransactionWithRetries(() => manager.setServiceFee(key, value), `Set Fee ${key}`);
     console.log(`   -> Service/Staking Fee set: ${key} = ${value.toString()}`);
     await sleep(CONFIG_DELAY_MS / 2); 
 }
 
 async function setPStake(manager: any, key: string, value: number | bigint) {
-    await sendTransactionWithRetries(() => manager.setPStakeMinimum(key, value));
+    await sendTransactionWithRetries(() => manager.setPStakeMinimum(key, value), `Set pStake ${key}`);
     console.log(`   -> pStake Minimum set: ${key} = ${value}`);
     await sleep(CONFIG_DELAY_MS / 2);
 }
@@ -100,14 +107,14 @@ async function setService(manager: any, serviceKey: string, feeValue: number | b
 
 // For Mining (New Tokens)
 async function setMiningDistributionBips(manager: any, key: string, value: number | bigint) {
-    await sendTransactionWithRetries(() => manager.setMiningDistributionBips(key, value));
+    await sendTransactionWithRetries(() => manager.setMiningDistributionBips(key, value), `Set Mining Bips ${key}`);
     console.log(`   -> Mining Distribution (New Tokens) set: ${key} = ${value.toString()} BIPS`);
     await sleep(CONFIG_DELAY_MS / 2); 
 }
 
 // For Fees (Original Tokens) - NEW
 async function setFeeDistributionBips(manager: any, key: string, value: number | bigint) {
-    await sendTransactionWithRetries(() => manager.setFeeDistributionBips(key, value));
+    await sendTransactionWithRetries(() => manager.setFeeDistributionBips(key, value), `Set Fee Bips ${key}`);
     console.log(`   -> Fee Distribution (Original Tokens) set: ${key} = ${value.toString()} BIPS`);
     await sleep(CONFIG_DELAY_MS / 2);
 }
@@ -183,7 +190,6 @@ export async function runScript(hre: HardhatRuntimeEnvironment) {
   let notaryInstance: any;
   let fortunePoolInstance: any;
   
-  // ✅ *** CORREÇÃO: Variável 'tx' movida para o escopo da função principal ***
   let tx: ContractTransactionReceipt | null;
 
   try {
@@ -224,7 +230,7 @@ export async function runScript(hre: HardhatRuntimeEnvironment) {
         addresses.decentralizedNotary || ethers.ZeroAddress,
         addresses.fortunePool || ethers.ZeroAddress,
         addresses.nftLiquidityPoolFactory || ethers.ZeroAddress
-    ));
+    ), "Update Hub with MM and DM");
     console.log(`   ✅ Hub updated with DM and MM.`);
     await sleep(DEPLOY_DELAY_MS);
     
@@ -301,26 +307,26 @@ export async function runScript(hre: HardhatRuntimeEnvironment) {
         addresses.decentralizedNotary,
         addresses.fortunePool,
         addresses.nftLiquidityPoolFactory
-    ));
+    ), "Update Hub with All Final Addresses");
     console.log(`   ✅ Hub updated with all 8 final addresses.`);
 
     // 2.2. Authorize Miners in MiningManager (NEW REVENUE FUNNEL LOGIC)
     console.log("\n2.2. Authorizing Spoke contracts in MiningManager (Universal Funnel)...");
     const mm = miningManagerInstance; // Alias for clarity
     
-    await sendTransactionWithRetries(() => mm.setAuthorizedMiner("TIGER_GAME_SERVICE", addresses.fortunePool));
+    await sendTransactionWithRetries(() => mm.setAuthorizedMiner("TIGER_GAME_SERVICE", addresses.fortunePool), "Authorize FortunePool");
     console.log(`   -> Authorized: FortunePool (TIGER_GAME_SERVICE)`);
     
-    await sendTransactionWithRetries(() => mm.setAuthorizedMiner("NOTARY_SERVICE", addresses.decentralizedNotary));
+    await sendTransactionWithRetries(() => mm.setAuthorizedMiner("NOTARY_SERVICE", addresses.decentralizedNotary), "Authorize DecentralizedNotary");
     console.log(`   -> Authorized: DecentralizedNotary (NOTARY_SERVICE)`);
 
-    await sendTransactionWithRetries(() => mm.setAuthorizedMiner("VALIDATOR_REGISTRATION_FEE", addresses.delegationManager));
+    await sendTransactionWithRetries(() => mm.setAuthorizedMiner("VALIDATOR_REGISTRATION_FEE", addresses.delegationManager), "Authorize DelegationManager (Registration)");
     console.log(`   -> Authorized: DelegationManager (VALIDATOR_REGISTRATION_FEE)`);
     
     // Authorize DelegationManager for its own internal fees (Unstake, Claim)
-    await sendTransactionWithRetries(() => mm.setAuthorizedMiner("UNSTAKE_FEE_BIPS", addresses.delegationManager));
-    await sendTransactionWithRetries(() => mm.setAuthorizedMiner("FORCE_UNSTAKE_PENALTY_BIPS", addresses.delegationManager));
-    await sendTransactionWithRetries(() => mm.setAuthorizedMiner("CLAIM_REWARD_FEE_BIPS", addresses.delegationManager));
+    await sendTransactionWithRetries(() => mm.setAuthorizedMiner("UNSTAKE_FEE_BIPS", addresses.delegationManager), "Authorize DelegationManager (Unstake)");
+    await sendTransactionWithRetries(() => mm.setAuthorizedMiner("FORCE_UNSTAKE_PENALTY_BIPS", addresses.delegationManager), "Authorize DelegationManager (ForceUnstake)");
+    await sendTransactionWithRetries(() => mm.setAuthorizedMiner("CLAIM_REWARD_FEE_BIPS", addresses.delegationManager), "Authorize DelegationManager (Claim)");
     console.log(`   -> Authorized: DelegationManager (Internal Fees: Unstake, ForceUnstake, Claim)`);
 
     console.log(`   -> NFT Pool authorization will occur in Part 4 during pool deployment.`);
@@ -329,7 +335,7 @@ export async function runScript(hre: HardhatRuntimeEnvironment) {
     console.log("\n2.3. (CRITICAL) Transferring BKCToken ownership to MiningManager...");
     const currentOwner = await bkcTokenInstance.owner(); 
     if (currentOwner.toLowerCase() === deployer.address.toLowerCase()) {
-        await sendTransactionWithRetries(() => bkcTokenInstance.transferOwnership(addresses.miningManager));
+        await sendTransactionWithRetries(() => bkcTokenInstance.transferOwnership(addresses.miningManager), "Transfer BKCToken Ownership");
         console.log(`   ✅ OWNERSHIP TRANSFERRED! MiningManager is now the sole minter.`);
     } else if (currentOwner.toLowerCase() === addresses.miningManager.toLowerCase()) {
         console.log(`   ⚠️ WARNING: Ownership already transferred. MiningManager is owner.`);
@@ -341,7 +347,7 @@ export async function runScript(hre: HardhatRuntimeEnvironment) {
     console.log(`\n2.4. Minting TGE Supply (${ethers.formatEther(TGE_SUPPLY_AMOUNT)} BKC) to MiningManager...`);
     try {
         await sendTransactionWithRetries(() => 
-            miningManagerInstance.initialTgeMint(addresses.miningManager, TGE_SUPPLY_AMOUNT)
+            miningManagerInstance.initialTgeMint(addresses.miningManager, TGE_SUPPLY_AMOUNT), "Initial TGE Mint"
         );
         console.log(`   ✅ TGE of ${ethers.formatEther(TGE_SUPPLY_AMOUNT)} BKC minted TO the MiningManager.`);
     } catch (e: any) {
@@ -362,7 +368,7 @@ export async function runScript(hre: HardhatRuntimeEnvironment) {
     console.log(`   -> Transferring ${ethers.formatEther(totalLiquidityForDeployer)} BKC from Manager to Deployer (for Liquidity)...`);
     try {
         await sendTransactionWithRetries(() => 
-            miningManagerInstance.transferTokensFromGuardian(deployer.address, totalLiquidityForDeployer)
+            miningManagerInstance.transferTokensFromGuardian(deployer.address, totalLiquidityForDeployer), "Transfer Liquidity to Deployer"
         );
         console.log(`   ✅ Deployer funded for liquidity.`);
     } catch (e: any) {
@@ -377,7 +383,7 @@ export async function runScript(hre: HardhatRuntimeEnvironment) {
         console.log(`   -> Transferring ${ethers.formatEther(remainingForAirdrop)} BKC from Manager to Airdrop Wallet (${airdropWallet})...`);
         try {
             await sendTransactionWithRetries(() => 
-                miningManagerInstance.transferTokensFromGuardian(airdropWallet, remainingForAirdrop)
+                miningManagerInstance.transferTokensFromGuardian(airdropWallet, remainingForAirdrop), "Transfer Airdrop to Deployer"
             );
              console.log(`   ✅ Airdrop wallet funded.`);
         } catch (e: any) {
@@ -388,8 +394,8 @@ export async function runScript(hre: HardhatRuntimeEnvironment) {
     // 2.6. Configure Oracle
     console.log("\n2.6. Authorizing Oracle in FortunePool and setting fee...");
     try {
-        await sendTransactionWithRetries(() => fortunePoolInstance.setOracleAddress(addresses.oracleWalletAddress));
-        await sendTransactionWithRetries(() => fortunePoolInstance.setOracleFee(ethers.parseEther(FORTUNE_POOL_ORACLE_FEE_ETH)));
+        await sendTransactionWithRetries(() => fortunePoolInstance.setOracleAddress(addresses.oracleWalletAddress), "Set Oracle Address");
+        await sendTransactionWithRetries(() => fortunePoolInstance.setOracleFee(ethers.parseEther(FORTUNE_POOL_ORACLE_FEE_ETH)), "Set Oracle Fee");
         console.log(`   ✅ Oracle (${addresses.oracleWalletAddress}) authorized with fee ${FORTUNE_POOL_ORACLE_FEE_ETH} ETH/BNB.`);
     } catch (e: any) { console.warn(`   ⚠️ Failed to set oracle (maybe done already): ${e.message}`); }
 
@@ -403,7 +409,7 @@ export async function runScript(hre: HardhatRuntimeEnvironment) {
     console.log("\n3.1. Configuring FortunePool Prize Tiers...");
     try {
         for (const tier of FORTUNE_POOL_TIERS) {
-            await sendTransactionWithRetries(() => fortunePoolInstance.setPrizeTier(tier.poolId, tier.chanceDenominator, tier.multiplierBips));
+            await sendTransactionWithRetries(() => fortunePoolInstance.setPrizeTier(tier.poolId, tier.chanceDenominator, tier.multiplierBips), `Set FortunePool Tier ${tier.poolId}`);
             console.log(`   -> Tier ${tier.poolId} (Mult: ${Number(tier.multiplierBips)/10000}x, Chance: 1/${tier.chanceDenominator.toString()}) set.`);
         }
     } catch (e: any) { console.warn(`   ⚠️ Failed to set tiers (maybe done already): ${e.message}`); }
@@ -467,10 +473,10 @@ export async function runScript(hre: HardhatRuntimeEnvironment) {
     console.log(`\n4.1. Seeding FortunePool with ${ethers.formatEther(FORTUNE_POOL_LIQUIDITY_TOTAL)} $BKC...`);
     try {
         await sendTransactionWithRetries(() => 
-            bkcTokenInstance.approve(addresses.fortunePool, FORTUNE_POOL_LIQUIDITY_TOTAL)
+            bkcTokenInstance.approve(addresses.fortunePool, FORTUNE_POOL_LIQUIDITY_TOTAL), "Approve FortunePool Liquidity"
         );
         console.log(`   ✅ Deployer approved FortunePool.`);
-        await sendTransactionWithRetries(() => fortunePoolInstance.topUpPool(FORTUNE_POOL_LIQUIDITY_TOTAL));
+        await sendTransactionWithRetries(() => fortunePoolInstance.topUpPool(FORTUNE_POOL_LIQUIDITY_TOTAL), "TopUp FortunePool");
         console.log(`   ✅ ${ethers.formatEther(FORTUNE_POOL_LIQUIDITY_TOTAL)} BKC injected into PrizePool.`);
     } catch (e: any) {
         if (e.message.includes("transfer amount exceeds balance")) {
@@ -505,23 +511,31 @@ export async function runScript(hre: HardhatRuntimeEnvironment) {
         if (poolAddress === ethers.ZeroAddress) {
             console.log(`         ... Pool not found. Deploying via Factory...`);
             
-            // ✅ CORREÇÃO: Atribui o recibo da transação a 'tx'
-            tx = await sendTransactionWithRetries(() => factoryInstanceLoaded.deployPool(tier.boostBips));
+            tx = await sendTransactionWithRetries(() => factoryInstanceLoaded.deployPool(tier.boostBips), `Deploy Pool ${tier.name}`);
             
-            // ✅ CORREÇÃO: Verifica se 'tx' não é nulo antes de acessar 'logs'
             if (!tx) {
-                throw new Error("Failed to deploy pool: Transaction receipt was null.");
+                // If deployment fails but tx is null (e.g., already exists), we assume existing pool
+                // But if deployment fails and tx is null because of network error, throw.
+                if (poolAddress === ethers.ZeroAddress) { // Still zero address after attempting deploy
+                    throw new Error(`Failed to deploy pool ${tier.name}: Transaction receipt was null and address is still zero.`);
+                }
             }
             
-            const logs = (tx.logs as Log[])
+            const logs = (tx?.logs || []) as Log[];
+            const parsedLogs = logs
                 .map((log: Log) => { try { return factoryInstanceLoaded.interface.parseLog(log as any); } catch { return null; } })
                 .filter((log: LogDescription | null): log is LogDescription => log !== null && log.name === "PoolDeployed");
 
-            if (logs.length > 0) {
-                poolAddress = logs[0].args.poolAddress;
+            if (parsedLogs.length > 0) {
+                poolAddress = parsedLogs[0].args.poolAddress;
                 console.log(`         ✅ Pool Clone deployed to: ${poolAddress}`);
-            } else {
-                throw new Error("Failed to deploy pool: 'PoolDeployed' event not found.");
+            } else if (poolAddress === ethers.ZeroAddress) {
+                // This scenario means the deployPool succeeded but didn't emit the event or transaction was skipped
+                console.warn(`         ⚠️ Could not find 'PoolDeployed' event for ${tier.name}. Trying to fetch address again.`);
+                poolAddress = await factoryInstanceLoaded.getPoolAddress(tier.boostBips);
+                if (poolAddress === ethers.ZeroAddress) {
+                    throw new Error(`Failed to confirm Pool address for ${tier.name} after deployment attempt.`);
+                }
             }
         } else {
             console.log(`         ... Pool already exists at: ${poolAddress}`);
@@ -536,7 +550,7 @@ export async function runScript(hre: HardhatRuntimeEnvironment) {
         console.log(`      -> Authorizing Pool ${poolAddress} in MiningManager...`);
         try {
             await sendTransactionWithRetries(() => 
-                mm.setAuthorizedMiner("NFT_POOL_TAX_BIPS", poolAddress)
+                mm.setAuthorizedMiner("NFT_POOL_TAX_BIPS", poolAddress), `Authorize Pool ${tier.name} in MM`
             );
             console.log(`      ✅ Pool authorized for "NFT_POOL_TAX_BIPS"`);
         } catch (e: any) {
@@ -560,17 +574,16 @@ export async function runScript(hre: HardhatRuntimeEnvironment) {
             const remaining = initialMintAmount - j;
             const amountToMint = remaining < CHUNK_SIZE_BIGINT ? remaining : CHUNK_SIZE_BIGINT;
             
-            // ✅ CORREÇÃO: Atribui o recibo da transação a 'tx'
             tx = await sendTransactionWithRetries(() =>
-                rewardBoosterNFT.ownerMintBatch(deployer.address, Number(amountToMint), tier.boostBips, tier.metadata)
+                rewardBoosterNFT.ownerMintBatch(deployer.address, Number(amountToMint), tier.boostBips, tier.metadata), `Mint ${Number(amountToMint)} ${tier.name} NFTs`
             );
 
-            // ✅ CORREÇÃO: Verifica se 'tx' não é nulo antes de acessar 'logs'
             if (!tx) {
                 throw new Error("Failed to mint NFTs: Transaction receipt was null.");
             }
             
-            const tokenIdsInChunk = (tx.logs as Log[])
+            const logs = (tx?.logs || []) as Log[];
+            const tokenIdsInChunk = logs
                 .map((log: Log) => { try { return rewardBoosterNFT.interface.parseLog(log as any); } catch { return null; } })
                 .filter((log: LogDescription | null): log is LogDescription => log !== null && log.name === "BoosterMinted")
                 .map((log: LogDescription) => log.args.tokenId.toString());
@@ -581,9 +594,9 @@ export async function runScript(hre: HardhatRuntimeEnvironment) {
         console.log(`      -> Adding ${allPoolTokenIds.length} NFTs and ${ethers.formatEther(LIQUIDITY_BKC_AMOUNT_PER_POOL)} BKC to POOL CLONE at ${poolAddress}...`);
         
         console.log(`         ... Approving BKC for ${poolAddress}`);
-        await sendTransactionWithRetries(() => bkcTokenInstance.approve(poolAddress, LIQUIDITY_BKC_AMOUNT_PER_POOL));
+        await sendTransactionWithRetries(() => bkcTokenInstance.approve(poolAddress, LIQUIDITY_BKC_AMOUNT_PER_POOL), `Approve BKC to Pool ${tier.name}`);
         console.log(`         ... Approving NFTs for ${poolAddress}`);
-        await sendTransactionWithRetries(() => rewardBoosterNFT.setApprovalForAll(poolAddress, true));
+        await sendTransactionWithRetries(() => rewardBoosterNFT.setApprovalForAll(poolAddress, true), `Approve NFTs to Pool ${tier.name}`);
 
         // Add liquidity in chunks
         let isFirstChunk = true;
@@ -591,17 +604,71 @@ export async function runScript(hre: HardhatRuntimeEnvironment) {
             const chunk = allPoolTokenIds.slice(k, k + CHUNK_SIZE);
             if (isFirstChunk) {
                 await sendTransactionWithRetries(() => 
-                    poolInstance.addInitialLiquidity(chunk, LIQUIDITY_BKC_AMOUNT_PER_POOL)
+                    poolInstance.addInitialLiquidity(chunk, LIQUIDITY_BKC_AMOUNT_PER_POOL), `Add Initial Liquidity to ${tier.name}`
                 );
                 isFirstChunk = false;
             } else {
-                await sendTransactionWithRetries(() => poolInstance.addMoreNFTsToPool(chunk));
+                await sendTransactionWithRetries(() => poolInstance.addMoreNFTsToPool(chunk), `Add More NFTs to ${tier.name}`);
             }
         }
         
-        await sendTransactionWithRetries(() => rewardBoosterNFT.setApprovalForAll(poolAddress, false));
+        await sendTransactionWithRetries(() => rewardBoosterNFT.setApprovalForAll(poolAddress, false), `Revoke NFT Approval for Pool ${tier.name}`);
         console.log(`   ✅ Liquidity for ${tier.name} added and approval revoked.`);
     }
+    
+    // ##############################################################
+    // ### PART 5: REGISTER VALIDATOR (CONSOLIDATED FROM STEP 4) ###
+    // ##############################################################
+    console.log("\n=== PART 5: REGISTERING INITIAL VALIDATOR (DEPLOYER) ===");
+
+    const validatorRegistrationKey = "VALIDATOR_REGISTRATION_FEE"; 
+    const dm = delegationManagerInstance;
+
+    try {
+      const registrationFeeWei = await hub.getFee(validatorRegistrationKey);
+      console.log(`\n5.1. Registration Fee (Hub) read: ${ethers.formatEther(registrationFeeWei)} BKC`);
+
+      if (registrationFeeWei === 0n) {
+          throw new Error("Registration fee is zero. Please configure 'VALIDATOR_REGISTRATION_FEE' in Hub.");
+      }
+      
+      // 5.2. Approve the DM to pull the fee
+      const allowance = await bkcTokenInstance.allowance(deployer.address, addresses.delegationManager);
+      
+      if (allowance < registrationFeeWei) {
+           await sendTransactionWithRetries(
+              () => bkcTokenInstance.approve(addresses.delegationManager, registrationFeeWei), 
+              `Approve ${ethers.formatEther(registrationFeeWei)} BKC for DM (Fee)`
+           );
+      } else {
+           console.log("   ⚠️ AVISO: BKC approval already sufficient. Skipping approval.");
+      }
+
+      // 5.3. Pay Fee AND Register (Single Transaction)
+      console.log("\n5.3. Registering the Validator (Charging Fee and Registering in one TX)...");
+      
+      // This call now charges the fee and sets 'isRegistered'
+      await sendTransactionWithRetries(
+          () => dm.registerValidator(deployer.address), 
+          "Final Validator Registration (With Fee)"
+      );
+
+      console.log("----------------------------------------------------");
+      console.log(`\n🎉🎉🎉 VALIDATOR ${deployer.address} REGISTERED SUCCESSFULLY! 🎉🎉🎉`);
+
+      // 5.4. Final Verification
+      const validatorInfo = await dm.validators(deployer.address);
+      if (validatorInfo[0]) { // isRegistered is the first element (index 0)
+          console.log(`   Status: Validator registered = TRUE`);
+      } else {
+           console.error(`   Status: ERROR. The validator is not marked as registered.`);
+      }
+
+    } catch (error: any) {
+      console.error("\n❌ Critical Failure in Validator Registration (Part 5):", error.message);
+      // NOTE: We don't exit here, as the ecosystem setup (Parts 1-4) was successful.
+    }
+
 
   } catch (error: any) {
     console.error("\n❌ Critical Failure during Ecosystem Launch:", error.message);
@@ -611,7 +678,7 @@ export async function runScript(hre: HardhatRuntimeEnvironment) {
   console.log("\n----------------------------------------------------");
   console.log("\n🎉🎉🎉 ECOSYSTEM LAUNCH & SEEDING COMPLETE! 🎉🎉🎉");
   console.log("The ecosystem is fully deployed, configured, and seeded.");
-  console.log("\nNext Step: Run '4_register_validator.ts' to register the first validator.");
+  console.log("\nNext Step: Test the DApp and delegation flow.");
 }
 
 // Standalone execution block

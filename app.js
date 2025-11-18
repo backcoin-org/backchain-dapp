@@ -33,7 +33,7 @@ import { TokenomicsPage } from './pages/TokenomicsPage.js';
 import { NotaryPage } from './pages/NotaryPage.js';
 
 // ============================================================================
-// FORMATTING FUNCTIONS
+// FORMATTING FUNCTIONS (Conteúdo Omitido por ser idêntico)
 // ============================================================================
 
 /**
@@ -63,7 +63,7 @@ function formatLargeBalance(bigNum) {
 }
 
 // ============================================================================
-// ROUTE CONFIGURATION
+// ROUTE CONFIGURATION (Conteúdo Omitido por ser idêntico)
 // ============================================================================
 
 const routes = {
@@ -88,7 +88,7 @@ const ADMIN_WALLET = '0x03aC69873293cD6ddef7625AfC91E3Bd5434562a';
 let currentPageCleanup = null;
 
 // ============================================================================
-// WALLET STATE CHANGE HANDLER
+// WALLET STATE CHANGE HANDLER (Conteúdo Omitido por ser idêntico)
 // ============================================================================
 
 function onWalletStateChange(changes) {
@@ -105,7 +105,7 @@ function onWalletStateChange(changes) {
 }
 
 // ============================================================================
-// NAVIGATION
+// NAVIGATION (Conteúdo Omitido por ser idêntico)
 // ============================================================================
 
 /**
@@ -175,7 +175,7 @@ function navigateTo(pageId, forceUpdate = false) {
 window.navigateTo = navigateTo;
 
 // ============================================================================
-// UI STATE UPDATE
+// UI STATE UPDATE (Conteúdo Omitido por ser idêntico)
 // ============================================================================
 
 /**
@@ -234,7 +234,7 @@ function updateUIState(forcePageUpdate = false) {
 }
 
 // ============================================================================
-// GLOBAL EVENT LISTENERS
+// GLOBAL EVENT LISTENERS (Conteúdo Omitido por ser idêntico)
 // ============================================================================
 
 function setupGlobalListeners() {
@@ -299,7 +299,7 @@ function setupGlobalListeners() {
 }
 
 // ============================================================================
-// APPLICATION INITIALIZATION
+// APPLICATION INITIALIZATION (Ajustada)
 // ============================================================================
 
 window.addEventListener('load', async () => {
@@ -337,15 +337,18 @@ window.addEventListener('load', async () => {
     
     setupGlobalListeners();
 
-    // 2. Initialize public provider (CRITICAL)
+    // 2. Initialize public provider (CRITICAL). This loads public data and calls updateUIState().
     await initPublicProvider(); 
     console.log("Public provider initialized and public data loaded.");
     
-    // CORREÇÃO: Força a primeira renderização após o carregamento de dados públicos
-    // Isso garante que os stats públicos (TVL, Validadores) sejam exibidos imediatamente.
-    updateUIState(true); 
+    /* * CORREÇÃO: Remova a chamada forçada para evitar renderização duplicada.
+     * updateUIState(true); 
+     * A função initWalletSubscriptions abaixo já dispara a primeira renderização
+     * (de estado desconectado) no seu callback onWalletStateChange.
+     */
     
     // 3. Subscribe to wallet changes
+    // O callback dentro desta função dispara a primeira renderização da UI.
     initWalletSubscriptions(onWalletStateChange);
 
     // 4. Show welcome modal
@@ -357,7 +360,7 @@ window.addEventListener('load', async () => {
 });
 
 // ============================================================================
-// GLOBAL EXPORTS
+// GLOBAL EXPORTS (Conteúdo Omitido por ser idêntico)
 // ============================================================================
 
 window.EarnPage = EarnPage; 
