@@ -1,11 +1,4 @@
 // modules/wallet.js
-// FIXED: Race conditions, validation, polling fallback
-// REFA: Removed single nftBondingCurve logic, changed ABI import
-// REFA V2: Fixed incorrect ABI for actionsManager
-// REFA V3: Added 'https://' prefix to ESM imports
-// CORREÇÃO: Removido rewardManagerABI e referências ao contrato RewardManager
-// ✅ CORREÇÃO (AJUSTE FINAL): Removido 'window.walletInitialized' e refatorada
-// a lógica de subscrição para 'initWalletSubscriptions'.
 
 import { ethers } from 'https://esm.sh/ethers@6.11.1';
 import { createWeb3Modal, defaultConfig } from 'https://esm.sh/@web3modal/ethers@5.0.3';
@@ -30,6 +23,8 @@ import { signIn } from './firebase-auth-service.js';
 // ============================================================================
 // ✅ CORREÇÃO: Removido 'window.walletInitialized'
 let balancePollingInterval = null;
+// 🚀 NOVO: Flag para garantir que a desconexão forçada da sessão salva aconteça apenas uma vez.
+let hasForcedInitialDisconnect = false; 
 
 // ============================================================================
 // WEB3MODAL CONFIGURATION
@@ -278,9 +273,10 @@ export function initWalletSubscriptions(callback) {
     let wasPreviouslyConnected = web3modal.getIsConnected(); 
     let isHandlingChange = false; // Mutex-like flag
 
-    // NOVO: FORÇA A DESCONEXÃO DE QUALQUER SESSÃO SALVA AO CARREGAR A PÁGINA
-    // (Esta lógica está correta e deve ser mantida)
-    if (wasPreviouslyConnected) {
+    // ✅ CORREÇÃO DA NAVEGAÇÃO: Adiciona a flag 'hasForcedInitialDisconnect'
+    // Esta lógica de desconexão só deve ocorrer na primeira carga do app, 
+    // e não a cada navegação de página.
+    if (wasPreviouslyConnected && !hasForcedInitialDisconnect) {
         console.log("⚠️ Found saved session on load. Forcing immediate disconnect to reset state.");
         try {
             // Não 'await' aqui, pois estamos em um contexto síncrono
@@ -291,6 +287,7 @@ export function initWalletSubscriptions(callback) {
             console.warn("Could not force disconnect, may already be cleaning up:", e);
         }
         wasPreviouslyConnected = false;
+        hasForcedInitialDisconnect = true; // Garante que não será executado novamente na navegação
     }
     // FIM DO BLOCO DE DESCONEXÃO FORÇADA
 
