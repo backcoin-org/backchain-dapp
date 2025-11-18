@@ -8,7 +8,6 @@ import {
     calculateUserTotalRewards, 
     calculateClaimDetails,
     getHighestBoosterBoostFromAPI, 
-    safeContractCall,
     loadUserData
 } from '../modules/data.js'; 
 import { executeUniversalClaim } from '../modules/transactions.js'; 
@@ -18,8 +17,6 @@ import {
     renderNoData, 
     renderError 
 } from '../utils.js';
-import { addresses } from '../config.js'; 
-
 
 // --- FUNÇÕES DE RENDERIZAÇÃO PRINCIPAL ---
 
@@ -46,7 +43,7 @@ async function renderClaimPanel() {
         const claimDetails = await calculateClaimDetails();
         const { totalRewards, netClaimAmount, feeAmount, discountPercent, basePenaltyPercent } = claimDetails;
 
-        // 2. Calcular Recompensas Brutas Separadas
+        // 2. Calcular Recompensas Brutas Separadas (para display detalhado se necessário)
         const totalGrossRewards = await calculateUserTotalRewards();
         
         // 3. Obter Detalhes do Desconto (para exibição)
@@ -63,59 +60,57 @@ async function renderClaimPanel() {
 
         // Renderiza o painel de recompensas
         el.innerHTML = `
-            <div class="space-y-4">
-                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div class="bg-main border border-border-color rounded-xl p-5 shadow-inner">
-                        <p class="text-zinc-400 text-sm flex items-center gap-2">
-                             <i class="fa-solid fa-layer-group text-purple-400"></i> Staking Rewards (Delegator)
+            <div class="space-y-6">
+                <div class="bg-main border border-border-color rounded-xl p-6 flex items-center justify-between shadow-inner relative overflow-hidden">
+                    <div class="relative z-10">
+                        <p class="text-zinc-400 text-sm flex items-center gap-2 mb-1">
+                             <i class="fa-solid fa-layer-group text-purple-400"></i> Staking Rewards
                         </p>
-                        <p class="text-3xl font-bold text-purple-400 mt-1">${formatBigNumber(totalGrossRewards.stakingRewards).toFixed(4)} $BKC</p>
+                        <p class="text-4xl font-bold text-purple-400">${formatBigNumber(totalGrossRewards.stakingRewards).toFixed(4)} <span class="text-lg text-purple-400/70">$BKC</span></p>
+                        <p class="text-xs text-zinc-500 mt-1">From Global Consensus Pool</p>
                     </div>
-                     <div class="bg-main border border-border-color rounded-xl p-5 shadow-inner">
-                        <p class="text-zinc-400 text-sm flex items-center gap-2">
-                            <i class="fa-solid fa-hard-hat text-blue-400"></i> Mining Rewards (PoP)
-                        </p>
-                        <p class="text-3xl font-bold text-blue-400 mt-1">${formatBigNumber(totalGrossRewards.minerRewards).toFixed(4)} $BKC</p>
+                    <div class="absolute right-0 bottom-0 p-4 opacity-5">
+                        <i class="fa-solid fa-coins text-9xl"></i>
                     </div>
                 </div>
 
-                <div class="p-5 bg-zinc-700/50 border border-amber-500/30 rounded-xl">
-                    <div class="flex justify-between items-center text-lg font-semibold border-b border-zinc-600 pb-2 mb-2">
-                        <span>Total Available (Gross):</span>
-                        <span class="text-amber-400">${formatBigNumber(totalRewards).toFixed(4)} $BKC</span>
+                <div class="p-6 bg-zinc-800/50 border border-zinc-700 rounded-xl">
+                    <div class="flex justify-between items-end border-b border-zinc-700 pb-3 mb-3">
+                        <span class="text-lg font-semibold text-white">Total Gross:</span>
+                        <span class="text-xl font-bold text-amber-400">${formatBigNumber(totalRewards).toFixed(4)} $BKC</span>
                     </div>
 
-                    <div class="space-y-1">
-                        <div class="flex justify-between text-sm text-zinc-400">
-                            <span>Base Claim Fee (${basePenaltyPercent.toFixed(2)}%):</span>
-                            <span class="${calculatedDiscountAmount > 0n ? 'line-through text-red-400/70' : 'text-red-400'}">-${formatBigNumber(baseFeeAmount).toFixed(4)} $BKC</span>
+                    <div class="space-y-2 text-sm">
+                        <div class="flex justify-between items-center">
+                            <span class="text-zinc-400">Base Claim Fee (${basePenaltyPercent.toFixed(2)}%):</span>
+                            <span class="${calculatedDiscountAmount > 0n ? 'line-through text-red-400/60' : 'text-red-400'}">-${formatBigNumber(baseFeeAmount).toFixed(4)} $BKC</span>
                         </div>
                         
                         ${efficiencyData.highestBoost > 0 ? 
-                            `<div class="flex justify-between font-semibold text-sm text-cyan-400">
-                                <span>Booster Discount (${efficiencyData.highestBoost / 100}%):</span>
+                            `<div class="flex justify-between items-center font-medium text-green-400 bg-green-400/5 p-2 rounded">
+                                <span><i class="fa-solid fa-sparkles mr-1"></i> Booster Discount (${efficiencyData.highestBoost / 100}%):</span>
                                 <span>+${formatBigNumber(calculatedDiscountAmount).toFixed(4)} $BKC</span>
                              </div>` : 
-                            `<div class="flex justify-between text-sm text-zinc-400">
+                            `<div class="flex justify-between items-center text-zinc-500 italic">
                                 <span>Booster Discount:</span>
-                                <span>0.00%</span>
+                                <span>0.00% (No Booster)</span>
                             </div>`
                         }
                     </div>
 
-                    <div class="flex justify-between font-bold text-2xl pt-3 mt-3 border-t border-zinc-600">
-                        <span>NET TO RECEIVE:</span>
+                    <div class="flex justify-between items-center font-bold text-2xl pt-4 mt-4 border-t border-zinc-700">
+                        <span class="text-zinc-200">NET TO RECEIVE:</span>
                         <span class="${netClaimAmount > 0n ? 'text-green-400' : 'text-zinc-500'}">${formatBigNumber(netClaimAmount).toFixed(4)} $BKC</span>
                     </div>
                 </div>
             </div>
 
             <p class="text-xs text-zinc-500 mt-4 text-center">
-                Fees are pooled and distributed to Delegator rewards to reinforce the pStake ecosystem.
+                <i class="fa-solid fa-circle-info mr-1"></i> Claim fees are redistributed to the ecosystem to sustain long-term rewards.
             </p>
 
-            <button id="claimAllRewardsBtn" class="w-full bg-amber-500 hover:bg-amber-600 text-zinc-900 font-bold py-3 px-4 rounded-md text-lg transition-opacity mt-5 ${totalRewards === 0n ? 'btn-disabled' : ''}" ${totalRewards === 0n ? 'disabled' : ''}>
-                 <i class="fa-solid fa-gift mr-2"></i> Claim All Rewards Now
+            <button id="claimAllRewardsBtn" class="w-full bg-amber-500 hover:bg-amber-600 text-zinc-900 font-bold py-4 px-6 rounded-lg text-xl transition-all shadow-lg hover:shadow-amber-500/20 mt-6 ${totalRewards === 0n ? 'btn-disabled opacity-50 cursor-not-allowed' : ''}" ${totalRewards === 0n ? 'disabled' : ''}>
+                 <i class="fa-solid fa-gift mr-2"></i> Claim All Rewards
             </button>
         `;
 
@@ -125,7 +120,6 @@ async function renderClaimPanel() {
             const { stakingRewards, minerRewards } = totalGrossRewards;
             const success = await executeUniversalClaim(stakingRewards, minerRewards, btn);
             if (success) {
-                // Força o re-render após a reivindicação
                 await RewardsPage.render(true);
             }
         });
@@ -147,25 +141,30 @@ export const RewardsPage = {
         contentWrapper.innerHTML = `
             <h1 class="text-2xl md:text-3xl font-bold mb-8">My Rewards Overview</h1>
 
-            <div id="claimable-rewards-panel" class="mb-8 p-6 bg-sidebar border border-border-color rounded-xl max-w-2xl mx-auto shadow-2xl">
-                <h2 class="text-xl font-bold mb-4 text-amber-300">Available Rewards for Claim</h2>
-                <div id="rewards-details-content">
-                    ${State.isConnected ? renderLoading() : renderNoData("Connect your wallet to view rewards.")}
+            <div id="claimable-rewards-panel" class="mb-10 p-1 bg-gradient-to-br from-amber-500/20 to-purple-500/20 rounded-2xl">
+                <div class="bg-sidebar border border-border-color rounded-xl p-6 md:p-8 shadow-2xl">
+                    <h2 class="text-xl font-bold mb-6 text-amber-300 flex items-center gap-2">
+                        <i class="fa-solid fa-sack-dollar"></i> Available Rewards
+                    </h2>
+                    <div id="rewards-details-content">
+                        ${State.isConnected ? renderLoading() : renderNoData("Connect your wallet to view rewards.")}
+                    </div>
                 </div>
             </div>
 
-            <h2 class="text-xl font-bold mb-4 mt-12">Vesting & Certificates Status</h2>
-            <div id="certificates-list-container" class="p-8 bg-sidebar/50 border border-zinc-700 rounded-xl text-center">
-                <i class="fa-solid fa-triangle-exclamation text-4xl text-yellow-500 mb-3"></i>
-                <h3 class="text-xl font-bold">Vesting Certificates are Deprecated</h3>
-                <p class="text-zinc-400 mt-2">This feature has been consolidated or removed from the current protocol architecture.</p>
+            <div class="opacity-70 hover:opacity-100 transition-opacity">
+                <h2 class="text-lg font-bold mb-4 text-zinc-400">Legacy Features</h2>
+                <div id="certificates-list-container" class="p-6 bg-sidebar/30 border border-dashed border-zinc-700 rounded-xl text-center">
+                    <i class="fa-solid fa-clock-rotate-left text-3xl text-zinc-600 mb-3"></i>
+                    <h3 class="text-base font-semibold text-zinc-500">Vesting Certificates (Deprecated)</h3>
+                    <p class="text-sm text-zinc-600 mt-1">This feature has been consolidated into the Global Staking Pool.</p>
+                </div>
             </div>
         `;
-
 
         if (State.isConnected) {
             await loadUserData(); 
             await renderClaimPanel();
         }
-    },
+    }
 };

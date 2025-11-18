@@ -64,6 +64,7 @@ contract MiningManager is
     /**
      * @notice Universal revenue funnel for PoP mining (new tokens) and Fee Distribution (existing tokens).
      * @dev The calling contract (Spoke) must have transferred the `_purchaseAmount` (fee) to this contract.
+     * @dev UPDATED: Distribution is now split only between Treasury and Delegator Pool (Single Staking Pool).
      */
     function performPurchaseMining(
         string calldata _serviceKey,
@@ -80,17 +81,16 @@ contract MiningManager is
 
         if (totalMintAmount > 0) {
             uint256 miningTreasuryBips = ecosystemManager.getMiningDistributionBips("TREASURY");
-            uint256 miningValidatorBips = ecosystemManager.getMiningDistributionBips("VALIDATOR_POOL");
+            // "DELEGATOR_POOL" now represents the single Global Staking Pool
             uint256 miningDelegatorBips = ecosystemManager.getMiningDistributionBips("DELEGATOR_POOL");
 
             require(
-                miningTreasuryBips + miningValidatorBips + miningDelegatorBips == 10000,
-                "MM: Mining Distribution BIPS must equal 10000"
+                miningTreasuryBips + miningDelegatorBips == 10000,
+                "MM: Mining Distribution BIPS must equal 10000 (Treasury + Delegator)"
             );
 
             uint256 mintTreasuryAmount = (totalMintAmount * miningTreasuryBips) / 10000;
-            uint256 mintValidatorAmount = (totalMintAmount * miningValidatorBips) / 10000;
-            uint256 mintDelegatorAmount = totalMintAmount - mintTreasuryAmount - mintValidatorAmount;
+            uint256 mintDelegatorAmount = totalMintAmount - mintTreasuryAmount;
 
             // Mint the total new amount to this contract
             bkcToken.mint(address(this), totalMintAmount);
@@ -99,38 +99,35 @@ contract MiningManager is
                 bkcToken.transfer(treasury, mintTreasuryAmount);
             }
 
-            uint256 totalDMMintShare = mintValidatorAmount + mintDelegatorAmount;
-            if (totalDMMintShare > 0) {
-                bkcToken.approve(dm, totalDMMintShare);
-                IDelegationManager(dm).depositMiningRewards(mintValidatorAmount, mintDelegatorAmount);
+            if (mintDelegatorAmount > 0) {
+                bkcToken.approve(dm, mintDelegatorAmount);
+                // UPDATED CALL: Only passes the total amount for the single pool
+                IDelegationManager(dm).depositMiningRewards(mintDelegatorAmount);
             }
         }
 
         // --- 2. FEE DISTRIBUTION (Original Tokens) ---
         if (_purchaseAmount > 0) {
             uint256 feeTreasuryBips = ecosystemManager.getFeeDistributionBips("TREASURY");
-            uint256 feeValidatorBips = ecosystemManager.getFeeDistributionBips("VALIDATOR_POOL");
             uint256 feeDelegatorBips = ecosystemManager.getFeeDistributionBips("DELEGATOR_POOL");
 
             require(
-                feeTreasuryBips + feeValidatorBips + feeDelegatorBips == 10000,
-                "MM: Fee Distribution BIPS must equal 10000"
+                feeTreasuryBips + feeDelegatorBips == 10000,
+                "MM: Fee Distribution BIPS must equal 10000 (Treasury + Delegator)"
             );
 
             uint256 feeTreasuryAmount = (_purchaseAmount * feeTreasuryBips) / 10000;
-            uint256 feeValidatorAmount = (_purchaseAmount * feeValidatorBips) / 10000;
-            uint256 feeDelegatorAmount = _purchaseAmount - feeTreasuryAmount - feeValidatorAmount;
+            uint256 feeDelegatorAmount = _purchaseAmount - feeTreasuryAmount;
 
             // Tokens are already in this contract (transferred by the Spoke)
             if (feeTreasuryAmount > 0) {
                 bkcToken.transfer(treasury, feeTreasuryAmount);
             }
 
-            uint256 totalDMFeeShare = feeValidatorAmount + feeDelegatorAmount;
-            if (totalDMFeeShare > 0) {
-                bkcToken.approve(dm, totalDMFeeShare);
-                // We use the *same* deposit function, as it just handles distribution
-                IDelegationManager(dm).depositMiningRewards(feeValidatorAmount, feeDelegatorAmount);
+            if (feeDelegatorAmount > 0) {
+                bkcToken.approve(dm, feeDelegatorAmount);
+                // UPDATED CALL: Only passes the total amount for the single pool
+                IDelegationManager(dm).depositMiningRewards(feeDelegatorAmount);
             }
         }
     }

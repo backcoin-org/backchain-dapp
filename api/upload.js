@@ -104,23 +104,12 @@ export default async function handler(req, res) {
         // ### 3. UPLOAD DOS METADADOS (ETAPA 2 de 2) ###
         // =======================================================
         
-        // --- ✅ ALTERAÇÃO AQUI: CONSTRUINDO A DESCRIÇÃO COMBINADA ---
-
-        // 1. Pega a descrição opcional do usuário
+        // --- CONSTRUINDO A DESCRIÇÃO COMBINADA ---
         const userDescription = fields.description ? fields.description[0] : 'No description provided.';
-        
-        // 2. Gera o timestamp do servidor
         const notarizationTimestamp = new Date().toISOString();
-        
-        // 3. Pega a carteira verificada
         const notarizerWallet = address;
-
-        // 4. Monta a string de descrição final
         const finalDescription = `Notarized By Backcoin.Org Decentralized Notary On ${notarizationTimestamp}, Wallet ${notarizerWallet}. Description: "${userDescription}"`;
         
-        // --- FIM DA ALTERAÇÃO ---
-
-
         const mimeType = file.mimetype || '';
         let contentField = 'image';
         if (mimeType.startsWith('audio/') || mimeType.startsWith('video/')) {
@@ -130,14 +119,16 @@ export default async function handler(req, res) {
         // Cria o objeto JSON de metadados
         const metadata = {
             name: `Notary Certificate - ${file.originalFilename || 'File'}`,
-            
-            // ✅ A string combinada vai aqui
             description: finalDescription, 
-            
             [contentField]: fileHash, 
             external_url: fileHash, 
             
-            // ❌ REMOVIDO: 'issuer' e 'attributes' não são mais necessários
+            // ✅ BLOCO 'attributes' ADICIONADO PARA CONSISTÊNCIA
+            attributes: [
+                { trait_type: "MIME Type", value: mimeType },
+                { trait_type: "Notarized By", value: notarizerWallet },
+                { trait_type: "Timestamp", value: notarizationTimestamp }
+            ]
         };
         
         const metadataOptions = {

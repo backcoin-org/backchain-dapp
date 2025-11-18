@@ -13,9 +13,9 @@ interface IDelegationManager {
 
     /**
      * @notice Deposits reward shares from the MiningManager.
-     * @dev This is now the universal function for ALL rewards (both minted tokens and fees).
+     * @dev Updated for the Single Pool model: receives the total amount to be distributed to all delegators.
      */
-    function depositMiningRewards(uint256 _validatorShare, uint256 _delegatorShare) external;
+    function depositMiningRewards(uint256 _amount) external;
 
     /**
      * @notice Returns the total network pStake.
@@ -50,7 +50,7 @@ interface IMiningManager {
 
 /**
  * @title IRewardBoosterNFT
- * @dev Interface to verify a Booster NFT. (No changes needed)
+ * @dev Interface to verify a Booster NFT.
  */
 interface IRewardBoosterNFT {
     /**
@@ -77,7 +77,7 @@ interface IRewardBoosterNFT {
 
 /**
  * @title INFTLiquidityPoolFactory
- * @dev Interface for the Factory that creates NFT Liquidity Pools. (No changes needed)
+ * @dev Interface for the Factory that creates NFT Liquidity Pools.
  */
 interface INFTLiquidityPoolFactory {
     /**
@@ -90,7 +90,7 @@ interface INFTLiquidityPoolFactory {
 
 /**
  * @title INFTLiquidityPool
- * @dev Interface for the individual NFT Liquidity Pool contract. (No changes needed)
+ * @dev Interface for the individual NFT Liquidity Pool contract.
  */
 interface INFTLiquidityPool {
     /**

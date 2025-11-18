@@ -1,8 +1,4 @@
 // pages/StorePage.js
-// ✅ ARQUIVO ATUALIZADO
-// - Texto do botão de pStake insuficiente alterado para "Delegate Now".
-
-// --- IMPORTAÇÕES E CONFIGURAÇÕES ---
 const ethers = window.ethers;
 
 import { State } from '../state.js';
@@ -12,6 +8,7 @@ import { executeBuyBooster, executeSellBooster } from '../modules/transactions.j
 import { formatBigNumber, renderLoading, renderError } from '../utils.js';
 import { boosterTiers, addresses, nftPoolABI, ipfsGateway } from '../config.js'; 
 import { rewardBoosterABI, ecosystemManagerABI } from '../config.js'; // Fallback ABI
+import { showToast } from '../ui-feedback.js'; // Adicionado import faltante
 
 // --- ESTADO LOCAL DA PÁGINA (TradeState) ---
 const TradeState = {
@@ -30,7 +27,7 @@ const TradeState = {
     isModalOpen: false, 
 };
 
-// --- (Helper para Imagem - sem alterações) ---
+// --- (Helper para Imagem) ---
 function buildImageUrl(ipfsIoUrl) {
     if (!ipfsIoUrl) return './assets/bkc_logo_3d.png'; 
     if (ipfsIoUrl.includes('ipfs.io/ipfs/')) {
@@ -47,7 +44,6 @@ function buildImageUrl(ipfsIoUrl) {
 
 // --- RENDERIZAÇÃO DA UI (SWAP BOX) ---
 
-// (renderSwapBoxInterface - sem alterações)
 async function renderSwapBoxInterface() {
     const el = document.getElementById('store-items-grid');
     if (!el) return;
@@ -79,7 +75,6 @@ async function renderSwapBoxInterface() {
     renderPoolSelectorModal();
 }
 
-// (renderSwapPanels - sem alterações)
 async function renderSwapPanels() {
     const contentEl = document.getElementById('swap-box-content');
     if (!contentEl) return;
@@ -95,7 +90,7 @@ async function renderSwapPanels() {
             tokenSymbol: "BKC",
             tokenImg: bkcLogoPath,
             amount: TradeState.isDataLoading ? "..." : (TradeState.buyPrice > 0n ? formatBigNumber(TradeState.buyPrice).toFixed(2) : "0.00"),
-            balance: `Balance: ${formatBigNumber(State.currentUserBalance).toFixed(2)}`
+            balance: `Balance: ${formatBigNumber(State.currentUserBalance || 0n).toFixed(2)}`
         });
         
         const sellOutBalanceText = (selectedTier && TradeState.firstAvailableTokenIdForBuy === null && !TradeState.isDataLoading) ? 'Sold Out' : '';
@@ -159,9 +154,6 @@ async function renderSwapPanels() {
     `;
 }
 
-/**
- * Renderiza o botão principal de execução (Comprar, Vender, Saldo Insuficiente, etc.)
- */
 function renderExecuteButton() {
     const buttonEl = document.getElementById('swap-box-button-container');
     if (!buttonEl) return;
@@ -175,11 +167,10 @@ function renderExecuteButton() {
         
         // 1. Verifica o pStake (prioridade mais alta após a conexão)
         if (State.isConnected && !TradeState.meetsPStakeRequirement) {
-            // ✅ *** INÍCIO DA CORREÇÃO DE TEXTO ***
-            btnText = "Delegate Now"; // Seu texto solicitado
-            // ✅ *** FIM DA CORREÇÃO DE TEXTO ***
+            // ✅ CORREÇÃO DE TEXTO AQUI
+            btnText = "Delegate Now"; 
             isDisabled = false; // O botão é clicável (para navegar)
-            isPStakeInsufficient = true; // Define o novo flag
+            isPStakeInsufficient = true; 
         }
         // 2. Se o pStake estiver OK, continua a lógica normal
         else if (TradeState.tradeDirection === 'buy') {
@@ -253,7 +244,6 @@ function renderExecuteButton() {
     }
 }
 
-// (renderPanel - sem alterações)
 function renderPanel({ label, tokenSymbol, tokenImg, amount, balance, details, isSelector = false }) {
     const finalTokenImg = buildImageUrl(tokenImg);
     const tokenDisplay = finalTokenImg 
@@ -281,7 +271,6 @@ function renderPanel({ label, tokenSymbol, tokenImg, amount, balance, details, i
     `;
 }
 
-// (renderPoolSelectorModal - sem alterações)
 function renderPoolSelectorModal() {
     const modalListEl = document.getElementById('pool-modal-list');
     if (!modalListEl) return;
@@ -409,7 +398,6 @@ async function loadDataForSelectedPool() {
     }
 }
 
-// (toggleModal - sem alterações)
 function toggleModal(isOpen) {
     TradeState.isModalOpen = isOpen;
     const modalEl = document.getElementById('pool-select-modal');
@@ -463,10 +451,8 @@ function setupStorePageListeners() {
         const delegateBtn = e.target.closest('#go-to-delegate-btn');
         if (delegateBtn) {
             e.preventDefault();
-            window.location.hash = '#dashboard';
-            
-            // Tenta forçar a aba de "Stake" (se o DashboardPage for configurado para isso)
-            sessionStorage.setItem('navigateToTab', 'tab-stake');
+            // Clica no link da sidebar para navegar corretamente para a aba 'mine'
+            document.querySelector('.sidebar-link[data-target="mine"]')?.click();
             return;
         }
 
@@ -504,7 +490,7 @@ function setupStorePageListeners() {
                     await loadDataForSelectedPool(); 
                 }
             } else {
-                if (TradeState.firstAvailableTokenId === null || TradeState.firstAvailableTokenId <= 0n) {
+                if (TradeState.firstAvailableTokenId === null || TradeState.firstAvailableTokenId <= 0n) { 
                      showToast("No NFT selected or Token ID is invalid.", "error");
                      return;
                 }

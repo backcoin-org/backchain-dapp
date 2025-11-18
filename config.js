@@ -28,7 +28,6 @@ export async function loadAddresses() {
         const jsonAddresses = await response.json();
 
         // Valida endereços essenciais
-        // O sistema agora se baseia em bkcToken, delegationManager e ecosystemManager
         const requiredAddresses = ['bkcToken', 'delegationManager', 'ecosystemManager'];
         const missingAddresses = requiredAddresses.filter(key => !jsonAddresses[key]);
         
@@ -55,6 +54,7 @@ export async function loadAddresses() {
 
         // FortunePool renomeado para actionsManager no frontend
         addresses.actionsManager = jsonAddresses.fortunePool; 
+        addresses.fortunePool = jsonAddresses.fortunePool; // Mantém alias original também
         
         // Endereços auxiliares
         addresses.bkcDexPoolAddress = jsonAddresses.bkcDexPoolAddress || "#"; 
@@ -62,43 +62,21 @@ export async function loadAddresses() {
         addresses.miningManager = jsonAddresses.miningManager;
         addresses.oracleWalletAddress = jsonAddresses.oracleWalletAddress;
         addresses.faucet = jsonAddresses.faucet; 
-        // REMOVIDO: addresses.rewardManager
 
         console.log("✅ Contract addresses loaded:", addresses);
         return true;
 
     } catch (error) {
         console.error("❌ CRITICAL ERROR: Failed to load contract addresses.", error);
-        
-        // CÓDIGO DE TRATAMENTO DE ERRO EM TELA CHEIA (Mantido)
-        const errorDiv = document.createElement('div');
-        errorDiv.style.cssText = 'position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.95); color: white; display: flex; align-items: center; justify-content: center; z-index: 9999; padding: 20px;';
-        errorDiv.innerHTML = `
-            <div style="max-width: 600px; background: #1e1e1e; border: 2px solid #ef4444; border-radius: 8px; padding: 30px;">
-                <h2 style="color: #ef4444; margin-bottom: 15px; font-size: 24px;">⚠️ Configuration Error</h2>
-                <p style="margin-bottom: 10px;">Could not load <code style="background: #333; padding: 2px 6px; border-radius: 3px;">deployment-addresses.json</code></p>
-                <p style="margin-bottom: 20px; color: #aaa; font-size: 14px;">The dApp requires contract addresses to function.</p>
-                <details style="margin-bottom: 20px; background: #2a2a2a; padding: 10px; border-radius: 4px;">
-                    <summary style="cursor: pointer; font-weight: bold; color: #fbbf24;">Technical Details</summary>
-                    <pre style="margin-top: 10px; color: #ef4444; font-size: 12px; overflow-x: auto;">${error.message}</pre>
-                </details>
-                <button onclick="location.reload()" style="background: #ef4444; color: white; border: none; padding: 10px 20px; border-radius: 4px; cursor: pointer; font-size: 16px; font-weight: bold;">
-                    🔄 Retry
-                </button>
-            </div>
-        `;
-        document.body.innerHTML = '';
-        document.body.appendChild(errorDiv);
-        
         return false;
     }
 }
 
 // ============================================================================
-// NETWORK CONFIGURATION (CHAVE WSS HARDCODED)
+// NETWORK CONFIGURATION
 // ============================================================================
 
-// Chave WSS hardcoded diretamente
+// Chave WSS hardcoded diretamente (Exemplo Amoy/Sepolia)
 const WSS_KEY = "wJwRXHRaYO3THysyZWvHL";
 
 // 1. Define a URL usando a chave hardcoded
@@ -107,7 +85,7 @@ export const sepoliaWssUrl = `wss://eth-sepolia.g.alchemy.com/v2/${WSS_KEY}`;
 // Converte WSS para HTTP/HTTPS para RPC tradicional
 export const sepoliaRpcUrl = sepoliaWssUrl.replace('wss://', 'https://');
 
-export const sepoliaChainId = 11155111n;
+export const sepoliaChainId = 11155111n; // Sepolia ID (Use 80002 para Amoy se necessário)
 
 // IPFS Gateway
 export const ipfsGateway = "https://white-defensive-eel-240.mypinata.cloud/ipfs/";
@@ -119,9 +97,9 @@ export const ipfsGateway = "https://white-defensive-eel-240.mypinata.cloud/ipfs/
 // Faucet amount (100 BKC)
 export const FAUCET_AMOUNT_WEI = 100n * 10n**18n; 
 
-// Booster tiers configuration (Mantido)
+// Booster tiers configuration
 export const boosterTiers = [
-    { name: "Diamond", boostBips: 5000, color: "text-cyan-400", img: "https://ipfs.io/ipfs/bafybeigf3n2q2cbsnsmqytv57e6dvuimtzsg6pp7iyhhhmqpaxgpzlmgem", borderColor: "border-cyan-400/50", glowColor: "bg-cyan-500/10" },
+    { name: "Diamond", boostBips: 5000, color: "text-cyan-400", img: "https://ipfs.io/ipfs/bafybeign2k73pq5pdicg2v2jdgumavw6kjmc4nremdenzvq27ngtcusv5i", borderColor: "border-cyan-400/50", glowColor: "bg-cyan-500/10" },
     { name: "Platinum", boostBips: 4000, color: "text-gray-300", img: "https://ipfs.io/ipfs/bafybeiag32gp4wssbjbpxjwxewer64fecrtjryhmnhhevgec74p4ltzrau", borderColor: "border-gray-300/50", glowColor: "bg-gray-400/10" },
     { name: "Gold", boostBips: 3000, color: "text-amber-400", img: "https://ipfs.io/ipfs/bafybeido6ah36xn4rpzkvl5avicjzf225ndborvx726sjzpzbpvoogntem", borderColor: "border-amber-400/50", glowColor: "bg-amber-500/10" },
     { name: "Silver", boostBips: 2000, color: "text-gray-400", img: "https://ipfs.io/ipfs/bafybeiaktaw4op7zrvsiyx2sghphrgm6sej6xw362mxgu326ahljjyu3gu", borderColor: "border-gray-400/50", glowColor: "bg-gray-500/10" },
@@ -131,7 +109,7 @@ export const boosterTiers = [
 ];
 
 // ============================================================================
-// CONTRACT ABIs (Ajustados)
+// CONTRACT ABIs (AJUSTADOS PARA GLOBAL STAKING)
 // ============================================================================
 
 export const bkcTokenABI = [
@@ -148,28 +126,29 @@ export const bkcTokenABI = [
 ];
 
 export const delegationManagerABI = [
+    // --- View Functions ---
     "function totalNetworkPStake() view returns (uint256)",
-    "function getAllValidators() view returns (address[])",
-    // CORREÇÃO: Removido selfStakeUnlockTime para corresponder à estrutura atual de 4 campos.
-    "function validators(address) view returns (bool isRegistered, uint256 selfStakeAmount, uint256 totalPStake, uint256 totalDelegatedAmount)",
     "function userTotalPStake(address) view returns (uint256)",
-    "function getDelegationsOf(address _user) view returns (tuple(uint256 amount, uint256 unlockTime, uint256 lockDuration, address validator)[])",
-    "function pendingDelegatorRewards(address _user) public view returns (uint256)",
-    "function pendingValidatorRewards(address _validator) public view returns (uint256)", 
-    "function VALIDATOR_LOCK_DURATION() view returns (uint256)",
-    "function hasPaidRegistrationFee(address) view returns (bool)",
+    // Struct atualizada: {amount, unlockTime, lockDuration} (Sem Validator Address)
+    "function getDelegationsOf(address _user) view returns (tuple(uint256 amount, uint256 unlockTime, uint256 lockDuration)[])",
+    "function pendingRewards(address _user) public view returns (uint256)",
+    
+    // --- Constants ---
     "function MIN_LOCK_DURATION() view returns (uint256)",
     "function MAX_LOCK_DURATION() view returns (uint256)",
-    "function getMinValidatorStake() view returns (uint256)",
-    "function payRegistrationFee()",
-    "function registerValidator(address _validatorAddress)",
-    "function delegate(address _validatorAddress, uint256 _totalAmount, uint256 _lockDuration, uint256 _boosterTokenId)",
+
+    // --- Write Functions (Updated Signatures) ---
+    // delegate(amount, duration, boosterId) -> Sem validator address
+    "function delegate(uint256 _totalAmount, uint256 _lockDuration, uint256 _boosterTokenId)",
     "function unstake(uint256 _delegationIndex, uint256 _boosterTokenId)",
     "function forceUnstake(uint256 _delegationIndex, uint256 _boosterTokenId)",
-    "function claimDelegatorReward(uint256 _boosterTokenId)",
-    "event Delegated(address indexed user, address indexed validator, uint256 delegationIndex, uint256 amount, uint256 feePaid)",
+    // claimReward(boosterId) -> Renomeado de claimDelegatorReward para padronizar ou manter claimDelegatorReward se não mudou nome
+    "function claimReward(uint256 _boosterTokenId)",
+    
+    // --- Events ---
+    "event Delegated(address indexed user, uint256 delegationIndex, uint256 amount, uint256 pStakeGenerated)",
     "event Unstaked(address indexed user, uint256 delegationIndex, uint256 amount, uint256 feePaid)",
-    "event DelegatorRewardClaimed(address indexed delegator, uint256 amount)"
+    "event RewardClaimed(address indexed user, uint256 amount)"
 ];
 
 export const rewardBoosterABI = [

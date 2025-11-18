@@ -13,6 +13,11 @@ import { addresses, boosterTiers, ipfsGateway } from '../config.js';
 // ====================================================================
 const API_TIMEOUT_MS = 10000; // 10 segundos de timeout para APIs lentas
 
+// Cache para dados do sistema para evitar chamadas excessivas
+let systemDataCache = null;
+let systemDataCacheTime = 0;
+const CACHE_DURATION_MS = 60000; // 1 minuto de cache
+
 /**
  * Executa um fetch com um tempo limite.
  * Se o tempo limite for atingido, a promise é rejeitada.
@@ -92,13 +97,22 @@ export const safeContractCall = async (contract, method, args = [], fallbackValu
 };
 
 // ====================================================================
-// loadSystemDataFromAPI (AJUSTADA COM TIMEOUT)
+// loadSystemDataFromAPI (AJUSTADA COM TIMEOUT E CACHE)
 // ====================================================================
 export async function loadSystemDataFromAPI() {
     
     if (!State.systemFees) State.systemFees = {};
     if (!State.systemPStakes) State.systemPStakes = {};
     if (!State.boosterDiscounts) State.boosterDiscounts = {};
+
+    // Verifica Cache
+    const now = Date.now();
+    if (systemDataCache && (now - systemDataCacheTime < CACHE_DURATION_MS)) {
+        console.log("Using cached system data.");
+        // Popula o State com o cache
+        applySystemDataToState(systemDataCache);
+        return true;
+    }
 
     try {
         console.log("Loading system rules from API with 10s timeout...");
@@ -111,17 +125,11 @@ export async function loadSystemDataFromAPI() {
         }
         const systemData = await response.json(); 
 
-        State.systemFees = {};
-        for (const key in systemData.fees) {
-             State.systemFees[key] = BigInt(systemData.fees[key]);
-        }
+        applySystemDataToState(systemData);
         
-        State.systemPStakes = {};
-        for (const key in systemData.pStakeRequirements) {
-             State.systemPStakes[key] = BigInt(systemData.pStakeRequirements[key]);
-        }
-        
-        State.boosterDiscounts = systemData.discounts; 
+        // Atualiza Cache
+        systemDataCache = systemData;
+        systemDataCacheTime = now;
         
         console.log("System rules loaded and synced to State.");
         return true;
@@ -133,6 +141,21 @@ export async function loadSystemDataFromAPI() {
         return false;
     }
 }
+
+function applySystemDataToState(systemData) {
+    State.systemFees = {};
+    for (const key in systemData.fees) {
+         State.systemFees[key] = BigInt(systemData.fees[key]);
+    }
+    
+    State.systemPStakes = {};
+    for (const key in systemData.pStakeRequirements) {
+         State.systemPStakes[key] = BigInt(systemData.pStakeRequirements[key]);
+    }
+    
+    State.boosterDiscounts = systemData.discounts; 
+}
+
 // ====================================================================
 
 
@@ -149,12 +172,12 @@ export async function loadPublicData() {
 
         const [
             totalSupply, 
-            validators, 
+            // validators (removido, pois getAllValidators não existe mais)
             MAX_SUPPLY, 
             TGE_SUPPLY
         ] = await Promise.all([
             safeContractCall(publicBkcContract, 'totalSupply', [], 0n), 
-            safeContractCall(publicDelegationContract, 'getAllValidators', [], []),
+            // safeContractCall(publicDelegationContract, 'getAllValidators', [], []), // REMOVED
             safeContractCall(publicBkcContract, 'MAX_SUPPLY', [], 0n), 
             safeContractCall(publicBkcContract, 'TGE_SUPPLY', [], 0n)
         ]);
@@ -164,39 +187,12 @@ export async function loadPublicData() {
              console.warn("Usando TGE_SUPPLY como estimativa de Total Supply due to totalSupply() call failure.");
         }
         
-        if (validators.length === 0) {
-            State.allValidatorsData = [];
-        } else {
-            // CORREÇÃO: Otimização para carregar todos os dados dos validadores em paralelo.
-            // LÊ OS 4 CAMPOS DA ESTRUTURA Validator POR ÍNDICE: [isRegistered, selfStakeAmount, totalPStake, totalDelegatedAmount]
-            const pStakePromises = validators.map(addr => 
-                safeContractCall(publicDelegationContract, 'validators', [addr], [])
-            );
+        // Como não há mais validadores individuais públicos para listar, limpamos o array ou usamos dados mock se necessário para UI legacy
+        State.allValidatorsData = []; 
 
-            const validatorDataRaw = await Promise.all(pStakePromises);
-            
-            State.allValidatorsData = validators.map((addr, index) => {
-                const data = validatorDataRaw[index];
-                
-                // Fallback robusto no caso de BAD_DATA (safeContractCall retorna [])
-                if (!data || data.length < 4 || data[0] === false) {
-                     return {
-                         addr, isRegistered: false, pStake: 0n, selfStake: 0n, totalDelegatedAmount: 0n
-                     };
-                }
-
-                return {
-                    addr,
-                    isRegistered: data[0] === true,
-                    selfStake: data[1] || 0n,
-                    pStake: data[2] || 0n,
-                    totalDelegatedAmount: data[3] || 0n
-                };
-            }).filter(v => v.isRegistered); // Filtra apenas validadores registrados 
-        }
-
-        const recalculatedTotalPStake = State.allValidatorsData.reduce((acc, val) => acc + val.pStake, 0n);
-        State.totalNetworkPStake = recalculatedTotalPStake;
+        // Carrega o Total Network pStake diretamente
+        const totalPStake = await safeContractCall(publicDelegationContract, 'totalNetworkPStake', [], 0n);
+        State.totalNetworkPStake = totalPStake;
         
         // Chamada à API com Timeout
         await loadSystemDataFromAPI();
@@ -225,13 +221,24 @@ export async function loadUserData() {
 
         State.currentUserBalance = balance;
         
+        // Mapeia a resposta da struct (que agora tem 3 campos: amount, unlockTime, lockDuration)
+        // Ajustado para refletir a nova ABI sem 'validator'
         State.userDelegations = delegationsRaw.map((d, index) => ({
-            amount: d[0], unlockTime: d[1],
-            lockDuration: d[2], validator: d[3], index,
+            amount: d[0], 
+            unlockTime: d[1],
+            lockDuration: d[2], 
+            // validator: d[3], // REMOVIDO
+            index,
             txHash: null 
         }));
         
         State.userTotalPStake = totalUserPStake;
+
+        // Tenta carregar saldo nativo (ETH/MATIC) para verificações de gás
+        if (State.provider) {
+            const nativeBalance = await State.provider.getBalance(State.userAddress);
+            State.currentUserNativeBalance = nativeBalance;
+        }
         
     } catch (e) {
         console.error("Error loading user data:", e);
@@ -244,11 +251,21 @@ export async function calculateUserTotalRewards() {
     }
 
     try {
-        const delegatorReward = await safeContractCall(State.delegationManagerContract, 'pendingDelegatorRewards', [State.userAddress], 0n);
-        const minerRewards = await safeContractCall(State.delegationManagerContract, 'pendingValidatorRewards', [State.userAddress], 0n);
+        // 1. Staking Rewards (Delegator) - Agora chamado 'pendingRewards' ou 'pendingDelegatorRewards' dependendo do contrato final
+        // Vou assumir 'pendingRewards' conforme a nova ABI sugerida, mas mantenho fallback
+        let stakingRewards = await safeContractCall(State.delegationManagerContract, 'pendingRewards', [State.userAddress], 0n);
+        
+        // Se falhar, tenta o nome antigo por compatibilidade se o contrato não foi atualizado exatamente como planejado
+        if (stakingRewards === 0n) {
+             stakingRewards = await safeContractCall(State.delegationManagerContract, 'pendingDelegatorRewards', [State.userAddress], 0n);
+        }
 
-        const stakingRewards = delegatorReward;
-        return { stakingRewards, minerRewards, totalRewards: stakingRewards + minerRewards };
+        // 2. Miner Rewards (Validator) - REMOVED (Always 0)
+        const minerRewards = 0n; 
+
+        const totalRewards = stakingRewards + minerRewards;
+
+        return { stakingRewards, minerRewards, totalRewards };
 
     } catch (e) {
         console.error("Error in calculateUserTotalRewards:", e);

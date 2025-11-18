@@ -244,8 +244,8 @@
                     </a>
 
                     <a data-target="mine" class="sidebar-link flex items-center gap-4 py-2.5 px-4 rounded-lg transition-colors text-zinc-400 hover:text-white hover:bg-zinc-700">
-                        <i class="fa-solid fa-helmet-safety w-5 text-center"></i>
-                        <span>Network Mining</span>
+                        <i class="fa-solid fa-layer-group w-5 text-center"></i>
+                        <span>Staking Pool</span>
                     </a>
                     
                     <a data-target="store" class="sidebar-link flex items-center gap-4 py-2.5 px-4 rounded-lg transition-colors text-zinc-400 hover:text-white hover:bg-zinc-700"><i class="fa-solid fa-store w-5 text-center"></i><span>NFT Pool</span></a>
@@ -355,7 +355,7 @@
                         <div class="grid grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 mb-8">
                             <div class="bg-sidebar border border-border-color rounded-xl p-4 flex items-center gap-4"><i class="fa-solid fa-coins text-2xl text-cyan-400 w-8 text-center"></i><div class="min-w-0"><p class="text-zinc-400 text-sm">Total Supply</p><p id="statTotalSupply" class="text-base sm:text-xl font-bold mt-1 truncate">--</p></div></div>
                             <div class="bg-sidebar border border-border-color rounded-xl p-4 flex items-center gap-4"><i class="fa-solid fa-coins text-2xl text-amber-400 w-8 text-center"></i><div class="min-w-0"><p class="text-zinc-400 text-sm">$BKC</p><p id="statUserBalance" class="text-base sm:text-xl font-bold mt-1 truncate">--</p></div></div>
-                            <div class="bg-sidebar border border-border-color rounded-xl p-4 flex items-center gap-4"><i class="fa-solid fa-users text-2xl text-green-400 w-8 text-center"></i><div class="min-w-0"><p class="text-zinc-400 text-sm">Validators</p><p id="statValidators" class="text-base sm:text-xl font-bold mt-1 truncate">--</p></div></div>
+                            <div class="bg-sidebar border border-border-color rounded-xl p-4 flex items-center gap-4"><i class="fa-solid fa-layer-group text-2xl text-green-400 w-8 text-center"></i><div class="min-w-0"><p class="text-zinc-400 text-sm">Active Pools</p><p id="statValidators" class="text-base sm:text-xl font-bold mt-1 truncate">--</p></div></div>
                             <div class="bg-sidebar border border-border-color rounded-xl p-4 flex items-center gap-4"><i class="fa-solid fa-shield-halved text-2xl text-purple-400 w-8 text-center"></i><div class="min-w-0"><p class="text-zinc-400 text-sm">Net pStake</p><p id="statTotalPStake" class="text-base sm:text-xl font-bold mt-1 truncate">--</p></div></div>
                             
                             <div class="bg-sidebar border border-border-color rounded-xl p-4 flex items-center gap-4">
@@ -395,7 +395,7 @@
                                                         <p id="statUserRewards" class="text-2xl sm:text-3xl font-bold text-amber-400 whitespace-nowrap overflow-hidden text-ellipsis">--</p>
                                                         
                                                         <div id="claimable-rewards-panel-content" class="mt-3">
-                                                             </div>
+                                                                </div>
                                                     </div>
                                                     </div>
                                                 <div id="reward-efficiency-panel"></div>
@@ -419,13 +419,11 @@
                                     
                                     <div class="mt-4 pt-4 border-t border-border-color/50 text-xs space-y-1">
                                         <div class="flex justify-between"><span class="text-zinc-400">Staking:</span> <span id="tvl-detail-staking" class="font-mono text-zinc-300">-- $BKC</span></div>
-                                        <div class="flex justify-between"><span class="text-zinc-400">Vesting:</span> <span id="tvl-detail-vesting" class="font-mono text-zinc-300">-- $BKC</span></div>
                                         <div class="flex justify-between"><span class="text-zinc-400">Game Pools:</span> <span id="tvl-detail-game" class="font-mono text-zinc-300">-- $BKC</span></div>
                                         <div class="flex justify-between"><span class="text-zinc-400">NFT Pools:</span> <span id="tvl-detail-nftpool" class="font-mono text-zinc-300">-- $BKC</span></div>
-                                        <div class="flex justify-between"><span class="text-zinc-400">DEX Pool:</span> <span id="tvl-detail-dex" class="font-mono text-zinc-300">-- $BKC</span></div>
                                     </div>
                                     </div>
-                                <div id="top-validators-dashboard" class="bg-sidebar border border-border-color rounded-xl p-6"><div class="flex justify-between items-center mb-4"><h3 classs="text-xl font-bold">Network Validators</h3><p class="text-sm text-zinc-400">Sorted by highest pStake</p></div><div id="top-validators-list" class="space-y-3"></div></div>
+                                <div id="top-validators-dashboard" class="bg-sidebar border border-border-color rounded-xl p-6"><div class="flex justify-between items-center mb-4"><h3 class="text-xl font-bold">Network Staking</h3><p class="text-sm text-zinc-400">Official Pool</p></div><div id="top-validators-list" class="space-y-3"></div></div>
                             </div>
                         </div>
                     </section>

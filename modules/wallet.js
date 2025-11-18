@@ -1,4 +1,8 @@
 // modules/wallet.js
+// FIXED: Race conditions, validation, polling fallback
+// CORREÇÃO: Removido rewardManagerABI e referências ao contrato RewardManager
+// ✅ CORREÇÃO (AJUSTE FINAL): Restaurado uso de imports ESM/CDN para Ethers e Web3Modal (Original)
+// O problema de CORS/404 deve ser resolvido na camada de infraestrutura/servidor.
 
 import { ethers } from 'https://esm.sh/ethers@6.11.1';
 import { createWeb3Modal, defaultConfig } from 'https://esm.sh/@web3modal/ethers@5.0.3';
@@ -210,7 +214,6 @@ async function setupSignerAndLoadData(provider, address) {
         startBalancePolling();
         
         State.isConnected = true;
-        // ✅ CORREÇÃO: Removido 'window.walletInitialized'
         
         return true;
     } catch (error) {

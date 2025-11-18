@@ -177,15 +177,17 @@ export async function runScript(hre: HardhatRuntimeEnvironment) {
     
     // 4.1. Hub Configuration
     console.log("4.1. Configuring Hub with batch `setAddresses`...");
+    // Note: DelegationManager and MiningManager are ZeroAddress here because they are deployed in Phase 2 (Script 3).
+    // This is correct and intentional.
     tx = await hub.setAddresses(
         addresses.bkcToken,             // _bkcToken
         deployer.address,               // _treasuryWallet (using deployer temporarily)
-        ethers.ZeroAddress,             // _delegationManager (Not deployed in Phase 1)
+        ethers.ZeroAddress,             // _delegationManager (Phase 2)
         addresses.rewardBoosterNFT,     // _rewardBooster
-        ethers.ZeroAddress,             // _miningManager (Not deployed in Phase 1)
-        ethers.ZeroAddress,             // _decentralizedNotary (Not deployed in Phase 1)
-        ethers.ZeroAddress,             // _fortunePool (Not deployed in Phase 1)
-        ethers.ZeroAddress              // _nftLiquidityPoolFactory (Not deployed in Phase 1)
+        ethers.ZeroAddress,             // _miningManager (Phase 2)
+        ethers.ZeroAddress,             // _decentralizedNotary (Phase 2)
+        ethers.ZeroAddress,             // _fortunePool (Phase 2)
+        ethers.ZeroAddress              // _nftLiquidityPoolFactory (Phase 2)
     );
     await tx.wait();
     console.log(`   ✅ Hub configured (BKCToken, RewardBooster, and Treasury set).`);
