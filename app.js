@@ -1,17 +1,24 @@
 // app.js
 // ✅ ARQUIVO CORRIGIDO
+// 🚀 AJUSTE: Removida a importação de ESM (esm.sh) devido a erros de CORS em produção.
+// As dependências 'inject' e 'ethers' devem ser carregadas via <script> tag no HTML.
 
-import { inject } from 'https://esm.sh/@vercel/analytics';
+// Removido: import { inject } from 'https://esm.sh/@vercel/analytics';
+
+// Se 'inject' estiver globalmente disponível via <script> tag:
+const inject = window.inject || (() => { console.warn("Vercel Analytics not loaded globally."); }); // Fallback seguro
 
 // Inject Vercel Analytics if not on localhost
 if (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
+    // Agora usando a função 'inject' global (assumindo que o script tag foi adicionado)
     inject();
 }
 
-const ethers = window.ethers;
+const ethers = window.ethers; // Depende da tag <script> para carregar ethers.
 
 import { DOMElements } from './dom-elements.js';
 import { State } from './state.js';
+// A importação de 'wallet.js' é mantida, mas 'wallet.js' também precisará de ajustes.
 import { initPublicProvider, initWalletSubscriptions, disconnectWallet, openConnectModal } from './modules/wallet.js';
 import { showToast, showShareModal, showWelcomeModal } from './ui-feedback.js';
 import { formatBigNumber } from './utils.js'; 
@@ -33,7 +40,7 @@ import { TokenomicsPage } from './pages/TokenomicsPage.js';
 import { NotaryPage } from './pages/NotaryPage.js';
 
 // ============================================================================
-// FORMATTING FUNCTIONS (Conteúdo Omitido por ser idêntico)
+// FORMATTING FUNCTIONS
 // ============================================================================
 
 /**
@@ -63,7 +70,7 @@ function formatLargeBalance(bigNum) {
 }
 
 // ============================================================================
-// ROUTE CONFIGURATION (Conteúdo Omitido por ser idêntico)
+// ROUTE CONFIGURATION
 // ============================================================================
 
 const routes = {
@@ -88,7 +95,7 @@ const ADMIN_WALLET = '0x03aC69873293cD6ddef7625AfC91E3Bd5434562a';
 let currentPageCleanup = null;
 
 // ============================================================================
-// WALLET STATE CHANGE HANDLER (Conteúdo Omitido por ser idêntico)
+// WALLET STATE CHANGE HANDLER
 // ============================================================================
 
 function onWalletStateChange(changes) {
@@ -105,7 +112,7 @@ function onWalletStateChange(changes) {
 }
 
 // ============================================================================
-// NAVIGATION (Conteúdo Omitido por ser idêntico)
+// NAVIGATION
 // ============================================================================
 
 /**
@@ -175,7 +182,7 @@ function navigateTo(pageId, forceUpdate = false) {
 window.navigateTo = navigateTo;
 
 // ============================================================================
-// UI STATE UPDATE (Conteúdo Omitido por ser idêntico)
+// UI STATE UPDATE
 // ============================================================================
 
 /**
@@ -234,7 +241,7 @@ function updateUIState(forcePageUpdate = false) {
 }
 
 // ============================================================================
-// GLOBAL EVENT LISTENERS (Conteúdo Omitido por ser idêntico)
+// GLOBAL EVENT LISTENERS
 // ============================================================================
 
 function setupGlobalListeners() {
@@ -299,7 +306,7 @@ function setupGlobalListeners() {
 }
 
 // ============================================================================
-// APPLICATION INITIALIZATION (Ajustada)
+// APPLICATION INITIALIZATION
 // ============================================================================
 
 window.addEventListener('load', async () => {
@@ -360,7 +367,7 @@ window.addEventListener('load', async () => {
 });
 
 // ============================================================================
-// GLOBAL EXPORTS (Conteúdo Omitido por ser idêntico)
+// GLOBAL EXPORTS
 // ============================================================================
 
 window.EarnPage = EarnPage; 

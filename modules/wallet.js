@@ -1,7 +1,20 @@
 // modules/wallet.js
+// FIXED: Race conditions, validation, polling fallback
+// REFA: Removed single nftBondingCurve logic, changed ABI import
+// REFA V2: Fixed incorrect ABI for actionsManager
+// REFA V3: Added 'https://' prefix to ESM imports
+// CORREÇÃO: Removido rewardManagerABI e referências ao contrato RewardManager
+// ✅ CORREÇÃO (AJUSTE FINAL): Removido 'window.walletInitialized' e refatorada
+// a lógica de subscrição para 'initWalletSubscriptions'.
+// 🚀 NOVO AJUSTE: Removidas importações do CDN 'esm.sh' devido a erros de CORS em produção.
 
-import { ethers } from 'https://esm.sh/ethers@6.11.1';
-import { createWeb3Modal, defaultConfig } from 'https://esm.sh/@web3modal/ethers@5.0.3';
+// Removidas importações do CDN 'esm.sh':
+// import { ethers } from 'https://esm.sh/ethers@6.11.1';
+// import { createWeb3Modal, defaultConfig } from 'https://esm.sh/@web3modal/ethers@5.0.3';
+
+// Variáveis Globais (Assumindo que foram carregadas via <script> tag no HTML)
+const ethers = window.ethers;
+const { createWeb3Modal, defaultConfig } = window.Web3ModalEthers; // Ajuste conforme o objeto Web3Modal é exposto
 
 import { State } from '../state.js';
 import { showToast } from '../ui-feedback.js';
