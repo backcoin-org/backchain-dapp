@@ -1,5 +1,6 @@
 // config.js
 // FINAL: Configuração da DApp para o Ecossistema Backchain
+// ATUALIZADO: Rede Infura + ABI Notário Corrigida
 
 // ============================================================================
 // ENVIRONMENT DETECTION
@@ -73,19 +74,19 @@ export async function loadAddresses() {
 }
 
 // ============================================================================
-// NETWORK CONFIGURATION
+// NETWORK CONFIGURATION (INFURA)
 // ============================================================================
 
-// Chave WSS hardcoded diretamente (Exemplo Amoy/Sepolia)
-const WSS_KEY = "chSfmmKaeEl_C6O2y17WB";
+// Chave da INFURA (Substituindo Alchemy para evitar erro 429)
+const INFURA_KEY = "27ead728568f4f38b80b360d1c4e43b8";
 
-// 1. Define a URL usando a chave hardcoded
-export const sepoliaWssUrl = `wss://eth-sepolia.g.alchemy.com/v2/${WSS_KEY}`; 
+// 1. WebSocket URL (para listeners e atualizações em tempo real)
+export const sepoliaWssUrl = `wss://sepolia.infura.io/ws/v3/${INFURA_KEY}`;
 
-// Converte WSS para HTTP/HTTPS para RPC tradicional
-export const sepoliaRpcUrl = sepoliaWssUrl.replace('wss://', 'https://');
+// 2. RPC URL (para chamadas de leitura/escrita padrão via HTTP)
+export const sepoliaRpcUrl = `https://sepolia.infura.io/v3/${INFURA_KEY}`;
 
-export const sepoliaChainId = 11155111n; // Sepolia ID (Use 80002 para Amoy se necessário)
+export const sepoliaChainId = 11155111n; // Sepolia ID
 
 // IPFS Gateway
 export const ipfsGateway = "https://white-defensive-eel-240.mypinata.cloud/ipfs/";
@@ -199,7 +200,8 @@ export const publicSaleABI = [
 ];
 
 export const decentralizedNotaryABI = [
-    "event NotarizationEvent(uint256 indexed tokenId, address indexed owner, string indexed documentMetadataHash)",
+    // ATUALIZADO: Adicionado feePaid para compatibilidade com Indexer e Contrato
+    "event NotarizationEvent(uint256 indexed tokenId, address indexed owner, string indexed documentMetadataHash, uint256 feePaid)",
     "function balanceOf(address owner) view returns (uint256)",
     "function tokenOfOwnerByIndex(address owner, uint256 index) view returns (uint256)",
     "function tokenURI(uint256 tokenId) view returns (string)",
