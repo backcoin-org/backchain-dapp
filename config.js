@@ -77,7 +77,7 @@ export async function loadAddresses() {
 // ============================================================================
 
 // Chave WSS hardcoded diretamente (Exemplo Amoy/Sepolia)
-const WSS_KEY = "wJwRXHRaYO3THysyZWvHL";
+const WSS_KEY = "chSfmmKaeEl_C6O2y17WB";
 
 // 1. Define a URL usando a chave hardcoded
 export const sepoliaWssUrl = `wss://eth-sepolia.g.alchemy.com/v2/${WSS_KEY}`; 
