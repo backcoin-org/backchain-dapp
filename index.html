@@ -27,6 +27,31 @@
     <script src="https://pay.coinbase.com/pay-sdk.js" defer></script>
     <script src="https://static.moonpay.com/web-sdk/v1/moonpay-web-sdk.min.js" defer></script>
     
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    animation: {
+                        'gradient-x': 'gradient-x 15s ease infinite',
+                        'bounce-slow': 'bounce-slow 3s infinite ease-in-out',
+                        'pulse-slow': 'pulse 4s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+                        'construct-hammer': 'construct-hammer 2s ease-in-out infinite',
+                        'construct-gear': 'spin 10s linear infinite',
+                        'construct-gear-rev': 'spin 10s linear infinite reverse',
+                        'fadeIn': 'fadeIn 0.5s ease-out',
+                    },
+                    keyframes: {
+                        'gradient-x': { '0%, 100%': { 'background-size': '200% 200%', 'background-position': 'left center' }, '50%': { 'background-size': '200% 200%', 'background-position': 'right center' } },
+                        'bounce-slow': { '0%, 100%': { transform: 'translateY(-5%)' }, '50%': { transform: 'translateY(5%)' } },
+                        'construct-hammer': { '0%, 100%': { transform: 'rotate(-10deg)' }, '50%': { transform: 'rotate(30deg)' } },
+                        'fadeIn': { '0%': { opacity: 0 }, '100%': { opacity: 1 } }
+                    }
+                }
+            }
+        }
+    </script>
+
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
         :root {
@@ -47,11 +72,6 @@
         ::-webkit-scrollbar-track { background: var(--bg-sidebar); }
         ::-webkit-scrollbar-thumb { background: var(--border-color); border-radius: 4px; }
         ::-webkit-scrollbar-thumb:hover { background: var(--bg-card); }
-        .tab-btn { padding: 0.75rem 1rem; font-size: 1rem; font-weight: 600; color: var(--text-secondary); border-bottom: 2px solid transparent; transition: color 0.2s, border-color 0.2s; cursor: pointer; background: none; border-top: none; border-left: none; border-right: none; }
-        .tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); }
-        .tab-content { display: none; }
-        .tab-content.active { display: block; animation: fadeIn 0.5s; }
-        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
         
         /* Presale Styles */
         #presale { background-color: var(--presale-bg-main); }
@@ -59,72 +79,16 @@
         #presale .btn-primary { background: linear-gradient(90deg, var(--accent), var(--accent-hover)); box-shadow: 0 0 15px rgba(245, 158, 11, 0.4); transition: all 0.3s ease-in-out; color: #1a1a1a; }
         #presale .btn-primary:hover:not(:disabled) { transform: translateY(-3px) scale(1.05); box-shadow: 0 0 25px rgba(245, 158, 11, 0.6); }
         #presale .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
-        #presale .nft-card { background: var(--presale-bg-card); backdrop-filter: blur(10px); border: 1px solid var(--presale-border-color); transition: transform 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease; }
-        #presale .nft-card:hover { transform: translateY(-10px); border-color: var(--accent); box-shadow: 0 20px 30px rgba(0,0,0,0.4); }
         
         /* AirBNFT Styles */
         .rental-card { transition: transform 0.2s; }
         .rental-card:hover { transform: translateY(-5px); }
 
-        /* --- DASHBOARD REDESIGN STYLES (NOVO) --- */
-        .glass-panel {
-            background: rgba(39, 39, 42, 0.6);
-            backdrop-filter: blur(12px);
-            border: 1px solid rgba(82, 82, 91, 0.5);
-            border-radius: 1rem;
-            padding: 1.5rem;
-            transition: all 0.3s ease;
-        }
-
-        .glass-panel:hover {
-            border-color: rgba(245, 158, 11, 0.3);
-            box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.5);
-        }
-
-        .booster-highlight-card {
-            background: linear-gradient(145deg, rgba(24, 24, 27, 0.9), rgba(39, 39, 42, 0.8));
-            border: 1px solid var(--accent);
-            box-shadow: 0 0 20px rgba(245, 158, 11, 0.1);
-            position: relative;
-            overflow: hidden;
-        }
-
-        .booster-glow {
-            position: absolute;
-            top: -50%;
-            right: -50%;
-            width: 100%;
-            height: 100%;
-            background: radial-gradient(circle, rgba(245, 158, 11, 0.2) 0%, rgba(0,0,0,0) 70%);
-            z-index: 0;
-        }
-
-        .activity-filter-btn {
-            padding: 0.5rem 1rem;
-            border-radius: 0.5rem;
-            font-size: 0.875rem;
-            font-weight: 600;
-            color: #a1a1aa;
-            background: rgba(63, 63, 70, 0.4);
-            border: 1px solid transparent;
-            transition: all 0.2s;
-        }
-
-        .activity-filter-btn.active {
-            background: rgba(245, 158, 11, 0.2);
-            color: #fbbf24;
-            border-color: rgba(245, 158, 11, 0.4);
-        }
-        
-        .no-scrollbar::-webkit-scrollbar {
-            display: none;
-        }
-        .no-scrollbar {
-            -ms-overflow-style: none;
-            scrollbar-width: none;
-        }
-        /* ---------------------------------------- */
-
+        /* Dashboard Styles */
+        .glass-panel { background: rgba(39, 39, 42, 0.6); backdrop-filter: blur(12px); border: 1px solid rgba(82, 82, 91, 0.5); border-radius: 1rem; padding: 1.5rem; transition: all 0.3s ease; }
+        .glass-panel:hover { border-color: rgba(245, 158, 11, 0.3); box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.5); }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
     </style>
 </head>
 <body class="antialiased">
@@ -147,39 +111,30 @@
                         <i class="fa-solid fa-chart-pie w-5 text-center"></i>
                         <span>Dashboard</span>
                     </a>
-                    
                     <a data-target="mine" class="sidebar-link flex items-center gap-4 py-2.5 px-4 rounded-lg transition-colors text-zinc-400 hover:text-white hover:bg-zinc-700">
                         <i class="fa-solid fa-layer-group w-5 text-center"></i>
                         <span>Staking Pool</span>
                     </a>
-                    
                     <a data-target="store" class="sidebar-link flex items-center gap-4 py-2.5 px-4 rounded-lg transition-colors text-zinc-400 hover:text-white hover:bg-zinc-700">
                         <i class="fa-solid fa-store w-5 text-center"></i>
                         <span>NFT Market</span>
                     </a>
-
                     <a data-target="rental" class="sidebar-link flex items-center gap-4 py-2.5 px-4 rounded-lg transition-colors text-cyan-400 hover:text-white hover:bg-zinc-700/50 border border-cyan-900/30 bg-cyan-900/10">
                         <i class="fa-solid fa-house-user w-5 text-center"></i>
                         <span>AirBNFT (Rent)</span>
                     </a>
-
                     <a data-target="rewards" class="sidebar-link flex items-center gap-4 py-2.5 px-4 rounded-lg transition-colors text-zinc-400 hover:text-white hover:bg-zinc-700"><i class="fa-solid fa-id-card-clip w-5 text-center"></i><span>My Rewards</span></a>
-                    
                     <a data-target="actions" class="sidebar-link flex items-center gap-4 py-2.5 px-4 rounded-lg transition-colors text-zinc-400 hover:text-white hover:bg-zinc-700">
                         <i class="fa-solid fa-dice w-5 text-center"></i>
                         <span>Fortune Pool</span>
                     </a>
-                    
                     <a data-target="airdrop" class="sidebar-link flex items-center gap-4 py-2.5 px-4 rounded-lg transition-colors text-zinc-400 hover:text-white hover:bg-zinc-700"><i class="fa-solid fa-parachute-box w-5 text-center"></i><span>Airdrop</span></a>
-                    
                     <a data-target="notary" class="sidebar-link flex items-center gap-4 py-2.5 px-4 rounded-lg transition-colors text-zinc-400 hover:text-white hover:bg-zinc-700">
                         <i class="fa-solid fa-stamp w-5 text-center"></i><span>Decentralized Notary</span>
                     </a>
-                    
                     <a data-target="tokenomics" class="sidebar-link flex items-center gap-4 py-2.5 px-4 rounded-lg transition-colors text-zinc-400 hover:text-white hover:bg-zinc-700">
                         <i class="fa-solid fa-chart-line w-5 text-center"></i><span>Tokenomics</span>
                     </a>
-
                     <a title="Coming Soon" class="sidebar-link flex items-center justify-between gap-4 py-2.5 px-4 rounded-lg transition-colors text-zinc-400 opacity-50 cursor-not-allowed">
                         <div class="flex items-center gap-4"><i class="fa-solid fa-shuffle w-5 text-center"></i><span>DEX Swap</span></div>
                         <span class="text-xs bg-zinc-700 text-zinc-300 font-semibold px-2 py-0.5 rounded-full">Soon</span>
@@ -236,45 +191,90 @@
                 <div class="container mx-auto max-w-7xl">
 
                     <section id="dashboard" class=""> 
-                        <div class="text-center p-10"><div class="loader inline-block"></div> Loading Dashboard...</div>
+                        <div id="initial-loader-container" class="flex flex-col items-center justify-center min-h-[65vh] animate-fadeIn relative">
+                            
+                            <div class="absolute inset-0 pointer-events-none flex items-center justify-center opacity-5">
+                                <i class="fa-solid fa-gear text-[12rem] animate-construct-gear absolute top-0 left-0 text-zinc-500"></i>
+                                <i class="fa-solid fa-gear text-[10rem] animate-construct-gear-rev absolute bottom-0 right-0 text-zinc-500"></i>
+                            </div>
+
+                            <div class="relative mb-10">
+                                <div class="absolute inset-0 bg-amber-500 blur-3xl opacity-20 animate-pulse-slow rounded-full"></div>
+                                <div class="relative z-20 animate-bounce-slow">
+                                    <img src="./assets/bkc_logo_3d.png" class="w-32 h-32 object-contain filter drop-shadow-2xl" alt="Backchain Logo">
+                                    <div class="absolute -right-6 -top-2 z-30 animate-construct-hammer origin-bottom-left">
+                                        <i class="fa-solid fa-hammer text-3xl text-zinc-400 drop-shadow-lg"></i>
+                                    </div>
+                                    <div class="absolute -left-6 -bottom-2 z-30 animate-construct-hammer animation-delay-1000 origin-bottom-right">
+                                        <i class="fa-solid fa-wrench text-3xl text-zinc-500 drop-shadow-lg"></i>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <h2 class="text-2xl md:text-3xl font-bold text-white mb-3 tracking-tight font-display text-center">Building the Economy</h2>
+                            <p id="loading-status-text" class="text-zinc-400 text-sm mb-8 font-mono h-6 text-center w-full max-w-md">Initializing protocol...</p>
+
+                            <div class="w-64 md:w-80 h-2 bg-zinc-800 rounded-full overflow-hidden relative border border-zinc-700/50 shadow-inner">
+                                <div id="loading-progress-bar" class="h-full bg-gradient-to-r from-amber-600 via-yellow-500 to-amber-600 bg-[length:200%_100%] animate-gradient-x rounded-full transition-all duration-300 ease-out" style="width: 0%"></div>
+                            </div>
+                            
+                            <div class="mt-3 flex items-center gap-2">
+                                <span id="loading-percentage" class="text-amber-400 font-mono font-bold text-xl">0</span>
+                                <span class="text-amber-500/80 text-sm font-bold">%</span>
+                            </div>
+                        </div>
+
+                        <script>
+                            (function() {
+                                const bar = document.getElementById('loading-progress-bar');
+                                const txt = document.getElementById('loading-percentage');
+                                const status = document.getElementById('loading-status-text');
+                                let progress = 0;
+                                
+                                const messages = [
+                                    "Establishing secure connection...",
+                                    "Syncing block data...",
+                                    "Loading market liquidity...",
+                                    "Verifying smart contracts...",
+                                    "Fetching user profile...",
+                                    "Finalizing interface..."
+                                ];
+
+                                const interval = setInterval(() => {
+                                    const increment = progress < 70 ? Math.random() * 3 : Math.random() * 1;
+                                    progress += increment;
+                                    
+                                    // Trava em 99% até o app.js substituir o conteúdo
+                                    if (progress > 99) progress = 99;
+
+                                    if (bar && txt && status) {
+                                        bar.style.width = `${progress}%`;
+                                        txt.innerText = Math.floor(progress);
+                                        
+                                        const msgIndex = Math.floor((progress / 100) * messages.length);
+                                        if (messages[msgIndex] && status.innerText !== messages[msgIndex]) {
+                                            status.innerText = messages[msgIndex];
+                                        }
+                                    } else {
+                                        clearInterval(interval);
+                                    }
+                                }, 80); // Velocidade
+                            })();
+                        </script>
                     </section>
                     
                     <section id="presale" class="hidden"></section>
-                    
                     <section id="mine" class="hidden"></section>
-                    <section id="store" class="hidden">
-                        <h1 class="text-2xl md:text-3xl font-bold mb-6">NFT Market</h1>
-                        <p class="text-zinc-400 max-w-3xl mb-8">Increase your reward claim efficiency by purchasing a Booster NFT.</p>
-                        <div class="bg-gradient-to-r from-cyan-900/40 to-blue-900/40 border border-cyan-500/30 rounded-xl p-6 mb-8 flex flex-col md:flex-row justify-between items-center gap-4 shadow-lg relative overflow-hidden">
-                            <div class="absolute top-0 right-0 opacity-10 pointer-events-none"><i class="fa-solid fa-house-user text-9xl text-cyan-400"></i></div>
-                            <div class="relative z-10"><h3 class="text-xl font-bold text-cyan-300 mb-1"><i class="fa-solid fa-clock mr-2"></i> Just need a temporary boost?</h3><p class="text-zinc-300 text-sm">Rent a powerful NFT by the hour with <strong>AirBNFT</strong>.</p></div>
-                            <button onclick="navigateTo('rental')" class="relative z-10 bg-cyan-600 hover:bg-cyan-500 text-white font-bold py-3 px-6 rounded-lg transition-transform hover:scale-105 shadow-cyan-500/20 shadow-lg">Go to AirBNFT <i class="fa-solid fa-arrow-right ml-2"></i></button>
-                        </div>
-                        <div class="store-content-wrapper"><h2 class="text-xl font-bold mb-4">Buy/Sell Pools</h2><div id="store-items-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6"></div></div>
-                    </section>
+                    <section id="store" class="hidden"></section>
                     <section id="rental" class="hidden"></section>
-                    <section id="rewards" class="hidden">
-                        <h1 class="text-2xl md:text-3xl font-bold mb-6">My Rewards</h1>
-                        <div id="claimable-rewards-panel" class="mb-8 p-6 bg-sidebar border border-border-color rounded-xl max-w-2xl mx-auto">
-                            <h2 class="text-xl font-bold mb-4">Claimable Rewards</h2>
-                            <div id="rewards-loader" class="text-center hidden"><div class="loader inline-block"></div></div>
-                            <div id="rewards-details-content"></div>
-                        </div>
-                        <h2 class="text-xl font-bold mb-4">Vesting Certificates</h2>
-                        <div id="certificates-list-container"></div>
-                    </section>
+                    <section id="rewards" class="hidden"></section>
                     <section id="actions" class="hidden"></section>
-                    <section id="airdrop" class="hidden" role="tabpanel" aria-labelledby="nav-airdrop">
-                        <div id="airdrop-loading-placeholder" class="text-center p-12"><div class="loader inline-block"></div><p class="text-zinc-400 mt-4 text-lg">Loading Airdrop...</p></div>
-                        <div id="airdrop-tabs-container"></div>
-                        <div id="airdrop-content-wrapper"><div id="active-tab-content" role="tabpanel" tabindex="0"></div></div>
-                    </section>
+                    <section id="airdrop" class="hidden"></section>
                     <section id="notary" class="hidden"></section>
                     <section id="tokenomics" class="hidden"></section>
                     <section id="faucet" class="hidden"></section>
                     <section id="about" class="hidden"></section>
                     <section id="admin" class="hidden"></section>
-
                     <section id="socials" class="hidden"></section>
 
                 </div>

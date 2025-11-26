@@ -1,5 +1,5 @@
 // pages/DashboardPage.js
-// ✅ VERSÃO DEFINITIVA 2.0: Booster Informativo & Educativo
+// ✅ VERSÃO FINAL COMPLETA: Histórico Corrigido, Paginação Ativa, Marketing de Booster e Métricas Reais
 
 const ethers = window.ethers;
 
@@ -18,7 +18,7 @@ import {
     formatBigNumber, formatPStake, renderLoading,
     renderNoData, renderError
 } from '../utils.js';
-import { showToast, addNftToWallet, openModal, closeModal } from '../ui-feedback.js'; // Importe openModal/closeModal se existirem, ou usamos lógica local
+import { showToast, addNftToWallet } from '../ui-feedback.js';
 import { addresses, boosterTiers } from '../config.js'; 
 
 // --- ESTADO LOCAL ---
@@ -29,7 +29,7 @@ const DashboardState = {
     filteredActivities: [], 
     pagination: {
         currentPage: 1,
-        itemsPerPage: 6 
+        itemsPerPage: 5 
     },
     filters: {
         type: 'ALL', 
@@ -285,8 +285,13 @@ async function updateGlobalMetrics() {
             if (addr && ethers.isAddress(addr)) uniqueAddrs.add(addr);
         }
 
+        // Throttle para evitar 429 no Infura
         for (const addr of uniqueAddrs) {
-            try { totalLocked += await safeContractCall(State.bkcTokenContractPublic, 'balanceOf', [addr], 0n); } catch {}
+            try { 
+                const bal = await safeContractCall(State.bkcTokenContractPublic, 'balanceOf', [addr], 0n);
+                totalLocked += bal;
+                await new Promise(r => setTimeout(r, 50)); 
+            } catch {}
         }
 
         const scarcityPool = maxSupply - tgeSupply;
@@ -298,7 +303,7 @@ async function updateGlobalMetrics() {
         setTxt('dash-metric-supply', formatBigNumber(totalSupply).toLocaleString('en-US', { maximumFractionDigits: 0 }));
         setTxt('dash-metric-pstake', formatPStake(totalPStake));
         
-        // Supply Locked (Visual Forte)
+        // Formatação rica para Supply Locked
         let lockedText = "0%";
         if (totalSupply > 0n) {
             const percent = (Number(totalLocked * 10000n / totalSupply)/100).toFixed(1);
@@ -366,7 +371,7 @@ function renderBoosterCard(data, claimDetails) {
 
     const totalPending = claimDetails ? claimDetails.totalRewards : 0n;
     
-    // CASO 1: SEM BOOSTER (Botão Learn More + Alerta)
+    // CASO 1: SEM BOOSTER (Alerta de Perda)
     if (!data || data.highestBoost === 0) {
         const maxBoostBips = boosterTiers && boosterTiers.length > 0 
             ? boosterTiers.reduce((max, t) => t.boostBips > max ? t.boostBips : max, 0)
@@ -405,7 +410,7 @@ function renderBoosterCard(data, claimDetails) {
         return;
     }
 
-    // CASO 2: COM BOOSTER (Visual Rico + Informações)
+    // CASO 2: COM BOOSTER (Visual Rico)
     const isRented = data.source === 'rented';
     const badgeColor = isRented ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/30' : 'bg-green-500/20 text-green-300 border-green-500/30';
     const badgeText = isRented ? 'Rented Active' : 'Owner Active';
@@ -422,7 +427,6 @@ function renderBoosterCard(data, claimDetails) {
         upgradeText = `Next Tier: +${(nextTier.boostBips - currentBoost)/100}% Efficiency`;
     }
 
-    // Busca a imagem oficial do Tier no config.js, caso a API não tenha retornado
     let finalImageUrl = data.imageUrl;
     if (!finalImageUrl || finalImageUrl.includes('placeholder')) {
         const tierInfo = boosterTiers.find(t => t.boostBips === currentBoost);
@@ -460,12 +464,11 @@ function renderBoosterCard(data, claimDetails) {
 }
 
 // ============================================================================
-// 4. TABELA DE ATIVIDADES
+// 4. TABELA DE ATIVIDADES (CORREÇÃO DE DADOS FIREBASE)
 // ============================================================================
 
 async function fetchAndProcessActivities() {
     const listEl = document.getElementById('dash-activity-list');
-    
     if (!State.isConnected) {
         if(listEl) listEl.innerHTML = renderNoData("Connect wallet to view history.");
         return;
@@ -485,7 +488,7 @@ async function fetchAndProcessActivities() {
         applyFiltersAndRender();
 
     } catch (e) {
-        console.error("Activity Fetch Error:", e);
+        console.error("Fetch Error:", e);
         if(listEl) listEl.innerHTML = renderError("Failed to load history.");
     }
 }
@@ -493,23 +496,31 @@ async function fetchAndProcessActivities() {
 function applyFiltersAndRender() {
     let result = [...DashboardState.activities];
     const type = DashboardState.filters.type;
-    
+    const normalize = (t) => (t || '').toUpperCase();
+
     if (type !== 'ALL') {
         result = result.filter(item => {
-            const t = item.type || '';
-            if (type === 'STAKE') return t.includes('Delegation');
-            if (type === 'UNSTAKE') return t.includes('Unstake');
-            if (type === 'CLAIM') return t.includes('Reward') || t.includes('Claim');
-            if (type === 'NFT') return t.includes('Booster') || t.includes('Rent');
-            if (type === 'GAME') return t.includes('Fortune') || t.includes('Game');
+            const t = normalize(item.type);
+            if (type === 'STAKE') return t.includes('DELEGATION');
+            if (type === 'UNSTAKE') return t.includes('UNSTAKE');
+            if (type === 'CLAIM') return t.includes('REWARD') || t.includes('CLAIM');
+            if (type === 'NFT') return t.includes('BOOSTER') || t.includes('RENT') || t.includes('TRANSFER');
+            if (type === 'GAME') return t.includes('FORTUNE') || t.includes('GAME');
             return true;
         });
     }
 
+    // Ordenação Robusta (Suporta Timestamp ou BlockNumber)
     result.sort((a, b) => {
-        const tA = a.timestamp?._seconds || a.timestamp || 0;
-        const tB = b.timestamp?._seconds || b.timestamp || 0;
-        return DashboardState.filters.sort === 'NEWEST' ? tB - tA : tA - tB;
+        const getTime = (obj) => {
+            if (obj.timestamp && obj.timestamp._seconds) return obj.timestamp._seconds;
+            if (obj.createdAt && obj.createdAt._seconds) return obj.createdAt._seconds;
+            if (obj.timestamp) return new Date(obj.timestamp).getTime() / 1000;
+            return 0;
+        };
+        const timeA = getTime(a);
+        const timeB = getTime(b);
+        return DashboardState.filters.sort === 'NEWEST' ? timeB - timeA : timeA - timeB;
     });
 
     DashboardState.filteredActivities = result;
@@ -522,33 +533,54 @@ function renderActivityPage() {
     const controlsEl = document.getElementById('dash-pagination-controls');
     if (!listEl) return;
 
-    const { currentPage, itemsPerPage } = DashboardState.pagination;
-    const totalItems = DashboardState.filteredActivities.length;
-    
-    if (totalItems === 0) {
+    if (DashboardState.filteredActivities.length === 0) {
         listEl.innerHTML = renderNoData("No activities found.");
         if(controlsEl) controlsEl.classList.add('hidden');
         return;
     }
 
-    const start = (currentPage - 1) * itemsPerPage;
-    const end = start + itemsPerPage;
+    const start = (DashboardState.pagination.currentPage - 1) * DashboardState.pagination.itemsPerPage;
+    const end = start + DashboardState.pagination.itemsPerPage;
     const pageItems = DashboardState.filteredActivities.slice(start, end);
 
     listEl.innerHTML = pageItems.map(item => {
-        let timestamp = Number(item.timestamp?._seconds || item.timestamp);
-        const dateStr = new Date(timestamp * 1000).toLocaleDateString();
-        const timeStr = new Date(timestamp * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        // Extração de Data Universal
+        let ts = 0;
+        if (item.timestamp && item.timestamp._seconds) ts = item.timestamp._seconds;
+        else if (item.createdAt && item.createdAt._seconds) ts = item.createdAt._seconds;
+        else if (item.timestamp) ts = new Date(item.timestamp).getTime() / 1000;
+        
+        const dateObj = ts > 0 ? new Date(ts * 1000) : new Date();
+        const dateStr = dateObj.toLocaleDateString();
+        const timeStr = dateObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
         
         let icon = 'fa-circle', color = 'text-zinc-500', label = item.type;
-        if(item.type === 'Delegation') { icon = 'fa-layer-group'; color = 'text-purple-400'; label = 'Staked BKC'; }
-        if(item.type === 'Unstake') { icon = 'fa-unlock'; color = 'text-zinc-400'; label = 'Unstaked'; }
-        if(item.type === 'DelegatorRewardClaimed') { icon = 'fa-gift'; color = 'text-amber-400'; label = 'Rewards Claimed'; }
-        if(item.type === 'BoosterNFT') { icon = 'fa-bolt'; color = 'text-cyan-400'; label = 'Booster NFT'; }
-        if(item.type === 'FortuneGameWin') { icon = 'fa-trophy'; color = 'text-yellow-400'; label = 'Fortune Win'; }
+        const t = (item.type || '').toUpperCase();
+        
+        // Mapeamento Inteligente de Tipos
+        if(t.includes('DELEGATION')) { 
+            icon = 'fa-layer-group'; color = 'text-purple-400'; label = 'Staked BKC'; 
+        } else if(t.includes('UNSTAKE')) { 
+            icon = 'fa-unlock'; color = 'text-zinc-400'; label = 'Unstaked'; 
+        } else if(t.includes('REWARD') || t.includes('CLAIM')) { 
+            icon = 'fa-gift'; color = 'text-amber-400'; label = 'Rewards Claimed'; 
+        } else if(t.includes('BOOSTER') || t.includes('NFT')) { 
+            icon = 'fa-bolt'; color = 'text-cyan-400'; label = 'Booster NFT'; 
+        } else if(t.includes('RENT')) { 
+            icon = 'fa-house-user'; color = 'text-blue-400'; label = 'Rental'; 
+        } else if(t.includes('FORTUNE') || t.includes('GAME')) { 
+            icon = 'fa-trophy'; color = 'text-yellow-400'; label = 'Fortune Game'; 
+        }
         
         const txLink = item.txHash ? `${EXPLORER_BASE_URL}${item.txHash}` : '#';
-        const amountDisplay = item.amount ? `${formatBigNumber(BigInt(item.amount)).toFixed(2)}` : '';
+        
+        // Extração de Valor (Busca em qualquer lugar)
+        let rawAmount = "0";
+        if (item.amount) rawAmount = item.amount;
+        else if (item.details && item.details.amount) rawAmount = item.details.amount;
+        else if (item.data && item.data.amount) rawAmount = item.data.amount;
+
+        const amountDisplay = (rawAmount && rawAmount !== "0") ? `${formatBigNumber(BigInt(rawAmount)).toFixed(2)}` : '';
 
         return `
             <a href="${txLink}" target="_blank" class="block bg-zinc-800/30 hover:bg-zinc-800/60 border border-zinc-700/50 rounded-lg p-3 transition-colors group">
@@ -573,18 +605,17 @@ function renderActivityPage() {
 
     if(controlsEl) {
         controlsEl.classList.remove('hidden');
-        const maxPage = Math.ceil(totalItems / itemsPerPage);
-        
-        document.getElementById('page-indicator').innerText = `Page ${currentPage} of ${maxPage}`;
+        const maxPage = Math.ceil(DashboardState.filteredActivities.length / DashboardState.pagination.itemsPerPage);
+        document.getElementById('page-indicator').innerText = `Page ${DashboardState.pagination.currentPage} of ${maxPage}`;
         
         const prevBtn = document.getElementById('page-prev');
         const nextBtn = document.getElementById('page-next');
         
-        prevBtn.disabled = currentPage === 1;
-        nextBtn.disabled = currentPage >= maxPage;
+        prevBtn.disabled = DashboardState.pagination.currentPage === 1;
+        nextBtn.disabled = DashboardState.pagination.currentPage >= maxPage;
         
-        prevBtn.style.opacity = currentPage === 1 ? '0.3' : '1';
-        nextBtn.style.opacity = currentPage >= maxPage ? '0.3' : '1';
+        prevBtn.style.opacity = DashboardState.pagination.currentPage === 1 ? '0.3' : '1';
+        nextBtn.style.opacity = DashboardState.pagination.currentPage >= maxPage ? '0.3' : '1';
     }
 }
 
@@ -597,12 +628,10 @@ function attachDashboardListeners() {
         DOMElements.dashboard.addEventListener('click', async (e) => {
             const target = e.target;
 
-            // NAVEGAÇÃO
             if (target.closest('.delegate-link')) { e.preventDefault(); window.navigateTo('mine'); }
             if (target.closest('.go-to-store')) { e.preventDefault(); window.navigateTo('store'); }
             if (target.closest('.go-to-rental')) { e.preventDefault(); window.navigateTo('rental'); }
 
-            // ABRIR MODAL EDUCATIVO
             if (target.closest('#open-booster-info')) {
                 e.preventDefault();
                 const modal = document.getElementById('booster-info-modal');
@@ -612,7 +641,6 @@ function attachDashboardListeners() {
                 }
             }
 
-            // FECHAR MODAL EDUCATIVO
             if (target.closest('#close-booster-modal') || target === document.getElementById('booster-info-modal')) {
                 e.preventDefault();
                 const modal = document.getElementById('booster-info-modal');
@@ -623,7 +651,6 @@ function attachDashboardListeners() {
                 }
             }
 
-            // NFT Click
             const nftClick = target.closest('.nft-clickable-image');
             if (nftClick) {
                 const address = nftClick.dataset.address;
@@ -631,7 +658,6 @@ function attachDashboardListeners() {
                 if(address && id) addNftToWallet(address, id);
             }
 
-            // Claim Button
             const claimBtn = target.closest('#dashboardClaimBtn');
             if (claimBtn && !claimBtn.disabled) {
                 try {
@@ -648,7 +674,6 @@ function attachDashboardListeners() {
                         }
                     }
                 } catch (err) {
-                    console.error(err);
                     showToast("Claim failed", "error");
                 } finally {
                     claimBtn.innerHTML = '<i class="fa-solid fa-gift mr-2"></i> Claim Net Amount';
@@ -656,28 +681,18 @@ function attachDashboardListeners() {
                 }
             }
 
-            // Paginação
-            if (target.closest('#page-prev')) {
-                if (DashboardState.pagination.currentPage > 1) {
-                    DashboardState.pagination.currentPage--;
-                    renderActivityPage();
-                }
+            if (target.closest('#page-prev') && DashboardState.pagination.currentPage > 1) {
+                DashboardState.pagination.currentPage--; renderActivityPage();
             }
             if (target.closest('#page-next')) {
                 const max = Math.ceil(DashboardState.filteredActivities.length / DashboardState.pagination.itemsPerPage);
                 if (DashboardState.pagination.currentPage < max) {
-                    DashboardState.pagination.currentPage++;
-                    renderActivityPage();
+                    DashboardState.pagination.currentPage++; renderActivityPage();
                 }
             }
-            
-            // Sort
-            const sortBtn = target.closest('#activity-sort-toggle');
-            if (sortBtn) {
+
+            if (target.closest('#activity-sort-toggle')) {
                 DashboardState.filters.sort = DashboardState.filters.sort === 'NEWEST' ? 'OLDEST' : 'NEWEST';
-                sortBtn.innerHTML = DashboardState.filters.sort === 'NEWEST' 
-                    ? '<i class="fa-solid fa-arrow-down-wide-short mr-1"></i> Newest' 
-                    : '<i class="fa-solid fa-arrow-up-wide-short mr-1"></i> Oldest';
                 applyFiltersAndRender();
             }
         });
@@ -699,16 +714,6 @@ export const DashboardPage = {
         if (State.isConnected) {
             await updateUserHub();
             await fetchAndProcessActivities();
-        } else {
-            const boosterArea = document.getElementById('dash-booster-area');
-            if(boosterArea) {
-                boosterArea.innerHTML = `
-                    <div class="h-full flex flex-col items-center justify-center text-zinc-500">
-                        <i class="fa-solid fa-wallet text-2xl mb-2 opacity-50"></i>
-                        <span class="text-xs">Connect Wallet</span>
-                    </div>
-                `;
-            }
         }
     },
 

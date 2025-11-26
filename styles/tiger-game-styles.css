@@ -1,594 +1,66 @@
-/* ============================================
-   BKC REWARD GENERATOR (Redesign V9 - Single Pool)
-   ============================================ */
+/* Adicione ao styles/tiger-game-styles.css */
 
-:root {
-    /* Cores Crypto/Dark Mode Aprimoradas */
-    --tiger-bg-primary: #0D1117; 
-    --tiger-bg-secondary: #161B22; 
-    --tiger-accent-gold: #FFD700; 
-    --tiger-accent-green: #00FF7F; 
-    --tiger-accent-orange: #FF4500;
-    --tiger-accent-blue: #00A3FF; /* Azul para mineração/ativação */
-    --tiger-text-primary: #C9D1D9; 
-    --tiger-text-secondary: #8B949E; 
-    --tiger-border-color: #30363D; 
-    --tiger-button-hover: #21262D;
-}
-
-/* Reset/Base para Mobile-First */
-.tiger-game-wrapper {
+.slot-machine-container {
     display: flex;
-    flex-direction: column;
-    gap: 16px; 
-    max-width: 100%; 
-    margin: 0 auto;
-    padding: 0 12px; 
-    box-sizing: border-box;
+    gap: 10px;
+    justify-content: center;
+    margin: 20px 0;
+    background: rgba(0, 0, 0, 0.5);
+    padding: 20px;
+    border-radius: 15px;
+    border: 1px solid #333;
+    box-shadow: inset 0 0 20px #000;
 }
 
-/* ============================================
-   HEADER & STATUS
-   ============================================ */
-
-.tiger-header {
-    background: var(--tiger-bg-secondary);
-    border: 1px solid var(--tiger-border-color);
-    border-radius: 12px;
-    padding: 16px;
-    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.5);
-}
-
-.header-top {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 12px;
-}
-
-.game-title {
-    font-size: 20px; 
-    font-weight: 900;
-    color: var(--tiger-accent-blue); 
-    text-shadow: 0 0 8px rgba(0, 163, 255, 0.4);
-    letter-spacing: 1px;
-}
-
-.legacy-badge {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    background: var(--tiger-button-hover);
-    border: 1px solid var(--tiger-accent-gold);
-    border-radius: 50px;
-    padding: 6px 12px;
-    font-weight: bold;
-    color: var(--tiger-accent-gold);
-    font-size: 14px;
-}
-.legacy-icon {
-    font-size: 18px;
-    animation: spin-gear 4s linear infinite;
-}
-
-@keyframes spin-gear {
-    from { transform: rotate(0deg); }
-    to { transform: rotate(360deg); }
-}
-
-.legacy-progress {
-    margin-bottom: 16px;
-}
-.progress-bar {
-    width: 100%;
-    height: 6px; 
-    background: var(--tiger-border-color);
-    border-radius: 10px;
-    overflow: hidden;
-    margin-bottom: 4px;
-}
-.progress-fill {
-    height: 100%;
-    background: linear-gradient(90deg, var(--tiger-accent-gold), var(--tiger-accent-blue)); 
-    width: 0%;
-    transition: width 0.3s ease;
-}
-.progress-text {
-    font-size: 11px;
-    color: var(--tiger-text-secondary);
-}
-
-/* ✅ CORRIGIDO: 1 coluna para a Piscina Única */
-.pools-info {
-    display: grid;
-    grid-template-columns: 1fr; /* 1 coluna */
-    gap: 8px;
-    margin-top: 12px;
-}
-
-/* ✅ CORRIGIDO: Estilo da Piscina Única (Azul) */
-.pool-item {
-    background: rgba(0, 163, 255, 0.05); /* Fundo Azul */
-    border: 1px solid var(--tiger-accent-blue); /* Borda Azul */
-    border-radius: 8px;
-    padding: 10px 12px; /* Mais preenchimento */
-    text-align: center;
-    font-size: 11px;
-    cursor: help;
-    transition: all 0.2s;
-}
-.pool-item:hover {
-    background: rgba(0, 163, 255, 0.1);
-    box-shadow: 0 0 10px rgba(0, 163, 255, 0.3);
-}
-.pool-label {
-    display: block;
-    color: var(--tiger-text-secondary);
-    margin-bottom: 4px;
-    font-weight: 500;
-    font-size: 13px; /* Maior */
-}
-.pool-value {
-    display: block;
-    color: var(--tiger-accent-blue); /* Cor Azul */
-    font-weight: bold;
-    font-size: 18px; /* Maior */
-    animation: pulse-glow-blue 2s ease-in-out infinite;
-}
-
-/* Animação de pulso azul */
-@keyframes pulse-glow-blue {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.8; }
-}
-
-/* ============================================
-   ÁREA DE ATIVAÇÃO
-   ============================================ */
-
-.activation-area {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center; 
-    gap: 16px;
-    background: var(--tiger-bg-secondary);
-    border: 1px solid var(--tiger-border-color);
-    border-radius: 12px;
-    padding: 16px 8px; 
-    box-shadow: inset 0 0 15px rgba(0, 0, 0, 0.5);
-    height: 180px; 
-    position: relative;
-    overflow: hidden;
-}
-
-.activation-core {
-    width: 120px;
+.slot-window {
+    width: 90px;
     height: 120px;
-    border-radius: 50%;
+    background: linear-gradient(to bottom, #111, #222, #111);
+    border: 2px solid #444;
+    border-radius: 10px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
     position: relative;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    transition: transform 0.3s ease;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.5);
 }
 
-.core-center {
-    width: 80px;
-    height: 80px;
-    background: var(--tiger-bg-primary);
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    border: 2px solid var(--tiger-accent-blue);
-    box-shadow: 0 0 15px rgba(0, 163, 255, 0.5), inset 0 0 10px rgba(0, 0, 0, 0.5);
-    z-index: 3;
-}
-.core-center img {
-    width: 60%;
-    height: 60%;
-    object-fit: contain;
-    animation: core-float 3s ease-in-out infinite;
+.slot-value {
+    font-size: 3.5rem;
+    font-weight: 800;
+    color: #555;
+    line-height: 1;
+    text-shadow: 0 2px 0 #000;
 }
 
-@keyframes core-float {
-    0%, 100% { transform: translateY(0); }
-    50% { transform: translateY(-4px); }
+.slot-window.spinning .slot-value {
+    color: #fff;
+    animation: slotBlur 0.1s infinite;
 }
 
-.core-pulse-1, .core-pulse-2 {
+.slot-window.win {
+    border-color: #ffd700;
+    background: radial-gradient(circle, rgba(255, 215, 0, 0.2), #000);
+    box-shadow: 0 0 15px #ffd700;
+}
+
+.slot-window.win .slot-value {
+    color: #ffd700;
+    text-shadow: 0 0 10px #ffd700;
+}
+
+.slot-label {
     position: absolute;
-    top: 0; left: 0; right: 0; bottom: 0;
-    border-radius: 50%;
-    border: 2px solid var(--tiger-accent-blue);
-    opacity: 0;
-    z-index: 1;
-}
-
-/* Animação de Ativação (Pulsos) */
-.activation-core.activating .core-pulse-1 {
-    animation: pulse-glow-fast 2s ease-out infinite;
-}
-.activation-core.activating .core-pulse-2 {
-    animation: pulse-glow-fast 2s 1s ease-out infinite; /* Delay de 1s */
-}
-
-@keyframes pulse-glow-fast {
-    0% {
-        transform: scale(0.8);
-        opacity: 1;
-        box-shadow: 0 0 10px var(--tiger-accent-blue);
-    }
-    100% {
-        transform: scale(1.5);
-        opacity: 0;
-        box-shadow: 0 0 30px var(--tiger-accent-blue);
-    }
-}
-
-/* Animação de Vitória */
-.activation-core.win-pulse {
-    animation: win-pulse-core 0.6s ease-out;
-}
-@keyframes win-pulse-core {
-    0% { box-shadow: 0 0 0 0 var(--tiger-accent-green); transform: scale(1); }
-    50% { box-shadow: 0 0 40px 15px rgba(0, 255, 127, 0.5); transform: scale(1.1); }
-    100% { box-shadow: 0 0 20px var(--tiger-accent-green); transform: scale(1); }
-}
-
-/* Animação de Falha/Perda */
-.activation-core.lose-pulse {
-    animation: lose-pulse-core 0.5s ease-in-out;
-}
-@keyframes lose-pulse-core {
-    0% { transform: translateX(0); }
-    20% { transform: translateX(-5px); }
-    40% { transform: translateX(5px); }
-    60% { transform: translateX(-3px); }
-    80% { transform: translateX(3px); }
-    100% { transform: translateX(0); }
-}
-
-.result-display {
-    text-align: center;
-    min-height: 40px; 
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    z-index: 10; 
-    position: absolute; 
-    bottom: 10px;
-    width: 90%;
-    background: rgba(0,0,0,0.3);
-    border-radius: 5px;
-    padding: 5px;
-}
-.result-display h3 {
-    font-size: 14px; 
-    color: var(--tiger-text-secondary);
-    font-weight: 700;
-    letter-spacing: 1px;
-}
-.result-display.win h3 {
-    color: var(--tiger-accent-green); 
-    animation: win-text-pulse 0.6s ease-out;
-    text-shadow: 0 0 15px rgba(0, 255, 127, 0.8);
-}
-.result-display.lose h3 {
-    color: var(--tiger-accent-orange); 
-}
-
-@keyframes win-text-pulse {
-    0% { transform: scale(0.9); opacity: 0; }
-    50% { transform: scale(1.05); }
-    100% { transform: scale(1); opacity: 1; }
-}
-
-/* ============================================
-   CONTROL PANEL
-   ============================================ */
-
-.tiger-control-panel {
-    background: var(--tiger-bg-secondary);
-    border: 1px solid var(--tiger-border-color);
-    border-radius: 12px;
-    padding: 16px;
-    display: flex;
-    flex-direction: column;
-    gap: 16px;
-}
-
-.wager-section {
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-}
-
-.control-label {
-    font-size: 11px;
-    font-weight: bold;
-    color: var(--tiger-text-secondary);
-    letter-spacing: 1px;
+    bottom: 5px;
+    font-size: 0.6rem;
+    color: #888;
     text-transform: uppercase;
-}
-
-.wager-input-group {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    background: var(--tiger-bg-primary);
-    border: 1px solid var(--tiger-border-color);
-    border-radius: 8px;
-    padding: 10px;
-}
-
-.wager-input {
-    flex: 1;
-    background: transparent;
-    border: none;
-    color: var(--tiger-accent-gold);
-    font-size: 16px;
     font-weight: bold;
-    outline: none;
-    -moz-appearance: textfield; 
-    appearance: textfield; 
-}
-.wager-input::-webkit-outer-spin-button,
-.wager-input::-webkit-inner-spin-button {
-    -webkit-appearance: none; 
-    margin: 0;
-}
-.wager-input::placeholder {
-    color: var(--tiger-text-secondary);
 }
 
-.currency {
-    color: var(--tiger-accent-green);
-    font-weight: bold;
-    font-size: 14px;
-}
-
-.quick-bets {
-    display: grid;
-    grid-template-columns: repeat(4, 1fr); 
-    gap: 6px;
-}
-
-.quick-bet-btn {
-    background: var(--tiger-button-hover);
-    border: 1px solid var(--tiger-border-color);
-    color: var(--tiger-text-primary);
-    padding: 8px 4px;
-    border-radius: 6px;
-    font-size: 11px;
-    font-weight: bold;
-    cursor: pointer;
-    transition: all 0.2s ease;
-    white-space: nowrap;
-}
-.quick-bet-btn:hover:not(:disabled) {
-    background: var(--tiger-border-color);
-    box-shadow: 0 0 5px rgba(255, 215, 0, 0.3);
-    transform: translateY(-1px);
-}
-.reset-btn {
-    grid-column: span 2; 
-    background: #602828 !important; 
-    border-color: #f00 !important;
-    color: white !important;
-}
-
-/* ✅ CORRIGIDO: pStake e Taxa do Oráculo agora em 2 colunas */
-.payout-info {
-    display: grid;
-    grid-template-columns: 1fr 1fr; /* 2 colunas */
-    gap: 12px;
-    background: var(--tiger-bg-primary);
-    border: 1px solid var(--tiger-border-color);
-    border-radius: 8px;
-    padding: 12px;
-}
-.info-row {
-    display: flex;
-    flex-direction: column; /* Empilha o label e o valor */
-    justify-content: space-between;
-    align-items: center;
-    font-size: 12px;
-    text-align: center;
-}
-.info-label {
-    color: var(--tiger-text-secondary);
-    font-weight: 500;
-    margin-bottom: 4px; /* Espaço entre label e valor */
-}
-.info-value {
-    color: var(--tiger-accent-green);
-    font-weight: bold;
-    font-size: 13px; /* Um pouco maior */
-}
-.status-icon {
-    margin-right: 4px;
-}
-.status-icon.error {
-    color: var(--tiger-accent-orange);
-}
-
-/* ============================================
-   ACTION BAR & MODALS
-   ============================================ */
-
-.tiger-action-bar {
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-    align-items: center;
-}
-
-.spin-button { /* Botão de Ativar Padrão */
-    width: 100%;
-    padding: 14px; 
-    background: linear-gradient(135deg, var(--tiger-accent-blue), #007BFF); 
-    color: #FFFFFF; 
-    border: none;
-    border-radius: 8px;
-    font-size: 16px;
-    font-weight: 900;
-    letter-spacing: 2px;
-    cursor: pointer;
-    box-shadow: 0 6px 15px rgba(0, 163, 255, 0.4); 
-    transition: all 0.3s ease;
-    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
-}
-
-/* [DEPOIS] Novo botão de comprar */
-.buy-button {
-    background: linear-gradient(135deg, var(--tiger-accent-gold), #FFA500);
-    color: #0D1117;
-    box-shadow: 0 6px 15px rgba(255, 215, 0, 0.4);
-}
-.buy-button:hover:not(:disabled) {
-    transform: translateY(-2px);
-    box-shadow: 0 8px 20px rgba(255, 215, 0, 0.6);
-}
-
-
-.spin-button:hover:not(:disabled) {
-    transform: translateY(-2px);
-    box-shadow: 0 8px 20px rgba(0, 163, 255, 0.6); 
-}
-
-.spin-button:active:not(:disabled) {
-    transform: translateY(0);
-}
-
-.spin-button:disabled {
-    opacity: 0.4;
-    cursor: not-allowed;
-    box-shadow: none;
-}
-
-.secondary-actions {
-    display: flex;
-    gap: 10px;
-}
-
-.icon-button {
-    width: 45px; 
-    height: 45px;
-    border-radius: 50%;
-    background: var(--tiger-bg-primary);
-    border: 1px solid var(--tiger-border-color);
-    color: var(--tiger-accent-gold);
-    font-size: 20px;
-    cursor: pointer;
-    transition: all 0.3s ease;
-    position: relative;
-    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.5);
-}
-.icon-button:hover {
-    background: var(--tiger-button-hover);
-    box-shadow: 0 0 10px rgba(255, 215, 0, 0.4);
-    transform: scale(1.05);
-}
-
-/* ... (Estilos de Modal, Conquistas e Level Up são mantidos como antes) ... */
-/* ... (Ocultos por brevidade, mas devem permanecer no seu CSS) ... */
-.modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.9); z-index: 2000; align-items: center; justify-content: center; animation: fade-in 0.3s ease-out; }
-.modal.active { display: flex; }
-@keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
-.modal-content { background: var(--tiger-bg-secondary); border: 1px solid var(--tiger-border-color); border-radius: 12px; max-width: 90%; width: 400px; max-height: 90vh; overflow-y: auto; box-shadow: 0 0 30px rgba(255, 215, 0, 0.2); animation: modal-slide-up 0.3s ease-out; }
-@keyframes modal-slide-up { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
-.modal-header { display: flex; justify-content: space-between; align-items: center; padding: 16px; border-bottom: 1px solid var(--tiger-border-color); }
-.modal-header h2 { color: var(--tiger-accent-gold); font-size: 18px; letter-spacing: 1px; }
-.modal-close { background: none; border: none; color: var(--tiger-text-secondary); font-size: 20px; cursor: pointer; transition: all 0.3s ease; }
-.modal-close:hover { color: var(--tiger-accent-gold); transform: rotate(90deg); }
-.modal-body { padding: 16px; color: var(--tiger-text-primary); }
-.rules-content h3 { color: var(--tiger-accent-green); margin-top: 12px; margin-bottom: 6px; font-size: 15px; }
-.rules-content p { color: var(--tiger-text-primary); line-height: 1.5; margin-bottom: 10px; font-size: 13px; }
-.achievement-item { background: var(--tiger-bg-primary); border: 1px solid var(--tiger-border-color); border-radius: 8px; padding: 10px; margin-bottom: 8px; display: flex; align-items: center; gap: 10px; }
-.achievement-icon { font-size: 28px; }
-.achievement-name { color: var(--tiger-accent-gold); font-weight: bold; font-size: 13px; }
-.achievement-desc { color: var(--tiger-text-secondary); font-size: 11px; margin-top: 2px; }
-.achievement-item.locked { opacity: 0.6; }
-
-
-/* ============================================
-   RESPONSIVE DESIGN (Desktop/Tablet)
-   ============================================ */
-
-@media (min-width: 600px) {
-    .tiger-game-wrapper {
-        max-width: 600px; 
-        padding: 0;
-    }
-    
-    .game-title {
-        font-size: 24px;
-    }
-
-    .legacy-badge {
-        padding: 8px 16px;
-        font-size: 16px;
-    }
-
-    /* ✅ CORRIGIDO: 1 coluna no desktop */
-    .pools-info {
-        grid-template-columns: 1fr; 
-        gap: 12px;
-    }
-
-    .pool-item {
-        padding: 12px 16px;
-        font-size: 14px;
-    }
-    .pool-value {
-        font-size: 20px;
-    }
-
-    .activation-area {
-        height: 220px; 
-    }
-    .activation-core {
-        width: 140px;
-        height: 140px;
-    }
-    .core-center {
-        width: 100px;
-        height: 100px;
-    }
-
-    .result-display h3 {
-        font-size: 18px;
-    }
-
-    /* ✅ CORRIGIDO: pStake e Taxa do Oráculo */
-    .payout-info {
-        grid-template-columns: 1fr 1fr;
-    }
-    .info-row {
-        font-size: 14px;
-    }
-    .info-value {
-        font-size: 15px;
-    }
-
-    .quick-bets {
-        grid-template-columns: repeat(7, 1fr); 
-        gap: 8px;
-    }
-    .reset-btn {
-        grid-column: span 1; 
-    }
-
-    .spin-button {
-        padding: 16px;
-        font-size: 18px;
-    }
-
-    .icon-button {
-        width: 50px;
-        height: 50px;
-        font-size: 24px;
-    }
+@keyframes slotBlur {
+    0% { transform: translateY(-2px); opacity: 0.8; }
+    50% { transform: translateY(2px); opacity: 1; }
+    100% { transform: translateY(-2px); opacity: 0.8; }
 }
