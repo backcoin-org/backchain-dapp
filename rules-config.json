@@ -1,46 +1,46 @@
 {
   "serviceFees": {
-    "COMMENT": "Taxas de Serviço (em BKC/Ether) 💰: Define o custo, em formato decimal (Ex: '100' para 100 BKC), que um usuário paga para usar serviços específicos. O valor é convertido para Wei/Ether na blockchain.",
+    "COMMENT": "💰 PREÇO DOS SERVIÇOS (Em BKC): Define quanto custa para usar cada serviço. Exemplo: Se colocar '100', o usuário pagará 100 tokens BKC. O sistema converte isso automaticamente para a unidade da blockchain (Wei).",
     "NOTARY_SERVICE": "100",
-    "FORTUNE_POOL_SERVICE": "1",
+    "FORTUNE_POOL_SERVICE": "10",
     "NFT_POOL_ACCESS": "0"
   },
   "pStakeMinimums": {
-    "COMMENT": "Mínimo de pStake (Valor Bruto) 🔒: Define a quantidade MÍNIMA de 'poder de stake' (pStake) que um usuário deve ter delegado para ser autorizado a usar um serviço. (O valor é tratado como inteiro, não em Wei).",
+    "COMMENT": "🔒 TRAVA DE VIP (Mínimo de Stake): Define quantos tokens BKC o usuário precisa ter travado (Staked) para ter permissão de usar o serviço. Exemplo: '5000' significa que só quem tem 5.000 BKC em stake pode acessar.",
     "NOTARY_SERVICE": "10000",
-    "FORTUNE_POOL_SERVICE": "10000",
-    "NFT_POOL_ACCESS": "10000"
+    "FORTUNE_POOL_SERVICE": "1000",
+    "NFT_POOL_ACCESS": "5000"
   },
   "stakingFees": {
-    "COMMENT": "Taxas de Stake & Penalidades (em BIPS) 📉: Define taxas e penalidades para as operações de stake e resgate. 100 BIPS = 1%.",
-    "DELEGATION_FEE_BIPS": "100",
+    "COMMENT": "📉 TAXAS DE STAKE (Use BIPS): Taxas cobradas sobre o investimento. ATENÇÃO: 100 = 1%. Se quiser cobrar 5%, coloque 500. Se quiser 0.5%, coloque 50.",
+    "DELEGATION_FEE_BIPS": "0",
     "UNSTAKE_FEE_BIPS": "100",
-    "FORCE_UNSTAKE_PENALTY_BIPS": "5000",
-    "CLAIM_REWARD_FEE_BIPS": "3000" 
+    "FORCE_UNSTAKE_PENALTY_BIPS": "500",
+    "CLAIM_REWARD_FEE_BIPS": "50" 
   },
   "ammTaxFees": {
-    "COMMENT": "Taxa de Venda de NFT (em BIPS) 💸: Define a taxa total cobrada quando um usuário VENDE um NFT de volta para a pool (AMM).",
-    "NFT_POOL_TAX_BIPS": "1000",
-    "NFT_POOL_TAX_LIQUIDITY_SHARE_BIPS": "300"
+    "COMMENT": "💸 TAXAS DO MERCADO DE NFT (Use BIPS): A porcentagem que o sistema retém quando alguém compra ou vende um NFT nas piscinas de liquidez. (Lembre-se: 100 = 1%).",
+    "NFT_POOL_BUY_TAX_BIPS": "100",
+    "NFT_POOL_SELL_TAX_BIPS": "100"
   },
   "boosterDiscounts": {
-    "COMMENT": "Descontos de NFT Booster (em BIPS) ⭐: Define o DESCONTO (em BIPS) que cada Nível de NFT Booster concede nas taxas/penalidades do sistema. A CHAVE é o BIPS do Boost (ex: '5000' para Diamond).",
+    "COMMENT": "⭐ DESCONTOS DOS NFTs (Equivalência): Aqui definimos o desconto de cada nível. No lado ESQUERDO está a Força do NFT (7000 = 70%) e no lado DIREITO o Desconto (7000 = 70%). Mantenha os números iguais para o sistema ser justo.",
+    "7000": "7000",
+    "6000": "6000",
     "5000": "5000",
     "4000": "4000",
     "3000": "3000",
     "2000": "2000",
-    "1000": "1000",
-    "500": "500",
-    "100": "100"
+    "1000": "1000"
   },
   "miningDistribution": {
-    "COMMENT": "Distribuição de Mineração PoP (em BIPS) ⛏️: Distribuição de tokens NOVOS (cunhados). REGRAS: TREASURY + DELEGATOR_POOL DEVE = 10000. VALIDATOR_POOL é 0.",
+    "COMMENT": "⛏️ DIVISÃO DA MINERAÇÃO (Novos Tokens): Para onde vão os tokens CRIADOS pelo sistema quando alguém usa um serviço. A SOMA DEVE SER 10000 (100%). Exemplo atual: 20% Tesouraria, 80% Delegadores.",
     "TREASURY": "2000",
     "VALIDATOR_POOL": "0",
     "DELEGATOR_POOL": "8000"
   },
   "feeDistribution": {
-    "COMMENT": "Distribuição de Taxas (em BIPS) 💵: Distribuição de tokens ORIGINAIS (coletados como taxas). REGRAS: TREASURY + DELEGATOR_POOL DEVE = 10000. VALIDATOR_POOL é 0.",
+    "COMMENT": "💵 DIVISÃO DAS TAXAS (Tokens Pagos): Para onde vão os tokens que o usuário PAGOU de taxa. A SOMA DEVE SER 10000 (100%). Exemplo atual: 50% Tesouraria, 50% Delegadores.",
     "TREASURY": "5000",
     "VALIDATOR_POOL": "0",
     "DELEGATOR_POOL": "5000"

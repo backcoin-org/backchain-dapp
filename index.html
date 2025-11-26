@@ -8,23 +8,26 @@
 
     <script src="https://cdn.tailwindcss.com"></script>
     
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self' data: https: wss: ws:; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.tailwindcss.com https://cdn.jsdelivr.net https://pay.coinbase.com https://static.moonpay.com https://esm.sh https://www.google-analytics.com https://*.vercel.app https://www.gstatic.com https://*.firebaseio.com https://apis.google.com; style-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com https://cdnjs.cloudflare.com https://fonts.googleapis.com; img-src 'self' data: blob: https:; font-src 'self' https: data: https://fonts.gstatic.com; connect-src 'self' https: wss: ws:; frame-ancestors 'self' http://127.0.0.1 http://localhost:* http://localhost:5500 http://localhost:8080 https://backcoin.org https://www.backcoin.org https://*.walletconnect.com https://*.walletconnect.org https://airdropbackchainnew.firebaseapp.com; frame-src 'self' https:;">
+    <meta http-equiv="Content-Security-Policy" content="
+        default-src 'self' data: blob: https: wss: ws:;
+        script-src 'self' 'unsafe-inline' 'unsafe-eval' https:;
+        style-src 'self' 'unsafe-inline' https:;
+        img-src 'self' data: blob: https:;
+        font-src 'self' https: data:;
+        connect-src 'self' https: wss: ws:;
+        frame-src 'self' https: https://*.walletconnect.com https://*.walletconnect.org https://verify.walletconnect.com https://secure.walletconnect.org;
+    ">
     
     <link rel="icon" href="./assets/bkc_logo_3d.png" type="image/png">
-
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" />
-    
     <link rel="stylesheet" href="./styles/tiger-game-styles.css">
-
     <link rel="stylesheet" href="./styles/trade.css">
 
     <script src="https://cdn.jsdelivr.net/npm/ethers@6.4.0/dist/ethers.umd.min.js" defer></script>
-    
     <script src="https://pay.coinbase.com/pay-sdk.js" defer></script>
     <script src="https://static.moonpay.com/web-sdk/v1/moonpay-web-sdk.min.js" defer></script>
     
     <style>
-        /* Estilos CSS (sem alterações) */
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
         :root {
             --bg-main: #18181b; --bg-sidebar: #27272a; --bg-card: #3f3f46; --border-color: #52525b; --text-primary: #f4f4f5; --text-secondary: #a1a1aa; --accent: #f59e0b; --accent-hover: #d97706;
@@ -35,10 +38,11 @@
         .btn-disabled { background-color: #3f3f46 !important; color: #71717a !important; cursor: not-allowed !important; }
         .loader { border: 2px solid var(--border-color); border-radius: 50%; border-top: 2px solid var(--accent); width: 20px; height: 20px; animation: spin 1s linear infinite; }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        
+        /* Utility Classes */
         .form-input { background-color: var(--bg-main); border: 1px solid var(--border-color); border-radius: 0.375rem; padding: 0.75rem 1rem; color: var(--text-primary); width: 100%; transition: border-color 0.2s, box-shadow 0.2s; }
         .form-input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.4); }
         .form-input:disabled { background-color: #27272a; cursor: not-allowed; }
-        .form-input[type="date"]::-webkit-calendar-picker-indicator { filter: invert(0.8); }
         ::-webkit-scrollbar { width: 8px; }
         ::-webkit-scrollbar-track { background: var(--bg-sidebar); }
         ::-webkit-scrollbar-thumb { background: var(--border-color); border-radius: 4px; }
@@ -48,172 +52,78 @@
         .tab-content { display: none; }
         .tab-content.active { display: block; animation: fadeIn 0.5s; }
         @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
-        .text-gradient { background: linear-gradient(to right, #f59e0b, #facc15); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }
-        .pagination-btn { height: 36px; width: 36px; display: inline-flex; align-items: center; justify-content: center; background-color: var(--bg-card); border-radius: 0.375rem; transition: background-color 0.2s; }
-        .pagination-btn:hover { background-color: #52525b; }
-        .pagination-btn:disabled { background-color: #27272a; color: #52525b; cursor: not-allowed; }
-        .pagination-page-num { height: 36px; padding: 0 1rem; display: inline-flex; align-items: center; justify-content: center; font-size: 0.875rem; font-weight: 500; }
-        .nft-clickable-image { cursor: pointer; transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out; }
-        .nft-clickable-image:hover { transform: scale(1.05); box-shadow: 0 0 15px rgba(245, 158, 11, 0.4); }
+        
+        /* Presale Styles */
         #presale { background-color: var(--presale-bg-main); }
         #presale .loader { border: 2px solid #fff; border-top: 2px solid var(--accent); width: 16px; height: 16px; margin-right: 8px; }
         #presale .btn-primary { background: linear-gradient(90deg, var(--accent), var(--accent-hover)); box-shadow: 0 0 15px rgba(245, 158, 11, 0.4); transition: all 0.3s ease-in-out; color: #1a1a1a; }
         #presale .btn-primary:hover:not(:disabled) { transform: translateY(-3px) scale(1.05); box-shadow: 0 0 25px rgba(245, 158, 11, 0.6); }
         #presale .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
-        #presale .presale-text-gradient { background: linear-gradient(90deg, var(--accent-hover), var(--accent)); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }
-        #presale .fade-in-section { opacity: 0; transform: translateY(40px); transition: opacity 0.8s ease-out, transform 0.8s ease-out; }
-        #presale .fade-in-section.is-visible { opacity: 1; transform: translateY(0); }
         #presale .nft-card { background: var(--presale-bg-card); backdrop-filter: blur(10px); border: 1px solid var(--presale-border-color); transition: transform 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease; }
         #presale .nft-card:hover { transform: translateY(-10px); border-color: var(--accent); box-shadow: 0 20px 30px rgba(0,0,0,0.4); }
-        #presale .nft-card-image { transition: transform 0.4s ease; }
-        #presale .nft-card:hover .nft-card-image { transform: scale(1.1); }
-        #presale .roadmap-item { position: relative; }
-        #presale .roadmap-item::before { content: ''; position: absolute; left: -31px; top: 5px; width: 22px; height: 22px; border-radius: 50%; background-color: var(--presale-bg-card); border: 4px solid var(--presale-border-color); transition: background-color 0.3s, border-color 0.3s; }
-        #presale .roadmap-item.is-visible::before { background-color: var(--accent); border-color: var(--accent-hover); }
-        #presale .quantity-selector { display: flex; align-items: center; justify-content: center; gap: 0.5rem; }
-        #presale .quantity-btn { background-color: var(--presale-border-color); color: var(--text-primary); width: 32px; height: 32px; border-radius: 50%; font-size: 1.25rem; font-weight: bold; transition: background-color 0.2s; }
-        #presale .quantity-btn:hover { background-color: var(--accent); color: var(--presale-bg-darker); }
-        #presale .quantity-input { background-color: transparent; border: none; color: var(--text-primary); text-align: center; width: 40px; font-size: 1.25rem; font-weight: bold; -moz-appearance: textfield; appearance: textfield; }
-        #presale .quantity-input::-webkit-outer-spin-button, #presale .quantity-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
-        .ugc-platform-btn { background-color: var(--bg-card); border: 1px solid var(--border-color); padding: 1.5rem 1rem; border-radius: 0.5rem; text-align: center; transition: all 0.2s ease-in-out; cursor: pointer; }
-        .ugc-platform-btn:hover { background-color: var(--border-color); transform: translateY(-3px); box-shadow: 0 4px 10px rgba(0,0,0,0.3); }
-        .ugc-platform-btn i { font-size: 2rem; margin-bottom: 0.75rem; display: block; }
-        .ugc-platform-btn span { font-weight: 600; }
-        .flagged-submission-card { background-color: var(--bg-main); border: 1px dashed #e53e3e; padding: 1rem; border-radius: 0.5rem; margin-bottom: 1rem; opacity: 0.9; }
-
-        /* --- NOVOS ESTILOS PARA GAMIFICAÇÃO (SLOT MACHINE) --- */
-        #tiger-animation-slot { 
-            height: 160px; /* Altura do slot */
-            overflow: hidden; 
-            box-shadow: inset 0 0 10px rgba(0,0,0,0.5); /* Sombra interna para profundidade */
-        }
         
-        .reel-style {
-            width: 33.33%;
-            height: 100%;
-            font-size: 5rem; /* Símbolos grandes */
-            text-align: center;
-            line-height: 1.2;
-            overflow: hidden;
-            /* Adiciona um gradiente para focar no centro */
-            mask-image: linear-gradient(to top, transparent 0%, white 20%, white 80%, transparent 100%);
-            -webkit-mask-image: linear-gradient(to top, transparent 0%, white 20%, white 80%, transparent 100%);
-            display: flex;
-            flex-direction: column;
-            justify-content: flex-start; /* Símbolos começam no topo */
-            transition: transform 1s cubic-bezier(0.1, 0.7, 0.1, 1); /* Transição para parada suave */
-        }
+        /* AirBNFT Styles */
+        .rental-card { transition: transform 0.2s; }
+        .rental-card:hover { transform: translateY(-5px); }
 
-        .slot-symbol {
-            height: 100%; 
-            width: 100%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            flex-shrink: 0;
-        }
-        
-        /* Animação de Rotação Infinita (para iniciar o jogo) */
-        @keyframes spin-reel { 
-            0% { transform: translateY(0); }
-            100% { transform: translateY(-80%); } /* Rola 80% dos símbolos (ajuste se necessário) */
-        }
-        .animate-spin-infinite {
-            animation: spin-reel 0.2s linear infinite; /* Rotação rápida e infinita */
-        }
-        
-        /* Animação de Parada Dramática (quando o resultado é conhecido) */
-        @keyframes stop-reel-effect {
-            0% { transform: scale(1.1); }
-            50% { transform: scale(0.95); }
-            100% { transform: scale(1); }
-        }
-        .animate-stop-reel {
-            animation: stop-reel-effect 0.5s ease-out 1;
-            /* Adiciona um efeito visual de 'bouncing' na parada */
-        }
-
-        /* --- Animações de Feedback de Resultado --- */
-        @keyframes pulse-once {
-            0% { opacity: 1; transform: scale(1); }
-            50% { opacity: 0.8; transform: scale(1.02); }
-            100% { opacity: 1; transform: scale(1); }
-        }
-        .animate-pulse-once {
-            animation: pulse-once 1.5s ease-out 1;
-        }
-        
-        @keyframes flash-red {
-            0% { background-color: rgba(220, 38, 38, 0.5); } /* Red 600/50 */
-            25% { background-color: rgba(220, 38, 38, 0.9); }
-            50% { background-color: rgba(220, 38, 38, 0.5); }
-            100% { background-color: rgba(220, 38, 38, 0.5); }
-        }
-        .animate-flash-red {
-            animation: flash-red 0.5s ease-in-out 3; /* Pisca 3 vezes */
-        }
-
-        /* ✅ INÍCIO DO NOVO CSS PARA O NOTÁRIO */
-        /* ================================================================== */
-        /* Notary Step Indicators                                             */
-        /* ================================================================== */
-
-        /* Estilo base para um passo (cinza, inativo) */
-        .step-indicator {
-            display: flex;
-            flex-direction: column; /* Empilha ícone e texto em telas pequenas */
-            align-items: center;
-            justify-content: center;
-            padding: 0.75rem; /* p-3 */
-            border-width: 2px;
-            border-color: #3f3f46; /* border-border-color (zinc-700) */
-            border-radius: 0.5rem; /* rounded-lg */
-            color: #71717a; /* text-zinc-500 */
+        /* --- DASHBOARD REDESIGN STYLES (NOVO) --- */
+        .glass-panel {
+            background: rgba(39, 39, 42, 0.6);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(82, 82, 91, 0.5);
+            border-radius: 1rem;
+            padding: 1.5rem;
             transition: all 0.3s ease;
-            flex-grow: 1;
         }
 
-        /* Ajuste para telas médias (md:) e maiores */
-        @media (min-width: 768px) {
-            .step-indicator {
-                flex-direction: row; /* Lado a lado em telas maiores */
-            }
-            .step-indicator i {
-                margin-right: 0.75rem; /* md:mr-3 */
-            }
-            .step-indicator span {
-                display: inline; /* md:inline */
-            }
+        .glass-panel:hover {
+            border-color: rgba(245, 158, 11, 0.3);
+            box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.5);
+        }
+
+        .booster-highlight-card {
+            background: linear-gradient(145deg, rgba(24, 24, 27, 0.9), rgba(39, 39, 42, 0.8));
+            border: 1px solid var(--accent);
+            box-shadow: 0 0 20px rgba(245, 158, 11, 0.1);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .booster-glow {
+            position: absolute;
+            top: -50%;
+            right: -50%;
+            width: 100%;
+            height: 100%;
+            background: radial-gradient(circle, rgba(245, 158, 11, 0.2) 0%, rgba(0,0,0,0) 70%);
+            z-index: 0;
+        }
+
+        .activity-filter-btn {
+            padding: 0.5rem 1rem;
+            border-radius: 0.5rem;
+            font-size: 0.875rem;
+            font-weight: 600;
+            color: #a1a1aa;
+            background: rgba(63, 63, 70, 0.4);
+            border: 1px solid transparent;
+            transition: all 0.2s;
+        }
+
+        .activity-filter-btn.active {
+            background: rgba(245, 158, 11, 0.2);
+            color: #fbbf24;
+            border-color: rgba(245, 158, 11, 0.4);
         }
         
-        /* Oculta o texto em telas pequenas */
-        .step-indicator span {
+        .no-scrollbar::-webkit-scrollbar {
             display: none;
         }
-
-        /* Estilo para um passo ATIVO (azul) */
-        .step-indicator.active {
-            border-color: #2563eb; /* border-blue-600 */
-            background-color: rgba(30, 58, 138, 0.2); /* bg-blue-900/20 */
-            color: #93c5fd; /* text-blue-300 */
-            box-shadow: 0 0 15px rgba(59, 130, 246, 0.2);
+        .no-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
         }
-
-        /* Estilo para um passo COMPLETO (verde) */
-        .step-indicator.complete {
-            border-color: rgba(74, 222, 128, 0.5); /* border-green-600/50 */
-            background-color: rgba(21, 128, 61, 0.1); /* bg-green-900/10 */
-            color: #86efac; /* text-green-400 */
-        }
-
-        .step-indicator i {
-            transition: transform 0.3s ease;
-        }
-
-        .step-indicator.active i {
-            transform: scale(1.1);
-        }
-        /* ✅ FIM DO NOVO CSS PARA O NOTÁRIO */
+        /* ---------------------------------------- */
 
     </style>
 </head>
@@ -238,17 +148,21 @@
                         <span>Dashboard</span>
                     </a>
                     
-                    <a data-target="presale" class="sidebar-link flex items-center gap-4 py-2.5 px-4 rounded-lg transition-colors text-zinc-400 hover:text-white hover:bg-zinc-700">
-                        <i class="fa-solid fa-hourglass-half w-5 text-center"></i>
-                        <span>NFT Presale</span>
-                    </a>
-
                     <a data-target="mine" class="sidebar-link flex items-center gap-4 py-2.5 px-4 rounded-lg transition-colors text-zinc-400 hover:text-white hover:bg-zinc-700">
                         <i class="fa-solid fa-layer-group w-5 text-center"></i>
                         <span>Staking Pool</span>
                     </a>
                     
-                    <a data-target="store" class="sidebar-link flex items-center gap-4 py-2.5 px-4 rounded-lg transition-colors text-zinc-400 hover:text-white hover:bg-zinc-700"><i class="fa-solid fa-store w-5 text-center"></i><span>NFT Pool</span></a>
+                    <a data-target="store" class="sidebar-link flex items-center gap-4 py-2.5 px-4 rounded-lg transition-colors text-zinc-400 hover:text-white hover:bg-zinc-700">
+                        <i class="fa-solid fa-store w-5 text-center"></i>
+                        <span>NFT Market</span>
+                    </a>
+
+                    <a data-target="rental" class="sidebar-link flex items-center gap-4 py-2.5 px-4 rounded-lg transition-colors text-cyan-400 hover:text-white hover:bg-zinc-700/50 border border-cyan-900/30 bg-cyan-900/10">
+                        <i class="fa-solid fa-house-user w-5 text-center"></i>
+                        <span>AirBNFT (Rent)</span>
+                    </a>
+
                     <a data-target="rewards" class="sidebar-link flex items-center gap-4 py-2.5 px-4 rounded-lg transition-colors text-zinc-400 hover:text-white hover:bg-zinc-700"><i class="fa-solid fa-id-card-clip w-5 text-center"></i><span>My Rewards</span></a>
                     
                     <a data-target="actions" class="sidebar-link flex items-center gap-4 py-2.5 px-4 rounded-lg transition-colors text-zinc-400 hover:text-white hover:bg-zinc-700">
@@ -267,45 +181,27 @@
                     </a>
 
                     <a title="Coming Soon" class="sidebar-link flex items-center justify-between gap-4 py-2.5 px-4 rounded-lg transition-colors text-zinc-400 opacity-50 cursor-not-allowed">
-                        <div class="flex items-center gap-4">
-                            <i class="fa-solid fa-shuffle w-5 text-center"></i>
-                            <span>DEX Swap</span>
-                        </div>
+                        <div class="flex items-center gap-4"><i class="fa-solid fa-shuffle w-5 text-center"></i><span>DEX Swap</span></div>
                         <span class="text-xs bg-zinc-700 text-zinc-300 font-semibold px-2 py-0.5 rounded-full">Soon</span>
                     </a>
-                    
                     <a title="Coming Soon" class="sidebar-link flex items-center justify-between gap-4 py-2.5 px-4 rounded-lg transition-colors text-zinc-400 opacity-50 cursor-not-allowed">
-                        <div class="flex items-center gap-4">
-                            <i class="fa-solid fa-landmark w-5 text-center"></i>
-                            <span>DAO</span>
-                        </div>
+                        <div class="flex items-center gap-4"><i class="fa-solid fa-landmark w-5 text-center"></i><span>DAO</span></div>
                         <span class="text-xs bg-zinc-700 text-zinc-300 font-semibold px-2 py-0.5 rounded-full">Soon</span>
                     </a>
-
-                    <a title="Coming Soon" class="sidebar-link flex items-center justify-between gap-4 py-2.5 px-4 rounded-lg transition-colors text-zinc-400 opacity-50 cursor-not-allowed">
-                        <div class="flex items-center gap-4">
-                            <i class="fa-solid fa-umbrella w-5 text-center"></i>
-                            <span>Insurance</span>
-                        </div>
-                        <span class="text-xs bg-zinc-700 text-zinc-300 font-semibold px-2 py-0.5 rounded-full">Soon</span>
-                    </a>
-                    
                     </div>
+
                 <div id="admin-link-container" class="mt-4 pt-4 border-t border-zinc-700" style="display: none;"><a data-target="admin" id="admin-link" class="sidebar-link flex items-center gap-4 py-2.5 px-4 rounded-lg transition-colors text-red-400 hover:text-white hover:bg-red-500/50"><i class="fa-solid fa-user-shield w-5 text-center"></i><span>Admin Panel</span></a></div>
 
                 <div class="mt-auto pt-4 border-t border-zinc-700 space-y-2">
-
                     <div class="px-4 pt-2 pb-4 text-center">
                         <div class="flex items-center justify-center gap-6">
-                            <a href="https://x.com/backcoin" target="_blank" rel="noopener noreferrer" title="Follow on X" class="text-zinc-400 hover:text-white transition-colors text-xl"><i class="fa-brands fa-twitter"></i></a>
-                            <a href="https://web.telegram.org/k/#@BackCoinorg" target="_blank" rel="noopener noreferrer" title="Join Telegram" class="text-zinc-400 hover:text-white transition-colors text-xl"><i class="fa-brands fa-telegram"></i></a>
-                            <a href="https://www.youtube.com/@Backcoin" target="_blank" rel="noopener noreferrer" title="Subscribe on YouTube" class="text-zinc-400 hover:text-white transition-colors text-xl"><i class="fa-brands fa-youtube"></i></a>
+                            <a href="https://x.com/backcoin" target="_blank" rel="noopener noreferrer" class="text-zinc-400 hover:text-white transition-colors text-xl"><i class="fa-brands fa-twitter"></i></a>
+                            <a href="https://web.telegram.org/k/#@BackCoinorg" target="_blank" rel="noopener noreferrer" class="text-zinc-400 hover:text-white transition-colors text-xl"><i class="fa-brands fa-telegram"></i></a>
+                            <a href="https://www.youtube.com/@Backcoin" target="_blank" rel="noopener noreferrer" class="text-zinc-400 hover:text-white transition-colors text-xl"><i class="fa-brands fa-youtube"></i></a>
                         </div>
                     </div>
-
                     <a data-target="about" class="sidebar-link flex items-center gap-4 py-2.5 px-4 rounded-lg transition-colors text-amber-400 hover:text-amber-300 hover:bg-zinc-700"><i class="fa-solid fa-circle-info w-5 text-center"></i><span>About the Project</span></a>
                     <a href="#" id="shareProjectBtn" class="sidebar-link flex items-center gap-4 py-2.5 px-4 rounded-lg transition-colors text-zinc-400 hover:text-white hover:bg-zinc-700"><i class="fa-solid fa-share-nodes w-5 text-center"></i><span>Share Project</span></a>
-
                     <a data-target="faucet" class="sidebar-link flex items-center gap-4 py-2.5 px-4 rounded-lg transition-colors text-cyan-400 hover:text-white hover:bg-zinc-700"><i class="fa-solid fa-faucet w-5 text-center"></i><span>Testnet Faucet</span></a>
                 </div>
             </nav>
@@ -316,34 +212,22 @@
             <header class="sticky top-0 z-20 flex justify-between items-center p-4 bg-sidebar/80 backdrop-blur-sm border-b border-border-color">
                 <div class="flex items-center gap-3">
                     <button id="menu-btn" class="lg:hidden text-xl text-zinc-400 hover:text-white h-10 w-10"><i class="fa-solid fa-bars"></i></button>
-                    
                     <img src="./assets/bkc_logo_3d.png" alt="Backcoin.org Logo" class="h-8 w-auto rounded-full lg:hidden">
                     <span id="mobileAppDisplay" class="text-xl font-bold text-amber-400 lg:hidden">Backcoin.org</span>
-
                 </div>
                 
                 <div class="flex items-center ml-auto gap-2 sm:gap-3">
-                    
                     <div id="desktop-connection-controls" class="hidden lg:flex items-center gap-3">
-
                         <button id="customBuyCryptoBtn" class="hidden items-center justify-center gap-2 rounded-md transition-colors text-sm bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4">
                             <i class="fa-solid fa-wallet"></i> Buy Crypto
                         </button>
-
                         <button id="connectButtonDesktop" class="bg-amber-500 hover:bg-amber-600 text-zinc-900 font-bold py-2 px-4 rounded-md transition-colors text-xs font-mono text-center max-w-fit whitespace-nowrap relative">
                             Connect
                         </button>
                     </div>
-                    
                     <div id="mobile-connection-controls" class="flex items-center lg:hidden gap-2">
-
-                        <button id="customBuyCryptoBtnMobile" class="hidden items-center justify-center h-10 w-10 text-xl text-blue-400 hover:text-white">
-                            <i class="fa-solid fa-wallet"></i>
-                        </button>
-
-                        <button id="connectButtonMobile" class="bg-amber-500 hover:bg-amber-600 text-zinc-900 font-bold py-2 px-3 rounded-md transition-colors text-xs font-mono text-center max-w-fit whitespace-nowrap relative">
-                            Connect
-                        </button>
+                        <button id="customBuyCryptoBtnMobile" class="hidden items-center justify-center h-10 w-10 text-xl text-blue-400 hover:text-white"><i class="fa-solid fa-wallet"></i></button>
+                        <button id="connectButtonMobile" class="bg-amber-500 hover:bg-amber-600 text-zinc-900 font-bold py-2 px-3 rounded-md transition-colors text-xs font-mono text-center max-w-fit whitespace-nowrap relative">Connect</button>
                     </div>
                 </div>
             </header>
@@ -352,87 +236,23 @@
                 <div class="container mx-auto max-w-7xl">
 
                     <section id="dashboard" class=""> 
-                        <div class="grid grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 mb-8">
-                            <div class="bg-sidebar border border-border-color rounded-xl p-4 flex items-center gap-4"><i class="fa-solid fa-coins text-2xl text-cyan-400 w-8 text-center"></i><div class="min-w-0"><p class="text-zinc-400 text-sm">Total Supply</p><p id="statTotalSupply" class="text-base sm:text-xl font-bold mt-1 truncate">--</p></div></div>
-                            <div class="bg-sidebar border border-border-color rounded-xl p-4 flex items-center gap-4"><i class="fa-solid fa-coins text-2xl text-amber-400 w-8 text-center"></i><div class="min-w-0"><p class="text-zinc-400 text-sm">$BKC</p><p id="statUserBalance" class="text-base sm:text-xl font-bold mt-1 truncate">--</p></div></div>
-                            <div class="bg-sidebar border border-border-color rounded-xl p-4 flex items-center gap-4"><i class="fa-solid fa-users text-2xl text-green-400 w-8 text-center"></i></i><div class="min-w-0"><p class="text-zinc-400 text-sm">Active Users</p><p id="statValidators" class="text-base sm:text-xl font-bold mt-1 truncate">--</p></div></div>
-                            <div class="bg-sidebar border border-border-color rounded-xl p-4 flex items-center gap-4"><i class="fa-solid fa-shield-halved text-2xl text-purple-400 w-8 text-center"></i><div class="min-w-0"><p class="text-zinc-400 text-sm">Net pStake</p><p id="statTotalPStake" class="text-base sm:text-xl font-bold mt-1 truncate">--</p></div></div>
-                            
-                            <div class="bg-sidebar border border-border-color rounded-xl p-4 flex items-center gap-4">
-                                <i class="fa-solid fa-lock text-2xl text-cyan-400 w-8 text-center"></i>
-                                <div class="min-w-0">
-                                    <p class="text-zinc-400 text-sm">Locked %</p>
-                                    <p id="statLockedPercentage" class="text-base sm:text-xl font-bold mt-1 truncate">--</p>
-                                </div>
-                            </div>
-                            
-                            <div class="bg-sidebar border border-border-color rounded-xl p-4 flex items-center gap-4">
-                                <i class="fa-solid fa-fire text-2xl text-amber-400 w-8 text-center"></i>
-                                <div class="min-w-0">
-                                    <p class="text-zinc-400 text-sm">Scarcity Rate</p><p id="statScarcity" class="text-base sm:text-xl font-bold mt-1 truncate">--</p>
-                                </div>
-                            </div>
-
-                        </div>
-                        <div class="grid grid-cols-1 xl:grid-cols-2 gap-8">
-                            <div class="flex flex-col gap-8">
-                                <div class="bg-sidebar border border-border-color rounded-xl p-6 flex flex-col">
-                                    <h2 class="text-xl font-bold mb-4">My Position</h2>
-                                    <div id="user-activity-container">
-                                        <div class="border-b border-border-color mb-5">
-                                            <nav id="user-activity-tabs" class="-mb-px flex gap-4 overflow-x-auto whitespace-nowrap">
-                                                <button class="tab-btn active" data-target="tab-overview">Overview</button>
-                                                <button class="tab-btn" data-target="tab-delegations">Delegations</button>
-                                            </nav>
-                                        </div>
-                                        <div id="user-activity-content">
-                                            <div id="tab-overview" class="tab-content active space-y-6">
-                                                <div class="grid grid-cols-1 sm:grid-cols-2 gap-5">
-                                                    <div class="bg-main border border-border-color rounded-xl p-5"><p class="text-zinc-400 text-sm">Your Total pStake</p><p id="statUserPStake" class="text-2xl sm:text-3xl font-bold mt-1 text-purple-400 whitespace-nowrap overflow-hidden text-ellipsis">--</p></div>
-                                                    
-                                                    <div class="bg-main border border-border-color rounded-xl p-5">
-                                                        <p class="text-zinc-400 text-sm mb-1">Claimable Rewards (Net)</p>
-                                                        <p id="statUserRewards" class="text-2xl sm:text-3xl font-bold text-amber-400 whitespace-nowrap overflow-hidden text-ellipsis">--</p>
-                                                        
-                                                        <div id="claimable-rewards-panel-content" class="mt-3">
-                                                                </div>
-                                                    </div>
-                                                    </div>
-                                                <div id="reward-efficiency-panel"></div>
-                                                <div class="mt-8 pt-6 border-t border-border-color"><h3 class="text-lg font-bold mb-4">Recent Activity</h3><div id="activity-history-list-container"></div></div>
-                                            </div>
-                                            <div id="tab-delegations" class="tab-content hidden"><h3 class="text-lg font-bold mb-3">Active Delegations</h3 ><div id="my-delegations-list" class="space-y-4"></div></div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="flex flex-col gap-8">
-                                
-                                <div id="protocol-tvl-panel" class="bg-sidebar border border-border-color rounded-xl p-6">
-                                    <div class="flex justify-between items-center mb-1">
-                                        <p class="text-zinc-400 text-sm">Protocol TVL (Total Locked)</p>
-                                        <i class="fa-solid fa-lock text-zinc-500"></i>
-                                    </div>
-
-                                    <p id="protocol-tvl-value" class="text-3xl font-bold text-white">--</p>
-                                    <p id="protocol-tvl-percentage" class="text-sm text-zinc-500">--% Locked</p>
-                                    
-                                    <div class="mt-4 pt-4 border-t border-border-color/50 text-xs space-y-1">
-                                        <div class="flex justify-between"><span class="text-zinc-400">Staking:</span> <span id="tvl-detail-staking" class="font-mono text-zinc-300">-- $BKC</span></div>
-                                        <div class="flex justify-between"><span class="text-zinc-400">Game Pools:</span> <span id="tvl-detail-game" class="font-mono text-zinc-300">-- $BKC</span></div>
-                                        <div class="flex justify-between"><span class="text-zinc-400">NFT Pools:</span> <span id="tvl-detail-nftpool" class="font-mono text-zinc-300">-- $BKC</span></div>
-                                    </div>
-                                    </div>
-                                <div id="top-validators-dashboard" class="bg-sidebar border border-border-color rounded-xl p-6"><div class="flex justify-between items-center mb-4"><h3 class="text-xl font-bold">Network Staking</h3><p class="text-sm text-zinc-400">Official Pool</p></div><div id="top-validators-list" class="space-y-3"></div></div>
-                            </div>
-                        </div>
+                        <div class="text-center p-10"><div class="loader inline-block"></div> Loading Dashboard...</div>
                     </section>
                     
-                    <section id="presale" style="background-color: var(--presale-bg-main); margin: -1.5rem;" class="hidden"></section>
-
+                    <section id="presale" class="hidden"></section>
+                    
                     <section id="mine" class="hidden"></section>
-
-                    <section id="store" class="hidden"><h1 class="text-2xl md:text-3xl font-bold mb-6">NFT Trading Pool</h1><p class="text-zinc-400 max-w-3xl mb-8">Increase your reward claim efficiency from a 50% base up to 100% by purchasing a Booster NFT. Prices are dynamic and increase as NFTs are sold.</p><div id="store-content-wrapper"><h2 class="text-xl font-bold mb-4">Booster Pools</h2><div id="store-items-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6"></div></div></section>
+                    <section id="store" class="hidden">
+                        <h1 class="text-2xl md:text-3xl font-bold mb-6">NFT Market</h1>
+                        <p class="text-zinc-400 max-w-3xl mb-8">Increase your reward claim efficiency by purchasing a Booster NFT.</p>
+                        <div class="bg-gradient-to-r from-cyan-900/40 to-blue-900/40 border border-cyan-500/30 rounded-xl p-6 mb-8 flex flex-col md:flex-row justify-between items-center gap-4 shadow-lg relative overflow-hidden">
+                            <div class="absolute top-0 right-0 opacity-10 pointer-events-none"><i class="fa-solid fa-house-user text-9xl text-cyan-400"></i></div>
+                            <div class="relative z-10"><h3 class="text-xl font-bold text-cyan-300 mb-1"><i class="fa-solid fa-clock mr-2"></i> Just need a temporary boost?</h3><p class="text-zinc-300 text-sm">Rent a powerful NFT by the hour with <strong>AirBNFT</strong>.</p></div>
+                            <button onclick="navigateTo('rental')" class="relative z-10 bg-cyan-600 hover:bg-cyan-500 text-white font-bold py-3 px-6 rounded-lg transition-transform hover:scale-105 shadow-cyan-500/20 shadow-lg">Go to AirBNFT <i class="fa-solid fa-arrow-right ml-2"></i></button>
+                        </div>
+                        <div class="store-content-wrapper"><h2 class="text-xl font-bold mb-4">Buy/Sell Pools</h2><div id="store-items-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6"></div></div>
+                    </section>
+                    <section id="rental" class="hidden"></section>
                     <section id="rewards" class="hidden">
                         <h1 class="text-2xl md:text-3xl font-bold mb-6">My Rewards</h1>
                         <div id="claimable-rewards-panel" class="mb-8 p-6 bg-sidebar border border-border-color rounded-xl max-w-2xl mx-auto">
@@ -440,54 +260,28 @@
                             <div id="rewards-loader" class="text-center hidden"><div class="loader inline-block"></div></div>
                             <div id="rewards-details-content"></div>
                         </div>
-                        <h2 class="text-xl font-bold mb-4">Vesting Certificates (Deprecated)</h2>
+                        <h2 class="text-xl font-bold mb-4">Vesting Certificates</h2>
                         <div id="certificates-list-container"></div>
                     </section>
-                    
-                    <section id="actions" class="hidden">
-                        </section>
-
+                    <section id="actions" class="hidden"></section>
                     <section id="airdrop" class="hidden" role="tabpanel" aria-labelledby="nav-airdrop">
-    
-                        <div id="airdrop-loading-placeholder" class="text-center p-12">
-                            <div class="loader inline-block"></div>
-                            <p class="text-zinc-400 mt-4 text-lg">Loading Airdrop...</p>
-                        </div>
-                    
-                        <div id="airdrop-tabs-container">
-                            </div>
-                    
-                        <div id="airdrop-content-wrapper">
-                            
-                            <div id="active-tab-content" role="tabpanel" tabindex="0">
-                                </div>
-                    
-                        </div>
-                    
+                        <div id="airdrop-loading-placeholder" class="text-center p-12"><div class="loader inline-block"></div><p class="text-zinc-400 mt-4 text-lg">Loading Airdrop...</p></div>
+                        <div id="airdrop-tabs-container"></div>
+                        <div id="airdrop-content-wrapper"><div id="active-tab-content" role="tabpanel" tabindex="0"></div></div>
                     </section>
-                    <section id="dao" class="hidden">
-                        </section>
+                    <section id="notary" class="hidden"></section>
+                    <section id="tokenomics" class="hidden"></section>
+                    <section id="faucet" class="hidden"></section>
+                    <section id="about" class="hidden"></section>
+                    <section id="admin" class="hidden"></section>
 
-                    <section id="notary" class="hidden">
-                        </section>
-
-                    <section id="tokenomics" class="hidden">
-                        </section>
-                    <section id="faucet" class="hidden">
-                        </section>
-                    <section id="about" class="hidden">
-                        </section>
-                    <section id="admin" class="hidden">
-                         </section>
+                    <section id="socials" class="hidden"></section>
 
                 </div>
             </main>
         </div>
     </div>
-
     <div id="modal-container"></div>
-
     <script type="module" src="./app.js"></script>
-    
 </body>
 </html>

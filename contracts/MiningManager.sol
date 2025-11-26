@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.28;
+pragma solidity 0.8.28;
 
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
@@ -10,6 +10,12 @@ import "@openzeppelin/contracts-upgradeable/token/ERC20/utils/SafeERC20Upgradeab
 import "./IInterfaces.sol";
 import "./BKCToken.sol";
 
+/**
+ * @title MiningManager
+ * @notice The economic heart of the Backcoin Protocol ($BKC).
+ * @dev Handles the "Proof-of-Purchase" mining mechanism and revenue distribution.
+ * Optimized for BNB Chain.
+ */
 contract MiningManager is
     Initializable,
     UUPSUpgradeable,
@@ -19,120 +25,163 @@ contract MiningManager is
 {
     using SafeERC20Upgradeable for BKCToken;
 
+    // --- State Variables ---
+
     IEcosystemManager public ecosystemManager;
     BKCToken public bkcToken;
     address public bkcTokenAddress;
     
-    mapping(string => address) public authorizedMiners;
+    // Mapping optimized with bytes32 keys for gas savings
+    mapping(bytes32 => address) public authorizedMiners;
     bool private tgeMinted;
 
-    // Constants for Dynamic Scarcity Logic (160M Max Mintable Supply)
+    // --- Constants ---
+
     uint256 private constant E18 = 10**18;
+    // Dynamic Scarcity Thresholds (160M Max Mintable via Mining)
     uint256 private constant MAX_MINTABLE_SUPPLY = 160000000 * E18;
     uint256 private constant THRESHOLD_80M = 80000000 * E18;
     uint256 private constant THRESHOLD_40M = 40000000 * E18;
     uint256 private constant THRESHOLD_20M = 20000000 * E18;
 
+    // Pre-computed hashes for distribution keys to save gas during mining
+    bytes32 public constant POOL_TREASURY = keccak256("TREASURY");
+    bytes32 public constant POOL_DELEGATOR = keccak256("DELEGATOR_POOL");
+
+    // --- Custom Errors ---
+
+    error InvalidAddress();
+    error Unauthorized();
+    error TGEAlreadyMinted();
+    error DistributionConfigError(); // Sum of BIPs != 10000
+
+    // --- Initialization ---
+
+    /// @custom:oz-upgrades-unsafe-allow constructor
+    constructor() {
+        _disableInitializers();
+    }
+
     function initialize(
         address _ecosystemManagerAddress
     ) public initializer {
+        if (_ecosystemManagerAddress == address(0)) revert InvalidAddress();
         __Ownable_init();
         __UUPSUpgradeable_init();
         __ReentrancyGuard_init();
 
         tgeMinted = false;
-        require(_ecosystemManagerAddress != address(0), "MM: Hub cannot be zero");
         ecosystemManager = IEcosystemManager(_ecosystemManagerAddress);
         bkcTokenAddress = ecosystemManager.getBKCTokenAddress();
-        require(bkcTokenAddress != address(0), "MM: BKC Token not set in Hub");
+        
+        if (bkcTokenAddress == address(0)) revert InvalidAddress();
         bkcToken = BKCToken(bkcTokenAddress);
     }
 
     function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
     
-    function setAuthorizedMiner(string calldata _serviceKey, address _spokeAddress) external onlyOwner {
-        require(_spokeAddress != address(0), "MM: Address cannot be zero");
+    // --- Admin Functions ---
+
+    /**
+     * @notice Authorizes a Spoke contract (e.g., Notary, Game) to trigger mining.
+     */
+    function setAuthorizedMiner(bytes32 _serviceKey, address _spokeAddress) external onlyOwner {
+        if (_spokeAddress == address(0)) revert InvalidAddress();
         authorizedMiners[_serviceKey] = _spokeAddress;
     }
     
     function initialTgeMint(address to, uint256 amount) external onlyOwner {
-        require(!tgeMinted, "MM: TGE already minted");
+        if (tgeMinted) revert TGEAlreadyMinted();
         tgeMinted = true;
         bkcToken.mint(to, amount);
     }
 
+    // --- Core Mining Logic ---
+
     /**
-     * @notice Universal revenue funnel for PoP mining (new tokens) and Fee Distribution (existing tokens).
-     * @dev The calling contract (Spoke) must have transferred the `_purchaseAmount` (fee) to this contract.
-     * @dev UPDATED: Distribution is now split only between Treasury and Delegator Pool (Single Staking Pool).
+     * @notice Universal revenue funnel for PoP mining ($BKC creation) and Fee Distribution.
      */
     function performPurchaseMining(
-        string calldata _serviceKey,
-        uint256 _purchaseAmount // This is the original fee paid by the user
-    ) external nonReentrant {
-        require(msg.sender == authorizedMiners[_serviceKey], "MM: Caller not authorized for service");
+        bytes32 _serviceKey,
+        uint256 _purchaseAmount
+    ) external nonReentrant override {
+        // 1. Authorization Check
+        bool isAuthorized = false;
+        
+        // Check 1: Direct Authorization (Notary, Game, etc)
+        if (authorizedMiners[_serviceKey] == msg.sender) {
+            isAuthorized = true;
+        } else {
+            // Check 2: Valid Liquidity Pool via Factory
+            // CLEANUP: Removido o staticcall complexo, usando interface direta e limpa
+            address factoryAddress = ecosystemManager.getNFTLiquidityPoolFactoryAddress();
+            if (factoryAddress != address(0)) {
+                try INFTLiquidityPoolFactory(factoryAddress).isPool(msg.sender) returns (bool valid) {
+                    isAuthorized = valid;
+                } catch {
+                    // Se falhar a chamada (ex: endereço invalido), mantém não autorizado
+                }
+            }
+        }
 
+        if (!isAuthorized) revert Unauthorized();
+
+        // 2. Cache addresses to save gas
         address treasury = ecosystemManager.getTreasuryAddress();
         address dm = ecosystemManager.getDelegationManagerAddress();
-        require(treasury != address(0) && dm != address(0), "MM: Core addresses not set in Hub");
-
-        // --- 1. MINING DISTRIBUTION (New Tokens) ---
+        
+        // 3. --- MINING DISTRIBUTION (New Tokens) ---
         uint256 totalMintAmount = getMintAmount(_purchaseAmount);
-
         if (totalMintAmount > 0) {
-            uint256 miningTreasuryBips = ecosystemManager.getMiningDistributionBips("TREASURY");
-            // "DELEGATOR_POOL" now represents the single Global Staking Pool
-            uint256 miningDelegatorBips = ecosystemManager.getMiningDistributionBips("DELEGATOR_POOL");
+            uint256 miningTreasuryBips = ecosystemManager.getMiningDistributionBips(POOL_TREASURY);
+            uint256 miningDelegatorBips = ecosystemManager.getMiningDistributionBips(POOL_DELEGATOR);
 
-            require(
-                miningTreasuryBips + miningDelegatorBips == 10000,
-                "MM: Mining Distribution BIPS must equal 10000 (Treasury + Delegator)"
-            );
+            if (miningTreasuryBips + miningDelegatorBips != 10000) revert DistributionConfigError();
 
             uint256 mintTreasuryAmount = (totalMintAmount * miningTreasuryBips) / 10000;
             uint256 mintDelegatorAmount = totalMintAmount - mintTreasuryAmount;
 
-            // Mint the total new amount to this contract
+            // Mint the total new amount to this contract first
             bkcToken.mint(address(this), totalMintAmount);
-
+            
             if (mintTreasuryAmount > 0) {
-                bkcToken.transfer(treasury, mintTreasuryAmount);
+                bkcToken.safeTransfer(treasury, mintTreasuryAmount);
             }
 
             if (mintDelegatorAmount > 0) {
-                bkcToken.approve(dm, mintDelegatorAmount);
-                // UPDATED CALL: Only passes the total amount for the single pool
+                // Direct transfer + Notify
+                bkcToken.safeTransfer(dm, mintDelegatorAmount);
                 IDelegationManager(dm).depositMiningRewards(mintDelegatorAmount);
             }
         }
 
-        // --- 2. FEE DISTRIBUTION (Original Tokens) ---
+        // 4. --- FEE DISTRIBUTION (Original Tokens) ---
         if (_purchaseAmount > 0) {
-            uint256 feeTreasuryBips = ecosystemManager.getFeeDistributionBips("TREASURY");
-            uint256 feeDelegatorBips = ecosystemManager.getFeeDistributionBips("DELEGATOR_POOL");
+            uint256 feeTreasuryBips = ecosystemManager.getFeeDistributionBips(POOL_TREASURY);
+            uint256 feeDelegatorBips = ecosystemManager.getFeeDistributionBips(POOL_DELEGATOR);
 
-            require(
-                feeTreasuryBips + feeDelegatorBips == 10000,
-                "MM: Fee Distribution BIPS must equal 10000 (Treasury + Delegator)"
-            );
+            if (feeTreasuryBips + feeDelegatorBips != 10000) revert DistributionConfigError();
 
             uint256 feeTreasuryAmount = (_purchaseAmount * feeTreasuryBips) / 10000;
             uint256 feeDelegatorAmount = _purchaseAmount - feeTreasuryAmount;
 
             // Tokens are already in this contract (transferred by the Spoke)
             if (feeTreasuryAmount > 0) {
-                bkcToken.transfer(treasury, feeTreasuryAmount);
+                bkcToken.safeTransfer(treasury, feeTreasuryAmount);
             }
 
             if (feeDelegatorAmount > 0) {
-                bkcToken.approve(dm, feeDelegatorAmount);
-                // UPDATED CALL: Only passes the total amount for the single pool
+                // Direct transfer + Notify
+                bkcToken.safeTransfer(dm, feeDelegatorAmount);
                 IDelegationManager(dm).depositMiningRewards(feeDelegatorAmount);
             }
         }
     }
 
-    function getMintAmount(uint256 _purchaseAmount) public view returns (uint256) {
+    /**
+     * @notice Calculates mint amount based on dynamic scarcity of $BKC.
+     */
+    function getMintAmount(uint256 _purchaseAmount) public view override returns (uint256) {
         uint256 maxSupply = bkcToken.MAX_SUPPLY();
         uint256 currentSupply = bkcToken.totalSupply();
 
@@ -140,26 +189,30 @@ contract MiningManager is
             return 0;
         }
 
-        // Dynamic Scarcity Calculation
-        uint256 remainingToMint = maxSupply - currentSupply;
+        uint256 remainingToMint;
+        unchecked {
+            remainingToMint = maxSupply - currentSupply;
+        }
+        
         uint256 mintRatioBips = 10000; // Default 100% (1.0x)
 
+        // Efficient if-else chain for thresholds
         if (remainingToMint < THRESHOLD_20M) {
-            mintRatioBips = 1250; // 12.5% (0.125x)
+            mintRatioBips = 1250; // 12.5%
         } else if (remainingToMint < THRESHOLD_40M) {
-            mintRatioBips = 2500; // 25% (0.25x)
+            mintRatioBips = 2500; // 25%
         } else if (remainingToMint < THRESHOLD_80M) {
-            mintRatioBips = 5000; // 50% (0.5x)
+            mintRatioBips = 5000; // 50%
         }
         
         return (_purchaseAmount * mintRatioBips) / 10000;
     }
     
     function transferTokensFromGuardian(address to, uint256 amount) external onlyOwner {
-        bkcToken.transfer(to, amount);
+        bkcToken.safeTransfer(to, amount);
     }
     
     function approveTokensFromGuardian(address spender, uint256 amount) external onlyOwner {
-        bkcToken.approve(spender, amount);
+        bkcToken.safeApprove(spender, amount);
     }
 }

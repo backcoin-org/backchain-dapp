@@ -7,13 +7,13 @@ import { loadUserData, loadMyBoostersFromAPI, safeContractCall, getHighestBooste
 import { executeBuyBooster, executeSellBooster } from '../modules/transactions.js';
 import { formatBigNumber, renderLoading, renderError } from '../utils.js';
 import { boosterTiers, addresses, nftPoolABI, ipfsGateway } from '../config.js'; 
-import { rewardBoosterABI, ecosystemManagerABI } from '../config.js'; // Fallback ABI
-import { showToast } from '../ui-feedback.js'; // Adicionado import faltante
+import { rewardBoosterABI, ecosystemManagerABI } from '../config.js'; 
+import { showToast } from '../ui-feedback.js'; 
 
 // --- ESTADO LOCAL DA PÁGINA (TradeState) ---
 const TradeState = {
     tradeDirection: 'buy', 
-    selectedPoolBoostBips: null, // Number
+    selectedPoolBoostBips: null, 
     buyPrice: 0n,
     sellPrice: 0n,
     netSellPrice: 0n, 
@@ -21,15 +21,15 @@ const TradeState = {
     firstAvailableTokenId: null, 
     firstAvailableTokenIdForBuy: null,
     bestBoosterTokenId: 0n, 
-    bestBoosterBips: 0, // Number
+    bestBoosterBips: 0, 
     meetsPStakeRequirement: true, 
     isDataLoading: false,
     isModalOpen: false, 
 };
 
-// --- (Helper para Imagem) ---
 function buildImageUrl(ipfsIoUrl) {
     if (!ipfsIoUrl) return './assets/bkc_logo_3d.png'; 
+    if (ipfsIoUrl.startsWith('https://') || ipfsIoUrl.startsWith('http://')) return ipfsIoUrl;
     if (ipfsIoUrl.includes('ipfs.io/ipfs/')) {
         const cid = ipfsIoUrl.split('ipfs.io/ipfs/')[1];
         return `${ipfsGateway}${cid}`;
@@ -41,35 +41,40 @@ function buildImageUrl(ipfsIoUrl) {
     return ipfsIoUrl;
 }
 
-
 // --- RENDERIZAÇÃO DA UI (SWAP BOX) ---
 
 async function renderSwapBoxInterface() {
     const el = document.getElementById('store-items-grid');
     if (!el) return;
-    el.innerHTML = `
-        <div class="swap-box-container">
-            <div class="swap-box-header">
-                <h3>Trade Boosters</h3>
-                <p>Swap BKC for NFT Boosters, or vice-versa.</p>
-            </div>
-            <div id="swap-box-content">
-                ${TradeState.isDataLoading ? renderLoading() : ''}
-            </div>
-            <div id="swap-box-button-container">
-            </div>
-        </div>
-        <div id="pool-select-modal" class="pool-modal ${TradeState.isModalOpen ? 'open' : ''}">
-            <div class="pool-modal-content">
-                <div class="pool-modal-header">
-                    <h4>Select an Asset</h4>
-                    <button class="pool-modal-close">&times;</button>
+    
+    // Só renderiza o HTML se ele estiver vazio (primeira vez)
+    if (el.innerHTML.trim() === "") {
+        el.innerHTML = `
+            <div class="swap-box-container">
+                <div class="swap-box-header">
+                    <h3>Trade Boosters</h3>
+                    <p>Swap BKC for NFT Boosters, or vice-versa.</p>
                 </div>
-                <div id="pool-modal-list">
+                <div id="swap-box-content">
+                    ${TradeState.isDataLoading ? renderLoading() : ''}
+                </div>
+                <div id="swap-box-button-container">
                 </div>
             </div>
-        </div>
-    `;
+            <div id="pool-select-modal" class="pool-modal ${TradeState.isModalOpen ? 'open' : ''}">
+                <div class="pool-modal-content">
+                    <div class="pool-modal-header">
+                        <h4>Select an Asset</h4>
+                        <button class="pool-modal-close">&times;</button>
+                    </div>
+                    <div id="pool-modal-list">
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+    
+    // Sempre atualiza os painéis e botões
     await renderSwapPanels();
     renderExecuteButton();
     renderPoolSelectorModal();
@@ -78,6 +83,12 @@ async function renderSwapBoxInterface() {
 async function renderSwapPanels() {
     const contentEl = document.getElementById('swap-box-content');
     if (!contentEl) return;
+
+    // Remove loader se dados carregados
+    if (!TradeState.isDataLoading) {
+        const loader = contentEl.querySelector('.loader');
+        if (loader) loader.remove();
+    }
 
     const selectedTier = boosterTiers.find(t => t.boostBips === TradeState.selectedPoolBoostBips);
     let fromPanelHtml, toPanelHtml;
@@ -118,13 +129,8 @@ async function renderSwapPanels() {
         if (TradeState.sellPrice > 0n) {
             const gross = formatBigNumber(TradeState.sellPrice).toFixed(2);
             
-            const baseTaxBips = isHubReady 
-                ? (State.systemFees["NFT_POOL_TAX_BIPS"] || 1000n)
-                : 1000n;
-            
-            const discountBips = isHubReady
-                ? BigInt(State.boosterDiscounts[TradeState.bestBoosterBips] || 0)
-                : 0n;
+            const baseTaxBips = isHubReady ? (State.systemFees["NFT_POOL_TAX_BIPS"] || 1000n) : 1000n;
+            const discountBips = isHubReady ? BigInt(State.boosterDiscounts[TradeState.bestBoosterBips] || 0) : 0n;
 
             if (discountBips > 0n) {
                 const discountPercent = (Number(discountBips) / 100).toFixed(0);
@@ -164,15 +170,11 @@ function renderExecuteButton() {
     let isPStakeInsufficient = false; 
 
     if (TradeState.selectedPoolBoostBips !== null) {
-        
-        // 1. Verifica o pStake (prioridade mais alta após a conexão)
         if (State.isConnected && !TradeState.meetsPStakeRequirement) {
-            // ✅ CORREÇÃO DE TEXTO AQUI
             btnText = "Delegate Now"; 
-            isDisabled = false; // O botão é clicável (para navegar)
+            isDisabled = false;
             isPStakeInsufficient = true; 
         }
-        // 2. Se o pStake estiver OK, continua a lógica normal
         else if (TradeState.tradeDirection === 'buy') {
             if (TradeState.buyPrice === 0n) {
                 btnText = "Buy Booster (Price Unavailable)";
@@ -193,7 +195,6 @@ function renderExecuteButton() {
                 isDisabled = false;
             }
         } else {
-            // Lógica de Venda
             if (TradeState.userBalanceOfSelectedNFT === 0) {
                 btnText = "You have no such Booster";
                 isDisabled = true;
@@ -210,9 +211,6 @@ function renderExecuteButton() {
         }
     }
 
-    // --- LÓGICA DE RENDERIZAÇÃO DO BOTÃO ---
-    
-    // Renderiza o botão "Delegate Now"
     if (isPStakeInsufficient) {
         buttonEl.innerHTML = `
             <button id="go-to-delegate-btn" class="execute-trade-btn" 
@@ -222,7 +220,6 @@ function renderExecuteButton() {
             </button>
         `;
     }
-    // Renderiza o botão "Buy $BKC"
     else if (isInsufficientBalance) {
         const buyBkcLink = addresses.bkcDexPoolAddress || '#';
         buttonEl.innerHTML = `
@@ -234,7 +231,6 @@ function renderExecuteButton() {
             </a>
         `;
     } 
-    // Renderiza o botão padrão
     else {
         buttonEl.innerHTML = `
             <button id="execute-trade-btn" class="execute-trade-btn" ${isDisabled ? 'disabled' : ''}>
@@ -292,82 +288,52 @@ function renderPoolSelectorModal() {
 // --- CARREGAMENTO DE DADOS (DATA FETCHING) ---
 
 async function loadDataForSelectedPool() {
-    if (TradeState.selectedPoolBoostBips === null) {
+    if (TradeState.selectedPoolBoostBips === null || TradeState.isDataLoading) {
         return; 
     }
     
     TradeState.isDataLoading = true;
-    TradeState.firstAvailableTokenIdForBuy = null; 
-    await renderSwapPanels(); 
-    renderExecuteButton(); 
+    await renderSwapBoxInterface(); // Atualiza UI para estado "Loading"
 
     try {
         const boostBips = TradeState.selectedPoolBoostBips;
-
         const tier = boosterTiers.find(t => t.boostBips === boostBips);
-        if (!tier) throw new Error(`Tier ${boostBips} não encontrado na configuração.`);
+        if (!tier) throw new Error(`Tier ${boostBips} não encontrado.`);
         
         const poolKey = `pool_${tier.name.toLowerCase()}`;
         const poolAddress = addresses[poolKey];
         
         if (!poolAddress || !poolAddress.startsWith('0x')) {
-            console.error(`Endereço da piscina para ${tier.name} (${poolKey}) não encontrado ou inválido no deployment-addresses.json.`);
-            throw new Error("Pool not deployed or not found in addresses.");
+            throw new Error("Pool not deployed.");
         }
 
-        const poolContract = new ethers.Contract(
-            poolAddress, 
-            nftPoolABI, 
-            State.publicProvider 
-        );
+        const poolContract = new ethers.Contract(poolAddress, nftPoolABI, State.publicProvider);
 
         if (State.isConnected) {
-            await Promise.all([
-                loadUserData(), // Carrega State.userTotalPStake
-                loadMyBoostersFromAPI() 
-            ]);
-            
+            await Promise.all([loadUserData(), loadMyBoostersFromAPI()]);
             const { highestBoost, tokenId } = await getHighestBoosterBoostFromAPI(); 
             TradeState.bestBoosterTokenId = tokenId ? BigInt(tokenId) : 0n;
             TradeState.bestBoosterBips = Number(highestBoost);
 
             const myTierBoosters = State.myBoosters.filter(b => b.boostBips === Number(boostBips));
             TradeState.userBalanceOfSelectedNFT = myTierBoosters.length;
-            
-            TradeState.firstAvailableTokenId = myTierBoosters.length > 0 
-                ? BigInt(myTierBoosters[0].tokenId) 
-                : null;
+            TradeState.firstAvailableTokenId = myTierBoosters.length > 0 ? BigInt(myTierBoosters[0].tokenId) : null;
         } else {
             TradeState.userBalanceOfSelectedNFT = 0;
             TradeState.firstAvailableTokenId = null;
-            TradeState.bestBoosterTokenId = 0n;
-            TradeState.bestBoosterBips = 0;
         }
 
         const TAX_BIPS_KEY = "NFT_POOL_TAX_BIPS";
         const PSTAKE_KEY = "NFT_POOL_ACCESS"; 
         
-        const [
-            poolInfo, 
-            buyPrice, 
-            sellPrice, 
-            availableTokenIds,
-            baseTaxBips,      
-            discountBips,
-            requiredPStake    
-        ] = await Promise.all([
-            safeContractCall(poolContract, 'getPoolInfo', [], null),
+        const [buyPrice, sellPrice, availableTokenIds, baseTaxBips, discountBips, requiredPStake] = await Promise.all([
             safeContractCall(poolContract, 'getBuyPrice', [], ethers.MaxUint256),
             safeContractCall(poolContract, 'getSellPrice', [], 0n),
             safeContractCall(poolContract, 'getAvailableTokenIds', [], []),
             Promise.resolve(State.systemFees[TAX_BIPS_KEY] || 1000n), 
             Promise.resolve(BigInt(State.boosterDiscounts[TradeState.bestBoosterBips] || 0)),
-            Promise.resolve(State.systemPStakes[PSTAKE_KEY] || 0n) // Carrega o requisito do cache da API
+            Promise.resolve(State.systemPStakes[PSTAKE_KEY] || 0n)
         ]);
-
-        if (poolInfo === null) {
-            throw new Error(`Falha ao carregar getPoolInfo do contrato ${poolAddress}`);
-        }
 
         TradeState.firstAvailableTokenIdForBuy = (availableTokenIds.length > 0) ? BigInt(availableTokenIds[availableTokenIds.length - 1]) : null;
         TradeState.buyPrice = (buyPrice === ethers.MaxUint256) ? 0n : buyPrice; 
@@ -377,20 +343,10 @@ async function loadDataForSelectedPool() {
         const taxAmount = (sellPrice * finalTaxBips) / 10000n;
         TradeState.netSellPrice = sellPrice - taxAmount;
 
-        // Define o flag de requisito de pStake
-        if (State.isConnected && State.userTotalPStake < requiredPStake) {
-            TradeState.meetsPStakeRequirement = false;
-        } else {
-            TradeState.meetsPStakeRequirement = true;
-        }
+        TradeState.meetsPStakeRequirement = !(State.isConnected && State.userTotalPStake < requiredPStake);
 
     } catch (err) {
         console.error("Error loading pool data:", err);
-        TradeState.buyPrice = 0n;
-        TradeState.sellPrice = 0n;
-        TradeState.netSellPrice = 0n;
-        TradeState.firstAvailableTokenIdForBuy = null; 
-        TradeState.meetsPStakeRequirement = false; 
     } finally {
         TradeState.isDataLoading = false;
         await renderSwapPanels();
@@ -411,7 +367,6 @@ function toggleModal(isOpen) {
 function setupStorePageListeners() {
     DOMElements.store.addEventListener('click', async (e) => {
         
-        // --- Botão de Inverter Direção (Swap) ---
         const swapBtn = e.target.closest('.swap-arrow-btn');
         if (swapBtn) {
             e.preventDefault();
@@ -421,7 +376,6 @@ function setupStorePageListeners() {
             return;
         }
 
-        // --- Abrir Modal de Seleção de Pool ---
         const selectorBtn = e.target.closest('.token-selector-btn.is-selector');
         if (selectorBtn) {
             e.preventDefault();
@@ -429,7 +383,6 @@ function setupStorePageListeners() {
             return;
         }
 
-        // --- Fechar Modal de Seleção ---
         const closeBtn = e.target.closest('.pool-modal-close');
         if (closeBtn) {
             e.preventDefault();
@@ -437,7 +390,6 @@ function setupStorePageListeners() {
             return;
         }
 
-        // --- Selecionar um Pool do Modal ---
         const poolItemBtn = e.target.closest('.pool-modal-item');
         if (poolItemBtn) {
             e.preventDefault();
@@ -447,63 +399,27 @@ function setupStorePageListeners() {
             return;
         }
 
-        // --- Botão "Delegate Now" (Redirecionamento) ---
         const delegateBtn = e.target.closest('#go-to-delegate-btn');
         if (delegateBtn) {
             e.preventDefault();
-            // Clica no link da sidebar para navegar corretamente para a aba 'mine'
             document.querySelector('.sidebar-link[data-target="mine"]')?.click();
             return;
         }
 
-        // --- Botão de Executar Negociação ---
         const executeBtn = e.target.closest('#execute-trade-btn');
         if (executeBtn) {
             e.preventDefault();
-
             const tier = boosterTiers.find(t => t.boostBips === TradeState.selectedPoolBoostBips);
-            if (!tier) {
-                showToast("Error: No pool selected.", "error");
-                return;
-            }
+            if (!tier) { showToast("Error: No pool selected.", "error"); return; }
             const poolKey = `pool_${tier.name.toLowerCase()}`;
             const poolAddress = addresses[poolKey];
-            if (!poolAddress || !poolAddress.startsWith('0x')) {
-                showToast(`Error: Pool address for ${tier.name} not found.`, "error");
-                return;
-            }
             
             if (TradeState.tradeDirection === 'buy') {
-                if (TradeState.firstAvailableTokenIdForBuy === null) {
-                    console.error("Attempted to buy, but no Token ID is available.");
-                    showToast("This item is currently sold out.", "error");
-                    return;
-                }
-                
-                const success = await executeBuyBooster(
-                    poolAddress, 
-                    TradeState.buyPrice,
-                    TradeState.bestBoosterTokenId, 
-                    executeBtn
-                );
-                if (success) {
-                    await loadDataForSelectedPool(); 
-                }
+                const success = await executeBuyBooster(poolAddress, TradeState.buyPrice, TradeState.bestBoosterTokenId, executeBtn);
+                if (success) await loadDataForSelectedPool(); 
             } else {
-                if (TradeState.firstAvailableTokenId === null || TradeState.firstAvailableTokenId <= 0n) { 
-                     showToast("No NFT selected or Token ID is invalid.", "error");
-                     return;
-                }
-
-                const success = await executeSellBooster(
-                    poolAddress, 
-                    TradeState.firstAvailableTokenId, 
-                    TradeState.bestBoosterTokenId,
-                    executeBtn
-                );
-                if (success) {
-                    await loadDataForSelectedPool(); 
-                }
+                const success = await executeSellBooster(poolAddress, TradeState.firstAvailableTokenId, TradeState.bestBoosterTokenId, executeBtn);
+                if (success) await loadDataForSelectedPool(); 
             }
             return;
         }
@@ -518,9 +434,15 @@ if (!DOMElements.store._listenersInitialized) {
 // --- OBJETO PRINCIPAL DA PÁGINA (StorePage) ---
 
 export const StorePage = {
-    async render(isUpdate = false) {
+    async render(isNewPage) {
+        // Se NÃO é uma nova página e já temos conteúdo, apenas atualiza a UI visualmente
+        const container = document.getElementById('store-items-grid');
+        if (!isNewPage && container && container.innerHTML.trim() !== "") {
+            await StorePage.update();
+            return;
+        }
+
         await loadSystemDataFromAPI();
-        
         await renderSwapBoxInterface();
         
         if (TradeState.selectedPoolBoostBips === null && boosterTiers.length > 0) {
@@ -528,5 +450,13 @@ export const StorePage = {
         }
         
         await loadDataForSelectedPool();
+    },
+
+    // Método leve para atualizar UI sem fetch pesado
+    async update() {
+        if (TradeState.selectedPoolBoostBips !== null) {
+            await renderSwapPanels();
+            renderExecuteButton();
+        }
     }
-}
+};

@@ -1,6 +1,5 @@
 // config.js
-// ✅ FINAL: Configuração Central da DApp (ABIs, Endereços e Redes)
-// CORRIGIDO: Evento Delegated (5 params) e mappings de Pools
+// ✅ VERSÃO FINAL DAPP: Completa (Todas as funções + Rental Market + Compatibilidade Visual)
 
 // ============================================================================
 // 1. ENVIRONMENT DETECTION
@@ -30,7 +29,7 @@ export async function loadAddresses() {
         const jsonAddresses = await response.json();
 
         // Validação básica de integridade
-        const requiredAddresses = ['bkcToken', 'delegationManager', 'ecosystemManager'];
+        const requiredAddresses = ['bkcToken', 'delegationManager', 'ecosystemManager', 'miningManager'];
         const missingAddresses = requiredAddresses.filter(key => !jsonAddresses[key]);
         
         if (missingAddresses.length > 0) {
@@ -43,9 +42,14 @@ export async function loadAddresses() {
         addresses.rewardBoosterNFT = jsonAddresses.rewardBoosterNFT;
         addresses.publicSale = jsonAddresses.publicSale;
         addresses.decentralizedNotary = jsonAddresses.decentralizedNotary;
-        addresses.ecosystemManager = jsonAddresses.ecosystemManager; 
+        addresses.ecosystemManager = jsonAddresses.ecosystemManager;
+        addresses.miningManager = jsonAddresses.miningManager;
         
-        // Mapeamento de Piscinas AMM (Store)
+        // --- [NEW] Rental Market (AirBNFT) ---
+        // Se não existir no JSON ainda, pode quebrar se tentarmos usar, então verificamos
+        addresses.rentalManager = jsonAddresses.rentalManager || null;
+        
+        // Mapeamento de Piscinas AMM (Carregamento Inteligente)
         addresses.pool_diamond = jsonAddresses.pool_diamond;
         addresses.pool_platinum = jsonAddresses.pool_platinum;
         addresses.pool_gold = jsonAddresses.pool_gold;
@@ -54,16 +58,22 @@ export async function loadAddresses() {
         addresses.pool_iron = jsonAddresses.pool_iron;
         addresses.pool_crystal = jsonAddresses.pool_crystal;
 
+        // Se houver pools extras criados dinamicamente, carrega também
+        Object.keys(jsonAddresses).forEach(key => {
+            if (key.startsWith('pool_')) {
+                addresses[key] = jsonAddresses[key];
+            }
+        });
+
         // FortunePool / ActionsManager
-        addresses.actionsManager = jsonAddresses.fortunePool; 
-        addresses.fortunePool = jsonAddresses.fortunePool; 
+        addresses.actionsManager = jsonAddresses.fortunePool;
+        addresses.fortunePool = jsonAddresses.fortunePool;
         
         // Endereços Auxiliares
-        addresses.bkcDexPoolAddress = jsonAddresses.bkcDexPoolAddress || "#"; 
-        addresses.mainLPPairAddress = jsonAddresses.mainLPPairAddress; 
-        addresses.miningManager = jsonAddresses.miningManager;
+        addresses.bkcDexPoolAddress = jsonAddresses.bkcDexPoolAddress || "#";
+        addresses.mainLPPairAddress = jsonAddresses.mainLPPairAddress;
         addresses.oracleWalletAddress = jsonAddresses.oracleWalletAddress;
-        addresses.faucet = jsonAddresses.faucet; 
+        addresses.faucet = jsonAddresses.faucet;
         addresses.nftLiquidityPoolFactory = jsonAddresses.nftLiquidityPoolFactory;
 
         console.log("✅ Contract addresses loaded successfully.");
@@ -79,7 +89,7 @@ export async function loadAddresses() {
 // 3. NETWORK CONFIGURATION (INFURA)
 // ============================================================================
 
-const INFURA_KEY = "b7abd593f0874499846caf742fb2a615"; // Chave pública dedicada
+const INFURA_KEY = "a17d6aa469bd4214836fe54f36df6915"; // Chave pública dedicada
 
 // WebSocket URL (Listeners)
 export const sepoliaWssUrl = `wss://sepolia.infura.io/ws/v3/${INFURA_KEY}`;
@@ -96,16 +106,17 @@ export const ipfsGateway = "https://white-defensive-eel-240.mypinata.cloud/ipfs/
 // 4. APPLICATION CONSTANTS
 // ============================================================================
 
-export const FAUCET_AMOUNT_WEI = 100n * 10n**18n; 
+export const FAUCET_AMOUNT_WEI = 100n * 10n**18n;
 
+// Tiers atualizados com a nova pasta do Pinata
 export const boosterTiers = [
-    { name: "Diamond", boostBips: 5000, color: "text-cyan-400", img: "https://ipfs.io/ipfs/bafybeign2k73pq5pdicg2v2jdgumavw6kjmc4nremdenzvq27ngtcusv5i", borderColor: "border-cyan-400/50", glowColor: "bg-cyan-500/10" },
-    { name: "Platinum", boostBips: 4000, color: "text-gray-300", img: "https://ipfs.io/ipfs/bafybeiag32gp4wssbjbpxjwxewer64fecrtjryhmnhhevgec74p4ltzrau", borderColor: "border-gray-300/50", glowColor: "bg-gray-400/10" },
-    { name: "Gold", boostBips: 3000, color: "text-amber-400", img: "https://ipfs.io/ipfs/bafybeido6ah36xn4rpzkvl5avicjzf225ndborvx726sjzpzbpvoogntem", borderColor: "border-amber-400/50", glowColor: "bg-amber-500/10" },
-    { name: "Silver", boostBips: 2000, color: "text-gray-400", img: "https://ipfs.io/ipfs/bafybeiaktaw4op7zrvsiyx2sghphrgm6sej6xw362mxgu326ahljjyu3gu", borderColor: "border-gray-400/50", glowColor: "bg-gray-500/10" },
-    { name: "Bronze", boostBips: 1000, color: "text-yellow-600", img: "https://ipfs.io/ipfs/bafybeifkke3zepb4hjutntcv6vor7t2e4k5oseaur54v5zsectcepgseye", borderColor: "border-yellow-600/50", glowColor: "bg-yellow-600/10" },
-    { name: "Iron", boostBips: 500, color: "text-slate-500", img: "https://ipfs.io/ipfs/bafybeidta4mytpfqtnnrspzij63m4lcnkp6l42m7hnhyjxioci5jhcf3vm", borderColor: "border-slate-500/50", glowColor: "bg-slate-600/10" },
-    { name: "Crystal", boostBips: 100, color: "text-indigo-300", img: "https://ipfs.io/ipfs/bafybeiela7zrsnyva47pymhmnr6dj2aurrkwxhpwo7eaasx3t24y6n3aay", borderColor: "border-indigo-300/50", glowColor: "bg-indigo-300/10" }
+    { name: "Diamond", boostBips: 7000, color: "text-cyan-400", img: `${ipfsGateway}bafybeicgip72jcqgsirlrhn3tq5cc226vmko6etnndzl6nlhqrktfikafq/diamond_booster.json`, realImg: `${ipfsGateway}bafybeicgip72jcqgsirlrhn3tq5cc226vmko6etnndzl6nlhqrktfikafq`, borderColor: "border-cyan-400/50", glowColor: "bg-cyan-500/10" },
+    { name: "Platinum", boostBips: 6000, color: "text-gray-300", img: `${ipfsGateway}bafybeigc2wgkccckhnjotejve7qyxa2o2z4fsgswfmsxyrbp5ncpc7plei/platinum_booster.json`, realImg: `${ipfsGateway}bafybeigc2wgkccckhnjotejve7qyxa2o2z4fsgswfmsxyrbp5ncpc7plei`, borderColor: "border-gray-300/50", glowColor: "bg-gray-400/10" },
+    { name: "Gold", boostBips: 5000, color: "text-amber-400", img: `${ipfsGateway}bafybeifponccrbicg2pcjrn2hrfoqgc77xhm2r4ld7hdpw6cxxkbsckf44/gold_booster.json`, realImg: `${ipfsGateway}bafybeifponccrbicg2pcjrn2hrfoqgc77xhm2r4ld7hdpw6cxxkbsckf44`, borderColor: "border-amber-400/50", glowColor: "bg-amber-500/10" },
+    { name: "Silver", boostBips: 4000, color: "text-gray-400", img: `${ipfsGateway}bafybeihvi2inujm5zpi7tl667g4srq273536pjkglwyrtbwmgnskmu7jg4/silver_booster.json`, realImg: `${ipfsGateway}bafybeihvi2inujm5zpi7tl667g4srq273536pjkglwyrtbwmgnskmu7jg4`, borderColor: "border-gray-400/50", glowColor: "bg-gray-500/10" },
+    { name: "Bronze", boostBips: 3000, color: "text-yellow-600", img: `${ipfsGateway}bafybeiclqidb67rt3tchhjpsib62s624li7j2bpxnr6b5w5mfp4tomhu7m/bronze_booster.json`, realImg: `${ipfsGateway}bafybeiclqidb67rt3tchhjpsib62s624li7j2bpxnr6b5w5mfp4tomhu7m`, borderColor: "border-yellow-600/50", glowColor: "bg-yellow-600/10" },
+    { name: "Iron", boostBips: 2000, color: "text-slate-500", img: `${ipfsGateway}bafybeiaxhv3ere2hyto4dlb5xqn46ehfglxqf3yzehpy4tvdnifyzpp4wu/iron_booster.json`, realImg: `${ipfsGateway}bafybeiaxhv3ere2hyto4dlb5xqn46ehfglxqf3yzehpy4tvdnifyzpp4wu`, borderColor: "border-slate-500/50", glowColor: "bg-slate-600/10" },
+    { name: "Crystal", boostBips: 1000, color: "text-indigo-300", img: `${ipfsGateway}bafybeib6nacggrhgcp72xksbhsqcofg3lzhfb576kuebj5ioxpk2id5m7u/crystal_booster.json`, realImg: `${ipfsGateway}bafybeib6nacggrhgcp72xksbhsqcofg3lzhfb576kuebj5ioxpk2id5m7u`, borderColor: "border-indigo-300/50", glowColor: "bg-indigo-300/10" }
 ];
 
 // ============================================================================
@@ -121,8 +132,8 @@ export const bkcTokenABI = [
     "function symbol() view returns (string)",
     "function allowance(address owner, address spender) view returns (uint256)",
     "function mint(address to, uint256 amount)",
-    "function MAX_SUPPLY() view returns (uint256)", 
-    "function TGE_SUPPLY() view returns (uint256)" 
+    "function MAX_SUPPLY() view returns (uint256)",
+    "function TGE_SUPPLY() view returns (uint256)"
 ];
 
 export const delegationManagerABI = [
@@ -143,45 +154,64 @@ export const delegationManagerABI = [
     "function claimReward(uint256 _boosterTokenId)",
     
     // --- Events ---
-    // ✅ FIXED: 5 Parâmetros para indexação correta
     "event Delegated(address indexed user, uint256 delegationIndex, uint256 amount, uint256 pStakeGenerated, uint256 feeAmount)",
     "event Unstaked(address indexed user, uint256 delegationIndex, uint256 amount, uint256 feePaid)",
     "event RewardClaimed(address indexed user, uint256 amount)"
 ];
 
 export const rewardBoosterABI = [
+    "function name() view returns (string)",
+    "function symbol() view returns (string)",
     "function balanceOf(address owner) view returns (uint256)",
-    "function boostBips(uint256) view returns (uint256)",
+    "function boostBips(uint256 tokenId) view returns (uint256)", 
     "function tokenURI(uint256 tokenId) view returns (string)",
     "function ownerOf(uint256 tokenId) view returns (address)",
     "function approve(address to, uint256 tokenId)",
+    "function setApprovalForAll(address operator, bool approved)",
+    "function isApprovedForAll(address owner, address operator) view returns (bool)",
+    "function safeTransferFrom(address from, address to, uint256 tokenId)",
+    "function getApproved(uint256 tokenId) view returns (address)"
 ];
 
-export const nftPoolABI = [ 
+// --- [NEW] RENTAL MANAGER ABI (AirBNFT) ---
+export const rentalManagerABI = [
+    "function listNFT(uint256 tokenId, uint256 pricePerHour, uint256 maxDurationHours) external",
+    "function withdrawNFT(uint256 tokenId) external",
+    "function rentNFT(uint256 tokenId, uint256 hoursToRent) external",
+    "function getListing(uint256 tokenId) view returns (tuple(address owner, uint256 pricePerHour, uint256 maxDuration, bool isActive))",
+    "function getRental(uint256 tokenId) view returns (tuple(address tenant, uint256 startTime, uint256 endTime))",
+    "function isRented(uint256 tokenId) view returns (bool)",
+    "function getAllListedTokenIds() view returns (uint256[])",
+    "event NFTListed(uint256 indexed tokenId, address indexed owner, uint256 pricePerHour, uint256 maxDurationHours)",
+    "event NFTRented(uint256 indexed tokenId, address indexed tenant, address indexed owner, uint256 hoursRented, uint256 totalCost, uint256 feePaid)"
+];
+
+export const nftPoolABI = [
     "function getBuyPrice() view returns (uint256)",
     "function getSellPrice() view returns (uint256)",
     "function buyNFT(uint256 _tokenId, uint256 _boosterTokenId)",
     "function buyNextAvailableNFT(uint256 _boosterTokenId)",
-    "function sellNFT(uint256 _tokenId, uint256 _boosterTokenId)",
-    "function PSTAKE_SERVICE_KEY() view returns (string)",
+    "function sellNFT(uint256 _tokenId, uint256 _boosterTokenId, uint256 _minBkcExpected)",
+    "function PSTAKE_SERVICE_KEY() view returns (bytes32)",
     "function getPoolInfo() view returns (uint256 tokenBalance, uint256 nftCount, uint256 k, bool isInitialized)",
     "function getAvailableTokenIds() view returns (uint256[] memory)",
-    "event NFTBought(address indexed buyer, uint256 indexed boostBips, uint256 tokenId, uint256 price)",
+    "event NFTBought(address indexed buyer, uint256 indexed boostBips, uint256 tokenId, uint256 price, uint256 taxPaid)",
     "event NFTSold(address indexed seller, uint256 indexed boostBips, uint256 tokenId, uint256 payout, uint256 taxPaid)"
 ];
 
-export const actionsManagerABI = [ 
-    "function participate(uint256 _amount)", 
+// Mantido como actionsManagerABI para compatibilidade
+export const actionsManagerABI = [
+    "function participate(uint256 _amount) payable", 
     "function oracleFeeInWei() view returns (uint256)",
     "function gameResults(uint256) view returns (uint256[3] memory)",
     "event GameRequested(uint256 indexed gameId, address indexed user, uint256 purchaseAmount)",
     "event GameFulfilled(uint256 indexed gameId, address indexed user, uint256 prizeWon, uint256[3] rolls)",
     "function prizePoolBalance() view returns (uint256)",
-    "function setOracleAddress(address _oracle)" 
+    "function setOracleAddress(address _oracle)"
 ];
 
 export const publicSaleABI = [
-    "function tiers(uint256) view returns (uint256 priceInWei, uint256 maxSupply, uint256 mintedCount, uint256 boostBips, string metadataFile, bool isConfigured)",
+    "function tiers(uint256) view returns (uint256 priceInWei, uint64 maxSupply, uint64 mintedCount, uint16 boostBips, bool isConfigured, string metadataFile)",
     "function rewardBoosterNFT() view returns (address)",
     "function ecosystemManager() view returns (address)",
     "function owner() view returns (address)",
@@ -198,7 +228,6 @@ export const publicSaleABI = [
 export const decentralizedNotaryABI = [
     "event NotarizationEvent(uint256 indexed tokenId, address indexed owner, string indexed documentMetadataHash, uint256 feePaid)",
     "function balanceOf(address owner) view returns (uint256)",
-    "function tokenOfOwnerByIndex(address owner, uint256 index) view returns (uint256)",
     "function tokenURI(uint256 tokenId) view returns (string)",
     "function notarize(string calldata _documentMetadataURI, uint256 _boosterTokenId)",
 ];
@@ -207,7 +236,6 @@ export const faucetABI = [
     "event OwnershipTransferred(address indexed previousOwner, address indexed newOwner)",
     "event TokensClaimed(address indexed recipient, uint256 amount)",
     "function claim()",
-    "function claimAmount() view returns (uint256)",
     "function owner() view returns (address)",
     "function renounceOwnership()",
     "function token() view returns (address)",
@@ -217,8 +245,9 @@ export const faucetABI = [
 ];
 
 export const ecosystemManagerABI = [
-    "function getServiceRequirements(string calldata _serviceKey) external view returns (uint256 fee, uint256 pStake)",
-    "function getFee(string calldata _serviceKey) external view returns (uint256)",
+    // ATENÇÃO: Contrato atualizado usa bytes32. Se o frontend passar string, use ethers.id() antes de chamar.
+    "function getServiceRequirements(bytes32 _serviceKey) external view returns (uint256 fee, uint256 pStake)",
+    "function getFee(bytes32 _serviceKey) external view returns (uint256)",
     "function getBoosterDiscount(uint256 _boostBips) external view returns (uint256)",
     "function getTreasuryAddress() external view returns (address)",
     "function getDelegationManagerAddress() external view returns (address)",

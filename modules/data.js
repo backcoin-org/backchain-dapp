@@ -1,52 +1,43 @@
-// modules/data.js
-// ✅ FINAL VERSION: Anti-Throttling Agressivo + Jitter Backoff + Smart Caching
+// js/modules/data.js
+// ✅ VERSÃO FINAL BLINDADA: Carregamento Paralelo (Blockchain não espera API) + Cache Inteligente
 
 const ethers = window.ethers;
 
 import { State } from '../state.js';
-import { DOMElements } from '../dom-elements.js';
-import { formatBigNumber, formatPStake } from '../utils.js';
-import { addresses, boosterTiers, ipfsGateway } from '../config.js';
+import { addresses, boosterTiers, rentalManagerABI } from '../config.js';
 
 // ====================================================================
-// CONSTANTES E UTILITÁRIOS
+// CONSTANTS & UTILITIES
 // ====================================================================
-const API_TIMEOUT_MS = 15000; 
-const CACHE_DURATION_MS = 120000; // 2 minutos de cache para dados de sistema
+const API_TIMEOUT_MS = 8000; // 8 segundos timeout para API (Rápido falha)
+const CACHE_DURATION_MS = 60000; // 1 minuto cache para dados do sistema
+const USER_DATA_CACHE_MS = 10000; // 10 segundos cache para dados do usuário
+const CONTRACT_READ_CACHE_MS = 10000; // 10 segundos cache para chamadas RPC (Evita rate limit)
 
-// Cache em memória para dados de sistema
 let systemDataCache = null;
 let systemDataCacheTime = 0;
+let lastBoosterFetchTime = 0; 
 
-// Cache simples para chamadas de contrato imutáveis (ex: URI, Fees estáticas)
-const contractReadCache = new Map();
+// Mapa de cache para chamadas de contrato: Chave -> {value, timestamp}
+const contractReadCache = new Map(); 
 
-// Função auxiliar para "dormir" (esperar)
 const wait = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
-/**
- * Executa um fetch com um tempo limite.
- */
 async function fetchWithTimeout(url, timeoutMs) {
     const controller = new AbortController();
     const id = setTimeout(() => controller.abort(), timeoutMs);
-
     try {
         const response = await fetch(url, { signal: controller.signal });
         clearTimeout(id);
         return response;
     } catch (error) {
         clearTimeout(id);
-        if (error.name === 'AbortError') {
-            throw new Error('API request timed out.');
-        }
+        // Se for timeout, lançamos erro específico
+        if (error.name === 'AbortError') throw new Error('API request timed out.');
         throw error;
     }
 }
 
-// ====================================================================
-// ENDPOINTS DE API
-// ====================================================================
 export const API_ENDPOINTS = {
     getHistory: 'https://gethistory-4wvdcuoouq-uc.a.run.app',
     getBoosters: 'https://getboosters-4wvdcuoouq-uc.a.run.app',
@@ -57,223 +48,325 @@ export const API_ENDPOINTS = {
 };
 
 // ====================================================================
-// Funções de Segurança e Resiliência (COM RETRY & JITTER)
+// SAFETY FUNCTIONS (Retry & Jitter & CACHE)
 // ====================================================================
 
-export const safeBalanceOf = async (contract, address) => {
-    try {
-        return await contract.balanceOf(address);
-    } catch (e) {
-        // Verifica Erro 429 (Rate Limit)
-        if (isRateLimitError(e)) {
-            console.warn("⚠️ Rate limited on balanceOf. Retrying in 5s...");
-            await wait(5000);
-            try {
-                return await contract.balanceOf(address);
-            } catch (retryError) {
-                console.warn("❌ Balance fetch failed after retry. Returning 0n.");
-                return 0n; // Falha segura
-            }
-        }
-        if (e.code === 'BAD_DATA' || e.code === 'CALL_EXCEPTION') {
-            return 0n;
-        }
-        throw e;
-    }
-};
-
-// Função auxiliar para detectar erro 429 de várias fontes
 function isRateLimitError(e) {
     return (
-        e?.error?.code === 429 || 
-        e?.code === 429 || 
-        (e.message && (
-            e.message.includes("429") || 
-            e.message.includes("Too Many Requests") || 
-            e.message.includes("compute units") ||
-            e.message.includes("limit reached")
-        ))
+        e?.error?.code === 429 || e?.code === 429 || 
+        (e.message && (e.message.includes("429") || e.message.includes("Too Many Requests") || e.message.includes("limit reached")))
     );
 }
 
-// Função Genérica com Retry Inteligente e Jitter
+/**
+ * Executa uma chamada de contrato de forma segura com cache e retry.
+ */
 export const safeContractCall = async (contract, method, args = [], fallbackValue = 0n, retries = 2) => {
-    // Chave de Cache simples baseada no contrato + método + argumentos
-    // Útil apenas para dados que não mudam a cada segundo dentro da mesma sessão
-    const cacheKey = `${contract.target || contract.address}:${method}:${JSON.stringify(args)}`;
+    if (!contract) return fallbackValue;
     
-    // Se for uma chamada "estática" conhecida (ex: getFee, tokenURI), tenta usar cache de memória curto (10s)
-    if (method === 'tokenURI' || method.startsWith('getFee')) {
+    const contractAddr = contract.target || contract.address;
+    // Cria uma chave única baseada no contrato, método e argumentos
+    const cacheKey = `${contractAddr}-${method}-${JSON.stringify(args)}`;
+    const now = Date.now();
+
+    // Lista de métodos que são seguros para cache (apenas leitura, mudam pouco)
+    const cacheableMethods = [
+        'getPoolInfo', 'getBuyPrice', 'getSellPrice', 'getAvailableTokenIds', 
+        'getAllListedTokenIds', 'tokenURI', 'boostBips', 'getListing', 
+        'balanceOf', 'totalSupply', 'totalNetworkPStake', 'MAX_SUPPLY', 'TGE_SUPPLY'
+    ];
+    
+    // 1. Tenta retornar do cache
+    if (cacheableMethods.includes(method)) {
         const cached = contractReadCache.get(cacheKey);
-        if (cached && (Date.now() - cached.timestamp < 10000)) {
+        if (cached && (now - cached.timestamp < CONTRACT_READ_CACHE_MS)) {
             return cached.value;
         }
     }
 
     try {
+        // 2. Executa chamada real
         const result = await contract[method](...args);
         
-        // Salva no cache se for sucesso
-        if (method === 'tokenURI' || method.startsWith('getFee')) {
-            contractReadCache.set(cacheKey, { value: result, timestamp: Date.now() });
+        // 3. Salva no cache se for bem-sucedido
+        if (cacheableMethods.includes(method)) {
+            contractReadCache.set(cacheKey, { value: result, timestamp: now });
         }
-        
         return result;
+
     } catch (e) {
-        // DETECÇÃO DO ERRO 429 COM JITTER (Aleatoriedade no tempo de espera)
+        // 4. Lógica de Retry para Rate Limit (Erro 429)
         if (isRateLimitError(e) && retries > 0) {
-            // Espera entre 10s e 15s para evitar "thundering herd" (todos tentando de novo ao mesmo tempo)
-            const jitter = Math.floor(Math.random() * 5000); 
-            const delayTime = 10000 + jitter; 
-            
-            console.warn(`⚠️ Rate limit hit on ${method}. Retrying in ${delayTime/1000}s... (${retries} left)`);
+            const jitter = Math.floor(Math.random() * 2000); 
+            const delayTime = 1500 + jitter; // Espera aleatória entre 1.5s e 3.5s
+            console.warn(`Rate limit (${method}). Retrying in ${delayTime}ms...`);
             await wait(delayTime);
             return safeContractCall(contract, method, args, fallbackValue, retries - 1);
         }
-
-        if (e.code === 'BAD_DATA' || e.code === 'CALL_EXCEPTION') {
-            console.warn(`⚠️ SafeContractCall (${method}): Falha técnica/revert. Retornando fallback.`);
-            
-            // Retorna objeto vazio se o fallback for objeto, para evitar crash por referência
-            if (typeof fallbackValue === 'object' && fallbackValue !== null && !Array.isArray(fallbackValue) && typeof fallbackValue !== 'bigint') {
-                 return { ...fallbackValue };
-            }
-            return fallbackValue;
-        }
         
-        console.error(`❌ SafeContractCall (${method}) unexpected error:`, e);
+        // Erros silenciosos comuns (ex: chamada revertida em view)
+        if (e.code !== 'BAD_DATA' && e.code !== 'CALL_EXCEPTION') {
+             console.warn(`SafeCall Error (${method}):`, e.code || e.message);
+        }
         return fallbackValue;
     }
 };
 
+export const safeBalanceOf = async (contract, address) => safeContractCall(contract, 'balanceOf', [address], 0n);
+
 // ====================================================================
-// CARREGAMENTO DE DADOS
+// DATA LOADING (SYSTEM & PUBLIC)
 // ====================================================================
 
 export async function loadSystemDataFromAPI() {
+    // Inicializa objetos vazios para evitar erros de undefined
     if (!State.systemFees) State.systemFees = {};
     if (!State.systemPStakes) State.systemPStakes = {};
     if (!State.boosterDiscounts) State.boosterDiscounts = {};
 
     const now = Date.now();
-    // Cache: Se carregou há menos de 2 minutos, usa o cache
+    // Verifica cache da API
     if (systemDataCache && (now - systemDataCacheTime < CACHE_DURATION_MS)) {
-        console.log("♻️ Using cached system data.");
         applySystemDataToState(systemDataCache);
         return true;
     }
 
     try {
-        console.log("🌐 Loading system rules from API...");
-        const response = await fetchWithTimeout(API_ENDPOINTS.getSystemData, API_TIMEOUT_MS); 
+        const response = await fetchWithTimeout(API_ENDPOINTS.getSystemData, API_TIMEOUT_MS);
+        if (!response.ok) throw new Error(`API Status: ${response.status}`);
         
-        if (!response.ok) {
-            throw new Error(`API (getSystemData) Error: ${response.statusText} (${response.status})`);
-        }
-        const systemData = await response.json(); 
-
+        const systemData = await response.json();
         applySystemDataToState(systemData);
         
         systemDataCache = systemData;
         systemDataCacheTime = now;
-        
-        console.log("✅ System rules loaded.");
         return true;
-
     } catch (e) {
-        console.error("❌ CRITICAL Error loading system data from API:", e.message);
+        console.warn("API System Data unavailable (using defaults):", e.message);
+        // Fallbacks críticos para não quebrar a UI se a API estiver offline
+        if(!State.systemFees['NOTARY_SERVICE']) State.systemFees['NOTARY_SERVICE'] = 100n;
         return false;
     }
 }
 
 function applySystemDataToState(systemData) {
-    State.systemFees = {};
-    for (const key in systemData.fees) {
-         State.systemFees[key] = BigInt(systemData.fees[key]);
+    if(systemData.fees) {
+        for (const key in systemData.fees) State.systemFees[key] = BigInt(systemData.fees[key]);
     }
-    
-    State.systemPStakes = {};
-    for (const key in systemData.pStakeRequirements) {
-         State.systemPStakes[key] = BigInt(systemData.pStakeRequirements[key]);
+    if(systemData.pStakeRequirements) {
+        for (const key in systemData.pStakeRequirements) State.systemPStakes[key] = BigInt(systemData.pStakeRequirements[key]);
     }
-    
-    State.boosterDiscounts = systemData.discounts; 
-    
+    if (systemData.discounts) {
+        for (const key in systemData.discounts) {
+            State.boosterDiscounts[key] = BigInt(systemData.discounts[key]);
+        }
+    }
     if (systemData.oracleFeeInWei) {
-         State.systemData = State.systemData || {};
-         State.systemData.oracleFeeInWei = BigInt(systemData.oracleFeeInWei);
+        State.systemData = State.systemData || {};
+        State.systemData.oracleFeeInWei = BigInt(systemData.oracleFeeInWei);
     }
 }
 
 export async function loadPublicData() {
-    if (!State.publicProvider || !State.bkcTokenContractPublic || !State.delegationManagerContractPublic) return;
-
-    try {
-        // SEQUENCIAL COM PAUSAS (Throttling Manual)
-        const publicBkc = State.bkcTokenContractPublic;
-        const publicDelegation = State.delegationManagerContractPublic;
-
-        await safeContractCall(publicBkc, 'totalSupply', [], 0n);
-        
-        await wait(300); // Pausa aumentada para 300ms
-        
-        await safeContractCall(publicBkc, 'MAX_SUPPLY', [], 0n);
-        
-        await wait(300);
-        
-        await safeContractCall(publicBkc, 'TGE_SUPPLY', [], 0n);
-        
-        State.allValidatorsData = []; 
-
-        const totalPStake = await safeContractCall(publicDelegation, 'totalNetworkPStake', [], 0n);
-        State.totalNetworkPStake = totalPStake;
-        
-        await loadSystemDataFromAPI();
-        
-        if (window.updateUIState) {
-            window.updateUIState();
-        }
-
-    } catch (e) { 
-        console.error("Error loading public data", e)
+    if (!State.publicProvider || !State.bkcTokenContractPublic) {
+        console.warn("Public Provider not ready yet.");
+        return;
     }
+
+    // EXECUÇÃO PARALELA BLINDADA: Blockchain não espera API
+    // Usamos Promise.allSettled para que falha em um não pare o outro
+    const promises = [
+        // 1. Blockchain Data (Prioridade Alta - UI Principal)
+        (async () => {
+            const publicBkc = State.bkcTokenContractPublic;
+            const publicDelegation = State.delegationManagerContractPublic;
+            
+            // Pré-aquece cache de Supply
+            await safeContractCall(publicBkc, 'totalSupply', [], 0n);
+            
+            if (publicDelegation) {
+                const totalPStake = await safeContractCall(publicDelegation, 'totalNetworkPStake', [], 0n);
+                State.totalNetworkPStake = totalPStake;
+            }
+        })(),
+        
+        // 2. API Data (Fundo - Configurações)
+        loadSystemDataFromAPI(),
+        
+        // 3. Rental Listings (Fundo - Mercado)
+        loadRentalListings()
+    ];
+
+    await Promise.allSettled(promises);
 }
+
+// ====================================================================
+// USER DATA LOADING
+// ====================================================================
 
 export async function loadUserData() {
     if (!State.isConnected || !State.userAddress) return;
 
     try {
-        // SEQUENCIAL ESTRATÉGICO
+        // 1. Saldo Principal (Crítico)
         const balance = await safeBalanceOf(State.bkcTokenContract, State.userAddress);
         State.currentUserBalance = balance;
-
-        await wait(300); 
-
-        const delegationsRaw = await safeContractCall(State.delegationManagerContract, 'getDelegationsOf', [State.userAddress], []);
         
-        State.userDelegations = delegationsRaw.map((d, index) => ({
-            amount: d[0], 
-            unlockTime: d[1],
-            lockDuration: d[2], 
-            index,
-            txHash: null 
-        }));
-        
-        await wait(300); 
+        // 2. Dados de Staking
+        if (State.delegationManagerContract) {
+            // Busca pStake do usuário
+            const totalUserPStake = await safeContractCall(State.delegationManagerContract, 'userTotalPStake', [State.userAddress], 0n);
+            State.userTotalPStake = totalUserPStake;
 
-        const totalUserPStake = await safeContractCall(State.delegationManagerContract, 'userTotalPStake', [State.userAddress], 0n);
-        State.userTotalPStake = totalUserPStake;
+            // Busca delegações
+            const delegationsRaw = await safeContractCall(State.delegationManagerContract, 'getDelegationsOf', [State.userAddress], []);
+            State.userDelegations = delegationsRaw.map((d, index) => ({
+                amount: d[0], unlockTime: d[1], lockDuration: d[2], index
+            }));
+        }
 
         if (State.provider) {
-            // Balanço Nativo (ETH) é rápido, não precisa de tanta pausa
             const nativeBalance = await State.provider.getBalance(State.userAddress);
             State.currentUserNativeBalance = nativeBalance;
         }
 
-        await loadMyBoostersFromAPI();
+        // 3. Carrega Boosters e Aluguéis em paralelo sem travar o resto
+        Promise.allSettled([
+            loadMyBoostersFromAPI(),
+            loadUserRentals()
+        ]);
         
+    } catch (e) { console.error("Error loading user data:", e); }
+}
+
+// ====================================================================
+// RENTAL MARKET DATA LOGIC (AirBNFT)
+// ====================================================================
+
+export async function loadRentalListings() {
+    if (!State.publicProvider || !addresses.rentalManager) {
+        State.rentalListings = [];
+        return [];
+    }
+    
+    const rentalContract = new ethers.Contract(addresses.rentalManager, rentalManagerABI, State.publicProvider);
+    
+    try {
+        const listedIds = await safeContractCall(rentalContract, 'getAllListedTokenIds', [], []);
+        if (!listedIds || listedIds.length === 0) {
+            State.rentalListings = [];
+            return [];
+        }
+
+        // Limita a 50 listings para performance inicial
+        const listingsToFetch = listedIds.slice(0, 50);
+        
+        const listingsPromises = listingsToFetch.map(async (tokenId) => {
+            const listing = await safeContractCall(rentalContract, 'getListing', [tokenId], null);
+            
+            // Otimização: Checa isRented apenas se listing existir e estiver ativo
+            if (listing && listing.isActive) {
+                const isRented = await safeContractCall(rentalContract, 'isRented', [tokenId], false);
+                
+                if (!isRented) {
+                    const boostInfo = await getBoosterInfo(tokenId); 
+                    return {
+                        tokenId: tokenId.toString(),
+                        owner: listing.owner,
+                        pricePerHour: listing.pricePerHour,
+                        maxDurationHours: listing.maxDuration,
+                        boostBips: boostInfo.boostBips,
+                        img: boostInfo.img,
+                        name: boostInfo.name
+                    };
+                }
+            }
+            return null;
+        });
+
+        // Espera todas e filtra nulos
+        const results = await Promise.all(listingsPromises);
+        const validListings = results.filter(l => l !== null);
+        
+        State.rentalListings = validListings;
+        return validListings;
+
     } catch (e) {
-        console.error("Error loading user data:", e);
+        console.error("Error loading rental listings:", e);
+        State.rentalListings = [];
+        return [];
+    }
+}
+
+export async function loadUserRentals() {
+    if (!State.userAddress || !addresses.rentalManager) {
+        State.myRentals = [];
+        return [];
+    }
+    
+    const rentalContract = new ethers.Contract(addresses.rentalManager, rentalManagerABI, State.publicProvider);
+    
+    try {
+        const listedIds = await safeContractCall(rentalContract, 'getAllListedTokenIds', [], []);
+        const myRentals = [];
+        
+        for (const tokenId of listedIds) {
+            const rental = await safeContractCall(rentalContract, 'getRental', [tokenId], null);
+            
+            if (rental && rental.tenant.toLowerCase() === State.userAddress.toLowerCase()) {
+                const nowSec = Math.floor(Date.now() / 1000);
+                
+                if (BigInt(rental.endTime) > BigInt(nowSec)) {
+                     const boostInfo = await getBoosterInfo(tokenId);
+                     myRentals.push({
+                        tokenId: tokenId.toString(),
+                        startTime: rental.startTime,
+                        endTime: rental.endTime,
+                        boostBips: boostInfo.boostBips,
+                        img: boostInfo.img,
+                        name: boostInfo.name
+                     });
+                }
+            }
+        }
+        
+        State.myRentals = myRentals;
+        return myRentals;
+
+    } catch (e) {
+        // console.error("Error loading user rentals:", e); // Silenciado para não poluir console
+        State.myRentals = [];
+        return [];
+    }
+}
+
+async function getBoosterInfo(tokenId) {
+    // Inicializa contrato público de Booster se necessário
+    if (!State.rewardBoosterContractPublic && State.publicProvider && addresses.rewardBoosterNFT) {
+         State.rewardBoosterContractPublic = new ethers.Contract(addresses.rewardBoosterNFT, [
+            "function boostBips(uint256) view returns (uint256)", 
+            "function tokenURI(uint256) view returns (string)"
+         ], State.publicProvider);
+    }
+    
+    const contractToUse = State.rewardBoosterContract || State.rewardBoosterContractPublic;
+    // Se não tiver contrato (rede errada ou não carregado), retorna placeholder
+    if (!contractToUse) return { boostBips: 0, img: 'assets/bkc_logo_3d.png', name: 'Unknown' };
+    
+    try {
+        const boostBips = await safeContractCall(contractToUse, 'boostBips', [tokenId], 0n);
+        let img = 'assets/bkc_logo_3d.png';
+        let name = `Booster #${tokenId}`;
+        
+        const tier = boosterTiers.find(t => t.boostBips === Number(boostBips));
+        if (tier) {
+            img = tier.img;
+            name = tier.name;
+        } 
+        
+        return { boostBips: Number(boostBips), img, name };
+    } catch {
+        return { boostBips: 0, img: 'assets/bkc_logo_3d.png', name: 'Unknown' };
     }
 }
 
@@ -297,134 +390,115 @@ export async function calculateUserTotalRewards() {
 
 export async function calculateClaimDetails() {
     if (!State.delegationManagerContract || !State.ecosystemManagerContract || !State.userAddress) {
-        return { netClaimAmount: 0n, feeAmount: 0n, discountPercent: 0, totalRewards: 0n, basePenaltyPercent: 0 };
+        return { netClaimAmount: 0n, feeAmount: 0n, discountPercent: 0, totalRewards: 0n };
     }
     
     const { totalRewards } = await calculateUserTotalRewards();
-    if (totalRewards === 0n) {
-        return { netClaimAmount: 0n, feeAmount: 0n, discountPercent: 0, totalRewards: 0n, basePenaltyPercent: 0 };
-    }
+    if (totalRewards === 0n) return { netClaimAmount: 0n, feeAmount: 0n, discountPercent: 0, totalRewards: 0n };
     
     let baseFeeBips = State.systemFees?.CLAIM_REWARD_FEE_BIPS;
-    // Fallback para contrato apenas se API falhar, com cache de leitura
     if (!baseFeeBips) {
-         baseFeeBips = await safeContractCall(State.ecosystemManagerContract, 'getFee', ["CLAIM_REWARD_FEE_BIPS"], 50n); 
+         baseFeeBips = await safeContractCall(State.ecosystemManagerContract, 'getFee', [ethers.id("CLAIM_REWARD_FEE_BIPS")], 50n); 
     }
 
-    const baseFeePercent = Number(baseFeeBips) / 100;
     const boosterData = await getHighestBoosterBoostFromAPI(); 
+    let discountBips = State.boosterDiscounts?.[boosterData.highestBoost] || 0n;
     
-    let discountBips = State.boosterDiscounts?.[boosterData.highestBoost];
-    if (!discountBips) {
-        discountBips = await safeContractCall(State.ecosystemManagerContract, 'getBoosterDiscount', [BigInt(boosterData.highestBoost)], 0n);
-    } else {
-        discountBips = BigInt(discountBips);
+    if (discountBips === 0n && boosterData.highestBoost > 0) {
+         discountBips = await safeContractCall(State.ecosystemManagerContract, 'getBoosterDiscount', [BigInt(boosterData.highestBoost)], 0n);
     }
-    
-    const discountPercent = Number(discountBips) / 100;
+
     const finalFeeBips = baseFeeBips > discountBips ? baseFeeBips - discountBips : 0n;
-    const finalFeeAmount = (totalRewards * finalFeeBips) / 10000n;
-    const netClaimAmount = totalRewards - finalFeeAmount;
+    const feeAmount = (totalRewards * finalFeeBips) / 10000n;
     
     return { 
-        netClaimAmount, 
-        feeAmount: finalFeeAmount, 
-        discountPercent, 
-        totalRewards, 
-        basePenaltyPercent: baseFeePercent 
+        netClaimAmount: totalRewards - feeAmount, 
+        feeAmount, 
+        discountPercent: Number(discountBips) / 100, 
+        totalRewards 
     };
 }
 
 export async function getHighestBoosterBoostFromAPI() {
-    if (!State.rewardBoosterContract || !State.userAddress) {
-        return { highestBoost: 0, boostName: 'None', imageUrl: '', tokenId: null, efficiency: 50 };
-    }
-
     await loadMyBoostersFromAPI();
+    
+    let maxBoost = 0;
+    let bestTokenId = null;
+    let source = 'none';
 
-    if (!State.myBoosters || State.myBoosters.length === 0) {
-        return { highestBoost: 0, boostName: 'None', imageUrl: '', tokenId: null, efficiency: 50 };
-    }
-
-    try {
-        const highestBooster = State.myBoosters.reduce((max, booster) => booster.boostBips > max.boostBips ? booster : max, State.myBoosters[0]);
-
-        const highestBoost = highestBooster.boostBips;
-        const bestTokenId = highestBooster.tokenId;
-        const boostPercent = highestBoost / 100;
-        const finalEfficiency = Math.min(50 + boostPercent, 100); 
-
-        const tier = boosterTiers.find(t => t.boostBips === highestBoost);
-        let imageUrl = tier?.img || '';
-        let nftName = tier?.name ? `${tier.name} Booster` : 'Booster NFT';
-
-        // OTIMIZAÇÃO: TokenURI é pesado. Só carrega se a imagem padrão não existir.
-        if (!imageUrl) {
-            try {
-                const tokenURI = await safeContractCall(State.rewardBoosterContract, 'tokenURI', [bestTokenId], '');
-                if (tokenURI) {
-                    const metadataResponse = await fetch(tokenURI.replace("ipfs://", ipfsGateway));
-                    if (metadataResponse.ok) {
-                        const metadata = await metadataResponse.json();
-                        imageUrl = metadata.image ? metadata.image.replace("ipfs://", ipfsGateway) : imageUrl;
-                        nftName = metadata.name || nftName;
-                    }
-                }
-            } catch (e) {
-                console.warn(`Could not fetch metadata for booster #${bestTokenId}, using fallback.`);
-            }
+    if (State.myBoosters && State.myBoosters.length > 0) {
+        const highestOwned = State.myBoosters.reduce((max, b) => b.boostBips > max.boostBips ? b : max, State.myBoosters[0]);
+        if (highestOwned.boostBips > maxBoost) {
+            maxBoost = highestOwned.boostBips;
+            bestTokenId = highestOwned.tokenId;
+            source = 'owned';
         }
-
-        return { highestBoost, boostName: nftName, imageUrl, tokenId: bestTokenId.toString(), efficiency: finalEfficiency };
-
-    } catch (e) {
-        console.error("Error processing highest booster:", e);
-        return { highestBoost: 0, boostName: 'Error Loading', imageUrl: '', tokenId: null, efficiency: 50 };
     }
+    
+    if (!State.myRentals) await loadUserRentals();
+    if (State.myRentals && State.myRentals.length > 0) {
+        const highestRented = State.myRentals.reduce((max, r) => r.boostBips > max.boostBips ? r : max, State.myRentals[0]);
+        if (highestRented.boostBips > maxBoost) {
+            maxBoost = highestRented.boostBips;
+            bestTokenId = highestRented.tokenId;
+            source = 'rented';
+        }
+    }
+
+    const boostPercent = maxBoost / 100;
+    const finalEfficiency = Math.min(50 + boostPercent, 100); 
+
+    const tier = boosterTiers.find(t => t.boostBips === maxBoost);
+    let imageUrl = tier?.realImg || tier?.img || '';
+    let nftName = tier?.name ? `${tier.name} Booster` : (source !== 'none' ? 'Booster NFT' : 'None');
+
+    return { 
+        highestBoost: maxBoost, 
+        boostName: nftName, 
+        imageUrl, 
+        tokenId: bestTokenId ? bestTokenId.toString() : null, 
+        efficiency: finalEfficiency,
+        source: source 
+    };
 }
 
 export async function loadMyBoostersFromAPI() {
     if (State.myBoosters && State.myBoosters.length > 0) {
-        return State.myBoosters;
+        if (Date.now() - lastBoosterFetchTime < USER_DATA_CACHE_MS) {
+            return State.myBoosters;
+        }
     }
-    State.myBoosters = []; 
-
-    if (!State.rewardBoosterContract || !State.userAddress) return [];
+    
+    if (!State.userAddress) {
+        State.myBoosters = [];
+        return [];
+    }
 
     try {
-        console.log("🚀 Loading user boosters from API...");
-        const userAddress = State.userAddress;
+        const response = await fetchWithTimeout(`${API_ENDPOINTS.getBoosters}/${State.userAddress}`, 5000);
         
-        // Timeout de 5s para a API
-        const response = await fetchWithTimeout(`${API_ENDPOINTS.getBoosters}/${userAddress}`, 5000);
-        
-        if (!response.ok) {
-            throw new Error(`API Error: ${response.status}`);
-        }
+        if (!response.ok) throw new Error(`API Error: ${response.status}`);
         
         const ownedTokensAPI = await response.json(); 
         
         if (ownedTokensAPI.length === 0) {
-            console.log("ℹ️ No boosters found via API.");
             State.myBoosters = [];
             return [];
         }
 
-        const boosterDetails = ownedTokensAPI.map(tokenData => {
-            return {
-                tokenId: BigInt(tokenData.tokenId),
-                boostBips: Number(tokenData.boostBips || 0), 
-                txHash: null,
-                acquisitionTime: tokenData.mintedAt || null
-            };
-        });
+        const boosterDetails = ownedTokensAPI.map(tokenData => ({
+            tokenId: BigInt(tokenData.tokenId),
+            boostBips: Number(tokenData.boostBips || 0), 
+            txHash: null,
+            acquisitionTime: tokenData.mintedAt || null
+        }));
 
         State.myBoosters = boosterDetails;
+        lastBoosterFetchTime = Date.now(); 
         return boosterDetails;
 
     } catch (e) {
-        console.warn("⚠️ Error loading My Boosters from API (Using empty list):", e.message);
-        State.myBoosters = [];
-        return []; 
+        // Retorna o que tiver no cache ou vazio em caso de erro, sem quebrar
+        return State.myBoosters || []; 
     }
 }

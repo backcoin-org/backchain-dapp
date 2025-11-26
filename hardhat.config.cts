@@ -1,27 +1,24 @@
 // hardhat.config.cts
-// // Importa os tipos e plugins necessários
 import { HardhatUserConfig } from "hardhat/config";
 import "@nomicfoundation/hardhat-toolbox";
-// // Pacote padrão de plugins (ethers, waffle, etc.)
-import "@openzeppelin/hardhat-upgrades"; // <-- ADICIONADO PARA SUPORTE A UUPS (PROXY)
+import "@openzeppelin/hardhat-upgrades"; 
 import "dotenv/config";
-// Carrega as variáveis do .env
 import "@nomicfoundation/hardhat-verify";
-// // Plugin de verificação
 
-// --- Carrega variáveis de ambiente ---
-const SEPOLIA_RPC_URL = process.env.SEPOLIA_RPC_URL ||
-  "https://sepolia.infura.io/v3/YOUR_INFURA_KEY";
+// --- CONFIGURAÇÃO DE CHAVES (HARDCODED PARA EVITAR ERROS DE LEITURA) ---
+// Estamos forçando a URL completa aqui para eliminar erro de DNS por caractere inválido
+const SEPOLIA_RPC_URL = "https://sepolia.infura.io/v3/a17d6aa469bd4214836fe54f36df6915";
+
+// Tenta ler a chave privada do .env, senão avisa
 const PRIVATE_KEY = process.env.PRIVATE_KEY;
-// // Verifica se a chave privada existe
-if (!PRIVATE_KEY) {
-  console.warn("AVISO: PRIVATE_KEY não definida no arquivo .env. As transações falharão.");
-} // ✅ CORRIGIDO: Chave '}' descomentada
+const ETHERSCAN_API_KEY = process.env.ETHERSCAN_API_KEY;
 
-// Define a configuração do Hardhat
+if (!PRIVATE_KEY) {
+  console.warn("⚠️ AVISO: PRIVATE_KEY não encontrada no .env. Deploy irá falhar.");
+}
+
 const config: HardhatUserConfig = {
-  
-  // Versão do Solidity (Mantida a sua versão 0.8.28)
+  // Configurações do Compilador
   solidity: {
     version: "0.8.28",
     settings: {
@@ -29,41 +26,35 @@ const config: HardhatUserConfig = {
         enabled: true,
         runs: 200,
       },
-      viaIR: true, // ✅ SOLUÇÃO PARA "Stack too deep"
+      // Vital para evitar 'Stack too deep'
+      viaIR: true, 
     },
   },
 
-  // Definição das Redes
+  // Configuração das Redes
   networks: {
-    // Rede 
-    // de 
-    // desenvolvimento local
     hardhat: {
       chainId: 31337,
     },
     
-    // Rede Sepolia
+    // Configuração da Sepolia
     sepolia: {
-      url: SEPOLIA_RPC_URL,
-      accounts: PRIVATE_KEY ? [PRIVATE_KEY] : [], // ✅ CORRIGIDO: Sintaxe do ternário
-      chainId: 11155111, // Chain ID da Sepolia
+      url: SEPOLIA_RPC_URL, // URL Fixa e direta
+      accounts: PRIVATE_KEY ? [PRIVATE_KEY] : [],
+      chainId: 11155111,
     },
 
-    // Rede BSC Testnet
+    // Configuração da BSC Testnet
     bscTestnet: {
       url: "https://data-seed-prebsc-1-s1.binance.org:8545/",
       chainId: 97,
-      accounts:
-        process.env.PRIVATE_KEY !== undefined ? [process.env.PRIVATE_KEY] : [], // ✅ CORRIGIDO: Sintaxe do ternário
+      accounts: PRIVATE_KEY ? [PRIVATE_KEY] : [],
     },
   },
 
-  // Configuração de Verificação (Etherscan/BscScan)
+  // Verificação de Contrato
   etherscan: {
-    // A chave API será lida do .env (ETHERSCAN_API_KEY)
-    apiKey: process.env.ETHERSCAN_API_KEY || "", // ✅ CORRIGIDO: Valor padrão descomentado
-
-    // Configuração para redes customizadas (como BSC)
+    apiKey: ETHERSCAN_API_KEY || "",
     customChains: [
       {
         network: "bscTestnet",
@@ -73,15 +64,17 @@ const config: HardhatUserConfig = {
           browserURL: "https://testnet.bscscan.com"
         }
       }
-      // Adicione a 'bscMainnet' aqui se for para produção
- 
-  ] // ✅ CORRIGIDO: Colchete ']' descomentado
+    ]
   },
 
-  // Outras configurações (ex: gas reporter)
   gasReporter: {
     enabled: process.env.REPORT_GAS !== undefined,
     currency: "USD",
   },
+  
+  mocha: {
+    timeout: 100000
+  }
 };
+
 export default config;

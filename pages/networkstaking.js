@@ -1,5 +1,5 @@
 // pages/networkstaking.js
-// ✅ VERSÃO FINAL BLINDADA: Cache de Dados + Anti-Loop + UI Otimizada
+// ✅ VERSÃO REDESENHADA: Foco em pStake Máximo (UX "Diamond Hands")
 
 const ethers = window.ethers;
 
@@ -24,12 +24,15 @@ import {
     executeForceUnstake, 
     executeUniversalClaim 
 } from '../modules/transactions.js';
-import { showToast, startCountdownTimers, openModal, closeModal } from '../ui-feedback.js';
+import { showToast, startCountdownTimers } from '../ui-feedback.js';
 
 // --- Estado Local ---
 let isStakingLoading = false;
-let lastStakingFetch = 0; // Cache de tempo
+let lastStakingFetch = 0;
 let delegationCurrentPage = 1;
+
+// Estado da NOVA UX
+let currentStakingDuration = 3650; // Padrão: 10 Anos (Max pStake)
 
 // =========================================================================
 // 1. RENDERIZAÇÃO VISUAL
@@ -39,121 +42,124 @@ function renderEarnLayout() {
     const container = document.getElementById('mine');
     if (!container) return;
     
-    // Se já existe o conteúdo principal, não recria para evitar piscar
     if (container.querySelector('#earn-main-content')) return;
 
     container.innerHTML = `
-        <div id="earn-main-content" class="container mx-auto max-w-7xl py-8 px-4">
+        <div id="earn-main-content" class="container mx-auto max-w-7xl py-4 px-4">
             
-            <div class="mb-10 text-center md:text-left">
-                <h1 class="text-4xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-pink-500 mb-2">
-                    Network Staking
-                </h1>
-                <p class="text-zinc-400 text-lg max-w-2xl">
-                    Delegate your $BKC to secure the network and earn passive rewards. 
-                    Longer lock periods generate more <span class="text-purple-400 font-bold">pStake</span> and higher APY.
-                </p>
-            </div>
-
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
-                <div class="bg-zinc-900/50 border border-zinc-700 p-6 rounded-2xl shadow-lg relative overflow-hidden group">
-                    <div class="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
-                        <i class="fa-solid fa-globe text-6xl text-purple-500"></i>
-                    </div>
-                    <p class="text-zinc-400 text-sm font-bold uppercase tracking-wider">Total Network Staked</p>
-                    <p class="text-3xl font-mono text-white mt-2" id="earn-total-network-pstake">--</p>
-                </div>
-
-                <div class="bg-zinc-900/50 border border-zinc-700 p-6 rounded-2xl shadow-lg relative overflow-hidden group">
-                     <div class="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
-                        <i class="fa-solid fa-user-shield text-6xl text-blue-500"></i>
-                    </div>
-                    <p class="text-zinc-400 text-sm font-bold uppercase tracking-wider">My Total pStake</p>
-                    <p class="text-3xl font-mono text-white mt-2" id="earn-my-pstake">--</p>
-                </div>
-
-                <div class="bg-zinc-900/50 border border-zinc-700 p-6 rounded-2xl shadow-lg relative overflow-hidden group">
-                     <div class="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
-                        <i class="fa-solid fa-gift text-6xl text-amber-500"></i>
-                    </div>
-                    <p class="text-zinc-400 text-sm font-bold uppercase tracking-wider">Claimable Rewards</p>
-                    <div class="flex items-center gap-3 mt-2">
-                        <p class="text-3xl font-mono text-amber-400" id="earn-my-rewards">--</p>
-                        <button id="earn-claim-btn" class="bg-amber-500/20 hover:bg-amber-500/30 text-amber-400 text-xs font-bold py-1.5 px-3 rounded-lg border border-amber-500/30 transition-all disabled:opacity-50 disabled:cursor-not-allowed" disabled>
-                            Claim
-                        </button>
-                    </div>
-                </div>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+                ${renderStatCard('Total Network Staked', 'earn-total-network-pstake', 'fa-globe', 'text-purple-500')}
+                ${renderStatCard('My Total pStake', 'earn-my-pstake', 'fa-user-shield', 'text-blue-500')}
+                ${renderStatCard('Claimable Rewards', 'earn-my-rewards', 'fa-gift', 'text-amber-500', true)}
             </div>
 
             <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
                 
                 <div class="lg:col-span-5">
-                    <div class="bg-sidebar border border-border-color rounded-2xl p-6 shadow-xl sticky top-24">
-                        <h2 class="text-xl font-bold text-white mb-6 flex items-center gap-2">
-                            <i class="fa-solid fa-plus-circle text-purple-400"></i> New Delegation
-                        </h2>
+                    <div class="glass-panel relative overflow-hidden p-1 border border-purple-500/30 shadow-[0_0_30px_rgba(168,85,247,0.1)]">
+                        
+                        <div class="bg-zinc-900/80 p-6 rounded-t-xl border-b border-zinc-800">
+                            <h2 class="text-2xl font-bold text-white flex items-center gap-2">
+                                <i class="fa-solid fa-layer-group text-purple-400"></i> Delegate & Earn
+                            </h2>
+                            <p class="text-sm text-zinc-400 mt-1">Maximize your voting power and rewards.</p>
+                        </div>
 
-                        <div class="space-y-6">
+                        <div class="p-6 space-y-6 bg-gradient-to-b from-zinc-900/50 to-black/50">
+                            
                             <div>
-                                <label class="block text-sm font-medium text-zinc-300 mb-2">Amount to Stake ($BKC)</label>
+                                <div class="flex justify-between mb-2">
+                                    <label class="text-sm font-bold text-zinc-300">Amount to Stake</label>
+                                    <span class="text-xs text-zinc-500">Available: <span id="staking-balance-display" class="text-white font-mono">--</span> $BKC</span>
+                                </div>
                                 <div class="relative">
-                                    <input type="number" id="staking-amount-input" placeholder="0.00" class="w-full bg-zinc-900 border border-zinc-700 rounded-xl p-4 text-white focus:border-purple-500 focus:ring-1 focus:ring-purple-500 transition-colors font-mono">
-                                    <div class="absolute right-2 top-2 flex gap-1">
-                                        <button class="stake-perc-btn text-xs bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white px-2 py-2 rounded transition-colors" data-perc="25">25%</button>
-                                        <button class="stake-perc-btn text-xs bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white px-2 py-2 rounded transition-colors" data-perc="50">50%</button>
-                                        <button class="stake-perc-btn text-xs bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white px-2 py-2 rounded transition-colors" data-perc="100">Max</button>
+                                    <input type="number" id="staking-amount-input" placeholder="0.00" class="w-full bg-black border border-zinc-700 rounded-xl p-4 text-2xl text-white focus:border-purple-500 focus:ring-1 focus:ring-purple-500 transition-colors font-mono outline-none font-bold placeholder-zinc-700">
+                                    <div class="absolute right-3 top-3 flex gap-1">
+                                        <button class="stake-perc-btn text-[10px] font-bold bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white px-3 py-2 rounded transition-colors uppercase tracking-wider" data-perc="100">Max</button>
                                     </div>
                                 </div>
-                                <p class="text-xs text-zinc-500 mt-2 text-right">Available: <span id="staking-balance-display" class="text-white">--</span> $BKC</p>
                             </div>
 
-                            <div>
-                                <label class="flex justify-between text-sm font-medium text-zinc-300 mb-2">
-                                    <span>Lock Duration</span>
-                                    <span id="staking-duration-display" class="text-purple-400 font-bold">365 days</span>
-                                </label>
-                                <input type="range" id="staking-duration-slider" min="1" max="3650" value="365" class="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer accent-purple-500">
-                                <div class="flex justify-between text-xs text-zinc-500 mt-2">
-                                    <span>1 Day</span>
-                                    <span>10 Years</span>
+                            <div class="bg-zinc-800/40 border border-zinc-700 rounded-xl p-4 relative group">
+                                <div class="flex justify-between items-start mb-2">
+                                    <div>
+                                        <p class="text-xs text-zinc-500 uppercase tracking-widest font-bold mb-1">Strategy Selected</p>
+                                        <div id="strategy-badge" class="inline-flex items-center gap-2 bg-purple-500/10 text-purple-300 px-3 py-1 rounded border border-purple-500/20">
+                                            <i class="fa-solid fa-gem"></i> <span id="strategy-name" class="font-bold text-sm">Diamond Hands (10Y)</span>
+                                        </div>
+                                    </div>
+                                    <button id="open-duration-modal" class="text-xs text-zinc-500 hover:text-white underline decoration-zinc-600 hover:decoration-white transition-all p-2">
+                                        <i class="fa-solid fa-sliders mr-1"></i> Adjust Duration
+                                    </button>
                                 </div>
-                            </div>
-
-                            <div class="bg-zinc-900/50 rounded-xl p-4 space-y-2 border border-zinc-800">
-                                <div class="flex justify-between text-sm">
-                                    <span class="text-zinc-400">Staking Fee (0.5%):</span>
-                                    <span class="text-white font-mono" id="staking-fee-display">0.00</span>
-                                </div>
-                                <div class="flex justify-between text-sm">
-                                    <span class="text-zinc-400">Net Staked:</span>
-                                    <span class="text-white font-mono" id="staking-net-display">0.00</span>
-                                </div>
-                                <div class="border-t border-zinc-800 pt-2 flex justify-between items-center">
-                                    <span class="text-zinc-400 text-sm">Projected pStake:</span>
-                                    <span class="text-purple-400 font-bold text-lg font-mono" id="staking-pstake-display">0</span>
+                                
+                                <div class="mt-4 pt-4 border-t border-zinc-700/50 grid grid-cols-2 gap-4">
+                                    <div>
+                                        <p class="text-[10px] text-zinc-500">Net Staked (After 0.5% Fee)</p>
+                                        <p class="text-white font-mono text-sm" id="staking-net-display">0.00</p>
+                                    </div>
+                                    <div class="text-right">
+                                        <p class="text-[10px] text-purple-400 font-bold">Projected pStake Power</p>
+                                        <p class="text-2xl font-bold text-white font-mono leading-none" id="staking-pstake-display">0</p>
+                                    </div>
                                 </div>
                             </div>
 
-                            <button id="confirm-stake-btn" class="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-4 px-6 rounded-xl shadow-lg transition-all transform hover:-translate-y-0.5 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:transform-none">
-                                Confirm Delegation
+                            <button id="confirm-stake-btn" class="w-full bg-gradient-to-r from-purple-600 to-purple-800 hover:from-purple-500 hover:to-purple-700 text-white font-bold py-4 px-6 rounded-xl shadow-lg shadow-purple-900/30 transition-all transform hover:-translate-y-0.5 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:transform-none flex items-center justify-center gap-3 text-lg">
+                                <span>Delegate Now</span> <i class="fa-solid fa-arrow-right"></i>
                             </button>
                         </div>
                     </div>
                 </div>
 
                 <div class="lg:col-span-7">
-                    <div class="bg-sidebar border border-border-color rounded-2xl p-6 shadow-xl min-h-[500px]">
-                        <h2 class="text-xl font-bold text-white mb-6 flex items-center justify-between">
-                            <span class="flex items-center gap-2"><i class="fa-solid fa-list-ul text-zinc-400"></i> Active Delegations</span>
-                            <button id="refresh-delegations-btn" class="text-sm text-blue-400 hover:text-blue-300"><i class="fa-solid fa-rotate"></i></button>
-                        </h2>
+                    <div class="glass-panel p-6 min-h-[500px]">
+                        <div class="flex justify-between items-center mb-6">
+                            <h2 class="text-lg font-bold text-white flex items-center gap-2">
+                                <i class="fa-solid fa-list-ul text-zinc-500"></i> My Delegations
+                            </h2>
+                            <button id="refresh-delegations-btn" class="text-zinc-500 hover:text-white transition-colors w-8 h-8 rounded-full hover:bg-zinc-800 flex items-center justify-center"><i class="fa-solid fa-rotate"></i></button>
+                        </div>
                         
-                        <div id="my-delegations-container" class="space-y-4">
-                             </div>
+                        <div id="my-delegations-container" class="space-y-3">
+                             ${renderLoading()}
+                        </div>
                     </div>
                 </div>
 
+            </div>
+        </div>
+
+        <div id="duration-modal" class="fixed inset-0 z-50 hidden flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 opacity-0 transition-opacity duration-300">
+            <div class="bg-zinc-900 border border-zinc-700 rounded-2xl max-w-md w-full p-6 shadow-2xl transform scale-95 transition-transform duration-300 relative">
+                <button id="close-duration-modal" class="absolute top-4 right-4 text-zinc-500 hover:text-white text-xl"><i class="fa-solid fa-xmark"></i></button>
+                
+                <h3 class="text-xl font-bold text-white mb-2">Select Lock Duration</h3>
+                <p class="text-sm text-zinc-400 mb-6">Longer lockups grant significantly more pStake power.</p>
+
+                <div class="mb-8">
+                    <div class="flex justify-between text-sm font-bold text-white mb-4">
+                        <span>Duration:</span>
+                        <span id="modal-duration-display" class="text-purple-400 text-xl">10 Years</span>
+                    </div>
+                    <input type="range" id="staking-duration-slider" min="1" max="3650" value="3650" class="w-full h-3 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-purple-500 hover:accent-purple-400">
+                    <div class="flex justify-between text-[10px] text-zinc-500 mt-2 font-mono uppercase">
+                        <span>1 Day (Min)</span>
+                        <span>10 Years (Max)</span>
+                    </div>
+                </div>
+
+                <div class="bg-amber-900/20 border border-amber-500/20 p-3 rounded-lg flex gap-3 items-start mb-6 hidden" id="duration-warning">
+                    <i class="fa-solid fa-triangle-exclamation text-amber-500 mt-0.5"></i>
+                    <div>
+                        <p class="text-xs text-amber-200 font-bold">High pStake Impact</p>
+                        <p class="text-[10px] text-amber-400/70">Reducing duration drastically reduces your pStake generation.</p>
+                    </div>
+                </div>
+
+                <button id="apply-duration-btn" class="w-full bg-white text-black font-bold py-3 rounded-xl hover:bg-zinc-200 transition-colors">
+                    Apply Strategy
+                </button>
             </div>
         </div>
     `;
@@ -161,8 +167,24 @@ function renderEarnLayout() {
     setupStakingListeners();
 }
 
+function renderStatCard(title, id, icon, colorClass, hasButton = false) {
+    return `
+        <div class="glass-panel p-5 flex flex-col justify-between relative overflow-hidden group">
+            <div class="absolute top-0 right-0 p-3 opacity-10 group-hover:opacity-20 transition-opacity">
+                <i class="fa-solid ${icon} text-5xl ${colorClass.replace('text-', 'text-')}"></i> </div>
+            <p class="text-zinc-500 text-xs font-bold uppercase tracking-wider mb-1">${title}</p>
+            <div class="flex items-end justify-between">
+                <p class="text-2xl font-mono text-white font-bold truncate" id="${id}">--</p>
+                ${hasButton ? 
+                    `<button id="earn-claim-btn" class="bg-amber-500 hover:bg-amber-400 text-black text-xs font-bold py-1.5 px-4 rounded shadow-lg transition-all disabled:opacity-30 disabled:cursor-not-allowed" disabled>Claim</button>` 
+                    : ''}
+            </div>
+        </div>
+    `;
+}
+
 // =========================================================================
-// 2. LÓGICA DE DADOS (SAFE)
+// 2. LÓGICA DE DADOS
 // =========================================================================
 
 async function updateStakingData(forceRefresh = false) {
@@ -172,31 +194,23 @@ async function updateStakingData(forceRefresh = false) {
     }
 
     const now = Date.now();
-    // 🕒 Cache de 1 minuto para dados gerais, a menos que forçado
-    // O loadUserData já tem sua própria proteção interna, mas essa protege a lógica de UI
     if (!forceRefresh && isStakingLoading && (now - lastStakingFetch < 60000)) return;
     
     isStakingLoading = true;
     lastStakingFetch = now;
 
     try {
-        // 1. Dados Públicos
-        if (!State.totalNetworkPStake || State.totalNetworkPStake === 0n) {
-            await loadPublicData(); 
-        }
+        if (!State.totalNetworkPStake || State.totalNetworkPStake === 0n) await loadPublicData(); 
         const netPStakeEl = document.getElementById('earn-total-network-pstake');
         if(netPStakeEl) netPStakeEl.textContent = formatPStake(State.totalNetworkPStake);
 
-        // 2. Dados do Usuário
         if (State.currentUserBalance === 0n) await loadUserData(); 
-        
         const balDisplay = document.getElementById('staking-balance-display');
         const myPStakeDisplay = document.getElementById('earn-my-pstake');
         
         if(balDisplay) balDisplay.textContent = formatBigNumber(State.currentUserBalance).toFixed(2);
         if(myPStakeDisplay) myPStakeDisplay.textContent = formatPStake(State.userTotalPStake);
 
-        // 3. Recompensas (Claimable)
         const { stakingRewards, minerRewards } = await calculateUserTotalRewards();
         const totalRewards = stakingRewards + minerRewards;
         
@@ -214,7 +228,6 @@ async function updateStakingData(forceRefresh = false) {
             }
         }
 
-        // 4. Lista de Delegações
         renderDelegationsList();
 
     } catch (error) {
@@ -230,7 +243,6 @@ function resetStakingUI() {
     setTxt('earn-my-pstake', '--');
     setTxt('earn-my-rewards', '--');
     setTxt('staking-balance-display', '--');
-    
     const container = document.getElementById('my-delegations-container');
     if(container) container.innerHTML = renderNoData("Connect wallet to view delegations.");
 }
@@ -256,43 +268,46 @@ function renderDelegationsList() {
         (d) => {
             const amountFormatted = formatBigNumber(d.amount).toFixed(2);
             const pStake = calculatePStake(d.amount, d.lockDuration);
-            
             const unlockTimestamp = Number(d.unlockTime);
             const nowSeconds = Math.floor(Date.now() / 1000);
             const isLocked = unlockTimestamp > nowSeconds;
             const unlockDate = new Date(unlockTimestamp * 1000).toLocaleDateString();
 
             return `
-                <div class="bg-zinc-900/40 border border-zinc-800 rounded-xl p-4 flex flex-col sm:flex-row justify-between items-center gap-4 delegation-card">
-                    <div class="text-center sm:text-left">
-                        <p class="text-white font-bold text-lg">${amountFormatted} <span class="text-zinc-500 text-sm">$BKC</span></p>
-                        <p class="text-purple-400 text-sm font-mono">${formatPStake(pStake)} pStake</p>
+                <div class="glass-panel p-4 flex flex-col sm:flex-row justify-between items-center gap-4 border border-zinc-800">
+                    <div class="flex items-center gap-4 w-full sm:w-auto">
+                        <div class="bg-zinc-800 p-3 rounded-lg">
+                            <i class="fa-solid fa-lock text-zinc-400"></i>
+                        </div>
+                        <div>
+                            <p class="text-white font-bold text-lg">${amountFormatted} <span class="text-zinc-500 text-xs">$BKC</span></p>
+                            <p class="text-purple-400 text-xs font-mono font-bold">${formatPStake(pStake)} pStake</p>
+                        </div>
                     </div>
                     
-                    <div class="text-center">
-                        <div class="countdown-timer text-sm font-mono text-zinc-300 bg-zinc-800 px-3 py-1 rounded-md" data-unlock-time="${unlockTimestamp}" data-index="${d.index}">
+                    <div class="flex flex-col items-end gap-2 w-full sm:w-auto">
+                        <div class="countdown-timer text-xs font-mono text-zinc-300 bg-zinc-900/50 px-2 py-1 rounded border border-zinc-700" data-unlock-time="${unlockTimestamp}" data-index="${d.index}">
                             ${isLocked ? 'Calculating...' : '<span class="text-green-400">Unlocked</span>'}
                         </div>
-                        <p class="text-xs text-zinc-600 mt-1">Unlock: ${unlockDate}</p>
-                    </div>
-
-                    <div class="flex gap-2">
-                        ${isLocked ? 
-                            `<button class="bg-red-900/20 hover:bg-red-900/40 text-red-400 border border-red-900/30 p-2 rounded-lg transition-colors text-xs force-unstake-btn" data-index="${d.index}" title="Force Unstake (Penalty Applies)">
-                                <i class="fa-solid fa-lock"></i> Force
-                            </button>` : ''
-                        }
-                        <button class="${isLocked ? 'bg-zinc-800 text-zinc-600 cursor-not-allowed' : 'bg-amber-500 hover:bg-amber-600 text-zinc-900'} font-bold py-2 px-4 rounded-lg text-sm transition-colors unstake-btn" 
-                                data-index="${d.index}" ${isLocked ? 'disabled' : ''}>
-                            Unstake
-                        </button>
+                        <div class="flex gap-2 mt-1">
+                            ${isLocked ? 
+                                `<button class="text-red-400 hover:text-red-300 text-[10px] uppercase font-bold tracking-wider force-unstake-btn px-2 py-1" data-index="${d.index}">
+                                    Force Unstake
+                                </button>` : ''
+                            }
+                            <button class="${isLocked ? 'bg-zinc-800 text-zinc-600 cursor-not-allowed' : 'bg-white text-black hover:bg-zinc-200'} text-xs font-bold py-1.5 px-4 rounded transition-colors unstake-btn" 
+                                    data-index="${d.index}" ${isLocked ? 'disabled' : ''}>
+                                Unstake
+                            </button>
+                        </div>
                     </div>
                 </div>
             `;
         },
-        5, // Itens por página
+        4, 
         delegationCurrentPage,
-        (newPage) => { delegationCurrentPage = newPage; renderDelegationsList(); }
+        (newPage) => { delegationCurrentPage = newPage; renderDelegationsList(); },
+        'space-y-3'
     );
 
     const timers = container.querySelectorAll('.countdown-timer');
@@ -317,22 +332,32 @@ function calculatePStake(amount, duration) {
 }
 
 // =========================================================================
-// 4. INTERAÇÃO (LISTENERS & HANDLERS)
+// 4. INTERAÇÃO (LISTENERS & MODAL)
 // =========================================================================
 
 function setupStakingListeners() {
     const amountInput = document.getElementById('staking-amount-input');
-    const durationSlider = document.getElementById('staking-duration-slider');
     const confirmBtn = document.getElementById('confirm-stake-btn');
     const refreshBtn = document.getElementById('refresh-delegations-btn');
+    
+    // Modal Elements
+    const modal = document.getElementById('duration-modal');
+    const openModalBtn = document.getElementById('open-duration-modal');
+    const closeModalBtn = document.getElementById('close-duration-modal');
+    const applyStrategyBtn = document.getElementById('apply-duration-btn');
+    const modalSlider = document.getElementById('staking-duration-slider');
+    const modalDisplay = document.getElementById('modal-duration-display');
+    const warningBox = document.getElementById('duration-warning');
 
+    // Badge Elements
+    const strategyBadge = document.getElementById('strategy-badge');
+    const strategyName = document.getElementById('strategy-name');
+
+    // --- FUNÇÃO DE SIMULAÇÃO PRINCIPAL ---
     const updateSimulation = () => {
         const amountVal = amountInput.value;
-        const durationVal = durationSlider.value;
-        document.getElementById('staking-duration-display').textContent = `${durationVal} days`;
-
+        
         if (!amountVal || amountVal <= 0) {
-            document.getElementById('staking-fee-display').textContent = "0.00";
             document.getElementById('staking-net-display').textContent = "0.00";
             document.getElementById('staking-pstake-display').textContent = "0";
             confirmBtn.disabled = true;
@@ -341,14 +366,14 @@ function setupStakingListeners() {
 
         try {
             const amountWei = ethers.parseUnits(amountVal, 18);
-            // Simulação de Fee (0.5%)
+            // Fee 0.5%
             const feeWei = (amountWei * 50n) / 10000n;
             const netWei = amountWei - feeWei;
             
-            // Simulação de pStake
-            const pStake = calculatePStake(netWei, durationVal * 86400);
+            // pStake com Duração Atual (Global)
+            const durationSeconds = currentStakingDuration * 86400;
+            const pStake = calculatePStake(netWei, durationSeconds);
 
-            document.getElementById('staking-fee-display').textContent = formatBigNumber(feeWei).toFixed(4);
             document.getElementById('staking-net-display').textContent = formatBigNumber(netWei).toFixed(4);
             document.getElementById('staking-pstake-display').textContent = formatPStake(pStake);
             
@@ -364,9 +389,70 @@ function setupStakingListeners() {
         }
     };
 
-    if(amountInput && durationSlider) {
+    // --- MODAL LOGIC ---
+    const updateModalUI = () => {
+        const days = parseInt(modalSlider.value);
+        const years = (days / 365).toFixed(1);
+        
+        modalDisplay.textContent = `${days} Days (${years} Years)`;
+        
+        // Lógica de Aviso se < 10 anos
+        if (days < 3600) {
+            warningBox.classList.remove('hidden');
+            modalDisplay.classList.remove('text-purple-400');
+            modalDisplay.classList.add('text-amber-400');
+        } else {
+            warningBox.classList.add('hidden');
+            modalDisplay.classList.add('text-purple-400');
+            modalDisplay.classList.remove('text-amber-400');
+        }
+    };
+
+    const applyStrategy = () => {
+        currentStakingDuration = parseInt(modalSlider.value);
+        
+        // Atualiza Badge na tela principal
+        if (currentStakingDuration >= 3600) {
+            strategyBadge.className = "inline-flex items-center gap-2 bg-purple-500/10 text-purple-300 px-3 py-1 rounded border border-purple-500/20";
+            strategyBadge.innerHTML = `<i class="fa-solid fa-gem"></i> <span class="font-bold text-sm">Diamond Hands (${(currentStakingDuration/365).toFixed(0)}Y)</span>`;
+        } else {
+            strategyBadge.className = "inline-flex items-center gap-2 bg-amber-500/10 text-amber-300 px-3 py-1 rounded border border-amber-500/20";
+            strategyBadge.innerHTML = `<i class="fa-solid fa-clock"></i> <span class="font-bold text-sm">Custom (${currentStakingDuration} Days)</span>`;
+        }
+
+        // Fecha modal com animação
+        modal.classList.add('opacity-0');
+        modal.querySelector('div').classList.add('scale-95');
+        setTimeout(() => modal.classList.add('hidden'), 300);
+        
+        updateSimulation(); // Recalcula pStake
+    };
+
+    if (openModalBtn) {
+        openModalBtn.addEventListener('click', () => {
+            modalSlider.value = currentStakingDuration; // Sync slider
+            updateModalUI();
+            modal.classList.remove('hidden');
+            // Pequeno delay para animação CSS funcionar
+            setTimeout(() => {
+                modal.classList.remove('opacity-0');
+                modal.querySelector('div').classList.remove('scale-95');
+            }, 10);
+        });
+        
+        closeModalBtn.addEventListener('click', () => {
+            modal.classList.add('opacity-0');
+            modal.querySelector('div').classList.add('scale-95');
+            setTimeout(() => modal.classList.add('hidden'), 300);
+        });
+
+        modalSlider.addEventListener('input', updateModalUI);
+        applyStrategyBtn.addEventListener('click', applyStrategy);
+    }
+
+    // --- MAIN INPUT LISTENERS ---
+    if(amountInput) {
         amountInput.addEventListener('input', updateSimulation);
-        durationSlider.addEventListener('input', updateSimulation);
         
         document.querySelectorAll('.stake-perc-btn').forEach(btn => {
             btn.addEventListener('click', () => {
@@ -380,7 +466,7 @@ function setupStakingListeners() {
 
         confirmBtn.addEventListener('click', async () => {
             const amountWei = ethers.parseUnits(amountInput.value, 18);
-            const durationSec = parseInt(durationSlider.value) * 86400;
+            const durationSec = currentStakingDuration * 86400; // Usa o estado global
             
             confirmBtn.innerHTML = `<div class="loader inline-block mr-2"></div> Sending...`;
             confirmBtn.disabled = true;
@@ -392,7 +478,7 @@ function setupStakingListeners() {
                 updateSimulation();
                 updateStakingData(true); 
             } else {
-                confirmBtn.innerHTML = "Confirm Delegation";
+                confirmBtn.innerHTML = `Delegate Now <i class="fa-solid fa-arrow-right ml-2"></i>`;
                 confirmBtn.disabled = false;
             }
         });
@@ -437,7 +523,6 @@ export const EarnPage = {
         renderEarnLayout();
         
         if (State.isConnected) {
-            // Se for navegação nova, carrega. Se não, respeita o cache
             await updateStakingData(isNewPage); 
         } else {
             resetStakingUI();
@@ -445,7 +530,6 @@ export const EarnPage = {
     },
     
     update() {
-        // Chamado pelo State Observer
         updateStakingData();
     }
 };

@@ -1,17 +1,12 @@
 // js/app.js
-// ✅ VERSÃO FINAL: UI Debounce (requestAnimationFrame) + Roteamento Inteligente + Inicialização Robusta
+// ✅ VERSÃO FINAL: Inicialização Forçada Corrigida
 
-// ============================================================================
-// 1. ANALYTICS & GLOBAL IMPORTS
-// ============================================================================
-
-// Vercel Analytics Injection (Safe Check)
 const inject = window.inject || (() => { console.warn("Dev Mode: Analytics disabled."); });
 if (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
     try { inject(); } catch (e) { console.error("Analytics Error:", e); }
 }
 
-const ethers = window.ethers; // Assumes Ethers.js loaded via CDN/Script
+const ethers = window.ethers;
 
 import { DOMElements } from './dom-elements.js';
 import { State } from './state.js';
@@ -33,15 +28,19 @@ import { PresalePage } from './pages/PresalePage.js';
 import { FaucetPage } from './pages/FaucetPage.js';
 import { TokenomicsPage } from './pages/TokenomicsPage.js';
 import { NotaryPage } from './pages/NotaryPage.js';
+import { RentalPage } from './pages/RentalPage.js';
+import { SocialMediaPage } from './pages/SocialMedia.js';
 
 // ============================================================================
 // 2. CONFIGURATION & STATE
 // ============================================================================
 
 const ADMIN_WALLET = '0x03aC69873293cD6ddef7625AfC91E3Bd5434562a'; 
-let activePageId = 'dashboard';
+
+// 🔴 MUDANÇA IMPORTANTE: Inicia como null para forçar o primeiro render
+let activePageId = null; 
 let currentPageCleanup = null;
-let uiUpdatePending = false; // Flag para o requestAnimationFrame
+let uiUpdatePending = false; 
 
 const routes = {
     'dashboard': DashboardPage,
@@ -56,6 +55,8 @@ const routes = {
     'about': AboutPage,
     'admin': AdminPage,
     'presale': PresalePage,
+    'rental': RentalPage,
+    'socials': SocialMediaPage
 };
 
 // ============================================================================
@@ -76,7 +77,7 @@ function formatLargeBalance(bigNum) {
 }
 
 // ============================================================================
-// 4. NAVIGATION ENGINE (SMART ROUTING)
+// 4. NAVIGATION ENGINE
 // ============================================================================
 
 function navigateTo(pageId, forceUpdate = false) {
@@ -85,12 +86,12 @@ function navigateTo(pageId, forceUpdate = false) {
 
     if (!pageContainer) return;
 
-    // Se já estamos na página e não é forçado, apenas atualiza dados internos (se houver método update)
+    // Se a página solicitada for a mesma da atual e não for update forçado, tenta apenas atualizar dados
     if (activePageId === pageId && !forceUpdate) {
         if (routes[pageId] && typeof routes[pageId].update === 'function') {
-            routes[pageId].update();
-            return;
+            routes[pageId].update(State.isConnected);
         }
+        return; 
     }
 
     // Cleanup da página anterior
@@ -99,7 +100,7 @@ function navigateTo(pageId, forceUpdate = false) {
         currentPageCleanup = null;
     }
 
-    // Esconde todas as seções
+    // Esconde todas as seções visualmente
     Array.from(pageContainer.children).forEach(child => {
         if (child.tagName === 'SECTION') {
             child.classList.add('hidden');
@@ -113,51 +114,52 @@ function navigateTo(pageId, forceUpdate = false) {
         item.classList.add('text-zinc-400', 'hover:text-white', 'hover:bg-zinc-700');
     });
 
-    // Mostra página alvo
     const targetPage = document.getElementById(pageId);
+    
+    // Se a seção HTML existe e temos a rota no JS
     if (targetPage && routes[pageId]) {
         targetPage.classList.remove('hidden');
         targetPage.classList.add('active');
         
+        // Verifica se é uma navegação real (mudança de rota)
         const isNewPage = activePageId !== pageId;
         activePageId = pageId;
 
-        // Highlight no menu
+        // Ativa o link no menu
         const activeNavItem = document.querySelector(`.sidebar-link[data-target="${pageId}"]`);
         if (activeNavItem) {
             activeNavItem.classList.remove('text-zinc-400', 'hover:text-white', 'hover:bg-zinc-700');
             activeNavItem.classList.add('active');
         }
 
-        // Renderiza a página
+        // 🔴 Renderiza a página
         if (routes[pageId] && typeof routes[pageId].render === 'function') {
-            // Passa flag isNewPage para que a página decida se recria DOM ou só busca dados
+            // Passamos isNewPage OR forceUpdate para garantir renderização quando necessário
             routes[pageId].render(isNewPage || forceUpdate);
         }
         
-        // Registra novo cleanup
         if (typeof routes[pageId].cleanup === 'function') {
             currentPageCleanup = routes[pageId].cleanup;
         }
         
-        // Scroll to top on new page
         if (isNewPage) window.scrollTo(0,0);
 
     } else {
-        console.warn(`Route '${pageId}' not found, redirecting to dashboard.`);
-        navigateTo('dashboard');
+        // Fallback se a rota não existir
+        if(pageId !== 'dashboard') {
+            console.warn(`Route '${pageId}' not found, redirecting to dashboard.`);
+            navigateTo('dashboard', true);
+        }
     }
 }
 window.navigateTo = navigateTo;
 
 // ============================================================================
-// 5. UI STATE MANAGEMENT (DEBOUNCED)
+// 5. UI STATE MANAGEMENT
 // ============================================================================
 
 function updateUIState(forcePageUpdate = false) {
-    // OTIMIZAÇÃO: Se já existe uma atualização agendada para este frame, ignora.
     if (uiUpdatePending) return;
-
     uiUpdatePending = true;
 
     requestAnimationFrame(() => {
@@ -173,10 +175,8 @@ function performUIUpdate(forcePageUpdate) {
     const connectButtonMobile = document.getElementById('connectButtonMobile');
     const mobileAppDisplay = document.getElementById('mobileAppDisplay');
     
-    const safeEl = (id) => document.getElementById(id);
-
+    // Atualiza botões e textos de conexão
     if (State.isConnected && State.userAddress) {
-        // --- ESTADO CONECTADO ---
         const balanceString = formatLargeBalance(State.currentUserBalance);
         
         if(connectButtonDesktop) connectButtonDesktop.textContent = `${balanceString} $BKC`;
@@ -199,7 +199,6 @@ function performUIUpdate(forcePageUpdate) {
         }
         
     } else {
-        // --- ESTADO DESCONECTADO ---
         if(connectButtonDesktop) connectButtonDesktop.textContent = "Connect";
         if(connectButtonMobile) connectButtonMobile.textContent = "Connect";
         
@@ -213,17 +212,27 @@ function performUIUpdate(forcePageUpdate) {
         if (statUserBalanceEl) statUserBalanceEl.textContent = '--';
     }
 
-    // Atualiza a página ativa
-    navigateTo(activePageId, forcePageUpdate); 
+    // Lógica de Atualização da Página Atual
+    // Se activePageId for null (primeiro load), forçamos 'dashboard'
+    const targetPage = activePageId || 'dashboard';
+
+    if (forcePageUpdate || !activePageId) {
+        navigateTo(targetPage, true);
+    } else {
+        // Update leve se já estivermos na página
+        if (routes[targetPage] && typeof routes[targetPage].update === 'function') {
+            routes[targetPage].update(State.isConnected);
+        }
+    }
 }
 
 function onWalletStateChange(changes) {
     const { isConnected, address, isNewConnection, wasConnected } = changes;
     
-    // Log limpo
-    // console.log("Wallet State:", changes);
-
-    updateUIState(true); 
+    // Força update completo se houve mudança real de conexão
+    const shouldForceUpdate = isNewConnection || (isConnected !== wasConnected);
+    
+    updateUIState(shouldForceUpdate); 
     
     if (isConnected && isNewConnection) {
         showToast(`Connected: ${formatAddress(address)}`, "success");
@@ -233,38 +242,25 @@ function onWalletStateChange(changes) {
 }
 
 // ============================================================================
-// 6. EVENT LISTENERS & COMPONENTS
+// 6. EVENT LISTENERS
 // ============================================================================
 
 function initTestnetBanner() {
     const banner = document.getElementById('testnet-banner');
     const closeButton = document.getElementById('close-testnet-banner');
-    const HIDE_STORAGE_KEY = 'hideTestnetBanner';
-    const AUTO_HIDE_DELAY_MS = 30000; 
-
     if (!banner || !closeButton) return;
 
-    const closeBanner = (animate = true) => {
-        if (animate) {
-            banner.style.transform = 'translateY(100%)'; 
-            setTimeout(() => banner.remove(), 500);
-        } else {
-            banner.remove();
-        }
-        localStorage.setItem(HIDE_STORAGE_KEY, 'true');
-    };
-
-    if (localStorage.getItem(HIDE_STORAGE_KEY) === 'true') {
+    if (localStorage.getItem('hideTestnetBanner') === 'true') {
         banner.remove();
         return;
     }
-
-    // Exibe
     banner.style.transform = 'translateY(0)'; 
     
-    // Eventos
-    closeButton.addEventListener('click', () => closeBanner(true));
-    setTimeout(() => { if (document.body.contains(banner)) closeBanner(true); }, AUTO_HIDE_DELAY_MS);
+    closeButton.addEventListener('click', () => {
+        banner.style.transform = 'translateY(100%)'; 
+        setTimeout(() => banner.remove(), 500);
+        localStorage.setItem('hideTestnetBanner', 'true');
+    });
 }
 
 function setupGlobalListeners() {
@@ -276,18 +272,15 @@ function setupGlobalListeners() {
     const connectButtonMobile = document.getElementById('connectButtonMobile');
     const shareButton = document.getElementById('shareProjectBtn');
     
-    // Inicializa Banner Isolado
     initTestnetBanner();
 
-    // Navegação Lateral
     if (navItems.length > 0) {
         navItems.forEach(item => {
             item.addEventListener('click', (e) => {
-                e.preventDefault(); // Previne comportamento padrão de <a>
+                e.preventDefault(); 
                 const pageId = item.dataset.target;
                 if (pageId) {
                     navigateTo(pageId, false); 
-                    // Fecha sidebar no mobile ao clicar
                     if (sidebar && sidebar.classList.contains('translate-x-0')) {
                         sidebar.classList.remove('translate-x-0');
                         sidebar.classList.add('-translate-x-full');
@@ -302,7 +295,6 @@ function setupGlobalListeners() {
     if (connectButtonMobile) connectButtonMobile.addEventListener('click', openConnectModal);
     if (shareButton) shareButton.addEventListener('click', () => showShareModal(State.userAddress));
 
-    // Menu Mobile Toggle
     if (menuButton && sidebar && sidebarBackdrop) {
         menuButton.addEventListener('click', () => {
             const isOpen = sidebar.classList.contains('translate-x-0');
@@ -332,7 +324,6 @@ function setupGlobalListeners() {
 window.addEventListener('load', async () => {
     console.log("🚀 App Initializing...");
 
-    // Pre-load critical DOM elements
     if (!DOMElements.earn) {
         DOMElements.earn = document.getElementById('mine'); 
     }
@@ -342,26 +333,27 @@ window.addEventListener('load', async () => {
         if (!addressesLoaded) throw new Error("Failed to load contract addresses");
     } catch (error) {
         console.error("❌ Critical Initialization Error:", error);
-        showToast("Failed to initialize app. Please refresh.", "error");
+        showToast("Initialization failed. Please refresh.", "error");
         return;
     }
     
     setupGlobalListeners();
 
-    // Inicializa Providers e Wallet
     await initPublicProvider(); 
     initWalletSubscriptions(onWalletStateChange);
     
     showWelcomeModal();
     
-    // Remove loader de entrada (se houver)
     const preloader = document.getElementById('preloader');
     if(preloader) preloader.style.display = 'none';
+    
+    // 🔴 FORÇA O PRIMEIRO RENDER DA DASHBOARD
+    // Isso garante que o esqueleto "Loading..." seja substituído pelo conteúdo real
+    navigateTo('dashboard', true);
 
     console.log("✅ App Ready.");
 });
 
-// Expose global functions for HTML interaction
 window.EarnPage = EarnPage; 
 window.openConnectModal = openConnectModal;
 window.disconnectWallet = disconnectWallet;

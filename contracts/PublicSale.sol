@@ -1,58 +1,71 @@
 // SPDX-License-Identifier: MIT 
-pragma solidity ^0.8.28;
+pragma solidity 0.8.28;
 
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import "./IInterfaces.sol";
 
+/**
+ * @title Public Sale
+ * @notice Distributes Reward Booster NFTs ($BKCB) to early adopters.
+ * @dev Funds are routed to the Ecosystem Treasury.
+ * Optimized for BNB Chain.
+ */
 contract PublicSale is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     
     IRewardBoosterNFT public rewardBoosterNFT;
     IEcosystemManager public ecosystemManager;
 
+    // Optimized Struct (Packed to save storage slots)
     struct Tier {
-        uint256 priceInWei;
-        uint256 maxSupply;
-        uint256 mintedCount;
-        uint256 boostBips;
-        string metadataFile; // <-- O NOME CORRETO
-        bool isConfigured;
+        uint256 priceInWei;   // Slot 0 (32 bytes)
+        uint64 maxSupply;     // Slot 1 (8 bytes)
+        uint64 mintedCount;   // Slot 1 (8 bytes)
+        uint16 boostBips;     // Slot 1 (2 bytes)
+        bool isConfigured;    // Slot 1 (1 byte)
+        // Slot 1 has ~13 bytes left
+        string metadataFile;  // Dynamic storage
     }
 
     mapping(uint256 => Tier) public tiers;
 
+    // --- Events ---
     event NFTSold(
         address indexed buyer,
         uint256 indexed tierId,
         uint256 indexed tokenId,
         uint256 price
     );
-    event TierSet(
-        uint256 indexed tierId,
-        uint256 price,
-        uint256 maxSupply
-    );
+    event TierSet(uint256 indexed tierId, uint256 price, uint256 maxSupply);
     event TierPriceUpdated(uint256 indexed tierId, uint256 newPrice);
 
-    // Construtor removido para Upgrade Safety.
+    // --- Custom Errors ---
+    error InvalidAddress();
+    error InvalidAmount();
+    error InvalidTier();
+    error TierNotConfigured();
+    error SoldOut();
+    error IncorrectValue();
+    error WithdrawFailed();
+
+    /// @custom:oz-upgrades-unsafe-allow constructor
+    constructor() {
+        _disableInitializers();
+    }
 
     function initialize(
         address _rewardBoosterAddress,
         address _ecosystemManagerAddress,
         address _initialOwner
     ) public initializer {
+        if (_rewardBoosterAddress == address(0)) revert InvalidAddress();
+        if (_ecosystemManagerAddress == address(0)) revert InvalidAddress();
+        if (_initialOwner == address(0)) revert InvalidAddress();
+
         __Ownable_init();
         __UUPSUpgradeable_init();
 
-        require(
-            _rewardBoosterAddress != address(0),
-            "Sale: Invalid Booster NFT Contract"
-        );
-        require(
-            _ecosystemManagerAddress != address(0),
-            "Sale: Invalid EcosystemManager"
-        );
         rewardBoosterNFT = IRewardBoosterNFT(_rewardBoosterAddress);
         ecosystemManager = IEcosystemManager(_ecosystemManagerAddress);
         
@@ -61,11 +74,13 @@ contract PublicSale is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 
     function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
 
+    // --- Admin ---
+
     function setTier(
         uint256 _tierId,
         uint256 _priceInWei,
-        uint256 _maxSupply,
-        uint256 _boostBips,
+        uint64 _maxSupply, // Optimized type
+        uint16 _boostBips, // Optimized type
         string calldata _metadataFile
     ) external onlyOwner {
         Tier storage tier = tiers[_tierId];
@@ -73,63 +88,62 @@ contract PublicSale is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         tier.maxSupply = _maxSupply;
         tier.mintedCount = 0;
         tier.boostBips = _boostBips;
-        tier.metadataFile = _metadataFile; // Aqui usa metadataFile
+        tier.metadataFile = _metadataFile;
         tier.isConfigured = true;
 
         emit TierSet(_tierId, _priceInWei, _maxSupply);
     }
 
-    function updateTierPrice(uint256 _tierId, uint256 _newPriceInWei)
-        external
-        onlyOwner
-    {
-        Tier storage tier = tiers[_tierId];
-        require(tier.isConfigured, "Sale: Tier not configured");
-        require(_newPriceInWei > 0, "Sale: Price must be positive");
+    function updateTierPrice(uint256 _tierId, uint256 _newPriceInWei) external onlyOwner {
+        if (!tiers[_tierId].isConfigured) revert TierNotConfigured();
+        if (_newPriceInWei == 0) revert InvalidAmount();
 
-        tier.priceInWei = _newPriceInWei;
-
+        tiers[_tierId].priceInWei = _newPriceInWei;
         emit TierPriceUpdated(_tierId, _newPriceInWei);
     }
+
+    function withdrawFunds() external onlyOwner {
+        address treasuryWallet = ecosystemManager.getTreasuryAddress();
+        if (treasuryWallet == address(0)) revert InvalidAddress();
+
+        uint256 balance = address(this).balance;
+        if (balance > 0) {
+            (bool success, ) = treasuryWallet.call{value: balance}("");
+            if (!success) revert WithdrawFailed();
+        }
+    }
+
+    // --- Purchase Logic ---
 
     function buyNFT(uint256 _tierId) external payable {
         buyMultipleNFTs(_tierId, 1);
     }
 
     function buyMultipleNFTs(uint256 _tierId, uint256 _quantity) public payable {
-        require(_quantity > 0, "Sale: Quantity must be > 0");
+        if (_quantity == 0) revert InvalidAmount();
+        
         Tier storage tier = tiers[_tierId];
-        require(tier.isConfigured, "Sale: Tier not configured");
+        if (!tier.isConfigured) revert TierNotConfigured();
 
+        // Check Supply
+        if (tier.mintedCount + _quantity > tier.maxSupply) revert SoldOut();
+
+        // Check Price
         uint256 totalPrice = tier.priceInWei * _quantity;
-        require(msg.value == totalPrice, "Sale: Incorrect native value sent");
+        if (msg.value != totalPrice) revert IncorrectValue();
 
-        require(
-            tier.mintedCount + _quantity <= tier.maxSupply,
-            "Sale: Sold out for this tier"
-        );
-        tier.mintedCount += _quantity;
+        // Update State
+        tier.mintedCount += uint64(_quantity);
 
-        for (uint i = 0; i < _quantity; i++) {
+        // Mint Loop
+        for (uint i = 0; i < _quantity;) {
             uint256 newTokenId = rewardBoosterNFT.mintFromSale(
                 msg.sender,
                 tier.boostBips,
-                tier.metadataFile // <-- CORRIGIDO AQUI
+                tier.metadataFile
             );
             emit NFTSold(msg.sender, _tierId, newTokenId, tier.priceInWei);
-        }
-    }
-
-    function withdrawFunds() external onlyOwner {
-        address treasuryWallet = ecosystemManager.getTreasuryAddress();
-        require(
-            treasuryWallet != address(0),
-            "Sale: Treasury not configured in Hub"
-        );
-        uint256 balance = address(this).balance;
-        if (balance > 0) {
-            (bool success, ) = treasuryWallet.call{value: balance}("");
-            require(success, "Sale: Native currency withdrawal failed");
+            unchecked { ++i; }
         }
     }
 }

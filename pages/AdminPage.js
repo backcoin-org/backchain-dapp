@@ -3,18 +3,10 @@
 // Importa o ethers e os endereços dos contratos
 const ethers = window.ethers;
 import { addresses } from '../config.js'; 
-// --- FIM NOVO ---
-
 import { showToast } from '../ui-feedback.js';
-// CORREÇÃO: Importa renderError também, caso necessário
-// ATUALIZAÇÃO: Importa a nova função 'renderPaginationControls'
 import { renderPaginatedList, renderPaginationControls, renderNoData, formatAddress, renderLoading, renderError } from '../utils.js';
 import { State } from '../state.js';
-// ATUALIZADO: Importa tudo de 'db', pois usaremos mais funções
-// ASSUMINDO: Que 'db' agora também exporta 'resolveBanAppeal'
 import * as db from '../modules/firebase-auth-service.js';
-
-// The administrator wallet address (security key)
 const ADMIN_WALLET = "0x03aC69873293cD6ddef7625AfC91E3Bd5434562a";
 
 // Mapeamento de Status para UI (Cores Tailwind e Ícones Font Awesome) - Reutilizado do AirdropPage
@@ -67,8 +59,7 @@ const loadAdminData = async () => {
 
 
     try {
-        // ATUALIZADO: Busca 4 fontes de dados em paralelo
-        // ASSUMINDO: getAllAirdropUsers() agora retorna 'hasPendingAppeal' em cada usuário
+        
         const [submissions, tasks, publicData, users] = await Promise.all([
             db.getAllSubmissionsForAdmin(), // Otimizado
             db.getAllTasksForAdmin(),
