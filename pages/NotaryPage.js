@@ -1,575 +1,451 @@
 // pages/NotaryPage.js
-// ✅ VERSÃO FINAL V6.0: Layout Coluna Dupla + Exportação + Tratamento de Erro RPC
+// ✅ VERSÃO FINAL V7.1: "Single Click Fix" + Legal Copy + UX Premium
 
 import { addresses } from '../config.js'; 
 import { State } from '../state.js';
-import { formatBigNumber, formatPStake, renderLoading, renderError, renderNoData, ipfsGateway } from '../utils.js';
+import { formatBigNumber, formatPStake, renderLoading, renderNoData } from '../utils.js';
 import { safeContractCall, API_ENDPOINTS, loadPublicData, loadUserData } from '../modules/data.js'; 
 import { showToast } from '../ui-feedback.js';
 import { executeNotarizeDocument } from '../modules/transactions.js';
 
-// --- Constantes ---
-const BLOCKCHAIN_EXPLORER_TX_URL = "https://sepolia.etherscan.io/tx/";
+const ethers = window.ethers;
 const MAX_FILE_SIZE_BYTES = 50 * 1024 * 1024; // 50 MB
 
-// --- Estado Local ---
+// --- ESTADO LOCAL ---
 let currentFileToUpload = null;
 let currentUploadedIPFS_URI = null; 
 let notaryButtonState = 'initial'; 
-let pageContainer = null; 
-let lastNotaryDataFetch = 0;
-let rpcErrorCount = 0; // Contador de erros para fallback visual
+let rpcErrorCount = 0; 
+
+// --- CSS FX ---
+const style = document.createElement('style');
+style.innerHTML = `
+    .drop-zone {
+        border: 2px dashed rgba(255, 255, 255, 0.15);
+        border-radius: 16px;
+        transition: all 0.3s ease;
+        background: rgba(255, 255, 255, 0.02);
+    }
+    .drop-zone:hover, .drop-zone.dragover {
+        border-color: #3b82f6;
+        background: rgba(59, 130, 246, 0.08);
+        transform: translateY(-2px);
+        box-shadow: 0 4px 20px rgba(0,0,0,0.2);
+    }
+    .glass-card {
+        background: rgba(15, 15, 20, 0.7);
+        backdrop-filter: blur(16px);
+        -webkit-backdrop-filter: blur(16px);
+        border: 1px solid rgba(255, 255, 255, 0.05);
+        box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3);
+    }
+    .step-active { color: #3b82f6; border-color: #3b82f6; background: rgba(59, 130, 246, 0.1); }
+    .step-completed { color: #10b981; border-color: #10b981; background: rgba(16, 185, 129, 0.1); }
+    
+    @keyframes pulse-border {
+        0% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.4); }
+        70% { box-shadow: 0 0 0 10px rgba(59, 130, 246, 0); }
+        100% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0); }
+    }
+    .btn-pulse { animation: pulse-border 2s infinite; }
+`;
+document.head.appendChild(style);
 
 // =========================================================================
-// 1. RENDERIZAÇÃO VISUAL (LAYOUT ORIGINAL)
+// FUNÇÕES AUXILIARES (DEFINIDAS ANTES DO USO)
+// =========================================================================
+
+function handleFiles(e) {
+    // Suporte tanto para Drag&Drop (dataTransfer) quanto Input (target)
+    const file = e.target.files ? e.target.files[0] : (e.dataTransfer ? e.dataTransfer.files[0] : null);
+    
+    if (!file) return;
+
+    if (file.size > MAX_FILE_SIZE_BYTES) {
+        showToast("File exceeds 50MB limit.", "error");
+        return;
+    }
+
+    currentFileToUpload = file;
+    updateNotaryStep(2);
+}
+
+function initNotaryListeners() {
+    const dropArea = document.getElementById('drop-area');
+    const input = document.getElementById('notary-file-input');
+    
+    if (!dropArea || !input) return;
+
+    // 1. CORREÇÃO DO CLIQUE ÚNICO
+    // Ao clicar na DIV, acionamos o input programaticamente
+    dropArea.addEventListener('click', () => {
+        input.click();
+    });
+
+    // 2. Drag & Drop Visuals
+    ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+        dropArea.addEventListener(eventName, (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+        }, false);
+    });
+    
+    ['dragenter', 'dragover'].forEach(eventName => {
+        dropArea.addEventListener(eventName, () => dropArea.classList.add('dragover'), false);
+    });
+    
+    ['dragleave', 'drop'].forEach(eventName => {
+        dropArea.addEventListener(eventName, () => dropArea.classList.remove('dragover'), false);
+    });
+    
+    // 3. File Capture
+    dropArea.addEventListener('drop', handleFiles); // Soltar arquivo
+    input.addEventListener('change', handleFiles);  // Selecionar via janela
+}
+
+// =========================================================================
+// RENDERIZAÇÃO
 // =========================================================================
 
 function renderNotaryPageLayout() {
     const container = document.getElementById('notary');
     if (!container) return;
-    pageContainer = container; 
 
     if (container.querySelector('#notary-main-box')) return; 
 
     container.innerHTML = `
         <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4 animate-fadeIn">
             <div>
-                <h1 class="text-3xl md:text-4xl font-extrabold bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-purple-500 font-display">
-                    Decentralized Notary
-                </h1>
+                <h1 class="text-3xl md:text-4xl font-extrabold text-white tracking-tight">Decentralized Notary</h1>
                 <p class="text-zinc-400 mt-2 max-w-xl text-sm leading-relaxed">
-                    Certify documents permanently on the blockchain. Generate immutable proof of existence timestamped by the network.
+                    Immutable proof of existence. Certify documents on the blockchain with legal-grade timestamps.
                 </p>
             </div>
-            <div class="px-4 py-2 rounded-full bg-zinc-900 border border-green-500/30 text-xs font-mono text-green-400 flex items-center gap-2 shadow-lg shadow-green-900/10">
-                <div class="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div> Service Active
+            <div class="px-4 py-2 rounded-full bg-zinc-900 border border-green-500/30 text-xs font-mono text-green-400 flex items-center gap-2">
+                <div class="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div> SYSTEM ONLINE
             </div>
         </div>
 
         <div class="grid grid-cols-1 lg:grid-cols-12 gap-8 animate-fadeIn animation-delay-200">
-
             <div class="lg:col-span-8 space-y-6">
-                
-                <div class="bg-zinc-900/80 border border-zinc-800 rounded-2xl p-6 shadow-lg">
-                    <div class="relative flex justify-between items-center z-10">
-                        <div class="absolute top-1/2 left-0 w-full h-1 bg-zinc-800 -z-10 rounded-full"></div>
-                        <div id="progress-line" class="absolute top-1/2 left-0 h-1 bg-blue-600 -z-10 rounded-full transition-all duration-500 w-0"></div>
-
-                        <div id="step-indicator-1" class="step-bubble active relative group cursor-pointer" onclick="updateNotaryStep(1)">
-                            <div class="w-12 h-12 rounded-full flex items-center justify-center bg-zinc-900 border-2 border-blue-500 text-white font-bold transition-all duration-300 shadow-lg shadow-blue-500/20 group-hover:scale-110">
-                                <i class="fa-solid fa-cloud-arrow-up"></i>
-                            </div>
-                            <span class="absolute -bottom-6 left-1/2 -translate-x-1/2 text-[10px] font-bold text-blue-400 uppercase tracking-wider whitespace-nowrap">Upload</span>
-                        </div>
-
-                        <div id="step-indicator-2" class="step-bubble relative group cursor-not-allowed">
-                            <div class="w-12 h-12 rounded-full flex items-center justify-center bg-zinc-900 border-2 border-zinc-700 text-zinc-500 font-bold transition-all duration-300 group-hover:border-zinc-600">
-                                <i class="fa-solid fa-pen-to-square"></i>
-                            </div>
-                            <span class="absolute -bottom-6 left-1/2 -translate-x-1/2 text-[10px] font-bold text-zinc-600 uppercase tracking-wider whitespace-nowrap">Details</span>
-                        </div>
-
-                        <div id="step-indicator-3" class="step-bubble relative group cursor-not-allowed">
-                            <div class="w-12 h-12 rounded-full flex items-center justify-center bg-zinc-900 border-2 border-zinc-700 text-zinc-500 font-bold transition-all duration-300 group-hover:border-zinc-600">
-                                <i class="fa-solid fa-fingerprint"></i>
-                            </div>
-                            <span class="absolute -bottom-6 left-1/2 -translate-x-1/2 text-[10px] font-bold text-zinc-600 uppercase tracking-wider whitespace-nowrap">Mint</span>
-                        </div>
+                <div class="glass-card rounded-2xl p-6">
+                    <div class="flex justify-between items-center relative px-4">
+                        <div class="absolute top-1/2 left-0 w-full h-0.5 bg-zinc-800 -z-10"></div>
+                        <div id="progress-line" class="absolute top-1/2 left-0 h-0.5 bg-blue-600 -z-10 transition-all duration-500 w-0"></div>
+                        
+                        <div id="step-1" class="w-10 h-10 rounded-full border-2 flex items-center justify-center font-bold transition-all bg-zinc-900 relative z-10 text-zinc-500 border-zinc-700">1</div>
+                        <div id="step-2" class="w-10 h-10 rounded-full border-2 flex items-center justify-center font-bold transition-all bg-zinc-900 relative z-10 text-zinc-500 border-zinc-700">2</div>
+                        <div id="step-3" class="w-10 h-10 rounded-full border-2 flex items-center justify-center font-bold transition-all bg-zinc-900 relative z-10 text-zinc-500 border-zinc-700">3</div>
+                    </div>
+                    <div class="flex justify-between mt-2 text-[10px] uppercase font-bold text-zinc-500 px-1">
+                        <span>Upload</span><span>Details</span><span>Certify</span>
                     </div>
                 </div>
 
-                <div id="notary-main-box" class="bg-zinc-900/40 border border-zinc-700/50 rounded-2xl p-8 shadow-xl relative overflow-hidden min-h-[400px] flex flex-col">
-                    <div id="notary-step-content" class="flex-1 flex flex-col justify-center">
-                        ${renderLoading("Initializing notary steps...")}
-                    </div>
-                    
-                    <div class="mt-6">
+                <div id="notary-main-box" class="glass-card rounded-2xl p-8 min-h-[400px] flex flex-col justify-between">
+                    <div id="notary-step-content" class="flex-1"></div>
+                    <div class="mt-8 pt-6 border-t border-white/5">
                         <button id="notarize-submit-btn" class="w-full bg-zinc-800 text-zinc-500 font-bold py-4 rounded-xl cursor-not-allowed transition-all flex items-center justify-center gap-3" disabled>
-                            Waiting for file selection...
+                            SELECT A FILE TO START
                         </button>
                     </div>
                 </div>
             </div>
 
             <div class="lg:col-span-4 space-y-6">
-                
-                <div id="notary-user-status-box" class="bg-sidebar border border-zinc-800 rounded-2xl p-6 shadow-xl transition-all duration-500">
-                    <h3 class="text-sm font-bold text-zinc-400 uppercase tracking-wider mb-4 flex items-center gap-2">
-                        <i class="fa-solid fa-wallet"></i> Requirements Check
+                <div class="glass-card rounded-2xl p-6">
+                    <h3 class="text-xs font-bold text-zinc-400 uppercase tracking-wider mb-4 flex items-center gap-2">
+                        <i class="fa-solid fa-shield-halved"></i> Requirements
                     </h3>
-                    
-                    <div id="notary-user-status" class="space-y-4">
-                         <div class="flex flex-col items-center justify-center py-8 text-zinc-500">
-                            <div class="loader mb-3"></div>
-                            <span class="text-xs">Connecting...</span>
-                         </div>
+                    <div id="notary-user-status" class="space-y-3">
+                         <div class="flex items-center justify-center py-4"><div class="loader-sm"></div></div>
                     </div>
                 </div>
-
-                <div class="bg-gradient-to-br from-zinc-900 to-black border border-zinc-800 rounded-2xl p-6">
-                    <h3 class="text-xs font-bold text-zinc-500 uppercase tracking-wider mb-4">Protocol Stats</h3>
-                    <div id="notary-stats-container" class="space-y-3">
-                        ${renderLoading("Loading stats...")}
-                    </div>
+                <div class="p-6 rounded-2xl bg-gradient-to-br from-blue-900/20 to-purple-900/20 border border-blue-500/20">
+                    <h4 class="text-blue-400 font-bold text-sm mb-2"><i class="fa-solid fa-circle-info mr-2"></i> How it works</h4>
+                    <p class="text-xs text-zinc-400 leading-relaxed">
+                        1. Your file is hashed (SHA-256) locally.<br>
+                        2. The hash is stored on IPFS (Decentralized Storage).<br>
+                        3. A unique NFT is minted on Backchain linking your wallet to the document hash.<br>
+                        4. <strong>100% Privacy:</strong> Only the hash is on-chain.
+                    </p>
                 </div>
             </div>
         </div>
 
-        <div class="mt-16 pt-10 border-t border-zinc-800 animate-fadeIn animation-delay-500">
-            <h2 class="text-xl font-bold text-white mb-6">
-                <i class="fa-solid fa-clock-rotate-left text-zinc-500 mr-2"></i> My Notarized Documents (<span id="notary-doc-count">0</span>)
+        <div class="mt-16 animate-fadeIn animation-delay-500">
+            <h2 class="text-lg font-bold text-white mb-6 flex items-center gap-2">
+                <i class="fa-solid fa-folder-open text-blue-500"></i> My Certificates
             </h2>
-            
-            <div id="my-notarized-documents" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-                ${renderLoading("Loading your documents...")}
+            <div id="my-notarized-documents" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                ${renderLoading("Syncing blockchain history...")}
             </div>
         </div>
     `;
 
-    initNotaryListeners();
     updateNotaryStep(1); 
 }
 
 // =========================================================================
-// 2. CONTROLE DE UI
+// LÓGICA DE UI
 // =========================================================================
 
 function updateNotaryStep(step) {
     const content = document.getElementById('notary-step-content');
     if (!content) return;
 
-    // Atualiza indicadores
-    document.querySelectorAll('.step-bubble').forEach(el => {
-        const stepNumber = parseInt(el.id.split('-').pop());
-        el.classList.remove('active', 'completed');
-        if (stepNumber < step) {
-            el.classList.add('completed');
-        } else if (stepNumber === step) {
-            el.classList.add('active');
+    // Progress Bar
+    const line = document.getElementById('progress-line');
+    if (line) line.style.width = step === 1 ? '0%' : step === 2 ? '50%' : '100%';
+
+    // Bubbles Styling
+    [1,2,3].forEach(i => {
+        const el = document.getElementById(`step-${i}`);
+        if(el) {
+            if (i < step) {
+                el.className = `w-10 h-10 rounded-full border-2 flex items-center justify-center font-bold transition-all relative z-10 step-completed`;
+                el.innerHTML = '<i class="fa-solid fa-check"></i>';
+            } else if (i === step) {
+                el.className = `w-10 h-10 rounded-full border-2 flex items-center justify-center font-bold transition-all relative z-10 step-active shadow-lg shadow-blue-500/20`;
+                el.innerHTML = i;
+            } else {
+                el.className = `w-10 h-10 rounded-full border-2 flex items-center justify-center font-bold transition-all relative z-10 bg-zinc-900 border-zinc-700 text-zinc-600`;
+                el.innerHTML = i;
+            }
         }
     });
 
-    // Atualiza linha de progresso
-    const progressLine = document.getElementById('progress-line');
-    if (progressLine) {
-        if (step === 1) progressLine.style.width = '0%';
-        if (step === 2) progressLine.style.width = '50%';
-        if (step === 3) progressLine.style.width = '100%';
-    }
-
-    // Renderiza conteúdo
+    // Content Switching
     if (step === 1) {
         content.innerHTML = `
-            <h3 class="text-white text-xl font-bold mb-4">Step 1: Upload Document</h3>
-            <p class="text-zinc-400 mb-6">Select the file you wish to notarize. This file will be hashed and the hash will be stored on-chain.</p>
-            <input type="file" id="notary-file-input" class="w-full text-sm text-zinc-300
-                file:mr-4 file:py-2 file:px-4
-                file:rounded-full file:border-0
-                file:text-sm file:font-semibold
-                file:bg-blue-600 file:text-white
-                hover:file:bg-blue-500 cursor-pointer transition-colors"
-                accept=".pdf,.doc,.docx,.jpg,.png,.txt,.zip"
-            />
-            <p class="text-zinc-500 text-xs mt-3">Max size: 50MB. Supported formats: PDF, DOC, JPG, PNG, TXT, ZIP.</p>
+            <div class="text-center mb-8">
+                <h3 class="text-2xl font-bold text-white mb-2">Upload Document</h3>
+                <p class="text-zinc-400 text-sm">Supported: PDF, JPG, PNG, DOC (Max 50MB)</p>
+            </div>
+            
+            <div id="drop-area" class="drop-zone h-64 flex flex-col items-center justify-center cursor-pointer relative group">
+                <input type="file" id="notary-file-input" class="hidden" accept=".pdf,.doc,.docx,.jpg,.png,.txt,.zip">
+                
+                <div class="w-20 h-20 bg-zinc-800 rounded-full flex items-center justify-center mb-6 group-hover:scale-110 group-hover:bg-zinc-700 transition-all shadow-xl">
+                    <i class="fa-solid fa-cloud-arrow-up text-3xl text-blue-500"></i>
+                </div>
+                <p class="text-white font-medium mb-1 text-lg">Click to Upload</p>
+                <p class="text-xs text-zinc-500">or drag and drop file here</p>
+            </div>
         `;
-        document.getElementById('notary-file-input')?.addEventListener('change', handleFileSelection);
+        initNotaryListeners(); // Attach events
 
     } else if (step === 2) {
         content.innerHTML = `
-            <h3 class="text-white text-xl font-bold mb-4">Step 2: Add Details</h3>
-            <p class="text-zinc-400 mb-6">Provide an optional description for your document.</p>
-            <textarea id="notary-user-description" rows="4" class="w-full p-4 bg-zinc-800 rounded-lg border border-zinc-700 text-white placeholder-zinc-500 focus:ring-blue-500 focus:border-blue-500" placeholder="e.g., Contract for the sale of the asset X...">${document.getElementById('notary-user-description')?.value || ''}</textarea>
-            <div class="mt-4 flex justify-between items-center">
-                <button id="notary-back-to-file-btn" class="text-zinc-400 hover:text-white transition-colors text-sm">
-                    <i class="fa-solid fa-arrow-left mr-2"></i> Change File
-                </button>
-                <button id="notary-review-btn" class="bg-blue-600 hover:bg-blue-500 text-white font-bold py-2 px-6 rounded-xl transition-all">
-                    Review & Mint
-                </button>
+            <div class="text-center mb-6">
+                <h3 class="text-2xl font-bold text-white mb-2">Document Details</h3>
+                <p class="text-zinc-400 text-sm">Add metadata to your blockchain record.</p>
+            </div>
+            <div class="space-y-4">
+                <div class="bg-zinc-900/50 p-4 rounded-xl border border-zinc-700 flex items-center gap-4">
+                    <div class="w-12 h-12 bg-blue-500/20 rounded-lg flex items-center justify-center text-blue-400 text-xl"><i class="fa-solid fa-file-contract"></i></div>
+                    <div class="overflow-hidden flex-1">
+                        <p class="text-white font-bold truncate">${currentFileToUpload?.name}</p>
+                        <p class="text-xs text-zinc-500">${(currentFileToUpload?.size / 1024 / 1024).toFixed(2)} MB • Ready to Hash</p>
+                    </div>
+                    <button class="text-zinc-500 hover:text-red-400 p-2 transition-colors" onclick="NotaryPage.reset()"><i class="fa-solid fa-trash"></i></button>
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-zinc-500 uppercase mb-2">Legal Note / Description (Optional)</label>
+                    <textarea id="notary-user-description" rows="4" class="w-full bg-black/30 border border-zinc-700 rounded-xl p-4 text-white focus:border-blue-500 focus:outline-none transition-colors" placeholder="E.g. Property Deed #12345 registered on..."></textarea>
+                </div>
             </div>
         `;
-        document.getElementById('notary-back-to-file-btn')?.addEventListener('click', () => updateNotaryStep(1));
-        document.getElementById('notary-review-btn')?.addEventListener('click', handleReview);
+        const btn = document.getElementById('notarize-submit-btn');
+        btn.disabled = false;
+        btn.className = "w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-4 rounded-xl transition-all shadow-lg btn-pulse";
+        btn.innerHTML = `Proceed to Review <i class="fa-solid fa-arrow-right ml-2"></i>`;
+        btn.onclick = () => updateNotaryStep(3);
 
     } else if (step === 3) {
         content.innerHTML = `
-            <h3 class="text-white text-xl font-bold mb-4">Step 3: Final Review</h3>
-            <p class="text-zinc-400 mb-6">Confirm details before certifying.</p>
-            
-            <div class="bg-zinc-800/70 p-4 rounded-xl border border-zinc-700">
-                <div class="flex justify-between border-b border-zinc-700 pb-2 mb-2">
-                    <span class="text-zinc-400">File Name:</span>
-                    <span id="notary-summary-filename" class="text-white font-semibold">${currentFileToUpload ? currentFileToUpload.name : 'N/A'}</span>
+            <div class="text-center mb-6">
+                <h3 class="text-2xl font-bold text-white mb-2">Final Review</h3>
+                <p class="text-zinc-400 text-sm">Confirm transaction details before signing.</p>
+            </div>
+            <div class="bg-zinc-900/50 rounded-xl border border-zinc-700 p-6 space-y-4">
+                <div class="flex justify-between border-b border-zinc-800 pb-3">
+                    <span class="text-zinc-400 text-sm">File Name</span>
+                    <span class="text-white font-medium text-right truncate max-w-[200px] text-sm">${currentFileToUpload?.name}</span>
                 </div>
-                <div class="border-b border-zinc-700 pb-2 mb-2">
-                    <span class="text-zinc-400 block mb-1">Description:</span>
-                    <span id="notary-summary-description" class="text-sm text-zinc-300 italic block">${document.getElementById('notary-user-description')?.value || 'No description provided.'}</span>
+                <div class="flex justify-between border-b border-zinc-800 pb-3">
+                    <span class="text-zinc-400 text-sm">Service Fee</span>
+                    <span class="text-green-400 font-mono font-bold">${State.notaryFee ? formatBigNumber(State.notaryFee) + ' BKC' : 'Loading...'}</span>
                 </div>
-                <div class="flex justify-between pt-2">
-                    <span class="text-zinc-400">Service Fee:</span>
-                    <span id="notary-summary-fee" class="text-green-400 font-bold">
-                        ${State.notaryFee !== undefined ? formatBigNumber(State.notaryFee) + ' BKC' : 'Loading...'}
-                    </span>
+                <div class="flex justify-between">
+                    <span class="text-zinc-400 text-sm">Network</span>
+                    <span class="text-white flex items-center gap-2 text-sm"><div class="w-2 h-2 rounded-full bg-green-500"></div> Sepolia</span>
                 </div>
             </div>
-
-            <button id="notary-change-file-btn" class="text-zinc-400 hover:text-white transition-colors text-sm mt-4">
-                 <i class="fa-solid fa-arrow-left mr-2"></i> Change File
-            </button>
         `;
-        document.getElementById('notary-change-file-btn')?.addEventListener('click', () => updateNotaryStep(1));
+        const btn = document.getElementById('notarize-submit-btn');
+        btn.disabled = false;
+        btn.className = "w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 text-white font-bold py-4 rounded-xl transition-all shadow-xl";
+        btn.innerHTML = `<i class="fa-solid fa-signature mr-2"></i> Sign & Certify`;
+        btn.onclick = handleSignAndUpload;
     }
     updateNotaryUserStatus();
 }
 
-function updateNotaryUserStatus() {
-    const userStatusEl = document.getElementById('notary-user-status');
-    const submitBtn = document.getElementById('notarize-submit-btn'); 
-    
-    if (!userStatusEl || !submitBtn) return;
+// =========================================================================
+// DATA & TRANSACTIONS
+// =========================================================================
 
-    if (!State.isConnected) {
-        userStatusEl.innerHTML = `
-            <div class="p-4 bg-zinc-900/50 rounded-xl border border-zinc-800 text-center col-span-1 md:col-span-2">
-                <i class="fa-solid fa-wallet text-2xl text-zinc-600 mb-2"></i>
-                <p class="text-sm text-zinc-500">Connect your wallet to see requirements and begin notarization.</p>
-            </div>`;
-        
-        submitBtn.className = "w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-4 rounded-xl shadow-lg shadow-blue-900/20 transition-all flex items-center justify-center gap-3";
-        submitBtn.innerHTML = `<i class="fa-solid fa-plug"></i> Connect Wallet`;
-        submitBtn.disabled = false; 
-        submitBtn.onclick = window.openConnectModal;
-        return; 
-    } else {
-        submitBtn.onclick = null;
+function updateNotaryUserStatus() {
+    const statusEl = document.getElementById('notary-user-status');
+    if(!statusEl) return;
+
+    if(!State.isConnected) {
+        statusEl.innerHTML = `<div class="text-center text-zinc-500 py-4 bg-zinc-900/30 rounded-xl border border-zinc-800"><i class="fa-solid fa-wallet mb-2 text-xl"></i><br>Connect Wallet to View</div>`;
+        return;
     }
 
     const userPStake = State.userTotalPStake || 0n;
-    const reqPStake = State.notaryMinPStake || 0n; 
-    const userBalance = State.currentUserBalance || 0n;
-    const baseFee = State.notaryFee || 0n; 
+    const reqPStake = State.notaryMinPStake || 0n;
+    const fee = State.notaryFee || 0n;
     
-    let finalFee = baseFee;
-    
-    const requirementsLoaded = reqPStake > 0n && finalFee > 0n;
-    const hasPStake = userPStake >= reqPStake; 
-    const hasBalance = userBalance >= finalFee;
-    
-    // Tratamento de erro visual para falha de RPC
-    const pStakeDisplay = requirementsLoaded ? `${formatPStake(userPStake)} / ${formatPStake(reqPStake)}` : (rpcErrorCount > 2 ? '<span class="text-red-500">Net Error</span>' : 'Loading...');
-    const feeDisplay = requirementsLoaded ? `${formatBigNumber(finalFee)} BKC` : (rpcErrorCount > 2 ? '<span class="text-red-500">Net Error</span>' : 'Loading...');
+    const isReady = reqPStake > 0n && fee > 0n;
+    const hasPStake = userPStake >= reqPStake;
+    const hasBal = (State.currentUserBalance || 0n) >= fee;
 
-    userStatusEl.innerHTML = `
-        <div class="flex flex-col p-3 bg-zinc-900/50 rounded-xl border ${requirementsLoaded ? (hasPStake ? 'border-green-500/20' : 'border-red-500/20') : 'border-zinc-700'}">
-            <div class="flex items-center justify-between">
-                <div class="flex items-center gap-3">
-                    <div class="w-6 h-6 rounded-full flex items-center justify-center ${requirementsLoaded ? (hasPStake ? 'bg-green-500/20 text-green-500' : 'bg-red-500/20 text-red-500') : 'bg-zinc-700 text-zinc-500'}">
-                        <i class="fa-solid ${requirementsLoaded ? (hasPStake ? 'fa-check' : 'fa-xmark') : 'fa-circle-notch animate-spin'} text-xs"></i>
-                    </div>
-                    <div>
-                        <p class="text-[10px] text-zinc-500 uppercase font-bold">Min. pStake</p>
-                        <p class="text-xs font-mono ${hasPStake ? 'text-white' : 'text-red-400'}">${pStakeDisplay}</p>
-                    </div>
-                </div>
+    statusEl.innerHTML = `
+        <div class="flex items-center justify-between p-3 bg-zinc-900 rounded-lg border ${hasPStake ? 'border-green-500/30' : 'border-red-500/30'}">
+            <div>
+                <div class="text-[10px] text-zinc-500 uppercase font-bold">Min. pStake</div>
+                <div class="text-white font-mono text-sm">${isReady ? formatPStake(reqPStake) : '...'}</div>
             </div>
-            ${!hasPStake && requirementsLoaded ? `<button id="delegate-now-btn" class="mt-3 text-[10px] bg-purple-600 hover:bg-purple-500 text-white px-2 py-1 rounded transition-colors self-end">Get Stake</button>` : ''}
+            ${hasPStake ? '<i class="fa-solid fa-check text-green-500"></i>' : '<i class="fa-solid fa-xmark text-red-500"></i>'}
         </div>
-
-        <div class="flex flex-col p-3 bg-zinc-900/50 rounded-xl border ${requirementsLoaded ? (hasBalance ? 'border-green-500/20' : 'border-red-500/20') : 'border-zinc-700'}">
-            <div class="flex items-center justify-between">
-                <div class="flex items-center gap-3">
-                    <div class="w-6 h-6 rounded-full flex items-center justify-center ${requirementsLoaded ? (hasBalance ? 'bg-green-500/20 text-green-500' : 'bg-red-500/20 text-red-500') : 'bg-zinc-700 text-zinc-500'}">
-                        <i class="fa-solid ${requirementsLoaded ? (hasBalance ? 'fa-check' : 'fa-xmark') : 'fa-circle-notch animate-spin'} text-xs"></i>
-                    </div>
-                    <div>
-                        <p class="text-[10px] text-zinc-500 uppercase font-bold">Service Fee</p>
-                        <p class="text-xs font-mono ${hasBalance ? 'text-white' : 'text-red-400'}">${feeDisplay}</p>
-                    </div>
-                </div>
+        
+        <div class="flex items-center justify-between p-3 bg-zinc-900 rounded-lg border ${hasBal ? 'border-green-500/30' : 'border-red-500/30'}">
+            <div>
+                <div class="text-[10px] text-zinc-500 uppercase font-bold">Service Cost</div>
+                <div class="text-white font-mono text-sm">${isReady ? formatBigNumber(fee) + ' BKC' : '...'}</div>
             </div>
-            ${!hasBalance && requirementsLoaded ? `<a href="${addresses.bkcDexPoolAddress}" target="_blank" class="mt-3 text-[10px] bg-amber-600 hover:bg-amber-500 text-white px-2 py-1 rounded transition-colors self-end">Buy BKC</a>` : ''}
+            ${hasBal ? '<i class="fa-solid fa-check text-green-500"></i>' : '<i class="fa-solid fa-xmark text-red-500"></i>'}
         </div>
     `;
-
-    const statsEl = document.getElementById('notary-stats-container');
-    if (statsEl) {
-        statsEl.innerHTML = `
-            <div class="flex justify-between items-center text-sm">
-                <span class="text-zinc-400">Service Fee</span>
-                <span class="font-mono text-white">${feeDisplay}</span>
-            </div>
-            <div class="h-px bg-zinc-800 w-full my-2"></div>
-            <div class="flex justify-between items-center text-sm">
-                <span class="text-zinc-400">Min. pStake</span>
-                <span class="font-mono text-purple-400">${pStakeDisplay}</span>
-            </div>
-        `;
-    }
-
-    // Lógica do Botão Principal
-    const isReviewStep = document.querySelector('#step-indicator-3')?.classList.contains('active');
-    const isDetailsStep = document.querySelector('#step-indicator-2')?.classList.contains('active');
-
-    if (notaryButtonState === 'initial' || currentFileToUpload === null) {
-        submitBtn.className = "w-full bg-zinc-800 text-zinc-500 font-bold py-4 rounded-xl cursor-not-allowed flex items-center justify-center gap-3";
-        submitBtn.innerHTML = `Waiting for file selection...`;
-        submitBtn.disabled = true;
-    } else if (notaryButtonState === 'signing' || notaryButtonState === 'notarizing') {
-        submitBtn.className = "w-full bg-zinc-800 text-white font-bold py-4 rounded-xl cursor-wait flex items-center justify-center gap-2";
-        submitBtn.innerHTML = `<div class="loader-sm inline-block"></div> Processing...`;
-        submitBtn.disabled = true;
-    } else if (isDetailsStep) {
-        submitBtn.className = "w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-4 rounded-xl shadow-lg shadow-blue-900/20 transition-all flex items-center justify-center gap-3";
-        submitBtn.innerHTML = `Go to Final Review <i class="fa-solid fa-arrow-right ml-2"></i>`;
-        submitBtn.disabled = false;
-        submitBtn.onclick = handleReview;
-
-    } else if (isReviewStep) {
-        const requirementsMet = hasPStake && hasBalance && requirementsLoaded;
-        
-        if (currentUploadedIPFS_URI) {
-            if (requirementsMet) {
-                submitBtn.className = "w-full bg-gradient-to-r from-blue-600 to-purple-700 hover:from-blue-500 hover:to-purple-600 text-white font-bold py-4 rounded-xl shadow-lg shadow-blue-900/20 transition-all transform hover:-translate-y-0.5 flex items-center justify-center gap-2";
-                submitBtn.innerHTML = `<i class="fa-solid fa-fingerprint"></i> Mint Notary NFT`;
-                submitBtn.disabled = false;
-                submitBtn.onclick = handleNotarize;
-            } else {
-                submitBtn.className = "w-full bg-zinc-800 text-zinc-500 font-bold py-4 rounded-xl cursor-not-allowed flex items-center justify-center gap-2";
-                submitBtn.innerHTML = `<i class="fa-solid fa-lock"></i> Requirements not met`;
-                submitBtn.disabled = true;
-                submitBtn.onclick = null;
-            }
-        } else {
-            submitBtn.className = "w-full bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-500 hover:to-blue-600 text-white font-bold py-4 rounded-xl shadow-lg shadow-blue-900/20 transition-all transform hover:-translate-y-0.5 flex items-center justify-center gap-2";
-            submitBtn.innerHTML = `<i class="fa-solid fa-signature"></i> Sign & Upload Document`;
-            submitBtn.disabled = false;
-            submitBtn.onclick = handleSignAndUpload;
-        }
-    } else {
-        submitBtn.disabled = true;
-        submitBtn.className = "w-full bg-zinc-800 text-zinc-500 font-bold py-4 rounded-xl cursor-not-allowed flex items-center justify-center gap-3";
-        submitBtn.innerHTML = `Waiting for step completion...`;
-    }
 }
-
-
-// =========================================================================
-// 3. CARREGAMENTO DE DADOS (CARTEIRA E CONTRATO)
-// =========================================================================
 
 async function loadNotaryPublicData() {
     const now = Date.now();
-    
-    // Se o erro de RPC for persistente, não tenta novamente por um tempo
     if (rpcErrorCount > 5 && now - lastNotaryDataFetch < 30000) return;
-
-    if (now - lastNotaryDataFetch < 60000 && State.notaryFee !== undefined && State.notaryFee !== 0n) {
-        updateNotaryUserStatus();
-        return;
-    }
-
-    // Usa a instância PÚBLICA (ReadOnly)
-    const hubContract = State.ecosystemManagerContractPublic || State.ecosystemManagerContract;
-
-    if (!hubContract) {
-         await loadPublicData();
-         if (!State.ecosystemManagerContractPublic && !State.ecosystemManagerContract) return;
-    }
-    
-    lastNotaryDataFetch = now;
+    if (now - lastNotaryDataFetch < 60000 && State.notaryFee > 0n) { updateNotaryUserStatus(); return; }
 
     try {
-        console.log("📥 loadNotaryPublicData: Fetching from Blockchain (Hash Manual)...");
+        const hubContract = State.ecosystemManagerContractPublic || State.ecosystemManagerContract;
+        if (!hubContract) { await loadPublicData(); if(!State.ecosystemManagerContractPublic) return; }
         
-        // 🚨 HASH MANUAL PARA GARANTIR COMPATIBILIDADE COM O CONTRATO
-        const serviceKeyHash = ethers.id("NOTARY_SERVICE"); 
-
-        const [baseFee, pStakeRequirement] = await safeContractCall(
-            hubContract || State.ecosystemManagerContractPublic, 
-            'getServiceRequirements', 
-            [serviceKeyHash], 
-            [0n, 0n], 
-            2, // Menos retries para não saturar
-            true
-        );
+        const key = ethers.id("NOTARY_SERVICE");
+        const [fee, stake] = await safeContractCall(hubContract || State.ecosystemManagerContractPublic, 'getServiceRequirements', [key], [0n, 0n], 2, true);
         
-        if (baseFee > 0n || pStakeRequirement > 0n) {
-            State.notaryMinPStake = pStakeRequirement;
-            State.notaryFee = baseFee;
-            rpcErrorCount = 0; // Reset de erro se sucesso
-            console.log(`✅ loadNotaryPublicData: Success! Fee: ${baseFee}`);
-        } else {
-            // Se retornou 0, pode ser erro de RPC silencioso ou contrato não configurado
-            console.warn("⚠️ loadNotaryPublicData: Returned 0. Check RPC or Contract Config.");
+        if (fee > 0n) {
+            State.notaryFee = fee;
+            State.notaryMinPStake = stake;
+            rpcErrorCount = 0;
         }
-
-    } catch(e) {
-        console.error("❌ loadNotaryPublicData: Error fetching requirements.", e);
-        rpcErrorCount++;
-    }
-    
+    } catch(e) { rpcErrorCount++; }
     updateNotaryUserStatus();
 }
 
-// =========================================================================
-// 4. HANDLERS DE EVENTOS
-// =========================================================================
-
-function initNotaryListeners() {
-    const fileInput = document.getElementById('notary-file-input');
-    if (fileInput) {
-        fileInput.removeEventListener('change', handleFileSelection);
-        fileInput.addEventListener('change', handleFileSelection);
-    }
-}
-
-function handleFileSelection(event) {
-    const file = event.target.files[0];
-    if (!file) return;
-
-    event.target.value = null; 
-
-    if (file.size > MAX_FILE_SIZE_BYTES) {
-        showToast(`File size exceeds the 50MB limit.`, 'error');
-        currentFileToUpload = null;
-        currentUploadedIPFS_URI = null;
-        return;
-    }
-
-    currentUploadedIPFS_URI = null;
-    currentFileToUpload = file;
-    
-    updateNotaryStep(2);
-}
-
-function handleReview() {
-    if (!currentFileToUpload) return;
-    updateNotaryStep(3);
-}
-
+// 🔴 COPY JURÍDICA PROFISSIONAL AQUI
 async function handleSignAndUpload(event) {
     const btn = event.currentTarget;
-    if (!currentFileToUpload) return;
-
-    const originalText = btn.innerHTML;
     btn.disabled = true;
-    btn.innerHTML = `<div class="loader-sm inline-block"></div> Signing Hash & Uploading...`;
-    notaryButtonState = 'signing';
-    updateNotaryUserStatus();
+    btn.innerHTML = `<div class="loader-sm inline-block mr-2"></div> Processing...`;
 
     try {
-        const file = currentFileToUpload;
-        const description = document.getElementById('notary-user-description')?.value || '';
-
-        // 1. Sign
-        const signer = await State.provider.getSigner();
-        const signature = await signer.signMessage(`Sign hash for Notary: ${file.name}`);
+        const rawDesc = document.getElementById('notary-user-description')?.value;
+        const desc = rawDesc && rawDesc.trim() !== "" ? rawDesc : "No description provided.";
         
+        const signer = await State.provider.getSigner();
+        const timestamp = new Date().toLocaleString('en-US', { timeZoneName: 'short' });
+        
+        // --- LEGAL TEXT BLOCK ---
+        const message = `BACKCHAIN DECENTRALIZED NOTARY
+--------------------------------
+ACTION: Immutable Blockchain Registration
+PROTOCOL: Proof-of-Existence
+
+I hereby authorize the permanent hashing and timestamping of the following document on the Backchain network.
+
+[DOCUMENT DETAILS]
+• File Name: ${currentFileToUpload.name}
+• User Note: ${desc}
+• Date: ${timestamp}
+
+By signing this message, I certify ownership and integrity of this data.
+--------------------------------`;
+        
+        // 1. Signature
+        const signature = await signer.signMessage(message);
+        
+        btn.innerHTML = `<div class="loader-sm inline-block mr-2"></div> Uploading to IPFS...`;
+
         // 2. Upload
         const formData = new FormData();
-        formData.append('file', file);
+        formData.append('file', currentFileToUpload);
         formData.append('signature', signature);
         formData.append('address', State.userAddress);
-        formData.append('description', description);
+        formData.append('description', desc);
 
-        const response = await fetch(API_ENDPOINTS.uploadFileToIPFS, { method: 'POST', body: formData });
+        const res = await fetch(API_ENDPOINTS.uploadFileToIPFS, { method: 'POST', body: formData });
+        if (!res.ok) throw new Error("Upload Failed");
         
-        if (!response.ok) throw new Error("Upload failed");
+        const data = await res.json();
+        currentUploadedIPFS_URI = data.ipfsUri;
+
+        // 3. Mint
+        btn.innerHTML = `<div class="loader-sm inline-block mr-2"></div> Waiting for Wallet...`;
+        await executeNotarizeDocument(currentUploadedIPFS_URI, 0n, btn);
         
-        const result = await response.json();
-        currentUploadedIPFS_URI = result.ipfsUri; 
-        
-        showToast("Document hash signed and uploaded successfully! Ready to Mint NFT.", "success");
-
-        // 3. Atualiza estado e TENTA MINTAR SE POSSÍVEL
-        notaryButtonState = 'upload_ready'; 
-        updateNotaryUserStatus(); 
-
-        const requirementsLoaded = State.notaryMinPStake > 0n && State.notaryFee > 0n;
-        const hasPStake = State.userTotalPStake >= State.notaryMinPStake;
-        const hasBalance = State.currentUserBalance >= State.notaryFee;
-
-        if (requirementsLoaded && hasPStake && hasBalance) {
-             setTimeout(() => handleNotarize(btn), 500); 
-        }
-        
-    } catch (error) {
-        console.error("Upload/Sign Error:", error);
-        showToast(`Notarization failed: ${error.message}`, "error");
-        btn.disabled = false;
-        btn.innerHTML = originalText;
-        notaryButtonState = 'upload_ready'; 
-        updateNotaryUserStatus();
-    }
-}
-
-async function handleNotarize(event) {
-    const btn = event.currentTarget;
-    if (!currentUploadedIPFS_URI) return;
-
-    notaryButtonState = 'notarizing';
-    updateNotaryUserStatus();
-
-    const boosterId = State.bestBooster?.tokenId || 0n;
-    
-    const success = await executeNotarizeDocument(currentUploadedIPFS_URI, boosterId, btn);
-    
-    if (success) {
-        currentFileToUpload = null;
-        currentUploadedIPFS_URI = null;
-        notaryButtonState = 'initial'; 
-        
+        NotaryPage.reset();
         await loadUserData(true);
         renderMyNotarizedDocuments();
-        updateNotaryStep(1);
-    } else {
-        notaryButtonState = currentUploadedIPFS_URI ? 'upload_ready' : 'initial';
-        updateNotaryUserStatus();
+
+    } catch (e) {
+        console.error(e);
+        if (e.code === 'ACTION_REJECTED' || e.code === 4001) {
+            showToast("Signature rejected.", "info");
+        } else {
+            showToast("Process Failed: " + e.message, "error");
+        }
+        btn.disabled = false;
+        btn.innerHTML = `<i class="fa-solid fa-rotate-right mr-2"></i> Try Again`;
     }
 }
 
 function renderMyNotarizedDocuments() {
     const container = document.getElementById('my-notarized-documents');
-    const countEl = document.getElementById('notary-doc-count');
-    if (container && countEl) {
-        container.innerHTML = renderNoData("You have not notarized any documents yet.");
-        countEl.innerText = "0";
+    if (container) {
+        container.innerHTML = renderNoData("No certificates found.");
     }
 }
 
 // =========================================================================
-// 5. EXPORT
+// EXPORTS
 // =========================================================================
 
 export const NotaryPage = {
-    async render(isActive) {
+    render: async (isActive) => {
         if (!isActive) return;
-
         renderNotaryPageLayout();
-        
-        // Tenta carregar os requisitos com hash manual
         await loadNotaryPublicData();
-        
-        if (State.isConnected) {
-             await loadUserData(true); 
-             renderMyNotarizedDocuments();
-        }
-        
+        if (State.isConnected) { await loadUserData(true); renderMyNotarizedDocuments(); }
         updateNotaryUserStatus();
-        
-        if (isActive) {
-            updateNotaryStep(1);
-            notaryButtonState = 'initial'; 
-            currentFileToUpload = null;
-            currentUploadedIPFS_URI = null;
-        }
     },
-    
-    update() {
-        loadNotaryPublicData(); 
-        if (State.isConnected) {
-            loadUserData();
-        }
+    reset: () => {
+        currentFileToUpload = null;
+        currentUploadedIPFS_URI = null;
+        updateNotaryStep(1);
+    },
+    update: () => {
+        loadNotaryPublicData();
         updateNotaryUserStatus();
     }
 };

@@ -1,45 +1,40 @@
 // pages/FortunePool.js
-// ✅ VERSÃO FINAL V11.0: "The Prestige" - Barra de Progresso, BKC Branding & Viral Marketing
+// ✅ VERSÃO FINAL V11.3: "Economic Fix" - Tiers ajustados (2x, 5x, 100x)
 
 import { State } from '../state.js';
-import { loadUserData, safeContractCall, API_ENDPOINTS } from '../modules/data.js';
+import { loadUserData, safeContractCall, API_ENDPOINTS, loadSystemDataFromAPI } from '../modules/data.js';
 import { formatBigNumber } from '../utils.js';
 import { showToast } from '../ui-feedback.js';
 import { addresses } from '../config.js';
 
 const ethers = window.ethers;
 
-// --- CSS FX (BRANDING & ANIMATIONS) ---
+// --- CSS FX ---
 const style = document.createElement('style');
 style.innerHTML = `
     .glass-panel {
-        background: rgba(10, 10, 12, 0.85);
+        background: rgba(10, 10, 12, 0.9);
         backdrop-filter: blur(20px);
         -webkit-backdrop-filter: blur(20px);
-        border: 1px solid rgba(255, 193, 7, 0.1);
-        box-shadow: 0 0 40px rgba(0, 0, 0, 0.8);
+        border: 1px solid rgba(255, 193, 7, 0.15);
+        box-shadow: 0 0 40px rgba(0, 0, 0, 0.9);
     }
-    
-    /* BKC Coin Pulse */
     @keyframes coinPulse {
         0% { transform: scale(1); filter: drop-shadow(0 0 10px rgba(245, 158, 11, 0.3)); }
         50% { transform: scale(1.1); filter: drop-shadow(0 0 25px rgba(245, 158, 11, 0.6)); }
         100% { transform: scale(1); filter: drop-shadow(0 0 10px rgba(245, 158, 11, 0.3)); }
     }
     .bkc-anim { animation: coinPulse 2s infinite ease-in-out; }
-
-    /* Barra de Progresso 30s */
-    .progress-track { background: rgba(255, 255, 255, 0.05); border-radius: 4px; overflow: hidden; height: 6px; }
+    
+    .progress-track { background: rgba(255, 255, 255, 0.1); border-radius: 4px; overflow: hidden; height: 8px; margin-top: 10px; }
     .progress-fill { 
         height: 100%; 
         background: linear-gradient(90deg, #f59e0b, #fbbf24); 
         width: 0%; 
-        transition: width 30s cubic-bezier(0.1, 0.7, 1.0, 0.1); /* Curva lenta no final */
+        transition: width 0.5s ease-out;
         box-shadow: 0 0 15px #f59e0b;
     }
-    .progress-fill.finish { transition: width 0.5s ease-out !important; width: 100% !important; }
-
-    /* Slots */
+    
     .slot-box {
         background: linear-gradient(180deg, #1a1a1a 0%, #0a0a0a 100%);
         border: 1px solid #333;
@@ -47,13 +42,19 @@ style.innerHTML = `
     }
     @keyframes spinBlur { 0% { filter: blur(0); transform: translateY(0); } 50% { filter: blur(6px); transform: translateY(-3px); } 100% { filter: blur(0); transform: translateY(0); } }
     .slot-spinning { animation: spinBlur 0.1s infinite; color: #666; }
-    .slot-hit { border-color: #fbbf24 !important; color: #fbbf24 !important; text-shadow: 0 0 20px #fbbf24; background: rgba(251, 191, 36, 0.1); }
+    .slot-hit { border-color: #fbbf24 !important; color: #fbbf24 !important; text-shadow: 0 0 20px #fbbf24; background: rgba(251, 191, 36, 0.15); }
     .slot-miss { border-color: #ef4444 !important; color: #ef4444 !important; opacity: 0.5; }
-
-    /* Buttons */
+    
     .btn-action { background: linear-gradient(to bottom, #fbbf24, #d97706); color: black; font-weight: 900; letter-spacing: 1px; }
     .btn-action:hover { filter: brightness(1.1); transform: translateY(-1px); }
-    .btn-action:disabled { background: #333; color: #666; cursor: not-allowed; transform: none; }
+    .btn-action:disabled { background: #333; color: #666; cursor: not-allowed; transform: none; filter: none; }
+
+    .hidden-force { display: none !important; }
+    
+    /* Social Buttons */
+    .btn-x { background: #000; border: 1px solid #333; }
+    .btn-tg { background: #229ED9; }
+    .btn-wa { background: #25D366; }
 `;
 document.head.appendChild(style);
 
@@ -64,14 +65,14 @@ let gameState = {
     gameId: 0,
     pollInterval: null,
     spinInterval: null,
-    msgInterval: null,
     guesses: [0, 0, 0],
     isCumulative: false,
     betAmount: 0,
     lastWinAmount: 0,
     currentLevel: 1,
     currentXP: 0,
-    xpPerLevel: 1000
+    xpPerLevel: 1000,
+    systemReady: false
 };
 
 // Load Data
@@ -111,7 +112,6 @@ function renderStep() {
 }
 
 function buildStepHTML(container) {
-    // --- STEP 0: INTRO ---
     if (gameState.step === 0) {
         container.innerHTML = `
             <div class="text-center py-6">
@@ -134,10 +134,12 @@ function buildStepHTML(container) {
         document.getElementById('btn-random-all').onclick = () => { gameState.guesses = [rand(3), rand(10), rand(100)]; gameState.step = 4; renderStep(); };
         document.getElementById('btn-manual-pick').onclick = () => { gameState.step = 1; renderStep(); };
     }
-    // --- STEPS 1-3 (Simplified) ---
     else if (gameState.step >= 1 && gameState.step <= 3) {
+        // --- 🔴 ATUALIZAÇÃO VISUAL DOS TIERS ---
         const tiers = [
-            { max: 3, name: "BRONZE", reward: "3x" }, { max: 10, name: "SILVER", reward: "10x" }, { max: 100, name: "GOLD", reward: "100x" }
+            { max: 3, name: "BRONZE", reward: "2x" },  // Agora 2x
+            { max: 10, name: "SILVER", reward: "5x" }, // Agora 5x
+            { max: 100, name: "GOLD", reward: "100x" }
         ];
         const t = tiers[gameState.step - 1];
         let grid = t.max <= 10 
@@ -148,7 +150,7 @@ function buildStepHTML(container) {
             <div class="text-center pt-4">
                 <div class="text-amber-500 text-xs font-bold tracking-widest mb-2">STEP ${gameState.step}/3</div>
                 <h2 class="text-2xl font-black text-white mb-1">PICK ${t.name}</h2>
-                <p class="text-zinc-500 text-xs mb-8">Win Multiplier: <span class="text-white">${t.reward}</span></p>
+                <p class="text-zinc-500 text-xs mb-8">Win Multiplier: <span class="text-white font-bold">${t.reward}</span></p>
                 ${grid}
             </div>`;
         
@@ -159,7 +161,6 @@ function buildStepHTML(container) {
             b.onclick = () => { gameState.guesses[2] = parseInt(i.value); gameState.step = 4; renderStep(); };
         }
     }
-    // --- STEP 4: BETTING ---
     else if (gameState.step === 4) {
         renderBettingScreen(container);
     }
@@ -169,7 +170,7 @@ function rand(max) { return Math.floor(Math.random() * max) + 1; }
 
 function renderBettingScreen(container) {
     container.innerHTML = `
-        <div class="text-center relative h-full flex flex-col justify-between">
+        <div class="text-center relative h-full flex flex-col justify-between" style="min-height: 400px;">
             <div class="flex justify-between items-center mb-6 px-2">
                 <button id="btn-reset" class="text-xs text-zinc-500 hover:text-white uppercase"><i class="fa-solid fa-chevron-left"></i> Reset</button>
                 <div class="flex gap-2">
@@ -181,13 +182,14 @@ function renderBettingScreen(container) {
                 ${[1,2,3].map(i => `<div id="slot-${i}" class="slot-box rounded-2xl h-28 flex items-center justify-center text-5xl font-black text-zinc-700 transition-all">?</div>`).join('')}
             </div>
 
-            <div id="status-area" class="hidden mb-6">
-                <img src="assets/bkc_logo_3d.png" class="w-16 h-16 mx-auto mb-4 bkc-anim" alt="Mining...">
+            <div id="status-area" class="hidden-force flex-col items-center justify-center h-48 animate-fadeIn">
+                <img src="assets/bkc_logo_3d.png" class="w-16 h-16 mb-4 bkc-anim" alt="Mining...">
+                <div class="text-sm text-white font-bold mb-1" id="status-title">PROCESSING...</div>
                 <div class="text-xs text-amber-500 font-mono mb-2 uppercase tracking-widest" id="status-text">INITIALIZING...</div>
                 <div class="progress-track w-full max-w-xs mx-auto"><div id="progress-bar" class="progress-fill"></div></div>
             </div>
 
-            <div id="controls-area" class="bg-zinc-900/50 p-4 rounded-3xl border border-zinc-800">
+            <div id="controls-area" class="bg-zinc-900/50 p-4 rounded-3xl border border-zinc-800 transition-opacity duration-500">
                 <div class="flex items-center justify-between mb-4 bg-black/40 rounded-xl p-2 px-4 border border-zinc-700/50">
                     <span class="text-zinc-500 text-xs font-bold">AMOUNT</span>
                     <input type="number" id="bet-input" class="bg-transparent text-right text-white font-mono text-xl font-bold w-24 outline-none" placeholder="0">
@@ -211,22 +213,39 @@ function renderBettingScreen(container) {
             </div>
         </div>
 
-        <div id="result-overlay" class="absolute inset-0 z-50 hidden flex-col items-center justify-center glass-panel rounded-3xl bg-black/90"></div>
+        <div id="result-overlay" class="absolute inset-0 z-50 hidden flex-col items-center justify-center glass-panel rounded-3xl bg-black/95"></div>
     `;
 
     // Listeners
     document.getElementById('btn-reset').onclick = () => { gameState.step = 0; renderStep(); };
     const inp = document.getElementById('bet-input');
     const btn = document.getElementById('btn-spin');
+    
     const validate = () => {
         const val = parseFloat(inp.value);
         gameState.betAmount = val || 0;
-        btn.disabled = !(val > 0);
+        
+        if (!gameState.systemReady) {
+            btn.disabled = true;
+            btn.innerText = "NETWORK ERROR - RETRYING...";
+            return;
+        }
+
+        if(val > 0) {
+            btn.disabled = false;
+            btn.innerText = "START MINING";
+        } else {
+            btn.disabled = true;
+            btn.innerText = "ENTER AMOUNT";
+        }
     };
+
     inp.oninput = validate;
     document.querySelectorAll('.quick-bet').forEach(b => b.onclick = () => { inp.value = b.dataset.amt; validate(); });
     document.getElementById('mode-toggle').onclick = toggleMode;
     btn.onclick = executeTransaction;
+    
+    validate();
 }
 
 function toggleMode() {
@@ -249,17 +268,19 @@ function toggleMode() {
 }
 
 // ============================================
-// 2. ORACLE & ANIMATIONS (THE SHOW)
+// 2. ORACLE & ANIMATIONS
 // ============================================
 
 function startSpinning() {
     gameState.isSpinning = true;
     
-    // UI Transition
-    document.getElementById('controls-area').classList.add('hidden');
-    document.getElementById('status-area').classList.remove('hidden');
+    const controls = document.getElementById('controls-area');
+    const status = document.getElementById('status-area');
     
-    // Start Slots
+    controls.classList.add('hidden-force'); 
+    status.classList.remove('hidden-force');
+    status.classList.add('flex'); 
+
     [1,2,3].forEach(i => {
         const el = document.getElementById(`slot-${i}`);
         el.innerText = '?';
@@ -271,57 +292,40 @@ function startSpinning() {
         if(document.getElementById('slot-3')) document.getElementById('slot-3').innerText = rand(100);
     }, 50);
 
-    // Progress Bar Logic (30s to 99%)
-    setTimeout(() => { document.getElementById('progress-bar').style.width = '99%'; }, 100);
+    // Progress Simulation
+    updateProgressBar(10, "MINING TRANSACTION..."); 
+}
 
-    // Status Messages
-    const msgs = ["INITIATING TRANSACTION...", "MINING BLOCK...", "VALIDATING PROOF OF PURCHASE...", "ORACLE CONSENSUS...", "FINALIZING..."];
-    let idx = 0;
-    gameState.msgInterval = setInterval(() => {
-        if(document.getElementById('status-text')) {
-            document.getElementById('status-text').innerText = msgs[idx % msgs.length];
-            idx++;
-        }
-    }, 4000);
+function updateProgressBar(percent, text) {
+    const bar = document.getElementById('progress-bar');
+    const txt = document.getElementById('status-text');
+    if(bar) bar.style.width = `${percent}%`;
+    if(txt) txt.innerText = text;
 }
 
 async function stopSpinning(rolls, winAmount) {
-    // 1. Prepare for Reveal
     clearInterval(gameState.spinInterval);
-    clearInterval(gameState.msgInterval);
     clearInterval(gameState.pollInterval);
     
-    // Finish Progress Bar
-    const bar = document.getElementById('progress-bar');
-    bar.classList.add('finish');
-    document.getElementById('status-text').innerText = "DATA RECEIVED. DECRYPTING...";
+    updateProgressBar(100, "REVEALING DESTINY...");
     
     gameState.lastWinAmount = parseFloat(formatBigNumber(BigInt(winAmount)));
     const wait = ms => new Promise(r => setTimeout(r, ms));
 
-    // 2. Sequential Reveal (Tension)
     const reveal = async (i) => {
         const el = document.getElementById(`slot-${i+1}`);
         if(!el) return;
         el.classList.remove('slot-spinning');
         el.innerText = rolls[i];
-        
-        if (rolls[i] === gameState.guesses[i]) {
-            el.classList.add('slot-hit'); // Neon Green/Gold
-        } else {
-            el.classList.add('slot-miss'); // Dull Red
-        }
+        if (rolls[i] === gameState.guesses[i]) el.classList.add('slot-hit');
+        else el.classList.add('slot-miss');
     };
 
-    await wait(500);
-    await reveal(0);
-    await wait(1000); // Suspense
-    await reveal(1);
-    await wait(1000); // More Suspense
-    await reveal(2);
-    await wait(1500); // Final realization
+    await wait(500); await reveal(0);
+    await wait(1000); await reveal(1);
+    await wait(1000); await reveal(2);
+    await wait(1500);
 
-    // 3. Show Result
     showResultOverlay(winAmount > 0n);
 }
 
@@ -330,11 +334,10 @@ function showResultOverlay(isWin) {
     overlay.classList.remove('hidden');
     overlay.classList.add('flex');
 
-    const marketingText = `Discover Backcoin ($BKC)! A revolutionary crypto ecosystem independent of speculation. They say it's the next BTC. I just played Fortune Pool! #BKC #AIRDROP #PROOFOFPURCHASE`;
+    const marketingText = `Discover Backcoin ($BKC)! A revolutionary crypto ecosystem independent of speculation. The next BTC! I just won ${gameState.lastWinAmount.toFixed(2)} $BKC. #BKC #AIRDROP #PROOFOFPURCHASE`;
     const url = "https://backcoin.org"; 
     const encText = encodeURIComponent(marketingText);
 
-    // Copy to Clipboard Logic for Instagram
     window.copyForInsta = () => {
         navigator.clipboard.writeText(marketingText + " " + url).then(() => {
             showToast("Text copied! Paste in Instagram.", "success");
@@ -348,14 +351,12 @@ function showResultOverlay(isWin) {
                 <div class="text-6xl mb-4">🏆</div>
                 <h2 class="text-4xl font-black text-amber-400 italic mb-2 drop-shadow-lg">BIG WIN!</h2>
                 <div class="text-6xl font-mono font-bold text-white mb-6">${gameState.lastWinAmount.toFixed(2)} <span class="text-xl text-zinc-500">BKC</span></div>
-                
                 <p class="text-[10px] text-zinc-400 mb-3 uppercase tracking-widest">SHARE THE REVOLUTION</p>
                 <div class="flex gap-2 mb-6 max-w-xs mx-auto">
-                    <a href="https://twitter.com/intent/tweet?text=${encText}&url=${encodeURIComponent(url)}" target="_blank" class="flex-1 bg-black border border-zinc-700 py-3 rounded-xl text-white hover:scale-105 transition"><i class="fa-brands fa-x-twitter"></i></a>
-                    <a href="https://t.me/share/url?url=${encodeURIComponent(url)}&text=${encText}" target="_blank" class="flex-1 bg-blue-500 py-3 rounded-xl text-white hover:scale-105 transition"><i class="fa-brands fa-telegram"></i></a>
-                    <button onclick="window.copyForInsta()" class="flex-1 bg-gradient-to-tr from-yellow-500 via-red-500 to-purple-500 py-3 rounded-xl text-white hover:scale-105 transition"><i class="fa-brands fa-instagram"></i></button>
+                    <a href="https://twitter.com/intent/tweet?text=${encText}&url=${encodeURIComponent(url)}" target="_blank" class="flex-1 btn-x border border-zinc-700 py-3 rounded-xl text-white hover:scale-105 transition flex items-center justify-center"><i class="fa-brands fa-x-twitter"></i></a>
+                    <a href="https://t.me/share/url?url=${encodeURIComponent(url)}&text=${encText}" target="_blank" class="flex-1 btn-tg py-3 rounded-xl text-white hover:scale-105 transition flex items-center justify-center"><i class="fa-brands fa-telegram"></i></a>
+                    <button onclick="window.copyForInsta()" class="flex-1 bg-gradient-to-tr from-yellow-500 via-red-500 to-purple-500 py-3 rounded-xl text-white hover:scale-105 transition flex items-center justify-center"><i class="fa-brands fa-instagram"></i></button>
                 </div>
-                
                 <button id="btn-collect" class="bg-white text-black font-black py-4 px-10 rounded-xl shadow-[0_0_20px_rgba(255,255,255,0.3)] hover:scale-105 transition-transform">COLLECT & REPLAY</button>
             </div>`;
         addXP(500);
@@ -373,30 +374,24 @@ function showResultOverlay(isWin) {
     document.getElementById('btn-collect').onclick = () => {
         overlay.classList.add('hidden');
         overlay.classList.remove('flex');
-        
-        // Reset UI
-        document.getElementById('status-area').classList.add('hidden');
-        document.getElementById('controls-area').classList.remove('hidden');
+        document.getElementById('status-area').classList.add('hidden-force');
+        document.getElementById('status-area').classList.remove('flex');
+        document.getElementById('controls-area').classList.remove('hidden-force');
         document.getElementById('progress-bar').classList.remove('finish');
         document.getElementById('progress-bar').style.width = '0%';
-        
         [1,2,3].forEach(i => {
             const el = document.getElementById(`slot-${i}`);
             el.className = "slot-box rounded-2xl h-28 flex items-center justify-center text-5xl font-black text-zinc-700 transition-all";
             el.innerText = "?";
         });
-        
         FortunePoolPage.loadHistory();
         loadUserData(true);
     };
 }
 
-// ============================================
-// 3. LOGIC (TRANSACTION)
-// ============================================
-
 async function executeTransaction() {
     if (!State.isConnected) return showToast("Connect wallet", "error");
+    if (!gameState.systemReady) { showToast("System Offline", "error"); FortunePoolPage.checkReqs(); return; }
     if (gameState.betAmount <= 0) return;
 
     const btn = document.getElementById('btn-spin');
@@ -412,17 +407,19 @@ async function executeTransaction() {
     try {
         const allowance = await State.bkcTokenContract.allowance(State.userAddress, addresses.fortunePool);
         if (allowance < amountWei) {
-            btn.innerHTML = `<div class="loader inline-block"></div> APPROVING (ONE-TIME)...`;
+            btn.innerHTML = `<div class="loader inline-block"></div> APPROVING...`;
             const tx = await State.bkcTokenContract.approve(addresses.fortunePool, ethers.MaxUint256);
             await tx.wait();
         }
 
-        btn.innerHTML = `<div class="loader inline-block"></div> SENDING TO ORACLE...`;
+        btn.innerHTML = `<div class="loader inline-block"></div> CONFIRMING...`;
         const tx = await State.actionsManagerContract.participate(amountWei, gameState.guesses, gameState.isCumulative, { value: fee });
         
-        startSpinning(); // START VISUALS IMMEDIATELY
+        startSpinning(); // VAI PARA TELA DE LOADING
         await tx.wait();
 
+        updateProgressBar(40, "BLOCK MINED. WAITING ORACLE...");
+        
         const ctr = await safeContractCall(State.actionsManagerContract, 'gameCounter', [], 0, 2, true);
         waitForOracle(Number(ctr));
 
@@ -431,55 +428,57 @@ async function executeTransaction() {
         btn.disabled = false;
         btn.innerHTML = "START MINING";
         showToast("Transaction Failed", "error");
-        // Reset Visuals if failed early
-        document.getElementById('status-area').classList.add('hidden');
-        document.getElementById('controls-area').classList.remove('hidden');
+        document.getElementById('status-area').classList.add('hidden-force');
+        document.getElementById('controls-area').classList.remove('hidden-force');
     }
 }
 
 async function waitForOracle(gameId) {
     let attempts = 0;
+    let progress = 40;
     if (gameState.pollInterval) clearInterval(gameState.pollInterval);
 
     gameState.pollInterval = setInterval(async () => {
         attempts++;
-        if (attempts > 60) { // 3 min
+        progress += 2; 
+        if(progress > 95) progress = 95;
+        updateProgressBar(progress, "ORACLE CONSENSUS...");
+
+        if (attempts > 60) {
             clearInterval(gameState.pollInterval);
             stopSpinning([0,0,0], 0n);
-            showToast("Oracle delay. Check history later.", "info");
+            showToast("Oracle delay.", "info");
             return;
         }
 
         try {
-            // Check individual slots (Array mapping fix)
             const p1 = safeContractCall(State.actionsManagerContract, 'gameResults', [gameId, 0], 0n, 0, true);
             const p2 = safeContractCall(State.actionsManagerContract, 'gameResults', [gameId, 1], 0n, 0, true);
             const p3 = safeContractCall(State.actionsManagerContract, 'gameResults', [gameId, 2], 0n, 0, true);
             const [r1, r2, r3] = await Promise.all([p1, p2, p3]);
 
             if (Number(r1) !== 0) {
+                clearInterval(gameState.pollInterval);
                 const rolls = [Number(r1), Number(r2), Number(r3)];
                 
-                // Calculate Win (Visual Only - Real is on Chain)
+                // --- 🔴 CÁLCULO VISUAL ATUALIZADO (2x, 5x, 100x) ---
                 let win = 0n;
-                // Simple check for visuals
                 if(rolls[0] === gameState.guesses[0] || rolls[1] === gameState.guesses[1] || rolls[2] === gameState.guesses[2]) {
                     let mult = 0;
-                    if(rolls[0]===gameState.guesses[0]) mult=3;
-                    if(rolls[1]===gameState.guesses[1]) mult= gameState.isCumulative ? mult+10 : Math.max(mult, 10);
-                    if(rolls[2]===gameState.guesses[2]) mult= gameState.isCumulative ? mult+100 : Math.max(mult, 100);
+                    if(rolls[0]===gameState.guesses[0]) mult=2; // 2x Tier 1
+                    if(rolls[1]===gameState.guesses[1]) mult= gameState.isCumulative ? mult+5 : Math.max(mult, 5); // 5x Tier 2
+                    if(rolls[2]===gameState.guesses[2]) mult= gameState.isCumulative ? mult+100 : Math.max(mult, 100); // 100x Tier 3
                     win = ethers.parseEther((gameState.betAmount * mult).toString());
                 }
                 
                 stopSpinning(rolls, win);
             }
         } catch (e) {}
-    }, 3000);
+    }, 2000);
 }
 
-// ============================================
-// 4. EXPORTS
-// ============================================
+// ... (Restante do arquivo export mantido igual) ...
+// (Boilerplate de exports para brevidade, mas está completo acima)
 
 function updateGamificationUI() {
     const el = document.getElementById('currentLevel');
@@ -489,11 +488,27 @@ function updateGamificationUI() {
 export const FortunePoolPage = {
     loadPoolBalance: async () => { /* ... */ },
     checkReqs: async () => {
-        if(!State.isConnected) return;
-        let fee = State.systemData?.oracleFeeInWei ? BigInt(State.systemData.oracleFeeInWei) : 0n;
-        if (gameState.isCumulative) fee = fee * 5n;
         const el = document.getElementById('oracleFeeStatus');
-        if(el) el.innerText = `FEE: ${ethers.formatEther(fee)} ETH`;
+        if(!State.isConnected) { if(el) el.innerHTML = `<span class="text-zinc-500">Connect Wallet</span>`; return; }
+        
+        if (!State.systemData || !State.systemData.oracleFeeInWei) await loadSystemDataFromAPI();
+
+        let fee = State.systemData?.oracleFeeInWei ? BigInt(State.systemData.oracleFeeInWei) : 0n;
+        if (fee === 0n) {
+            gameState.systemReady = false;
+            if(el) el.innerHTML = `<span class="text-red-500 cursor-pointer font-bold" onclick="FortunePoolPage.checkReqs()">⚠️ OFFLINE</span>`;
+            const btn = document.getElementById('btn-spin');
+            if(btn) { btn.disabled = true; btn.innerText = "SYSTEM OFFLINE"; }
+        } else {
+            gameState.systemReady = true;
+            if (gameState.isCumulative) fee = fee * 5n;
+            if(el) el.innerText = `FEE: ${ethers.formatEther(fee)} ETH`;
+            const inp = document.getElementById('bet-input');
+            if(inp && parseFloat(inp.value) > 0) {
+                const btn = document.getElementById('btn-spin');
+                if(btn) { btn.disabled = false; btn.innerText = "START MINING"; }
+            }
+        }
     },
     loadHistory: async () => {
         const list = document.getElementById('gameHistoryList');
@@ -520,7 +535,6 @@ export const FortunePoolPage = {
         const container = document.getElementById('actions');
         if (!addresses.fortunePool) { container.innerHTML = "Error Config"; return; }
         
-        // CONTAINER PRINCIPAL (IDÊNTICO À LÓGICA ANTERIOR)
         container.innerHTML = `
             <div class="fortune-pool-wrapper max-w-2xl mx-auto py-8 animate-fadeIn">
                 <header class="flex justify-between items-end border-b border-zinc-800 pb-4 mb-6">
@@ -530,7 +544,7 @@ export const FortunePoolPage = {
                 <div class="glass-panel p-1 rounded-3xl relative overflow-hidden min-h-[450px] flex flex-col justify-center bg-black/40">
                     <div id="game-interaction-area" class="p-4 transition-opacity duration-300"></div>
                 </div>
-                <div class="flex justify-between text-[10px] text-zinc-500 font-mono mt-4 px-4"><span>System: Online</span><span id="oracleFeeStatus">Fee: ...</span></div>
+                <div class="flex justify-between text-[10px] text-zinc-500 font-mono mt-4 px-4"><span>System: Online</span><span id="oracleFeeStatus">Checking...</span></div>
                 <div class="mt-8"><h4 class="text-zinc-500 text-xs font-bold uppercase mb-2 ml-2">Recent Activity</h4><div class="bg-zinc-900/50 rounded-xl overflow-hidden"><table class="w-full"><tbody id="gameHistoryList"></tbody></table></div></div>
             </div>`;
         
