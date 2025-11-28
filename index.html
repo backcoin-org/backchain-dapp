@@ -128,22 +128,29 @@
                         <i class="fa-solid fa-dice w-5 text-center"></i>
                         <span>Fortune Pool</span>
                     </a>
-                    <a data-target="airdrop" class="sidebar-link flex items-center gap-4 py-2.5 px-4 rounded-lg transition-colors text-zinc-400 hover:text-white hover:bg-zinc-700"><i class="fa-solid fa-parachute-box w-5 text-center"></i><span>Airdrop</span></a>
                     <a data-target="notary" class="sidebar-link flex items-center gap-4 py-2.5 px-4 rounded-lg transition-colors text-zinc-400 hover:text-white hover:bg-zinc-700">
                         <i class="fa-solid fa-stamp w-5 text-center"></i><span>Decentralized Notary</span>
                     </a>
+                    <a data-target="airdrop" class="sidebar-link flex items-center gap-4 py-2.5 px-4 rounded-lg transition-colors text-zinc-400 hover:text-white hover:bg-zinc-700"><i class="fa-solid fa-parachute-box w-5 text-center"></i><span>Airdrop</span></a>
                     <a data-target="tokenomics" class="sidebar-link flex items-center gap-4 py-2.5 px-4 rounded-lg transition-colors text-zinc-400 hover:text-white hover:bg-zinc-700">
                         <i class="fa-solid fa-chart-line w-5 text-center"></i><span>Tokenomics</span>
                     </a>
-                    <a title="Coming Soon" class="sidebar-link flex items-center justify-between gap-4 py-2.5 px-4 rounded-lg transition-colors text-zinc-400 opacity-50 cursor-not-allowed">
+                    
+                    <a data-target="creditcard" class="sidebar-link flex items-center justify-between gap-4 py-2.5 px-4 rounded-lg transition-colors text-zinc-400 hover:text-white hover:bg-zinc-700">
+                        <div class="flex items-center gap-4"><i class="fa-solid fa-credit-card w-5 text-center"></i><span>BKC Card</span></div>
+                        <span class="text-xs bg-amber-500/20 text-amber-400 font-semibold px-2 py-0.5 rounded-full border border-amber-500/30">Demo</span>
+                    </a>
+
+                    <a data-target="dex" class="sidebar-link flex items-center justify-between gap-4 py-2.5 px-4 rounded-lg transition-colors text-zinc-400 hover:text-white hover:bg-zinc-700">
                         <div class="flex items-center gap-4"><i class="fa-solid fa-shuffle w-5 text-center"></i><span>DEX Swap</span></div>
-                        <span class="text-xs bg-zinc-700 text-zinc-300 font-semibold px-2 py-0.5 rounded-full">Soon</span>
+                        <span class="text-xs bg-zinc-700 text-zinc-300 font-semibold px-2 py-0.5 rounded-full">Demo</span>
                     </a>
-                    <a title="Coming Soon" class="sidebar-link flex items-center justify-between gap-4 py-2.5 px-4 rounded-lg transition-colors text-zinc-400 opacity-50 cursor-not-allowed">
+
+                    <a data-target="dao" class="sidebar-link flex items-center justify-between gap-4 py-2.5 px-4 rounded-lg transition-colors text-zinc-400 hover:text-white hover:bg-zinc-700">
                         <div class="flex items-center gap-4"><i class="fa-solid fa-landmark w-5 text-center"></i><span>DAO</span></div>
-                        <span class="text-xs bg-zinc-700 text-zinc-300 font-semibold px-2 py-0.5 rounded-full">Soon</span>
+                        <span class="text-xs bg-zinc-700 text-zinc-300 font-semibold px-2 py-0.5 rounded-full">Demo</span>
                     </a>
-                    </div>
+                </div>
 
                 <div id="admin-link-container" class="mt-4 pt-4 border-t border-zinc-700" style="display: none;"><a data-target="admin" id="admin-link" class="sidebar-link flex items-center gap-4 py-2.5 px-4 rounded-lg transition-colors text-red-400 hover:text-white hover:bg-red-500/50"><i class="fa-solid fa-user-shield w-5 text-center"></i><span>Admin Panel</span></a></div>
 
@@ -192,12 +199,10 @@
 
                     <section id="dashboard" class=""> 
                         <div id="initial-loader-container" class="flex flex-col items-center justify-center min-h-[65vh] animate-fadeIn relative">
-                            
                             <div class="absolute inset-0 pointer-events-none flex items-center justify-center opacity-5">
                                 <i class="fa-solid fa-gear text-[12rem] animate-construct-gear absolute top-0 left-0 text-zinc-500"></i>
                                 <i class="fa-solid fa-gear text-[10rem] animate-construct-gear-rev absolute bottom-0 right-0 text-zinc-500"></i>
                             </div>
-
                             <div class="relative mb-10">
                                 <div class="absolute inset-0 bg-amber-500 blur-3xl opacity-20 animate-pulse-slow rounded-full"></div>
                                 <div class="relative z-20 animate-bounce-slow">
@@ -210,55 +215,34 @@
                                     </div>
                                 </div>
                             </div>
-
                             <h2 class="text-2xl md:text-3xl font-bold text-white mb-3 tracking-tight font-display text-center">Building the Economy</h2>
                             <p id="loading-status-text" class="text-zinc-400 text-sm mb-8 font-mono h-6 text-center w-full max-w-md">Initializing protocol...</p>
-
                             <div class="w-64 md:w-80 h-2 bg-zinc-800 rounded-full overflow-hidden relative border border-zinc-700/50 shadow-inner">
                                 <div id="loading-progress-bar" class="h-full bg-gradient-to-r from-amber-600 via-yellow-500 to-amber-600 bg-[length:200%_100%] animate-gradient-x rounded-full transition-all duration-300 ease-out" style="width: 0%"></div>
                             </div>
-                            
                             <div class="mt-3 flex items-center gap-2">
                                 <span id="loading-percentage" class="text-amber-400 font-mono font-bold text-xl">0</span>
                                 <span class="text-amber-500/80 text-sm font-bold">%</span>
                             </div>
                         </div>
-
                         <script>
                             (function() {
                                 const bar = document.getElementById('loading-progress-bar');
                                 const txt = document.getElementById('loading-percentage');
                                 const status = document.getElementById('loading-status-text');
                                 let progress = 0;
-                                
-                                const messages = [
-                                    "Establishing secure connection...",
-                                    "Syncing block data...",
-                                    "Loading market liquidity...",
-                                    "Verifying smart contracts...",
-                                    "Fetching user profile...",
-                                    "Finalizing interface..."
-                                ];
-
+                                const messages = ["Establishing secure connection...", "Syncing block data...", "Loading market liquidity...", "Verifying smart contracts...", "Fetching user profile...", "Finalizing interface..."];
                                 const interval = setInterval(() => {
                                     const increment = progress < 70 ? Math.random() * 3 : Math.random() * 1;
                                     progress += increment;
-                                    
-                                    // Trava em 99% até o app.js substituir o conteúdo
                                     if (progress > 99) progress = 99;
-
                                     if (bar && txt && status) {
                                         bar.style.width = `${progress}%`;
                                         txt.innerText = Math.floor(progress);
-                                        
                                         const msgIndex = Math.floor((progress / 100) * messages.length);
-                                        if (messages[msgIndex] && status.innerText !== messages[msgIndex]) {
-                                            status.innerText = messages[msgIndex];
-                                        }
-                                    } else {
-                                        clearInterval(interval);
-                                    }
-                                }, 80); // Velocidade
+                                        if (messages[msgIndex] && status.innerText !== messages[msgIndex]) status.innerText = messages[msgIndex];
+                                    } else { clearInterval(interval); }
+                                }, 80);
                             })();
                         </script>
                     </section>
@@ -276,6 +260,10 @@
                     <section id="about" class="hidden"></section>
                     <section id="admin" class="hidden"></section>
                     <section id="socials" class="hidden"></section>
+                    
+                    <section id="creditcard" class="hidden"></section>
+                    <section id="dex" class="hidden"></section>
+                    <section id="dao" class="hidden"></section>
 
                 </div>
             </main>

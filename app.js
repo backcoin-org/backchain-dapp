@@ -1,5 +1,5 @@
 // js/app.js
-// ✅ VERSÃO FINAL: Inicialização Forçada Corrigida
+// ✅ VERSÃO FINAL: Inicialização Forçada Corrigida + Novas Páginas Demo
 
 const inject = window.inject || (() => { console.warn("Dev Mode: Analytics disabled."); });
 if (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
@@ -31,13 +31,17 @@ import { NotaryPage } from './pages/NotaryPage.js';
 import { RentalPage } from './pages/RentalPage.js';
 import { SocialMediaPage } from './pages/SocialMedia.js';
 
+// NOVOS IMPORTS DE DEMONSTRAÇÃO
+import { CreditCardPage } from './pages/CreditCardPage.js';
+import { DexPage } from './pages/DexPage.js';
+import { DaoPage } from './pages/DaoPage.js';
+
 // ============================================================================
 // 2. CONFIGURATION & STATE
 // ============================================================================
 
 const ADMIN_WALLET = '0x03aC69873293cD6ddef7625AfC91E3Bd5434562a'; 
 
-// 🔴 MUDANÇA IMPORTANTE: Inicia como null para forçar o primeiro render
 let activePageId = null; 
 let currentPageCleanup = null;
 let uiUpdatePending = false; 
@@ -56,7 +60,11 @@ const routes = {
     'admin': AdminPage,
     'presale': PresalePage,
     'rental': RentalPage,
-    'socials': SocialMediaPage
+    'socials': SocialMediaPage,
+    // NOVAS ROTAS
+    'creditcard': CreditCardPage,
+    'dex': DexPage,
+    'dao': DaoPage
 };
 
 // ============================================================================
@@ -86,7 +94,6 @@ function navigateTo(pageId, forceUpdate = false) {
 
     if (!pageContainer) return;
 
-    // Se a página solicitada for a mesma da atual e não for update forçado, tenta apenas atualizar dados
     if (activePageId === pageId && !forceUpdate) {
         if (routes[pageId] && typeof routes[pageId].update === 'function') {
             routes[pageId].update(State.isConnected);
@@ -94,13 +101,11 @@ function navigateTo(pageId, forceUpdate = false) {
         return; 
     }
 
-    // Cleanup da página anterior
     if (currentPageCleanup && typeof currentPageCleanup === 'function') {
         currentPageCleanup();
         currentPageCleanup = null;
     }
 
-    // Esconde todas as seções visualmente
     Array.from(pageContainer.children).forEach(child => {
         if (child.tagName === 'SECTION') {
             child.classList.add('hidden');
@@ -108,7 +113,6 @@ function navigateTo(pageId, forceUpdate = false) {
         }
     });
 
-    // Atualiza Menu Lateral
     navItems.forEach(item => {
         item.classList.remove('active');
         item.classList.add('text-zinc-400', 'hover:text-white', 'hover:bg-zinc-700');
@@ -116,25 +120,20 @@ function navigateTo(pageId, forceUpdate = false) {
 
     const targetPage = document.getElementById(pageId);
     
-    // Se a seção HTML existe e temos a rota no JS
     if (targetPage && routes[pageId]) {
         targetPage.classList.remove('hidden');
         targetPage.classList.add('active');
         
-        // Verifica se é uma navegação real (mudança de rota)
         const isNewPage = activePageId !== pageId;
         activePageId = pageId;
 
-        // Ativa o link no menu
         const activeNavItem = document.querySelector(`.sidebar-link[data-target="${pageId}"]`);
         if (activeNavItem) {
             activeNavItem.classList.remove('text-zinc-400', 'hover:text-white', 'hover:bg-zinc-700');
             activeNavItem.classList.add('active');
         }
 
-        // 🔴 Renderiza a página
         if (routes[pageId] && typeof routes[pageId].render === 'function') {
-            // Passamos isNewPage OR forceUpdate para garantir renderização quando necessário
             routes[pageId].render(isNewPage || forceUpdate);
         }
         
@@ -145,7 +144,6 @@ function navigateTo(pageId, forceUpdate = false) {
         if (isNewPage) window.scrollTo(0,0);
 
     } else {
-        // Fallback se a rota não existir
         if(pageId !== 'dashboard') {
             console.warn(`Route '${pageId}' not found, redirecting to dashboard.`);
             navigateTo('dashboard', true);
@@ -175,7 +173,6 @@ function performUIUpdate(forcePageUpdate) {
     const connectButtonMobile = document.getElementById('connectButtonMobile');
     const mobileAppDisplay = document.getElementById('mobileAppDisplay');
     
-    // Atualiza botões e textos de conexão
     if (State.isConnected && State.userAddress) {
         const balanceString = formatLargeBalance(State.currentUserBalance);
         
@@ -212,14 +209,11 @@ function performUIUpdate(forcePageUpdate) {
         if (statUserBalanceEl) statUserBalanceEl.textContent = '--';
     }
 
-    // Lógica de Atualização da Página Atual
-    // Se activePageId for null (primeiro load), forçamos 'dashboard'
     const targetPage = activePageId || 'dashboard';
 
     if (forcePageUpdate || !activePageId) {
         navigateTo(targetPage, true);
     } else {
-        // Update leve se já estivermos na página
         if (routes[targetPage] && typeof routes[targetPage].update === 'function') {
             routes[targetPage].update(State.isConnected);
         }
@@ -228,17 +222,10 @@ function performUIUpdate(forcePageUpdate) {
 
 function onWalletStateChange(changes) {
     const { isConnected, address, isNewConnection, wasConnected } = changes;
-    
-    // Força update completo se houve mudança real de conexão
     const shouldForceUpdate = isNewConnection || (isConnected !== wasConnected);
-    
     updateUIState(shouldForceUpdate); 
-    
-    if (isConnected && isNewConnection) {
-        showToast(`Connected: ${formatAddress(address)}`, "success");
-    } else if (!isConnected && wasConnected) {
-        showToast("Wallet disconnected.", "info");
-    }
+    if (isConnected && isNewConnection) showToast(`Connected: ${formatAddress(address)}`, "success");
+    else if (!isConnected && wasConnected) showToast("Wallet disconnected.", "info");
 }
 
 // ============================================================================
@@ -347,8 +334,6 @@ window.addEventListener('load', async () => {
     const preloader = document.getElementById('preloader');
     if(preloader) preloader.style.display = 'none';
     
-    // 🔴 FORÇA O PRIMEIRO RENDER DA DASHBOARD
-    // Isso garante que o esqueleto "Loading..." seja substituído pelo conteúdo real
     navigateTo('dashboard', true);
 
     console.log("✅ App Ready.");
