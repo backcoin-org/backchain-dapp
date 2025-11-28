@@ -18,6 +18,11 @@ async function attemptVerification(
   contractPath?: string
 ) {
   try {
+    if (!contractAddress) {
+      console.log(`⚠️  Pulando ${contractName}: Endereço não encontrado.`);
+      return;
+    }
+
     console.log(`   -> Verificando ${contractName} em ${contractAddress}...`);
     await hre.run("verify:verify", {
       address: contractAddress,
@@ -27,7 +32,7 @@ async function attemptVerification(
     console.log("   ✅ Verificado com sucesso!");
   } catch (error: any) {
     if (error.message.toLowerCase().includes("already verified")) {
-      console.log("   ⚠️  Contrato já verificado.");
+      console.log("   ✅ Contrato já estava verificado.");
     } else {
       console.error(`   ❌ FALHA na verificação (${contractName}): ${error.message}`);
     }
@@ -58,7 +63,8 @@ export async function runScript(hre: HardhatRuntimeEnvironment) {
     fs.readFileSync(addressesFilePath, "utf8")
   );
   
-  const constructorArgs: any[] = []; // Argumentos de construtor vazios para Proxies
+  // Como todos são Proxies UUPS, o construtor é vazio (initializer é usado depois).
+  const constructorArgs: any[] = []; 
 
   console.log("=== Verificando Contratos UUPS (Proxies) ===");
 
@@ -67,24 +73,33 @@ export async function runScript(hre: HardhatRuntimeEnvironment) {
     constructorArgs,
     "contracts/EcosystemManager.sol:EcosystemManager"
   );
+  
   await attemptVerification(
     hre, "MiningManager", addresses.miningManager, 
     constructorArgs,
     "contracts/MiningManager.sol:MiningManager"
   );
+  
   await attemptVerification(
     hre, "DelegationManager", addresses.delegationManager, 
     constructorArgs,
     "contracts/DelegationManager.sol:DelegationManager"
   );
-  // ✅ REMOVIDO: A verificação do RewardManager foi excluída.
+  
   await attemptVerification(
     hre, "DecentralizedNotary", addresses.decentralizedNotary, 
     constructorArgs,
     "contracts/DecentralizedNotary.sol:DecentralizedNotary"
   );
+
+  // ✅ ADICIONADO: Rental Manager (AirBNFT)
+  await attemptVerification(
+    hre, "RentalManager", addresses.rentalManager, 
+    constructorArgs,
+    "contracts/RentalManager.sol:RentalManager"
+  );
   
-  // ✅ CORRIGIDO O NOME DO CONTRATO
+  // ✅ Fortune Pool
   await attemptVerification(
     hre, "FortunePool", addresses.fortunePool, 
     constructorArgs,
@@ -92,10 +107,12 @@ export async function runScript(hre: HardhatRuntimeEnvironment) {
   );
   
   // Verifica a Implementação do Pool (Molde da Fábrica)
+  // Nota: Implementações lógicas geralmente não têm construtor com args se usarem initialize,
+  // mas não são proxies em si mesmas quando deployadas como molde.
   if (addresses.nftLiquidityPool_Implementation) {
     await attemptVerification(
       hre, "NFTLiquidityPool_Implementation", addresses.nftLiquidityPool_Implementation, 
-      [], // Molde não tem construtor, mas não é proxy.
+      [], 
       "contracts/NFTLiquidityPool.sol:NFTLiquidityPool"
     );
   }
@@ -110,17 +127,17 @@ export async function runScript(hre: HardhatRuntimeEnvironment) {
 
   // --- 3. Verificar Contratos Normais (Standard) ---
   
-  console.log("\n=== Verificando Contratos Normais (Standard) ===");
+  console.log("\n=== Verificando Contratos Normais / Tokens ===");
 
   await attemptVerification(
     hre, "BKCToken", addresses.bkcToken,
-    constructorArgs,
+    constructorArgs, // BKCToken também é UUPS
     "contracts/BKCToken.sol:BKCToken"
   );
 
   await attemptVerification(
     hre, "RewardBoosterNFT", addresses.rewardBoosterNFT,
-    constructorArgs,
+    constructorArgs, // RewardBoosterNFT também é UUPS
     "contracts/RewardBoosterNFT.sol:RewardBoosterNFT"
   );
 
