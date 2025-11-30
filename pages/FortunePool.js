@@ -1,5 +1,5 @@
 // js/pages/FortunePool.js
-// ✅ VERSÃO FINAL V12.6: Additive Bets (+0.5, +1...) + Instant Replay Fix
+// ✅ VERSÃO FINAL V14: Share Buttons (Win/Loss) + Viral Copywriting + Gas Error Handling
 
 import { State } from '../state.js';
 import { loadUserData, safeContractCall, API_ENDPOINTS, loadSystemDataFromAPI } from '../modules/data.js';
@@ -97,10 +97,6 @@ style.innerHTML = `
 
     .hidden-force { display: none !important; }
     
-    .btn-x { background: #000; border: 1px solid #333; }
-    .btn-tg { background: #229ED9; }
-    .btn-wa { background: #25D366; }
-
     .mode-locked { 
         opacity: 0.7; 
         filter: grayscale(1); 
@@ -281,7 +277,6 @@ function renderBettingScreen(container) {
     const inp = document.getElementById('bet-input');
     const btn = document.getElementById('btn-spin');
     
-    // Se já tiver aposta anterior, popula o input
     if (gameState.betAmount > 0) inp.value = gameState.betAmount;
 
     const validate = () => {
@@ -309,12 +304,10 @@ function renderBettingScreen(container) {
 
     inp.oninput = validate;
     
-    // LOGICA DE SOMA (ADDITIVE BETS)
     document.querySelectorAll('.add-bet').forEach(b => b.onclick = () => { 
         let current = parseFloat(inp.value) || 0;
         let toAdd = parseFloat(b.dataset.amt);
         let newVal = current + toAdd;
-        // Limita casas decimais para evitar bugs de float (ex: 0.30000004)
         inp.value = parseFloat(newVal.toFixed(4)); 
         validate(); 
     });
@@ -402,19 +395,35 @@ async function stopSpinning(rolls, winAmount) {
     showResultOverlay(winAmount > 0n);
 }
 
+// -------------------------------------------------------------
+// ✅ SHARE BUTTON LOGIC ADDED HERE (WIN & LOSS SCENARIOS)
+// -------------------------------------------------------------
 function showResultOverlay(isWin) {
     const overlay = document.getElementById('result-overlay');
     overlay.classList.remove('hidden'); overlay.classList.add('flex');
-    const marketingText = `I just won ${gameState.lastWinAmount.toFixed(2)} $BKC on Fortune Pool! Try your luck at`;
-    const url = "https://backcoin.org"; const encText = encodeURIComponent(marketingText);
     
+    const winText = `🏆 I just won ${gameState.lastWinAmount.toFixed(2)} $BKC on the Fortune Pool! The Backchain Protocol is changing the game. Real Yield, Real Utility. 🚀🔥 #BKC #BACKCOIN #AIRDROP`;
+    const lossText = `⛏️ Mining the future with Proof-of-Purchase! Every interaction counts in the Backchain Protocol. Join the revolution. 💎🔨 #BKC #BACKCOIN #AIRDROP`;
+    
+    // Encode text for Twitter Intent
+    const shareText = isWin ? winText : lossText;
+    const shareUrl = `https://twitter.com/intent/tweet?text=${encodeURIComponent(shareText)}&url=${encodeURIComponent('https://backcoin.org')}`;
+
     if (isWin) {
         overlay.innerHTML = `
             <div class="text-center p-6 w-full animate-fadeIn">
                 <div class="text-6xl mb-4">🏆</div>
                 <h2 class="text-4xl font-black text-amber-400 italic mb-2 drop-shadow-lg">BIG WIN!</h2>
                 <div class="text-6xl font-mono font-bold text-white mb-6">${gameState.lastWinAmount.toFixed(2)} <span class="text-xl text-zinc-500">BKC</span></div>
-                <button id="btn-collect" class="bg-white text-black font-black py-4 px-10 rounded-xl shadow-[0_0_20px_rgba(255,255,255,0.3)] hover:scale-105 transition-transform">COLLECT & REPLAY</button>
+                
+                <div class="flex flex-col gap-3 justify-center">
+                    <button id="btn-collect" class="bg-white text-black font-black py-4 px-10 rounded-xl shadow-[0_0_20px_rgba(255,255,255,0.3)] hover:scale-105 transition-transform">
+                        COLLECT & REPLAY
+                    </button>
+                    <button id="btn-share-win" class="bg-[#1DA1F2] hover:bg-[#1a91da] text-white font-bold py-3 px-10 rounded-xl flex items-center justify-center gap-2 transition-all">
+                        <i class="fa-brands fa-twitter"></i> SHARE VICTORY
+                    </button>
+                </div>
             </div>`;
         addXP(500);
     } else {
@@ -422,35 +431,55 @@ function showResultOverlay(isWin) {
             <div class="text-center p-6 w-full animate-fadeIn">
                 <div class="text-6xl mb-4 grayscale opacity-50">💔</div>
                 <h2 class="text-2xl font-bold text-zinc-300 mb-2">NOT THIS TIME</h2>
-                <p class="text-zinc-500 mb-8 text-sm">Proof of Purchase generated.</p>
-                <button id="btn-collect" class="bg-zinc-800 text-white font-bold py-3 px-8 rounded-xl border border-zinc-600 hover:bg-zinc-700">TRY AGAIN</button>
+                <p class="text-zinc-500 mb-8 text-sm">Proof of Purchase generated. Ecosystem mining active.</p>
+                
+                <div class="flex flex-col gap-3 justify-center">
+                    <button id="btn-collect" class="bg-zinc-800 text-white font-bold py-3 px-8 rounded-xl border border-zinc-600 hover:bg-zinc-700">
+                        TRY AGAIN
+                    </button>
+                    <button id="btn-share-loss" class="bg-transparent border border-zinc-600 text-zinc-400 hover:text-white hover:border-zinc-400 font-bold py-3 px-8 rounded-xl transition-all flex items-center justify-center gap-2">
+                        <i class="fa-brands fa-twitter"></i> SHARE MINING
+                    </button>
+                </div>
             </div>`;
         addXP(50);
     }
-    document.getElementById('btn-collect').onclick = () => {
-        overlay.classList.add('hidden'); overlay.classList.remove('flex');
-        document.getElementById('status-area').classList.add('hidden-force'); document.getElementById('status-area').classList.remove('flex');
-        document.getElementById('controls-area').classList.remove('hidden-force');
-        document.getElementById('progress-bar').classList.remove('finish'); document.getElementById('progress-bar').style.width = '0%';
-        [1,2,3].forEach(i => {
-            const el = document.getElementById(`slot-${i}`);
-            el.className = "slot-box rounded-2xl h-20 flex items-center justify-center text-4xl font-black text-zinc-700 transition-all";
-            el.innerText = "?"; el.classList.remove('slot-hit', 'slot-miss');
-        });
-        
-        // INSTANT REPLAY FIX:
-        // Mantém o estado visual do botão "Spin" baseado no valor que já está lá (gameState.betAmount)
-        const btnSpin = document.getElementById('btn-spin');
-        if (btnSpin && gameState.betAmount > 0) {
-            btnSpin.disabled = false;
-            btnSpin.innerText = "SPIN TO WIN";
-        }
-        
-        FortunePoolPage.loadHistory();
-        loadUserData(true);
-    };
+
+    // Attach Listeners
+    document.getElementById('btn-collect').onclick = closeOverlay;
+    
+    if (isWin) {
+        document.getElementById('btn-share-win').onclick = () => window.open(shareUrl, '_blank');
+    } else {
+        document.getElementById('btn-share-loss').onclick = () => window.open(shareUrl, '_blank');
+    }
 }
 
+function closeOverlay() {
+    const overlay = document.getElementById('result-overlay');
+    overlay.classList.add('hidden'); overlay.classList.remove('flex');
+    document.getElementById('status-area').classList.add('hidden-force'); document.getElementById('status-area').classList.remove('flex');
+    document.getElementById('controls-area').classList.remove('hidden-force');
+    document.getElementById('progress-bar').classList.remove('finish'); document.getElementById('progress-bar').style.width = '0%';
+    [1,2,3].forEach(i => {
+        const el = document.getElementById(`slot-${i}`);
+        el.className = "slot-box rounded-2xl h-20 flex items-center justify-center text-4xl font-black text-zinc-700 transition-all";
+        el.innerText = "?"; el.classList.remove('slot-hit', 'slot-miss');
+    });
+    
+    const btnSpin = document.getElementById('btn-spin');
+    if (btnSpin && gameState.betAmount > 0) {
+        btnSpin.disabled = false;
+        btnSpin.innerText = "SPIN TO WIN";
+    }
+    
+    FortunePoolPage.loadHistory();
+    loadUserData(true);
+}
+
+// -------------------------------------------------------------
+// ✅ GAS ERROR HANDLING & REVERT FIX
+// -------------------------------------------------------------
 async function executeTransaction() {
     if (!State.isConnected) return showToast("Connect wallet", "error");
     await FortunePoolPage.checkReqs();
@@ -460,7 +489,6 @@ async function executeTransaction() {
     const amountWei = ethers.parseEther(gameState.betAmount.toString());
     if (amountWei > State.currentUserBalance) return showToast("Insufficient Balance", "error");
     
-    // FEE: 0.001 Default or 0.005 Cumulative
     let fee = 0n;
     if (State.systemData && State.systemData.oracleFeeInWei) { 
         fee = BigInt(State.systemData.oracleFeeInWei); 
@@ -473,6 +501,23 @@ async function executeTransaction() {
 
     if (gameState.isCumulative) fee = fee * 5n;
     
+    // --- CHECK BNB BALANCE FOR GAS & FEE ---
+    try {
+        const bnbBalance = await State.provider.getBalance(State.userAddress);
+        const minRequiredBNB = fee + ethers.parseEther("0.005"); 
+        
+        if (bnbBalance < minRequiredBNB) {
+            showToast("Insufficient BNB for Gas/Fee!", "error");
+            document.getElementById('status-area').classList.add('hidden-force');
+            btn.innerHTML = `<i class="fa-solid fa-cart-shopping"></i> BUY BNB FOR GAS`;
+            btn.classList.add('bg-red-600', 'hover:bg-red-500');
+            btn.onclick = () => {
+                window.open('https://buy.moonpay.com?currencyCode=bnb_bsc', '_blank');
+            };
+            return;
+        }
+    } catch(e) { console.warn("Gas check skipped:", e); }
+
     btn.disabled = true;
     try {
         const allowance = await State.bkcTokenContract.allowance(State.userAddress, addresses.fortunePool);
@@ -489,7 +534,15 @@ async function executeTransaction() {
         waitForOracle(Number(ctr));
     } catch (e) {
         console.error(e); btn.disabled = false; btn.innerText = "START MINING";
-        showToast("Transaction Failed: " + (e.reason || e.message), "error");
+        
+        const msg = e.reason || e.message || "Transaction Failed";
+        if (msg.includes("insufficient funds") || msg.includes("gas required exceeds allowance")) {
+             showToast("Transaction Reverted: Not enough BNB for gas.", "error");
+             btn.innerHTML = "INSUFFICIENT BNB";
+        } else {
+             showToast("Error: " + msg, "error");
+        }
+        
         document.getElementById('status-area').classList.add('hidden-force');
         document.getElementById('controls-area').classList.remove('hidden-force');
     }
@@ -513,8 +566,6 @@ async function waitForOracle(gameId) {
                 clearInterval(gameState.pollInterval);
                 const rolls = [Number(r1), Number(r2), Number(r3)];
                 let win = 0n;
-                
-                // SIMULAÇÃO DE GANHO LOCAL (1.5x, 5x, 50x)
                 if(rolls[0] === gameState.guesses[0] || rolls[1] === gameState.guesses[1] || rolls[2] === gameState.guesses[2]) {
                     let mult = 0;
                     if(rolls[0]===gameState.guesses[0]) mult=1.5; 
@@ -543,7 +594,6 @@ export const FortunePoolPage = {
         if (State.systemData && State.systemData.oracleFeeInWei) { 
             fee = BigInt(State.systemData.oracleFeeInWei); 
         } else {
-            // Fallback
             if (State.actionsManagerContract) {
                 try { fee = await safeContractCall(State.actionsManagerContract, 'oracleFeeInWei', [], 0n); } catch (e) {}
             }
