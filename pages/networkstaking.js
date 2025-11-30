@@ -1,5 +1,5 @@
 // pages/networkstaking.js
-// ✅ VERSÃO FINAL V4.0: Staking Estratégico (Modal) + Update Otimizado
+// ✅ VERSÃO FINAL V4.1: Public Data Sync + UI Reset Fix
 
 const ethers = window.ethers;
 
@@ -32,8 +32,8 @@ let isStakingLoading = false;
 let lastStakingFetch = 0;
 let delegationCurrentPage = 1;
 
-// Estado da NOVA UX (em Dias)
-let currentStakingDuration = 3650; // Padrão: 10 Anos (Max pStake)
+// Estado da UX (em Dias)
+let currentStakingDuration = 3650; // Padrão: 10 Anos
 
 // =========================================================================
 // 1. RENDERIZAÇÃO VISUAL
@@ -96,7 +96,7 @@ function renderEarnLayout() {
                                 
                                 <div class="mt-4 pt-4 border-t border-zinc-700/50 grid grid-cols-2 gap-4">
                                     <div>
-                                        <p class="text-[10px] text-zinc-500">Net Staked (After 0.5% Fee)</p>
+                                        <p class="text-[10px] text-zinc-500">Net Staked (After Fee)</p>
                                         <p class="text-white font-mono text-sm" id="staking-net-display">0.00</p>
                                     </div>
                                     <div class="text-right">
@@ -195,22 +195,24 @@ async function updateStakingData(forceRefresh = false) {
     }
 
     const now = Date.now();
-    // Cache de 1 minuto para dados globais, mas sempre permite refresh da UI
     if (!forceRefresh && isStakingLoading && (now - lastStakingFetch < 60000)) return;
     
     isStakingLoading = true;
     lastStakingFetch = now;
 
     try {
-        // Carrega dados do usuário (saldo, pStake) forçando refresh se necessário
-        await loadUserData(forceRefresh); 
-        await loadUserDelegations(forceRefresh); // Carrega a lista de delegações
+        // [FIX CRÍTICO]: Carregar dados PÚBLICOS e PRIVADOS simultaneamente
+        // Isso garante que o "Total Network Staked" atualize ao clicar no refresh
+        await Promise.all([
+            loadUserData(forceRefresh),
+            loadUserDelegations(forceRefresh),
+            loadPublicData() 
+        ]);
 
         const netPStakeEl = document.getElementById('earn-total-network-pstake');
-        // A rede total PStake é carregada via loadPublicData (Disparado no app.js/wallet.js)
         if(netPStakeEl) netPStakeEl.textContent = formatPStake(State.totalNetworkPStake || 0n);
 
-        // Atualiza Cards
+        // Atualiza Cards do Usuário
         const balDisplay = document.getElementById('staking-balance-display');
         const myPStakeDisplay = document.getElementById('earn-my-pstake');
         
@@ -235,7 +237,10 @@ async function updateStakingData(forceRefresh = false) {
         }
 
         renderDelegationsList();
-        updateSimulation(); // Recalcula simulação na tela para garantir que o net/pStake esteja correto
+        
+        // Disparar uma atualização visual da simulação para garantir consistência
+        const amountInput = document.getElementById('staking-amount-input');
+        if (amountInput) amountInput.dispatchEvent(new Event('input'));
 
     } catch (error) {
         console.error("Staking Data Error:", error);
@@ -278,7 +283,6 @@ function renderDelegationsList() {
             const unlockTimestamp = Number(d.unlockTime);
             const nowSeconds = Math.floor(Date.now() / 1000);
             const isLocked = unlockTimestamp > nowSeconds;
-            // Dica: use a função startCountdownTimers no final para ativar o timer
             
             return `
                 <div class="glass-panel p-4 flex flex-col sm:flex-row justify-between items-center gap-4 border border-zinc-800">
@@ -333,8 +337,7 @@ function calculatePStake(amount, duration) {
         const amountBig = BigInt(amount);
         const durationBig = BigInt(duration);
         const daySeconds = 86400n;
-        const divisor = 10n**18n; // Divisor para normalizar o pStake
-        // Cálculo: (Valor Staked * Duração em Dias) / Divisor
+        const divisor = 10n**18n; 
         return (amountBig * (durationBig / daySeconds)) / divisor;
     } catch { return 0n; }
 }
@@ -357,7 +360,6 @@ function setupStakingListeners() {
     const warningBox = document.getElementById('duration-warning');
     const strategyBadge = document.getElementById('strategy-badge');
 
-    // --- FUNÇÃO DE SIMULAÇÃO PRINCIPAL (Recalcula tudo) ---
     const updateSimulation = () => {
         const amountVal = amountInput.value;
         
@@ -371,7 +373,8 @@ function setupStakingListeners() {
         try {
             const amountWei = ethers.parseUnits(amountVal, 18);
             
-            const DELEGATION_FEE_BIPS = 0n; // Set in Hub, but use 0 here or fetch
+            // Taxa dinâmica (Ex: 0%, buscar de State.systemFees se disponível)
+            const DELEGATION_FEE_BIPS = State.systemFees?.["DELEGATION_FEE_BIPS"] || 0n; 
             const feeWei = (amountWei * DELEGATION_FEE_BIPS) / 10000n;
             const netWei = amountWei - feeWei;
             
@@ -397,7 +400,6 @@ function setupStakingListeners() {
     const updateModalUI = () => {
         const days = parseInt(modalSlider.value);
         const years = (days / 365).toFixed(1);
-        
         modalDisplay.textContent = `${days} Days (${years} Years)`;
         
         if (days < 3600) {
@@ -414,7 +416,6 @@ function setupStakingListeners() {
     const applyStrategy = () => {
         currentStakingDuration = parseInt(modalSlider.value);
         
-        // Atualiza Badge
         const durationName = currentStakingDuration >= 3600 
             ? `Diamond Hands (${(currentStakingDuration/365).toFixed(0)}Y)`
             : `Custom (${currentStakingDuration} Days)`;
@@ -425,15 +426,14 @@ function setupStakingListeners() {
             
         strategyBadge.innerHTML = `<i class="fa-solid ${currentStakingDuration >= 3600 ? 'fa-gem' : 'fa-clock'}"></i> <span class="font-bold text-sm">${durationName}</span>`;
 
-        // Fecha modal
         modal.classList.add('opacity-0');
         modal.querySelector('div').classList.add('scale-95');
         setTimeout(() => modal.classList.add('hidden'), 300);
         
-        updateSimulation(); // Recalcula pStake
+        updateSimulation(); 
     };
 
-    // --- Modal Event Setup ---
+    // --- Events ---
     if (openModalBtn) {
         openModalBtn.addEventListener('click', () => {
             modalSlider.value = currentStakingDuration;
@@ -452,7 +452,6 @@ function setupStakingListeners() {
         applyStrategyBtn.addEventListener('click', applyStrategy);
     }
 
-    // --- Main Input Event Setup ---
     if(amountInput) {
         amountInput.addEventListener('input', updateSimulation);
         
@@ -468,19 +467,18 @@ function setupStakingListeners() {
 
         confirmBtn.addEventListener('click', async () => {
             const amountWei = ethers.parseUnits(amountInput.value, 18);
-            // Duração é enviada em segundos
             const durationSec = BigInt(currentStakingDuration) * 86400n; 
             
             confirmBtn.innerHTML = `<div class="loader inline-block mr-2"></div> Sending...`;
             confirmBtn.disabled = true;
 
-            // Transação: executeDelegation(amount, durationSec, boosterId, btn)
             const success = await executeDelegation(amountWei, durationSec, 0, confirmBtn);
             
             if (success) {
+                // [FIX CRÍTICO]: Limpar e Resetar a Simulação Visual
                 amountInput.value = "";
-                updateSimulation();
-                updateStakingData(true); // FORÇA REFRESH APÓS SUCESSO
+                updateSimulation(); 
+                updateStakingData(true); 
             } else {
                 confirmBtn.innerHTML = `Delegate Now <i class="fa-solid fa-arrow-right ml-2"></i>`;
                 confirmBtn.disabled = false;
@@ -488,12 +486,10 @@ function setupStakingListeners() {
         });
     }
 
-    // --- Refresh Button ---
     if(refreshBtn) {
         refreshBtn.addEventListener('click', () => {
             const icon = refreshBtn.querySelector('i');
             icon.classList.add('fa-spin');
-            // FORÇA REFRESH DE TODOS OS DADOS APÓS O BOTÃO SER CLICADO
             updateStakingData(true).then(() => icon.classList.remove('fa-spin'));
         });
     }
@@ -529,7 +525,6 @@ export const EarnPage = {
         renderEarnLayout();
         
         if (State.isConnected) {
-            // Se for nova página, força o refresh inicial para pegar o pStake total da rede
             await updateStakingData(isNewPage); 
         } else {
             resetStakingUI();
@@ -537,7 +532,6 @@ export const EarnPage = {
     },
     
     update(isConnected) {
-        // Chamado via app.js para update leve de dados.
         updateStakingData();
     }
 };

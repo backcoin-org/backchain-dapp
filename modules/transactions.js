@@ -1,5 +1,5 @@
 // js/modules/transactions.js
-// ✅ VERSÃO FINAL V4.0: Optimistic UI + Sync Robusto + Tratamento de Erro Humanizado
+// ✅ VERSÃO FINAL V4.2: Fix "Approval to Current Owner" (Proteção de Propriedade)
 
 const ethers = window.ethers;
 
@@ -19,7 +19,6 @@ const BIPS_DENOMINATOR = 10000n;
 
 /**
  * Generic wrapper to execute a transaction and provide UI feedback.
- * NOW WITH OPTIMISTIC UPDATES V4.0
  */
 async function executeTransaction(txPromise, successMessage, failMessage, btnElement) {
     if (!btnElement) {
@@ -43,22 +42,17 @@ async function executeTransaction(txPromise, successMessage, failMessage, btnEle
         
         showToast(successMessage, 'success', receipt.hash);
 
-        // --- OPTIMISTIC UPDATE V4 ---
-        // 1. Atualização Imediata (Tenta ler o novo estado na hora)
+        // --- OPTIMISTIC UPDATE ---
         await loadUserData(); 
         
-        // Se for operação de Rental, atualiza a lista visualmente já
         if (window.location.hash.includes('rental') || window.location.hash.includes('dashboard')) {
              await loadRentalListings(); 
         }
         
-        // 2. Atualização de Segurança (3s depois para garantir propagação RPC e Indexer)
+        // Atualização de segurança
         setTimeout(async () => {
-            console.log("🔄 Sync Check (Safety Update)...");
             await loadUserData();
             if (typeof loadRentalListings === 'function') await loadRentalListings();
-            
-            // Força renderização da UI se disponível
             if (window.updateUIState) window.updateUIState(true);
         }, 3000);
 
@@ -67,16 +61,13 @@ async function executeTransaction(txPromise, successMessage, failMessage, btnEle
         console.error("Transaction Error:", e);
         let reason = 'Transaction rejected or failed.';
 
-        // Extração profunda do erro
         if (e.reason) reason = e.reason;
         else if (e.data && e.data.message) reason = e.data.message;
         else if (e.message) reason = e.message;
 
-        // Mapeamento de Erros Humanizado
         if (e.code === 'ACTION_REJECTED') reason = 'You rejected the transaction in your wallet.';
         if (e.code === 'INSUFFICIENT_FUNDS') reason = 'You do not have enough ETH (Sepolia) for gas fees.';
         
-        // Erros de Contrato Específicos
         if (reason.includes("Notary: Insufficient pStake")) reason = "Minimum pStake requirement not met.";
         if (reason.includes("Fee transfer failed") || reason.includes("insufficient allowance")) reason = "Insufficient BKC balance or allowance.";
         if (reason.includes("NP: No available NFTs")) reason = "Pool is currently sold out.";
@@ -99,7 +90,8 @@ async function executeTransaction(txPromise, successMessage, failMessage, btnEle
 }
 
 /**
- * Ensures the user has approved a specific amount of BKC (ERC20) OR a specific NFT (ERC721).
+ * Ensures approval for ERC20 (Amount) OR ERC721 (TokenID).
+ * INCLUI VERIFICAÇÃO DE PROPRIEDADE REAL (ON-CHAIN) PARA EVITAR ERRO DE RPC.
  */
 async function ensureApproval(tokenContract, spenderAddress, amountOrTokenId, btnElement, purpose) {
     if (!State.signer) return false;
@@ -109,30 +101,24 @@ async function ensureApproval(tokenContract, spenderAddress, amountOrTokenId, bt
         return false;
     }
 
-    const originalText = btnElement ? btnElement.innerHTML : null;
     const setBtnLoading = (text) => {
         if(btnElement) {
             btnElement.innerHTML = `<div class="loader inline-block mr-2"></div> ${text}...`;
             btnElement.disabled = true;
         }
     };
-    const resetBtn = () => {
-         if(btnElement && originalText) {
-             btnElement.innerHTML = originalText;
-             btnElement.disabled = false;
-         }
-    };
 
     try {
-        // --- Logic for ERC20 (Amount is BigInt) ---
-        if (typeof amountOrTokenId === 'bigint') {
-            const requiredAmount = amountOrTokenId;
+        const isERC721 = typeof tokenContract.setApprovalForAll === 'function';
+
+        if (!isERC721) {
+            // --- ERC20 LOGIC ---
+            const requiredAmount = BigInt(amountOrTokenId);
             if (requiredAmount === 0n) return true;
             
             setBtnLoading("Checking Allowance");
             const allowance = await tokenContract.allowance(State.userAddress, spenderAddress);
 
-            // Add tolerance buffer
             const toleratedAmount = (requiredAmount * (BIPS_DENOMINATOR + APPROVAL_TOLERANCE_BIPS)) / BIPS_DENOMINATOR;
 
             if (allowance < toleratedAmount) {
@@ -145,14 +131,41 @@ async function ensureApproval(tokenContract, spenderAddress, amountOrTokenId, bt
             }
             return true;
         } 
-        // --- Logic for ERC721 (TokenID is usually Number or BigInt acting as ID) ---
         else {
+            // --- ERC721 LOGIC ---
             const tokenId = BigInt(amountOrTokenId);
+            setBtnLoading("Verifying Ownership");
+            
+            // 🛑 SANITY CHECK: Verificar proprietário real na Blockchain antes de aprovar
+            try {
+                const currentOwner = await tokenContract.ownerOf(tokenId);
+                
+                // Se o usuário NÃO é o dono
+                if (currentOwner.toLowerCase() !== State.userAddress.toLowerCase()) {
+                    console.warn(`Ownership mismatch for Token #${tokenId}. Real Owner: ${currentOwner}`);
+                    showToast("Sync Error: You no longer own this NFT. Refreshing...", "error");
+                    // Força atualização dos dados
+                    await loadUserData(true);
+                    return false; // Aborta para evitar erro de RPC
+                }
+
+                // Se o spender JÁ É o dono (Ex: Pool), não precisa aprovar (e aprovar daria erro)
+                if (currentOwner.toLowerCase() === spenderAddress.toLowerCase()) {
+                    return true;
+                }
+
+            } catch (e) {
+                console.warn("Could not verify owner (Token might be burned)", e);
+                // Se falhar a leitura, tentamos seguir com a aprovação padrão
+            }
+
             setBtnLoading("Checking NFT Approval");
             
             // 1. Check specific approval
-            const approvedAddr = await tokenContract.getApproved(tokenId);
-            // 2. Check operator approval (setApprovalForAll)
+            let approvedAddr = ethers.ZeroAddress;
+            try { approvedAddr = await tokenContract.getApproved(tokenId); } catch(e) {} 
+            
+            // 2. Check operator approval
             const isApprovedAll = await tokenContract.isApprovedForAll(State.userAddress, spenderAddress);
             
             if (approvedAddr.toLowerCase() !== spenderAddress.toLowerCase() && !isApprovedAll) {
@@ -168,8 +181,12 @@ async function ensureApproval(tokenContract, spenderAddress, amountOrTokenId, bt
 
     } catch (e) {
         console.error("Approval Error:", e);
-        showToast(`Approval Error: ${e.reason || e.message || 'Transaction rejected.'}`, "error");
-        resetBtn();
+        if(btnElement) btnElement.disabled = false;
+        
+        let msg = e.reason || e.message || 'Transaction rejected.';
+        if (msg.includes("approval to current owner")) msg = "Token already owned by target.";
+        
+        showToast(`Approval Error: ${msg}`, "error");
         return false;
     }
 }
@@ -182,7 +199,6 @@ async function ensureApproval(tokenContract, spenderAddress, amountOrTokenId, bt
 export async function executeListNFT(tokenId, pricePerHourWei, maxDurationHours, btnElement) {
     if (!State.signer || !addresses.rentalManager) return showToast("Wallet not connected or Config missing", "error");
 
-    // 1. Approve RentalManager to take custody of the NFT
     const approved = await ensureApproval(
         State.rewardBoosterContract, 
         addresses.rentalManager, 
@@ -192,7 +208,6 @@ export async function executeListNFT(tokenId, pricePerHourWei, maxDurationHours,
     );
     if (!approved) return false;
 
-    // 2. Call listNFT
     const rentalContract = new ethers.Contract(addresses.rentalManager, rentalManagerABI, State.signer);
     const txPromise = rentalContract.listNFT(BigInt(tokenId), BigInt(pricePerHourWei), BigInt(maxDurationHours));
     
@@ -202,7 +217,6 @@ export async function executeListNFT(tokenId, pricePerHourWei, maxDurationHours,
 export async function executeRentNFT(tokenId, hoursToRent, totalCostWei, btnElement) {
     if (!State.signer || !addresses.rentalManager) return showToast("Wallet not connected", "error");
 
-    // 1. Approve RentalManager to spend User's BKC
     const approved = await ensureApproval(
         State.bkcTokenContract, 
         addresses.rentalManager, 
@@ -212,7 +226,6 @@ export async function executeRentNFT(tokenId, hoursToRent, totalCostWei, btnElem
     );
     if (!approved) return false;
 
-    // 2. Call rentNFT
     const rentalContract = new ethers.Contract(addresses.rentalManager, rentalManagerABI, State.signer);
     const txPromise = rentalContract.rentNFT(BigInt(tokenId), BigInt(hoursToRent));
 
@@ -393,16 +406,18 @@ export async function executeSellBooster(poolAddress, tokenIdToSell, boosterToke
     }
 
     try {
-        // Approve NFT Transfer
+        // CORREÇÃO: Usar o contrato de NFT correto para aprovação (RewardBooster)
         const approved = await ensureApproval(State.rewardBoosterContract, poolAddress, tokenIdBigInt, btnElement, "NFT Sale");
         if (!approved) return false;
 
         if (btnElement) btnElement.innerHTML = '<div class="loader inline-block"></div> Selling...';
 
         const boosterIdToSend = BigInt(boosterTokenIdForDiscount);
+        const minPrice = 0n; 
+        
         const poolContract = new ethers.Contract(poolAddress, nftPoolABI, State.signer);
 
-        const sellTxPromise = poolContract.sellNFT(tokenIdBigInt, boosterIdToSend);
+        const sellTxPromise = poolContract.sellNFT(tokenIdBigInt, boosterIdToSend, minPrice);
         return await executeTransaction(sellTxPromise, 'Sale successful!', 'Error during sale', btnElement);
 
     } catch (e) {

@@ -1,25 +1,26 @@
 // js/modules/data.js
-// ✅ VERSÃO FINAL V4.1: Cache Robusto (Exclui Requisitos Críticos)
+// ✅ VERSÃO FINAL V5.0: API-First Architecture + RPC Fallback + Smart Caching
 
 const ethers = window.ethers;
 
 import { State } from '../state.js';
-import { addresses, boosterTiers, rentalManagerABI } from '../config.js';
+import { addresses, boosterTiers, rentalManagerABI, rewardBoosterABI } from '../config.js';
 
 // ====================================================================
 // CONSTANTS & UTILITIES
 // ====================================================================
-const API_TIMEOUT_MS = 8000; 
-const CACHE_DURATION_MS = 60000; // 1 minuto cache sistema
-const USER_DATA_CACHE_MS = 10000; // 10 segundos cache usuário (Normal)
-const CONTRACT_READ_CACHE_MS = 10000; // 10 segundos cache RPC (Normal)
+const API_TIMEOUT_MS = 5000; // 5 segundos max para API responder
+const CACHE_DURATION_MS = 60000; // Cache de dados do sistema (1 min)
+const CONTRACT_READ_CACHE_MS = 10000; // Cache de leitura RPC curta (10s)
+const OWNERSHIP_CACHE_MS = 30000; // Cache de dono de NFT (30s)
 
 let systemDataCache = null;
 let systemDataCacheTime = 0;
-let lastBoosterFetchTime = 0; 
 
-// Mapa de Cache RPC
+// Mapa de Cache RPC (Evita chamadas repetidas)
 const contractReadCache = new Map(); 
+// Mapa de Cache de Propriedade (Evita spam de ownerOf)
+const ownershipCache = new Map();
 
 const wait = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
@@ -37,17 +38,20 @@ async function fetchWithTimeout(url, timeoutMs) {
     }
 }
 
+// ENDPOINTS DA SUA API (Firebase Functions)
 export const API_ENDPOINTS = {
     getHistory: 'https://gethistory-4wvdcuoouq-uc.a.run.app',
     getBoosters: 'https://getboosters-4wvdcuoouq-uc.a.run.app',
     getSystemData: 'https://getsystemdata-4wvdcuoouq-uc.a.run.app',
     getNotaryHistory: 'https://getnotaryhistory-4wvdcuoouq-uc.a.run.app',
+    getRentalListings: 'https://getrentallistings-4wvdcuoouq-uc.a.run.app', // NOVO ENDPOINT
+    getUserRentals: 'https://getuserrentals-4wvdcuoouq-uc.a.run.app',       // NOVO ENDPOINT
     uploadFileToIPFS: 'https://uploadfiletoipfs-4wvdcuoouq-uc.a.run.app',   
     claimAirdrop: 'https://us-central1-airdropbackchainnew.cloudfunctions.net/claimAirdrop'
 };
 
 // ====================================================================
-// SAFETY FUNCTIONS (Retry & Jitter & CACHE BYPASS)
+// SAFETY FUNCTIONS (RPC Protection)
 // ====================================================================
 
 function isRateLimitError(e) {
@@ -57,10 +61,19 @@ function isRateLimitError(e) {
     );
 }
 
-/**
- * Wrapper seguro para chamadas de contrato com Cache e Retry.
- * @param {boolean} forceRefresh - Se true, ignora o cache e busca na blockchain.
- */
+// Helper para garantir que temos um contrato válido (Lazy Load)
+function getContractInstance(address, abi, fallbackStateContract) {
+    if (fallbackStateContract) return fallbackStateContract;
+    if (!address || !State.publicProvider) return null;
+    try {
+        return new ethers.Contract(address, abi, State.publicProvider);
+    } catch (e) {
+        console.warn("Failed to create lazy contract instance", e);
+        return null;
+    }
+}
+
+// Wrapper seguro para chamadas de Contrato com Cache e Retry
 export const safeContractCall = async (contract, method, args = [], fallbackValue = 0n, retries = 2, forceRefresh = false) => {
     if (!contract) return fallbackValue;
     
@@ -68,17 +81,14 @@ export const safeContractCall = async (contract, method, args = [], fallbackValu
     const cacheKey = `${contractAddr}-${method}-${JSON.stringify(args)}`;
     const now = Date.now();
 
-    // 🚨 AJUSTE DE EFICIÊNCIA/ECONOMIA: 
-    // Métodos que podem ser cacheados localmente (evitam requisições RPC)
-    // 'getServiceRequirements' foi removido para garantir a leitura fresca para dados críticos.
     const cacheableMethods = [
         'getPoolInfo', 'getBuyPrice', 'getSellPrice', 'getAvailableTokenIds', 
         'getAllListedTokenIds', 'tokenURI', 'boostBips', 'getListing', 
         'balanceOf', 'totalSupply', 'totalNetworkPStake', 'MAX_SUPPLY', 'TGE_SUPPLY',
-        'userTotalPStake', 'pendingRewards', 'isRented', 'getRental'
+        'userTotalPStake', 'pendingRewards', 'isRented', 'getRental', 'ownerOf'
     ];
     
-    // 1. Verifica Cache (Apenas se NÃO for refresh forçado)
+    // Verifica Cache
     if (!forceRefresh && cacheableMethods.includes(method)) {
         const cached = contractReadCache.get(cacheKey);
         if (cached && (now - cached.timestamp < CONTRACT_READ_CACHE_MS)) {
@@ -88,18 +98,18 @@ export const safeContractCall = async (contract, method, args = [], fallbackValu
 
     try {
         const result = await contract[method](...args);
-        
-        // 2. Atualiza Cache (Sempre)
+        // Salva Cache
         if (cacheableMethods.includes(method)) {
             contractReadCache.set(cacheKey, { value: result, timestamp: now });
         }
         return result;
 
     } catch (e) {
+        // Retry em caso de Rate Limit
         if (isRateLimitError(e) && retries > 0) {
             const jitter = Math.floor(Math.random() * 2000); 
             const delayTime = 1500 + jitter; 
-            console.warn(`Rate limit (${method}). Retrying in ${delayTime}ms...`);
+            console.warn(`RPC Rate Limit (${method}). Retrying in ${delayTime}ms...`);
             await wait(delayTime);
             return safeContractCall(contract, method, args, fallbackValue, retries - 1, forceRefresh);
         }
@@ -111,7 +121,7 @@ export const safeBalanceOf = async (contract, address, forceRefresh = false) =>
     safeContractCall(contract, 'balanceOf', [address], 0n, 2, forceRefresh);
 
 // ====================================================================
-// 1. GLOBAL DATA LOADING (Leve - Apenas Header/Footer)
+// 1. GLOBAL DATA LOADING (Configurações do Sistema)
 // ====================================================================
 
 export async function loadSystemDataFromAPI() {
@@ -126,6 +136,7 @@ export async function loadSystemDataFromAPI() {
     }
 
     try {
+        // Tenta pegar da API (Mais rápido)
         const response = await fetchWithTimeout(API_ENDPOINTS.getSystemData, API_TIMEOUT_MS);
         if (!response.ok) throw new Error(`API Status: ${response.status}`);
         
@@ -136,7 +147,8 @@ export async function loadSystemDataFromAPI() {
         systemDataCacheTime = now;
         return true;
     } catch (e) {
-        // Fallbacks críticos
+        // Fallback: Se API falhar, usa valor padrão seguro
+        console.warn("System Data API Failed. Using defaults.");
         if(!State.systemFees['NOTARY_SERVICE']) State.systemFees['NOTARY_SERVICE'] = 100n;
         return false;
     }
@@ -162,8 +174,7 @@ function applySystemDataToState(systemData) {
 
 export async function loadPublicData() {
     if (!State.publicProvider || !State.bkcTokenContractPublic) return;
-
-    // ✅ OTIMIZAÇÃO: Carrega APENAS dados globais essenciais (Supply e Config)
+    // Executa em paralelo
     await Promise.allSettled([
         safeContractCall(State.bkcTokenContractPublic, 'totalSupply', [], 0n),
         loadSystemDataFromAPI()
@@ -171,14 +182,13 @@ export async function loadPublicData() {
 }
 
 // ====================================================================
-// 2. USER BASIC DATA (Leve - Apenas Saldo e Booster Ativo)
+// 2. USER DATA (Básico)
 // ====================================================================
 
 export async function loadUserData(forceRefresh = false) {
     if (!State.isConnected || !State.userAddress) return;
 
     try {
-        // 1. Saldo (Refresh Forçado suportado)
         const balance = await safeBalanceOf(State.bkcTokenContract, State.userAddress, forceRefresh);
         State.currentUserBalance = balance;
 
@@ -187,18 +197,13 @@ export async function loadUserData(forceRefresh = false) {
             State.currentUserNativeBalance = nativeBalance;
         }
 
-        // 2. Booster (API com Bypass de Cache)
+        // Carrega Boosters (API First)
         await loadMyBoostersFromAPI(forceRefresh);
         
-        // 3. pStake do Usuário (Refresh Forçado suportado)
+        // Carrega pStake (On-Chain)
         if (State.delegationManagerContract) {
              const totalUserPStake = await safeContractCall(
-                 State.delegationManagerContract, 
-                 'userTotalPStake', 
-                 [State.userAddress], 
-                 0n, 
-                 2, 
-                 forceRefresh
+                 State.delegationManagerContract, 'userTotalPStake', [State.userAddress], 0n, 2, forceRefresh
              );
              State.userTotalPStake = totalUserPStake;
         }
@@ -207,54 +212,65 @@ export async function loadUserData(forceRefresh = false) {
 }
 
 // ====================================================================
-// 3. PÁGINA ESPECÍFICA: STAKING (Delegações)
+// 3. PÁGINA: STAKING
 // ====================================================================
 
 export async function loadUserDelegations(forceRefresh = false) {
     if (!State.isConnected || !State.delegationManagerContract) return [];
     
     try {
+        // Ainda On-Chain por segurança e dados pessoais
         const delegationsRaw = await safeContractCall(
-            State.delegationManagerContract, 
-            'getDelegationsOf', 
-            [State.userAddress], 
-            [], 
-            2, 
-            forceRefresh
+            State.delegationManagerContract, 'getDelegationsOf', [State.userAddress], [], 2, forceRefresh
         );
         State.userDelegations = delegationsRaw.map((d, index) => ({
             amount: d[0], unlockTime: d[1], lockDuration: d[2], index
         }));
         return State.userDelegations;
     } catch (e) {
-        console.error("Error loading delegations:", e);
         return [];
     }
 }
 
 // ====================================================================
-// 4. PÁGINA ESPECÍFICA: RENTAL MARKET (AirBNFT)
+// 4. PÁGINA: RENTAL MARKET (OTIMIZAÇÃO "API FIRST")
 // ====================================================================
 
 export async function loadRentalListings(forceRefresh = false) {
-    if (!State.publicProvider || !addresses.rentalManager) {
-        State.rentalListings = [];
-        return [];
+    // 1. TENTATIVA RÁPIDA: API (Firebase)
+    // Evita 50 chamadas RPC. Pega JSON pronto do Indexer.
+    try {
+        const response = await fetchWithTimeout(API_ENDPOINTS.getRentalListings, 4000); // 4s timeout
+        if (response.ok) {
+            const listingsFromApi = await response.json();
+            
+            // Enriquece com imagens locais (tiers) para não depender de IPFS
+            const enrichedListings = listingsFromApi.map(item => {
+                const tier = boosterTiers.find(t => t.boostBips === Number(item.boostBips || 0));
+                return {
+                    ...item,
+                    img: tier ? tier.img : 'assets/bkc_logo_3d.png',
+                    name: tier ? tier.name : 'Booster NFT'
+                };
+            });
+
+            State.rentalListings = enrichedListings;
+            // console.log("⚡ Rental listings loaded from API.");
+            return enrichedListings;
+        }
+    } catch (e) {
+        console.warn("⚠️ API Rental Unavailable. Switching to Blockchain Fallback...");
     }
-    
-    const rentalContract = new ethers.Contract(addresses.rentalManager, rentalManagerABI, State.publicProvider);
+
+    // 2. FALLBACK: BLOCKCHAIN (Lento, mas seguro)
+    const rentalContract = getContractInstance(addresses.rentalManager, rentalManagerABI, State.rentalManagerContractPublic);
+    if (!rentalContract) { State.rentalListings = []; return []; }
     
     try {
-        // Pega IDs da Blockchain (RPC) - Suporta refresh forçado
         const listedIds = await safeContractCall(rentalContract, 'getAllListedTokenIds', [], [], 2, forceRefresh);
-        
-        if (!listedIds || listedIds.length === 0) {
-            State.rentalListings = [];
-            return [];
-        }
+        if (!listedIds || listedIds.length === 0) { State.rentalListings = []; return []; }
 
-        // Paginação implícita para não travar UI
-        const listingsToFetch = listedIds.slice(0, 50); 
+        const listingsToFetch = listedIds.slice(0, 30); // Limita a 30 para não travar
         
         const listingsPromises = listingsToFetch.map(async (tokenId) => {
             const listing = await safeContractCall(rentalContract, 'getListing', [tokenId], null, 2, forceRefresh);
@@ -283,18 +299,36 @@ export async function loadRentalListings(forceRefresh = false) {
         return validListings;
 
     } catch (e) {
+        console.error("Rental Fallback Error:", e);
         State.rentalListings = [];
         return [];
     }
 }
 
 export async function loadUserRentals(forceRefresh = false) {
-    if (!State.userAddress || !addresses.rentalManager) {
-        State.myRentals = [];
-        return [];
-    }
+    if (!State.userAddress) { State.myRentals = []; return []; }
+
+    // 1. TENTATIVA API
+    try {
+        const response = await fetchWithTimeout(`${API_ENDPOINTS.getUserRentals}/${State.userAddress}`, 4000);
+        if (response.ok) {
+            const myRentalsApi = await response.json();
+            const enrichedRentals = myRentalsApi.map(item => {
+                const tier = boosterTiers.find(t => t.boostBips === Number(item.boostBips || 0));
+                return {
+                    ...item,
+                    img: tier ? tier.img : 'assets/bkc_logo_3d.png',
+                    name: tier ? tier.name : 'Booster NFT'
+                };
+            });
+            State.myRentals = enrichedRentals;
+            return enrichedRentals;
+        }
+    } catch (e) { /* Fallback silently */ }
     
-    const rentalContract = new ethers.Contract(addresses.rentalManager, rentalManagerABI, State.publicProvider);
+    // 2. FALLBACK BLOCKCHAIN (Itera sobre listagens... ineficiente mas funciona)
+    const rentalContract = getContractInstance(addresses.rentalManager, rentalManagerABI, State.rentalManagerContractPublic);
+    if (!rentalContract) return [];
     
     try {
         const listedIds = await safeContractCall(rentalContract, 'getAllListedTokenIds', [], [], 2, forceRefresh);
@@ -326,87 +360,19 @@ export async function loadUserRentals(forceRefresh = false) {
 }
 
 // ====================================================================
-// HELPER: BOOSTER INFO
+// HELPERS
 // ====================================================================
 
-async function getBoosterInfo(tokenId) {
-    if (!State.rewardBoosterContractPublic && State.publicProvider && addresses.rewardBoosterNFT) {
-         State.rewardBoosterContractPublic = new ethers.Contract(addresses.rewardBoosterNFT, [
-            "function boostBips(uint256) view returns (uint256)", 
-            "function tokenURI(uint256) view returns (string)"
-         ], State.publicProvider);
-    }
-    
-    const contractToUse = State.rewardBoosterContract || State.rewardBoosterContractPublic;
-    if (!contractToUse) return { boostBips: 0, img: 'assets/bkc_logo_3d.png', name: 'Unknown' };
-    
-    try {
-        const boostBips = await safeContractCall(contractToUse, 'boostBips', [tokenId], 0n);
-        let img = 'assets/bkc_logo_3d.png';
-        let name = `Booster #${tokenId}`;
-        
-        const tier = boosterTiers.find(t => t.boostBips === Number(boostBips));
-        if (tier) {
-            img = tier.img; 
-            name = tier.name;
-        } 
-        
-        return { boostBips: Number(boostBips), img, name };
-    } catch {
-        return { boostBips: 0, img: 'assets/bkc_logo_3d.png', name: 'Unknown' };
-    }
-}
-
-// ====================================================================
-// SHARED: REWARDS CALCULATION
-// ====================================================================
-
-export async function calculateUserTotalRewards() {
-    if (!State.isConnected || !State.delegationManagerContract) {
-        return { stakingRewards: 0n, minerRewards: 0n, totalRewards: 0n };
-    }
-
-    try {
-        const stakingRewards = await safeContractCall(State.delegationManagerContract, 'pendingRewards', [State.userAddress], 0n);
-        const minerRewards = 0n; 
-        const totalRewards = stakingRewards + minerRewards;
-        return { stakingRewards, minerRewards, totalRewards };
-
-    } catch (e) {
-        return { stakingRewards: 0n, minerRewards: 0n, totalRewards: 0n };
-    }
-}
-
-export async function calculateClaimDetails() {
-    if (!State.delegationManagerContract || !State.userAddress) {
-        return { netClaimAmount: 0n, feeAmount: 0n, discountPercent: 0, totalRewards: 0n };
-    }
-    
-    const { totalRewards } = await calculateUserTotalRewards();
-    if (totalRewards === 0n) return { netClaimAmount: 0n, feeAmount: 0n, discountPercent: 0, totalRewards: 0n };
-    
-    let baseFeeBips = State.systemFees?.CLAIM_REWARD_FEE_BIPS || 50n;
-    const boosterData = await getHighestBoosterBoostFromAPI(); 
-    let discountBips = State.boosterDiscounts?.[boosterData.highestBoost] || 0n;
-
-    const finalFeeBips = baseFeeBips > discountBips ? baseFeeBips - discountBips : 0n;
-    const feeAmount = (totalRewards * finalFeeBips) / 10000n;
-    
-    return { 
-        netClaimAmount: totalRewards - feeAmount, 
-        feeAmount, 
-        discountPercent: Number(discountBips) / 100, 
-        totalRewards 
-    };
-}
-
+// Calcula o melhor booster (Propriedade ou Aluguel)
 export async function getHighestBoosterBoostFromAPI() {
+    // Garante dados frescos
     await loadMyBoostersFromAPI();
     
     let maxBoost = 0;
     let bestTokenId = null;
     let source = 'none';
 
+    // Checa Boosters Próprios
     if (State.myBoosters && State.myBoosters.length > 0) {
         const highestOwned = State.myBoosters.reduce((max, b) => b.boostBips > max.boostBips ? b : max, State.myBoosters[0]);
         if (highestOwned.boostBips > maxBoost) {
@@ -416,6 +382,7 @@ export async function getHighestBoosterBoostFromAPI() {
         }
     }
     
+    // Checa Boosters Alugados (Aluguel conta como posse temporária para desconto!)
     if (State.myRentals && State.myRentals.length > 0) {
         const highestRented = State.myRentals.reduce((max, r) => r.boostBips > max.boostBips ? r : max, State.myRentals[0]);
         if (highestRented.boostBips > maxBoost) {
@@ -438,30 +405,126 @@ export async function getHighestBoosterBoostFromAPI() {
     };
 }
 
-// 🛡️ API Fetch with Fallback (Stale-While-Revalidate)
-export async function loadMyBoostersFromAPI(forceRefresh = false) {
-    // Se temos dados em cache e NÃO é refresh forçado, retorna cache
-    if (!forceRefresh && State.myBoosters && State.myBoosters.length > 0) {
-        if (Date.now() - lastBoosterFetchTime < USER_DATA_CACHE_MS) return State.myBoosters;
+// Função auxiliar interna para pegar info do booster (usada no fallback)
+async function getBoosterInfo(tokenId) {
+    const minABI = ["function boostBips(uint256) view returns (uint256)"];
+    const contractToUse = getContractInstance(addresses.rewardBoosterNFT, minABI, State.rewardBoosterContractPublic);
+    
+    if (!contractToUse) return { boostBips: 0, img: 'assets/bkc_logo_3d.png', name: 'Unknown' };
+    
+    try {
+        const boostBips = await safeContractCall(contractToUse, 'boostBips', [tokenId], 0n);
+        let img = 'assets/bkc_logo_3d.png';
+        let name = `Booster #${tokenId}`;
+        
+        const tier = boosterTiers.find(t => t.boostBips === Number(boostBips));
+        if (tier) { img = tier.img; name = tier.name; } 
+        
+        return { boostBips: Number(boostBips), img, name };
+    } catch {
+        return { boostBips: 0, img: 'assets/bkc_logo_3d.png', name: 'Unknown' };
+    }
+}
+
+// Cálculos de Recompensas
+export async function calculateUserTotalRewards() {
+    if (!State.isConnected || !State.delegationManagerContract) {
+        return { stakingRewards: 0n, minerRewards: 0n, totalRewards: 0n };
+    }
+    try {
+        const stakingRewards = await safeContractCall(State.delegationManagerContract, 'pendingRewards', [State.userAddress], 0n);
+        return { stakingRewards, minerRewards: 0n, totalRewards: stakingRewards };
+    } catch (e) {
+        return { stakingRewards: 0n, minerRewards: 0n, totalRewards: 0n };
+    }
+}
+
+export async function calculateClaimDetails() {
+    if (!State.delegationManagerContract || !State.userAddress) {
+        return { netClaimAmount: 0n, feeAmount: 0n, discountPercent: 0, totalRewards: 0n };
     }
     
+    const { totalRewards } = await calculateUserTotalRewards();
+    if (totalRewards === 0n) return { netClaimAmount: 0n, feeAmount: 0n, discountPercent: 0, totalRewards: 0n };
+    
+    let baseFeeBips = State.systemFees?.CLAIM_REWARD_FEE_BIPS || 5000n;
+    const boosterData = await getHighestBoosterBoostFromAPI(); 
+    let discountBips = State.boosterDiscounts?.[boosterData.highestBoost] || 0n;
+
+    const finalFeeBips = baseFeeBips > discountBips ? baseFeeBips - discountBips : 0n;
+    const feeAmount = (totalRewards * finalFeeBips) / 10000n;
+    
+    return { 
+        netClaimAmount: totalRewards - feeAmount, 
+        feeAmount, 
+        discountPercent: Number(discountBips) / 100, 
+        totalRewards 
+    };
+}
+
+// 🛡️ API Fetch with AGGRESSIVE CACHING (Ghost Buster V2)
+export async function loadMyBoostersFromAPI(forceRefresh = false) {
     if (!State.userAddress) return [];
 
     try {
+        // 1. Pega lista da API
         const response = await fetchWithTimeout(`${API_ENDPOINTS.getBoosters}/${State.userAddress}`, 5000);
         if (!response.ok) throw new Error(`API Error`);
         
-        const ownedTokensAPI = await response.json(); 
-        const boosterDetails = ownedTokensAPI.map(tokenData => ({
-            tokenId: BigInt(tokenData.tokenId),
-            boostBips: Number(tokenData.boostBips || 0)
-        }));
+        let ownedTokensAPI = await response.json(); 
+        
+        // 2. Validação "Ghost Buster" (Confirma on-chain se ainda é dono)
+        // Usa uma instância leve do contrato
+        const minABI = ["function ownerOf(uint256) view returns (address)"];
+        const contract = getContractInstance(addresses.rewardBoosterNFT, minABI, State.rewardBoosterContractPublic);
 
-        State.myBoosters = boosterDetails;
-        lastBoosterFetchTime = Date.now(); 
-        return boosterDetails;
+        if (contract && ownedTokensAPI.length > 0) {
+            const checks = await Promise.all(ownedTokensAPI.map(async (token) => {
+                const id = BigInt(token.tokenId);
+                const cacheKey = `ownerOf-${id}`;
+                const now = Date.now();
+
+                // [OTIMIZAÇÃO] Verifica Cache Local antes de chamar RPC
+                if (!forceRefresh && ownershipCache.has(cacheKey)) {
+                    const cachedData = ownershipCache.get(cacheKey);
+                    if (now - cachedData.timestamp < OWNERSHIP_CACHE_MS) {
+                        if (cachedData.owner.toLowerCase() === State.userAddress.toLowerCase()) {
+                            return { tokenId: id, boostBips: Number(token.boostBips || 0) };
+                        }
+                        return null; // Cache diz que vendeu
+                    }
+                }
+
+                try {
+                    // Chama RPC (Sem retry agressivo para não bloquear)
+                    const owner = await contract.ownerOf(id);
+                    ownershipCache.set(cacheKey, { owner, timestamp: now });
+
+                    if (owner.toLowerCase() === State.userAddress.toLowerCase()) {
+                        return { tokenId: id, boostBips: Number(token.boostBips || 0) };
+                    }
+                    return null; // Vendeu recentemente
+                } catch(e) {
+                    // Se der erro de RPC, confia na API temporariamente (Otimismo)
+                    if(isRateLimitError(e)) {
+                        return { tokenId: id, boostBips: Number(token.boostBips || 0) };
+                    }
+                    return null;
+                }
+            }));
+            // Filtra nulos
+            State.myBoosters = checks.filter(t => t !== null);
+        } else {
+            State.myBoosters = ownedTokensAPI.map(tokenData => ({
+                tokenId: BigInt(tokenData.tokenId),
+                boostBips: Number(tokenData.boostBips || 0)
+            }));
+        }
+        
+        return State.myBoosters;
+
     } catch (e) { 
-        // Em caso de erro, retorna o que tem no State (Fallback)
-        return State.myBoosters || []; 
+        console.error("Error fetching boosters:", e);
+        return []; 
     }
 }

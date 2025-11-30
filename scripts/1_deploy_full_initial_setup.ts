@@ -6,7 +6,7 @@ import { BigNumberish } from "ethers";
 
 // Função auxiliar para atrasos (delays)
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-const DEPLOY_DELAY_MS = 30000; // Tempo seguro para redes de teste/mainnet
+const DEPLOY_DELAY_MS = 15000; // Tempo seguro para redes de teste (15s)
 
 // --- CONFIGURAÇÃO CRÍTICA (Fase 1) ---
 
@@ -50,7 +50,7 @@ const INITIAL_FEES_TO_SET = {
 const addressesFilePath = path.join(
     __dirname,
     "../deployment-addresses.json"
-);
+  );
 
 function deleteAddressesFileOnError() {
     if (fs.existsSync(addressesFilePath)) {
@@ -124,7 +124,7 @@ export async function runScript(hre: HardhatRuntimeEnvironment) {
     boosterNFT = await upgrades.deployProxy(
         RewardBoosterNFT,
         [deployer.address], 
-        { initializer: "initialize" } 
+        { initializer: "initialize" } // UUPS já embutido na herança
     );
     await boosterNFT.waitForDeployment();
     addresses.rewardBoosterNFT = await boosterNFT.getAddress();
@@ -183,7 +183,7 @@ export async function runScript(hre: HardhatRuntimeEnvironment) {
     await sleep(DEPLOY_DELAY_MS);
 
     // =================================================================
-    // === PASSO 3: SALVAR ENDEREÇOS ESTÁTICOS ===
+    // === PASSO 3: SALVAR ENDEREÇOS ESTÁTICOS & CONFIG HUB ===
     // =================================================================
     
     addresses.oracleWalletAddress = DEFAULT_ORACLE_ADDRESS;
@@ -198,16 +198,12 @@ export async function runScript(hre: HardhatRuntimeEnvironment) {
     console.log(`   ✅ Todos os ${Object.keys(addresses).length} endereços iniciais salvos no JSON.`);
     await sleep(DEPLOY_DELAY_MS);
 
-    // =================================================================
-    // === PASSO 4: CONFIGURAR CONTRATOS & DEPLOY RENTAL ===
-    // =================================================================
-
     console.log("\n--- Configurando Conexões e Regras ---");
     const hub = await ethers.getContractAt("EcosystemManager", addresses.ecosystemManager, deployer);
     
-    // 4.1. Configuração do Hub (Conectando endereços iniciais)
+    // 3.2. Configuração do Hub (Conectando endereços iniciais)
     // ATENÇÃO: Precisamos configurar o Hub AGORA para que o RentalManager encontre o BKC Token na inicialização.
-    console.log("4.1. Configurando Hub com `setAddresses` em lote...");
+    console.log("3.2. Configurando Hub com `setAddresses` em lote (Pré-requisito para Rental)...");
     
     tx = await hub.setAddresses(
         addresses.bkcToken,             // _bkcToken
@@ -223,9 +219,11 @@ export async function runScript(hre: HardhatRuntimeEnvironment) {
     console.log(`   ✅ Hub configurado (BKCToken visível para o ecossistema).`);
     await sleep(DEPLOY_DELAY_MS);
 
-    // --- [NOVO] DEPLOY RENTAL MANAGER (AirBNFT) ---
-    // Agora que o Hub conhece o BKC, podemos implantar o RentalManager
-    console.log("\n4.2. Implantando RentalManager (AirBNFT Market)...");
+    // =================================================================
+    // === PASSO 4: DEPLOY RENTAL MANAGER (AirBNFT) ===
+    // =================================================================
+
+    console.log("\n4.1. Implantando RentalManager (AirBNFT Market Otimizado)...");
     const RentalManager = await ethers.getContractFactory("RentalManager");
     rentalManagerInstance = await upgrades.deployProxy(
         RentalManager,
@@ -234,16 +232,24 @@ export async function runScript(hre: HardhatRuntimeEnvironment) {
     );
     await rentalManagerInstance.waitForDeployment();
     addresses.rentalManager = await rentalManagerInstance.getAddress();
+    
     updateAddressJSON("rentalManager", addresses.rentalManager);
     console.log(`   ✅ RentalManager (Proxy) implantado em: ${addresses.rentalManager}`);
     await sleep(DEPLOY_DELAY_MS);
 
     // 4.3. Definindo Taxas Iniciais (Incluindo Rental)
-    console.log("\n4.3. Definindo Taxas Iniciais do Ecossistema (incluindo Rental)...");
+    console.log("\n4.2. Definindo Taxas Iniciais do Ecossistema (incluindo Rental)...");
     for (const [key, bips] of Object.entries(INITIAL_FEES_TO_SET)) {
-        tx = await hub.setServiceFee(ethers.id(key), bips);
+        // Para RENTAL_MARKET_ACCESS, usamos setPStakeMinimum
+        if (key === "RENTAL_MARKET_ACCESS") {
+             tx = await hub.setPStakeMinimum(ethers.id(key), bips);
+             console.log(`   -> pStake definido para ${key}: ${bips}`);
+        } else {
+             // Para taxas normais (FEE)
+             tx = await hub.setServiceFee(ethers.id(key), bips);
+             console.log(`   -> Taxa definida para ${key}: ${bips} BIPS`);
+        }
         await tx.wait();
-        console.log(`   -> Taxa definida para ${key}: ${bips} BIPS`);
     }
     await sleep(DEPLOY_DELAY_MS);
     
@@ -256,7 +262,7 @@ export async function runScript(hre: HardhatRuntimeEnvironment) {
     await sleep(DEPLOY_DELAY_MS);
 
     // 4.5. Configuração de Tiers da Pré-venda
-    console.log("\n4.5. Configurando Tiers OTIMIZADOS...");
+    console.log("\n4.3. Configurando Tiers OTIMIZADOS...");
     
     for (const tier of TIERS_TO_SETUP) {
       const priceInWei = ethers.parseEther(tier.priceETH);

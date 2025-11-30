@@ -55,7 +55,7 @@ export async function loadAddresses() {
 // 3. NETWORK CONFIGURATION
 // ============================================================================
 // ⚠️ OBS: Substitua pela sua chave NOVA se esta estiver bloqueada.
-const INFURA_KEY = "a17d6aa469bd4214836fe54f36df6915"; 
+const INFURA_KEY = "7d31b7dd70ab4d4da293c96bf983f1f1"; 
 
 export const sepoliaWssUrl = `wss://sepolia.infura.io/ws/v3/${INFURA_KEY}`;
 export const sepoliaRpcUrl = `https://sepolia.infura.io/v3/${INFURA_KEY}`;

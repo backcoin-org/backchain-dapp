@@ -1,21 +1,160 @@
 // js/pages/RentalPage.js
+// ✅ VERSÃO FINAL V4.1: Mobile-First UX + Robust Click Handler Fix
+
 const ethers = window.ethers;
 
 import { State } from '../state.js';
-import { DOMElements } from '../dom-elements.js';
-import { loadRentalListings, loadUserRentals, loadMyBoostersFromAPI } from '../modules/data.js';
+import { loadRentalListings, loadUserRentals, loadMyBoostersFromAPI, API_ENDPOINTS } from '../modules/data.js';
 import { executeListNFT, executeRentNFT, executeWithdrawNFT } from '../modules/transactions.js';
 import { formatBigNumber, renderLoading, renderNoData } from '../utils.js';
 import { showToast } from '../ui-feedback.js';
+import { boosterTiers } from '../config.js'; 
+
+// --- CSS INJECTION (MOBILE OPTIMIZED) ---
+const style = document.createElement('style');
+style.innerHTML = `
+    /* LAYOUT PRINCIPAL */
+    .rental-wrapper {
+        display: grid;
+        grid-template-columns: 1fr 320px; /* Desktop: Mercado | Sidebar */
+        gap: 32px;
+        align-items: start;
+    }
+
+    /* MOBILE FIRST ADJUSTMENTS */
+    @media (max-width: 1024px) { 
+        .rental-wrapper { 
+            grid-template-columns: 1fr; 
+            display: flex;
+            flex-direction: column-reverse; /* Mobile: Sidebar embaixo, Mercado em cima */
+        }
+        
+        /* Sidebar no mobile fica no fundo para gestão */
+        .rental-sidebar {
+            position: relative !important;
+            top: 0 !important;
+            width: 100%;
+        }
+    }
+
+    /* CARD DESIGN */
+    .market-card {
+        background: rgba(20, 20, 23, 0.7);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        border-radius: 20px; /* Bordas mais arredondadas para mobile */
+        overflow: hidden;
+        transition: all 0.3s ease;
+        position: relative;
+        display: flex;
+        flex-direction: column;
+    }
+    .market-card:active { transform: scale(0.98); } /* Feedback tátil */
+
+    .card-image-area {
+        width: 100%;
+        aspect-ratio: 1/1;
+        background: radial-gradient(circle at center, rgba(255,255,255,0.03), transparent);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 20px;
+        position: relative;
+    }
+    .card-image-area img {
+        width: 70%;
+        height: 70%;
+        object-fit: contain;
+        filter: drop-shadow(0 10px 20px rgba(0,0,0,0.5));
+    }
+
+    .boost-badge {
+        position: absolute;
+        top: 12px; right: 12px;
+        background: rgba(0,0,0,0.8);
+        backdrop-filter: blur(4px);
+        border: 1px solid rgba(34, 211, 238, 0.3);
+        color: #22d3ee;
+        font-size: 11px;
+        font-weight: 800;
+        padding: 6px 10px;
+        border-radius: 8px;
+        z-index: 2;
+    }
+
+    .card-info { padding: 16px; flex: 1; display: flex; flex-direction: column; }
+    
+    .price-display {
+        font-family: monospace;
+        font-size: 20px;
+        font-weight: 700;
+        color: white;
+    }
+    .price-label { font-size: 10px; color: #71717a; text-transform: uppercase; font-weight: 600; }
+
+    /* BOTÕES OTIMIZADOS PARA TOQUE */
+    .action-button {
+        width: 100%; 
+        padding: 14px; /* Mais alto para toque */
+        border-radius: 12px; 
+        font-weight: 800; 
+        font-size: 13px; 
+        letter-spacing: 0.5px;
+        transition: all 0.2s; 
+        text-transform: uppercase;
+        margin-top: auto;
+        cursor: pointer;
+        border: none;
+    }
+    .btn-rent { 
+        background: #22d3ee; 
+        color: #000; 
+        box-shadow: 0 4px 15px rgba(34, 211, 238, 0.2);
+    }
+    .btn-rent:active { background: #67e8f9; transform: translateY(2px); }
+    
+    .btn-withdraw { 
+        background: rgba(239, 68, 68, 0.15); 
+        color: #ef4444; 
+        border: 1px solid rgba(239, 68, 68, 0.3); 
+    }
+
+    /* SIDEBAR & MODAL */
+    .rental-sidebar {
+        background: #18181b;
+        border: 1px solid #27272a;
+        border-radius: 20px;
+        padding: 24px;
+        position: sticky;
+        top: 24px;
+        height: fit-content;
+    }
+    
+    .modal-overlay { 
+        position: fixed; inset: 0; 
+        background: rgba(0,0,0,0.9); 
+        z-index: 9999; /* Z-Index altíssimo para garantir */
+        display: none; 
+        align-items: center; 
+        justify-content: center; 
+        backdrop-filter: blur(5px);
+        padding: 20px;
+    }
+    .modal-content {
+        width: 100%;
+        max-width: 360px;
+        animation: slideUp 0.3s ease-out;
+    }
+    @keyframes slideUp { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+`;
+document.head.appendChild(style);
 
 // --- LOCAL STATE ---
 const RentalState = {
-    activeTab: 'market', // 'market' | 'dashboard'
+    filterTier: 'ALL',
+    sortBy: 'price_asc',
     selectedRentalId: null,
-    rentHoursInput: 1,
-    listPriceInput: '',
-    listDurationInput: 24,
-    isDataLoading: false
+    isDataLoading: false,
+    history: []
 };
 
 // --- RENDER FUNCTIONS ---
@@ -25,62 +164,96 @@ export const RentalPage = {
         const container = document.getElementById('rental');
         if (!container) return;
 
-        // 1. Initial Layout Structure (Only once)
         if (container.innerHTML.trim() === '' || isNewPage) {
             container.innerHTML = `
-                <div class="flex flex-col md:flex-row justify-between items-end mb-8">
-                    <div>
-                        <h1 class="text-3xl md:text-4xl font-bold text-white mb-2 flex items-center gap-3">
-                            <i class="fa-solid fa-house-laptop text-cyan-400"></i> AirBNFT <span class="text-sm bg-cyan-900/50 text-cyan-300 px-2 py-1 rounded border border-cyan-700/50">Beta</span>
-                        </h1>
-                        <p class="text-zinc-400 max-w-xl">
-                            Rent high-power Boosters by the hour to maximize your rewards temporarily, or monetize your idle NFTs.
-                        </p>
-                    </div>
+                <div class="flex flex-col pb-24 animate-fadeIn">
                     
-                    <div class="flex bg-zinc-800/50 p-1 rounded-lg border border-zinc-700 mt-4 md:mt-0">
-                        <button id="tab-rent-market" class="px-6 py-2 rounded-md text-sm font-bold transition-all ${RentalState.activeTab === 'market' ? 'bg-cyan-600 text-white shadow-lg' : 'text-zinc-400 hover:text-white'}">
-                            <i class="fa-solid fa-shop mr-2"></i> Marketplace
-                        </button>
-                        <button id="tab-rent-dashboard" class="px-6 py-2 rounded-md text-sm font-bold transition-all ${RentalState.activeTab === 'dashboard' ? 'bg-cyan-600 text-white shadow-lg' : 'text-zinc-400 hover:text-white'}">
-                            <i class="fa-solid fa-user-astronaut mr-2"></i> My Dashboard
-                        </button>
+                    <div class="flex gap-4 overflow-x-auto pb-4 mb-4 no-scrollbar snap-x">
+                        <div class="min-w-[140px] bg-zinc-900/80 border border-zinc-800 rounded-xl p-3 snap-center">
+                            <p class="text-[10px] text-zinc-500 font-bold uppercase">Listings</p>
+                            <p id="stat-listings" class="text-lg font-bold text-white">--</p>
+                        </div>
+                        <div class="min-w-[140px] bg-zinc-900/80 border border-zinc-800 rounded-xl p-3 snap-center">
+                            <p class="text-[10px] text-zinc-500 font-bold uppercase">Floor (1h)</p>
+                            <div class="flex items-end gap-1">
+                                <p id="stat-floor" class="text-lg font-bold text-white">--</p>
+                                <span class="text-[10px] text-zinc-600 font-bold mb-1">BKC</span>
+                            </div>
+                        </div>
+                        <div class="min-w-[140px] bg-zinc-900/80 border border-zinc-800 rounded-xl p-3 snap-center cursor-pointer active:bg-zinc-800" onclick="window.navigateTo('store')">
+                            <p class="text-[10px] text-amber-500 font-bold uppercase">Inventory</p>
+                            <div class="flex items-center gap-2">
+                                <i class="fa-solid fa-box-open text-zinc-400"></i>
+                                <span class="text-sm text-white font-bold">Manage</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="rental-wrapper">
+                        
+                        <div class="flex flex-col gap-6">
+                            
+                            <div class="flex justify-between items-center gap-4">
+                                <div class="flex gap-2 overflow-x-auto pb-2 no-scrollbar w-full">
+                                    <button class="filter-btn px-4 py-2 rounded-full bg-white text-black text-xs font-bold whitespace-nowrap shadow-lg" data-tier="ALL">All</button>
+                                    ${boosterTiers.map(t => `<button class="filter-btn px-4 py-2 rounded-full bg-zinc-800 text-zinc-400 hover:text-white text-xs font-bold border border-zinc-700 whitespace-nowrap" data-tier="${t.name}">${t.name}</button>`).join('')}
+                                </div>
+                            </div>
+
+                            <div id="rental-marketplace-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 min-h-[300px]">
+                                ${renderLoading()}
+                            </div>
+                        </div>
+
+                        <div class="rental-sidebar">
+                            
+                            <div class="mb-8">
+                                <div class="text-xs font-bold text-zinc-500 uppercase mb-4 tracking-widest">
+                                    <i class="fa-solid fa-plus-circle text-amber-500 mr-1"></i> Create Listing
+                                </div>
+                                <div class="bg-zinc-900/50 p-4 rounded-xl border border-zinc-800/50">
+                                    <label class="block text-[10px] font-bold text-zinc-500 mb-1 uppercase">Select Asset</label>
+                                    <select id="list-nft-selector" class="w-full bg-black border border-zinc-700 rounded-lg p-3 text-white text-xs mb-4 outline-none focus:border-amber-500"></select>
+                                    
+                                    <label class="block text-[10px] font-bold text-zinc-500 mb-1 uppercase">Price per Hour</label>
+                                    <div class="flex items-center relative mb-4">
+                                        <input type="number" id="list-price-input" placeholder="0.0" class="w-full bg-black border border-zinc-700 rounded-lg p-3 text-white text-sm font-mono font-bold outline-none focus:border-amber-500 pr-12">
+                                        <span class="absolute right-3 text-[10px] text-zinc-500 font-bold">BKC</span>
+                                    </div>
+
+                                    <button id="execute-list-btn" class="action-button bg-white hover:bg-zinc-200 text-black shadow-lg">List for Rent</button>
+                                </div>
+                            </div>
+
+                            <div class="mb-8">
+                                <div class="text-xs font-bold text-zinc-500 uppercase mb-4 tracking-widest flex justify-between">
+                                    <span><i class="fa-solid fa-list-check text-blue-500 mr-1"></i> Your Listings</span>
+                                    <span id="my-listings-count" class="bg-zinc-800 px-2 rounded text-white">0</span>
+                                </div>
+                                <div id="my-listings-list" class="space-y-2 max-h-[250px] overflow-y-auto custom-scrollbar pr-1">
+                                    <div class="text-center py-4 text-xs text-zinc-600">Connect wallet</div>
+                                </div>
+                            </div>
+
+                        </div>
                     </div>
                 </div>
 
-                <div id="rental-content-area" class="min-h-[400px]">
-                    ${renderLoading()}
-                </div>
-
-                <div id="rent-modal" class="fixed inset-0 z-50 hidden flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-                    <div class="bg-zinc-900 border border-zinc-700 rounded-xl max-w-md w-full p-6 shadow-2xl relative overflow-hidden">
-                        <div class="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-cyan-500 to-blue-500"></div>
-                        <button id="close-rent-modal" class="absolute top-4 right-4 text-zinc-500 hover:text-white"><i class="fa-solid fa-xmark text-xl"></i></button>
+                <div id="rent-modal" class="modal-overlay hidden">
+                    <div class="bg-zinc-900 border border-zinc-700 rounded-2xl modal-content p-6 relative shadow-2xl">
+                        <button id="close-rent-modal" class="absolute top-4 right-4 text-zinc-500 hover:text-white p-2"><i class="fa-solid fa-xmark text-xl"></i></button>
                         
-                        <h3 class="text-xl font-bold text-white mb-4 flex items-center gap-2">
-                            <i class="fa-solid fa-clock text-cyan-400"></i> Rent Booster
-                        </h3>
+                        <h3 class="text-xl font-bold text-white mb-1">Rent Booster</h3>
+                        <p class="text-xs text-zinc-500 mb-6">1 Hour Access • Instant Activation</p>
                         
-                        <div id="rent-modal-details" class="mb-6"></div>
+                        <div id="rent-modal-content" class="mb-6 bg-black/30 p-4 rounded-xl border border-zinc-800"></div>
                         
-                        <div class="mb-6">
-                            <label class="block text-sm text-zinc-400 mb-2">Duration (Hours)</label>
-                            <div class="flex items-center gap-3">
-                                <button class="w-10 h-10 rounded bg-zinc-800 hover:bg-zinc-700 text-white font-bold" onclick="adjustRentHours(-1)">-</button>
-                                <input type="number" id="rent-hours-input" value="1" min="1" class="flex-1 bg-black border border-zinc-700 rounded p-2 text-center text-white font-mono text-lg focus:border-cyan-500 outline-none">
-                                <button class="w-10 h-10 rounded bg-zinc-800 hover:bg-zinc-700 text-white font-bold" onclick="adjustRentHours(1)">+</button>
-                            </div>
-                            <p class="text-xs text-zinc-500 mt-2 text-right">Max duration: <span id="modal-max-duration">--</span> hours</p>
+                        <div class="flex justify-between items-end border-t border-zinc-800 pt-4 mb-6">
+                            <span class="text-zinc-400 text-xs font-bold uppercase">Total Cost</span>
+                            <span id="modal-total-cost" class="text-3xl font-black text-cyan-400">0.00 <span class="text-sm text-zinc-500">BKC</span></span>
                         </div>
-
-                        <div class="flex justify-between items-center border-t border-zinc-800 pt-4 mb-6">
-                            <span class="text-zinc-400">Total Cost:</span>
-                            <span id="modal-total-cost" class="text-xl font-bold text-cyan-400">0.00 BKC</span>
-                        </div>
-
-                        <button id="confirm-rent-btn" class="w-full bg-cyan-600 hover:bg-cyan-500 text-white font-bold py-3 rounded-lg transition-colors shadow-lg shadow-cyan-900/20">
-                            Confirm Rental
-                        </button>
+                        
+                        <button id="confirm-rent-btn" class="action-button btn-rent shadow-lg shadow-cyan-500/20">CONFIRM PAYMENT</button>
                     </div>
                 </div>
             `;
@@ -88,382 +261,246 @@ export const RentalPage = {
             setupEventListeners();
         }
 
-        // 2. Load Data & Render Content
-        RentalState.isDataLoading = true;
-        if (State.isConnected) {
-            await Promise.all([
-                loadRentalListings(),
-                loadUserRentals(),
-                loadMyBoostersFromAPI() // Needed for listing list
-            ]);
-        }
-        RentalState.isDataLoading = false;
-        
-        renderActiveTabContent();
+        await refreshRentalData();
     },
 
     update() {
-        renderActiveTabContent();
+        if (!RentalState.isDataLoading) renderUI();
     }
 };
 
-// --- INTERNAL RENDERING ---
+// --- DATA FETCHING ---
 
-function renderActiveTabContent() {
-    const container = document.getElementById('rental-content-area');
-    if (!container) return;
-
-    if (RentalState.isDataLoading) {
-        container.innerHTML = renderLoading();
-        return;
+async function refreshRentalData() {
+    RentalState.isDataLoading = true;
+    renderUI(); 
+    if (State.isConnected) {
+        await Promise.all([
+            loadRentalListings(true),
+            loadUserRentals(true),
+            loadMyBoostersFromAPI(true)
+        ]);
     }
-
-    if (!State.isConnected) {
-        container.innerHTML = renderNoData("Connect your wallet to access the Rental Market.");
-        return;
-    }
-
-    if (RentalState.activeTab === 'market') {
-        renderMarketplace(container);
-    } else {
-        renderDashboard(container);
-    }
+    RentalState.isDataLoading = false;
+    renderUI();
 }
 
-function renderMarketplace(container) {
+// --- RENDERING UI ---
+
+function renderUI() {
+    const marketGrid = document.getElementById('rental-marketplace-grid');
+    const myListingsContainer = document.getElementById('my-listings-list');
+    const formSelector = document.getElementById('list-nft-selector');
+    
     const listings = State.rentalListings || [];
-
-    if (listings.length === 0) {
-        container.innerHTML = `
-            <div class="text-center py-12 bg-zinc-800/30 rounded-xl border border-dashed border-zinc-700">
-                <i class="fa-solid fa-shop-slash text-4xl text-zinc-600 mb-4"></i>
-                <h3 class="text-xl font-bold text-zinc-400">Marketplace Empty</h3>
-                <p class="text-zinc-500 mt-2">Be the first to list a Booster for rent!</p>
-                <button class="mt-4 text-cyan-400 hover:text-cyan-300 underline" onclick="document.getElementById('tab-rent-dashboard').click()">Go to Dashboard to List</button>
-            </div>
-        `;
-        return;
+    
+    // Stats
+    if(document.getElementById('stat-listings')) document.getElementById('stat-listings').innerText = listings.length;
+    if (listings.length > 0) {
+        const prices = listings.map(l => parseFloat(ethers.formatEther(l.pricePerHour)));
+        const minPrice = Math.min(...prices);
+        if(document.getElementById('stat-floor')) document.getElementById('stat-floor').innerText = minPrice.toFixed(2);
+    } else {
+        if(document.getElementById('stat-floor')) document.getElementById('stat-floor').innerText = "0.00";
     }
 
-    let html = `<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">`;
-    
-    listings.forEach(item => {
-        const pricePerHour = formatBigNumber(item.pricePerHour);
-        const isOwner = item.owner.toLowerCase() === State.userAddress.toLowerCase();
+    // MARKET GRID
+    if (marketGrid) {
+        if (RentalState.isDataLoading) {
+            marketGrid.innerHTML = renderLoading();
+        } else if (listings.length === 0) {
+            marketGrid.innerHTML = renderNoData("No boosters available.");
+        } else {
+            let filtered = listings.filter(l => RentalState.filterTier === 'ALL' || l.name.includes(RentalState.filterTier));
+            
+            // Ordenação simples para mobile
+            filtered.sort((a, b) => Number(a.pricePerHour) - Number(b.pricePerHour));
 
-        html += `
-            <div class="rental-card bg-zinc-800 border border-zinc-700 rounded-xl overflow-hidden flex flex-col relative group">
-                <div class="absolute top-2 right-2 bg-black/60 backdrop-blur px-2 py-1 rounded text-xs font-mono text-white border border-zinc-600">
-                    #${item.tokenId}
-                </div>
+            marketGrid.innerHTML = filtered.map(l => {
+                const price = formatBigNumber(BigInt(l.pricePerHour)).toFixed(2);
+                const isOwner = l.owner.toLowerCase() === State.userAddress?.toLowerCase();
                 
-                <div class="p-6 flex flex-col items-center justify-center bg-gradient-to-b from-zinc-800 to-zinc-900">
-                    <img src="${item.img}" alt="${item.name}" class="h-24 w-auto object-contain drop-shadow-lg transition-transform group-hover:scale-110 duration-300">
-                    <div class="mt-4 text-center">
-                        <h3 class="font-bold text-white text-lg">${item.name}</h3>
-                        <span class="inline-block mt-1 px-2 py-0.5 bg-green-500/20 text-green-400 text-xs rounded font-bold border border-green-500/30">
-                            +${item.boostBips / 100}% Efficiency
-                        </span>
+                if (isOwner) return ''; 
+
+                return `
+                    <div class="market-card group">
+                        <div class="boost-badge">+${l.boostBips/100}% BOOST</div>
+                        <div class="card-image-area">
+                            <img src="${l.img}" alt="${l.name}">
+                        </div>
+                        <div class="card-info">
+                            <div class="flex justify-between items-start mb-4">
+                                <div>
+                                    <h4 class="text-white font-bold text-sm leading-tight">${l.name}</h4>
+                                    <p class="text-zinc-500 text-[10px] font-mono mt-1">#${l.tokenId}</p>
+                                </div>
+                                <div class="text-right">
+                                    <p class="price-display">${price}</p>
+                                    <p class="price-label">BKC / 1H</p>
+                                </div>
+                            </div>
+                            <div class="mt-auto">
+                                <button class="action-button btn-rent rent-btn" data-id="${l.tokenId}">RENT NOW</button>
+                            </div>
+                        </div>
                     </div>
-                </div>
-
-                <div class="p-4 border-t border-zinc-700 bg-zinc-800/50 flex-1 flex flex-col">
-                    <div class="flex justify-between items-center mb-2">
-                        <span class="text-zinc-400 text-xs">Price / Hour</span>
-                        <span class="text-white font-mono font-bold">${pricePerHour.toFixed(2)} BKC</span>
-                    </div>
-                    <div class="flex justify-between items-center mb-4">
-                        <span class="text-zinc-400 text-xs">Max Duration</span>
-                        <span class="text-zinc-300 text-xs">${item.maxDurationHours} Hours</span>
-                    </div>
-
-                    <button 
-                        class="mt-auto w-full py-2 rounded-lg font-bold transition-all ${isOwner ? 'bg-zinc-700 text-zinc-400 cursor-not-allowed' : 'bg-cyan-600 hover:bg-cyan-500 text-white shadow-lg shadow-cyan-900/20'}"
-                        ${isOwner ? 'disabled' : ''}
-                        onclick="window.openRentModal('${item.tokenId}')"
-                    >
-                        ${isOwner ? 'Your Listing' : 'Rent Now'}
-                    </button>
-                </div>
-            </div>
-        `;
-    });
-
-    html += `</div>`;
-    container.innerHTML = html;
-}
-
-function renderDashboard(container) {
-    // 1. My Active Rentals (Tenant)
-    const myRentals = State.myRentals || [];
-    
-    // 2. My Listings (Owner)
-    const myListings = (State.rentalListings || []).filter(l => l.owner.toLowerCase() === State.userAddress.toLowerCase());
-    
-    // 3. My Idle Boosters (Available to List)
-    // Filter logic: Owns NFT AND NOT currently listed
-    const listedIds = new Set((State.rentalListings || []).map(l => l.tokenId));
-    const idleBoosters = (State.myBoosters || []).filter(b => !listedIds.has(b.tokenId.toString()));
-
-    let html = `<div class="space-y-8">`;
-
-    // SECTION A: ACTIVE RENTALS
-    html += `
-        <div class="bg-zinc-800/40 border border-zinc-700 rounded-xl p-6">
-            <h3 class="text-xl font-bold text-white mb-4 flex items-center gap-2">
-                <i class="fa-solid fa-clock-rotate-left text-green-400"></i> Active Rentals (Rented by me)
-            </h3>
-            ${myRentals.length === 0 ? '<p class="text-zinc-500 text-sm">You have no active rentals.</p>' : 
-                `<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    ${myRentals.map(r => renderRentalCard(r)).join('')}
-                </div>`
-            }
-        </div>
-    `;
-
-    // SECTION B: MY LISTINGS
-    html += `
-        <div class="bg-zinc-800/40 border border-zinc-700 rounded-xl p-6">
-            <h3 class="text-xl font-bold text-white mb-4 flex items-center gap-2">
-                <i class="fa-solid fa-shop text-amber-400"></i> My Listings (Earning Passive Income)
-            </h3>
-            ${myListings.length === 0 ? '<p class="text-zinc-500 text-sm">You have no active listings.</p>' : 
-                `<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    ${myListings.map(l => renderListingCard(l)).join('')}
-                </div>`
-            }
-        </div>
-    `;
-
-    // SECTION C: CREATE LISTING FORM
-    html += `
-        <div class="bg-gradient-to-br from-zinc-800 to-zinc-900 border border-zinc-600 rounded-xl p-6 shadow-xl">
-            <h3 class="text-xl font-bold text-white mb-4 flex items-center gap-2">
-                <i class="fa-solid fa-plus-circle text-cyan-400"></i> List New Asset
-            </h3>
+                `;
+            }).join('');
             
-            <div class="flex flex-col lg:flex-row gap-6 items-end">
-                <div class="flex-1 w-full">
-                    <label class="block text-xs text-zinc-400 mb-2">Select Booster</label>
-                    <select id="list-nft-selector" class="w-full bg-black border border-zinc-700 rounded p-3 text-white focus:border-cyan-500 outline-none">
-                        ${idleBoosters.length === 0 ? '<option value="">No idle boosters available</option>' : 
-                            idleBoosters.map(b => `<option value="${b.tokenId}">Booster #${b.tokenId} (+${b.boostBips/100}%)</option>`).join('')
-                        }
-                    </select>
+            if (marketGrid.innerHTML.trim() === '') marketGrid.innerHTML = renderNoData("No listings from others.");
+        }
+    }
+
+    // MY LISTINGS
+    if (myListingsContainer && State.isConnected) {
+        const myListings = listings.filter(l => l.owner.toLowerCase() === State.userAddress.toLowerCase());
+        document.getElementById('my-listings-count').innerText = myListings.length;
+        
+        if (myListings.length === 0) {
+            myListingsContainer.innerHTML = `<div class="text-center py-4 text-xs text-zinc-600">No listings</div>`;
+        } else {
+            myListingsContainer.innerHTML = myListings.map(l => `
+                <div class="bg-black/40 p-3 rounded-lg flex items-center justify-between border border-zinc-800">
+                    <div class="flex items-center gap-3">
+                        <img src="${l.img}" class="w-10 h-10 object-contain">
+                        <div>
+                            <p class="text-white text-xs font-bold">#${l.tokenId}</p>
+                            <p class="text-zinc-500 text-[10px]">${formatBigNumber(BigInt(l.pricePerHour)).toFixed(2)} BKC</p>
+                        </div>
+                    </div>
+                    <button class="btn-withdraw-mini withdraw-btn" data-id="${l.tokenId}">RETRIEVE</button>
                 </div>
+            `).join('');
+        }
 
-                <div class="w-full lg:w-48">
-                    <label class="block text-xs text-zinc-400 mb-2">Price / Hour (BKC)</label>
-                    <input type="number" id="list-price-input" placeholder="e.g. 10" class="w-full bg-black border border-zinc-700 rounded p-3 text-white focus:border-cyan-500 outline-none">
-                </div>
-
-                <div class="w-full lg:w-48">
-                    <label class="block text-xs text-zinc-400 mb-2">Max Duration (Hours)</label>
-                    <input type="number" id="list-duration-input" value="24" class="w-full bg-black border border-zinc-700 rounded p-3 text-white focus:border-cyan-500 outline-none">
-                </div>
-
-                <button id="execute-list-btn" class="w-full lg:w-auto bg-cyan-600 hover:bg-cyan-500 text-white font-bold py-3 px-8 rounded shadow-lg transition-colors" ${idleBoosters.length === 0 ? 'disabled opacity-50' : ''}>
-                    List Asset
-                </button>
-            </div>
-            <p class="text-xs text-zinc-500 mt-3">
-                <i class="fa-solid fa-info-circle"></i> The NFT will be transferred to the Rental Smart Contract (Escrow) safely. You can withdraw it anytime if it's not rented.
-            </p>
-        </div>
-    `;
-
-    html += `</div>`;
-    container.innerHTML = html;
-    
-    // Start timers for active rentals
-    startCountdowns();
-}
-
-// --- CARD HELPERS ---
-
-function renderRentalCard(rental) {
-    const endTime = Number(rental.endTime) * 1000;
-    const now = Date.now();
-    const isExpired = now > endTime;
-
-    return `
-        <div class="bg-zinc-900 border border-green-900/30 rounded-lg p-4 flex items-center gap-4 relative overflow-hidden">
-            <div class="absolute right-0 top-0 h-full w-1 bg-green-500"></div>
-            <img src="${rental.img}" class="h-12 w-12 object-contain">
-            <div class="flex-1 min-w-0">
-                <h4 class="font-bold text-white text-sm truncate">${rental.name}</h4>
-                <div class="flex items-center gap-2 mt-1">
-                    <span class="text-xs bg-green-500/10 text-green-400 px-1.5 rounded border border-green-500/20">+${rental.boostBips/100}% Active</span>
-                </div>
-                <p class="text-xs text-zinc-400 mt-2 font-mono rental-timer" data-end="${endTime}">
-                    ${isExpired ? 'Expired' : 'Calculating...'}
-                </p>
-            </div>
-        </div>
-    `;
-}
-
-function renderListingCard(listing) {
-    // "isRented" logic is inferred if we had that data on listing object.
-    // Assuming listing object now has 'isRented' from data.js update.
-    const isRented = false; // Placeholder: In data.js we should fetch this. Assuming available for withdraw for now.
-    
-    return `
-        <div class="bg-zinc-900 border border-zinc-700 rounded-lg p-4 flex flex-col gap-3">
-            <div class="flex items-center gap-3">
-                <img src="${listing.img}" class="h-10 w-10 object-contain">
-                <div>
-                    <h4 class="font-bold text-white text-sm">#${listing.tokenId}</h4>
-                    <p class="text-xs text-zinc-500">${formatBigNumber(listing.pricePerHour).toFixed(2)} BKC/hr</p>
-                </div>
-            </div>
+        if (formSelector) {
+            const listedIds = new Set(listings.map(l => l.tokenId));
+            const idle = (State.myBoosters || []).filter(b => !listedIds.has(b.tokenId.toString()));
             
-            <div class="flex gap-2 mt-2">
-                <button class="flex-1 bg-red-900/20 hover:bg-red-900/40 text-red-400 text-xs py-2 rounded border border-red-900/30 transition-colors withdraw-btn" data-id="${listing.tokenId}">
-                    Withdraw
-                </button>
-            </div>
-        </div>
-    `;
+            if (idle.length === 0) {
+                formSelector.innerHTML = `<option value="">No idle assets found</option>`;
+                document.getElementById('execute-list-btn').disabled = true;
+            } else {
+                formSelector.innerHTML = idle.map(b => {
+                    const t = boosterTiers.find(x => x.boostBips === b.boostBips);
+                    return `<option value="${b.tokenId}">#${b.tokenId} - ${t?.name} (+${b.boostBips/100}%)</option>`;
+                }).join('');
+                document.getElementById('execute-list-btn').disabled = false;
+            }
+        }
+    }
 }
 
-// --- LOGIC & INTERACTION ---
+// --- INTERACTION (FIXED CLICK HANDLERS) ---
 
 function setupEventListeners() {
-    // Tabs
-    document.getElementById('tab-rent-market').addEventListener('click', () => {
-        RentalState.activeTab = 'market';
-        RentalPage.render();
-    });
-    document.getElementById('tab-rent-dashboard').addEventListener('click', () => {
-        RentalState.activeTab = 'dashboard';
-        RentalPage.render();
+    
+    // 1. FILTERS
+    document.querySelectorAll('.filter-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            document.querySelectorAll('.filter-btn').forEach(b => {
+                b.classList.remove('bg-white', 'text-black');
+                b.classList.add('bg-zinc-800', 'text-zinc-400');
+            });
+            e.target.classList.remove('bg-zinc-800', 'text-zinc-400');
+            e.target.classList.add('bg-white', 'text-black');
+            RentalState.filterTier = e.target.dataset.tier;
+            renderUI();
+        });
     });
 
-    // Modal Interaction
-    document.getElementById('close-rent-modal').addEventListener('click', closeModal);
-    document.getElementById('confirm-rent-btn').addEventListener('click', handleRentConfirm);
+    // 2. LIST ASSET
+    const listBtn = document.getElementById('execute-list-btn');
+    if(listBtn) {
+        listBtn.addEventListener('click', async (e) => {
+            const tokenId = document.getElementById('list-nft-selector').value;
+            const price = document.getElementById('list-price-input').value;
+            
+            if (!tokenId || !price || parseFloat(price) <= 0) return showToast("Invalid price", "error");
+            
+            const btn = e.target;
+            btn.innerText = "PROCESSING...";
+            btn.disabled = true;
+            
+            const success = await executeListNFT(tokenId, ethers.parseUnits(price, 18), 1, btn);
+            if (success) await refreshRentalData();
+            else { btn.innerText = "List for Rent"; btn.disabled = false; }
+        });
+    }
 
-    // List Interaction (Delegated for dynamic elements or attached after render)
-    // Since renderDashboard replaces HTML, we attach listener to a static parent or re-attach
-    const contentArea = document.getElementById('rental-content-area');
-    contentArea.addEventListener('click', async (e) => {
-        // List Button
-        if (e.target.id === 'execute-list-btn') {
-            handleListAsset(e.target);
+    // 3. RENT MODAL OPEN (EVENT DELEGATION - THE FIX!)
+    document.addEventListener('click', (e) => {
+        const rentBtn = e.target.closest('.rent-btn');
+        if (rentBtn) {
+            openRentModal(rentBtn.dataset.id);
         }
-        // Withdraw Button
-        if (e.target.classList.contains('withdraw-btn')) {
-            const tokenId = e.target.dataset.id;
-            await executeWithdrawNFT(tokenId, e.target);
+        
+        const withdrawBtn = e.target.closest('.withdraw-btn');
+        if (withdrawBtn) {
+            if(!confirm("Retrieve NFT?")) return;
+            executeWithdrawNFT(withdrawBtn.dataset.id, withdrawBtn).then(success => {
+                if(success) refreshRentalData();
+            });
+        }
+    });
+
+    // 4. MODAL CLOSE
+    const closeModal = () => {
+        document.getElementById('rent-modal').classList.add('hidden');
+        document.getElementById('rent-modal').classList.remove('flex');
+    };
+    document.getElementById('close-rent-modal').addEventListener('click', closeModal);
+    document.getElementById('rent-modal').addEventListener('click', (e) => {
+        if(e.target === document.getElementById('rent-modal')) closeModal();
+    });
+
+    // 5. CONFIRM RENT
+    document.getElementById('confirm-rent-btn').addEventListener('click', async (e) => {
+        const btn = e.target;
+        const tokenId = RentalState.selectedRentalId;
+        const listing = State.rentalListings.find(l => l.tokenId === tokenId);
+        
+        if (!listing) return;
+        const cost = BigInt(listing.pricePerHour) * 1n; // 1h Fixa
+        
+        btn.innerText = "CONFIRMING...";
+        btn.disabled = true;
+        
+        const success = await executeRentNFT(tokenId, 1, cost, btn);
+        if (success) {
+            closeModal();
+            await refreshRentalData();
+        } else {
+            btn.innerText = "CONFIRM PAYMENT";
+            btn.disabled = false;
         }
     });
 }
 
-// Exposed to window for onclick in HTML string
-window.openRentModal = (tokenId) => {
+// Function to populate and show modal
+function openRentModal(tokenId) {
     const listing = State.rentalListings.find(l => l.tokenId === tokenId);
     if (!listing) return;
-
+    
     RentalState.selectedRentalId = tokenId;
-    RentalState.rentHoursInput = 1;
+    
+    const content = document.getElementById('rent-modal-content');
+    const totalEl = document.getElementById('modal-total-cost');
+    
+    const priceFormatted = formatBigNumber(BigInt(listing.pricePerHour)).toFixed(2);
+    totalEl.innerHTML = `${priceFormatted} <span class="text-sm text-zinc-500">BKC</span>`;
 
-    const modal = document.getElementById('rent-modal');
-    const details = document.getElementById('rent-modal-details');
-    const maxDurEl = document.getElementById('modal-max-duration');
-    const costEl = document.getElementById('modal-total-cost');
-    const input = document.getElementById('rent-hours-input');
-
-    // Update UI
-    details.innerHTML = `
-        <div class="flex items-center gap-4 bg-black/40 p-4 rounded-lg">
-            <img src="${listing.img}" class="h-16 w-16 object-contain">
+    content.innerHTML = `
+        <div class="flex items-center gap-4 bg-zinc-800/50 p-3 rounded-lg border border-zinc-700">
+            <img src="${listing.img}" class="w-16 h-16 object-contain bg-black/20 rounded-lg p-1">
             <div>
-                <h4 class="font-bold text-white">${listing.name}</h4>
-                <p class="text-cyan-400 text-sm">+${listing.boostBips/100}% Boost</p>
-                <p class="text-zinc-500 text-xs mt-1">${formatBigNumber(listing.pricePerHour).toFixed(2)} BKC / Hour</p>
+                <h4 class="text-white font-bold text-lg leading-none">${listing.name}</h4>
+                <p class="text-cyan-400 text-xs font-mono mt-1">#${listing.tokenId}</p>
             </div>
         </div>
     `;
     
-    maxDurEl.innerText = listing.maxDurationHours;
-    input.value = 1;
-    input.max = listing.maxDurationHours;
-    
-    // Recalculate cost function
-    const updateCost = () => {
-        const hours = parseInt(input.value) || 1;
-        const totalWei = listing.pricePerHour * BigInt(hours);
-        costEl.innerText = `${formatBigNumber(totalWei).toFixed(2)} BKC`;
-    };
-    
-    input.oninput = updateCost;
-    
-    // Global adjust function for +/- buttons
-    window.adjustRentHours = (delta) => {
-        let val = parseInt(input.value) || 0;
-        val = Math.max(1, Math.min(parseInt(listing.maxDurationHours), val + delta));
-        input.value = val;
-        RentalState.rentHoursInput = val;
-        updateCost();
-    };
-
-    updateCost();
+    const modal = document.getElementById('rent-modal');
     modal.classList.remove('hidden');
-};
-
-function closeModal() {
-    document.getElementById('rent-modal').classList.add('hidden');
-}
-
-async function handleRentConfirm(e) {
-    const btn = e.target;
-    const tokenId = RentalState.selectedRentalId;
-    const hours = document.getElementById('rent-hours-input').value;
-    const listing = State.rentalListings.find(l => l.tokenId === tokenId);
-    
-    if (!listing || !hours) return;
-
-    const totalCostWei = listing.pricePerHour * BigInt(hours);
-    
-    const success = await executeRentNFT(tokenId, hours, totalCostWei, btn);
-    if (success) closeModal();
-}
-
-async function handleListAsset(btn) {
-    const tokenId = document.getElementById('list-nft-selector').value;
-    const price = document.getElementById('list-price-input').value;
-    const duration = document.getElementById('list-duration-input').value;
-
-    if (!tokenId || !price || !duration) {
-        showToast("Please fill in all fields", "error");
-        return;
-    }
-
-    const priceWei = ethers.parseUnits(price, 18); // BKC has 18 decimals
-    
-    await executeListNFT(tokenId, priceWei, duration, btn);
-}
-
-function startCountdowns() {
-    const timers = document.querySelectorAll('.rental-timer');
-    
-    const update = () => {
-        const now = Date.now();
-        timers.forEach(t => {
-            const end = parseInt(t.dataset.end);
-            if (end < now) {
-                t.innerText = "Expired";
-                t.classList.add('text-red-500');
-            } else {
-                const diff = end - now;
-                const h = Math.floor(diff / (1000 * 60 * 60));
-                const m = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
-                t.innerText = `${h}h ${m}m remaining`;
-            }
-        });
-    };
-    
-    update();
-    setInterval(update, 60000); // Update every minute
+    modal.classList.add('flex');
 }

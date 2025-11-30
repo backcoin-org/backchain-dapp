@@ -7,7 +7,7 @@ import "@nomicfoundation/hardhat-verify";
 
 // --- CONFIGURAÇÃO DE CHAVES (HARDCODED PARA EVITAR ERROS DE LEITURA) ---
 // Estamos forçando a URL completa aqui para eliminar erro de DNS por caractere inválido
-const SEPOLIA_RPC_URL = "https://sepolia.infura.io/v3/a17d6aa469bd4214836fe54f36df6915";
+const SEPOLIA_RPC_URL = "https://sepolia.infura.io/v3/7d31b7dd70ab4d4da293c96bf983f1f1";
 
 // Tenta ler a chave privada do .env, senão avisa
 const PRIVATE_KEY = process.env.PRIVATE_KEY;

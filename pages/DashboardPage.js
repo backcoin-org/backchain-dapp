@@ -1,5 +1,5 @@
 // pages/DashboardPage.js
-// ✅ VERSÃO FINAL V4.0: Real-Time Sync + Manual Refresh + Auto-Update Inteligente
+// ✅ VERSÃO FINAL V5.5: Phantom NFT Fix + Yield Efficiency Gamification
 
 const ethers = window.ethers;
 
@@ -39,6 +39,20 @@ const DashboardState = {
 
 const EXPLORER_BASE_URL = "https://sepolia.etherscan.io/tx/";
 
+// --- HELPER: DATA ---
+function formatDate(timestamp) {
+    if (!timestamp) return 'Just now';
+    try {
+        if (timestamp.seconds || timestamp._seconds) {
+            const secs = timestamp.seconds || timestamp._seconds;
+            return new Date(secs * 1000).toLocaleString(); 
+        }
+        return new Date(timestamp).toLocaleString();
+    } catch (e) {
+        return 'Recent';
+    }
+}
+
 // --- ANIMAÇÃO DE RECOMPENSAS ---
 let animationFrameId = null;
 let displayedRewardValue = 0n;
@@ -59,6 +73,7 @@ function animateClaimableRewards(targetNetValue) {
 
     if (displayedRewardValue < 0n) displayedRewardValue = 0n;
     
+    // Mostra o valor LÍQUIDO (O que vai para a carteira)
     rewardsEl.innerHTML = `${formatBigNumber(displayedRewardValue).toFixed(4)} <span class="text-sm text-amber-500">$BKC</span>`;
 
     if (displayedRewardValue !== targetNetValue) {
@@ -67,7 +82,7 @@ function animateClaimableRewards(targetNetValue) {
 }
 
 // ============================================================================
-// 1. RENDERIZAÇÃO ESTRUTURAL (LAYOUT)
+// 1. RENDERIZAÇÃO ESTRUTURAL
 // ============================================================================
 
 function renderDashboardLayout() {
@@ -103,16 +118,24 @@ function renderDashboardLayout() {
                             <div class="flex-1 space-y-6">
                                 <div>
                                     <div class="flex items-center gap-2">
-                                        <p class="text-zinc-400 text-sm font-medium">Net Claimable Rewards</p>
-                                        <i class="fa-solid fa-circle-info text-zinc-600 text-xs cursor-help" title="Amount you receive after protocol fees and NFT discounts"></i>
+                                        <p class="text-zinc-400 text-sm font-medium">Your Current Payout</p>
+                                        <i class="fa-solid fa-circle-info text-zinc-600 text-xs cursor-help" title="Net amount you receive based on your Efficiency Score"></i>
                                     </div>
                                     
                                     <div id="dash-user-rewards" class="text-4xl font-bold text-white mt-2">--</div>
-                                    <p id="dash-user-gross-rewards" class="text-xs text-zinc-500 mt-1 font-mono hidden">Gross: 0.0000 BKC</p>
+                                    
+                                    <div id="dash-user-gain-area" class="hidden mt-2 p-2 bg-green-900/20 border border-green-500/20 rounded-lg inline-block animate-pulse">
+                                        <p class="text-xs text-green-400 font-bold font-mono flex items-center gap-2">
+                                            <i class="fa-solid fa-arrow-up"></i>
+                                            Potential: <span id="dash-user-potential-gain">0.0000</span> BKC Extra
+                                        </p>
+                                    </div>
 
-                                    <button id="dashboardClaimBtn" class="mt-5 bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700 text-white font-bold py-2.5 px-6 rounded-lg shadow-lg transition-all transform hover:-translate-y-0.5 text-sm w-full sm:w-auto" disabled>
-                                        <i class="fa-solid fa-gift mr-2"></i> Claim Net Amount
-                                    </button>
+                                    <div class="mt-6">
+                                        <button id="dashboardClaimBtn" class="bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700 text-white font-bold py-2.5 px-6 rounded-lg shadow-lg transition-all transform hover:-translate-y-0.5 text-sm w-full sm:w-auto disabled:opacity-50 disabled:cursor-not-allowed" disabled>
+                                            <i class="fa-solid fa-gift mr-2"></i> Claim Rewards
+                                        </button>
+                                    </div>
                                 </div>
                                 
                                 <div class="border-t border-zinc-700/50 pt-4 flex items-center gap-4">
@@ -127,7 +150,7 @@ function renderDashboardLayout() {
                                 </div>
                             </div>
 
-                            <div id="dash-booster-area" class="flex-1 md:border-l md:border-zinc-700/50 md:pl-8 flex flex-col justify-center min-h-[160px]">
+                            <div id="dash-booster-area" class="flex-1 md:border-l md:border-zinc-700/50 md:pl-8 flex flex-col justify-center min-h-[180px]">
                                 ${renderLoading()}
                             </div>
                         </div>
@@ -171,7 +194,6 @@ function renderDashboardLayout() {
                 </div>
 
                 <div class="lg:col-span-4 flex flex-col gap-6">
-                    
                     <div class="glass-panel bg-gradient-to-b from-purple-900/20 to-transparent border-purple-500/20">
                         <h3 class="font-bold text-white mb-2">Grow your Capital</h3>
                         <p class="text-sm text-zinc-400 mb-4">Delegate $BKC to the Global Consensus Pool to earn passive yield.</p>
@@ -210,43 +232,39 @@ function renderDashboardLayout() {
         </div>
         
         <div id="booster-info-modal" class="fixed inset-0 z-50 hidden flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 opacity-0 transition-opacity duration-300">
-            <div class="bg-zinc-900 border border-zinc-700 rounded-xl max-w-md w-full p-6 shadow-2xl transform scale-95 transition-transform duration-300 relative">
+            <div class="bg-zinc-900 border border-amber-500/50 rounded-xl max-w-md w-full p-6 shadow-2xl shadow-amber-900/20 transform scale-95 transition-transform duration-300 relative">
                 <button id="close-booster-modal" class="absolute top-4 right-4 text-zinc-500 hover:text-white text-xl"><i class="fa-solid fa-xmark"></i></button>
-                
                 <div class="text-center mb-6">
-                    <div class="inline-block bg-amber-500/20 p-4 rounded-full mb-3">
+                    <div class="inline-block bg-amber-500/20 p-4 rounded-full mb-3 animate-bounce">
                         <i class="fa-solid fa-rocket text-4xl text-amber-500"></i>
                     </div>
-                    <h3 class="text-2xl font-bold text-white">Why use a Booster?</h3>
+                    <h3 class="text-2xl font-bold text-white">Maximize Your Efficiency</h3>
+                    <p class="text-zinc-400 text-sm mt-2">NFT holders can earn up to 2x more.</p>
                 </div>
                 
-                <div class="space-y-4">
-                    <div class="flex gap-4 items-start bg-zinc-800/50 p-3 rounded-lg">
-                        <i class="fa-solid fa-percent text-green-400 mt-1"></i>
-                        <div>
-                            <h4 class="text-white font-bold text-sm">Fee Discount</h4>
-                            <p class="text-zinc-400 text-xs">Protocol fees (normally 5%) are reduced significantly. Higher tiers = Lower fees.</p>
-                        </div>
+                <div class="space-y-4 bg-zinc-800/50 p-4 rounded-lg border border-zinc-700/50">
+                    <div class="flex justify-between items-center text-sm border-b border-zinc-700 pb-2">
+                        <span class="text-zinc-400">No NFT:</span>
+                        <span class="text-zinc-500 font-bold">50% Efficiency</span>
                     </div>
-                    <div class="flex gap-4 items-start bg-zinc-800/50 p-3 rounded-lg">
-                        <i class="fa-solid fa-sack-dollar text-amber-400 mt-1"></i>
-                        <div>
-                            <h4 class="text-white font-bold text-sm">Maximize Rewards</h4>
-                            <p class="text-zinc-400 text-xs">Keep more of what you earn from staking. A Diamond Booster can save you tons of BKC.</p>
-                        </div>
+                    <div class="flex justify-between items-center text-sm border-b border-zinc-700 pb-2">
+                        <span class="text-zinc-400">Bronze Booster:</span>
+                        <span class="text-green-300 font-bold">80% Efficiency (+60% Profit)</span>
                     </div>
-                    <div class="flex gap-4 items-start bg-zinc-800/50 p-3 rounded-lg">
-                        <i class="fa-solid fa-ticket text-purple-400 mt-1"></i>
-                        <div>
-                            <h4 class="text-white font-bold text-sm">Access to Features</h4>
-                            <p class="text-zinc-400 text-xs">Some pools and notary services require specific NFT Tiers to access.</p>
-                        </div>
+                    <div class="flex justify-between items-center text-sm">
+                        <span class="text-amber-400 font-bold">Gold/Diamond:</span>
+                        <span class="text-green-400 font-bold">100% Efficiency (2x Profit)</span>
                     </div>
                 </div>
                 
-                <button class="w-full bg-amber-600 hover:bg-amber-500 text-white font-bold py-3 rounded-lg mt-6 go-to-store" onclick="document.getElementById('booster-info-modal').classList.add('hidden')">
-                    Get a Booster Now
-                </button>
+                <div class="grid grid-cols-2 gap-3 mt-6">
+                    <button class="bg-amber-600 hover:bg-amber-500 text-white font-bold py-3 rounded-lg go-to-store" onclick="document.getElementById('booster-info-modal').classList.add('hidden')">
+                        Buy NFT
+                    </button>
+                    <button class="bg-cyan-700 hover:bg-cyan-600 text-white font-bold py-3 rounded-lg go-to-rental" onclick="document.getElementById('booster-info-modal').classList.add('hidden')">
+                        Rent NFT
+                    </button>
+                </div>
             </div>
         </div>
     `;
@@ -283,7 +301,6 @@ async function updateGlobalMetrics() {
 
         let totalLocked = 0n;
         const contractKeys = ['delegationManager', 'fortunePool', 'rentalManager', 'rewardBoosterNFT', 'ecosystemManager', 'decentralizedNotary', 'faucet', 'publicSale', 'bkcDexPoolAddress'];
-        
         if (addresses) Object.keys(addresses).forEach(k => { if (k.startsWith('pool_')) contractKeys.push(k); });
 
         const uniqueAddrs = new Set();
@@ -296,7 +313,7 @@ async function updateGlobalMetrics() {
             try { 
                 const bal = await safeContractCall(State.bkcTokenContractPublic, 'balanceOf', [addr], 0n);
                 totalLocked += bal;
-                await new Promise(r => setTimeout(r, 50)); 
+                await new Promise(r => setTimeout(r, 20)); 
             } catch {}
         }
 
@@ -316,21 +333,12 @@ async function updateGlobalMetrics() {
             lockedText = `${percent}% <span class="text-lg text-zinc-300 ml-2 font-bold">(${amount} BKC)</span>`;
         }
         setTxt('dash-metric-locked', lockedText);
-        
         setTxt('dash-metric-scarcity', `${(Number(scarcityRate)/100).toFixed(2)}%`);
         setTxt('dash-metric-users', (State.systemData?.activeUsers || 1240).toLocaleString());
 
     } catch (e) { console.error("Metrics Error", e); }
 }
 
-// ============================================================================
-// 3. LÓGICA DE DADOS DO USUÁRIO (COM REFRESH V4)
-// ============================================================================
-
-/**
- * Atualiza os dados do usuário. 
- * @param {boolean} forceRefresh - Se true, ignora cache e busca na blockchain.
- */
 async function updateUserHub(forceRefresh = false) {
     if (!State.isConnected) {
         const boosterArea = document.getElementById('dash-booster-area');
@@ -345,27 +353,29 @@ async function updateUserHub(forceRefresh = false) {
     }
 
     try {
-        // Efeito Visual de Loading (Sutil)
         const rewardsEl = document.getElementById('dash-user-rewards');
         if (forceRefresh && rewardsEl) {
             rewardsEl.classList.add('animate-pulse', 'opacity-70');
         }
 
-        // Chama data.js com o parâmetro forceRefresh
         await loadUserData(forceRefresh); 
         
         const claimDetails = await calculateClaimDetails();
-        const { totalRewards, netClaimAmount } = claimDetails;
+        const { totalRewards, netClaimAmount, feeAmount } = claimDetails;
         
         animateClaimableRewards(netClaimAmount);
 
-        const grossEl = document.getElementById('dash-user-gross-rewards');
-        if (grossEl) {
-            if (totalRewards > 0n) {
-                grossEl.textContent = `Gross Reward: ${formatBigNumber(totalRewards).toFixed(4)} BKC`;
-                grossEl.classList.remove('hidden');
+        // Exibe o Potencial de Ganho Extra (ISCA)
+        const gainArea = document.getElementById('dash-user-gain-area');
+        const gainVal = document.getElementById('dash-user-potential-gain');
+
+        if (gainArea && gainVal) {
+            if (totalRewards > 0n && feeAmount > 0n) {
+                // O ganho potencial é exatamente o valor que está sendo descontado (taxa)
+                gainVal.textContent = formatBigNumber(feeAmount).toFixed(4);
+                gainArea.classList.remove('hidden');
             } else {
-                grossEl.classList.add('hidden');
+                gainArea.classList.add('hidden');
             }
         }
         
@@ -378,7 +388,6 @@ async function updateUserHub(forceRefresh = false) {
         const boosterData = await getHighestBoosterBoostFromAPI();
         renderBoosterCard(boosterData, claimDetails);
 
-        // Remove efeito visual
         if (rewardsEl) rewardsEl.classList.remove('animate-pulse', 'opacity-70');
 
     } catch (e) { console.error("User Hub Error", e); }
@@ -390,37 +399,56 @@ function renderBoosterCard(data, claimDetails) {
 
     const totalPending = claimDetails ? claimDetails.totalRewards : 0n;
     
-    if (!data || data.highestBoost === 0) {
-        const maxBoostBips = boosterTiers && boosterTiers.length > 0 
-            ? boosterTiers.reduce((max, t) => t.boostBips > max ? t.boostBips : max, 0)
-            : 2000;
+    // --- LÓGICA DE GAMIFICAÇÃO (YIELD EFFICIENCY) ---
+    // [CRÍTICO] Verificação de 'source' para evitar NFT Fantasma
+    const hasValidBooster = data && data.highestBoost > 0 && data.source !== 'none';
+    const currentBoostBips = hasValidBooster ? data.highestBoost : 0;
+    
+    // Calcula eficiência: 50% (Base) + (BoostBips / 100)%
+    let efficiency = 50 + (currentBoostBips / 100);
+    if (efficiency > 100) efficiency = 100;
 
-        const potentialSaveWei = (totalPending * BigInt(maxBoostBips)) / 10000n;
-        const potentialFormatted = formatBigNumber(potentialSaveWei).toFixed(4);
+    // --- CENÁRIO 1: EFICIÊNCIA ABAIXO DE 100% (UPSELL) ---
+    if (efficiency < 100) {
+        const feeAmount = claimDetails?.feeAmount || 0n; 
+        const lostFormatted = formatBigNumber(feeAmount).toFixed(4);
 
-        const copyText = totalPending > 0n 
-            ? `<span class="text-red-400 font-bold">Stop losing ${potentialFormatted} BKC</span> in fees.`
-            : "Reduce your claim fees significantly.";
+        const copyText = totalPending > 0n && feeAmount > 0n
+            ? `Leaving <span class="text-amber-400 font-bold">${lostFormatted} BKC</span> on the table.`
+            : "Boost your efficiency to 100% to claim full rewards.";
+
+        // Barra de Progresso Visual
+        const progressBar = `
+            <div class="w-full bg-zinc-800 rounded-full h-2.5 mb-2 border border-zinc-700 overflow-hidden relative">
+                <div class="bg-gradient-to-r from-red-500 to-amber-500 h-2.5 rounded-full transition-all duration-1000" style="width: ${efficiency}%"></div>
+            </div>
+            <div class="flex justify-between text-[10px] text-zinc-500 mb-3 font-mono">
+                <span>${efficiency}% Efficiency</span>
+                <span>Goal: 100%</span>
+            </div>
+        `;
 
         container.innerHTML = `
             <div class="text-center animate-fadeIn">
-                <div class="inline-block bg-red-900/20 rounded-full p-3 mb-2 border border-red-500/30">
-                    <i class="fa-solid fa-triangle-exclamation text-2xl text-red-500"></i>
-                </div>
-                <h4 class="text-white font-bold mb-1">Fee Alert</h4>
-                <p class="text-xs text-zinc-400 mb-3 max-w-[220px] mx-auto leading-relaxed">
+                <h4 class="text-white font-bold mb-2 flex items-center justify-center gap-2">
+                    <i class="fa-solid fa-gauge-high text-amber-500"></i> Yield Efficiency
+                </h4>
+                
+                ${progressBar}
+
+                <p class="text-xs text-zinc-300 mb-4 max-w-[220px] mx-auto">
                     ${copyText} <br>
                     <button id="open-booster-info" class="text-amber-400 hover:text-amber-300 underline font-bold mt-1">
-                        Learn about Boosters
+                        Upgrade Now
                     </button>
                 </p>
                 
                 <div class="flex gap-2 justify-center">
                     <button class="go-to-store bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold py-2 px-4 rounded shadow-lg transition-colors">
-                        Buy
+                        Buy Booster
                     </button>
                     <button class="go-to-rental bg-cyan-700 hover:bg-cyan-600 text-white text-xs font-bold py-2 px-4 rounded shadow-lg transition-colors">
-                        Rent
+                        Rent Booster
                     </button>
                 </div>
             </div>
@@ -428,36 +456,27 @@ function renderBoosterCard(data, claimDetails) {
         return;
     }
 
+    // --- CENÁRIO 2: 100% EFICIÊNCIA (SUCCESS STATE) ---
     const isRented = data.source === 'rented';
     const badgeColor = isRented ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/30' : 'bg-green-500/20 text-green-300 border-green-500/30';
     const badgeText = isRented ? 'Rented Active' : 'Owner Active';
 
-    let upgradeText = `<span class="text-green-400">Max efficiency active!</span>`;
-    const currentBoost = data.highestBoost;
-    const nextTier = boosterTiers.find(t => t.boostBips > currentBoost);
+    let upgradeText = `<span class="text-green-400 font-bold"><i class="fa-solid fa-check-circle"></i> Max Yield Active!</span>`;
     
-    if (nextTier && totalPending > 0n) {
-        const diffBips = BigInt(nextTier.boostBips - currentBoost);
-        const extraSaveWei = (totalPending * diffBips) / 10000n;
-        upgradeText = `Upgrade to save <span class="text-green-400">+${formatBigNumber(extraSaveWei).toFixed(4)} BKC</span>`;
-    } else if (nextTier) {
-        upgradeText = `Next Tier: +${(nextTier.boostBips - currentBoost)/100}% Efficiency`;
-    }
-
     let finalImageUrl = data.imageUrl;
     if (!finalImageUrl || finalImageUrl.includes('placeholder')) {
-        const tierInfo = boosterTiers.find(t => t.boostBips === currentBoost);
+        const tierInfo = boosterTiers.find(t => t.boostBips === currentBoostBips);
         if (tierInfo && tierInfo.realImg) finalImageUrl = tierInfo.realImg;
     }
 
     container.innerHTML = `
         <div class="flex flex-col items-center w-full animate-fadeIn">
-            <div class="relative w-full bg-zinc-800/40 border border-zinc-700 rounded-xl p-3 flex items-center gap-4 overflow-hidden group hover:border-amber-500/30 transition-all nft-clickable-image cursor-pointer" data-address="${addresses.rewardBoosterNFT}" data-tokenid="${data.tokenId}">
+            <div class="relative w-full bg-zinc-800/40 border border-zinc-700 rounded-xl p-3 flex items-center gap-4 overflow-hidden group hover:border-green-500/30 transition-all nft-clickable-image cursor-pointer" data-address="${addresses.rewardBoosterNFT}" data-tokenid="${data.tokenId}">
                 
                 <div class="relative w-20 h-20 flex-shrink-0">
                     <img src="${finalImageUrl}" class="w-full h-full object-cover rounded-lg shadow-lg transition-transform group-hover:scale-105" onerror="this.src='./assets/bkc_logo_3d.png'">
-                    <div class="absolute -top-2 -left-2 bg-black/80 text-amber-400 font-black text-xs px-2 py-1 rounded border border-amber-500/50 shadow-lg z-10">
-                        +${data.highestBoost/100}%
+                    <div class="absolute -top-2 -left-2 bg-green-500 text-black font-black text-xs px-2 py-1 rounded shadow-lg z-10">
+                        100%
                     </div>
                 </div>
 
@@ -474,14 +493,14 @@ function renderBoosterCard(data, claimDetails) {
             </div>
             
             <button id="open-booster-info" class="text-[10px] text-zinc-500 hover:text-zinc-300 mt-2 underline">
-                What are Boosters?
+                View Benefits
             </button>
         </div>
     `;
 }
 
 // ============================================================================
-// 4. TABELA DE ATIVIDADES (CORREÇÃO DE DADOS FIREBASE)
+// 4. TABELA DE ATIVIDADES
 // ============================================================================
 
 async function fetchAndProcessActivities() {
@@ -519,10 +538,9 @@ function applyFiltersAndRender() {
         result = result.filter(item => {
             const t = normalize(item.type);
             if (type === 'STAKE') return t.includes('DELEGATION');
-            if (type === 'UNSTAKE') return t.includes('UNSTAKE');
             if (type === 'CLAIM') return t.includes('REWARD') || t.includes('CLAIM');
-            if (type === 'NFT') return t.includes('BOOSTER') || t.includes('RENT') || t.includes('TRANSFER');
-            if (type === 'GAME') return t.includes('FORTUNE') || t.includes('GAME');
+            if (type === 'NFT') return t.includes('BOOSTER') || t.includes('RENT') || t.includes('TRANSFER') || t.includes('NFTBOUGHT') || t.includes('NFTSOLD');
+            if (type === 'GAME') return t.includes('FORTUNE') || t.includes('GAME') || t.includes('REQUEST') || t.includes('RESULT');
             return true;
         });
     }
@@ -534,9 +552,7 @@ function applyFiltersAndRender() {
             if (obj.timestamp) return new Date(obj.timestamp).getTime() / 1000;
             return 0;
         };
-        const timeA = getTime(a);
-        const timeB = getTime(b);
-        return DashboardState.filters.sort === 'NEWEST' ? timeB - timeA : timeA - timeB;
+        return DashboardState.filters.sort === 'NEWEST' ? getTime(b) - getTime(a) : getTime(a) - getTime(b);
     });
 
     DashboardState.filteredActivities = result;
@@ -560,39 +576,28 @@ function renderActivityPage() {
     const pageItems = DashboardState.filteredActivities.slice(start, end);
 
     listEl.innerHTML = pageItems.map(item => {
-        let ts = 0;
-        if (item.timestamp && item.timestamp._seconds) ts = item.timestamp._seconds;
-        else if (item.createdAt && item.createdAt._seconds) ts = item.createdAt._seconds;
-        else if (item.timestamp) ts = new Date(item.timestamp).getTime() / 1000;
-        
-        const dateObj = ts > 0 ? new Date(ts * 1000) : new Date();
-        const dateStr = dateObj.toLocaleDateString();
-        const timeStr = dateObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        const dateStr = formatDate(item.timestamp || item.createdAt);
+        const timeStr = (item.timestamp && (item.timestamp.seconds || item.timestamp._seconds)) 
+            ? new Date((item.timestamp.seconds || item.timestamp._seconds) * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+            : '';
         
         let icon = 'fa-circle', color = 'text-zinc-500', label = item.type;
         const t = (item.type || '').toUpperCase();
         
-        if(t.includes('DELEGATION')) { 
-            icon = 'fa-layer-group'; color = 'text-purple-400'; label = 'Staked BKC'; 
-        } else if(t.includes('UNSTAKE')) { 
-            icon = 'fa-unlock'; color = 'text-zinc-400'; label = 'Unstaked'; 
-        } else if(t.includes('REWARD') || t.includes('CLAIM')) { 
-            icon = 'fa-gift'; color = 'text-amber-400'; label = 'Rewards Claimed'; 
-        } else if(t.includes('BOOSTER') || t.includes('NFT')) { 
-            icon = 'fa-bolt'; color = 'text-cyan-400'; label = 'Booster NFT'; 
-        } else if(t.includes('RENT')) { 
-            icon = 'fa-house-user'; color = 'text-blue-400'; label = 'Rental'; 
-        } else if(t.includes('FORTUNE') || t.includes('GAME')) { 
-            icon = 'fa-trophy'; color = 'text-yellow-400'; label = 'Fortune Game'; 
-        }
+        if(t.includes('DELEGATION')) { icon = 'fa-layer-group'; color = 'text-purple-400'; label = 'Staked BKC'; }
+        else if(t.includes('UNSTAKE')) { icon = 'fa-unlock'; color = 'text-zinc-400'; label = 'Unstaked'; }
+        else if(t.includes('REWARD') || t.includes('CLAIM')) { icon = 'fa-gift'; color = 'text-amber-400'; label = 'Rewards Claimed'; }
+        else if(t === 'NFTBOUGHT') { icon = 'fa-cart-shopping'; color = 'text-green-400'; label = 'Bought Booster'; }
+        else if(t === 'BOOSTERBUY') { icon = 'fa-star'; color = 'text-yellow-300'; label = 'Minted from Sale'; }
+        else if(t === 'NFTSOLD') { icon = 'fa-money-bill-transfer'; color = 'text-orange-400'; label = 'Sold to Pool'; }
+        else if(t.includes('RENTALR') || t.includes('RENTED')) { icon = 'fa-house-user'; color = 'text-blue-400'; label = 'Rented NFT'; }
+        else if(t.includes('RENTALLIST')) { icon = 'fa-sign-hanging'; color = 'text-blue-300'; label = 'Listed for Rent'; }
+        else if(t === 'GAMEREQUESTED') { icon = 'fa-ticket'; color = 'text-amber-500'; label = 'Fortune Pool: Bet'; }
+        else if(t === 'GAMERESULT') { icon = 'fa-robot'; color = 'text-cyan-400'; label = 'Fortune Oracle: Result'; }
+        else if(t.includes('FORTUNE') || t.includes('GAME')) { icon = 'fa-trophy'; color = 'text-yellow-400'; label = 'Fortune Game'; }
         
         const txLink = item.txHash ? `${EXPLORER_BASE_URL}${item.txHash}` : '#';
-        
-        let rawAmount = "0";
-        if (item.amount) rawAmount = item.amount;
-        else if (item.details && item.details.amount) rawAmount = item.details.amount;
-        else if (item.data && item.data.amount) rawAmount = item.data.amount;
-
+        let rawAmount = item.amount || item.details?.amount || item.data?.amount || "0";
         const amountDisplay = (rawAmount && rawAmount !== "0") ? `${formatBigNumber(BigInt(rawAmount)).toFixed(2)}` : '';
 
         return `
@@ -604,7 +609,7 @@ function renderActivityPage() {
                         </div>
                         <div>
                             <p class="text-white text-sm font-bold">${label}</p>
-                            <p class="text-xs text-zinc-500">${dateStr} • ${timeStr}</p>
+                            <p class="text-xs text-zinc-500">${dateStr} ${timeStr ? '• ' + timeStr : ''}</p>
                         </div>
                     </div>
                     <div class="text-right">
@@ -623,10 +628,8 @@ function renderActivityPage() {
         
         const prevBtn = document.getElementById('page-prev');
         const nextBtn = document.getElementById('page-next');
-        
         prevBtn.disabled = DashboardState.pagination.currentPage === 1;
         nextBtn.disabled = DashboardState.pagination.currentPage >= maxPage;
-        
         prevBtn.style.opacity = DashboardState.pagination.currentPage === 1 ? '0.3' : '1';
         nextBtn.style.opacity = DashboardState.pagination.currentPage >= maxPage ? '0.3' : '1';
     }
@@ -645,13 +648,10 @@ function attachDashboardListeners() {
                 const btn = target.closest('#manual-refresh-btn');
                 btn.disabled = true;
                 btn.innerHTML = '<i class="fa-solid fa-rotate fa-spin"></i> Syncing...';
-                
-                await updateUserHub(true); // Força refresh
-                
-                setTimeout(() => {
-                    btn.innerHTML = '<i class="fa-solid fa-rotate"></i> Sync Data';
-                    btn.disabled = false;
-                }, 1000);
+                await updateUserHub(true); 
+                DashboardState.activities = []; 
+                await fetchAndProcessActivities(); 
+                setTimeout(() => { btn.innerHTML = '<i class="fa-solid fa-rotate"></i> Sync Data'; btn.disabled = false; }, 1000);
             }
 
             if (target.closest('.delegate-link')) { e.preventDefault(); window.navigateTo('mine'); }
@@ -694,7 +694,7 @@ function attachDashboardListeners() {
                         const success = await executeUniversalClaim(stakingRewards, minerRewards, null);
                         if (success) {
                             showToast("Rewards claimed!", "success");
-                            await updateUserHub(true); // Refresh forçado após claim
+                            await updateUserHub(true); 
                             DashboardState.activities = []; 
                             fetchAndProcessActivities();
                         }
@@ -738,7 +738,7 @@ export const DashboardPage = {
         renderDashboardLayout();
         updateGlobalMetrics();
         if (State.isConnected) {
-            await updateUserHub(false); // Inicial normal (cache)
+            await updateUserHub(false); 
             fetchAndProcessActivities();
         }
     },
@@ -752,7 +752,7 @@ export const DashboardPage = {
 
             if ((now - DashboardState.lastUpdate > 10000) || (!hasActivityData && isShowingPlaceholder)) {
                 DashboardState.lastUpdate = now;
-                updateUserHub(false); // Update suave em background
+                updateUserHub(false); 
                 fetchAndProcessActivities(); 
             }
         }

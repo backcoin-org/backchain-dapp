@@ -21,6 +21,7 @@ import "./IInterfaces.sol";
  * - **Ecosystem Integration**: Enforces minimum pStake requirements via DelegationManager.
  * - **Proof-of-Purchase**: Protocol fees trigger the MiningManager to mint new rewards.
  * - **Escrow**: NFTs are held securely by this contract during the listing period.
+ * - **Optimized Storage**: Uses O(1) array management for infinite scalability.
  */
 contract RentalManager is 
     Initializable, 
@@ -57,9 +58,12 @@ contract RentalManager is
     
     // Mapping: TokenID => Active Rental Details
     mapping(uint256 => Rental) public activeRentals;
-    
-    // Array to assist frontend indexing (Note: In production, TheGraph is recommended)
+
+    // Array to assist frontend indexing
     uint256[] public listedTokenIds;
+    
+    // [CRÍTICO] Otimização O(1): Mapeia TokenID para o Índice no Array
+    mapping(uint256 => uint256) private _listedTokenIndex;
 
     // --- Constants & Configuration Keys ---
     
@@ -106,7 +110,7 @@ contract RentalManager is
         
         ecosystemManager = IEcosystemManager(_ecosystemManagerAddress);
         nftContract = IERC721Upgradeable(_nftContract);
-        
+
         // Fetch BKC Token address dynamically from the Hub
         address bkcAddress = ecosystemManager.getBKCTokenAddress();
         if (bkcAddress == address(0)) revert InvalidAddress();
@@ -137,6 +141,7 @@ contract RentalManager is
             isActive: true
         });
 
+        // Otimização: Adiciona ao array com rastreamento de índice
         _addToListedArray(tokenId);
 
         emit NFTListed(tokenId, msg.sender, pricePerHour, maxDurationHours);
@@ -158,6 +163,8 @@ contract RentalManager is
         // Clean up storage
         delete listings[tokenId];
         delete activeRentals[tokenId];
+        
+        // Otimização: Remove do array usando Swap-and-Pop (O(1))
         _removeFromListedArray(tokenId);
 
         // Return NFT to owner
@@ -218,14 +225,13 @@ contract RentalManager is
         emit NFTRented(tokenId, msg.sender, listing.owner, hoursToRent, totalCost, feeAmount);
     }
 
-    // --- Internal Logic ---
+    // --- Internal Logic (Optimized) ---
 
     /**
      * @dev Checks if the user meets the minimum pStake required by the Ecosystem.
      */
     function _enforcePStakeRequirement(address _user) internal view {
         ( , uint256 minPStake) = ecosystemManager.getServiceRequirements(RENTAL_ACCESS_KEY);
-        
         if (minPStake > 0) {
             address delegationManagerAddr = ecosystemManager.getDelegationManagerAddress();
             if (delegationManagerAddr != address(0)) {
@@ -235,18 +241,37 @@ contract RentalManager is
         }
     }
 
+    /**
+     * @dev O(1) Add to array.
+     */
     function _addToListedArray(uint256 tokenId) internal {
+        // Registra onde o token vai ficar no array (última posição)
+        _listedTokenIndex[tokenId] = listedTokenIds.length;
         listedTokenIds.push(tokenId);
     }
 
+    /**
+     * @dev O(1) Remove from array (Swap-and-Pop pattern).
+     * Prevents gas issues with large arrays.
+     */
     function _removeFromListedArray(uint256 tokenId) internal {
-        for (uint256 i = 0; i < listedTokenIds.length; i++) {
-            if (listedTokenIds[i] == tokenId) {
-                listedTokenIds[i] = listedTokenIds[listedTokenIds.length - 1];
-                listedTokenIds.pop();
-                break;
-            }
+        uint256 indexToRemove = _listedTokenIndex[tokenId];
+        uint256 lastIndex = listedTokenIds.length - 1;
+
+        // Se o elemento não for o último, troca de lugar com o último
+        if (indexToRemove != lastIndex) {
+            uint256 lastTokenId = listedTokenIds[lastIndex];
+
+            // Move o último elemento para o buraco do elemento que vai sair
+            listedTokenIds[indexToRemove] = lastTokenId;
+            
+            // Atualiza o índice do elemento movido
+            _listedTokenIndex[lastTokenId] = indexToRemove;
         }
+
+        // Remove o último elemento (que agora é duplicado ou o alvo)
+        listedTokenIds.pop();
+        delete _listedTokenIndex[tokenId];
     }
 
     // --- View Functions ---

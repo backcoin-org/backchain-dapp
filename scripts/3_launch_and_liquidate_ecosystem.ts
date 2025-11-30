@@ -1,18 +1,19 @@
 // scripts/3_launch_and_liquidate_ecosystem.ts
-// ✅ VERSÃO FINAL V3.2: Fix TypeScript Error 1308 + Smart Recovery + Limpeza de Carteira
+// ✅ VERSÃO FINAL V3.3: Anti-Rate Limit (Infura/Alchemy Fix) + Retry no DeployProxy
 
 import { ethers, upgrades } from "hardhat";
 import { HardhatRuntimeEnvironment } from "hardhat/types";
 import fs from "fs";
 import path from "path";
-import { LogDescription, Log, ContractTransactionReceipt, BaseContract } from "ethers";
+import { LogDescription, Log, ContractTransactionReceipt } from "ethers";
 
 // ######################################################################
 // ###               CONFIGURAÇÃO DE LANÇAMENTO DO ECOSSISTEMA        ###
 // ######################################################################
 
-const DEPLOY_DELAY_MS = 2000;
-const CHUNK_SIZE = 100; // Reduzido para segurança em loops e evitar estouro de gás
+// AUMENTADO PARA 10s PARA EVITAR ERRO 429 (TOO MANY REQUESTS)
+const DEPLOY_DELAY_MS = 10000; 
+const CHUNK_SIZE = 50; // Reduzido para aliviar o RPC
 const CHUNK_SIZE_BIGINT = BigInt(CHUNK_SIZE);
 
 // Quantidade de NFTs para injetar na liquidez inicial por Tier
@@ -26,14 +27,9 @@ const MANUAL_LIQUIDITY_MINT_COUNT = [
     70n  // Crystal
 ];
 
-const FORTUNE_POOL_ORACLE_FEE_ETH = "0.001"; 
 const FORTUNE_POOL_LIQUIDITY_TOTAL = ethers.parseEther("1000000"); // 1M BKC
 
 // --- [CALIBRAÇÃO V3] TIGER GAME (Ajustado) ---
-// Base: 10000 BIPS = 1x (100%)
-// Tier 1 (33%): Paga 2x (20000 BIPS)
-// Tier 2 (10%): Paga 5x (50000 BIPS)
-// Tier 3 (1%): Paga 100x (1000000 BIPS)
 const FORTUNE_POOL_TIERS = [
     { poolId: 1, multiplierBips: 20000n, chanceDenominator: 3n }, 
     { poolId: 2, multiplierBips: 50000n, chanceDenominator: 10n }, 
@@ -73,6 +69,27 @@ function updateAddressJSON(key: string, value: string) {
     fs.writeFileSync(addressesFilePath, JSON.stringify(currentAddresses, null, 2));
 }
 
+// Helper robusto para Deploy de Proxy com Retries (Evita erro 429 no deploy)
+async function deployProxyWithRetries(Factory: any, args: any[], retries = 5) {
+    for (let i = 0; i < retries; i++) {
+        try {
+            const instance = await upgrades.deployProxy(Factory, args, { kind: "uups" });
+            await instance.waitForDeployment();
+            return instance;
+        } catch (error: any) {
+            const msg = error.message || JSON.stringify(error);
+            if (msg.includes("Too Many Requests") || msg.includes("429") || msg.includes("network")) {
+                const waitTime = DEPLOY_DELAY_MS * (i + 1); // Backoff exponencial simples
+                console.warn(`   ⚠️ Rate Limit no Deploy (429). Tentativa ${i + 1}/${retries}. Aguardando ${waitTime/1000}s...`);
+                await sleep(waitTime);
+            } else {
+                throw error;
+            }
+        }
+    }
+    throw new Error("Falha no deploy após várias tentativas devido a Rate Limit.");
+}
+
 async function sendTransactionWithRetries(txFunction: () => Promise<any>, description: string, retries = 5): Promise<ContractTransactionReceipt | null> {
   for (let i = 0; i < retries; i++) {
     try {
@@ -82,6 +99,7 @@ async function sendTransactionWithRetries(txFunction: () => Promise<any>, descri
       if (!receipt) { throw new Error("Transação enviada, mas o recibo retornou nulo."); }
       
       console.log(`   ✅ [SUCESSO] ${description}`);
+      await sleep(2000); // Pausa extra após cada sucesso para respirar o RPC
       return receipt as ContractTransactionReceipt;
     } catch (error: any) {
       const errorMessage = error.message || JSON.stringify(error);
@@ -89,9 +107,10 @@ async function sendTransactionWithRetries(txFunction: () => Promise<any>, descri
              console.log(`   ⚠️ Nota: Ação já realizada anteriormente (${description}). Continuando...`);
              return null;
       }
-      if ((errorMessage.includes("nonce") || errorMessage.includes("replacement fee") || errorMessage.includes("network")) && i < retries - 1) {
-        console.warn(`   ⚠️ Erro temporário. Tentativa ${i + 1}/${retries}. Aguardando...`);
-        await sleep(5000);
+      if ((errorMessage.includes("nonce") || errorMessage.includes("replacement fee") || errorMessage.includes("network") || errorMessage.includes("Too Many Requests") || errorMessage.includes("429")) && i < retries - 1) {
+        const waitTime = 5000 * (i + 1);
+        console.warn(`   ⚠️ Erro temporário RPC. Tentativa ${i + 1}/${retries}. Aguardando ${waitTime/1000}s...`);
+        await sleep(waitTime);
       } else {
         throw error; // Erro fatal
       }
@@ -102,43 +121,38 @@ async function sendTransactionWithRetries(txFunction: () => Promise<any>, descri
 
 /**
  * 🕵️‍♂️ FUNÇÃO INTELIGENTE: SCANNER DE ÓRFÃOS
- * Procura por NFTs que estão na carteira do Deployer (mintados mas não usados)
- * para evitar mintar duplicado em caso de falha e garantir limpeza.
  */
 async function findDeployerOrphanTokens(rewardBoosterNFT: any, deployerAddress: string, targetBoostBips: bigint): Promise<string[]> {
-    console.log(`      🕵️‍♂️ Escaneando carteira por NFTs órfãos (Recuperação de falha)...`);
+    console.log(`      🕵️‍♂️ Escaneando carteira por NFTs órfãos...`);
     
-    const filterTo = rewardBoosterNFT.filters.Transfer(null, deployerAddress, null);
-    const events = await rewardBoosterNFT.queryFilter(filterTo); 
-    
-    const ownedTokenIds: string[] = [];
-
-    for (const event of events) {
-        if ('args' in event) {
-            const tokenId = (event as any).args[2];
-            try {
-                const currentOwner = await rewardBoosterNFT.ownerOf(tokenId);
-                if (currentOwner.toLowerCase() === deployerAddress.toLowerCase()) {
-                    const boost = await rewardBoosterNFT.boostBips(tokenId);
-                    if (boost === targetBoostBips) {
-                        ownedTokenIds.push(tokenId.toString());
+    // Tenta pegar logs. Se falhar por RPC, retorna vazio para não travar o script
+    try {
+        const filterTo = rewardBoosterNFT.filters.Transfer(null, deployerAddress, null);
+        const events = await rewardBoosterNFT.queryFilter(filterTo); 
+        
+        const ownedTokenIds: string[] = [];
+        for (const event of events) {
+            if ('args' in event) {
+                const tokenId = (event as any).args[2];
+                try {
+                    const currentOwner = await rewardBoosterNFT.ownerOf(tokenId);
+                    if (currentOwner.toLowerCase() === deployerAddress.toLowerCase()) {
+                        const boost = await rewardBoosterNFT.boostBips(tokenId);
+                        if (boost === targetBoostBips) {
+                            ownedTokenIds.push(tokenId.toString());
+                        }
                     }
-                }
-            } catch (e) {
-                // Token ignorado
+                } catch (e) { /* Token ignorado */ }
             }
         }
+        
+        const uniqueIds = [...new Set(ownedTokenIds)];
+        if (uniqueIds.length > 0) console.log(`      ⚠️ ${uniqueIds.length} NFTs órfãos encontrados! Reutilizando...`);
+        return uniqueIds;
+    } catch (e) {
+        console.warn("      ⚠️ Falha ao escanear eventos (RPC Limit). Seguindo sem órfãos.");
+        return [];
     }
-    
-    const uniqueIds = [...new Set(ownedTokenIds)];
-
-    if (uniqueIds.length > 0) {
-        console.log(`      ⚠️ ENCONTRADOS ${uniqueIds.length} NFTs órfãos na carteira! Reutilizando para limpeza...`);
-    } else {
-        console.log(`      ✅ Nenhum órfão encontrado. Carteira limpa.`);
-    }
-    
-    return uniqueIds;
 }
 
 // --- Funções Auxiliares de Regras ---
@@ -154,39 +168,39 @@ async function setPStake(manager: any, key: string, value: number | bigint) {
     if (current.pStake === BigInt(value)) return;
     await sendTransactionWithRetries(async () => await manager.setPStakeMinimum(hashedKey, value), `REGRA: pStake '${key}'`);
 }
-async function setMiningDistributionBips(manager: any, key: string, value: number | bigint) {
-    const hashedKey = ethers.id(key);
-    const current = await manager.getMiningDistributionBips(hashedKey);
-    if (current === BigInt(value)) return;
-    await sendTransactionWithRetries(async () => await manager.setMiningDistributionBips(hashedKey, value), `ECONOMIA: Mineração '${key}'`);
-}
-async function setFeeDistributionBips(manager: any, key: string, value: number | bigint) {
-    const hashedKey = ethers.id(key);
-    const current = await manager.getFeeDistributionBips(hashedKey);
-    if (current === BigInt(value)) return;
-    await sendTransactionWithRetries(async () => await manager.setFeeDistributionBips(hashedKey, value), `ECONOMIA: Taxas '${key}'`);
-}
 
 async function getOrCreateSpoke(hre: any, addresses: any, key: string, contractName: string, contractPath: string, args: any[]) {
-    const { ethers, upgrades } = hre;
+    const { ethers } = hre;
     const [deployer] = await ethers.getSigners();
+    
+    // Verifica se já existe
     if (addresses[key] && addresses[key].startsWith("0x")) {
-        const code = await ethers.provider.getCode(addresses[key]);
-        if (code !== "0x") return await ethers.getContractAt(contractName, addresses[key], deployer);
+        try {
+            const code = await ethers.provider.getCode(addresses[key]);
+            if (code !== "0x") {
+                console.log(`   ⏩ ${contractName} já implantado em: ${addresses[key]}`);
+                return await ethers.getContractAt(contractName, addresses[key], deployer);
+            }
+        } catch (e) { console.warn("   ⚠️ Erro ao verificar código do contrato, tentando implantar..."); }
     } 
+
     console.log(`   🔨 Implantando ${contractName}...`);
     const Factory = await ethers.getContractFactory(contractPath.split(":")[1]);
-    const instance = await upgrades.deployProxy(Factory, args, { kind: "uups" });
-    await instance.waitForDeployment();
+    
+    // USA O DEPLOY COM RETRY
+    const instance = await deployProxyWithRetries(Factory, args);
+    
     const addr = await instance.getAddress();
     addresses[key] = addr;
     updateAddressJSON(key, addr);
     console.log(`   ✅ ${contractName} criado em: ${addr}`);
+    
+    await sleep(DEPLOY_DELAY_MS); // Pausa após deploy
     return instance;
 }
 
 export async function runScript(hre: HardhatRuntimeEnvironment) {
-  const { ethers, upgrades } = hre;
+  const { ethers } = hre;
   const [deployer] = await ethers.getSigners();
   const networkName = hre.network.name;
 
@@ -201,12 +215,12 @@ export async function runScript(hre: HardhatRuntimeEnvironment) {
   const hub = await ethers.getContractAt("EcosystemManager", addresses.ecosystemManager, deployer);
   const bkcTokenInstance = await ethers.getContractAt("BKCToken", addresses.bkcToken, deployer);
   
-  // Deploy Managers (Idempotente)
+  // Deploy Managers (Idempotente + Retry)
   const miningManagerInstance = await getOrCreateSpoke(hre, addresses, 'miningManager', 'MiningManager', 'contracts/MiningManager.sol:MiningManager', [addresses.ecosystemManager]); 
   const delegationManagerInstance = await getOrCreateSpoke(hre, addresses, 'delegationManager', 'DelegationManager', 'contracts/DelegationManager.sol:DelegationManager', [deployer.address, addresses.ecosystemManager]);
   
-  // Update Hub Addresses
-  console.log("\n🔌 Atualizando Hub...");
+  // Update Hub Addresses (Parte 1)
+  console.log("\n🔌 Atualizando Hub (Parte 1)...");
   await sendTransactionWithRetries(async () => await hub.setAddresses(
       addresses.bkcToken,
       addresses.treasuryWallet || deployer.address,
@@ -225,12 +239,14 @@ export async function runScript(hre: HardhatRuntimeEnvironment) {
   // Template & Factory
   let nftPoolImpAddr = addresses.nftLiquidityPool_Implementation;
   if (!nftPoolImpAddr || !nftPoolImpAddr.startsWith("0x")) {
+      console.log(`   🔨 Implantando Template NFTLiquidityPool...`);
       const NFTLiquidityPool = await ethers.getContractFactory("NFTLiquidityPool");
       const imp = await NFTLiquidityPool.deploy();
       await imp.waitForDeployment();
       nftPoolImpAddr = await imp.getAddress();
       addresses.nftLiquidityPool_Implementation = nftPoolImpAddr;
       updateAddressJSON("nftLiquidityPool_Implementation", nftPoolImpAddr);
+      await sleep(DEPLOY_DELAY_MS);
   }
   
   let factoryInstance = await getOrCreateSpoke(hre, addresses, 'nftLiquidityPoolFactory', 'NFTLiquidityPoolFactory', 'contracts/NFTLiquidityPoolFactory.sol:NFTLiquidityPoolFactory', 
@@ -238,6 +254,7 @@ export async function runScript(hre: HardhatRuntimeEnvironment) {
   );
 
   // Update Hub Final
+  console.log("\n🔌 Atualizando Hub (Final)...");
   await sendTransactionWithRetries(async () => await hub.setAddresses(
       addresses.bkcToken, addresses.treasuryWallet || deployer.address, addresses.delegationManager, addresses.rewardBoosterNFT, addresses.miningManager,
       addresses.decentralizedNotary, addresses.fortunePool, addresses.nftLiquidityPoolFactory
@@ -257,7 +274,11 @@ export async function runScript(hre: HardhatRuntimeEnvironment) {
   
   for (const m of miners) {
       if(m.addr && m.addr.startsWith("0x")) {
-          await sendTransactionWithRetries(async () => await mm.setAuthorizedMiner(ethers.id(m.key), m.addr), `AUTH: ${m.key}`);
+          // Verifica se já está autorizado para economizar RPC
+          const currentAuth = await mm.authorizedMiners(ethers.id(m.key));
+          if (currentAuth.toLowerCase() !== m.addr.toLowerCase()) {
+              await sendTransactionWithRetries(async () => await mm.setAuthorizedMiner(ethers.id(m.key), m.addr), `AUTH: ${m.key}`);
+          }
       }
   }
 
@@ -268,16 +289,22 @@ export async function runScript(hre: HardhatRuntimeEnvironment) {
 
   // TGE & Distribuição
   try {
-      if ((await bkcTokenInstance.balanceOf(addresses.treasuryWallet)) === 0n) {
+      // Verifica balance antes de tentar mintar para não falhar se já foi feito
+      const miningManagerBal = await bkcTokenInstance.balanceOf(addresses.miningManager);
+      if (miningManagerBal === 0n && (await bkcTokenInstance.totalSupply()) < TGE_SUPPLY_AMOUNT) {
           await sendTransactionWithRetries(async () => await miningManagerInstance.initialTgeMint(addresses.miningManager, TGE_SUPPLY_AMOUNT), "GÊNESE: Mint Inicial");
       }
-  } catch(e) {}
+  } catch(e) { console.log("   ⚠️ TGE já realizado ou erro não-crítico."); }
 
   const mmBal = await bkcTokenInstance.balanceOf(addresses.miningManager);
   if (mmBal > 0n) {
       const totalLiq = FORTUNE_POOL_LIQUIDITY_TOTAL + (LIQUIDITY_BKC_AMOUNT_PER_POOL * BigInt(ALL_TIERS.length)) + INITIAL_STAKE_AMOUNT;
       await sendTransactionWithRetries(async () => await miningManagerInstance.transferTokensFromGuardian(deployer.address, totalLiq), "SAQUE: Fundos Operacionais");
-      await sendTransactionWithRetries(async () => await miningManagerInstance.transferTokensFromGuardian(deployer.address, await bkcTokenInstance.balanceOf(addresses.miningManager)), "SAQUE: Tesouraria");
+      
+      const rest = await bkcTokenInstance.balanceOf(addresses.miningManager);
+      if (rest > 0n) {
+        await sendTransactionWithRetries(async () => await miningManagerInstance.transferTokensFromGuardian(deployer.address, rest), "SAQUE: Tesouraria");
+      }
   }
 
   // Configuração Oráculo & Tiers Jogo
@@ -328,6 +355,7 @@ export async function runScript(hre: HardhatRuntimeEnvironment) {
           await sendTransactionWithRetries(async () => await factoryInstance.deployPool(tier.boostBips), `FÁBRICA: Novo Pool ${tier.name}`);
           poolAddress = await factoryInstance.getPoolAddress(tier.boostBips);
           updateAddressJSON(poolKey, poolAddress);
+          await sleep(DEPLOY_DELAY_MS);
       }
       
       const poolInstance = await ethers.getContractAt("NFTLiquidityPool", poolAddress, deployer);
@@ -338,7 +366,7 @@ export async function runScript(hre: HardhatRuntimeEnvironment) {
           continue;
       }
 
-      // 2. Autorizar Pool para Mineração
+      // 2. Autorizar Pool para Mineração (Com checagem para evitar erro)
       try {
           await sendTransactionWithRetries(async () => await mm.setAuthorizedMiner(ethers.id("NFT_POOL_BUY_TAX_BIPS"), poolAddress), `AUTH: Pool ${tier.name}`);
           await sendTransactionWithRetries(async () => await mm.setAuthorizedMiner(ethers.id("NFT_POOL_SELL_TAX_BIPS"), poolAddress), `AUTH: Pool ${tier.name}`);
@@ -370,6 +398,7 @@ export async function runScript(hre: HardhatRuntimeEnvironment) {
                       .map((log: LogDescription) => log.args.tokenId.toString());
                   idsToDeposit.push(...newIds);
               }
+              await sleep(2000); // Pausa entre lotes
           }
       } else {
           console.log(`      ✅ Estoque completo usando apenas NFTs recuperados!`);
@@ -391,6 +420,7 @@ export async function runScript(hre: HardhatRuntimeEnvironment) {
               } else {
                   await sendTransactionWithRetries(async () => await poolInstance.addMoreNFTsToPool(chunk), `MERCADO: +Estoque`);
               }
+              await sleep(2000); // Pausa entre depósitos
           }
           await sendTransactionWithRetries(async () => await rewardBoosterNFT.setApprovalForAll(poolAddress, false), `SEGURANÇA: Revogando`);
       }

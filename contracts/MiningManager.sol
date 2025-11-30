@@ -13,7 +13,7 @@ import "./BKCToken.sol";
 /**
  * @title MiningManager
  * @notice The economic heart of the Backcoin Protocol ($BKC).
- * @dev Handles the "Proof-of-Purchase" mining mechanism and revenue distribution.
+ * @dev Handles the "Proof-of-Purchase" mining mechanism with LINEAR DYNAMIC SCARCITY.
  * Optimized for BNB Chain.
  */
 contract MiningManager is
@@ -38,11 +38,9 @@ contract MiningManager is
     // --- Constants ---
 
     uint256 private constant E18 = 10**18;
-    // Dynamic Scarcity Thresholds (160M Max Mintable via Mining)
+    // Dynamic Scarcity Base: 160M Tokens available for mining
+    // This is the denominator for the linear scarcity curve.
     uint256 private constant MAX_MINTABLE_SUPPLY = 160000000 * E18;
-    uint256 private constant THRESHOLD_80M = 80000000 * E18;
-    uint256 private constant THRESHOLD_40M = 40000000 * E18;
-    uint256 private constant THRESHOLD_20M = 20000000 * E18;
 
     // Pre-computed hashes for distribution keys to save gas during mining
     bytes32 public constant POOL_TREASURY = keccak256("TREASURY");
@@ -113,13 +111,13 @@ contract MiningManager is
             isAuthorized = true;
         } else {
             // Check 2: Valid Liquidity Pool via Factory
-            // CLEANUP: Removido o staticcall complexo, usando interface direta e limpa
+            // CLEANUP: Removed complex staticcall, using clean interface
             address factoryAddress = ecosystemManager.getNFTLiquidityPoolFactoryAddress();
             if (factoryAddress != address(0)) {
                 try INFTLiquidityPoolFactory(factoryAddress).isPool(msg.sender) returns (bool valid) {
                     isAuthorized = valid;
                 } catch {
-                    // Se falhar a chamada (ex: endereço invalido), mantém não autorizado
+                    // If call fails (e.g. invalid address), remains unauthorized
                 }
             }
         }
@@ -131,6 +129,7 @@ contract MiningManager is
         address dm = ecosystemManager.getDelegationManagerAddress();
         
         // 3. --- MINING DISTRIBUTION (New Tokens) ---
+        // Uses the Linear Scarcity Logic
         uint256 totalMintAmount = getMintAmount(_purchaseAmount);
         if (totalMintAmount > 0) {
             uint256 miningTreasuryBips = ecosystemManager.getMiningDistributionBips(POOL_TREASURY);
@@ -179,7 +178,12 @@ contract MiningManager is
     }
 
     /**
-     * @notice Calculates mint amount based on dynamic scarcity of $BKC.
+     * @notice Calculates mint amount based on LINEAR dynamic scarcity.
+     * @dev 
+     * Formula: Mint = Purchase * (RemainingSupply / 160M)
+     * - At 160M remaining (start): Mint = Purchase * 1.0 (100%)
+     * - At 80M remaining: Mint = Purchase * 0.5 (50%)
+     * - At 0M remaining: Mint = 0
      */
     function getMintAmount(uint256 _purchaseAmount) public view override returns (uint256) {
         uint256 maxSupply = bkcToken.MAX_SUPPLY();
@@ -194,18 +198,15 @@ contract MiningManager is
             remainingToMint = maxSupply - currentSupply;
         }
         
-        uint256 mintRatioBips = 10000; // Default 100% (1.0x)
-
-        // Efficient if-else chain for thresholds
-        if (remainingToMint < THRESHOLD_20M) {
-            mintRatioBips = 1250; // 12.5%
-        } else if (remainingToMint < THRESHOLD_40M) {
-            mintRatioBips = 2500; // 25%
-        } else if (remainingToMint < THRESHOLD_80M) {
-            mintRatioBips = 5000; // 50%
+        // Safety cap: If burned tokens cause remaining > 160M, cap ratio at 100% (1:1)
+        if (remainingToMint > MAX_MINTABLE_SUPPLY) {
+            return _purchaseAmount;
         }
         
-        return (_purchaseAmount * mintRatioBips) / 10000;
+        // Linear Calculation:
+        // (Purchase * Remaining) / 160,000,000
+        // Multiplication first to maintain precision
+        return (_purchaseAmount * remainingToMint) / MAX_MINTABLE_SUPPLY;
     }
     
     function transferTokensFromGuardian(address to, uint256 amount) external onlyOwner {
