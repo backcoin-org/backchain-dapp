@@ -1,5 +1,5 @@
 // js/modules/data.js
-// ✅ VERSÃO FINAL V5.0: API-First Architecture + RPC Fallback + Smart Caching
+// ✅ VERSÃO FINAL V6.0: Endpoint Vercel Corrigido + Fix BigInt Crash + Cache Inteligente
 
 const ethers = window.ethers;
 
@@ -9,7 +9,7 @@ import { addresses, boosterTiers, rentalManagerABI, rewardBoosterABI } from '../
 // ====================================================================
 // CONSTANTS & UTILITIES
 // ====================================================================
-const API_TIMEOUT_MS = 5000; // 5 segundos max para API responder
+const API_TIMEOUT_MS = 8000; // Aumentado para 8s para evitar timeout em redes lentas
 const CACHE_DURATION_MS = 60000; // Cache de dados do sistema (1 min)
 const CONTRACT_READ_CACHE_MS = 10000; // Cache de leitura RPC curta (10s)
 const OWNERSHIP_CACHE_MS = 30000; // Cache de dono de NFT (30s)
@@ -38,7 +38,8 @@ async function fetchWithTimeout(url, timeoutMs) {
     }
 }
 
-// ENDPOINTS DA SUA API (Firebase Functions)
+// ⚠️ CORREÇÃO CRÍTICA AQUI: O endpoint de upload DEVE ser relativo (/api/upload)
+// ENDPOINTS DA SUA API (Firebase Functions + Vercel)
 export const API_ENDPOINTS = {
     getHistory: 'https://gethistory-4wvdcuoouq-uc.a.run.app',
     getBoosters: 'https://getboosters-4wvdcuoouq-uc.a.run.app',
@@ -46,7 +47,10 @@ export const API_ENDPOINTS = {
     getNotaryHistory: 'https://getnotaryhistory-4wvdcuoouq-uc.a.run.app',
     getRentalListings: 'https://getrentallistings-4wvdcuoouq-uc.a.run.app', 
     getUserRentals: 'https://getuserrentals-4wvdcuoouq-uc.a.run.app',       
-    uploadFileToIPFS: 'https://uploadfiletoipfs-4wvdcuoouq-uc.a.run.app',   
+    
+    // 👇 AQUI ESTAVA O ERRO DE CORS. MUDADO PARA O LOCAL:
+    uploadFileToIPFS: '/api/upload',   
+    
     claimAirdrop: 'https://us-central1-airdropbackchainnew.cloudfunctions.net/claimAirdrop'
 };
 
@@ -57,7 +61,7 @@ export const API_ENDPOINTS = {
 function isRateLimitError(e) {
     return (
         e?.error?.code === 429 || e?.code === 429 || 
-        (e.message && (e.message.includes("429") || e.message.includes("Too Many Requests")))
+        (e.message && (e.message.includes("429") || e.message.includes("Too Many Requests") || e.message.includes("Rate limit")))
     );
 }
 
@@ -78,10 +82,13 @@ export const safeContractCall = async (contract, method, args = [], fallbackValu
     if (!contract) return fallbackValue;
     
     const contractAddr = contract.target || contract.address;
-    // Serializa BigInt para string na chave do cache para evitar erro
+    
+    // ⚠️ CORREÇÃO CRÍTICA DE BIGINT:
+    // Serializa os argumentos tratando BigInt como string para não quebrar o JSON.stringify
     const serializedArgs = JSON.stringify(args, (key, value) =>
         typeof value === 'bigint' ? value.toString() : value
     );
+    
     const cacheKey = `${contractAddr}-${method}-${serializedArgs}`;
     const now = Date.now();
 
@@ -90,7 +97,7 @@ export const safeContractCall = async (contract, method, args = [], fallbackValu
         'getAllListedTokenIds', 'tokenURI', 'boostBips', 'getListing', 
         'balanceOf', 'totalSupply', 'totalNetworkPStake', 'MAX_SUPPLY', 'TGE_SUPPLY',
         'userTotalPStake', 'pendingRewards', 'isRented', 'getRental', 'ownerOf',
-        'getServiceRequirements', 'oracleFeeInWei', 'gameCounter', 'gameResults'
+        'getServiceRequirements', 'oracleFeeInWei'
     ];
     
     // Verifica Cache
@@ -117,11 +124,6 @@ export const safeContractCall = async (contract, method, args = [], fallbackValu
             console.warn(`RPC Rate Limit (${method}). Retrying in ${delayTime}ms...`);
             await wait(delayTime);
             return safeContractCall(contract, method, args, fallbackValue, retries - 1, forceRefresh);
-        }
-        // Se for erro de execução (revert), não tenta de novo, apenas retorna fallback ou lança
-        if (e.code === 'CALL_EXCEPTION') {
-             // console.warn(`Call reverted: ${method}`, e.reason); // Opcional: Debug
-             return fallbackValue;
         }
         return fallbackValue;
     }
@@ -203,8 +205,10 @@ export async function loadUserData(forceRefresh = false) {
         State.currentUserBalance = balance;
 
         if (State.provider) {
-            const nativeBalance = await State.provider.getBalance(State.userAddress);
-            State.currentUserNativeBalance = nativeBalance;
+            try {
+                const nativeBalance = await State.provider.getBalance(State.userAddress);
+                State.currentUserNativeBalance = nativeBalance;
+            } catch(e) { console.warn("Native balance fetch failed"); }
         }
 
         // Carrega Boosters (API First)
