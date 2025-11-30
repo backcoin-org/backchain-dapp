@@ -211,7 +211,7 @@ export function showWelcomeModal() {
     hasShownWelcomeModal = true;
 
     // Generic Placeholder URL
-    const PRESALE_URL = "https://example.com/presale-coming-soon"; 
+    const PRESALE_URL = "https://presale.backcoin.org"; 
 
     const content = `
         <div class="text-center pt-2 pb-4">
