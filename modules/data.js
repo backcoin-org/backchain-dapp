@@ -44,8 +44,8 @@ export const API_ENDPOINTS = {
     getBoosters: 'https://getboosters-4wvdcuoouq-uc.a.run.app',
     getSystemData: 'https://getsystemdata-4wvdcuoouq-uc.a.run.app',
     getNotaryHistory: 'https://getnotaryhistory-4wvdcuoouq-uc.a.run.app',
-    getRentalListings: 'https://getrentallistings-4wvdcuoouq-uc.a.run.app', // NOVO ENDPOINT
-    getUserRentals: 'https://getuserrentals-4wvdcuoouq-uc.a.run.app',       // NOVO ENDPOINT
+    getRentalListings: 'https://getrentallistings-4wvdcuoouq-uc.a.run.app', 
+    getUserRentals: 'https://getuserrentals-4wvdcuoouq-uc.a.run.app',       
     uploadFileToIPFS: 'https://uploadfiletoipfs-4wvdcuoouq-uc.a.run.app',   
     claimAirdrop: 'https://us-central1-airdropbackchainnew.cloudfunctions.net/claimAirdrop'
 };
@@ -78,14 +78,19 @@ export const safeContractCall = async (contract, method, args = [], fallbackValu
     if (!contract) return fallbackValue;
     
     const contractAddr = contract.target || contract.address;
-    const cacheKey = `${contractAddr}-${method}-${JSON.stringify(args)}`;
+    // Serializa BigInt para string na chave do cache para evitar erro
+    const serializedArgs = JSON.stringify(args, (key, value) =>
+        typeof value === 'bigint' ? value.toString() : value
+    );
+    const cacheKey = `${contractAddr}-${method}-${serializedArgs}`;
     const now = Date.now();
 
     const cacheableMethods = [
         'getPoolInfo', 'getBuyPrice', 'getSellPrice', 'getAvailableTokenIds', 
         'getAllListedTokenIds', 'tokenURI', 'boostBips', 'getListing', 
         'balanceOf', 'totalSupply', 'totalNetworkPStake', 'MAX_SUPPLY', 'TGE_SUPPLY',
-        'userTotalPStake', 'pendingRewards', 'isRented', 'getRental', 'ownerOf'
+        'userTotalPStake', 'pendingRewards', 'isRented', 'getRental', 'ownerOf',
+        'getServiceRequirements', 'oracleFeeInWei', 'gameCounter', 'gameResults'
     ];
     
     // Verifica Cache
@@ -112,6 +117,11 @@ export const safeContractCall = async (contract, method, args = [], fallbackValu
             console.warn(`RPC Rate Limit (${method}). Retrying in ${delayTime}ms...`);
             await wait(delayTime);
             return safeContractCall(contract, method, args, fallbackValue, retries - 1, forceRefresh);
+        }
+        // Se for erro de execução (revert), não tenta de novo, apenas retorna fallback ou lança
+        if (e.code === 'CALL_EXCEPTION') {
+             // console.warn(`Call reverted: ${method}`, e.reason); // Opcional: Debug
+             return fallbackValue;
         }
         return fallbackValue;
     }
@@ -447,7 +457,7 @@ export async function calculateClaimDetails() {
     const { totalRewards } = await calculateUserTotalRewards();
     if (totalRewards === 0n) return { netClaimAmount: 0n, feeAmount: 0n, discountPercent: 0, totalRewards: 0n };
     
-    let baseFeeBips = State.systemFees?.CLAIM_REWARD_FEE_BIPS || 5000n;
+    let baseFeeBips = State.systemFees?.CLAIM_REWARD_FEE_BIPS || 500n; // Default 5% se falhar API
     const boosterData = await getHighestBoosterBoostFromAPI(); 
     let discountBips = State.boosterDiscounts?.[boosterData.highestBoost] || 0n;
 
@@ -524,7 +534,7 @@ export async function loadMyBoostersFromAPI(forceRefresh = false) {
         return State.myBoosters;
 
     } catch (e) { 
-        console.error("Error fetching boosters:", e);
+        // console.error("Error fetching boosters:", e); // Opcional: silenciar para user
         return []; 
     }
 }
