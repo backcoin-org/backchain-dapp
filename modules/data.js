@@ -1,5 +1,5 @@
 // js/modules/data.js
-// ✅ VERSÃO FINAL V6.0: Endpoint Vercel Corrigido + Fix BigInt Crash + Cache Inteligente
+// ✅ VERSÃO FINAL V6.0 (CORRIGIDA E COMPLETA): Endpoint Vercel + Fix BigInt + Cache
 
 const ethers = window.ethers;
 
@@ -9,7 +9,7 @@ import { addresses, boosterTiers, rentalManagerABI, rewardBoosterABI } from '../
 // ====================================================================
 // CONSTANTS & UTILITIES
 // ====================================================================
-const API_TIMEOUT_MS = 8000; // Aumentado para 8s para evitar timeout em redes lentas
+const API_TIMEOUT_MS = 5000; // 5 segundos max para API responder
 const CACHE_DURATION_MS = 60000; // Cache de dados do sistema (1 min)
 const CONTRACT_READ_CACHE_MS = 10000; // Cache de leitura RPC curta (10s)
 const OWNERSHIP_CACHE_MS = 30000; // Cache de dono de NFT (30s)
@@ -38,8 +38,7 @@ async function fetchWithTimeout(url, timeoutMs) {
     }
 }
 
-// ⚠️ CORREÇÃO CRÍTICA AQUI: O endpoint de upload DEVE ser relativo (/api/upload)
-// ENDPOINTS DA SUA API (Firebase Functions + Vercel)
+// ENDPOINTS DA SUA API (Firebase Functions + Vercel Fix)
 export const API_ENDPOINTS = {
     getHistory: 'https://gethistory-4wvdcuoouq-uc.a.run.app',
     getBoosters: 'https://getboosters-4wvdcuoouq-uc.a.run.app',
@@ -48,7 +47,7 @@ export const API_ENDPOINTS = {
     getRentalListings: 'https://getrentallistings-4wvdcuoouq-uc.a.run.app', 
     getUserRentals: 'https://getuserrentals-4wvdcuoouq-uc.a.run.app',       
     
-    // 👇 AQUI ESTAVA O ERRO DE CORS. MUDADO PARA O LOCAL:
+    // 👇 CORREÇÃO 1: Endpoint relativo para usar o Vercel Local e evitar CORS
     uploadFileToIPFS: '/api/upload',   
     
     claimAirdrop: 'https://us-central1-airdropbackchainnew.cloudfunctions.net/claimAirdrop'
@@ -61,7 +60,7 @@ export const API_ENDPOINTS = {
 function isRateLimitError(e) {
     return (
         e?.error?.code === 429 || e?.code === 429 || 
-        (e.message && (e.message.includes("429") || e.message.includes("Too Many Requests") || e.message.includes("Rate limit")))
+        (e.message && (e.message.includes("429") || e.message.includes("Too Many Requests")))
     );
 }
 
@@ -83,12 +82,10 @@ export const safeContractCall = async (contract, method, args = [], fallbackValu
     
     const contractAddr = contract.target || contract.address;
     
-    // ⚠️ CORREÇÃO CRÍTICA DE BIGINT:
-    // Serializa os argumentos tratando BigInt como string para não quebrar o JSON.stringify
+    // 👇 CORREÇÃO 2: Serialização segura de BigInt na chave de cache para evitar crash
     const serializedArgs = JSON.stringify(args, (key, value) =>
         typeof value === 'bigint' ? value.toString() : value
     );
-    
     const cacheKey = `${contractAddr}-${method}-${serializedArgs}`;
     const now = Date.now();
 
@@ -96,8 +93,7 @@ export const safeContractCall = async (contract, method, args = [], fallbackValu
         'getPoolInfo', 'getBuyPrice', 'getSellPrice', 'getAvailableTokenIds', 
         'getAllListedTokenIds', 'tokenURI', 'boostBips', 'getListing', 
         'balanceOf', 'totalSupply', 'totalNetworkPStake', 'MAX_SUPPLY', 'TGE_SUPPLY',
-        'userTotalPStake', 'pendingRewards', 'isRented', 'getRental', 'ownerOf',
-        'getServiceRequirements', 'oracleFeeInWei'
+        'userTotalPStake', 'pendingRewards', 'isRented', 'getRental', 'ownerOf'
     ];
     
     // Verifica Cache
@@ -205,10 +201,8 @@ export async function loadUserData(forceRefresh = false) {
         State.currentUserBalance = balance;
 
         if (State.provider) {
-            try {
-                const nativeBalance = await State.provider.getBalance(State.userAddress);
-                State.currentUserNativeBalance = nativeBalance;
-            } catch(e) { console.warn("Native balance fetch failed"); }
+            const nativeBalance = await State.provider.getBalance(State.userAddress);
+            State.currentUserNativeBalance = nativeBalance;
         }
 
         // Carrega Boosters (API First)
