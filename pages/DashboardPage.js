@@ -1,5 +1,5 @@
 // pages/DashboardPage.js
-// ✅ VERSÃO FINAL V5.5: Phantom NFT Fix + Yield Efficiency Gamification
+// ✅ VERSÃO FINAL V6.1: Faucet Widget "20 BKC" + UI Fixes
 
 const ethers = window.ethers;
 
@@ -13,7 +13,7 @@ import {
     calculateClaimDetails,
     API_ENDPOINTS
 } from '../modules/data.js';
-import { executeUniversalClaim } from '../modules/transactions.js';
+import { executeUniversalClaim, executeInternalFaucet } from '../modules/transactions.js';
 import {
     formatBigNumber, formatPStake, renderLoading,
     renderNoData, renderError
@@ -73,7 +73,6 @@ function animateClaimableRewards(targetNetValue) {
 
     if (displayedRewardValue < 0n) displayedRewardValue = 0n;
     
-    // Mostra o valor LÍQUIDO (O que vai para a carteira)
     rewardsEl.innerHTML = `${formatBigNumber(displayedRewardValue).toFixed(4)} <span class="text-sm text-amber-500">$BKC</span>`;
 
     if (displayedRewardValue !== targetNetValue) {
@@ -109,6 +108,22 @@ function renderDashboardLayout() {
                 
                 <div class="lg:col-span-8 flex flex-col gap-6">
                     
+                    <div id="dashboard-faucet-widget" class="hidden glass-panel border-l-4 border-l-amber-500 bg-gradient-to-r from-amber-900/10 to-transparent">
+                        <div class="flex flex-col sm:flex-row justify-between items-center gap-4">
+                            <div>
+                                <h3 class="text-white font-bold flex items-center gap-2">
+                                    <i class="fa-solid fa-faucet text-amber-500 animate-bounce"></i> Need Tokens for Testing?
+                                </h3>
+                                <p class="text-sm text-zinc-400 mt-1">
+                                    Claim <strong>20 Free BKC</strong> on Testnet to explore Staking, Fortune Pool & Notary.
+                                </p>
+                            </div>
+                            <button id="quick-faucet-btn" class="w-full sm:w-auto bg-amber-600 hover:bg-amber-500 text-white font-bold py-2.5 px-6 rounded-lg shadow-lg transition-transform hover:scale-105 whitespace-nowrap">
+                                <i class="fa-solid fa-coins mr-2"></i> Get 20 BKC
+                            </button>
+                        </div>
+                    </div>
+
                     <div class="glass-panel relative overflow-hidden group">
                         <div class="absolute top-0 right-0 p-8 opacity-5 group-hover:opacity-10 transition-opacity">
                             <i class="fa-solid fa-rocket text-9xl"></i>
@@ -349,6 +364,9 @@ async function updateUserHub(forceRefresh = false) {
                     <button onclick="window.openConnectModal()" class="text-amber-400 hover:text-white text-sm font-bold border border-amber-400/30 px-4 py-2 rounded hover:bg-amber-400/10 transition-all">Connect Wallet</button>
                 </div>`;
         }
+        // Esconde o Widget se não estiver conectado
+        const faucetWidget = document.getElementById('dashboard-faucet-widget');
+        if(faucetWidget) faucetWidget.classList.add('hidden');
         return;
     }
 
@@ -360,6 +378,18 @@ async function updateUserHub(forceRefresh = false) {
 
         await loadUserData(forceRefresh); 
         
+        // --- LOGICA DO WIDGET FAUCET ---
+        const faucetWidget = document.getElementById('dashboard-faucet-widget');
+        if (faucetWidget) {
+            // Se < 10 BKC, mostra o widget
+            const lowBalanceThreshold = ethers.parseUnits("10", 18);
+            if (State.currentUserBalance < lowBalanceThreshold) {
+                faucetWidget.classList.remove('hidden');
+            } else {
+                faucetWidget.classList.add('hidden');
+            }
+        }
+
         const claimDetails = await calculateClaimDetails();
         const { totalRewards, netClaimAmount, feeAmount } = claimDetails;
         
@@ -596,6 +626,9 @@ function renderActivityPage() {
         else if(t === 'GAMERESULT') { icon = 'fa-robot'; color = 'text-cyan-400'; label = 'Fortune Oracle: Result'; }
         else if(t.includes('FORTUNE') || t.includes('GAME')) { icon = 'fa-trophy'; color = 'text-yellow-400'; label = 'Fortune Game'; }
         
+        // --- NOVA LÓGICA PARA NOTARY (Icone fixo) ---
+        else if(t.includes('NOTARY')) { icon = 'fa-stamp'; color = 'text-indigo-400'; label = 'Document Notarized'; }
+        
         const txLink = item.txHash ? `${EXPLORER_BASE_URL}${item.txHash}` : '#';
         let rawAmount = item.amount || item.details?.amount || item.data?.amount || "0";
         const amountDisplay = (rawAmount && rawAmount !== "0") ? `${formatBigNumber(BigInt(rawAmount)).toFixed(2)}` : '';
@@ -652,6 +685,13 @@ function attachDashboardListeners() {
                 DashboardState.activities = []; 
                 await fetchAndProcessActivities(); 
                 setTimeout(() => { btn.innerHTML = '<i class="fa-solid fa-rotate"></i> Sync Data'; btn.disabled = false; }, 1000);
+            }
+
+            // LISTENER DO FAUCET WIDGET
+            if (target.closest('#quick-faucet-btn')) {
+                const btn = target.closest('#quick-faucet-btn');
+                await executeInternalFaucet(btn);
+                await updateUserHub(true); // Atualiza saldo na hora
             }
 
             if (target.closest('.delegate-link')) { e.preventDefault(); window.navigateTo('mine'); }

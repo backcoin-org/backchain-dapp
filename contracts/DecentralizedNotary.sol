@@ -14,7 +14,7 @@ import "./BKCToken.sol";
 /**
  * @title Decentralized Notary
  * @notice A key service in the Backcoin Protocol ($BKC) for immutable document certification.
- * @dev Mints NFTs representing notarized documents. Optimized for BNB Chain:
+ * @dev Mints NFTs representing notarized documents.  Optimized for Arbitrum Network.:
  * - Removes ERC721Enumerable (saves ~40% gas on mint).
  * - Uses bytes32 keys for service identification.
  * - Integrates with the $BKC revenue funnel.

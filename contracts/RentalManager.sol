@@ -17,11 +17,12 @@ import "./IInterfaces.sol";
  * @title RentalManager (AirBNFT Protocol)
  * @notice A decentralized marketplace for hourly NFT rentals, fully integrated with the Backchain Economy.
  * @dev 
- * - **AirBNFT Logic**: Rentals are priced and managed on an HOURLY basis.
- * - **Ecosystem Integration**: Enforces minimum pStake requirements via DelegationManager.
- * - **Proof-of-Purchase**: Protocol fees trigger the MiningManager to mint new rewards.
- * - **Escrow**: NFTs are held securely by this contract during the listing period.
- * - **Optimized Storage**: Uses O(1) array management for infinite scalability.
+ * - AirBNFT Logic: Rentals are priced and managed on an HOURLY basis.
+ * - Ecosystem Integration: Enforces minimum pStake requirements via DelegationManager.
+ * - Proof-of-Purchase: Protocol fees trigger the MiningManager to mint new rewards.
+ * - Escrow: NFTs are held securely by this contract during the listing period.
+ * - Optimized Storage: Uses O(1) array management for infinite scalability.
+ * - Optimized for Arbitrum Network.
  */
 contract RentalManager is 
     Initializable, 

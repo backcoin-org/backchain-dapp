@@ -19,7 +19,7 @@ import "./BKCToken.sol";
  * - Buys/Sells impact Pool Liquidity (XY=K).
  * - Taxes are collected and sent 100% to MiningManager.
  * - MiningManager splits Tax between Treasury & Delegation.
- * Optimized for BNB Chain.
+* Optimized for Arbitrum Network.
  */
 contract NFTLiquidityPool is
     Initializable,

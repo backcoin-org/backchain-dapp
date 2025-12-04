@@ -5,16 +5,21 @@ import "@openzeppelin/hardhat-upgrades";
 import "dotenv/config";
 import "@nomicfoundation/hardhat-verify";
 
-// --- CONFIGURAÇÃO DE CHAVES (HARDCODED PARA EVITAR ERROS DE LEITURA) ---
-// Estamos forçando a URL completa aqui para eliminar erro de DNS por caractere inválido
-const SEPOLIA_RPC_URL = "https://sepolia.infura.io/v3/7d31b7dd70ab4d4da293c96bf983f1f1";
+// --- CONFIGURAÇÃO DE CHAVES ---
 
-// Tenta ler a chave privada do .env, senão avisa
-const PRIVATE_KEY = process.env.PRIVATE_KEY;
-const ETHERSCAN_API_KEY = process.env.ETHERSCAN_API_KEY;
+// 1. Sua Chave Alchemy (Peguei da sua imagem anterior)
+// Isso garante que o deploy conte para o Grant "Everyone Onchain"
+const ALCHEMY_API_KEY = process.env.ALCHEMY_API_KEY || "OXcpAI1M17gLgjZJJ8VC3";
+
+// 2. Chave Privada (Do .env ou Hardcoded se for teste rápido)
+const PRIVATE_KEY = process.env.PRIVATE_KEY || "";
+
+// 3. Chave da Arbiscan (Para verificar o contrato)
+// Se não tiver, o deploy funciona, mas a verificação falha.
+const ARBISCAN_API_KEY = process.env.ARBISCAN_API_KEY || ""; 
 
 if (!PRIVATE_KEY) {
-  console.warn("⚠️ AVISO: PRIVATE_KEY não encontrada no .env. Deploy irá falhar.");
+  console.warn("⚠️ AVISO: PRIVATE_KEY não encontrada. O deploy irá falhar.");
 }
 
 const config: HardhatUserConfig = {
@@ -26,54 +31,56 @@ const config: HardhatUserConfig = {
         enabled: true,
         runs: 200,
       },
-      // Vital para evitar 'Stack too deep'
-      viaIR: true, 
+      viaIR: true, // Vital para contratos complexos
     },
   },
 
-  // Configuração das Redes
+  // Configuração das Redes (ARBITRUM)
   networks: {
     hardhat: {
       chainId: 31337,
     },
     
-    // Configuração da Sepolia
-    sepolia: {
-      url: SEPOLIA_RPC_URL, // URL Fixa e direta
+    // 🟢 TESTNET: Arbitrum Sepolia (Use esta para testar agora)
+    arbitrumSepolia: {
+      url: `https://arb-sepolia.g.alchemy.com/v2/${ALCHEMY_API_KEY}`,
       accounts: PRIVATE_KEY ? [PRIVATE_KEY] : [],
-      chainId: 11155111,
+      chainId: 421614,
     },
 
-    // Configuração da BSC Testnet
-    bscTestnet: {
-      url: "https://data-seed-prebsc-1-s1.binance.org:8545/",
-      chainId: 97,
+    // 🔴 MAINNET: Arbitrum One (Use esta para o Lançamento Mundial)
+    arbitrumOne: {
+      url: `https://arb-mainnet.g.alchemy.com/v2/${ALCHEMY_API_KEY}`,
       accounts: PRIVATE_KEY ? [PRIVATE_KEY] : [],
+      chainId: 42161,
     },
   },
 
-  // Verificação de Contrato
+  // Verificação de Contrato na Arbiscan
   etherscan: {
-    apiKey: ETHERSCAN_API_KEY || "",
+    apiKey: {
+      // É necessário mapear a chave correta para cada rede
+      arbitrumSepolia: ARBISCAN_API_KEY,
+      arbitrumOne: ARBISCAN_API_KEY
+    },
     customChains: [
-      {
-        network: "bscTestnet",
-        chainId: 97,
-        urls: {
-          apiURL: "https://api-testnet.bscscan.com/api",
-          browserURL: "https://testnet.bscscan.com"
-        }
-      }
+      // Arbitrum Sepolia geralmente já é suportada nativamente pelo plugin,
+      // mas mantemos a config padrão limpa.
     ]
   },
 
   gasReporter: {
     enabled: process.env.REPORT_GAS !== undefined,
     currency: "USD",
+    coinmarketcap: process.env.COINMARKETCAP_API_KEY,
   },
   
   mocha: {
     timeout: 120000
+  },
+  
+  sourcify: {
+    enabled: true // Ajuda na verificação automática
   }
 };
 

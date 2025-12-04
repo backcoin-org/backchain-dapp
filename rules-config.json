@@ -1,31 +1,37 @@
 {
+  "DESCRIPTION": "Configuração Otimizada para Arbitrum Sepolia (Economia de 20 BKC)",
+  
   "serviceFees": {
-    "COMMENT": "💰 PREÇO FIXO (Valores viram Wei x10^18).",
-    "NOTARY_SERVICE": "100",
-    "FORTUNE_POOL_SERVICE": "10"
+    "COMMENT": "💰 PREÇO FIXO (Valores viram Wei x10^18). Max 5 BKC para caber no Faucet.",
+    "NOTARY_SERVICE": "5",
+    "NFT_POOL_ACCESS": "0"
   },
+
   "pStakeMinimums": {
-    "COMMENT": "🔒 REQUISITO DE PSTAKE (Inteiro Puro).",
-    "NOTARY_SERVICE": "10000",
-    "FORTUNE_POOL_SERVICE": "1000",
-    "NFT_POOL_ACCESS": "5000",
+    "COMMENT": "🔒 REQUISITO DE PSTAKE (Inteiro). Zerado para Testnet.",
+    "NOTARY_SERVICE": "0",
+    "FORTUNE_POOL_SERVICE": "0",
+    "NFT_POOL_ACCESS": "0",
     "RENTAL_MARKET_ACCESS": "0"
   },
+
   "stakingFees": {
-    "COMMENT": "📉 TAXAS GERAIS (BIPS: 100 = 1%).",
+    "COMMENT": "📉 TAXAS DE PROTOCOLO (BIPS: 100 = 1%).",
     "DELEGATION_FEE_BIPS": "50",
     "UNSTAKE_FEE_BIPS": "100",
-    "FORCE_UNSTAKE_PENALTY_BIPS": "500",
-    "CLAIM_REWARD_FEE_BIPS": "5000",
+    "FORCE_UNSTAKE_PENALTY_BIPS": "5000",
+    "CLAIM_REWARD_FEE_BIPS": "100",
     "RENTAL_MARKET_TAX_BIPS": "500"
   },
+
   "ammTaxFees": {
-    "COMMENT": "💸 TAXAS DE POOLS (BIPS).",
-    "NFT_POOL_BUY_TAX_BIPS": "100",
+    "COMMENT": "💸 TAXAS DE POOLS NFT (BIPS).",
+    "NFT_POOL_BUY_TAX_BIPS": "50",
     "NFT_POOL_SELL_TAX_BIPS": "1000"
   },
+
   "boosterDiscounts": {
-    "COMMENT": "⭐ DESCONTOS DO NFT (BIPS).",
+    "COMMENT": "⭐ DESCONTOS DO NFT (BIPS). Força = Desconto.",
     "7000": "7000",
     "6000": "6000",
     "5000": "5000",
@@ -34,20 +40,23 @@
     "2000": "2000",
     "1000": "1000"
   },
+
   "miningDistribution": {
-    "COMMENT": "⛏️ MINERAÇÃO. Soma = 10000.",
+    "COMMENT": "⛏️ MINERAÇÃO (Novos Tokens). Soma = 10000.",
     "TREASURY": "2000",
     "DELEGATOR_POOL": "8000"
   },
+
   "feeDistribution": {
-    "COMMENT": "💵 DIVISÃO DE TAXAS. Soma = 10000.",
+    "COMMENT": "💵 DIVISÃO DE TAXAS (Tokens Originais). Soma = 10000.",
     "TREASURY": "5000",
     "DELEGATOR_POOL": "5000"
   },
+  
   "fortunePoolTiers": {
-    "COMMENT": "🎰 TIERS DO JOGO (Chance 1/X, Mult BIPS). 10000 = 1x.",
+    "COMMENT": "🎰 JOGO DO TIGRE (Chance 1/X, Mult BIPS). Ex: 3,20000 = 33% chance, 2x prêmio.",
     "1": "4,15000",
-    "2": "12,50000",
-    "3": "120,500000"
+    "2": "15,50000",
+    "3": "150,500000"
   }
 }

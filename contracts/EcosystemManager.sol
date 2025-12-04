@@ -11,6 +11,8 @@ import "./IInterfaces.sol";
  * @notice The central brain of the revolutionary Backcoin Protocol.
  * @dev Manages the rules and addresses that power the economy fueled by $BKC.
  * Acts as the source of truth for the entire ecosystem.
+ * Optimized for Arbitrum Network.
+
  */
 contract EcosystemManager is
     Initializable,

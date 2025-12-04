@@ -1,5 +1,5 @@
 // scripts/3_launch_and_liquidate_ecosystem.ts
-// ✅ VERSÃO FINAL V3.3: Anti-Rate Limit (Infura/Alchemy Fix) + Retry no DeployProxy
+// ✅ VERSÃO FINAL V4.0: Economia Testnet (20 BKC) + Genesis Fix + Robustez Total
 
 import { ethers, upgrades } from "hardhat";
 import { HardhatRuntimeEnvironment } from "hardhat/types";
@@ -11,9 +11,8 @@ import { LogDescription, Log, ContractTransactionReceipt } from "ethers";
 // ###               CONFIGURAÇÃO DE LANÇAMENTO DO ECOSSISTEMA        ###
 // ######################################################################
 
-// AUMENTADO PARA 10s PARA EVITAR ERRO 429 (TOO MANY REQUESTS)
 const DEPLOY_DELAY_MS = 10000; 
-const CHUNK_SIZE = 50; // Reduzido para aliviar o RPC
+const CHUNK_SIZE = 50; 
 const CHUNK_SIZE_BIGINT = BigInt(CHUNK_SIZE);
 
 // Quantidade de NFTs para injetar na liquidez inicial por Tier
@@ -29,7 +28,7 @@ const MANUAL_LIQUIDITY_MINT_COUNT = [
 
 const FORTUNE_POOL_LIQUIDITY_TOTAL = ethers.parseEther("1000000"); // 1M BKC
 
-// --- [CALIBRAÇÃO V3] TIGER GAME (Ajustado) ---
+// --- TIGER GAME CONFIG ---
 const FORTUNE_POOL_TIERS = [
     { poolId: 1, multiplierBips: 20000n, chanceDenominator: 3n }, 
     { poolId: 2, multiplierBips: 50000n, chanceDenominator: 10n }, 
@@ -69,7 +68,7 @@ function updateAddressJSON(key: string, value: string) {
     fs.writeFileSync(addressesFilePath, JSON.stringify(currentAddresses, null, 2));
 }
 
-// Helper robusto para Deploy de Proxy com Retries (Evita erro 429 no deploy)
+// Helper robusto para Deploy de Proxy com Retries
 async function deployProxyWithRetries(Factory: any, args: any[], retries = 5) {
     for (let i = 0; i < retries; i++) {
         try {
@@ -78,8 +77,8 @@ async function deployProxyWithRetries(Factory: any, args: any[], retries = 5) {
             return instance;
         } catch (error: any) {
             const msg = error.message || JSON.stringify(error);
-            if (msg.includes("Too Many Requests") || msg.includes("429") || msg.includes("network")) {
-                const waitTime = DEPLOY_DELAY_MS * (i + 1); // Backoff exponencial simples
+            if (msg.includes("Too Many Requests") || msg.includes("429") || msg.includes("network") || msg.includes("timeout")) {
+                const waitTime = DEPLOY_DELAY_MS * (i + 1); 
                 console.warn(`   ⚠️ Rate Limit no Deploy (429). Tentativa ${i + 1}/${retries}. Aguardando ${waitTime/1000}s...`);
                 await sleep(waitTime);
             } else {
@@ -99,11 +98,11 @@ async function sendTransactionWithRetries(txFunction: () => Promise<any>, descri
       if (!receipt) { throw new Error("Transação enviada, mas o recibo retornou nulo."); }
       
       console.log(`   ✅ [SUCESSO] ${description}`);
-      await sleep(2000); // Pausa extra após cada sucesso para respirar o RPC
+      await sleep(2000); 
       return receipt as ContractTransactionReceipt;
     } catch (error: any) {
       const errorMessage = error.message || JSON.stringify(error);
-      if (errorMessage.includes("already") || errorMessage.includes("Already")) {
+      if (errorMessage.includes("already") || errorMessage.includes("Already") || errorMessage.includes("GameAlreadyFulfilled")) {
              console.log(`   ⚠️ Nota: Ação já realizada anteriormente (${description}). Continuando...`);
              return null;
       }
@@ -112,7 +111,7 @@ async function sendTransactionWithRetries(txFunction: () => Promise<any>, descri
         console.warn(`   ⚠️ Erro temporário RPC. Tentativa ${i + 1}/${retries}. Aguardando ${waitTime/1000}s...`);
         await sleep(waitTime);
       } else {
-        throw error; // Erro fatal
+        throw error; 
       }
     }
   }
@@ -124,11 +123,10 @@ async function sendTransactionWithRetries(txFunction: () => Promise<any>, descri
  */
 async function findDeployerOrphanTokens(rewardBoosterNFT: any, deployerAddress: string, targetBoostBips: bigint): Promise<string[]> {
     console.log(`      🕵️‍♂️ Escaneando carteira por NFTs órfãos...`);
-    
-    // Tenta pegar logs. Se falhar por RPC, retorna vazio para não travar o script
     try {
         const filterTo = rewardBoosterNFT.filters.Transfer(null, deployerAddress, null);
-        const events = await rewardBoosterNFT.queryFilter(filterTo); 
+        // Limita busca se possível ou apenas tenta pegar os últimos
+        const events = await rewardBoosterNFT.queryFilter(filterTo, -5000); // Últimos 5000 blocos
         
         const ownedTokenIds: string[] = [];
         for (const event of events) {
@@ -160,20 +158,19 @@ async function setServiceFee(manager: any, key: string, value: number | bigint) 
     const hashedKey = ethers.id(key); 
     const current = await manager.getFee(hashedKey);
     if (current === BigInt(value)) return;
-    await sendTransactionWithRetries(async () => await manager.setServiceFee(hashedKey, value), `REGRA: Taxa '${key}'`);
+    await sendTransactionWithRetries(async () => await manager.setServiceFee(hashedKey, value), `REGRA: Taxa '${key}' -> ${value}`);
 }
 async function setPStake(manager: any, key: string, value: number | bigint) {
     const hashedKey = ethers.id(key);
     const current = await manager.getServiceRequirements(hashedKey);
     if (current.pStake === BigInt(value)) return;
-    await sendTransactionWithRetries(async () => await manager.setPStakeMinimum(hashedKey, value), `REGRA: pStake '${key}'`);
+    await sendTransactionWithRetries(async () => await manager.setPStakeMinimum(hashedKey, value), `REGRA: pStake '${key}' -> ${value}`);
 }
 
 async function getOrCreateSpoke(hre: any, addresses: any, key: string, contractName: string, contractPath: string, args: any[]) {
     const { ethers } = hre;
     const [deployer] = await ethers.getSigners();
     
-    // Verifica se já existe
     if (addresses[key] && addresses[key].startsWith("0x")) {
         try {
             const code = await ethers.provider.getCode(addresses[key]);
@@ -186,16 +183,12 @@ async function getOrCreateSpoke(hre: any, addresses: any, key: string, contractN
 
     console.log(`   🔨 Implantando ${contractName}...`);
     const Factory = await ethers.getContractFactory(contractPath.split(":")[1]);
-    
-    // USA O DEPLOY COM RETRY
     const instance = await deployProxyWithRetries(Factory, args);
-    
     const addr = await instance.getAddress();
     addresses[key] = addr;
     updateAddressJSON(key, addr);
     console.log(`   ✅ ${contractName} criado em: ${addr}`);
-    
-    await sleep(DEPLOY_DELAY_MS); // Pausa após deploy
+    await sleep(DEPLOY_DELAY_MS); 
     return instance;
 }
 
@@ -215,7 +208,7 @@ export async function runScript(hre: HardhatRuntimeEnvironment) {
   const hub = await ethers.getContractAt("EcosystemManager", addresses.ecosystemManager, deployer);
   const bkcTokenInstance = await ethers.getContractAt("BKCToken", addresses.bkcToken, deployer);
   
-  // Deploy Managers (Idempotente + Retry)
+  // Deploy Managers
   const miningManagerInstance = await getOrCreateSpoke(hre, addresses, 'miningManager', 'MiningManager', 'contracts/MiningManager.sol:MiningManager', [addresses.ecosystemManager]); 
   const delegationManagerInstance = await getOrCreateSpoke(hre, addresses, 'delegationManager', 'DelegationManager', 'contracts/DelegationManager.sol:DelegationManager', [deployer.address, addresses.ecosystemManager]);
   
@@ -274,7 +267,6 @@ export async function runScript(hre: HardhatRuntimeEnvironment) {
   
   for (const m of miners) {
       if(m.addr && m.addr.startsWith("0x")) {
-          // Verifica se já está autorizado para economizar RPC
           const currentAuth = await mm.authorizedMiners(ethers.id(m.key));
           if (currentAuth.toLowerCase() !== m.addr.toLowerCase()) {
               await sendTransactionWithRetries(async () => await mm.setAuthorizedMiner(ethers.id(m.key), m.addr), `AUTH: ${m.key}`);
@@ -289,7 +281,6 @@ export async function runScript(hre: HardhatRuntimeEnvironment) {
 
   // TGE & Distribuição
   try {
-      // Verifica balance antes de tentar mintar para não falhar se já foi feito
       const miningManagerBal = await bkcTokenInstance.balanceOf(addresses.miningManager);
       if (miningManagerBal === 0n && (await bkcTokenInstance.totalSupply()) < TGE_SUPPLY_AMOUNT) {
           await sendTransactionWithRetries(async () => await miningManagerInstance.initialTgeMint(addresses.miningManager, TGE_SUPPLY_AMOUNT), "GÊNESE: Mint Inicial");
@@ -312,23 +303,51 @@ export async function runScript(hre: HardhatRuntimeEnvironment) {
   if (currOracle.toLowerCase() !== addresses.oracleWalletAddress.toLowerCase()) {
       await sendTransactionWithRetries(async () => await fortunePoolInstance.setOracleAddress(addresses.oracleWalletAddress), "CONFIG: Oráculo");
   }
-  for (const tier of FORTUNE_POOL_TIERS) {
-      await sendTransactionWithRetries(async () => await fortunePoolInstance.setPrizeTier(tier.poolId, tier.chanceDenominator, tier.multiplierBips), `JOGO: Tier ${tier.poolId} (Mult: ${tier.multiplierBips} BIPS)`);
+  
+  // Oráculo Zero Fee
+  const currOracleFee = await fortunePoolInstance.oracleFeeInWei();
+  if (currOracleFee > 0n) {
+      await sendTransactionWithRetries(async () => await fortunePoolInstance.setOracleFee(0n), "CONFIG: Taxa Oráculo (0 ETH)");
   }
 
-  // Aplicação Regras JSON
-  try {
-      const configPath = path.join(__dirname, "../rules-config.json");
-      if (fs.existsSync(configPath)) {
-          const RULES = JSON.parse(fs.readFileSync(configPath, "utf8"));
-          await setServiceFee(hub, "NOTARY_SERVICE", ethers.parseEther(RULES.serviceFees.NOTARY_SERVICE));
-          await setPStake(hub, "NOTARY_SERVICE", BigInt(RULES.pStakeMinimums.NOTARY_SERVICE));
-          await setServiceFee(hub, "NFT_POOL_ACCESS", ethers.parseEther(RULES.serviceFees.NFT_POOL_ACCESS));
-          await setPStake(hub, "NFT_POOL_ACCESS", BigInt(RULES.pStakeMinimums.NFT_POOL_ACCESS));
-          await setServiceFee(hub, "NFT_POOL_BUY_TAX_BIPS", BigInt(RULES.ammTaxFees.NFT_POOL_BUY_TAX_BIPS));
-          await setServiceFee(hub, "NFT_POOL_SELL_TAX_BIPS", BigInt(RULES.ammTaxFees.NFT_POOL_SELL_TAX_BIPS));
-      }
-  } catch(e) {}
+  for (const tier of FORTUNE_POOL_TIERS) {
+      await sendTransactionWithRetries(async () => await fortunePoolInstance.setPrizeTier(tier.poolId, tier.chanceDenominator, tier.multiplierBips), `JOGO: Tier ${tier.poolId}`);
+  }
+
+  // -----------------------------------------------------------
+  // 🚨 APLICAÇÃO DE REGRAS ECONÔMICAS (20 BKC ECONOMY)
+  // -----------------------------------------------------------
+  console.log("\n⚖️  Aplicando Taxas Econômicas Ajustadas (Testnet 20 BKC)...");
+
+  // 1. Force Unstake (50% = 5000 BIPS)
+  await setServiceFee(hub, "FORCE_UNSTAKE_PENALTY_BIPS", 5000n);
+  
+  // 2. Claim Reward (1% = 100 BIPS)
+  await setServiceFee(hub, "CLAIM_REWARD_FEE_BIPS", 100n);
+  
+  // 3. Stake Fee (0.5% = 50 BIPS)
+  await setServiceFee(hub, "DELEGATION_FEE_BIPS", 50n);
+  
+  // 4. Unstake Normal (1% = 100 BIPS)
+  await setServiceFee(hub, "UNSTAKE_FEE_BIPS", 100n);
+
+  // 5. NFT Pool Venda (10% = 1000 BIPS)
+  await setServiceFee(hub, "NFT_POOL_SELL_TAX_BIPS", 1000n);
+  
+  // 6. NFT Pool Compra (0.5% = 50 BIPS)
+  await setServiceFee(hub, "NFT_POOL_BUY_TAX_BIPS", 50n);
+
+  // 7. Notary Fee (5 BKC Fixos - Compatível com faucet de 20)
+  await setServiceFee(hub, "NOTARY_SERVICE", ethers.parseEther("5"));
+  await setPStake(hub, "NOTARY_SERVICE", 0n); 
+
+  // 8. Rental Market Tax (5% = 500 BIPS)
+  await setServiceFee(hub, "RENTAL_MARKET_TAX_BIPS", 500n);
+  await setPStake(hub, "RENTAL_MARKET_ACCESS", 0n); 
+  
+  // 9. Acesso aos Pools (0 pStake)
+  await setPStake(hub, "NFT_POOL_ACCESS", 0n); 
+  await setServiceFee(hub, "NFT_POOL_ACCESS", 0n);
 
   console.log("\n=== PARTE 4: INJETANDO LIQUIDEZ E LIMPANDO CARTEIRA ===");
 
@@ -350,7 +369,7 @@ export async function runScript(hre: HardhatRuntimeEnvironment) {
       const poolKey = `pool_${tier.name.toLowerCase()}`;
       let poolAddress = addresses[poolKey];
 
-      // 1. Criar Pool se não existir
+      // 1. Criar Pool
       if (!poolAddress || !poolAddress.startsWith('0x')) {
           await sendTransactionWithRetries(async () => await factoryInstance.deployPool(tier.boostBips), `FÁBRICA: Novo Pool ${tier.name}`);
           poolAddress = await factoryInstance.getPoolAddress(tier.boostBips);
@@ -366,23 +385,22 @@ export async function runScript(hre: HardhatRuntimeEnvironment) {
           continue;
       }
 
-      // 2. Autorizar Pool para Mineração (Com checagem para evitar erro)
+      // 2. Autorizar Pool
       try {
           await sendTransactionWithRetries(async () => await mm.setAuthorizedMiner(ethers.id("NFT_POOL_BUY_TAX_BIPS"), poolAddress), `AUTH: Pool ${tier.name}`);
           await sendTransactionWithRetries(async () => await mm.setAuthorizedMiner(ethers.id("NFT_POOL_SELL_TAX_BIPS"), poolAddress), `AUTH: Pool ${tier.name}`);
       } catch(e) {}
 
-      // 3. RECUPERAÇÃO INTELIGENTE: Verificar Órfãos
+      // 3. RECUPERAÇÃO
       const orphanIds = await findDeployerOrphanTokens(rewardBoosterNFT, deployer.address, tier.boostBips);
       let idsToDeposit: string[] = [...orphanIds];
       
-      // 4. Calcular necessidade de Mint
+      // 4. Mint Necessário
       const currentCount = BigInt(idsToDeposit.length);
       const needed = targetTotal > currentCount ? targetTotal - currentCount : 0n;
 
       if (needed > 0n) {
-          console.log(`      Fabricando ${needed} novos NFTs para completar estoque...`);
-          // Loop para mintar em lotes pequenos se necessário
+          console.log(`      Fabricando ${needed} novos NFTs...`);
           for (let j = 0n; j < needed; j += CHUNK_SIZE_BIGINT) {
               const batch = needed - j < CHUNK_SIZE_BIGINT ? needed - j : CHUNK_SIZE_BIGINT;
               const tx = await sendTransactionWithRetries(async () => 
@@ -390,7 +408,6 @@ export async function runScript(hre: HardhatRuntimeEnvironment) {
                   `MINT: +${batch} ${tier.name}`
               );
               
-              // Capturar IDs novos dos eventos
               if (tx) {
                   const logs = (tx.logs || []) as Log[];
                   const newIds = logs.map((log: Log) => { try { return rewardBoosterNFT.interface.parseLog(log as any); } catch { return null; } })
@@ -398,16 +415,13 @@ export async function runScript(hre: HardhatRuntimeEnvironment) {
                       .map((log: LogDescription) => log.args.tokenId.toString());
                   idsToDeposit.push(...newIds);
               }
-              await sleep(2000); // Pausa entre lotes
+              await sleep(2000); 
           }
-      } else {
-          console.log(`      ✅ Estoque completo usando apenas NFTs recuperados!`);
-          idsToDeposit = idsToDeposit.slice(0, Number(targetTotal)); 
       }
 
-      // 5. Depositar no Pool (Esvaziar Carteira)
+      // 5. Depositar
       if (idsToDeposit.length > 0) {
-          console.log(`      Depositando ${idsToDeposit.length} NFTs no Pool...`);
+          console.log(`      Depositando ${idsToDeposit.length} NFTs...`);
           await sendTransactionWithRetries(async () => await bkcTokenInstance.approve(poolAddress, LIQUIDITY_BKC_AMOUNT_PER_POOL), `BANCO: Aprovando BKC`);
           await sendTransactionWithRetries(async () => await rewardBoosterNFT.setApprovalForAll(poolAddress, true), `ESTOQUE: Aprovando NFTs`);
 
@@ -420,17 +434,35 @@ export async function runScript(hre: HardhatRuntimeEnvironment) {
               } else {
                   await sendTransactionWithRetries(async () => await poolInstance.addMoreNFTsToPool(chunk), `MERCADO: +Estoque`);
               }
-              await sleep(2000); // Pausa entre depósitos
+              await sleep(2000); 
           }
           await sendTransactionWithRetries(async () => await rewardBoosterNFT.setApprovalForAll(poolAddress, false), `SEGURANÇA: Revogando`);
       }
   }
 
-  // Genesis Stake
+  // Genesis Stake (COM PROTEÇÃO DE SALDO)
   if ((await delegationManagerInstance.totalNetworkPStake()) === 0n) {
       console.log("\n=== PARTE 5: GENESIS STAKE ===");
+      
+      // 1. Verifica se Deployer tem saldo
+      const deployerBal = await bkcTokenInstance.balanceOf(deployer.address);
+      if (deployerBal < INITIAL_STAKE_AMOUNT) {
+          console.log(`      ⚠️ Saldo insuficiente. Resgatando da Tesouraria...`);
+          try {
+             await sendTransactionWithRetries(async () => 
+                  await mm.transferTokensFromGuardian(deployer.address, INITIAL_STAKE_AMOUNT), 
+                  "RESGATE: Fundos para Genesis"
+              );
+          } catch (e) { console.warn("      ❌ Falha no resgate (pode já ter sido feito)."); }
+      }
+
       await sendTransactionWithRetries(async () => await bkcTokenInstance.approve(addresses.delegationManager, INITIAL_STAKE_AMOUNT), `BANCO: Aprovando Stake`);
-      await sendTransactionWithRetries(async () => await delegationManagerInstance.delegate(INITIAL_STAKE_AMOUNT, BigInt(INITIAL_STAKE_DURATION * 86400), 0), "STAKING: Genesis");
+      
+      try {
+          await sendTransactionWithRetries(async () => await delegationManagerInstance.delegate(INITIAL_STAKE_AMOUNT, BigInt(INITIAL_STAKE_DURATION * 86400), 0), "STAKING: Genesis");
+      } catch (error: any) {
+          console.error("      ❌ ERRO NO GENESIS STAKE: Provável falta de saldo ou taxa.", error.message);
+      }
   }
 
   console.log("\n----------------------------------------------------");

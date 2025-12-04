@@ -1,5 +1,5 @@
 // js/modules/transactions.js
-// ✅ VERSÃO FINAL V4.2: Fix "Approval to Current Owner" (Proteção de Propriedade)
+// ✅ VERSÃO FINAL V6.14: Forçar Signer do State (Última Solução Cliente)
 
 const ethers = window.ethers;
 
@@ -13,6 +13,50 @@ import { loadUserData, getHighestBoosterBoostFromAPI, loadRentalListings } from 
 const APPROVAL_TOLERANCE_BIPS = 100n; 
 const BIPS_DENOMINATOR = 10000n; 
 
+// 🔥 FIX: Configuração de GÁS explícita para Arbitrum Sepolia (EIP-1559)
+const GAS_OPTS = { 
+    gasLimit: 800000, 
+    maxFeePerGas: ethers.parseUnits("0.5", "gwei"), 
+    maxPriorityFeePerGas: ethers.parseUnits("0.05", "gwei")
+}; 
+
+// ====================================================================
+// CORE SIGNER/RUNNER UTILITY (CRITICAL FIX - Apenas Signer do State)
+// ====================================================================
+
+/**
+ * Obtém o Signer priorizando o Signer já armazenado no State.
+ * Ignora a falha de 'getSigner()' que o AppKit/Web3Modal está bloqueando.
+ */
+async function getConnectedSigner() {
+    if (!State.isConnected) {
+        showToast("Wallet not connected.", "error");
+        return null;
+    }
+    
+    // 🔥 FIX: Apenas retorna o Signer armazenado durante o login (State.signer)
+    // Confiamos que o State.signer é o objeto UserOperation que pode ser conectado ao contrato.
+    if (State.signer) {
+        return State.signer;
+    }
+
+    // TENTATIVA 2 (FALLBACK): Forçar a obtenção via BrowserProvider (Método que está falhando)
+    if (State.web3Provider) {
+        try {
+            const provider = new ethers.BrowserProvider(State.web3Provider);
+            const signer = await provider.getSigner(); 
+            return signer;
+        } catch (e) {
+            console.error("Signer acquisition failed (Fallback):", e);
+            // Continua, pois a primeira tentativa é a mais provável de funcionar.
+        }
+    }
+
+    showToast("Wallet signer is unavailable.", "error");
+    return null;
+}
+
+
 // ====================================================================
 // GENERIC WRAPPERS & UTILITIES
 // ====================================================================
@@ -21,10 +65,6 @@ const BIPS_DENOMINATOR = 10000n;
  * Generic wrapper to execute a transaction and provide UI feedback.
  */
 async function executeTransaction(txPromise, successMessage, failMessage, btnElement) {
-    if (!btnElement) {
-        console.warn("Transaction executed without a button element for feedback.");
-    }
-
     const originalText = btnElement ? btnElement.innerHTML : 'Processing...';
     if (btnElement) {
         btnElement.disabled = true;
@@ -37,7 +77,7 @@ async function executeTransaction(txPromise, successMessage, failMessage, btnEle
         if (btnElement) btnElement.innerHTML = '<div class="loader inline-block mr-2"></div> Confirming...';
         showToast('Submitting transaction to blockchain...', 'info');
         
-        // Aguarda a confirmação do bloco
+        // Wait for block confirmation
         const receipt = await tx.wait();
         
         showToast(successMessage, 'success', receipt.hash);
@@ -46,10 +86,10 @@ async function executeTransaction(txPromise, successMessage, failMessage, btnEle
         await loadUserData(); 
         
         if (window.location.hash.includes('rental') || window.location.hash.includes('dashboard')) {
-             await loadRentalListings(); 
+             if (typeof loadRentalListings === 'function') await loadRentalListings(); 
         }
         
-        // Atualização de segurança
+        // Safety update
         setTimeout(async () => {
             await loadUserData();
             if (typeof loadRentalListings === 'function') await loadRentalListings();
@@ -65,16 +105,17 @@ async function executeTransaction(txPromise, successMessage, failMessage, btnEle
         else if (e.data && e.data.message) reason = e.data.message;
         else if (e.message) reason = e.message;
 
+        // Mapeamento de erros do Ethers v6
+        if (reason.includes("Internal JSON-RPC error") || reason.includes("code=-32603")) {
+            reason = "RPC Error: Network busy or Gas estimation failed.";
+        }
         if (e.code === 'ACTION_REJECTED') reason = 'You rejected the transaction in your wallet.';
-        if (e.code === 'INSUFFICIENT_FUNDS') reason = 'You do not have enough ETH (Sepolia) for gas fees.';
+        if (reason.includes("execution reverted")) reason = "Execution Reverted (Check Contract State/Input).";
         
-        if (reason.includes("Notary: Insufficient pStake")) reason = "Minimum pStake requirement not met.";
-        if (reason.includes("Fee transfer failed") || reason.includes("insufficient allowance")) reason = "Insufficient BKC balance or allowance.";
-        if (reason.includes("NP: No available NFTs")) reason = "Pool is currently sold out.";
-        if (reason.includes("InsufficientPStake")) reason = "Your pStake is too low to use this service.";
-        if (reason.includes("RentalActive")) reason = "NFT is currently rented and cannot be withdrawn.";
-        if (reason.includes("NotOwner")) reason = "You do not own this NFT.";
-
+        // Erros customizados do Contrato
+        if (reason.includes("Insufficient pStake")) reason = "Minimum pStake requirement not met.";
+        if (reason.includes("TransferFailed")) reason = "Token transfer failed (Check BKC balance/allowance).";
+        
         showToast(`${failMessage}: ${reason}`, "error");
         return false;
     } finally {
@@ -91,11 +132,14 @@ async function executeTransaction(txPromise, successMessage, failMessage, btnEle
 
 /**
  * Ensures approval for ERC20 (Amount) OR ERC721 (TokenID).
- * INCLUI VERIFICAÇÃO DE PROPRIEDADE REAL (ON-CHAIN) PARA EVITAR ERRO DE RPC.
  */
 async function ensureApproval(tokenContract, spenderAddress, amountOrTokenId, btnElement, purpose) {
-    if (!State.signer) return false;
+    const signer = await getConnectedSigner(); // 🔥 OBTÉM SIGNER VÁLIDO
+    if (!signer) return false;
     
+    // Reinicializa o contrato com o Signer válido
+    const approvedTokenContract = tokenContract.connect(signer);
+
     if (!spenderAddress || spenderAddress.includes('...')) {
         showToast(`Error: Invalid contract address for ${purpose}.`, "error");
         return false;
@@ -109,15 +153,22 @@ async function ensureApproval(tokenContract, spenderAddress, amountOrTokenId, bt
     };
 
     try {
-        const isERC721 = typeof tokenContract.setApprovalForAll === 'function';
+        // --- SAFE CHECK FOR ERC721 ---
+        let isERC721 = false;
+        try {
+            const fn = tokenContract.interface.getFunction("setApprovalForAll");
+            isERC721 = !!fn; 
+        } catch (e) {
+            isERC721 = false;
+        }
 
         if (!isERC721) {
-            // --- ERC20 LOGIC ---
+            // --- ERC20 LOGIC (Tokens) ---
             const requiredAmount = BigInt(amountOrTokenId);
             if (requiredAmount === 0n) return true;
             
             setBtnLoading("Checking Allowance");
-            const allowance = await tokenContract.allowance(State.userAddress, spenderAddress);
+            const allowance = await tokenContract.allowance(State.userAddress, spenderAddress); 
 
             const toleratedAmount = (requiredAmount * (BIPS_DENOMINATOR + APPROVAL_TOLERANCE_BIPS)) / BIPS_DENOMINATOR;
 
@@ -125,54 +176,27 @@ async function ensureApproval(tokenContract, spenderAddress, amountOrTokenId, bt
                 showToast(`Approving ${formatBigNumber(toleratedAmount).toFixed(2)} $BKC for ${purpose}...`, "info");
                 setBtnLoading("Approving");
 
-                const approveTx = await tokenContract.approve(spenderAddress, toleratedAmount);
+                const approveTx = await approvedTokenContract.approve(spenderAddress, toleratedAmount, GAS_OPTS);
                 await approveTx.wait();
                 showToast('Approval successful!', "success");
             }
             return true;
         } 
         else {
-            // --- ERC721 LOGIC ---
+            // --- ERC721 LOGIC (NFTs) ---
             const tokenId = BigInt(amountOrTokenId);
-            setBtnLoading("Verifying Ownership");
-            
-            // 🛑 SANITY CHECK: Verificar proprietário real na Blockchain antes de aprovar
-            try {
-                const currentOwner = await tokenContract.ownerOf(tokenId);
-                
-                // Se o usuário NÃO é o dono
-                if (currentOwner.toLowerCase() !== State.userAddress.toLowerCase()) {
-                    console.warn(`Ownership mismatch for Token #${tokenId}. Real Owner: ${currentOwner}`);
-                    showToast("Sync Error: You no longer own this NFT. Refreshing...", "error");
-                    // Força atualização dos dados
-                    await loadUserData(true);
-                    return false; // Aborta para evitar erro de RPC
-                }
-
-                // Se o spender JÁ É o dono (Ex: Pool), não precisa aprovar (e aprovar daria erro)
-                if (currentOwner.toLowerCase() === spenderAddress.toLowerCase()) {
-                    return true;
-                }
-
-            } catch (e) {
-                console.warn("Could not verify owner (Token might be burned)", e);
-                // Se falhar a leitura, tentamos seguir com a aprovação padrão
-            }
-
             setBtnLoading("Checking NFT Approval");
             
-            // 1. Check specific approval
             let approvedAddr = ethers.ZeroAddress;
             try { approvedAddr = await tokenContract.getApproved(tokenId); } catch(e) {} 
             
-            // 2. Check operator approval
             const isApprovedAll = await tokenContract.isApprovedForAll(State.userAddress, spenderAddress);
             
             if (approvedAddr.toLowerCase() !== spenderAddress.toLowerCase() && !isApprovedAll) {
                 showToast(`Approving NFT #${tokenId}...`, "info");
                 setBtnLoading("Approving NFT");
                 
-                const approveTx = await tokenContract.approve(spenderAddress, tokenId);
+                const approveTx = await approvedTokenContract.approve(spenderAddress, tokenId, GAS_OPTS);
                 await approveTx.wait();
                 showToast("NFT Approval successful!", "success");
             }
@@ -185,6 +209,7 @@ async function ensureApproval(tokenContract, spenderAddress, amountOrTokenId, bt
         
         let msg = e.reason || e.message || 'Transaction rejected.';
         if (msg.includes("approval to current owner")) msg = "Token already owned by target.";
+        if (msg.includes("Internal JSON-RPC error")) msg = "RPC Error (Internal). Try again.";
         
         showToast(`Approval Error: ${msg}`, "error");
         return false;
@@ -197,46 +222,37 @@ async function ensureApproval(tokenContract, spenderAddress, amountOrTokenId, bt
 // ====================================================================
 
 export async function executeListNFT(tokenId, pricePerHourWei, maxDurationHours, btnElement) {
-    if (!State.signer || !addresses.rentalManager) return showToast("Wallet not connected or Config missing", "error");
+    const signer = await getConnectedSigner();
+    if (!signer || !addresses.rentalManager) return false;
 
-    const approved = await ensureApproval(
-        State.rewardBoosterContract, 
-        addresses.rentalManager, 
-        tokenId, 
-        btnElement, 
-        "Listing NFT"
-    );
+    const approved = await ensureApproval(State.rewardBoosterContract, addresses.rentalManager, tokenId, btnElement, "Listing NFT");
     if (!approved) return false;
 
-    const rentalContract = new ethers.Contract(addresses.rentalManager, rentalManagerABI, State.signer);
-    const txPromise = rentalContract.listNFT(BigInt(tokenId), BigInt(pricePerHourWei), BigInt(maxDurationHours));
+    const rentalContract = new ethers.Contract(addresses.rentalManager, rentalManagerABI, signer); 
+    const txPromise = rentalContract.listNFT(BigInt(tokenId), BigInt(pricePerHourWei), BigInt(maxDurationHours), GAS_OPTS);
     
     return await executeTransaction(txPromise, `NFT #${tokenId} listed successfully!`, "Error listing NFT", btnElement);
 }
 
 export async function executeRentNFT(tokenId, hoursToRent, totalCostWei, btnElement) {
-    if (!State.signer || !addresses.rentalManager) return showToast("Wallet not connected", "error");
+    const signer = await getConnectedSigner();
+    if (!signer || !addresses.rentalManager) return false;
 
-    const approved = await ensureApproval(
-        State.bkcTokenContract, 
-        addresses.rentalManager, 
-        BigInt(totalCostWei), 
-        btnElement, 
-        "Rental Payment"
-    );
+    const approved = await ensureApproval(State.bkcTokenContract, addresses.rentalManager, BigInt(totalCostWei), btnElement, "Rental Payment");
     if (!approved) return false;
 
-    const rentalContract = new ethers.Contract(addresses.rentalManager, rentalManagerABI, State.signer);
-    const txPromise = rentalContract.rentNFT(BigInt(tokenId), BigInt(hoursToRent));
+    const rentalContract = new ethers.Contract(addresses.rentalManager, rentalManagerABI, signer); 
+    const txPromise = rentalContract.rentNFT(BigInt(tokenId), BigInt(hoursToRent), GAS_OPTS);
 
     return await executeTransaction(txPromise, `NFT #${tokenId} rented for ${hoursToRent} hours!`, "Error renting NFT", btnElement);
 }
 
 export async function executeWithdrawNFT(tokenId, btnElement) {
-    if (!State.signer || !addresses.rentalManager) return showToast("Wallet not connected", "error");
+    const signer = await getConnectedSigner();
+    if (!signer || !addresses.rentalManager) return false;
 
-    const rentalContract = new ethers.Contract(addresses.rentalManager, rentalManagerABI, State.signer);
-    const txPromise = rentalContract.withdrawNFT(BigInt(tokenId));
+    const rentalContract = new ethers.Contract(addresses.rentalManager, rentalManagerABI, signer); 
+    const txPromise = rentalContract.withdrawNFT(BigInt(tokenId), GAS_OPTS);
 
     return await executeTransaction(txPromise, `NFT #${tokenId} withdrawn!`, "Error withdrawing NFT", btnElement);
 }
@@ -247,16 +263,34 @@ export async function executeWithdrawNFT(tokenId, btnElement) {
 // ====================================================================
 
 export async function executeDelegation(totalAmount, durationSeconds, boosterIdToSend, btnElement) {
-    if (!State.signer) return showToast("Wallet not connected.", "error");
+    const signer = await getConnectedSigner();
+    if (!signer || !addresses.delegationManager) return false;
     
     const totalAmountBigInt = BigInt(totalAmount); 
     const durationBigInt = BigInt(durationSeconds);
     const boosterIdBigInt = BigInt(boosterIdToSend);
     
+    // 🛑 1. BALANCE CHECK
+    try {
+        const balance = await State.bkcTokenContract.balanceOf(State.userAddress);
+        if (balance < totalAmountBigInt) {
+            showToast(`Insufficient balance! You have ${formatBigNumber(balance).toFixed(2)} BKC. Use the Faucet!`, "error");
+            return false;
+        }
+    } catch(e) { console.warn("Error checking balance", e); }
+
+    // 🛑 2. DURATION CHECK (UPDATED TO 10 YEARS)
+    const MAX_DURATION = 315360000n; 
+    if (durationBigInt > MAX_DURATION) {
+        showToast("Invalid duration (Max: 10 Years).", "error");
+        return false;
+    }
+
     const approved = await ensureApproval(State.bkcTokenContract, addresses.delegationManager, totalAmountBigInt, btnElement, "Delegation");
     if (!approved) return false;
     
-    const delegateTxPromise = State.delegationManagerContract.delegate(totalAmountBigInt, durationBigInt, boosterIdBigInt);
+    const delegationContract = State.delegationManagerContract.connect(signer); 
+    const delegateTxPromise = delegationContract.delegate(totalAmountBigInt, durationBigInt, boosterIdBigInt, GAS_OPTS);
     
     const success = await executeTransaction(delegateTxPromise, 'Delegation successful!', 'Error delegating tokens', btnElement);
     
@@ -265,33 +299,38 @@ export async function executeDelegation(totalAmount, durationSeconds, boosterIdT
 }
 
 export async function executeUnstake(index) {
-    if (!State.signer) return showToast("Wallet not connected.", "error");
+    const signer = await getConnectedSigner();
+    if (!signer || !addresses.delegationManager) return false;
 
     const { tokenId: boosterTokenId } = await getHighestBoosterBoostFromAPI();
     const boosterIdToSend = boosterTokenId ? BigInt(boosterTokenId) : 0n;
     
-    const btnElement = document.querySelector(`.unstake-btn[data-index='${index}']`)
-    const unstakeTxPromise = State.delegationManagerContract.unstake(index, boosterIdToSend);
+    const btnElement = document.querySelector(`.unstake-btn[data-index='${index}']`);
+    const delegationContract = State.delegationManagerContract.connect(signer); 
+    const unstakeTxPromise = delegationContract.unstake(index, boosterIdToSend, GAS_OPTS);
     
     return await executeTransaction(unstakeTxPromise, 'Unstake successful!', 'Error unstaking tokens', btnElement);
 }
 
 export async function executeForceUnstake(index) {
-    if (!State.signer) return showToast("Wallet not connected.", "error");
+    const signer = await getConnectedSigner();
+    if (!signer || !addresses.delegationManager) return false;
 
     const { tokenId: boosterTokenId } = await getHighestBoosterBoostFromAPI();
     const boosterIdToSend = boosterTokenId ? BigInt(boosterTokenId) : 0n;
     
-    if (!confirm("Are you sure? This action will incur a penalty.")) return false;
+    if (!confirm("Are you sure? Force unstaking applies a 50% penalty on your principal.")) return false;
     
-    const btnElement = document.querySelector(`.force-unstake-btn[data-index='${index}']`)
-    const forceUnstakeTxPromise = State.delegationManagerContract.forceUnstake(index, boosterIdToSend); 
+    const btnElement = document.querySelector(`.force-unstake-btn[data-index='${index}']`);
+    const delegationContract = State.delegationManagerContract.connect(signer); 
+    const forceUnstakeTxPromise = delegationContract.forceUnstake(index, boosterIdToSend, GAS_OPTS); 
     
     return await executeTransaction(forceUnstakeTxPromise, 'Force unstake successful!', 'Error performing force unstake', btnElement);
 }
 
 export async function executeUniversalClaim(stakingRewards, minerRewards, btnElement) {
-    if (!State.signer) return showToast("Wallet not connected.", "error");
+    const signer = await getConnectedSigner();
+    if (!signer || !addresses.delegationManager) return false;
     
     if (stakingRewards === 0n && minerRewards === 0n) {
         showToast("No rewards to claim.", "info");
@@ -310,7 +349,8 @@ export async function executeUniversalClaim(stakingRewards, minerRewards, btnEle
 
         if (stakingRewards > 0n) {
             showToast("Claiming rewards...", "info");
-            const tx = await State.delegationManagerContract.claimReward(boosterIdToSend);
+            const delegationContract = State.delegationManagerContract.connect(signer); 
+            const tx = await delegationContract.claimReward(boosterIdToSend, GAS_OPTS);
             await tx.wait();
             showToast('Reward claimed successfully!', "success");
         }
@@ -339,7 +379,8 @@ export async function executeUniversalClaim(stakingRewards, minerRewards, btnEle
 // ====================================================================
 
 export async function executeBuyBooster(poolAddress, price, boosterTokenIdForPStake, btnElement) {
-    if (!State.signer) return showToast("Wallet not connected.", "error");
+    const signer = await getConnectedSigner();
+    if (!signer || !poolAddress) return false;
     
     const originalText = btnElement ? btnElement.innerHTML : 'Buy';
     const priceBigInt = BigInt(price);
@@ -367,15 +408,15 @@ export async function executeBuyBooster(poolAddress, price, boosterTokenIdForPSt
 
         if (btnElement) btnElement.innerHTML = '<div class="loader inline-block"></div> Buying...';
 
-        const poolContract = new ethers.Contract(poolAddress, nftPoolABI, State.signer);
+        const poolContract = new ethers.Contract(poolAddress, nftPoolABI, signer); 
         const boosterIdToSend = BigInt(boosterTokenIdForPStake);
 
-        const buyTxPromise = poolContract.buyNextAvailableNFT(boosterIdToSend);
+        const buyTxPromise = poolContract.buyNextAvailableNFT(boosterIdToSend, GAS_OPTS);
         return await executeTransaction(buyTxPromise, 'Purchase successful!', 'Error during purchase', btnElement);
 
     } catch (e) {
         console.error("Error buying booster:", e);
-        showToast(`Error: ${e.message || 'Transaction rejected.'}`, "error");
+        showToast(`Error: ${e.reason || e.message || 'Transaction rejected.'}`, "error");
         return false;
     } finally {
          if(btnElement) {
@@ -390,7 +431,8 @@ export async function executeBuyBooster(poolAddress, price, boosterTokenIdForPSt
 }
 
 export async function executeSellBooster(poolAddress, tokenIdToSell, boosterTokenIdForDiscount, btnElement) {
-    if (!State.signer) return showToast("Wallet not connected.", "error");
+    const signer = await getConnectedSigner();
+    if (!signer || !poolAddress) return false;
     
     const originalText = btnElement ? btnElement.innerHTML : 'Sell NFT';
     const tokenIdBigInt = BigInt(tokenIdToSell);
@@ -406,7 +448,6 @@ export async function executeSellBooster(poolAddress, tokenIdToSell, boosterToke
     }
 
     try {
-        // CORREÇÃO: Usar o contrato de NFT correto para aprovação (RewardBooster)
         const approved = await ensureApproval(State.rewardBoosterContract, poolAddress, tokenIdBigInt, btnElement, "NFT Sale");
         if (!approved) return false;
 
@@ -415,14 +456,14 @@ export async function executeSellBooster(poolAddress, tokenIdToSell, boosterToke
         const boosterIdToSend = BigInt(boosterTokenIdForDiscount);
         const minPrice = 0n; 
         
-        const poolContract = new ethers.Contract(poolAddress, nftPoolABI, State.signer);
+        const poolContract = new ethers.Contract(poolAddress, nftPoolABI, signer); 
 
-        const sellTxPromise = poolContract.sellNFT(tokenIdBigInt, boosterIdToSend, minPrice);
+        const sellTxPromise = poolContract.sellNFT(tokenIdBigInt, boosterIdToSend, minPrice, GAS_OPTS);
         return await executeTransaction(sellTxPromise, 'Sale successful!', 'Error during sale', btnElement);
 
     } catch (e) {
         console.error("Error selling booster:", e);
-        showToast(`Error: ${e.message || 'Transaction rejected.'}`, "error");
+        showToast(`Error: ${e.reason || e.message || 'Transaction rejected.'}`, "error");
         return false;
     } finally {
         if(btnElement) {
@@ -441,33 +482,75 @@ export async function executeSellBooster(poolAddress, tokenIdToSell, boosterToke
 // 4. FAUCET & NOTARY
 // ====================================================================
 
-export async function executeFaucetClaim(btnElement) {
-    if (!State.signer || !State.faucetContract) {
-        showToast("Wallet not connected or Faucet not configured.", "error");
+// 🚨 INTERNAL FAUCET: 20 TOKENS (Testnet Economy)
+export async function executeInternalFaucet(btnElement) {
+    const signer = await getConnectedSigner();
+    if (!signer) return false;
+    
+    const network = await State.provider.getNetwork();
+    if (network.chainId !== 421614n) { 
+        return showToast("Faucet available on Arbitrum Sepolia (Testnet) only.", "warning");
+    }
+
+    const originalText = btnElement ? btnElement.innerHTML : 'Get Tokens';
+    if (btnElement) {
+        btnElement.disabled = true;
+        btnElement.innerHTML = '<div class="loader inline-block"></div> Minting...';
+    }
+
+    try {
+        // Option A: Faucet Contract
+        if (State.faucetContract) {
+            const faucetContract = State.faucetContract.connect(signer); 
+            const tx = await faucetContract.claim(GAS_OPTS);
+            return await executeTransaction(tx, 'Tokens sent to your wallet!', 'Faucet Error', btnElement);
+        } 
+        
+        // Option B: Fallback (Direct Mint) - Requires Signer to be token Owner
+        else if (State.bkcTokenContract) {
+            const amount = ethers.parseUnits("20", 18); 
+            const bkcTokenContract = State.bkcTokenContract.connect(signer); 
+            
+            // This path should fail unless the Signer is the MiningManager
+            const tx = await bkcTokenContract.mint(State.userAddress, amount, GAS_OPTS); 
+            return await executeTransaction(tx, '20 BKC Minted Successfully!', 'Mint Error', btnElement);
+        } else {
+            throw new Error("Faucet not available.");
+        }
+
+    } catch (e) {
+        console.error("Faucet Error:", e);
+        showToast(`Error: ${e.reason || e.message}`, "error");
+        if (e.reason && e.reason.includes("InsufficientFaucetBalance")) {
+             showToast("Faucet Error: Faucet contract is out of tokens!", "error");
+        } else if (e.reason && e.reason.includes("revert")) {
+             showToast("Faucet Error: Execution reverted (check console for contract reason).", "error");
+        }
+        
+        if(btnElement) {
+            btnElement.disabled = false;
+            btnElement.innerHTML = originalText;
+        }
         return false;
     }
-    
-    const claimTxPromise = State.faucetContract.claim();
-    const faucetAmount = formatBigNumber(FAUCET_AMOUNT_WEI);
-    
-    return await executeTransaction(claimTxPromise, `Successfully claimed ${faucetAmount} $BKC!`, 'Error claiming tokens', btnElement);
 }
 
 export async function executeNotarizeDocument(documentURI, boosterId, submitButton) {
-    if (!State.signer || !State.bkcTokenContract || !State.decentralizedNotaryContract) {
-        showToast("Wallet not connected or contracts not loaded.", "error");
+    const signer = await getConnectedSigner();
+    if (!signer || !State.bkcTokenContract || !State.decentralizedNotaryContract) {
         return false;
     }
 
+    const notaryContract = State.decentralizedNotaryContract.connect(signer); 
     const baseFee = State.systemFees?.NOTARY_SERVICE || 0n;
-    const notaryAddress = await State.decentralizedNotaryContract.getAddress();
+    const notaryAddress = await notaryContract.getAddress(); 
     
     if (baseFee > 0n) {
         const approved = await ensureApproval(State.bkcTokenContract, notaryAddress, baseFee, submitButton, "Notary Fee");
         if (!approved) return false;
     }
 
-    const notarizeTxPromise = State.decentralizedNotaryContract.notarize(documentURI, BigInt(boosterId));
+    const notarizeTxPromise = notaryContract.notarize(documentURI, BigInt(boosterId), GAS_OPTS);
 
     return await executeTransaction(notarizeTxPromise, 'Document notarized successfully!', 'Error notarizing document', submitButton);
 }

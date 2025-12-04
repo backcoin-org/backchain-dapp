@@ -10,7 +10,7 @@ import "./IInterfaces.sol";
  * @title Public Sale
  * @notice Distributes Reward Booster NFTs ($BKCB) to early adopters.
  * @dev Funds are routed to the Ecosystem Treasury.
- * Optimized for BNB Chain.
+ * Optimized for Arbitrum Network.
  */
 contract PublicSale is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     

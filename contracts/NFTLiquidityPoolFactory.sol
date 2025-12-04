@@ -12,7 +12,7 @@ import "./IInterfaces.sol";
  * @title NFT Liquidity Pool Factory
  * @notice Deploys and tracks AMM pools for Backcoin ($BKC) Boosters.
  * @dev Acts as a registry for valid pools using the 'isPool' mapping.
- * Optimized for BNB Chain.
+* Optimized for Arbitrum Network.
  */
 contract NFTLiquidityPoolFactory is
     Initializable,

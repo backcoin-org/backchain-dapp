@@ -10,7 +10,7 @@ import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
  * @title Backcoin ($BKC)
  * @notice The fuel of the Backchain Protocol.
  * @dev Implementation of the ERC20 Token with UUPS Upgradeability.
- * Optimized for BNB Chain with Custom Errors.
+ * Optimized for Arbitrum Network.
  */
 contract BKCToken is 
     Initializable, 

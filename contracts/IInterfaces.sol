@@ -6,6 +6,7 @@ pragma solidity 0.8.28;
  * @notice Defines the communication standards between the Hub (EcosystemManager) and Spokes.
  * @dev These interfaces are optimized for the BNB Chain using bytes32 for keys to reduce gas costs.
  * Part of the Backchain Protocol (BKC).
+ * Optimized for Arbitrum Network.
  */
 
 /**

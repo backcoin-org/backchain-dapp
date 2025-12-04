@@ -14,7 +14,8 @@ import "./BKCToken.sol";
  * @title MiningManager
  * @notice The economic heart of the Backcoin Protocol ($BKC).
  * @dev Handles the "Proof-of-Purchase" mining mechanism with LINEAR DYNAMIC SCARCITY.
- * Optimized for BNB Chain.
+ * Optimized for Arbitrum Network.
+.
  */
 contract MiningManager is
     Initializable,

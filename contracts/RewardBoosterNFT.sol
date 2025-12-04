@@ -11,7 +11,7 @@ import "@openzeppelin/contracts-upgradeable/utils/StringsUpgradeable.sol";
  * @title Backchain Reward Booster ($BKCB)
  * @notice Utility NFTs for the Backcoin Ecosystem ($BKC).
  * @dev Holders earn fee discounts in Staking and Notary services.
- * Optimized for BNB Chain.
+ * Optimized for Arbitrum Network.
  */
 contract RewardBoosterNFT is 
     Initializable, 

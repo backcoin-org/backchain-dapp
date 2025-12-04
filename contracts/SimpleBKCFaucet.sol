@@ -12,6 +12,7 @@ import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
  * @title Simple BKC Faucet
  * @notice Dispenses $BKC for testing ecosystem interactions.
  * @dev Restricted rate limiting or whitelist logic can be added here.
+ * Optimized for Arbitrum Network.
  */
 contract SimpleBKCFaucet is
     Initializable,
@@ -22,7 +23,8 @@ contract SimpleBKCFaucet is
     using SafeERC20Upgradeable for IERC20Upgradeable;
 
     IERC20Upgradeable public token;
-    uint256 public constant CLAIM_AMOUNT = 100 * 10**18;
+    
+    uint256 public constant CLAIM_AMOUNT = 20 * 10**18;
 
     // --- Events ---
     event TokensClaimed(address indexed recipient, uint256 amount);

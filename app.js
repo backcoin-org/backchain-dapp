@@ -1,5 +1,5 @@
 // js/app.js
-// ✅ VERSÃO FINAL: Inicialização Forçada Corrigida + Novas Páginas Demo
+// ✅ VERSÃO FINAL V7.4: Renderização Blindada e Simplificada (Final Clean-up)
 
 const inject = window.inject || (() => { console.warn("Dev Mode: Analytics disabled."); });
 if (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
@@ -14,8 +14,9 @@ import { initPublicProvider, initWalletSubscriptions, disconnectWallet, openConn
 import { showToast, showShareModal, showWelcomeModal } from './ui-feedback.js';
 import { formatBigNumber } from './utils.js'; 
 import { loadAddresses } from './config.js'; 
+import { executeInternalFaucet } from './modules/transactions.js'; 
 
-// Page Imports
+// Page Imports (Mantidos)
 import { DashboardPage } from './pages/DashboardPage.js';
 import { EarnPage } from './pages/networkstaking.js'; 
 import { StorePage } from './pages/StorePage.js';
@@ -25,13 +26,10 @@ import { AboutPage } from './pages/AboutPage.js';
 import { AirdropPage } from './pages/AirdropPage.js';
 import { AdminPage } from './pages/AdminPage.js';
 import { PresalePage } from './pages/PresalePage.js';
-import { FaucetPage } from './pages/FaucetPage.js';
 import { TokenomicsPage } from './pages/TokenomicsPage.js';
 import { NotaryPage } from './pages/NotaryPage.js';
 import { RentalPage } from './pages/RentalPage.js';
 import { SocialMediaPage } from './pages/SocialMedia.js';
-
-// NOVOS IMPORTS DE DEMONSTRAÇÃO
 import { CreditCardPage } from './pages/CreditCardPage.js';
 import { DexPage } from './pages/DexPage.js';
 import { DaoPage } from './pages/DaoPage.js';
@@ -55,13 +53,11 @@ const routes = {
     'notary': NotaryPage,
     'airdrop': AirdropPage,
     'tokenomics': TokenomicsPage,
-    'faucet': FaucetPage,
     'about': AboutPage,
     'admin': AdminPage,
     'presale': PresalePage,
     'rental': RentalPage,
     'socials': SocialMediaPage,
-    // NOVAS ROTAS
     'creditcard': CreditCardPage,
     'dex': DexPage,
     'dao': DaoPage
@@ -77,6 +73,7 @@ function formatAddress(addr) {
 }
 
 function formatLargeBalance(bigNum) {
+    if (!bigNum) return "0.00";
     const num = formatBigNumber(bigNum);
     if (num >= 1_000_000_000) return (num / 1_000_000_000).toFixed(2) + 'B';
     if (num >= 1_000_000) return (num / 1_000_000).toFixed(2) + 'M';
@@ -144,7 +141,7 @@ function navigateTo(pageId, forceUpdate = false) {
         if (isNewPage) window.scrollTo(0,0);
 
     } else {
-        if(pageId !== 'dashboard') {
+        if(pageId !== 'dashboard' && pageId !== 'faucet') { 
             console.warn(`Route '${pageId}' not found, redirecting to dashboard.`);
             navigateTo('dashboard', true);
         }
@@ -153,8 +150,10 @@ function navigateTo(pageId, forceUpdate = false) {
 window.navigateTo = navigateTo;
 
 // ============================================================================
-// 5. UI STATE MANAGEMENT
+// 5. UI STATE MANAGEMENT (FINAL FIX)
 // ============================================================================
+
+const BASE_BTN_CLASSES = "wallet-btn text-xs font-mono text-center max-w-fit whitespace-nowrap relative font-bold py-2 px-4 rounded-md transition-colors";
 
 function updateUIState(forcePageUpdate = false) {
     if (uiUpdatePending) return;
@@ -173,12 +172,33 @@ function performUIUpdate(forcePageUpdate) {
     const connectButtonMobile = document.getElementById('connectButtonMobile');
     const mobileAppDisplay = document.getElementById('mobileAppDisplay');
     
-    if (State.isConnected && State.userAddress) {
+    // 🔥 FIX: Confia APENAS no State.userAddress (preenchido pelo wallet.js)
+    let currentAddress = State.userAddress; 
+    
+    const connectBtns = [connectButtonDesktop, connectButtonMobile];
+    
+    if (State.isConnected && currentAddress) {
         const balanceString = formatLargeBalance(State.currentUserBalance);
+        const shortAddress = formatAddress(currentAddress);
         
-        if(connectButtonDesktop) connectButtonDesktop.textContent = `${balanceString} $BKC`;
-        if(connectButtonMobile) connectButtonMobile.textContent = `${balanceString} $BKC`;
+        // Estilo "Conectado"
+        const btnContent = `
+            <div class="status-dot"></div>
+            <span>${shortAddress}</span>
+            <div class="balance-pill">
+                ${balanceString} BKC
+            </div>
+        `;
+
+        connectBtns.forEach(btn => {
+            if (btn) {
+                btn.innerHTML = btnContent;
+                // Aplica BASE + classe de ESTADO
+                btn.className = BASE_BTN_CLASSES + " wallet-btn-connected";
+            }
+        });
         
+        // Atualiza textos auxiliares
         if (mobileAppDisplay) { 
             mobileAppDisplay.textContent = 'Backcoin.org'; 
             mobileAppDisplay.classList.add('text-amber-400'); 
@@ -192,13 +212,21 @@ function performUIUpdate(forcePageUpdate) {
         }
 
         if (adminLinkContainer) { 
-            adminLinkContainer.style.display = (State.userAddress.toLowerCase() === ADMIN_WALLET.toLowerCase()) ? 'block' : 'none'; 
+            adminLinkContainer.style.display = (currentAddress.toLowerCase() === ADMIN_WALLET.toLowerCase()) ? 'block' : 'none'; 
         }
         
     } else {
-        if(connectButtonDesktop) connectButtonDesktop.textContent = "Connect";
-        if(connectButtonMobile) connectButtonMobile.textContent = "Connect";
+        // Estilo "Desconectado"
+        const defaultText = `<i class="fa-solid fa-plug"></i> Connect Wallet`;
         
+        connectBtns.forEach(btn => {
+            if (btn) {
+                btn.innerHTML = defaultText;
+                // Aplica BASE + classe de ESTADO
+                btn.className = BASE_BTN_CLASSES + " wallet-btn-disconnected";
+            }
+        });
+
         if (mobileAppDisplay) { 
             mobileAppDisplay.textContent = 'Backcoin.org'; 
             mobileAppDisplay.classList.add('text-amber-400'); 
@@ -223,7 +251,13 @@ function performUIUpdate(forcePageUpdate) {
 function onWalletStateChange(changes) {
     const { isConnected, address, isNewConnection, wasConnected } = changes;
     const shouldForceUpdate = isNewConnection || (isConnected !== wasConnected);
+    
+    // Atualiza o estado global
+    State.isConnected = isConnected;
+    if(address) State.userAddress = address;
+
     updateUIState(shouldForceUpdate); 
+    
     if (isConnected && isNewConnection) showToast(`Connected: ${formatAddress(address)}`, "success");
     else if (!isConnected && wasConnected) showToast("Wallet disconnected.", "info");
 }
@@ -263,9 +297,17 @@ function setupGlobalListeners() {
 
     if (navItems.length > 0) {
         navItems.forEach(item => {
-            item.addEventListener('click', (e) => {
+            item.addEventListener('click', async (e) => {
                 e.preventDefault(); 
                 const pageId = item.dataset.target;
+                
+                if (pageId === 'faucet') {
+                    showToast("Accessing Testnet Faucet...", "info");
+                    const success = await executeInternalFaucet(null);
+                    if (success) updateUIState(true);
+                    return; 
+                }
+
                 if (pageId) {
                     navigateTo(pageId, false); 
                     if (sidebar && sidebar.classList.contains('translate-x-0')) {
@@ -278,8 +320,14 @@ function setupGlobalListeners() {
         });
     }
     
-    if (connectButton) connectButton.addEventListener('click', openConnectModal);
-    if (connectButtonMobile) connectButtonMobile.addEventListener('click', openConnectModal);
+    // Lógica de Conectar/Desconectar Unificada
+    const handleConnectClick = () => {
+        openConnectModal(); 
+    };
+
+    if (connectButton) connectButton.addEventListener('click', handleConnectClick);
+    if (connectButtonMobile) connectButtonMobile.addEventListener('click', handleConnectClick);
+    
     if (shareButton) shareButton.addEventListener('click', () => showShareModal(State.userAddress));
 
     if (menuButton && sidebar && sidebarBackdrop) {

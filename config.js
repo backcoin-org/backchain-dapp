@@ -1,14 +1,32 @@
-// config.js
-// ✅ VERSÃO FINAL V9.1: Fortune Pool V2 Fix (ABI Update) + Full Ecosystem Support
+// js/config.js
+// ✅ VERSÃO FINAL (PRODUÇÃO): Alchemy Gas Manager Configurado
 
 // ============================================================================
-// 1. ENVIRONMENT DETECTION
+// 1. ENVIRONMENT & ALCHEMY CONFIG
 // ============================================================================
 const isDevelopment = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
 console.log(`Environment: ${isDevelopment ? 'DEVELOPMENT' : 'PRODUCTION'}`);
 
+// ⚠️ CONFIGURAÇÃO ATIVA PARA O GRANT
+export const CONFIG = {
+    alchemy: {
+        apiKey: "OXcpAI1M17gLgjZJJ8VC3", // Sua API Key (Leitura de dados)
+        gasPolicyId: "54c32e74-c1d4-4e14-a7bf-db28f18e6c29" // ✅ Seu Policy ID (Gas Sponsorship)
+    }
+};
+
 // ============================================================================
-// 2. CONTRACT ADDRESSES (Dynamic Loader)
+// 2. NETWORK CONFIGURATION
+// ============================================================================
+// RPC Otimizado da Alchemy (Arbitrum Sepolia)
+export const sepoliaRpcUrl = `https://arb-sepolia.g.alchemy.com/v2/${CONFIG.alchemy.apiKey}`;
+export const sepoliaWssUrl = `wss://arb-sepolia.g.alchemy.com/v2/${CONFIG.alchemy.apiKey}`;
+export const sepoliaChainId = 421614n; // Arbitrum Sepolia Chain ID
+
+export const ipfsGateway = "https://white-defensive-eel-240.mypinata.cloud/ipfs/";
+
+// ============================================================================
+// 3. CONTRACT ADDRESSES (Dynamic Loader)
 // ============================================================================
 export const addresses = {};
 
@@ -22,7 +40,7 @@ export async function loadAddresses() {
         
         const jsonAddresses = await response.json();
 
-        // Validação básica de integridade
+        // Validação básica
         const requiredAddresses = ['bkcToken', 'delegationManager', 'ecosystemManager', 'miningManager'];
         const missingAddresses = requiredAddresses.filter(key => !jsonAddresses[key]);
         
@@ -30,17 +48,15 @@ export async function loadAddresses() {
             throw new Error(`Missing required addresses: ${missingAddresses.join(', ')}`);
         }
 
-        // Mapeamento Principal
         Object.assign(addresses, jsonAddresses);
 
-        // ALIASES CRÍTICOS (Compatibilidade com código legado)
-        // Garante que 'fortunePool' e 'actionsManager' apontem para o mesmo contrato
+        // Aliases para compatibilidade
         addresses.actionsManager = jsonAddresses.fortunePool; 
         addresses.fortunePool = jsonAddresses.fortunePool;
-
-        // Fallbacks de segurança
         addresses.rentalManager = jsonAddresses.rentalManager || null;
         addresses.bkcDexPoolAddress = jsonAddresses.bkcDexPoolAddress || "#";
+
+        if (!addresses.faucet) console.warn("Faucet address missing in JSON, check deployment.");
 
         console.log("✅ Contract addresses loaded successfully.");
         return true;
@@ -52,20 +68,9 @@ export async function loadAddresses() {
 }
 
 // ============================================================================
-// 3. NETWORK CONFIGURATION
-// ============================================================================
-// ⚠️ OBS: Substitua pela sua chave NOVA se esta estiver bloqueada.
-const INFURA_KEY = "7d31b7dd70ab4d4da293c96bf983f1f1"; 
-
-export const sepoliaWssUrl = `wss://sepolia.infura.io/ws/v3/${INFURA_KEY}`;
-export const sepoliaRpcUrl = `https://sepolia.infura.io/v3/${INFURA_KEY}`;
-export const sepoliaChainId = 11155111n;
-export const ipfsGateway = "https://white-defensive-eel-240.mypinata.cloud/ipfs/";
-
-// ============================================================================
 // 4. APPLICATION CONSTANTS
 // ============================================================================
-export const FAUCET_AMOUNT_WEI = 100n * 10n**18n;
+export const FAUCET_AMOUNT_WEI = 20n * 10n**18n; // 20 BKC
 
 export const boosterTiers = [
     { name: "Diamond", boostBips: 7000, color: "text-cyan-400", img: `${ipfsGateway}bafybeicgip72jcqgsirlrhn3tq5cc226vmko6etnndzl6nlhqrktfikafq/diamond_booster.json`, realImg: `${ipfsGateway}bafybeicgip72jcqgsirlrhn3tq5cc226vmko6etnndzl6nlhqrktfikafq`, borderColor: "border-cyan-400/50", glowColor: "bg-cyan-500/10" },
@@ -78,7 +83,7 @@ export const boosterTiers = [
 ];
 
 // ============================================================================
-// 5. CONTRACT ABIs
+// 5. CONTRACT ABIs (Mantidas)
 // ============================================================================
 
 export const bkcTokenABI = [
@@ -149,12 +154,10 @@ export const nftPoolABI = [
     "event NFTSold(address indexed seller, uint256 indexed boostBips, uint256 tokenId, uint256 payout, uint256 taxPaid)"
 ];
 
-// --- [UPDATED] FORTUNE POOL V2 ABI ---
-// CORREÇÃO CRÍTICA APLICADA: gameResults agora pede (gameId, index) para suportar Arrays em Mappings
 export const actionsManagerABI = [
     "function participate(uint256 _amount, uint8[3] _guesses, bool _isCumulative) payable", 
     "function oracleFeeInWei() view returns (uint256)",
-    "function gameResults(uint256, uint256) view returns (uint256)", // <-- FIX AQUI!
+    "function gameResults(uint256, uint256) view returns (uint256)", 
     "function gameCounter() view returns (uint256)",
     "function prizePoolBalance() view returns (uint256)",
     "event GameRequested(uint256 indexed gameId, address indexed user, uint256 purchaseAmount, uint8[3] guesses, bool isCumulative)",

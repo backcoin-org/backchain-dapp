@@ -1,5 +1,5 @@
 // js/ui-feedback.js
-// ✅ FINAL VERSION: Clean Logo + Adjusted Button Flow (Buy -> Community -> Group)
+// ✅ VERSÃO FINAL: Arbitrum Rebrand + Links Arbiscan Corretos
 
 import { DOMElements } from './dom-elements.js';
 import { State } from './state.js';
@@ -17,40 +17,42 @@ export const showToast = (message, type = 'info', txHash = null) => {
     const definitions = {
         success: { icon: 'fa-check-circle', color: 'bg-green-600', border: 'border-green-400' },
         error: { icon: 'fa-exclamation-triangle', color: 'bg-red-600', border: 'border-red-400' },
-        info: { icon: 'fa-info-circle', color: 'bg-blue-600', border: 'border-blue-400' }
+        info: { icon: 'fa-info-circle', color: 'bg-blue-600', border: 'border-blue-400' },
+        warning: { icon: 'fa-exclamation-circle', color: 'bg-yellow-600', border: 'border-yellow-400' }
     };
     const def = definitions[type] || definitions.info;
 
     const toast = document.createElement('div');
-    toast.className = `flex items-center w-full max-w-xs p-3 text-white rounded-lg shadow-2xl transition-all duration-500 ease-out 
+    toast.className = `flex items-center w-full max-w-xs p-4 text-white rounded-lg shadow-lg transition-all duration-500 ease-out 
                        transform translate-x-full opacity-0 
-                       ${def.color} border-l-4 ${def.border}`;
+                       ${def.color} border-l-4 ${def.border} mb-3`;
 
     let content = `
         <div class="flex items-center flex-1">
-            <i class="fa-solid ${def.icon} text-lg mr-3"></i>
-            <div class="text-sm font-medium">${message}</div>
+            <i class="fa-solid ${def.icon} text-xl mr-3"></i>
+            <div class="text-sm font-medium leading-tight">${message}</div>
         </div>
     `;
 
     if (txHash) {
-        const explorerUrl = `https://sepolia.etherscan.io/tx/${txHash}`;
-        content += `<a href="${explorerUrl}" target="_blank" title="View Transaction" class="ml-3 flex-shrink-0 text-zinc-200 hover:text-white transition-colors">
+        // 🔄 ATUALIZADO: Link correto para Arbiscan (Arbitrum Sepolia)
+        const explorerUrl = `https://sepolia.arbiscan.io/tx/${txHash}`;
+        content += `<a href="${explorerUrl}" target="_blank" title="View on Arbiscan" class="ml-3 flex-shrink-0 text-white/80 hover:text-white transition-colors">
                         <i class="fa-solid fa-arrow-up-right-from-square text-sm"></i>
                       </a>`;
     }
     
-    content += `<button class="ml-3 text-zinc-200 hover:text-white transition-colors" onclick="this.closest('.shadow-2xl').remove()">
-                    <i class="fa-solid fa-xmark"></i>
+    content += `<button class="ml-3 text-white/80 hover:text-white transition-colors focus:outline-none" onclick="this.closest('.shadow-lg').remove()">
+                    <i class="fa-solid fa-xmark text-lg"></i>
                 </button>`;
 
     toast.innerHTML = content;
     DOMElements.toastContainer.appendChild(toast);
 
-    setTimeout(() => { 
+    requestAnimationFrame(() => {
         toast.classList.remove('translate-x-full', 'opacity-0'); 
         toast.classList.add('translate-x-0', 'opacity-100'); 
-    }, 50);
+    });
 
     setTimeout(() => { 
         toast.classList.remove('translate-x-0', 'opacity-100');
@@ -68,6 +70,7 @@ export const closeModal = () => {
             content.classList.remove('animate-fade-in-up');
             content.classList.add('animate-fade-out-down');
         }
+        backdrop.classList.remove('opacity-100'); 
         backdrop.classList.add('opacity-0');
         setTimeout(() => {
             DOMElements.modalContainer.innerHTML = '';
@@ -89,9 +92,9 @@ export const openModal = (content, maxWidth = 'max-w-md', allowCloseOnBackdrop =
         '</style>';
 
     const modalHTML = `
-        <div id="modal-backdrop" class="fixed inset-0 bg-black/90 backdrop-blur-md flex items-center justify-center z-50 p-4 transition-opacity duration-300">
-            <div id="modal-content" class="bg-zinc-900 border border-zinc-700 rounded-2xl p-6 w-full ${maxWidth} shadow-2xl animate-fade-in-up max-h-full overflow-y-auto relative">
-                <button class="closeModalBtn absolute top-4 right-4 text-zinc-500 hover:text-white text-xl"><i class="fa-solid fa-xmark"></i></button>
+        <div id="modal-backdrop" class="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-[9999] p-4 transition-opacity duration-300 opacity-0">
+            <div id="modal-content" class="bg-zinc-900 border border-zinc-700 rounded-2xl p-6 w-full ${maxWidth} shadow-2xl animate-fade-in-up max-h-[90vh] overflow-y-auto relative">
+                <button class="closeModalBtn absolute top-4 right-4 text-zinc-500 hover:text-white text-xl transition-colors focus:outline-none"><i class="fa-solid fa-xmark"></i></button>
                 ${content}
             </div>
         </div>
@@ -99,6 +102,12 @@ export const openModal = (content, maxWidth = 'max-w-md', allowCloseOnBackdrop =
     `;
     
     DOMElements.modalContainer.innerHTML = modalHTML;
+
+    requestAnimationFrame(() => {
+        const backdrop = document.getElementById('modal-backdrop');
+        if (backdrop) backdrop.classList.remove('opacity-0');
+        if (backdrop) backdrop.classList.add('opacity-100');
+    });
 
     document.getElementById('modal-backdrop')?.addEventListener('click', e => {
         if (allowCloseOnBackdrop && e.target.id === 'modal-backdrop') {
@@ -125,8 +134,11 @@ const updateAllTimers = () => {
             const parentCard = el.closest('.delegation-card');
             if (parentCard) {
                 parentCard.querySelector('.force-unstake-btn')?.remove();
-                parentCard.querySelector('.unstake-btn')?.classList.remove('btn-disabled', 'opacity-50', 'cursor-not-allowed');
-                parentCard.querySelector('.unstake-btn')?.removeAttribute('disabled');
+                const unstakeBtn = parentCard.querySelector('.unstake-btn');
+                if (unstakeBtn) {
+                    unstakeBtn.classList.remove('btn-disabled', 'opacity-50', 'cursor-not-allowed');
+                    unstakeBtn.removeAttribute('disabled');
+                }
             }
             return false; 
         }
@@ -191,11 +203,18 @@ export async function addNftToWallet(contractAddress, tokenId) {
 // --- SHARE MODAL ---
 export function showShareModal(userAddress) {
     const projectUrl = window.location.origin;
-    const content = `<div class="p-6 text-center text-zinc-300"><h3>Share functionality coming soon!</h3><p>${projectUrl}</p></div>`;
+    const content = `<div class="p-6 text-center text-zinc-300">
+                        <i class="fa-solid fa-share-nodes text-4xl mb-4 text-zinc-500"></i>
+                        <h3 class="text-xl font-bold text-white mb-2">Share Project</h3>
+                        <p class="mb-4 text-sm">Spread the word about Backcoin!</p>
+                        <div class="bg-black/50 p-3 rounded-lg break-all font-mono text-xs text-zinc-400 select-all border border-zinc-700">
+                            ${projectUrl}
+                        </div>
+                     </div>`;
     openModal(content);
 }
 
-// --- WELCOME MODAL (CLEAN LOGO & NEW BUTTON FLOW) ---
+// --- WELCOME MODAL (UPDATED FOR ARBITRUM) ---
 
 const navigateAndClose = (target) => {
     if (window.navigateTo) {
@@ -210,59 +229,59 @@ export function showWelcomeModal() {
     if (hasShownWelcomeModal) return;
     hasShownWelcomeModal = true;
 
-    // Generic Placeholder URL
     const PRESALE_URL = "https://presale.backcoin.org"; 
 
     const content = `
         <div class="text-center pt-2 pb-4">
             
-            <div class="inline-flex items-center gap-2 bg-zinc-800 border border-zinc-700 rounded-full px-4 py-1.5 mb-6">
+            <div class="inline-flex items-center gap-2 bg-zinc-800 border border-zinc-700 rounded-full px-4 py-1.5 mb-6 shadow-sm">
                 <span class="relative flex h-3 w-3">
-                  <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
-                  <span class="relative inline-flex rounded-full h-3 w-3 bg-green-500"></span>
+                  <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
+                  <span class="relative inline-flex rounded-full h-3 w-3 bg-blue-500"></span>
                 </span>
-                <span class="text-xs font-mono text-zinc-400 uppercase tracking-wider">ENVIRONMENT: <span class="text-white font-bold">BKC TESTNET</span></span>
+                <span class="text-xs font-mono text-zinc-400 uppercase tracking-wider">NETWORK: <span class="text-blue-400 font-bold">ARBITRUM SEPOLIA</span></span>
             </div>
 
-            <div class="mb-4">
-                <img src="./assets/bkc_logo_3d.png" alt="Backcoin Logo" class="h-24 w-24 mx-auto rounded-full">
+            <div class="mb-4 relative inline-block">
+                <div class="absolute inset-0 bg-blue-500/20 rounded-full blur-xl"></div>
+                <img src="./assets/bkc_logo_3d.png" alt="Backcoin Logo" class="h-24 w-24 mx-auto rounded-full relative z-10 shadow-2xl">
             </div>
             
             <h2 class="text-3xl font-black text-white mb-2 uppercase tracking-wide">
                 Welcome to Backcoin
             </h2> 
             
-            <p class="text-zinc-300 mb-8 text-sm leading-relaxed px-2">
-                This application is running on the <strong>Testnet</strong>. 
-                However, the <strong class="text-amber-400">Exclusive Presale</strong> is live on the <strong>BNB Mainnet</strong>.
+            <p class="text-zinc-300 mb-8 text-sm leading-relaxed px-4">
+                This dApp is running on the <strong>Arbitrum Sepolia Testnet</strong>. 
+                However, the <strong class="text-amber-400">Exclusive Presale</strong> is live on <strong>Arbitrum One (Mainnet)</strong>.
             </p>
 
-            <div class="flex flex-col gap-4">
+            <div class="flex flex-col gap-3">
                 
-                <button id="btnPresale" class="group relative w-full bg-gradient-to-r from-amber-600 via-yellow-500 to-amber-600 bg-[length:200%_auto] hover:bg-right transition-all duration-500 text-black font-black py-4 px-5 rounded-xl text-lg shadow-xl shadow-amber-500/20 pulse-gold border border-yellow-300/50 flex items-center justify-center gap-3 overflow-hidden">
-                    <div class="absolute inset-0 bg-white/20 group-hover:bg-transparent transition-colors"></div>
-                    <i class="fa-solid fa-cart-shopping text-2xl animate-pulse"></i> 
+                <button id="btnPresale" class="group relative w-full bg-gradient-to-r from-blue-600 via-blue-500 to-blue-600 bg-[length:200%_auto] hover:bg-right transition-all duration-500 text-white font-black py-4 px-5 rounded-xl text-lg shadow-xl shadow-blue-500/20 pulse-gold border border-blue-400/50 flex items-center justify-center gap-3 overflow-hidden transform hover:scale-[1.02]">
+                    <div class="absolute inset-0 bg-white/10 group-hover:bg-transparent transition-colors"></div>
+                    <i class="fa-solid fa-rocket text-2xl animate-pulse"></i> 
                     <div class="flex flex-col items-start leading-none z-10">
-                        <span class="text-xs font-bold opacity-80 uppercase tracking-wider">BNB Mainnet Event</span>
-                        <span class="text-xl">BUY EXCLUSIVE NFT</span>
+                        <span class="text-[10px] font-bold opacity-80 uppercase tracking-wider mb-0.5">Arbitrum One Event</span>
+                        <span class="text-lg">GO TO PRESALE</span>
                     </div>
-                    <i class="fa-solid fa-chevron-right ml-auto text-black/50 text-base"></i>
+                    <i class="fa-solid fa-chevron-right ml-auto text-white/50 text-base group-hover:translate-x-1 transition-transform"></i>
                 </button>
 
-                <button id="btnAirdrop" class="w-full bg-zinc-800 hover:bg-zinc-700 border border-zinc-600 hover:border-blue-500 text-white font-bold py-3.5 px-5 rounded-xl text-lg transition-all duration-300 transform hover:translate-y-[-2px] shadow-lg flex items-center justify-center gap-3">
-                    <i class="fa-solid fa-users text-blue-400 text-xl"></i>
+                <button id="btnAirdrop" class="w-full bg-zinc-800 hover:bg-zinc-700 border border-zinc-600 hover:border-amber-500 text-white font-bold py-3.5 px-5 rounded-xl text-base transition-all duration-300 transform hover:translate-y-[-1px] shadow-lg flex items-center justify-center gap-3 group">
+                    <i class="fa-solid fa-parachute-box text-amber-500 text-lg group-hover:rotate-12 transition-transform"></i>
                     <span>Join Community & Airdrop</span>
                 </button>
 
-                <button id="btnSocials" class="w-full bg-transparent hover:bg-zinc-800 border border-zinc-700 hover:border-zinc-500 text-zinc-400 hover:text-white font-semibold py-3 px-5 rounded-xl text-sm transition-all duration-300 flex items-center justify-center gap-2">
-                    <i class="fa-brands fa-telegram text-lg"></i>
-                    <span>Enter Official Group / Learn More About Project</span>
+                <button id="btnSocials" class="w-full bg-transparent hover:bg-zinc-800 border border-zinc-700 hover:border-zinc-500 text-zinc-400 hover:text-white font-semibold py-3 px-5 rounded-xl text-sm transition-all duration-300 flex items-center justify-center gap-2 group">
+                    <i class="fa-brands fa-telegram text-lg group-hover:text-blue-400 transition-colors"></i>
+                    <span>Enter Official Group</span>
                 </button>
 
             </div>
             
-            <div class="mt-6 text-xs text-zinc-500">
-                Backcoin.org &copy; 2025
+            <div class="mt-6 text-[10px] text-zinc-600 uppercase tracking-widest">
+                Backcoin Protocol on Arbitrum
             </div>
         </div>
     `;

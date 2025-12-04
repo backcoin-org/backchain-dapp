@@ -13,17 +13,16 @@ import path from "path";
  * Ele chama a nova função 'updateTierPrice' e NÃO RESETA a contagem de vendas.
  */
 
-// Defina os NOVOS PREÇOS (Fase 2) aqui
+// Defina os NOVOS PREÇOS (Fase 2) aqui - AJUSTADO PARA ARBITRUM (ETH)
+// Lógica aplicada: Aumento de 50% sobre o preço da Fase 1 (Baseada em 1 ETH Diamond)
 const NEW_PRICES_ETH = {
-  // Preços da Fase 1 (ex: 3.60) aumentados em 50%
-  // (Você pode definir qualquer valor, não precisa ser +50%)
-  "0": "5.40", // Diamond (Tier ID 0)
-  "1": "2.16", // Platinum (Tier ID 1)
-  "2": "0.81", // Gold (Tier ID 2)
-  "3": "0.405", // Silver (Tier ID 3)
-  "4": "0.216", // Bronze (Tier ID 4)
-  "5": "0.105", // Iron (Tier ID 5)
-  "6": "0.015", // Crystal (Tier ID 6)
+  "0": "1.5",     // Diamond (Fase 1: 1.0 -> +50%)
+  "1": "0.6",     // Platinum (Fase 1: 0.4 -> +50%)
+  "2": "0.225",   // Gold (Fase 1: 0.15 -> +50%)
+  "3": "0.105",   // Silver (Fase 1: 0.07 -> +50%)
+  "4": "0.045",   // Bronze (Fase 1: 0.03 -> +50%)
+  "5": "0.015",   // Iron (Fase 1: 0.01 -> +50%)
+  "6": "0.006",   // Crystal (Fase 1: 0.004 -> +50%)
 };
 
 // ######################################################################
@@ -86,8 +85,8 @@ export async function runScript(hre: HardhatRuntimeEnvironment) {
           continue;
       }
 
-      console.log(`      Preço Antigo: ${ethers.formatEther(currentTier.priceInWei)} ETH/BNB`);
-      console.log(`      Preço Novo:   ${newPriceETH} ETH/BNB (${newPriceInWei} Wei)`);
+      console.log(`      Preço Antigo: ${ethers.formatEther(currentTier.priceInWei)} ETH`);
+      console.log(`      Preço Novo:   ${newPriceETH} ETH (${newPriceInWei} Wei)`);
       console.log(`      Contagem de Vendas (MintedCount): ${currentTier.mintedCount} (NÃO SERÁ RESETADO)`);
 
       const tx = await saleContract.updateTierPrice(

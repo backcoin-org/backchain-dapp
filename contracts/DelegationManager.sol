@@ -12,6 +12,8 @@ import "./BKCToken.sol";
  * @title DelegationManager
  * @notice Manages staking and rewards within the Backcoin Protocol.
  * @dev Implements "Saved Rewards" logic: rewards accumulate and are only transferred upon manual claim.
+ * Optimized for Arbitrum Network.
+
  */
 contract DelegationManager is
     Initializable,
