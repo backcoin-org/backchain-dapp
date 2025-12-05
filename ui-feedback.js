@@ -229,7 +229,7 @@ export function showWelcomeModal() {
     if (hasShownWelcomeModal) return;
     hasShownWelcomeModal = true;
 
-    const PRESALE_URL = "https://presale.backcoin.org"; 
+    const PRESALE_URL = "https://backcoin.org/presale"; 
 
     const content = `
         <div class="text-center pt-2 pb-4">
