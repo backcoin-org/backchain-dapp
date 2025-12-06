@@ -13,7 +13,8 @@ import "./BKCToken.sol";
 /**
  * @title Fortune Pool (Strategic Betting)
  * @notice A skill-based prediction game fueled by Backcoin ($BKC).
- * @dev Users predict 3 numbers. Fees trigger the Proof-of-Purchase mining mechanism.
+ * @dev Users predict 3 numbers. Fees collected trigger the Proof-of-Purchase mining mechanism.
+ * The contract is designed to be gas-efficient for EVM networks like Arbitrum.
  */
 contract FortunePool is
     Initializable,
@@ -29,39 +30,40 @@ contract FortunePool is
     BKCToken public bkcToken;
     IDelegationManager public delegationManager;
     
-    address public miningManagerAddress; 
+    address public miningManagerAddress;
     address public oracleAddress;
 
     uint256 public oracleFeeInWei;
     uint256 public gameCounter;
 
+    // --- Dynamic Game Fee (Adjustable by Owner) ---
+    uint256 public gameFeeBips; 
+
     struct PrizeTier {
-        uint128 chanceDenominator; // Max range (3, 10, 100)
-        uint64 multiplierBips;     // Reward multiplier (3x, 10x, 100x)
+        uint128 chanceDenominator; // Max range (e.g., 3, 10, 100)
+        uint64 multiplierBips;     // Reward multiplier (e.g., 20000 = 2x)
         bool isInitialized;
     }
 
-    // NEW: Stores user guesses pending oracle resolution
     struct GameRequest {
         address user;
-        uint256 purchaseAmount;
-        uint8[3] guesses; // User predictions [1-3, 1-10, 1-100]
-        bool isCumulative; // True = All wins paid; False = Highest win only
+        uint256 purchaseAmount; // Net wager amount used for calculation
+        uint8[3] guesses;      // User predictions [Tier 1, Tier 2, Tier 3]
+        bool isCumulative;     // True = All matching tiers pay; False = Highest tier only
     }
 
     mapping(uint256 => PrizeTier) public prizeTiers;
-    mapping(uint256 => GameRequest) public pendingGames; // Store pending requests
-    mapping(uint256 => uint256[3]) public gameResults;   // Store final rolls
+    mapping(uint256 => GameRequest) public pendingGames; // Requests waiting for oracle fulfillment
+    mapping(uint256 => uint256[3]) public gameResults;   // Final rolls results
 
     uint256 public prizePoolBalance;
     uint256 public activeTierCount;
     
     // Constants
-    uint256 public constant TOTAL_FEE_BIPS = 1000; // 10% Fee
     uint256 public constant TOTAL_BIPS = 10000;
     uint256 public constant MAX_PRIZE_PAYOUT_BIPS = 5000; // Max 50% of pool per win
     
-    // Service Key
+    // Service Key for MiningManager Authorization
     bytes32 public constant SERVICE_KEY = keccak256("TIGER_GAME_SERVICE");
 
     // --- Events ---
@@ -70,6 +72,7 @@ contract FortunePool is
     event PrizePoolToppedUp(uint256 amount);
     event OracleAddressSet(address indexed oracle);
     event OracleFeeSet(uint256 newFeeInWei);
+    event GameFeeSet(uint256 newFeeBips); // New event for dynamic BKC fee change
     
     event GameRequested(
         uint256 indexed gameId, 
@@ -78,7 +81,7 @@ contract FortunePool is
         uint8[3] guesses,
         bool isCumulative
     );
-    
+
     event GameFulfilled(
         uint256 indexed gameId,
         address indexed user,
@@ -87,7 +90,7 @@ contract FortunePool is
         uint8[3] guesses
     );
 
-    // --- Custom Errors ---
+    // --- Custom Errors (Gas Optimization) ---
 
     error InvalidAddress();
     error InvalidAmount();
@@ -106,6 +109,11 @@ contract FortunePool is
         _disableInitializers();
     }
 
+    /**
+     * @notice Initializes the Fortune Pool contract and links core ecosystem managers.
+     * @param _initialOwner The owner of this contract.
+     * @param _ecosystemManagerAddress The address of the central hub.
+     */
     function initialize(
         address _initialOwner,
         address _ecosystemManagerAddress
@@ -133,6 +141,9 @@ contract FortunePool is
         delegationManager = IDelegationManager(_dmAddress);
         miningManagerAddress = _miningManagerAddr;
         
+        // Default game fee is 10% (1000 BIPS)
+        gameFeeBips = 1000;
+        
         _transferOwnership(_initialOwner);
     }
 
@@ -140,23 +151,48 @@ contract FortunePool is
 
     // --- Admin Functions ---
 
+    /**
+     * @notice Sets the address of the Oracle (RNG Service).
+     * @param _oracle The EOA address that fulfills the game.
+     */
     function setOracleAddress(address _oracle) external onlyOwner {
         if (_oracle == address(0)) revert InvalidAddress();
         oracleAddress = _oracle;
         emit OracleAddressSet(_oracle);
     }
     
+    /**
+     * @notice Sets the native ETH fee required to trigger the oracle.
+     * @param _feeInWei The fee amount in Wei.
+     */
     function setOracleFee(uint256 _feeInWei) external onlyOwner {
         oracleFeeInWei = _feeInWei;
         emit OracleFeeSet(_feeInWei);
     }
 
+    /**
+     * @notice Sets the fee taken from the BKC wager (10% default).
+     * @param _newFeeBips The new fee in Basis Points (1000 = 10%). Max 3000.
+     */
+    function setGameFee(uint256 _newFeeBips) external onlyOwner {
+        // Safety cap at 30%
+        if (_newFeeBips > 3000) revert InvalidFee(); 
+        gameFeeBips = _newFeeBips;
+        emit GameFeeSet(_newFeeBips);
+    }
+
+    /**
+     * @notice Configures a prize tier (up to 3 tiers).
+     * @param _tierId The tier ID (1, 2, or 3).
+     * @param _chanceDenominator The chance denominator (e.g., 4 for 1/4 chance).
+     * @param _multiplierBips The reward multiplier in BIPS (e.g., 15000 = 1.5x).
+     */
     function setPrizeTier(
         uint256 _tierId,
         uint128 _chanceDenominator,
         uint64 _multiplierBips
     ) external onlyOwner {
-        if (_tierId == 0 || _tierId > 3) revert InvalidTierID(); // Limit to 3 tiers for UI consistency
+        if (_tierId == 0 || _tierId > 3) revert InvalidTierID(); 
         
         if (!prizeTiers[_tierId].isInitialized) {
             activeTierCount++;
@@ -171,6 +207,10 @@ contract FortunePool is
         emit TierCreated(_tierId, _chanceDenominator, _multiplierBips);
     }
 
+    /**
+     * @notice Allows the owner to transfer BKC to increase the prize pool.
+     * @param _amount The amount of BKC to deposit.
+     */
     function topUpPool(uint256 _amount) external onlyOwner {
         if (_amount == 0) revert InvalidAmount();
         bkcToken.safeTransferFrom(msg.sender, address(this), _amount);
@@ -178,6 +218,9 @@ contract FortunePool is
         emit PrizePoolToppedUp(_amount);
     }
 
+    /**
+     * @notice Emergency function to withdraw all pool balance to the Treasury.
+     */
     function emergencyWithdraw() external onlyOwner {
         address treasury = ecosystemManager.getTreasuryAddress();
         if (treasury == address(0)) revert CoreContractsNotSet();
@@ -193,10 +236,11 @@ contract FortunePool is
     // --- Game Logic ---
 
     /**
-     * @notice Play the game by submitting guesses.
+     * @notice Allows a user to play the game by submitting a wager and guesses.
+     * @dev Pays native ETH fee to the oracle and wagers BKC.
      * @param _amount Amount of BKC to wager.
-     * @param _guesses Array of 3 numbers [1-3, 1-10, 1-100].
-     * @param _isCumulative If true, pays ALL wins (riskier). If false, pays HIGHEST win.
+     * @param _guesses Array of 3 number predictions.
+     * @param _isCumulative If true, pays ALL wins (fee 5x). If false, pays HIGHEST win (fee 1x).
      */
     function participate(
         uint256 _amount, 
@@ -205,22 +249,23 @@ contract FortunePool is
     ) external payable nonReentrant {
         if (_amount == 0) revert InvalidAmount();
         
-        // Validate Guesses
+        // Validate Guesses (Tiers 1-3, 1-10, 1-100)
         if (_guesses[0] < 1 || _guesses[0] > 3) revert InvalidGuess();
         if (_guesses[1] < 1 || _guesses[1] > 10) revert InvalidGuess();
         if (_guesses[2] < 1 || _guesses[2] > 100) revert InvalidGuess();
 
-        // Calculate Oracle Fee (5x for Cumulative Mode to prevent spam/exploit)
+        // Calculate required ETH fee (5x for Cumulative)
         uint256 requiredFee = _isCumulative ? oracleFeeInWei * 5 : oracleFeeInWei;
-        if (msg.value != requiredFee) revert InvalidFee();
         
-        // Forward native fee to Oracle
+        if (msg.value != requiredFee) revert InvalidFee();
+
+        // Forward native fee to Oracle (EOA)
         (bool sent, ) = oracleAddress.call{value: msg.value}("");
         if (!sent) revert OracleTransferFailed();
 
-        // Process BKC (90% Pool / 10% Mining)
+        // Process BKC (Pool / Mining based on dynamic fee)
         uint256 purchaseAmount = _processFeesAndMining(_amount);
-        
+
         unchecked {
             gameCounter++;
         }
@@ -228,23 +273,30 @@ contract FortunePool is
         // Store request for fulfillment
         pendingGames[gameCounter] = GameRequest({
             user: msg.sender,
-            purchaseAmount: purchaseAmount, // This is the NET wager used for calculation
+            purchaseAmount: purchaseAmount, 
             guesses: _guesses,
             isCumulative: _isCumulative
         });
-        
+
         emit GameRequested(gameCounter, msg.sender, purchaseAmount, _guesses, _isCumulative);
     }
     
+    /**
+     * @notice Called only by the Oracle to fulfill a pending game request.
+     * @dev Calculates the final prize, pays the user, and updates pool balance.
+     * @param _gameId The ID of the pending game request.
+     * @param _randomNumber The random number generated by the oracle (bytes32 converted to uint256).
+     */
     function fulfillGame(
         uint256 _gameId,
         uint256 _randomNumber
     ) external nonReentrant {
         if (msg.sender != oracleAddress) revert Unauthorized();
+        // Check if game is already fulfilled
         if (gameResults[_gameId][0] != 0) revert GameAlreadyFulfilled();
 
         GameRequest memory request = pendingGames[_gameId];
-        if (request.user == address(0)) revert Unauthorized(); // Invalid game ID
+        if (request.user == address(0)) revert Unauthorized(); 
 
         uint256 totalPrize = 0;
         uint256[3] memory rolls;
@@ -255,7 +307,7 @@ contract FortunePool is
             PrizeTier memory tier = prizeTiers[i];
             if (!tier.isInitialized) continue;
 
-            // Generate Roll
+            // Generate Roll (1 to chanceDenominator)
             uint256 roll = (uint256(keccak256(abi.encodePacked(_randomNumber, i))) % tier.chanceDenominator) + 1;
             rolls[i-1] = roll;
 
@@ -282,7 +334,7 @@ contract FortunePool is
 
         // Save Result
         gameResults[_gameId] = rolls;
-        
+
         // Payout
         if (totalPrize > 0) {
             prizePoolBalance -= totalPrize;
@@ -291,31 +343,49 @@ contract FortunePool is
 
         // Clean up storage (Gas Refund)
         delete pendingGames[_gameId];
-
+        
         emit GameFulfilled(_gameId, request.user, totalPrize, rolls, request.guesses);
     }
 
     // --- Internal Helpers ---
 
+    /**
+     * @dev Handles the BKC transfer: user -> contract, pool amount -> pool, fee amount -> MiningManager.
+     * @param _amount The gross amount wagered by the user.
+     * @return purchaseAmount The gross amount wagered.
+     */
     function _processFeesAndMining(uint256 _amount) internal returns (uint256 purchaseAmount) {
-        uint256 totalFee = (_amount * TOTAL_FEE_BIPS) / TOTAL_BIPS;
+        // Calculates dynamic fee (e.g., 10%)
+        uint256 totalFee = (_amount * gameFeeBips) / TOTAL_BIPS;
+        
         uint256 prizePoolAmount = _amount - totalFee;
-        purchaseAmount = _amount; // NOTE: We base multipliers on the GROSS amount for UX simplicity
+        purchaseAmount = _amount; // Multipliers are based on the GROSS amount for UX
 
         if (miningManagerAddress == address(0)) revert CoreContractsNotSet();
 
+        // 1. Pull tokens from user
         bkcToken.safeTransferFrom(msg.sender, address(this), _amount);
+        
+        // 2. Add net wager to pool
         _addAmountToPool(prizePoolAmount);
         
-        // Fee Mining Logic
-        bkcToken.safeTransfer(miningManagerAddress, totalFee);
-        IMiningManager(miningManagerAddress).performPurchaseMining(SERVICE_KEY, totalFee);
-            
+        // 3. Fee Mining Logic
+        if (totalFee > 0) {
+            // Transfer fee to MiningManager
+            bkcToken.safeTransfer(miningManagerAddress, totalFee);
+            // Trigger PoP mining
+            IMiningManager(miningManagerAddress).performPurchaseMining(SERVICE_KEY, totalFee);
+        }
+        
         return purchaseAmount;
     }
     
+    /**
+     * @dev Adds the net wager amount to the prize pool, or sends to treasury if no tiers are active.
+     */
     function _addAmountToPool(uint256 _amount) internal {
         if (_amount == 0) return;
+        
         if (activeTierCount == 0) {
             address treasury = ecosystemManager.getTreasuryAddress();
             if (treasury != address(0)) {

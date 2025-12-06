@@ -1,5 +1,5 @@
 // scripts/3_launch_and_liquidate_ecosystem.ts
-// ✅ VERSÃO FINAL V5.0: Alinhado com Contratos V16 e Deploy Unificado
+// ✅ VERSÃO FINAL V5.1 (ORACLE FEE FIXED, TIERS ADJUSTED, LIQUIDITY 3X): Alinhado com Contratos V16 e Deploy Unificado
 
 import { ethers, upgrades } from "hardhat";
 import { HardhatRuntimeEnvironment } from "hardhat/types";
@@ -16,24 +16,27 @@ const CHUNK_SIZE = 50;
 const CHUNK_SIZE_BIGINT = BigInt(CHUNK_SIZE);
 const DEFAULT_ORACLE = "0xd7e622124b78a28c4c928b271fc9423285804f98"; // Fallback seguro
 
-// Quantidade de NFTs para injetar na liquidez inicial por Tier
+// C4: Quantidade de NFTs para injetar na liquidez inicial por Tier (TRIPLICADO)
 const MANUAL_LIQUIDITY_MINT_COUNT = [
-    10n, // Diamond
-    20n, // Platinum
-    30n, // Gold
-    40n, // Silver
-    50n, // Bronze
-    60n, // Iron
-    70n  // Crystal
+    30n, // Diamond (10 * 3)
+    60n, // Platinum (20 * 3)
+    90n, // Gold (30 * 3)
+    120n, // Silver (40 * 3)
+    150n, // Bronze (50 * 3)
+    180n, // Iron (60 * 3)
+    210n  // Crystal (70 * 3)
 ];
 
 const FORTUNE_POOL_LIQUIDITY_TOTAL = ethers.parseEther("1000000"); // 1M BKC
 
-// --- TIGER GAME CONFIG ---
+// C1: TIGER GAME CONFIG (Tiers Ajustados)
 const FORTUNE_POOL_TIERS = [
-    { poolId: 1, multiplierBips: 20000n, chanceDenominator: 3n }, 
-    { poolId: 2, multiplierBips: 50000n, chanceDenominator: 10n }, 
-    { poolId: 3, multiplierBips: 1000000n, chanceDenominator: 100n } 
+    // 1/5 chance (20%), 1.5x (15000 BIPS)
+    { poolId: 1, multiplierBips: 15000n, chanceDenominator: 5n }, 
+    // 1/15 chance (6.6%), 5x (50000 BIPS)
+    { poolId: 2, multiplierBips: 50000n, chanceDenominator: 15n }, 
+    // 1/150 chance (0.66%), 50x (500000 BIPS)
+    { poolId: 3, multiplierBips: 500000n, chanceDenominator: 150n } 
 ];
 
 // Liquidez de BKC para parear com os NFTs (2M BKC por Pool)
@@ -55,6 +58,12 @@ const INITIAL_STAKE_AMOUNT = ethers.parseEther("1000");
 const INITIAL_STAKE_DURATION = 365; // Dias
 
 // ######################################################################
+// CONFIGURAÇÕES GLOBAIS DE TAXAS E DISTRIBUIÇÃO
+// ######################################################################
+const TREASURY_BIPS = 2500n; // 25%
+const DELEGATOR_BIPS = 7500n; // 75%
+const STANDARD_ORACLE_FEE = ethers.parseEther("0.00035"); // Ajuste recente
+const NOTARY_FEE_BKC = ethers.parseEther("1"); // Ajuste recente
 
 const addressesFilePath = path.join(__dirname, "../deployment-addresses.json");
 
@@ -309,20 +318,32 @@ export async function runScript(hre: HardhatRuntimeEnvironment) {
       await sendTransactionWithRetries(async () => await fortunePoolInstance.setOracleAddress(oracleAddr), "CONFIG: Oráculo");
   }
   
-  // Oráculo Zero Fee
+  // CORREÇÃO: Aplica a taxa de ETH ajustada (0.00035 ETH)
   const currOracleFee = await fortunePoolInstance.oracleFeeInWei();
-  if (currOracleFee > 0n) {
-      await sendTransactionWithRetries(async () => await fortunePoolInstance.setOracleFee(0n), "CONFIG: Taxa Oráculo (0 ETH)");
+  if (currOracleFee !== STANDARD_ORACLE_FEE) {
+      await sendTransactionWithRetries(async () => await fortunePoolInstance.setOracleFee(STANDARD_ORACLE_FEE), `CONFIG: Taxa Oráculo (${ethers.formatEther(STANDARD_ORACLE_FEE)} ETH)`);
   }
 
+  // CORREÇÃO: Aplica os Tiers ajustados (1/5 @ 1.5x, 1/15 @ 5x, 1/150 @ 50x)
   for (const tier of FORTUNE_POOL_TIERS) {
       await sendTransactionWithRetries(async () => await fortunePoolInstance.setPrizeTier(tier.poolId, tier.chanceDenominator, tier.multiplierBips), `JOGO: Tier ${tier.poolId}`);
   }
 
   // -----------------------------------------------------------
-  // 🚨 APLICAÇÃO DE REGRAS ECONÔMICAS (20 BKC ECONOMY)
+  // 🚨 APLICAÇÃO DE REGRAS ECONÔMICAS (OVERRIDE)
   // -----------------------------------------------------------
-  console.log("\n⚖️  Aplicando Taxas Econômicas Ajustadas (Testnet 20 BKC)...");
+  console.log("\n⚖️  Aplicando Taxas Econômicas Ajustadas (Override)...");
+
+  // C2: Mineração/Fee Distribution (25% Treasury / 75% Delegator)
+  const POOL_TREASURY = ethers.keccak256(ethers.toUtf8Bytes("TREASURY"));
+  const POOL_DELEGATOR = ethers.keccak256(ethers.toUtf8Bytes("DELEGATOR_POOL"));
+    
+  await sendTransactionWithRetries(async () => await hub.setMiningDistributionBips(POOL_TREASURY, TREASURY_BIPS), "DISTRIB: Mining Treasury (25%)");
+  await sendTransactionWithRetries(async () => await hub.setMiningDistributionBips(POOL_DELEGATOR, DELEGATOR_BIPS), "DISTRIB: Mining Delegator (75%)");
+  await sendTransactionWithRetries(async () => await hub.setFeeDistributionBips(POOL_TREASURY, TREASURY_BIPS), "DISTRIB: Fee Treasury (25%)");
+  await sendTransactionWithRetries(async () => await hub.setFeeDistributionBips(POOL_DELEGATOR, DELEGATOR_BIPS), "DISTRIB: Fee Delegator (75%)");
+  console.log("   ✅ Regras de Distribuição Configuradas (Treasury 25% / Delegator 75%).");
+
 
   // 1. Force Unstake (50% = 5000 BIPS)
   await setServiceFee(hub, "FORCE_UNSTAKE_PENALTY_BIPS", 5000n);
@@ -342,8 +363,8 @@ export async function runScript(hre: HardhatRuntimeEnvironment) {
   // 6. NFT Pool Compra (0.5% = 50 BIPS)
   await setServiceFee(hub, "NFT_POOL_BUY_TAX_BIPS", 50n);
 
-  // 7. Notary Fee (5 BKC Fixos - Compatível com faucet de 20)
-  await setServiceFee(hub, "NOTARY_SERVICE", ethers.parseEther("5"));
+  // 7. Notary Fee (1 BKC Fixos)
+  await setServiceFee(hub, "NOTARY_SERVICE", NOTARY_FEE_BKC);
   await setPStake(hub, "NOTARY_SERVICE", 0n); 
 
   // 8. Rental Market Tax (5% = 500 BIPS)

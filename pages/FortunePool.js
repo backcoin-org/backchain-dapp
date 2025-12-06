@@ -1,5 +1,5 @@
 // js/pages/FortunePool.js
-// ✅ VERSÃO FINAL V17: Alinhado com FortunePool.sol (Participate + Async Oracle)
+// ✅ VERSÃO FINAL V25: Tiers Atualizados (1/5@1.5x, 1/15@5x, 1/150@50x) + Taxa 0.00035 ETH
 
 import { State } from '../state.js';
 import { loadUserData, safeContractCall, API_ENDPOINTS } from '../modules/data.js';
@@ -8,7 +8,9 @@ import { showToast } from '../ui-feedback.js';
 import { addresses } from '../config.js';
 
 const ethers = window.ethers;
-const EXPLORER_BASE = "https://sepolia.etherscan.io/tx/";
+
+// ✅ Configuração de Rede: Arbitrum Sepolia
+const EXPLORER_BASE = "https://sepolia.arbiscan.io/tx/";
 
 // --- HELPER DE DATA ---
 function formatDate(timestamp) {
@@ -94,11 +96,11 @@ let gameState = {
 
 // --- DATA PERSISTENCE ---
 try {
-    const local = localStorage.getItem('bkc_fortune_v17');
+    const local = localStorage.getItem('bkc_fortune_v24');
     if (local) { const p = JSON.parse(local); gameState.currentLevel = p.lvl || 1; gameState.currentXP = p.xp || 0; }
 } catch (e) {}
 
-function saveProgress() { localStorage.setItem('bkc_fortune_v17', JSON.stringify({ lvl: gameState.currentLevel, xp: gameState.currentXP })); updateGamificationUI(); }
+function saveProgress() { localStorage.setItem('bkc_fortune_v24', JSON.stringify({ lvl: gameState.currentLevel, xp: gameState.currentXP })); updateGamificationUI(); }
 function addXP(amount) { gameState.currentXP += amount; if (gameState.currentXP >= gameState.xpPerLevel) { gameState.currentLevel++; gameState.currentXP -= gameState.xpPerLevel; showToast(`🆙 LEVEL UP! LVL ${gameState.currentLevel}`, "success"); } saveProgress(); }
 
 // --- RENDERIZACAO DE PASSOS ---
@@ -125,24 +127,27 @@ function buildStepHTML(container) {
                     </button>
                 </div>
             </div>`;
-        document.getElementById('btn-random-all').onclick = () => { gameState.guesses = [rand(4), rand(12), rand(120)]; gameState.step = 4; renderStep(); };
+        // ATUALIZADO: Rand Max para 5, 15, 150
+        document.getElementById('btn-random-all').onclick = () => { gameState.guesses = [rand(5), rand(15), rand(150)]; gameState.step = 4; renderStep(); };
         document.getElementById('btn-manual-pick').onclick = () => { gameState.step = 1; renderStep(); };
     }
     else if (gameState.step >= 1 && gameState.step <= 3) {
+        // ATUALIZADO: Tiers (Max e Descrição)
         const tiers = [
-            { max: 4, name: "BRONZE", reward: "1.5x", desc: "1 in 4 Chance" }, 
-            { max: 12, name: "SILVER", reward: "5x", desc: "1 in 12 Chance" }, 
-            { max: 120, name: "GOLD", reward: "50x", desc: "1 in 120 Chance" }
+            { max: 5, name: "BRONZE", reward: "1.5x", desc: "1 in 5 Chance" }, 
+            { max: 15, name: "SILVER", reward: "5x", desc: "1 in 15 Chance" }, 
+            { max: 150, name: "GOLD", reward: "50x", desc: "1 in 150 Chance" }
         ];
         const t = tiers[gameState.step - 1];
         
         let grid = "";
-        if (t.max <= 4) {
+        if (t.max <= 5) {
              grid = `<div class="flex flex-wrap justify-center gap-4 mb-8">${Array.from({length: t.max},(_,i)=>i+1).map(n=>`<button class="w-20 h-20 glass-panel rounded-2xl font-black text-3xl text-white hover:bg-amber-500 hover:text-black transition-all step-pick-btn shadow-lg" data-val="${n}">${n}</button>`).join('')}</div>`;
-        } else if (t.max <= 12) {
-             grid = `<div class="flex flex-wrap justify-center gap-3 mb-8 max-w-xs mx-auto">${Array.from({length: t.max},(_,i)=>i+1).map(n=>`<button class="w-14 h-14 glass-panel rounded-xl font-bold text-lg text-white hover:bg-zinc-200 hover:text-black transition-all step-pick-btn" data-val="${n}">${n}</button>`).join('')}</div>`;
+        } else if (t.max <= 15) {
+             grid = `<div class="flex flex-wrap justify-center gap-3 mb-8 max-w-sm mx-auto">${Array.from({length: t.max},(_,i)=>i+1).map(n=>`<button class="w-14 h-14 glass-panel rounded-xl font-bold text-lg text-white hover:bg-zinc-200 hover:text-black transition-all step-pick-btn" data-val="${n}">${n}</button>`).join('')}</div>`;
         } else {
-             grid = `<div class="max-w-xs mx-auto mb-8"><input type="number" id="master-input" class="w-full bg-black/50 border border-amber-500/30 rounded-xl text-center text-5xl py-6 text-white font-bold outline-none focus:border-amber-500" placeholder="1-120"><button id="confirm-master" class="w-full mt-4 btn-action py-3 rounded-xl shadow-lg" disabled>LOCK NUMBER</button></div>`;
+             // ATUALIZADO: Placeholder para 1-150
+             grid = `<div class="max-w-xs mx-auto mb-8"><input type="number" id="master-input" class="w-full bg-black/50 border border-amber-500/30 rounded-xl text-center text-5xl py-6 text-white font-bold outline-none focus:border-amber-500" placeholder="1-${t.max}"><button id="confirm-master" class="w-full mt-4 btn-action py-3 rounded-xl shadow-lg" disabled>LOCK NUMBER</button></div>`;
         }
 
         container.innerHTML = `
@@ -153,13 +158,14 @@ function buildStepHTML(container) {
                 ${grid}
             </div>`;
             
-        if(t.max<=12) document.querySelectorAll('.step-pick-btn').forEach(b => b.onclick = () => { gameState.guesses[gameState.step-1] = parseInt(b.dataset.val); gameState.step++; renderStep(); });
+        if(t.max<=15) document.querySelectorAll('.step-pick-btn').forEach(b => b.onclick = () => { gameState.guesses[gameState.step-1] = parseInt(b.dataset.val); gameState.step++; renderStep(); });
         else { 
             const i = document.getElementById('master-input'); 
             const b = document.getElementById('confirm-master'); 
             i.oninput = () => {
                 const val = parseInt(i.value);
-                b.disabled = !val || val < 1 || val > 120;
+                // ATUALIZADO: Validação para 1-150
+                b.disabled = !val || val < 1 || val > 150;
             }; 
             b.onclick = () => { gameState.guesses[2] = parseInt(i.value); gameState.step = 4; renderStep(); }; 
         }
@@ -169,6 +175,7 @@ function buildStepHTML(container) {
     }
 }
 
+// ATUALIZADO: Rand Max para 5, 15, 150
 function rand(max) { return Math.floor(Math.random() * max) + 1; }
 
 function renderBettingScreen(container) {
@@ -255,7 +262,11 @@ function renderBettingScreen(container) {
         const pot2 = document.getElementById('win-pot-2');
         const pot3 = document.getElementById('win-pot-3');
 
-        if (val > 0) {
+        // Check Palpites (Zeros)
+        const hasZeros = gameState.guesses.includes(0);
+
+        if (val > 0 && !hasZeros) { 
+            // ATUALIZADO: Multiplicadores para 1.5x, 5x, 50x
             pot1.innerText = `+ ${(val * 1.5).toLocaleString()} BKC`; pot1.classList.add('profit-active');
             pot2.innerText = `+ ${(val * 5).toLocaleString()} BKC`; pot2.classList.add('profit-active');
             pot3.innerText = `+ ${(val * 50).toLocaleString()} BKC`; pot3.classList.add('profit-active');
@@ -264,7 +275,9 @@ function renderBettingScreen(container) {
             pot1.innerText = "---"; pot1.classList.remove('profit-active');
             pot2.innerText = "---"; pot2.classList.remove('profit-active');
             pot3.innerText = "---"; pot3.classList.remove('profit-active');
-            btn.disabled = true; btn.innerText = "ENTER AMOUNT";
+            btn.disabled = true; 
+            if (hasZeros) btn.innerText = "PICK NUMBERS";
+            else btn.innerText = "ENTER AMOUNT";
         }
         if (!gameState.systemReady) { btn.disabled = true; btn.innerText = "NETWORK ERROR"; }
     };
@@ -329,10 +342,11 @@ function startSpinning() {
         const el = document.getElementById(`slot-${i}`);
         el.innerText = '?'; el.className = "slot-box rounded-2xl h-20 flex items-center justify-center text-4xl font-black slot-spinning";
     });
+    // ATUALIZADO: Rand Max para 5, 15, 150
     gameState.spinInterval = setInterval(() => {
-        if(document.getElementById('slot-1')) document.getElementById('slot-1').innerText = rand(4);
-        if(document.getElementById('slot-2')) document.getElementById('slot-2').innerText = rand(12);
-        if(document.getElementById('slot-3')) document.getElementById('slot-3').innerText = rand(120);
+        if(document.getElementById('slot-1')) document.getElementById('slot-1').innerText = rand(5);
+        if(document.getElementById('slot-2')) document.getElementById('slot-2').innerText = rand(15);
+        if(document.getElementById('slot-3')) document.getElementById('slot-3').innerText = rand(150);
     }, 50);
     updateProgressBar(10, "MINING TRANSACTION..."); 
 }
@@ -362,11 +376,19 @@ async function stopSpinning(rolls, winAmount) {
     showResultOverlay(winAmount > 0n);
 }
 
+// -------------------------------------------------------------
+// ✅ SHARE BUTTON LOGIC ADDED HERE (WIN & LOSS SCENARIOS)
+// -------------------------------------------------------------
 function showResultOverlay(isWin) {
     const overlay = document.getElementById('result-overlay');
     overlay.classList.remove('hidden'); overlay.classList.add('flex');
-    const winText = `🏆 I just won ${gameState.lastWinAmount.toFixed(2)} $BKC on the Fortune Pool!`;
-    const shareUrl = `https://twitter.com/intent/tweet?text=${encodeURIComponent(winText)}&url=${encodeURIComponent('https://backcoin.org')}`;
+    
+    const winText = `🏆 I just won ${gameState.lastWinAmount.toFixed(2)} $BKC on the Fortune Pool! The Backchain Protocol is changing the game. Real Yield, Real Utility. 🚀🔥 #BKC #BACKCOIN #AIRDROP`;
+    const lossText = `⛏️ Mining the future with Proof-of-Purchase! Every interaction counts in the Backchain Protocol. Join the revolution. 💎🔨 #BKC #BACKCOIN #AIRDROP`;
+    
+    // Encode text for Twitter Intent
+    const shareText = isWin ? winText : lossText;
+    const shareUrl = `https://twitter.com/intent/tweet?text=${encodeURIComponent(shareText)}&url=${encodeURIComponent('https://backcoin.org')}`;
 
     if (isWin) {
         overlay.innerHTML = `
@@ -374,9 +396,14 @@ function showResultOverlay(isWin) {
                 <div class="text-6xl mb-4">🏆</div>
                 <h2 class="text-4xl font-black text-amber-400 italic mb-2 drop-shadow-lg">BIG WIN!</h2>
                 <div class="text-6xl font-mono font-bold text-white mb-6">${gameState.lastWinAmount.toFixed(2)} <span class="text-xl text-zinc-500">BKC</span></div>
+                
                 <div class="flex flex-col gap-3 justify-center">
-                    <button id="btn-collect" class="bg-white text-black font-black py-4 px-10 rounded-xl hover:scale-105 transition-transform">COLLECT & REPLAY</button>
-                    <button id="btn-share-win" class="bg-[#1DA1F2] hover:bg-[#1a91da] text-white font-bold py-3 px-10 rounded-xl flex items-center justify-center gap-2"><i class="fa-brands fa-twitter"></i> SHARE</button>
+                    <button id="btn-collect" class="bg-white text-black font-black py-4 px-10 rounded-xl shadow-[0_0_20px_rgba(255,255,255,0.3)] hover:scale-105 transition-transform">
+                        COLLECT & REPLAY
+                    </button>
+                    <button id="btn-share-win" class="bg-[#1DA1F2] hover:bg-[#1a91da] text-white font-bold py-3 px-10 rounded-xl flex items-center justify-center gap-2 transition-all">
+                        <i class="fa-brands fa-twitter"></i> SHARE VICTORY
+                    </button>
                 </div>
             </div>`;
         addXP(500);
@@ -385,14 +412,28 @@ function showResultOverlay(isWin) {
             <div class="text-center p-6 w-full animate-fadeIn">
                 <div class="text-6xl mb-4 grayscale opacity-50">💔</div>
                 <h2 class="text-2xl font-bold text-zinc-300 mb-2">NOT THIS TIME</h2>
+                <p class="text-zinc-500 mb-8 text-sm">Proof of Purchase generated. Ecosystem mining active.</p>
+                
                 <div class="flex flex-col gap-3 justify-center">
-                    <button id="btn-collect" class="bg-zinc-800 text-white font-bold py-3 px-8 rounded-xl border border-zinc-600 hover:bg-zinc-700">TRY AGAIN</button>
+                    <button id="btn-collect" class="bg-zinc-800 text-white font-bold py-3 px-8 rounded-xl border border-zinc-600 hover:bg-zinc-700">
+                        TRY AGAIN
+                    </button>
+                    <button id="btn-share-loss" class="bg-transparent border border-zinc-600 text-zinc-400 hover:text-white hover:border-zinc-400 font-bold py-3 px-8 rounded-xl transition-all flex items-center justify-center gap-2">
+                        <i class="fa-brands fa-twitter"></i> SHARE MINING
+                    </button>
                 </div>
             </div>`;
         addXP(50);
     }
+
+    // Attach Listeners
     document.getElementById('btn-collect').onclick = closeOverlay;
-    if(isWin) document.getElementById('btn-share-win').onclick = () => window.open(shareUrl, '_blank');
+    
+    if (isWin) {
+        document.getElementById('btn-share-win').onclick = () => window.open(shareUrl, '_blank');
+    } else {
+        document.getElementById('btn-share-loss').onclick = () => window.open(shareUrl, '_blank');
+    }
 }
 
 function closeOverlay() {
@@ -418,52 +459,81 @@ function closeOverlay() {
 }
 
 // -------------------------------------------------------------
-// ✅ EXECUTION FIXED: participate instead of play
+// ✅ TRANSACTION EXECUTION V25: Base Fee 0.00035 -> Triple 0.00175
 // -------------------------------------------------------------
 async function executeTransaction() {
     if (!State.isConnected) return showToast("Connect wallet", "error");
+    
+    // 1. Validação de Palpites
+    if (gameState.guesses.includes(0)) {
+        showToast("Select all 3 numbers!", "error");
+        if(gameState.guesses[0] === 0) { gameState.step = 1; renderStep(); }
+        return;
+    }
+
     await FortunePoolPage.checkReqs();
-    if (!gameState.systemReady) { showToast("System Offline - Check Connection", "error"); return; }
+    if (!gameState.systemReady) { showToast("System Offline", "error"); return; }
     if (gameState.betAmount <= 0) return;
+    
     const btn = document.getElementById('btn-spin');
     const amountWei = ethers.parseEther(gameState.betAmount.toString());
-    if (amountWei > State.currentUserBalance) return showToast("Insufficient Balance", "error");
     
-    // --- MODE & FEE ---
-    const isCumulative = gameState.isCumulative; // Boolean
+    if (amountWei > State.currentUserBalance) return showToast("Insufficient BKC Balance", "error");
+    
+    // 2. CÁLCULO DE TAXA (CRÍTICO: USO DE BIGINT E PRECISION)
+    const isCumulative = gameState.isCumulative;
     let fee = 0n;
 
     try {
-        // Read oracle fee from contract
-        const baseFee = await safeContractCall(State.actionsManagerContract, 'oracleFeeInWei', [], 0n);
-        // Calculate total fee (5x if cumulative)
-        fee = isCumulative ? (baseFee * 5n) : baseFee;
+        console.log("🔍 [INIT] Fetching oracleFeeInWei from contract...");
+        const baseFee = await State.actionsManagerContract.oracleFeeInWei();
+        
+        // Conversão Explícita para BigInt
+        const baseFeeBigInt = BigInt(baseFee); 
+        console.log("   > Base Fee (Contract):", baseFeeBigInt.toString(), "Wei");
+        
+        // Cálculo Multiplicador (5x se Cumulative)
+        fee = isCumulative ? (baseFeeBigInt * 5n) : baseFeeBigInt;
+        console.log("   > Final Fee (Calculated):", fee.toString(), "Wei");
+
     } catch (e) {
-        fee = ethers.parseEther(isCumulative ? "0.005" : "0.001");
+        console.warn("⚠️ RPC Read Failed. Using FALLBACK Safe Value (0.00035 ETH).", e);
+        
+        // [IMPORTANTE] Fallback definido para 0.00035 ETH (Nova Taxa)
+        const FALLBACK_BASE_FEE = ethers.parseEther("0.00035"); 
+        fee = isCumulative ? (FALLBACK_BASE_FEE * 5n) : FALLBACK_BASE_FEE;
+        
+        console.log("   > Fallback Fee Used:", fee.toString(), "Wei");
     }
     
-    // --- CHECK NATIVE BALANCE FOR GAS & FEE ---
+    // 3. Verificação de Saldo de ETH (Taxa + Gás)
     try {
         const nativeBalance = await State.provider.getBalance(State.userAddress);
-        const minRequired = fee + ethers.parseEther("0.005"); 
+        const minRequired = fee + ethers.parseEther("0.002"); 
+        
         if (nativeBalance < minRequired) {
-            showToast("Insufficient ETH for Gas/Fee!", "error");
-            btn.innerText = "INSUFFICIENT ETH";
+            showToast(`Insufficient ETH! Need ~${ethers.formatEther(minRequired)} ETH`, "error");
             return;
         }
     } catch(e) {}
 
     btn.disabled = true;
     try {
+        // A. Approve BKC
         const allowance = await State.bkcTokenContract.allowance(State.userAddress, addresses.fortunePool);
         if (allowance < amountWei) {
             btn.innerHTML = `<div class="loader inline-block"></div> APPROVING...`;
             const tx = await State.bkcTokenContract.approve(addresses.fortunePool, ethers.MaxUint256);
             await tx.wait();
         }
+        
+        // B. Participate
         btn.innerHTML = `<div class="loader inline-block"></div> CONFIRMING...`;
         
-        // ✅ CORRECT CALL: participate(amount, guesses, isCumulative)
+        console.log("🚀 Sending Transaction...");
+        console.log("   > Value (msg.value):", fee.toString());
+        
+        // Chama participate enviando o valor EXATO calculado (fee)
         const tx = await State.actionsManagerContract.participate(
             amountWei, 
             gameState.guesses, 
@@ -471,17 +541,27 @@ async function executeTransaction() {
             { value: fee }
         );
         
-        startSpinning(); await tx.wait();
+        startSpinning(); 
+        await tx.wait();
         updateProgressBar(40, "BLOCK MINED. WAITING ORACLE...");
         
-        // Start polling for gameCounter to verify result
         const ctr = await safeContractCall(State.actionsManagerContract, 'gameCounter', [], 0, 2, true);
         setTimeout(() => waitForOracle(Number(ctr)), 2000);
         
     } catch (e) {
-        console.error(e); btn.disabled = false; btn.innerText = "START MINING";
-        const msg = e.reason || e.message || "Transaction Failed";
-        showToast(msg.includes("insufficient funds") ? "Not enough ETH/Gas." : "Error: " + msg, "error");
+        console.error("❌ Tx Failed. Full Error:", e);
+        btn.disabled = false; 
+        btn.innerText = "START MINING";
+        
+        let msg = "Transaction Failed";
+        
+        // Tratamento de erros comuns
+        if (e.message && e.message.includes("cf07063a")) msg = "Fee Mismatch (Limpe o Cache!)"; // InvalidFee error code
+        else if (e.message && e.message.includes("insufficient funds")) msg = "Insufficient ETH for Gas";
+        else if (e.reason) msg = e.reason;
+        
+        showToast(msg, "error");
+        
         document.getElementById('status-area').classList.add('hidden-force');
         document.getElementById('controls-area').classList.remove('hidden-force');
     }
@@ -490,27 +570,26 @@ async function executeTransaction() {
 async function waitForOracle(gameId) {
     let attempts = 0; let progress = 40;
     if (gameState.pollInterval) clearInterval(gameState.pollInterval);
-    
     gameState.pollInterval = setInterval(async () => {
         attempts++; progress += 2; if(progress > 95) progress = 95;
         updateProgressBar(progress, "ORACLE CONSENSUS...");
-        
         if (attempts > 60) {
             clearInterval(gameState.pollInterval); stopSpinning([0,0,0], 0n); showToast("Oracle delay. Check history later.", "info"); return;
         }
         try {
-            // ✅ CHECK: gameResults(gameId) returns [roll1, roll2, roll3]
-            const result = await State.actionsManagerContract.gameResults(gameId);
-            
-            // If result[0] is not 0, oracle has answered
-            if (result && result[0] > 0n) {
+            // Checks result for the 3 slots (0,1,2)
+            const p1 = safeContractCall(State.actionsManagerContract, 'gameResults', [gameId, 0], 0n, 0, true);
+            const p2 = safeContractCall(State.actionsManagerContract, 'gameResults', [gameId, 1], 0n, 0, true);
+            const p3 = safeContractCall(State.actionsManagerContract, 'gameResults', [gameId, 2], 0n, 0, true);
+            const [r1, r2, r3] = await Promise.all([p1, p2, p3]);
+            if (Number(r1) !== 0) {
                 clearInterval(gameState.pollInterval);
-                const rolls = [Number(result[0]), Number(result[1]), Number(result[2])];
-                
-                // Calculate Win Locally
+                const rolls = [Number(r1), Number(r2), Number(r3)];
                 let win = 0n;
+                // Calculate Win Locally for UI
                 if(rolls[0] === gameState.guesses[0] || rolls[1] === gameState.guesses[1] || rolls[2] === gameState.guesses[2]) {
                     let mult = 0;
+                    // ATUALIZADO: Multiplicadores para 1.5x, 5x, 50x
                     if(rolls[0]===gameState.guesses[0]) mult=1.5; 
                     if(rolls[1]===gameState.guesses[1]) mult= gameState.isCumulative ? mult+5 : Math.max(mult, 5); 
                     if(rolls[2]===gameState.guesses[2]) mult= gameState.isCumulative ? mult+50 : Math.max(mult, 50); 
@@ -539,16 +618,20 @@ export const FortunePoolPage = {
             return; 
         }
         
-        // Fee Display
+        // CORREÇÃO VISUAL: Exibir taxa correta (0.00035 ou 0.00175)
         let fee = 0n;
         try {
-            const baseFee = await safeContractCall(State.actionsManagerContract, 'oracleFeeInWei', [], 0n);
+            let baseFee = await safeContractCall(State.actionsManagerContract, 'oracleFeeInWei', [], 0n);
+            if (baseFee === 0n) baseFee = ethers.parseEther("0.00035"); // Fallback visual (Ajustado)
             fee = gameState.isCumulative ? (baseFee * 5n) : baseFee;
-        } catch (e) { console.warn(e); }
+        } catch (e) { 
+            // Fallback total (Ajustado)
+            fee = ethers.parseEther(gameState.isCumulative ? "0.00175" : "0.00035");
+        }
         
         if(el) { 
             const feeEth = ethers.formatEther(fee); 
-            el.innerText = `ORACLE FEE: ${feeEth} ETH`; 
+            el.innerText = `GAME FEE: ${feeEth} ETH`; 
             el.className = "text-[10px] text-zinc-400 font-mono mt-4 px-4"; 
         }
         const inp = document.getElementById('bet-input');
@@ -575,7 +658,10 @@ export const FortunePoolPage = {
                 const isWin = g.details.isWin || false;
                 const winAmount = g.details.amount || '0';
                 const dateStr = formatDate(g.timestamp || g.createdAt);
+                
+                // ✅ Link para Arbitrum Sepolia
                 const explorerLink = g.txHash ? `${EXPLORER_BASE}${g.txHash}` : '#';
+                
                 const userGuesses = g.details.userGuesses || ['?', '?', '?'];
                 const oracleRolls = g.details.rolls || ['?', '?', '?'];
                 
