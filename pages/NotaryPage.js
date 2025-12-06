@@ -1,5 +1,5 @@
 // pages/NotaryPage.js
-// ✅ VERSÃO CORRIGIDA (V9.1): Fix Event Name & Signature Match
+// ✅ VERSÃO FINAL V9.2: Fix History Hash & Global Export
 
 import { State } from '../state.js';
 import { formatBigNumber, formatPStake, renderLoading, renderNoData } from '../utils.js';
@@ -439,13 +439,10 @@ async function handleSignAndUpload(btn) {
         const rawDesc = document.getElementById('notary-user-description')?.value;
         const desc = rawDesc && rawDesc.trim() !== "" ? rawDesc : "No description provided.";
         
-        // 1. Assinatura Off-chain
-        // CORREÇÃO CRÍTICA: Mensagem fixa para bater com upload.js
         const signer = await State.provider.getSigner();
         const message = "I am signing to authenticate my file for notarization on Backchain.";
         const signature = await signer.signMessage(message);
         
-        // 2. Animação de Overlay
         const overlay = document.getElementById('mining-overlay');
         const progressBar = document.getElementById('mining-progress-bar');
         const statusText = document.getElementById('mining-status-text');
@@ -466,7 +463,6 @@ async function handleSignAndUpload(btn) {
             if (statusText) statusText.innerText = next;
         }, 4000);
 
-        // 3. Upload IPFS
         const formData = new FormData();
         formData.append('file', currentFileToUpload);
         formData.append('signature', signature);
@@ -486,11 +482,9 @@ async function handleSignAndUpload(btn) {
         const data = await res.json();
         currentUploadedIPFS_URI = data.ipfsUri;
 
-        // 4. Transação Blockchain
         if(statusText) statusText.innerText = "CONFIRMING ON WALLET...";
         await executeNotarizeDocument(currentUploadedIPFS_URI, 0n, btn);
         
-        // 5. Sucesso
         clearInterval(progressTimer); clearInterval(textTimer);
         if (progressBar) progressBar.style.width = `100%`;
         if (statusText) {
@@ -522,7 +516,7 @@ async function handleSignAndUpload(btn) {
 }
 
 // =========================================================================
-// HISTÓRICO (DATA FETCHING)
+// HISTÓRICO (DATA FETCHING - FIX STRING INDEXED)
 // =========================================================================
 
 async function fetchUserHistory() {
@@ -531,30 +525,39 @@ async function fetchUserHistory() {
     
     try {
         if (!State.decentralizedNotaryContract) await loadPublicData();
-        const contract = State.decentralizedNotaryContract; // CORREÇÃO: Usar o contrato do Notário
+        const contract = State.decentralizedNotaryContract;
 
         if (!contract) {
             container.innerHTML = renderNoData("Contract not available.");
             return;
         }
 
-        // CORREÇÃO CRÍTICA: Nome correto do evento do Smart Contract: NotarizationEvent
-        // Definição: event NotarizationEvent(uint256 indexed tokenId, address indexed owner, string indexed documentMetadataHash, uint256 feePaid);
-        // Filtro: owner é o index 1 (argumento 2)
+        // Filtra eventos do usuário
         const filter = contract.filters.NotarizationEvent(null, State.userAddress); 
-        
-        let docs = [];
-        if (filter) {
-            const events = await contract.queryFilter(filter, -50000); // 50k blocos
-            docs = events.map(e => ({
-                // args[0]=tokenId, args[1]=owner, args[2]=metadataHash, args[3]=fee
-                hash: e.args[2], 
-                txHash: e.transactionHash
-                // Timestamp não vem no evento, ignorado para economizar RPC
-            })).reverse();
-        } 
+        const events = await contract.queryFilter(filter, -50000);
 
-        if (docs.length === 0) {
+        // ✅ FIX CRÍTICO: Buscar o URI real, pois o evento retorna apenas o Hash
+        const docs = await Promise.all(events.map(async (e) => {
+            const tokenId = e.args[0]; // ID do Token
+            
+            // Busca o link real do IPFS usando a função pública do contrato
+            // documentMetadataURI(uint256 tokenId)
+            let ipfsHash = "";
+            try {
+                ipfsHash = await contract.documentMetadataURI(tokenId);
+            } catch {
+                ipfsHash = "ipfs://unavailable";
+            }
+
+            return {
+                hash: ipfsHash, 
+                txHash: e.transactionHash
+            };
+        }));
+
+        const reversedDocs = docs.reverse();
+
+        if (reversedDocs.length === 0) {
             container.innerHTML = `
                 <div class="col-span-full text-center py-10 opacity-50">
                     <i class="fa-solid fa-folder-open text-4xl mb-3 text-zinc-700"></i>
@@ -564,9 +567,11 @@ async function fetchUserHistory() {
             return;
         }
 
-        container.innerHTML = docs.map(doc => {
-            const isImage = doc.hash.match(/\.(jpg|jpeg|png|gif)$/i) || !doc.hash.includes('.'); 
-            const ipfsLink = `https://ipfs.io/ipfs/${doc.hash.replace('ipfs://', '')}`;
+        container.innerHTML = reversedDocs.map(doc => {
+            // Check seguro para evitar crash se hash for inválido
+            const safeHash = doc.hash || "";
+            const isImage = safeHash.match(/\.(jpg|jpeg|png|gif)$/i) || !safeHash.includes('.'); 
+            const ipfsLink = `https://ipfs.io/ipfs/${safeHash.replace('ipfs://', '')}`;
 
             return `
                 <div class="notary-glass rounded-xl overflow-hidden hover:border-amber-500/50 transition-colors group">
@@ -578,7 +583,7 @@ async function fetchUserHistory() {
                     </div>
                     <div class="p-4">
                         <div class="flex items-center justify-between mb-2">
-                            <span class="text-xs font-mono text-zinc-500 truncate max-w-[120px]">${doc.hash.substring(0, 10)}...</span>
+                            <span class="text-xs font-mono text-zinc-500 truncate max-w-[120px]">${safeHash.substring(0, 10)}...</span>
                             <a href="https://arbiscan.io/tx/${doc.txHash}" target="_blank" class="text-zinc-600 hover:text-white"><i class="fa-solid fa-external-link-alt"></i></a>
                         </div>
                         <a href="${ipfsLink}" target="_blank" class="block w-full text-center bg-zinc-800 hover:bg-zinc-700 text-xs text-white py-2 rounded-lg transition-colors">
@@ -647,3 +652,6 @@ export const NotaryPage = {
         updateNotaryInterface();
     }
 };
+
+// ✅ FIX CRÍTICO 2: Exportar para o Window para o HTML Inline funcionar
+window.NotaryPage = NotaryPage;
