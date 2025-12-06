@@ -1,5 +1,5 @@
 // js/modules/transactions.js
-// ✅ VERSÃO FINAL V6.15: Notary Fix & Safe BigInt
+// ✅ VERSÃO FINAL V6.16: Notary Fee Fix (Real-time Fetch) & Safe Signer
 
 const ethers = window.ethers;
 
@@ -21,7 +21,7 @@ const GAS_OPTS = {
 }; 
 
 // ====================================================================
-// CORE SIGNER/RUNNER UTILITY (CRITICAL FIX - Apenas Signer do State)
+// CORE SIGNER/RUNNER UTILITY
 // ====================================================================
 
 /**
@@ -35,12 +35,11 @@ async function getConnectedSigner() {
     }
     
     // 🔥 FIX: Apenas retorna o Signer armazenado durante o login (State.signer)
-    // Confiamos que o State.signer é o objeto UserOperation que pode ser conectado ao contrato.
     if (State.signer) {
         return State.signer;
     }
 
-    // TENTATIVA 2 (FALLBACK): Forçar a obtenção via BrowserProvider (Método que está falhando)
+    // TENTATIVA 2 (FALLBACK): Forçar a obtenção via BrowserProvider
     if (State.web3Provider) {
         try {
             const provider = new ethers.BrowserProvider(State.web3Provider);
@@ -48,7 +47,6 @@ async function getConnectedSigner() {
             return signer;
         } catch (e) {
             console.error("Signer acquisition failed (Fallback):", e);
-            // Continua, pois a primeira tentativa é a mais provável de funcionar.
         }
     }
 
@@ -115,6 +113,7 @@ async function executeTransaction(txPromise, successMessage, failMessage, btnEle
         // Erros customizados do Contrato
         if (reason.includes("Insufficient pStake")) reason = "Minimum pStake requirement not met.";
         if (reason.includes("TransferFailed")) reason = "Token transfer failed (Check BKC balance/allowance).";
+        if (reason.includes("insufficient allowance")) reason = "Contract not approved to spend tokens.";
         
         showToast(`${failMessage}: ${reason}`, "error");
         return false;
@@ -134,7 +133,7 @@ async function executeTransaction(txPromise, successMessage, failMessage, btnEle
  * Ensures approval for ERC20 (Amount) OR ERC721 (TokenID).
  */
 async function ensureApproval(tokenContract, spenderAddress, amountOrTokenId, btnElement, purpose) {
-    const signer = await getConnectedSigner(); // 🔥 OBTÉM SIGNER VÁLIDO
+    const signer = await getConnectedSigner(); 
     if (!signer) return false;
     
     // Reinicializa o contrato com o Signer válido
@@ -209,7 +208,6 @@ async function ensureApproval(tokenContract, spenderAddress, amountOrTokenId, bt
         
         let msg = e.reason || e.message || 'Transaction rejected.';
         if (msg.includes("approval to current owner")) msg = "Token already owned by target.";
-        if (msg.includes("Internal JSON-RPC error")) msg = "RPC Error (Internal). Try again.";
         
         showToast(`Approval Error: ${msg}`, "error");
         return false;
@@ -537,24 +535,41 @@ export async function executeInternalFaucet(btnElement) {
 
 export async function executeNotarizeDocument(documentURI, boosterId, submitButton) {
     const signer = await getConnectedSigner();
-    // ✅ FIX 1: Feedback de erro se contratos/signer não estiverem prontos
+    // ✅ FIX 1: Verificação antecipada de contratos e signer
     if (!signer || !State.bkcTokenContract || !State.decentralizedNotaryContract) {
         showToast("Contracts or Signer not ready.", "error");
         return false;
     }
 
     const notaryContract = State.decentralizedNotaryContract.connect(signer); 
-    const baseFee = State.systemFees?.NOTARY_SERVICE || 0n;
     const notaryAddress = await notaryContract.getAddress(); 
     
-    if (baseFee > 0n) {
-        const approved = await ensureApproval(State.bkcTokenContract, notaryAddress, baseFee, submitButton, "Notary Fee");
-        if (!approved) return false;
+    // ✅ FIX 2: Busca Dinâmica da Taxa (Evita cache zerado e erro de Insufficient Allowance)
+    let feeToPay = State.systemFees?.NOTARY_SERVICE || 0n;
+
+    try {
+        if (State.ecosystemManagerContractPublic) {
+            const key = ethers.id("NOTARY_SERVICE");
+            const [realFee] = await State.ecosystemManagerContractPublic.getServiceRequirements(key);
+            if (realFee > 0n) feeToPay = realFee; // Atualiza com o valor real da blockchain
+        }
+    } catch (e) {
+        console.warn("Could not fetch live fee, using state cache:", e);
     }
 
-    // ✅ FIX 2: Conversão segura de BigInt (Undefined/Null vira 0n)
-    const bId = boosterId ? BigInt(boosterId) : 0n;
+    console.log(`Notary Fee to Approve: ${feeToPay.toString()}`);
 
+    // Verifica Aprovação com a taxa correta
+    if (feeToPay > 0n) {
+        const approved = await ensureApproval(State.bkcTokenContract, notaryAddress, feeToPay, submitButton, "Notary Fee");
+        if (!approved) {
+            showToast("Approval failed or rejected.", "error");
+            return false;
+        }
+    }
+
+    // ✅ FIX 3: Conversão segura de BigInt e chamada da função
+    const bId = boosterId ? BigInt(boosterId) : 0n;
     const notarizeTxPromise = notaryContract.notarize(documentURI, bId, GAS_OPTS);
 
     return await executeTransaction(notarizeTxPromise, 'Document notarized successfully!', 'Error notarizing document', submitButton);
