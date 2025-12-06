@@ -1,5 +1,5 @@
 // scripts/3_launch_and_liquidate_ecosystem.ts
-// ✅ VERSÃO FINAL V4.0: Economia Testnet (20 BKC) + Genesis Fix + Robustez Total
+// ✅ VERSÃO FINAL V5.0: Alinhado com Contratos V16 e Deploy Unificado
 
 import { ethers, upgrades } from "hardhat";
 import { HardhatRuntimeEnvironment } from "hardhat/types";
@@ -14,6 +14,7 @@ import { LogDescription, Log, ContractTransactionReceipt } from "ethers";
 const DEPLOY_DELAY_MS = 10000; 
 const CHUNK_SIZE = 50; 
 const CHUNK_SIZE_BIGINT = BigInt(CHUNK_SIZE);
+const DEFAULT_ORACLE = "0xd7e622124b78a28c4c928b271fc9423285804f98"; // Fallback seguro
 
 // Quantidade de NFTs para injetar na liquidez inicial por Tier
 const MANUAL_LIQUIDITY_MINT_COUNT = [
@@ -227,6 +228,8 @@ export async function runScript(hre: HardhatRuntimeEnvironment) {
 
   // Deploy Spokes
   const notaryInstance = await getOrCreateSpoke(hre, addresses, 'decentralizedNotary', 'DecentralizedNotary', 'contracts/DecentralizedNotary.sol:DecentralizedNotary', [deployer.address, addresses.ecosystemManager]);
+  
+  // CORREÇÃO CRÍTICA: Argumentos FortunePool (Deployer, Hub) apenas.
   const fortunePoolInstance = await getOrCreateSpoke(hre, addresses, 'fortunePool', 'FortunePool', 'contracts/FortunePool.sol:FortunePool', [deployer.address, addresses.ecosystemManager]);
   
   // Template & Factory
@@ -299,9 +302,11 @@ export async function runScript(hre: HardhatRuntimeEnvironment) {
   }
 
   // Configuração Oráculo & Tiers Jogo
+  // CORREÇÃO: Fallback seguro se não houver no JSON
+  const oracleAddr = addresses.oracleWalletAddress || DEFAULT_ORACLE;
   const currOracle = await fortunePoolInstance.oracleAddress();
-  if (currOracle.toLowerCase() !== addresses.oracleWalletAddress.toLowerCase()) {
-      await sendTransactionWithRetries(async () => await fortunePoolInstance.setOracleAddress(addresses.oracleWalletAddress), "CONFIG: Oráculo");
+  if (currOracle.toLowerCase() !== oracleAddr.toLowerCase()) {
+      await sendTransactionWithRetries(async () => await fortunePoolInstance.setOracleAddress(oracleAddr), "CONFIG: Oráculo");
   }
   
   // Oráculo Zero Fee
@@ -351,10 +356,16 @@ export async function runScript(hre: HardhatRuntimeEnvironment) {
 
   console.log("\n=== PARTE 4: INJETANDO LIQUIDEZ E LIMPANDO CARTEIRA ===");
 
-  // Abastecer Jogo
-  if ((await bkcTokenInstance.balanceOf(addresses.fortunePool)) < FORTUNE_POOL_LIQUIDITY_TOTAL) {
-      await sendTransactionWithRetries(async () => await bkcTokenInstance.approve(addresses.fortunePool, FORTUNE_POOL_LIQUIDITY_TOTAL), "APROVAR: Fortune Pool");
-      await sendTransactionWithRetries(async () => await fortunePoolInstance.topUpPool(FORTUNE_POOL_LIQUIDITY_TOTAL), "DEPOSITAR: Fortune Pool");
+  // Abastecer Jogo (Proteção de Saldo)
+  const deployerBalance = await bkcTokenInstance.balanceOf(deployer.address);
+  
+  if (deployerBalance >= FORTUNE_POOL_LIQUIDITY_TOTAL) {
+    if ((await bkcTokenInstance.balanceOf(addresses.fortunePool)) < FORTUNE_POOL_LIQUIDITY_TOTAL) {
+        await sendTransactionWithRetries(async () => await bkcTokenInstance.approve(addresses.fortunePool, FORTUNE_POOL_LIQUIDITY_TOTAL), "APROVAR: Fortune Pool");
+        await sendTransactionWithRetries(async () => await fortunePoolInstance.topUpPool(FORTUNE_POOL_LIQUIDITY_TOTAL), "DEPOSITAR: Fortune Pool");
+    }
+  } else {
+    console.warn("   ⚠️ Saldo insuficiente para abastecer FortunePool. Pulando...");
   }
 
   // CRIAR POOLS E LIMPAR NFTs

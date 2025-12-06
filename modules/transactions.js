@@ -1,5 +1,5 @@
 // js/modules/transactions.js
-// ✅ VERSÃO FINAL V6.16: Notary Fee Fix (Real-time Fetch) & Safe Signer
+// ✅ VERSÃO FINAL V7.0 (Enterprise Notary): Updated notarize signature & Safe Signer
 
 const ethers = window.ethers;
 
@@ -15,7 +15,7 @@ const BIPS_DENOMINATOR = 10000n;
 
 // 🔥 FIX: Configuração de GÁS explícita para Arbitrum Sepolia (EIP-1559)
 const GAS_OPTS = { 
-    gasLimit: 800000, 
+    gasLimit: 1000000, // Aumentado ligeiramente para garantir execução da struct
     maxFeePerGas: ethers.parseUnits("0.5", "gwei"), 
     maxPriorityFeePerGas: ethers.parseUnits("0.05", "gwei")
 }; 
@@ -24,22 +24,18 @@ const GAS_OPTS = {
 // CORE SIGNER/RUNNER UTILITY
 // ====================================================================
 
-/**
- * Obtém o Signer priorizando o Signer já armazenado no State.
- * Ignora a falha de 'getSigner()' que o AppKit/Web3Modal está bloqueando.
- */
 async function getConnectedSigner() {
     if (!State.isConnected) {
         showToast("Wallet not connected.", "error");
         return null;
     }
     
-    // 🔥 FIX: Apenas retorna o Signer armazenado durante o login (State.signer)
+    // Prioriza Signer do State (Login inicial)
     if (State.signer) {
         return State.signer;
     }
 
-    // TENTATIVA 2 (FALLBACK): Forçar a obtenção via BrowserProvider
+    // Fallback: Tenta obter via BrowserProvider
     if (State.web3Provider) {
         try {
             const provider = new ethers.BrowserProvider(State.web3Provider);
@@ -59,9 +55,6 @@ async function getConnectedSigner() {
 // GENERIC WRAPPERS & UTILITIES
 // ====================================================================
 
-/**
- * Generic wrapper to execute a transaction and provide UI feedback.
- */
 async function executeTransaction(txPromise, successMessage, failMessage, btnElement) {
     const originalText = btnElement ? btnElement.innerHTML : 'Processing...';
     if (btnElement) {
@@ -87,7 +80,6 @@ async function executeTransaction(txPromise, successMessage, failMessage, btnEle
              if (typeof loadRentalListings === 'function') await loadRentalListings(); 
         }
         
-        // Safety update
         setTimeout(async () => {
             await loadUserData();
             if (typeof loadRentalListings === 'function') await loadRentalListings();
@@ -103,14 +95,12 @@ async function executeTransaction(txPromise, successMessage, failMessage, btnEle
         else if (e.data && e.data.message) reason = e.data.message;
         else if (e.message) reason = e.message;
 
-        // Mapeamento de erros do Ethers v6
         if (reason.includes("Internal JSON-RPC error") || reason.includes("code=-32603")) {
             reason = "RPC Error: Network busy or Gas estimation failed.";
         }
         if (e.code === 'ACTION_REJECTED') reason = 'You rejected the transaction in your wallet.';
         if (reason.includes("execution reverted")) reason = "Execution Reverted (Check Contract State/Input).";
         
-        // Erros customizados do Contrato
         if (reason.includes("Insufficient pStake")) reason = "Minimum pStake requirement not met.";
         if (reason.includes("TransferFailed")) reason = "Token transfer failed (Check BKC balance/allowance).";
         if (reason.includes("insufficient allowance")) reason = "Contract not approved to spend tokens.";
@@ -129,14 +119,10 @@ async function executeTransaction(txPromise, successMessage, failMessage, btnEle
     }
 }
 
-/**
- * Ensures approval for ERC20 (Amount) OR ERC721 (TokenID).
- */
 async function ensureApproval(tokenContract, spenderAddress, amountOrTokenId, btnElement, purpose) {
     const signer = await getConnectedSigner(); 
     if (!signer) return false;
     
-    // Reinicializa o contrato com o Signer válido
     const approvedTokenContract = tokenContract.connect(signer);
 
     if (!spenderAddress || spenderAddress.includes('...')) {
@@ -152,17 +138,13 @@ async function ensureApproval(tokenContract, spenderAddress, amountOrTokenId, bt
     };
 
     try {
-        // --- SAFE CHECK FOR ERC721 ---
         let isERC721 = false;
         try {
             const fn = tokenContract.interface.getFunction("setApprovalForAll");
             isERC721 = !!fn; 
-        } catch (e) {
-            isERC721 = false;
-        }
+        } catch (e) { isERC721 = false; }
 
         if (!isERC721) {
-            // --- ERC20 LOGIC (Tokens) ---
             const requiredAmount = BigInt(amountOrTokenId);
             if (requiredAmount === 0n) return true;
             
@@ -182,7 +164,6 @@ async function ensureApproval(tokenContract, spenderAddress, amountOrTokenId, bt
             return true;
         } 
         else {
-            // --- ERC721 LOGIC (NFTs) ---
             const tokenId = BigInt(amountOrTokenId);
             setBtnLoading("Checking NFT Approval");
             
@@ -216,7 +197,7 @@ async function ensureApproval(tokenContract, spenderAddress, amountOrTokenId, bt
 
 
 // ====================================================================
-// 1. RENTAL MARKET TRANSACTIONS (AirBNFT)
+// 1. RENTAL MARKET TRANSACTIONS
 // ====================================================================
 
 export async function executeListNFT(tokenId, pricePerHourWei, maxDurationHours, btnElement) {
@@ -268,16 +249,14 @@ export async function executeDelegation(totalAmount, durationSeconds, boosterIdT
     const durationBigInt = BigInt(durationSeconds);
     const boosterIdBigInt = BigInt(boosterIdToSend);
     
-    // 🛑 1. BALANCE CHECK
     try {
         const balance = await State.bkcTokenContract.balanceOf(State.userAddress);
         if (balance < totalAmountBigInt) {
-            showToast(`Insufficient balance! You have ${formatBigNumber(balance).toFixed(2)} BKC. Use the Faucet!`, "error");
+            showToast(`Insufficient balance!`, "error");
             return false;
         }
-    } catch(e) { console.warn("Error checking balance", e); }
+    } catch(e) { }
 
-    // 🛑 2. DURATION CHECK (UPDATED TO 10 YEARS)
     const MAX_DURATION = 315360000n; 
     if (durationBigInt > MAX_DURATION) {
         showToast("Invalid duration (Max: 10 Years).", "error");
@@ -291,7 +270,6 @@ export async function executeDelegation(totalAmount, durationSeconds, boosterIdT
     const delegateTxPromise = delegationContract.delegate(totalAmountBigInt, durationBigInt, boosterIdBigInt, GAS_OPTS);
     
     const success = await executeTransaction(delegateTxPromise, 'Delegation successful!', 'Error delegating tokens', btnElement);
-    
     if (success) closeModal();
     return success;
 }
@@ -317,7 +295,7 @@ export async function executeForceUnstake(index) {
     const { tokenId: boosterTokenId } = await getHighestBoosterBoostFromAPI();
     const boosterIdToSend = boosterTokenId ? BigInt(boosterTokenId) : 0n;
     
-    if (!confirm("Are you sure? Force unstaking applies a 50% penalty on your principal.")) return false;
+    if (!confirm("Are you sure? Force unstaking applies a 50% penalty.")) return false;
     
     const btnElement = document.querySelector(`.force-unstake-btn[data-index='${index}']`);
     const delegationContract = State.delegationManagerContract.connect(signer); 
@@ -352,7 +330,6 @@ export async function executeUniversalClaim(stakingRewards, minerRewards, btnEle
             await tx.wait();
             showToast('Reward claimed successfully!', "success");
         }
-        
         loadUserData(); 
         return true;
     } catch (e) {
@@ -383,26 +360,14 @@ export async function executeBuyBooster(poolAddress, price, boosterTokenIdForPSt
     const originalText = btnElement ? btnElement.innerHTML : 'Buy';
     const priceBigInt = BigInt(price);
     
-    if (priceBigInt <= 0n) {
-        showToast("Price is zero or unavailable.", "error");
-        return false;
-    }
-    if (priceBigInt > State.currentUserBalance) {
-         showToast("Insufficient BKC balance.", "error");
-         return false;
-    }
+    if (priceBigInt <= 0n) { showToast("Price is zero.", "error"); return false; }
+    if (priceBigInt > State.currentUserBalance) { showToast("Insufficient BKC balance.", "error"); return false; }
 
-    if (btnElement) {
-        btnElement.disabled = true;
-        btnElement.innerHTML = '<div class="loader inline-block"></div>';
-    }
+    if (btnElement) { btnElement.disabled = true; btnElement.innerHTML = '<div class="loader inline-block"></div>'; }
     
     try {
         const approved = await ensureApproval(State.bkcTokenContract, poolAddress, priceBigInt, btnElement, "NFT Purchase");
-        if (!approved) {
-             if(btnElement) btnElement.innerHTML = originalText;
-             return false;
-        }
+        if (!approved) { if(btnElement) btnElement.innerHTML = originalText; return false; }
 
         if (btnElement) btnElement.innerHTML = '<div class="loader inline-block"></div> Buying...';
 
@@ -417,14 +382,7 @@ export async function executeBuyBooster(poolAddress, price, boosterTokenIdForPSt
         showToast(`Error: ${e.reason || e.message || 'Transaction rejected.'}`, "error");
         return false;
     } finally {
-         if(btnElement) {
-             setTimeout(() => {
-                 if(btnElement) {
-                     btnElement.disabled = false;
-                     btnElement.innerHTML = originalText;
-                 }
-             }, 1000);
-         }
+         if(btnElement) setTimeout(() => { if(btnElement) { btnElement.disabled = false; btnElement.innerHTML = originalText; } }, 1000);
     }
 }
 
@@ -435,15 +393,9 @@ export async function executeSellBooster(poolAddress, tokenIdToSell, boosterToke
     const originalText = btnElement ? btnElement.innerHTML : 'Sell NFT';
     const tokenIdBigInt = BigInt(tokenIdToSell);
     
-    if (tokenIdBigInt <= 0n) {
-        showToast("No NFT selected.", "error");
-        return false;
-    }
+    if (tokenIdBigInt <= 0n) { showToast("No NFT selected.", "error"); return false; }
 
-    if (btnElement) {
-        btnElement.disabled = true;
-        btnElement.innerHTML = '<div class="loader inline-block"></div>';
-    }
+    if (btnElement) { btnElement.disabled = true; btnElement.innerHTML = '<div class="loader inline-block"></div>'; }
 
     try {
         const approved = await ensureApproval(State.rewardBoosterContract, poolAddress, tokenIdBigInt, btnElement, "NFT Sale");
@@ -455,87 +407,64 @@ export async function executeSellBooster(poolAddress, tokenIdToSell, boosterToke
         const minPrice = 0n; 
         
         const poolContract = new ethers.Contract(poolAddress, nftPoolABI, signer); 
-
         const sellTxPromise = poolContract.sellNFT(tokenIdBigInt, boosterIdToSend, minPrice, GAS_OPTS);
         return await executeTransaction(sellTxPromise, 'Sale successful!', 'Error during sale', btnElement);
 
     } catch (e) {
         console.error("Error selling booster:", e);
-        showToast(`Error: ${e.reason || e.message || 'Transaction rejected.'}`, "error");
+        showToast(`Error: ${e.reason || e.message}`, "error");
         return false;
     } finally {
-        if(btnElement) {
-             setTimeout(() => {
-                 if(btnElement) {
-                    btnElement.disabled = false;
-                    btnElement.innerHTML = originalText;
-                 }
-             }, 1000);
-        }
+        if(btnElement) setTimeout(() => { if(btnElement) { btnElement.disabled = false; btnElement.innerHTML = originalText; } }, 1000);
     }
 }
 
 
 // ====================================================================
-// 4. FAUCET & NOTARY
+// 4. FAUCET & NOTARY (ENTERPRISE LOGIC)
 // ====================================================================
 
-// 🚨 INTERNAL FAUCET: 20 TOKENS (Testnet Economy)
 export async function executeInternalFaucet(btnElement) {
     const signer = await getConnectedSigner();
     if (!signer) return false;
     
     const network = await State.provider.getNetwork();
-    if (network.chainId !== 421614n) { 
-        return showToast("Faucet available on Arbitrum Sepolia (Testnet) only.", "warning");
-    }
+    if (network.chainId !== 421614n) return showToast("Testnet only.", "warning");
 
     const originalText = btnElement ? btnElement.innerHTML : 'Get Tokens';
-    if (btnElement) {
-        btnElement.disabled = true;
-        btnElement.innerHTML = '<div class="loader inline-block"></div> Minting...';
-    }
+    if (btnElement) { btnElement.disabled = true; btnElement.innerHTML = '<div class="loader inline-block"></div> Minting...'; }
 
     try {
-        // Option A: Faucet Contract
         if (State.faucetContract) {
             const faucetContract = State.faucetContract.connect(signer); 
             const tx = await faucetContract.claim(GAS_OPTS);
-            return await executeTransaction(tx, 'Tokens sent to your wallet!', 'Faucet Error', btnElement);
-        } 
-        
-        // Option B: Fallback (Direct Mint) - Requires Signer to be token Owner
-        else if (State.bkcTokenContract) {
+            return await executeTransaction(tx, 'Tokens sent!', 'Faucet Error', btnElement);
+        } else if (State.bkcTokenContract) {
             const amount = ethers.parseUnits("20", 18); 
             const bkcTokenContract = State.bkcTokenContract.connect(signer); 
-            
-            // This path should fail unless the Signer is the MiningManager
             const tx = await bkcTokenContract.mint(State.userAddress, amount, GAS_OPTS); 
-            return await executeTransaction(tx, '20 BKC Minted Successfully!', 'Mint Error', btnElement);
+            return await executeTransaction(tx, '20 BKC Minted!', 'Mint Error', btnElement);
         } else {
             throw new Error("Faucet not available.");
         }
-
     } catch (e) {
         console.error("Faucet Error:", e);
         showToast(`Error: ${e.reason || e.message}`, "error");
-        if (e.reason && e.reason.includes("InsufficientFaucetBalance")) {
-             showToast("Faucet Error: Faucet contract is out of tokens!", "error");
-        } else if (e.reason && e.reason.includes("revert")) {
-             showToast("Faucet Error: Execution reverted (check console for contract reason).", "error");
-        }
-        
-        if(btnElement) {
-            btnElement.disabled = false;
-            btnElement.innerHTML = originalText;
-        }
+        if(btnElement) { btnElement.disabled = false; btnElement.innerHTML = originalText; }
         return false;
     }
 }
 
-export async function executeNotarizeDocument(documentURI, boosterId, submitButton) {
+/**
+ * Enterprise Notarization: Sends Link, Text and Hash to the Blockchain.
+ * @param {string} documentURI - IPFS link of the file (Image/PDF)
+ * @param {string} description - User provided text description
+ * @param {string} contentHash - SHA-256 hash of the file (bytes32 hex string)
+ * @param {string|number} boosterId - Optional Booster NFT ID for discount
+ */
+export async function executeNotarizeDocument(documentURI, description, contentHash, boosterId, submitButton) {
     const signer = await getConnectedSigner();
-    // ✅ FIX 1: Verificação antecipada de contratos e signer
+    
     if (!signer || !State.bkcTokenContract || !State.decentralizedNotaryContract) {
         showToast("Contracts or Signer not ready.", "error");
         return false;
@@ -544,22 +473,20 @@ export async function executeNotarizeDocument(documentURI, boosterId, submitButt
     const notaryContract = State.decentralizedNotaryContract.connect(signer); 
     const notaryAddress = await notaryContract.getAddress(); 
     
-    // ✅ FIX 2: Busca Dinâmica da Taxa (Evita cache zerado e erro de Insufficient Allowance)
+    // 1. Fee Calculation & Approval Logic
     let feeToPay = State.systemFees?.NOTARY_SERVICE || 0n;
-
     try {
         if (State.ecosystemManagerContractPublic) {
             const key = ethers.id("NOTARY_SERVICE");
             const [realFee] = await State.ecosystemManagerContractPublic.getServiceRequirements(key);
-            if (realFee > 0n) feeToPay = realFee; // Atualiza com o valor real da blockchain
+            if (realFee > 0n) feeToPay = realFee;
         }
     } catch (e) {
-        console.warn("Could not fetch live fee, using state cache:", e);
+        console.warn("Fee fetch warning:", e);
     }
 
     console.log(`Notary Fee to Approve: ${feeToPay.toString()}`);
 
-    // Verifica Aprovação com a taxa correta
     if (feeToPay > 0n) {
         const approved = await ensureApproval(State.bkcTokenContract, notaryAddress, feeToPay, submitButton, "Notary Fee");
         if (!approved) {
@@ -568,9 +495,18 @@ export async function executeNotarizeDocument(documentURI, boosterId, submitButt
         }
     }
 
-    // ✅ FIX 3: Conversão segura de BigInt e chamada da função
+    // 2. Prepare Parameters
     const bId = boosterId ? BigInt(boosterId) : 0n;
-    const notarizeTxPromise = notaryContract.notarize(documentURI, bId, GAS_OPTS);
+    
+    // 3. Call Smart Contract (Updated Signature)
+    // notarize(string memory _ipfsCid, string memory _description, bytes32 _contentHash, uint256 _boosterTokenId)
+    const notarizeTxPromise = notaryContract.notarize(
+        documentURI, 
+        description, 
+        contentHash, 
+        bId, 
+        GAS_OPTS
+    );
 
     return await executeTransaction(notarizeTxPromise, 'Document notarized successfully!', 'Error notarizing document', submitButton);
 }

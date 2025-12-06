@@ -1,5 +1,5 @@
 // js/config.js
-// ✅ VERSÃO FINAL (PRODUÇÃO): Alchemy Gas Manager Configurado
+// ✅ VERSÃO FINAL (PRODUÇÃO V16): Async Oracle & Enterprise Notary Corrected
 
 // ============================================================================
 // 1. ENVIRONMENT & ALCHEMY CONFIG
@@ -10,8 +10,8 @@ console.log(`Environment: ${isDevelopment ? 'DEVELOPMENT' : 'PRODUCTION'}`);
 // ⚠️ CONFIGURAÇÃO ATIVA PARA O GRANT
 export const CONFIG = {
     alchemy: {
-        apiKey: "OXcpAI1M17gLgjZJJ8VC3", // Sua API Key (Leitura de dados)
-        gasPolicyId: "54c32e74-c1d4-4e14-a7bf-db28f18e6c29" // ✅ Seu Policy ID (Gas Sponsorship)
+        apiKey: "OXcpAI1M17gLgjZJJ8VC3", // Sua API Key
+        gasPolicyId: "54c32e74-c1d4-4e14-a7bf-db28f18e6c29" // ✅ Gas Sponsorship Policy ID
     }
 };
 
@@ -50,7 +50,7 @@ export async function loadAddresses() {
 
         Object.assign(addresses, jsonAddresses);
 
-        // Aliases para compatibilidade
+        // Aliases para compatibilidade interna do app
         addresses.actionsManager = jsonAddresses.fortunePool; 
         addresses.fortunePool = jsonAddresses.fortunePool;
         addresses.rentalManager = jsonAddresses.rentalManager || null;
@@ -83,7 +83,7 @@ export const boosterTiers = [
 ];
 
 // ============================================================================
-// 5. CONTRACT ABIs (Mantidas)
+// 5. CONTRACT ABIs
 // ============================================================================
 
 export const bkcTokenABI = [
@@ -154,15 +154,21 @@ export const nftPoolABI = [
     "event NFTSold(address indexed seller, uint256 indexed boostBips, uint256 tokenId, uint256 payout, uint256 taxPaid)"
 ];
 
+// ✅ CORREÇÃO CRÍTICA (Async Oracle): Alinhado com o contrato FortunePool.sol atual
 export const actionsManagerABI = [
-    "function participate(uint256 _amount, uint8[3] _guesses, bool _isCumulative) payable", 
+    // Função principal de aposta
+    "function participate(uint256 _amount, uint8[3] _guesses, bool _isCumulative) payable",
+    // Taxas
     "function oracleFeeInWei() view returns (uint256)",
-    "function gameResults(uint256, uint256) view returns (uint256)", 
+    // Consulta de resultados (retorna tupla fixa de 3)
+    "function gameResults(uint256) view returns (uint256[3])",
+    // Contadores e Listas
     "function gameCounter() view returns (uint256)",
+    "function pendingGames(uint256) view returns (address, uint256, uint8[3], bool)",
     "function prizePoolBalance() view returns (uint256)",
+    // Eventos
     "event GameRequested(uint256 indexed gameId, address indexed user, uint256 purchaseAmount, uint8[3] guesses, bool isCumulative)",
-    "event GameFulfilled(uint256 indexed gameId, address indexed user, uint256 prizeWon, uint256[3] rolls, uint8[3] guesses)",
-    "function setOracleAddress(address _oracle)"
+    "event GameFulfilled(uint256 indexed gameId, address indexed user, uint256 prizeWon, uint256[3] rolls, uint8[3] guesses)"
 ];
 
 export const publicSaleABI = [
@@ -172,11 +178,13 @@ export const publicSaleABI = [
     "event NFTSold(address indexed buyer, uint256 indexed tierId, uint256 indexed tokenId, uint256 price)"
 ];
 
+// ✅ ENTERPRISE NOTARY ABI: Alinhado com DecentralizedNotary.sol (Struct Interna)
 export const decentralizedNotaryABI = [
-    "event NotarizationEvent(uint256 indexed tokenId, address indexed owner, string indexed documentMetadataHash, uint256 feePaid)",
+    "event NotarizationEvent(uint256 indexed tokenId, address indexed owner, string ipfsCid, bytes32 contentHash)",
     "function balanceOf(address owner) view returns (uint256)",
     "function tokenURI(uint256 tokenId) view returns (string)",
-    "function notarize(string calldata _documentMetadataURI, uint256 _boosterTokenId)",
+    "function getDocumentInfo(uint256 tokenId) view returns (tuple(string ipfsCid, string description, bytes32 contentHash, uint256 timestamp))",
+    "function notarize(string calldata _ipfsCid, string calldata _description, bytes32 _contentHash, uint256 _boosterTokenId)"
 ];
 
 export const faucetABI = [

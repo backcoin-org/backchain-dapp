@@ -1,8 +1,8 @@
 // js/pages/FortunePool.js
-// ✅ VERSÃO FINAL V14: Share Buttons (Win/Loss) + Viral Copywriting + Gas Error Handling
+// ✅ VERSÃO FINAL V17: Alinhado com FortunePool.sol (Participate + Async Oracle)
 
 import { State } from '../state.js';
-import { loadUserData, safeContractCall, API_ENDPOINTS, loadSystemDataFromAPI } from '../modules/data.js';
+import { loadUserData, safeContractCall, API_ENDPOINTS } from '../modules/data.js';
 import { formatBigNumber } from '../utils.js';
 import { showToast } from '../ui-feedback.js';
 import { addresses } from '../config.js';
@@ -34,13 +34,12 @@ style.innerHTML = `
         border: 1px solid rgba(255, 193, 7, 0.15);
         box-shadow: 0 0 40px rgba(0, 0, 0, 0.9);
     }
+    .bkc-anim { animation: coinPulse 2s infinite ease-in-out; }
     @keyframes coinPulse {
         0% { transform: scale(1); filter: drop-shadow(0 0 10px rgba(245, 158, 11, 0.3)); }
         50% { transform: scale(1.1); filter: drop-shadow(0 0 25px rgba(245, 158, 11, 0.6)); }
         100% { transform: scale(1); filter: drop-shadow(0 0 10px rgba(245, 158, 11, 0.3)); }
     }
-    .bkc-anim { animation: coinPulse 2s infinite ease-in-out; }
-    
     .progress-track { background: rgba(255, 255, 255, 0.1); border-radius: 4px; overflow: hidden; height: 8px; margin-top: 10px; }
     .progress-fill { 
         height: 100%; 
@@ -49,72 +48,38 @@ style.innerHTML = `
         transition: width 0.5s ease-out;
         box-shadow: 0 0 15px #f59e0b;
     }
-    
     .guess-box {
-        background: rgba(59, 130, 246, 0.05);
-        border: 1px solid rgba(59, 130, 246, 0.3);
-        color: #60a5fa;
+        background: rgba(59, 130, 246, 0.05); border: 1px solid rgba(59, 130, 246, 0.3); color: #60a5fa;
         box-shadow: inset 0 0 10px rgba(59, 130, 246, 0.05);
     }
-    
     .slot-box {
         background: linear-gradient(180deg, #18181b 0%, #09090b 100%);
-        border: 1px solid #3f3f46;
-        color: #52525b;
-        box-shadow: inset 0 0 20px #000;
-        position: relative;
+        border: 1px solid #3f3f46; color: #52525b;
+        box-shadow: inset 0 0 20px #000; position: relative;
     }
-    
-    .tier-label {
-        font-size: 9px; font-weight: 900; letter-spacing: 1px; text-transform: uppercase;
-        text-align: center; display: block; margin-bottom: 4px; opacity: 0.8;
-    }
-
+    .tier-label { font-size: 9px; font-weight: 900; letter-spacing: 1px; text-transform: uppercase; text-align: center; display: block; margin-bottom: 4px; opacity: 0.8; }
     .profit-tag {
-        font-family: monospace; font-size: 10px; font-weight: bold;
-        text-align: center; padding: 4px; border-radius: 6px;
-        background: rgba(0,0,0,0.4); border: 1px solid rgba(255,255,255,0.1);
-        transition: all 0.3s;
+        font-family: monospace; font-size: 10px; font-weight: bold; text-align: center; padding: 4px; border-radius: 6px;
+        background: rgba(0,0,0,0.4); border: 1px solid rgba(255,255,255,0.1); transition: all 0.3s;
     }
-    .profit-active {
-        background: rgba(16, 185, 129, 0.1); border-color: #10b981; color: #10b981;
-        box-shadow: 0 0 10px rgba(16, 185, 129, 0.2);
-    }
-
+    .profit-active { background: rgba(16, 185, 129, 0.1); border-color: #10b981; color: #10b981; box-shadow: 0 0 10px rgba(16, 185, 129, 0.2); }
     @keyframes spinBlur { 0% { filter: blur(0); transform: translateY(0); } 50% { filter: blur(6px); transform: translateY(-3px); } 100% { filter: blur(0); transform: translateY(0); } }
     .slot-spinning { animation: spinBlur 0.1s infinite; color: #71717a !important; text-shadow: 0 0 5px rgba(255,255,255,0.2); }
-    
     .slot-hit { 
-        border-color: #10b981 !important; color: #fff !important; 
-        background: rgba(16, 185, 129, 0.2) !important;
+        border-color: #10b981 !important; color: #fff !important; background: rgba(16, 185, 129, 0.2) !important;
         text-shadow: 0 0 20px #10b981; transform: scale(1.05); z-index: 10;
     }
     .slot-miss { border-color: #ef4444 !important; color: #ef4444 !important; opacity: 0.4; }
-    
     .btn-action { background: linear-gradient(to bottom, #fbbf24, #d97706); color: black; font-weight: 900; letter-spacing: 1px; }
     .btn-action:hover { filter: brightness(1.1); transform: translateY(-1px); }
     .btn-action:disabled { background: #333; color: #666; cursor: not-allowed; transform: none; filter: none; }
-
     .hidden-force { display: none !important; }
-    
-    .mode-locked { 
-        opacity: 0.7; 
-        filter: grayscale(1); 
-        border: 1px dashed #555 !important; 
-        background: #111 !important;
-    }
-    
+    .mode-locked { opacity: 0.7; filter: grayscale(1); border: 1px dashed #555 !important; background: #111 !important; }
     .mode-active-cumulative { 
         background: linear-gradient(135deg, rgba(147, 51, 234, 0.2) 0%, rgba(79, 70, 229, 0.3) 100%) !important;
-        border: 1px solid #a855f7 !important;
-        box-shadow: 0 0 20px rgba(168, 85, 247, 0.3);
-        transform: scale(1.02);
+        border: 1px solid #a855f7 !important; box-shadow: 0 0 20px rgba(168, 85, 247, 0.3); transform: scale(1.02);
     }
-    
-    .mode-container {
-        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-        cursor: pointer;
-    }
+    .mode-container { transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); cursor: pointer; }
     .mode-container:hover { filter: brightness(1.2); }
 `;
 document.head.appendChild(style);
@@ -122,19 +87,21 @@ document.head.appendChild(style);
 let gameState = {
     step: 0, isSpinning: false, gameId: 0, pollInterval: null, spinInterval: null,
     guesses: [0, 0, 0], 
-    isCumulative: true, // Padrão Turbo Ativo
+    isCumulative: true, 
     betAmount: 0, lastWinAmount: 0,
     currentLevel: 1, currentXP: 0, xpPerLevel: 1000, systemReady: false
 };
 
+// --- DATA PERSISTENCE ---
 try {
-    const local = localStorage.getItem('bkc_fortune_v12');
+    const local = localStorage.getItem('bkc_fortune_v17');
     if (local) { const p = JSON.parse(local); gameState.currentLevel = p.lvl || 1; gameState.currentXP = p.xp || 0; }
 } catch (e) {}
 
-function saveProgress() { localStorage.setItem('bkc_fortune_v12', JSON.stringify({ lvl: gameState.currentLevel, xp: gameState.currentXP })); updateGamificationUI(); }
+function saveProgress() { localStorage.setItem('bkc_fortune_v17', JSON.stringify({ lvl: gameState.currentLevel, xp: gameState.currentXP })); updateGamificationUI(); }
 function addXP(amount) { gameState.currentXP += amount; if (gameState.currentXP >= gameState.xpPerLevel) { gameState.currentLevel++; gameState.currentXP -= gameState.xpPerLevel; showToast(`🆙 LEVEL UP! LVL ${gameState.currentLevel}`, "success"); } saveProgress(); }
 
+// --- RENDERIZACAO DE PASSOS ---
 function renderStep() {
     const container = document.getElementById('game-interaction-area');
     if (!container) return;
@@ -395,19 +362,11 @@ async function stopSpinning(rolls, winAmount) {
     showResultOverlay(winAmount > 0n);
 }
 
-// -------------------------------------------------------------
-// ✅ SHARE BUTTON LOGIC ADDED HERE (WIN & LOSS SCENARIOS)
-// -------------------------------------------------------------
 function showResultOverlay(isWin) {
     const overlay = document.getElementById('result-overlay');
     overlay.classList.remove('hidden'); overlay.classList.add('flex');
-    
-    const winText = `🏆 I just won ${gameState.lastWinAmount.toFixed(2)} $BKC on the Fortune Pool! The Backchain Protocol is changing the game. Real Yield, Real Utility. 🚀🔥 #BKC #BACKCOIN #AIRDROP`;
-    const lossText = `⛏️ Mining the future with Proof-of-Purchase! Every interaction counts in the Backchain Protocol. Join the revolution. 💎🔨 #BKC #BACKCOIN #AIRDROP`;
-    
-    // Encode text for Twitter Intent
-    const shareText = isWin ? winText : lossText;
-    const shareUrl = `https://twitter.com/intent/tweet?text=${encodeURIComponent(shareText)}&url=${encodeURIComponent('https://backcoin.org')}`;
+    const winText = `🏆 I just won ${gameState.lastWinAmount.toFixed(2)} $BKC on the Fortune Pool!`;
+    const shareUrl = `https://twitter.com/intent/tweet?text=${encodeURIComponent(winText)}&url=${encodeURIComponent('https://backcoin.org')}`;
 
     if (isWin) {
         overlay.innerHTML = `
@@ -415,14 +374,9 @@ function showResultOverlay(isWin) {
                 <div class="text-6xl mb-4">🏆</div>
                 <h2 class="text-4xl font-black text-amber-400 italic mb-2 drop-shadow-lg">BIG WIN!</h2>
                 <div class="text-6xl font-mono font-bold text-white mb-6">${gameState.lastWinAmount.toFixed(2)} <span class="text-xl text-zinc-500">BKC</span></div>
-                
                 <div class="flex flex-col gap-3 justify-center">
-                    <button id="btn-collect" class="bg-white text-black font-black py-4 px-10 rounded-xl shadow-[0_0_20px_rgba(255,255,255,0.3)] hover:scale-105 transition-transform">
-                        COLLECT & REPLAY
-                    </button>
-                    <button id="btn-share-win" class="bg-[#1DA1F2] hover:bg-[#1a91da] text-white font-bold py-3 px-10 rounded-xl flex items-center justify-center gap-2 transition-all">
-                        <i class="fa-brands fa-twitter"></i> SHARE VICTORY
-                    </button>
+                    <button id="btn-collect" class="bg-white text-black font-black py-4 px-10 rounded-xl hover:scale-105 transition-transform">COLLECT & REPLAY</button>
+                    <button id="btn-share-win" class="bg-[#1DA1F2] hover:bg-[#1a91da] text-white font-bold py-3 px-10 rounded-xl flex items-center justify-center gap-2"><i class="fa-brands fa-twitter"></i> SHARE</button>
                 </div>
             </div>`;
         addXP(500);
@@ -431,28 +385,14 @@ function showResultOverlay(isWin) {
             <div class="text-center p-6 w-full animate-fadeIn">
                 <div class="text-6xl mb-4 grayscale opacity-50">💔</div>
                 <h2 class="text-2xl font-bold text-zinc-300 mb-2">NOT THIS TIME</h2>
-                <p class="text-zinc-500 mb-8 text-sm">Proof of Purchase generated. Ecosystem mining active.</p>
-                
                 <div class="flex flex-col gap-3 justify-center">
-                    <button id="btn-collect" class="bg-zinc-800 text-white font-bold py-3 px-8 rounded-xl border border-zinc-600 hover:bg-zinc-700">
-                        TRY AGAIN
-                    </button>
-                    <button id="btn-share-loss" class="bg-transparent border border-zinc-600 text-zinc-400 hover:text-white hover:border-zinc-400 font-bold py-3 px-8 rounded-xl transition-all flex items-center justify-center gap-2">
-                        <i class="fa-brands fa-twitter"></i> SHARE MINING
-                    </button>
+                    <button id="btn-collect" class="bg-zinc-800 text-white font-bold py-3 px-8 rounded-xl border border-zinc-600 hover:bg-zinc-700">TRY AGAIN</button>
                 </div>
             </div>`;
         addXP(50);
     }
-
-    // Attach Listeners
     document.getElementById('btn-collect').onclick = closeOverlay;
-    
-    if (isWin) {
-        document.getElementById('btn-share-win').onclick = () => window.open(shareUrl, '_blank');
-    } else {
-        document.getElementById('btn-share-loss').onclick = () => window.open(shareUrl, '_blank');
-    }
+    if(isWin) document.getElementById('btn-share-win').onclick = () => window.open(shareUrl, '_blank');
 }
 
 function closeOverlay() {
@@ -478,7 +418,7 @@ function closeOverlay() {
 }
 
 // -------------------------------------------------------------
-// ✅ GAS ERROR HANDLING & REVERT FIX
+// ✅ EXECUTION FIXED: participate instead of play
 // -------------------------------------------------------------
 async function executeTransaction() {
     if (!State.isConnected) return showToast("Connect wallet", "error");
@@ -489,34 +429,29 @@ async function executeTransaction() {
     const amountWei = ethers.parseEther(gameState.betAmount.toString());
     if (amountWei > State.currentUserBalance) return showToast("Insufficient Balance", "error");
     
+    // --- MODE & FEE ---
+    const isCumulative = gameState.isCumulative; // Boolean
     let fee = 0n;
-    if (State.systemData && State.systemData.oracleFeeInWei) { 
-        fee = BigInt(State.systemData.oracleFeeInWei); 
-    } else {
-        if (State.actionsManagerContract) {
-            try { fee = await safeContractCall(State.actionsManagerContract, 'oracleFeeInWei', [], 0n); } catch (e) {}
-        }
-        if (fee === 0n) fee = ethers.parseEther("0.001");
-    }
 
-    if (gameState.isCumulative) fee = fee * 5n;
-    
-    // --- CHECK BNB BALANCE FOR GAS & FEE ---
     try {
-        const bnbBalance = await State.provider.getBalance(State.userAddress);
-        const minRequiredBNB = fee + ethers.parseEther("0.005"); 
-        
-        if (bnbBalance < minRequiredBNB) {
-            showToast("Insufficient BNB for Gas/Fee!", "error");
-            document.getElementById('status-area').classList.add('hidden-force');
-            btn.innerHTML = `<i class="fa-solid fa-cart-shopping"></i> BUY BNB FOR GAS`;
-            btn.classList.add('bg-red-600', 'hover:bg-red-500');
-            btn.onclick = () => {
-                window.open('https://buy.moonpay.com?currencyCode=bnb_bsc', '_blank');
-            };
+        // Read oracle fee from contract
+        const baseFee = await safeContractCall(State.actionsManagerContract, 'oracleFeeInWei', [], 0n);
+        // Calculate total fee (5x if cumulative)
+        fee = isCumulative ? (baseFee * 5n) : baseFee;
+    } catch (e) {
+        fee = ethers.parseEther(isCumulative ? "0.005" : "0.001");
+    }
+    
+    // --- CHECK NATIVE BALANCE FOR GAS & FEE ---
+    try {
+        const nativeBalance = await State.provider.getBalance(State.userAddress);
+        const minRequired = fee + ethers.parseEther("0.005"); 
+        if (nativeBalance < minRequired) {
+            showToast("Insufficient ETH for Gas/Fee!", "error");
+            btn.innerText = "INSUFFICIENT ETH";
             return;
         }
-    } catch(e) { console.warn("Gas check skipped:", e); }
+    } catch(e) {}
 
     btn.disabled = true;
     try {
@@ -527,22 +462,26 @@ async function executeTransaction() {
             await tx.wait();
         }
         btn.innerHTML = `<div class="loader inline-block"></div> CONFIRMING...`;
-        const tx = await State.actionsManagerContract.participate(amountWei, gameState.guesses, gameState.isCumulative, { value: fee });
+        
+        // ✅ CORRECT CALL: participate(amount, guesses, isCumulative)
+        const tx = await State.actionsManagerContract.participate(
+            amountWei, 
+            gameState.guesses, 
+            isCumulative, 
+            { value: fee }
+        );
+        
         startSpinning(); await tx.wait();
         updateProgressBar(40, "BLOCK MINED. WAITING ORACLE...");
+        
+        // Start polling for gameCounter to verify result
         const ctr = await safeContractCall(State.actionsManagerContract, 'gameCounter', [], 0, 2, true);
-        waitForOracle(Number(ctr));
+        setTimeout(() => waitForOracle(Number(ctr)), 2000);
+        
     } catch (e) {
         console.error(e); btn.disabled = false; btn.innerText = "START MINING";
-        
         const msg = e.reason || e.message || "Transaction Failed";
-        if (msg.includes("insufficient funds") || msg.includes("gas required exceeds allowance")) {
-             showToast("Transaction Reverted: Not enough BNB for gas.", "error");
-             btn.innerHTML = "INSUFFICIENT BNB";
-        } else {
-             showToast("Error: " + msg, "error");
-        }
-        
+        showToast(msg.includes("insufficient funds") ? "Not enough ETH/Gas." : "Error: " + msg, "error");
         document.getElementById('status-area').classList.add('hidden-force');
         document.getElementById('controls-area').classList.remove('hidden-force');
     }
@@ -551,20 +490,24 @@ async function executeTransaction() {
 async function waitForOracle(gameId) {
     let attempts = 0; let progress = 40;
     if (gameState.pollInterval) clearInterval(gameState.pollInterval);
+    
     gameState.pollInterval = setInterval(async () => {
         attempts++; progress += 2; if(progress > 95) progress = 95;
         updateProgressBar(progress, "ORACLE CONSENSUS...");
+        
         if (attempts > 60) {
             clearInterval(gameState.pollInterval); stopSpinning([0,0,0], 0n); showToast("Oracle delay. Check history later.", "info"); return;
         }
         try {
-            const p1 = safeContractCall(State.actionsManagerContract, 'gameResults', [gameId, 0], 0n, 0, true);
-            const p2 = safeContractCall(State.actionsManagerContract, 'gameResults', [gameId, 1], 0n, 0, true);
-            const p3 = safeContractCall(State.actionsManagerContract, 'gameResults', [gameId, 2], 0n, 0, true);
-            const [r1, r2, r3] = await Promise.all([p1, p2, p3]);
-            if (Number(r1) !== 0) {
+            // ✅ CHECK: gameResults(gameId) returns [roll1, roll2, roll3]
+            const result = await State.actionsManagerContract.gameResults(gameId);
+            
+            // If result[0] is not 0, oracle has answered
+            if (result && result[0] > 0n) {
                 clearInterval(gameState.pollInterval);
-                const rolls = [Number(r1), Number(r2), Number(r3)];
+                const rolls = [Number(result[0]), Number(result[1]), Number(result[2])];
+                
+                // Calculate Win Locally
                 let win = 0n;
                 if(rolls[0] === gameState.guesses[0] || rolls[1] === gameState.guesses[1] || rolls[2] === gameState.guesses[2]) {
                     let mult = 0;
@@ -588,24 +531,26 @@ export const FortunePoolPage = {
         const btn = document.getElementById('btn-spin');
         if(!State.isConnected) { if(el) el.innerHTML = `<span class="text-zinc-500">Connect Wallet</span>`; return; }
         
-        if (!State.systemData || !State.systemData.oracleFeeInWei) { await loadSystemDataFromAPI(); }
-        
-        let fee = 0n;
-        if (State.systemData && State.systemData.oracleFeeInWei) { 
-            fee = BigInt(State.systemData.oracleFeeInWei); 
-        } else {
-            if (State.actionsManagerContract) {
-                try { fee = await safeContractCall(State.actionsManagerContract, 'oracleFeeInWei', [], 0n); } catch (e) {}
-            }
-            if (fee === 0n) fee = ethers.parseEther("0.001");
+        gameState.systemReady = true;
+        if (!addresses.fortunePool || !State.actionsManagerContract) { 
+            gameState.systemReady = false; 
+            if(el) el.innerHTML = `<span class="text-red-500 font-bold">⚠️ CONTRACT ERROR</span>`; 
+            if(btn) { btn.disabled = true; btn.innerText = "SYSTEM ERROR"; } 
+            return; 
         }
         
-        gameState.systemReady = true;
-        if (!addresses.fortunePool) { gameState.systemReady = false; if(el) el.innerHTML = `<span class="text-red-500 font-bold">⚠️ CONTRACT ERROR</span>`; if(btn) { btn.disabled = true; btn.innerText = "SYSTEM ERROR"; } return; }
+        // Fee Display
+        let fee = 0n;
+        try {
+            const baseFee = await safeContractCall(State.actionsManagerContract, 'oracleFeeInWei', [], 0n);
+            fee = gameState.isCumulative ? (baseFee * 5n) : baseFee;
+        } catch (e) { console.warn(e); }
         
-        if (gameState.isCumulative) fee = fee * 5n;
-        
-        if(el) { const feeEth = ethers.formatEther(fee); el.innerText = `FEE: ${feeEth} ETH`; el.className = "text-[10px] text-zinc-400 font-mono mt-4 px-4"; }
+        if(el) { 
+            const feeEth = ethers.formatEther(fee); 
+            el.innerText = `ORACLE FEE: ${feeEth} ETH`; 
+            el.className = "text-[10px] text-zinc-400 font-mono mt-4 px-4"; 
+        }
         const inp = document.getElementById('bet-input');
         if(inp && parseFloat(inp.value) > 0) { if(btn) { btn.disabled = false; btn.innerText = "SPIN TO WIN"; } }
     },

@@ -1,7 +1,8 @@
 import pinataSDK from '@pinata/sdk';
 import { Formidable } from 'formidable';
 import fs from 'fs';
-import { ethers } from 'ethers'; 
+import { ethers } from 'ethers';
+import crypto from 'crypto'; // Necessário para calcular o Hash SHA-256
 
 export const config = {
     api: {
@@ -10,11 +11,10 @@ export const config = {
 };
 
 // --- FUNÇÃO AUXILIAR PARA CORS ---
-// Isso permite que seu front-end (backcoin.org ou localhost) chame esta API.
 const setCorsHeaders = (res) => {
     res.setHeader('Access-Control-Allow-Credentials', true);
-    res.setHeader('Access-Control-Allow-Origin', '*'); // Em produção, você pode restringir ao seu domínio
-    res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,POST');
     res.setHeader(
         'Access-Control-Allow-Headers',
         'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version'
@@ -22,192 +22,140 @@ const setCorsHeaders = (res) => {
 };
 
 export default async function handler(req, res) {
-    // 1. Aplicar Headers de CORS imediatamente
+    // 1. Configurar CORS
     setCorsHeaders(res);
 
-    // 2. Responder a requisições "Preflight" (OPTIONS) imediatamente
     if (req.method === 'OPTIONS') {
         return res.status(200).end();
     }
 
-    console.log(`[${new Date().toISOString()}] Upload request received`);
-
     if (req.method !== 'POST') {
-        console.error('❌ Method not allowed:', req.method);
         return res.status(405).json({ error: 'Method Not Allowed' });
     }
 
+    console.log(`[${new Date().toISOString()}] Upload request received (Enterprise Mode)`);
+
     const PINATA_JWT = process.env.PINATA_JWT;
     if (!PINATA_JWT) {
-        console.error('❌ Vercel Error: PINATA_JWT key not found.');
-        return res.status(500).json({ error: 'Piñata API Key not configured on server.' });
+        console.error('❌ Server Error: PINATA_JWT key not found.');
+        return res.status(500).json({ error: 'Server configuration error.' });
     }
 
     const pinata = new pinataSDK({ pinataJWTKey: PINATA_JWT });
     let file = null;
 
     try {
-        // Configuração robusta do Formidable
+        // 2. Processar o Formulário
         const form = new Formidable({
-            maxFileSize: 50 * 1024 * 1024, // 50MB
+            maxFileSize: 50 * 1024 * 1024, // 50MB Limite
             uploadDir: '/tmp',
             keepExtensions: true,
-            multiples: true, // Garante tratamento consistente de arrays/objetos
+            multiples: true,
         });
 
-        console.log('📋 Parsing form data...');
         const [fields, files] = await new Promise((resolve, reject) => {
             form.parse(req, (err, fields, files) => {
-                if (err) {
-                    console.error('❌ Formidable .parse() callback error:', err);
-                    reject(new Error('Error in .parse() callback: ' + err.message));
-                }
+                if (err) reject(new Error('Form parsing failed: ' + err.message));
                 resolve([fields, files]);
             });
         });
 
-        // Tratamento seguro para pegar o arquivo (funciona com V2 e V3 do formidable)
         file = (files.file && Array.isArray(files.file)) ? files.file[0] : files.file;
         
         if (!file) {
-            console.error('❌ No file received in request');
             return res.status(400).json({ error: 'No file received.' });
         }
 
-        // =======================================================
-        // ### 1. VERIFICAÇÃO DE ASSINATURA ###
-        // =======================================================
-        console.log('🔑 Verifying wallet signature...');
-        
-        // Extração segura dos campos (tratando arrays ou strings)
+        // 3. Validar Assinatura (Segurança)
         const signature = (Array.isArray(fields.signature)) ? fields.signature[0] : fields.signature;
         const address = (Array.isArray(fields.address)) ? fields.address[0] : fields.address;
-        const userDescription = (Array.isArray(fields.description)) ? fields.description[0] : (fields.description || 'No description provided.');
         
+        // Mensagem Exata que o Frontend assina
         const message = "I am signing to authenticate my file for notarization on Backchain."; 
 
         if (!signature || !address) {
-            console.error('❌ Signature or address missing from request');
-            return res.status(401).json({ error: 'Unauthorized', details: 'Signature and address are required.' });
+            return res.status(401).json({ error: 'Unauthorized', details: 'Missing signature/address.' });
         }
 
         let recoveredAddress;
         try {
-            // Compatibilidade Ethers v5 vs v6
             if (ethers.verifyMessage) {
-                // Ethers v6
                 recoveredAddress = ethers.verifyMessage(message, signature);
             } else if (ethers.utils && ethers.utils.verifyMessage) {
-                // Ethers v5
                 recoveredAddress = ethers.utils.verifyMessage(message, signature);
-            } else {
-                throw new Error("Ethers library version incompatibility: verifyMessage not found.");
             }
         } catch (e) {
-            console.error('❌ Signature verification failed:', e.message);
             return res.status(401).json({ error: 'Unauthorized', details: 'Invalid signature format.' });
         }
 
         if (recoveredAddress.toLowerCase() !== address.toLowerCase()) {
-            console.error(`❌ Signature mismatch. Expected: ${address}, Got: ${recoveredAddress}`);
-            return res.status(401).json({ error: 'Unauthorized', details: 'Signature does not match address.' });
+            return res.status(401).json({ error: 'Unauthorized', details: 'Signature mismatch.' });
         }
 
-        console.log('✅ Signature verified for address:', recoveredAddress);
+        console.log('✅ Signature verified.');
 
         // =======================================================
-        // ### 2. UPLOAD DO ARQUIVO (ETAPA 1 de 2) ###
+        // ### 4. CALCULAR HASH SHA-256 (PROVA MATEMÁTICA) ###
         // =======================================================
-
-        console.log('📖 Creating file stream from:', file.filepath);
-        const stream = fs.createReadStream(file.filepath);
+        console.log('🔒 Calculating SHA-256 Content Hash...');
         
+        // Lê o buffer do arquivo para calcular o hash
+        const fileBuffer = fs.readFileSync(file.filepath);
+        const hashSum = crypto.createHash('sha256');
+        hashSum.update(fileBuffer);
+        
+        // Formata para string Hexadecimal com prefixo 0x (Para o tipo bytes32 do Solidity)
+        const contentHash = '0x' + hashSum.digest('hex');
+        
+        console.log('🔹 Generated Hash:', contentHash);
+
+        // =======================================================
+        // ### 5. UPLOAD DO ARQUIVO PARA O IPFS ###
+        // =======================================================
+        console.log('☁️ Uploading Raw File to Piñata IPFS...');
+        
+        const stream = fs.createReadStream(file.filepath);
         const fileOptions = {
             pinataMetadata: {
-                name: file.originalFilename || 'Notary File (Backchain)',
+                name: `Notary_Asset_${file.originalFilename || 'Unknown'}`,
+                keyvalues: {
+                    owner: address,
+                    timestamp: new Date().toISOString()
+                }
             },
-            pinataOptions: {
-                cidVersion: 1 
-            }
+            pinataOptions: { cidVersion: 1 }
         };
 
-        console.log('☁️  [ETAPA 1/2] Uploading FILE to Piñata IPFS...');
         const fileResult = await pinata.pinFileToIPFS(stream, fileOptions);
-        const fileHash = `ipfs://${fileResult.IpfsHash}`;
-        console.log('✅ File uploaded:', fileHash);
+        const ipfsUri = `ipfs://${fileResult.IpfsHash}`;
+        
+        console.log('✅ File Uploaded:', ipfsUri);
 
         // =======================================================
-        // ### 3. UPLOAD DOS METADADOS (ETAPA 2 de 2) ###
+        // ### 6. RETORNO PARA O FRONTEND ###
         // =======================================================
-        
-        const notarizationTimestamp = new Date().toISOString();
-        const notarizerWallet = address;
-        const finalDescription = `Notarized By Backcoin.Org Decentralized Notary On ${notarizationTimestamp}, Wallet ${notarizerWallet}. Description: "${userDescription}"`;
-        
-        const mimeType = file.mimetype || '';
-        let contentField = 'image';
-        
-        // Define o campo correto para OpenSea/Marketplaces
-        if (mimeType.startsWith('audio/') || mimeType.startsWith('video/')) {
-            contentField = 'animation_url';
-        }
-
-        // Cria o objeto JSON de metadados
-        const metadata = {
-            name: `Notary Certificate - ${file.originalFilename || 'File'}`,
-            description: finalDescription, 
-            [contentField]: fileHash, 
-            external_url: fileHash, 
-            attributes: [
-                { trait_type: "MIME Type", value: mimeType },
-                { trait_type: "Notarized By", value: notarizerWallet },
-                { trait_type: "Timestamp", value: notarizationTimestamp }
-            ]
-        };
-        
-        const metadataOptions = {
-            pinataMetadata: {
-                name: `${file.originalFilename || 'Notary'}_Metadata.json`,
-            },
-            pinataOptions: {
-                cidVersion: 1 
-            }
-        };
-
-        console.log('☁️  [ETAPA 2/2] Uploading METADATA JSON to Piñata IPFS...');
-        const metadataResult = await pinata.pinJSONToIPFS(metadata, metadataOptions);
-        const metadataHash = `ipfs://${metadataResult.IpfsHash}`;
-        console.log('✅ Metadata uploaded:', metadataHash);
-
-        // =======================================================
-        // ### 4. RETORNO ###
-        // =======================================================
-
-        console.log('✅ Upload successful!');
-        
+        // O Frontend pegará esses dados e enviará para a Blockchain
         return res.status(200).json({ 
             success: true,
-            cid: metadataResult.IpfsHash, 
-            ipfsUri: metadataHash, 
+            ipfsUri: ipfsUri,       // Vai para o campo string ipfsCid
+            contentHash: contentHash, // Vai para o campo bytes32 contentHash
+            fileName: file.originalFilename
         });
 
     } catch (error) {
-        console.error('❌ Upload Error (Main Catch):', error);
+        console.error('❌ Upload API Error:', error);
         return res.status(500).json({
             error: 'Server Error during upload.',
-            details: error.message || 'Internal error processing upload.',
+            details: error.message
         });
 
     } finally {
-        // Limpeza do arquivo temporário
-        if (file && file.filepath) {
+        // Limpeza do arquivo temporário do servidor
+        if (file && file.filepath && fs.existsSync(file.filepath)) {
             try {
-                if (fs.existsSync(file.filepath)) {
-                    fs.unlinkSync(file.filepath);
-                    console.log('🗑️  Temporary file deleted:', file.filepath);
-                }
+                fs.unlinkSync(file.filepath);
             } catch (e) {
-                console.warn('⚠️  Could not delete temporary file:', e.message);
+                console.warn('Could not delete temp file:', e.message);
             }
         }
     }
