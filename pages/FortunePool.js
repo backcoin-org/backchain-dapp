@@ -1,5 +1,5 @@
 // js/pages/FortunePool.js
-// ✅ VERSÃO FINAL V25: Tiers Atualizados (1/5@1.5x, 1/15@5x, 1/150@50x) + Taxa 0.00035 ETH
+// ✅ VERSÃO FINAL V26: Implementado PStake Check Inteligente
 
 import { State } from '../state.js';
 import { loadUserData, safeContractCall, API_ENDPOINTS } from '../modules/data.js';
@@ -127,12 +127,12 @@ function buildStepHTML(container) {
                     </button>
                 </div>
             </div>`;
-        // ATUALIZADO: Rand Max para 5, 15, 150
+        // Rand Max para 5, 15, 150
         document.getElementById('btn-random-all').onclick = () => { gameState.guesses = [rand(5), rand(15), rand(150)]; gameState.step = 4; renderStep(); };
         document.getElementById('btn-manual-pick').onclick = () => { gameState.step = 1; renderStep(); };
     }
     else if (gameState.step >= 1 && gameState.step <= 3) {
-        // ATUALIZADO: Tiers (Max e Descrição)
+        // Tiers (Max e Descrição)
         const tiers = [
             { max: 5, name: "BRONZE", reward: "1.5x", desc: "1 in 5 Chance" }, 
             { max: 15, name: "SILVER", reward: "5x", desc: "1 in 15 Chance" }, 
@@ -146,7 +146,7 @@ function buildStepHTML(container) {
         } else if (t.max <= 15) {
              grid = `<div class="flex flex-wrap justify-center gap-3 mb-8 max-w-sm mx-auto">${Array.from({length: t.max},(_,i)=>i+1).map(n=>`<button class="w-14 h-14 glass-panel rounded-xl font-bold text-lg text-white hover:bg-zinc-200 hover:text-black transition-all step-pick-btn" data-val="${n}">${n}</button>`).join('')}</div>`;
         } else {
-             // ATUALIZADO: Placeholder para 1-150
+             // Placeholder para 1-150
              grid = `<div class="max-w-xs mx-auto mb-8"><input type="number" id="master-input" class="w-full bg-black/50 border border-amber-500/30 rounded-xl text-center text-5xl py-6 text-white font-bold outline-none focus:border-amber-500" placeholder="1-${t.max}"><button id="confirm-master" class="w-full mt-4 btn-action py-3 rounded-xl shadow-lg" disabled>LOCK NUMBER</button></div>`;
         }
 
@@ -164,7 +164,7 @@ function buildStepHTML(container) {
             const b = document.getElementById('confirm-master'); 
             i.oninput = () => {
                 const val = parseInt(i.value);
-                // ATUALIZADO: Validação para 1-150
+                // Validação para 1-150
                 b.disabled = !val || val < 1 || val > 150;
             }; 
             b.onclick = () => { gameState.guesses[2] = parseInt(i.value); gameState.step = 4; renderStep(); }; 
@@ -175,7 +175,7 @@ function buildStepHTML(container) {
     }
 }
 
-// ATUALIZADO: Rand Max para 5, 15, 150
+// Rand Max para 5, 15, 150
 function rand(max) { return Math.floor(Math.random() * max) + 1; }
 
 function renderBettingScreen(container) {
@@ -266,7 +266,7 @@ function renderBettingScreen(container) {
         const hasZeros = gameState.guesses.includes(0);
 
         if (val > 0 && !hasZeros) { 
-            // ATUALIZADO: Multiplicadores para 1.5x, 5x, 50x
+            // Multiplicadores para 1.5x, 5x, 50x
             pot1.innerText = `+ ${(val * 1.5).toLocaleString()} BKC`; pot1.classList.add('profit-active');
             pot2.innerText = `+ ${(val * 5).toLocaleString()} BKC`; pot2.classList.add('profit-active');
             pot3.innerText = `+ ${(val * 50).toLocaleString()} BKC`; pot3.classList.add('profit-active');
@@ -342,7 +342,7 @@ function startSpinning() {
         const el = document.getElementById(`slot-${i}`);
         el.innerText = '?'; el.className = "slot-box rounded-2xl h-20 flex items-center justify-center text-4xl font-black slot-spinning";
     });
-    // ATUALIZADO: Rand Max para 5, 15, 150
+    // Rand Max para 5, 15, 150
     gameState.spinInterval = setInterval(() => {
         if(document.getElementById('slot-1')) document.getElementById('slot-1').innerText = rand(5);
         if(document.getElementById('slot-2')) document.getElementById('slot-2').innerText = rand(15);
@@ -519,13 +519,15 @@ async function executeTransaction() {
 
     btn.disabled = true;
     try {
-        // A. Approve BKC
-        const allowance = await State.bkcTokenContract.allowance(State.userAddress, addresses.fortunePool);
-        if (allowance < amountWei) {
-            btn.innerHTML = `<div class="loader inline-block"></div> APPROVING...`;
-            const tx = await State.bkcTokenContract.approve(addresses.fortunePool, ethers.MaxUint256);
-            await tx.wait();
-        }
+        // A. Approve BKC (Usando o EnsureApproval do transactions.js)
+        const approvalSuccess = await window.executeApproval(
+            State.bkcTokenContract, 
+            addresses.fortunePool, 
+            amountWei, 
+            btn, 
+            "Game Wager"
+        );
+        if (!approvalSuccess) return; 
         
         // B. Participate
         btn.innerHTML = `<div class="loader inline-block"></div> CONFIRMING...`;
@@ -589,7 +591,7 @@ async function waitForOracle(gameId) {
                 // Calculate Win Locally for UI
                 if(rolls[0] === gameState.guesses[0] || rolls[1] === gameState.guesses[1] || rolls[2] === gameState.guesses[2]) {
                     let mult = 0;
-                    // ATUALIZADO: Multiplicadores para 1.5x, 5x, 50x
+                    // Multiplicadores para 1.5x, 5x, 50x
                     if(rolls[0]===gameState.guesses[0]) mult=1.5; 
                     if(rolls[1]===gameState.guesses[1]) mult= gameState.isCumulative ? mult+5 : Math.max(mult, 5); 
                     if(rolls[2]===gameState.guesses[2]) mult= gameState.isCumulative ? mult+50 : Math.max(mult, 50); 
@@ -607,10 +609,17 @@ export const FortunePoolPage = {
     loadPoolBalance: async () => {},
     checkReqs: async () => {
         const el = document.getElementById('oracleFeeStatus');
+        const pstakeEl = document.getElementById('pstakeStatus');
         const btn = document.getElementById('btn-spin');
-        if(!State.isConnected) { if(el) el.innerHTML = `<span class="text-zinc-500">Connect Wallet</span>`; return; }
+
+        if(!State.isConnected) { 
+            if(el) el.innerHTML = `<span class="text-zinc-500">Connect Wallet</span>`; 
+            if(pstakeEl) pstakeEl.innerHTML = `<span class="text-zinc-500">PStake: N/A</span>`; 
+            return; 
+        }
         
         gameState.systemReady = true;
+
         if (!addresses.fortunePool || !State.actionsManagerContract) { 
             gameState.systemReady = false; 
             if(el) el.innerHTML = `<span class="text-red-500 font-bold">⚠️ CONTRACT ERROR</span>`; 
@@ -618,24 +627,49 @@ export const FortunePoolPage = {
             return; 
         }
         
-        // CORREÇÃO VISUAL: Exibir taxa correta (0.00035 ou 0.00175)
+        // --- 1. PSTAKE CHECK (Inteligente) ---
+        const MIN_PSTAKE_KEY = "TIGER_GAME_SERVICE";
+        const minPStake = State.systemPStakes?.[MIN_PSTAKE_KEY] || 0n;
+        const userPStake = State.userTotalPStake || 0n;
+        let isPStakeOK = true;
+
+        if (minPStake > 0n && userPStake < minPStake) {
+            isPStakeOK = false;
+            const requiredBkc = formatBigNumber(minPStake).toFixed(2);
+            pstakeEl.innerHTML = `<span class="text-red-500 font-bold">❌ PSTAKE REQUIRED: ${requiredBkc} BKC</span>`;
+            pstakeEl.className = "text-[10px] text-red-400 font-mono mt-2 px-4";
+        } else {
+            pstakeEl.innerHTML = `<span class="text-green-500">PSTAKE: OK</span> (${formatBigNumber(userPStake).toFixed(2)} BKC)`;
+            pstakeEl.className = "text-[10px] text-zinc-400 font-mono mt-2 px-4";
+        }
+        // ------------------------------------
+
+        // --- 2. ORACLE FEE CHECK ---
         let fee = 0n;
         try {
             let baseFee = await safeContractCall(State.actionsManagerContract, 'oracleFeeInWei', [], 0n);
-            if (baseFee === 0n) baseFee = ethers.parseEther("0.00035"); // Fallback visual (Ajustado)
+            if (baseFee === 0n) baseFee = ethers.parseEther("0.00035"); 
             fee = gameState.isCumulative ? (baseFee * 5n) : baseFee;
         } catch (e) { 
-            // Fallback total (Ajustado)
             fee = ethers.parseEther(gameState.isCumulative ? "0.00175" : "0.00035");
         }
         
         if(el) { 
             const feeEth = ethers.formatEther(fee); 
             el.innerText = `GAME FEE: ${feeEth} ETH`; 
-            el.className = "text-[10px] text-zinc-400 font-mono mt-4 px-4"; 
+            el.className = "text-[10px] text-zinc-400 font-mono mt-2 px-4"; 
         }
+        
+        // --- 3. FINAL READY CHECK ---
+        gameState.systemReady = isPStakeOK && (addresses.fortunePool && State.actionsManagerContract);
         const inp = document.getElementById('bet-input');
-        if(inp && parseFloat(inp.value) > 0) { if(btn) { btn.disabled = false; btn.innerText = "SPIN TO WIN"; } }
+
+        if(inp && parseFloat(inp.value) > 0) { 
+            if(btn) { 
+                btn.disabled = !gameState.systemReady; 
+                btn.innerText = gameState.systemReady ? "SPIN TO WIN" : "SYSTEM ERROR / PSTAKE MISSING";
+            } 
+        }
     },
 
     loadHistory: async () => {
@@ -644,7 +678,7 @@ export const FortunePoolPage = {
         if(!list || !State.isConnected) return;
         
         try {
-            const res = await fetch(`${API_ENDPOINTS.getHistory}/${State.userAddress}`);
+            const res = await fetch(`${API_ENDpoints.getHistory}/${State.userAddress}`);
             const data = await res.json();
             const games = data.filter(a => a.type === 'GameResult');
             
@@ -726,7 +760,10 @@ export const FortunePoolPage = {
                 <div class="glass-panel p-1 rounded-3xl relative overflow-hidden min-h-[450px] flex flex-col justify-center bg-black/40">
                     <div id="game-interaction-area" class="p-4 transition-opacity duration-300"></div>
                 </div>
-                <div class="flex justify-between text-[10px] text-zinc-500 font-mono mt-4 px-4"><span>System: Online</span><span id="oracleFeeStatus">Checking...</span></div>
+                <div class="flex justify-between text-[10px] text-zinc-500 font-mono mt-4 px-4">
+                    <div id="pstakeStatus" class="flex-1">Checking PStake...</div>
+                    <div id="oracleFeeStatus" class="text-right flex-1">Checking...</div>
+                </div>
                 <div class="mt-8">
                     <div class="flex justify-between items-center mb-3 ml-2 mr-2">
                         <h4 class="text-zinc-500 text-xs font-bold uppercase">Recent Results</h4>

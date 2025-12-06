@@ -1,5 +1,5 @@
 // js/modules/transactions.js
-// ✅ VERSÃO FINAL V7.0 (Enterprise Notary): Updated notarize signature & Safe Signer
+// ✅ VERSÃO FINAL V7.1 (FIX CRÍTICO DO SIGNER): Prioriza BrowserProvider/Signer
 
 const ethers = window.ethers;
 
@@ -21,7 +21,7 @@ const GAS_OPTS = {
 }; 
 
 // ====================================================================
-// CORE SIGNER/RUNNER UTILITY
+// CORE SIGNER/RUNNER UTILITY (AJUSTADO PARA FORÇAR SIGNER VÁLIDO)
 // ====================================================================
 
 async function getConnectedSigner() {
@@ -30,23 +30,22 @@ async function getConnectedSigner() {
         return null;
     }
     
-    // Prioriza Signer do State (Login inicial)
-    if (State.signer) {
-        return State.signer;
-    }
-
-    // Fallback: Tenta obter via BrowserProvider
+    // 🔥 CORREÇÃO CRÍTICA: Prioriza obter o Signer diretamente do Web3Provider (MetaMask/WalletConnect)
     if (State.web3Provider) {
         try {
             const provider = new ethers.BrowserProvider(State.web3Provider);
             const signer = await provider.getSigner(); 
+            // 🚨 SUCESSO: Retorna o Signer que pode assinar.
             return signer;
         } catch (e) {
-            console.error("Signer acquisition failed (Fallback):", e);
+            console.error("Signer acquisition failed (BrowserProvider):", e);
+            // Se falhar (e.g., usuário não deu permissão), o usuário não deve conseguir transacionar.
+            showToast("Failed to acquire wallet signer. Please check permissions in MetaMask.", "error");
+            return null;
         }
     }
 
-    showToast("Wallet signer is unavailable.", "error");
+    showToast("Wallet provider not found.", "error");
     return null;
 }
 
