@@ -1,5 +1,5 @@
 // pages/NotaryPage.js
-// ✅ VERSÃO REDESENHADA (V9.0): Bloqueio por Requisitos + Histórico On-Chain + UI Premium
+// ✅ VERSÃO CORRIGIDA (V9.1): Fix Event Name & Signature Match
 
 import { State } from '../state.js';
 import { formatBigNumber, formatPStake, renderLoading, renderNoData } from '../utils.js';
@@ -64,7 +64,6 @@ function checkNotaryRequirements() {
     const userBal = State.currentUserBalance || 0n;
     const reqFee = State.notaryFee || 0n;
 
-    // Se os dados ainda não carregaram (são 0 e não deveriam ser), consideramos "loading" mas bloqueamos preventivamente
     if (reqPStake === 0n && reqFee === 0n) return { allowed: false, reason: 'loading' };
 
     const hasPStake = userPStake >= reqPStake;
@@ -82,7 +81,7 @@ function checkNotaryRequirements() {
 
 function handleFiles(e) {
     const status = checkNotaryRequirements();
-    if (!status.allowed) return; // Bloqueia drag/drop se não tiver requisitos
+    if (!status.allowed) return; 
 
     const file = e.target.files ? e.target.files[0] : (e.dataTransfer ? e.dataTransfer.files[0] : null);
     if (!file) return;
@@ -93,14 +92,13 @@ function handleFiles(e) {
     }
     
     currentFileToUpload = file;
-    updateNotaryStep(2); // Avança para detalhes
+    updateNotaryStep(2); 
 }
 
 function initNotaryListeners() {
     const dropArea = document.getElementById('drop-area');
     const input = document.getElementById('notary-file-input');
     
-    // Só adiciona listeners se o elemento existir e o usuário tiver permissão
     if (!dropArea || !input || dropArea.classList.contains('cursor-not-allowed')) return;
 
     dropArea.addEventListener('click', () => input.click());
@@ -129,9 +127,8 @@ function renderNotaryPageLayout() {
     const container = document.getElementById('notary');
     if (!container) return;
     
-    // Evita re-renderizar o layout base se já existe
     if (container.querySelector('#notary-layout-base')) {
-        updateNotaryInterface(); // Apenas atualiza estados
+        updateNotaryInterface(); 
         return;
     }
 
@@ -166,13 +163,10 @@ function renderNotaryPageLayout() {
             </div>
 
             <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                
                 <div class="lg:col-span-2 space-y-6">
-                    
                     <div class="notary-glass rounded-xl p-6 relative overflow-hidden">
                          <div class="absolute top-1/2 left-6 right-6 h-0.5 bg-zinc-800 -z-0"></div>
                          <div id="progress-line-fill" class="absolute top-1/2 left-6 h-0.5 bg-amber-500 -z-0 transition-all duration-500 w-0"></div>
-                         
                          <div class="flex justify-between relative z-10 px-4">
                             <div class="flex flex-col items-center gap-2">
                                 <div id="dot-1" class="step-dot active"></div>
@@ -188,10 +182,8 @@ function renderNotaryPageLayout() {
                             </div>
                          </div>
                     </div>
-
                     <div id="notary-action-area" class="notary-glass rounded-xl p-8 min-h-[420px] flex flex-col justify-center items-center relative transition-all">
                         <div class="loader"></div> </div>
-
                 </div>
 
                 <div class="lg:col-span-1 space-y-6">
@@ -206,7 +198,6 @@ function renderNotaryPageLayout() {
                             </div>
                         </div>
                     </div>
-
                     <div class="p-6 rounded-xl bg-gradient-to-br from-zinc-900 to-black border border-zinc-800">
                         <h4 class="text-amber-500 font-bold text-xs mb-3 uppercase"><i class="fa-solid fa-lightbulb mr-1"></i> Did you know?</h4>
                         <p class="text-xs text-zinc-500 leading-relaxed text-justify">
@@ -225,21 +216,17 @@ function renderNotaryPageLayout() {
                         <i class="fa-solid fa-rotate"></i> Refresh
                     </button>
                 </div>
-                
                 <div id="history-container" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
                     ${renderLoading("Syncing blockchain events...")}
                 </div>
             </div>
         </div>
     `;
-
-    // Inicia lógica
     updateNotaryInterface();
     fetchUserHistory();
 }
 
 function updateNotaryInterface() {
-    // 1. Atualiza Status Badge e Lista de Requisitos
     const badge = document.getElementById('service-status-badge');
     const reqList = document.getElementById('requirements-list');
     const actionArea = document.getElementById('notary-action-area');
@@ -286,9 +273,8 @@ function updateNotaryInterface() {
         </div>
     `;
 
-    // Action Area Logic (The Guard)
+    // Action Area Logic
     if (!check.allowed) {
-        // RENDERIZA TELA DE BLOQUEIO
         if (check.reason === 'loading') {
             actionArea.innerHTML = `<div class="loader"></div><p class="mt-4 text-zinc-500 text-xs">Loading protocols...</p>`;
         } else if (check.reason === 'wallet') {
@@ -303,7 +289,6 @@ function updateNotaryInterface() {
                 </div>
             `;
         } else {
-            // Requisitos não atendidos (pStake ou Saldo)
             actionArea.innerHTML = `
                 <div class="text-center p-6 max-w-md">
                     <div class="w-20 h-20 bg-red-900/20 rounded-full flex items-center justify-center mx-auto mb-4 border border-red-500/30">
@@ -322,12 +307,9 @@ function updateNotaryInterface() {
             `;
         }
     } else {
-        // PERMITIDO: Se não tiver arquivo, mostra step 1, senão mantém o step atual
         if (!currentFileToUpload) {
             updateNotaryStep(1);
         } else {
-            // Se já tem arquivo, re-renderiza o step atual para garantir que o DOM esteja lá
-            // (Mas cuidado para não resetar input de texto se estiver no step 2)
             const contentExists = document.getElementById('step-content-active');
             if(!contentExists) updateNotaryStep(2);
         }
@@ -338,7 +320,6 @@ function updateNotaryStep(step) {
     const actionArea = document.getElementById('notary-action-area');
     if (!actionArea) return;
 
-    // Atualiza Barra de Progresso
     const line = document.getElementById('progress-line-fill');
     if (line) line.style.width = step === 1 ? '0%' : step === 2 ? '50%' : '100%';
 
@@ -438,13 +419,12 @@ function updateNotaryStep(step) {
             </div>
         `;
     }
-    // Necessário expor a função globalmente para o onclick funcionar dentro do innerHTML modular
     window.updateNotaryStep = updateNotaryStep;
     window.handleSignAndUpload = handleSignAndUpload;
 }
 
 // =========================================================================
-// TRANSAÇÃO & UPLOAD (LÓGICA MANTIDA E MELHORADA)
+// TRANSAÇÃO & UPLOAD
 // =========================================================================
 
 async function handleSignAndUpload(btn) {
@@ -460,8 +440,9 @@ async function handleSignAndUpload(btn) {
         const desc = rawDesc && rawDesc.trim() !== "" ? rawDesc : "No description provided.";
         
         // 1. Assinatura Off-chain
+        // CORREÇÃO CRÍTICA: Mensagem fixa para bater com upload.js
         const signer = await State.provider.getSigner();
-        const message = `I authorize the notarization of file: ${currentFileToUpload.name}\nTimestamp: ${Date.now()}`;
+        const message = "I am signing to authenticate my file for notarization on Backchain.";
         const signature = await signer.signMessage(message);
         
         // 2. Animação de Overlay
@@ -471,7 +452,6 @@ async function handleSignAndUpload(btn) {
         
         if (overlay) { overlay.classList.remove('hidden'); overlay.classList.add('flex'); }
 
-        // Simulador de progresso (3 min max)
         let progress = 0;
         progressTimer = setInterval(() => {
             progress += 0.5;
@@ -486,7 +466,7 @@ async function handleSignAndUpload(btn) {
             if (statusText) statusText.innerText = next;
         }, 4000);
 
-        // 3. Upload IPFS (Com timeout)
+        // 3. Upload IPFS
         const formData = new FormData();
         formData.append('file', currentFileToUpload);
         formData.append('signature', signature);
@@ -499,7 +479,10 @@ async function handleSignAndUpload(btn) {
         const res = await fetch(API_ENDPOINTS.uploadFileToIPFS, { method: 'POST', body: formData, signal: controller.signal });
         clearTimeout(timeoutId);
 
-        if (!res.ok) throw new Error("Upload Failed");
+        if (!res.ok) {
+            const errData = await res.json().catch(() => ({}));
+            throw new Error(errData.details || "Upload Failed");
+        }
         const data = await res.json();
         currentUploadedIPFS_URI = data.ipfsUri;
 
@@ -547,42 +530,29 @@ async function fetchUserHistory() {
     if (!container || !State.isConnected) return;
     
     try {
-        // Usa o contrato do Notary ou EcosystemManager para buscar logs
-        // Supondo evento: DocumentNotarized(address indexed user, string ipfsHash, uint256 timestamp)
-        
-        // *Em produção, ideal usar The Graph ou Indexer. Aqui faremos queryFilter simples.*
-        // Mock se não tiver contrato instanciado ainda, tenta carregar
-        if (!State.ecosystemManagerContract) await loadPublicData();
-        const contract = State.ecosystemManagerContract;
+        if (!State.decentralizedNotaryContract) await loadPublicData();
+        const contract = State.decentralizedNotaryContract; // CORREÇÃO: Usar o contrato do Notário
 
         if (!contract) {
             container.innerHTML = renderNoData("Contract not available.");
             return;
         }
 
-        // Tenta buscar eventos dos ultimos blocos (limitado para não quebrar RPC)
-        // Nota: Isso depende da implementação exata do contrato. 
-        // Se o contrato não tiver evento exposto, não funcionará. 
-        // Vamos assumir que existe uma função getViewUserDocuments ou eventos.
-        
-        // OPÇÃO A: Ler de array (mais comum em contratos simples)
-        // const docs = await contract.getUserDocuments(State.userAddress);
-        
-        // OPÇÃO B: Ler eventos (mais robusto para histórico)
-        const filter = contract.filters.DocumentNotarized ? contract.filters.DocumentNotarized(State.userAddress) : null;
+        // CORREÇÃO CRÍTICA: Nome correto do evento do Smart Contract: NotarizationEvent
+        // Definição: event NotarizationEvent(uint256 indexed tokenId, address indexed owner, string indexed documentMetadataHash, uint256 feePaid);
+        // Filtro: owner é o index 1 (argumento 2)
+        const filter = contract.filters.NotarizationEvent(null, State.userAddress); 
         
         let docs = [];
         if (filter) {
-            const events = await contract.queryFilter(filter, -10000); // Ultimos 10k blocos (exemplo)
+            const events = await contract.queryFilter(filter, -50000); // 50k blocos
             docs = events.map(e => ({
-                hash: e.args[1], // ipfsHash
-                timestamp: Number(e.args[2] || 0), // timestamp (se existir)
+                // args[0]=tokenId, args[1]=owner, args[2]=metadataHash, args[3]=fee
+                hash: e.args[2], 
                 txHash: e.transactionHash
+                // Timestamp não vem no evento, ignorado para economizar RPC
             })).reverse();
-        } else {
-             // Fallback para teste/mock se o evento não existir na ABI atual
-             console.warn("Event DocumentNotarized not found in ABI. History may be empty.");
-        }
+        } 
 
         if (docs.length === 0) {
             container.innerHTML = `
@@ -595,10 +565,7 @@ async function fetchUserHistory() {
         }
 
         container.innerHTML = docs.map(doc => {
-            const date = new Date(doc.timestamp * 1000).toLocaleDateString();
-            const isImage = doc.hash.match(/\.(jpg|jpeg|png|gif)$/i) || !doc.hash.includes('.'); // Simples heurística
-            
-            // IPFS Gateway (usando um público robusto)
+            const isImage = doc.hash.match(/\.(jpg|jpeg|png|gif)$/i) || !doc.hash.includes('.'); 
             const ipfsLink = `https://ipfs.io/ipfs/${doc.hash.replace('ipfs://', '')}`;
 
             return `
@@ -608,9 +575,6 @@ async function fetchUserHistory() {
                             `<img src="${ipfsLink}" class="w-full h-full object-cover opacity-60 group-hover:opacity-100 transition-opacity" onerror="this.src='assets/file_icon.png'">` : 
                             `<i class="fa-solid fa-file-contract text-4xl text-zinc-700 group-hover:text-amber-500 transition-colors"></i>`
                         }
-                        <div class="absolute top-2 right-2 bg-black/60 px-2 py-1 rounded text-[10px] text-white backdrop-blur-sm">
-                            ${date}
-                        </div>
                     </div>
                     <div class="p-4">
                         <div class="flex items-center justify-between mb-2">
@@ -637,7 +601,6 @@ async function fetchUserHistory() {
 
 async function loadNotaryPublicData() {
     const now = Date.now();
-    // Cache de 30s
     if (now - lastNotaryDataFetch < 30000 && State.notaryFee > 0n) return;
 
     try {
@@ -665,12 +628,12 @@ async function loadNotaryPublicData() {
 export const NotaryPage = {
     render: async (isActive) => {
         if (!isActive) return;
-        renderNotaryPageLayout(); // Renderiza esqueleto
-        await loadNotaryPublicData(); // Busca dados
+        renderNotaryPageLayout(); 
+        await loadNotaryPublicData(); 
         if (State.isConnected) {
-            await loadUserData(); // Garante saldo/stake atualizados
+            await loadUserData(); 
         }
-        updateNotaryInterface(); // Atualiza UI com dados reais (ou bloqueia)
+        updateNotaryInterface(); 
     },
     reset: () => {
         currentFileToUpload = null;

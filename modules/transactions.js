@@ -1,5 +1,5 @@
 // js/modules/transactions.js
-// ✅ VERSÃO FINAL V6.14: Forçar Signer do State (Última Solução Cliente)
+// ✅ VERSÃO FINAL V6.15: Notary Fix & Safe BigInt
 
 const ethers = window.ethers;
 
@@ -537,7 +537,9 @@ export async function executeInternalFaucet(btnElement) {
 
 export async function executeNotarizeDocument(documentURI, boosterId, submitButton) {
     const signer = await getConnectedSigner();
+    // ✅ FIX 1: Feedback de erro se contratos/signer não estiverem prontos
     if (!signer || !State.bkcTokenContract || !State.decentralizedNotaryContract) {
+        showToast("Contracts or Signer not ready.", "error");
         return false;
     }
 
@@ -550,7 +552,10 @@ export async function executeNotarizeDocument(documentURI, boosterId, submitButt
         if (!approved) return false;
     }
 
-    const notarizeTxPromise = notaryContract.notarize(documentURI, BigInt(boosterId), GAS_OPTS);
+    // ✅ FIX 2: Conversão segura de BigInt (Undefined/Null vira 0n)
+    const bId = boosterId ? BigInt(boosterId) : 0n;
+
+    const notarizeTxPromise = notaryContract.notarize(documentURI, bId, GAS_OPTS);
 
     return await executeTransaction(notarizeTxPromise, 'Document notarized successfully!', 'Error notarizing document', submitButton);
 }
