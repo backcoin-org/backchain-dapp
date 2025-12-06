@@ -1,5 +1,5 @@
-// pages/DashboardPage.js
-// ✅ VERSÃO FINAL V6.1: Faucet Widget "20 BKC" + UI Fixes
+// js/pages/DashboardPage.js
+// ✅ FINAL VERSION V7.0: Presale Stats Integration + Activity Feed V9.8 Support
 
 const ethers = window.ethers;
 
@@ -21,12 +21,13 @@ import {
 import { showToast, addNftToWallet } from '../ui-feedback.js';
 import { addresses, boosterTiers } from '../config.js'; 
 
-// --- ESTADO LOCAL ---
+// --- LOCAL STATE ---
 const DashboardState = {
     hasRenderedOnce: false,
     lastUpdate: 0,
     activities: [], 
     filteredActivities: [], 
+    userProfile: null, // 🔥 Novo campo para dados da API
     pagination: {
         currentPage: 1,
         itemsPerPage: 5 
@@ -39,7 +40,7 @@ const DashboardState = {
 
 const EXPLORER_BASE_URL = "https://sepolia.etherscan.io/tx/";
 
-// --- HELPER: DATA ---
+// --- HELPER: DATE FORMAT ---
 function formatDate(timestamp) {
     if (!timestamp) return 'Just now';
     try {
@@ -53,7 +54,7 @@ function formatDate(timestamp) {
     }
 }
 
-// --- ANIMAÇÃO DE RECOMPENSAS ---
+// --- REWARDS ANIMATION ---
 let animationFrameId = null;
 let displayedRewardValue = 0n;
 
@@ -81,7 +82,7 @@ function animateClaimableRewards(targetNetValue) {
 }
 
 // ============================================================================
-// 1. RENDERIZAÇÃO ESTRUTURAL
+// 1. RENDER LAYOUT
 // ============================================================================
 
 function renderDashboardLayout() {
@@ -167,6 +168,31 @@ function renderDashboardLayout() {
 
                             <div id="dash-booster-area" class="flex-1 md:border-l md:border-zinc-700/50 md:pl-8 flex flex-col justify-center min-h-[180px]">
                                 ${renderLoading()}
+                            </div>
+                        </div>
+                    </div>
+
+                    <div id="dash-presale-stats" class="hidden glass-panel border border-amber-500/20">
+                        <div class="flex justify-between items-center mb-4">
+                            <h3 class="text-sm font-bold text-amber-500 uppercase tracking-widest">
+                                <i class="fa-solid fa-star mr-2"></i> Presale Portfolio
+                            </h3>
+                            <span class="text-xs text-zinc-500">Synced via Indexer V9.8</span>
+                        </div>
+                        <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                            <div class="bg-zinc-900/50 rounded-lg p-3 border border-zinc-800">
+                                <p class="text-xs text-zinc-500">Total Spent</p>
+                                <p id="stats-total-spent" class="text-lg font-bold text-white">0 ETH</p>
+                            </div>
+                            <div class="bg-zinc-900/50 rounded-lg p-3 border border-zinc-800">
+                                <p class="text-xs text-zinc-500">Boosters Owned</p>
+                                <p id="stats-total-boosters" class="text-lg font-bold text-white">0</p>
+                            </div>
+                            <div class="bg-zinc-900/50 rounded-lg p-3 border border-zinc-800 col-span-2">
+                                <p class="text-xs text-zinc-500 mb-1">Top Tiers</p>
+                                <div id="stats-tier-badges" class="flex gap-1 flex-wrap">
+                                    <span class="text-xs text-zinc-600">No data yet</span>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -300,7 +326,7 @@ function renderMetricCard(label, icon, iconColor, id) {
 }
 
 // ============================================================================
-// 2. LÓGICA DE DADOS GLOBAIS
+// 2. DATA LOGIC (GLOBAL + USER)
 // ============================================================================
 
 async function updateGlobalMetrics() {
@@ -354,6 +380,45 @@ async function updateGlobalMetrics() {
     } catch (e) { console.error("Metrics Error", e); }
 }
 
+async function fetchUserProfile() {
+    if (!State.userAddress) return;
+    try {
+        // 🔥 NOVO ENDPOINT DE PERFIL
+        const response = await fetch(`${API_ENDPOINTS.getBoosters.replace('/boosters/', '/profile/')}/${State.userAddress}`);
+        if (response.ok) {
+            DashboardState.userProfile = await response.json();
+            renderPresaleStats(DashboardState.userProfile);
+        }
+    } catch (e) { console.error("Profile Fetch Error", e); }
+}
+
+function renderPresaleStats(profile) {
+    const statsDiv = document.getElementById('dash-presale-stats');
+    if (!statsDiv || !profile || !profile.presale) return;
+
+    statsDiv.classList.remove('hidden');
+
+    const spentWei = profile.presale.totalSpentWei || 0;
+    const spentEth = parseFloat(ethers.formatEther(BigInt(spentWei))).toFixed(4);
+    
+    document.getElementById('stats-total-spent').innerText = `${spentEth} ETH`;
+    document.getElementById('stats-total-boosters').innerText = profile.presale.totalBoosters || 0;
+
+    const badgesContainer = document.getElementById('stats-tier-badges');
+    if (badgesContainer && profile.presale.tiersOwned) {
+        let html = '';
+        Object.entries(profile.presale.tiersOwned).forEach(([tierId, count]) => {
+            // Mapeia ID para Nome (Ex: 1 -> Iron)
+            const tierConfig = boosterTiers[Number(tierId)-1]; 
+            const color = tierConfig ? tierConfig.color.replace('text-', 'bg-').replace('300', '500/20').replace('400', '500/20').replace('500', '500/20') : 'bg-zinc-700';
+            const name = tierConfig ? tierConfig.name : `Tier ${tierId}`;
+            
+            html += `<span class="text-[10px] ${color} text-white px-2 py-0.5 rounded border border-white/10">${count}x ${name}</span>`;
+        });
+        if(html) badgesContainer.innerHTML = html;
+    }
+}
+
 async function updateUserHub(forceRefresh = false) {
     if (!State.isConnected) {
         const boosterArea = document.getElementById('dash-booster-area');
@@ -364,7 +429,6 @@ async function updateUserHub(forceRefresh = false) {
                     <button onclick="window.openConnectModal()" class="text-amber-400 hover:text-white text-sm font-bold border border-amber-400/30 px-4 py-2 rounded hover:bg-amber-400/10 transition-all">Connect Wallet</button>
                 </div>`;
         }
-        // Esconde o Widget se não estiver conectado
         const faucetWidget = document.getElementById('dashboard-faucet-widget');
         if(faucetWidget) faucetWidget.classList.add('hidden');
         return;
@@ -378,10 +442,12 @@ async function updateUserHub(forceRefresh = false) {
 
         await loadUserData(forceRefresh); 
         
-        // --- LOGICA DO WIDGET FAUCET ---
+        // Fetch do Perfil Completo (Stats de Pré-venda)
+        fetchUserProfile();
+
+        // --- FAUCET WIDGET LOGIC ---
         const faucetWidget = document.getElementById('dashboard-faucet-widget');
         if (faucetWidget) {
-            // Se < 10 BKC, mostra o widget
             const lowBalanceThreshold = ethers.parseUnits("10", 18);
             if (State.currentUserBalance < lowBalanceThreshold) {
                 faucetWidget.classList.remove('hidden');
@@ -395,13 +461,12 @@ async function updateUserHub(forceRefresh = false) {
         
         animateClaimableRewards(netClaimAmount);
 
-        // Exibe o Potencial de Ganho Extra (ISCA)
+        // Potential Gain Display
         const gainArea = document.getElementById('dash-user-gain-area');
         const gainVal = document.getElementById('dash-user-potential-gain');
 
         if (gainArea && gainVal) {
             if (totalRewards > 0n && feeAmount > 0n) {
-                // O ganho potencial é exatamente o valor que está sendo descontado (taxa)
                 gainVal.textContent = formatBigNumber(feeAmount).toFixed(4);
                 gainArea.classList.remove('hidden');
             } else {
@@ -429,16 +494,15 @@ function renderBoosterCard(data, claimDetails) {
 
     const totalPending = claimDetails ? claimDetails.totalRewards : 0n;
     
-    // --- LÓGICA DE GAMIFICAÇÃO (YIELD EFFICIENCY) ---
-    // [CRÍTICO] Verificação de 'source' para evitar NFT Fantasma
+    // Check Source to avoid Ghost NFTs
     const hasValidBooster = data && data.highestBoost > 0 && data.source !== 'none';
     const currentBoostBips = hasValidBooster ? data.highestBoost : 0;
     
-    // Calcula eficiência: 50% (Base) + (BoostBips / 100)%
+    // Efficiency: 50% (Base) + (BoostBips / 100)%
     let efficiency = 50 + (currentBoostBips / 100);
     if (efficiency > 100) efficiency = 100;
 
-    // --- CENÁRIO 1: EFICIÊNCIA ABAIXO DE 100% (UPSELL) ---
+    // --- SCENARIO 1: LOW EFFICIENCY (UPSELL) ---
     if (efficiency < 100) {
         const feeAmount = claimDetails?.feeAmount || 0n; 
         const lostFormatted = formatBigNumber(feeAmount).toFixed(4);
@@ -447,7 +511,6 @@ function renderBoosterCard(data, claimDetails) {
             ? `Leaving <span class="text-amber-400 font-bold">${lostFormatted} BKC</span> on the table.`
             : "Boost your efficiency to 100% to claim full rewards.";
 
-        // Barra de Progresso Visual
         const progressBar = `
             <div class="w-full bg-zinc-800 rounded-full h-2.5 mb-2 border border-zinc-700 overflow-hidden relative">
                 <div class="bg-gradient-to-r from-red-500 to-amber-500 h-2.5 rounded-full transition-all duration-1000" style="width: ${efficiency}%"></div>
@@ -486,7 +549,7 @@ function renderBoosterCard(data, claimDetails) {
         return;
     }
 
-    // --- CENÁRIO 2: 100% EFICIÊNCIA (SUCCESS STATE) ---
+    // --- SCENARIO 2: MAX EFFICIENCY (SUCCESS) ---
     const isRented = data.source === 'rented';
     const badgeColor = isRented ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/30' : 'bg-green-500/20 text-green-300 border-green-500/30';
     const badgeText = isRented ? 'Rented Active' : 'Owner Active';
@@ -530,7 +593,7 @@ function renderBoosterCard(data, claimDetails) {
 }
 
 // ============================================================================
-// 4. TABELA DE ATIVIDADES
+// 4. ACTIVITY TABLE
 // ============================================================================
 
 async function fetchAndProcessActivities() {
@@ -625,8 +688,6 @@ function renderActivityPage() {
         else if(t === 'GAMEREQUESTED') { icon = 'fa-ticket'; color = 'text-amber-500'; label = 'Fortune Pool: Bet'; }
         else if(t === 'GAMERESULT') { icon = 'fa-robot'; color = 'text-cyan-400'; label = 'Fortune Oracle: Result'; }
         else if(t.includes('FORTUNE') || t.includes('GAME')) { icon = 'fa-trophy'; color = 'text-yellow-400'; label = 'Fortune Game'; }
-        
-        // --- NOVA LÓGICA PARA NOTARY (Icone fixo) ---
         else if(t.includes('NOTARY')) { icon = 'fa-stamp'; color = 'text-indigo-400'; label = 'Document Notarized'; }
         
         const txLink = item.txHash ? `${EXPLORER_BASE_URL}${item.txHash}` : '#';
@@ -687,11 +748,10 @@ function attachDashboardListeners() {
                 setTimeout(() => { btn.innerHTML = '<i class="fa-solid fa-rotate"></i> Sync Data'; btn.disabled = false; }, 1000);
             }
 
-            // LISTENER DO FAUCET WIDGET
             if (target.closest('#quick-faucet-btn')) {
                 const btn = target.closest('#quick-faucet-btn');
                 await executeInternalFaucet(btn);
-                await updateUserHub(true); // Atualiza saldo na hora
+                await updateUserHub(true); 
             }
 
             if (target.closest('.delegate-link')) { e.preventDefault(); window.navigateTo('mine'); }
