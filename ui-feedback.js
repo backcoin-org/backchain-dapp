@@ -1,5 +1,5 @@
 // js/ui-feedback.js
-// ✅ VERSÃO FINAL: Arbitrum Rebrand + Links Arbiscan Corretos
+// ✅ VERSÃO FINAL: Arbitrum Rebrand + Links Arbiscan Corretos + NFT Error Handling
 
 import { DOMElements } from './dom-elements.js';
 import { State } from './state.js';
@@ -179,24 +179,45 @@ export const startCountdownTimers = (elements) => {
 
 // --- WALLET HELPERS ---
 
+/**
+ * Adds an NFT to the user's MetaMask wallet.
+ * Handles the "Suggested NFT is not owned" (-32002) error gracefully.
+ */
 export async function addNftToWallet(contractAddress, tokenId) {
     if (!tokenId || !window.ethereum) {
         showToast('No wallet detected.', 'error');
         return;
     }
+    
     try {
-        showToast(`Adding NFT #${tokenId} to wallet...`, 'info');
+        showToast(`Requesting wallet to track NFT #${tokenId}...`, 'info');
+        
         const wasAdded = await window.ethereum.request({ 
             method: 'wallet_watchAsset', 
             params: { 
                 type: 'ERC721', 
-                options: { address: contractAddress, tokenId: tokenId.toString() } 
+                options: { 
+                    address: contractAddress, 
+                    tokenId: tokenId.toString() 
+                } 
             } 
         });
-        if(wasAdded) showToast(`NFT #${tokenId} added successfully!`, 'success');
+
+        if(wasAdded) {
+            showToast(`NFT #${tokenId} added successfully!`, 'success');
+        } else {
+            showToast('Action cancelled by user.', 'warning');
+        }
+
     } catch (error) { 
-        console.error(error); 
-        showToast(`Error: ${error.message}`, 'error');
+        console.error("Wallet Watch Error:", error);
+        
+        // 🛠️ FIX: Handle RPC latency where Wallet doesn't see ownership yet
+        if (error.code === -32002 || (error.message && error.message.includes("not owned"))) {
+            showToast("Wallet syncing... Please wait 10s and try again.", "warning");
+        } else {
+            showToast(`Wallet Error: ${error.message}`, 'error');
+        }
     }
 }
 
