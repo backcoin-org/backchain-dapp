@@ -1,5 +1,5 @@
 // js/pages/FortunePool.js
-// ✅ VERSÃO FINAL V27: Debug Approve & Gas Limit Fix (Forced for Testnet)
+// ✅ VERSÃO FINAL V28: Deep Debug Participate & Gas Limit Fix
 
 import { State } from '../state.js';
 import { loadUserData, safeContractCall, API_ENDPOINTS } from '../modules/data.js';
@@ -9,10 +9,10 @@ import { addresses } from '../config.js';
 
 const ethers = window.ethers;
 
-// ✅ Configuração de Rede: Arbitrum Sepolia
+// ✅ Network Config: Arbitrum Sepolia
 const EXPLORER_BASE = "https://sepolia.arbiscan.io/tx/";
 
-// --- HELPER DE DATA ---
+// --- DATE HELPER ---
 function formatDate(timestamp) {
     if (!timestamp) return 'Just now';
     try {
@@ -128,7 +128,7 @@ function addXP(amount) {
     saveProgress(); 
 }
 
-// --- RENDERIZACAO DE PASSOS ---
+// --- RENDER STEPS ---
 function renderStep() {
     const container = document.getElementById('game-interaction-area');
     if (!container) return;
@@ -152,12 +152,12 @@ function buildStepHTML(container) {
                     </button>
                 </div>
             </div>`;
-        // Rand Max para 3, 10, 100 (MUST MATCH CONTRACT LIMITS!)
+        // Rand Max for 3, 10, 100 (MUST MATCH CONTRACT LIMITS!)
         document.getElementById('btn-random-all').onclick = () => { gameState.guesses = [rand(3), rand(10), rand(100)]; gameState.step = 4; renderStep(); };
         document.getElementById('btn-manual-pick').onclick = () => { gameState.step = 1; renderStep(); };
     }
     else if (gameState.step >= 1 && gameState.step <= 3) {
-        // Tiers (Max e Descrição) - MUST MATCH CONTRACT LIMITS!
+        // Tiers (Max & Description) - MUST MATCH CONTRACT LIMITS!
         // Contract: guesses[0] 1-3, guesses[1] 1-10, guesses[2] 1-100
         const tiers = [
             { max: 3, name: "BRONZE", reward: "1.5x", desc: "1 in 3 Chance" }, 
@@ -172,7 +172,7 @@ function buildStepHTML(container) {
         } else if (t.max <= 15) {
              grid = `<div class="flex flex-wrap justify-center gap-3 mb-8 max-w-sm mx-auto">${Array.from({length: t.max},(_,i)=>i+1).map(n=>`<button class="w-14 h-14 glass-panel rounded-xl font-bold text-lg text-white hover:bg-zinc-200 hover:text-black transition-all step-pick-btn" data-val="${n}">${n}</button>`).join('')}</div>`;
         } else {
-             // Placeholder para 1-150
+             // Placeholder for 1-100
              grid = `<div class="max-w-xs mx-auto mb-8"><input type="number" id="master-input" class="w-full bg-black/50 border border-amber-500/30 rounded-xl text-center text-5xl py-6 text-white font-bold outline-none focus:border-amber-500" placeholder="1-${t.max}"><button id="confirm-master" class="w-full mt-4 btn-action py-3 rounded-xl shadow-lg" disabled>LOCK NUMBER</button></div>`;
         }
 
@@ -190,8 +190,8 @@ function buildStepHTML(container) {
             const b = document.getElementById('confirm-master'); 
             i.oninput = () => {
                 const val = parseInt(i.value);
-                // Validação para 1-150
-                b.disabled = !val || val < 1 || val > 150;
+                // Validate 1-100
+                b.disabled = !val || val < 1 || val > 100;
             }; 
             b.onclick = () => { gameState.guesses[2] = parseInt(i.value); gameState.step = 4; renderStep(); }; 
         }
@@ -201,7 +201,7 @@ function buildStepHTML(container) {
     }
 }
 
-// Rand Max para 5, 15, 150
+// Rand Max
 function rand(max) { return Math.floor(Math.random() * max) + 1; }
 
 function renderBettingScreen(container) {
@@ -277,7 +277,7 @@ function renderBettingScreen(container) {
     const inp = document.getElementById('bet-input');
     const btn = document.getElementById('btn-spin');
     
-    // ✅ State Persistence: Recupera o valor da aposta se já existir
+    // ✅ Persistence: Recover bet amount if exists
     if (gameState.betAmount > 0) inp.value = gameState.betAmount;
 
     const validate = () => {
@@ -289,11 +289,11 @@ function renderBettingScreen(container) {
         const pot2 = document.getElementById('win-pot-2');
         const pot3 = document.getElementById('win-pot-3');
 
-        // Check Palpites (Zeros)
+        // Check Guesses (Zeros)
         const hasZeros = gameState.guesses.includes(0);
 
         if (val > 0 && !hasZeros) { 
-            // Multiplicadores para 1.5x, 5x, 50x
+            // Multipliers 1.5x, 5x, 50x
             pot1.innerText = `+ ${(val * 1.5).toLocaleString()} BKC`; pot1.classList.add('profit-active');
             pot2.innerText = `+ ${(val * 5).toLocaleString()} BKC`; pot2.classList.add('profit-active');
             pot3.innerText = `+ ${(val * 50).toLocaleString()} BKC`; pot3.classList.add('profit-active');
@@ -369,7 +369,7 @@ function startSpinning() {
         const el = document.getElementById(`slot-${i}`);
         el.innerText = '?'; el.className = "slot-box rounded-2xl h-20 flex items-center justify-center text-4xl font-black slot-spinning";
     });
-    // Rand Max para 5, 15, 150
+    // Rand Max for 5, 15, 150
     gameState.spinInterval = setInterval(() => {
         if(document.getElementById('slot-1')) document.getElementById('slot-1').innerText = rand(5);
         if(document.getElementById('slot-2')) document.getElementById('slot-2').innerText = rand(15);
@@ -486,12 +486,12 @@ function closeOverlay() {
 }
 
 // -------------------------------------------------------------
-// ✅ TRANSACTION EXECUTION V27: Debug Approve & Gas Limit Fix
+// ✅ TRANSACTION EXECUTION V28: Deep Debug Participate & Gas Limit Fix
 // -------------------------------------------------------------
 async function executeTransaction() {
     if (!State.isConnected) return showToast("Connect wallet", "error");
     
-    // 1. Validação de Palpites
+    // 1. Validate Guesses (Must not contain 0)
     if (gameState.guesses.includes(0)) {
         showToast("Select all 3 numbers!", "error");
         if(gameState.guesses[0] === 0) { gameState.step = 1; renderStep(); }
@@ -505,33 +505,27 @@ async function executeTransaction() {
     const btn = document.getElementById('btn-spin');
     const amountWei = ethers.parseEther(gameState.betAmount.toString());
     
-    // 2. CÁLCULO DE TAXA (CRÍTICO: USO DE BIGINT E PRECISION)
+    // 2. FEE CALCULATION
     const isCumulative = gameState.isCumulative;
     let fee = 0n;
 
     try {
         console.log("🔍 [INIT] Fetching oracleFeeInWei from contract...");
         const baseFee = await State.actionsManagerContract.oracleFeeInWei();
-        
-        // Conversão Explícita para BigInt
         const baseFeeBigInt = BigInt(baseFee); 
         console.log("   > Base Fee (Contract):", baseFeeBigInt.toString(), "Wei");
         
-        // Cálculo Multiplicador (5x se Cumulative)
         fee = isCumulative ? (baseFeeBigInt * 5n) : baseFeeBigInt;
         console.log("   > Final Fee (Calculated):", fee.toString(), "Wei");
 
     } catch (e) {
         console.warn("⚠️ RPC Read Failed. Using FALLBACK Safe Value (0.00035 ETH).", e);
-        
-        // [IMPORTANTE] Fallback definido para 0.00035 ETH (Nova Taxa)
         const FALLBACK_BASE_FEE = ethers.parseEther("0.00035"); 
         fee = isCumulative ? (FALLBACK_BASE_FEE * 5n) : FALLBACK_BASE_FEE;
-        
         console.log("   > Fallback Fee Used:", fee.toString(), "Wei");
     }
     
-    // 3. Verificação de Saldo de ETH (Taxa + Gás)
+    // 3. ETH Balance Check
     try {
         const nativeBalance = await State.provider.getBalance(State.userAddress);
         const minRequired = fee + ethers.parseEther("0.002"); 
@@ -545,9 +539,9 @@ async function executeTransaction() {
     btn.disabled = true;
     try {
         const spender = addresses.fortunePool;
-        // VALIDATION FIX: Garante que o endereço é válido
+        // VALIDATION FIX: Ensure address is valid
         if (!spender || !ethers.isAddress(spender)) {
-             console.error("❌ Spender Invalido:", spender);
+             console.error("❌ Invalid Spender:", spender);
              showToast("Config Error: Spender Invalid. Reload.", "error");
              btn.disabled = false;
              return;
@@ -556,7 +550,6 @@ async function executeTransaction() {
         // A. Approve BKC
         btn.innerHTML = `<div class="loader inline-block"></div> APPROVING BKC...`;
         try {
-            // DEBUG LOG: Mostra endereços para conferência
             console.log("🔍 DEBUG APPROVE:", {
                 tokenAddress: await State.bkcTokenContract.getAddress(),
                 spenderAddress: spender,
@@ -566,7 +559,7 @@ async function executeTransaction() {
 
             const currentAllowance = await State.bkcTokenContract.allowance(State.userAddress, spender);
             if (currentAllowance < amountWei) {
-                // ✅ MANUAL GAS LIMIT FIX: Força 200k de gás para evitar erros de estimativa
+                // ✅ MANUAL GAS LIMIT FIX: Force 200k gas
                 const approveTx = await State.bkcTokenContract.approve(spender, amountWei, { gasLimit: 200000 });
                 await approveTx.wait();
                 showToast("✅ BKC Approved!", "success");
@@ -582,15 +575,21 @@ async function executeTransaction() {
         // B. Participate
         btn.innerHTML = `<div class="loader inline-block"></div> CONFIRMING...`;
         
-        console.log("🚀 Sending Transaction...");
-        console.log("   > Value (msg.value):", fee.toString());
+        // ✅ DEEP DEBUG LOG (CHECK CONSOLE FOR THIS!)
+        console.log("🚀 DEBUG PARTICIPATE PAYLOAD:", {
+            contractAddress: addresses.fortunePool,
+            amountBKC: amountWei.toString(),
+            guesses: gameState.guesses,
+            isCumulative: isCumulative,
+            feeETH: fee.toString()
+        });
         
-        // Chama participate enviando o valor EXATO calculado (fee) + GasLimit
+        // Call participate with EXACT fee + GasLimit
         const tx = await State.actionsManagerContract.participate(
             amountWei, 
             gameState.guesses, 
             isCumulative, 
-            { value: fee, gasLimit: 500000 } // ✅ Força 500k de gás para execução segura
+            { value: fee, gasLimit: 500000 } // ✅ Force 500k gas
         );
         
         startSpinning(); 
@@ -607,10 +606,11 @@ async function executeTransaction() {
         
         let msg = "Transaction Failed";
         
-        // Tratamento de erros comuns
-        if (e.message && e.message.includes("cf07063a")) msg = "Fee Mismatch (Limpe o Cache!)"; // InvalidFee error code
+        // Common error handling
+        if (e.message && e.message.includes("cf07063a")) msg = "Fee Mismatch (Clear Cache!)"; // InvalidFee error code
         else if (e.message && e.message.includes("insufficient funds")) msg = "Insufficient ETH for Gas";
         else if (e.reason) msg = e.reason;
+        else if (e.code === "ACTION_REJECTED") msg = "User rejected transaction";
         
         showToast(msg, "error");
         
@@ -641,7 +641,7 @@ async function waitForOracle(gameId) {
                 // Calculate Win Locally for UI
                 if(rolls[0] === gameState.guesses[0] || rolls[1] === gameState.guesses[1] || rolls[2] === gameState.guesses[2]) {
                     let mult = 0;
-                    // Multiplicadores para 1.5x, 5x, 50x
+                    // Multipliers 1.5x, 5x, 50x
                     if(rolls[0]===gameState.guesses[0]) mult=1.5; 
                     if(rolls[1]===gameState.guesses[1]) mult= gameState.isCumulative ? mult+5 : Math.max(mult, 5); 
                     if(rolls[2]===gameState.guesses[2]) mult= gameState.isCumulative ? mult+50 : Math.max(mult, 50); 
@@ -677,7 +677,7 @@ export const FortunePoolPage = {
             return; 
         }
         
-        // --- 1. PSTAKE CHECK (Inteligente) ---
+        // --- 1. PSTAKE CHECK (Smart) ---
         const MIN_PSTAKE_KEY = "TIGER_GAME_SERVICE";
         const minPStake = State.systemPStakes?.[MIN_PSTAKE_KEY] || 0n;
         const userPStake = State.userTotalPStake || 0n;
