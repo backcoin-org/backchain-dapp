@@ -1,5 +1,5 @@
 // js/pages/DashboardPage.js
-// ✅ FINAL VERSION V7.3: Smart Priority Widget (Gas > BKC)
+// ✅ FINAL VERSION V8.0: Smart Gasless Faucet Integration
 
 const ethers = window.ethers;
 
@@ -43,6 +43,10 @@ const DashboardState = {
 // -----------------------------------------------------------
 const EXPLORER_BASE_URL = "https://sepolia.arbiscan.io/tx/";
 
+// URL do seu Indexer (Backend) que paga o Gás
+// Ajuste para a URL real do seu servidor (ex: https://api.backcoin.org/faucet)
+const FAUCET_API_URL = "https://seu-endpoint-indexer.com/faucet"; // ⚠️ CONFIGURAR
+
 const EXTERNAL_FAUCETS = [
     { name: "Alchemy Faucet", url: "https://www.alchemy.com/faucets/arbitrum-sepolia" },
     { name: "QuickNode Faucet", url: "https://faucet.quicknode.com/arbitrum/sepolia" },
@@ -58,9 +62,7 @@ function formatDate(timestamp) {
             return new Date(secs * 1000).toLocaleString(); 
         }
         return new Date(timestamp).toLocaleString();
-    } catch (e) {
-        return 'Recent';
-    }
+    } catch (e) { return 'Recent'; }
 }
 
 // --- REWARDS ANIMATION ---
@@ -73,20 +75,50 @@ function animateClaimableRewards(targetNetValue) {
         if(animationFrameId) cancelAnimationFrame(animationFrameId);
         return;
     }
-
     const diff = targetNetValue - displayedRewardValue;
-    if (diff > -1000000000n && diff < 1000000000n) {
-        displayedRewardValue = targetNetValue;
-    } else {
-        displayedRewardValue += diff / 8n; 
-    }
-
+    if (diff > -1000000000n && diff < 1000000000n) displayedRewardValue = targetNetValue;
+    else displayedRewardValue += diff / 8n; 
     if (displayedRewardValue < 0n) displayedRewardValue = 0n;
-    
     rewardsEl.innerHTML = `${formatBigNumber(displayedRewardValue).toFixed(4)} <span class="text-sm text-amber-500">$BKC</span>`;
+    if (displayedRewardValue !== targetNetValue) animationFrameId = requestAnimationFrame(() => animateClaimableRewards(targetNetValue));
+}
 
-    if (displayedRewardValue !== targetNetValue) {
-        animationFrameId = requestAnimationFrame(() => animateClaimableRewards(targetNetValue));
+// -------------------------------------------------------------
+// ⚡ SMART FAUCET REQUEST (GASLESS)
+// -------------------------------------------------------------
+async function requestSmartFaucet(btnElement) {
+    if (!State.isConnected || !State.userAddress) return showToast("Connect wallet first", "error");
+
+    const originalHTML = btnElement.innerHTML;
+    btnElement.disabled = true;
+    btnElement.innerHTML = `<i class="fa-solid fa-circle-notch fa-spin mr-2"></i> Sending...`;
+
+    try {
+        const response = await fetch(`${FAUCET_API_URL}?address=${State.userAddress}`);
+        const data = await response.json();
+
+        if (response.ok && data.success) {
+            showToast("✅ Starter Pack Sent! (0.005 ETH + 20 BKC)", "success");
+            
+            // Ocultar widget e atualizar dados
+            const widget = document.getElementById('dashboard-faucet-widget');
+            if(widget) widget.classList.add('hidden');
+            
+            // Fechar modal de gás se estiver aberto
+            const modal = document.getElementById('no-gas-modal-dash');
+            if(modal) modal.classList.add('hidden');
+
+            setTimeout(() => DashboardPage.update(true), 4000); 
+        } else {
+            const msg = data.error || "Faucet unavailable";
+            showToast(`⏳ ${msg}`, "warning");
+        }
+    } catch (e) {
+        console.error("Faucet API Error:", e);
+        showToast("Faucet Service Offline", "error");
+    } finally {
+        btnElement.disabled = false;
+        btnElement.innerHTML = originalHTML;
     }
 }
 
@@ -345,13 +377,23 @@ function renderDashboardLayout() {
                     <i class="fa-solid fa-gas-pump text-2xl text-red-500"></i>
                 </div>
                 <h3 class="text-xl font-bold text-white mb-2">Insufficient Gas (ETH)</h3>
-                <p class="text-zinc-400 text-sm mb-6">You need Arbitrum Sepolia ETH to pay for transaction fees. The tokens you have are BKC (Game Token), not ETH (Gas).</p>
+                <p class="text-zinc-400 text-sm mb-6">You need Arbitrum Sepolia ETH. We can send you a small amount to get started.</p>
                 
                 <div class="flex flex-col gap-3">
+                    <button id="emergency-faucet-btn" class="w-full bg-green-600 hover:bg-green-500 text-white font-bold py-3 px-4 rounded-xl flex justify-center items-center gap-2 shadow-lg transition-transform hover:scale-105">
+                        <i class="fa-solid fa-hand-holding-medical"></i> Get Gas + Tokens (Free)
+                    </button>
+                    
+                    <div class="relative flex py-2 items-center">
+                        <div class="flex-grow border-t border-zinc-700"></div>
+                        <span class="flex-shrink-0 mx-2 text-zinc-600 text-xs">OR USE EXTERNAL</span>
+                        <div class="flex-grow border-t border-zinc-700"></div>
+                    </div>
+
                     ${EXTERNAL_FAUCETS.map(f => `
-                        <a href="${f.url}" target="_blank" class="w-full bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-white font-bold py-3 px-4 rounded-xl flex justify-between items-center transition-all hover:scale-105">
+                        <a href="${f.url}" target="_blank" class="w-full bg-zinc-800/50 hover:bg-zinc-700 border border-zinc-700 text-zinc-300 font-bold py-2 px-4 rounded-lg flex justify-between items-center text-xs transition-colors">
                             <span>${f.name}</span>
-                            <i class="fa-solid fa-arrow-up-right-from-square text-xs text-zinc-500"></i>
+                            <i class="fa-solid fa-arrow-up-right-from-square text-[10px]"></i>
                         </a>
                     `).join('')}
                     <button id="close-gas-modal-dash" class="mt-2 text-zinc-500 hover:text-white text-xs underline">Close</button>
@@ -513,11 +555,11 @@ async function updateUserHub(forceRefresh = false) {
                 
                 title.innerHTML = '<i class="fa-solid fa-gas-pump text-red-500 animate-bounce"></i> Low Gas Detected';
                 desc.innerHTML = 'You need <strong>Arbitrum Sepolia ETH</strong> to transact.';
-                btn.innerHTML = '<i class="fa-solid fa-external-link-alt mr-2"></i> Get ETH';
+                btn.innerHTML = '<i class="fa-solid fa-hand-holding-medical mr-2"></i> Get Gas + Tokens';
                 btn.className = "w-full sm:w-auto bg-red-600 hover:bg-red-500 text-white font-bold py-2.5 px-6 rounded-lg shadow-lg transition-transform hover:scale-105 whitespace-nowrap";
                 
                 // Add unique identifier for click listener
-                btn.dataset.action = "gas";
+                btn.dataset.action = "gasless";
 
             } else if (bkcBalance < minBkc) {
                 // PRIORIDADE 2: FALTA TOKEN (BKC)
@@ -529,7 +571,7 @@ async function updateUserHub(forceRefresh = false) {
                 btn.innerHTML = '<i class="fa-solid fa-coins mr-2"></i> Get 20 BKC';
                 btn.className = "w-full sm:w-auto bg-amber-600 hover:bg-amber-500 text-white font-bold py-2.5 px-6 rounded-lg shadow-lg transition-transform hover:scale-105 whitespace-nowrap";
                 
-                btn.dataset.action = "bkc";
+                btn.dataset.action = "gasless";
             } else {
                 widget.classList.add('hidden');
             }
@@ -578,6 +620,7 @@ function renderBoosterCard(data, claimDetails) {
     let efficiency = 50 + (currentBoostBips / 100);
     if (efficiency > 100) efficiency = 100;
 
+    // --- SCENARIO 1: LOW EFFICIENCY (UPSELL) ---
     if (efficiency < 100) {
         const feeAmount = claimDetails?.feeAmount || 0n; 
         const lostFormatted = formatBigNumber(feeAmount).toFixed(4);
@@ -624,6 +667,7 @@ function renderBoosterCard(data, claimDetails) {
         return;
     }
 
+    // --- SCENARIO 2: MAX EFFICIENCY (SUCCESS) ---
     const isRented = data.source === 'rented';
     const badgeColor = isRented ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/30' : 'bg-green-500/20 text-green-300 border-green-500/30';
     const badgeText = isRented ? 'Rented Active' : 'Owner Active';
@@ -827,13 +871,18 @@ function attachDashboardListeners() {
                 const btn = target.closest('#faucet-action-btn');
                 const action = btn.dataset.action;
 
-                if (action === "gas") {
-                    document.getElementById('no-gas-modal-dash').classList.remove('hidden');
-                    document.getElementById('no-gas-modal-dash').classList.add('flex');
+                if (action === "gasless") {
+                    await requestSmartFaucet(btn);
                 } else if (action === "bkc") {
-                    await executeInternalFaucet(btn);
-                    await updateUserHub(true); 
+                    // Fallback para apenas BKC se necessário
+                    await requestSmartFaucet(btn); 
                 }
+            }
+            
+            // --- EMERGENCY BUTTON NO MODAL ---
+            if (target.closest('#emergency-faucet-btn')) {
+                const btn = target.closest('#emergency-faucet-btn');
+                await requestSmartFaucet(btn);
             }
 
             if (target.closest('.delegate-link')) { e.preventDefault(); window.navigateTo('mine'); }

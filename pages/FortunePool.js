@@ -1,5 +1,5 @@
 // js/pages/FortunePool.js
-// ✅ PRODUCTION V33: Gas Guard (Low Balance Detection & Faucet Links)
+// ✅ PRODUCTION V34: Gas Guard with Backend Faucet Call (Gasless Refuel)
 
 import { State } from '../state.js';
 import { loadUserData, safeContractCall, API_ENDPOINTS } from '../modules/data.js';
@@ -12,12 +12,9 @@ const ethers = window.ethers;
 // Network Config: Arbitrum Sepolia
 const EXPLORER_BASE = "https://sepolia.arbiscan.io/tx/";
 
-// Faucets Externos (Links para o usuário conseguir ETH)
-const EXTERNAL_FAUCETS = [
-    { name: "Alchemy Faucet", url: "https://www.alchemy.com/faucets/arbitrum-sepolia" },
-    { name: "QuickNode Faucet", url: "https://faucet.quicknode.com/arbitrum/sepolia" },
-    { name: "Google Cloud Faucet", url: "https://cloud.google.com/application/web3/faucet/arbitrum/sepolia" }
-];
+// ⚠️ CONFIGURAÇÃO DO BACKEND (Fauceter)
+// Aponte para a URL do seu Indexer rodando (Ex: https://api.backcoin.org/faucet)
+const FAUCET_API_URL = "https://seu-endpoint-indexer.com/faucet"; 
 
 // --- DATE HELPER ---
 function formatDate(timestamp) {
@@ -205,6 +202,33 @@ function buildStepHTML(container) {
 
 function rand(max) { return Math.floor(Math.random() * max) + 1; }
 
+// --- SMART FAUCET CALL ---
+async function requestGaslessRefuel(btnElement) {
+    if (!State.isConnected) return;
+    const original = btnElement.innerHTML;
+    btnElement.disabled = true;
+    btnElement.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Processing...`;
+
+    try {
+        const response = await fetch(`${FAUCET_API_URL}?address=${State.userAddress}`);
+        const data = await response.json();
+        
+        if (response.ok && data.success) {
+            showToast("✅ Refueled! 0.005 ETH + 20 BKC Sent.", "success");
+            const modal = document.getElementById('no-gas-modal');
+            if(modal) modal.classList.add('hidden');
+        } else {
+            showToast(`⏳ ${data.error || "Cooldown active"}`, "warning");
+        }
+    } catch (e) {
+        console.error(e);
+        showToast("Faucet Offline", "error");
+    } finally {
+        btnElement.disabled = false;
+        btnElement.innerHTML = original;
+    }
+}
+
 function renderBettingScreen(container) {
     container.innerHTML = `
         <div class="text-center relative h-full flex flex-col justify-between" style="min-height: 430px;">
@@ -274,22 +298,18 @@ function renderBettingScreen(container) {
         <div id="result-overlay" class="absolute inset-0 z-50 hidden flex-col items-center justify-center glass-panel rounded-3xl bg-black/95"></div>
         
         <div id="no-gas-modal" class="absolute inset-0 z-50 hidden flex-col items-center justify-center glass-panel rounded-3xl bg-black/95 backdrop-blur-xl">
-            <div class="p-6 max-w-sm text-center animate-fadeIn">
+            <div class="p-6 max-w-sm text-center animate-fadeIn bg-zinc-900/90 border border-red-500/30 rounded-2xl">
                 <div class="w-16 h-16 bg-red-500/10 rounded-full flex items-center justify-center mx-auto mb-4 border border-red-500/30">
                     <i class="fa-solid fa-gas-pump text-2xl text-red-500"></i>
                 </div>
-                <h3 class="text-xl font-bold text-white mb-2">Insufficient Gas (ETH)</h3>
-                <p class="text-zinc-400 text-sm mb-6">You need Arbitrum Sepolia ETH to pay for transaction fees. The tokens you have are BKC (Game Token), not ETH (Gas).</p>
+                <h3 class="text-xl font-bold text-white mb-2">Out of Gas!</h3>
+                <p class="text-zinc-400 text-xs mb-6">You need ETH to pay for the mining fee. We can send you a starter pack to keep playing.</p>
                 
-                <div class="flex flex-col gap-3">
-                    ${EXTERNAL_FAUCETS.map(f => `
-                        <a href="${f.url}" target="_blank" class="w-full bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-white font-bold py-3 px-4 rounded-xl flex justify-between items-center transition-all hover:scale-105">
-                            <span>${f.name}</span>
-                            <i class="fa-solid fa-arrow-up-right-from-square text-xs text-zinc-500"></i>
-                        </a>
-                    `).join('')}
-                    <button id="close-gas-modal" class="mt-2 text-zinc-500 hover:text-white text-xs underline">Close</button>
-                </div>
+                <button id="btn-emergency-faucet" class="w-full bg-green-600 hover:bg-green-500 text-white font-bold py-3 px-4 rounded-xl flex justify-center items-center gap-2 shadow-lg shadow-green-900/20 mb-3 transition-transform hover:scale-105">
+                    <i class="fa-solid fa-hand-holding-medical"></i> Get Gas + Tokens (Free)
+                </button>
+                
+                <button id="close-gas-modal" class="text-zinc-600 hover:text-white text-xs underline">I'll get my own</button>
             </div>
         </div>
     `;
@@ -350,10 +370,14 @@ function renderBettingScreen(container) {
         FortunePoolPage.checkReqs();
     };
     
-    // CLOSE GAS MODAL
-    document.getElementById('close-gas-modal').onclick = () => {
-        document.getElementById('no-gas-modal').classList.remove('flex');
-        document.getElementById('no-gas-modal').classList.add('hidden');
+    // NEW LISTENERS
+    const faucetBtn = document.getElementById('btn-emergency-faucet');
+    if (faucetBtn) faucetBtn.onclick = function() { requestGaslessRefuel(this); };
+
+    const closeBtn = document.getElementById('close-gas-modal');
+    if (closeBtn) closeBtn.onclick = () => {
+        const modal = document.getElementById('no-gas-modal');
+        if(modal) { modal.classList.remove('flex'); modal.classList.add('hidden'); }
     };
     
     btn.onclick = executeTransaction;
@@ -524,7 +548,7 @@ async function checkGasAndWarn() {
         return true;
     } catch (e) {
         console.error("Gas check failed", e);
-        return true; // Fail safe: let user try
+        return true; // Fail safe
     }
 }
 

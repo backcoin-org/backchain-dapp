@@ -9,10 +9,9 @@ import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 
 /**
- * @title Simple BKC Faucet
- * @notice Dispenses $BKC for testing ecosystem interactions.
- * @dev Restricted rate limiting or whitelist logic can be added here.
- * Optimized for Arbitrum Network.
+ * @title Simple BKC Faucet (Relayer Mode)
+ * @notice Stores ETH and BKC to distribute to users via a Relayer (Backend).
+ * @dev The Backend pays the gas fees. The user receives assets.
  */
 contract SimpleBKCFaucet is
     Initializable,
@@ -24,14 +23,23 @@ contract SimpleBKCFaucet is
 
     IERC20Upgradeable public token;
     
-    uint256 public constant CLAIM_AMOUNT = 20 * 10**18;
+    // Configurações (Ajustáveis pelo Owner)
+    uint256 public claimAmountToken; // Ex: 20 BKC
+    uint256 public claimAmountEth;   // Ex: 0.005 ETH
+    uint256 public cooldownTime;     // Ex: 1 hora
 
-    // --- Events ---
-    event TokensClaimed(address indexed recipient, uint256 amount);
+    // Controle de tempo por usuário
+    mapping(address => uint256) public lastClaimTime;
 
-    // --- Errors ---
-    error InvalidAddress();
-    error InsufficientFaucetBalance();
+    // Eventos
+    event FaucetDistributed(address indexed recipient, uint256 tokenAmount, uint256 ethAmount);
+    event ContractRefueled(address indexed donor, uint256 amount);
+    event ConfigUpdated(uint256 newTokenAmount, uint256 newEthAmount, uint256 newCooldown);
+
+    // Erros
+    error CooldownActive(uint256 nextTry);
+    error InsufficientContractETH();
+    error InsufficientContractTokens();
     error TransferFailed();
 
     /// @custom:oz-upgrades-unsafe-allow constructor
@@ -43,41 +51,70 @@ contract SimpleBKCFaucet is
         address _tokenAddress,
         address _initialOwner
     ) public initializer {
-        if (_tokenAddress == address(0)) revert InvalidAddress();
-        if (_initialOwner == address(0)) revert InvalidAddress();
-
         __Ownable_init();
         __ReentrancyGuard_init();
         __UUPSUpgradeable_init();
         
         token = IERC20Upgradeable(_tokenAddress);
         _transferOwnership(_initialOwner);
+
+        // Valores Padrão (Ajuste conforme necessário)
+        claimAmountToken = 20 * 10**18; // 20 BKC
+        claimAmountEth = 0.005 ether;   // 0.005 ETH
+        cooldownTime = 1 hours;
     }
 
     function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
 
-    function claim() external nonReentrant {
-        if (token.balanceOf(address(this)) < CLAIM_AMOUNT) revert InsufficientFaucetBalance();
-        token.safeTransfer(msg.sender, CLAIM_AMOUNT);
-        emit TokensClaimed(msg.sender, CLAIM_AMOUNT);
+    /**
+     * @notice Função principal chamada pelo seu BACKEND.
+     * @dev O Backend paga o gas desta transação.
+     * @param _recipient O endereço do usuário que vai receber os fundos.
+     */
+    function distributeTo(address _recipient) external onlyOwner nonReentrant {
+        // 1. Validar Cooldown
+        if (block.timestamp < lastClaimTime[_recipient] + cooldownTime) {
+            revert CooldownActive(lastClaimTime[_recipient] + cooldownTime);
+        }
+
+        // 2. Validar Saldos do Contrato
+        if (address(this).balance < claimAmountEth) revert InsufficientContractETH();
+        if (token.balanceOf(address(this)) < claimAmountToken) revert InsufficientContractTokens();
+
+        // 3. Atualizar Tempo
+        lastClaimTime[_recipient] = block.timestamp;
+
+        // 4. Transferir Token (BKC)
+        token.safeTransfer(_recipient, claimAmountToken);
+
+        // 5. Transferir ETH Nativo (Gas)
+        (bool success, ) = _recipient.call{value: claimAmountEth}("");
+        if (!success) revert TransferFailed();
+
+        emit FaucetDistributed(_recipient, claimAmountToken, claimAmountEth);
     }
 
-    function withdrawRemainingTokens() external onlyOwner {
-        uint256 balance = token.balanceOf(address(this));
-        if (balance > 0) {
-            token.safeTransfer(owner(), balance);
+    // --- Admin ---
+
+    function setConfig(uint256 _tokens, uint256 _eth, uint256 _cooldown) external onlyOwner {
+        claimAmountToken = _tokens;
+        claimAmountEth = _eth;
+        cooldownTime = _cooldown;
+        emit ConfigUpdated(_tokens, _eth, _cooldown);
+    }
+
+    function withdrawEverything() external onlyOwner {
+        uint256 ethBal = address(this).balance;
+        uint256 tokenBal = token.balanceOf(address(this));
+        if (tokenBal > 0) token.safeTransfer(owner(), tokenBal);
+        if (ethBal > 0) {
+            (bool s, ) = owner().call{value: ethBal}("");
+            require(s, "ETH Transfer failed");
         }
     }
 
-    function withdrawNativeCurrency() external onlyOwner {
-        uint256 balance = address(this).balance;
-        if (balance > 0) {
-            (bool success, ) = owner().call{value: balance}("");
-            if (!success) revert TransferFailed();
-        }
-    }
-
+    // Aceita depósitos de ETH para recarregar o Faucet
     receive() external payable {
-        revert TransferFailed(); // Reject direct native transfers
+        emit ContractRefueled(msg.sender, msg.value);
     }
 }
