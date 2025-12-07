@@ -38,7 +38,7 @@ const DashboardState = {
     }
 };
 
-const EXPLORER_BASE_URL = "https://sepolia.etherscan.io/tx/";
+const EXPLORER_BASE_URL = "https://sepolia.arbiscan.io/tx/";
 
 // --- HELPER: DATE FORMAT ---
 function formatDate(timestamp) {
