@@ -1,7 +1,8 @@
 // js/ui-feedback.js
-// ✅ VERSÃO FINAL: Arbitrum Rebrand + Links Arbiscan Corretos + NFT Error Handling
+// ✅ VERSÃO FINAL: Tratamento de Erro -32002 (MetaMask Sync Issue)
 
 import { DOMElements } from './dom-elements.js';
+// Se State não for usado aqui, pode remover a importação, mas mantive para compatibilidade
 import { State } from './state.js';
 
 // Timer Management
@@ -35,7 +36,6 @@ export const showToast = (message, type = 'info', txHash = null) => {
     `;
 
     if (txHash) {
-        // 🔄 ATUALIZADO: Link correto para Arbiscan (Arbitrum Sepolia)
         const explorerUrl = `https://sepolia.arbiscan.io/tx/${txHash}`;
         content += `<a href="${explorerUrl}" target="_blank" title="View on Arbiscan" class="ml-3 flex-shrink-0 text-white/80 hover:text-white transition-colors">
                         <i class="fa-solid fa-arrow-up-right-from-square text-sm"></i>
@@ -177,18 +177,13 @@ export const startCountdownTimers = (elements) => {
     }
 };
 
-// --- WALLET HELPERS ---
+// --- WALLET HELPERS (CORRIGIDO PARA O ERRO -32002) ---
 
-/**
- * Adds an NFT to the user's MetaMask wallet.
- * Handles the "Suggested NFT is not owned" (-32002) error gracefully.
- */
 export async function addNftToWallet(contractAddress, tokenId) {
     if (!tokenId || !window.ethereum) {
         showToast('No wallet detected.', 'error');
         return;
     }
-    
     try {
         showToast(`Requesting wallet to track NFT #${tokenId}...`, 'info');
         
@@ -196,10 +191,7 @@ export async function addNftToWallet(contractAddress, tokenId) {
             method: 'wallet_watchAsset', 
             params: { 
                 type: 'ERC721', 
-                options: { 
-                    address: contractAddress, 
-                    tokenId: tokenId.toString() 
-                } 
+                options: { address: contractAddress, tokenId: tokenId.toString() } 
             } 
         });
 
@@ -210,13 +202,14 @@ export async function addNftToWallet(contractAddress, tokenId) {
         }
 
     } catch (error) { 
-        console.error("Wallet Watch Error:", error);
+        console.error("Add NFT Error:", error); 
         
-        // 🛠️ FIX: Handle RPC latency where Wallet doesn't see ownership yet
+        // 🛠️ AQUI ESTÁ A CORREÇÃO:
+        // Captura o erro específico da MetaMask e mostra um aviso amigável
         if (error.code === -32002 || (error.message && error.message.includes("not owned"))) {
-            showToast("Wallet syncing... Please wait 10s and try again.", "warning");
+            showToast(`MetaMask cannot sync this NFT on Testnet yet. Please add manually.`, 'warning');
         } else {
-            showToast(`Wallet Error: ${error.message}`, 'error');
+            showToast(`Error: ${error.message}`, 'error');
         }
     }
 }
@@ -235,7 +228,7 @@ export function showShareModal(userAddress) {
     openModal(content);
 }
 
-// --- WELCOME MODAL (UPDATED FOR ARBITRUM) ---
+// --- WELCOME MODAL ---
 
 const navigateAndClose = (target) => {
     if (window.navigateTo) {
@@ -278,7 +271,6 @@ export function showWelcomeModal() {
             </p>
 
             <div class="flex flex-col gap-3">
-                
                 <button id="btnPresale" class="group relative w-full bg-gradient-to-r from-blue-600 via-blue-500 to-blue-600 bg-[length:200%_auto] hover:bg-right transition-all duration-500 text-white font-black py-4 px-5 rounded-xl text-lg shadow-xl shadow-blue-500/20 pulse-gold border border-blue-400/50 flex items-center justify-center gap-3 overflow-hidden transform hover:scale-[1.02]">
                     <div class="absolute inset-0 bg-white/10 group-hover:bg-transparent transition-colors"></div>
                     <i class="fa-solid fa-rocket text-2xl animate-pulse"></i> 
@@ -298,7 +290,6 @@ export function showWelcomeModal() {
                     <i class="fa-brands fa-telegram text-lg group-hover:text-blue-400 transition-colors"></i>
                     <span>Enter Official Group</span>
                 </button>
-
             </div>
             
             <div class="mt-6 text-[10px] text-zinc-600 uppercase tracking-widest">
@@ -312,20 +303,15 @@ export function showWelcomeModal() {
     const modalContent = document.getElementById('modal-content');
     if (!modalContent) return;
 
-    // --- BUTTON LISTENERS ---
-
-    // 1. Presale (External Link)
     modalContent.querySelector('#btnPresale')?.addEventListener('click', () => {
         window.open(PRESALE_URL, '_blank');
         closeModal();
     });
 
-    // 2. Airdrop (Community Action)
     modalContent.querySelector('#btnAirdrop')?.addEventListener('click', () => {
         navigateAndClose('airdrop');
     });
 
-    // 3. Socials (Official Group Info)
     modalContent.querySelector('#btnSocials')?.addEventListener('click', () => {
         navigateAndClose('socials'); 
     });
