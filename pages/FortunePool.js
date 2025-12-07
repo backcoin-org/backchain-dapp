@@ -1,5 +1,5 @@
 // js/pages/FortunePool.js
-// ✅ PRODUCTION V31: Stability Fix (Gas Limit Increased) & GameCounter Logic
+// ✅ PRODUCTION V32: RPC Error Bypass (No-Estimate & High Gas)
 
 import { State } from '../state.js';
 import { loadUserData, safeContractCall, API_ENDPOINTS } from '../modules/data.js';
@@ -471,7 +471,7 @@ function closeOverlay() {
 }
 
 // -------------------------------------------------------------
-// TRANSACTION EXECUTION (FIXED FOR V31: GAS & COUNTER)
+// TRANSACTION EXECUTION (V32: BLINDED & HIGH GAS)
 // -------------------------------------------------------------
 async function executeTransaction() {
     if (!State.isConnected) return showToast("Connect wallet", "error");
@@ -488,30 +488,25 @@ async function executeTransaction() {
     
     const btn = document.getElementById('btn-spin');
     const amountWei = ethers.parseEther(gameState.betAmount.toString());
-    
     const isCumulative = gameState.isCumulative;
     let fee = 0n;
 
+    // 1. Calculate Fee safely
     try {
         console.log("🔍 [INIT] Fetching oracleFeeInWei from contract...");
         const baseFee = await State.actionsManagerContract.oracleFeeInWei();
         const baseFeeBigInt = BigInt(baseFee); 
         console.log("   > Base Fee (Contract):", baseFeeBigInt.toString(), "Wei");
-        
         fee = isCumulative ? (baseFeeBigInt * 5n) : baseFeeBigInt;
-        console.log("   > Final Fee (Calculated):", fee.toString(), "Wei");
-
     } catch (e) {
-        console.warn("⚠️ RPC Read Failed. Using FALLBACK Safe Value (0.00035 ETH).", e);
         const FALLBACK_BASE_FEE = ethers.parseEther("0.00035"); 
         fee = isCumulative ? (FALLBACK_BASE_FEE * 5n) : FALLBACK_BASE_FEE;
-        console.log("   > Fallback Fee Used:", fee.toString(), "Wei");
     }
     
+    // 2. Validate ETH Balance
     try {
         const nativeBalance = await State.provider.getBalance(State.userAddress);
-        const minRequired = fee + ethers.parseEther("0.002"); 
-        
+        const minRequired = fee + ethers.parseEther("0.005"); // increased buffer
         if (nativeBalance < minRequired) {
             showToast(`Insufficient ETH! Need ~${ethers.formatEther(minRequired)} ETH`, "error");
             return;
@@ -519,33 +514,22 @@ async function executeTransaction() {
     } catch(e) {}
 
     btn.disabled = true;
+    
     try {
+        // 3. Approval Flow
         const spender = addresses.fortunePool;
-        if (!spender || !ethers.isAddress(spender)) {
-             console.error("❌ Invalid Spender:", spender);
-             showToast("Config Error: Spender Invalid. Reload.", "error");
-             btn.disabled = false;
-             return;
-        }
-
         btn.innerHTML = `<div class="loader inline-block"></div> APPROVING BKC...`;
+        
         try {
-            console.log("🔍 DEBUG APPROVE:", {
-                tokenAddress: await State.bkcTokenContract.getAddress(),
-                spenderAddress: spender,
-                amount: amountWei.toString(),
-                user: State.userAddress
-            });
-
             const currentAllowance = await State.bkcTokenContract.allowance(State.userAddress, spender);
             if (currentAllowance < amountWei) {
-                const approveTx = await State.bkcTokenContract.approve(spender, amountWei, { gasLimit: 200000 });
+                const approveTx = await State.bkcTokenContract.approve(spender, amountWei, { gasLimit: 300000 });
                 await approveTx.wait();
                 showToast("✅ BKC Approved!", "success");
             }
         } catch (approvalError) {
             console.error("❌ Approval Failed:", approvalError);
-            showToast("Approval failed or rejected", "error");
+            showToast("Approval failed. Check Balance.", "error");
             btn.disabled = false;
             btn.innerText = "START MINING";
             return;
@@ -553,33 +537,34 @@ async function executeTransaction() {
         
         btn.innerHTML = `<div class="loader inline-block"></div> CONFIRMING...`;
         
-        // Convert guesses to BigInt array for uint256[] compatibility
         const guessesAsBigInt = gameState.guesses.map(g => BigInt(g));
         
-        console.log("🚀 DEBUG PARTICIPATE PAYLOAD:", {
+        console.log("🚀 DEBUG PARTICIPATE V32:", {
             contractAddress: addresses.fortunePool,
             amountBKC: amountWei.toString(),
             guesses: guessesAsBigInt.map(g => g.toString()),
-            isCumulative: isCumulative,
             feeETH: fee.toString()
         });
         
-        // V31 FIX: Increased Gas Limit to 2.5M to prevent RPC errors
+        // 4. V32 FIX: AGGRESSIVE GAS & NO ESTIMATE
+        // We do NOT use estimateGas() to avoid the -32603 JSON-RPC error on revert
         const tx = await State.actionsManagerContract.participate(
             amountWei, 
             guessesAsBigInt,
             isCumulative, 
-            { value: fee, gasLimit: 2500000 }
+            { 
+                value: fee, 
+                gasLimit: 3000000 // 3M Gas Limit (Aggressive)
+            }
         );
         
         startSpinning(); 
         await tx.wait();
         updateProgressBar(40, "BLOCK MINED. WAITING ORACLE...");
         
-        // V31 FIX: Correct Game ID logic
+        // 5. Game ID Monitoring
         const ctr = await safeContractCall(State.actionsManagerContract, 'gameCounter', [], 0, 2, true);
         const gameIdToWatch = Number(ctr) > 0 ? Number(ctr) - 1 : 0; 
-        
         console.log(`✅ TX Confirmed. Counter is ${ctr}. Watching Game #${gameIdToWatch}`);
         
         setTimeout(() => waitForOracle(gameIdToWatch), 2000);
@@ -593,11 +578,8 @@ async function executeTransaction() {
         
         if (e.message && e.message.includes("cf07063a")) msg = "Fee Mismatch (Clear Cache!)";
         else if (e.message && e.message.includes("insufficient funds")) msg = "Insufficient ETH for Gas";
-        else if (e.message && e.message.includes("InvalidGuessCount")) msg = "Wrong number of guesses!";
-        else if (e.message && e.message.includes("InvalidGuessRange")) msg = "Guess out of range!";
-        else if (e.reason) msg = e.reason;
+        else if (e.code === -32603) msg = "RPC Error: Reset Metamask & Check Balance";
         else if (e.code === "ACTION_REJECTED") msg = "User rejected transaction";
-        else if (e.code === -32603) msg = "RPC Error (Reset Metamask)";
         
         showToast(msg, "error");
         
