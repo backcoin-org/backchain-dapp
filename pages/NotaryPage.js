@@ -1,10 +1,11 @@
 // pages/NotaryPage.js
-// ✅ VERSÃO FINAL (CORREÇÃO DE MEMÓRIA DA DESCRIÇÃO)
+// ✅ VERSÃO FINAL (V13): Add to Wallet Button Included
 
 import { State } from '../state.js';
 import { formatBigNumber, formatPStake, renderLoading, renderNoData } from '../utils.js';
 import { safeContractCall, API_ENDPOINTS, loadPublicData, loadUserData } from '../modules/data.js'; 
-import { showToast } from '../ui-feedback.js';
+// 🟢 ADICIONADO: addNftToWallet
+import { showToast, addNftToWallet } from '../ui-feedback.js';
 import { executeNotarizeDocument } from '../modules/transactions.js';
 
 const ethers = window.ethers;
@@ -14,7 +15,6 @@ const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024; // 10MB
 let currentFileToUpload = null;
 let notaryButtonState = 'initial'; 
 let lastNotaryDataFetch = 0;
-// 🟢 NOVO: Variável para segurar a descrição na memória
 let notaryDescriptionCache = ""; 
 
 // --- CSS CUSTOMIZADO ---
@@ -25,8 +25,6 @@ style.innerHTML = `
     .step-dot { width: 12px; height: 12px; border-radius: 50%; background: #27272a; border: 2px solid #52525b; transition: all 0.3s ease; z-index: 10; }
     .step-dot.active { background: #f59e0b; border-color: #f59e0b; box-shadow: 0 0 10px rgba(245, 158, 11, 0.5); }
     .step-dot.completed { background: #10b981; border-color: #10b981; }
-    
-    /* Overlay Animation (Scanner) */
     .mining-overlay { background: rgba(0, 0, 0, 0.95); backdrop-filter: blur(20px); }
     .scan-line { position: absolute; width: 100%; height: 2px; background: #f59e0b; animation: scan 2s ease-in-out infinite; box-shadow: 0 0 15px #f59e0b; }
     @keyframes scan { 0% {top: 0%; opacity: 0;} 50% {opacity: 1;} 100% {top: 100%; opacity: 0;} }
@@ -201,9 +199,7 @@ function updateNotaryStep(step) {
             </div>`;
         initNotaryListeners();
     } else if (step === 2) {
-        // Se a descrição já estava salva, restaura ela no textarea
         const savedText = notaryDescriptionCache || "";
-        
         actionArea.innerHTML = `
             <div id="step-content-active" class="w-full max-w-lg animate-fadeIn">
                 <h3 class="text-xl font-bold text-white mb-4 text-center">Add Details</h3>
@@ -219,9 +215,7 @@ function updateNotaryStep(step) {
                 <button onclick="NotaryPage.saveAndNext()" class="w-full bg-white hover:bg-zinc-200 text-black font-bold py-3 rounded-xl">Next <i class="fa-solid fa-arrow-right ml-2"></i></button>
             </div>`;
     } else if (step === 3) {
-        // Exibe a descrição salva apenas para confirmação visual (opcional)
         const displayDesc = notaryDescriptionCache || "No description provided.";
-        
         actionArea.innerHTML = `
             <div id="step-content-active" class="w-full max-w-lg animate-fadeIn text-center">
                 <h3 class="text-xl font-bold text-white mb-4">Confirm & Mint</h3>
@@ -246,7 +240,6 @@ async function handleSignAndUpload(btn) {
 
     let progressTimer;
     try {
-        // 🟢 MUDANÇA: Lê da variável de cache, pois o textarea não existe mais na tela 3
         const rawDesc = notaryDescriptionCache;
         const desc = rawDesc && rawDesc.trim() !== "" ? rawDesc : "No description provided.";
 
@@ -254,7 +247,6 @@ async function handleSignAndUpload(btn) {
         const message = "I am signing to authenticate my file for notarization on Backchain.";
         const signature = await signer.signMessage(message);
         
-        // --- ATIVA ANIMAÇÃO DO SCANNER ---
         const overlay = document.getElementById('mining-overlay');
         const progressBar = document.getElementById('mining-progress-bar');
         const statusText = document.getElementById('mining-status-text');
@@ -280,12 +272,11 @@ async function handleSignAndUpload(btn) {
         
         if(statusText) statusText.innerText = "MINTING ON BLOCKCHAIN...";
         
-        // Chama a função atualizada no transactions.js que aceita (URI, Desc, Hash)
         await executeNotarizeDocument(
             data.ipfsUri, 
-            desc, // Passa a descrição correta
+            desc, 
             data.contentHash, 
-            0n, // Booster ID (Opcional)
+            0n, 
             btn
         );
         
@@ -322,22 +313,19 @@ async function fetchUserHistory() {
         const contract = State.decentralizedNotaryContract;
         if (!contract) { container.innerHTML = renderNoData("Contract not available."); return; }
 
-        // Filtra eventos para pegar os IDs
         const filter = contract.filters.NotarizationEvent(null, State.userAddress); 
         const events = await contract.queryFilter(filter, -50000);
 
-        // Para cada ID, lê a STRUCT completa do contrato
         const docs = await Promise.all(events.map(async (e) => {
             const tokenId = e.args[0]; 
             let docInfo = { ipfsCid: "", description: "Loading...", contentHash: "" };
-            
             try {
                 docInfo = await contract.getDocumentInfo(tokenId);
             } catch (err) {
                 console.warn("Could not read struct for token", tokenId);
             }
-
             return {
+                id: tokenId.toString(), // 🟢 ID Salvo
                 image: docInfo.ipfsCid,
                 description: docInfo.description,
                 hash: docInfo.contentHash,
@@ -370,7 +358,12 @@ async function fetchUserHistory() {
                             <p class="text-[10px] font-mono text-zinc-600 truncate" title="${doc.hash}">${doc.hash}</p>
                         </div>
                         <div class="flex justify-between items-center mt-2 border-t border-zinc-800 pt-3">
-                            <a href="${ipfsLink}" target="_blank" class="text-xs text-amber-500 hover:text-white font-bold">Open File</a>
+                            <div class="flex gap-2">
+                                <a href="${ipfsLink}" target="_blank" class="text-xs text-amber-500 hover:text-white font-bold" title="View File">Open</a>
+                                <button onclick="NotaryPage.addToWallet('${doc.id}')" class="text-zinc-500 hover:text-amber-400 transition-colors" title="Add to Wallet">
+                                    <i class="fa-solid fa-wallet"></i>
+                                </button>
+                            </div>
                             
                             <a href="https://sepolia.arbiscan.io/tx/${doc.txHash}" target="_blank" class="text-zinc-600 hover:text-white"><i class="fa-solid fa-cube"></i></a>
                         </div>
@@ -407,17 +400,24 @@ export const NotaryPage = {
     },
     reset: () => { 
         currentFileToUpload = null; 
-        notaryDescriptionCache = ""; // Limpa a memória ao resetar
+        notaryDescriptionCache = ""; 
         updateNotaryStep(1); 
     },
-    // 🟢 NOVA FUNÇÃO EXPORTADA
     saveAndNext: () => {
         const el = document.getElementById('notary-user-description');
-        if(el) notaryDescriptionCache = el.value; // Salva na memória
-        updateNotaryStep(3); // Avança
+        if(el) notaryDescriptionCache = el.value; 
+        updateNotaryStep(3); 
     },
     refreshHistory: () => { fetchUserHistory(); },
-    update: () => { updateNotaryInterface(); }
+    update: () => { updateNotaryInterface(); },
+    // 🟢 FUNÇÃO EXPORTADA PARA O ONCLICK
+    addToWallet: (tokenId) => {
+        if (State.decentralizedNotaryContract) {
+            addNftToWallet(State.decentralizedNotaryContract.target, tokenId);
+        } else {
+            showToast("Contract not loaded.", "error");
+        }
+    }
 };
 
 window.NotaryPage = NotaryPage;
