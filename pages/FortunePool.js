@@ -1,5 +1,5 @@
 // js/pages/FortunePool.js
-// ✅ PRODUCTION V30: Fixed GameCounter Logic & ABI Compatibility
+// ✅ PRODUCTION V31: Stability Fix (Gas Limit Increased) & GameCounter Logic
 
 import { State } from '../state.js';
 import { loadUserData, safeContractCall, API_ENDPOINTS } from '../modules/data.js';
@@ -471,7 +471,7 @@ function closeOverlay() {
 }
 
 // -------------------------------------------------------------
-// TRANSACTION EXECUTION (FIXED FOR V30)
+// TRANSACTION EXECUTION (FIXED FOR V31: GAS & COUNTER)
 // -------------------------------------------------------------
 async function executeTransaction() {
     if (!State.isConnected) return showToast("Connect wallet", "error");
@@ -553,7 +553,7 @@ async function executeTransaction() {
         
         btn.innerHTML = `<div class="loader inline-block"></div> CONFIRMING...`;
         
-        // CRITICAL FIX: Convert guesses to BigInt array for uint256[] compatibility
+        // Convert guesses to BigInt array for uint256[] compatibility
         const guessesAsBigInt = gameState.guesses.map(g => BigInt(g));
         
         console.log("🚀 DEBUG PARTICIPATE PAYLOAD:", {
@@ -564,18 +564,19 @@ async function executeTransaction() {
             feeETH: fee.toString()
         });
         
+        // V31 FIX: Increased Gas Limit to 2.5M to prevent RPC errors
         const tx = await State.actionsManagerContract.participate(
             amountWei, 
             guessesAsBigInt,
             isCumulative, 
-            { value: fee, gasLimit: 500000 }
+            { value: fee, gasLimit: 2500000 }
         );
         
         startSpinning(); 
         await tx.wait();
         updateProgressBar(40, "BLOCK MINED. WAITING ORACLE...");
         
-        // --- FIX V30: CORRECT GAME ID MONITORING ---
+        // V31 FIX: Correct Game ID logic
         const ctr = await safeContractCall(State.actionsManagerContract, 'gameCounter', [], 0, 2, true);
         const gameIdToWatch = Number(ctr) > 0 ? Number(ctr) - 1 : 0; 
         
@@ -596,6 +597,7 @@ async function executeTransaction() {
         else if (e.message && e.message.includes("InvalidGuessRange")) msg = "Guess out of range!";
         else if (e.reason) msg = e.reason;
         else if (e.code === "ACTION_REJECTED") msg = "User rejected transaction";
+        else if (e.code === -32603) msg = "RPC Error (Reset Metamask)";
         
         showToast(msg, "error");
         
@@ -631,14 +633,12 @@ async function waitForOracle(gameId) {
             
             const [r1, r2, r3] = await Promise.all([p1, p2, p3]);
             
-            // If r1 is > 0, it means the Oracle has responded
             if (Number(r1) !== 0) {
                 clearInterval(gameState.pollInterval);
                 const rolls = [Number(r1), Number(r2), Number(r3)];
                 
                 let win = 0n;
                 
-                // Client-side Win Calculation (Visual Only - Contract handles real payout)
                 if(rolls[0] === gameState.guesses[0] || rolls[1] === gameState.guesses[1] || rolls[2] === gameState.guesses[2]) {
                     let mult = 0;
                     if(rolls[0] === gameState.guesses[0]) mult = 1.5; 
@@ -684,7 +684,6 @@ export const FortunePoolPage = {
             return; 
         }
         
-        // Check active tier count
         try {
             const tierCount = await safeContractCall(State.actionsManagerContract, 'activeTierCount', [], 0n, 1, false);
             if (Number(tierCount) === 0) {
@@ -698,7 +697,6 @@ export const FortunePoolPage = {
             console.warn("Could not check tier count:", e);
         }
         
-        // PStake Check
         const MIN_PSTAKE_KEY = "TIGER_GAME_SERVICE";
         const minPStake = State.systemPStakes?.[MIN_PSTAKE_KEY] || 0n;
         const userPStake = State.userTotalPStake || 0n;
@@ -714,7 +712,6 @@ export const FortunePoolPage = {
             pstakeEl.className = "text-[10px] text-zinc-400 font-mono mt-2 px-4";
         }
 
-        // Fee Display
         let fee = 0n;
         try {
             let baseFee = await safeContractCall(State.actionsManagerContract, 'oracleFeeInWei', [], 0n);
