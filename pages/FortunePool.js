@@ -1,5 +1,5 @@
 // js/pages/FortunePool.js
-// ✅ VERSÃO FINAL V28: Deep Debug Participate & Gas Limit Fix
+// ✅ PRODUCTION V29: Fixed ABI Compatibility (uint256[] dynamic arrays)
 
 import { State } from '../state.js';
 import { loadUserData, safeContractCall, API_ENDPOINTS } from '../modules/data.js';
@@ -9,7 +9,7 @@ import { addresses } from '../config.js';
 
 const ethers = window.ethers;
 
-// ✅ Network Config: Arbitrum Sepolia
+// Network Config: Arbitrum Sepolia
 const EXPLORER_BASE = "https://sepolia.arbiscan.io/tx/";
 
 // --- DATE HELPER ---
@@ -152,13 +152,10 @@ function buildStepHTML(container) {
                     </button>
                 </div>
             </div>`;
-        // Rand Max for 3, 10, 100 (MUST MATCH CONTRACT LIMITS!)
         document.getElementById('btn-random-all').onclick = () => { gameState.guesses = [rand(3), rand(10), rand(100)]; gameState.step = 4; renderStep(); };
         document.getElementById('btn-manual-pick').onclick = () => { gameState.step = 1; renderStep(); };
     }
     else if (gameState.step >= 1 && gameState.step <= 3) {
-        // Tiers (Max & Description) - MUST MATCH CONTRACT LIMITS!
-        // Contract: guesses[0] 1-3, guesses[1] 1-10, guesses[2] 1-100
         const tiers = [
             { max: 3, name: "BRONZE", reward: "1.5x", desc: "1 in 3 Chance" }, 
             { max: 10, name: "SILVER", reward: "5x", desc: "1 in 10 Chance" }, 
@@ -172,7 +169,6 @@ function buildStepHTML(container) {
         } else if (t.max <= 15) {
              grid = `<div class="flex flex-wrap justify-center gap-3 mb-8 max-w-sm mx-auto">${Array.from({length: t.max},(_,i)=>i+1).map(n=>`<button class="w-14 h-14 glass-panel rounded-xl font-bold text-lg text-white hover:bg-zinc-200 hover:text-black transition-all step-pick-btn" data-val="${n}">${n}</button>`).join('')}</div>`;
         } else {
-             // Placeholder for 1-100
              grid = `<div class="max-w-xs mx-auto mb-8"><input type="number" id="master-input" class="w-full bg-black/50 border border-amber-500/30 rounded-xl text-center text-5xl py-6 text-white font-bold outline-none focus:border-amber-500" placeholder="1-${t.max}"><button id="confirm-master" class="w-full mt-4 btn-action py-3 rounded-xl shadow-lg" disabled>LOCK NUMBER</button></div>`;
         }
 
@@ -190,7 +186,6 @@ function buildStepHTML(container) {
             const b = document.getElementById('confirm-master'); 
             i.oninput = () => {
                 const val = parseInt(i.value);
-                // Validate 1-100
                 b.disabled = !val || val < 1 || val > 100;
             }; 
             b.onclick = () => { gameState.guesses[2] = parseInt(i.value); gameState.step = 4; renderStep(); }; 
@@ -201,7 +196,6 @@ function buildStepHTML(container) {
     }
 }
 
-// Rand Max
 function rand(max) { return Math.floor(Math.random() * max) + 1; }
 
 function renderBettingScreen(container) {
@@ -277,7 +271,6 @@ function renderBettingScreen(container) {
     const inp = document.getElementById('bet-input');
     const btn = document.getElementById('btn-spin');
     
-    // ✅ Persistence: Recover bet amount if exists
     if (gameState.betAmount > 0) inp.value = gameState.betAmount;
 
     const validate = () => {
@@ -289,11 +282,9 @@ function renderBettingScreen(container) {
         const pot2 = document.getElementById('win-pot-2');
         const pot3 = document.getElementById('win-pot-3');
 
-        // Check Guesses (Zeros)
         const hasZeros = gameState.guesses.includes(0);
 
         if (val > 0 && !hasZeros) { 
-            // Multipliers 1.5x, 5x, 50x
             pot1.innerText = `+ ${(val * 1.5).toLocaleString()} BKC`; pot1.classList.add('profit-active');
             pot2.innerText = `+ ${(val * 5).toLocaleString()} BKC`; pot2.classList.add('profit-active');
             pot3.innerText = `+ ${(val * 50).toLocaleString()} BKC`; pot3.classList.add('profit-active');
@@ -369,7 +360,6 @@ function startSpinning() {
         const el = document.getElementById(`slot-${i}`);
         el.innerText = '?'; el.className = "slot-box rounded-2xl h-20 flex items-center justify-center text-4xl font-black slot-spinning";
     });
-    // Rand Max for 5, 15, 150
     gameState.spinInterval = setInterval(() => {
         if(document.getElementById('slot-1')) document.getElementById('slot-1').innerText = rand(5);
         if(document.getElementById('slot-2')) document.getElementById('slot-2').innerText = rand(15);
@@ -403,9 +393,6 @@ async function stopSpinning(rolls, winAmount) {
     showResultOverlay(winAmount > 0n);
 }
 
-// -------------------------------------------------------------
-// ✅ SHARE BUTTON LOGIC ADDED HERE (WIN & LOSS SCENARIOS)
-// -------------------------------------------------------------
 function showResultOverlay(isWin) {
     const overlay = document.getElementById('result-overlay');
     overlay.classList.remove('hidden'); overlay.classList.add('flex');
@@ -413,7 +400,6 @@ function showResultOverlay(isWin) {
     const winText = `🏆 I just won ${gameState.lastWinAmount.toFixed(2)} $BKC on the Fortune Pool! The Backchain Protocol is changing the game. Real Yield, Real Utility. 🚀🔥 #BKC #BACKCOIN #AIRDROP`;
     const lossText = `⛏️ Mining the future with Proof-of-Purchase! Every interaction counts in the Backchain Protocol. Join the revolution. 💎🔨 #BKC #BACKCOIN #AIRDROP`;
     
-    // Encode text for Twitter Intent
     const shareText = isWin ? winText : lossText;
     const shareUrl = `https://twitter.com/intent/tweet?text=${encodeURIComponent(shareText)}&url=${encodeURIComponent('https://backcoin.org')}`;
 
@@ -453,7 +439,6 @@ function showResultOverlay(isWin) {
         addXP(50);
     }
 
-    // Attach Listeners
     document.getElementById('btn-collect').onclick = closeOverlay;
     
     if (isWin) {
@@ -486,12 +471,11 @@ function closeOverlay() {
 }
 
 // -------------------------------------------------------------
-// ✅ TRANSACTION EXECUTION V28: Deep Debug Participate & Gas Limit Fix
+// TRANSACTION EXECUTION V29: Fixed for uint256[] dynamic arrays
 // -------------------------------------------------------------
 async function executeTransaction() {
     if (!State.isConnected) return showToast("Connect wallet", "error");
     
-    // 1. Validate Guesses (Must not contain 0)
     if (gameState.guesses.includes(0)) {
         showToast("Select all 3 numbers!", "error");
         if(gameState.guesses[0] === 0) { gameState.step = 1; renderStep(); }
@@ -505,7 +489,6 @@ async function executeTransaction() {
     const btn = document.getElementById('btn-spin');
     const amountWei = ethers.parseEther(gameState.betAmount.toString());
     
-    // 2. FEE CALCULATION
     const isCumulative = gameState.isCumulative;
     let fee = 0n;
 
@@ -525,7 +508,6 @@ async function executeTransaction() {
         console.log("   > Fallback Fee Used:", fee.toString(), "Wei");
     }
     
-    // 3. ETH Balance Check
     try {
         const nativeBalance = await State.provider.getBalance(State.userAddress);
         const minRequired = fee + ethers.parseEther("0.002"); 
@@ -539,7 +521,6 @@ async function executeTransaction() {
     btn.disabled = true;
     try {
         const spender = addresses.fortunePool;
-        // VALIDATION FIX: Ensure address is valid
         if (!spender || !ethers.isAddress(spender)) {
              console.error("❌ Invalid Spender:", spender);
              showToast("Config Error: Spender Invalid. Reload.", "error");
@@ -547,7 +528,6 @@ async function executeTransaction() {
              return;
         }
 
-        // A. Approve BKC
         btn.innerHTML = `<div class="loader inline-block"></div> APPROVING BKC...`;
         try {
             console.log("🔍 DEBUG APPROVE:", {
@@ -559,7 +539,6 @@ async function executeTransaction() {
 
             const currentAllowance = await State.bkcTokenContract.allowance(State.userAddress, spender);
             if (currentAllowance < amountWei) {
-                // ✅ MANUAL GAS LIMIT FIX: Force 200k gas
                 const approveTx = await State.bkcTokenContract.approve(spender, amountWei, { gasLimit: 200000 });
                 await approveTx.wait();
                 showToast("✅ BKC Approved!", "success");
@@ -572,24 +551,24 @@ async function executeTransaction() {
             return;
         } 
         
-        // B. Participate
         btn.innerHTML = `<div class="loader inline-block"></div> CONFIRMING...`;
         
-        // ✅ DEEP DEBUG LOG (CHECK CONSOLE FOR THIS!)
+        // CRITICAL FIX: Convert guesses to BigInt array for uint256[] compatibility
+        const guessesAsBigInt = gameState.guesses.map(g => BigInt(g));
+        
         console.log("🚀 DEBUG PARTICIPATE PAYLOAD:", {
             contractAddress: addresses.fortunePool,
             amountBKC: amountWei.toString(),
-            guesses: gameState.guesses,
+            guesses: guessesAsBigInt.map(g => g.toString()),
             isCumulative: isCumulative,
             feeETH: fee.toString()
         });
         
-        // Call participate with EXACT fee + GasLimit
         const tx = await State.actionsManagerContract.participate(
             amountWei, 
-            gameState.guesses, 
+            guessesAsBigInt,
             isCumulative, 
-            { value: fee, gasLimit: 500000 } // ✅ Force 500k gas
+            { value: fee, gasLimit: 500000 }
         );
         
         startSpinning(); 
@@ -606,9 +585,10 @@ async function executeTransaction() {
         
         let msg = "Transaction Failed";
         
-        // Common error handling
-        if (e.message && e.message.includes("cf07063a")) msg = "Fee Mismatch (Clear Cache!)"; // InvalidFee error code
+        if (e.message && e.message.includes("cf07063a")) msg = "Fee Mismatch (Clear Cache!)";
         else if (e.message && e.message.includes("insufficient funds")) msg = "Insufficient ETH for Gas";
+        else if (e.message && e.message.includes("InvalidGuessCount")) msg = "Wrong number of guesses!";
+        else if (e.message && e.message.includes("InvalidGuessRange")) msg = "Guess out of range!";
         else if (e.reason) msg = e.reason;
         else if (e.code === "ACTION_REJECTED") msg = "User rejected transaction";
         
@@ -620,36 +600,61 @@ async function executeTransaction() {
 }
 
 async function waitForOracle(gameId) {
-    let attempts = 0; let progress = 40;
+    let attempts = 0; 
+    let progress = 40;
+    
     if (gameState.pollInterval) clearInterval(gameState.pollInterval);
+    
     gameState.pollInterval = setInterval(async () => {
-        attempts++; progress += 2; if(progress > 95) progress = 95;
+        attempts++; 
+        progress += 2; 
+        if(progress > 95) progress = 95;
+        
         updateProgressBar(progress, "ORACLE CONSENSUS...");
+        
         if (attempts > 60) {
-            clearInterval(gameState.pollInterval); stopSpinning([0,0,0], 0n); showToast("Oracle delay. Check history later.", "info"); return;
+            clearInterval(gameState.pollInterval); 
+            stopSpinning([0,0,0], 0n); 
+            showToast("Oracle delay. Check history later.", "info"); 
+            return;
         }
+        
         try {
-            // Checks result for the 3 slots (0,1,2)
             const p1 = safeContractCall(State.actionsManagerContract, 'gameResults', [gameId, 0], 0n, 0, true);
             const p2 = safeContractCall(State.actionsManagerContract, 'gameResults', [gameId, 1], 0n, 0, true);
             const p3 = safeContractCall(State.actionsManagerContract, 'gameResults', [gameId, 2], 0n, 0, true);
+            
             const [r1, r2, r3] = await Promise.all([p1, p2, p3]);
+            
+            console.log(`🎰 Poll #${attempts} - Game ${gameId}: Results [${r1}, ${r2}, ${r3}]`);
+            
             if (Number(r1) !== 0) {
                 clearInterval(gameState.pollInterval);
                 const rolls = [Number(r1), Number(r2), Number(r3)];
+                
                 let win = 0n;
-                // Calculate Win Locally for UI
+                
                 if(rolls[0] === gameState.guesses[0] || rolls[1] === gameState.guesses[1] || rolls[2] === gameState.guesses[2]) {
                     let mult = 0;
-                    // Multipliers 1.5x, 5x, 50x
-                    if(rolls[0]===gameState.guesses[0]) mult=1.5; 
-                    if(rolls[1]===gameState.guesses[1]) mult= gameState.isCumulative ? mult+5 : Math.max(mult, 5); 
-                    if(rolls[2]===gameState.guesses[2]) mult= gameState.isCumulative ? mult+50 : Math.max(mult, 50); 
+                    
+                    if(rolls[0] === gameState.guesses[0]) mult = 1.5; 
+                    if(rolls[1] === gameState.guesses[1]) {
+                        mult = gameState.isCumulative ? mult + 5 : Math.max(mult, 5); 
+                    }
+                    if(rolls[2] === gameState.guesses[2]) {
+                        mult = gameState.isCumulative ? mult + 50 : Math.max(mult, 50); 
+                    }
+                    
                     win = ethers.parseEther((gameState.betAmount * mult).toString());
                 }
+                
+                console.log(`🎉 Game Result - Rolls: [${rolls}], Guesses: [${gameState.guesses}], Win: ${ethers.formatEther(win)} BKC`);
+                
                 stopSpinning(rolls, win);
             }
-        } catch (e) {}
+        } catch (e) {
+            console.error("Poll error:", e);
+        }
     }, 2000);
 }
 
@@ -677,7 +682,20 @@ export const FortunePoolPage = {
             return; 
         }
         
-        // --- 1. PSTAKE CHECK (Smart) ---
+        // Check active tier count
+        try {
+            const tierCount = await safeContractCall(State.actionsManagerContract, 'activeTierCount', [], 0n, 1, false);
+            if (Number(tierCount) === 0) {
+                console.error("❌ ERROR: No Prize Tiers configured!");
+                gameState.systemReady = false;
+                if(el) el.innerHTML = `<span class="text-red-500 font-bold">⚠️ TIERS NOT SET</span>`; 
+                if(btn) { btn.disabled = true; btn.innerText = "GAME NOT READY"; } 
+                return;
+            }
+        } catch(e) {
+            console.warn("Could not check tier count:", e);
+        }
+        
         const MIN_PSTAKE_KEY = "TIGER_GAME_SERVICE";
         const minPStake = State.systemPStakes?.[MIN_PSTAKE_KEY] || 0n;
         const userPStake = State.userTotalPStake || 0n;
@@ -692,9 +710,7 @@ export const FortunePoolPage = {
             pstakeEl.innerHTML = `<span class="text-green-500">PSTAKE: OK</span> (${formatBigNumber(userPStake).toFixed(2)} BKC)`;
             pstakeEl.className = "text-[10px] text-zinc-400 font-mono mt-2 px-4";
         }
-        // ------------------------------------
 
-        // --- 2. ORACLE FEE CHECK ---
         let fee = 0n;
         try {
             let baseFee = await safeContractCall(State.actionsManagerContract, 'oracleFeeInWei', [], 0n);
@@ -710,7 +726,6 @@ export const FortunePoolPage = {
             el.className = "text-[10px] text-zinc-400 font-mono mt-2 px-4"; 
         }
         
-        // --- 3. FINAL READY CHECK ---
         gameState.systemReady = isPStakeOK && (addresses.fortunePool && State.actionsManagerContract);
         const inp = document.getElementById('bet-input');
 
@@ -743,7 +758,6 @@ export const FortunePoolPage = {
                 const winAmount = g.details.amount || '0';
                 const dateStr = formatDate(g.timestamp || g.createdAt);
                 
-                // ✅ Link para Arbitrum Sepolia
                 const explorerLink = g.txHash ? `${EXPLORER_BASE}${g.txHash}` : '#';
                 
                 const userGuesses = g.details.userGuesses || ['?', '?', '?'];

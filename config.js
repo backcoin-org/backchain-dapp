@@ -1,5 +1,5 @@
 // js/config.js
-// ✅ VERSÃO FINAL (PRODUÇÃO V19): Fetching Static JSON (Compatible with Hardhat & Vite)
+// ✅ PRODUCTION V20: Fixed FortunePool ABI (uint256[] dynamic arrays)
 
 // ============================================================================
 // 1. ENVIRONMENT & ALCHEMY CONFIG
@@ -7,16 +7,13 @@
 const isDevelopment = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
 console.log(`Environment: ${isDevelopment ? 'DEVELOPMENT' : 'PRODUCTION'}`);
 
-// 🔐 Carrega as variáveis injetadas pelo Vite (do .env ou Vercel)
 const ALCHEMY_KEY = import.meta.env.VITE_ALCHEMY_API_KEY;
 const GAS_POLICY_ID = import.meta.env.VITE_GAS_POLICY_ID;
 
-// Validação de Segurança
 if (!ALCHEMY_KEY) {
-    console.error("❌ ERRO CRÍTICO: VITE_ALCHEMY_API_KEY não encontrada. Verifique seu arquivo .env ou configurações da Vercel.");
+    console.error("❌ CRITICAL ERROR: VITE_ALCHEMY_API_KEY not found. Check your .env or Vercel settings.");
 }
 
-// ⚠️ CONFIGURAÇÃO ATIVA PARA O GRANT
 export const CONFIG = {
     alchemy: {
         apiKey: ALCHEMY_KEY, 
@@ -27,10 +24,9 @@ export const CONFIG = {
 // ============================================================================
 // 2. NETWORK CONFIGURATION
 // ============================================================================
-// RPC Otimizado da Alchemy (Arbitrum Sepolia)
 export const sepoliaRpcUrl = `https://arb-sepolia.g.alchemy.com/v2/${CONFIG.alchemy.apiKey}`;
 export const sepoliaWssUrl = `wss://arb-sepolia.g.alchemy.com/v2/${CONFIG.alchemy.apiKey}`;
-export const sepoliaChainId = 421614n; // Arbitrum Sepolia Chain ID
+export const sepoliaChainId = 421614n;
 
 export const ipfsGateway = "https://white-defensive-eel-240.mypinata.cloud/ipfs/";
 
@@ -43,10 +39,6 @@ export async function loadAddresses() {
     try {
         console.log("🔄 Fetching contract addresses from static file...");
         
-        // ✅ USO DE FETCH (A solução robusta)
-        // O arquivo deployment-addresses.json é copiado para a raiz do site pelo vite-plugin-static-copy.
-        // Usamos fetch para lê-lo como um arquivo de dados, evitando erros de "MIME Type" do Javascript.
-        // Adicionamos um timestamp para evitar cache antigo.
         const response = await fetch(`./deployment-addresses.json?t=${new Date().getTime()}`);
         
         if (!response.ok) {
@@ -55,7 +47,6 @@ export async function loadAddresses() {
         
         const jsonAddresses = await response.json();
 
-        // Validação básica
         const requiredAddresses = ['bkcToken', 'delegationManager', 'ecosystemManager', 'miningManager'];
         const missingAddresses = requiredAddresses.filter(key => !jsonAddresses[key]);
         
@@ -63,10 +54,8 @@ export async function loadAddresses() {
             throw new Error(`Missing required addresses: ${missingAddresses.join(', ')}`);
         }
 
-        // Injeta os dados carregados no objeto addresses exportado
         Object.assign(addresses, jsonAddresses);
 
-        // Aliases para compatibilidade interna do app
         addresses.actionsManager = jsonAddresses.fortunePool; 
         addresses.fortunePool = jsonAddresses.fortunePool;
         addresses.rentalManager = jsonAddresses.rentalManager || null;
@@ -86,7 +75,7 @@ export async function loadAddresses() {
 // ============================================================================
 // 4. APPLICATION CONSTANTS
 // ============================================================================
-export const FAUCET_AMOUNT_WEI = 20n * 10n**18n; // 20 BKC
+export const FAUCET_AMOUNT_WEI = 20n * 10n**18n;
 
 export const boosterTiers = [
     { name: "Diamond", boostBips: 7000, color: "text-cyan-400", img: `${ipfsGateway}bafybeicgip72jcqgsirlrhn3tq5cc226vmko6etnndzl6nlhqrktfikafq/diamond_booster.json`, realImg: `${ipfsGateway}bafybeicgip72jcqgsirlrhn3tq5cc226vmko6etnndzl6nlhqrktfikafq`, borderColor: "border-cyan-400/50", glowColor: "bg-cyan-500/10" },
@@ -170,21 +159,18 @@ export const nftPoolABI = [
     "event NFTSold(address indexed seller, uint256 indexed boostBips, uint256 tokenId, uint256 payout, uint256 taxPaid)"
 ];
 
-// ✅ CORREÇÃO CRÍTICA (Async Oracle): Alinhado com o contrato FortunePool.sol atual
+// CRITICAL FIX: FortunePool ABI with uint256[] dynamic arrays (NOT uint8[3])
 export const actionsManagerABI = [
-    // Função principal de aposta
-    "function participate(uint256 _amount, uint8[3] _guesses, bool _isCumulative) payable",
-    // Taxas
+    "function participate(uint256 _amount, uint256[] _guesses, bool _isCumulative) payable",
     "function oracleFeeInWei() view returns (uint256)",
-    // Consulta de resultados (retorna tupla fixa de 3)
-    "function gameResults(uint256) view returns (uint256[3])",
-    // Contadores e Listas
+    "function gameFeeBips() view returns (uint256)",
+    "function activeTierCount() view returns (uint256)",
+    "function gameResults(uint256 gameId, uint256 index) view returns (uint256)",
     "function gameCounter() view returns (uint256)",
-    "function pendingGames(uint256) view returns (address, uint256, uint8[3], bool)",
     "function prizePoolBalance() view returns (uint256)",
-    // Eventos
-    "event GameRequested(uint256 indexed gameId, address indexed user, uint256 purchaseAmount, uint8[3] guesses, bool isCumulative)",
-    "event GameFulfilled(uint256 indexed gameId, address indexed user, uint256 prizeWon, uint256[3] rolls, uint8[3] guesses)"
+    "function prizeTiers(uint256 tierId) view returns (uint128 range, uint64 multiplierBips, bool isActive)",
+    "event GameRequested(uint256 indexed gameId, address indexed user, uint256 purchaseAmount, uint256[] guesses, bool isCumulative)",
+    "event GameFulfilled(uint256 indexed gameId, address indexed user, uint256 prizeWon, uint256[] rolls, uint256[] guesses)"
 ];
 
 export const publicSaleABI = [
@@ -194,7 +180,6 @@ export const publicSaleABI = [
     "event NFTSold(address indexed buyer, uint256 indexed tierId, uint256 indexed tokenId, uint256 price)"
 ];
 
-// ✅ ENTERPRISE NOTARY ABI: Alinhado com DecentralizedNotary.sol (Struct Interna)
 export const decentralizedNotaryABI = [
     "event NotarizationEvent(uint256 indexed tokenId, address indexed owner, string ipfsCid, bytes32 contentHash)",
     "function balanceOf(address owner) view returns (uint256)",
