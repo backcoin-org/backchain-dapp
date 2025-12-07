@@ -244,7 +244,7 @@ export function showWelcomeModal() {
 
             <div class="mb-4 relative inline-block">
                 <div class="absolute inset-0 bg-blue-500/20 rounded-full blur-xl"></div>
-                <img src="./assets/bkc_logo_3d.png" alt="Backcoin Logo" class="h-24 w-24 mx-auto rounded-full relative z-10 shadow-2xl">
+                <img src="/assets/bkc_logo_3d.png" alt="Backcoin Logo" class="h-24 w-24 mx-auto rounded-full relative z-10 shadow-2xl">
             </div>
             
             <h2 class="text-3xl font-black text-white mb-2 uppercase tracking-wide">
