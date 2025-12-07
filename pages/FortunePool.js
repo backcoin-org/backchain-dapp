@@ -1,5 +1,5 @@
 // js/pages/FortunePool.js
-// ✅ VERSÃO FINAL V26: Implementado PStake Check Inteligente
+// ✅ VERSÃO FINAL V26: Implementado PStake Check Inteligente & State Persistence
 
 import { State } from '../state.js';
 import { loadUserData, safeContractCall, API_ENDPOINTS } from '../modules/data.js';
@@ -86,22 +86,47 @@ style.innerHTML = `
 `;
 document.head.appendChild(style);
 
+// --- GLOBAL GAME STATE ---
 let gameState = {
-    step: 0, isSpinning: false, gameId: 0, pollInterval: null, spinInterval: null,
+    step: 0, 
+    isSpinning: false, 
+    gameId: 0, 
+    pollInterval: null, 
+    spinInterval: null,
     guesses: [0, 0, 0], 
     isCumulative: true, 
-    betAmount: 0, lastWinAmount: 0,
-    currentLevel: 1, currentXP: 0, xpPerLevel: 1000, systemReady: false
+    betAmount: 0, 
+    lastWinAmount: 0,
+    currentLevel: 1, 
+    currentXP: 0, 
+    xpPerLevel: 1000, 
+    systemReady: false
 };
 
-// --- DATA PERSISTENCE ---
+// --- DATA PERSISTENCE (Gamification) ---
 try {
     const local = localStorage.getItem('bkc_fortune_v24');
-    if (local) { const p = JSON.parse(local); gameState.currentLevel = p.lvl || 1; gameState.currentXP = p.xp || 0; }
+    if (local) { 
+        const p = JSON.parse(local); 
+        gameState.currentLevel = p.lvl || 1; 
+        gameState.currentXP = p.xp || 0; 
+    }
 } catch (e) {}
 
-function saveProgress() { localStorage.setItem('bkc_fortune_v24', JSON.stringify({ lvl: gameState.currentLevel, xp: gameState.currentXP })); updateGamificationUI(); }
-function addXP(amount) { gameState.currentXP += amount; if (gameState.currentXP >= gameState.xpPerLevel) { gameState.currentLevel++; gameState.currentXP -= gameState.xpPerLevel; showToast(`🆙 LEVEL UP! LVL ${gameState.currentLevel}`, "success"); } saveProgress(); }
+function saveProgress() { 
+    localStorage.setItem('bkc_fortune_v24', JSON.stringify({ lvl: gameState.currentLevel, xp: gameState.currentXP })); 
+    updateGamificationUI(); 
+}
+
+function addXP(amount) { 
+    gameState.currentXP += amount; 
+    if (gameState.currentXP >= gameState.xpPerLevel) { 
+        gameState.currentLevel++; 
+        gameState.currentXP -= gameState.xpPerLevel; 
+        showToast(`🆙 LEVEL UP! LVL ${gameState.currentLevel}`, "success"); 
+    } 
+    saveProgress(); 
+}
 
 // --- RENDERIZACAO DE PASSOS ---
 function renderStep() {
@@ -127,16 +152,17 @@ function buildStepHTML(container) {
                     </button>
                 </div>
             </div>`;
-        // Rand Max para 5, 15, 150
-        document.getElementById('btn-random-all').onclick = () => { gameState.guesses = [rand(5), rand(15), rand(150)]; gameState.step = 4; renderStep(); };
+        // Rand Max para 3, 10, 100 (MUST MATCH CONTRACT LIMITS!)
+        document.getElementById('btn-random-all').onclick = () => { gameState.guesses = [rand(3), rand(10), rand(100)]; gameState.step = 4; renderStep(); };
         document.getElementById('btn-manual-pick').onclick = () => { gameState.step = 1; renderStep(); };
     }
     else if (gameState.step >= 1 && gameState.step <= 3) {
-        // Tiers (Max e Descrição)
+        // Tiers (Max e Descrição) - MUST MATCH CONTRACT LIMITS!
+        // Contract: guesses[0] 1-3, guesses[1] 1-10, guesses[2] 1-100
         const tiers = [
-            { max: 5, name: "BRONZE", reward: "1.5x", desc: "1 in 5 Chance" }, 
-            { max: 15, name: "SILVER", reward: "5x", desc: "1 in 15 Chance" }, 
-            { max: 150, name: "GOLD", reward: "50x", desc: "1 in 150 Chance" }
+            { max: 3, name: "BRONZE", reward: "1.5x", desc: "1 in 3 Chance" }, 
+            { max: 10, name: "SILVER", reward: "5x", desc: "1 in 10 Chance" }, 
+            { max: 100, name: "GOLD", reward: "50x", desc: "1 in 100 Chance" }
         ];
         const t = tiers[gameState.step - 1];
         
@@ -251,6 +277,7 @@ function renderBettingScreen(container) {
     const inp = document.getElementById('bet-input');
     const btn = document.getElementById('btn-spin');
     
+    // ✅ State Persistence: Recupera o valor da aposta se já existir
     if (gameState.betAmount > 0) inp.value = gameState.betAmount;
 
     const validate = () => {
@@ -519,15 +546,22 @@ async function executeTransaction() {
 
     btn.disabled = true;
     try {
-        // A. Approve BKC (Usando o EnsureApproval do transactions.js)
-        const approvalSuccess = await window.executeApproval(
-            State.bkcTokenContract, 
-            addresses.fortunePool, 
-            amountWei, 
-            btn, 
-            "Game Wager"
-        );
-        if (!approvalSuccess) return; 
+        // A. Approve BKC
+        btn.innerHTML = `<div class="loader inline-block"></div> APPROVING BKC...`;
+        try {
+            const currentAllowance = await State.bkcTokenContract.allowance(State.userAddress, addresses.fortunePool);
+            if (currentAllowance < amountWei) {
+                const approveTx = await State.bkcTokenContract.approve(addresses.fortunePool, amountWei);
+                await approveTx.wait();
+                showToast("✅ BKC Approved!", "success");
+            }
+        } catch (approvalError) {
+            console.error("❌ Approval Failed:", approvalError);
+            showToast("Approval failed or rejected", "error");
+            btn.disabled = false;
+            btn.innerText = "START MINING";
+            return;
+        } 
         
         // B. Participate
         btn.innerHTML = `<div class="loader inline-block"></div> CONFIRMING...`;
@@ -678,7 +712,7 @@ export const FortunePoolPage = {
         if(!list || !State.isConnected) return;
         
         try {
-            const res = await fetch(`${API_ENDpoints.getHistory}/${State.userAddress}`);
+            const res = await fetch(`${API_ENDPOINTS.getHistory}/${State.userAddress}`);
             const data = await res.json();
             const games = data.filter(a => a.type === 'GameResult');
             
