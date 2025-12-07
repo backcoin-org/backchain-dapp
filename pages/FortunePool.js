@@ -1,5 +1,5 @@
 // js/pages/FortunePool.js
-// ✅ PRODUCTION V29: Fixed ABI Compatibility (uint256[] dynamic arrays)
+// ✅ PRODUCTION V30: Fixed GameCounter Logic & ABI Compatibility
 
 import { State } from '../state.js';
 import { loadUserData, safeContractCall, API_ENDPOINTS } from '../modules/data.js';
@@ -471,7 +471,7 @@ function closeOverlay() {
 }
 
 // -------------------------------------------------------------
-// TRANSACTION EXECUTION V29: Fixed for uint256[] dynamic arrays
+// TRANSACTION EXECUTION (FIXED FOR V30)
 // -------------------------------------------------------------
 async function executeTransaction() {
     if (!State.isConnected) return showToast("Connect wallet", "error");
@@ -575,8 +575,13 @@ async function executeTransaction() {
         await tx.wait();
         updateProgressBar(40, "BLOCK MINED. WAITING ORACLE...");
         
+        // --- FIX V30: CORRECT GAME ID MONITORING ---
         const ctr = await safeContractCall(State.actionsManagerContract, 'gameCounter', [], 0, 2, true);
-        setTimeout(() => waitForOracle(Number(ctr)), 2000);
+        const gameIdToWatch = Number(ctr) > 0 ? Number(ctr) - 1 : 0; 
+        
+        console.log(`✅ TX Confirmed. Counter is ${ctr}. Watching Game #${gameIdToWatch}`);
+        
+        setTimeout(() => waitForOracle(gameIdToWatch), 2000);
         
     } catch (e) {
         console.error("❌ Tx Failed. Full Error:", e);
@@ -610,7 +615,7 @@ async function waitForOracle(gameId) {
         progress += 2; 
         if(progress > 95) progress = 95;
         
-        updateProgressBar(progress, "ORACLE CONSENSUS...");
+        updateProgressBar(progress, `ORACLE CONSENSUS (Game ${gameId})...`);
         
         if (attempts > 60) {
             clearInterval(gameState.pollInterval); 
@@ -626,17 +631,16 @@ async function waitForOracle(gameId) {
             
             const [r1, r2, r3] = await Promise.all([p1, p2, p3]);
             
-            console.log(`🎰 Poll #${attempts} - Game ${gameId}: Results [${r1}, ${r2}, ${r3}]`);
-            
+            // If r1 is > 0, it means the Oracle has responded
             if (Number(r1) !== 0) {
                 clearInterval(gameState.pollInterval);
                 const rolls = [Number(r1), Number(r2), Number(r3)];
                 
                 let win = 0n;
                 
+                // Client-side Win Calculation (Visual Only - Contract handles real payout)
                 if(rolls[0] === gameState.guesses[0] || rolls[1] === gameState.guesses[1] || rolls[2] === gameState.guesses[2]) {
                     let mult = 0;
-                    
                     if(rolls[0] === gameState.guesses[0]) mult = 1.5; 
                     if(rolls[1] === gameState.guesses[1]) {
                         mult = gameState.isCumulative ? mult + 5 : Math.max(mult, 5); 
@@ -644,12 +648,10 @@ async function waitForOracle(gameId) {
                     if(rolls[2] === gameState.guesses[2]) {
                         mult = gameState.isCumulative ? mult + 50 : Math.max(mult, 50); 
                     }
-                    
-                    win = ethers.parseEther((gameState.betAmount * mult).toString());
+                    win = ethers.parseEther((gameState.betAmount * mult).toFixed(18));
                 }
                 
                 console.log(`🎉 Game Result - Rolls: [${rolls}], Guesses: [${gameState.guesses}], Win: ${ethers.formatEther(win)} BKC`);
-                
                 stopSpinning(rolls, win);
             }
         } catch (e) {
@@ -696,6 +698,7 @@ export const FortunePoolPage = {
             console.warn("Could not check tier count:", e);
         }
         
+        // PStake Check
         const MIN_PSTAKE_KEY = "TIGER_GAME_SERVICE";
         const minPStake = State.systemPStakes?.[MIN_PSTAKE_KEY] || 0n;
         const userPStake = State.userTotalPStake || 0n;
@@ -711,6 +714,7 @@ export const FortunePoolPage = {
             pstakeEl.className = "text-[10px] text-zinc-400 font-mono mt-2 px-4";
         }
 
+        // Fee Display
         let fee = 0n;
         try {
             let baseFee = await safeContractCall(State.actionsManagerContract, 'oracleFeeInWei', [], 0n);
