@@ -19,5 +19,6 @@
   "pool_silver": "0x637a631883053fB88FEd383A951192e2717bb444",
   "pool_bronze": "0xebb480c1d2E6a4D383e2c28aC5955641ed0B9783",
   "pool_iron": "0x47603812dEEB7349F3c86c457D97f91596721069",
-  "pool_crystal": "0xb561Fb153b2d54CdfCC9d100E66A3dc1f4cE480F"
+  "pool_crystal": "0xb561Fb153b2d54CdfCC9d100E66A3dc1f4cE480F",
+  "faucetInitialSupplyWei": "1000000000000000000000000"
 }
