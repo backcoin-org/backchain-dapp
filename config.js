@@ -1,5 +1,9 @@
 // js/config.js
-// ✅ VERSÃO FINAL (PRODUÇÃO V17): Environment Variables Secured
+// ✅ VERSÃO FINAL (PRODUÇÃO V18): Fixed JSON Import for Vite Root
+
+// 1. IMPORTAÇÃO DIRETA DO JSON (Resolve o erro 404)
+// O Vite vai ler este arquivo no momento do build e embutir os dados aqui.
+import jsonAddresses from './deployment-addresses.json';
 
 // ============================================================================
 // 1. ENVIRONMENT & ALCHEMY CONFIG
@@ -41,13 +45,12 @@ export const addresses = {};
 
 export async function loadAddresses() {
     try {
-        const response = await fetch('./deployment-addresses.json');
+        console.log("🔄 Loading addresses directly from build bundle...");
         
-        if (!response.ok) {
-            throw new Error(`Failed to fetch deployment-addresses.json: ${response.status}`);
+        // Não usamos mais fetch(), usamos a variável importada no topo
+        if (!jsonAddresses) {
+             throw new Error("Deployment addresses JSON failed to load via import.");
         }
-        
-        const jsonAddresses = await response.json();
 
         // Validação básica
         const requiredAddresses = ['bkcToken', 'delegationManager', 'ecosystemManager', 'miningManager'];
@@ -57,6 +60,7 @@ export async function loadAddresses() {
             throw new Error(`Missing required addresses: ${missingAddresses.join(', ')}`);
         }
 
+        // Injeta os dados importados no objeto addresses exportado
         Object.assign(addresses, jsonAddresses);
 
         // Aliases para compatibilidade interna do app
@@ -67,7 +71,7 @@ export async function loadAddresses() {
 
         if (!addresses.faucet) console.warn("Faucet address missing in JSON, check deployment.");
 
-        console.log("✅ Contract addresses loaded successfully.");
+        console.log("✅ Contract addresses loaded successfully (Embedded).");
         return true;
 
     } catch (error) {
