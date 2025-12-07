@@ -1,5 +1,5 @@
 // js/pages/DashboardPage.js
-// ✅ FINAL VERSION V7.2: Explorer Link Fixed + Gas Guard (Low Balance Warning)
+// ✅ FINAL VERSION V7.3: Smart Priority Widget (Gas > BKC)
 
 const ethers = window.ethers;
 
@@ -96,7 +96,6 @@ function animateClaimableRewards(targetNetValue) {
 async function checkGasAndWarn() {
     try {
         const nativeBalance = await State.provider.getBalance(State.userAddress);
-        // Minimum safe threshold: 0.002 ETH
         const minGas = ethers.parseEther("0.002"); 
         
         if (nativeBalance < minGas) {
@@ -111,7 +110,7 @@ async function checkGasAndWarn() {
         return true;
     } catch (e) {
         console.error("Gas check failed", e);
-        return true; // Fail safe
+        return true; 
     }
 }
 
@@ -143,19 +142,16 @@ function renderDashboardLayout() {
                 
                 <div class="lg:col-span-8 flex flex-col gap-6">
                     
-                    <div id="dashboard-faucet-widget" class="hidden glass-panel border-l-4 border-l-amber-500 bg-gradient-to-r from-amber-900/10 to-transparent">
+                    <div id="dashboard-faucet-widget" class="hidden glass-panel border-l-4 transition-all duration-500 bg-gradient-to-r from-zinc-900/50 to-transparent">
                         <div class="flex flex-col sm:flex-row justify-between items-center gap-4">
                             <div>
-                                <h3 class="text-white font-bold flex items-center gap-2">
-                                    <i class="fa-solid fa-faucet text-amber-500 animate-bounce"></i> Need Tokens for Testing?
-                                </h3>
-                                <p class="text-sm text-zinc-400 mt-1">
-                                    Claim <strong>20 Free BKC</strong> on Testnet to explore Staking, Fortune Pool & Notary.
-                                </p>
+                                <h3 id="faucet-title" class="text-white font-bold flex items-center gap-2">
+                                    </h3>
+                                <p id="faucet-desc" class="text-sm text-zinc-400 mt-1">
+                                    </p>
                             </div>
-                            <button id="quick-faucet-btn" class="w-full sm:w-auto bg-amber-600 hover:bg-amber-500 text-white font-bold py-2.5 px-6 rounded-lg shadow-lg transition-transform hover:scale-105 whitespace-nowrap">
-                                <i class="fa-solid fa-coins mr-2"></i> Get 20 BKC
-                            </button>
+                            <button id="faucet-action-btn" class="w-full sm:w-auto font-bold py-2.5 px-6 rounded-lg shadow-lg transition-transform hover:scale-105 whitespace-nowrap">
+                                </button>
                         </div>
                     </div>
 
@@ -493,16 +489,49 @@ async function updateUserHub(forceRefresh = false) {
         }
 
         await loadUserData(forceRefresh); 
-        
         fetchUserProfile();
 
-        const faucetWidget = document.getElementById('dashboard-faucet-widget');
-        if (faucetWidget) {
-            const lowBalanceThreshold = ethers.parseUnits("10", 18);
-            if (State.currentUserBalance < lowBalanceThreshold) {
-                faucetWidget.classList.remove('hidden');
+        // ------------------------------------------------
+        // ✅ SMART WIDGET LOGIC (GAS > BKC)
+        // ------------------------------------------------
+        const widget = document.getElementById('dashboard-faucet-widget');
+        
+        if (widget) {
+            const ethBalance = await State.provider.getBalance(State.userAddress);
+            const bkcBalance = State.currentUserBalance;
+            const minEth = ethers.parseEther("0.002");
+            const minBkc = ethers.parseUnits("10", 18);
+
+            const title = widget.querySelector('#faucet-title');
+            const desc = widget.querySelector('#faucet-desc');
+            const btn = widget.querySelector('#faucet-action-btn');
+
+            if (ethBalance < minEth) {
+                // PRIORIDADE 1: FALTA GÁS (ETH)
+                widget.classList.remove('hidden', 'border-l-amber-500');
+                widget.classList.add('border-l-red-500');
+                
+                title.innerHTML = '<i class="fa-solid fa-gas-pump text-red-500 animate-bounce"></i> Low Gas Detected';
+                desc.innerHTML = 'You need <strong>Arbitrum Sepolia ETH</strong> to transact.';
+                btn.innerHTML = '<i class="fa-solid fa-external-link-alt mr-2"></i> Get ETH';
+                btn.className = "w-full sm:w-auto bg-red-600 hover:bg-red-500 text-white font-bold py-2.5 px-6 rounded-lg shadow-lg transition-transform hover:scale-105 whitespace-nowrap";
+                
+                // Add unique identifier for click listener
+                btn.dataset.action = "gas";
+
+            } else if (bkcBalance < minBkc) {
+                // PRIORIDADE 2: FALTA TOKEN (BKC)
+                widget.classList.remove('hidden', 'border-l-red-500');
+                widget.classList.add('border-l-amber-500');
+                
+                title.innerHTML = '<i class="fa-solid fa-faucet text-amber-500 animate-bounce"></i> Need Tokens?';
+                desc.innerHTML = 'Claim <strong>20 Free BKC</strong> to explore the ecosystem.';
+                btn.innerHTML = '<i class="fa-solid fa-coins mr-2"></i> Get 20 BKC';
+                btn.className = "w-full sm:w-auto bg-amber-600 hover:bg-amber-500 text-white font-bold py-2.5 px-6 rounded-lg shadow-lg transition-transform hover:scale-105 whitespace-nowrap";
+                
+                btn.dataset.action = "bkc";
             } else {
-                faucetWidget.classList.add('hidden');
+                widget.classList.add('hidden');
             }
         }
 
@@ -549,7 +578,6 @@ function renderBoosterCard(data, claimDetails) {
     let efficiency = 50 + (currentBoostBips / 100);
     if (efficiency > 100) efficiency = 100;
 
-    // --- SCENARIO 1: LOW EFFICIENCY (UPSELL) ---
     if (efficiency < 100) {
         const feeAmount = claimDetails?.feeAmount || 0n; 
         const lostFormatted = formatBigNumber(feeAmount).toFixed(4);
@@ -596,7 +624,6 @@ function renderBoosterCard(data, claimDetails) {
         return;
     }
 
-    // --- SCENARIO 2: MAX EFFICIENCY (SUCCESS) ---
     const isRented = data.source === 'rented';
     const badgeColor = isRented ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/30' : 'bg-green-500/20 text-green-300 border-green-500/30';
     const badgeText = isRented ? 'Rented Active' : 'Owner Active';
@@ -795,10 +822,18 @@ function attachDashboardListeners() {
                 setTimeout(() => { btn.innerHTML = '<i class="fa-solid fa-rotate"></i> Sync Data'; btn.disabled = false; }, 1000);
             }
 
-            if (target.closest('#quick-faucet-btn')) {
-                const btn = target.closest('#quick-faucet-btn');
-                await executeInternalFaucet(btn);
-                await updateUserHub(true); 
+            // --- SMART BUTTON LISTENER (GAS OR BKC) ---
+            if (target.closest('#faucet-action-btn')) {
+                const btn = target.closest('#faucet-action-btn');
+                const action = btn.dataset.action;
+
+                if (action === "gas") {
+                    document.getElementById('no-gas-modal-dash').classList.remove('hidden');
+                    document.getElementById('no-gas-modal-dash').classList.add('flex');
+                } else if (action === "bkc") {
+                    await executeInternalFaucet(btn);
+                    await updateUserHub(true); 
+                }
             }
 
             if (target.closest('.delegate-link')) { e.preventDefault(); window.navigateTo('mine'); }
