@@ -1,5 +1,5 @@
 // js/pages/DashboardPage.js
-// ✅ FINAL VERSION V7.1: Explorer Link Fixed (Arbitrum Sepolia)
+// ✅ FINAL VERSION V7.2: Explorer Link Fixed + Gas Guard (Low Balance Warning)
 
 const ethers = window.ethers;
 
@@ -39,9 +39,15 @@ const DashboardState = {
 };
 
 // -----------------------------------------------------------
-// ✅ FIX: ARBITRUM SEPOLIA EXPLORER
+// CONFIGS
 // -----------------------------------------------------------
 const EXPLORER_BASE_URL = "https://sepolia.arbiscan.io/tx/";
+
+const EXTERNAL_FAUCETS = [
+    { name: "Alchemy Faucet", url: "https://www.alchemy.com/faucets/arbitrum-sepolia" },
+    { name: "QuickNode Faucet", url: "https://faucet.quicknode.com/arbitrum/sepolia" },
+    { name: "Google Cloud Faucet", url: "https://cloud.google.com/application/web3/faucet/arbitrum/sepolia" }
+];
 
 // --- HELPER: DATE FORMAT ---
 function formatDate(timestamp) {
@@ -81,6 +87,31 @@ function animateClaimableRewards(targetNetValue) {
 
     if (displayedRewardValue !== targetNetValue) {
         animationFrameId = requestAnimationFrame(() => animateClaimableRewards(targetNetValue));
+    }
+}
+
+// -------------------------------------------------------------
+// GAS GUARD: Check for Sepolia ETH
+// -------------------------------------------------------------
+async function checkGasAndWarn() {
+    try {
+        const nativeBalance = await State.provider.getBalance(State.userAddress);
+        // Minimum safe threshold: 0.002 ETH
+        const minGas = ethers.parseEther("0.002"); 
+        
+        if (nativeBalance < minGas) {
+            console.warn("⚠️ Low Gas Detected:", ethers.formatEther(nativeBalance));
+            const modal = document.getElementById('no-gas-modal-dash');
+            if(modal) {
+                modal.classList.remove('hidden');
+                modal.classList.add('flex');
+            }
+            return false;
+        }
+        return true;
+    } catch (e) {
+        console.error("Gas check failed", e);
+        return true; // Fail safe
     }
 }
 
@@ -308,6 +339,26 @@ function renderDashboardLayout() {
                     <button class="bg-cyan-700 hover:bg-cyan-600 text-white font-bold py-3 rounded-lg go-to-rental" onclick="document.getElementById('booster-info-modal').classList.add('hidden')">
                         Rent NFT
                     </button>
+                </div>
+            </div>
+        </div>
+
+        <div id="no-gas-modal-dash" class="absolute inset-0 z-50 hidden flex-col items-center justify-center glass-panel rounded-3xl bg-black/95 backdrop-blur-xl">
+            <div class="p-6 max-w-sm text-center animate-fadeIn bg-zinc-900 border border-zinc-800 rounded-2xl shadow-2xl">
+                <div class="w-16 h-16 bg-red-500/10 rounded-full flex items-center justify-center mx-auto mb-4 border border-red-500/30">
+                    <i class="fa-solid fa-gas-pump text-2xl text-red-500"></i>
+                </div>
+                <h3 class="text-xl font-bold text-white mb-2">Insufficient Gas (ETH)</h3>
+                <p class="text-zinc-400 text-sm mb-6">You need Arbitrum Sepolia ETH to pay for transaction fees. The tokens you have are BKC (Game Token), not ETH (Gas).</p>
+                
+                <div class="flex flex-col gap-3">
+                    ${EXTERNAL_FAUCETS.map(f => `
+                        <a href="${f.url}" target="_blank" class="w-full bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-white font-bold py-3 px-4 rounded-xl flex justify-between items-center transition-all hover:scale-105">
+                            <span>${f.name}</span>
+                            <i class="fa-solid fa-arrow-up-right-from-square text-xs text-zinc-500"></i>
+                        </a>
+                    `).join('')}
+                    <button id="close-gas-modal-dash" class="mt-2 text-zinc-500 hover:text-white text-xs underline">Close</button>
                 </div>
             </div>
         </div>
@@ -773,6 +824,15 @@ function attachDashboardListeners() {
                 }
             }
 
+            if (target.closest('#close-gas-modal-dash') || target === document.getElementById('no-gas-modal-dash')) {
+                e.preventDefault();
+                const modal = document.getElementById('no-gas-modal-dash');
+                if(modal) {
+                    modal.classList.remove('flex');
+                    modal.classList.add('hidden');
+                }
+            }
+
             const nftClick = target.closest('.nft-clickable-image');
             if (nftClick) {
                 const address = nftClick.dataset.address;
@@ -785,6 +845,15 @@ function attachDashboardListeners() {
                 try {
                     claimBtn.innerHTML = '<div class="loader inline-block"></div>';
                     claimBtn.disabled = true;
+
+                    // --- GAS GUARD CHECK ---
+                    const hasGas = await checkGasAndWarn();
+                    if (!hasGas) {
+                        claimBtn.innerHTML = '<i class="fa-solid fa-gift mr-2"></i> Claim Rewards';
+                        claimBtn.disabled = false;
+                        return;
+                    }
+
                     const { stakingRewards, minerRewards } = await calculateUserTotalRewards();
                     if (stakingRewards > 0n || minerRewards > 0n) {
                         const success = await executeUniversalClaim(stakingRewards, minerRewards, null);
