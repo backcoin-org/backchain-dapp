@@ -308,4 +308,4 @@ export function showWelcomeModal() {
     modalContent.querySelector('#btnSocials')?.addEventListener('click', () => {
         navigateAndClose('socials'); 
     });
-}
+}VC
