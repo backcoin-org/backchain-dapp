@@ -1,9 +1,5 @@
 // js/config.js
-// ✅ VERSÃO FINAL (PRODUÇÃO V18): Fixed JSON Import for Vite Root
-
-// 1. IMPORTAÇÃO DIRETA DO JSON (Resolve o erro 404)
-// O Vite vai ler este arquivo no momento do build e embutir os dados aqui.
-import jsonAddresses from './deployment-addresses.json';
+// ✅ VERSÃO FINAL (PRODUÇÃO V19): Fetching Static JSON (Compatible with Hardhat & Vite)
 
 // ============================================================================
 // 1. ENVIRONMENT & ALCHEMY CONFIG
@@ -45,12 +41,19 @@ export const addresses = {};
 
 export async function loadAddresses() {
     try {
-        console.log("🔄 Loading addresses directly from build bundle...");
+        console.log("🔄 Fetching contract addresses from static file...");
         
-        // Não usamos mais fetch(), usamos a variável importada no topo
-        if (!jsonAddresses) {
-             throw new Error("Deployment addresses JSON failed to load via import.");
+        // ✅ USO DE FETCH (A solução robusta)
+        // O arquivo deployment-addresses.json é copiado para a raiz do site pelo vite-plugin-static-copy.
+        // Usamos fetch para lê-lo como um arquivo de dados, evitando erros de "MIME Type" do Javascript.
+        // Adicionamos um timestamp para evitar cache antigo.
+        const response = await fetch(`./deployment-addresses.json?t=${new Date().getTime()}`);
+        
+        if (!response.ok) {
+            throw new Error(`Failed to fetch deployment-addresses.json: ${response.status}`);
         }
+        
+        const jsonAddresses = await response.json();
 
         // Validação básica
         const requiredAddresses = ['bkcToken', 'delegationManager', 'ecosystemManager', 'miningManager'];
@@ -60,7 +63,7 @@ export async function loadAddresses() {
             throw new Error(`Missing required addresses: ${missingAddresses.join(', ')}`);
         }
 
-        // Injeta os dados importados no objeto addresses exportado
+        // Injeta os dados carregados no objeto addresses exportado
         Object.assign(addresses, jsonAddresses);
 
         // Aliases para compatibilidade interna do app
@@ -71,7 +74,7 @@ export async function loadAddresses() {
 
         if (!addresses.faucet) console.warn("Faucet address missing in JSON, check deployment.");
 
-        console.log("✅ Contract addresses loaded successfully (Embedded).");
+        console.log("✅ Contract addresses loaded successfully.");
         return true;
 
     } catch (error) {
