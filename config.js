@@ -202,4 +202,4 @@ export const ecosystemManagerABI = [
     "function getBKCTokenAddress() external view returns (address)",
     "function getBoosterAddress() external view returns (address)",
     "function getNFTLiquidityPoolFactoryAddress() external view returns (address)"
-];  sasd
+];
