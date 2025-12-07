@@ -1,5 +1,5 @@
 // js/pages/DashboardPage.js
-// ✅ FINAL VERSION V7.0: Presale Stats Integration + Activity Feed V9.8 Support
+// ✅ FINAL VERSION V7.1: Explorer Link Fixed (Arbitrum Sepolia)
 
 const ethers = window.ethers;
 
@@ -27,7 +27,7 @@ const DashboardState = {
     lastUpdate: 0,
     activities: [], 
     filteredActivities: [], 
-    userProfile: null, // 🔥 Novo campo para dados da API
+    userProfile: null, 
     pagination: {
         currentPage: 1,
         itemsPerPage: 5 
@@ -38,6 +38,9 @@ const DashboardState = {
     }
 };
 
+// -----------------------------------------------------------
+// ✅ FIX: ARBITRUM SEPOLIA EXPLORER
+// -----------------------------------------------------------
 const EXPLORER_BASE_URL = "https://sepolia.arbiscan.io/tx/";
 
 // --- HELPER: DATE FORMAT ---
@@ -383,7 +386,6 @@ async function updateGlobalMetrics() {
 async function fetchUserProfile() {
     if (!State.userAddress) return;
     try {
-        // 🔥 NOVO ENDPOINT DE PERFIL
         const response = await fetch(`${API_ENDPOINTS.getBoosters.replace('/boosters/', '/profile/')}/${State.userAddress}`);
         if (response.ok) {
             DashboardState.userProfile = await response.json();
@@ -408,7 +410,6 @@ function renderPresaleStats(profile) {
     if (badgesContainer && profile.presale.tiersOwned) {
         let html = '';
         Object.entries(profile.presale.tiersOwned).forEach(([tierId, count]) => {
-            // Mapeia ID para Nome (Ex: 1 -> Iron)
             const tierConfig = boosterTiers[Number(tierId)-1]; 
             const color = tierConfig ? tierConfig.color.replace('text-', 'bg-').replace('300', '500/20').replace('400', '500/20').replace('500', '500/20') : 'bg-zinc-700';
             const name = tierConfig ? tierConfig.name : `Tier ${tierId}`;
@@ -442,10 +443,8 @@ async function updateUserHub(forceRefresh = false) {
 
         await loadUserData(forceRefresh); 
         
-        // Fetch do Perfil Completo (Stats de Pré-venda)
         fetchUserProfile();
 
-        // --- FAUCET WIDGET LOGIC ---
         const faucetWidget = document.getElementById('dashboard-faucet-widget');
         if (faucetWidget) {
             const lowBalanceThreshold = ethers.parseUnits("10", 18);
@@ -461,7 +460,6 @@ async function updateUserHub(forceRefresh = false) {
         
         animateClaimableRewards(netClaimAmount);
 
-        // Potential Gain Display
         const gainArea = document.getElementById('dash-user-gain-area');
         const gainVal = document.getElementById('dash-user-potential-gain');
 
@@ -494,11 +492,9 @@ function renderBoosterCard(data, claimDetails) {
 
     const totalPending = claimDetails ? claimDetails.totalRewards : 0n;
     
-    // Check Source to avoid Ghost NFTs
     const hasValidBooster = data && data.highestBoost > 0 && data.source !== 'none';
     const currentBoostBips = hasValidBooster ? data.highestBoost : 0;
     
-    // Efficiency: 50% (Base) + (BoostBips / 100)%
     let efficiency = 50 + (currentBoostBips / 100);
     if (efficiency > 100) efficiency = 100;
 
