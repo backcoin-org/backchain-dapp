@@ -9,10 +9,12 @@ export default defineConfig({
     viteStaticCopy({
       targets: [
         {
-          // O asterisco (*) diz: "Pegue tudo DENTRO dessa pasta"
-          src: 'assets/*', 
-          // E coloque DENTRO de uma pasta chamada 'assets' no site final
-          dest: 'assets'   
+          src: 'assets/*',
+          dest: 'assets'
+        },
+        {
+          src: 'deployment-addresses.json',
+          dest: ''
         }
       ]
     })
