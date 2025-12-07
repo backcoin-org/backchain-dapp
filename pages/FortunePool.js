@@ -1,5 +1,5 @@
 // js/pages/FortunePool.js
-// ✅ PRODUCTION V32: RPC Error Bypass (No-Estimate & High Gas)
+// ✅ PRODUCTION V33: Gas Guard (Low Balance Detection & Faucet Links)
 
 import { State } from '../state.js';
 import { loadUserData, safeContractCall, API_ENDPOINTS } from '../modules/data.js';
@@ -11,6 +11,13 @@ const ethers = window.ethers;
 
 // Network Config: Arbitrum Sepolia
 const EXPLORER_BASE = "https://sepolia.arbiscan.io/tx/";
+
+// Faucets Externos (Links para o usuário conseguir ETH)
+const EXTERNAL_FAUCETS = [
+    { name: "Alchemy Faucet", url: "https://www.alchemy.com/faucets/arbitrum-sepolia" },
+    { name: "QuickNode Faucet", url: "https://faucet.quicknode.com/arbitrum/sepolia" },
+    { name: "Google Cloud Faucet", url: "https://cloud.google.com/application/web3/faucet/arbitrum/sepolia" }
+];
 
 // --- DATE HELPER ---
 function formatDate(timestamp) {
@@ -265,6 +272,26 @@ function renderBettingScreen(container) {
             </div>
         </div>
         <div id="result-overlay" class="absolute inset-0 z-50 hidden flex-col items-center justify-center glass-panel rounded-3xl bg-black/95"></div>
+        
+        <div id="no-gas-modal" class="absolute inset-0 z-50 hidden flex-col items-center justify-center glass-panel rounded-3xl bg-black/95 backdrop-blur-xl">
+            <div class="p-6 max-w-sm text-center animate-fadeIn">
+                <div class="w-16 h-16 bg-red-500/10 rounded-full flex items-center justify-center mx-auto mb-4 border border-red-500/30">
+                    <i class="fa-solid fa-gas-pump text-2xl text-red-500"></i>
+                </div>
+                <h3 class="text-xl font-bold text-white mb-2">Insufficient Gas (ETH)</h3>
+                <p class="text-zinc-400 text-sm mb-6">You need Arbitrum Sepolia ETH to pay for transaction fees. The tokens you have are BKC (Game Token), not ETH (Gas).</p>
+                
+                <div class="flex flex-col gap-3">
+                    ${EXTERNAL_FAUCETS.map(f => `
+                        <a href="${f.url}" target="_blank" class="w-full bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-white font-bold py-3 px-4 rounded-xl flex justify-between items-center transition-all hover:scale-105">
+                            <span>${f.name}</span>
+                            <i class="fa-solid fa-arrow-up-right-from-square text-xs text-zinc-500"></i>
+                        </a>
+                    `).join('')}
+                    <button id="close-gas-modal" class="mt-2 text-zinc-500 hover:text-white text-xs underline">Close</button>
+                </div>
+            </div>
+        </div>
     `;
 
     document.getElementById('btn-reset').onclick = () => { gameState.step = 0; renderStep(); };
@@ -321,6 +348,12 @@ function renderBettingScreen(container) {
         gameState.isCumulative = !gameState.isCumulative;
         updateToggleVisuals();
         FortunePoolPage.checkReqs();
+    };
+    
+    // CLOSE GAS MODAL
+    document.getElementById('close-gas-modal').onclick = () => {
+        document.getElementById('no-gas-modal').classList.remove('flex');
+        document.getElementById('no-gas-modal').classList.add('hidden');
     };
     
     btn.onclick = executeTransaction;
@@ -471,7 +504,32 @@ function closeOverlay() {
 }
 
 // -------------------------------------------------------------
-// TRANSACTION EXECUTION (V32: BLINDED & HIGH GAS)
+// GAS GUARD: Check for Sepolia ETH
+// -------------------------------------------------------------
+async function checkGasAndWarn() {
+    try {
+        const nativeBalance = await State.provider.getBalance(State.userAddress);
+        // Minimum safe threshold: 0.002 ETH
+        const minGas = ethers.parseEther("0.002"); 
+        
+        if (nativeBalance < minGas) {
+            console.warn("⚠️ Low Gas Detected:", ethers.formatEther(nativeBalance));
+            const modal = document.getElementById('no-gas-modal');
+            if(modal) {
+                modal.classList.remove('hidden');
+                modal.classList.add('flex');
+            }
+            return false;
+        }
+        return true;
+    } catch (e) {
+        console.error("Gas check failed", e);
+        return true; // Fail safe: let user try
+    }
+}
+
+// -------------------------------------------------------------
+// TRANSACTION EXECUTION (V33: BLINDED + GAS GUARD)
 // -------------------------------------------------------------
 async function executeTransaction() {
     if (!State.isConnected) return showToast("Connect wallet", "error");
@@ -482,6 +540,10 @@ async function executeTransaction() {
         return;
     }
 
+    // 1. Gas Guard Check
+    const hasGas = await checkGasAndWarn();
+    if (!hasGas) return; // Stop if no gas
+
     await FortunePoolPage.checkReqs();
     if (!gameState.systemReady) { showToast("System Offline", "error"); return; }
     if (gameState.betAmount <= 0) return;
@@ -491,7 +553,7 @@ async function executeTransaction() {
     const isCumulative = gameState.isCumulative;
     let fee = 0n;
 
-    // 1. Calculate Fee safely
+    // 2. Calculate Fee
     try {
         console.log("🔍 [INIT] Fetching oracleFeeInWei from contract...");
         const baseFee = await State.actionsManagerContract.oracleFeeInWei();
@@ -503,16 +565,6 @@ async function executeTransaction() {
         fee = isCumulative ? (FALLBACK_BASE_FEE * 5n) : FALLBACK_BASE_FEE;
     }
     
-    // 2. Validate ETH Balance
-    try {
-        const nativeBalance = await State.provider.getBalance(State.userAddress);
-        const minRequired = fee + ethers.parseEther("0.005"); // increased buffer
-        if (nativeBalance < minRequired) {
-            showToast(`Insufficient ETH! Need ~${ethers.formatEther(minRequired)} ETH`, "error");
-            return;
-        }
-    } catch(e) {}
-
     btn.disabled = true;
     
     try {
@@ -529,7 +581,10 @@ async function executeTransaction() {
             }
         } catch (approvalError) {
             console.error("❌ Approval Failed:", approvalError);
-            showToast("Approval failed. Check Balance.", "error");
+            // If approval fails, it might be GAS related too, so check again
+            await checkGasAndWarn();
+            
+            showToast("Approval failed.", "error");
             btn.disabled = false;
             btn.innerText = "START MINING";
             return;
@@ -539,22 +594,21 @@ async function executeTransaction() {
         
         const guessesAsBigInt = gameState.guesses.map(g => BigInt(g));
         
-        console.log("🚀 DEBUG PARTICIPATE V32:", {
+        console.log("🚀 DEBUG PARTICIPATE V33:", {
             contractAddress: addresses.fortunePool,
             amountBKC: amountWei.toString(),
             guesses: guessesAsBigInt.map(g => g.toString()),
             feeETH: fee.toString()
         });
         
-        // 4. V32 FIX: AGGRESSIVE GAS & NO ESTIMATE
-        // We do NOT use estimateGas() to avoid the -32603 JSON-RPC error on revert
+        // 4. Execute Transaction (High Gas Limit)
         const tx = await State.actionsManagerContract.participate(
             amountWei, 
             guessesAsBigInt,
             isCumulative, 
             { 
                 value: fee, 
-                gasLimit: 3000000 // 3M Gas Limit (Aggressive)
+                gasLimit: 3000000 
             }
         );
         
@@ -562,7 +616,7 @@ async function executeTransaction() {
         await tx.wait();
         updateProgressBar(40, "BLOCK MINED. WAITING ORACLE...");
         
-        // 5. Game ID Monitoring
+        // 5. Monitor
         const ctr = await safeContractCall(State.actionsManagerContract, 'gameCounter', [], 0, 2, true);
         const gameIdToWatch = Number(ctr) > 0 ? Number(ctr) - 1 : 0; 
         console.log(`✅ TX Confirmed. Counter is ${ctr}. Watching Game #${gameIdToWatch}`);
@@ -574,6 +628,10 @@ async function executeTransaction() {
         btn.disabled = false; 
         btn.innerText = "START MINING";
         
+        // Check gas one last time if it failed
+        const lowGas = await checkGasAndWarn();
+        if(!lowGas) return;
+
         let msg = "Transaction Failed";
         
         if (e.message && e.message.includes("cf07063a")) msg = "Fee Mismatch (Clear Cache!)";
