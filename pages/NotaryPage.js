@@ -1,5 +1,5 @@
 // pages/NotaryPage.js
-// ✅ VERSÃO FINAL TESTNET (V12.1): Fix Explorer Link (Sepolia) & Preserved Animation
+// ✅ VERSÃO FINAL (CORREÇÃO DE MEMÓRIA DA DESCRIÇÃO)
 
 import { State } from '../state.js';
 import { formatBigNumber, formatPStake, renderLoading, renderNoData } from '../utils.js';
@@ -13,7 +13,9 @@ const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024; // 10MB
 // --- ESTADO LOCAL ---
 let currentFileToUpload = null;
 let notaryButtonState = 'initial'; 
-let lastNotaryDataFetch = 0; 
+let lastNotaryDataFetch = 0;
+// 🟢 NOVO: Variável para segurar a descrição na memória
+let notaryDescriptionCache = ""; 
 
 // --- CSS CUSTOMIZADO ---
 const style = document.createElement('style');
@@ -199,6 +201,9 @@ function updateNotaryStep(step) {
             </div>`;
         initNotaryListeners();
     } else if (step === 2) {
+        // Se a descrição já estava salva, restaura ela no textarea
+        const savedText = notaryDescriptionCache || "";
+        
         actionArea.innerHTML = `
             <div id="step-content-active" class="w-full max-w-lg animate-fadeIn">
                 <h3 class="text-xl font-bold text-white mb-4 text-center">Add Details</h3>
@@ -209,15 +214,19 @@ function updateNotaryStep(step) {
                 </div>
                 <div class="mb-6">
                     <label class="block text-[10px] font-bold text-zinc-500 uppercase mb-2">Description / Public Note</label>
-                    <textarea id="notary-user-description" rows="3" class="w-full bg-black/40 border border-zinc-700 rounded-xl p-3 text-sm text-white focus:border-amber-500 focus:outline-none placeholder-zinc-700" placeholder="E.g. Property Deed #123 registered..."></textarea>
+                    <textarea id="notary-user-description" rows="3" class="w-full bg-black/40 border border-zinc-700 rounded-xl p-3 text-sm text-white focus:border-amber-500 focus:outline-none placeholder-zinc-700" placeholder="E.g. Property Deed #123 registered...">${savedText}</textarea>
                 </div>
-                <button onclick="updateNotaryStep(3)" class="w-full bg-white hover:bg-zinc-200 text-black font-bold py-3 rounded-xl">Next <i class="fa-solid fa-arrow-right ml-2"></i></button>
+                <button onclick="NotaryPage.saveAndNext()" class="w-full bg-white hover:bg-zinc-200 text-black font-bold py-3 rounded-xl">Next <i class="fa-solid fa-arrow-right ml-2"></i></button>
             </div>`;
     } else if (step === 3) {
+        // Exibe a descrição salva apenas para confirmação visual (opcional)
+        const displayDesc = notaryDescriptionCache || "No description provided.";
+        
         actionArea.innerHTML = `
             <div id="step-content-active" class="w-full max-w-lg animate-fadeIn text-center">
                 <h3 class="text-xl font-bold text-white mb-4">Confirm & Mint</h3>
-                <p class="text-zinc-500 text-sm mb-6">File link, description, and cryptographic hash will be permanently stored on the Blockchain.</p>
+                <p class="text-zinc-500 text-sm mb-4">File link, description, and cryptographic hash will be permanently stored on the Blockchain.</p>
+                <div class="bg-zinc-900/50 p-3 rounded mb-6 text-xs text-zinc-400 italic">"${displayDesc}"</div>
                 <div class="flex gap-3">
                     <button onclick="updateNotaryStep(2)" class="w-1/3 border border-zinc-700 text-zinc-400 font-bold py-3 rounded-xl">Back</button>
                     <button id="btn-confirm-sign" onclick="handleSignAndUpload(this)" class="w-2/3 bg-amber-500 text-black font-bold py-3 rounded-xl shadow-lg shadow-amber-500/20">Sign & Mint</button>
@@ -237,7 +246,8 @@ async function handleSignAndUpload(btn) {
 
     let progressTimer;
     try {
-        const rawDesc = document.getElementById('notary-user-description')?.value;
+        // 🟢 MUDANÇA: Lê da variável de cache, pois o textarea não existe mais na tela 3
+        const rawDesc = notaryDescriptionCache;
         const desc = rawDesc && rawDesc.trim() !== "" ? rawDesc : "No description provided.";
 
         const signer = await State.provider.getSigner();
@@ -273,7 +283,7 @@ async function handleSignAndUpload(btn) {
         // Chama a função atualizada no transactions.js que aceita (URI, Desc, Hash)
         await executeNotarizeDocument(
             data.ipfsUri, 
-            desc, 
+            desc, // Passa a descrição correta
             data.contentHash, 
             0n, // Booster ID (Opcional)
             btn
@@ -395,7 +405,17 @@ export const NotaryPage = {
         if (State.isConnected) await loadUserData(); 
         updateNotaryInterface(); 
     },
-    reset: () => { currentFileToUpload = null; updateNotaryStep(1); },
+    reset: () => { 
+        currentFileToUpload = null; 
+        notaryDescriptionCache = ""; // Limpa a memória ao resetar
+        updateNotaryStep(1); 
+    },
+    // 🟢 NOVA FUNÇÃO EXPORTADA
+    saveAndNext: () => {
+        const el = document.getElementById('notary-user-description');
+        if(el) notaryDescriptionCache = el.value; // Salva na memória
+        updateNotaryStep(3); // Avança
+    },
     refreshHistory: () => { fetchUserHistory(); },
     update: () => { updateNotaryInterface(); }
 };
