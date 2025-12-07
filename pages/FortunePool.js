@@ -1,5 +1,5 @@
 // js/pages/FortunePool.js
-// ✅ VERSÃO FINAL V26: Implementado PStake Check Inteligente & State Persistence
+// ✅ VERSÃO FINAL V27: Debug Approve & Gas Limit Fix
 
 import { State } from '../state.js';
 import { loadUserData, safeContractCall, API_ENDPOINTS } from '../modules/data.js';
@@ -486,7 +486,7 @@ function closeOverlay() {
 }
 
 // -------------------------------------------------------------
-// ✅ TRANSACTION EXECUTION V25: Base Fee 0.00035 -> Triple 0.00175
+// ✅ TRANSACTION EXECUTION V27: Debug Approve & Gas Limit Fix
 // -------------------------------------------------------------
 async function executeTransaction() {
     if (!State.isConnected) return showToast("Connect wallet", "error");
@@ -504,8 +504,6 @@ async function executeTransaction() {
     
     const btn = document.getElementById('btn-spin');
     const amountWei = ethers.parseEther(gameState.betAmount.toString());
-    
-    if (amountWei > State.currentUserBalance) return showToast("Insufficient BKC Balance", "error");
     
     // 2. CÁLCULO DE TAXA (CRÍTICO: USO DE BIGINT E PRECISION)
     const isCumulative = gameState.isCumulative;
@@ -546,12 +544,28 @@ async function executeTransaction() {
 
     btn.disabled = true;
     try {
+        const spender = addresses.fortunePool;
+        if (!spender || !ethers.isAddress(spender)) {
+             console.error("❌ Spender Invalido:", spender);
+             showToast("Config Error: Spender Invalid. Reload.", "error");
+             btn.disabled = false;
+             return;
+        }
+
         // A. Approve BKC
         btn.innerHTML = `<div class="loader inline-block"></div> APPROVING BKC...`;
         try {
-            const currentAllowance = await State.bkcTokenContract.allowance(State.userAddress, addresses.fortunePool);
+            console.log("🔍 DEBUG APPROVE:", {
+                tokenAddress: await State.bkcTokenContract.getAddress(),
+                spenderAddress: spender,
+                amount: amountWei.toString(),
+                user: State.userAddress
+            });
+
+            const currentAllowance = await State.bkcTokenContract.allowance(State.userAddress, spender);
             if (currentAllowance < amountWei) {
-                const approveTx = await State.bkcTokenContract.approve(addresses.fortunePool, amountWei);
+                // ✅ MANUAL GAS LIMIT FIX
+                const approveTx = await State.bkcTokenContract.approve(spender, amountWei, { gasLimit: 200000 });
                 await approveTx.wait();
                 showToast("✅ BKC Approved!", "success");
             }
@@ -569,12 +583,12 @@ async function executeTransaction() {
         console.log("🚀 Sending Transaction...");
         console.log("   > Value (msg.value):", fee.toString());
         
-        // Chama participate enviando o valor EXATO calculado (fee)
+        // Chama participate enviando o valor EXATO calculado (fee) + GasLimit
         const tx = await State.actionsManagerContract.participate(
             amountWei, 
             gameState.guesses, 
             isCumulative, 
-            { value: fee }
+            { value: fee, gasLimit: 500000 }
         );
         
         startSpinning(); 
