@@ -1,12 +1,19 @@
 import { defineConfig } from 'vite';
+import { viteStaticCopy } from 'vite-plugin-static-copy';
 
 export default defineConfig({
-  // Garante que o build vai para a pasta 'dist' que a Vercel espera
   build: {
     outDir: 'dist',
   },
-  // Define a raiz do servidor como a pasta atual
-  root: '.', 
-  // Configuração para carregar variáveis de ambiente corretamente
+  plugins: [
+    viteStaticCopy({
+      targets: [
+        {
+          src: 'assets', // Nome da pasta na raiz do seu projeto
+          dest: ''       // Destino na raiz do site final (vai criar dist/assets)
+        }
+      ]
+    })
+  ],
   envPrefix: 'VITE_',
 });
