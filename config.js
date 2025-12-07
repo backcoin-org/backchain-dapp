@@ -1,5 +1,5 @@
 // js/config.js
-// ✅ VERSÃO FINAL (PRODUÇÃO V16): Async Oracle & Enterprise Notary Corrected
+// ✅ VERSÃO FINAL (PRODUÇÃO V17): Environment Variables Secured
 
 // ============================================================================
 // 1. ENVIRONMENT & ALCHEMY CONFIG
@@ -7,11 +7,20 @@
 const isDevelopment = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
 console.log(`Environment: ${isDevelopment ? 'DEVELOPMENT' : 'PRODUCTION'}`);
 
+// 🔐 Carrega as variáveis injetadas pelo Vite (do .env ou Vercel)
+const ALCHEMY_KEY = import.meta.env.VITE_ALCHEMY_API_KEY;
+const GAS_POLICY_ID = import.meta.env.VITE_GAS_POLICY_ID;
+
+// Validação de Segurança
+if (!ALCHEMY_KEY) {
+    console.error("❌ ERRO CRÍTICO: VITE_ALCHEMY_API_KEY não encontrada. Verifique seu arquivo .env ou configurações da Vercel.");
+}
+
 // ⚠️ CONFIGURAÇÃO ATIVA PARA O GRANT
 export const CONFIG = {
     alchemy: {
-        apiKey: "OXcpAI1M17gLgjZJJ8VC3", // Sua API Key
-        gasPolicyId: "54c32e74-c1d4-4e14-a7bf-db28f18e6c29" // ✅ Gas Sponsorship Policy ID
+        apiKey: ALCHEMY_KEY, 
+        gasPolicyId: GAS_POLICY_ID 
     }
 };
 
