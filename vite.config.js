@@ -2,18 +2,21 @@ import { defineConfig } from 'vite';
 import { viteStaticCopy } from 'vite-plugin-static-copy';
 
 export default defineConfig({
+  // Configurações básicas de build
   build: {
     outDir: 'dist',
   },
+  // ATIVAÇÃO DO PLUGIN DE CÓPIA
   plugins: [
     viteStaticCopy({
       targets: [
         {
-          src: 'assets', // Nome da pasta na raiz do seu projeto
-          dest: ''       // Destino na raiz do site final (vai criar dist/assets)
+          src: 'assets', // Pega a pasta 'assets' da raiz
+          dest: ''       // Copia para a raiz do site final (criando dist/assets)
         }
       ]
     })
   ],
+  // Prefixo para carregar variáveis de ambiente
   envPrefix: 'VITE_',
 });
