@@ -1,5 +1,5 @@
 // js/pages/FortunePool.js
-// ✅ VERSÃO FINAL V27: Debug Approve & Gas Limit Fix
+// ✅ VERSÃO FINAL V27: Debug Approve & Gas Limit Fix (Forced for Testnet)
 
 import { State } from '../state.js';
 import { loadUserData, safeContractCall, API_ENDPOINTS } from '../modules/data.js';
@@ -545,6 +545,7 @@ async function executeTransaction() {
     btn.disabled = true;
     try {
         const spender = addresses.fortunePool;
+        // VALIDATION FIX: Garante que o endereço é válido
         if (!spender || !ethers.isAddress(spender)) {
              console.error("❌ Spender Invalido:", spender);
              showToast("Config Error: Spender Invalid. Reload.", "error");
@@ -555,6 +556,7 @@ async function executeTransaction() {
         // A. Approve BKC
         btn.innerHTML = `<div class="loader inline-block"></div> APPROVING BKC...`;
         try {
+            // DEBUG LOG: Mostra endereços para conferência
             console.log("🔍 DEBUG APPROVE:", {
                 tokenAddress: await State.bkcTokenContract.getAddress(),
                 spenderAddress: spender,
@@ -564,7 +566,7 @@ async function executeTransaction() {
 
             const currentAllowance = await State.bkcTokenContract.allowance(State.userAddress, spender);
             if (currentAllowance < amountWei) {
-                // ✅ MANUAL GAS LIMIT FIX
+                // ✅ MANUAL GAS LIMIT FIX: Força 200k de gás para evitar erros de estimativa
                 const approveTx = await State.bkcTokenContract.approve(spender, amountWei, { gasLimit: 200000 });
                 await approveTx.wait();
                 showToast("✅ BKC Approved!", "success");
@@ -588,7 +590,7 @@ async function executeTransaction() {
             amountWei, 
             gameState.guesses, 
             isCumulative, 
-            { value: fee, gasLimit: 500000 }
+            { value: fee, gasLimit: 500000 } // ✅ Força 500k de gás para execução segura
         );
         
         startSpinning(); 
