@@ -14,7 +14,7 @@ const EXPLORER_BASE = "https://sepolia.arbiscan.io/tx/";
 
 // ⚠️ CONFIGURAÇÃO DO BACKEND (Fauceter)
 // Aponte para a URL do seu Indexer rodando (Ex: https://api.backcoin.org/faucet)
-const FAUCET_API_URL = "https://seu-endpoint-indexer.com/faucet"; 
+const FAUCET_API_URL = "http://64.225.122.2:8080/faucet"; 
 
 // --- DATE HELPER ---
 function formatDate(timestamp) {

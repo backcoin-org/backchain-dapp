@@ -1,120 +1,186 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.28;
 
-import "@openzeppelin/contracts-upgradeable/token/ERC20/IERC20Upgradeable.sol";
-import "@openzeppelin/contracts-upgradeable/token/ERC20/utils/SafeERC20Upgradeable.sol";
-import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
-import "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.sol";
-import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
-import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
+import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 
 /**
- * @title Simple BKC Faucet (Relayer Mode)
- * @notice Stores ETH and BKC to distribute to users via a Relayer (Backend).
- * @dev The Backend pays the gas fees. The user receives assets.
+ * @title SimpleBKCFaucet V2
+ * @notice Oracle paga o claim e distribui BKC + ETH para o usuário
  */
-contract SimpleBKCFaucet is
-    Initializable,
-    OwnableUpgradeable,
-    ReentrancyGuardUpgradeable,
-    UUPSUpgradeable
-{
-    using SafeERC20Upgradeable for IERC20Upgradeable;
-
-    IERC20Upgradeable public token;
+contract SimpleBKCFaucet is Ownable, ReentrancyGuard {
     
-    // Configurações (Ajustáveis pelo Owner)
-    uint256 public claimAmountToken; // Ex: 20 BKC
-    uint256 public claimAmountEth;   // Ex: 0.005 ETH
-    uint256 public cooldownTime;     // Ex: 1 hora
-
-    // Controle de tempo por usuário
-    mapping(address => uint256) public lastClaimTime;
-
-    // Eventos
-    event FaucetDistributed(address indexed recipient, uint256 tokenAmount, uint256 ethAmount);
-    event ContractRefueled(address indexed donor, uint256 amount);
-    event ConfigUpdated(uint256 newTokenAmount, uint256 newEthAmount, uint256 newCooldown);
-
-    // Erros
-    error CooldownActive(uint256 nextTry);
-    error InsufficientContractETH();
+    IERC20 public bkcToken;
+    address public relayerAddress; // Oracle address
+    
+    uint256 public tokensPerRequest;  // BKC a distribuir
+    uint256 public ethPerRequest;     // ETH a distribuir (0.008 ETH)
+    uint256 public cooldownPeriod;    // 1 hora
+    
+    mapping(address => uint256) public lastRequestTime;
+    
+    event TokensDistributed(address indexed recipient, uint256 tokenAmount, uint256 ethAmount, address indexed relayer);
+    event RelayerSet(address indexed relayer);
+    event AmountsUpdated(uint256 newTokenAmount, uint256 newEthAmount);
+    event FundsDeposited(address indexed sender, uint256 ethAmount, uint256 tokenAmount);
+    
+    error CooldownActive(uint256 timeRemaining);
     error InsufficientContractTokens();
+    error InsufficientContractETH();
+    error Unauthorized();
+    error InvalidAddress();
     error TransferFailed();
-
-    /// @custom:oz-upgrades-unsafe-allow constructor
-    constructor() {
-        _disableInitializers();
-    }
-
-    function initialize(
-        address _tokenAddress,
-        address _initialOwner
-    ) public initializer {
-        __Ownable_init();
-        __ReentrancyGuard_init();
-        __UUPSUpgradeable_init();
+    
+    constructor(
+        address _bkcToken,
+        address _relayer,
+        uint256 _tokensPerRequest,
+        uint256 _ethPerRequest
+    ) {
+        if (_bkcToken == address(0)) revert InvalidAddress();
+        if (_relayer == address(0)) revert InvalidAddress();
         
-        token = IERC20Upgradeable(_tokenAddress);
-        _transferOwnership(_initialOwner);
-
-        // Valores Padrão (Ajuste conforme necessário)
-        claimAmountToken = 20 * 10**18; // 20 BKC
-        claimAmountEth = 0.005 ether;   // 0.005 ETH
-        cooldownTime = 1 hours;
+        bkcToken = IERC20(_bkcToken);
+        relayerAddress = _relayer;
+        tokensPerRequest = _tokensPerRequest;
+        ethPerRequest = _ethPerRequest;
+        cooldownPeriod = 1 hours;
     }
-
-    function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
-
+    
     /**
-     * @notice Função principal chamada pelo seu BACKEND.
-     * @dev O Backend paga o gas desta transação.
-     * @param _recipient O endereço do usuário que vai receber os fundos.
+     * @notice Distribui BKC + ETH para o usuário
+     * @dev Apenas relayer (oracle) pode chamar. Oracle paga o gas.
+     * @param _recipient Endereço do usuário
      */
-    function distributeTo(address _recipient) external onlyOwner nonReentrant {
-        // 1. Validar Cooldown
-        if (block.timestamp < lastClaimTime[_recipient] + cooldownTime) {
-            revert CooldownActive(lastClaimTime[_recipient] + cooldownTime);
+    function distributeTo(address _recipient) external nonReentrant {
+        // Apenas relayer pode chamar
+        if (msg.sender != relayerAddress) revert Unauthorized();
+        if (_recipient == address(0)) revert InvalidAddress();
+        
+        // Verificar cooldown
+        uint256 timeSinceLastRequest = block.timestamp - lastRequestTime[_recipient];
+        if (timeSinceLastRequest < cooldownPeriod) {
+            revert CooldownActive(cooldownPeriod - timeSinceLastRequest);
         }
-
-        // 2. Validar Saldos do Contrato
-        if (address(this).balance < claimAmountEth) revert InsufficientContractETH();
-        if (token.balanceOf(address(this)) < claimAmountToken) revert InsufficientContractTokens();
-
-        // 3. Atualizar Tempo
-        lastClaimTime[_recipient] = block.timestamp;
-
-        // 4. Transferir Token (BKC)
-        token.safeTransfer(_recipient, claimAmountToken);
-
-        // 5. Transferir ETH Nativo (Gas)
-        (bool success, ) = _recipient.call{value: claimAmountEth}("");
-        if (!success) revert TransferFailed();
-
-        emit FaucetDistributed(_recipient, claimAmountToken, claimAmountEth);
-    }
-
-    // --- Admin ---
-
-    function setConfig(uint256 _tokens, uint256 _eth, uint256 _cooldown) external onlyOwner {
-        claimAmountToken = _tokens;
-        claimAmountEth = _eth;
-        cooldownTime = _cooldown;
-        emit ConfigUpdated(_tokens, _eth, _cooldown);
-    }
-
-    function withdrawEverything() external onlyOwner {
-        uint256 ethBal = address(this).balance;
-        uint256 tokenBal = token.balanceOf(address(this));
-        if (tokenBal > 0) token.safeTransfer(owner(), tokenBal);
-        if (ethBal > 0) {
-            (bool s, ) = owner().call{value: ethBal}("");
-            require(s, "ETH Transfer failed");
+        
+        // Verificar saldos do contrato
+        uint256 contractTokenBalance = bkcToken.balanceOf(address(this));
+        if (contractTokenBalance < tokensPerRequest) {
+            revert InsufficientContractTokens();
         }
+        
+        uint256 contractEthBalance = address(this).balance;
+        if (contractEthBalance < ethPerRequest) {
+            revert InsufficientContractETH();
+        }
+        
+        // Atualizar timestamp
+        lastRequestTime[_recipient] = block.timestamp;
+        
+        // Transferir BKC
+        bool tokenSuccess = bkcToken.transfer(_recipient, tokensPerRequest);
+        if (!tokenSuccess) revert TransferFailed();
+        
+        // Transferir ETH
+        (bool ethSuccess, ) = _recipient.call{value: ethPerRequest}("");
+        if (!ethSuccess) revert TransferFailed();
+        
+        emit TokensDistributed(_recipient, tokensPerRequest, ethPerRequest, msg.sender);
     }
-
-    // Aceita depósitos de ETH para recarregar o Faucet
+    
+    /**
+     * @notice Permite que qualquer um deposite ETH no faucet
+     */
     receive() external payable {
-        emit ContractRefueled(msg.sender, msg.value);
+        emit FundsDeposited(msg.sender, msg.value, 0);
+    }
+    
+    /**
+     * @notice Owner pode depositar BKC
+     */
+    function depositTokens(uint256 _amount) external {
+        bool success = bkcToken.transferFrom(msg.sender, address(this), _amount);
+        if (!success) revert TransferFailed();
+        emit FundsDeposited(msg.sender, 0, _amount);
+    }
+    
+    /**
+     * @notice Atualizar relayer (oracle)
+     */
+    function setRelayer(address _newRelayer) external onlyOwner {
+        if (_newRelayer == address(0)) revert InvalidAddress();
+        relayerAddress = _newRelayer;
+        emit RelayerSet(_newRelayer);
+    }
+    
+    /**
+     * @notice Atualizar quantidades distribuídas
+     */
+    function setAmounts(uint256 _tokensPerRequest, uint256 _ethPerRequest) external onlyOwner {
+        tokensPerRequest = _tokensPerRequest;
+        ethPerRequest = _ethPerRequest;
+        emit AmountsUpdated(_tokensPerRequest, _ethPerRequest);
+    }
+    
+    /**
+     * @notice Atualizar cooldown
+     */
+    function setCooldown(uint256 _newCooldown) external onlyOwner {
+        cooldownPeriod = _newCooldown;
+    }
+    
+    /**
+     * @notice Emergency withdraw (owner)
+     */
+    function emergencyWithdrawETH() external onlyOwner {
+        uint256 balance = address(this).balance;
+        (bool success, ) = owner().call{value: balance}("");
+        if (!success) revert TransferFailed();
+    }
+    
+    function emergencyWithdrawTokens(uint256 _amount) external onlyOwner {
+        bool success = bkcToken.transfer(owner(), _amount);
+        if (!success) revert TransferFailed();
+    }
+    
+    /**
+     * @notice Verificar tempo restante de cooldown
+     */
+    function getCooldownRemaining(address _user) external view returns (uint256) {
+        uint256 timeSinceLastRequest = block.timestamp - lastRequestTime[_user];
+        if (timeSinceLastRequest >= cooldownPeriod) {
+            return 0;
+        }
+        return cooldownPeriod - timeSinceLastRequest;
+    }
+    
+    /**
+     * @notice Verificar se usuário pode clamar
+     */
+    function canClaim(address _user) external view returns (bool) {
+        uint256 timeSinceLastRequest = block.timestamp - lastRequestTime[_user];
+        return timeSinceLastRequest >= cooldownPeriod;
+    }
+    
+    /**
+     * @notice Info do contrato
+     */
+    function getContractInfo() external view returns (
+        uint256 tokenBalance,
+        uint256 ethBalance,
+        uint256 tokensPerDist,
+        uint256 ethPerDist,
+        uint256 cooldown,
+        address relayer
+    ) {
+        return (
+            bkcToken.balanceOf(address(this)),
+            address(this).balance,
+            tokensPerRequest,
+            ethPerRequest,
+            cooldownPeriod,
+            relayerAddress
+        );
     }
 }

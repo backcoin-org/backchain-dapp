@@ -1,5 +1,5 @@
 // js/pages/DashboardPage.js
-// ✅ FINAL VERSION V8.0: Smart Gasless Faucet Integration
+// ✅ FINAL VERSION V8.2: Production Faucet URL Configured
 
 const ethers = window.ethers;
 
@@ -43,9 +43,8 @@ const DashboardState = {
 // -----------------------------------------------------------
 const EXPLORER_BASE_URL = "https://sepolia.arbiscan.io/tx/";
 
-// URL do seu Indexer (Backend) que paga o Gás
-// Ajuste para a URL real do seu servidor (ex: https://api.backcoin.org/faucet)
-const FAUCET_API_URL = "https://seu-endpoint-indexer.com/faucet"; // ⚠️ CONFIGURAR
+// ✅ URL DE PRODUÇÃO CORRIGIDA
+const FAUCET_API_URL = "https://api.backcoin.org/faucet"; 
 
 const EXTERNAL_FAUCETS = [
     { name: "Alchemy Faucet", url: "https://www.alchemy.com/faucets/arbitrum-sepolia" },
@@ -84,7 +83,7 @@ function animateClaimableRewards(targetNetValue) {
 }
 
 // -------------------------------------------------------------
-// ⚡ SMART FAUCET REQUEST (GASLESS)
+// ⚡ REQUISITAR FAUCET AO BACKEND
 // -------------------------------------------------------------
 async function requestSmartFaucet(btnElement) {
     if (!State.isConnected || !State.userAddress) return showToast("Connect wallet first", "error");
@@ -94,17 +93,14 @@ async function requestSmartFaucet(btnElement) {
     btnElement.innerHTML = `<i class="fa-solid fa-circle-notch fa-spin mr-2"></i> Sending...`;
 
     try {
+        // Agora tenta a requisição de produção
         const response = await fetch(`${FAUCET_API_URL}?address=${State.userAddress}`);
         const data = await response.json();
 
         if (response.ok && data.success) {
             showToast("✅ Starter Pack Sent! (0.005 ETH + 20 BKC)", "success");
-            
-            // Ocultar widget e atualizar dados
             const widget = document.getElementById('dashboard-faucet-widget');
             if(widget) widget.classList.add('hidden');
-            
-            // Fechar modal de gás se estiver aberto
             const modal = document.getElementById('no-gas-modal-dash');
             if(modal) modal.classList.add('hidden');
 
@@ -115,12 +111,13 @@ async function requestSmartFaucet(btnElement) {
         }
     } catch (e) {
         console.error("Faucet API Error:", e);
-        showToast("Faucet Service Offline", "error");
+        showToast("Faucet Service Offline (Check Network/CORS)", "error");
     } finally {
         btnElement.disabled = false;
         btnElement.innerHTML = originalHTML;
     }
 }
+
 
 // -------------------------------------------------------------
 // GAS GUARD: Check for Sepolia ETH
@@ -874,7 +871,6 @@ function attachDashboardListeners() {
                 if (action === "gasless") {
                     await requestSmartFaucet(btn);
                 } else if (action === "bkc") {
-                    // Fallback para apenas BKC se necessário
                     await requestSmartFaucet(btn); 
                 }
             }

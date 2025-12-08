@@ -10,7 +10,7 @@
   "nftLiquidityPool_Implementation": "0xefB3670e2f7543fbA08814Cd60a389309F2606b1",
   "nftLiquidityPoolFactory": "0x35c40F567ac6d87fde45736CfdC44Ba1ef6b3fF1",
   "publicSale": "0x1D0eC23fDabD9D16CFBE54C462cfEeD85D13c645",
-  "faucet": "0x4b18A0224141F5f1Dec8a9AB38e861A3Ad77c279",
+  "faucet": "0xaaAaec50EF7BE0745aCC38E145e317a414677420",
   "oracleWalletAddress": "0xd7e622124b78a28c4c928b271fc9423285804f98",
   "bkcDexPoolAddress": "https://app.uniswap.org/#/swap?chain=arbitrum",
   "pool_diamond": "0xf51D10bA45A6e721B1f34D28eFcD147764364d28",

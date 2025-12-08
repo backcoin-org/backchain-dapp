@@ -26,6 +26,7 @@
     "@types/mocha": "^10.0.0",
     "@types/node": "^20.14.2",
     "chai": "^4.2.0",
+    "dotenv": "^17.2.3",
     "ethers": "^6.15.0",
     "hardhat": "^2.22.6",
     "hardhat-gas-reporter": "^1.0.8",
@@ -41,12 +42,11 @@
     "node": "20.x"
   },
   "dependencies": {
-    "@openzeppelin/contracts": "^5.4.0",
+    "@openzeppelin/contracts": "^4.9.3",
     "@openzeppelin/contracts-upgradeable": "4.9.3",
     "@pinata/sdk": "^2.1.0",
     "@vercel/analytics": "^1.5.0",
     "@vercel/speed-insights": "^1.2.0",
-    "dotenv": "^16.4.5",
     "formidable": "^3.5.4",
     "merkletreejs": "^0.6.0",
     "nft.storage": "^7.1.1"
