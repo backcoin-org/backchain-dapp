@@ -1,33 +1,36 @@
 {
-  "DESCRIPTION": "Configuração Otimizada para Arbitrum Sepolia (Economia de 20 BKC)",
+  "DESCRIPTION": "Configuração Otimizada para Testnet (PStake Zerado + Taxas Baixas)",
   
   "serviceFees": {
-    "COMMENT": "💰 PREÇO FIXO (Valores viram Wei x10^18). Max 5 BKC para caber no Faucet.",
-    "NOTARY_SERVICE": "5",
-    "NFT_POOL_ACCESS": "0"
+    "COMMENT": "💰 PREÇO FIXO EM BKC (Valores viram Wei x10^18). Max 5 BKC para caber no Faucet.",
+    "NOTARY_SERVICE": "1",
+    "NFT_POOL_ACCESS": "0",
+    "RENTAL_MARKET_ACCESS": "0",
+    "TIGER_GAME_SERVICE": "1"
   },
 
   "pStakeMinimums": {
-    "COMMENT": "🔒 REQUISITO DE PSTAKE (Inteiro). Zerado para Testnet.",
+    "COMMENT": "🔒 REQUISITO DE PSTAKE (Inteiro). ZERADO PARA ACESSO LIVRE.",
     "NOTARY_SERVICE": "0",
     "FORTUNE_POOL_SERVICE": "0",
+    "TIGER_GAME_SERVICE": "0",
     "NFT_POOL_ACCESS": "0",
     "RENTAL_MARKET_ACCESS": "0"
   },
 
   "stakingFees": {
     "COMMENT": "📉 TAXAS DE PROTOCOLO (BIPS: 100 = 1%).",
-    "DELEGATION_FEE_BIPS": "50",
-    "UNSTAKE_FEE_BIPS": "100",
+    "DELEGATION_FEE_BIPS": "0",
+    "UNSTAKE_FEE_BIPS": "0",
     "FORCE_UNSTAKE_PENALTY_BIPS": "5000",
-    "CLAIM_REWARD_FEE_BIPS": "100",
-    "RENTAL_MARKET_TAX_BIPS": "500"
+    "CLAIM_REWARD_FEE_BIPS": "0",
+    "RENTAL_MARKET_TAX_BIPS": "100"
   },
 
   "ammTaxFees": {
-    "COMMENT": "💸 TAXAS DE POOLS NFT (BIPS).",
+    "COMMENT": "💸 TAXAS DE POOLS NFT (BIPS). Baixas para incentivar trade.",
     "NFT_POOL_BUY_TAX_BIPS": "50",
-    "NFT_POOL_SELL_TAX_BIPS": "1000"
+    "NFT_POOL_SELL_TAX_BIPS": "50"
   },
 
   "boosterDiscounts": {
@@ -54,9 +57,9 @@
   },
   
   "fortunePoolTiers": {
-    "COMMENT": "🎰 JOGO DO TIGRE (Chance 1/X, Mult BIPS). Ex: 3,20000 = 33% chance, 2x prêmio.",
-    "1": "4,15000",
-    "2": "15,50000",
-    "3": "150,500000"
+    "COMMENT": "🎰 JOGO DO TIGRE (Chance 1/X, Mult BIPS). Ex: 3,15000 = 33% chance, 1.5x prêmio.",
+    "1": "3,15000",
+    "2": "10,50000",
+    "3": "100,500000"
   }
 }

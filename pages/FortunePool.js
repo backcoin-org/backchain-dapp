@@ -1,5 +1,5 @@
 // js/pages/FortunePool.js
-// ✅ PRODUCTION V34: Gas Guard with Backend Faucet Call (Gasless Refuel)
+// ✅ PRODUCTION V35: Fixed Exact Fee (No Safety Margin) + Gas Guard
 
 import { State } from '../state.js';
 import { loadUserData, safeContractCall, API_ENDPOINTS } from '../modules/data.js';
@@ -553,7 +553,7 @@ async function checkGasAndWarn() {
 }
 
 // -------------------------------------------------------------
-// TRANSACTION EXECUTION (V33: BLINDED + GAS GUARD)
+// TRANSACTION EXECUTION (V35: EXACT FEE CORRECTION)
 // -------------------------------------------------------------
 async function executeTransaction() {
     if (!State.isConnected) return showToast("Connect wallet", "error");
@@ -577,16 +577,21 @@ async function executeTransaction() {
     const isCumulative = gameState.isCumulative;
     let fee = 0n;
 
-    // 2. Calculate Fee
+    // 2. Calculate Fee (CORRIGIDO: EXACT MATCHING)
     try {
         console.log("🔍 [INIT] Fetching oracleFeeInWei from contract...");
         const baseFee = await State.actionsManagerContract.oracleFeeInWei();
         const baseFeeBigInt = BigInt(baseFee); 
         console.log("   > Base Fee (Contract):", baseFeeBigInt.toString(), "Wei");
+        
         const rawFee = isCumulative ? (baseFeeBigInt * 5n) : baseFeeBigInt;
-        fee = (rawFee * 110n) / 100n; // +10% de margem
-        console.log("⚠️ TESTE: Enviando taxa com margem de segurança:", fee.toString());
+        
+        // ⚠️ REMOVIDA MARGEM DE 10% para evitar 'InvalidFee()' do contrato
+        fee = rawFee; 
+        
+        console.log("⚠️ TESTE: Enviando taxa EXATA (Contract Requirement):", fee.toString());
     } catch (e) {
+        // Fallback deve bater com o contrato (0.00035 ETH)
         const FALLBACK_BASE_FEE = ethers.parseEther("0.00035"); 
         fee = isCumulative ? (FALLBACK_BASE_FEE * 5n) : FALLBACK_BASE_FEE;
     }
@@ -620,7 +625,7 @@ async function executeTransaction() {
         
         const guessesAsBigInt = gameState.guesses.map(g => BigInt(g));
         
-        console.log("🚀 DEBUG PARTICIPATE V33:", {
+        console.log("🚀 DEBUG PARTICIPATE V35:", {
             contractAddress: addresses.fortunePool,
             amountBKC: amountWei.toString(),
             guesses: guessesAsBigInt.map(g => g.toString()),
@@ -664,6 +669,7 @@ async function executeTransaction() {
         else if (e.message && e.message.includes("insufficient funds")) msg = "Insufficient ETH for Gas";
         else if (e.code === -32603) msg = "RPC Error: Reset Metamask & Check Balance";
         else if (e.code === "ACTION_REJECTED") msg = "User rejected transaction";
+        else if (e.message.includes("InvalidFee")) msg = "Invalid Fee Amount";
         
         showToast(msg, "error");
         
