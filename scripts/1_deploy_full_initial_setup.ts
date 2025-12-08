@@ -1,4 +1,3 @@
-// scripts/1_deploy_full_initial_setup.ts
 import { HardhatRuntimeEnvironment } from "hardhat/types";
 import { ethers, upgrades } from "hardhat";
 import fs from "fs";
@@ -6,7 +5,7 @@ import path from "path";
 
 // --- CORE CONFIGURATION (International) ---
 
-// C1: Oracle Wallet Address (EOA that signs fulfillGame transactions)
+// C1: Oracle Wallet Address (EOA that signs fulfillGame transactions & Relayer for Faucet)
 const ORACLE_WALLET_ADDRESS = "0xd7e622124b78a28c4c928b271fc9423285804f98"; 
 
 // C2: Oracle Fee paid in native ETH (0.00035 ETH)
@@ -66,7 +65,7 @@ export async function runScript(hre: HardhatRuntimeEnvironment) {
   
   const ZERO_ADDR = ethers.ZeroAddress;
 
-  console.log(`🚀 DEPLOY INTEGRAL V3 (ORACLE FIXED) | Network: ${networkName}`);
+  console.log(`🚀 DEPLOY INTEGRAL V3 (FAUCET FIXED) | Network: ${networkName}`);
   console.log(`👷 Deployer: ${deployer.address}`);
   console.log(`🔮 Oracle Wallet Set: ${ORACLE_WALLET_ADDRESS}`);
   
@@ -125,7 +124,7 @@ export async function runScript(hre: HardhatRuntimeEnvironment) {
     const { address: dmAddr } = await deployProxyWithRetry(upgrades, DelegationManager, [deployer.address, hubAddr], "DelegationManager");
     addresses.delegationManager = dmAddr;
 
-    // --- CRITICAL CORRECTION: Update Hub WITH Managers ---
+    // --- Pre-Wiring Managers ---
     console.log("   🔌 Executing Pre-Wiring 2 (Registering Managers)...");
     await (await hub.setAddresses(
         bkcAddr,
@@ -183,9 +182,22 @@ export async function runScript(hre: HardhatRuntimeEnvironment) {
     const { contract: sale, address: saleAddr } = await deployProxyWithRetry(upgrades, PublicSale, [nftAddr, hubAddr, deployer.address], "PublicSale");
     addresses.publicSale = saleAddr;
 
+    // -------- FAUCET ADJUSTMENT START --------
     const SimpleBKCFaucet = await ethers.getContractFactory("SimpleBKCFaucet");
-    const { address: faucetAddr } = await deployProxyWithRetry(upgrades, SimpleBKCFaucet, [bkcAddr, deployer.address], "SimpleBKCFaucet");
+    
+    // Configurações Iniciais do Faucet
+    const FAUCET_TOKENS_PER_CLAIM = ethers.parseEther("20");  // 20 BKC
+    const FAUCET_ETH_PER_CLAIM = ethers.parseEther("0.008"); // 0.008 ETH (Ajuste se precisar)
+
+    const { address: faucetAddr } = await deployProxyWithRetry(upgrades, SimpleBKCFaucet, [
+        bkcAddr, 
+        ORACLE_WALLET_ADDRESS, // Usa o Oracle como Relayer
+        FAUCET_TOKENS_PER_CLAIM,
+        FAUCET_ETH_PER_CLAIM
+    ], "SimpleBKCFaucet");
+    
     addresses.faucet = faucetAddr;
+    // -------- FAUCET ADJUSTMENT END --------
 
     // Save Oracle address to JSON for the indexer/backend (Script 3 will use it)
     addresses.oracleWalletAddress = ORACLE_WALLET_ADDRESS;

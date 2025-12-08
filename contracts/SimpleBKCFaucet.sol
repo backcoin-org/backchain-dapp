@@ -1,30 +1,41 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.28;
 
-import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import "@openzeppelin/contracts/access/Ownable.sol";
-import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
+import "@openzeppelin/contracts-upgradeable/token/ERC20/IERC20Upgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
+import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 
 /**
- * @title SimpleBKCFaucet V2
- * @notice Oracle paga o claim e distribui BKC + ETH para o usuário
+ * @title SimpleBKCFaucet V3 (Production)
+ * @notice Distributes ERC20 tokens + Native ETH to users via Oracle/Relayer.
+ * @dev UUPS Upgradeable implementation.
  */
-contract SimpleBKCFaucet is Ownable, ReentrancyGuard {
+contract SimpleBKCFaucet is 
+    Initializable, 
+    OwnableUpgradeable, 
+    ReentrancyGuardUpgradeable,
+    UUPSUpgradeable 
+{
+    // --- State Variables ---
+    IERC20Upgradeable public bkcToken;
+    address public relayerAddress; // The Oracle/Indexer wallet
     
-    IERC20 public bkcToken;
-    address public relayerAddress; // Oracle address
-    
-    uint256 public tokensPerRequest;  // BKC a distribuir
-    uint256 public ethPerRequest;     // ETH a distribuir (0.008 ETH)
-    uint256 public cooldownPeriod;    // 1 hora
+    uint256 public tokensPerRequest;  
+    uint256 public ethPerRequest;     
+    uint256 public cooldownPeriod;    
     
     mapping(address => uint256) public lastRequestTime;
     
+    // --- Events ---
     event TokensDistributed(address indexed recipient, uint256 tokenAmount, uint256 ethAmount, address indexed relayer);
     event RelayerSet(address indexed relayer);
     event AmountsUpdated(uint256 newTokenAmount, uint256 newEthAmount);
     event FundsDeposited(address indexed sender, uint256 ethAmount, uint256 tokenAmount);
-    
+    event CooldownUpdated(uint256 newCooldown);
+
+    // --- Custom Errors (Gas Efficient) ---
     error CooldownActive(uint256 timeRemaining);
     error InsufficientContractTokens();
     error InsufficientContractETH();
@@ -32,39 +43,62 @@ contract SimpleBKCFaucet is Ownable, ReentrancyGuard {
     error InvalidAddress();
     error TransferFailed();
     
-    constructor(
+    /// @custom:oz-upgrades-unsafe-allow constructor
+    constructor() {
+        _disableInitializers();
+    }
+
+    /**
+     * @notice Initialize the proxy state (Replaces constructor)
+     * @param _bkcToken Address of the ERC20 token
+     * @param _relayer Address of the Oracle/Indexer
+     * @param _tokensPerRequest Amount of BKC to give (in Wei)
+     * @param _ethPerRequest Amount of ETH to give (in Wei)
+     */
+    function initialize(
         address _bkcToken,
         address _relayer,
         uint256 _tokensPerRequest,
         uint256 _ethPerRequest
-    ) {
+    ) public initializer {
         if (_bkcToken == address(0)) revert InvalidAddress();
         if (_relayer == address(0)) revert InvalidAddress();
+
+        __Ownable_init();
+        __ReentrancyGuard_init();
+        __UUPSUpgradeable_init();
         
-        bkcToken = IERC20(_bkcToken);
+        bkcToken = IERC20Upgradeable(_bkcToken);
         relayerAddress = _relayer;
         tokensPerRequest = _tokensPerRequest;
         ethPerRequest = _ethPerRequest;
-        cooldownPeriod = 1 hours;
+        cooldownPeriod = 1 hours; // Default cooldown
     }
-    
+
     /**
-     * @notice Distribui BKC + ETH para o usuário
-     * @dev Apenas relayer (oracle) pode chamar. Oracle paga o gas.
-     * @param _recipient Endereço do usuário
+     * @dev Required by UUPS pattern to authorize upgrades.
+     */
+    function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
+
+    // ========================================================================
+    // 🚀 CORE FUNCTIONALITY
+    // ========================================================================
+
+    /**
+     * @notice Distributes BKC + ETH to the recipient.
+     * @dev Called by the Relayer (Oracle) who pays the gas.
      */
     function distributeTo(address _recipient) external nonReentrant {
-        // Apenas relayer pode chamar
         if (msg.sender != relayerAddress) revert Unauthorized();
         if (_recipient == address(0)) revert InvalidAddress();
         
-        // Verificar cooldown
+        // 1. Check Cooldown
         uint256 timeSinceLastRequest = block.timestamp - lastRequestTime[_recipient];
         if (timeSinceLastRequest < cooldownPeriod) {
             revert CooldownActive(cooldownPeriod - timeSinceLastRequest);
         }
         
-        // Verificar saldos do contrato
+        // 2. Check Contract Balances
         uint256 contractTokenBalance = bkcToken.balanceOf(address(this));
         if (contractTokenBalance < tokensPerRequest) {
             revert InsufficientContractTokens();
@@ -75,38 +109,26 @@ contract SimpleBKCFaucet is Ownable, ReentrancyGuard {
             revert InsufficientContractETH();
         }
         
-        // Atualizar timestamp
+        // 3. Update State
         lastRequestTime[_recipient] = block.timestamp;
         
-        // Transferir BKC
+        // 4. Transfer BKC
         bool tokenSuccess = bkcToken.transfer(_recipient, tokensPerRequest);
         if (!tokenSuccess) revert TransferFailed();
         
-        // Transferir ETH
+        // 5. Transfer ETH
         (bool ethSuccess, ) = _recipient.call{value: ethPerRequest}("");
         if (!ethSuccess) revert TransferFailed();
         
         emit TokensDistributed(_recipient, tokensPerRequest, ethPerRequest, msg.sender);
     }
     
+    // ========================================================================
+    // ⚙️ ADMIN FUNCTIONS (Dynamic Updates)
+    // ========================================================================
+
     /**
-     * @notice Permite que qualquer um deposite ETH no faucet
-     */
-    receive() external payable {
-        emit FundsDeposited(msg.sender, msg.value, 0);
-    }
-    
-    /**
-     * @notice Owner pode depositar BKC
-     */
-    function depositTokens(uint256 _amount) external {
-        bool success = bkcToken.transferFrom(msg.sender, address(this), _amount);
-        if (!success) revert TransferFailed();
-        emit FundsDeposited(msg.sender, 0, _amount);
-    }
-    
-    /**
-     * @notice Atualizar relayer (oracle)
+     * @notice Updates the Relayer/Oracle address.
      */
     function setRelayer(address _newRelayer) external onlyOwner {
         if (_newRelayer == address(0)) revert InvalidAddress();
@@ -115,7 +137,7 @@ contract SimpleBKCFaucet is Ownable, ReentrancyGuard {
     }
     
     /**
-     * @notice Atualizar quantidades distribuídas
+     * @notice Updates distribution amounts instantly.
      */
     function setAmounts(uint256 _tokensPerRequest, uint256 _ethPerRequest) external onlyOwner {
         tokensPerRequest = _tokensPerRequest;
@@ -124,15 +146,33 @@ contract SimpleBKCFaucet is Ownable, ReentrancyGuard {
     }
     
     /**
-     * @notice Atualizar cooldown
+     * @notice Updates cooldown period (in seconds).
      */
     function setCooldown(uint256 _newCooldown) external onlyOwner {
         cooldownPeriod = _newCooldown;
+        emit CooldownUpdated(_newCooldown);
+    }
+
+    // ========================================================================
+    // 💰 FUNDING & WITHDRAWAL
+    // ========================================================================
+
+    /**
+     * @notice Allows anyone to fund the contract with ETH.
+     */
+    receive() external payable {
+        emit FundsDeposited(msg.sender, msg.value, 0);
     }
     
     /**
-     * @notice Emergency withdraw (owner)
+     * @notice Allows funding with BKC (requires approval).
      */
+    function depositTokens(uint256 _amount) external {
+        bool success = bkcToken.transferFrom(msg.sender, address(this), _amount);
+        if (!success) revert TransferFailed();
+        emit FundsDeposited(msg.sender, 0, _amount);
+    }
+    
     function emergencyWithdrawETH() external onlyOwner {
         uint256 balance = address(this).balance;
         (bool success, ) = owner().call{value: balance}("");
@@ -144,9 +184,10 @@ contract SimpleBKCFaucet is Ownable, ReentrancyGuard {
         if (!success) revert TransferFailed();
     }
     
-    /**
-     * @notice Verificar tempo restante de cooldown
-     */
+    // ========================================================================
+    // 🔍 VIEW FUNCTIONS
+    // ========================================================================
+
     function getCooldownRemaining(address _user) external view returns (uint256) {
         uint256 timeSinceLastRequest = block.timestamp - lastRequestTime[_user];
         if (timeSinceLastRequest >= cooldownPeriod) {
@@ -155,32 +196,8 @@ contract SimpleBKCFaucet is Ownable, ReentrancyGuard {
         return cooldownPeriod - timeSinceLastRequest;
     }
     
-    /**
-     * @notice Verificar se usuário pode clamar
-     */
     function canClaim(address _user) external view returns (bool) {
         uint256 timeSinceLastRequest = block.timestamp - lastRequestTime[_user];
         return timeSinceLastRequest >= cooldownPeriod;
-    }
-    
-    /**
-     * @notice Info do contrato
-     */
-    function getContractInfo() external view returns (
-        uint256 tokenBalance,
-        uint256 ethBalance,
-        uint256 tokensPerDist,
-        uint256 ethPerDist,
-        uint256 cooldown,
-        address relayer
-    ) {
-        return (
-            bkcToken.balanceOf(address(this)),
-            address(this).balance,
-            tokensPerRequest,
-            ethPerRequest,
-            cooldownPeriod,
-            relayerAddress
-        );
     }
 }
