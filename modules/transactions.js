@@ -1,5 +1,5 @@
 // js/modules/transactions.js
-// ✅ VERSÃO FINAL V7.2 (RPC FIX): Gás Automático para Arbitrum Sepolia
+// ✅ VERSÃO FINAL V7.3 (RPC FIX + DYNAMIC GAS): Correção Definitiva para Erro -32603
 
 const ethers = window.ethers;
 
@@ -13,12 +13,26 @@ import { loadUserData, getHighestBoosterBoostFromAPI, loadRentalListings } from 
 const APPROVAL_TOLERANCE_BIPS = 100n; 
 const BIPS_DENOMINATOR = 10000n; 
 
-// 🔥 CORREÇÃO CRÍTICA DO GÁS (V7.2)
-// Removemos maxFeePerGas/maxPriorityFeePerGas para evitar erro -32603 na Arbitrum.
-// Deixamos o RPC decidir o preço, apenas definimos um limite alto de segurança.
-const GAS_OPTS = { 
-    gasLimit: 5000000 
-}; 
+// ⚡ GAS HELPERS (CRITICAL FIX FOR ARBITRUM)
+// Aprovações são leves, usamos um teto fixo seguro e baixo.
+const GAS_LIMIT_APPROVAL = 300000n; 
+
+/**
+ * Calcula o gás dinamicamente com margem de segurança de 20%.
+ * Se a estimativa do RPC falhar (timeout), usa um fallback seguro (2M) em vez de 5M.
+ */
+async function getGasWithMargin(contract, method, args) {
+    try {
+        // Tenta estimar o gás real
+        const estimatedGas = await contract[method].estimateGas(...args);
+        // Adiciona 20% de margem (x * 120 / 100)
+        return { gasLimit: (estimatedGas * 120n) / 100n };
+    } catch (error) {
+        console.warn(`⚠️ Gas estimation failed for ${method}. Using safe fallback.`, error);
+        // Fallback seguro: 2 Milhões (Suficiente para 99% das txs complexas, mas menor que os 5M que travavam a carteira)
+        return { gasLimit: 2000000n };
+    }
+}
 
 // ====================================================================
 // CORE SIGNER/RUNNER UTILITY
@@ -92,8 +106,9 @@ async function executeTransaction(txPromise, successMessage, failMessage, btnEle
         else if (e.data && e.data.message) reason = e.data.message;
         else if (e.message) reason = e.message;
 
+        // Tratamento específico para erros comuns de RPC
         if (reason.includes("Internal JSON-RPC error") || reason.includes("code=-32603")) {
-            reason = "RPC Error: Network busy or Gas estimation failed.";
+            reason = "RPC Error: Network busy or Gas estimation failed. Please reset MetaMask activity.";
         }
         if (e.code === 'ACTION_REJECTED') reason = 'You rejected the transaction in your wallet.';
         if (reason.includes("execution reverted")) reason = "Execution Reverted (Check Contract State/Input).";
@@ -154,7 +169,8 @@ async function ensureApproval(tokenContract, spenderAddress, amountOrTokenId, bt
                 showToast(`Approving ${formatBigNumber(toleratedAmount).toFixed(2)} $BKC for ${purpose}...`, "info");
                 setBtnLoading("Approving");
 
-                const approveTx = await approvedTokenContract.approve(spenderAddress, toleratedAmount, GAS_OPTS);
+                // ✅ Usa gás fixo baixo para aprovações (ERC20 Approve é barato)
+                const approveTx = await approvedTokenContract.approve(spenderAddress, toleratedAmount, { gasLimit: GAS_LIMIT_APPROVAL });
                 await approveTx.wait();
                 showToast('Approval successful!', "success");
             }
@@ -173,7 +189,8 @@ async function ensureApproval(tokenContract, spenderAddress, amountOrTokenId, bt
                 showToast(`Approving NFT #${tokenId}...`, "info");
                 setBtnLoading("Approving NFT");
                 
-                const approveTx = await approvedTokenContract.approve(spenderAddress, tokenId, GAS_OPTS);
+                // ✅ Usa gás fixo baixo para aprovações
+                const approveTx = await approvedTokenContract.approve(spenderAddress, tokenId, { gasLimit: GAS_LIMIT_APPROVAL });
                 await approveTx.wait();
                 showToast("NFT Approval successful!", "success");
             }
@@ -205,7 +222,11 @@ export async function executeListNFT(tokenId, pricePerHourWei, maxDurationHours,
     if (!approved) return false;
 
     const rentalContract = new ethers.Contract(addresses.rentalManager, rentalManagerABI, signer); 
-    const txPromise = rentalContract.listNFT(BigInt(tokenId), BigInt(pricePerHourWei), BigInt(maxDurationHours), GAS_OPTS);
+    const args = [BigInt(tokenId), BigInt(pricePerHourWei), BigInt(maxDurationHours)];
+    
+    // 🔥 Gás Dinâmico
+    const gasOpts = await getGasWithMargin(rentalContract, 'listNFT', args);
+    const txPromise = rentalContract.listNFT(...args, gasOpts);
     
     return await executeTransaction(txPromise, `NFT #${tokenId} listed successfully!`, "Error listing NFT", btnElement);
 }
@@ -218,7 +239,11 @@ export async function executeRentNFT(tokenId, hoursToRent, totalCostWei, btnElem
     if (!approved) return false;
 
     const rentalContract = new ethers.Contract(addresses.rentalManager, rentalManagerABI, signer); 
-    const txPromise = rentalContract.rentNFT(BigInt(tokenId), BigInt(hoursToRent), GAS_OPTS);
+    const args = [BigInt(tokenId), BigInt(hoursToRent)];
+
+    // 🔥 Gás Dinâmico
+    const gasOpts = await getGasWithMargin(rentalContract, 'rentNFT', args);
+    const txPromise = rentalContract.rentNFT(...args, gasOpts);
 
     return await executeTransaction(txPromise, `NFT #${tokenId} rented for ${hoursToRent} hours!`, "Error renting NFT", btnElement);
 }
@@ -228,7 +253,11 @@ export async function executeWithdrawNFT(tokenId, btnElement) {
     if (!signer || !addresses.rentalManager) return false;
 
     const rentalContract = new ethers.Contract(addresses.rentalManager, rentalManagerABI, signer); 
-    const txPromise = rentalContract.withdrawNFT(BigInt(tokenId), GAS_OPTS);
+    const args = [BigInt(tokenId)];
+
+    // 🔥 Gás Dinâmico
+    const gasOpts = await getGasWithMargin(rentalContract, 'withdrawNFT', args);
+    const txPromise = rentalContract.withdrawNFT(...args, gasOpts);
 
     return await executeTransaction(txPromise, `NFT #${tokenId} withdrawn!`, "Error withdrawing NFT", btnElement);
 }
@@ -264,7 +293,11 @@ export async function executeDelegation(totalAmount, durationSeconds, boosterIdT
     if (!approved) return false;
     
     const delegationContract = State.delegationManagerContract.connect(signer); 
-    const delegateTxPromise = delegationContract.delegate(totalAmountBigInt, durationBigInt, boosterIdBigInt, GAS_OPTS);
+    const args = [totalAmountBigInt, durationBigInt, boosterIdBigInt];
+
+    // 🔥 Gás Dinâmico
+    const gasOpts = await getGasWithMargin(delegationContract, 'delegate', args);
+    const delegateTxPromise = delegationContract.delegate(...args, gasOpts);
     
     const success = await executeTransaction(delegateTxPromise, 'Delegation successful!', 'Error delegating tokens', btnElement);
     if (success) closeModal();
@@ -280,7 +313,11 @@ export async function executeUnstake(index) {
     
     const btnElement = document.querySelector(`.unstake-btn[data-index='${index}']`);
     const delegationContract = State.delegationManagerContract.connect(signer); 
-    const unstakeTxPromise = delegationContract.unstake(index, boosterIdToSend, GAS_OPTS);
+    const args = [index, boosterIdToSend];
+
+    // 🔥 Gás Dinâmico
+    const gasOpts = await getGasWithMargin(delegationContract, 'unstake', args);
+    const unstakeTxPromise = delegationContract.unstake(...args, gasOpts);
     
     return await executeTransaction(unstakeTxPromise, 'Unstake successful!', 'Error unstaking tokens', btnElement);
 }
@@ -296,7 +333,11 @@ export async function executeForceUnstake(index) {
     
     const btnElement = document.querySelector(`.force-unstake-btn[data-index='${index}']`);
     const delegationContract = State.delegationManagerContract.connect(signer); 
-    const forceUnstakeTxPromise = delegationContract.forceUnstake(index, boosterIdToSend, GAS_OPTS); 
+    const args = [index, boosterIdToSend];
+
+    // 🔥 Gás Dinâmico
+    const gasOpts = await getGasWithMargin(delegationContract, 'forceUnstake', args);
+    const forceUnstakeTxPromise = delegationContract.forceUnstake(...args, gasOpts); 
     
     return await executeTransaction(forceUnstakeTxPromise, 'Force unstake successful!', 'Error performing force unstake', btnElement);
 }
@@ -323,7 +364,12 @@ export async function executeUniversalClaim(stakingRewards, minerRewards, btnEle
         if (stakingRewards > 0n) {
             showToast("Claiming rewards...", "info");
             const delegationContract = State.delegationManagerContract.connect(signer); 
-            const tx = await delegationContract.claimReward(boosterIdToSend, GAS_OPTS);
+            const args = [boosterIdToSend];
+            
+            // 🔥 Gás Dinâmico
+            const gasOpts = await getGasWithMargin(delegationContract, 'claimReward', args);
+            const tx = await delegationContract.claimReward(...args, gasOpts);
+            
             await tx.wait();
             showToast('Reward claimed successfully!', "success");
         }
@@ -370,8 +416,12 @@ export async function executeBuyBooster(poolAddress, price, boosterTokenIdForPSt
 
         const poolContract = new ethers.Contract(poolAddress, nftPoolABI, signer); 
         const boosterIdToSend = BigInt(boosterTokenIdForPStake);
+        const args = [boosterIdToSend];
 
-        const buyTxPromise = poolContract.buyNextAvailableNFT(boosterIdToSend, GAS_OPTS);
+        // 🔥 Gás Dinâmico
+        const gasOpts = await getGasWithMargin(poolContract, 'buyNextAvailableNFT', args);
+        const buyTxPromise = poolContract.buyNextAvailableNFT(...args, gasOpts);
+        
         return await executeTransaction(buyTxPromise, 'Purchase successful!', 'Error during purchase', btnElement);
 
     } catch (e) {
@@ -404,7 +454,12 @@ export async function executeSellBooster(poolAddress, tokenIdToSell, boosterToke
         const minPrice = 0n; 
         
         const poolContract = new ethers.Contract(poolAddress, nftPoolABI, signer); 
-        const sellTxPromise = poolContract.sellNFT(tokenIdBigInt, boosterIdToSend, minPrice, GAS_OPTS);
+        const args = [tokenIdBigInt, boosterIdToSend, minPrice];
+
+        // 🔥 Gás Dinâmico
+        const gasOpts = await getGasWithMargin(poolContract, 'sellNFT', args);
+        const sellTxPromise = poolContract.sellNFT(...args, gasOpts);
+
         return await executeTransaction(sellTxPromise, 'Sale successful!', 'Error during sale', btnElement);
 
     } catch (e) {
@@ -434,12 +489,18 @@ export async function executeInternalFaucet(btnElement) {
     try {
         if (State.faucetContract) {
             const faucetContract = State.faucetContract.connect(signer); 
-            const tx = await faucetContract.claim(GAS_OPTS);
+            // 🔥 Gás Dinâmico
+            const gasOpts = await getGasWithMargin(faucetContract, 'claim', []);
+            const tx = await faucetContract.claim(gasOpts);
             return await executeTransaction(tx, 'Tokens sent!', 'Faucet Error', btnElement);
         } else if (State.bkcTokenContract) {
             const amount = ethers.parseUnits("20", 18); 
             const bkcTokenContract = State.bkcTokenContract.connect(signer); 
-            const tx = await bkcTokenContract.mint(State.userAddress, amount, GAS_OPTS); 
+            const args = [State.userAddress, amount];
+            
+            // 🔥 Gás Dinâmico
+            const gasOpts = await getGasWithMargin(bkcTokenContract, 'mint', args);
+            const tx = await bkcTokenContract.mint(...args, gasOpts); 
             return await executeTransaction(tx, '20 BKC Minted!', 'Mint Error', btnElement);
         } else {
             throw new Error("Faucet not available.");
@@ -494,15 +555,11 @@ export async function executeNotarizeDocument(documentURI, description, contentH
 
     // 2. Prepare Parameters
     const bId = boosterId ? BigInt(boosterId) : 0n;
+    const args = [documentURI, description, contentHash, bId];
     
-    // 3. Call Smart Contract (Updated Signature)
-    const notarizeTxPromise = notaryContract.notarize(
-        documentURI, 
-        description, 
-        contentHash, 
-        bId, 
-        GAS_OPTS
-    );
+    // 3. Call Smart Contract (Updated Signature with Dynamic Gas)
+    const gasOpts = await getGasWithMargin(notaryContract, 'notarize', args);
+    const notarizeTxPromise = notaryContract.notarize(...args, gasOpts);
 
     return await executeTransaction(notarizeTxPromise, 'Document notarized successfully!', 'Error notarizing document', submitButton);
 }
