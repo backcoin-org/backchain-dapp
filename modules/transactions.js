@@ -1,5 +1,5 @@
 // js/modules/transactions.js
-// ✅ VERSÃO FINAL V7.3 (RPC FIX + DYNAMIC GAS): Correção Definitiva para Erro -32603
+// ✅ VERSÃO FINAL V7.4 (FULL DYNAMIC GAS): Correção de Aprovação e RPC -32603
 
 const ethers = window.ethers;
 
@@ -13,13 +13,10 @@ import { loadUserData, getHighestBoosterBoostFromAPI, loadRentalListings } from 
 const APPROVAL_TOLERANCE_BIPS = 100n; 
 const BIPS_DENOMINATOR = 10000n; 
 
-// ⚡ GAS HELPERS (CRITICAL FIX FOR ARBITRUM)
-// Aprovações são leves, usamos um teto fixo seguro e baixo.
-const GAS_LIMIT_APPROVAL = 300000n; 
-
 /**
+ * ⚡ GAS HELPER (CRITICAL FIX FOR ARBITRUM)
  * Calcula o gás dinamicamente com margem de segurança de 20%.
- * Se a estimativa do RPC falhar (timeout), usa um fallback seguro (2M) em vez de 5M.
+ * Se a estimativa do RPC falhar, usa um fallback seguro.
  */
 async function getGasWithMargin(contract, method, args) {
     try {
@@ -29,7 +26,7 @@ async function getGasWithMargin(contract, method, args) {
         return { gasLimit: (estimatedGas * 120n) / 100n };
     } catch (error) {
         console.warn(`⚠️ Gas estimation failed for ${method}. Using safe fallback.`, error);
-        // Fallback seguro: 2 Milhões (Suficiente para 99% das txs complexas, mas menor que os 5M que travavam a carteira)
+        // Fallback seguro: 2 Milhões (Suficiente para a maioria das operações sem travar a carteira)
         return { gasLimit: 2000000n };
     }
 }
@@ -169,8 +166,11 @@ async function ensureApproval(tokenContract, spenderAddress, amountOrTokenId, bt
                 showToast(`Approving ${formatBigNumber(toleratedAmount).toFixed(2)} $BKC for ${purpose}...`, "info");
                 setBtnLoading("Approving");
 
-                // ✅ Usa gás fixo baixo para aprovações (ERC20 Approve é barato)
-                const approveTx = await approvedTokenContract.approve(spenderAddress, toleratedAmount, { gasLimit: GAS_LIMIT_APPROVAL });
+                // ✅ FIX: Gás dinâmico para evitar "Insufficient Funds" em aprovações
+                const args = [spenderAddress, toleratedAmount];
+                const gasOpts = await getGasWithMargin(approvedTokenContract, 'approve', args);
+                
+                const approveTx = await approvedTokenContract.approve(...args, gasOpts);
                 await approveTx.wait();
                 showToast('Approval successful!', "success");
             }
@@ -189,8 +189,11 @@ async function ensureApproval(tokenContract, spenderAddress, amountOrTokenId, bt
                 showToast(`Approving NFT #${tokenId}...`, "info");
                 setBtnLoading("Approving NFT");
                 
-                // ✅ Usa gás fixo baixo para aprovações
-                const approveTx = await approvedTokenContract.approve(spenderAddress, tokenId, { gasLimit: GAS_LIMIT_APPROVAL });
+                // ✅ FIX: Gás dinâmico para aprovação de NFT
+                const args = [spenderAddress, tokenId];
+                const gasOpts = await getGasWithMargin(approvedTokenContract, 'approve', args);
+
+                const approveTx = await approvedTokenContract.approve(...args, gasOpts);
                 await approveTx.wait();
                 showToast("NFT Approval successful!", "success");
             }
@@ -513,13 +516,6 @@ export async function executeInternalFaucet(btnElement) {
     }
 }
 
-/**
- * Enterprise Notarization: Sends Link, Text and Hash to the Blockchain.
- * @param {string} documentURI - IPFS link of the file (Image/PDF)
- * @param {string} description - User provided text description
- * @param {string} contentHash - SHA-256 hash of the file (bytes32 hex string)
- * @param {string|number} boosterId - Optional Booster NFT ID for discount
- */
 export async function executeNotarizeDocument(documentURI, description, contentHash, boosterId, submitButton) {
     const signer = await getConnectedSigner();
     
