@@ -1,5 +1,5 @@
 // js/modules/transactions.js
-// ✅ VERSÃO FINAL V7.1 (FIX CRÍTICO DO SIGNER): Prioriza BrowserProvider/Signer
+// ✅ VERSÃO FINAL V7.2 (RPC FIX): Gás Automático para Arbitrum Sepolia
 
 const ethers = window.ethers;
 
@@ -13,15 +13,15 @@ import { loadUserData, getHighestBoosterBoostFromAPI, loadRentalListings } from 
 const APPROVAL_TOLERANCE_BIPS = 100n; 
 const BIPS_DENOMINATOR = 10000n; 
 
-// 🔥 FIX: Configuração de GÁS explícita para Arbitrum Sepolia (EIP-1559)
+// 🔥 CORREÇÃO CRÍTICA DO GÁS (V7.2)
+// Removemos maxFeePerGas/maxPriorityFeePerGas para evitar erro -32603 na Arbitrum.
+// Deixamos o RPC decidir o preço, apenas definimos um limite alto de segurança.
 const GAS_OPTS = { 
-    gasLimit: 1000000, // Aumentado ligeiramente para garantir execução da struct
-    maxFeePerGas: ethers.parseUnits("0.5", "gwei"), 
-    maxPriorityFeePerGas: ethers.parseUnits("0.05", "gwei")
+    gasLimit: 5000000 
 }; 
 
 // ====================================================================
-// CORE SIGNER/RUNNER UTILITY (AJUSTADO PARA FORÇAR SIGNER VÁLIDO)
+// CORE SIGNER/RUNNER UTILITY
 // ====================================================================
 
 async function getConnectedSigner() {
@@ -30,16 +30,14 @@ async function getConnectedSigner() {
         return null;
     }
     
-    // 🔥 CORREÇÃO CRÍTICA: Prioriza obter o Signer diretamente do Web3Provider (MetaMask/WalletConnect)
+    // Prioriza obter o Signer diretamente do Web3Provider (MetaMask/WalletConnect)
     if (State.web3Provider) {
         try {
             const provider = new ethers.BrowserProvider(State.web3Provider);
             const signer = await provider.getSigner(); 
-            // 🚨 SUCESSO: Retorna o Signer que pode assinar.
             return signer;
         } catch (e) {
             console.error("Signer acquisition failed (BrowserProvider):", e);
-            // Se falhar (e.g., usuário não deu permissão), o usuário não deve conseguir transacionar.
             showToast("Failed to acquire wallet signer. Please check permissions in MetaMask.", "error");
             return null;
         }
@@ -498,7 +496,6 @@ export async function executeNotarizeDocument(documentURI, description, contentH
     const bId = boosterId ? BigInt(boosterId) : 0n;
     
     // 3. Call Smart Contract (Updated Signature)
-    // notarize(string memory _ipfsCid, string memory _description, bytes32 _contentHash, uint256 _boosterTokenId)
     const notarizeTxPromise = notaryContract.notarize(
         documentURI, 
         description, 
