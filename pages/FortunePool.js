@@ -583,7 +583,9 @@ async function executeTransaction() {
         const baseFee = await State.actionsManagerContract.oracleFeeInWei();
         const baseFeeBigInt = BigInt(baseFee); 
         console.log("   > Base Fee (Contract):", baseFeeBigInt.toString(), "Wei");
-        fee = isCumulative ? (baseFeeBigInt * 5n) : baseFeeBigInt;
+        const rawFee = isCumulative ? (baseFeeBigInt * 5n) : baseFeeBigInt;
+        fee = (rawFee * 110n) / 100n; // +10% de margem
+        console.log("⚠️ TESTE: Enviando taxa com margem de segurança:", fee.toString());
     } catch (e) {
         const FALLBACK_BASE_FEE = ethers.parseEther("0.00035"); 
         fee = isCumulative ? (FALLBACK_BASE_FEE * 5n) : FALLBACK_BASE_FEE;
