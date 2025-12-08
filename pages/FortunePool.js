@@ -1,33 +1,16 @@
 // js/pages/FortunePool.js
-// ✅ PRODUCTION V36: UX REDESIGN + EXACT FEE FIX + REALTIME FEEDBACK
+// ✅ PRODUCTION V37: UI REF FIX + SAFE APPROVE GAS + UX ENHANCEMENTS
 
 import { State } from '../state.js';
-import { loadUserData, safeContractCall, API_ENDPOINTS } from '../modules/data.js';
+import { loadUserData, safeContractCall } from '../modules/data.js';
 import { formatBigNumber } from '../utils.js';
 import { showToast } from '../ui-feedback.js';
 import { addresses } from '../config.js';
 
 const ethers = window.ethers;
-
-// Network Config: Arbitrum Sepolia
-const EXPLORER_BASE = "https://sepolia.arbiscan.io/tx/";
 const FAUCET_API_URL = "http://64.225.122.2:8080/faucet"; 
 
-// --- DATE HELPER ---
-function formatDate(timestamp) {
-    if (!timestamp) return 'Just now';
-    try {
-        if (timestamp.seconds || timestamp._seconds) {
-            const secs = timestamp.seconds || timestamp._seconds;
-            return new Date(secs * 1000).toLocaleString(undefined, {
-                month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
-            }); 
-        }
-        return new Date(timestamp).toLocaleString();
-    } catch (e) { return 'Recent'; }
-}
-
-// --- CSS STYLES (ENHANCED UX) ---
+// --- STYLES INJECTION ---
 const style = document.createElement('style');
 style.innerHTML = `
     .fortune-container {
@@ -38,8 +21,6 @@ style.innerHTML = `
         overflow: hidden;
         position: relative;
     }
-    
-    /* SLOT MACHINES */
     .slot-window {
         background: #09090b;
         border: 2px solid #27272a;
@@ -66,7 +47,6 @@ style.innerHTML = `
     }
     .slot-window.winner .slot-number { color: #fff; text-shadow: 0 0 10px #10b981; transform: scale(1.1); }
     
-    /* ANIMATIONS */
     @keyframes slotSpin {
         0% { transform: translateY(0); filter: blur(0); }
         50% { transform: translateY(-5px); filter: blur(4px); }
@@ -74,7 +54,6 @@ style.innerHTML = `
     }
     .spinning .slot-number { animation: slotSpin 0.1s infinite linear; color: #fbbf24; opacity: 0.8; }
 
-    /* STATUS BAR */
     .status-bar {
         background: #18181b;
         border-top: 1px solid #27272a;
@@ -90,7 +69,6 @@ style.innerHTML = `
     .status-dot.active { background: #f59e0b; box-shadow: 0 0 10px #f59e0b; animation: pulse 1s infinite; }
     @keyframes pulse { 0% { opacity: 0.5; } 50% { opacity: 1; } 100% { opacity: 0.5; } }
 
-    /* CONTROLS */
     .bet-btn { 
         background: #27272a; color: #a1a1aa; border: 1px solid #3f3f46; 
         transition: all 0.2s; font-weight: bold; font-size: 10px;
@@ -106,7 +84,6 @@ style.innerHTML = `
     .action-btn:active { transform: translateY(4px); box-shadow: none; }
     .action-btn:disabled { background: #3f3f46; color: #71717a; box-shadow: none; cursor: not-allowed; transform: none; }
 
-    /* RESULT OVERLAY */
     .result-overlay {
         position: absolute; inset: 0; 
         background: rgba(0,0,0,0.95); 
@@ -127,25 +104,20 @@ let gameState = {
     guesses: [0, 0, 0],
     isCumulative: true,
     betAmount: 0,
-    lastWinAmount: 0,
     currentLevel: 1,
     currentXP: 0,
     xpPerLevel: 1000,
     systemReady: false
 };
 
-// --- DATA PERSISTENCE ---
-try {
-    const local = localStorage.getItem('bkc_fortune_v36');
-    if (local) { 
-        const p = JSON.parse(local); 
-        gameState.currentLevel = p.lvl || 1; 
-        gameState.currentXP = p.xp || 0; 
-    }
-} catch (e) {}
+// --- GAMIFICATION FUNCTIONS (Moved up to fix ReferenceError) ---
+function updateGamificationUI() { 
+    const el = document.getElementById('currentLevel'); 
+    if (el) el.innerText = gameState.currentLevel; 
+}
 
 function saveProgress() { 
-    localStorage.setItem('bkc_fortune_v36', JSON.stringify({ lvl: gameState.currentLevel, xp: gameState.currentXP })); 
+    localStorage.setItem('bkc_fortune_v37', JSON.stringify({ lvl: gameState.currentLevel, xp: gameState.currentXP })); 
     updateGamificationUI(); 
 }
 
@@ -159,18 +131,29 @@ function addXP(amount) {
     saveProgress(); 
 }
 
-// --- HELPER: DYNAMIC GAS ---
+// Load Progress
+try {
+    const local = localStorage.getItem('bkc_fortune_v37');
+    if (local) { 
+        const p = JSON.parse(local); 
+        gameState.currentLevel = p.lvl || 1; 
+        gameState.currentXP = p.xp || 0; 
+    }
+} catch (e) {}
+
+
+// --- GAS HELPERS ---
 async function getGasWithMargin(contract, method, args) {
     try {
         const estimatedGas = await contract[method].estimateGas(...args);
         return { gasLimit: (estimatedGas * 120n) / 100n }; // +20% Margin
     } catch (error) {
         console.warn(`⚠️ Gas estimation failed for ${method}. Using fallback.`, error);
-        return { gasLimit: 3000000n }; // Safe fallback for Arbitrum
+        return { gasLimit: 3000000n }; 
     }
 }
 
-// --- MAIN RENDERER ---
+// --- RENDER FUNCTIONS ---
 function renderGame(container) {
     container.innerHTML = `
         <div class="fortune-container w-full max-w-2xl mx-auto min-h-[500px] flex flex-col justify-between">
@@ -188,18 +171,15 @@ function renderGame(container) {
                 </div>
             </div>
 
-            <div id="game-stage" class="flex-1 p-6 flex flex-col justify-center relative">
-                </div>
-
-            <div id="controls-panel" class="p-6 bg-black/40 border-t border-white/5">
-                </div>
+            <div id="game-stage" class="flex-1 p-6 flex flex-col justify-center relative"></div>
+            <div id="controls-panel" class="p-6 bg-black/40 border-t border-white/5"></div>
 
             <div class="status-bar">
                 <div class="flex items-center">
                     <span id="status-dot" class="status-dot"></span>
                     <span id="status-text">SYSTEM READY</span>
                 </div>
-                <div id="network-info" class="text-zinc-600">ARBITRUM SEPOLIA</div>
+                <div class="text-zinc-600">ARBITRUM SEPOLIA</div>
             </div>
             
             <div id="result-overlay" class="result-overlay"></div>
@@ -209,9 +189,7 @@ function renderGame(container) {
                     <i class="fa-solid fa-gas-pump text-3xl text-red-500 mb-4"></i>
                     <h3 class="text-xl font-bold text-white mb-2">Out of Gas!</h3>
                     <p class="text-zinc-400 text-xs mb-6">You need ETH to pay for the oracle fee.</p>
-                    <button id="btn-emergency-faucet" class="w-full bg-green-600 hover:bg-green-500 text-white font-bold py-3 rounded-xl">
-                        Get Free Gas
-                    </button>
+                    <button id="btn-emergency-faucet" class="w-full bg-green-600 hover:bg-green-500 text-white font-bold py-3 rounded-xl">Get Free Gas</button>
                     <button id="close-gas-modal" class="mt-3 text-zinc-500 text-xs underline">Close</button>
                 </div>
             </div>
@@ -220,7 +198,6 @@ function renderGame(container) {
 
     renderStep();
     
-    // Gas Modal Listeners
     document.getElementById('close-gas-modal').onclick = () => document.getElementById('no-gas-modal').classList.add('hidden');
     document.getElementById('btn-emergency-faucet').onclick = function() { requestGaslessRefuel(this); };
 }
@@ -239,7 +216,6 @@ function renderStep() {
     }, 200);
 }
 
-// --- STEP 0: INTRO ---
 function renderIntro(stage, controls) {
     stage.innerHTML = `
         <div class="text-center">
@@ -260,20 +236,12 @@ function renderIntro(stage, controls) {
         </div>`;
     controls.innerHTML = `<div class="text-center text-[10px] text-zinc-600">Select a mode to begin</div>`;
     
-    document.getElementById('btn-random-all').onclick = () => { 
-        gameState.guesses = [rand(3), rand(10), rand(100)]; 
-        gameState.step = 4; renderStep(); 
-    };
+    document.getElementById('btn-random-all').onclick = () => { gameState.guesses = [rand(3), rand(10), rand(100)]; gameState.step = 4; renderStep(); };
     document.getElementById('btn-manual-pick').onclick = () => { gameState.step = 1; renderStep(); };
 }
 
-// --- STEP 1-3: PICKER ---
 function renderPicker(stage, controls) {
-    const tiers = [
-        { max: 3, name: "BRONZE", reward: "1.5x", desc: "1 in 3" }, 
-        { max: 10, name: "SILVER", reward: "5x", desc: "1 in 10" }, 
-        { max: 100, name: "GOLD", reward: "50x", desc: "1 in 100" }
-    ];
+    const tiers = [{ max: 3, name: "BRONZE", reward: "1.5x" }, { max: 10, name: "SILVER", reward: "5x" }, { max: 100, name: "GOLD", reward: "50x" }];
     const t = tiers[gameState.step - 1];
     
     let grid = "";
@@ -282,10 +250,7 @@ function renderPicker(stage, controls) {
             `<button class="w-16 h-16 bg-zinc-800 rounded-xl font-bold text-xl text-zinc-400 hover:bg-amber-500 hover:text-black hover:scale-110 transition-all step-pick-btn shadow-lg" data-val="${n}">${n}</button>`
         ).join('')}</div>`;
     } else {
-        grid = `<div class="max-w-xs mx-auto">
-            <input type="number" id="master-input" class="w-full bg-black/50 border border-zinc-700 rounded-xl text-center text-6xl py-6 text-white font-bold outline-none focus:border-amber-500 focus:text-amber-500 transition-colors" placeholder="#">
-            <p class="text-center text-zinc-500 text-xs mt-2">Enter 1 - ${t.max}</p>
-        </div>`;
+        grid = `<div class="max-w-xs mx-auto"><input type="number" id="master-input" class="w-full bg-black/50 border border-zinc-700 rounded-xl text-center text-6xl py-6 text-white font-bold outline-none focus:border-amber-500 focus:text-amber-500 transition-colors" placeholder="#"><p class="text-center text-zinc-500 text-xs mt-2">Enter 1 - ${t.max}</p></div>`;
     }
 
     stage.innerHTML = `
@@ -301,49 +266,29 @@ function renderPicker(stage, controls) {
         const i = document.getElementById('master-input'); 
         const b = document.getElementById('confirm-master');
         i.focus();
-        i.oninput = () => {
-            const val = parseInt(i.value);
-            b.disabled = !val || val < 1 || val > t.max;
-        }; 
+        i.oninput = () => { const val = parseInt(i.value); b.disabled = !val || val < 1 || val > t.max; }; 
         b.onclick = () => { gameState.guesses[2] = parseInt(i.value); gameState.step = 4; renderStep(); };
     } else {
         controls.innerHTML = `<div class="text-center text-[10px] text-zinc-600">Choose a number</div>`;
-        document.querySelectorAll('.step-pick-btn').forEach(b => b.onclick = () => { 
-            gameState.guesses[gameState.step-1] = parseInt(b.dataset.val); 
-            gameState.step++; 
-            renderStep(); 
-        });
+        document.querySelectorAll('.step-pick-btn').forEach(b => b.onclick = () => { gameState.guesses[gameState.step-1] = parseInt(b.dataset.val); gameState.step++; renderStep(); });
     }
 }
 
-// --- STEP 4: SLOTS (MAIN GAME) ---
 function renderSlots(stage, controls) {
     stage.innerHTML = `
         <div class="flex flex-col gap-4 h-full justify-center">
             <div class="flex justify-center gap-2 mb-2">
-                 ${gameState.guesses.map((g, i) => `
-                    <div class="text-center">
-                        <div class="w-10 h-6 bg-zinc-800 rounded text-xs flex items-center justify-center text-zinc-400 font-bold border border-zinc-700">${g}</div>
-                        <div class="text-[8px] text-zinc-600 mt-1 uppercase tracking-wider">Tier ${i+1}</div>
-                    </div>
-                 `).join('')}
+                 ${gameState.guesses.map((g, i) => `<div class="text-center"><div class="w-10 h-6 bg-zinc-800 rounded text-xs flex items-center justify-center text-zinc-400 font-bold border border-zinc-700">${g}</div><div class="text-[8px] text-zinc-600 mt-1 uppercase tracking-wider">Tier ${i+1}</div></div>`).join('')}
             </div>
-            
             <div class="grid grid-cols-3 gap-3">
-                ${[1,2,3].map(i => `
-                    <div id="slot-${i}" class="slot-window">
-                        <span class="slot-number">?</span>
-                    </div>
-                `).join('')}
+                ${[1,2,3].map(i => `<div id="slot-${i}" class="slot-window"><span class="slot-number">?</span></div>`).join('')}
             </div>
-
             <div class="grid grid-cols-3 gap-3 text-center">
                 <div id="win-pot-1" class="text-[10px] text-zinc-600 font-mono transition-colors">---</div>
                 <div id="win-pot-2" class="text-[10px] text-zinc-600 font-mono transition-colors">---</div>
                 <div id="win-pot-3" class="text-[10px] text-zinc-600 font-mono transition-colors">---</div>
             </div>
-        </div>
-    `;
+        </div>`;
 
     controls.innerHTML = `
         <div class="flex items-center justify-between mb-4 bg-black/40 rounded-xl p-2 px-4 border border-zinc-700/50">
@@ -353,7 +298,6 @@ function renderSlots(stage, controls) {
                 <span class="text-amber-500 font-bold text-xs ml-2">BKC</span>
             </div>
         </div>
-        
         <div class="grid grid-cols-5 gap-2 mb-4">
             <button class="bet-btn rounded-lg py-2" data-amt="1">+1</button>
             <button class="bet-btn rounded-lg py-2" data-amt="10">+10</button>
@@ -361,22 +305,11 @@ function renderSlots(stage, controls) {
             <button class="bet-btn rounded-lg py-2" data-amt="1000">1K</button>
             <button id="btn-reset" class="bet-btn rounded-lg py-2 text-red-500 border-red-900/30 hover:bg-red-900/20"><i class="fa-solid fa-trash"></i></button>
         </div>
-
         <div id="mode-toggle" class="mode-container border border-purple-500/30 bg-purple-900/10 p-3 rounded-xl flex items-center justify-between cursor-pointer group mb-4 transition-all hover:bg-purple-900/20">
-            <div class="flex items-center gap-3">
-                <div class="text-xl">🚀</div>
-                <div>
-                    <div class="text-xs font-bold text-white" id="mode-title">TRIPLE COMBO</div>
-                    <div class="text-[9px] text-purple-300">Win on all tiers</div>
-                </div>
-            </div>
+            <div class="flex items-center gap-3"><div class="text-xl">🚀</div><div><div class="text-xs font-bold text-white" id="mode-title">TRIPLE COMBO</div><div class="text-[9px] text-purple-300">Win on all tiers</div></div></div>
             <div class="text-[9px] bg-purple-600 text-white px-2 py-0.5 rounded font-bold">ACTIVE</div>
         </div>
-
-        <button id="btn-spin" class="w-full action-btn py-4 rounded-xl text-lg disabled:opacity-50 disabled:grayscale" disabled>
-            ENTER AMOUNT
-        </button>
-    `;
+        <button id="btn-spin" class="w-full action-btn py-4 rounded-xl text-lg disabled:opacity-50 disabled:grayscale" disabled>ENTER AMOUNT</button>`;
 
     setupControls();
 }
@@ -390,31 +323,24 @@ function setupControls() {
     const validate = () => {
         const val = parseFloat(inp.value);
         gameState.betAmount = val || 0;
+        const [p1, p2, p3] = [1,2,3].map(i => document.getElementById(`win-pot-${i}`));
         
-        const pot1 = document.getElementById('win-pot-1');
-        const pot2 = document.getElementById('win-pot-2');
-        const pot3 = document.getElementById('win-pot-3');
-
         if (val > 0) { 
-            pot1.innerText = `+${(val * 1.5).toLocaleString()}`; pot1.style.color = '#10b981';
-            pot2.innerText = `+${(val * 5).toLocaleString()}`; pot2.style.color = '#10b981';
-            pot3.innerText = `+${(val * 50).toLocaleString()}`; pot3.style.color = '#10b981';
+            p1.innerText = `+${(val * 1.5).toLocaleString()}`; p1.style.color = '#10b981';
+            p2.innerText = `+${(val * 5).toLocaleString()}`; p2.style.color = '#10b981';
+            p3.innerText = `+${(val * 50).toLocaleString()}`; p3.style.color = '#10b981';
             btn.disabled = false; btn.innerText = "SPIN TO WIN";
         } else {
-            pot1.innerText = "---"; pot1.style.color = '#52525b';
-            pot2.innerText = "---"; pot2.style.color = '#52525b';
-            pot3.innerText = "---"; pot3.style.color = '#52525b';
+            [p1, p2, p3].forEach(p => { p.innerText = "---"; p.style.color = '#52525b'; });
             btn.disabled = true; btn.innerText = "ENTER AMOUNT";
         }
-        
         if (!gameState.systemReady) { btn.disabled = true; btn.innerText = "SYSTEM OFFLINE"; }
     };
 
     inp.oninput = validate;
     document.querySelectorAll('.bet-btn').forEach(b => b.onclick = (e) => { 
         if(b.id === 'btn-reset') { inp.value = ''; gameState.step=0; renderStep(); return; }
-        let current = parseFloat(inp.value) || 0;
-        inp.value = parseFloat((current + parseFloat(b.dataset.amt)).toFixed(2)); 
+        inp.value = parseFloat(((parseFloat(inp.value)||0) + parseFloat(b.dataset.amt)).toFixed(2)); 
         validate(); 
     });
     
@@ -440,26 +366,17 @@ function setStatus(text, isActive = false) {
     const dot = document.getElementById('status-dot');
     const txt = document.getElementById('status-text');
     if(!dot || !txt) return;
-    
     txt.innerText = text;
-    if(isActive) {
-        dot.classList.add('active');
-        txt.classList.add('text-amber-500');
-    } else {
-        dot.classList.remove('active');
-        txt.classList.remove('text-amber-500');
-    }
+    if(isActive) { dot.classList.add('active'); txt.classList.add('text-amber-500'); }
+    else { dot.classList.remove('active'); txt.classList.remove('text-amber-500'); }
 }
-
-// --- GAME LOGIC ---
 
 function rand(max) { return Math.floor(Math.random() * max) + 1; }
 
 async function checkGasAndWarn() {
     try {
         const nativeBalance = await State.provider.getBalance(State.userAddress);
-        const minGas = ethers.parseEther("0.002"); 
-        if (nativeBalance < minGas) {
+        if (nativeBalance < ethers.parseEther("0.002")) {
             document.getElementById('no-gas-modal').classList.remove('hidden');
             document.getElementById('no-gas-modal').classList.add('flex');
             return false;
@@ -479,7 +396,7 @@ async function requestGaslessRefuel(btnElement) {
     btnElement.innerHTML = "Get Free Gas";
 }
 
-// ⚠️ CORE TRANSACTION LOGIC (EXACT FEE + DYNAMIC GAS)
+// ⚠️ CORE TRANSACTION LOGIC (SAFE APPROVE + DYNAMIC GAME GAS)
 async function executeTransaction() {
     if (!State.isConnected) return showToast("Connect wallet", "error");
     const hasGas = await checkGasAndWarn();
@@ -492,7 +409,7 @@ async function executeTransaction() {
     const amountWei = ethers.parseEther(gameState.betAmount.toString());
     const isCumulative = gameState.isCumulative;
     
-    // 1. FEE CALCULATION (EXACT - NO MARGIN)
+    // 1. FEE (Exact)
     let fee = 0n;
     try {
         const baseFee = await State.actionsManagerContract.oracleFeeInWei();
@@ -504,7 +421,7 @@ async function executeTransaction() {
     btn.disabled = true;
     
     try {
-        // 2. APPROVE BKC
+        // 2. APPROVE BKC (SAFE MODE: Fixed Gas)
         const spender = addresses.fortunePool;
         setStatus("APPROVING BKC...", true);
         btn.innerText = "APPROVING...";
@@ -512,28 +429,25 @@ async function executeTransaction() {
         try {
             const currentAllowance = await State.bkcTokenContract.allowance(State.userAddress, spender);
             if (currentAllowance < amountWei) {
-                // Dynamic Gas for Approval
-                const argsApprove = [spender, amountWei];
-                const gasApprove = await getGasWithMargin(State.bkcTokenContract, 'approve', argsApprove);
-                const approveTx = await State.bkcTokenContract.approve(...argsApprove, gasApprove);
+                // FORCE SAFE GAS LIMIT FOR APPROVE TO AVOID RPC ERRORS
+                const approveTx = await State.bkcTokenContract.approve(spender, amountWei, { gasLimit: 300000n });
                 await approveTx.wait();
             }
         } catch (approvalError) {
+            console.error("Approve Error:", approvalError);
             throw new Error("Approval Failed");
         } 
         
-        // 3. EXECUTE GAME
+        // 3. EXECUTE GAME (Dynamic Gas)
         setStatus("MINING TRANSACTION...", true);
         btn.innerText = "MINING...";
-        startSpinning(); // Visuals start
+        startSpinning();
         
         const guessesAsBigInt = gameState.guesses.map(g => BigInt(g));
-        
-        // Dynamic Gas for Game
         const argsGame = [amountWei, guessesAsBigInt, isCumulative];
-        const gasGame = await getGasWithMargin(State.actionsManagerContract, 'participate', argsGame);
         
-        // Attach Value (Fee)
+        // Use Dynamic Gas for the Game interaction as it's complex
+        const gasGame = await getGasWithMargin(State.actionsManagerContract, 'participate', argsGame);
         gasGame.value = fee; 
         
         const tx = await State.actionsManagerContract.participate(...argsGame, gasGame);
@@ -542,10 +456,8 @@ async function executeTransaction() {
         setStatus("WAITING ORACLE...", true);
         btn.innerText = "PENDING...";
         
-        // 4. MONITOR RESULT
         const ctr = await safeContractCall(State.actionsManagerContract, 'gameCounter', [], 0, 2, true);
         const gameIdToWatch = Number(ctr) > 0 ? Number(ctr) - 1 : 0; 
-        
         setTimeout(() => waitForOracle(gameIdToWatch), 2000);
         
     } catch (e) {
@@ -558,6 +470,7 @@ async function executeTransaction() {
         if (e.message && e.message.includes("cf07063a")) msg = "Fee Mismatch (Clear Cache!)";
         else if (e.code === "ACTION_REJECTED") msg = "Rejected by User";
         else if (e.message.includes("InvalidFee")) msg = "Invalid Fee Amount";
+        else if (e.message.includes("Approval Failed")) msg = "Token Approval Failed";
         
         showToast(msg, "error");
     }
@@ -567,13 +480,8 @@ function startSpinning() {
     gameState.isSpinning = true;
     [1,2,3].forEach(i => {
         const el = document.getElementById(`slot-${i}`);
-        if(el) {
-            el.classList.add('spinning');
-            el.querySelector('.slot-number').innerText = "?";
-        }
+        if(el) { el.classList.add('spinning'); el.querySelector('.slot-number').innerText = "?"; }
     });
-    
-    // Fake random numbers while waiting
     gameState.spinInterval = setInterval(() => {
         if(document.getElementById('slot-1')) document.querySelector('#slot-1 .slot-number').innerText = rand(3);
         if(document.getElementById('slot-2')) document.querySelector('#slot-2 .slot-number').innerText = rand(10);
@@ -599,22 +507,16 @@ async function waitForOracle(gameId) {
             resetGameUI();
             return;
         }
-        
         try {
-            // Check result of the 3 slots
             const p1 = safeContractCall(State.actionsManagerContract, 'gameResults', [gameId, 0], 0n, 0, true);
             const p2 = safeContractCall(State.actionsManagerContract, 'gameResults', [gameId, 1], 0n, 0, true);
             const p3 = safeContractCall(State.actionsManagerContract, 'gameResults', [gameId, 2], 0n, 0, true);
-            
             const [r1, r2, r3] = await Promise.all([p1, p2, p3]);
             
-            // If result exists (not 0)
             if (Number(r1) !== 0) {
                 clearInterval(gameState.pollInterval);
                 clearInterval(gameState.spinInterval);
-                
-                const rolls = [Number(r1), Number(r2), Number(r3)];
-                revealResults(rolls);
+                revealResults([Number(r1), Number(r2), Number(r3)]);
             }
         } catch (e) { }
     }, 2000);
@@ -623,9 +525,8 @@ async function waitForOracle(gameId) {
 async function revealResults(rolls) {
     setStatus("REVEALING DESTINY...", true);
     const wait = ms => new Promise(r => setTimeout(r, ms));
-    
     let totalWin = 0;
-    let multipliers = [1.5, 5, 50];
+    const multipliers = [1.5, 5, 50];
     
     for(let i=0; i<3; i++) {
         const el = document.getElementById(`slot-${i+1}`);
@@ -635,50 +536,35 @@ async function revealResults(rolls) {
         
         if(rolls[i] === gameState.guesses[i]) {
             el.classList.add('winner');
-            // Calculate win locally for display
-            let win = gameState.betAmount * multipliers[i];
-            // Adjust logic based on cumulative mode (simplified visual calc)
-            totalWin += win; 
+            totalWin += gameState.betAmount * multipliers[i];
         } else {
             el.classList.add('loser');
         }
-        await wait(800); // Dramatic pause
+        await wait(800);
     }
-
-    if (!gameState.isCumulative) {
-        // If not cumulative, max win is the highest single win
-        // (This is just visual, contract handles real payout)
-    }
-
     showResultOverlay(totalWin, rolls);
 }
 
 function showResultOverlay(winAmount, rolls) {
     const overlay = document.getElementById('result-overlay');
     overlay.classList.add('visible');
-    
-    // Check if ACTUAL win (match at least one)
     const matches = rolls.map((r, i) => r === gameState.guesses[i]).filter(Boolean).length;
-    const isWin = matches > 0;
     
-    if (isWin) {
+    if (matches > 0) {
         overlay.innerHTML = `
             <div class="text-6xl mb-4 animate-bounce">🏆</div>
             <h2 class="text-4xl font-black text-amber-500 mb-2">VICTORY!</h2>
             <p class="text-white text-lg font-mono mb-8">Matches: ${matches}/3</p>
-            <button id="btn-collect" class="bg-white text-black font-black py-3 px-8 rounded-xl hover:scale-105 transition-transform">COLLECT</button>
-        `;
+            <button id="btn-collect" class="bg-white text-black font-black py-3 px-8 rounded-xl hover:scale-105 transition-transform">COLLECT</button>`;
         addXP(500);
     } else {
         overlay.innerHTML = `
             <div class="text-6xl mb-4 grayscale opacity-50">⛏️</div>
             <h2 class="text-3xl font-bold text-white mb-2">MINING SUCCESS</h2>
             <p class="text-zinc-400 text-sm mb-8 max-w-xs text-center">No prize this time, but your Proof-of-Purchase generated ecosystem rewards.</p>
-            <button id="btn-collect" class="bg-zinc-800 border border-zinc-600 text-white font-bold py-3 px-8 rounded-xl hover:bg-zinc-700">CONTINUE</button>
-        `;
+            <button id="btn-collect" class="bg-zinc-800 border border-zinc-600 text-white font-bold py-3 px-8 rounded-xl hover:bg-zinc-700">CONTINUE</button>`;
         addXP(50);
     }
-    
     document.getElementById('btn-collect').onclick = resetGameUI;
     loadUserData(true);
 }
@@ -689,18 +575,14 @@ function resetGameUI() {
     const btn = document.getElementById('btn-spin');
     btn.disabled = false;
     btn.innerText = "SPIN TO WIN";
-    
-    // Clear slots styles
     [1,2,3].forEach(i => {
         const el = document.getElementById(`slot-${i}`);
         el.className = "slot-window";
         el.querySelector('.slot-number').innerText = "?";
     });
-    
     FortunePoolPage.loadHistory();
 }
 
-// --- EXPORT ---
 export const FortunePoolPage = {
     checkReqs: async () => {
         if(!State.isConnected) return;
@@ -712,18 +594,30 @@ export const FortunePoolPage = {
     },
 
     loadHistory: async () => {
-        // (Simplified history loader - keeping existing logic conceptually)
         const list = document.getElementById('gameHistoryList');
-        if(!list) return;
-        // ... Fetch logic same as before ...
+        if(!list || !State.isConnected) return;
+        try {
+            const res = await fetch(`${API_ENDPOINTS.getHistory}/${State.userAddress}`);
+            const data = await res.json();
+            const games = data.filter(a => a.type === 'GameResult');
+            const total = games.reduce((acc, g) => acc + (g.details.isWin ? parseFloat(ethers.formatEther(g.details.amount)) : 0), 0);
+            const stats = document.getElementById('totalWinningsDisplay');
+            if(stats) stats.innerHTML = `Total Won: <span class="text-amber-400 font-bold">${total.toFixed(2)} BKC</span>`;
+            list.innerHTML = games.slice(0, 5).map(g => `
+                <tr class="border-b border-zinc-800/50 hover:bg-zinc-800/30">
+                    <td class="p-3 font-mono text-zinc-400 text-[10px]">#${g.details.gameId}</td>
+                    <td class="p-3 text-center"><span class="${g.details.isWin ? 'text-green-500' : 'text-zinc-600'} font-bold text-[10px]">${g.details.isWin ? 'WIN' : 'LOSS'}</span></td>
+                    <td class="p-3 text-right text-zinc-300 font-mono text-[10px]">${g.details.isWin ? '+' + formatBigNumber(BigInt(g.details.amount)).toFixed(2) : '-'}</td>
+                </tr>`).join('');
+        } catch (e) { list.innerHTML = `<tr><td colspan="3" class="text-center text-[10px] text-zinc-600 py-4">History unavailable</td></tr>`; }
     },
 
     render(isActive) {
         if (!isActive) return;
-        const container = document.getElementById('actions');
-        renderGame(container);
+        renderGame(document.getElementById('actions'));
         this.checkReqs();
         updateGamificationUI();
+        this.loadHistory();
     }
 };
 
