@@ -1,8 +1,8 @@
 // js/pages/FortunePool.js
-// ✅ PRODUCTION V37: UI REF FIX + SAFE APPROVE GAS + UX ENHANCEMENTS
+// ✅ PRODUCTION V38: FIXED REFERENCE ERROR + SAFE GAS
 
 import { State } from '../state.js';
-import { loadUserData, safeContractCall } from '../modules/data.js';
+import { loadUserData, safeContractCall, API_ENDPOINTS } from '../modules/data.js';
 import { formatBigNumber } from '../utils.js';
 import { showToast } from '../ui-feedback.js';
 import { addresses } from '../config.js';
@@ -110,43 +110,44 @@ let gameState = {
     systemReady: false
 };
 
-// --- GAMIFICATION FUNCTIONS (Moved up to fix ReferenceError) ---
-function updateGamificationUI() { 
-    const el = document.getElementById('currentLevel'); 
-    if (el) el.innerText = gameState.currentLevel; 
-}
-
-function saveProgress() { 
-    localStorage.setItem('bkc_fortune_v37', JSON.stringify({ lvl: gameState.currentLevel, xp: gameState.currentXP })); 
-    updateGamificationUI(); 
-}
-
-function addXP(amount) { 
-    gameState.currentXP += amount; 
-    if (gameState.currentXP >= gameState.xpPerLevel) { 
-        gameState.currentLevel++; 
-        gameState.currentXP -= gameState.xpPerLevel; 
-        showToast(`🆙 LEVEL UP! LVL ${gameState.currentLevel}`, "success"); 
-    } 
-    saveProgress(); 
-}
-
-// Load Progress
-try {
-    const local = localStorage.getItem('bkc_fortune_v37');
-    if (local) { 
-        const p = JSON.parse(local); 
-        gameState.currentLevel = p.lvl || 1; 
-        gameState.currentXP = p.xp || 0; 
+// --- GAMIFICATION HELPERS ---
+const Gamification = {
+    updateUI: () => {
+        const el = document.getElementById('currentLevel'); 
+        if (el) el.innerText = gameState.currentLevel; 
+    },
+    save: () => {
+        localStorage.setItem('bkc_fortune_v38', JSON.stringify({ lvl: gameState.currentLevel, xp: gameState.currentXP })); 
+        Gamification.updateUI(); 
+    },
+    addXP: (amount) => {
+        gameState.currentXP += amount; 
+        if (gameState.currentXP >= gameState.xpPerLevel) { 
+            gameState.currentLevel++; 
+            gameState.currentXP -= gameState.xpPerLevel; 
+            showToast(`🆙 LEVEL UP! LVL ${gameState.currentLevel}`, "success"); 
+        } 
+        Gamification.save(); 
+    },
+    load: () => {
+        try {
+            const local = localStorage.getItem('bkc_fortune_v38');
+            if (local) { 
+                const p = JSON.parse(local); 
+                gameState.currentLevel = p.lvl || 1; 
+                gameState.currentXP = p.xp || 0; 
+            }
+        } catch (e) {}
     }
-} catch (e) {}
+};
 
+Gamification.load();
 
 // --- GAS HELPERS ---
 async function getGasWithMargin(contract, method, args) {
     try {
         const estimatedGas = await contract[method].estimateGas(...args);
-        return { gasLimit: (estimatedGas * 120n) / 100n }; // +20% Margin
+        return { gasLimit: (estimatedGas * 120n) / 100n }; 
     } catch (error) {
         console.warn(`⚠️ Gas estimation failed for ${method}. Using fallback.`, error);
         return { gasLimit: 3000000n }; 
@@ -556,14 +557,14 @@ function showResultOverlay(winAmount, rolls) {
             <h2 class="text-4xl font-black text-amber-500 mb-2">VICTORY!</h2>
             <p class="text-white text-lg font-mono mb-8">Matches: ${matches}/3</p>
             <button id="btn-collect" class="bg-white text-black font-black py-3 px-8 rounded-xl hover:scale-105 transition-transform">COLLECT</button>`;
-        addXP(500);
+        Gamification.addXP(500);
     } else {
         overlay.innerHTML = `
             <div class="text-6xl mb-4 grayscale opacity-50">⛏️</div>
             <h2 class="text-3xl font-bold text-white mb-2">MINING SUCCESS</h2>
             <p class="text-zinc-400 text-sm mb-8 max-w-xs text-center">No prize this time, but your Proof-of-Purchase generated ecosystem rewards.</p>
             <button id="btn-collect" class="bg-zinc-800 border border-zinc-600 text-white font-bold py-3 px-8 rounded-xl hover:bg-zinc-700">CONTINUE</button>`;
-        addXP(50);
+        Gamification.addXP(50);
     }
     document.getElementById('btn-collect').onclick = resetGameUI;
     loadUserData(true);
@@ -616,7 +617,7 @@ export const FortunePoolPage = {
         if (!isActive) return;
         renderGame(document.getElementById('actions'));
         this.checkReqs();
-        updateGamificationUI();
+        Gamification.updateUI();
         this.loadHistory();
     }
 };
