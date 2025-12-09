@@ -1,10 +1,9 @@
 // pages/NotaryPage.js
-// ✅ VERSÃO FINAL (V13): Add to Wallet Button Included
+// ✅ VERSÃO V5.3: No pStake Logic + Fixed Fee Support (1 BKC)
 
 import { State } from '../state.js';
-import { formatBigNumber, formatPStake, renderLoading, renderNoData } from '../utils.js';
+import { formatBigNumber, renderLoading, renderNoData } from '../utils.js';
 import { safeContractCall, API_ENDPOINTS, loadPublicData, loadUserData } from '../modules/data.js'; 
-// 🟢 ADICIONADO: addNftToWallet
 import { showToast, addNftToWallet } from '../ui-feedback.js';
 import { executeNotarizeDocument } from '../modules/transactions.js';
 
@@ -13,7 +12,6 @@ const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024; // 10MB
 
 // --- ESTADO LOCAL ---
 let currentFileToUpload = null;
-let notaryButtonState = 'initial'; 
 let lastNotaryDataFetch = 0;
 let notaryDescriptionCache = ""; 
 
@@ -32,19 +30,18 @@ style.innerHTML = `
 document.head.appendChild(style);
 
 // =========================================================================
-// LÓGICA DE REQUISITOS
+// LÓGICA DE REQUISITOS (V5: FEE ONLY)
 // =========================================================================
 
 function checkNotaryRequirements() {
     if (!State.isConnected) return { allowed: false, reason: 'wallet' };
-    const userPStake = State.userTotalPStake || 0n;
-    const reqPStake = State.notaryMinPStake || 0n;
+    
+    // V5: Apenas verifica saldo vs taxa
     const userBal = State.currentUserBalance || 0n;
-    const reqFee = State.notaryFee || 0n;
-    if (reqPStake === 0n && reqFee === 0n) return { allowed: false, reason: 'loading' };
-    const hasPStake = userPStake >= reqPStake;
+    const reqFee = State.notaryFee || ethers.parseEther("1"); // Default 1 BKC se loading
+    
     const hasBalance = userBal >= reqFee;
-    if (!hasPStake) return { allowed: false, reason: 'pstake', current: userPStake, required: reqPStake };
+    
     if (!hasBalance) return { allowed: false, reason: 'balance', current: userBal, required: reqFee };
     return { allowed: true };
 }
@@ -55,7 +52,12 @@ function checkNotaryRequirements() {
 
 function handleFiles(e) {
     const status = checkNotaryRequirements();
-    if (!status.allowed) return; 
+    if (!status.allowed) {
+        if(status.reason === 'balance') showToast("Insufficient BKC Balance for fee.", "error");
+        else showToast("Connect wallet first.", "error");
+        return; 
+    }
+    
     const file = e.target.files ? e.target.files[0] : (e.dataTransfer ? e.dataTransfer.files[0] : null);
     if (!file) return;
     if (file.size > MAX_FILE_SIZE_BYTES) { showToast(`File too large. Max: 10MB.`, "error"); return; }
@@ -67,12 +69,16 @@ function initNotaryListeners() {
     const dropArea = document.getElementById('drop-area');
     const input = document.getElementById('notary-file-input');
     if (!dropArea || !input || dropArea.classList.contains('cursor-not-allowed')) return;
+    
     dropArea.addEventListener('click', () => input.click());
+    
     ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
         dropArea.addEventListener(eventName, (e) => { e.preventDefault(); e.stopPropagation(); }, false);
     });
+    
     ['dragenter', 'dragover'].forEach(eventName => { dropArea.addEventListener(eventName, () => dropArea.classList.add('drop-zone-active'), false); });
     ['dragleave', 'drop'].forEach(eventName => { dropArea.addEventListener(eventName, () => dropArea.classList.remove('drop-zone-active'), false); });
+    
     dropArea.addEventListener('drop', handleFiles);
     input.addEventListener('change', handleFiles);
 }
@@ -121,10 +127,12 @@ function renderNotaryPageLayout() {
                     </div>
                     <div id="notary-action-area" class="notary-glass rounded-xl p-8 min-h-[420px] flex flex-col justify-center items-center relative transition-all"><div class="loader"></div></div>
                 </div>
+                
                 <div class="lg:col-span-1 space-y-6">
                     <div class="notary-glass rounded-xl p-6 border-l-2 border-amber-500">
-                        <h3 class="text-sm font-bold text-white uppercase tracking-wider mb-4 border-b border-zinc-700 pb-2">Requirements</h3>
-                        <div id="requirements-list" class="space-y-4"></div>
+                        <h3 class="text-sm font-bold text-white uppercase tracking-wider mb-4 border-b border-zinc-700 pb-2">Service Cost</h3>
+                        <div id="requirements-list" class="space-y-4">
+                            </div>
                     </div>
                 </div>
             </div>
@@ -155,24 +163,27 @@ function updateNotaryInterface() {
         `<div class="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div> SYSTEM ONLINE` : 
         `<div class="w-2 h-2 rounded-full bg-red-500"></div> WALLET DISCONNECTED`;
     
-    const pStakeReq = State.notaryMinPStake || 0n;
-    const feeReq = State.notaryFee || 0n;
-    const userStake = State.userTotalPStake || 0n;
+    const feeReq = State.notaryFee || ethers.parseEther("1"); // 1 BKC Default
     const userBal = State.currentUserBalance || 0n;
 
+    // --- SIDEBAR V5: ONLY FEES ---
     reqList.innerHTML = `
-        <div class="flex justify-between items-center text-sm"><span class="text-zinc-400">Min. pStake</span><span class="${userStake >= pStakeReq ? 'text-green-500' : 'text-red-500'} font-mono font-bold">${formatPStake(userStake)} / ${formatPStake(pStakeReq)}</span></div>
-        <div class="w-full bg-zinc-800 h-1 mt-1 mb-3 rounded-full overflow-hidden"><div class="bg-amber-500 h-full" style="width: ${pStakeReq > 0n ? Math.min(Number(userStake * 100n / pStakeReq), 100) : 0}%"></div></div>
-        <div class="flex justify-between items-center text-sm"><span class="text-zinc-400">Fee</span><span class="${userBal >= feeReq ? 'text-green-500' : 'text-red-500'} font-mono font-bold">${formatBigNumber(feeReq)} BKC</span></div>
+        <div class="flex justify-between items-center text-sm mb-2">
+            <span class="text-zinc-400">Notary Fee</span>
+            <span class="text-white font-mono font-bold">${formatBigNumber(feeReq)} BKC</span>
+        </div>
+        <div class="flex justify-between items-center text-sm border-t border-zinc-700 pt-2">
+            <span class="text-zinc-400">Your Balance</span>
+            <span class="${userBal >= feeReq ? 'text-green-500' : 'text-red-500'} font-mono font-bold">${formatBigNumber(userBal)} BKC</span>
+        </div>
+        ${userBal < feeReq && isOnline ? '<p class="text-xs text-red-500 mt-2 bg-red-500/10 p-2 rounded border border-red-500/20">Insufficient BKC. Please use the Faucet.</p>' : ''}
     `;
 
     if (!check.allowed) {
-        if (check.reason === 'loading') {
-            actionArea.innerHTML = `<div class="loader"></div>`;
-        } else if (check.reason === 'wallet') {
-            actionArea.innerHTML = `<div class="text-center"><i class="fa-solid fa-wallet text-3xl text-zinc-500 mb-4"></i><h3 class="text-white font-bold">Wallet Disconnected</h3><button id="connectButtonMobile" class="mt-4 bg-amber-500 text-black font-bold py-2 px-6 rounded-lg">Connect</button></div>`;
-        } else {
-            actionArea.innerHTML = `<div class="text-center"><i class="fa-solid fa-lock text-3xl text-red-500 mb-4"></i><h3 class="text-white font-bold">Access Denied</h3><p class="text-zinc-400 text-sm mt-2">Insufficient Balance or pStake.</p></div>`;
+        if (check.reason === 'wallet') {
+            actionArea.innerHTML = `<div class="text-center"><i class="fa-solid fa-wallet text-3xl text-zinc-500 mb-4"></i><h3 class="text-white font-bold">Wallet Disconnected</h3><button id="connectButtonMobile" class="mt-4 bg-amber-500 text-black font-bold py-2 px-6 rounded-lg" onclick="window.openConnectModal()">Connect</button></div>`;
+        } else if (check.reason === 'balance') {
+            actionArea.innerHTML = `<div class="text-center"><i class="fa-solid fa-coins text-3xl text-red-500 mb-4"></i><h3 class="text-white font-bold">Insufficient Funds</h3><p class="text-zinc-400 text-sm mt-2">You need ${formatBigNumber(feeReq)} BKC.</p></div>`;
         }
     } else {
         if (!currentFileToUpload) updateNotaryStep(1);
@@ -183,6 +194,7 @@ function updateNotaryInterface() {
 function updateNotaryStep(step) {
     const actionArea = document.getElementById('notary-action-area');
     if (!actionArea) return;
+    
     const line = document.getElementById('progress-line-fill');
     if (line) line.style.width = step === 1 ? '0%' : step === 2 ? '50%' : '100%';
     [1,2,3].forEach(i => { const dot = document.getElementById(`dot-${i}`); if(dot) dot.className = `step-dot ${i < step ? 'completed' : (i === step ? 'active' : '')}`; });
@@ -195,6 +207,7 @@ function updateNotaryStep(step) {
                     <input type="file" id="notary-file-input" class="hidden" accept="*">
                     <i class="fa-solid fa-cloud-arrow-up text-4xl text-amber-500 mb-4 group-hover:scale-110 transition-transform"></i>
                     <p class="text-zinc-300 font-medium">Click or Drag File</p>
+                    <p class="text-xs text-zinc-500 mt-2">Max 10MB • All formats</p>
                 </div>
             </div>`;
         initNotaryListeners();
@@ -264,7 +277,11 @@ async function handleSignAndUpload(btn) {
         const timeoutId = setTimeout(() => controller.abort(), 180000); 
 
         if(statusText) statusText.innerText = "UPLOADING & HASHING...";
-        const res = await fetch(API_ENDPOINTS.uploadFileToIPFS, { method: 'POST', body: formData, signal: controller.signal });
+        
+        // Ensure correct API endpoint
+        const uploadEndpoint = API_ENDPOINTS.uploadFileToIPFS || "https://api.backcoin.org/upload"; 
+        
+        const res = await fetch(uploadEndpoint, { method: 'POST', body: formData, signal: controller.signal });
         clearTimeout(timeoutId);
 
         if (!res.ok) throw new Error("Upload Failed");
@@ -272,6 +289,7 @@ async function handleSignAndUpload(btn) {
         
         if(statusText) statusText.innerText = "MINTING ON BLOCKCHAIN...";
         
+        // Execute Smart Contract Call
         await executeNotarizeDocument(
             data.ipfsUri, 
             desc, 
@@ -301,7 +319,7 @@ async function handleSignAndUpload(btn) {
 }
 
 // =========================================================================
-// HISTORY (ENTERPRISE STRUCT READING)
+// HISTORY (V5 STRUCT READING)
 // =========================================================================
 
 async function fetchUserHistory() {
@@ -320,12 +338,13 @@ async function fetchUserHistory() {
             const tokenId = e.args[0]; 
             let docInfo = { ipfsCid: "", description: "Loading...", contentHash: "" };
             try {
+                // V5: getDocumentInfo returns struct
                 docInfo = await contract.getDocumentInfo(tokenId);
             } catch (err) {
                 console.warn("Could not read struct for token", tokenId);
             }
             return {
-                id: tokenId.toString(), // 🟢 ID Salvo
+                id: tokenId.toString(),
                 image: docInfo.ipfsCid,
                 description: docInfo.description,
                 hash: docInfo.contentHash,
@@ -384,10 +403,18 @@ async function loadNotaryPublicData() {
     try {
         const hubContract = State.ecosystemManagerContractPublic || State.ecosystemManagerContract;
         if (!hubContract) await loadPublicData();
+        
+        // V5 CHANGE: USE getFee INSTEAD OF getServiceRequirements
         const key = ethers.id("NOTARY_SERVICE");
-        const [fee, stake] = await safeContractCall(hubContract || State.ecosystemManagerContractPublic, 'getServiceRequirements', [key], [0n, 0n]);
-        if (fee > 0n || stake > 0n) { State.notaryFee = fee; State.notaryMinPStake = stake; lastNotaryDataFetch = now; }
-    } catch(e) {}
+        const fee = await safeContractCall(hubContract || State.ecosystemManagerContractPublic, 'getFee', [key], 0n);
+        
+        if (fee > 0n) { 
+            State.notaryFee = fee; 
+            // Min Stake not used anymore, but we can set to 0 for compatibility
+            State.notaryMinPStake = 0n; 
+            lastNotaryDataFetch = now; 
+        }
+    } catch(e) { console.error("Notary Data Error", e); }
 }
 
 export const NotaryPage = {
@@ -410,7 +437,6 @@ export const NotaryPage = {
     },
     refreshHistory: () => { fetchUserHistory(); },
     update: () => { updateNotaryInterface(); },
-    // 🟢 FUNÇÃO EXPORTADA PARA O ONCLICK
     addToWallet: (tokenId) => {
         if (State.decentralizedNotaryContract) {
             addNftToWallet(State.decentralizedNotaryContract.target, tokenId);

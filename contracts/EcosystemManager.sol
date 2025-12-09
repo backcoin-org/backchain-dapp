@@ -8,11 +8,11 @@ import "./IInterfaces.sol";
 
 /**
  * @title EcosystemManager (The Hub)
- * @notice The central brain of the revolutionary Backcoin Protocol.
- * @dev Manages the rules and addresses that power the economy fueled by $BKC.
- * Acts as the source of truth for the entire ecosystem.
+ * @notice The central brain of the Backcoin Protocol.
+ * @dev Manages fees, addresses, and economic rules.
+ * Part of the Backcoin Ecosystem.
+ * Website: Backcoin.org
  * Optimized for Arbitrum Network.
-
  */
 contract EcosystemManager is
     Initializable,
@@ -32,12 +32,13 @@ contract EcosystemManager is
     address public fortunePoolAddress;
     address public nftLiquidityPoolFactoryAddress;
 
-    // Configuration Mappings (Optimized with bytes32)
+    // Configuration Mappings
     mapping(bytes32 => uint256) public serviceFees;
-    mapping(bytes32 => uint256) public servicePStakeMinimums;
-    mapping(uint256 => uint256) public boosterDiscounts; // Key: BoostBips (e.g., 100) -> Value: DiscountBips
-    mapping(bytes32 => uint256) public miningDistributionBips; // For newly minted tokens
-    mapping(bytes32 => uint256) public feeDistributionBips;    // For original fee tokens
+    // Key: BoostBips (e.g., 100) -> Value: DiscountBips
+    mapping(uint256 => uint256) public boosterDiscounts;
+    // Distribution Rules
+    mapping(bytes32 => uint256) public miningDistributionBips; // For new mints
+    mapping(bytes32 => uint256) public feeDistributionBips;    // For fee revenue
 
     // --- Events ---
 
@@ -45,7 +46,7 @@ contract EcosystemManager is
     event RuleSet(bytes32 indexed key, uint256 newValue);
     event BoosterDiscountSet(uint256 indexed boostBips, uint256 discountBips);
 
-    // --- Custom Errors (Gas Optimization) ---
+    // --- Custom Errors ---
 
     error InvalidAddress();
     error InvalidValue();
@@ -59,19 +60,18 @@ contract EcosystemManager is
 
     function initialize(address _initialOwner) public initializer {
         if (_initialOwner == address(0)) revert InvalidAddress();
+
+        // CORREÇÃO v4: __Ownable_init() sem argumentos
         __Ownable_init();
-        __UUPSUpgradeable_init();
+        
         _transferOwnership(_initialOwner);
+        __UUPSUpgradeable_init();
     }
 
     function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
 
     // --- Configuration Functions ---
 
-    /**
-     * @notice Sets the core contract addresses.
-     * @dev Validation relaxed to allow partial setup (circular dependencies).
-     */
     function setAddresses(
         address _bkcToken,
         address _treasuryWallet,
@@ -82,13 +82,7 @@ contract EcosystemManager is
         address _fortunePool,
         address _nftLiquidityPoolFactory
     ) external onlyOwner {
-        // CORREÇÃO: Removemos _delegationManager e _miningManager da validação inicial.
-        // Eles podem ser address(0) durante o primeiro deploy e atualizados depois.
-        if (
-            _bkcToken == address(0) ||
-            _treasuryWallet == address(0) ||
-            _rewardBooster == address(0)
-        ) revert InvalidAddress();
+        if (_bkcToken == address(0) || _treasuryWallet == address(0)) revert InvalidAddress();
 
         bkcTokenAddress = _bkcToken;
         treasuryWallet = _treasuryWallet;
@@ -109,131 +103,52 @@ contract EcosystemManager is
         emit AddressSet("nftLiquidityPoolFactory", _nftLiquidityPoolFactory);
     }
 
-    /**
-     * @notice Sets the fee for a specific service.
-     * @param _serviceKey The keccak256 hash of the service name.
-     */
     function setServiceFee(bytes32 _serviceKey, uint256 _fee) external onlyOwner {
         serviceFees[_serviceKey] = _fee;
         emit RuleSet(_serviceKey, _fee);
     }
 
-    /**
-     * @notice Sets the minimum pStake required to access a service.
-     */
-    function setPStakeMinimum(
-        bytes32 _serviceKey,
-        uint256 _pStake
-    ) external onlyOwner {
-        servicePStakeMinimums[_serviceKey] = _pStake;
-        emit RuleSet(_serviceKey, _pStake);
-    }
-
-    /**
-     * @notice Sets the discount for a specific Booster level.
-     * @param _boostBips The boost power (e.g., 100 = 1%).
-     * @param _discountBips The discount percentage (e.g., 500 = 5%).
-     */
-    function setBoosterDiscount(
-        uint256 _boostBips,
-        uint256 _discountBips
-    ) external onlyOwner {
+    function setBoosterDiscount(uint256 _boostBips, uint256 _discountBips) external onlyOwner {
         boosterDiscounts[_boostBips] = _discountBips;
         emit BoosterDiscountSet(_boostBips, _discountBips);
     }
     
-    function setMiningDistributionBips(
-        bytes32 _poolKey, 
-        uint256 _bips
-    ) external onlyOwner {
+    function setMiningDistributionBips(bytes32 _poolKey, uint256 _bips) external onlyOwner {
         miningDistributionBips[_poolKey] = _bips;
         emit RuleSet(_poolKey, _bips);
     }
 
-    /**
-     * @notice Sets the distribution BIPS for *original fee* tokens.
-     */
-    function setFeeDistributionBips(
-        bytes32 _poolKey,
-        uint256 _bips
-    ) external onlyOwner {
+    function setFeeDistributionBips(bytes32 _poolKey, uint256 _bips) external onlyOwner {
         feeDistributionBips[_poolKey] = _bips;
         emit RuleSet(_poolKey, _bips);
     }
 
-    // --- VIEW FUNCTIONS (Optimized for Interface) ---
+    // --- View Functions ---
 
-    function getServiceRequirements(
-        bytes32 _serviceKey
-    ) external view override returns (uint256 fee, uint256 pStake) {
-        return (serviceFees[_serviceKey], servicePStakeMinimums[_serviceKey]);
-    }
-
-    function getBoosterDiscount(
-        uint256 _boostBips
-    ) external view override returns (uint256) {
+    function getBoosterDiscount(uint256 _boostBips) external view override returns (uint256) {
         return boosterDiscounts[_boostBips];
     }
 
-    function getFee(
-        bytes32 _serviceKey
-    ) external view override returns (uint256) {
+    function getFee(bytes32 _serviceKey) external view override returns (uint256) {
         return serviceFees[_serviceKey];
     }
 
-    function getMiningDistributionBips(
-        bytes32 _poolKey
-    ) external view override returns (uint256) {
+    function getMiningDistributionBips(bytes32 _poolKey) external view override returns (uint256) {
         return miningDistributionBips[_poolKey];
     }
 
-    function getFeeDistributionBips(
-        bytes32 _poolKey
-    ) external view override returns (uint256) {
+    function getFeeDistributionBips(bytes32 _poolKey) external view override returns (uint256) {
         return feeDistributionBips[_poolKey];
     }
 
     // --- Address Getters ---
 
-    function getTreasuryAddress() external view override returns (address) {
-        return treasuryWallet;
-    }
-
-    function getDelegationManagerAddress()
-        external
-        view
-        override
-        returns (address)
-    {
-        return delegationManagerAddress;
-    }
-
-    function getBKCTokenAddress() external view override returns (address) {
-        return bkcTokenAddress;
-    }
-
-    function getBoosterAddress() external view override returns (address) {
-        return rewardBoosterAddress;
-    }
-
-    function getMiningManagerAddress() external view override returns (address) {
-        return miningManagerAddress;
-    }
-
-    function getDecentralizedNotaryAddress() external view override returns (address) {
-        return decentralizedNotaryAddress;
-    }
-
-    function getFortunePoolAddress() external view override returns (address) {
-        return fortunePoolAddress;
-    }
-
-    function getNFTLiquidityPoolFactoryAddress()
-        external
-        view
-        override
-        returns (address)
-    {
-        return nftLiquidityPoolFactoryAddress;
-    }
+    function getTreasuryAddress() external view override returns (address) { return treasuryWallet; }
+    function getDelegationManagerAddress() external view override returns (address) { return delegationManagerAddress; }
+    function getBKCTokenAddress() external view override returns (address) { return bkcTokenAddress; }
+    function getBoosterAddress() external view override returns (address) { return rewardBoosterAddress; }
+    function getMiningManagerAddress() external view override returns (address) { return miningManagerAddress; }
+    function getDecentralizedNotaryAddress() external view override returns (address) { return decentralizedNotaryAddress; }
+    function getFortunePoolAddress() external view override returns (address) { return fortunePoolAddress; }
+    function getNFTLiquidityPoolFactoryAddress() external view override returns (address) { return nftLiquidityPoolFactoryAddress; }
 }

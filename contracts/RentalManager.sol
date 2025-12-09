@@ -14,15 +14,17 @@ import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import "./IInterfaces.sol";
 
 /**
- * @title RentalManager (AirBNFT Protocol)
- * @notice A decentralized marketplace for hourly NFT rentals, fully integrated with the Backchain Economy.
+ * @title RentalManager (AirBNFT Protocol - Single Session)
+ * @notice A decentralized marketplace for fixed 1-HOUR NFT rentals.
  * @dev 
- * - AirBNFT Logic: Rentals are priced and managed on an HOURLY basis.
- * - Ecosystem Integration: Enforces minimum pStake requirements via DelegationManager.
+ * - Single Session Logic: Rentals are fixed to exactly 1 HOUR.
+ * - Automatic Expiry: Usage rights expire automatically after 60 minutes.
  * - Proof-of-Purchase: Protocol fees trigger the MiningManager to mint new rewards.
  * - Escrow: NFTs are held securely by this contract during the listing period.
  * - Optimized Storage: Uses O(1) array management for infinite scalability.
- * - Optimized for Arbitrum Network.
+ * Part of the Backcoin Ecosystem.
+ * Website: Backcoin.org
+ * Optimized for Arbitrum Network.
  */
 contract RentalManager is 
     Initializable, 
@@ -37,8 +39,7 @@ contract RentalManager is
 
     struct Listing {
         address owner;
-        uint256 pricePerHour; // Cost per 1 HOUR in Wei (BKC)
-        uint256 maxDuration;  // Max duration allowed in HOURS
+        uint256 price; // Cost for 1 HOUR session in Wei (BKC)
         bool isActive;
     }
 
@@ -56,29 +57,23 @@ contract RentalManager is
 
     // Mapping: TokenID => Listing Details
     mapping(uint256 => Listing) public listings;
-    
     // Mapping: TokenID => Active Rental Details
     mapping(uint256 => Rental) public activeRentals;
-
     // Array to assist frontend indexing
     uint256[] public listedTokenIds;
-    
-    // [CRÍTICO] Otimização O(1): Mapeia TokenID para o Índice no Array
+    // Critical: O(1) Optimization: Maps TokenID to Array Index
     mapping(uint256 => uint256) private _listedTokenIndex;
 
     // --- Constants & Configuration Keys ---
     
-    // Key to fetch the protocol tax percentage (BIPS) from EcosystemManager (e.g., 500 = 5%)
+    // Key to fetch the protocol tax percentage (BIPS) from EcosystemManager
     bytes32 public constant RENTAL_TAX_BIPS_KEY = keccak256("RENTAL_MARKET_TAX_BIPS");
-    
-    // Key to fetch the minimum pStake requirement to rent an NFT
-    bytes32 public constant RENTAL_ACCESS_KEY = keccak256("RENTAL_MARKET_ACCESS");
 
     // --- Events ---
 
-    event NFTListed(uint256 indexed tokenId, address indexed owner, uint256 pricePerHour, uint256 maxDurationHours);
+    event NFTListed(uint256 indexed tokenId, address indexed owner, uint256 price);
     event NFTWithdrawn(uint256 indexed tokenId, address indexed owner);
-    event NFTRented(uint256 indexed tokenId, address indexed tenant, address indexed owner, uint256 hoursRented, uint256 totalCost, uint256 feePaid);
+    event NFTRented(uint256 indexed tokenId, address indexed tenant, address indexed owner, uint256 totalCost, uint256 feePaid);
 
     // --- Errors ---
 
@@ -88,8 +83,8 @@ contract RentalManager is
     error NotListed();
     error AlreadyRented();
     error RentalActive();
-    error DurationTooLong();
-    error InsufficientPStake();
+
+    // --- Initialization ---
 
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
@@ -126,26 +121,24 @@ contract RentalManager is
      * @notice Lists an NFT for rent (Escrow Custody).
      * @dev Transfers the NFT from the user to this contract.
      * @param tokenId The ID of the NFT to list.
-     * @param pricePerHour The cost per HOUR in BKC (Wei).
-     * @param maxDurationHours The maximum duration in HOURS allowed for a single rental.
+     * @param price The cost for a fixed 1-HOUR session in BKC (Wei).
      */
-    function listNFT(uint256 tokenId, uint256 pricePerHour, uint256 maxDurationHours) external nonReentrant {
-        if (pricePerHour == 0 || maxDurationHours == 0) revert InvalidAmount();
+    function listNFT(uint256 tokenId, uint256 price) external nonReentrant {
+        if (price == 0) revert InvalidAmount();
 
         // Escrow: Transfer NFT to this contract
         nftContract.safeTransferFrom(msg.sender, address(this), tokenId);
 
         listings[tokenId] = Listing({
             owner: msg.sender,
-            pricePerHour: pricePerHour,
-            maxDuration: maxDurationHours,
+            price: price,
             isActive: true
         });
 
-        // Otimização: Adiciona ao array com rastreamento de índice
+        // Optimization: Add to array with index tracking
         _addToListedArray(tokenId);
 
-        emit NFTListed(tokenId, msg.sender, pricePerHour, maxDurationHours);
+        emit NFTListed(tokenId, msg.sender, price);
     }
 
     /**
@@ -165,7 +158,7 @@ contract RentalManager is
         delete listings[tokenId];
         delete activeRentals[tokenId];
         
-        // Otimização: Remove do array usando Swap-and-Pop (O(1))
+        // Optimization: Remove from array using Swap-and-Pop (O(1))
         _removeFromListedArray(tokenId);
 
         // Return NFT to owner
@@ -175,31 +168,27 @@ contract RentalManager is
     }
 
     /**
-     * @notice Rents a listed NFT, distributes fees, and triggers mining.
+     * @notice Rents a listed NFT for exactly 1 HOUR.
+     * @dev Distributes fees and triggers mining.
      * @param tokenId The ID of the NFT to rent.
-     * @param hoursToRent The duration of the rental in HOURS.
      */
-    function rentNFT(uint256 tokenId, uint256 hoursToRent) external nonReentrant {
+    function rentNFT(uint256 tokenId) external nonReentrant {
         Listing storage listing = listings[tokenId];
         if (!listing.isActive) revert NotListed();
-        if (hoursToRent == 0 || hoursToRent > listing.maxDuration) revert DurationTooLong();
         
         Rental storage currentRental = activeRentals[tokenId];
         if (currentRental.endTime > block.timestamp) revert AlreadyRented();
 
-        // 1. Regulatory Check (Hub): Ensure tenant meets pStake requirements
-        _enforcePStakeRequirement(msg.sender);
-
-        // 2. Financial Calculation
-        uint256 totalCost = listing.pricePerHour * hoursToRent;
+        // 1. Financial Calculation (Fixed Price)
+        uint256 totalCost = listing.price;
         uint256 feeBips = ecosystemManager.getFee(RENTAL_TAX_BIPS_KEY); // Fetch dynamic fee from Hub
         uint256 feeAmount = (totalCost * feeBips) / 10000;
         uint256 ownerAmount = totalCost - feeAmount;
 
-        // 3. Fund Collection (Pull all funds to contract for safety)
+        // 2. Fund Collection (Pull all funds to contract for safety)
         bkcToken.safeTransferFrom(msg.sender, address(this), totalCost);
 
-        // 4. Fee Distribution & Proof-of-Purchase Mining
+        // 3. Fee Distribution & Proof-of-Purchase Mining
         if (feeAmount > 0) {
             address miningManager = ecosystemManager.getMiningManagerAddress();
             if (miningManager != address(0)) {
@@ -210,43 +199,28 @@ contract RentalManager is
             }
         }
 
-        // 5. Payout to Owner
+        // 4. Payout to Owner
         if (ownerAmount > 0) {
             bkcToken.safeTransfer(listing.owner, ownerAmount);
         }
 
-        // 6. Record Rental
+        // 5. Record Rental (Fixed 1 Hour Duration)
         activeRentals[tokenId] = Rental({
             tenant: msg.sender,
             startTime: block.timestamp,
-            // 1 hours = 3600 seconds in Solidity
-            endTime: block.timestamp + (hoursToRent * 1 hours)
+            endTime: block.timestamp + 1 hours
         });
-
-        emit NFTRented(tokenId, msg.sender, listing.owner, hoursToRent, totalCost, feeAmount);
+        
+        emit NFTRented(tokenId, msg.sender, listing.owner, totalCost, feeAmount);
     }
 
     // --- Internal Logic (Optimized) ---
 
     /**
-     * @dev Checks if the user meets the minimum pStake required by the Ecosystem.
-     */
-    function _enforcePStakeRequirement(address _user) internal view {
-        ( , uint256 minPStake) = ecosystemManager.getServiceRequirements(RENTAL_ACCESS_KEY);
-        if (minPStake > 0) {
-            address delegationManagerAddr = ecosystemManager.getDelegationManagerAddress();
-            if (delegationManagerAddr != address(0)) {
-                uint256 userStake = IDelegationManager(delegationManagerAddr).userTotalPStake(_user);
-                if (userStake < minPStake) revert InsufficientPStake();
-            }
-        }
-    }
-
-    /**
      * @dev O(1) Add to array.
      */
     function _addToListedArray(uint256 tokenId) internal {
-        // Registra onde o token vai ficar no array (última posição)
+        // Tracks where the token will stay in the array (last position)
         _listedTokenIndex[tokenId] = listedTokenIds.length;
         listedTokenIds.push(tokenId);
     }
@@ -259,18 +233,16 @@ contract RentalManager is
         uint256 indexToRemove = _listedTokenIndex[tokenId];
         uint256 lastIndex = listedTokenIds.length - 1;
 
-        // Se o elemento não for o último, troca de lugar com o último
+        // If the element is not the last one, swap it with the last one
         if (indexToRemove != lastIndex) {
             uint256 lastTokenId = listedTokenIds[lastIndex];
-
-            // Move o último elemento para o buraco do elemento que vai sair
+            // Move the last element to the hole of the element being removed
             listedTokenIds[indexToRemove] = lastTokenId;
-            
-            // Atualiza o índice do elemento movido
+            // Update the index of the moved element
             _listedTokenIndex[lastTokenId] = indexToRemove;
         }
 
-        // Remove o último elemento (que agora é duplicado ou o alvo)
+        // Remove the last element (which is now duplicated or the target)
         listedTokenIds.pop();
         delete _listedTokenIndex[tokenId];
     }

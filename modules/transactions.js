@@ -1,97 +1,29 @@
 // js/modules/transactions.js
-// ✅ VERSÃO FINAL V7.5 (IMPROVED DYNAMIC GAS): Fallbacks Contextuais + Export + Retry
+// ✅ VERSÃO FINAL V5.3 (CONTRATOS V5.2): Alinhamento de Assinatura (Booster ID) + Rental Fix
 
 const ethers = window.ethers;
 
 import { State } from '../state.js';
 import { showToast, closeModal } from '../ui-feedback.js';
-import { addresses, FAUCET_AMOUNT_WEI, nftPoolABI, rentalManagerABI } from '../config.js'; 
+import { addresses, nftPoolABI, rentalManagerABI } from '../config.js'; 
 import { formatBigNumber } from '../utils.js';
-// CERTIFIQUE-SE QUE loadRentalListings ESTÁ EXPORTADO EM ./data.js
-import { loadUserData, getHighestBoosterBoostFromAPI, loadRentalListings } from './data.js'; 
+import { loadUserData, getHighestBoosterBoostFromAPI, loadRentalListings } from './data.js';
 
 // --- Tolerance Constants ---
 const APPROVAL_TOLERANCE_BIPS = 100n; 
 const BIPS_DENOMINATOR = 10000n; 
 
 /**
- * ⚡ GAS HELPER V2 (CRITICAL FIX FOR ARBITRUM)
+ * ⚡ GAS HELPER (CRITICAL FIX FOR ARBITRUM)
  * Calcula o gás dinamicamente com margem de segurança de 20%.
- * Se a estimativa do RPC falhar, usa fallbacks contextuais baseados no método.
- * Inclui retry automático para lidar com timeouts temporários.
- * * @param {Contract} contract - Contrato Ethers.js
- * @param {string} method - Nome do método a ser chamado
- * @param {Array} args - Argumentos do método
- * @param {number} retries - Número de tentativas (padrão: 2)
- * @returns {Object} { gasLimit: BigInt }
  */
-export async function getGasWithMargin(contract, method, args, retries = 2) {
-    for (let i = 0; i <= retries; i++) {
-        try {
-            // Tenta estimar o gás real via RPC
-            const estimatedGas = await contract[method].estimateGas(...args);
-            // Adiciona 20% de margem (x * 120 / 100)
-            const gasWithMargin = (estimatedGas * 120n) / 100n;
-            
-            console.log(`✅ ${method} Gas Estimation: ${estimatedGas.toString()} → ${gasWithMargin.toString()} (+20%)`);
-            return { gasLimit: gasWithMargin };
-            
-        } catch (error) {
-            // Retry em caso de timeout/erro de rede
-            if (i < retries && !error.message?.includes("execution reverted") && !error.data) {
-                console.warn(`⚠️ Gas estimation retry ${i + 1}/${retries} for ${method}...`);
-                await new Promise(resolve => setTimeout(resolve, 1000)); // Aguarda 1s
-                continue;
-            }
-            
-            // Detecta erro de lógica de contrato vs erro de rede
-            if (error.message?.includes("execution reverted") || error.data) {
-                // É um erro de lógica do contrato (ex: PStake insuficiente)
-                console.error(`❌ Contract revert during gas estimation for ${method}:`, error.reason || error.message);
-                throw error; // Propaga para exibir mensagem ao usuário
-            }
-            
-            // Erro de rede/RPC: usa fallback contextual
-            console.warn(`⚠️ Gas estimation failed for ${method}. Using contextual fallback.`, error.message);
-            
-            // 🔥 FALLBACKS CONTEXTUAIS baseados no método
-            const fallbacks = {
-                // ERC20 Operations
-                'approve': 100000n,
-                'transfer': 65000n,
-                'transferFrom': 85000n,
-                
-                // Game Operations
-                'participate': 800000n,
-                'requestRandom': 500000n,
-                
-                // NFT Pool Operations
-                'buyNextAvailableNFT': 500000n,
-                'sellNFT': 400000n,
-                
-                // Faucet & Minting
-                'claim': 150000n,
-                'mint': 150000n,
-                
-                // Notary
-                'notarize': 300000n,
-                
-                // Rental
-                'listNFT': 250000n,
-                'rentNFT': 350000n,
-                'returnNFT': 200000n,
-                
-                // Staking
-                'stake': 200000n,
-                'unstake': 180000n,
-                'claimRewards': 150000n
-            };
-            
-            const fallbackGas = fallbacks[method] || 300000n; // Fallback genérico: 300k
-            console.log(`   → Using fallback: ${fallbackGas.toString()} gas units for ${method}`);
-            
-            return { gasLimit: fallbackGas };
-        }
+async function getGasWithMargin(contract, method, args) {
+    try {
+        const estimatedGas = await contract[method].estimateGas(...args);
+        return { gasLimit: (estimatedGas * 120n) / 100n };
+    } catch (error) {
+        console.warn(`⚠️ Gas estimation failed for ${method}. Using safe fallback.`, error);
+        return { gasLimit: 2000000n };
     }
 }
 
@@ -105,7 +37,6 @@ async function getConnectedSigner() {
         return null;
     }
     
-    // Prioriza obter o Signer diretamente do Web3Provider (MetaMask/WalletConnect)
     if (State.web3Provider) {
         try {
             const provider = new ethers.BrowserProvider(State.web3Provider);
@@ -140,7 +71,6 @@ async function executeTransaction(txPromise, successMessage, failMessage, btnEle
         if (btnElement) btnElement.innerHTML = '<div class="loader inline-block mr-2"></div> Confirming...';
         showToast('Submitting transaction to blockchain...', 'info');
         
-        // Wait for block confirmation
         const receipt = await tx.wait();
         
         showToast(successMessage, 'success', receipt.hash);
@@ -250,104 +180,193 @@ async function ensureApproval(tokenContract, spenderAddress, amountOrTokenId, bt
             const isApprovedAll = await tokenContract.isApprovedForAll(State.userAddress, spenderAddress);
             
             if (approvedAddr.toLowerCase() !== spenderAddress.toLowerCase() && !isApprovedAll) {
-                showToast(`Approving NFT #${tokenId} for ${purpose}...`, "info");
+                showToast(`Approving NFT #${tokenId}...`, "info");
                 setBtnLoading("Approving NFT");
                 
+                // ✅ FIX: Gás dinâmico para aprovação de NFT
                 const args = [spenderAddress, tokenId];
                 const gasOpts = await getGasWithMargin(approvedTokenContract, 'approve', args);
-                
+
                 const approveTx = await approvedTokenContract.approve(...args, gasOpts);
                 await approveTx.wait();
-                showToast('NFT Approval successful!', "success");
+                showToast("NFT Approval successful!", "success");
             }
             return true;
         }
+
     } catch (e) {
-        console.error("Approval error:", e);
-        showToast(`Approval error: ${e.reason || e.message}`, "error");
+        console.error("Approval Error:", e);
+        if(btnElement) btnElement.disabled = false;
+        
+        let msg = e.reason || e.message || 'Transaction rejected.';
+        if (msg.includes("approval to current owner")) msg = "Token already owned by target.";
+        
+        showToast(`Approval Error: ${msg}`, "error");
         return false;
     }
 }
 
 
 // ====================================================================
-// 1. STAKING WORKFLOW
+// 1. RENTAL MARKET TRANSACTIONS (V5 FIXES)
 // ====================================================================
 
-export async function executeStake(amount, btnElement) {
+// V5 FIX: Removido maxDurationHours, pois a duração é fixa em 1h
+export async function executeListNFT(tokenId, pricePerHourWei, btnElement) {
     const signer = await getConnectedSigner();
-    if (!signer || !State.delegationManagerContract) return false;
-    
-    const originalText = btnElement ? btnElement.innerHTML : 'Stake';
-    const amountWei = ethers.parseUnits(amount.toString(), 18);
+    if (!signer || !addresses.rentalManager) return false;
 
-    if (amountWei <= 0n) { showToast("Invalid amount.", "error"); return false; }
-    if (amountWei > State.currentUserBalance) { showToast("Insufficient BKC balance.", "error"); return false; }
-
-    const approved = await ensureApproval(State.bkcTokenContract, await State.delegationManagerContract.getAddress(), amountWei, btnElement, "Staking");
+    const approved = await ensureApproval(State.rewardBoosterContract, addresses.rentalManager, tokenId, btnElement, "Listing NFT");
     if (!approved) return false;
 
-    const delegationManagerContract = State.delegationManagerContract.connect(signer); 
-    const args = [amountWei];
+    const rentalContract = new ethers.Contract(addresses.rentalManager, rentalManagerABI, signer); 
+    // Argumentos do V5: tokenId, price
+    const args = [BigInt(tokenId), BigInt(pricePerHourWei)]; 
     
-    // 🔥 Gás Dinâmico
-    const gasOpts = await getGasWithMargin(delegationManagerContract, 'stake', args);
-    const stakeTxPromise = delegationManagerContract.stake(...args, gasOpts);
-
-    return await executeTransaction(stakeTxPromise, 'Staking successful!', 'Error during staking', btnElement);
+    const gasOpts = await getGasWithMargin(rentalContract, 'listNFT', args);
+    const txPromise = rentalContract.listNFT(...args, gasOpts);
+    
+    return await executeTransaction(txPromise, `NFT #${tokenId} listed successfully!`, "Error listing NFT", btnElement);
 }
 
-export async function executeUnstake(amount, btnElement) {
+// V5 FIX: Removido hoursToRent, pois a duração é fixa em 1h
+export async function executeRentNFT(tokenId, totalCostWei, btnElement) {
     const signer = await getConnectedSigner();
-    if (!signer || !State.delegationManagerContract) return false;
-    
-    const amountWei = ethers.parseUnits(amount.toString(), 18);
-    if (amountWei <= 0n) { showToast("Invalid amount.", "error"); return false; }
+    if (!signer || !addresses.rentalManager) return false;
 
-    const delegationManagerContract = State.delegationManagerContract.connect(signer); 
-    const args = [amountWei];
+    // Aprovação baseada no custo total (1H)
+    const approved = await ensureApproval(State.bkcTokenContract, addresses.rentalManager, BigInt(totalCostWei), btnElement, "Rental Payment");
+    if (!approved) return false;
 
-    // 🔥 Gás Dinâmico
-    const gasOpts = await getGasWithMargin(delegationManagerContract, 'unstake', args);
-    const unstakeTxPromise = delegationManagerContract.unstake(...args, gasOpts);
+    const rentalContract = new ethers.Contract(addresses.rentalManager, rentalManagerABI, signer); 
+    // Argumentos do V5: tokenId
+    const args = [BigInt(tokenId)];
 
-    return await executeTransaction(unstakeTxPromise, 'Unstaked successfully!', 'Error during unstake', btnElement);
+    const gasOpts = await getGasWithMargin(rentalContract, 'rentNFT', args);
+    const txPromise = rentalContract.rentNFT(...args, gasOpts);
+
+    // Mensagem de sucesso ajustada
+    return await executeTransaction(txPromise, `NFT #${tokenId} rented for 1 hour!`, "Error renting NFT", btnElement);
+}
+
+export async function executeWithdrawNFT(tokenId, btnElement) {
+    const signer = await getConnectedSigner();
+    if (!signer || !addresses.rentalManager) return false;
+
+    const rentalContract = new ethers.Contract(addresses.rentalManager, rentalManagerABI, signer); 
+    const args = [BigInt(tokenId)];
+
+    const gasOpts = await getGasWithMargin(rentalContract, 'withdrawNFT', args);
+    const txPromise = rentalContract.withdrawNFT(...args, gasOpts);
+
+    return await executeTransaction(txPromise, `NFT #${tokenId} withdrawn!`, "Error withdrawing NFT", btnElement);
 }
 
 
 // ====================================================================
-// 2. REWARD CLAIM
+// 2. CORE TRANSACTIONS (Delegation, Unstake, Claims)
 // ====================================================================
 
-export async function executeClaimRewards(btnElement) {
+// Assinatura V5: totalAmount, durationSeconds, boosterIdToSend
+export async function executeDelegation(totalAmount, durationSeconds, boosterIdToSend, btnElement) {
     const signer = await getConnectedSigner();
-    if (!signer || !State.delegationManagerContract) {
-        console.error("Signer or contract unavailable.");
-        showToast("Wallet or contract not ready.", "error");
+    if (!signer || !addresses.delegationManager) return false;
+    
+    const totalAmountBigInt = BigInt(totalAmount); 
+    const durationBigInt = BigInt(durationSeconds);
+    const boosterIdBigInt = BigInt(boosterIdToSend);
+    
+    try {
+        const balance = await State.bkcTokenContract.balanceOf(State.userAddress);
+        if (balance < totalAmountBigInt) {
+            showToast(`Insufficient balance!`, "error");
+            return false;
+        }
+    } catch(e) { }
+
+    const MAX_DURATION = 315360000n; 
+    if (durationBigInt > MAX_DURATION) {
+        showToast("Invalid duration (Max: 10 Years).", "error");
         return false;
     }
 
-    const originalText = btnElement ? btnElement.innerHTML : 'Claim';
+    const approved = await ensureApproval(State.bkcTokenContract, addresses.delegationManager, totalAmountBigInt, btnElement, "Delegation");
+    if (!approved) return false;
+    
+    const delegationContract = State.delegationManagerContract.connect(signer); 
+    const args = [totalAmountBigInt, durationBigInt, boosterIdBigInt];
+
+    const gasOpts = await getGasWithMargin(delegationContract, 'delegate', args);
+    const delegateTxPromise = delegationContract.delegate(...args, gasOpts);
+    
+    const success = await executeTransaction(delegateTxPromise, 'Delegation successful!', 'Error delegating tokens', btnElement);
+    if (success) closeModal();
+    return success;
+}
+
+// Assinatura V5: index, boosterIdToSend
+export async function executeUnstake(index, boosterIdToSend) {
+    const signer = await getConnectedSigner();
+    if (!signer || !addresses.delegationManager) return false;
+
+    const boosterIdBigInt = BigInt(boosterIdToSend);
+    
+    const btnElement = document.querySelector(`.unstake-btn[data-index='${index}']`);
+    const delegationContract = State.delegationManagerContract.connect(signer); 
+    const args = [index, boosterIdBigInt];
+
+    const gasOpts = await getGasWithMargin(delegationContract, 'unstake', args);
+    const unstakeTxPromise = delegationContract.unstake(...args, gasOpts);
+    
+    return await executeTransaction(unstakeTxPromise, 'Unstake successful!', 'Error unstaking tokens', btnElement);
+}
+
+// Assinatura V5: index, boosterIdToSend
+export async function executeForceUnstake(index, boosterIdToSend) {
+    const signer = await getConnectedSigner();
+    if (!signer || !addresses.delegationManager) return false;
+
+    const boosterIdBigInt = BigInt(boosterIdToSend);
+    
+    if (!confirm("Are you sure? Force unstaking applies a 50% penalty.")) return false;
+    
+    const btnElement = document.querySelector(`.force-unstake-btn[data-index='${index}']`);
+    const delegationContract = State.delegationManagerContract.connect(signer); 
+    const args = [index, boosterIdBigInt];
+
+    const gasOpts = await getGasWithMargin(delegationContract, 'forceUnstake', args);
+    const forceUnstakeTxPromise = delegationContract.forceUnstake(...args, gasOpts); 
+    
+    return await executeTransaction(forceUnstakeTxPromise, 'Force unstake successful!', 'Error performing force unstake', btnElement);
+}
+
+// Assinatura V5: stakingRewards, minerRewards, boosterIdToSend
+export async function executeUniversalClaim(stakingRewards, minerRewards, boosterIdToSend, btnElement) {
+    const signer = await getConnectedSigner();
+    if (!signer || !addresses.delegationManager) return false;
+    
+    const boosterIdBigInt = BigInt(boosterIdToSend); // Usa o ID passado pelo cliente
+    
+    if (stakingRewards === 0n && minerRewards === 0n) {
+        showToast("No rewards to claim.", "info");
+        return false;
+    }
+    
+    const originalText = btnElement ? btnElement.innerHTML : 'Claiming...';
     if (btnElement) {
         btnElement.disabled = true;
         btnElement.innerHTML = '<div class="loader inline-block"></div> Claiming...';
     }
-
+    
     try {
-        const pendingRewards = await State.delegationManagerContract.pendingRewards(State.userAddress);
-        if (pendingRewards === 0n) {
-            showToast('No rewards to claim.', "info");
-            if (btnElement) {
-                btnElement.disabled = false;
-                btnElement.innerHTML = originalText;
-            }
-            return false;
-        } else {
-            const delegationManagerContract = State.delegationManagerContract.connect(signer); 
+        if (stakingRewards > 0n) {
+            showToast("Claiming rewards...", "info");
+            const delegationContract = State.delegationManagerContract.connect(signer); 
+            // Argumento V5: apenas boosterId
+            const args = [boosterIdBigInt];
             
-            // 🔥 Gás Dinâmico
-            const gasOpts = await getGasWithMargin(delegationManagerContract, 'claimRewards', []);
-            const tx = await delegationManagerContract.claimRewards(gasOpts);
+            const gasOpts = await getGasWithMargin(delegationContract, 'claimReward', args);
+            const tx = await delegationContract.claimReward(...args, gasOpts);
             
             await tx.wait();
             showToast('Reward claimed successfully!', "success");
@@ -375,7 +394,7 @@ export async function executeClaimRewards(btnElement) {
 // 3. BOOSTER STORE (FACTORY)
 // ====================================================================
 
-export async function executeBuyBooster(poolAddress, price, boosterTokenIdForPStake, btnElement) {
+export async function executeBuyBooster(poolAddress, price, boosterTokenIdForDiscount, btnElement) {
     const signer = await getConnectedSigner();
     if (!signer || !poolAddress) return false;
     
@@ -393,11 +412,11 @@ export async function executeBuyBooster(poolAddress, price, boosterTokenIdForPSt
 
         if (btnElement) btnElement.innerHTML = '<div class="loader inline-block"></div> Buying...';
 
-        const poolContract = new ethers.Contract(poolAddress, nftPoolABI, signer); 
-        const boosterIdToSend = BigInt(boosterTokenIdForPStake);
+        const boosterIdToSend = BigInt(boosterTokenIdForDiscount);
+        // buyNextAvailableNFT(boosterId)
         const args = [boosterIdToSend];
 
-        // 🔥 Gás Dinâmico
+        const poolContract = new ethers.Contract(poolAddress, nftPoolABI, signer); 
         const gasOpts = await getGasWithMargin(poolContract, 'buyNextAvailableNFT', args);
         const buyTxPromise = poolContract.buyNextAvailableNFT(...args, gasOpts);
         
@@ -433,9 +452,9 @@ export async function executeSellBooster(poolAddress, tokenIdToSell, boosterToke
         const minPrice = 0n; 
         
         const poolContract = new ethers.Contract(poolAddress, nftPoolABI, signer); 
+        // sellNFT(tokenId, boosterId, minPrice)
         const args = [tokenIdBigInt, boosterIdToSend, minPrice];
 
-        // 🔥 Gás Dinâmico
         const gasOpts = await getGasWithMargin(poolContract, 'sellNFT', args);
         const sellTxPromise = poolContract.sellNFT(...args, gasOpts);
 
@@ -468,7 +487,6 @@ export async function executeInternalFaucet(btnElement) {
     try {
         if (State.faucetContract) {
             const faucetContract = State.faucetContract.connect(signer); 
-            // 🔥 Gás Dinâmico
             const gasOpts = await getGasWithMargin(faucetContract, 'claim', []);
             const tx = await faucetContract.claim(gasOpts);
             return await executeTransaction(tx, 'Tokens sent!', 'Faucet Error', btnElement);
@@ -477,7 +495,6 @@ export async function executeInternalFaucet(btnElement) {
             const bkcTokenContract = State.bkcTokenContract.connect(signer); 
             const args = [State.userAddress, amount];
             
-            // 🔥 Gás Dinâmico
             const gasOpts = await getGasWithMargin(bkcTokenContract, 'mint', args);
             const tx = await bkcTokenContract.mint(...args, gasOpts); 
             return await executeTransaction(tx, '20 BKC Minted!', 'Mint Error', btnElement);
@@ -508,14 +525,13 @@ export async function executeNotarizeDocument(documentURI, description, contentH
     try {
         if (State.ecosystemManagerContractPublic) {
             const key = ethers.id("NOTARY_SERVICE");
-            const [realFee] = await State.ecosystemManagerContractPublic.getServiceRequirements(key);
+            // V5: Usa getFee(key) no Hub
+            const realFee = await State.ecosystemManagerContractPublic.getFee(key);
             if (realFee > 0n) feeToPay = realFee;
         }
     } catch (e) {
         console.warn("Fee fetch warning:", e);
     }
-
-    console.log(`Notary Fee to Approve: ${feeToPay.toString()}`);
 
     if (feeToPay > 0n) {
         const approved = await ensureApproval(State.bkcTokenContract, notaryAddress, feeToPay, submitButton, "Notary Fee");

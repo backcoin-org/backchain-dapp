@@ -1,21 +1,9 @@
 {
-  "DESCRIPTION": "Configuração Otimizada para Testnet (PStake Zerado + Taxas Baixas)",
+  "DESCRIPTION": "Configuração Otimizada para Testnet (Open Access - PStake Zerado + Taxas Baixas)",
   
   "serviceFees": {
-    "COMMENT": "💰 PREÇO FIXO EM BKC (Valores viram Wei x10^18). Max 5 BKC para caber no Faucet.",
-    "NOTARY_SERVICE": "1",
-    "NFT_POOL_ACCESS": "0",
-    "RENTAL_MARKET_ACCESS": "0",
-    "TIGER_GAME_SERVICE": "1"
-  },
-
-  "pStakeMinimums": {
-    "COMMENT": "🔒 REQUISITO DE PSTAKE (Inteiro). ZERADO PARA ACESSO LIVRE.",
-    "NOTARY_SERVICE": "0",
-    "FORTUNE_POOL_SERVICE": "0",
-    "TIGER_GAME_SERVICE": "0",
-    "NFT_POOL_ACCESS": "0",
-    "RENTAL_MARKET_ACCESS": "0"
+    "COMMENT": "💰 PREÇO FIXO EM BKC (O script converte 1 para 10^18 Wei automaticamente).",
+    "NOTARY_SERVICE": "1"
   },
 
   "stakingFees": {
@@ -45,19 +33,19 @@
   },
 
   "miningDistribution": {
-    "COMMENT": "⛏️ MINERAÇÃO (Novos Tokens). Soma = 10000.",
+    "COMMENT": "⛏️ MINERAÇÃO (Novos Tokens). Soma deve ser 10000.",
     "TREASURY": "2000",
     "DELEGATOR_POOL": "8000"
   },
 
   "feeDistribution": {
-    "COMMENT": "💵 DIVISÃO DE TAXAS (Tokens Originais). Soma = 10000.",
+    "COMMENT": "💵 DIVISÃO DE TAXAS (Tokens Originais). Soma deve ser 10000.",
     "TREASURY": "5000",
     "DELEGATOR_POOL": "5000"
   },
   
   "fortunePoolTiers": {
-    "COMMENT": "🎰 JOGO DO TIGRE (Chance 1/X, Mult BIPS). Ex: 3,15000 = 33% chance, 1.5x prêmio.",
+    "COMMENT": "🎰 JOGO DA FORTUNA (Range, Mult BIPS). Ex: '3,15000' = Range 1-3 (33% chance), 1.5x prêmio.",
     "1": "3,15000",
     "2": "10,50000",
     "3": "100,500000"

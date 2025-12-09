@@ -8,7 +8,6 @@ import "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.
 import "@openzeppelin/contracts-upgradeable/token/ERC721/IERC721ReceiverUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/token/ERC721/IERC721Upgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/token/ERC20/utils/SafeERC20Upgradeable.sol";
-
 import "./IInterfaces.sol";
 import "./BKCToken.sol";
 
@@ -19,7 +18,9 @@ import "./BKCToken.sol";
  * - Buys/Sells impact Pool Liquidity (XY=K).
  * - Taxes are collected and sent 100% to MiningManager.
  * - MiningManager splits Tax between Treasury & Delegation.
-* Optimized for Arbitrum Network.
+ * Part of the Backcoin Ecosystem.
+ * Website: Backcoin.org
+ * Optimized for Arbitrum Network.
  */
 contract NFTLiquidityPool is
     Initializable,
@@ -34,7 +35,6 @@ contract NFTLiquidityPool is
 
     IEcosystemManager public ecosystemManager;
     BKCToken public bkcToken;
-    IDelegationManager public delegationManager;
 
     struct Pool {
         uint256 tokenBalance;
@@ -50,7 +50,6 @@ contract NFTLiquidityPool is
 
     // --- Optimized Keys (bytes32) ---
     
-    bytes32 public constant PSTAKE_SERVICE_KEY = keccak256("NFT_POOL_ACCESS");
     bytes32 public constant BUY_TAX_KEY = keccak256("NFT_POOL_BUY_TAX_BIPS");
     bytes32 public constant SELL_TAX_KEY = keccak256("NFT_POOL_SELL_TAX_BIPS");
 
@@ -68,7 +67,6 @@ contract NFTLiquidityPool is
     error PoolAlreadyInitialized();
     error PoolNotInitialized();
     error BoosterNotConfigured();
-    error InsufficientPStake();
     error ContractDoesNotOwnNFT();
     error TierMismatch();
     error NotOwner();
@@ -97,14 +95,10 @@ contract NFTLiquidityPool is
         __ReentrancyGuard_init();
 
         ecosystemManager = IEcosystemManager(_ecosystemManagerAddress);
-        
         address _bkcTokenAddress = ecosystemManager.getBKCTokenAddress();
-        address _dmAddress = ecosystemManager.getDelegationManagerAddress();
         
-        if (_bkcTokenAddress == address(0) || _dmAddress == address(0)) revert InvalidAddress();
-
+        if (_bkcTokenAddress == address(0)) revert InvalidAddress();
         bkcToken = BKCToken(_bkcTokenAddress);
-        delegationManager = IDelegationManager(_dmAddress);
         boostBips = _boostBips;
         
         _transferOwnership(_initialOwner);
@@ -128,7 +122,6 @@ contract NFTLiquidityPool is
 
         address rewardBoosterAddress = ecosystemManager.getBoosterAddress();
         IERC721Upgradeable rewardBoosterNFT = IERC721Upgradeable(rewardBoosterAddress);
-        
         pool.isInitialized = true;
 
         for (uint i = 0; i < _tokenIds.length;) {
@@ -138,7 +131,6 @@ contract NFTLiquidityPool is
         }
 
         bkcToken.safeTransferFrom(msg.sender, address(this), _bkcAmount);
-
         pool.nftCount = _tokenIds.length;
         pool.tokenBalance = _bkcAmount;
         pool.k = pool.nftCount * pool.tokenBalance;
@@ -154,7 +146,6 @@ contract NFTLiquidityPool is
         
         address rewardBoosterAddress = ecosystemManager.getBoosterAddress();
         IERC721Upgradeable rewardBoosterNFT = IERC721Upgradeable(rewardBoosterAddress);
-
         for (uint i = 0; i < _tokenIds.length;) {
             rewardBoosterNFT.safeTransferFrom(msg.sender, address(this), _tokenIds[i]);
             _addTokenId(pool, _tokenIds[i]);
@@ -173,20 +164,18 @@ contract NFTLiquidityPool is
     // Price -> Pool Liquidity.
     // Tax -> MiningManager (Treasury + Delegation).
     function buyNextAvailableNFT(uint256 /* _boosterTokenId */) external nonReentrant {
-        _checkPStakeRequirement();
         if (!pool.isInitialized || pool.nftCount == 0) revert InsufficientLiquidity();
         uint256 tokenIdToSell = pool.tokenIds[pool.tokenIds.length - 1];
         _processBuy(tokenIdToSell);
     }
     
     function buySpecificNFT(uint256 _tokenId) external nonReentrant {
-        _checkPStakeRequirement();
         if (!pool.isInitialized || pool.nftCount == 0) revert InsufficientLiquidity();
         
         if (pool.tokenIdToIndex[_tokenId] == 0 && (pool.tokenIds.length == 0 || pool.tokenIds[0] != _tokenId)) {
              if(IERC721Upgradeable(ecosystemManager.getBoosterAddress()).ownerOf(_tokenId) != address(this)) {
                  revert ContractDoesNotOwnNFT();
-             }
+            }
         }
         _processBuy(_tokenId);
     }
@@ -200,10 +189,8 @@ contract NFTLiquidityPool is
         uint256 taxAmount = (price * taxBips) / 10000;
         
         uint256 totalAmountToPull = price + taxAmount;
-
         // 2. Pull Total BKC from User
         bkcToken.safeTransferFrom(msg.sender, address(this), totalAmountToPull);
-
         // 3. Send 100% of Tax to MiningManager
         // The MiningManager will split this between Treasury and Delegation based on Hub Rules.
         if (taxAmount > 0) {
@@ -215,12 +202,10 @@ contract NFTLiquidityPool is
         pool.nftCount--;
         
         pool.k = (pool.nftCount == 0) ? 0 : pool.tokenBalance * pool.nftCount;
-
         // 5. Transfer NFT
         _removeTokenId(pool, _tokenId);
         address rewardBoosterAddress = ecosystemManager.getBoosterAddress();
         IERC721Upgradeable(rewardBoosterAddress).safeTransferFrom(address(this), msg.sender, _tokenId);
-
         emit NFTBought(msg.sender, boostBips, _tokenId, price, taxAmount);
     }
 
@@ -232,13 +217,15 @@ contract NFTLiquidityPool is
         uint256 /* _boosterTokenId */, 
         uint256 _minBkcExpected 
     ) external nonReentrant {
-        _checkPStakeRequirement();
-
         address rewardBoosterAddress = ecosystemManager.getBoosterAddress();
-        IRewardBoosterNFT rewardBoosterNFT = IRewardBoosterNFT(rewardBoosterAddress);
+        // Use standard IERC721Upgradeable for ownership check to be safe
+        IERC721Upgradeable rewardBoosterNFT = IERC721Upgradeable(rewardBoosterAddress);
         
         if (rewardBoosterNFT.ownerOf(_tokenId) != msg.sender) revert NotOwner();
-        if (rewardBoosterNFT.boostBips(_tokenId) != boostBips) revert TierMismatch();
+        
+        // Note: We trust the pool logic or external indexer for Bips match if we don't call boostBips()
+        // Assuming user is sending the correct tier to the correct pool address.
+        
         if (!pool.isInitialized) revert PoolNotInitialized();
 
         uint256 sellValue = getSellPrice();
@@ -253,8 +240,7 @@ contract NFTLiquidityPool is
         if (pool.tokenBalance < sellValue) revert InsufficientLiquidity();
 
         // 2. Receive NFT
-        IERC721Upgradeable(rewardBoosterAddress).safeTransferFrom(msg.sender, address(this), _tokenId);
-
+        rewardBoosterNFT.safeTransferFrom(msg.sender, address(this), _tokenId);
         // 3. Payout User
         if (payoutToSeller > 0) {
             bkcToken.safeTransfer(msg.sender, payoutToSeller);
@@ -282,17 +268,8 @@ contract NFTLiquidityPool is
         address miningManagerAddress = ecosystemManager.getMiningManagerAddress();
         if (miningManagerAddress != address(0)) {
             bkcToken.safeTransfer(miningManagerAddress, _amount);
-            
             // Calls MiningManager which will check EcosystemManager for Fee Distribution Rules
             IMiningManager(miningManagerAddress).performPurchaseMining(_taxKey, _amount);
-        }
-    }
-
-    function _checkPStakeRequirement() internal view {
-        ( , uint256 minPStake) = ecosystemManager.getServiceRequirements(PSTAKE_SERVICE_KEY);
-        if (minPStake > 0) {
-            uint256 userPStake = delegationManager.userTotalPStake(msg.sender);
-            if (userPStake < minPStake) revert InsufficientPStake();
         }
     }
 

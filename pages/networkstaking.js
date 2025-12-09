@@ -1,5 +1,5 @@
 // pages/networkstaking.js
-// ✅ VERSÃO FINAL V4.1: Public Data Sync + UI Reset Fix
+// ✅ VERSÃO V5.2: Inclusão do BoosterTokenId (NFT) nas transações de Staking/Unstake/Claim
 
 const ethers = window.ethers;
 
@@ -17,7 +17,8 @@ import {
     loadPublicData, 
     loadUserData, 
     calculateUserTotalRewards,
-    loadUserDelegations 
+    loadUserDelegations,
+    getHighestBoosterBoostFromAPI // Adicionado para buscar o ID do NFT
 } from '../modules/data.js';
 import { 
     executeDelegation, 
@@ -31,9 +32,8 @@ import { showToast, startCountdownTimers } from '../ui-feedback.js';
 let isStakingLoading = false;
 let lastStakingFetch = 0;
 let delegationCurrentPage = 1;
-
-// Estado da UX (em Dias)
 let currentStakingDuration = 3650; // Padrão: 10 Anos
+let highestBoosterTokenId = 0n; // NOVO: ID do NFT para descontos
 
 // =========================================================================
 // 1. RENDERIZAÇÃO VISUAL
@@ -195,14 +195,21 @@ async function updateStakingData(forceRefresh = false) {
     }
 
     const now = Date.now();
-    if (!forceRefresh && isStakingLoading && (now - lastStakingFetch < 60000)) return;
+    if (!forceRefresh && isStakingLoading && (now - lastStakingFetch < 10000)) return; // Reduzido o check para 10s
     
     isStakingLoading = true;
     lastStakingFetch = now;
 
     try {
-        // [FIX CRÍTICO]: Carregar dados PÚBLICOS e PRIVADOS simultaneamente
-        // Isso garante que o "Total Network Staked" atualize ao clicar no refresh
+        // Busca o ID do melhor Booster NFT do usuário
+        const boosterData = await getHighestBoosterBoostFromAPI();
+        if (boosterData && boosterData.tokenId) {
+            highestBoosterTokenId = BigInt(boosterData.tokenId);
+        } else {
+            highestBoosterTokenId = 0n;
+        }
+
+        // Carregar dados PÚBLICOS e PRIVADOS simultaneamente
         await Promise.all([
             loadUserData(forceRefresh),
             loadUserDelegations(forceRefresh),
@@ -230,6 +237,7 @@ async function updateStakingData(forceRefresh = false) {
         if (claimBtn) {
             if (totalRewards > 0n) {
                 claimBtn.disabled = false;
+                // NOVO: Passa o ID do NFT para a função de Claim
                 claimBtn.onclick = () => handleClaimRewards(stakingRewards, minerRewards, claimBtn);
             } else {
                 claimBtn.disabled = true;
@@ -325,9 +333,11 @@ function renderDelegationsList() {
     if (timers.length > 0) startCountdownTimers(Array.from(timers));
 
     container.querySelectorAll('.unstake-btn').forEach(btn => {
+        // NOVO: Chamada para Unstake com o ID do Booster
         btn.addEventListener('click', () => handleUnstake(btn.dataset.index, false));
     });
     container.querySelectorAll('.force-unstake-btn').forEach(btn => {
+        // NOVO: Chamada para Force Unstake com o ID do Booster
         btn.addEventListener('click', () => handleUnstake(btn.dataset.index, true));
     });
 }
@@ -472,10 +482,10 @@ function setupStakingListeners() {
             confirmBtn.innerHTML = `<div class="loader inline-block mr-2"></div> Sending...`;
             confirmBtn.disabled = true;
 
-            const success = await executeDelegation(amountWei, durationSec, 0, confirmBtn);
+            // V5 NOVO: Passa o ID do Booster (0n se não tiver)
+            const success = await executeDelegation(amountWei, durationSec, highestBoosterTokenId, confirmBtn);
             
             if (success) {
-                // [FIX CRÍTICO]: Limpar e Resetar a Simulação Visual
                 amountInput.value = "";
                 updateSimulation(); 
                 updateStakingData(true); 
@@ -496,9 +506,10 @@ function setupStakingListeners() {
 }
 
 async function handleUnstake(index, isForce) {
+    // V5 NOVO: Passa o ID do Booster (0n se não tiver)
     const success = isForce 
-        ? await executeForceUnstake(Number(index))
-        : await executeUnstake(Number(index));
+        ? await executeForceUnstake(Number(index), highestBoosterTokenId)
+        : await executeUnstake(Number(index), highestBoosterTokenId);
     
     if (success) updateStakingData(true);
 }
@@ -506,7 +517,8 @@ async function handleUnstake(index, isForce) {
 async function handleClaimRewards(stakingRewards, minerRewards, btn) {
     btn.disabled = true;
     btn.innerHTML = `<div class="loader inline-block"></div>`;
-    const success = await executeUniversalClaim(stakingRewards, minerRewards, btn);
+    // V5 NOVO: Passa o ID do Booster (0n se não tiver)
+    const success = await executeUniversalClaim(stakingRewards, minerRewards, highestBoosterTokenId, btn);
     if (success) {
         showToast("Rewards claimed!", "success");
         updateStakingData(true);

@@ -1,4 +1,3 @@
-// scripts/manage_rules.ts
 import { ethers } from "hardhat";
 import { HardhatRuntimeEnvironment } from "hardhat/types";
 import fs from "fs";
@@ -12,7 +11,7 @@ const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 const DESCRIPTION_KEYS = ["DESCRIPTION", "COMMENT"];
 
 /**
- * Função robusta para processar categorias do EcosystemManager (Hub)
+ * Robust function to process EcosystemManager (Hub) rule categories.
  */
 async function processRuleCategory(
     hub: any, 
@@ -25,18 +24,18 @@ async function processRuleCategory(
     if (!rules) return;
     
     for (const ruleKey of Object.keys(rules)) {
-        // Ignora chaves de comentário
+        // Ignore comment keys
         if (DESCRIPTION_KEYS.includes(ruleKey.toUpperCase())) continue;
 
         const valueStr = rules[ruleKey];
         if (valueStr && valueStr.trim() !== "") {
             try {
-                // Converte o valor (Wei ou Inteiro)
+                // Convert value (Wei or Integer/Bips)
                 const valueBigInt = converter(valueStr);
                 
                 let finalKey: string | bigint;
                 
-                // Define se a chave é String (Hash) ou Número (Booster)
+                // Determine if key is a String (Hash) or Number (Booster ID)
                 if (isBoosterDiscount) {
                     finalKey = converter(ruleKey); 
                 } else {
@@ -45,22 +44,22 @@ async function processRuleCategory(
                 
                 console.log(`   -> UPDATING ${description} [${ruleKey}] to ${valueStr}...`);
                 
-                // Executa a transação
+                // Execute transaction
                 const tx = await setter(finalKey, valueBigInt);
                 await tx.wait();
                 
                 console.log("   ✅ SUCCESS.");
-                await sleep(500); // Pausa para evitar rate limit do RPC
+                await sleep(500); // Pause to avoid RPC rate limits
             } catch (e: any) {
                  console.error(`   ❌ ERROR applying rule [${ruleKey}]: ${e.message}`);
-                 // Não aborta o script, apenas loga o erro
+                 // Don't abort script, just log error
             }
         }
     }
 }
 
 /**
- * Função ESPECIAL para os Tiers do Fortune Pool (ID -> Chance,Multiplier)
+ * Special function for Fortune Pool Tiers (ID -> Range, Multiplier)
  */
 async function processFortuneTiers(fortunePool: any, rules: any) {
     if (!rules || !fortunePool) return;
@@ -70,18 +69,18 @@ async function processFortuneTiers(fortunePool: any, rules: any) {
     for (const tierIdStr of Object.keys(rules)) {
         if (DESCRIPTION_KEYS.includes(tierIdStr.toUpperCase())) continue;
 
-        const valueStr = rules[tierIdStr]; // Formato esperado: "3,20000"
+        const valueStr = rules[tierIdStr]; // Expected format: "50,20000" (Range 50, 2x Multiplier)
         if (valueStr && valueStr.includes(",")) {
             try {
-                const [chanceStr, multStr] = valueStr.split(",");
+                const [rangeStr, multStr] = valueStr.split(",");
                 const tierId = BigInt(tierIdStr);
-                const chance = BigInt(chanceStr.trim());
+                const range = BigInt(rangeStr.trim());
                 const multiplier = BigInt(multStr.trim());
 
-                console.log(`   -> SETTING Tier ${tierId}: Chance 1/${chance}, Mult ${multiplier} BIPS...`);
+                console.log(`   -> SETTING Tier ${tierId}: Range 1-${range}, Mult ${multiplier} BIPS...`);
                 
-                // ABI: setPrizeTier(uint256 _tierId, uint128 _chanceDenominator, uint64 _multiplierBips)
-                const tx = await fortunePool.setPrizeTier(tierId, chance, multiplier);
+                // ABI: setPrizeTier(uint256 _tierId, uint128 _range, uint64 _multiplierBips)
+                const tx = await fortunePool.setPrizeTier(tierId, range, multiplier);
                 await tx.wait();
                 
                 console.log("   ✅ SUCCESS.");
@@ -104,30 +103,30 @@ export async function runScript(hre: HardhatRuntimeEnvironment) {
   console.log(`Using account: ${deployer.address}`);
   console.log("----------------------------------------------------");
 
-  // --- 1. Carregar Endereços ---
+  // --- 1. Load Addresses ---
   const addressesFilePath = path.join(__dirname, "../deployment-addresses.json");
   if (!fs.existsSync(addressesFilePath)) throw new Error("Missing deployment-addresses.json");
   
   const addresses = JSON.parse(fs.readFileSync(addressesFilePath, "utf8"));
   const hubAddress = addresses.ecosystemManager;
-  const fortuneAddress = addresses.fortunePool; // Pega o endereço do jogo
+  const fortuneAddress = addresses.fortunePool;
 
   if (!hubAddress) throw new Error("EcosystemManager address not found in JSON.");
 
-  // --- 2. Conectar aos Contratos ---
+  // --- 2. Connect to Contracts ---
   const hub = await ethers.getContractAt("EcosystemManager", hubAddress, deployer);
   
-  // Conecta ao Fortune Pool apenas se o endereço existir no JSON
+  // Connect to Fortune Pool only if address exists
   let fortunePool = null;
   if (fortuneAddress) {
-      // Interface manual mínima para evitar dependência de artifacts complexos
+      // Manual minimal ABI to avoid complex artifact dependencies
       const fortuneAbi = ["function setPrizeTier(uint256, uint128, uint64) external"];
       fortunePool = new ethers.Contract(fortuneAddress, fortuneAbi, deployer);
       console.log(`Connected to Fortune Pool at: ${fortuneAddress}`);
   }
   console.log(`Connected to Hub at: ${hubAddress}`);
 
-  // --- 3. Carregar Regras do JSON ---
+  // --- 3. Load Rules from JSON ---
   const rulesConfigPath = path.join(__dirname, "../rules-config.json"); 
   if (!fs.existsSync(rulesConfigPath)) throw new Error("rules-config.json not found.");
   
@@ -137,15 +136,15 @@ export async function runScript(hre: HardhatRuntimeEnvironment) {
   try {
     console.log("\nInitiating rule verification and application...");
 
-    // --- CONVERSORES ---
-    // Para valores monetários (1 BKC = 10^18 Wei)
+    // --- CONVERTERS ---
+    // For monetary values (1 BKC = 10^18 Wei)
     const weiConverter = (value: string) => ethers.parseUnits(value, 18);
-    // Para valores inteiros puros (BIPS, pStake simples)
+    // For pure integer values (BIPS, Quantities)
     const bigIntConverter = (value: string) => BigInt(value);
     
-    // --- EXECUÇÃO DAS REGRAS DO HUB ---
+    // --- EXECUTE HUB RULES ---
 
-    // A. Service Fees (Usa Wei Converter)
+    // A. Service Fees (Wei Values) - e.g., Notary Fee
     await processRuleCategory(
         hub, 
         RULES_TO_APPLY.serviceFees, 
@@ -154,16 +153,11 @@ export async function runScript(hre: HardhatRuntimeEnvironment) {
         "Service Fee (BKC)"
     );
 
-    // B. pStake Minimum (Usa BigInt Converter - CORREÇÃO CRÍTICA MANTIDA)
-    await processRuleCategory(
-        hub, 
-        RULES_TO_APPLY.pStakeMinimums, 
-        (k, v) => hub.setPStakeMinimum(k, v), 
-        bigIntConverter, 
-        "pStake Minimum"
-    );
+    // NOTE: 'pStakeMinimums' removed as Open Access architecture does not support gatekeeping.
 
-    // C. Staking Fees (BIPS)
+    // B. Staking Fees (BIPS)
+    // Both Staking Fees and AMM Taxes use 'setServiceFee' in the contract, 
+    // but we use bigIntConverter because they are BIPS (100 = 1%).
     await processRuleCategory(
         hub, 
         RULES_TO_APPLY.stakingFees, 
@@ -172,7 +166,7 @@ export async function runScript(hre: HardhatRuntimeEnvironment) {
         "Staking Fee (BIPS)"
     );
     
-    // D. AMM Tax Fees (BIPS)
+    // C. AMM Tax Fees (BIPS)
     await processRuleCategory(
         hub, 
         RULES_TO_APPLY.ammTaxFees, 
@@ -181,7 +175,7 @@ export async function runScript(hre: HardhatRuntimeEnvironment) {
         "AMM Tax (BIPS)"
     );
 
-    // E. Booster Discounts (BIPS)
+    // D. Booster Discounts (BIPS)
     await processRuleCategory(
         hub, 
         RULES_TO_APPLY.boosterDiscounts, 
@@ -191,7 +185,7 @@ export async function runScript(hre: HardhatRuntimeEnvironment) {
         true
     );
 
-    // F. Mining Distribution (BIPS)
+    // E. Mining Distribution (BIPS)
     await processRuleCategory(
         hub, 
         RULES_TO_APPLY.miningDistribution, 
@@ -200,7 +194,7 @@ export async function runScript(hre: HardhatRuntimeEnvironment) {
         "Mining Distribution (BIPS)"
     );
 
-    // G. Fee Distribution (BIPS)
+    // F. Fee Distribution (BIPS)
     await processRuleCategory(
         hub, 
         RULES_TO_APPLY.feeDistribution, 
@@ -209,7 +203,7 @@ export async function runScript(hre: HardhatRuntimeEnvironment) {
         "Fee Distribution (BIPS)"
     );
 
-    // H. Fortune Pool Tiers (Novidade!)
+    // G. Fortune Pool Tiers
     if (fortunePool && RULES_TO_APPLY.fortunePoolTiers) {
         await processFortuneTiers(fortunePool, RULES_TO_APPLY.fortunePoolTiers);
     } else {

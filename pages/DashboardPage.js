@@ -1,5 +1,5 @@
 // js/pages/DashboardPage.js
-// ✅ FINAL VERSION V8.2: Production Faucet URL Configured
+// ✅ FINAL VERSION V5.3: VPS Ready + Faucet Fix + History Optimized
 
 const ethers = window.ethers;
 
@@ -13,7 +13,7 @@ import {
     calculateClaimDetails,
     API_ENDPOINTS
 } from '../modules/data.js';
-import { executeUniversalClaim, executeInternalFaucet } from '../modules/transactions.js';
+import { executeUniversalClaim } from '../modules/transactions.js';
 import {
     formatBigNumber, formatPStake, renderLoading,
     renderNoData, renderError
@@ -43,7 +43,9 @@ const DashboardState = {
 // -----------------------------------------------------------
 const EXPLORER_BASE_URL = "https://sepolia.arbiscan.io/tx/";
 
-// ✅ URL DE PRODUÇÃO CORRIGIDA
+// ⚠️ AJUSTE PARA SUA VPS:
+// Se você ainda não configurou o domínio 'api.backcoin.org', troque pela URL da sua VPS.
+// Exemplo: "http://SEU_IP_DA_DIGITALOCEAN:8080/faucet"
 const FAUCET_API_URL = "https://api.backcoin.org/faucet"; 
 
 const EXTERNAL_FAUCETS = [
@@ -56,6 +58,7 @@ const EXTERNAL_FAUCETS = [
 function formatDate(timestamp) {
     if (!timestamp) return 'Just now';
     try {
+        // Compatibilidade com Firestore Timestamp (_seconds) e Date ISO
         if (timestamp.seconds || timestamp._seconds) {
             const secs = timestamp.seconds || timestamp._seconds;
             return new Date(secs * 1000).toLocaleString(); 
@@ -75,15 +78,21 @@ function animateClaimableRewards(targetNetValue) {
         return;
     }
     const diff = targetNetValue - displayedRewardValue;
+    // Animação suave (Lerp)
     if (diff > -1000000000n && diff < 1000000000n) displayedRewardValue = targetNetValue;
     else displayedRewardValue += diff / 8n; 
+    
     if (displayedRewardValue < 0n) displayedRewardValue = 0n;
+    
     rewardsEl.innerHTML = `${formatBigNumber(displayedRewardValue).toFixed(4)} <span class="text-sm text-amber-500">$BKC</span>`;
-    if (displayedRewardValue !== targetNetValue) animationFrameId = requestAnimationFrame(() => animateClaimableRewards(targetNetValue));
+    
+    if (displayedRewardValue !== targetNetValue) {
+        animationFrameId = requestAnimationFrame(() => animateClaimableRewards(targetNetValue));
+    }
 }
 
 // -------------------------------------------------------------
-// ⚡ REQUISITAR FAUCET AO BACKEND
+// ⚡ REQUISITAR FAUCET AO BACKEND (VPS)
 // -------------------------------------------------------------
 async function requestSmartFaucet(btnElement) {
     if (!State.isConnected || !State.userAddress) return showToast("Connect wallet first", "error");
@@ -93,31 +102,35 @@ async function requestSmartFaucet(btnElement) {
     btnElement.innerHTML = `<i class="fa-solid fa-circle-notch fa-spin mr-2"></i> Sending...`;
 
     try {
-        // Agora tenta a requisição de produção
+        // Faz a chamada para a sua API na VPS
         const response = await fetch(`${FAUCET_API_URL}?address=${State.userAddress}`);
         const data = await response.json();
 
         if (response.ok && data.success) {
-            showToast("✅ Starter Pack Sent! (0.005 ETH + 20 BKC)", "success");
+            showToast("✅ Starter Pack Sent! (0.002 ETH + 20 BKC)", "success");
+            
+            // Esconde o widget após sucesso
             const widget = document.getElementById('dashboard-faucet-widget');
             if(widget) widget.classList.add('hidden');
             const modal = document.getElementById('no-gas-modal-dash');
             if(modal) modal.classList.add('hidden');
 
+            // Atualiza a tela após alguns segundos para refletir o saldo
             setTimeout(() => DashboardPage.update(true), 4000); 
         } else {
             const msg = data.error || "Faucet unavailable";
-            showToast(`⏳ ${msg}`, "warning");
+            // Se for erro de cooldown, avisa o usuário
+            if (msg.includes("Cooldown")) showToast(`⏳ ${msg}`, "warning");
+            else showToast(`❌ ${msg}`, "error");
         }
     } catch (e) {
         console.error("Faucet API Error:", e);
-        showToast("Faucet Service Offline (Check Network/CORS)", "error");
+        showToast("Faucet Service Offline. Check VPS connection.", "error");
     } finally {
         btnElement.disabled = false;
         btnElement.innerHTML = originalHTML;
     }
 }
-
 
 // -------------------------------------------------------------
 // GAS GUARD: Check for Sepolia ETH
@@ -139,7 +152,7 @@ async function checkGasAndWarn() {
         return true;
     } catch (e) {
         console.error("Gas check failed", e);
-        return true; 
+        return true; // Assume success if check fails to avoid blocking
     }
 }
 
@@ -174,13 +187,10 @@ function renderDashboardLayout() {
                     <div id="dashboard-faucet-widget" class="hidden glass-panel border-l-4 transition-all duration-500 bg-gradient-to-r from-zinc-900/50 to-transparent">
                         <div class="flex flex-col sm:flex-row justify-between items-center gap-4">
                             <div>
-                                <h3 id="faucet-title" class="text-white font-bold flex items-center gap-2">
-                                    </h3>
-                                <p id="faucet-desc" class="text-sm text-zinc-400 mt-1">
-                                    </p>
+                                <h3 id="faucet-title" class="text-white font-bold flex items-center gap-2"></h3>
+                                <p id="faucet-desc" class="text-sm text-zinc-400 mt-1"></p>
                             </div>
-                            <button id="faucet-action-btn" class="w-full sm:w-auto font-bold py-2.5 px-6 rounded-lg shadow-lg transition-transform hover:scale-105 whitespace-nowrap">
-                                </button>
+                            <button id="faucet-action-btn" class="w-full sm:w-auto font-bold py-2.5 px-6 rounded-lg shadow-lg transition-transform hover:scale-105 whitespace-nowrap"></button>
                         </div>
                     </div>
 
@@ -236,7 +246,7 @@ function renderDashboardLayout() {
                             <h3 class="text-sm font-bold text-amber-500 uppercase tracking-widest">
                                 <i class="fa-solid fa-star mr-2"></i> Presale Portfolio
                             </h3>
-                            <span class="text-xs text-zinc-500">Synced via Indexer V9.8</span>
+                            <span class="text-xs text-zinc-500">Synced via Indexer V5.2</span>
                         </div>
                         <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
                             <div class="bg-zinc-900/50 rounded-lg p-3 border border-zinc-800">
@@ -277,7 +287,7 @@ function renderDashboardLayout() {
                         </div>
 
                         <div id="dash-activity-list" class="space-y-3 min-h-[200px]">
-                            ${renderNoData("Connect wallet to view activity.")}
+                            ${renderNoData("Connect wallet to view history.")}
                         </div>
                         
                         <div id="dash-pagination-controls" class="flex justify-between items-center mt-6 pt-4 border-t border-zinc-700/30 hidden">
@@ -439,6 +449,7 @@ async function updateGlobalMetrics() {
             if (addr && ethers.isAddress(addr)) uniqueAddrs.add(addr);
         }
 
+        // Calcula Supply Bloqueado aproximado
         for (const addr of uniqueAddrs) {
             try { 
                 const bal = await safeContractCall(State.bkcTokenContractPublic, 'balanceOf', [addr], 0n);
@@ -555,7 +566,6 @@ async function updateUserHub(forceRefresh = false) {
                 btn.innerHTML = '<i class="fa-solid fa-hand-holding-medical mr-2"></i> Get Gas + Tokens';
                 btn.className = "w-full sm:w-auto bg-red-600 hover:bg-red-500 text-white font-bold py-2.5 px-6 rounded-lg shadow-lg transition-transform hover:scale-105 whitespace-nowrap";
                 
-                // Add unique identifier for click listener
                 btn.dataset.action = "gasless";
 
             } else if (bkcBalance < minBkc) {
@@ -568,7 +578,7 @@ async function updateUserHub(forceRefresh = false) {
                 btn.innerHTML = '<i class="fa-solid fa-coins mr-2"></i> Get 20 BKC';
                 btn.className = "w-full sm:w-auto bg-amber-600 hover:bg-amber-500 text-white font-bold py-2.5 px-6 rounded-lg shadow-lg transition-transform hover:scale-105 whitespace-nowrap";
                 
-                btn.dataset.action = "gasless";
+                btn.dataset.action = "gasless"; // Usa o mesmo endpoint de faucet
             } else {
                 widget.classList.add('hidden');
             }
@@ -724,6 +734,7 @@ async function fetchAndProcessActivities() {
         }
 
         if (DashboardState.activities.length === 0) {
+            // Usa o endpoint centralizado do Indexer
             const response = await fetch(`${API_ENDPOINTS.getHistory}/${State.userAddress}`);
             if (!response.ok) throw new Error("API Error");
             DashboardState.activities = await response.json();
@@ -856,23 +867,20 @@ function attachDashboardListeners() {
             if (target.closest('#manual-refresh-btn')) {
                 const btn = target.closest('#manual-refresh-btn');
                 btn.disabled = true;
-                btn.innerHTML = '<i class="fa-solid fa-rotate fa-spin"></i> Syncing...';
+                btn.innerHTML = `<i class="fa-solid fa-rotate fa-spin"></i> Syncing...`;
+                
                 await updateUserHub(true); 
                 DashboardState.activities = []; 
                 await fetchAndProcessActivities(); 
-                setTimeout(() => { btn.innerHTML = '<i class="fa-solid fa-rotate"></i> Sync Data'; btn.disabled = false; }, 1000);
+                
+                setTimeout(() => { btn.innerHTML = `<i class="fa-solid fa-rotate"></i> Sync Data`; btn.disabled = false; }, 1000);
             }
 
             // --- SMART BUTTON LISTENER (GAS OR BKC) ---
             if (target.closest('#faucet-action-btn')) {
                 const btn = target.closest('#faucet-action-btn');
-                const action = btn.dataset.action;
-
-                if (action === "gasless") {
-                    await requestSmartFaucet(btn);
-                } else if (action === "bkc") {
-                    await requestSmartFaucet(btn); 
-                }
+                // Chama a mesma função para Gas e BKC, pois o backend entrega ambos
+                await requestSmartFaucet(btn);
             }
             
             // --- EMERGENCY BUTTON NO MODAL ---
@@ -881,10 +889,12 @@ function attachDashboardListeners() {
                 await requestSmartFaucet(btn);
             }
 
+            // --- NAVIGATION LINKS ---
             if (target.closest('.delegate-link')) { e.preventDefault(); window.navigateTo('mine'); }
             if (target.closest('.go-to-store')) { e.preventDefault(); window.navigateTo('store'); }
             if (target.closest('.go-to-rental')) { e.preventDefault(); window.navigateTo('rental'); }
 
+            // --- BOOSTER MODAL ---
             if (target.closest('#open-booster-info')) {
                 e.preventDefault();
                 const modal = document.getElementById('booster-info-modal');
@@ -904,6 +914,7 @@ function attachDashboardListeners() {
                 }
             }
 
+            // --- GAS MODAL ---
             if (target.closest('#close-gas-modal-dash') || target === document.getElementById('no-gas-modal-dash')) {
                 e.preventDefault();
                 const modal = document.getElementById('no-gas-modal-dash');
@@ -913,6 +924,7 @@ function attachDashboardListeners() {
                 }
             }
 
+            // --- NFT WALLET ADD ---
             const nftClick = target.closest('.nft-clickable-image');
             if (nftClick) {
                 const address = nftClick.dataset.address;
@@ -920,6 +932,7 @@ function attachDashboardListeners() {
                 if(address && id) addNftToWallet(address, id);
             }
 
+            // --- CLAIM BUTTON ---
             const claimBtn = target.closest('#dashboardClaimBtn');
             if (claimBtn && !claimBtn.disabled) {
                 try {
@@ -945,13 +958,15 @@ function attachDashboardListeners() {
                         }
                     }
                 } catch (err) {
-                    showToast("Claim failed", "error");
+                    console.error(err);
+                    showToast("Claim failed. Check console.", "error");
                 } finally {
-                    claimBtn.innerHTML = '<i class="fa-solid fa-gift mr-2"></i> Claim Net Amount';
+                    claimBtn.innerHTML = '<i class="fa-solid fa-gift mr-2"></i> Claim Rewards';
                     claimBtn.disabled = false;
                 }
             }
 
+            // --- PAGINATION ---
             if (target.closest('#page-prev') && DashboardState.pagination.currentPage > 1) {
                 DashboardState.pagination.currentPage--; renderActivityPage();
             }
@@ -995,6 +1010,7 @@ export const DashboardPage = {
             const hasActivityData = DashboardState.activities.length > 0;
             const isShowingPlaceholder = activityListEl && activityListEl.innerText.includes("Connect");
 
+            // Atualiza a cada 10s ou se não houver dados
             if ((now - DashboardState.lastUpdate > 10000) || (!hasActivityData && isShowingPlaceholder)) {
                 DashboardState.lastUpdate = now;
                 updateUserHub(false); 

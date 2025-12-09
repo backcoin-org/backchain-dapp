@@ -1,11 +1,13 @@
 // js/pages/RentalPage.js
-// ✅ VERSÃO FINAL V4.1: Mobile-First UX + Robust Click Handler Fix
+// ✅ VERSÃO V5.2: Fixed 1-Hour Rental Contract Compatibility
 
 const ethers = window.ethers;
 
 import { State } from '../state.js';
 import { loadRentalListings, loadUserRentals, loadMyBoostersFromAPI, API_ENDPOINTS } from '../modules/data.js';
-import { executeListNFT, executeRentNFT, executeWithdrawNFT } from '../modules/transactions.js';
+// É crucial que executeListNFT, executeRentNFT, executeWithdrawNFT nas transações.js também tenham sido ajustados 
+// para não esperar o argumento de duração
+import { executeListNFT, executeRentNFT, executeWithdrawNFT } from '../modules/transactions.js'; 
 import { formatBigNumber, renderLoading, renderNoData } from '../utils.js';
 import { showToast } from '../ui-feedback.js';
 import { boosterTiers } from '../config.js'; 
@@ -26,10 +28,9 @@ style.innerHTML = `
         .rental-wrapper { 
             grid-template-columns: 1fr; 
             display: flex;
-            flex-direction: column-reverse; /* Mobile: Sidebar embaixo, Mercado em cima */
+            flex-direction: column-reverse; 
         }
         
-        /* Sidebar no mobile fica no fundo para gestão */
         .rental-sidebar {
             position: relative !important;
             top: 0 !important;
@@ -41,14 +42,14 @@ style.innerHTML = `
     .market-card {
         background: rgba(20, 20, 23, 0.7);
         border: 1px solid rgba(255, 255, 255, 0.08);
-        border-radius: 20px; /* Bordas mais arredondadas para mobile */
+        border-radius: 20px; 
         overflow: hidden;
         transition: all 0.3s ease;
         position: relative;
         display: flex;
         flex-direction: column;
     }
-    .market-card:active { transform: scale(0.98); } /* Feedback tátil */
+    .market-card:active { transform: scale(0.98); } 
 
     .card-image-area {
         width: 100%;
@@ -94,7 +95,7 @@ style.innerHTML = `
     /* BOTÕES OTIMIZADOS PARA TOQUE */
     .action-button {
         width: 100%; 
-        padding: 14px; /* Mais alto para toque */
+        padding: 14px; 
         border-radius: 12px; 
         font-weight: 800; 
         font-size: 13px; 
@@ -132,7 +133,7 @@ style.innerHTML = `
     .modal-overlay { 
         position: fixed; inset: 0; 
         background: rgba(0,0,0,0.9); 
-        z-index: 9999; /* Z-Index altíssimo para garantir */
+        z-index: 9999; 
         display: none; 
         align-items: center; 
         justify-content: center; 
@@ -422,7 +423,8 @@ function setupEventListeners() {
             btn.innerText = "PROCESSING...";
             btn.disabled = true;
             
-            const success = await executeListNFT(tokenId, ethers.parseUnits(price, 18), 1, btn);
+            // V5 FIX: Removido o argumento de duração (1)
+            const success = await executeListNFT(tokenId, ethers.parseUnits(price, 18), btn);
             if (success) await refreshRentalData();
             else { btn.innerText = "List for Rent"; btn.disabled = false; }
         });
@@ -461,12 +463,15 @@ function setupEventListeners() {
         const listing = State.rentalListings.find(l => l.tokenId === tokenId);
         
         if (!listing) return;
-        const cost = BigInt(listing.pricePerHour) * 1n; // 1h Fixa
+        
+        // CUSTO: O preço listado é o custo total da sessão fixa de 1H
+        const cost = BigInt(listing.pricePerHour); 
         
         btn.innerText = "CONFIRMING...";
         btn.disabled = true;
         
-        const success = await executeRentNFT(tokenId, 1, cost, btn);
+        // V5 FIX: Removido o argumento de duração (1)
+        const success = await executeRentNFT(tokenId, cost, btn);
         if (success) {
             closeModal();
             await refreshRentalData();

@@ -1,91 +1,74 @@
+// scripts/1_deploy_full_initial_setup.ts
 import { HardhatRuntimeEnvironment } from "hardhat/types";
-import { ethers, upgrades } from "hardhat";
 import fs from "fs";
 import path from "path";
+import { ethers } from "ethers";
 
-// --- CORE CONFIGURATION (International) ---
-
-// C1: Oracle Wallet Address (EOA that signs fulfillGame transactions & Relayer for Faucet)
-const ORACLE_WALLET_ADDRESS = "0xd7e622124b78a28c4c928b271fc9423285804f98"; 
-
-// C2: Oracle Fee paid in native ETH (0.00035 ETH)
-const NEW_ORACLE_FEE_ETH = ethers.parseEther("0.00035"); 
-
-// C3: Fixed BKC Fee for Notary Service (1 BKC)
-const NOTARY_FEE_BKC = ethers.parseEther("1"); 
-
+// --- CONFIGURAÇÃO ---
+const DEPLOY_DELAY_MS = 5000; 
 const IPFS_BASE_URI_BOOSTERS = "ipfs://bafybeibtfnc6zgeiayglticrk2bqqgleybpgageh723grbdtsdddoicwtu/";
+const DEFAULT_ORACLE_ADDRESS = "0xd7e622124b78a28c4c928b271fc9423285804f98";
 
+// Configuração dos Tiers
 const TIERS_TO_SETUP = [
-  { tierId: 0, name: "Diamond", maxSupply: 1000000, priceETH: "1.0", boostBips: 7000, metadata: "diamond_booster.json", discountBips: 7000 },
-  { tierId: 1, name: "Platinum", maxSupply: 1000000, priceETH: "0.4", boostBips: 6000, metadata: "platinum_booster.json", discountBips: 6000 },
-  { tierId: 2, name: "Gold", maxSupply: 1000000, priceETH: "0.15", boostBips: 5000, metadata: "gold_booster.json", discountBips: 5000 },
-  { tierId: 3, name: "Silver", maxSupply: 1000000, priceETH: "0.07", boostBips: 4000, metadata: "silver_booster.json", discountBips: 4000 },
-  { tierId: 4, name: "Bronze", maxSupply: 1000000, priceETH: "0.03", boostBips: 3000, metadata: "bronze_booster.json", discountBips: 3000 },
-  { tierId: 5, name: "Iron", maxSupply: 1000000, priceETH: "0.01", boostBips: 2000, metadata: "iron_booster.json", discountBips: 2000 },
-  { tierId: 6, name: "Crystal", maxSupply: 1000000, priceETH: "0.004", boostBips: 1000, metadata: "crystal_booster.json", discountBips: 1000 },
+  { tierId: 1, name: "Diamond", maxSupply: 1000000, priceETH: "1.0", boostBips: 7000, metadata: "diamond_booster.json", discountBips: 7000 },
+  { tierId: 2, name: "Platinum", maxSupply: 1000000, priceETH: "0.4", boostBips: 6000, metadata: "platinum_booster.json", discountBips: 6000 },
+  { tierId: 3, name: "Gold", maxSupply: 1000000, priceETH: "0.15", boostBips: 5000, metadata: "gold_booster.json", discountBips: 5000 },
+  { tierId: 4, name: "Silver", maxSupply: 1000000, priceETH: "0.07", boostBips: 4000, metadata: "silver_booster.json", discountBips: 4000 },
+  { tierId: 5, name: "Bronze", maxSupply: 1000000, priceETH: "0.03", boostBips: 3000, metadata: "bronze_booster.json", discountBips: 3000 },
+  { tierId: 6, name: "Iron", maxSupply: 1000000, priceETH: "0.01", boostBips: 2000, metadata: "iron_booster.json", discountBips: 2000 },
+  { tierId: 7, name: "Crystal", maxSupply: 1000000, priceETH: "0.004", boostBips: 1000, metadata: "crystal_booster.json", discountBips: 1000 },
 ];
 
 const INITIAL_FEES = {
-    "DELEGATION_FEE_BIPS": 50,           // 0.5%
-    "UNSTAKE_FEE_BIPS": 100,             // 1%
-    "FORCE_UNSTAKE_PENALTY_BIPS": 5000,  // 50%
-    "CLAIM_REWARD_FEE_BIPS": 100,        // 1%
-    "RENTAL_MARKET_TAX_BIPS": 500,       // 5%
-    "RENTAL_MARKET_ACCESS": 0,           // 0 pStake
-    "NOTARY_SERVICE": 0,                 // Fixed BKC fee set separately later
-    "NFT_POOL_ACCESS": 0,                // 0 pStake
-    "NFT_POOL_BUY_TAX_BIPS": 50,         // 0.5%
-    "NFT_POOL_SELL_TAX_BIPS": 1000       // 10%
+    "DELEGATION_FEE_BIPS": 50,           
+    "UNSTAKE_FEE_BIPS": 100,             
+    "FORCE_UNSTAKE_PENALTY_BIPS": 5000,  
+    "CLAIM_REWARD_FEE_BIPS": 100,        
+    "RENTAL_MARKET_TAX_BIPS": 500,       
+    "NFT_POOL_BUY_TAX_BIPS": 50,         
+    "NFT_POOL_SELL_TAX_BIPS": 1000,      
+    "NOTARY_SERVICE": 0                  // 1 BKC (definido na lógica)
 };
 
 const addressesFilePath = path.join(__dirname, "../deployment-addresses.json");
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 async function deployProxyWithRetry(upgrades: any, Factory: any, args: any[], name: string) {
-    console.log(`   🔨 Deploying ${name}...`);
+    console.log(`   🔨 Implantando ${name}...`);
     try {
         const contract = await upgrades.deployProxy(Factory, args, { initializer: "initialize", kind: "uups" });
         await contract.waitForDeployment();
         const address = await contract.getAddress();
         console.log(`   ✅ ${name}: ${address}`);
-        // Small pause for propagation on test net
         await sleep(2000);
         return { contract, address };
     } catch (error: any) {
-        console.error(`   ❌ Failed to deploy ${name}: ${error.message}`);
+        console.error(`   ❌ Falha ao implantar ${name}: ${error.message}`);
         throw error;
     }
 }
 
 export async function runScript(hre: HardhatRuntimeEnvironment) {
-  const { ethers } = hre;
+  const { ethers, upgrades } = hre;
   const [deployer] = await ethers.getSigners();
   const networkName = hre.network.name;
-  
-  const ZERO_ADDR = ethers.ZeroAddress;
 
-  console.log(`🚀 DEPLOY INTEGRAL V3 (FAUCET FIXED) | Network: ${networkName}`);
+  console.log(`🚀 DEPLOY UNIFICADO V5.2 (Correção de Dependência) | Rede: ${networkName}`);
   console.log(`👷 Deployer: ${deployer.address}`);
-  console.log(`🔮 Oracle Wallet Set: ${ORACLE_WALLET_ADDRESS}`);
-  
-  if (!ethers.isAddress(ORACLE_WALLET_ADDRESS) || ORACLE_WALLET_ADDRESS === ZERO_ADDR) {
-      throw new Error("❌ INVALID ORACLE ADDRESS! Please configure the constant ORACLE_WALLET_ADDRESS at the top of the script.");
-  }
-
   console.log("----------------------------------------------------");
 
-  // Clear previous file
+  // Limpeza de arquivo anterior
   const addresses: { [key: string]: string } = {};
   fs.writeFileSync(addressesFilePath, JSON.stringify({}, null, 2));
 
   try {
     // ====================================================
-    // 1. CORE ASSETS (Required Base)
+    // 1. CORE: HUB & TOKENS
     // ====================================================
-    console.log("\n📡 PHASE 1: Core Assets & Hub");
+    console.log("\n📡 FASE 1: Core & Assets");
 
-    // 1.1 EcosystemManager
+    // 1.1 EcosystemManager (Hub)
     const EcosystemManager = await ethers.getContractFactory("EcosystemManager");
     const { contract: hub, address: hubAddr } = await deployProxyWithRetry(upgrades, EcosystemManager, [deployer.address], "EcosystemManager");
     addresses.ecosystemManager = hubAddr;
@@ -100,68 +83,86 @@ export async function runScript(hre: HardhatRuntimeEnvironment) {
     const { contract: nft, address: nftAddr } = await deployProxyWithRetry(upgrades, RewardBoosterNFT, [deployer.address], "RewardBoosterNFT");
     addresses.rewardBoosterNFT = nftAddr;
 
-    // PARTIAL CONFIG 1: Register Token and NFT in Hub
-    console.log("   🔌 Executing Pre-Wiring 1 (Core Assets)...");
+    // --- FIX: PRÉ-WIRING 1 ---
+    // Precisamos registrar o BKC no Hub AGORA, senão o MiningManager falha ao tentar achar o token.
+    console.log("   ⚠️ Pré-Configuração 1: Registrando BKC e NFT no Hub...");
     await (await hub.setAddresses(
         bkcAddr,
-        deployer.address, // Temporary Treasury
-        ZERO_ADDR, nftAddr, ZERO_ADDR, ZERO_ADDR, ZERO_ADDR, ZERO_ADDR
+        deployer.address, // Treasury
+        ethers.ZeroAddress, // DM (ainda não existe)
+        nftAddr,
+        ethers.ZeroAddress, // MM (ainda não existe)
+        ethers.ZeroAddress, // Notary
+        ethers.ZeroAddress, // Fortune
+        ethers.ZeroAddress  // Factory
     )).wait();
-    console.log("   ✅ Hub knows BKC and NFT.");
+
 
     // ====================================================
     // 2. MANAGERS (SPOKES)
     // ====================================================
-    console.log("\n🧠 PHASE 2: Managers (Spokes)");
+    console.log("\n🧠 FASE 2: Managers (Spokes)");
 
     // 2.1 MiningManager
+    // Agora vai funcionar, pois ele vai consultar o Hub e encontrar o endereço do BKC
     const MiningManager = await ethers.getContractFactory("MiningManager");
     const { contract: miningManager, address: mmAddr } = await deployProxyWithRetry(upgrades, MiningManager, [hubAddr], "MiningManager");
     addresses.miningManager = mmAddr;
+
+    // --- FIX: PRÉ-WIRING 2 ---
+    // Precisamos registrar o MiningManager no Hub, pois o Notary depende dele no Init.
+    console.log("   ⚠️ Pré-Configuração 2: Registrando MiningManager no Hub...");
+    await (await hub.setAddresses(
+        bkcAddr,
+        deployer.address,
+        ethers.ZeroAddress, // DM
+        nftAddr,
+        mmAddr, // <--- Atualizado
+        ethers.ZeroAddress, // Notary
+        ethers.ZeroAddress, // Fortune
+        ethers.ZeroAddress  // Factory
+    )).wait();
 
     // 2.2 DelegationManager
     const DelegationManager = await ethers.getContractFactory("DelegationManager");
     const { address: dmAddr } = await deployProxyWithRetry(upgrades, DelegationManager, [deployer.address, hubAddr], "DelegationManager");
     addresses.delegationManager = dmAddr;
 
-    // --- Pre-Wiring Managers ---
-    console.log("   🔌 Executing Pre-Wiring 2 (Registering Managers)...");
+    // --- FIX: PRÉ-WIRING 3 ---
+    // Precisamos registrar o DelegationManager no Hub, pois o FortunePool depende dele no Init.
+    console.log("   ⚠️ Pré-Configuração 3: Registrando DelegationManager no Hub...");
     await (await hub.setAddresses(
         bkcAddr,
         deployer.address,
-        dmAddr, // DelegationManager registered
+        dmAddr, // <--- Atualizado
         nftAddr,
-        mmAddr, // MiningManager registered
-        ZERO_ADDR, ZERO_ADDR, ZERO_ADDR
+        mmAddr,
+        ethers.ZeroAddress, // Notary
+        ethers.ZeroAddress, // Fortune
+        ethers.ZeroAddress  // Factory
     )).wait();
-    console.log("   ✅ Hub knows Mining and Delegation Managers (Notary safe to deploy).");
 
     // 2.3 DecentralizedNotary
+    // Init requer BKC e MM (Já configurados no Wiring 1 e 2)
     const DecentralizedNotary = await ethers.getContractFactory("DecentralizedNotary");
     const { address: notaryAddr } = await deployProxyWithRetry(upgrades, DecentralizedNotary, [deployer.address, hubAddr], "DecentralizedNotary");
     addresses.decentralizedNotary = notaryAddr;
 
     // 2.4 FortunePool
+    // Init requer BKC, MM e DM (Configurados nos Wirings 1, 2 e 3)
     const FortunePool = await ethers.getContractFactory("FortunePool");
-    const { contract: fortuneContract, address: fortuneAddr } = await deployProxyWithRetry(upgrades, FortunePool, [
-        deployer.address, 
+    const { address: fortuneAddr } = await deployProxyWithRetry(upgrades, FortunePool, [
+        deployer.address,
         hubAddr 
     ], "FortunePool");
     addresses.fortunePool = fortuneAddr;
-    
-    // C1 & C2: Configure Oracle Address and Fee
-    console.log(`   ⚙️ Configuring Oracle on FortunePool (${ORACLE_WALLET_ADDRESS})...`);
-    await (await fortuneContract.setOracleAddress(ORACLE_WALLET_ADDRESS)).wait();
-    
-    console.log("   ⚙️ Configuring Initial Oracle Fee (0.00035 ETH)...");
-    await (await fortuneContract.setOracleFee(NEW_ORACLE_FEE_ETH)).wait();
 
     // 2.5 RentalManager
     const RentalManager = await ethers.getContractFactory("RentalManager");
     const { address: rentalAddr } = await deployProxyWithRetry(upgrades, RentalManager, [hubAddr, nftAddr], "RentalManager");
     addresses.rentalManager = rentalAddr;
 
-    // 2.6 NFT Pools
+    // 2.6 NFT Pools (Factory & Implementation)
     const NFTLiquidityPool = await ethers.getContractFactory("NFTLiquidityPool");
     const poolImpl = await NFTLiquidityPool.deploy();
     await poolImpl.waitForDeployment();
@@ -176,43 +177,36 @@ export async function runScript(hre: HardhatRuntimeEnvironment) {
     // ====================================================
     // 3. UTILITIES & SALES
     // ====================================================
-    console.log("\n🛠️ PHASE 3: Utilities");
+    console.log("\n🛠️ FASE 3: Utilities");
 
+    // 3.1 PublicSale
     const PublicSale = await ethers.getContractFactory("PublicSale");
     const { contract: sale, address: saleAddr } = await deployProxyWithRetry(upgrades, PublicSale, [nftAddr, hubAddr, deployer.address], "PublicSale");
     addresses.publicSale = saleAddr;
 
-    // -------- FAUCET ADJUSTMENT START --------
+    // 3.2 Faucet
     const SimpleBKCFaucet = await ethers.getContractFactory("SimpleBKCFaucet");
-    
-    // Configurações Iniciais do Faucet
-    const FAUCET_TOKENS_PER_CLAIM = ethers.parseEther("20");  // 20 BKC
-    const FAUCET_ETH_PER_CLAIM = ethers.parseEther("0.008"); // 0.008 ETH (Ajuste se precisar)
-
     const { address: faucetAddr } = await deployProxyWithRetry(upgrades, SimpleBKCFaucet, [
         bkcAddr, 
-        ORACLE_WALLET_ADDRESS, // Usa o Oracle como Relayer
-        FAUCET_TOKENS_PER_CLAIM,
-        FAUCET_ETH_PER_CLAIM
+        deployer.address, 
+        ethers.parseEther("20"), 
+        ethers.parseEther("0.001") 
     ], "SimpleBKCFaucet");
-    
     addresses.faucet = faucetAddr;
-    // -------- FAUCET ADJUSTMENT END --------
 
-    // Save Oracle address to JSON for the indexer/backend (Script 3 will use it)
-    addresses.oracleWalletAddress = ORACLE_WALLET_ADDRESS;
+    addresses.oracleWalletAddress = DEFAULT_ORACLE_ADDRESS;
     addresses.bkcDexPoolAddress = "https://app.uniswap.org/#/swap?chain=arbitrum";
     fs.writeFileSync(addressesFilePath, JSON.stringify(addresses, null, 2));
 
     // ====================================================
     // 4. WIRING FINAL
     // ====================================================
-    console.log("\n🔌 PHASE 4: Final Wiring (Complete Connection)");
+    console.log("\n🔌 FASE 4: Conectando o Sistema (Wiring Final)");
 
-    console.log("   -> Setting ALL addresses in the Hub...");
+    console.log("   -> Configurando Hub com todos os endereços FINAIS...");
     const txHub = await hub.setAddresses(
         bkcAddr,
-        deployer.address,
+        deployer.address, 
         dmAddr,
         nftAddr,
         mmAddr,
@@ -221,46 +215,44 @@ export async function runScript(hre: HardhatRuntimeEnvironment) {
         factoryAddr
     );
     await txHub.wait();
-    console.log("   ✅ Ecosystem fully interconnected.");
+    console.log("   ✅ Hub Atualizado.");
 
-    console.log("   -> Authorizing Miners (MiningManager)...");
+    console.log("   -> Autorizando Mineradores no MiningManager...");
     const miners = [
         { key: "NOTARY_SERVICE", addr: notaryAddr },
-        { key: "RENTAL_MARKET_TAX_BIPS", addr: rentalAddr },
-        { key: "TIGER_GAME_SERVICE", addr: fortuneAddr },
+        { key: "RENTAL_MARKET_TAX_BIPS", addr: rentalAddr }, 
+        { key: "TIGER_GAME_SERVICE", addr: fortuneAddr },     
     ];
     for (const m of miners) {
         const keyHash = ethers.keccak256(ethers.toUtf8Bytes(m.key));
         await (await miningManager.setAuthorizedMiner(keyHash, m.addr)).wait();
-        console.log(`      + Authorized: ${m.key}`);
+        console.log(`      + Autorizado: ${m.key}`);
     }
 
-    // C4: Distribution BIPS (75% Delegator / 25% Treasury)
+    // Configurando Distribuição
     const POOL_TREASURY = ethers.keccak256(ethers.toUtf8Bytes("TREASURY"));
     const POOL_DELEGATOR = ethers.keccak256(ethers.toUtf8Bytes("DELEGATOR_POOL"));
     
-    await (await hub.setMiningDistributionBips(POOL_TREASURY, 2500)).wait();
-    await (await hub.setMiningDistributionBips(POOL_DELEGATOR, 7500)).wait();
-    await (await hub.setFeeDistributionBips(POOL_TREASURY, 2500)).wait();
-    await (await hub.setFeeDistributionBips(POOL_DELEGATOR, 7500)).wait();
-    console.log("   ✅ Distribution Rules Configured (Treasury 25% / Delegator 75%).");
+    await (await hub.setMiningDistributionBips(POOL_TREASURY, 5000)).wait();
+    await (await hub.setMiningDistributionBips(POOL_DELEGATOR, 5000)).wait();
+    await (await hub.setFeeDistributionBips(POOL_TREASURY, 5000)).wait();
+    await (await hub.setFeeDistributionBips(POOL_DELEGATOR, 5000)).wait();
+    console.log("   ✅ Regras de Distribuição Configuradas.");
 
-    console.log("   -> Configuring Fees and Economic Rules...");
-    
-    // Notary service fee must be set separately as it's a fixed BKC amount, not BIPS.
-    const NOTARY_KEY = ethers.id("NOTARY_SERVICE");
-    await (await hub.setServiceFee(NOTARY_KEY, NOTARY_FEE_BKC)).wait(); // <-- C3: 1 BKC
-
+    console.log("   -> Configurando Taxas e Regras Econômicas...");
     for (const [key, val] of Object.entries(INITIAL_FEES)) {
         const keyHash = ethers.id(key);
-        if (key.includes("ACCESS") || key.includes("MINIMUM")) {
-             await (await hub.setPStakeMinimum(keyHash, BigInt(val))).wait();
-        } else if (key !== "NOTARY_SERVICE") { // Skip Notary as it's already set in BKC units
+        
+        if (key === "NOTARY_SERVICE") {
+             const notaryFee = ethers.parseEther("1"); // 1 BKC
+             await (await hub.setServiceFee(keyHash, notaryFee)).wait();
+             console.log(`      + Taxa Notary configurada: 1 BKC`);
+        } else {
              await (await hub.setServiceFee(keyHash, BigInt(val))).wait();
         }
     }
 
-    console.log("   -> Configuring Store and NFTs...");
+    console.log("   -> Configurando Loja (PublicSale) e NFTs...");
     await (await nft.setSaleContractAddress(saleAddr)).wait();
     await (await nft.setBaseURI(IPFS_BASE_URI_BOOSTERS)).wait();
 
@@ -269,29 +261,29 @@ export async function runScript(hre: HardhatRuntimeEnvironment) {
             BigInt(tier.tierId),
             ethers.parseEther(tier.priceETH),
             BigInt(tier.maxSupply),
-            BigInt(tier.boostBips),
+            BigInt(tier.boostBips), 
             tier.metadata
         )).wait();
         
         if (tier.discountBips > 0) {
             await (await hub.setBoosterDiscount(BigInt(tier.boostBips), BigInt(tier.discountBips))).wait();
         }
-        console.log(`      + Tier ${tier.name} configured.`);
+        console.log(`      + Tier ${tier.name} configurado.`);
     }
 
     // ====================================================
     // 5. OWNERSHIP TRANSFER
     // ====================================================
-    console.log("\n🔥 PHASE 5: Ownership Transfer");
+    console.log("\n🔥 FASE 5: Transferência de Controle (CRÍTICO)");
     
-    console.log("   -> Transferring BKC Ownership to MiningManager...");
+    console.log("   -> Transferindo Propriedade do BKC para MiningManager...");
     await (await bkc.transferOwnership(mmAddr)).wait();
-    console.log("   ✅ MiningManager now controls BKC emission.");
+    console.log("   ✅ MiningManager agora controla a emissão de BKC.");
 
-    console.log("\n🎉 SETUP COMPLETE SUCCESSFULLY!");
+    console.log("\n🎉 SETUP COMPLETO COM SUCESSO!");
     
   } catch (error: any) {
-    console.error("\n❌ FATAL DEPLOYMENT ERROR:", error.message);
+    console.error("\n❌ ERRO FATAL NO DEPLOY:", error.message);
     process.exit(1);
   }
 }

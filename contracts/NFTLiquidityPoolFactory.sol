@@ -12,7 +12,9 @@ import "./IInterfaces.sol";
  * @title NFT Liquidity Pool Factory
  * @notice Deploys and tracks AMM pools for Backcoin ($BKC) Boosters.
  * @dev Acts as a registry for valid pools using the 'isPool' mapping.
-* Optimized for Arbitrum Network.
+ * Part of the Backcoin Ecosystem.
+ * Website: Backcoin.org
+ * Optimized for Arbitrum Network.
  */
 contract NFTLiquidityPoolFactory is
     Initializable,
@@ -25,9 +27,8 @@ contract NFTLiquidityPoolFactory is
     address public poolImplementation;
     address public ecosystemManagerAddress;
 
-    // CRÍTICO: Permite que o MiningManager verifique se o chamador é um Pool legítimo
-    mapping(address => bool) public isPool; 
-    
+    // Critical: Allows MiningManager to verify if caller is a legit Pool
+    mapping(address => bool) public isPool;
     mapping(uint256 => address) public getPoolAddress;
     uint256[] public deployedBoostBips;
 
@@ -37,7 +38,7 @@ contract NFTLiquidityPoolFactory is
     event EcosystemManagerSet(address indexed ecosystemManager);
     event PoolDeployed(uint256 indexed boostBips, address indexed poolAddress);
 
-    // --- Custom Errors (Gas Saving) ---
+    // --- Custom Errors ---
 
     error InvalidAddress();
     error PoolAlreadyExists();
@@ -65,7 +66,6 @@ contract NFTLiquidityPoolFactory is
 
         ecosystemManagerAddress = _ecosystemManagerAddress;
         poolImplementation = _poolImplementation;
-        
         _transferOwnership(_initialOwner);
     }
 
@@ -92,15 +92,15 @@ contract NFTLiquidityPoolFactory is
         if (getPoolAddress[_boostBips] != address(0)) revert PoolAlreadyExists();
         if (poolImplementation == address(0)) revert ImplementationNotSet();
 
-        // Padrão Clone (EIP-1167) para economizar muito gás no deploy
+        // Clone Pattern (EIP-1167) for massive gas savings
         address cloneAddress = Clones.clone(poolImplementation);
-
-        // CRÍTICO: Registrar o pool imediatamente
+        
+        // Register the pool immediately
         isPool[cloneAddress] = true;
         getPoolAddress[_boostBips] = cloneAddress;
         deployedBoostBips.push(_boostBips);
 
-        // Inicializa o clone
+        // Initialize the clone
         NFTLiquidityPool(cloneAddress).initialize(
             owner(),
             ecosystemManagerAddress,

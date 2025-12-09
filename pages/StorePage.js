@@ -1,5 +1,5 @@
 // pages/StorePage.js
-// ✅ VERSÃO FINAL V7.2: Tax Visibility (10%) + Modal CSS Fix
+// ✅ VERSÃO V5.3: Removida a Verificação de pStake (Acesso Livre)
 
 const ethers = window.ethers;
 
@@ -25,7 +25,7 @@ function formatDate(timestamp) {
 
 // --- HELPER: BLOCKCHAIN EXPLORER URL ---
 function getExplorerUrl(txHash) {
-    const baseUrl = "https://sepolia.etherscan.io/tx/";
+    const baseUrl = "https://sepolia.arbiscan.io/tx/";
     return `${baseUrl}${txHash}`;
 }
 
@@ -141,6 +141,7 @@ const TradeState = {
     firstAvailableTokenIdForBuy: null,
     bestBoosterTokenId: 0n, 
     bestBoosterBips: 0, 
+    // V5 FIX: Requisito de pStake removido. Deve ser sempre true.
     meetsPStakeRequirement: true, 
     isDataLoading: false,
     lastFetchTimestamp: 0,
@@ -353,9 +354,9 @@ function renderExecuteButton() {
     let text = "Select a Booster", active = false, actionType = "trade"; 
 
     if (!State.isConnected) { text = "Connect Wallet"; actionType = "connect"; active = true; } 
+    // V5 FIX: Removido TradeState.meetsPStakeRequirement (Acesso sempre true)
     else if (TradeState.selectedPoolBoostBips !== null) {
-        if (!TradeState.meetsPStakeRequirement) { text = "Insufficient pStake (Delegate Now)"; active = true; actionType = "delegate"; }
-        else if (TradeState.tradeDirection === 'buy') {
+        if (TradeState.tradeDirection === 'buy') {
             if (TradeState.buyPrice === 0n) text = "Price Unavailable";
             else if (TradeState.buyPrice > State.currentUserBalance) text = "Insufficient BKC Balance";
             else if (TradeState.firstAvailableTokenIdForBuy === null) text = "Sold Out";
@@ -533,13 +534,13 @@ async function loadDataForSelectedPool() {
             }
         }
 
-        const [buyPrice, sellPrice, availableTokenIds, baseTaxBips, discountBips, requiredPStake] = await Promise.all([
+        // V5 FIX: Removido requiredPStake da chamada Promise.all
+        const [buyPrice, sellPrice, availableTokenIds, baseTaxBips, discountBips] = await Promise.all([
             safeContractCall(poolContract, 'getBuyPrice', [], ethers.MaxUint256),
             safeContractCall(poolContract, 'getSellPrice', [], 0n),
             safeContractCall(poolContract, 'getAvailableTokenIds', [], []),
-            Promise.resolve(State.systemFees?.["NFT_POOL_SELL_TAX_BIPS"] || 1000n), // Força leitura da chave correta
+            Promise.resolve(State.systemFees?.["NFT_POOL_SELL_TAX_BIPS"] || 1000n),
             Promise.resolve(BigInt(State.boosterDiscounts?.[TradeState.bestBoosterBips] || 0)),
-            Promise.resolve(State.systemPStakes?.["NFT_POOL_ACCESS"] || 0n)
         ]);
 
         TradeState.firstAvailableTokenIdForBuy = (availableTokenIds.length > 0) ? BigInt(availableTokenIds[availableTokenIds.length - 1]) : null;
@@ -551,7 +552,8 @@ async function loadDataForSelectedPool() {
         const taxAmount = (sellPrice * finalTaxBips) / 10000n;
         TradeState.netSellPrice = sellPrice - taxAmount;
 
-        TradeState.meetsPStakeRequirement = !(State.isConnected && State.userTotalPStake < requiredPStake);
+        // V5 FIX: Acesso sempre TRUE (Removida a verificação de State.userTotalPStake)
+        TradeState.meetsPStakeRequirement = true; 
 
     } catch (err) {
         console.warn("Store Data Warning:", err.message);
@@ -619,9 +621,11 @@ function setupStorePageListeners() {
             const poolAddress = addresses[poolKey];
 
             if (TradeState.tradeDirection === 'buy') {
+                // V5 FIX: Passa TradeState.bestBoosterTokenId para aplicar desconto na compra
                 const success = await executeBuyBooster(poolAddress, TradeState.buyPrice, TradeState.bestBoosterTokenId, executeBtn);
                 if (success) { await loadDataForSelectedPool(); loadStoreHistory(); }
             } else {
+                // V5 FIX: Passa TradeState.bestBoosterTokenId para aplicar desconto na venda
                 const success = await executeSellBooster(poolAddress, TradeState.firstAvailableTokenId, TradeState.bestBoosterTokenId, executeBtn);
                 if (success) { await loadDataForSelectedPool(); loadStoreHistory(); }
             }

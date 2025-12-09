@@ -1,5 +1,5 @@
 // pages/RewardsPage.js
-// ✅ VERSÃO REDESENHADA: UI Premium + Proteção Anti-Crash
+// ✅ VERSÃO V5.3: Inclusão do BoosterTokenId (NFT) na transação de Claim
 
 const ethers = window.ethers;
 
@@ -90,7 +90,6 @@ export const RewardsPage = {
 
         // Cache de 1 minuto para evitar spam de RPC, exceto se forçado
         if (!forceRefresh && !isRewardsLoading && (now - lastRewardsFetch < 60000)) {
-            // Se já tem conteúdo, não faz nada. Se está vazio, carrega.
             if (contentArea && contentArea.innerHTML.includes('loader')) {
                 // Passa para o fetch
             } else {
@@ -108,11 +107,15 @@ export const RewardsPage = {
             const [claimDetails, totalGrossRewards, boosterData] = await Promise.all([
                 calculateClaimDetails(),
                 calculateUserTotalRewards(),
-                getHighestBoosterBoostFromAPI()
+                getHighestBoosterBoostFromAPI() // Busca o ID do NFT e o Boost
             ]);
 
+            // NOVO: Extrai o ID do Booster
+            const boosterTokenId = BigInt(boosterData.tokenId || 0);
+
             // Renderiza a UI com os dados frescos
-            renderRewardsUI(contentArea, claimDetails, totalGrossRewards, boosterData);
+            // Passa o boosterTokenId para ser usado na transação de Claim
+            renderRewardsUI(contentArea, claimDetails, totalGrossRewards, boosterData, boosterTokenId);
 
             lastRewardsFetch = now;
             if (updateLabel) updateLabel.innerText = `Updated: ${new Date().toLocaleTimeString()}`;
@@ -130,11 +133,10 @@ export const RewardsPage = {
 // 2. COMPONENTES DE UI (REDESENHADOS)
 // ============================================================================
 
-function renderRewardsUI(container, claimDetails, grossRewards, boosterData) {
+function renderRewardsUI(container, claimDetails, grossRewards, boosterData, boosterTokenId) {
     if (!container) return;
 
     // --- 1. TRATAMENTO DE DADOS (SEGURANÇA) ---
-    // Garante que nada seja undefined antes de formatar
     const details = claimDetails || {};
     const gross = grossRewards || { stakingRewards: 0n, minerRewards: 0n };
     const booster = boosterData || { highestBoost: 0, boostName: 'None' };
@@ -146,11 +148,7 @@ function renderRewardsUI(container, claimDetails, grossRewards, boosterData) {
     const feeBips = State.systemFees?.["CLAIM_REWARD_FEE_BIPS"] || 50n;
     const feePercent = Number(feeBips) / 100;
 
-    // Cálculos de Economia
-    // Se não tivesse booster, a taxa seria cheia. Quanto economizou?
-    // Taxa Cheia = Total * (BaseFee / 10000)
-    // Taxa Paga = feeAmount
-    // Economia = Taxa Cheia - Taxa Paga
+    // Cálculo de Economia
     const baseFeeVal = (totalReward * feeBips) / 10000n;
     const savedAmount = baseFeeVal > feeAmount ? baseFeeVal - feeAmount : 0n;
     
@@ -271,12 +269,13 @@ function renderRewardsUI(container, claimDetails, grossRewards, boosterData) {
     if (btn && hasRewards) {
         btn.onclick = async () => {
             const { stakingRewards, minerRewards } = gross;
-            await handleClaimClick(btn, stakingRewards, minerRewards);
+            // NOVO: Passa o Token ID para o Claim
+            await handleClaimClick(btn, stakingRewards, minerRewards, boosterTokenId);
         };
     }
 }
 
-async function handleClaimClick(btn, stakingRewards, minerRewards) {
+async function handleClaimClick(btn, stakingRewards, minerRewards, boosterTokenId) {
     const originalContent = btn.innerHTML;
     btn.disabled = true;
     btn.innerHTML = '<div class="loader inline-block"></div> Processing...';
@@ -284,7 +283,8 @@ async function handleClaimClick(btn, stakingRewards, minerRewards) {
     btn.classList.add('bg-zinc-700');
 
     try {
-        const success = await executeUniversalClaim(stakingRewards, minerRewards, btn);
+        // V5 FIX: Passa o boosterTokenId como argumento para o claimRewards no contrato
+        const success = await executeUniversalClaim(stakingRewards, minerRewards, boosterTokenId, btn);
         if (success) {
             showToast("Rewards claimed successfully!", "success");
             // Recarrega forçado

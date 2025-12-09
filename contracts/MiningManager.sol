@@ -15,7 +15,6 @@ import "./BKCToken.sol";
  * @notice The economic heart of the Backcoin Protocol ($BKC).
  * @dev Handles the "Proof-of-Purchase" mining mechanism with LINEAR DYNAMIC SCARCITY.
  * Optimized for Arbitrum Network.
-.
  */
 contract MiningManager is
     Initializable,
@@ -31,7 +30,7 @@ contract MiningManager is
     IEcosystemManager public ecosystemManager;
     BKCToken public bkcToken;
     address public bkcTokenAddress;
-    
+
     // Mapping optimized with bytes32 keys for gas savings
     mapping(bytes32 => address) public authorizedMiners;
     bool private tgeMinted;
@@ -39,11 +38,12 @@ contract MiningManager is
     // --- Constants ---
 
     uint256 private constant E18 = 10**18;
+
     // Dynamic Scarcity Base: 160M Tokens available for mining
     // This is the denominator for the linear scarcity curve.
     uint256 private constant MAX_MINTABLE_SUPPLY = 160000000 * E18;
 
-    // Pre-computed hashes for distribution keys to save gas during mining
+    // Pre-computed hashes for distribution keys
     bytes32 public constant POOL_TREASURY = keccak256("TREASURY");
     bytes32 public constant POOL_DELEGATOR = keccak256("DELEGATOR_POOL");
 
@@ -65,7 +65,10 @@ contract MiningManager is
         address _ecosystemManagerAddress
     ) public initializer {
         if (_ecosystemManagerAddress == address(0)) revert InvalidAddress();
+
+        // CORREÇÃO v4: __Ownable_init() sem argumentos
         __Ownable_init();
+        
         __UUPSUpgradeable_init();
         __ReentrancyGuard_init();
 
@@ -89,6 +92,9 @@ contract MiningManager is
         authorizedMiners[_serviceKey] = _spokeAddress;
     }
     
+    /**
+     * @notice Performs the initial Token Generation Event minting (One-time use).
+     */
     function initialTgeMint(address to, uint256 amount) external onlyOwner {
         if (tgeMinted) revert TGEAlreadyMinted();
         tgeMinted = true;
@@ -99,6 +105,7 @@ contract MiningManager is
 
     /**
      * @notice Universal revenue funnel for PoP mining ($BKC creation) and Fee Distribution.
+     * @dev Called by authorized Spokes (Notary, Marketplace) or Liquidity Pools.
      */
     function performPurchaseMining(
         bytes32 _serviceKey,
@@ -106,19 +113,18 @@ contract MiningManager is
     ) external nonReentrant override {
         // 1. Authorization Check
         bool isAuthorized = false;
-        
+
         // Check 1: Direct Authorization (Notary, Game, etc)
         if (authorizedMiners[_serviceKey] == msg.sender) {
             isAuthorized = true;
         } else {
             // Check 2: Valid Liquidity Pool via Factory
-            // CLEANUP: Removed complex staticcall, using clean interface
             address factoryAddress = ecosystemManager.getNFTLiquidityPoolFactoryAddress();
             if (factoryAddress != address(0)) {
                 try INFTLiquidityPoolFactory(factoryAddress).isPool(msg.sender) returns (bool valid) {
                     isAuthorized = valid;
                 } catch {
-                    // If call fails (e.g. invalid address), remains unauthorized
+                    // If call fails, remains unauthorized
                 }
             }
         }
@@ -132,6 +138,7 @@ contract MiningManager is
         // 3. --- MINING DISTRIBUTION (New Tokens) ---
         // Uses the Linear Scarcity Logic
         uint256 totalMintAmount = getMintAmount(_purchaseAmount);
+        
         if (totalMintAmount > 0) {
             uint256 miningTreasuryBips = ecosystemManager.getMiningDistributionBips(POOL_TREASURY);
             uint256 miningDelegatorBips = ecosystemManager.getMiningDistributionBips(POOL_DELEGATOR);
@@ -143,19 +150,19 @@ contract MiningManager is
 
             // Mint the total new amount to this contract first
             bkcToken.mint(address(this), totalMintAmount);
-            
-            if (mintTreasuryAmount > 0) {
+
+            if (mintTreasuryAmount > 0 && treasury != address(0)) {
                 bkcToken.safeTransfer(treasury, mintTreasuryAmount);
             }
 
-            if (mintDelegatorAmount > 0) {
-                // Direct transfer + Notify
+            if (mintDelegatorAmount > 0 && dm != address(0)) {
                 bkcToken.safeTransfer(dm, mintDelegatorAmount);
                 IDelegationManager(dm).depositMiningRewards(mintDelegatorAmount);
             }
         }
 
         // 4. --- FEE DISTRIBUTION (Original Tokens) ---
+        // These tokens were transferred to this contract by the Spoke before calling this function
         if (_purchaseAmount > 0) {
             uint256 feeTreasuryBips = ecosystemManager.getFeeDistributionBips(POOL_TREASURY);
             uint256 feeDelegatorBips = ecosystemManager.getFeeDistributionBips(POOL_DELEGATOR);
@@ -165,13 +172,11 @@ contract MiningManager is
             uint256 feeTreasuryAmount = (_purchaseAmount * feeTreasuryBips) / 10000;
             uint256 feeDelegatorAmount = _purchaseAmount - feeTreasuryAmount;
 
-            // Tokens are already in this contract (transferred by the Spoke)
-            if (feeTreasuryAmount > 0) {
+            if (feeTreasuryAmount > 0 && treasury != address(0)) {
                 bkcToken.safeTransfer(treasury, feeTreasuryAmount);
             }
 
-            if (feeDelegatorAmount > 0) {
-                // Direct transfer + Notify
+            if (feeDelegatorAmount > 0 && dm != address(0)) {
                 bkcToken.safeTransfer(dm, feeDelegatorAmount);
                 IDelegationManager(dm).depositMiningRewards(feeDelegatorAmount);
             }
@@ -204,17 +209,22 @@ contract MiningManager is
             return _purchaseAmount;
         }
         
-        // Linear Calculation:
-        // (Purchase * Remaining) / 160,000,000
-        // Multiplication first to maintain precision
+        // Linear Calculation: (Purchase * Remaining) / 160,000,000
         return (_purchaseAmount * remainingToMint) / MAX_MINTABLE_SUPPLY;
     }
     
+    // --- Emergency Functions ---
+
+    /**
+     * @notice Recover tokens sent by mistake or rescue funds if needed.
+     */
     function transferTokensFromGuardian(address to, uint256 amount) external onlyOwner {
+        if (to == address(0)) revert InvalidAddress();
         bkcToken.safeTransfer(to, amount);
     }
     
     function approveTokensFromGuardian(address spender, uint256 amount) external onlyOwner {
+        if (spender == address(0)) revert InvalidAddress();
         bkcToken.safeApprove(spender, amount);
     }
 }

@@ -4,9 +4,9 @@ pragma solidity 0.8.28;
 /**
  * @title Backchain Ecosystem Interfaces
  * @notice Defines the communication standards between the Hub (EcosystemManager) and Spokes.
- * @dev These interfaces are optimized for the BNB Chain using bytes32 for keys to reduce gas costs.
- * Part of the Backchain Protocol (BKC).
- * Optimized for Arbitrum Network.
+ * @dev Optimized for Arbitrum Network.
+ * Part of the Backcoin Ecosystem.
+ * Website: Backcoin.org
  */
 
 /**
@@ -16,7 +16,6 @@ pragma solidity 0.8.28;
 interface IDelegationManager {
     /**
      * @notice Returns the total pStake of a user.
-     * @param _user The address of the user to query.
      */
     function userTotalPStake(address _user) external view returns (uint256);
 
@@ -108,7 +107,7 @@ interface INFTLiquidityPoolFactory {
      * @notice Gets the address of an existing pool for a specific NFT boost tier.
      */
     function getPoolAddress(uint256 _boostBips) external view returns (address);
-    
+
     /**
      * @notice Returns all BoostBips that have deployed pools.
      * Needed by MiningManager for validation loop.
@@ -151,14 +150,6 @@ interface INFTLiquidityPool {
  */
 interface IEcosystemManager {
     // --- Rule Getters ---
-
-    /**
-     * @notice Returns the service fee and pStake minimum for a given service.
-     * @param _serviceKey The hashed identifier of the service (bytes32).
-     */
-    function getServiceRequirements(
-        bytes32 _serviceKey
-    ) external view returns (uint256 fee, uint256 pStake);
 
     /**
      * @notice Returns the service fee only.

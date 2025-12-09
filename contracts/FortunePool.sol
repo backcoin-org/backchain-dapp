@@ -13,8 +13,14 @@ import "./BKCToken.sol";
 /**
  * @title Fortune Pool (Dynamic Strategic Betting)
  * @notice A fully dynamic, skill-based prediction game fueled by Backcoin ($BKC).
- * @dev Supports variable number of tiers and adjustable number ranges.
- * Designed for gas efficiency on EVM L2s (Arbitrum).
+ * @dev 
+ * - Supports variable number of tiers and adjustable number ranges.
+ * - Open Access: Anyone can play by paying the fee + wager.
+ * - Proof-of-Purchase: Game fees trigger the MiningManager to mint new rewards.
+ * - Oracle Integration: Uses an external oracle for randomness.
+ * Part of the Backcoin Ecosystem.
+ * Website: Backcoin.org
+ * Optimized for Arbitrum Network.
  */
 contract FortunePool is
     Initializable,
@@ -54,10 +60,8 @@ contract FortunePool is
 
     // Mapping of Tier ID => Tier Config
     mapping(uint256 => PrizeTier) public prizeTiers;
-    
     // Mapping of Game ID => Request Data
     mapping(uint256 => GameRequest) public pendingGames;
-    
     // Mapping of Game ID => Result Rolls
     mapping(uint256 => uint256[]) public gameResults;
 
@@ -78,7 +82,6 @@ contract FortunePool is
     event OracleAddressSet(address indexed oracle);
     event OracleFeeSet(uint256 newFeeInWei);
     event GameFeeSet(uint256 newFeeBips);
-    
     event GameRequested(
         uint256 indexed gameId, 
         address indexed user, 
@@ -86,7 +89,6 @@ contract FortunePool is
         uint256[] guesses,
         bool isCumulative
     );
-
     event GameFulfilled(
         uint256 indexed gameId,
         address indexed user,
@@ -150,7 +152,6 @@ contract FortunePool is
         
         // Default game fee: 10% (1000 BIPS)
         gameFeeBips = 1000;
-
         _transferOwnership(_initialOwner);
     }
 
@@ -187,7 +188,8 @@ contract FortunePool is
     }
 
     /**
-     * @notice Configures a prize tier. Must be done sequentially (1, then 2, etc.) to ensure loop integrity.
+     * @notice Configures a prize tier.
+     * Must be done sequentially (1, then 2, etc.) to ensure loop integrity.
      * @param _tierId The ID of the tier (must be activeCount + 1 for new tiers).
      * @param _range The max number for this tier (e.g., 50 for 1-50).
      * @param _multiplierBips The reward multiplier.
@@ -213,7 +215,6 @@ contract FortunePool is
             multiplierBips: _multiplierBips,
             isActive: true
         });
-
         emit TierConfigured(_tierId, _range, _multiplierBips, true);
     }
 
@@ -269,7 +270,7 @@ contract FortunePool is
         
         // Cache state variable for gas efficiency
         uint256 currentTierCount = activeTierCount;
-        
+
         // Validate array length matches current configuration
         if (_guesses.length != currentTierCount) revert InvalidGuessCount();
 
@@ -321,10 +322,9 @@ contract FortunePool is
         uint256 _randomNumber
     ) external nonReentrant {
         if (msg.sender != oracleAddress) revert Unauthorized();
-        
         // Check if game is already fulfilled (using length check of results)
         if (gameResults[_gameId].length != 0) revert GameAlreadyFulfilled();
-        
+
         GameRequest memory request = pendingGames[_gameId];
         if (request.user == address(0)) revert Unauthorized(); 
 
@@ -340,8 +340,7 @@ contract FortunePool is
             uint256 tierId = i + 1;
             PrizeTier memory tier = prizeTiers[tierId];
 
-            // Safety check: if tier config changed mid-flight to be inactive, we skip or use default logic.
-            // Assuming we want to honor the played game, we proceed if range > 0.
+            // Safety check: if tier config changed mid-flight to be inactive, we proceed if range > 0.
             if (tier.range > 0) {
                 // Generate Roll (1 to Range)
                 // Using (Random + Index) hash to generate unique outcomes per tier
@@ -351,7 +350,6 @@ contract FortunePool is
                 // Check Win
                 if (request.guesses[i] == roll) {
                     uint256 winAmount = (request.purchaseAmount * tier.multiplierBips) / TOTAL_BIPS;
-                    
                     if (request.isCumulative) {
                         totalPrize += winAmount;
                     } else {
@@ -382,7 +380,7 @@ contract FortunePool is
 
         // Clean up (Gas Refund)
         delete pendingGames[_gameId];
-
+        
         emit GameFulfilled(_gameId, request.user, totalPrize, rolls, request.guesses);
     }
 

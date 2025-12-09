@@ -9,8 +9,11 @@ import "@openzeppelin/contracts-upgradeable/utils/StringsUpgradeable.sol";
 
 /**
  * @title Backchain Reward Booster ($BKCB)
- * @notice Utility NFTs for the Backcoin Ecosystem ($BKC).
- * @dev Holders earn fee discounts in Staking and Notary services.
+ * @notice Utility NFTs for the Backcoin Ecosystem.
+ * @dev Holders earn fee discounts in Staking, Notary, and other ecosystem services.
+ * Stores the "Boost Power" (Bips) which acts as a tier level.
+ * Part of the Backcoin Ecosystem.
+ * Website: Backcoin.org
  * Optimized for Arbitrum Network.
  */
 contract RewardBoosterNFT is 
@@ -23,11 +26,13 @@ contract RewardBoosterNFT is
 
     // --- State Variables ---
 
+    // Maps TokenID -> Boost Power (e.g. 100 = Level 1, 500 = Level 5)
     mapping(uint256 => uint256) public boostBips;
+    // Maps TokenID -> Specific metadata file (e.g. "gold_tier.json")
     mapping(uint256 => string) public tokenMetadataFile;
-    
+
     string private _customBaseURI;
-    uint256 private _nextTokenId; // Replaces Counters for gas saving
+    uint256 private _nextTokenId; 
     
     address public saleContractAddress;
 
@@ -61,7 +66,9 @@ contract RewardBoosterNFT is
         if (_initialOwner == address(0)) revert InvalidAddress();
 
         __ERC721_init("Backchain Reward Booster", "BKCB");
-        __Ownable_init();
+        
+        // Adjusted for OZ v4 compatibility
+        __Ownable_init(); 
         __UUPSUpgradeable_init();
         
         _transferOwnership(_initialOwner);
@@ -83,7 +90,7 @@ contract RewardBoosterNFT is
     }
 
     /**
-     * @notice Owner/Admin minting for giveaways or partnerships.
+     * @notice Owner/Admin minting for giveaways, partnerships or treasury reserves.
      */
     function ownerMintBatch(
         address to,
@@ -95,7 +102,7 @@ contract RewardBoosterNFT is
         if (to == address(0)) revert InvalidAddress();
         if (boostValueInBips == 0 || boostValueInBips > 10000) revert InvalidBoostValue();
 
-        // Gas Optimization: Loop handling
+        // Gas Optimization: Loop handling with unchecked increment
         for (uint256 i = 0; i < quantity;) {
             _mintInternal(to, boostValueInBips, metadataFile);
             unchecked { ++i; }
@@ -105,8 +112,7 @@ contract RewardBoosterNFT is
     // --- Sale Integration ---
 
     /**
-     * @notice Allows the authorized Sale Contract to mint Boosters.
-     * @dev Used by presale or public sale contracts.
+     * @notice Allows the authorized Sale Contract to mint Boosters directly to buyers.
      */
     function mintFromSale(
         address to,
@@ -128,8 +134,6 @@ contract RewardBoosterNFT is
         string calldata metadataFile
     ) internal returns (uint256) {
         uint256 tokenId = _nextTokenId;
-        
-        // Unchecked increment is safe (uint256 is massive)
         unchecked {
             _nextTokenId++;
         }
@@ -145,12 +149,16 @@ contract RewardBoosterNFT is
 
     // --- View Functions ---
 
+    /**
+     * @notice Returns the Metadata URI.
+     */
     function tokenURI(uint256 tokenId)
         public
         view
         override
         returns (string memory)
     {
+        // FIX: Replaced _requireOwned(tokenId) (v5) with _exists (v4)
         if (!_exists(tokenId)) revert TokenDoesNotExist();
 
         string memory baseURI = _customBaseURI;
