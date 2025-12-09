@@ -41,7 +41,7 @@ const DashboardState = {
 // -----------------------------------------------------------
 // CONFIGS
 // -----------------------------------------------------------
-const EXPLORER_BASE_URL = "https://sepolia.arbiscan.io/tx/";
+const EXPLORER_BASE_URL = "https://sepolia.arbiscan.io/address/";
 
 // ⚠️ AJUSTE PARA SUA VPS:
 // Se você ainda não configurou o domínio 'api.backcoin.org', troque pela URL da sua VPS.
