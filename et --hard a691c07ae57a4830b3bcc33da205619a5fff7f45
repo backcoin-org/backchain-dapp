@@ -1,0 +1,110 @@
+[33mcommit 513498770c4b2f2bf6887bb1c3ab5885593dae26[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m, [m[1;31morigin/main[m[33m)[m
+Author: Ygor Vicktorhugo Bezerra Cavalcante <ygorvicktorhugo@gmail.com>
+Date:   Wed Oct 22 11:55:05 2025 -0300
+
+    feat: Mensagem clara sobre as atualizações
+
+[33mcommit 5665b4417e02f151b0d18e91c002bd590a4695c3[m
+Author: Ygor Vicktorhugo Bezerra Cavalcante <ygorvicktorhugo@gmail.com>
+Date:   Wed Oct 22 11:30:09 2025 -0300
+
+    feat: Mensagem clara sobre as atualizações
+
+[33mcommit a691c07ae57a4830b3bcc33da205619a5fff7f45[m
+Author: Ygor Vicktorhugo Bezerra Cavalcante <ygorvicktorhugo@gmail.com>
+Date:   Wed Oct 22 05:02:33 2025 -0300
+
+    feat: Mensagem clara sobre as atualizações
+
+[33mcommit 2c9e1297a16bd7b6144f796bad05d84d4a1cf3d9[m
+Merge: ee71e10d 922ae266
+Author: Ygor Vicktorhugo Bezerra Cavalcante <ygorvicktorhugo@gmail.com>
+Date:   Wed Oct 22 04:47:57 2025 -0300
+
+    Merge branch 'main' of https://github.com/ygorvicktorhugo-glitch/backchain-dapp
+
+[33mcommit ee71e10d48653614ca36ee63f22627559cb1ecba[m
+Merge: 16777614 08311522
+Author: Ygor Vicktorhugo Bezerra Cavalcante <ygorvicktorhugo@gmail.com>
+Date:   Tue Oct 21 22:21:26 2025 -0300
+
+    Merge branch 'main' of https://github.com/ygorvicktorhugo-glitch/backchain-dapp
+
+[33mcommit 922ae266b28626a402fdcf9793b8b4b3d0080d99[m
+Merge: 16777614 08311522
+Author: Ygor Vicktorhugo Bezerra Cavalcante <ygorvicktorhugo@gmail.com>
+Date:   Tue Oct 21 22:21:26 2025 -0300
+
+    Merge branch 'main' of https://github.com/ygorvicktorhugo-glitch/backchain-dapp
+
+[33mcommit 16777614134229962e0a0cfbf8936822ccbb4f3e[m
+Author: Ygor Vicktorhugo Bezerra Cavalcante <ygorvicktorhugo@gmail.com>
+Date:   Tue Oct 21 22:18:33 2025 -0300
+
+    feat: Mensagem clara sobre as atualizações
+
+[33mcommit 0831152263d97bf2c1e0110b30ec5cdab65a91a3[m
+Author: Ygor Vicktorhugo Bezerra Cavalcante <ygorvicktorhugo@gmail.com>
+Date:   Tue Oct 21 21:15:36 2025 -0300
+
+    feat: Mensagem clara sobre as atualizações
+
+[33mcommit 07a43fd1efac8c17e12ab991b8cb96ae43f0a4af[m
+Author: Ygor Vicktorhugo Bezerra Cavalcante <ygorvicktorhugo@gmail.com>
+Date:   Tue Oct 21 17:06:35 2025 -0300
+
+    feat: Mensagem clara sobre as atualizações
+
+[33mcommit 65f0e7b2ddea799160d95a4f010f637c27f041e7[m
+Author: Ygor Vicktorhugo Bezerra Cavalcante <ygorvicktorhugo@gmail.com>
+Date:   Tue Oct 21 00:31:16 2025 -0300
+
+    feat: Mensagem clara sobre as atualizações
+
+[33mcommit ea8ebf8c2e440ec1fe0d0ab31c1f90e159a371f0[m
+Author: Ygor Vicktorhugo Bezerra Cavalcante <ygorvicktorhugo@gmail.com>
+Date:   Mon Oct 20 21:24:27 2025 -0300
+
+    feat: Mensagem clara sobre as atualizações
+
+[33mcommit 1c68e9260394e1334c3db1514f486531d842d3f9[m
+Author: Ygor Vicktorhugo Bezerra Cavalcante <ygorvicktorhugo@gmail.com>
+Date:   Mon Oct 20 15:57:10 2025 -0300
+
+    feat: Mensagem clara sobre as atualizações
+
+[33mcommit b68255feaf762839b3cc5b6579c5d012051b57d0[m
+Author: Ygor Vicktorhugo Bezerra Cavalcante <ygorvicktorhugo@gmail.com>
+Date:   Mon Oct 20 14:36:39 2025 -0300
+
+    feat: Atualização geral do DApp, incluindo FaucetPage e correções visuais
+
+[33mcommit dd767132874b5b3c60b8605bc457a8d35fda5197[m
+Author: Ygor Vicktorhugo Bezerra Cavalcante <ygorvicktorhugo@gmail.com>
+Date:   Mon Oct 20 06:27:35 2025 -0300
+
+    Deploy: Corrige erros, adiciona DAO e otimiza Airdrop
+
+[33mcommit 890ac1e95f13b81688e9ef8b89ea814b9a959c7e[m
+Author: Ygor Vicktorhugo Bezerra Cavalcante <ygorvicktorhugo@gmail.com>
+Date:   Sun Oct 19 22:56:56 2025 -0300
+
+    Atualiza Airdrop, adiciona DAO, corrige bugs e comentários
+
+[33mcommit dbcaf6e6c82033e8a1afb98fcc093715f34c8f68[m
+Author: Ygor Vicktorhugo Bezerra Cavalcante <ygorvicktorhugo@gmail.com>
+Date:   Fri Oct 17 11:12:45 2025 -0300
+
+    fix: Detecta dinamicamente a URL do dApp para links mobile
+
+[33mcommit 47b7332c4e116727933cbc0d3d5bf0b1afe0df99[m
+Author: Ygor Vicktorhugo Bezerra Cavalcante <ygorvicktorhugo@gmail.com>
+Date:   Fri Oct 17 11:01:35 2025 -0300
+
+    feat: Adiciona guia de conexão para usuários mobile
+
+[33mcommit be52a96acb324c2fc10827adad8d99cf0e316d0d[m
+Author: Ygor Vicktorhugo Bezerra Cavalcante <ygorvicktorhugo@gmail.com>
+Date:   Fri Oct 17 10:34:53 2025 -0300
+
+    Versão inicial para testes da comunidade

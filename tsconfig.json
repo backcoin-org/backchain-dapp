@@ -1,0 +1,30 @@
+{
+  "compilerOptions": {
+    "target": "es2020",
+    "module": "commonjs",
+    "moduleResolution": "node",
+    "strict": true,
+    "esModuleInterop": true,
+    "resolveJsonModule": true,
+    "allowSyntheticDefaultImports": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "outDir": "dist",
+    "allowJs": true,
+    "checkJs": false,
+    "sourceMap": true
+  },
+  "include": [
+    "./scripts",
+    "./test",
+    "./hardhat.config.cts"
+  ],
+  "files": [
+    "./hardhat.config.cts"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist",
+    "frontend" 
+  ]
+}

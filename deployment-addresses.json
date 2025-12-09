@@ -1,0 +1,23 @@
+{
+  "ecosystemManager": "0xC02d07e8B5Eb5eFf99Ce5c978C25fAE1a92BC6c4",
+  "bkcToken": "0xa45c17EeD08Dc8b271282b5D976D2bB6Bab4e0Fe",
+  "rewardBoosterNFT": "0x8eb40D2Fcc29ce190fb3375986C97F52F1E942C7",
+  "miningManager": "0x7CFbaCBa861726d551456B8c90911BBc365A63f1",
+  "delegationManager": "0x052AC1e1b0380E27c0549a17daaC8B30fE6b1E9F",
+  "decentralizedNotary": "0x79054Bf92460cD538CE2bc9ACbdcf969C752AbA3",
+  "fortunePool": "0x6523bE836788e0Df1bd1CEBF901F59893818Bac3",
+  "rentalManager": "0x53b6BD72B383E06CCaFf1715D1B8d925D0d79Be5",
+  "nftLiquidityPool_Implementation": "0x46B36F86D142A9a0a9b7a036FE1034f361E0E59a",
+  "nftLiquidityPoolFactory": "0x94509Bb3D6D684140c4346ae3365B4C98DB00124",
+  "publicSale": "0x38ae3EbfcD2fAb06A9B3Eec8974Fc506660A9F97",
+  "faucet": "0xF2aeb0aFC09FEf55B7Ba1fa32561C33de288bEf3",
+  "oracleWalletAddress": "0xd7e622124b78a28c4c928b271fc9423285804f98",
+  "bkcDexPoolAddress": "https://app.uniswap.org/#/swap?chain=arbitrum",
+  "pool_diamond": "0x0F5C603b54Cde3c6e130b3C2753ff18178434628",
+  "pool_platinum": "0x62aDb19961B7ae2dACB543c0AAA5D33b597676D6",
+  "pool_gold": "0x3c19e0648c21378AF4a73bD8C257D3d6Ac83e914",
+  "pool_silver": "0xEAB9308C02dd79e48115Dd81BD7D27837BF35039",
+  "pool_bronze": "0x5294eD700e6C69aD8d515F36804B8e518E4B88D2",
+  "pool_iron": "0xD3937996b0155d03F4BA04da117352f0CC3BF09f",
+  "pool_crystal": "0xAF82CCA80bc08bcC4A22e330708D27689A768e6f"
+}

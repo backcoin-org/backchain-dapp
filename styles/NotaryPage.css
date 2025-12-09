@@ -1,0 +1,60 @@
+/* ================================================================== */
+/* Notary Step Indicators (Standard CSS)                              */
+/* ================================================================== */
+
+/* Estilo base para um passo (cinza, inativo) */
+.step-indicator {
+    display: flex;
+    flex-direction: column; /* Empilha ícone e texto em telas pequenas */
+    align-items: center;
+    justify-content: center;
+    padding: 0.75rem; /* p-3 */
+    border-width: 2px;
+    /* Usa as variáveis CSS que você já definiu no :root do index.html */
+    border-color: var(--border-color);
+    border-radius: 0.5rem; /* rounded-lg */
+    color: var(--text-secondary);
+    transition: all 0.3s ease;
+    flex-grow: 1;
+}
+
+/* Ajuste para telas médias (md:) e maiores */
+@media (min-width: 768px) {
+    .step-indicator {
+        flex-direction: row; /* Lado a lado em telas maiores */
+    }
+    .step-indicator i {
+        margin-right: 0.75rem; /* md:mr-3 */
+    }
+    .step-indicator span {
+        display: inline; /* md:inline */
+    }
+}
+
+/* Oculta o texto em telas pequenas */
+.step-indicator span {
+    display: none;
+}
+
+/* Estilo para um passo ATIVO (azul) */
+.step-indicator.active {
+    border-color: #2563eb; /* border-blue-600 */
+    background-color: rgba(30, 58, 138, 0.2); /* bg-blue-900/20 */
+    color: #93c5fd; /* text-blue-300 */
+    box-shadow: 0 0 15px rgba(59, 130, 246, 0.2);
+}
+
+/* Estilo para um passo COMPLETO (verde) */
+.step-indicator.complete {
+    border-color: rgba(74, 222, 128, 0.5); /* border-green-600/50 */
+    background-color: rgba(21, 128, 61, 0.1); /* bg-green-900/10 */
+    color: #86efac; /* text-green-400 */
+}
+
+.step-indicator i {
+    transition: transform 0.3s ease;
+}
+
+.step-indicator.active i {
+    transform: scale(1.1);
+}
