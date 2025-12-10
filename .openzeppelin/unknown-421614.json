@@ -680,6 +680,61 @@
       "address": "0x4483EFf66264b085ed3Cbc699ed6924caaBDE07D",
       "txHash": "0x6663eb4b089bdba7fa5bb3c3bb5e1f99b51f3c9c9756aa2ecf6d49da3c4ffdcf",
       "kind": "uups"
+    },
+    {
+      "address": "0x1b24cbaFCd8ad741353E3859396473d3910F2d26",
+      "txHash": "0x6237d6259608d92bce6ae19f5ed1cec4e562f4861f65031d3242eca6f733ddda",
+      "kind": "uups"
+    },
+    {
+      "address": "0xe7EBD68441345fE27C0bBC7648C3eb7b36586410",
+      "txHash": "0xc189ed18c83b23ebc27573b515bd2065b8bcc5e4ca73946babdaab29aecb718e",
+      "kind": "uups"
+    },
+    {
+      "address": "0x54D9b1776360011EB00401CE5BA9a2Db33f0fdCf",
+      "txHash": "0xe0d68aabe36860cf15742f5113cdc9f4c69ce0293ec239306f8b9d6e917aa842",
+      "kind": "uups"
+    },
+    {
+      "address": "0x5c820Dc008905Baf70c5c7058C9AB9F65c7A3134",
+      "txHash": "0x254392e796321092fb08d9385a20688c408f892ba8ee15fb1e34d98454bbcfc1",
+      "kind": "uups"
+    },
+    {
+      "address": "0xFfc77204c6ffe960524E07087BD7dDd161e43513",
+      "txHash": "0x36dc7c30779a47655eedee4e727d55b6b402dc1502d36bc3fb6bbf2d258150c9",
+      "kind": "uups"
+    },
+    {
+      "address": "0x32612aA9aD3d1f616159b5D2c7b54E65A74C7086",
+      "txHash": "0xb5a7f7d7ab826678167d73398ace45b2c69dc6d229d696c1e32dd9f48e1669ad",
+      "kind": "uups"
+    },
+    {
+      "address": "0x87a26185Fe9b54730FB7768f3fB562a9eD4d0AA7",
+      "txHash": "0x6f5ff39692e423b0f59b8f74f5ae6bd52ffeef4a4c1c2715bfa4ffcb65189b0b",
+      "kind": "uups"
+    },
+    {
+      "address": "0xc8733e8aF8783588683C10cE2101501f3fede814",
+      "txHash": "0x8814003ffdd22a87bb65fbd9c16d4537487fcffd5a5435df18959b493bf1b5b7",
+      "kind": "uups"
+    },
+    {
+      "address": "0xA726980D745D684BFAeE816251de6282CE292194",
+      "txHash": "0x264e6969fb0494a114ec31c7c489de42df87b839cff123707e76395e0918f60b",
+      "kind": "uups"
+    },
+    {
+      "address": "0xb5904D23550032269a91e838fbF4969bab83A5F9",
+      "txHash": "0x60462ee8b367143ae2bf55daf4bcef822a5ebca354f8f08cdda10fd64ce20d25",
+      "kind": "uups"
+    },
+    {
+      "address": "0xA5e7eebF63188982DbC5F9b2a55Da73B90eee90d",
+      "txHash": "0x4567928bbc251c5b2783549365f390d9186bdb5254b340a144d2959a110c02d4",
+      "kind": "uups"
     }
   ],
   "impls": {
@@ -5615,6 +5670,309 @@
           "t_uint256": {
             "label": "uint256",
             "numberOfBytes": "32"
+          },
+          "t_uint8": {
+            "label": "uint8",
+            "numberOfBytes": "1"
+          }
+        },
+        "namespaces": {}
+      }
+    },
+    "a9ed54c66438a923b788325bf10b40a692e6afa24c968b132ca8c72381cfa585": {
+      "address": "0xff34340c37B1d7391Ef76C158844958c83ED7D7a",
+      "txHash": "0xc3fd45ce180e3cd7b66d2c6ebcb7207741e9fcd1bd231ad4c2ea4695b7b35876",
+      "layout": {
+        "solcVersion": "0.8.28",
+        "storage": [
+          {
+            "label": "_initialized",
+            "offset": 0,
+            "slot": "0",
+            "type": "t_uint8",
+            "contract": "Initializable",
+            "src": "@openzeppelin\\contracts-upgradeable\\proxy\\utils\\Initializable.sol:63",
+            "retypedFrom": "bool"
+          },
+          {
+            "label": "_initializing",
+            "offset": 1,
+            "slot": "0",
+            "type": "t_bool",
+            "contract": "Initializable",
+            "src": "@openzeppelin\\contracts-upgradeable\\proxy\\utils\\Initializable.sol:68"
+          },
+          {
+            "label": "__gap",
+            "offset": 0,
+            "slot": "1",
+            "type": "t_array(t_uint256)50_storage",
+            "contract": "ERC1967UpgradeUpgradeable",
+            "src": "@openzeppelin\\contracts-upgradeable\\proxy\\ERC1967\\ERC1967UpgradeUpgradeable.sol:169"
+          },
+          {
+            "label": "__gap",
+            "offset": 0,
+            "slot": "51",
+            "type": "t_array(t_uint256)50_storage",
+            "contract": "UUPSUpgradeable",
+            "src": "@openzeppelin\\contracts-upgradeable\\proxy\\utils\\UUPSUpgradeable.sol:111"
+          },
+          {
+            "label": "__gap",
+            "offset": 0,
+            "slot": "101",
+            "type": "t_array(t_uint256)50_storage",
+            "contract": "ContextUpgradeable",
+            "src": "@openzeppelin\\contracts-upgradeable\\utils\\ContextUpgradeable.sol:36"
+          },
+          {
+            "label": "_owner",
+            "offset": 0,
+            "slot": "151",
+            "type": "t_address",
+            "contract": "OwnableUpgradeable",
+            "src": "@openzeppelin\\contracts-upgradeable\\access\\OwnableUpgradeable.sol:22"
+          },
+          {
+            "label": "__gap",
+            "offset": 0,
+            "slot": "152",
+            "type": "t_array(t_uint256)49_storage",
+            "contract": "OwnableUpgradeable",
+            "src": "@openzeppelin\\contracts-upgradeable\\access\\OwnableUpgradeable.sol:94"
+          },
+          {
+            "label": "_status",
+            "offset": 0,
+            "slot": "201",
+            "type": "t_uint256",
+            "contract": "ReentrancyGuardUpgradeable",
+            "src": "@openzeppelin\\contracts-upgradeable\\security\\ReentrancyGuardUpgradeable.sol:38"
+          },
+          {
+            "label": "__gap",
+            "offset": 0,
+            "slot": "202",
+            "type": "t_array(t_uint256)49_storage",
+            "contract": "ReentrancyGuardUpgradeable",
+            "src": "@openzeppelin\\contracts-upgradeable\\security\\ReentrancyGuardUpgradeable.sol:88"
+          },
+          {
+            "label": "ecosystemManager",
+            "offset": 0,
+            "slot": "251",
+            "type": "t_contract(IEcosystemManager)4274",
+            "contract": "FortunePool",
+            "src": "contracts\\FortunePool.sol:43"
+          },
+          {
+            "label": "bkcToken",
+            "offset": 0,
+            "slot": "252",
+            "type": "t_contract(BKCToken)2712",
+            "contract": "FortunePool",
+            "src": "contracts\\FortunePool.sol:44"
+          },
+          {
+            "label": "delegationManager",
+            "offset": 0,
+            "slot": "253",
+            "type": "t_contract(IDelegationManager)4109",
+            "contract": "FortunePool",
+            "src": "contracts\\FortunePool.sol:45"
+          },
+          {
+            "label": "miningManagerAddress",
+            "offset": 0,
+            "slot": "254",
+            "type": "t_address",
+            "contract": "FortunePool",
+            "src": "contracts\\FortunePool.sol:47"
+          },
+          {
+            "label": "oracleAddress",
+            "offset": 0,
+            "slot": "255",
+            "type": "t_address",
+            "contract": "FortunePool",
+            "src": "contracts\\FortunePool.sol:48"
+          },
+          {
+            "label": "oracleFeeInWei",
+            "offset": 0,
+            "slot": "256",
+            "type": "t_uint256",
+            "contract": "FortunePool",
+            "src": "contracts\\FortunePool.sol:50"
+          },
+          {
+            "label": "gameCounter",
+            "offset": 0,
+            "slot": "257",
+            "type": "t_uint256",
+            "contract": "FortunePool",
+            "src": "contracts\\FortunePool.sol:51"
+          },
+          {
+            "label": "gameFeeBips",
+            "offset": 0,
+            "slot": "258",
+            "type": "t_uint256",
+            "contract": "FortunePool",
+            "src": "contracts\\FortunePool.sol:54"
+          },
+          {
+            "label": "prizeTiers",
+            "offset": 0,
+            "slot": "259",
+            "type": "t_mapping(t_uint256,t_struct(PrizeTier)2760_storage)",
+            "contract": "FortunePool",
+            "src": "contracts\\FortunePool.sol:70"
+          },
+          {
+            "label": "pendingGames",
+            "offset": 0,
+            "slot": "260",
+            "type": "t_mapping(t_uint256,t_struct(GameRequest)2770_storage)",
+            "contract": "FortunePool",
+            "src": "contracts\\FortunePool.sol:72"
+          },
+          {
+            "label": "gameResults",
+            "offset": 0,
+            "slot": "261",
+            "type": "t_mapping(t_uint256,t_array(t_uint256)dyn_storage)",
+            "contract": "FortunePool",
+            "src": "contracts\\FortunePool.sol:74"
+          },
+          {
+            "label": "prizePoolBalance",
+            "offset": 0,
+            "slot": "262",
+            "type": "t_uint256",
+            "contract": "FortunePool",
+            "src": "contracts\\FortunePool.sol:76"
+          },
+          {
+            "label": "activeTierCount",
+            "offset": 0,
+            "slot": "263",
+            "type": "t_uint256",
+            "contract": "FortunePool",
+            "src": "contracts\\FortunePool.sol:77"
+          }
+        ],
+        "types": {
+          "t_address": {
+            "label": "address",
+            "numberOfBytes": "20"
+          },
+          "t_array(t_uint256)49_storage": {
+            "label": "uint256[49]",
+            "numberOfBytes": "1568"
+          },
+          "t_array(t_uint256)50_storage": {
+            "label": "uint256[50]",
+            "numberOfBytes": "1600"
+          },
+          "t_array(t_uint256)dyn_storage": {
+            "label": "uint256[]",
+            "numberOfBytes": "32"
+          },
+          "t_bool": {
+            "label": "bool",
+            "numberOfBytes": "1"
+          },
+          "t_contract(BKCToken)2712": {
+            "label": "contract BKCToken",
+            "numberOfBytes": "20"
+          },
+          "t_contract(IDelegationManager)4109": {
+            "label": "contract IDelegationManager",
+            "numberOfBytes": "20"
+          },
+          "t_contract(IEcosystemManager)4274": {
+            "label": "contract IEcosystemManager",
+            "numberOfBytes": "20"
+          },
+          "t_mapping(t_uint256,t_array(t_uint256)dyn_storage)": {
+            "label": "mapping(uint256 => uint256[])",
+            "numberOfBytes": "32"
+          },
+          "t_mapping(t_uint256,t_struct(GameRequest)2770_storage)": {
+            "label": "mapping(uint256 => struct FortunePool.GameRequest)",
+            "numberOfBytes": "32"
+          },
+          "t_mapping(t_uint256,t_struct(PrizeTier)2760_storage)": {
+            "label": "mapping(uint256 => struct FortunePool.PrizeTier)",
+            "numberOfBytes": "32"
+          },
+          "t_struct(GameRequest)2770_storage": {
+            "label": "struct FortunePool.GameRequest",
+            "members": [
+              {
+                "label": "user",
+                "type": "t_address",
+                "offset": 0,
+                "slot": "0"
+              },
+              {
+                "label": "purchaseAmount",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "1"
+              },
+              {
+                "label": "guesses",
+                "type": "t_array(t_uint256)dyn_storage",
+                "offset": 0,
+                "slot": "2"
+              },
+              {
+                "label": "isCumulative",
+                "type": "t_bool",
+                "offset": 0,
+                "slot": "3"
+              }
+            ],
+            "numberOfBytes": "128"
+          },
+          "t_struct(PrizeTier)2760_storage": {
+            "label": "struct FortunePool.PrizeTier",
+            "members": [
+              {
+                "label": "range",
+                "type": "t_uint128",
+                "offset": 0,
+                "slot": "0"
+              },
+              {
+                "label": "multiplierBips",
+                "type": "t_uint64",
+                "offset": 16,
+                "slot": "0"
+              },
+              {
+                "label": "isActive",
+                "type": "t_bool",
+                "offset": 24,
+                "slot": "0"
+              }
+            ],
+            "numberOfBytes": "32"
+          },
+          "t_uint128": {
+            "label": "uint128",
+            "numberOfBytes": "16"
+          },
+          "t_uint256": {
+            "label": "uint256",
+            "numberOfBytes": "32"
+          },
+          "t_uint64": {
+            "label": "uint64",
+            "numberOfBytes": "8"
           },
           "t_uint8": {
             "label": "uint8",

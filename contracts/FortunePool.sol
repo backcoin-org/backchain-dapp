@@ -11,13 +11,21 @@ import "./IInterfaces.sol";
 import "./BKCToken.sol";
 
 /**
- * @title Fortune Pool (Dynamic Strategic Betting)
+ * @title Fortune Pool (Dynamic Strategic Betting) - V2.0
  * @notice A fully dynamic, skill-based prediction game fueled by Backcoin ($BKC).
  * @dev 
  * - Supports variable number of tiers and adjustable number ranges.
  * - Open Access: Anyone can play by paying the fee + wager.
  * - Proof-of-Purchase: Game fees trigger the MiningManager to mint new rewards.
  * - Oracle Integration: Uses an external oracle for randomness.
+ * 
+ * V2.0 Changes:
+ * - Added getGameResults() for proper array retrieval
+ * - Added getGameStatus() for comprehensive game state queries
+ * - Added getPendingGame() for oracle verification
+ * - Added isGameFulfilled() for quick status checks
+ * - Improved error messages for better debugging
+ * 
  * Part of the Backcoin Ecosystem.
  * Website: Backcoin.org
  * Optimized for Arbitrum Network.
@@ -109,6 +117,7 @@ contract FortunePool is
     error OracleTransferFailed();
     error Unauthorized();
     error GameAlreadyFulfilled();
+    error GameNotFound();
     error CoreContractsNotSet();
 
     // --- Initialization ---
@@ -252,7 +261,143 @@ contract FortunePool is
         }
     }
 
-    // --- Game Logic ---
+    // =========================================================================
+    // VIEW FUNCTIONS (V2.0 - Oracle & Frontend Support)
+    // =========================================================================
+
+    /**
+     * @notice Returns the complete result rolls array for a game.
+     * @dev This is the proper way to retrieve dynamic arrays from mappings.
+     * @param _gameId The ID of the game to query.
+     * @return rolls The array of dice rolls. Empty array if game not yet fulfilled.
+     */
+    function getGameResults(uint256 _gameId) external view returns (uint256[] memory rolls) {
+        return gameResults[_gameId];
+    }
+
+    /**
+     * @notice Checks if a game has been fulfilled.
+     * @dev Used by oracles to avoid double-processing.
+     * @param _gameId The ID of the game to check.
+     * @return True if game has results, false otherwise.
+     */
+    function isGameFulfilled(uint256 _gameId) external view returns (bool) {
+        return gameResults[_gameId].length > 0;
+    }
+
+    /**
+     * @notice Returns the pending game request data.
+     * @dev Useful for oracle to verify game exists before processing.
+     * @param _gameId The ID of the game.
+     * @return user The player's address (address(0) if not found or already processed).
+     * @return purchaseAmount The wager amount.
+     * @return guesses The player's guesses array.
+     * @return isCumulative The game mode.
+     */
+    function getPendingGame(uint256 _gameId) external view returns (
+        address user,
+        uint256 purchaseAmount,
+        uint256[] memory guesses,
+        bool isCumulative
+    ) {
+        GameRequest storage req = pendingGames[_gameId];
+        return (req.user, req.purchaseAmount, req.guesses, req.isCumulative);
+    }
+
+    /**
+     * @notice Comprehensive game status for frontends and oracles.
+     * @param _gameId The ID of the game.
+     * @return exists True if game was ever created.
+     * @return fulfilled True if game has been processed by oracle.
+     * @return pending True if game is waiting for oracle.
+     * @return user The player's address.
+     * @return results The result rolls (empty if not fulfilled).
+     */
+    function getGameStatus(uint256 _gameId) external view returns (
+        bool exists,
+        bool fulfilled,
+        bool pending,
+        address user,
+        uint256[] memory results
+    ) {
+        GameRequest storage req = pendingGames[_gameId];
+        uint256[] storage res = gameResults[_gameId];
+        
+        // Game exists if it has results OR has a pending request
+        exists = res.length > 0 || req.user != address(0);
+        fulfilled = res.length > 0;
+        pending = req.user != address(0) && res.length == 0;
+        user = req.user != address(0) ? req.user : address(0);
+        results = res;
+    }
+
+    /**
+     * @notice Returns all tier configurations.
+     * @dev Useful for frontends to display game rules.
+     * @return ranges Array of max numbers for each tier.
+     * @return multipliers Array of reward multipliers (in BIPS).
+     */
+    function getAllTiers() external view returns (
+        uint256[] memory ranges,
+        uint256[] memory multipliers
+    ) {
+        uint256 count = activeTierCount;
+        ranges = new uint256[](count);
+        multipliers = new uint256[](count);
+        
+        for (uint256 i = 0; i < count;) {
+            PrizeTier storage tier = prizeTiers[i + 1];
+            ranges[i] = uint256(tier.range);
+            multipliers[i] = uint256(tier.multiplierBips);
+            unchecked { ++i; }
+        }
+    }
+
+    /**
+     * @notice Calculate potential winnings for a given wager.
+     * @param _wagerAmount The amount to wager.
+     * @param _isCumulative True for cumulative mode.
+     * @return maxPossibleWin Maximum possible prize (all tiers hit).
+     * @return netWager Amount after fees that counts toward prize calculation.
+     */
+    function calculatePotentialWinnings(
+        uint256 _wagerAmount,
+        bool _isCumulative
+    ) external view returns (uint256 maxPossibleWin, uint256 netWager) {
+        uint256 totalFee = (_wagerAmount * gameFeeBips) / TOTAL_BIPS;
+        netWager = _wagerAmount - totalFee;
+        
+        uint256 count = activeTierCount;
+        
+        if (_isCumulative) {
+            // Sum all tier multipliers
+            for (uint256 i = 0; i < count;) {
+                maxPossibleWin += (_wagerAmount * prizeTiers[i + 1].multiplierBips) / TOTAL_BIPS;
+                unchecked { ++i; }
+            }
+        } else {
+            // Find highest multiplier
+            uint256 highestMultiplier = 0;
+            for (uint256 i = 0; i < count;) {
+                uint256 mult = uint256(prizeTiers[i + 1].multiplierBips);
+                if (mult > highestMultiplier) {
+                    highestMultiplier = mult;
+                }
+                unchecked { ++i; }
+            }
+            maxPossibleWin = (_wagerAmount * highestMultiplier) / TOTAL_BIPS;
+        }
+        
+        // Cap at max payout
+        uint256 maxPayout = (prizePoolBalance * MAX_PRIZE_PAYOUT_BIPS) / TOTAL_BIPS;
+        if (maxPossibleWin > maxPayout) {
+            maxPossibleWin = maxPayout;
+        }
+    }
+
+    // =========================================================================
+    // GAME LOGIC
+    // =========================================================================
 
     /**
      * @notice User participation function.
@@ -316,17 +461,22 @@ contract FortunePool is
     /**
      * @notice Oracle fulfillment.
      * @dev Dynamically iterates through tiers to check wins.
+     * @param _gameId The game ID to fulfill.
+     * @param _randomNumber Random seed from oracle.
      */
     function fulfillGame(
         uint256 _gameId,
         uint256 _randomNumber
     ) external nonReentrant {
         if (msg.sender != oracleAddress) revert Unauthorized();
+        
         // Check if game is already fulfilled (using length check of results)
         if (gameResults[_gameId].length != 0) revert GameAlreadyFulfilled();
 
         GameRequest memory request = pendingGames[_gameId];
-        if (request.user == address(0)) revert Unauthorized(); 
+        
+        // V2.0: More specific error for missing games
+        if (request.user == address(0)) revert GameNotFound(); 
 
         uint256 totalPrize = 0;
         uint256 currentPool = prizePoolBalance;
@@ -369,7 +519,7 @@ contract FortunePool is
             totalPrize = maxPayout;
         }
 
-        // Save Result
+        // Save Result BEFORE cleanup (important for state consistency)
         gameResults[_gameId] = rolls;
 
         // Payout
@@ -378,7 +528,7 @@ contract FortunePool is
             bkcToken.safeTransfer(request.user, totalPrize);
         }
 
-        // Clean up (Gas Refund)
+        // Clean up (Gas Refund) - AFTER saving results
         delete pendingGames[_gameId];
         
         emit GameFulfilled(_gameId, request.user, totalPrize, rolls, request.guesses);
