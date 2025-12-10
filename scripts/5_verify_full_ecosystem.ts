@@ -2,6 +2,9 @@
 import { ethers } from "hardhat";
 import fs from "fs";
 import path from "path";
+import dotenv from "dotenv";
+
+dotenv.config();
 
 // --- Utilitários ---
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -66,7 +69,7 @@ async function executeWithMiningAudit(
 
 async function main() {
   const [tester] = await ethers.getSigners();
-  console.log(`\n🕵️‍♂️ SYSTEM DIAGNOSTIC & STRESS TEST V6.0`);
+  console.log(`\n🕵️‍♂️ SYSTEM DIAGNOSTIC & STRESS TEST V6.5 (Auto-Fix Oracle)`);
   console.log(`   🧑‍🚀 Tester: ${tester.address}`);
   console.log(`   🌐 Network: Arbitrum Sepolia`);
 
@@ -91,6 +94,33 @@ async function main() {
   const pool = await ethers.getContractAt("NFTLiquidityPool", poolAddress, tester);
 
   console.log("   ✅ Contracts Loaded.");
+
+  // =================================================================
+  // 🔧 PHASE 0.5: ORACLE PERMISSION AUTO-FIX
+  // =================================================================
+  console.log("\n   🔧 [PHASE 0.5] CHECKING ORACLE PERMISSIONS...");
+  
+  const envKey = process.env.ORACLE_PRIVATE_KEY;
+  if (envKey) {
+      const oracleWallet = new ethers.Wallet(envKey);
+      const currentOracle = await fortune.oracleAddress();
+
+      // Verifica se o contrato aponta para a carteira do .env
+      if (currentOracle.toLowerCase() !== oracleWallet.address.toLowerCase()) {
+          console.log(`      ⚠️  MISMATCH DETECTED!`);
+          console.log(`         Contract expects: ${currentOracle}`);
+          console.log(`         Local .env has:   ${oracleWallet.address}`);
+          console.log(`      🛠️  Auto-fixing contract permissions using Tester (Owner)...`);
+          
+          // Tester (Owner) corrige o endereço no contrato
+          await sendTx(fortune.setOracleAddress(oracleWallet.address), "Fixing Oracle Address");
+          console.log(`      ✅ Permission Fixed! Restart your Indexer if needed.`);
+      } else {
+          console.log(`      ✅ Oracle permissions are synced (${oracleWallet.address})`);
+      }
+  } else {
+      console.log("      ⚠️  Skipping Oracle Check: ORACLE_PRIVATE_KEY not found in .env");
+  }
 
   // =================================================================
   // 🔍 PHASE 0: PRE-FLIGHT SYSTEM BALANCE CHECK
@@ -273,7 +303,6 @@ async function main() {
                   gameFeeAmt
               );
               
-              // Tipagem explícita para evitar erro TS
               let gameId: any;
               for (const log of rcGame.logs) {
                   try {
@@ -335,6 +364,8 @@ async function main() {
   console.log(`   🏦 Treasury: ${toEther(finalTreasuryBal)} BKC`);
   console.log(`   ⛽ Gas Spent: ${toEther(totalGasSpent)} ETH`);
   console.log("=================================================");
+  console.log("\n✅ SCRIPT COMPLETED SUCCESSFULLY.");
+  process.exit(0);
 }
 
 main().catch((error) => {
