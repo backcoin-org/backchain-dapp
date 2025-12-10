@@ -1,5 +1,5 @@
 // js/pages/DashboardPage.js
-// ✅ FINAL VERSION V5.4: Scarcity Fix + Real Metrics + History Polish
+// ✅ FINAL VERSION V6.0: Economic Output + Faucet Support + Enhanced History
 
 const ethers = window.ethers;
 
@@ -30,7 +30,7 @@ const DashboardState = {
     userProfile: null, 
     pagination: {
         currentPage: 1,
-        itemsPerPage: 10 // UPDATE: Increased to 10 as requested
+        itemsPerPage: 10 
     },
     filters: {
         type: 'ALL', 
@@ -42,7 +42,7 @@ const DashboardState = {
 // CONFIGS
 // -----------------------------------------------------------
 const EXPLORER_BASE_URL = "https://sepolia.arbiscan.io/address/";
-const FAUCET_API_URL = "https://api.backcoin.org/faucet"; // Ajuste para sua VPS se necessário
+const FAUCET_API_URL = "https://api.backcoin.org/faucet";
 
 const EXTERNAL_FAUCETS = [
     { name: "Alchemy Faucet", url: "https://www.alchemy.com/faucets/arbitrum-sepolia" },
@@ -157,7 +157,9 @@ function renderDashboardLayout() {
             <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4">
                 ${renderMetricCard('Total Supply', 'fa-coins', 'text-zinc-400', 'dash-metric-supply')}
                 ${renderMetricCard('Net pStake', 'fa-layer-group', 'text-purple-400', 'dash-metric-pstake')}
-                ${renderMetricCard('Supply Locked', 'fa-lock', 'text-blue-400', 'dash-metric-locked')}
+                
+                ${renderMetricCard('Economic Output', 'fa-chart-line', 'text-blue-400', 'dash-metric-economic')}
+                
                 ${renderMetricCard('Mining Power', 'fa-fire', 'text-orange-500', 'dash-metric-scarcity')}
                 ${renderMetricCard('Protocol Revenue', 'fa-building-columns', 'text-green-400', 'dash-metric-revenue')}
             </div>
@@ -397,7 +399,7 @@ function renderMetricCard(label, icon, iconColor, id) {
         <div class="glass-panel p-4 flex flex-col items-center text-center sm:items-start sm:text-left transition-transform hover:-translate-y-1">
             <div class="flex items-center gap-2 mb-2">
                 <i class="fa-solid ${icon} ${iconColor}"></i>
-                <span class="text-xs text-zinc-500 uppercase font-bold tracking-wider">${label}</span>
+                <span class="text-xs text-zinc-500 uppercase font-bold tracking-wider whitespace-nowrap">${label}</span>
             </div>
             <p id="${id}" class="text-lg md:text-xl font-bold text-white truncate w-full">--</p>
         </div>
@@ -419,46 +421,37 @@ async function updateGlobalMetrics() {
             safeContractCall(State.bkcTokenContractPublic, 'TGE_SUPPLY', [], 0n)
         ]);
 
-        let totalLocked = 0n;
-        // Contracts that hold BKC (Approximate TVL)
-        const contractKeys = ['delegationManager', 'fortunePool', 'rentalManager', 'rewardBoosterNFT', 'ecosystemManager', 'decentralizedNotary', 'faucet', 'publicSale', 'bkcDexPoolAddress'];
-        if (addresses) Object.keys(addresses).forEach(k => { if (k.startsWith('pool_')) contractKeys.push(k); });
-
-        // UPDATE: Treasury Address for Revenue Metric
-        const treasuryAddr = addresses.treasuryWallet || "0x0000000000000000000000000000000000000000"; 
+        // FETCH TREASURY ADDRESS DYNAMICALLY (Fixes 0 Revenue issue)
+        let treasuryAddr = addresses.treasuryWallet;
+        if (!treasuryAddr || treasuryAddr === ethers.ZeroAddress) {
+            try {
+                if (State.ecosystemManagerContractPublic) {
+                    treasuryAddr = await safeContractCall(State.ecosystemManagerContractPublic, 'getTreasuryAddress', [], ethers.ZeroAddress);
+                }
+            } catch(e) { console.warn("Failed to fetch treasury address"); }
+        }
         
         let treasuryBalance = 0n;
-        try {
-            treasuryBalance = await safeContractCall(State.bkcTokenContractPublic, 'balanceOf', [treasuryAddr], 0n);
-        } catch(e) {}
-
-        const uniqueAddrs = new Set();
-        for (const k of contractKeys) {
-            const addr = addresses[k];
-            if (addr && ethers.isAddress(addr)) uniqueAddrs.add(addr);
+        if (treasuryAddr && treasuryAddr !== ethers.ZeroAddress) {
+            try {
+                treasuryBalance = await safeContractCall(State.bkcTokenContractPublic, 'balanceOf', [treasuryAddr], 0n);
+            } catch(e) {}
         }
 
-        for (const addr of uniqueAddrs) {
-            try { 
-                const bal = await safeContractCall(State.bkcTokenContractPublic, 'balanceOf', [addr], 0n);
-                totalLocked += bal;
-                await new Promise(r => setTimeout(r, 20)); 
-            } catch {}
-        }
+        // --- NEW: ECONOMIC OUTPUT METRIC ---
+        // Formula: (Total Supply - TGE) + Treasury Balance
+        // Logic: Mined Tokens + Collected Fees
+        const totalMined = totalSupply - tgeSupply;
+        const totalEconomicOutput = totalMined + treasuryBalance;
 
-        // UPDATE: Mining Power (Scarcity) Calculation
-        // Formula: (MAX_SUPPLY - Current) / 160M (Mintable)
-        // If current is 40M (TGE), remaining is 160M. 160/160 = 100% (1.0x)
-        const currentSupply = totalSupply;
-        const remainingToMint = maxSupply > currentSupply ? maxSupply - currentSupply : 0n;
-        const mintableBase = 160000000n * 10n**18n; // 160M Fixed Base
+        // Mining Power Logic
+        const remainingToMint = maxSupply > totalSupply ? maxSupply - totalSupply : 0n;
+        const mintableBase = 160000000n * 10n**18n; 
         
         let miningPowerBips = 0n;
         if (mintableBase > 0n) {
             miningPowerBips = (remainingToMint * 10000n) / mintableBase;
         }
-        
-        // Cap at 100% (10000 bips)
         if (miningPowerBips > 10000n) miningPowerBips = 10000n;
         
         const setTxt = (id, val) => { const el = document.getElementById(id); if(el) el.innerHTML = val; };
@@ -466,19 +459,13 @@ async function updateGlobalMetrics() {
         setTxt('dash-metric-supply', formatBigNumber(totalSupply).toLocaleString('en-US', { maximumFractionDigits: 0 }));
         setTxt('dash-metric-pstake', formatPStake(totalPStake));
         
-        let lockedText = "0%";
-        if (totalSupply > 0n) {
-            const percent = (Number(totalLocked * 10000n / totalSupply)/100).toFixed(1);
-            const amount = formatBigNumber(totalLocked).toLocaleString('en-US', { maximumFractionDigits: 1, notation: "compact", compactDisplay: "short" });
-            lockedText = `${percent}% <span class="text-lg text-zinc-300 ml-2 font-bold">(${amount})</span>`;
-        }
-        setTxt('dash-metric-locked', lockedText);
+        // NEW: ECONOMIC OUTPUT
+        const econAmt = formatBigNumber(totalEconomicOutput).toLocaleString('en-US', { maximumFractionDigits: 0 });
+        setTxt('dash-metric-economic', `${econAmt} <span class="text-sm text-blue-500">Generated</span>`);
         
-        // UPDATE: Display Mining Power correctly
         const powerPercent = (Number(miningPowerBips)/100).toFixed(2);
         setTxt('dash-metric-scarcity', `${powerPercent}% <span class="text-xs text-zinc-500">Power</span>`);
         
-        // UPDATE: Display Revenue
         const revenueAmt = formatBigNumber(treasuryBalance).toLocaleString('en-US', { maximumFractionDigits: 0 });
         setTxt('dash-metric-revenue', `${revenueAmt} <span class="text-sm text-green-600">BKC</span>`);
 
@@ -546,9 +533,6 @@ async function updateUserHub(forceRefresh = false) {
         await loadUserData(forceRefresh); 
         fetchUserProfile();
 
-        // ------------------------------------------------
-        // SMART WIDGET LOGIC (GAS > BKC)
-        // ------------------------------------------------
         const widget = document.getElementById('dashboard-faucet-widget');
         
         if (widget) {
@@ -800,23 +784,41 @@ function renderActivityPage() {
             ? new Date((item.timestamp.seconds || item.timestamp._seconds) * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
             : '';
         
-        // UPDATE: Enhanced Icon Matching Logic
+        // UPDATE: FINAL ICON SET
         let icon = 'fa-circle', color = 'text-zinc-500', label = item.type;
         const t = (item.type || '').toUpperCase();
         
-        if(t.includes('DELEGATION') || t.includes('STAKE')) { icon = 'fa-layer-group'; color = 'text-purple-400'; label = 'Staked BKC'; }
-        else if(t.includes('UNSTAKE')) { icon = 'fa-unlock'; color = 'text-zinc-400'; label = 'Unstaked'; }
+        if(t.includes('DELEGATION') || t.includes('STAKE')) { 
+            icon = 'fa-sack-dollar'; 
+            color = 'text-green-400'; 
+            label = 'Staked BKC'; 
+        }
+        else if(t.includes('UNSTAKE')) { 
+            icon = 'fa-money-bill-transfer'; 
+            color = 'text-amber-500'; 
+            label = 'Unstaked'; 
+        }
         else if(t.includes('REWARD') || t.includes('CLAIM')) { icon = 'fa-gift'; color = 'text-amber-400'; label = 'Rewards Claimed'; }
         else if(t.includes('NFTBOUGHT')) { icon = 'fa-cart-shopping'; color = 'text-green-400'; label = 'Bought Booster'; }
         else if(t.includes('BOOSTERBUY')) { icon = 'fa-star'; color = 'text-yellow-300'; label = 'Minted from Sale'; }
         else if(t.includes('NFTSOLD')) { icon = 'fa-money-bill-transfer'; color = 'text-orange-400'; label = 'Sold to Pool'; }
         else if(t.includes('RENTALR') || t.includes('RENTED')) { icon = 'fa-house-user'; color = 'text-blue-400'; label = 'Rented NFT'; }
         else if(t.includes('RENTALLIST')) { icon = 'fa-sign-hanging'; color = 'text-blue-300'; label = 'Listed for Rent'; }
-        else if(t.includes('RENTALWITH')) { icon = 'fa-ban'; color = 'text-zinc-500'; label = 'Rental Withdrawn'; }
+        else if(t.includes('RENTALWITH')) { 
+            icon = 'fa-right-from-bracket'; // Exit Icon
+            color = 'text-red-400'; 
+            label = 'Rental Withdrawn'; 
+        }
         else if(t.includes('NOTARY') || t.includes('NOTARIZ')) { icon = 'fa-file-signature'; color = 'text-indigo-400'; label = 'Document Notarized'; }
+        
+        // --- FAUCET ICON ---
+        else if(t.includes('FAUCET')) { icon = 'fa-faucet'; color = 'text-cyan-400'; label = 'Faucet Claim'; }
+
+        // --- GAME ICONS ---
         else if(t === 'GAMEREQUESTED') { icon = 'fa-ticket'; color = 'text-amber-500'; label = 'Fortune Pool: Bet'; }
-        else if(t === 'GAMERESULT') { icon = 'fa-robot'; color = 'text-cyan-400'; label = 'Fortune Oracle: Result'; }
-        else if(t.includes('FORTUNE') || t.includes('GAME')) { icon = 'fa-trophy'; color = 'text-yellow-400'; label = 'Fortune Game'; }
+        else if(t === 'GAMERESULT') { icon = 'fa-trophy'; color = 'text-yellow-400'; label = 'Fortune Oracle: Result'; }
+        else if(t.includes('FORTUNE') || t.includes('GAME')) { icon = 'fa-dice'; color = 'text-purple-400'; label = 'Fortune Game'; }
+        
         else if(t.includes('TRANSFER')) { icon = 'fa-paper-plane'; color = 'text-zinc-400'; label = 'Transferred Item'; }
         else if(t.includes('APPROV')) { icon = 'fa-check-double'; color = 'text-zinc-600'; label = 'Token Approval'; }
         

@@ -5,34 +5,30 @@ import path from "path";
 
 // --- Utilitários ---
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-// Garante conversão segura para BigInt antes de formatar
 const toEther = (val: bigint | number | any) => ethers.formatEther(BigInt(val));
 
 // Coletores de Dados
 const report: string[] = [];
 let totalGasSpent = 0n; // Acumulador de Gás
 
-// Função auxiliar para enviar Tx com Auditoria de Gás e Log Visual
+// Helper: Envia Tx e Retorna o RECIBO (Receipt)
 async function sendTx(txPromise: Promise<any>, description: string) {
     process.stdout.write(`      ➡️ ${description}... `);
     try {
         const tx = await txPromise;
-        // Espera a confirmação para pegar o recibo real
         const receipt = await tx.wait();
         
         // Cálculo de Gás
         const gasUsed = BigInt(receipt.gasUsed);
-        const gasPrice = BigInt(receipt.gasPrice); // Na Arbitrum isso é o effectiveGasPrice
+        const gasPrice = BigInt(receipt.gasPrice);
         const cost = gasUsed * gasPrice;
-        
-        // Atualiza acumulador global
         totalGasSpent += cost;
 
         console.log(`\n         📝 Hash: https://sepolia.arbiscan.io/tx/${tx.hash}`);
-        console.log(`         ⛽ Custo Gás: ${toEther(cost)} ETH (${gasUsed} units)`);
+        console.log(`         ⛽ Gás: ${toEther(cost)} ETH`);
         console.log(`         ✅ Confirmado!`);
         
-        return tx;
+        return receipt;
     } catch (error: any) {
         console.log(` ❌ ERRO!`);
         console.error(`         Motivo: ${error.message}`);
@@ -40,7 +36,7 @@ async function sendTx(txPromise: Promise<any>, description: string) {
     }
 }
 
-// Auditor Econômico (Mineração + Gás)
+// Helper: Auditoria Econômica + Retorno de Recibo
 async function executeWithMiningAudit(
     bkcContract: any, 
     miningManager: any,
@@ -48,43 +44,38 @@ async function executeWithMiningAudit(
     actionName: string, 
     expectedFee: bigint
 ) {
-    // 1. Snapshot Before
     const supplyBefore = BigInt(await bkcContract.totalSupply());
     
-    // 2. Execute Tx (O sendTx já calcula e loga o gás)
-    const tx = await sendTx(txPromise, actionName);
+    // Executa e pega o recibo
+    const receipt = await sendTx(txPromise, actionName);
     
-    // 3. Snapshot After
     const supplyAfter = BigInt(await bkcContract.totalSupply());
     const minedAmount = supplyAfter - supplyBefore;
     
-    // 4. Calculate Stats
     let ratio = "0%";
     if (expectedFee > 0n) {
-        // Ratio = (Mined / Fee) * 100
         const ratioBig = (minedAmount * 100n) / expectedFee;
         ratio = `${ratioBig.toString()}%`;
     }
 
     console.log(`         📊 [ECON] Fee Paid: ${toEther(expectedFee)} BKC`);
-    console.log(`         ⛏️ [ECON] Mined:    ${toEther(minedAmount)} BKC (Dynamic Scarcity)`);
-    console.log(`         📉 [ECON] Ratio:    ${ratio} Efficiency`);
+    console.log(`         ⛏️ [ECON] Mined:    ${toEther(minedAmount)} BKC`);
     
-    return { tx, minedAmount };
+    return { receipt, minedAmount };
 }
 
 async function main() {
   const [tester] = await ethers.getSigners();
-  console.log(`\n🕵️‍♂️ ECOSYSTEM AUDIT (GAS + ECONOMY + INTEGRITY)`);
+  console.log(`\n🕵️‍♂️ SYSTEM DIAGNOSTIC & STRESS TEST V6.0`);
   console.log(`   🧑‍🚀 Tester: ${tester.address}`);
   console.log(`   🌐 Network: Arbitrum Sepolia`);
 
   // 1. Load Addresses
   const addressesPath = path.join(__dirname, "../deployment-addresses.json");
-  if (!fs.existsSync(addressesPath)) throw new Error("File deployment-addresses.json not found.");
+  if (!fs.existsSync(addressesPath)) throw new Error("File not found.");
   const addresses = JSON.parse(fs.readFileSync(addressesPath, "utf8"));
 
-  // 2. Instantiate Contracts
+  // 2. Contracts
   const bkc = await ethers.getContractAt("BKCToken", addresses.bkcToken, tester);
   const hub = await ethers.getContractAt("EcosystemManager", addresses.ecosystemManager, tester);
   const notary = await ethers.getContractAt("DecentralizedNotary", addresses.decentralizedNotary, tester);
@@ -96,96 +87,137 @@ async function main() {
   const miningManager = await ethers.getContractAt("MiningManager", addresses.miningManager, tester);
   const faucet = await ethers.getContractAt("SimpleBKCFaucet", addresses.faucet, tester);
 
-  // Pool Diamond (7000 Bips)
   const poolAddress = await factory.getPoolAddress(7000n);
   const pool = await ethers.getContractAt("NFTLiquidityPool", poolAddress, tester);
 
   console.log("   ✅ Contracts Loaded.");
 
-  // -----------------------------------------------------------------
-  // 📉 SCARCITY BASELINE CHECK
-  // -----------------------------------------------------------------
-  console.log("\n   📉 [BASELINE] Checking Dynamic Scarcity...");
-  const oneEther = ethers.parseEther("1");
-  const expectedMint = await miningManager.getMintAmount(oneEther);
-  const maxSupply = await bkc.MAX_SUPPLY();
-  const currentSupply = await bkc.totalSupply();
+  // =================================================================
+  // 🔍 PHASE 0: PRE-FLIGHT SYSTEM BALANCE CHECK
+  // =================================================================
+  console.log("\n   🔍 [PHASE 0] CHECKING CONTRACT LIQUIDITY...");
   
-  console.log(`      Total Supply: ${toEther(currentSupply)} / ${toEther(maxSupply)} BKC`);
-  console.log(`      Current Rate: 1.0 BKC Fee = ${toEther(expectedMint)} BKC Mined`);
+  const treasuryAddr = await hub.getTreasuryAddress();
+  
+  const targets = [
+      { name: "Fortune Pool", address: addresses.fortunePool, contract: fortune },
+      { name: "Faucet Contract", address: addresses.faucet, contract: faucet },
+      { name: "Rental Manager", address: addresses.rentalManager },
+      { name: "Delegation Manager", address: addresses.delegationManager },
+      { name: "Treasury Wallet", address: treasuryAddr },
+      { name: "Mining Manager", address: addresses.miningManager },
+      { name: "Tester Wallet", address: tester.address }
+  ];
+
+  console.table(
+      await Promise.all(targets.map(async (t) => {
+          const ethBal = await ethers.provider.getBalance(t.address);
+          const bkcBal = await bkc.balanceOf(t.address);
+          return {
+              "Contract Name": t.name,
+              "ETH Balance": parseFloat(ethers.formatEther(ethBal)).toFixed(4),
+              "BKC Balance": parseFloat(ethers.formatEther(bkcBal)).toFixed(2)
+          };
+      }))
+  );
+
+  // --- AUTO TOP-UP LOGIC ---
+  const fortuneBal = await bkc.balanceOf(addresses.fortunePool);
+  if (fortuneBal < ethers.parseEther("500")) {
+      console.log(`   ⚠️ Fortune Pool Low! Topping up...`);
+      await sendTx(bkc.approve(addresses.fortunePool, ethers.parseEther("1000")), "Approve TopUp");
+      await sendTx(fortune.topUpPool(ethers.parseEther("1000")), "Deposit to Fortune");
+  }
+
+  const faucetBal = await bkc.balanceOf(addresses.faucet);
+  if (faucetBal < ethers.parseEther("100")) {
+      console.log(`   ⚠️ Faucet Low! Refilling...`);
+      await sendTx(bkc.approve(addresses.faucet, ethers.parseEther("1000")), "Approve Faucet");
+      await sendTx(faucet.depositTokens(ethers.parseEther("1000")), "Deposit to Faucet");
+  }
 
   // =================================================================
-  // DOUBLE VERIFICATION LOOP (2X)
+  // LOOP DE TESTE DUPLO (2X)
   // =================================================================
   for (let cycle = 1; cycle <= 2; cycle++) {
       console.log(`\n   🔄 ================= CYCLE ${cycle} / 2 ================= 🔄`);
       
       try {
-          // --- A. NOTARY (FIXED FEE) ---
-          console.log(`   📜 [A] Notary Service`);
+          // --- A. NOTARY ---
+          console.log(`   📜 [A] Notary`);
           const notaryFee = BigInt(await hub.getFee(ethers.id("NOTARY_SERVICE"))); 
-          
           await sendTx(bkc.approve(addresses.decentralizedNotary, notaryFee), "Approving BKC");
-          const docId = ethers.id(`Doc_Cycle_${cycle}_${Date.now()}`);
           
           await executeWithMiningAudit(
               bkc, miningManager,
-              notary.notarize("ipfs://QmProof", "Econ Test", docId, 0n),
-              "Notarizing (Mining Trigger)",
+              notary.notarize("ipfs://QmProof", "Test", ethers.id(`Doc_${cycle}_${Date.now()}`), 0n),
+              "Notarizing",
               notaryFee
           );
           report.push(`[CYCLE ${cycle}] Notary: SUCCESS`);
 
-          // --- B. NFT MARKET (BUY TAX) ---
-          console.log(`\n   🛒 [B] NFT Market (Buy Tax)`);
+          // --- B. NFT MARKET (BUY) ---
+          console.log(`\n   🛒 [B] NFT Buy`);
           let buyPrice = BigInt(await pool.getBuyPrice());
           let buyTaxBips = BigInt(await hub.getFee(ethers.id("NFT_POOL_BUY_TAX_BIPS")));
-          
           let taxAmt = (buyPrice * buyTaxBips) / 10000n;
-          let totalCost = buyPrice + taxAmt;
-
-          await sendTx(bkc.approve(poolAddress, totalCost), "Approving BKC");
           
-          await executeWithMiningAudit(
+          await sendTx(bkc.approve(poolAddress, buyPrice + taxAmt), "Approving BKC");
+          
+          const { receipt: rcBuy } = await executeWithMiningAudit(
               bkc, miningManager,
               pool.buyNextAvailableNFT(0n),
-              "Buying NFT (Mining Trigger)",
+              "Buying NFT",
               taxAmt 
           );
 
-          // Get Token ID
-          const filter = pool.filters.NFTBought();
-          const events = await pool.queryFilter(filter, -1);
-          const lastEvent = events[events.length - 1] as any;
-          const tokenIdSell = lastEvent.args?.tokenId;
+          // Extrair Token ID com segurança
+          let tokenIdSell;
+          for (const log of rcBuy.logs) {
+              try {
+                  const parsed = pool.interface.parseLog(log);
+                  if (parsed && parsed.name === 'NFTBought') {
+                      tokenIdSell = parsed.args.tokenId;
+                      break;
+                  }
+              } catch (e) {}
+          }
+          
+          if (!tokenIdSell) throw new Error("Could not find NFTBought event in receipt");
           console.log(`         💎 Token #${tokenIdSell} Acquired`);
 
-          // --- C. NFT MARKET (SELL TAX) ---
-          console.log(`\n   🛒 [B.2] NFT Market (Sell Tax)`);
+          // --- C. NFT MARKET (SELL) ---
+          console.log(`\n   🛒 [B.2] NFT Sell`);
           let sellPrice = BigInt(await pool.getSellPrice());
           let sellTaxBips = BigInt(await hub.getFee(ethers.id("NFT_POOL_SELL_TAX_BIPS")));
           let sellTaxAmt = (sellPrice * sellTaxBips) / 10000n;
 
           await sendTx(nft.approve(poolAddress, tokenIdSell), "Approving NFT");
-          
           await executeWithMiningAudit(
               bkc, miningManager,
               pool.sellNFT(tokenIdSell, 0n, 0n),
-              "Selling NFT (Mining Trigger)",
+              "Selling NFT",
               sellTaxAmt
           );
           report.push(`[CYCLE ${cycle}] NFT Market: SUCCESS`);
 
-          // --- D. RENTAL (LIST & RENT) ---
-          console.log(`\n   🏠 [C] Rental Market`);
-          // Buy new NFT for rental
-          await sendTx(bkc.approve(poolAddress, totalCost), "Approving Buy 2");
-          const txPrep = await pool.buyNextAvailableNFT(0n);
-          await txPrep.wait();
+          // --- D. RENTAL ---
+          console.log(`\n   🏠 [C] Rental`);
+          // Buy NFT for Rental
+          await sendTx(bkc.approve(poolAddress, buyPrice + taxAmt), "Approving Buy 2");
+          const rcPrep = await sendTx(pool.buyNextAvailableNFT(0n), "Buying NFT (Rental Prep)");
           
-          const events2 = await pool.queryFilter(filter, -1);
-          const lastEvent2 = events2[events2.length - 1] as any;
-          const tokenIdRent = lastEvent2.args?.tokenId;
+          let tokenIdRent;
+          for (const log of rcPrep.logs) {
+              try {
+                  const parsed = pool.interface.parseLog(log);
+                  if (parsed && parsed.name === 'NFTBought') {
+                      tokenIdRent = parsed.args.tokenId;
+                      break;
+                  }
+              } catch (e) {}
+          }
+          console.log(`         💎 Token #${tokenIdRent} for Rental`);
 
           const rentalPrice = ethers.parseEther("10");
           const rentalTaxBips = BigInt(await hub.getFee(ethers.id("RENTAL_MARKET_TAX_BIPS")));
@@ -193,78 +225,88 @@ async function main() {
 
           await sendTx(nft.approve(addresses.rentalManager, tokenIdRent), "Approving RentalMgr");
           await sendTx(rental.listNFT(tokenIdRent, rentalPrice), "Listing");
-          
-          await sendTx(bkc.approve(addresses.rentalManager, rentalPrice), "Approving Rental Payment");
+          await sendTx(bkc.approve(addresses.rentalManager, rentalPrice), "Approving Payment");
           
           await executeWithMiningAudit(
               bkc, miningManager,
               rental.rentNFT(tokenIdRent),
-              "Renting NFT (Mining Trigger)",
+              "Renting NFT",
               rentalTaxAmt
           );
           report.push(`[CYCLE ${cycle}] Rental: SUCCESS`);
 
-          // --- E. STAKING (DELEGATION FEE) ---
+          // --- E. STAKING ---
           console.log(`\n   🥩 [D] Staking`);
           const stakeAmt = ethers.parseEther("50");
           const stakeFeeBips = BigInt(await hub.getFee(ethers.id("DELEGATION_FEE_BIPS")));
           const stakeFeeAmt = (stakeAmt * stakeFeeBips) / 10000n;
 
           await sendTx(bkc.approve(addresses.delegationManager, stakeAmt), "Approving Stake");
-          
           await executeWithMiningAudit(
               bkc, miningManager,
               delegation.delegate(stakeAmt, 86400n * 30n, 0n),
-              "Staking (Mining Trigger)",
+              "Staking",
               stakeFeeAmt
           );
           
-          // Clean up (Force Unstake)
           const userDelegations = await delegation.getDelegationsOf(tester.address);
           await sendTx(delegation.forceUnstake(userDelegations.length - 1, 0n), "Force Unstake");
           report.push(`[CYCLE ${cycle}] Staking: SUCCESS`);
 
-          // --- F. FORTUNE POOL (GAME FEE) ---
-          console.log(`\n   🎰 [E] Fortune Pool`);
+          // --- F. FORTUNE ---
+          console.log(`\n   🎰 [E] Fortune`);
           const activeTiers = await fortune.activeTierCount();
           if (activeTiers > 0n) {
               const wager = ethers.parseEther("10");
               const gameFeeBips = BigInt(await fortune.gameFeeBips());
               const gameFeeAmt = (wager * gameFeeBips) / 10000n;
-
               const guesses = [];
               for(let i=0; i<Number(activeTiers); i++) guesses.push(1n);
               const oracleFee = await fortune.oracleFeeInWei();
               
               await sendTx(bkc.approve(addresses.fortunePool, wager), "Approving Wager");
               
-              const txGame = await executeWithMiningAudit(
+              const { receipt: rcGame } = await executeWithMiningAudit(
                   bkc, miningManager,
                   fortune.participate(wager, guesses, false, { value: oracleFee }),
-                  "Betting (Mining Trigger)",
+                  "Betting",
                   gameFeeAmt
               );
               
-              const rcGame = await txGame.tx.wait();
-              const evtGame = rcGame?.logs.find((l: any) => { try { return fortune.interface.parseLog(l)?.name === "GameRequested"; } catch { return false; } });
-              const gameId = fortune.interface.parseLog(evtGame!)?.args?.gameId;
+              // Tipagem explícita para evitar erro TS
+              let gameId: any;
+              for (const log of rcGame.logs) {
+                  try {
+                      const parsed = fortune.interface.parseLog(log);
+                      if (parsed && parsed.name === 'GameRequested') {
+                          gameId = parsed.args.gameId;
+                          break;
+                      }
+                  } catch (e) {}
+              }
 
-              console.log(`         ⏳ Waiting for Oracle...`);
+              console.log(`         ⏳ Waiting Oracle (Game #${gameId})...`);
               await new Promise<void>((resolve) => {
                   const t = setTimeout(() => { console.log("         ⚠️ Timeout"); report.push(`[CYCLE ${cycle}] Fortune: TIMEOUT`); resolve(); }, 90000);
-                  fortune.once("GameFulfilled", (id) => { if(id === gameId) { clearTimeout(t); console.log("         🎉 Oracle OK!"); report.push(`[CYCLE ${cycle}] Fortune: SUCCESS`); resolve(); }});
+                  fortune.once("GameFulfilled", (id: any) => { 
+                      if(id == gameId) { 
+                          clearTimeout(t); 
+                          console.log("         🎉 Oracle OK!"); 
+                          report.push(`[CYCLE ${cycle}] Fortune: SUCCESS`); 
+                          resolve(); 
+                      }
+                  });
               });
           }
 
           // --- G. FAUCET ---
           console.log(`\n   🚰 [F] Faucet`);
           const recipient = cycle === 1 ? tester.address : ethers.Wallet.createRandom().address;
-          let skipFaucet = false;
-          if (cycle === 1) {
-              const cooldown = await faucet.getCooldownRemaining(recipient);
-              if (cooldown > 0n) skipFaucet = true;
-          }
-          if (!skipFaucet) {
+          // Check cooldown only if sending to self
+          let cooldown = 0n;
+          if (cycle === 1) cooldown = await faucet.getCooldownRemaining(recipient);
+          
+          if (cooldown === 0n) {
               await sendTx(faucet.distributeTo(recipient), `Distributing`);
               report.push(`[CYCLE ${cycle}] Faucet: SUCCESS`);
           } else {
@@ -281,27 +323,18 @@ async function main() {
       await sleep(5000);
   }
 
-  // =================================================================
-  // FINAL REPORT
-  // =================================================================
-  console.log("\n\n📄 ================= FULL SYSTEM AUDIT REPORT ================= 📄");
-  
-  console.log("\n🔹 MODULE STATUS:");
+  // REPORT
+  console.log("\n\n📄 ================= AUDIT REPORT ================= 📄");
   report.forEach(r => console.log(`   ${r}`));
   
   const finalBal = await bkc.balanceOf(tester.address);
-  const treasuryAddr = await hub.getTreasuryAddress();
-  const treasuryBal = await bkc.balanceOf(treasuryAddr);
+  const finalTreasuryBal = await bkc.balanceOf(treasuryAddr);
 
-  console.log("\n🔹 FINANCIAL SUMMARY:");
-  console.log(`   💰 Tester Balance:   ${toEther(finalBal)} BKC`);
-  console.log(`   🏦 Treasury Balance: ${toEther(treasuryBal)} BKC (Revenue Collected)`);
-
-  console.log("\n🔹 GAS CONSUMPTION (Arbitrum Sepolia):");
-  console.log(`   ⛽ TOTAL GAS SPENT:  ${toEther(totalGasSpent)} ETH`);
-  console.log("   (This cost includes deployment, approvals, and complex contract interactions)");
-  
-  console.log("\n=================================================================");
+  console.log("\n🔹 FINANCIAL:");
+  console.log(`   💰 Tester:   ${toEther(finalBal)} BKC`);
+  console.log(`   🏦 Treasury: ${toEther(finalTreasuryBal)} BKC`);
+  console.log(`   ⛽ Gas Spent: ${toEther(totalGasSpent)} ETH`);
+  console.log("=================================================");
 }
 
 main().catch((error) => {
