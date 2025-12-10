@@ -1,5 +1,6 @@
 // scripts/3_launch_and_liquidate_ecosystem.ts
-// ✅ VERSÃO V5.2: Escalonamento de Liquidez (100 a 1000) + 500k BKC
+// ✅ VERSÃO V5.3: Escalonamento de Liquidez + Prize Tiers Inteligente
+// ATUALIZAÇÃO: Adicionada configuração automática dos Prize Tiers do FortunePool
 
 import { ethers, upgrades } from "hardhat";
 import { HardhatRuntimeEnvironment } from "hardhat/types";
@@ -29,17 +30,41 @@ const MANUAL_LIQUIDITY_MINT_COUNT = [
 
 const FORTUNE_POOL_LIQUIDITY_TOTAL = ethers.parseEther("1000000"); // 1M BKC para o Jogo
 
-// --- TIGER GAME CONFIG ---
-const FORTUNE_POOL_TIERS = [
-    { poolId: 1, multiplierBips: 20000n, chanceDenominator: 3n }, 
-    { poolId: 2, multiplierBips: 50000n, chanceDenominator: 10n }, 
-    { poolId: 3, multiplierBips: 1000000n, chanceDenominator: 100n } 
+// ######################################################################
+// ###        🎰 CONFIGURAÇÃO DOS PRIZE TIERS DO FORTUNE POOL         ###
+// ######################################################################
+// 
+// Estrutura: { tierId, range, multiplierBips, name }
+// - tierId: ID sequencial do tier (1, 2, 3...)
+// - range: Número máximo para sorteio (ex: 3 = números 1-3, chance 1/3)
+// - multiplierBips: Multiplicador em BIPS (10000 = 1x, 20000 = 2x, 100000 = 10x)
+// - name: Nome descritivo para logs
+//
+const FORTUNE_POOL_PRIZE_TIERS = [
+    { 
+        tierId: 1, 
+        range: 3,           // 1 em 3 chance (33.3%)
+        multiplierBips: 20000,  // 2x multiplicador
+        name: "Fácil (1/3 - 2x)" 
+    },
+    { 
+        tierId: 2, 
+        range: 10,          // 1 em 10 chance (10%)
+        multiplierBips: 50000,  // 5x multiplicador
+        name: "Médio (1/10 - 5x)" 
+    },
+    { 
+        tierId: 3, 
+        range: 100,         // 1 em 100 chance (1%)
+        multiplierBips: 1000000, // 100x multiplicador
+        name: "Difícil (1/100 - 100x)" 
+    }
 ];
 
 // Liquidez de BKC para parear com os NFTs (MANTIDO: 500k BKC)
 const LIQUIDITY_BKC_AMOUNT_PER_POOL = ethers.parseEther("500000"); 
 
-// Tiers Sincronizados
+// Tiers Sincronizados (NFT Boosters)
 const ALL_TIERS = [
   { tierId: 1, name: "Diamond", boostBips: 7000n, metadata: "diamond_booster.json" },
   { tierId: 2, name: "Platinum", boostBips: 6000n, metadata: "platinum_booster.json" },
@@ -181,12 +206,134 @@ async function getOrCreateSpoke(hre: any, addresses: any, key: string, contractN
     return instance;
 }
 
+// ######################################################################
+// ###     🎰 FUNÇÃO INTELIGENTE PARA CONFIGURAR PRIZE TIERS          ###
+// ######################################################################
+
+/**
+ * Configura os Prize Tiers do FortunePool de forma inteligente.
+ * - Verifica se cada tier já está configurado corretamente
+ * - Só executa transação se houver diferença
+ * - Suporta atualização de tiers existentes
+ * - Adiciona novos tiers sequencialmente
+ */
+async function configureFortunePoolPrizeTiers(fortunePoolInstance: any): Promise<void> {
+    console.log("\n🎰 CONFIGURANDO PRIZE TIERS DO FORTUNE POOL...");
+    
+    // 1. Obter estado atual
+    const currentActiveTierCount = await fortunePoolInstance.activeTierCount();
+    console.log(`   📊 Tiers ativos atualmente: ${currentActiveTierCount}`);
+    
+    let tiersConfigured = 0;
+    let tiersSkipped = 0;
+    let tiersUpdated = 0;
+    
+    // 2. Iterar sobre cada tier que queremos configurar
+    for (const tierConfig of FORTUNE_POOL_PRIZE_TIERS) {
+        const { tierId, range, multiplierBips, name } = tierConfig;
+        
+        console.log(`\n   🎯 Tier ${tierId} - ${name}`);
+        console.log(`      Config desejada: range=${range}, mult=${multiplierBips/10000}x (${multiplierBips} bips)`);
+        
+        // 3. Verificar se o tier já existe
+        let needsConfiguration = false;
+        let isUpdate = false;
+        
+        if (tierId <= Number(currentActiveTierCount)) {
+            // Tier existe, verificar se está configurado corretamente
+            try {
+                const existingTier = await fortunePoolInstance.prizeTiers(tierId);
+                const existingRange = Number(existingTier.range);
+                const existingMultiplier = Number(existingTier.multiplierBips);
+                const existingActive = existingTier.isActive;
+                
+                console.log(`      Config atual: range=${existingRange}, mult=${existingMultiplier/10000}x, active=${existingActive}`);
+                
+                if (existingRange !== range || existingMultiplier !== multiplierBips) {
+                    console.log(`      ⚠️ Configuração diferente detectada! Atualizando...`);
+                    needsConfiguration = true;
+                    isUpdate = true;
+                } else if (!existingActive) {
+                    console.log(`      ⚠️ Tier inativo! Reativando...`);
+                    needsConfiguration = true;
+                    isUpdate = true;
+                } else {
+                    console.log(`      ✅ Já configurado corretamente. Pulando.`);
+                    tiersSkipped++;
+                }
+            } catch (e) {
+                console.log(`      ⚠️ Erro ao ler tier existente. Configurando...`);
+                needsConfiguration = true;
+            }
+        } else {
+            // Tier não existe ainda
+            console.log(`      📝 Tier novo. Configurando...`);
+            needsConfiguration = true;
+        }
+        
+        // 4. Configurar se necessário
+        if (needsConfiguration) {
+            try {
+                await sendTransactionWithRetries(
+                    async () => await fortunePoolInstance.setPrizeTier(
+                        tierId,
+                        range,
+                        multiplierBips
+                    ),
+                    `PRIZE TIER ${tierId}: range=${range}, mult=${multiplierBips/10000}x`
+                );
+                
+                if (isUpdate) {
+                    tiersUpdated++;
+                } else {
+                    tiersConfigured++;
+                }
+            } catch (error: any) {
+                // Verificar se é erro de sequência (tier muito alto)
+                if (error.message?.includes("InvalidTierSequence")) {
+                    console.log(`      ❌ Erro de sequência! Configure os tiers anteriores primeiro.`);
+                    throw new Error(`Não é possível configurar Tier ${tierId} - tiers anteriores não existem`);
+                }
+                throw error;
+            }
+        }
+    }
+    
+    // 5. Resumo final
+    console.log("\n   ═══════════════════════════════════════════════");
+    console.log("   📊 RESUMO DA CONFIGURAÇÃO DE PRIZE TIERS:");
+    console.log(`      ✅ Novos tiers configurados: ${tiersConfigured}`);
+    console.log(`      🔄 Tiers atualizados: ${tiersUpdated}`);
+    console.log(`      ⏩ Tiers já corretos (pulados): ${tiersSkipped}`);
+    
+    // 6. Verificação final
+    const finalTierCount = await fortunePoolInstance.activeTierCount();
+    console.log(`      🎰 Total de tiers ativos: ${finalTierCount}`);
+    
+    if (Number(finalTierCount) === 0) {
+        console.log("\n   ❌ ATENÇÃO: Nenhum tier configurado! O jogo não funcionará.");
+    } else {
+        console.log("\n   ✅ Prize Tiers configurados com sucesso!");
+        
+        // Mostrar configuração final
+        console.log("\n   📋 Configuração Final:");
+        for (let i = 1; i <= Number(finalTierCount); i++) {
+            const tier = await fortunePoolInstance.prizeTiers(i);
+            const chance = (100 / Number(tier.range)).toFixed(2);
+            const mult = Number(tier.multiplierBips) / 10000;
+            console.log(`      Tier ${i}: 1/${tier.range} chance (${chance}%) → ${mult}x multiplicador`);
+        }
+    }
+}
+
+// ######################################################################
+
 export async function runScript(hre: HardhatRuntimeEnvironment) {
   const { ethers } = hre;
   const [deployer] = await ethers.getSigners();
   const networkName = hre.network.name;
 
-  console.log(`🚀 (Fase 3) LANÇAMENTO & LIQUIDEZ V5.2 | Rede: ${networkName}`);
+  console.log(`🚀 (Fase 3) LANÇAMENTO & LIQUIDEZ V5.3 | Rede: ${networkName}`);
   console.log(`👷 Engenheiro: ${deployer.address}`);
   console.log("----------------------------------------------------");
 
@@ -277,10 +424,18 @@ export async function runScript(hre: HardhatRuntimeEnvironment) {
       await sendTransactionWithRetries(async () => await miningManagerInstance.transferTokensFromGuardian(deployer.address, totalLiq), "SAQUE: Fundos Operacionais para Liquidez");
   }
 
-  // Configuração Oráculo & Tiers Jogo
+  // ═══════════════════════════════════════════════════════════════════
+  // 🎰 CONFIGURAÇÃO DO FORTUNE POOL (ORACLE + PRIZE TIERS)
+  // ═══════════════════════════════════════════════════════════════════
+  
+  console.log("\n=== PARTE 3: CONFIGURAÇÃO DO FORTUNE POOL ===");
+  
+  // Configuração do Oráculo
   const currOracle = await fortunePoolInstance.oracleAddress();
   if (currOracle.toLowerCase() !== addresses.oracleWalletAddress.toLowerCase()) {
       await sendTransactionWithRetries(async () => await fortunePoolInstance.setOracleAddress(addresses.oracleWalletAddress), "CONFIG: Oráculo");
+  } else {
+      console.log("   ✅ Oráculo já configurado corretamente.");
   }
   
   const currOracleFee = await fortunePoolInstance.oracleFeeInWei();
@@ -288,9 +443,13 @@ export async function runScript(hre: HardhatRuntimeEnvironment) {
       await sendTransactionWithRetries(async () => await fortunePoolInstance.setOracleFee(0n), "CONFIG: Taxa Oráculo (0 ETH)");
   }
 
-  // -----------------------------------------------------------
-  // 🚨 APLICAÇÃO DE REGRAS ECONÔMICAS
-  // -----------------------------------------------------------
+  // 🎰 CONFIGURAR PRIZE TIERS (NOVO!)
+  await configureFortunePoolPrizeTiers(fortunePoolInstance);
+
+  // ═══════════════════════════════════════════════════════════════════
+  // ⚖️ APLICAÇÃO DE REGRAS ECONÔMICAS
+  // ═══════════════════════════════════════════════════════════════════
+  
   console.log("\n⚖️  Aplicando Taxas Econômicas...");
 
   await setServiceFee(hub, "FORCE_UNSTAKE_PENALTY_BIPS", 5000n);
@@ -306,10 +465,15 @@ export async function runScript(hre: HardhatRuntimeEnvironment) {
   
   console.log("\n=== PARTE 4: INJETANDO LIQUIDEZ ESCALONADA ===");
 
-  // Abastecer Jogo
-  if ((await bkcTokenInstance.balanceOf(addresses.fortunePool)) < FORTUNE_POOL_LIQUIDITY_TOTAL) {
-      await sendTransactionWithRetries(async () => await bkcTokenInstance.approve(addresses.fortunePool, FORTUNE_POOL_LIQUIDITY_TOTAL), "APROVAR: Fortune Pool");
-      await sendTransactionWithRetries(async () => await fortunePoolInstance.topUpPool(FORTUNE_POOL_LIQUIDITY_TOTAL), "DEPOSITAR: Fortune Pool");
+  // Abastecer Jogo (Fortune Pool)
+  const currentFortuneBalance = await bkcTokenInstance.balanceOf(addresses.fortunePool);
+  if (currentFortuneBalance < FORTUNE_POOL_LIQUIDITY_TOTAL) {
+      const needed = FORTUNE_POOL_LIQUIDITY_TOTAL - currentFortuneBalance;
+      console.log(`   💰 Fortune Pool precisa de mais ${ethers.formatEther(needed)} BKC`);
+      await sendTransactionWithRetries(async () => await bkcTokenInstance.approve(addresses.fortunePool, needed), "APROVAR: Fortune Pool");
+      await sendTransactionWithRetries(async () => await fortunePoolInstance.topUpPool(needed), "DEPOSITAR: Fortune Pool");
+  } else {
+      console.log(`   ✅ Fortune Pool já tem liquidez suficiente (${ethers.formatEther(currentFortuneBalance)} BKC)`);
   }
 
   // CRIAR POOLS E LIMPAR NFTs
@@ -335,9 +499,11 @@ export async function runScript(hre: HardhatRuntimeEnvironment) {
       
       const poolInstance = await ethers.getContractAt("NFTLiquidityPool", poolAddress, deployer);
       const poolInfo = await poolInstance.getPoolInfo();
+      // getPoolInfo() retorna: (tokenBalance, nftCount, k)
+      const poolNftCount = poolInfo[1];
       
-      if (poolInfo.nftCount > 0n) {
-          console.log(`      ⏩ Pool já abastecido (${poolInfo.nftCount} NFTs). Pulando.`);
+      if (poolNftCount > 0n) {
+          console.log(`      ⏩ Pool já abastecido (${poolNftCount} NFTs). Pulando.`);
           continue;
       }
 
@@ -418,8 +584,59 @@ export async function runScript(hre: HardhatRuntimeEnvironment) {
       }
   }
 
+  // ═══════════════════════════════════════════════════════════════════
+  // 📊 RESUMO FINAL
+  // ═══════════════════════════════════════════════════════════════════
+  
+  console.log("\n════════════════════════════════════════════════════════");
+  console.log("                    📊 RESUMO FINAL");
+  console.log("════════════════════════════════════════════════════════");
+  
+  // Verificar Fortune Pool
+  const finalTierCount = await fortunePoolInstance.activeTierCount();
+  const finalPoolBalance = await fortunePoolInstance.prizePoolBalance();
+  const finalOracle = await fortunePoolInstance.oracleAddress();
+  
+  console.log("\n🎰 FORTUNE POOL:");
+  console.log(`   Prize Tiers Ativos: ${finalTierCount}`);
+  console.log(`   Prize Pool Balance: ${ethers.formatEther(finalPoolBalance)} BKC`);
+  console.log(`   Oracle: ${finalOracle}`);
+  
+  if (Number(finalTierCount) > 0) {
+      console.log("   Configuração dos Tiers:");
+      for (let i = 1; i <= Number(finalTierCount); i++) {
+          const tier = await fortunePoolInstance.prizeTiers(i);
+          console.log(`      Tier ${i}: 1/${tier.range} → ${Number(tier.multiplierBips)/10000}x`);
+      }
+  }
+  
+  // Verificar Pools de NFT
+  console.log("\n🏊 NFT LIQUIDITY POOLS:");
+  for (const tier of ALL_TIERS) {
+      const poolKey = `pool_${tier.name.toLowerCase()}`;
+      const poolAddr = addresses[poolKey];
+      if (poolAddr && poolAddr.startsWith('0x')) {
+          try {
+              const pool = await ethers.getContractAt("NFTLiquidityPool", poolAddr, deployer);
+              const info = await pool.getPoolInfo();
+              // getPoolInfo() retorna: (tokenBalance, nftCount, k)
+              const tokenBalance = info[0]; // ou info.tokenBalance
+              const nftCount = info[1];     // ou info.nftCount
+              console.log(`   ${tier.name}: ${nftCount} NFTs | ${ethers.formatEther(tokenBalance)} BKC`);
+          } catch (e) {
+              console.log(`   ${tier.name}: ⚠️ Erro ao ler pool`);
+          }
+      }
+  }
+  
+  // Verificar Staking
+  const totalPStake = await delegationManagerInstance.totalNetworkPStake();
+  console.log(`\n📈 DELEGATION:`);
+  console.log(`   Total Network pStake: ${ethers.formatEther(totalPStake)}`);
+
   console.log("\n----------------------------------------------------");
   console.log("🎉🎉🎉 ECOSSISTEMA LANÇADO COM SUCESSO! 🎉🎉🎉");
+  console.log("----------------------------------------------------");
 }
 
 if (require.main === module) {
