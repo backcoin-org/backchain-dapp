@@ -461,7 +461,7 @@ async function updateGlobalMetrics() {
         
         // NEW: ECONOMIC OUTPUT
         const econAmt = formatBigNumber(totalEconomicOutput).toLocaleString('en-US', { maximumFractionDigits: 0 });
-        setTxt('dash-metric-economic', `${econAmt} <span class="text-sm text-blue-500">Generated</span>`);
+        setTxt('dash-metric-economic', `${econAmt} <span class="text-sm text-blue-500">Fee</span>`);
         
         const powerPercent = (Number(miningPowerBips)/100).toFixed(2);
         setTxt('dash-metric-scarcity', `${powerPercent}% <span class="text-xs text-zinc-500">Power</span>`);
