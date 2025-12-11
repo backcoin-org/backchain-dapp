@@ -41,7 +41,7 @@ const DashboardState = {
 // -----------------------------------------------------------
 // CONFIGS
 // -----------------------------------------------------------
-const EXPLORER_BASE_URL = "https://sepolia.arbiscan.io/address/";
+const EXPLORER_BASE_URL = "https://sepolia.arbiscan.io/tx/";
 const FAUCET_API_URL = "https://api.backcoin.org/faucet";
 
 const EXTERNAL_FAUCETS = [
