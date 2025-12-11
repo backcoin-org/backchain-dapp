@@ -11,24 +11,31 @@ import "./IInterfaces.sol";
 import "./BKCToken.sol";
 
 /**
- * @title Fortune Pool (Dynamic Strategic Betting) - V2.0
- * @notice A fully dynamic, skill-based prediction game fueled by Backcoin ($BKC).
- * @dev 
- * - Supports variable number of tiers and adjustable number ranges.
- * - Open Access: Anyone can play by paying the fee + wager.
- * - Proof-of-Purchase: Game fees trigger the MiningManager to mint new rewards.
- * - Oracle Integration: Uses an external oracle for randomness.
- * 
- * V2.0 Changes:
- * - Added getGameResults() for proper array retrieval
- * - Added getGameStatus() for comprehensive game state queries
- * - Added getPendingGame() for oracle verification
- * - Added isGameFulfilled() for quick status checks
- * - Improved error messages for better debugging
- * 
- * Part of the Backcoin Ecosystem.
- * Website: Backcoin.org
- * Optimized for Arbitrum Network.
+ * @title Fortune Pool
+ * @author Backchain Protocol
+ * @notice Strategic prediction game powered by Backcoin ($BKC)
+ * @dev Implements two game modes with oracle-based randomness:
+ *
+ *      MODE 1x (Jackpot Mode):
+ *      - Player competes ONLY for the highest tier (hardest, biggest prize)
+ *      - Requires 1 guess for the jackpot tier
+ *      - Lower oracle fee (1x)
+ *      - Winner takes the highest multiplier
+ *
+ *      MODE 5x (Cumulative Mode):
+ *      - Player competes for ALL active tiers
+ *      - Requires N guesses (one per tier)
+ *      - Higher oracle fee (5x)
+ *      - All matching tiers pay out (cumulative rewards)
+ *
+ *      Tier Structure (recommended):
+ *      - Tier 1: Easy (e.g., 1-3 range, 2x multiplier)
+ *      - Tier 2: Medium (e.g., 1-10 range, 5x multiplier)
+ *      - Tier 3: Hard/Jackpot (e.g., 1-100 range, 100x multiplier)
+ *
+ * @custom:security-contact security@backcoin.org
+ * @custom:website https://backcoin.org
+ * @custom:network Arbitrum
  */
 contract FortunePool is
     Initializable,
@@ -38,89 +45,150 @@ contract FortunePool is
 {
     using SafeERC20Upgradeable for BKCToken;
 
-    // --- State Variables ---
+    // =========================================================================
+    //                              CONSTANTS
+    // =========================================================================
 
+    /// @notice Basis points denominator (100% = 10000)
+    uint256 public constant BIPS_DENOMINATOR = 10_000;
+
+    /// @notice Maximum prize payout as percentage of pool (50%)
+    uint256 public constant MAX_PAYOUT_BIPS = 5_000;
+
+    /// @notice Maximum game fee allowed (30%)
+    uint256 public constant MAX_GAME_FEE_BIPS = 3_000;
+
+    /// @notice Service key for MiningManager authorization
+    bytes32 public constant SERVICE_KEY = keccak256("FORTUNE_POOL_SERVICE");
+
+    // =========================================================================
+    //                              STATE
+    // =========================================================================
+
+    /// @notice Reference to the ecosystem hub
     IEcosystemManager public ecosystemManager;
+
+    /// @notice BKC token contract
     BKCToken public bkcToken;
+
+    /// @notice Reference to delegation manager for staking integration
     IDelegationManager public delegationManager;
 
-    address public miningManagerAddress;
+    /// @notice Address authorized to fulfill games
     address public oracleAddress;
 
-    uint256 public oracleFeeInWei;
-    uint256 public gameCounter;
+    /// @notice Address of the mining manager for fee distribution
+    address public miningManagerAddress;
 
-    // --- Dynamic Game Fee ---
+    /// @notice Native fee (ETH/MATIC) required per oracle call
+    uint256 public oracleFee;
+
+    /// @notice Game fee in basis points (deducted from wager)
     uint256 public gameFeeBips;
 
+    /// @notice Total games created
+    uint256 public gameCounter;
+
+    /// @notice Current prize pool balance
+    uint256 public prizePoolBalance;
+
+    /// @notice Number of active prize tiers
+    uint256 public activeTierCount;
+
+    /// @notice Prize tier configuration
     struct PrizeTier {
-        uint128 range;          // Max number for this tier (e.g., 50 means range 1-50)
-        uint64 multiplierBips;  // Reward multiplier (e.g., 20000 = 2x)
-        bool isActive;          // Determines if the tier is currently in use
+        uint128 maxRange;       // Maximum number in range (e.g., 100 = 1-100)
+        uint64 multiplierBips;  // Reward multiplier (e.g., 50000 = 5x)
+        bool active;            // Whether tier is currently playable
     }
 
+    /// @notice Game request data
     struct GameRequest {
-        address user;
-        uint256 purchaseAmount; // Net wager amount used for calculation
-        uint256[] guesses;      // User predictions (Dynamic Array)
-        bool isCumulative;      // True = All matching tiers pay; False = Highest tier only
+        address player;         // Player's address
+        uint256 wagerAmount;    // Net wager after fees
+        uint256[] guesses;      // Player's predictions
+        bool isCumulative;      // true = 5x mode, false = 1x mode
+        uint256 targetTier;     // For 1x mode: jackpot tier ID (0 = all tiers)
     }
 
-    // Mapping of Tier ID => Tier Config
+    /// @notice Tier ID => Configuration
     mapping(uint256 => PrizeTier) public prizeTiers;
-    // Mapping of Game ID => Request Data
+
+    /// @notice Game ID => Request data
     mapping(uint256 => GameRequest) public pendingGames;
-    // Mapping of Game ID => Result Rolls
+
+    /// @notice Game ID => Result rolls
     mapping(uint256 => uint256[]) public gameResults;
 
-    uint256 public prizePoolBalance;
-    uint256 public activeTierCount; // Tracks how many tiers are currently active (e.g., 3)
+    // =========================================================================
+    //                              EVENTS
+    // =========================================================================
 
-    // --- Constants ---
-    uint256 public constant TOTAL_BIPS = 10000;
-    uint256 public constant MAX_PRIZE_PAYOUT_BIPS = 5000; // Max 50% of pool per win
-    
-    // Service Key for MiningManager Authorization
-    bytes32 public constant SERVICE_KEY = keccak256("TIGER_GAME_SERVICE");
+    /// @notice Emitted when a tier is configured
+    event TierConfigured(
+        uint256 indexed tierId,
+        uint128 maxRange,
+        uint64 multiplierBips,
+        bool active
+    );
 
-    // --- Events ---
+    /// @notice Emitted when prize pool receives funds
+    event PrizePoolFunded(uint256 amount, uint256 newBalance);
 
-    event TierConfigured(uint256 indexed tierId, uint256 range, uint256 multiplier, bool isActive);
-    event PrizePoolToppedUp(uint256 amount);
-    event OracleAddressSet(address indexed oracle);
-    event OracleFeeSet(uint256 newFeeInWei);
-    event GameFeeSet(uint256 newFeeBips);
+    /// @notice Emitted when oracle address changes
+    event OracleUpdated(address indexed previousOracle, address indexed newOracle);
+
+    /// @notice Emitted when oracle fee changes
+    event OracleFeeUpdated(uint256 previousFee, uint256 newFee);
+
+    /// @notice Emitted when game fee changes
+    event GameFeeUpdated(uint256 previousFeeBips, uint256 newFeeBips);
+
+    /// @notice Emitted when a player requests a game
     event GameRequested(
-        uint256 indexed gameId, 
-        address indexed user, 
-        uint256 purchaseAmount,
+        uint256 indexed gameId,
+        address indexed player,
+        uint256 wagerAmount,
+        uint256[] guesses,
+        bool isCumulative,
+        uint256 targetTier
+    );
+
+    /// @notice Emitted when oracle fulfills a game
+    event GameFulfilled(
+        uint256 indexed gameId,
+        address indexed player,
+        uint256 prizeWon,
+        uint256[] rolls,
         uint256[] guesses,
         bool isCumulative
     );
-    event GameFulfilled(
-        uint256 indexed gameId,
-        address indexed user,
-        uint256 prizeWon,
-        uint256[] rolls,
-        uint256[] guesses
-    );
 
-    // --- Custom Errors ---
+    /// @notice Emitted on emergency withdrawal
+    event EmergencyWithdrawal(address indexed to, uint256 amount);
 
-    error InvalidAddress();
-    error InvalidAmount();
+    // =========================================================================
+    //                              ERRORS
+    // =========================================================================
+
+    error ZeroAddress();
+    error ZeroAmount();
     error InvalidFee();
-    error InvalidTierID();
-    error InvalidTierSequence(); // Ensures tiers are set sequentially (1, 2, 3...)
-    error InvalidGuessCount();   // User sent wrong number of guesses
-    error InvalidGuessRange();   // Guess exceeds tier range
-    error OracleTransferFailed();
-    error Unauthorized();
+    error InvalidTierId();
+    error InvalidTierSequence();
+    error InvalidGuessCount();
+    error InvalidGuessRange();
+    error InsufficientOracleFee();
+    error OraclePaymentFailed();
+    error UnauthorizedOracle();
     error GameAlreadyFulfilled();
     error GameNotFound();
-    error CoreContractsNotSet();
+    error NoActiveTiers();
+    error CoreContractNotSet();
 
-    // --- Initialization ---
+    // =========================================================================
+    //                           INITIALIZATION
+    // =========================================================================
 
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
@@ -128,442 +196,522 @@ contract FortunePool is
     }
 
     /**
-     * @notice Initializes the Fortune Pool contract.
-     * @param _initialOwner The owner of this contract.
-     * @param _ecosystemManagerAddress The address of the central hub.
+     * @notice Initializes the Fortune Pool contract
+     * @param _owner Contract owner address
+     * @param _ecosystemManager Address of the ecosystem hub
      */
     function initialize(
-        address _initialOwner,
-        address _ecosystemManagerAddress
-    ) public initializer {
-        if (_initialOwner == address(0)) revert InvalidAddress();
-        if (_ecosystemManagerAddress == address(0)) revert InvalidAddress();
+        address _owner,
+        address _ecosystemManager
+    ) external initializer {
+        if (_owner == address(0)) revert ZeroAddress();
+        if (_ecosystemManager == address(0)) revert ZeroAddress();
 
         __Ownable_init();
         __UUPSUpgradeable_init();
         __ReentrancyGuard_init();
 
-        ecosystemManager = IEcosystemManager(_ecosystemManagerAddress);
+        _transferOwnership(_owner);
 
-        address _bkcTokenAddress = ecosystemManager.getBKCTokenAddress();
-        address _dmAddress = ecosystemManager.getDelegationManagerAddress();
-        address _miningManagerAddr = ecosystemManager.getMiningManagerAddress();
+        ecosystemManager = IEcosystemManager(_ecosystemManager);
 
-        if (
-            _bkcTokenAddress == address(0) ||
-            _dmAddress == address(0) ||
-            _miningManagerAddr == address(0)
-        ) revert CoreContractsNotSet();
+        address bkcAddress = ecosystemManager.getBKCTokenAddress();
+        address dmAddress = ecosystemManager.getDelegationManagerAddress();
+        address mmAddress = ecosystemManager.getMiningManagerAddress();
 
-        bkcToken = BKCToken(_bkcTokenAddress);
-        delegationManager = IDelegationManager(_dmAddress);
-        miningManagerAddress = _miningManagerAddr;
-        
-        // Default game fee: 10% (1000 BIPS)
-        gameFeeBips = 1000;
-        _transferOwnership(_initialOwner);
+        if (bkcAddress == address(0) || dmAddress == address(0) || mmAddress == address(0)) {
+            revert CoreContractNotSet();
+        }
+
+        bkcToken = BKCToken(bkcAddress);
+        delegationManager = IDelegationManager(dmAddress);
+        miningManagerAddress = mmAddress;
+
+        gameFeeBips = 1000; // Default: 10%
     }
 
-    function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
+    /**
+     * @dev Authorizes contract upgrades (owner only)
+     */
+    function _authorizeUpgrade(address) internal override onlyOwner {}
 
-    // --- Admin Functions ---
+    // =========================================================================
+    //                         ADMIN FUNCTIONS
+    // =========================================================================
 
     /**
-     * @notice Sets the Oracle address.
-     * @param _oracle The EOA address that fulfills the game.
+     * @notice Sets the oracle address authorized to fulfill games
+     * @param _oracle New oracle address
      */
-    function setOracleAddress(address _oracle) external onlyOwner {
-        if (_oracle == address(0)) revert InvalidAddress();
+    function setOracle(address _oracle) external onlyOwner {
+        if (_oracle == address(0)) revert ZeroAddress();
+
+        address previousOracle = oracleAddress;
         oracleAddress = _oracle;
-        emit OracleAddressSet(_oracle);
-    }
-    
-    /**
-     * @notice Sets the native ETH fee required to trigger the oracle.
-     */
-    function setOracleFee(uint256 _feeInWei) external onlyOwner {
-        oracleFeeInWei = _feeInWei;
-        emit OracleFeeSet(_feeInWei);
+
+        emit OracleUpdated(previousOracle, _oracle);
     }
 
     /**
-     * @notice Sets the fee taken from the BKC wager.
-     * @param _newFeeBips Fee in Basis Points (Max 3000 = 30%).
+     * @notice Sets the native fee required for oracle calls
+     * @param _fee Fee amount in wei
      */
-    function setGameFee(uint256 _newFeeBips) external onlyOwner {
-        if (_newFeeBips > 3000) revert InvalidFee();
-        gameFeeBips = _newFeeBips;
-        emit GameFeeSet(_newFeeBips);
+    function setOracleFee(uint256 _fee) external onlyOwner {
+        uint256 previousFee = oracleFee;
+        oracleFee = _fee;
+
+        emit OracleFeeUpdated(previousFee, _fee);
     }
 
     /**
-     * @notice Configures a prize tier.
-     * Must be done sequentially (1, then 2, etc.) to ensure loop integrity.
-     * @param _tierId The ID of the tier (must be activeCount + 1 for new tiers).
-     * @param _range The max number for this tier (e.g., 50 for 1-50).
-     * @param _multiplierBips The reward multiplier.
+     * @notice Sets the game fee percentage
+     * @param _feeBips Fee in basis points (max 3000 = 30%)
      */
-    function setPrizeTier(
+    function setGameFee(uint256 _feeBips) external onlyOwner {
+        if (_feeBips > MAX_GAME_FEE_BIPS) revert InvalidFee();
+
+        uint256 previousFee = gameFeeBips;
+        gameFeeBips = _feeBips;
+
+        emit GameFeeUpdated(previousFee, _feeBips);
+    }
+
+    /**
+     * @notice Configures a prize tier
+     * @dev Tiers must be set sequentially (1, 2, 3...)
+     *      Lower tiers should be easier (smaller range, lower multiplier)
+     *      Highest tier is the jackpot (largest range, highest multiplier)
+     * @param _tierId Tier identifier (1-based)
+     * @param _maxRange Maximum number in guess range (e.g., 100 for 1-100)
+     * @param _multiplierBips Reward multiplier in bips (10000 = 1x)
+     */
+    function configureTier(
         uint256 _tierId,
-        uint128 _range,
+        uint128 _maxRange,
         uint64 _multiplierBips
     ) external onlyOwner {
-        if (_tierId == 0) revert InvalidTierID();
-        if (_range == 0) revert InvalidAmount();
-
-        // Ensure no gaps in tiers (cannot set Tier 3 if Active Count is 1)
+        if (_tierId == 0) revert InvalidTierId();
+        if (_maxRange == 0) revert ZeroAmount();
         if (_tierId > activeTierCount + 1) revert InvalidTierSequence();
 
-        // Update active count if adding a new tier
         if (_tierId > activeTierCount) {
             activeTierCount = _tierId;
         }
-        
+
         prizeTiers[_tierId] = PrizeTier({
-            range: _range,
+            maxRange: _maxRange,
             multiplierBips: _multiplierBips,
-            isActive: true
+            active: true
         });
-        emit TierConfigured(_tierId, _range, _multiplierBips, true);
+
+        emit TierConfigured(_tierId, _maxRange, _multiplierBips, true);
     }
 
     /**
-     * @notice Reduces the active tier count (removes highest tiers).
-     * @param _newCount The new number of active tiers.
+     * @notice Reduces the number of active tiers
+     * @param _newCount New tier count (must be less than current)
      */
-    function setActiveTierCount(uint256 _newCount) external onlyOwner {
-        // Can only reduce count here. To increase, use setPrizeTier.
+    function reduceTierCount(uint256 _newCount) external onlyOwner {
         if (_newCount >= activeTierCount) revert InvalidTierSequence();
         activeTierCount = _newCount;
     }
 
     /**
-     * @notice Top up the prize pool with BKC.
+     * @notice Adds BKC to the prize pool
+     * @param _amount Amount to add
      */
-    function topUpPool(uint256 _amount) external onlyOwner {
-        if (_amount == 0) revert InvalidAmount();
+    function fundPrizePool(uint256 _amount) external onlyOwner {
+        if (_amount == 0) revert ZeroAmount();
+
         bkcToken.safeTransferFrom(msg.sender, address(this), _amount);
-        _addAmountToPool(_amount);
-        emit PrizePoolToppedUp(_amount);
+        prizePoolBalance += _amount;
+
+        emit PrizePoolFunded(_amount, prizePoolBalance);
     }
 
     /**
-     * @notice Emergency withdraw of pool balance.
+     * @notice Emergency withdrawal of prize pool to treasury
      */
     function emergencyWithdraw() external onlyOwner {
         address treasury = ecosystemManager.getTreasuryAddress();
-        if (treasury == address(0)) revert CoreContractsNotSet();
-        
-        uint256 totalBalance = prizePoolBalance;
+        if (treasury == address(0)) revert CoreContractNotSet();
+
+        uint256 amount = prizePoolBalance;
         prizePoolBalance = 0;
-        if (totalBalance > 0) {
-            bkcToken.safeTransfer(treasury, totalBalance);
+
+        if (amount > 0) {
+            bkcToken.safeTransfer(treasury, amount);
         }
+
+        emit EmergencyWithdrawal(treasury, amount);
     }
 
     // =========================================================================
-    // VIEW FUNCTIONS (V2.0 - Oracle & Frontend Support)
+    //                          VIEW FUNCTIONS
     // =========================================================================
 
     /**
-     * @notice Returns the complete result rolls array for a game.
-     * @dev This is the proper way to retrieve dynamic arrays from mappings.
-     * @param _gameId The ID of the game to query.
-     * @return rolls The array of dice rolls. Empty array if game not yet fulfilled.
+     * @notice Returns the jackpot tier ID (highest tier)
      */
-    function getGameResults(uint256 _gameId) external view returns (uint256[] memory rolls) {
+    function getJackpotTierId() public view returns (uint256) {
+        return activeTierCount;
+    }
+
+    /**
+     * @notice Returns jackpot tier configuration
+     */
+    function getJackpotTier() external view returns (
+        uint256 tierId,
+        uint128 maxRange,
+        uint64 multiplierBips,
+        bool active
+    ) {
+        tierId = activeTierCount;
+        if (tierId > 0) {
+            PrizeTier storage tier = prizeTiers[tierId];
+            return (tierId, tier.maxRange, tier.multiplierBips, tier.active);
+        }
+        return (0, 0, 0, false);
+    }
+
+    /**
+     * @notice Returns all tier configurations
+     */
+    function getAllTiers() external view returns (
+        uint128[] memory ranges,
+        uint64[] memory multipliers
+    ) {
+        uint256 count = activeTierCount;
+        ranges = new uint128[](count);
+        multipliers = new uint64[](count);
+
+        for (uint256 i = 0; i < count;) {
+            PrizeTier storage tier = prizeTiers[i + 1];
+            ranges[i] = tier.maxRange;
+            multipliers[i] = tier.multiplierBips;
+            unchecked { ++i; }
+        }
+    }
+
+    /**
+     * @notice Calculates required oracle fee for a game mode
+     * @param _isCumulative true = 5x mode, false = 1x mode
+     */
+    function getRequiredOracleFee(bool _isCumulative) public view returns (uint256) {
+        return _isCumulative ? oracleFee * 5 : oracleFee;
+    }
+
+    /**
+     * @notice Returns expected guess count for a game mode
+     * @param _isCumulative true = 5x mode (all tiers), false = 1x mode (1 guess)
+     */
+    function getExpectedGuessCount(bool _isCumulative) public view returns (uint256) {
+        return _isCumulative ? activeTierCount : 1;
+    }
+
+    /**
+     * @notice Calculates potential winnings
+     * @param _wagerAmount Wager amount in BKC
+     * @param _isCumulative Game mode
+     * @return maxPrize Maximum possible prize
+     * @return netWager Wager after fees
+     */
+    function calculatePotentialWinnings(
+        uint256 _wagerAmount,
+        bool _isCumulative
+    ) external view returns (uint256 maxPrize, uint256 netWager) {
+        uint256 fee = (_wagerAmount * gameFeeBips) / BIPS_DENOMINATOR;
+        netWager = _wagerAmount - fee;
+
+        uint256 count = activeTierCount;
+        if (count == 0) return (0, netWager);
+
+        if (_isCumulative) {
+            for (uint256 i = 0; i < count;) {
+                maxPrize += (_wagerAmount * prizeTiers[i + 1].multiplierBips) / BIPS_DENOMINATOR;
+                unchecked { ++i; }
+            }
+        } else {
+            maxPrize = (_wagerAmount * prizeTiers[count].multiplierBips) / BIPS_DENOMINATOR;
+        }
+
+        uint256 maxPayout = (prizePoolBalance * MAX_PAYOUT_BIPS) / BIPS_DENOMINATOR;
+        if (maxPrize > maxPayout) {
+            maxPrize = maxPayout;
+        }
+    }
+
+    /**
+     * @notice Returns game results
+     * @param _gameId Game identifier
+     */
+    function getGameResults(uint256 _gameId) external view returns (uint256[] memory) {
         return gameResults[_gameId];
     }
 
     /**
-     * @notice Checks if a game has been fulfilled.
-     * @dev Used by oracles to avoid double-processing.
-     * @param _gameId The ID of the game to check.
-     * @return True if game has results, false otherwise.
+     * @notice Checks if a game has been fulfilled
+     * @param _gameId Game identifier
      */
     function isGameFulfilled(uint256 _gameId) external view returns (bool) {
         return gameResults[_gameId].length > 0;
     }
 
     /**
-     * @notice Returns the pending game request data.
-     * @dev Useful for oracle to verify game exists before processing.
-     * @param _gameId The ID of the game.
-     * @return user The player's address (address(0) if not found or already processed).
-     * @return purchaseAmount The wager amount.
-     * @return guesses The player's guesses array.
-     * @return isCumulative The game mode.
+     * @notice Returns pending game data
+     * @param _gameId Game identifier
      */
     function getPendingGame(uint256 _gameId) external view returns (
-        address user,
-        uint256 purchaseAmount,
+        address player,
+        uint256 wagerAmount,
         uint256[] memory guesses,
-        bool isCumulative
+        bool isCumulative,
+        uint256 targetTier
     ) {
         GameRequest storage req = pendingGames[_gameId];
-        return (req.user, req.purchaseAmount, req.guesses, req.isCumulative);
+        return (req.player, req.wagerAmount, req.guesses, req.isCumulative, req.targetTier);
     }
 
     /**
-     * @notice Comprehensive game status for frontends and oracles.
-     * @param _gameId The ID of the game.
-     * @return exists True if game was ever created.
-     * @return fulfilled True if game has been processed by oracle.
-     * @return pending True if game is waiting for oracle.
-     * @return user The player's address.
-     * @return results The result rolls (empty if not fulfilled).
+     * @notice Returns comprehensive game status
+     * @param _gameId Game identifier
      */
     function getGameStatus(uint256 _gameId) external view returns (
         bool exists,
         bool fulfilled,
         bool pending,
-        address user,
+        address player,
         uint256[] memory results
     ) {
         GameRequest storage req = pendingGames[_gameId];
         uint256[] storage res = gameResults[_gameId];
-        
-        // Game exists if it has results OR has a pending request
-        exists = res.length > 0 || req.user != address(0);
+
+        exists = res.length > 0 || req.player != address(0);
         fulfilled = res.length > 0;
-        pending = req.user != address(0) && res.length == 0;
-        user = req.user != address(0) ? req.user : address(0);
+        pending = req.player != address(0) && res.length == 0;
+        player = req.player;
         results = res;
     }
 
-    /**
-     * @notice Returns all tier configurations.
-     * @dev Useful for frontends to display game rules.
-     * @return ranges Array of max numbers for each tier.
-     * @return multipliers Array of reward multipliers (in BIPS).
-     */
-    function getAllTiers() external view returns (
-        uint256[] memory ranges,
-        uint256[] memory multipliers
-    ) {
-        uint256 count = activeTierCount;
-        ranges = new uint256[](count);
-        multipliers = new uint256[](count);
-        
-        for (uint256 i = 0; i < count;) {
-            PrizeTier storage tier = prizeTiers[i + 1];
-            ranges[i] = uint256(tier.range);
-            multipliers[i] = uint256(tier.multiplierBips);
-            unchecked { ++i; }
-        }
-    }
+    // =========================================================================
+    //                          GAME LOGIC
+    // =========================================================================
 
     /**
-     * @notice Calculate potential winnings for a given wager.
-     * @param _wagerAmount The amount to wager.
-     * @param _isCumulative True for cumulative mode.
-     * @return maxPossibleWin Maximum possible prize (all tiers hit).
-     * @return netWager Amount after fees that counts toward prize calculation.
+     * @notice Participates in a Fortune Pool game
+     * @dev
+     *      Mode 1x (isCumulative = false):
+     *      - Send 1 guess for the JACKPOT tier only
+     *      - Pay 1x oracle fee
+     *      - Compete for the highest multiplier
+     *
+     *      Mode 5x (isCumulative = true):
+     *      - Send N guesses (one per active tier)
+     *      - Pay 5x oracle fee
+     *      - All matching tiers pay out cumulatively
+     *
+     * @param _wagerAmount Amount to wager in BKC
+     * @param _guesses Array of predictions (1 for 1x mode, N for 5x mode)
+     * @param _isCumulative false = 1x mode (jackpot), true = 5x mode (all tiers)
      */
-    function calculatePotentialWinnings(
+    function participate(
         uint256 _wagerAmount,
+        uint256[] calldata _guesses,
         bool _isCumulative
-    ) external view returns (uint256 maxPossibleWin, uint256 netWager) {
-        uint256 totalFee = (_wagerAmount * gameFeeBips) / TOTAL_BIPS;
-        netWager = _wagerAmount - totalFee;
-        
-        uint256 count = activeTierCount;
-        
+    ) external payable nonReentrant {
+        if (_wagerAmount == 0) revert ZeroAmount();
+
+        uint256 tierCount = activeTierCount;
+        if (tierCount == 0) revert NoActiveTiers();
+
+        uint256 targetTier;
+
         if (_isCumulative) {
-            // Sum all tier multipliers
-            for (uint256 i = 0; i < count;) {
-                maxPossibleWin += (_wagerAmount * prizeTiers[i + 1].multiplierBips) / TOTAL_BIPS;
-                unchecked { ++i; }
-            }
-        } else {
-            // Find highest multiplier
-            uint256 highestMultiplier = 0;
-            for (uint256 i = 0; i < count;) {
-                uint256 mult = uint256(prizeTiers[i + 1].multiplierBips);
-                if (mult > highestMultiplier) {
-                    highestMultiplier = mult;
+            // ═══════════════════════════════════════════════════════════════
+            // MODE 5x: COMPETE FOR ALL TIERS
+            // ═══════════════════════════════════════════════════════════════
+            if (_guesses.length != tierCount) revert InvalidGuessCount();
+
+            for (uint256 i = 0; i < tierCount;) {
+                uint256 maxRange = uint256(prizeTiers[i + 1].maxRange);
+                if (_guesses[i] < 1 || _guesses[i] > maxRange) {
+                    revert InvalidGuessRange();
                 }
                 unchecked { ++i; }
             }
-            maxPossibleWin = (_wagerAmount * highestMultiplier) / TOTAL_BIPS;
-        }
-        
-        // Cap at max payout
-        uint256 maxPayout = (prizePoolBalance * MAX_PRIZE_PAYOUT_BIPS) / TOTAL_BIPS;
-        if (maxPossibleWin > maxPayout) {
-            maxPossibleWin = maxPayout;
-        }
-    }
 
-    // =========================================================================
-    // GAME LOGIC
-    // =========================================================================
+            targetTier = 0; // 0 = all tiers
 
-    /**
-     * @notice User participation function.
-     * @dev Fully dynamic validation based on activeTierCount and tier ranges.
-     * @param _amount Wager amount.
-     * @param _guesses Dynamic array of predictions. Length must match activeTierCount.
-     * @param _isCumulative Calculation mode.
-     */
-    function participate(
-        uint256 _amount, 
-        uint256[] calldata _guesses, 
-        bool _isCumulative
-    ) external payable nonReentrant {
-        if (_amount == 0) revert InvalidAmount();
-        
-        // Cache state variable for gas efficiency
-        uint256 currentTierCount = activeTierCount;
+        } else {
+            // ═══════════════════════════════════════════════════════════════
+            // MODE 1x: COMPETE FOR JACKPOT ONLY
+            // ═══════════════════════════════════════════════════════════════
+            if (_guesses.length != 1) revert InvalidGuessCount();
 
-        // Validate array length matches current configuration
-        if (_guesses.length != currentTierCount) revert InvalidGuessCount();
+            targetTier = tierCount; // Jackpot tier
+            uint256 maxRange = uint256(prizeTiers[targetTier].maxRange);
 
-        // Validate guesses against current ranges
-        // Using unchecked for loop increment to save gas
-        for (uint256 i = 0; i < currentTierCount;) {
-            // Tier IDs are 1-based, array is 0-based
-            uint256 tierId = i + 1;
-            uint256 maxRange = uint256(prizeTiers[tierId].range);
-            
-            if (_guesses[i] < 1 || _guesses[i] > maxRange) {
+            if (_guesses[0] < 1 || _guesses[0] > maxRange) {
                 revert InvalidGuessRange();
             }
-            
-            unchecked { ++i; }
         }
 
-        // Calculate ETH fee
-        uint256 requiredFee = _isCumulative ? oracleFeeInWei * 5 : oracleFeeInWei;
-        if (msg.value != requiredFee) revert InvalidFee();
+        // Validate oracle fee
+        uint256 requiredFee = getRequiredOracleFee(_isCumulative);
+        if (msg.value != requiredFee) revert InsufficientOracleFee();
 
-        // Forward native fee to Oracle
-        (bool sent, ) = oracleAddress.call{value: msg.value}("");
-        if (!sent) revert OracleTransferFailed();
-
-        // Process BKC
-        uint256 purchaseAmount = _processFeesAndMining(_amount);
-        
-        unchecked {
-            gameCounter++;
+        // Forward oracle fee
+        if (msg.value > 0) {
+            (bool sent,) = oracleAddress.call{value: msg.value}("");
+            if (!sent) revert OraclePaymentFailed();
         }
-        
+
+        // Process BKC payment
+        uint256 netWager = _processPayment(_wagerAmount);
+
+        // Create game request
+        unchecked { ++gameCounter; }
+
         pendingGames[gameCounter] = GameRequest({
-            user: msg.sender,
-            purchaseAmount: purchaseAmount, 
+            player: msg.sender,
+            wagerAmount: netWager,
             guesses: _guesses,
-            isCumulative: _isCumulative
+            isCumulative: _isCumulative,
+            targetTier: targetTier
         });
 
-        emit GameRequested(gameCounter, msg.sender, purchaseAmount, _guesses, _isCumulative);
+        emit GameRequested(
+            gameCounter,
+            msg.sender,
+            netWager,
+            _guesses,
+            _isCumulative,
+            targetTier
+        );
     }
-    
+
     /**
-     * @notice Oracle fulfillment.
-     * @dev Dynamically iterates through tiers to check wins.
-     * @param _gameId The game ID to fulfill.
-     * @param _randomNumber Random seed from oracle.
+     * @notice Fulfills a game with random number from oracle
+     * @dev Only callable by authorized oracle address
+     * @param _gameId Game identifier to fulfill
+     * @param _randomSeed Random seed from oracle
      */
     function fulfillGame(
         uint256 _gameId,
-        uint256 _randomNumber
+        uint256 _randomSeed
     ) external nonReentrant {
-        if (msg.sender != oracleAddress) revert Unauthorized();
-        
-        // Check if game is already fulfilled (using length check of results)
+        if (msg.sender != oracleAddress) revert UnauthorizedOracle();
         if (gameResults[_gameId].length != 0) revert GameAlreadyFulfilled();
 
         GameRequest memory request = pendingGames[_gameId];
-        
-        // V2.0: More specific error for missing games
-        if (request.user == address(0)) revert GameNotFound(); 
+        if (request.player == address(0)) revert GameNotFound();
 
-        uint256 totalPrize = 0;
-        uint256 currentPool = prizePoolBalance;
-        
-        // Use cached count at time of execution (or utilize request length)
-        // Ideally we use request.guesses.length as that was the state when user played
-        uint256 tiersToProcess = request.guesses.length;
-        uint256[] memory rolls = new uint256[](tiersToProcess);
+        uint256 totalPrize;
+        uint256[] memory rolls;
 
-        for (uint256 i = 0; i < tiersToProcess;) {
-            uint256 tierId = i + 1;
-            PrizeTier memory tier = prizeTiers[tierId];
+        if (request.isCumulative) {
+            // ═══════════════════════════════════════════════════════════════
+            // MODE 5x: PROCESS ALL TIERS
+            // ═══════════════════════════════════════════════════════════════
+            uint256 tierCount = request.guesses.length;
+            rolls = new uint256[](tierCount);
 
-            // Safety check: if tier config changed mid-flight to be inactive, we proceed if range > 0.
-            if (tier.range > 0) {
-                // Generate Roll (1 to Range)
-                // Using (Random + Index) hash to generate unique outcomes per tier
-                uint256 roll = (uint256(keccak256(abi.encodePacked(_randomNumber, tierId))) % tier.range) + 1;
-                rolls[i] = roll;
+            for (uint256 i = 0; i < tierCount;) {
+                uint256 tierId = i + 1;
+                PrizeTier memory tier = prizeTiers[tierId];
 
-                // Check Win
-                if (request.guesses[i] == roll) {
-                    uint256 winAmount = (request.purchaseAmount * tier.multiplierBips) / TOTAL_BIPS;
-                    if (request.isCumulative) {
-                        totalPrize += winAmount;
-                    } else {
-                        if (winAmount > totalPrize) {
-                            totalPrize = winAmount;
-                        }
+                if (tier.maxRange > 0) {
+                    uint256 roll = _generateRoll(_randomSeed, tierId, tier.maxRange);
+                    rolls[i] = roll;
+
+                    if (request.guesses[i] == roll) {
+                        totalPrize += (request.wagerAmount * tier.multiplierBips) / BIPS_DENOMINATOR;
                     }
                 }
+
+                unchecked { ++i; }
             }
-            
-            unchecked { ++i; }
+
+        } else {
+            // ═══════════════════════════════════════════════════════════════
+            // MODE 1x: PROCESS JACKPOT ONLY
+            // ═══════════════════════════════════════════════════════════════
+            rolls = new uint256[](1);
+
+            uint256 tierId = request.targetTier;
+            PrizeTier memory tier = prizeTiers[tierId];
+
+            if (tier.maxRange > 0) {
+                uint256 roll = _generateRoll(_randomSeed, tierId, tier.maxRange);
+                rolls[0] = roll;
+
+                if (request.guesses[0] == roll) {
+                    totalPrize = (request.wagerAmount * tier.multiplierBips) / BIPS_DENOMINATOR;
+                }
+            }
         }
 
-        // Safety Cap (Max 50% of pool)
-        uint256 maxPayout = (currentPool * MAX_PRIZE_PAYOUT_BIPS) / TOTAL_BIPS;
+        // Apply safety cap
+        uint256 maxPayout = (prizePoolBalance * MAX_PAYOUT_BIPS) / BIPS_DENOMINATOR;
         if (totalPrize > maxPayout) {
             totalPrize = maxPayout;
         }
 
-        // Save Result BEFORE cleanup (important for state consistency)
+        // Save results
         gameResults[_gameId] = rolls;
 
-        // Payout
+        // Pay winner
         if (totalPrize > 0) {
             prizePoolBalance -= totalPrize;
-            bkcToken.safeTransfer(request.user, totalPrize);
+            bkcToken.safeTransfer(request.player, totalPrize);
         }
 
-        // Clean up (Gas Refund) - AFTER saving results
+        // Cleanup
         delete pendingGames[_gameId];
-        
-        emit GameFulfilled(_gameId, request.user, totalPrize, rolls, request.guesses);
+
+        emit GameFulfilled(
+            _gameId,
+            request.player,
+            totalPrize,
+            rolls,
+            request.guesses,
+            request.isCumulative
+        );
     }
 
-    // --- Internal Helpers ---
+    // =========================================================================
+    //                         INTERNAL FUNCTIONS
+    // =========================================================================
 
-    function _processFeesAndMining(uint256 _amount) internal returns (uint256 purchaseAmount) {
-        uint256 totalFee = (_amount * gameFeeBips) / TOTAL_BIPS;
-        uint256 prizePoolAmount = _amount - totalFee;
-        purchaseAmount = _amount; 
+    /**
+     * @dev Processes BKC payment: collects wager, deducts fee, adds to pool
+     */
+    function _processPayment(uint256 _amount) internal returns (uint256 netWager) {
+        uint256 fee = (_amount * gameFeeBips) / BIPS_DENOMINATOR;
+        netWager = _amount - fee;
 
-        if (miningManagerAddress == address(0)) revert CoreContractsNotSet();
+        if (miningManagerAddress == address(0)) revert CoreContractNotSet();
 
         bkcToken.safeTransferFrom(msg.sender, address(this), _amount);
-        _addAmountToPool(prizePoolAmount);
 
-        if (totalFee > 0) {
-            bkcToken.safeTransfer(miningManagerAddress, totalFee);
-            IMiningManager(miningManagerAddress).performPurchaseMining(SERVICE_KEY, totalFee);
+        // Add net wager to prize pool
+        prizePoolBalance += netWager;
+
+        // Send fee to mining manager
+        if (fee > 0) {
+            bkcToken.safeTransfer(miningManagerAddress, fee);
+            IMiningManager(miningManagerAddress).performPurchaseMining(SERVICE_KEY, fee);
         }
-        
-        return purchaseAmount;
     }
-    
-    function _addAmountToPool(uint256 _amount) internal {
-        if (_amount == 0) return;
-        
-        if (activeTierCount == 0) {
-            address treasury = ecosystemManager.getTreasuryAddress();
-            if (treasury != address(0)) {
-                bkcToken.safeTransfer(treasury, _amount);
-                return;
-            }
-        }
-        prizePoolBalance += _amount;
+
+    /**
+     * @dev Generates a deterministic roll from random seed
+     */
+    function _generateRoll(
+        uint256 _seed,
+        uint256 _tierId,
+        uint256 _maxRange
+    ) internal pure returns (uint256) {
+        return (uint256(keccak256(abi.encodePacked(_seed, _tierId))) % _maxRange) + 1;
     }
 }

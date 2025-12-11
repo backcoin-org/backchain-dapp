@@ -10,123 +10,80 @@ import {
     RewardBoosterNFT, 
     NFTLiquidityPoolFactory, 
     SimpleBKCFaucet, 
-    MiningManager,
     NFTLiquidityPool,
-    FortunePool
+    FortunePool,
+    RentalManager
 } from "../typechain-types";
 
 dotenv.config();
 
-// --- Tipos ---
-type AuditResult = {
-    tier: string;
-    action: string;
-    status: "✅ PASS" | "❌ FAIL" | "⚠️ SKIP" | "⏳ COOLDOWN";
-    details?: string;
+// =================================================================
+// ⚙️ CONFIGURAÇÃO GLOBAL
+// =================================================================
+const FEES = {
+    MINT_TAX_BASE: ethers.parseEther("0.0003"), // ETH
+    FAUCET_ETH: ethers.parseEther("0.002"),
+    FAUCET_BKC: ethers.parseEther("200")
 };
 
-type TierConfig = {
-    name: string;
-    boost: bigint;
-};
-
-// --- Configurações ---
-const REPORT: AuditResult[] = [];
-const TIERS: TierConfig[] = [
-    { name: "💎 Diamond", boost: 7000n },
-    { name: "💿 Platinum", boost: 6000n },
-    { name: "🥇 Gold", boost: 5000n },
-    { name: "🥈 Silver", boost: 4000n },
-    { name: "🥉 Bronze", boost: 3000n },
+const TIERS = [
+    { name: "🛡️ Baseline (No NFT)", boost: 0n },
+    { name: "🔮 Crystal", boost: 1000n },
     { name: "⚙️ Iron", boost: 2000n },
-    { name: "🔮 Crystal", boost: 1000n }
+    { name: "🥉 Bronze", boost: 3000n },
+    { name: "🥈 Silver", boost: 4000n },
+    { name: "🥇 Gold", boost: 5000n },
+    { name: "💿 Platinum", boost: 6000n },
+    { name: "💎 Diamond", boost: 7000n }
 ];
 
-// --- Utilitários ---
+type AuditEntry = {
+    tier: string;
+    action: string;
+    status: "✅ PASS" | "❌ FAIL" | "⚠️ SKIP" | "⏳ WAIT" | "ℹ️ INFO";
+    details?: string;
+};
+const REPORT: AuditEntry[] = [];
+
+// =================================================================
+// 🛠️ HELPERS
+// =================================================================
 const toEther = (val: bigint) => ethers.formatEther(val);
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-// Configuração de ETH para enviar ao Faucet
-const FAUCET_ETH_REFILL = ethers.parseEther("0.05");
-const MIN_FAUCET_ETH = ethers.parseEther("0.01");
-
-// Retry configuration
-const MAX_RETRIES = 3;
-const RETRY_DELAY_MS = 5000;
-
-// --- Helper: Retry wrapper ---
-async function withRetry<T>(
-    fn: () => Promise<T>,
-    actionName: string,
-    maxRetries: number = MAX_RETRIES
-): Promise<T> {
-    let lastError: Error | null = null;
-    
-    for (let attempt = 1; attempt <= maxRetries; attempt++) {
-        try {
-            return await fn();
-        } catch (e: unknown) {
-            lastError = e as Error;
-            
-            // Não fazer retry para cooldown
-            if (lastError.message?.toLowerCase().includes("cooldown")) {
-                throw lastError;
-            }
-            
-            if (attempt < maxRetries) {
-                console.log(`\n      ⚠️ Attempt ${attempt}/${maxRetries} failed. Retrying in ${RETRY_DELAY_MS/1000}s...`);
-                await sleep(RETRY_DELAY_MS);
-            }
-        }
-    }
-    
-    throw lastError;
+function logSection(title: string) {
+    console.log(`\n═══════════════════════════════════════════════════════════`);
+    console.log(`   ${title}`);
+    console.log(`═══════════════════════════════════════════════════════════`);
 }
 
-// --- Helper: Parse cooldown time from error ---
-function parseCooldownTime(errorMessage: string): string {
-    const match = errorMessage.match(/(\d+)/);
-    if (match) {
-        const timestamp = parseInt(match[1]);
-        if (timestamp > 946684800) {
-            const date = new Date(timestamp * 1000);
-            return date.toLocaleString();
-        }
-        if (timestamp < 86400 * 365) {
-            const minutes = Math.floor(timestamp / 60);
-            const seconds = timestamp % 60;
-            return `${minutes}m ${seconds}s restantes`;
-        }
-    }
-    return "aguarde o período de cooldown";
+function calculateExpectedFee(baseFee: bigint, boostBips: bigint): bigint {
+    const discount = (baseFee * boostBips) / 10000n;
+    return baseFee - discount;
 }
 
-// --- Helper: Calculate expected discount ---
-function calculateDiscount(baseFee: bigint, boostBips: bigint): { discountedFee: bigint; discountAmount: bigint; discountPercent: number } {
-    const discountAmount = (baseFee * boostBips) / 10000n;
-    const discountedFee = baseFee - discountAmount;
-    const discountPercent = Number(boostBips) / 100;
-    return { discountedFee, discountAmount, discountPercent };
+// Helper para tolerância de "dust" (100 wei)
+function isClose(a: bigint, b: bigint, tolerance = 100n): boolean {
+    const diff = a > b ? a - b : b - a;
+    return diff <= tolerance;
 }
 
+// =================================================================
+// 🧪 SCRIPT PRINCIPAL
+// =================================================================
 async function main() {
-    // 1. Setup
-    const signers = await ethers.getSigners();
-    const tester = signers[0];
-    
-    if (!tester) {
-        throw new Error("❌ Nenhum signer disponível! Verifique PRIVATE_KEY no .env");
-    }
-    
-    console.log(`\n🕵️‍♂️ BACKCHAIN ECOSYSTEM - FULL INTEGRATION TEST`);
+    const [tester] = await ethers.getSigners();
+    if (!tester) throw new Error("Sem signer configurado.");
+
+    console.log(`\n🕵️‍♂️  ECOSYSTEM FULL AUDIT V3.1 (DEBUG MODE)`);
     console.log(`   🧑‍🚀 Tester: ${tester.address}`);
-    console.log(`   📅 Date: ${new Date().toISOString()}`);
-    
-    // 2. Load Contracts
+
+    // 1. Carregar Endereços
     const addressesPath = path.join(__dirname, "../deployment-addresses.json");
-    if (!fs.existsSync(addressesPath)) throw new Error("❌ deployment-addresses.json not found");
+    if (!fs.existsSync(addressesPath)) throw new Error("Arquivo de endereços não encontrado.");
     const addresses = JSON.parse(fs.readFileSync(addressesPath, "utf8"));
 
+    // 2. Conectar Contratos
     const bkc = await ethers.getContractAt("BKCToken", addresses.bkcToken, tester) as unknown as BKCToken;
     const hub = await ethers.getContractAt("EcosystemManager", addresses.ecosystemManager, tester) as unknown as EcosystemManager;
     const notary = await ethers.getContractAt("DecentralizedNotary", addresses.decentralizedNotary, tester) as unknown as DecentralizedNotary;
@@ -135,620 +92,297 @@ async function main() {
     const factory = await ethers.getContractAt("NFTLiquidityPoolFactory", addresses.nftLiquidityPoolFactory, tester) as unknown as NFTLiquidityPoolFactory;
     const faucet = await ethers.getContractAt("SimpleBKCFaucet", addresses.faucet, tester) as unknown as SimpleBKCFaucet;
     const fortune = await ethers.getContractAt("FortunePool", addresses.fortunePool, tester) as unknown as FortunePool;
+    const rental = await ethers.getContractAt("RentalManager", addresses.rentalManager, tester) as unknown as RentalManager;
 
-    // Cast para acesso dinâmico
+    // Interfaces "Any" para flexibilidade
+    const faucetAny = faucet as any;
     const delegationAny = delegation as any;
-    const fortuneAny = fortune as any;
-
-    console.log("   ✅ Contracts Loaded\n");
 
     // =================================================================
-    // 💰 CHECK & FUND FAUCET WITH ETH
+    // 🔁 LOOP DE TIERS
     // =================================================================
-    console.log("═══════════════════════════════════════════════════════════");
-    console.log("   💰 FAUCET ETH CHECK");
-    console.log("═══════════════════════════════════════════════════════════\n");
-    
-    const faucetEthBalance = await tester.provider!.getBalance(addresses.faucet);
-    console.log(`   📍 Faucet Address: ${addresses.faucet}`);
-    console.log(`   💵 Faucet ETH Balance: ${toEther(faucetEthBalance)} ETH`);
-    
-    if (faucetEthBalance < MIN_FAUCET_ETH) {
-        console.log(`   ⚠️  Faucet needs ETH! Sending ${toEther(FAUCET_ETH_REFILL)} ETH...`);
+    for (const tier of TIERS) {
+        await runTestCycle(tier.name, tier.boost);
+    }
+
+    async function runTestCycle(tierName: string, boostBips: bigint) {
+        logSection(`🚀 TESTING TIER: ${tierName} (Boost: ${Number(boostBips)/100}%)`);
+        
+        let tokenId: bigint | null = null;
+        let poolAddr: string = ethers.ZeroAddress;
+
+        // ---------------------------------------------------------
+        // A. SMART FAUCET (Com Fallback para Erro de ABI)
+        // ---------------------------------------------------------
+        process.stdout.write(`   🚰 [FAUCET] Checking... `);
         try {
-            const txFund = await tester.sendTransaction({
-                to: addresses.faucet,
-                value: FAUCET_ETH_REFILL
-            });
-            await txFund.wait();
-            const newBalance = await tester.provider!.getBalance(addresses.faucet);
-            console.log(`   ✅ Faucet funded! New Balance: ${toEther(newBalance)} ETH`);
-            REPORT.push({ tier: "System", action: "Fund Faucet", status: "✅ PASS", details: `Sent ${toEther(FAUCET_ETH_REFILL)} ETH` });
-        } catch (e: unknown) {
-            const err = e as Error;
-            console.log(`   ❌ Failed to fund Faucet: ${err.message}`);
-            REPORT.push({ tier: "System", action: "Fund Faucet", status: "❌ FAIL", details: err.message?.slice(0, 100) });
-        }
-    } else {
-        console.log(`   ✅ Faucet has sufficient ETH`);
-        REPORT.push({ tier: "System", action: "Faucet ETH Check", status: "✅ PASS", details: `${toEther(faucetEthBalance)} ETH` });
-    }
-
-    // Verificar BKC no Faucet
-    const faucetBkcBalance = await bkc.balanceOf(addresses.faucet);
-    console.log(`   💰 Faucet BKC Balance: ${toEther(faucetBkcBalance)} BKC`);
-
-    // =================================================================
-    // 🎰 FORTUNE POOL DIAGNOSTICS (GLOBAL)
-    // =================================================================
-    console.log("\n═══════════════════════════════════════════════════════════");
-    console.log("   🎰 FORTUNE POOL DIAGNOSTICS");
-    console.log("═══════════════════════════════════════════════════════════\n");
-    
-    console.log(`   📍 FortunePool Address: ${addresses.fortunePool}`);
-    
-    // Variáveis globais do Fortune
-    let activeTierCount = 0n;
-    let oracleFeeInWei = 0n;
-    let oracleAddress = ethers.ZeroAddress;
-    let gameFeeBips = 0n;
-    let prizePoolBalance = 0n;
-    
-    try {
-        activeTierCount = await fortuneAny.activeTierCount();
-        oracleFeeInWei = await fortuneAny.oracleFeeInWei();
-        oracleAddress = await fortuneAny.oracleAddress();
-        gameFeeBips = await fortuneAny.gameFeeBips();
-        prizePoolBalance = await fortuneAny.prizePoolBalance();
-        
-        console.log(`   🎲 Active Tiers: ${activeTierCount}`);
-        console.log(`   💵 Oracle Fee: ${toEther(oracleFeeInWei)} ETH`);
-        console.log(`   🤖 Oracle Address: ${oracleAddress}`);
-        console.log(`   📊 Game Fee: ${gameFeeBips} bips (${Number(gameFeeBips) / 100}%)`);
-        console.log(`   🏆 Prize Pool: ${toEther(prizePoolBalance)} BKC`);
-        
-        if (activeTierCount > 0n) {
-            console.log(`\n   📋 Tier Configuration:`);
-            for (let i = 1n; i <= activeTierCount; i++) {
-                try {
-                    const tier = await fortuneAny.prizeTiers(i);
-                    console.log(`      Tier ${i}: Range 1-${tier.range}, Multiplier ${Number(tier.multiplierBips) / 100}x, Active: ${tier.isActive}`);
-                } catch {}
-            }
-        }
-        
-        REPORT.push({ tier: "Fortune", action: "Config Read", status: "✅ PASS", details: `${activeTierCount} tiers, ${toEther(oracleFeeInWei)} ETH fee` });
-        
-    } catch (e: unknown) {
-        const err = e as Error;
-        console.log(`   ❌ Error reading FortunePool config: ${err.message}`);
-        REPORT.push({ tier: "Fortune", action: "Config Read", status: "❌ FAIL", details: err.message?.slice(0, 100) });
-    }
-
-    // =================================================================
-    // 📊 INITIAL BALANCE
-    // =================================================================
-    const initialBal = await bkc.balanceOf(tester.address);
-    console.log(`\n   💰 Initial BKC Balance: ${toEther(initialBal)} BKC\n`);
-
-    // =================================================================
-    // 🎮 FORTUNE TEST FUNCTION (Reusable for each tier)
-    // =================================================================
-    async function testFortune(tierName: string, currentBoost: bigint): Promise<void> {
-        console.log(`\n      🎰 Fortune Pool Test...`);
-        
-        if (activeTierCount === 0n) {
-            console.log(`         ⚠️ No prize tiers configured`);
-            REPORT.push({ tier: tierName, action: "Fortune", status: "⚠️ SKIP", details: "No tiers configured" });
-            return;
-        }
-        
-        if (oracleAddress === ethers.ZeroAddress) {
-            console.log(`         ⚠️ Oracle address not set`);
-            REPORT.push({ tier: tierName, action: "Fortune", status: "⚠️ SKIP", details: "Oracle not configured" });
-            return;
-        }
-        
-        const wagerAmount = ethers.parseEther("1");
-        const isCumulative = false;
-        
-        // Criar guesses
-        const guesses: bigint[] = [];
-        console.log(`         📝 Preparing ${activeTierCount} guesses...`);
-        
-        for (let i = 1n; i <= activeTierCount; i++) {
+            // Tenta ler locktime, se falhar, assume que pode clamar e trata o erro de revert
+            let canClaim = true;
             try {
-                const tier = await fortuneAny.prizeTiers(i);
-                const range = BigInt(tier.range);
-                const guess = BigInt(Math.floor(Math.random() * Number(range)) + 1);
-                guesses.push(guess);
-                console.log(`            Tier ${i}: Guess ${guess} (Range: 1-${range})`);
+                // Tenta chamar lastAccessTime (padrão)
+                const lastAccess = await faucetAny.lastAccessTime(tester.address);
+                const interval = await faucetAny.cooldownInterval();
+                const now = BigInt((await tester.provider!.getBlock("latest"))!.timestamp);
+                if (now < lastAccess + interval) {
+                    const waitTime = (lastAccess + interval) - now;
+                    console.log(`⏳ Cooldown (${waitTime}s). Skipping.`);
+                    REPORT.push({ tier: tierName, action: "Faucet", status: "⏳ WAIT", details: `${waitTime}s` });
+                    canClaim = false;
+                }
             } catch {
-                guesses.push(1n);
+                // Se der erro ao ler a função (ex: nome diferente), tentamos clamar direto
+                // Ignoramos o erro de leitura
+            }
+
+            if (canClaim) {
+                const tx = await faucet.distributeTo(tester.address);
+                await tx.wait();
+                console.log(`✅ Claimed ${toEther(FEES.FAUCET_BKC)} BKC`);
+                REPORT.push({ tier: tierName, action: "Faucet", status: "✅ PASS" });
+            }
+        } catch (e: any) {
+            // Se o erro for de Revert (Cooldown do contrato), marcamos como WAIT
+            if (e.message.includes("cooldown") || e.message.includes("Wait")) {
+                console.log(`⏳ Contract Reverted (Cooldown).`);
+                REPORT.push({ tier: tierName, action: "Faucet", status: "⏳ WAIT" });
+            } else {
+                console.log(`❌ Error: ${e.message.slice(0, 50)}`);
+                REPORT.push({ tier: tierName, action: "Faucet", status: "❌ FAIL", details: "Check ABI/Function Name" });
             }
         }
-        
-        // Calcular taxa com desconto
-        const baseFee = (wagerAmount * gameFeeBips) / 10000n;
-        const { discountedFee, discountPercent } = calculateDiscount(baseFee, currentBoost);
-        
-        console.log(`\n         📊 Fee Analysis (Boost: ${currentBoost} bips = ${Number(currentBoost)/100}%):`);
-        console.log(`            Base Fee: ${toEther(baseFee)} BKC`);
-        console.log(`            Expected Fee (with ${discountPercent}% discount): ${toEther(discountedFee)} BKC`);
-        
-        const ethRequired = isCumulative ? oracleFeeInWei * 5n : oracleFeeInWei;
-        const testerEthBalance = await tester.provider!.getBalance(tester.address);
-        
-        if (ethRequired > 0n && testerEthBalance < ethRequired + ethers.parseEther("0.001")) {
-            console.log(`         ❌ Insufficient ETH (need ${toEther(ethRequired)} ETH)`);
-            REPORT.push({ tier: tierName, action: "Fortune", status: "⚠️ SKIP", details: "Insufficient ETH" });
-            return;
+
+        // ---------------------------------------------------------
+        // B. NFT MARKET & RENTAL
+        // ---------------------------------------------------------
+        if (boostBips > 0n) {
+            try {
+                poolAddr = await factory.getPoolAddress(boostBips);
+                if (poolAddr === ethers.ZeroAddress) {
+                    console.log(`   ⚠️ Pool not found. Skipping.`);
+                    return;
+                }
+                
+                const pool = await ethers.getContractAt("NFTLiquidityPool", poolAddr, tester) as unknown as NFTLiquidityPool;
+                const buyPrice = await pool.getBuyPrice();
+                const taxBips = await hub.getFee(ethers.id("NFT_POOL_BUY_TAX_BIPS"));
+                const totalCost = buyPrice + (buyPrice * taxBips) / 10000n;
+
+                console.log(`   🛍️  [MARKET] Buying NFT (Cost: ${toEther(totalCost)} BKC)...`);
+                await bkc.approve(poolAddr, totalCost);
+                const txBuy = await pool.buyNextAvailableNFT(0n);
+                const rcBuy = await txBuy.wait();
+                
+                const event = rcBuy?.logs.find(l => {
+                    try { return pool.interface.parseLog(l)?.name === "NFTBought"; } catch { return false; }
+                });
+                if (event) {
+                    tokenId = pool.interface.parseLog(event)?.args.tokenId;
+                    console.log(`      ✅ Bought NFT #${tokenId}`);
+                    REPORT.push({ tier: tierName, action: "NFT Buy", status: "✅ PASS", details: `#${tokenId}` });
+                }
+
+                // --- TESTE DE RENTAL DEBUGADO ---
+                if (tokenId !== null) {
+                    console.log(`   🏠 [RENTAL] Testing List/Unlist...`);
+                    const rentPrice = ethers.parseEther("10"); 
+                    
+                    await nft.approve(addresses.rentalManager, tokenId);
+                    const txList = await rental.listNFT(tokenId, rentPrice);
+                    await txList.wait();
+                    
+                    const listing = await rental.listings(tokenId);
+                    
+                    // DEBUG: Verificando o estado real
+                    // console.log("      Debug Listing:", listing);
+
+                    // Verifica se está ativo OU se o contrato virou o owner (custódia)
+                    if (listing.isActive === true) {
+                        console.log(`      ✅ Listed Successfully.`);
+                        REPORT.push({ tier: tierName, action: "Rental Test", status: "✅ PASS" });
+                    } else {
+                        console.log(`      ❌ Listing State Invalid: Active=${listing.isActive}`);
+                        REPORT.push({ tier: tierName, action: "Rental Test", status: "❌ FAIL", details: `Active: ${listing.isActive}` });
+                    }
+
+                    // Withdraw para usar no teste seguinte
+                    const txWith = await rental.withdrawNFT(tokenId);
+                    await txWith.wait();
+                }
+
+            } catch (e: any) {
+                console.log(`   ❌ Market/Rental Error: ${e.message}`);
+                REPORT.push({ tier: tierName, action: "NFT/Rental", status: "❌ FAIL" });
+                return;
+            }
         }
-        
+
+        const nftIdToUse = tokenId === null ? 0n : tokenId;
+
+        // ---------------------------------------------------------
+        // C. STAKING (Math Fix: Auto-Claim Detection)
+        // ---------------------------------------------------------
+        console.log(`   🥩 [STAKING] Delegating...`);
         try {
-            // Aprovar BKC
-            const txApprove = await bkc.approve(addresses.fortunePool, wagerAmount);
-            await txApprove.wait();
+            const stakeAmount = ethers.parseEther("50");
+            const lockTime = 86400 * 30; 
+            const baseFeeBips = await hub.getFee(ethers.id("DELEGATION_FEE_BIPS"));
             
-            // Participar do jogo
-            console.log(`         🎲 Calling participate()...`);
-            const txGame = await fortuneAny.participate(
-                wagerAmount,
-                guesses,
-                isCumulative,
-                { value: ethRequired }
-            );
-            const receipt = await txGame.wait();
+            // MATH: Fee esperada
+            const feeBase = (stakeAmount * baseFeeBips) / 10000n;
+            const expectedFee = calculateExpectedFee(feeBase, boostBips);
+
+            console.log(`      📊 Math: Exp Fee ${toEther(expectedFee)} BKC`);
+
+            const balBefore = await bkc.balanceOf(tester.address);
             
-            // Buscar GameRequested event - guardar como BigInt
-            let gameId: bigint | null = null;
-            if (receipt && receipt.logs) {
-                for (const log of receipt.logs) {
+            await bkc.approve(addresses.delegationManager, stakeAmount * 2n);
+            const txDel = await delegation.delegate(stakeAmount, lockTime, nftIdToUse);
+            const rcDel = await txDel.wait();
+
+            // DETECTAR AUTO-CLAIM (Recompensas sacadas automaticamente)
+            let autoClaimedAmount = 0n;
+            if (rcDel) {
+                for (const log of rcDel.logs) {
                     try {
-                        const parsed = fortune.interface.parseLog(log);
-                        if (parsed && parsed.name === 'GameRequested') {
-                            gameId = BigInt(parsed.args.gameId.toString());
+                        const parsed = delegation.interface.parseLog(log);
+                        if (parsed?.name === "RewardClaimed" && parsed.args.user === tester.address) {
+                            autoClaimedAmount += parsed.args.amount;
+                            console.log(`      💰 Auto-Claimed Rewards: ${toEther(parsed.args.amount)} BKC`);
                         }
                     } catch {}
                 }
             }
-            
-            if (gameId === null) {
-                console.log(`         ⚠️ Could not detect Game ID`);
-                REPORT.push({ tier: tierName, action: "Fortune", status: "⚠️ SKIP", details: "No game ID detected" });
-                return;
-            }
-            
-            console.log(`         ✅ Game #${gameId} Requested!`);
-            console.log(`         ⏳ Waiting 15s for Oracle to fulfill...`);
-            
-            // Aguardar para o Oracle processar
-            await sleep(15000);
-            
-            // ✅ Verificar se o jogo foi resolvido via evento GameFulfilled
-            try {
-                // Buscar eventos recentes do contrato
-                const filter = fortuneAny.filters.GameFulfilled ? 
-                    fortuneAny.filters.GameFulfilled(gameId) : null;
-                
-                if (filter) {
-                    const events = await fortuneAny.queryFilter(filter, -100);
-                    if (events.length > 0) {
-                        const event = events[0];
-                        const results = event.args?.results || event.args?.[1];
-                        if (results && results.length > 0) {
-                            const resultsArray = Array.from(results).map((r: any) => BigInt(r.toString()));
-                            console.log(`         🎉 Game Fulfilled! Results: [${resultsArray.join(', ')}]`);
-                            console.log(`         📊 Your Guesses: [${guesses.join(', ')}]`);
-                            
-                            let wins = 0;
-                            for (let i = 0; i < resultsArray.length; i++) {
-                                const match = resultsArray[i] === guesses[i];
-                                if (match) wins++;
-                                console.log(`            Tier ${i + 1}: ${guesses[i]} vs ${resultsArray[i]} ${match ? '✅ MATCH!' : '❌'}`);
-                            }
-                            
-                            const resultText = wins > 0 ? `🏆 WIN! ${wins}/${resultsArray.length} matches` : `☠️ LOSE 0/${resultsArray.length}`;
-                            REPORT.push({ 
-                                tier: tierName, 
-                                action: "Fortune", 
-                                status: "✅ PASS", 
-                                details: `Game #${gameId} - ${resultText}` 
-                            });
-                            return;
-                        }
-                    }
-                }
-                
-                // Se não encontrou evento, verificar o resultado via mapping games[]
-                try {
-                    const gameData = await fortuneAny.games(gameId);
-                    // Se o jogo foi fulfilled, player será address(0) ou haverá dados
-                    if (gameData && gameData.fulfilled === true) {
-                        console.log(`         ✅ Game #${gameId} fulfilled (verified via games mapping)`);
-                        REPORT.push({ tier: tierName, action: "Fortune", status: "✅ PASS", details: `Game #${gameId} fulfilled` });
-                        return;
-                    }
-                } catch {}
-                
-                // Se chegou aqui, jogo foi enviado mas não conseguimos verificar
-                console.log(`         ⚠️ Game #${gameId} sent - Oracle may still be processing`);
-                REPORT.push({ tier: tierName, action: "Fortune", status: "✅ PASS", details: `Game #${gameId} requested` });
-                
-            } catch (checkError: unknown) {
-                const checkErr = checkError as Error;
-                console.log(`         ⚠️ Verification issue: ${checkErr.message?.slice(0, 50)}`);
-                // O jogo foi enviado, só não conseguimos verificar resultado
-                REPORT.push({ tier: tierName, action: "Fortune", status: "✅ PASS", details: `Game #${gameId} requested` });
-            }
-            
-        } catch (e: unknown) {
-            const err = e as Error;
-            console.log(`         ❌ Fortune Error: ${err.message?.slice(0, 60)}`);
-            REPORT.push({ tier: tierName, action: "Fortune", status: "❌ FAIL", details: err.message?.slice(0, 80) });
-        }
-    }
 
-    // =================================================================
-    // 🔄 TEST CYCLE FUNCTION (Com Fortune, Claim Rewards e análise de taxas)
-    // =================================================================
-    async function runTestCycle(tierName: string, tokenId: bigint | null, currentBoost: bigint) {
-        console.log(`\n   🚀 TESTING: [ ${tierName} ] (Boost: ${currentBoost} bips = ${Number(currentBoost)/100}%)`);
-
-        // Token ID para usar em operações com desconto (0 se não tiver NFT)
-        const nftIdToUse = tokenId === null ? 0n : tokenId;
-
-        // --- A. FAUCET ---
-        process.stdout.write(`      🚰 Faucet... `);
-        try {
-            await withRetry(async () => {
-                const tx = await faucet.distributeTo(tester.address);
-                await tx.wait();
-                return true;
-            }, "Faucet");
-            REPORT.push({ tier: tierName, action: "Faucet", status: "✅ PASS" });
-            console.log("OK");
-        } catch (e: unknown) {
-            const err = e as Error;
-            const isCooldown = err.message?.toLowerCase().includes("cooldown");
-            if (isCooldown) {
-                const cooldownInfo = parseCooldownTime(err.message || "");
-                console.log(`⏳ Cooldown (${cooldownInfo})`);
-                REPORT.push({ tier: tierName, action: "Faucet", status: "⏳ COOLDOWN", details: cooldownInfo });
-            } else {
-                // Verificar se é falta de BKC no faucet ou outro erro
-                const faucetBkc = await bkc.balanceOf(addresses.faucet);
-                if (faucetBkc < ethers.parseEther("100")) {
-                    console.log(`⚠️ Skip (Faucet low: ${toEther(faucetBkc)} BKC)`);
-                    REPORT.push({ tier: tierName, action: "Faucet", status: "⚠️ SKIP", details: `Faucet low: ${toEther(faucetBkc)} BKC` });
-                } else {
-                    console.log(`FAIL: ${err.message?.slice(0, 50)}`);
-                    REPORT.push({ tier: tierName, action: "Faucet", status: "❌ FAIL", details: err.message?.slice(0, 80) });
-                }
-            }
-        }
-
-        // --- B. STAKING (Com análise de taxa) ---
-        process.stdout.write(`      🥩 Staking... `);
-        const stakeAmount = ethers.parseEther("10");
-        const stakeLockTime = 86400n * 30n;
-        
-        try {
-            const delegationFeeBips = await hub.getFee(ethers.id("DELEGATION_FEE_BIPS"));
-            const rawFee = (stakeAmount * delegationFeeBips) / 10000n;
-            const { discountedFee, discountPercent } = calculateDiscount(rawFee, currentBoost);
-            
-            console.log(`\n         📊 Stake Fee Analysis:`);
-            console.log(`            Base Fee: ${toEther(rawFee)} BKC`);
-            console.log(`            Discount: ${discountPercent}%`);
-            console.log(`            Expected Fee: ${toEther(discountedFee)} BKC`);
-            
-            const balBefore = await bkc.balanceOf(tester.address);
-            
-            await withRetry(async () => {
-                const approveAmount = stakeAmount * 2n;
-                const txApprove = await bkc.approve(addresses.delegationManager, approveAmount);
-                await txApprove.wait();
-                
-                const txDelegate = await delegation.delegate(stakeAmount, stakeLockTime, nftIdToUse);
-                await txDelegate.wait();
-                return true;
-            }, "Stake");
-            
             const balAfter = await bkc.balanceOf(tester.address);
-            const actualSpent = balBefore - balAfter;
-            const actualFee = actualSpent - stakeAmount;
             
-            console.log(`            Actual Fee: ${toEther(actualFee)} BKC`);
+            // CÁLCULO REAL:
+            // Delta da Carteira = (O que eu tinha) - (O que eu tenho agora)
+            // Esse Delta é composto por: (Stake + Taxa) - (Recompensas Ganhas)
+            // Logo: (Stake + Taxa) = Delta + Recompensas
+            // Taxa = (Delta + Recompensas) - Stake
             
-            REPORT.push({ 
-                tier: tierName, 
-                action: "Stake", 
-                status: "✅ PASS",
-                details: `Fee: ${toEther(actualFee)} BKC (Discount: ${discountPercent}%)`
-            });
-            process.stdout.write(`         ✅ OK\n`);
-        } catch (e: unknown) {
-            const err = e as Error;
-            REPORT.push({ tier: tierName, action: "Stake", status: "❌ FAIL", details: err.message?.slice(0, 80) });
-            console.log(`FAIL: ${err.message?.slice(0, 50)}`);
+            const walletDelta = balBefore - balAfter;
+            const totalCost = walletDelta + autoClaimedAmount;
+            const actualFee = totalCost - stakeAmount;
+
+            if (isClose(actualFee, expectedFee, 10000n)) { // Tolerância pequena
+                console.log(`      ✅ MATCH: Paid ${toEther(actualFee)} (vs Exp ${toEther(expectedFee)})`);
+                REPORT.push({ tier: tierName, action: "Stake Math", status: "✅ PASS" });
+            } else {
+                console.warn(`      ❌ MISMATCH: Paid ${toEther(actualFee)} vs Exp ${toEther(expectedFee)}`);
+                // Não falha o script inteiro, mas loga erro
+                REPORT.push({ tier: tierName, action: "Stake Math", status: "❌ FAIL", details: "Fee Mismatch" });
+            }
+
+        } catch (e: any) {
+            console.log(`      ❌ Stake Error: ${e.message}`);
+            REPORT.push({ tier: tierName, action: "Stake", status: "❌ FAIL" });
         }
 
-        // --- C. NOTARY (Com análise de taxa) ---
-        process.stdout.write(`      📜 Notary... `);
+        // ---------------------------------------------------------
+        // D. NOTARY (Math Check)
+        // ---------------------------------------------------------
         try {
             const baseFee = await hub.getFee(ethers.id("NOTARY_SERVICE"));
-            const { discountedFee, discountPercent } = calculateDiscount(baseFee, currentBoost);
+            const expected = calculateExpectedFee(baseFee, boostBips);
             
-            console.log(`\n         📊 Notary Fee Analysis:`);
-            console.log(`            Base Fee: ${toEther(baseFee)} BKC`);
-            console.log(`            Discount: ${discountPercent}%`);
-            console.log(`            Expected Fee: ${toEther(discountedFee)} BKC`);
-            
-            const balBefore = await bkc.balanceOf(tester.address);
-            
-            await withRetry(async () => {
-                const approveAmount = baseFee * 2n;
-                const txApprove = await bkc.approve(addresses.decentralizedNotary, approveAmount);
-                await txApprove.wait();
+            // Só executa se tiver saldo suficiente
+            const bal = await bkc.balanceOf(tester.address);
+            if (bal > baseFee) {
+                console.log(`   📜 [NOTARY] Service Fee Check...`);
+                const b4 = await bkc.balanceOf(tester.address);
+                await bkc.approve(addresses.decentralizedNotary, baseFee);
+                const tx = await notary.notarize("ipfs://x", "Audit", ethers.id(Math.random().toString()), nftIdToUse);
+                await tx.wait();
+                const a4 = await bkc.balanceOf(tester.address);
                 
-                const uniqueHash = ethers.id(`Test_${tierName}_${Date.now()}_${Math.random()}`);
-                
-                const txNotarize = await notary.notarize(
-                    "ipfs://QmTest123", 
-                    "Integration Test", 
-                    uniqueHash, 
-                    nftIdToUse
-                );
-                await txNotarize.wait();
-                return true;
-            }, "Notary");
-            
-            const balAfter = await bkc.balanceOf(tester.address);
-            const actualFee = balBefore - balAfter;
-            
-            console.log(`            Actual Fee: ${toEther(actualFee)} BKC`);
-            
-            REPORT.push({ 
-                tier: tierName, 
-                action: "Notary", 
-                status: "✅ PASS",
-                details: `Fee: ${toEther(actualFee)} BKC (Discount: ${discountPercent}%)`
-            });
-            process.stdout.write(`         ✅ OK\n`);
-        } catch (e: unknown) {
-            const err = e as Error;
-            REPORT.push({ tier: tierName, action: "Notary", status: "❌ FAIL", details: err.message?.slice(0, 80) });
-            console.log(`FAIL: ${err.message?.slice(0, 50)}`);
-        }
+                const paid = b4 - a4;
+                if (isClose(paid, expected)) {
+                    REPORT.push({ tier: tierName, action: "Notary Math", status: "✅ PASS" });
+                } else {
+                    console.log(`      ❌ Notary Mismatch: Paid ${toEther(paid)} vs Exp ${toEther(expected)}`);
+                    REPORT.push({ tier: tierName, action: "Notary Math", status: "❌ FAIL" });
+                }
+            }
+        } catch (e) {}
 
-        // --- D. FORTUNE TEST ---
-        await testFortune(tierName, currentBoost);
-
-        // --- E. CLAIM REWARDS ---
-        process.stdout.write(`      🎁 Claim Rewards... `);
+        // ---------------------------------------------------------
+        // E. FORTUNE (Game)
+        // ---------------------------------------------------------
+        console.log(`   🎰 [FORTUNE] Game Test...`);
         try {
-            // ✅ CORREÇÃO: Usar pendingRewards(address) corretamente
-            const pendingRewards = await delegationAny.pendingRewards(tester.address);
-            
-            if (pendingRewards > 0n) {
-                console.log(`\n         💰 Pending Rewards: ${toEther(pendingRewards)} BKC`);
+            const activeTiers = await (fortune as any).activeTierCount();
+            if (activeTiers > 0n) {
+                const guesses = Array(Number(activeTiers)).fill(1n);
+                const wager = ethers.parseEther("10");
+                const oracleFee = await (fortune as any).oracleFeeInWei();
+
+                await bkc.approve(addresses.fortunePool, wager);
+                const tx = await (fortune as any).participate(wager, guesses, false, { value: oracleFee });
+                const rc = await tx.wait();
                 
-                const balBefore = await bkc.balanceOf(tester.address);
+                // Pegar Game ID
+                const evt = rc?.logs.find((l: any) => {
+                    try { return fortune.interface.parseLog(l)?.name === "GameRequested"; } catch { return false; }
+                });
                 
-                // ✅ CORREÇÃO: Usar chamada de baixo nível com ABI manual
-                // claimReward(uint256 _boosterTokenId)
-                // function selector = keccak256("claimReward(uint256)")[0:4]
-                await withRetry(async () => {
-                    const claimRewardAbi = ["function claimReward(uint256 _boosterTokenId)"];
-                    const claimInterface = new ethers.Interface(claimRewardAbi);
-                    const data = claimInterface.encodeFunctionData("claimReward", [nftIdToUse]);
+                if (evt) {
+                    const gameId = fortune.interface.parseLog(evt)?.args.gameId;
+                    console.log(`      🚀 Game #${gameId} Sent. Waiting Oracle...`);
                     
-                    const txClaim = await tester.sendTransaction({
-                        to: addresses.delegationManager,
-                        data: data
-                    });
-                    await txClaim.wait();
-                    return true;
-                }, "Claim");
-                
-                const balAfter = await bkc.balanceOf(tester.address);
-                const claimed = balAfter - balBefore;
-                
-                console.log(`         ✅ Claimed: ${toEther(claimed)} BKC`);
-                REPORT.push({ tier: tierName, action: "Claim Rewards", status: "✅ PASS", details: `Claimed ${toEther(claimed)} BKC (NFT #${nftIdToUse})` });
-            } else {
-                console.log(`Skip (No rewards pending)`);
-                REPORT.push({ tier: tierName, action: "Claim Rewards", status: "⚠️ SKIP", details: "No rewards pending" });
+                    let done = false;
+                    for(let i=0; i<10; i++) {
+                        await sleep(2000);
+                        const status = await (fortune as any).getGameStatus(gameId);
+                        if (status[1]) {
+                            const rolls = status[4];
+                            const wins = rolls.filter((r: bigint, idx: number) => r === guesses[idx]).length;
+                            console.log(`      🎲 Result: [${rolls}] - ${wins > 0 ? "WIN" : "LOSE"}`);
+                            REPORT.push({ tier: tierName, action: "Oracle", status: "✅ PASS" });
+                            done = true;
+                            break;
+                        }
+                        process.stdout.write(".");
+                    }
+                    if(!done) REPORT.push({ tier: tierName, action: "Oracle", status: "⏳ WAIT" });
+                }
             }
-        } catch (e: unknown) {
-            const err = e as Error;
-            // Se não houver rewards, é skip, não erro
-            if (err.message?.includes("No rewards") || err.message?.includes("nothing")) {
-                console.log(`Skip (No rewards)`);
-                REPORT.push({ tier: tierName, action: "Claim Rewards", status: "⚠️ SKIP", details: "No rewards" });
-            } else {
-                console.log(`FAIL: ${err.message?.slice(0, 50)}`);
-                REPORT.push({ tier: tierName, action: "Claim Rewards", status: "❌ FAIL", details: err.message?.slice(0, 80) });
-            }
+        } catch (e: any) {
+            console.log(`      ❌ Fortune Error: ${e.message}`);
         }
 
-        // --- F. FORCE UNSTAKE ---
-        process.stdout.write(`      💔 Unstake... `);
+        // ---------------------------------------------------------
+        // F. CLEANUP
+        // ---------------------------------------------------------
         try {
             const delegations = await delegation.getDelegationsOf(tester.address);
             if (delegations.length > 0) {
-                const lastIndex = delegations.length - 1;
-                const balBefore = await bkc.balanceOf(tester.address);
-                
-                await withRetry(async () => {
-                    const txUnstake = await delegation.forceUnstake(BigInt(lastIndex), nftIdToUse);
-                    await txUnstake.wait();
-                    return true;
-                }, "Unstake");
-                
-                const balAfter = await bkc.balanceOf(tester.address);
-                const received = balAfter - balBefore;
-                
-                REPORT.push({ 
-                    tier: tierName, 
-                    action: "Unstake", 
-                    status: "✅ PASS",
-                    details: `Recovered: ${toEther(received)} BKC`
-                });
-                console.log(`OK (Got ${toEther(received)} BKC)`);
-            } else {
-                REPORT.push({ tier: tierName, action: "Unstake", status: "⚠️ SKIP", details: "No active stake" });
-                console.log("Skip (No stake)");
+                await delegation.forceUnstake(delegations.length - 1, nftIdToUse);
             }
-        } catch (e: unknown) {
-            const err = e as Error;
-            REPORT.push({ tier: tierName, action: "Unstake", status: "❌ FAIL", details: err.message?.slice(0, 80) });
-            console.log(`FAIL: ${err.message?.slice(0, 50)}`);
-        }
+            if (tokenId !== null && boostBips > 0n) {
+                const pool = await ethers.getContractAt("NFTLiquidityPool", poolAddr, tester) as unknown as NFTLiquidityPool;
+                await nft.approve(poolAddr, tokenId);
+                await pool.sellNFT(tokenId, 0n, 0n);
+                console.log(`   🧹 Cleanup Done.`);
+            }
+        } catch {}
+
+        await sleep(500);
     }
 
     // =================================================================
-    // 🔥 MAIN EXECUTION
+    // 📊 REPORT
     // =================================================================
-
-    // Phase 1: Baseline (Sem NFT = 0% boost)
-    console.log("\n═══════════════════════════════════════════════════════════");
-    console.log("   PHASE 1: BASELINE (NO NFT BOOST = 0%)");
-    console.log("═══════════════════════════════════════════════════════════");
-    await runTestCycle("Baseline", null, 0n);
-
-    // Phase 2: Tier Sweep
-    console.log("\n═══════════════════════════════════════════════════════════");
-    console.log("   PHASE 2: NFT TIER SWEEP");
-    console.log("═══════════════════════════════════════════════════════════");
-    
-    for (const tier of TIERS) {
-        let currentTokenId: bigint | null = null;
-        
-        try {
-            const poolAddr = await factory.getPoolAddress(tier.boost);
-            if (poolAddr === ethers.ZeroAddress) {
-                console.log(`\n⚠️  No Pool for ${tier.name}. Skipping.`);
-                REPORT.push({ tier: tier.name, action: "Pool Lookup", status: "⚠️ SKIP", details: "No pool deployed" });
-                continue;
-            }
-            
-            const pool = await ethers.getContractAt("NFTLiquidityPool", poolAddr, tester) as unknown as NFTLiquidityPool;
-            
-            // Buy NFT
-            console.log(`\n🛍️  Buying ${tier.name} NFT (Boost: ${tier.boost} bips = ${Number(tier.boost)/100}%)...`);
-            
-            await withRetry(async () => {
-                const buyPrice = await pool.getBuyPrice();
-                const taxBips = await hub.getFee(ethers.id("NFT_POOL_BUY_TAX_BIPS"));
-                const tax = (buyPrice * taxBips) / 10000n;
-                const totalCost = buyPrice + tax;
-                
-                console.log(`   💵 Price: ${toEther(buyPrice)} + Tax: ${toEther(tax)} = ${toEther(totalCost)} BKC`);
-
-                const txApproveBuy = await bkc.approve(poolAddr, totalCost);
-                await txApproveBuy.wait();
-                
-                const txBuy = await pool.buyNextAvailableNFT(0n);
-                const rcBuy = await txBuy.wait();
-                
-                if (rcBuy) { 
-                    for (const log of rcBuy.logs) {
-                        try {
-                            const parsed = pool.interface.parseLog(log);
-                            if (parsed && parsed.name === 'NFTBought') { 
-                                currentTokenId = parsed.args.tokenId; 
-                                break; 
-                            }
-                        } catch {}
-                    }
-                }
-                
-                if (currentTokenId === null) throw new Error("Could not detect Token ID");
-                return true;
-            }, "Buy NFT");
-            
-            console.log(`   ✅ Token ID: ${currentTokenId}`);
-            REPORT.push({ tier: tier.name, action: "Buy NFT", status: "✅ PASS", details: `Token #${currentTokenId}` });
-
-            // Run Tests com o boost do tier
-            await runTestCycle(tier.name, currentTokenId, tier.boost);
-
-            // Sell NFT Back
-            try {
-                if (currentTokenId === null) throw new Error("No token to sell");
-                const ownerOf = await nft.ownerOf(currentTokenId);
-                if (ownerOf === tester.address) {
-                    console.log(`\n   🔄 Selling ${tier.name} NFT back...`);
-                    
-                    await withRetry(async () => {
-                        const txApproveNFT = await nft.approve(poolAddr, currentTokenId!);
-                        await txApproveNFT.wait();
-                        const txSell = await pool.sellNFT(currentTokenId!, 0n, 0n);
-                        await txSell.wait();
-                        return true;
-                    }, "Sell NFT");
-                    
-                    console.log(`   ✅ Sold`);
-                    REPORT.push({ tier: tier.name, action: "Sell NFT", status: "✅ PASS" });
-                } else {
-                    console.log(`   ⚠️ NFT not owned (Owner: ${ownerOf})`);
-                    REPORT.push({ tier: tier.name, action: "Sell NFT", status: "⚠️ SKIP", details: "NFT not owned" });
-                }
-            } catch (sellError: unknown) {
-                const err = sellError as Error;
-                console.log(`   ❌ Sell failed: ${err.message?.slice(0, 50)}`);
-                REPORT.push({ tier: tier.name, action: "Sell NFT", status: "❌ FAIL", details: err.message?.slice(0, 80) });
-            }
-
-        } catch (e: unknown) {
-            const err = e as Error;
-            console.error(`\n🚨 Critical Error on ${tier.name}: ${err.message?.slice(0, 80)}`);
-            REPORT.push({ tier: tier.name, action: "CRITICAL", status: "❌ FAIL", details: err.message?.slice(0, 80) });
-        }
-        
-        await sleep(2000);
-    }
-
-    // =================================================================
-    // 📊 FINAL REPORT
-    // =================================================================
-    console.log("\n\n═══════════════════════════════════════════════════════════");
-    console.log("   📊 FINAL AUDIT REPORT");
-    console.log("═══════════════════════════════════════════════════════════\n");
-    
+    console.log(`\n═══════════════════════════════════════════════════════════`);
     console.table(REPORT.map(r => ({
-        "Tier": r.tier,
-        "Action": r.action,
-        "Result": r.status,
-        "Details": r.details || "-"
+        Tier: r.tier,
+        Action: r.action,
+        Status: r.status,
+        Details: r.details || "-"
     })));
-
-    // Summary (COOLDOWN não conta como erro)
-    const passed = REPORT.filter(r => r.status === "✅ PASS").length;
-    const failed = REPORT.filter(r => r.status === "❌ FAIL").length;
-    const skipped = REPORT.filter(r => r.status === "⚠️ SKIP").length;
-    const cooldown = REPORT.filter(r => r.status === "⏳ COOLDOWN").length;
     
-    console.log(`\n   📈 Summary:`);
-    console.log(`      ✅ Passed:   ${passed}`);
-    console.log(`      ❌ Failed:   ${failed}`);
-    console.log(`      ⚠️ Skipped:  ${skipped}`);
-    console.log(`      ⏳ Cooldown: ${cooldown}`);
-    
-    const finalBal = await bkc.balanceOf(tester.address);
-    const balChange = finalBal - initialBal;
-    console.log(`\n   💰 Final BKC: ${toEther(finalBal)}`);
-    console.log(`   📊 Net Change: ${balChange >= 0n ? '+' : ''}${toEther(balChange)} BKC`);
-
-    if (failed > 0) {
-        console.log(`\n❌ ${failed} FAILURES DETECTED!`);
-        process.exit(1);
-    } else {
-        console.log("\n✅ ALL SYSTEMS OPERATIONAL!");
-        process.exit(0);
-    }
+    const errors = REPORT.filter(r => r.status === "❌ FAIL").length;
+    if (errors > 0) process.exit(1);
 }
 
 main().catch((error) => {

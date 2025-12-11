@@ -14,15 +14,24 @@ import "./IInterfaces.sol";
 import "./BKCToken.sol";
 
 /**
- * @title Backcoin Digital Notary
- * @notice Enterprise-grade document certification on the blockchain.
- * @dev 
- * - Open Access: Fees are paid in BKC to mint a Notary NFT.
- * - Proof-of-Purchase: Fees trigger the MiningManager to mint new rewards.
- * - On-Chain Metadata: Uses Base64 encoding to store certification data permanently.
- * Part of the Backcoin Ecosystem.
- * Website: Backcoin.org
- * Optimized for Arbitrum Network.
+ * @title Backchain Digital Notary
+ * @author Backchain Protocol
+ * @notice Enterprise-grade document certification and timestamping on the blockchain
+ * @dev Each notarization mints an NFT containing:
+ *      - IPFS content identifier (CID)
+ *      - Document description
+ *      - SHA-256 content hash
+ *      - Immutable timestamp
+ *
+ *      Features:
+ *      - On-chain metadata using Base64 encoding
+ *      - NFT-based fee discounts via RewardBoosterNFT
+ *      - Proof-of-Purchase mining integration
+ *      - OpenSea compatible metadata
+ *
+ * @custom:security-contact security@backcoin.org
+ * @custom:website https://backcoin.org
+ * @custom:network Arbitrum
  */
 contract DecentralizedNotary is
     Initializable,
@@ -34,45 +43,75 @@ contract DecentralizedNotary is
     using SafeERC20Upgradeable for BKCToken;
     using StringsUpgradeable for uint256;
 
-    // --- Structs ---
+    // =========================================================================
+    //                              CONSTANTS
+    // =========================================================================
 
-    struct Document {
-        string ipfsCid;      // Ex: ipfs://QmHash...
-        string description;  
-        bytes32 contentHash; // SHA-256 Hash of the file
-        uint256 timestamp;
-    }
+    /// @notice Basis points denominator (100% = 10000)
+    uint256 private constant BIPS_DENOMINATOR = 10_000;
 
-    // --- State Variables ---
-
-    IEcosystemManager public ecosystemManager;
-    BKCToken public bkcToken;
-    address public miningManagerAddress;
-    uint256 private _nextTokenId;
-
-    mapping(uint256 => Document) public documents;
-    mapping(uint256 => uint256) public notarizationFeePaid;
-
+    /// @notice Service key for MiningManager authorization
     bytes32 public constant SERVICE_KEY = keccak256("NOTARY_SERVICE");
 
-    // --- Events ---
+    // =========================================================================
+    //                              STRUCTS
+    // =========================================================================
 
-    event NotarizationEvent(
+    /// @notice Document certification record
+    struct Document {
+        string ipfsCid;       // IPFS content identifier (e.g., "ipfs://Qm...")
+        string description;   // Human-readable description
+        bytes32 contentHash;  // SHA-256 hash of document content
+        uint256 timestamp;    // Block timestamp when notarized
+    }
+
+    // =========================================================================
+    //                              STATE
+    // =========================================================================
+
+    /// @notice Reference to the ecosystem hub
+    IEcosystemManager public ecosystemManager;
+
+    /// @notice BKC token contract
+    BKCToken public bkcToken;
+
+    /// @notice Address of the mining manager
+    address public miningManagerAddress;
+
+    /// @notice Next token ID to mint
+    uint256 private _nextTokenId;
+
+    /// @notice Token ID => Document data
+    mapping(uint256 => Document) public documents;
+
+    /// @notice Token ID => Fee paid for notarization
+    mapping(uint256 => uint256) public notarizationFeePaid;
+
+    // =========================================================================
+    //                              EVENTS
+    // =========================================================================
+
+    /// @notice Emitted when a document is notarized
+    event DocumentNotarized(
         uint256 indexed tokenId,
         address indexed owner,
         string ipfsCid,
-        bytes32 contentHash
+        bytes32 indexed contentHash,
+        uint256 feePaid
     );
 
-    // --- Custom Errors ---
+    // =========================================================================
+    //                              ERRORS
+    // =========================================================================
 
-    error InvalidAddress();
-    error InvalidMetadata();
-    error FeeTransferFailed();
-    error InvalidFee();
-    error TokenDoesNotExist();
+    error ZeroAddress();
+    error EmptyMetadata();
+    error TokenNotFound();
+    error CoreContractNotSet();
 
-    // --- Initialization ---
+    // =========================================================================
+    //                           INITIALIZATION
+    // =========================================================================
 
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
@@ -80,45 +119,62 @@ contract DecentralizedNotary is
     }
 
     /**
-     * @notice Initializer for the Upgradeable contract.
+     * @notice Initializes the Digital Notary contract
+     * @param _owner Contract owner address
+     * @param _ecosystemManager Address of the ecosystem hub
      */
     function initialize(
-        address _initialOwner,
-        address _ecosystemManagerAddress
-    ) public initializer {
-        if (_initialOwner == address(0)) revert InvalidAddress();
-        if (_ecosystemManagerAddress == address(0)) revert InvalidAddress();
+        address _owner,
+        address _ecosystemManager
+    ) external initializer {
+        if (_owner == address(0)) revert ZeroAddress();
+        if (_ecosystemManager == address(0)) revert ZeroAddress();
 
-        // Adjusted for OZ v4 compatibility
-        __Ownable_init(); 
-        _transferOwnership(_initialOwner);
+        __Ownable_init();
         __UUPSUpgradeable_init();
         __ERC721_init("Backchain Digital Notary", "BKCN");
         __ReentrancyGuard_init();
-        
-        ecosystemManager = IEcosystemManager(_ecosystemManagerAddress);
-        address _bkcTokenAddress = ecosystemManager.getBKCTokenAddress();
-        address _miningManagerAddr = ecosystemManager.getMiningManagerAddress();
-        
-        if (_bkcTokenAddress == address(0) || _miningManagerAddr == address(0)) revert InvalidAddress();
 
-        bkcToken = BKCToken(_bkcTokenAddress);
-        miningManagerAddress = _miningManagerAddr;
-        
+        _transferOwnership(_owner);
+
+        ecosystemManager = IEcosystemManager(_ecosystemManager);
+
+        address bkcAddress = ecosystemManager.getBKCTokenAddress();
+        address mmAddress = ecosystemManager.getMiningManagerAddress();
+
+        if (bkcAddress == address(0) || mmAddress == address(0)) {
+            revert CoreContractNotSet();
+        }
+
+        bkcToken = BKCToken(bkcAddress);
+        miningManagerAddress = mmAddress;
+
         _nextTokenId = 1;
     }
 
-    function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
+    /**
+     * @dev Authorizes contract upgrades (owner only)
+     */
+    function _authorizeUpgrade(address) internal override onlyOwner {}
 
-    // --- Core Functions ---
+    // =========================================================================
+    //                         CORE FUNCTIONS
+    // =========================================================================
 
     /**
-     * @notice Notarizes a document on the blockchain.
-     * @dev Open access: Fees generate mining rewards.
-     * @param _ipfsCid The IPFS CID of the document.
-     * @param _description A brief description of the document.
-     * @param _contentHash The SHA-256 hash of the content.
-     * @param _boosterTokenId Optional Booster NFT ID for fee discounts.
+     * @notice Notarizes a document on the blockchain
+     * @dev Mints an NFT containing the document certification
+     *
+     *      Fee Calculation with NFT Discount:
+     *      - Base fee retrieved from EcosystemManager
+     *      - If user owns a RewardBoosterNFT, discount is applied proportionally
+     *      - Example: 1 BKC fee with 70% discount = 0.3 BKC
+     *
+     * @param _ipfsCid IPFS content identifier (e.g., "ipfs://QmHash...")
+     * @param _description Brief description of the document
+     * @param _contentHash SHA-256 hash of the document content
+     * @param _boosterTokenId RewardBoosterNFT token ID for fee discount (0 = no discount)
+     * @return tokenId The minted NFT token ID
      */
     function notarize(
         string calldata _ipfsCid,
@@ -126,134 +182,202 @@ contract DecentralizedNotary is
         bytes32 _contentHash,
         uint256 _boosterTokenId
     ) external nonReentrant returns (uint256 tokenId) {
-        if (bytes(_ipfsCid).length == 0) revert InvalidMetadata();
+        if (bytes(_ipfsCid).length == 0) revert EmptyMetadata();
 
-        // 1. Fee Calculation
-        uint256 feeToPay = ecosystemManager.getFee(SERVICE_KEY);
+        // Calculate fee with potential NFT discount
+        uint256 feeToPay = _calculateFeeWithDiscount(_boosterTokenId);
 
-        if (feeToPay > 0 && _boosterTokenId > 0) {
-            address boosterAddress = ecosystemManager.getBoosterAddress();
-            if (boosterAddress != address(0)) {
-                // Try/Catch to prevent revert if token doesn't exist or logic fails
-                try IRewardBoosterNFT(boosterAddress).ownerOf(_boosterTokenId) returns (address owner) {
-                    if (owner == msg.sender) {
-                        uint256 boostBips = IRewardBoosterNFT(boosterAddress).boostBips(_boosterTokenId);
-                        uint256 discountBips = ecosystemManager.getBoosterDiscount(boostBips);
-                        if (discountBips > 0) {
-                            uint256 discountAmount = (feeToPay * discountBips) / 10000;
-                            feeToPay = (feeToPay > discountAmount) ? feeToPay - discountAmount : 0;
-                        }
-                    }
-                } catch {}
-            }
-        }
- 
-        // 2. Fee Payment & Mining Trigger
+        // Process payment
         if (feeToPay > 0) {
             bkcToken.safeTransferFrom(msg.sender, address(this), feeToPay);
-            // Forward fee to MiningManager
             bkcToken.safeTransfer(miningManagerAddress, feeToPay);
-            // Trigger the Purchase Mining logic
             IMiningManager(miningManagerAddress).performPurchaseMining(SERVICE_KEY, feeToPay);
         }
 
-        // 3. Minting Logic
+        // Mint NFT
         tokenId = _nextTokenId;
-        unchecked { 
-            _nextTokenId++;
+        unchecked {
+            ++_nextTokenId;
         }
-        
+
         _safeMint(msg.sender, tokenId);
 
+        // Store document data
         documents[tokenId] = Document({
             ipfsCid: _ipfsCid,
             description: _description,
             contentHash: _contentHash,
             timestamp: block.timestamp
         });
+
         notarizationFeePaid[tokenId] = feeToPay;
 
-        emit NotarizationEvent(tokenId, msg.sender, _ipfsCid, _contentHash);
-        return tokenId;
+        emit DocumentNotarized(tokenId, msg.sender, _ipfsCid, _contentHash, feeToPay);
     }
 
-    // --- Marketplace Metadata Generator ---
-
-    function tokenURI(uint256 tokenId) public view override returns (string memory) {
-        // CORREÇÃO: Substituído _requireOwned (v5) por _exists (v4)
-        if (!_exists(tokenId)) revert TokenDoesNotExist();
-        
-        Document memory doc = documents[tokenId];
-        string memory imageHttp = _convertToHttp(doc.ipfsCid);
-
-        // Building JSON Metadata
-        string memory fullDescription = string(abi.encodePacked(
-            _escapeJson(doc.description),
-            "\\n\\n-------------------\\n",
-            "**Verified by Backchain Protocol.**\\n",
-            "Content Hash (SHA-256): ", _bytes32ToString(doc.contentHash)
-        ));
-
-        bytes memory dataURI = abi.encodePacked(
-            '{',
-                '"name": "Notary Registry #', tokenId.toString(), '",',
-                '"description": "', fullDescription, '",', 
-                '"external_url": "https://backcoin.org/notary",', 
-                '"image": "', imageHttp, '",',
-                '"attributes": [',
-                    '{"trait_type": "Verification", "value": "Secured"},',
-                    '{"trait_type": "Timestamp", "display_type": "date", "value": ', uint256(doc.timestamp).toString(), '},',
-                    '{"trait_type": "Data Integrity", "value": "SHA-256"}',
-                ']',
-            '}'
-        );
-
-        return string(
-            abi.encodePacked(
-                "data:application/json;base64,",
-                Base64Upgradeable.encode(dataURI)
-            )
-        );
-    }
-
-    function getDocumentInfo(uint256 tokenId) external view returns (Document memory) {
-        if (!_exists(tokenId)) revert TokenDoesNotExist();
-        return documents[tokenId];
-    }
-
-    // --- Helpers ---
+    // =========================================================================
+    //                          VIEW FUNCTIONS
+    // =========================================================================
 
     /**
-     * @dev Converts ipfs:// protocol to a public HTTP gateway.
+     * @notice Returns the document data for a token
+     * @param _tokenId Token ID to query
+     * @return Document struct containing all certification data
      */
-    function _convertToHttp(string memory _ipfsUri) internal pure returns (string memory) {
+    function getDocument(uint256 _tokenId) external view returns (Document memory) {
+        if (!_exists(_tokenId)) revert TokenNotFound();
+        return documents[_tokenId];
+    }
+
+    /**
+     * @notice Returns the current notarization fee (without discount)
+     * @return Base fee in BKC
+     */
+    function getBaseFee() external view returns (uint256) {
+        return ecosystemManager.getFee(SERVICE_KEY);
+    }
+
+    /**
+     * @notice Calculates the fee a user would pay
+     * @param _boosterTokenId NFT token ID for discount calculation
+     * @return Fee amount after discount
+     */
+    function calculateFee(uint256 _boosterTokenId) external view returns (uint256) {
+        return _calculateFeeWithDiscount(_boosterTokenId);
+    }
+
+    /**
+     * @notice Returns total number of notarized documents
+     * @return Current token count
+     */
+    function totalSupply() external view returns (uint256) {
+        return _nextTokenId - 1;
+    }
+
+    /**
+     * @notice Returns fully on-chain metadata for OpenSea compatibility
+     * @param _tokenId Token ID to query
+     * @return Base64-encoded JSON metadata
+     */
+    function tokenURI(uint256 _tokenId) public view override returns (string memory) {
+        if (!_exists(_tokenId)) revert TokenNotFound();
+
+        Document memory doc = documents[_tokenId];
+        string memory imageUrl = _convertIpfsToHttp(doc.ipfsCid);
+
+        // Build description with verification info
+        string memory fullDescription = string(abi.encodePacked(
+            _escapeJson(doc.description),
+            "\\n\\n---\\n",
+            "Verified by Backchain Protocol\\n",
+            "Content Hash: ", _bytes32ToHex(doc.contentHash)
+        ));
+
+        // Build JSON metadata
+        bytes memory json = abi.encodePacked(
+            '{"name":"Notary Certificate #', _tokenId.toString(), '",',
+            '"description":"', fullDescription, '",',
+            '"external_url":"https://backcoin.org/notary/',  _tokenId.toString(), '",',
+            '"image":"', imageUrl, '",',
+            '"attributes":[',
+                '{"trait_type":"Status","value":"Verified"},',
+                '{"trait_type":"Timestamp","display_type":"date","value":', doc.timestamp.toString(), '},',
+                '{"trait_type":"Algorithm","value":"SHA-256"},',
+                '{"trait_type":"Network","value":"Arbitrum"}',
+            ']}'
+        );
+
+        return string(abi.encodePacked(
+            "data:application/json;base64,",
+            Base64Upgradeable.encode(json)
+        ));
+    }
+
+    // =========================================================================
+    //                         INTERNAL FUNCTIONS
+    // =========================================================================
+
+    /**
+     * @dev Calculates fee with NFT booster discount
+     *
+     *      Discount Calculation (PROPORTIONAL):
+     *      - discountAmount = baseFee × discountBips / 10000
+     *      - finalFee = baseFee - discountAmount
+     *
+     *      Example with Diamond NFT (70% discount = 7000 bips):
+     *      - Base Fee: 1.0 BKC
+     *      - Discount: 1.0 × 7000 / 10000 = 0.7 BKC
+     *      - Final Fee: 1.0 - 0.7 = 0.3 BKC
+     */
+    function _calculateFeeWithDiscount(uint256 _boosterTokenId) internal view returns (uint256) {
+        uint256 baseFee = ecosystemManager.getFee(SERVICE_KEY);
+
+        if (baseFee == 0 || _boosterTokenId == 0) {
+            return baseFee;
+        }
+
+        address boosterAddress = ecosystemManager.getBoosterAddress();
+        if (boosterAddress == address(0)) {
+            return baseFee;
+        }
+
+        IRewardBoosterNFT booster = IRewardBoosterNFT(boosterAddress);
+
+        // Try/catch prevents revert if NFT doesn't exist
+        try booster.ownerOf(_boosterTokenId) returns (address owner) {
+            if (owner == msg.sender) {
+                uint256 boostBips = booster.boostBips(_boosterTokenId);
+                uint256 discountBips = ecosystemManager.getBoosterDiscount(boostBips);
+
+                if (discountBips > 0) {
+                    // Calculate PROPORTIONAL discount
+                    uint256 discountAmount = (baseFee * discountBips) / BIPS_DENOMINATOR;
+                    return baseFee > discountAmount ? baseFee - discountAmount : 0;
+                }
+            }
+        } catch {}
+
+        return baseFee;
+    }
+
+    /**
+     * @dev Converts IPFS URI to HTTP gateway URL
+     */
+    function _convertIpfsToHttp(string memory _ipfsUri) internal pure returns (string memory) {
         bytes memory uriBytes = bytes(_ipfsUri);
-        // Check if it starts with "ipfs://" (length 7)
+
+        // Check for "ipfs://" prefix (7 characters)
         if (uriBytes.length > 7) {
-            // 0x697066733a2f2f is "ipfs://" in hex
-            if (keccak256(abi.encodePacked(substring(_ipfsUri, 0, 7))) == keccak256(abi.encodePacked("ipfs://"))) {
-                string memory cid = substring(_ipfsUri, 7, uriBytes.length);
+            bytes memory prefix = new bytes(7);
+            for (uint256 i = 0; i < 7; i++) {
+                prefix[i] = uriBytes[i];
+            }
+
+            if (keccak256(prefix) == keccak256("ipfs://")) {
+                // Extract CID (everything after "ipfs://")
+                bytes memory cid = new bytes(uriBytes.length - 7);
+                for (uint256 i = 7; i < uriBytes.length; i++) {
+                    cid[i - 7] = uriBytes[i];
+                }
                 return string(abi.encodePacked("https://ipfs.io/ipfs/", cid));
             }
         }
+
         return _ipfsUri;
     }
 
-    function substring(string memory str, uint startIndex, uint endIndex) internal pure returns (string memory) {
-        bytes memory strBytes = bytes(str);
-        bytes memory result = new bytes(endIndex - startIndex);
-        for(uint i = startIndex; i < endIndex; i++) {
-            result[i - startIndex] = strBytes[i];
-        }
-        return string(result);
+    /**
+     * @dev Converts bytes32 to hexadecimal string
+     */
+    function _bytes32ToHex(bytes32 _data) internal pure returns (string memory) {
+        return StringsUpgradeable.toHexString(uint256(_data), 32);
     }
 
-    function _bytes32ToString(bytes32 _bytes32) internal pure returns (string memory) {
-        return StringsUpgradeable.toHexString(uint256(_bytes32), 32);
-    }
-
+    /**
+     * @dev Simple JSON string escaping
+     */
     function _escapeJson(string memory _str) internal pure returns (string memory) {
-        // Simple escape just to return the string packed.
-        return string(abi.encodePacked(_str));
+        // Basic implementation - extend as needed for special characters
+        return _str;
     }
 }

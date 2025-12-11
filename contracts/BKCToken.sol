@@ -7,40 +7,91 @@ import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 
 /**
- * @title Backcoin ($BKC)
- * @notice The fuel of the Backchain Protocol.
- * @dev Implementation of the ERC20 Token with UUPS Upgradeability and Blacklist mechanism.
- * * --- TOKENOMICS ---
- * Max Supply: 200,000,000 BKC
- * TGE Supply:  40,000,000 BKC (Minted at genesis via Script/Manager)
- * ------------------
+ * @title BKCToken (Backcoin)
+ * @author Backchain Protocol
+ * @notice The native utility token of the Backcoin ecosystem
+ * @dev ERC20 token with:
+ *      - Fixed maximum supply (200M)
+ *      - Controlled minting via MiningManager
+ *      - Blacklist mechanism for compliance
+ *      - UUPS upgradeable pattern
  *
- * Part of the Backcoin Ecosystem.
- * Website: Backcoin.org
- * Optimized for Arbitrum Network.
+ *      ┌─────────────────────────────────────────────────────────────┐
+ *      │                      TOKENOMICS                             │
+ *      ├─────────────────────────────────────────────────────────────┤
+ *      │  Max Supply:       200,000,000 BKC                          │
+ *      │  TGE Supply:        40,000,000 BKC (20%)                    │
+ *      │  Mining Reserve:   160,000,000 BKC (80%)                    │
+ *      ├─────────────────────────────────────────────────────────────┤
+ *      │  Mining Mechanism: Proof-of-Purchase                        │
+ *      │  Scarcity Model:   Linear decreasing rate                   │
+ *      └─────────────────────────────────────────────────────────────┘
+ *
+ *      Token Utility:
+ *      - Staking rewards in DelegationManager
+ *      - Fee payments across ecosystem services
+ *      - NFT purchases in liquidity pools
+ *      - Game participation in FortunePool
+ *      - Document notarization fees
+ *
+ * @custom:security-contact security@backcoin.org
+ * @custom:website https://backcoin.org
+ * @custom:network Arbitrum
  */
-contract BKCToken is 
-    Initializable, 
-    ERC20Upgradeable, 
-    OwnableUpgradeable, 
-    UUPSUpgradeable 
+contract BKCToken is
+    Initializable,
+    ERC20Upgradeable,
+    OwnableUpgradeable,
+    UUPSUpgradeable
 {
-    // --- Constants ---
-    uint256 public constant MAX_SUPPLY = 200000000 * 10**18;
+    // =========================================================================
+    //                              CONSTANTS
+    // =========================================================================
 
-    // --- State Variables (Blacklist) ---
-    /// @notice Mapping to store blacklisted addresses
+    /// @notice Maximum token supply (200 million with 18 decimals)
+    uint256 public constant MAX_SUPPLY = 200_000_000 * 1e18;
+
+    /// @notice Initial TGE supply (40 million with 18 decimals)
+    uint256 public constant TGE_SUPPLY = 40_000_000 * 1e18;
+
+    // =========================================================================
+    //                              STATE
+    // =========================================================================
+
+    /// @notice Addresses blocked from transfers
     mapping(address => bool) private _blacklisted;
 
-    // --- Events ---
-    /// @notice Emitted when an address is added or removed from the blacklist
-    event BlacklistUpdated(address indexed account, bool isBlacklisted);
+    // =========================================================================
+    //                              EVENTS
+    // =========================================================================
 
-    // --- Custom Errors ---
-    error InvalidAddress();
-    error MaxSupplyExceeded();
-    /// @notice Thrown when a blacklisted address attempts to transfer or receive tokens
+    /// @notice Emitted when blacklist status changes
+    event BlacklistUpdated(
+        address indexed account,
+        bool indexed isBlacklisted,
+        address indexed updatedBy
+    );
+
+    /// @notice Emitted when tokens are minted
+    event TokensMinted(
+        address indexed to,
+        uint256 amount,
+        uint256 newTotalSupply
+    );
+
+    // =========================================================================
+    //                              ERRORS
+    // =========================================================================
+
+    error ZeroAddress();
+    error ZeroAmount();
+    error MaxSupplyExceeded(uint256 requested, uint256 available);
     error AddressBlacklisted(address account);
+    error ArrayLengthMismatch();
+
+    // =========================================================================
+    //                           INITIALIZATION
+    // =========================================================================
 
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
@@ -48,74 +99,200 @@ contract BKCToken is
     }
 
     /**
-     * @notice Initializer for the Upgradeable contract.
-     * @param _initialOwner The address of the initial owner (usually the Deployer or DAO).
+     * @notice Initializes the BKC token contract
+     * @param _owner Contract owner (typically MiningManager or deployer initially)
      */
-    function initialize(address _initialOwner) public initializer {
-        if (_initialOwner == address(0)) revert InvalidAddress();
+    function initialize(address _owner) external initializer {
+        if (_owner == address(0)) revert ZeroAddress();
 
         __ERC20_init("Backcoin", "BKC");
-        
-        // CORREÇÃO v4: Ownable_init não recebe argumentos nesta versão
-        __Ownable_init(); 
-        
-        _transferOwnership(_initialOwner);
+        __Ownable_init();
         __UUPSUpgradeable_init();
-    }
 
-    function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
-
-    // --- Blacklist Management ---
-
-    /**
-     * @notice Adds or removes an address from the blacklist.
-     * @dev Only callable by the contract owner.
-     * @param account The address to modify.
-     * @param state True to blacklist, false to unblacklist.
-     */
-    function setBlacklist(address account, bool state) external onlyOwner {
-        if (account == address(0)) revert InvalidAddress();
-        _blacklisted[account] = state;
-        emit BlacklistUpdated(account, state);
+        _transferOwnership(_owner);
     }
 
     /**
-     * @notice Checks if an address is blacklisted.
-     * @param account The address to check.
-     * @return True if the address is blacklisted, false otherwise.
+     * @dev Authorizes contract upgrades (owner only)
      */
-    function isBlacklisted(address account) external view returns (bool) {
-        return _blacklisted[account];
-    }
+    function _authorizeUpgrade(address) internal override onlyOwner {}
 
-    // --- Overrides (Hook) ---
+    // =========================================================================
+    //                         MINT FUNCTIONS
+    // =========================================================================
 
     /**
-     * @dev Hook that is called before any transfer of tokens.
-     * CORREÇÃO v4: Usando _beforeTokenTransfer ao invés de _update
+     * @notice Mints new tokens to an address
+     * @dev Only callable by owner (MiningManager)
+     * @param _to Recipient address
+     * @param _amount Amount to mint
      */
-    function _beforeTokenTransfer(address from, address to, uint256 amount) internal override {
+    function mint(address _to, uint256 _amount) external onlyOwner {
+        if (_to == address(0)) revert ZeroAddress();
+        if (_amount == 0) revert ZeroAmount();
+
+        uint256 available = MAX_SUPPLY - totalSupply();
+        if (_amount > available) {
+            revert MaxSupplyExceeded(_amount, available);
+        }
+
+        _mint(_to, _amount);
+
+        emit TokensMinted(_to, _amount, totalSupply());
+    }
+
+    /**
+     * @notice Mints tokens to multiple addresses in a single transaction
+     * @dev Only callable by owner. Useful for TGE distribution.
+     * @param _recipients Array of recipient addresses
+     * @param _amounts Array of amounts to mint
+     */
+    function mintBatch(
+        address[] calldata _recipients,
+        uint256[] calldata _amounts
+    ) external onlyOwner {
+        uint256 length = _recipients.length;
+        if (length != _amounts.length) revert ArrayLengthMismatch();
+
+        uint256 totalToMint;
+        for (uint256 i = 0; i < length;) {
+            totalToMint += _amounts[i];
+            unchecked { ++i; }
+        }
+
+        uint256 available = MAX_SUPPLY - totalSupply();
+        if (totalToMint > available) {
+            revert MaxSupplyExceeded(totalToMint, available);
+        }
+
+        for (uint256 i = 0; i < length;) {
+            if (_recipients[i] == address(0)) revert ZeroAddress();
+            if (_amounts[i] > 0) {
+                _mint(_recipients[i], _amounts[i]);
+                emit TokensMinted(_recipients[i], _amounts[i], totalSupply());
+            }
+            unchecked { ++i; }
+        }
+    }
+
+    // =========================================================================
+    //                       BLACKLIST MANAGEMENT
+    // =========================================================================
+
+    /**
+     * @notice Adds or removes an address from the blacklist
+     * @dev Only callable by owner. Used for compliance and security.
+     * @param _account Address to modify
+     * @param _isBlacklisted True to blacklist, false to remove
+     */
+    function setBlacklist(address _account, bool _isBlacklisted) external onlyOwner {
+        if (_account == address(0)) revert ZeroAddress();
+
+        _blacklisted[_account] = _isBlacklisted;
+
+        emit BlacklistUpdated(_account, _isBlacklisted, msg.sender);
+    }
+
+    /**
+     * @notice Batch updates blacklist status for multiple addresses
+     * @param _accounts Array of addresses
+     * @param _isBlacklisted True to blacklist, false to remove
+     */
+    function setBlacklistBatch(
+        address[] calldata _accounts,
+        bool _isBlacklisted
+    ) external onlyOwner {
+        uint256 length = _accounts.length;
+
+        for (uint256 i = 0; i < length;) {
+            if (_accounts[i] != address(0)) {
+                _blacklisted[_accounts[i]] = _isBlacklisted;
+                emit BlacklistUpdated(_accounts[i], _isBlacklisted, msg.sender);
+            }
+            unchecked { ++i; }
+        }
+    }
+
+    /**
+     * @notice Checks if an address is blacklisted
+     * @param _account Address to check
+     * @return True if blacklisted
+     */
+    function isBlacklisted(address _account) external view returns (bool) {
+        return _blacklisted[_account];
+    }
+
+    // =========================================================================
+    //                          VIEW FUNCTIONS
+    // =========================================================================
+
+    /**
+     * @notice Returns remaining mintable supply
+     * @return Tokens remaining until max supply
+     */
+    function remainingMintableSupply() external view returns (uint256) {
+        uint256 current = totalSupply();
+        return current >= MAX_SUPPLY ? 0 : MAX_SUPPLY - current;
+    }
+
+    /**
+     * @notice Returns circulating supply
+     * @return Current circulating supply
+     */
+    function circulatingSupply() external view returns (uint256) {
+        return totalSupply();
+    }
+
+    /**
+     * @notice Returns token statistics
+     * @return maxSupply Maximum possible supply
+     * @return currentSupply Current total supply
+     * @return mintable Remaining mintable tokens
+     */
+    function getTokenStats() external view returns (
+        uint256 maxSupply,
+        uint256 currentSupply,
+        uint256 mintable
+    ) {
+        currentSupply = totalSupply();
+        return (
+            MAX_SUPPLY,
+            currentSupply,
+            currentSupply >= MAX_SUPPLY ? 0 : MAX_SUPPLY - currentSupply
+        );
+    }
+
+    /**
+     * @notice Returns percentage of max supply minted
+     * @return Percentage in basis points (10000 = 100%)
+     */
+    function mintedPercentage() external view returns (uint256) {
+        return (totalSupply() * 10000) / MAX_SUPPLY;
+    }
+
+    // =========================================================================
+    //                         INTERNAL FUNCTIONS
+    // =========================================================================
+
+    /**
+     * @dev Hook called before any token transfer
+     *      Enforces blacklist restrictions
+     */
+    function _beforeTokenTransfer(
+        address from,
+        address to,
+        uint256 amount
+    ) internal override {
         super._beforeTokenTransfer(from, to, amount);
 
-        // Se "from" não é endereço zero (não é mint) e está na blacklist, reverte
+        // Check sender (skip for minting)
         if (from != address(0) && _blacklisted[from]) {
             revert AddressBlacklisted(from);
         }
-        // Se "to" não é endereço zero (não é burn) e está na blacklist, reverte
+
+        // Check recipient
         if (to != address(0) && _blacklisted[to]) {
             revert AddressBlacklisted(to);
         }
-    }
-
-    // --- Mint Function (For the MiningManager) ---
-
-    /**
-     * @dev Allows the owner (MiningManager) to mint new tokens up to MAX_SUPPLY.
-     * @param to The address receiving the tokens.
-     * @param amount The amount of tokens to mint.
-     */
-    function mint(address to, uint256 amount) public onlyOwner {
-        if (totalSupply() + amount > MAX_SUPPLY) revert MaxSupplyExceeded();
-        _mint(to, amount);
     }
 }

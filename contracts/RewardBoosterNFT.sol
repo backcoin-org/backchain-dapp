@@ -2,171 +2,383 @@
 pragma solidity 0.8.28;
 
 import "@openzeppelin/contracts-upgradeable/token/ERC721/ERC721Upgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/token/ERC721/extensions/ERC721EnumerableUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/utils/StringsUpgradeable.sol";
 
 /**
- * @title Backchain Reward Booster ($BKCB)
- * @notice Utility NFTs for the Backcoin Ecosystem.
- * @dev Holders earn fee discounts in Staking, Notary, and other ecosystem services.
- * Stores the "Boost Power" (Bips) which acts as a tier level.
- * Part of the Backcoin Ecosystem.
- * Website: Backcoin.org
- * Optimized for Arbitrum Network.
+ * @title RewardBoosterNFT
+ * @author Backchain Protocol
+ * @notice Utility NFTs that provide fee discounts across the Backcoin ecosystem
+ * @dev Each NFT has a "boost power" (in basis points) that determines the discount tier.
+ *
+ *      Tier System:
+ *      ┌──────────┬────────────┬──────────────┐
+ *      │ Tier     │ Boost Bips │ Discount     │
+ *      ├──────────┼────────────┼──────────────┤
+ *      │ Crystal  │ 1000       │ 10%          │
+ *      │ Iron     │ 2000       │ 20%          │
+ *      │ Bronze   │ 3000       │ 30%          │
+ *      │ Silver   │ 4000       │ 40%          │
+ *      │ Gold     │ 5000       │ 50%          │
+ *      │ Platinum │ 6000       │ 60%          │
+ *      │ Diamond  │ 7000       │ 70%          │
+ *      └──────────┴────────────┴──────────────┘
+ *
+ *      The actual discount percentage is configured in EcosystemManager.
+ *      This contract only stores the boost power for each token.
+ *
+ *      Minting:
+ *      - Owner can mint for giveaways/partnerships via ownerMintBatch()
+ *      - Authorized sale contract can mint via mintFromSale()
+ *      - NFTLiquidityPool uses mintFromSale() for public sales
+ *
+ * @custom:security-contact security@backcoin.org
+ * @custom:website https://backcoin.org
+ * @custom:network Arbitrum
  */
-contract RewardBoosterNFT is 
-    Initializable, 
-    ERC721Upgradeable, 
-    OwnableUpgradeable, 
-    UUPSUpgradeable 
+contract RewardBoosterNFT is
+    Initializable,
+    ERC721Upgradeable,
+    ERC721EnumerableUpgradeable,
+    OwnableUpgradeable,
+    UUPSUpgradeable
 {
     using StringsUpgradeable for uint256;
 
-    // --- State Variables ---
+    // =========================================================================
+    //                              CONSTANTS
+    // =========================================================================
 
-    // Maps TokenID -> Boost Power (e.g. 100 = Level 1, 500 = Level 5)
+    /// @notice Maximum boost value (100% = 10000 bips)
+    uint256 public constant MAX_BOOST_BIPS = 10_000;
+
+    // =========================================================================
+    //                              STATE
+    // =========================================================================
+
+    /// @notice Token ID => Boost power in basis points
     mapping(uint256 => uint256) public boostBips;
-    // Maps TokenID -> Specific metadata file (e.g. "gold_tier.json")
+
+    /// @notice Token ID => Metadata file name (e.g., "diamond.json")
     mapping(uint256 => string) public tokenMetadataFile;
 
-    string private _customBaseURI;
-    uint256 private _nextTokenId; 
-    
-    address public saleContractAddress;
+    /// @notice Base URI for metadata (e.g., "https://api.backcoin.org/nft/")
+    string private _baseTokenURI;
 
-    // --- Events ---
+    /// @notice Next token ID to mint
+    uint256 private _nextTokenId;
 
+    /// @notice Authorized contract for public sales (NFTLiquidityPool)
+    address public saleContract;
+
+    // =========================================================================
+    //                              EVENTS
+    // =========================================================================
+
+    /// @notice Emitted when a booster NFT is minted
     event BoosterMinted(
         uint256 indexed tokenId,
-        address indexed owner,
-        uint256 boostInBips
+        address indexed recipient,
+        uint256 boostBips,
+        string metadataFile
     );
-    event SaleContractAddressSet(address indexed saleContract);
 
-    // --- Custom Errors ---
+    /// @notice Emitted when base URI is updated
+    event BaseURIUpdated(string previousURI, string newURI);
 
-    error InvalidAddress();
-    error InvalidAmount();
-    error InvalidBoostValue(); // Must be 0-10000
-    error Unauthorized();
-    error TokenDoesNotExist();
+    /// @notice Emitted when sale contract is updated
+    event SaleContractUpdated(
+        address indexed previousContract,
+        address indexed newContract
+    );
 
-    // --- Initialization ---
+    // =========================================================================
+    //                              ERRORS
+    // =========================================================================
+
+    error ZeroAddress();
+    error ZeroQuantity();
+    error InvalidBoostValue();
+    error UnauthorizedMinter();
+    error TokenNotFound();
+
+    // =========================================================================
+    //                           INITIALIZATION
+    // =========================================================================
 
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
         _disableInitializers();
     }
 
-    function initialize(
-        address _initialOwner
-    ) public initializer {
-        if (_initialOwner == address(0)) revert InvalidAddress();
+    /**
+     * @notice Initializes the RewardBoosterNFT contract
+     * @param _owner Contract owner address
+     */
+    function initialize(address _owner) external initializer {
+        if (_owner == address(0)) revert ZeroAddress();
 
         __ERC721_init("Backchain Reward Booster", "BKCB");
-        
-        // Adjusted for OZ v4 compatibility
-        __Ownable_init(); 
+        __ERC721Enumerable_init();
+        __Ownable_init();
         __UUPSUpgradeable_init();
-        
-        _transferOwnership(_initialOwner);
-        _nextTokenId = 1; // Start IDs at 1
-    }
 
-    function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
-
-    // --- Admin Functions ---
-
-    function setBaseURI(string calldata newBaseURI) external onlyOwner {
-        _customBaseURI = newBaseURI;
-    }
-
-    function setSaleContractAddress(address _saleAddress) external onlyOwner {
-        if (_saleAddress == address(0)) revert InvalidAddress();
-        saleContractAddress = _saleAddress;
-        emit SaleContractAddressSet(_saleAddress);
+        _transferOwnership(_owner);
+        _nextTokenId = 1;
     }
 
     /**
-     * @notice Owner/Admin minting for giveaways, partnerships or treasury reserves.
+     * @dev Authorizes contract upgrades (owner only)
+     */
+    function _authorizeUpgrade(address) internal override onlyOwner {}
+
+    // =========================================================================
+    //                         ADMIN FUNCTIONS
+    // =========================================================================
+
+    /**
+     * @notice Sets the base URI for token metadata
+     * @param _newBaseURI New base URI (e.g., "https://api.backcoin.org/nft/")
+     */
+    function setBaseURI(string calldata _newBaseURI) external onlyOwner {
+        string memory previousURI = _baseTokenURI;
+        _baseTokenURI = _newBaseURI;
+
+        emit BaseURIUpdated(previousURI, _newBaseURI);
+    }
+
+    /**
+     * @notice Sets the authorized sale contract
+     * @dev Usually the NFTLiquidityPoolFactory or a specific pool
+     * @param _saleContract Address of the sale contract
+     */
+    function setSaleContract(address _saleContract) external onlyOwner {
+        address previousContract = saleContract;
+        saleContract = _saleContract;
+
+        emit SaleContractUpdated(previousContract, _saleContract);
+    }
+
+    /**
+     * @notice Mints multiple NFTs to a recipient (owner only)
+     * @dev Used for giveaways, partnerships, and treasury reserves
+     * @param _to Recipient address
+     * @param _quantity Number of NFTs to mint
+     * @param _boostBips Boost power for all minted NFTs
+     * @param _metadataFile Metadata file name for all minted NFTs
      */
     function ownerMintBatch(
-        address to,
-        uint256 quantity,
-        uint256 boostValueInBips,
-        string calldata metadataFile
+        address _to,
+        uint256 _quantity,
+        uint256 _boostBips,
+        string calldata _metadataFile
     ) external onlyOwner {
-        if (quantity == 0) revert InvalidAmount();
-        if (to == address(0)) revert InvalidAddress();
-        if (boostValueInBips == 0 || boostValueInBips > 10000) revert InvalidBoostValue();
+        if (_to == address(0)) revert ZeroAddress();
+        if (_quantity == 0) revert ZeroQuantity();
+        if (_boostBips == 0 || _boostBips > MAX_BOOST_BIPS) revert InvalidBoostValue();
 
-        // Gas Optimization: Loop handling with unchecked increment
-        for (uint256 i = 0; i < quantity;) {
-            _mintInternal(to, boostValueInBips, metadataFile);
+        for (uint256 i = 0; i < _quantity;) {
+            _mintBooster(_to, _boostBips, _metadataFile);
             unchecked { ++i; }
         }
     }
 
-    // --- Sale Integration ---
-
     /**
-     * @notice Allows the authorized Sale Contract to mint Boosters directly to buyers.
+     * @notice Mints a single NFT to a recipient (owner only)
+     * @param _to Recipient address
+     * @param _boostBips Boost power
+     * @param _metadataFile Metadata file name
+     * @return tokenId The minted token ID
      */
-    function mintFromSale(
-        address to,
-        uint256 boostValueInBips,
-        string calldata metadataFile
-    ) external returns (uint256) {
-        if (msg.sender != saleContractAddress) revert Unauthorized();
-        if (to == address(0)) revert InvalidAddress();
-        if (boostValueInBips == 0 || boostValueInBips > 10000) revert InvalidBoostValue();
+    function ownerMint(
+        address _to,
+        uint256 _boostBips,
+        string calldata _metadataFile
+    ) external onlyOwner returns (uint256) {
+        if (_to == address(0)) revert ZeroAddress();
+        if (_boostBips == 0 || _boostBips > MAX_BOOST_BIPS) revert InvalidBoostValue();
 
-        return _mintInternal(to, boostValueInBips, metadataFile);
+        return _mintBooster(_to, _boostBips, _metadataFile);
     }
 
-    // --- Internal Logic ---
+    // =========================================================================
+    //                         SALE INTEGRATION
+    // =========================================================================
 
-    function _mintInternal(
-        address to,
-        uint256 boostValueInBips,
-        string calldata metadataFile
-    ) internal returns (uint256) {
-        uint256 tokenId = _nextTokenId;
-        unchecked {
-            _nextTokenId++;
+    /**
+     * @notice Mints an NFT from the authorized sale contract
+     * @dev Called by NFTLiquidityPool during public sales
+     * @param _to Recipient address
+     * @param _boostBips Boost power for the NFT
+     * @param _metadataFile Metadata file name
+     * @return tokenId The minted token ID
+     */
+    function mintFromSale(
+        address _to,
+        uint256 _boostBips,
+        string calldata _metadataFile
+    ) external returns (uint256) {
+        if (msg.sender != saleContract) revert UnauthorizedMinter();
+        if (_to == address(0)) revert ZeroAddress();
+        if (_boostBips == 0 || _boostBips > MAX_BOOST_BIPS) revert InvalidBoostValue();
+
+        return _mintBooster(_to, _boostBips, _metadataFile);
+    }
+
+    // =========================================================================
+    //                          VIEW FUNCTIONS
+    // =========================================================================
+
+    /**
+     * @notice Returns the metadata URI for a token
+     * @param _tokenId Token ID to query
+     * @return Full metadata URI
+     */
+    function tokenURI(uint256 _tokenId)
+        public
+        view
+        override(ERC721Upgradeable)
+        returns (string memory)
+    {
+        if (!_exists(_tokenId)) revert TokenNotFound();
+
+        string memory baseURI = _baseTokenURI;
+        string memory metadataFile = tokenMetadataFile[_tokenId];
+
+        if (bytes(baseURI).length > 0) {
+            return string(abi.encodePacked(baseURI, metadataFile));
         }
 
-        _safeMint(to, tokenId);
+        return metadataFile;
+    }
 
-        boostBips[tokenId] = boostValueInBips;
-        tokenMetadataFile[tokenId] = metadataFile;
+    /**
+     * @notice Returns the boost power for a token
+     * @param _tokenId Token ID to query
+     * @return Boost power in basis points
+     */
+    function getBoostBips(uint256 _tokenId) external view returns (uint256) {
+        if (!_exists(_tokenId)) revert TokenNotFound();
+        return boostBips[_tokenId];
+    }
 
-        emit BoosterMinted(tokenId, to, boostValueInBips);
+    /**
+     * @notice Returns the total number of minted NFTs
+     * @return Total supply
+     */
+    function totalMinted() external view returns (uint256) {
+        return _nextTokenId - 1;
+    }
+
+    /**
+     * @notice Returns the next token ID to be minted
+     * @return Next token ID
+     */
+    function nextTokenId() external view returns (uint256) {
+        return _nextTokenId;
+    }
+
+    /**
+     * @notice Returns all tokens owned by an address
+     * @param _owner Owner address
+     * @return Array of token IDs
+     */
+    function tokensOfOwner(address _owner) external view returns (uint256[] memory) {
+        uint256 balance = balanceOf(_owner);
+        uint256[] memory tokens = new uint256[](balance);
+
+        for (uint256 i = 0; i < balance;) {
+            tokens[i] = tokenOfOwnerByIndex(_owner, i);
+            unchecked { ++i; }
+        }
+
+        return tokens;
+    }
+
+    /**
+     * @notice Returns the highest boost NFT owned by an address
+     * @param _owner Owner address
+     * @return tokenId Token ID with highest boost (0 if none)
+     * @return boost Boost value in bips (0 if none)
+     */
+    function getHighestBoostOf(address _owner) external view returns (
+        uint256 tokenId,
+        uint256 boost
+    ) {
+        uint256 balance = balanceOf(_owner);
+
+        for (uint256 i = 0; i < balance;) {
+            uint256 id = tokenOfOwnerByIndex(_owner, i);
+            uint256 tokenBoost = boostBips[id];
+
+            if (tokenBoost > boost) {
+                boost = tokenBoost;
+                tokenId = id;
+            }
+
+            unchecked { ++i; }
+        }
+    }
+
+    /**
+     * @notice Checks if an address owns any booster NFT
+     * @param _owner Address to check
+     * @return True if owner has at least one NFT
+     */
+    function hasBooster(address _owner) external view returns (bool) {
+        return balanceOf(_owner) > 0;
+    }
+
+    // =========================================================================
+    //                         INTERNAL FUNCTIONS
+    // =========================================================================
+
+    /**
+     * @dev Internal function to mint a booster NFT
+     */
+    function _mintBooster(
+        address _to,
+        uint256 _boostBips,
+        string calldata _metadataFile
+    ) internal returns (uint256) {
+        uint256 tokenId = _nextTokenId;
+
+        unchecked {
+            ++_nextTokenId;
+        }
+
+        _safeMint(_to, tokenId);
+
+        boostBips[tokenId] = _boostBips;
+        tokenMetadataFile[tokenId] = _metadataFile;
+
+        emit BoosterMinted(tokenId, _to, _boostBips, _metadataFile);
+
         return tokenId;
     }
 
-    // --- View Functions ---
+    // =========================================================================
+    //                    REQUIRED OVERRIDES (ERC721Enumerable)
+    // =========================================================================
 
-    /**
-     * @notice Returns the Metadata URI.
-     */
-    function tokenURI(uint256 tokenId)
+    function _beforeTokenTransfer(
+        address from,
+        address to,
+        uint256 tokenId,
+        uint256 batchSize
+    ) internal override(ERC721Upgradeable, ERC721EnumerableUpgradeable) {
+        super._beforeTokenTransfer(from, to, tokenId, batchSize);
+    }
+
+    function supportsInterface(bytes4 interfaceId)
         public
         view
-        override
-        returns (string memory)
+        override(ERC721Upgradeable, ERC721EnumerableUpgradeable)
+        returns (bool)
     {
-        // FIX: Replaced _requireOwned(tokenId) (v5) with _exists (v4)
-        if (!_exists(tokenId)) revert TokenDoesNotExist();
-
-        string memory baseURI = _customBaseURI;
-        string memory metadataFile = tokenMetadataFile[tokenId];
-
-        // Efficient concatenation
-        return bytes(baseURI).length > 0
-            ? string(abi.encodePacked(baseURI, metadataFile))
-            : metadataFile;
+        return super.supportsInterface(interfaceId);
     }
 }

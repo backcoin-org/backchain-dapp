@@ -1,5 +1,5 @@
 // js/pages/FortunePool.js
-// ✅ FINAL VERSION V5.2: No pStake Logic + Exact Fee Handling
+// ✅ VERSION V6.0: Clean UI, Mobile-First, V2.1 Compatible
 
 import { State } from '../state.js';
 import { loadUserData, safeContractCall, API_ENDPOINTS } from '../modules/data.js';
@@ -9,532 +9,810 @@ import { addresses } from '../config.js';
 
 const ethers = window.ethers;
 
-// Network Config: Arbitrum Sepolia
+// --- CONFIG ---
 const EXPLORER_BASE = "https://sepolia.arbiscan.io/tx/";
+const FAUCET_API_URL = "https://api.backcoin.org/faucet";
 
-// ⚠️ CONFIGURAÇÃO DO BACKEND (VPS)
-// Aponte para a URL do seu Indexer rodando
-const FAUCET_API_URL = "https://api.backcoin.org/faucet"; 
+// --- TIER CONFIG V2.1 ---
+const TIERS = [
+    { id: 1, name: "Bronze", max: 3, multiplier: 1.5, color: "amber", odds: "1:3" },
+    { id: 2, name: "Silver", max: 10, multiplier: 5, color: "zinc", odds: "1:10" },
+    { id: 3, name: "Gold", max: 100, multiplier: 50, color: "yellow", odds: "1:100" }
+];
 
-// --- DATE HELPER ---
+// --- HELPERS ---
 function formatDate(timestamp) {
     if (!timestamp) return 'Just now';
     try {
-        if (timestamp.seconds || timestamp._seconds) {
-            const secs = timestamp.seconds || timestamp._seconds;
-            return new Date(secs * 1000).toLocaleString(undefined, {
-                month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
-            }); 
-        }
-        return new Date(timestamp).toLocaleString();
+        const secs = timestamp.seconds || timestamp._seconds || (new Date(timestamp).getTime() / 1000);
+        const date = new Date(secs * 1000);
+        const now = new Date();
+        const diffMs = now - date;
+        const diffMins = Math.floor(diffMs / 60000);
+        const diffHours = Math.floor(diffMs / 3600000);
+        
+        if (diffMins < 1) return 'Just now';
+        if (diffMins < 60) return `${diffMins}m ago`;
+        if (diffHours < 24) return `${diffHours}h ago`;
+        return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
     } catch (e) { return 'Recent'; }
 }
 
-// --- CSS FX ---
-const style = document.createElement('style');
-style.innerHTML = `
-    .glass-panel {
-        background: rgba(10, 10, 12, 0.95);
-        backdrop-filter: blur(20px);
-        -webkit-backdrop-filter: blur(20px);
-        border: 1px solid rgba(255, 193, 7, 0.15);
-        box-shadow: 0 0 40px rgba(0, 0, 0, 0.9);
-    }
-    .bkc-anim { animation: coinPulse 2s infinite ease-in-out; }
-    @keyframes coinPulse {
-        0% { transform: scale(1); filter: drop-shadow(0 0 10px rgba(245, 158, 11, 0.3)); }
-        50% { transform: scale(1.1); filter: drop-shadow(0 0 25px rgba(245, 158, 11, 0.6)); }
-        100% { transform: scale(1); filter: drop-shadow(0 0 10px rgba(245, 158, 11, 0.3)); }
-    }
-    .progress-track { background: rgba(255, 255, 255, 0.1); border-radius: 4px; overflow: hidden; height: 8px; margin-top: 10px; }
-    .progress-fill { 
-        height: 100%; 
-        background: linear-gradient(90deg, #f59e0b, #fbbf24); 
-        width: 0%; 
-        transition: width 0.5s ease-out;
-        box-shadow: 0 0 15px #f59e0b;
-    }
-    .guess-box {
-        background: rgba(59, 130, 246, 0.05); border: 1px solid rgba(59, 130, 246, 0.3); color: #60a5fa;
-        box-shadow: inset 0 0 10px rgba(59, 130, 246, 0.05);
-    }
-    .slot-box {
-        background: linear-gradient(180deg, #18181b 0%, #09090b 100%);
-        border: 1px solid #3f3f46; color: #52525b;
-        box-shadow: inset 0 0 20px #000; position: relative;
-    }
-    .tier-label { font-size: 9px; font-weight: 900; letter-spacing: 1px; text-transform: uppercase; text-align: center; display: block; margin-bottom: 4px; opacity: 0.8; }
-    .profit-tag {
-        font-family: monospace; font-size: 10px; font-weight: bold; text-align: center; padding: 4px; border-radius: 6px;
-        background: rgba(0,0,0,0.4); border: 1px solid rgba(255,255,255,0.1); transition: all 0.3s;
-    }
-    .profit-active { background: rgba(16, 185, 129, 0.1); border-color: #10b981; color: #10b981; box-shadow: 0 0 10px rgba(16, 185, 129, 0.2); }
-    @keyframes spinBlur { 0% { filter: blur(0); transform: translateY(0); } 50% { filter: blur(6px); transform: translateY(-3px); } 100% { filter: blur(0); transform: translateY(0); } }
-    .slot-spinning { animation: spinBlur 0.1s infinite; color: #71717a !important; text-shadow: 0 0 5px rgba(255,255,255,0.2); }
-    .slot-hit { 
-        border-color: #10b981 !important; color: #fff !important; background: rgba(16, 185, 129, 0.2) !important;
-        text-shadow: 0 0 20px #10b981; transform: scale(1.05); z-index: 10;
-    }
-    .slot-miss { border-color: #ef4444 !important; color: #ef4444 !important; opacity: 0.4; }
-    .btn-action { background: linear-gradient(to bottom, #fbbf24, #d97706); color: black; font-weight: 900; letter-spacing: 1px; }
-    .btn-action:hover { filter: brightness(1.1); transform: translateY(-1px); }
-    .btn-action:disabled { background: #333; color: #666; cursor: not-allowed; transform: none; filter: none; }
-    .hidden-force { display: none !important; }
-    .mode-locked { opacity: 0.7; filter: grayscale(1); border: 1px dashed #555 !important; background: #111 !important; }
-    .mode-active-cumulative { 
-        background: linear-gradient(135deg, rgba(147, 51, 234, 0.2) 0%, rgba(79, 70, 229, 0.3) 100%) !important;
-        border: 1px solid #a855f7 !important; box-shadow: 0 0 20px rgba(168, 85, 247, 0.3); transform: scale(1.02);
-    }
-    .mode-container { transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); cursor: pointer; }
-    .mode-container:hover { filter: brightness(1.2); }
-`;
-document.head.appendChild(style);
+function rand(max) { 
+    return Math.floor(Math.random() * max) + 1; 
+}
 
-// --- GLOBAL GAME STATE ---
+// --- GAME STATE ---
 let gameState = {
-    step: 0, 
-    isSpinning: false, 
-    gameId: 0, 
-    pollInterval: null, 
+    step: 0,
+    isSpinning: false,
+    gameId: 0,
+    pollInterval: null,
     spinInterval: null,
-    guesses: [0, 0, 0], 
-    isCumulative: true, 
-    betAmount: 0, 
+    guesses: [0, 0, 0],
+    isCumulative: true,
+    betAmount: 0,
     lastWinAmount: 0,
-    currentLevel: 1, 
-    currentXP: 0, 
-    xpPerLevel: 1000, 
+    currentLevel: 1,
+    currentXP: 0,
+    xpPerLevel: 1000,
     systemReady: false
 };
 
-// --- DATA PERSISTENCE (Gamification) ---
+// --- PERSISTENCE ---
 try {
-    const local = localStorage.getItem('bkc_fortune_v24');
-    if (local) { 
-        const p = JSON.parse(local); 
-        gameState.currentLevel = p.lvl || 1; 
-        gameState.currentXP = p.xp || 0; 
+    const saved = localStorage.getItem('bkc_fortune_v6');
+    if (saved) {
+        const p = JSON.parse(saved);
+        gameState.currentLevel = p.lvl || 1;
+        gameState.currentXP = p.xp || 0;
     }
 } catch (e) {}
 
-function saveProgress() { 
-    localStorage.setItem('bkc_fortune_v24', JSON.stringify({ lvl: gameState.currentLevel, xp: gameState.currentXP })); 
-    updateGamificationUI(); 
+function saveProgress() {
+    localStorage.setItem('bkc_fortune_v6', JSON.stringify({ 
+        lvl: gameState.currentLevel, 
+        xp: gameState.currentXP 
+    }));
 }
 
-function addXP(amount) { 
-    gameState.currentXP += amount; 
-    if (gameState.currentXP >= gameState.xpPerLevel) { 
-        gameState.currentLevel++; 
-        gameState.currentXP -= gameState.xpPerLevel; 
-        showToast(`🆙 LEVEL UP! LVL ${gameState.currentLevel}`, "success"); 
-    } 
-    saveProgress(); 
+function addXP(amount) {
+    gameState.currentXP += amount;
+    if (gameState.currentXP >= gameState.xpPerLevel) {
+        gameState.currentLevel++;
+        gameState.currentXP -= gameState.xpPerLevel;
+        showToast(`🆙 Level ${gameState.currentLevel}!`, "success");
+    }
+    saveProgress();
+    updateLevelDisplay();
 }
 
-// --- RENDER STEPS ---
-function renderStep() {
-    const container = document.getElementById('game-interaction-area');
-    if (!container) return;
-    container.style.opacity = '0';
-    setTimeout(() => { container.innerHTML = ''; buildStepHTML(container); container.style.opacity = '1'; }, 200);
+function updateLevelDisplay() {
+    const el = document.getElementById('player-level');
+    if (el) el.textContent = gameState.currentLevel;
 }
 
-function buildStepHTML(container) {
+// --- INJECT STYLES ---
+const style = document.createElement('style');
+style.innerHTML = `
+    .fortune-slot {
+        background: linear-gradient(180deg, #18181b 0%, #09090b 100%);
+        border: 2px solid #3f3f46;
+        box-shadow: inset 0 0 20px rgba(0,0,0,0.8);
+        transition: all 0.3s ease;
+    }
+    .fortune-slot.spinning {
+        animation: slotSpin 0.08s infinite;
+        color: #71717a !important;
+    }
+    .fortune-slot.hit {
+        border-color: #10b981 !important;
+        background: rgba(16, 185, 129, 0.15) !important;
+        color: #fff !important;
+        box-shadow: 0 0 20px rgba(16, 185, 129, 0.4);
+        transform: scale(1.05);
+    }
+    .fortune-slot.miss {
+        border-color: #ef4444 !important;
+        color: #ef4444 !important;
+        opacity: 0.5;
+    }
+    .guess-display {
+        background: rgba(59, 130, 246, 0.1);
+        border: 1px solid rgba(59, 130, 246, 0.3);
+    }
+    @keyframes slotSpin {
+        0%, 100% { transform: translateY(0); }
+        50% { transform: translateY(-2px); filter: blur(1px); }
+    }
+    @keyframes coinPulse {
+        0%, 100% { transform: scale(1); filter: drop-shadow(0 0 8px rgba(245, 158, 11, 0.3)); }
+        50% { transform: scale(1.08); filter: drop-shadow(0 0 16px rgba(245, 158, 11, 0.6)); }
+    }
+    .coin-pulse { animation: coinPulse 2s infinite ease-in-out; }
+    .progress-bar-fill {
+        background: linear-gradient(90deg, #f59e0b, #fbbf24);
+        box-shadow: 0 0 10px #f59e0b;
+        transition: width 0.4s ease-out;
+    }
+`;
+document.head.appendChild(style);
+
+// ============================================================================
+// 1. MAIN RENDER
+// ============================================================================
+
+function renderMainLayout() {
+    const container = document.getElementById('actions');
+    if (!container || !addresses.fortunePool) {
+        if (container) container.innerHTML = `<div class="text-center py-20 text-zinc-500">Fortune Pool not configured</div>`;
+        return;
+    }
+
+    container.innerHTML = `
+        <div class="max-w-lg mx-auto py-6 px-4">
+            
+            <!-- HEADER -->
+            <div class="flex justify-between items-center mb-6">
+                <div>
+                    <h1 class="text-2xl font-black text-transparent bg-clip-text bg-gradient-to-r from-amber-400 to-yellow-500">
+                        Fortune Pool
+                    </h1>
+                    <p class="text-[10px] text-zinc-500 uppercase tracking-wider">Proof of Purchase Mining</p>
+                </div>
+                <div class="text-right">
+                    <div class="text-[10px] text-zinc-500">LEVEL</div>
+                    <div id="player-level" class="text-xl font-black text-amber-500">${gameState.currentLevel}</div>
+                </div>
+            </div>
+
+            <!-- GAME AREA -->
+            <div class="glass-panel rounded-2xl overflow-hidden mb-4">
+                <div id="game-area" class="p-4 min-h-[380px] flex flex-col justify-center">
+                    <!-- Dynamic content -->
+                </div>
+            </div>
+
+            <!-- STATUS BAR -->
+            <div class="flex justify-between text-[10px] text-zinc-600 font-mono px-2 mb-6">
+                <div id="system-status">Checking...</div>
+                <div id="fee-status">--</div>
+            </div>
+
+            <!-- HISTORY -->
+            <div class="glass-panel rounded-xl p-4">
+                <div class="flex justify-between items-center mb-3">
+                    <h3 class="text-xs font-bold text-zinc-400 uppercase">Recent Games</h3>
+                    <div id="total-winnings" class="text-xs font-mono text-zinc-500"></div>
+                </div>
+                <div id="game-history" class="space-y-2 max-h-[300px] overflow-y-auto custom-scrollbar">
+                    <div class="text-center py-4 text-zinc-600 text-xs">Loading...</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- GAS MODAL -->
+        ${renderGasModal()}
+    `;
+
+    gameState.step = 0;
+    renderGameStep();
+    FortunePoolPage.checkReqs();
+    FortunePoolPage.loadHistory();
+    updateLevelDisplay();
+}
+
+function renderGasModal() {
+    return `
+        <div id="gas-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/90 backdrop-blur-sm p-4">
+            <div class="bg-zinc-900 border border-zinc-800 rounded-xl max-w-xs w-full p-5 text-center">
+                <div class="w-12 h-12 bg-red-500/10 rounded-full flex items-center justify-center mx-auto mb-3">
+                    <i class="fa-solid fa-gas-pump text-red-500"></i>
+                </div>
+                <h3 class="text-lg font-bold text-white mb-1">Out of Gas</h3>
+                <p class="text-zinc-400 text-xs mb-4">You need ETH for transaction fees</p>
+                <button id="btn-faucet" class="w-full bg-green-600 hover:bg-green-500 text-white font-bold py-2.5 rounded-lg text-sm mb-2">
+                    <i class="fa-solid fa-hand-holding-medical mr-2"></i> Get Free Gas
+                </button>
+                <button id="btn-close-gas" class="text-zinc-500 hover:text-white text-xs">Close</button>
+            </div>
+        </div>
+    `;
+}
+
+// ============================================================================
+// 2. GAME STEPS
+// ============================================================================
+
+function renderGameStep() {
+    const area = document.getElementById('game-area');
+    if (!area) return;
+
+    area.style.opacity = '0';
+    setTimeout(() => {
+        buildStepContent(area);
+        area.style.opacity = '1';
+    }, 150);
+}
+
+function buildStepContent(container) {
+    // STEP 0: Welcome
     if (gameState.step === 0) {
         container.innerHTML = `
-            <div class="text-center py-6">
-                <img src="assets/bkc_logo_3d.png" class="w-24 h-24 mx-auto mb-6 bkc-anim" alt="Backcoin">
-                <h2 class="text-4xl font-black text-white mb-2 uppercase tracking-tighter">Fortune Pool</h2>
-                <p class="text-amber-500/80 text-sm mb-10 font-bold tracking-widest">PROOF OF PURCHASE MINING</p>
-                <div class="grid grid-cols-2 gap-4 max-w-sm mx-auto">
-                    <button id="btn-random-all" class="glass-panel p-5 rounded-2xl hover:border-amber-500 transition-all group">
-                        <div class="text-3xl mb-2">🎲</div><div class="font-bold text-white text-sm">QUICK LUCK</div>
+            <div class="text-center py-4">
+                <img src="assets/bkc_logo_3d.png" class="w-20 h-20 mx-auto mb-4 coin-pulse" alt="BKC">
+                <h2 class="text-2xl font-black text-white mb-1">Ready to Play?</h2>
+                <p class="text-zinc-500 text-sm mb-8">Pick 3 numbers and win up to 56.5x</p>
+                
+                <div class="grid grid-cols-2 gap-3 max-w-xs mx-auto">
+                    <button id="btn-quick" class="glass-panel p-4 rounded-xl hover:border-amber-500/50 transition-all group">
+                        <div class="text-2xl mb-1">🎲</div>
+                        <div class="text-white font-bold text-sm">Quick</div>
+                        <div class="text-[10px] text-zinc-500">Random picks</div>
                     </button>
-                    <button id="btn-manual-pick" class="glass-panel p-5 rounded-2xl hover:border-amber-500 transition-all group">
-                        <div class="text-3xl mb-2">🧠</div><div class="font-bold text-white text-sm">STRATEGY</div>
+                    <button id="btn-manual" class="glass-panel p-4 rounded-xl hover:border-amber-500/50 transition-all group">
+                        <div class="text-2xl mb-1">🎯</div>
+                        <div class="text-white font-bold text-sm">Strategy</div>
+                        <div class="text-[10px] text-zinc-500">Pick your own</div>
                     </button>
                 </div>
-            </div>`;
-        document.getElementById('btn-random-all').onclick = () => { gameState.guesses = [rand(3), rand(10), rand(100)]; gameState.step = 4; renderStep(); };
-        document.getElementById('btn-manual-pick').onclick = () => { gameState.step = 1; renderStep(); };
+            </div>
+        `;
+
+        document.getElementById('btn-quick').onclick = () => {
+            gameState.guesses = [rand(3), rand(10), rand(100)];
+            gameState.step = 4;
+            renderGameStep();
+        };
+        document.getElementById('btn-manual').onclick = () => {
+            gameState.step = 1;
+            renderGameStep();
+        };
     }
+    // STEPS 1-3: Number Selection
     else if (gameState.step >= 1 && gameState.step <= 3) {
-        const tiers = [
-            { max: 3, name: "BRONZE", reward: "1.5x", desc: "1 in 3 Chance" }, 
-            { max: 10, name: "SILVER", reward: "5x", desc: "1 in 10 Chance" }, 
-            { max: 100, name: "GOLD", reward: "50x", desc: "1 in 100 Chance" }
-        ];
-        const t = tiers[gameState.step - 1];
+        const tier = TIERS[gameState.step - 1];
         
-        let grid = "";
-        if (t.max <= 5) {
-             grid = `<div class="flex flex-wrap justify-center gap-4 mb-8">${Array.from({length: t.max},(_,i)=>i+1).map(n=>`<button class="w-20 h-20 glass-panel rounded-2xl font-black text-3xl text-white hover:bg-amber-500 hover:text-black transition-all step-pick-btn shadow-lg" data-val="${n}">${n}</button>`).join('')}</div>`;
-        } else if (t.max <= 15) {
-             grid = `<div class="flex flex-wrap justify-center gap-3 mb-8 max-w-sm mx-auto">${Array.from({length: t.max},(_,i)=>i+1).map(n=>`<button class="w-14 h-14 glass-panel rounded-xl font-bold text-lg text-white hover:bg-zinc-200 hover:text-black transition-all step-pick-btn" data-val="${n}">${n}</button>`).join('')}</div>`;
+        let gridHTML;
+        if (tier.max <= 5) {
+            gridHTML = `
+                <div class="flex justify-center gap-3 mb-6">
+                    ${Array.from({length: tier.max}, (_, i) => i + 1).map(n => `
+                        <button class="pick-btn w-14 h-14 glass-panel rounded-xl font-black text-xl text-white hover:bg-amber-500 hover:text-black transition-all" data-val="${n}">
+                            ${n}
+                        </button>
+                    `).join('')}
+                </div>
+            `;
+        } else if (tier.max <= 10) {
+            gridHTML = `
+                <div class="grid grid-cols-5 gap-2 mb-6 max-w-xs mx-auto">
+                    ${Array.from({length: tier.max}, (_, i) => i + 1).map(n => `
+                        <button class="pick-btn w-12 h-12 glass-panel rounded-lg font-bold text-white hover:bg-amber-500 hover:text-black transition-all" data-val="${n}">
+                            ${n}
+                        </button>
+                    `).join('')}
+                </div>
+            `;
         } else {
-             grid = `<div class="max-w-xs mx-auto mb-8"><input type="number" id="master-input" class="w-full bg-black/50 border border-amber-500/30 rounded-xl text-center text-5xl py-6 text-white font-bold outline-none focus:border-amber-500" placeholder="1-${t.max}"><button id="confirm-master" class="w-full mt-4 btn-action py-3 rounded-xl shadow-lg" disabled>LOCK NUMBER</button></div>`;
+            gridHTML = `
+                <div class="max-w-[200px] mx-auto mb-6">
+                    <input type="number" id="num-input" min="1" max="${tier.max}" 
+                        class="w-full bg-black border-2 border-amber-500/30 rounded-xl text-center text-4xl py-4 text-white font-bold outline-none focus:border-amber-500"
+                        placeholder="1-${tier.max}">
+                    <button id="btn-confirm-num" class="w-full mt-3 bg-amber-500 hover:bg-amber-400 text-black font-bold py-2.5 rounded-lg disabled:opacity-30" disabled>
+                        Confirm
+                    </button>
+                </div>
+            `;
         }
 
         container.innerHTML = `
-            <div class="text-center pt-4">
-                <div class="text-amber-500 text-xs font-bold tracking-widest mb-2">STEP ${gameState.step}/3</div>
-                <h2 class="text-2xl font-black text-white mb-1">PICK ${t.name}</h2>
-                <p class="text-zinc-500 text-xs mb-8">Win Multiplier: <span class="text-white font-bold">${t.reward}</span> (${t.desc})</p>
-                ${grid}
-            </div>`;
-            
-        if(t.max<=15) document.querySelectorAll('.step-pick-btn').forEach(b => b.onclick = () => { gameState.guesses[gameState.step-1] = parseInt(b.dataset.val); gameState.step++; renderStep(); });
-        else { 
-            const i = document.getElementById('master-input'); 
-            const b = document.getElementById('confirm-master'); 
-            i.oninput = () => {
-                const val = parseInt(i.value);
-                b.disabled = !val || val < 1 || val > 100;
-            }; 
-            b.onclick = () => { gameState.guesses[2] = parseInt(i.value); gameState.step = 4; renderStep(); }; 
+            <div class="text-center py-2">
+                <div class="text-amber-500 text-[10px] font-bold tracking-widest mb-1">STEP ${gameState.step}/3</div>
+                <h2 class="text-xl font-black text-white mb-1">${tier.name} Tier</h2>
+                <p class="text-zinc-500 text-xs mb-6">${tier.multiplier}x multiplier • ${tier.odds} odds</p>
+                ${gridHTML}
+                <button id="btn-back" class="text-[10px] text-zinc-500 hover:text-white">
+                    <i class="fa-solid fa-arrow-left mr-1"></i> Back
+                </button>
+            </div>
+        `;
+
+        // Attach events
+        document.querySelectorAll('.pick-btn').forEach(btn => {
+            btn.onclick = () => {
+                gameState.guesses[gameState.step - 1] = parseInt(btn.dataset.val);
+                gameState.step++;
+                renderGameStep();
+            };
+        });
+
+        const numInput = document.getElementById('num-input');
+        const confirmBtn = document.getElementById('btn-confirm-num');
+        if (numInput && confirmBtn) {
+            numInput.oninput = () => {
+                const val = parseInt(numInput.value);
+                confirmBtn.disabled = !val || val < 1 || val > tier.max;
+            };
+            confirmBtn.onclick = () => {
+                gameState.guesses[gameState.step - 1] = parseInt(numInput.value);
+                gameState.step++;
+                renderGameStep();
+            };
         }
+
+        document.getElementById('btn-back').onclick = () => {
+            gameState.step = gameState.step > 1 ? gameState.step - 1 : 0;
+            renderGameStep();
+        };
     }
+    // STEP 4: Betting Screen
     else if (gameState.step === 4) {
         renderBettingScreen(container);
     }
 }
 
-function rand(max) { return Math.floor(Math.random() * max) + 1; }
-
-// --- SMART FAUCET CALL ---
-async function requestGaslessRefuel(btnElement) {
-    if (!State.isConnected) return;
-    const original = btnElement.innerHTML;
-    btnElement.disabled = true;
-    btnElement.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Processing...`;
-
-    try {
-        const response = await fetch(`${FAUCET_API_URL}?address=${State.userAddress}`);
-        const data = await response.json();
-        
-        if (response.ok && data.success) {
-            showToast("✅ Refueled! 0.002 ETH + 20 BKC Sent.", "success");
-            const modal = document.getElementById('no-gas-modal');
-            if(modal) modal.classList.add('hidden');
-        } else {
-            showToast(`⏳ ${data.error || "Cooldown active"}`, "warning");
-        }
-    } catch (e) {
-        console.error(e);
-        showToast("Faucet Offline", "error");
-    } finally {
-        btnElement.disabled = false;
-        btnElement.innerHTML = original;
-    }
-}
+// ============================================================================
+// 3. BETTING SCREEN
+// ============================================================================
 
 function renderBettingScreen(container) {
     container.innerHTML = `
-        <div class="text-center relative h-full flex flex-col justify-between" style="min-height: 430px;">
-            <div class="absolute top-0 right-0">
-                <button id="btn-reset" class="text-[10px] text-zinc-500 hover:text-white uppercase tracking-wider flex items-center gap-1 bg-zinc-900/50 px-3 py-1 rounded-lg border border-zinc-800"><i class="fa-solid fa-rotate-left"></i> Reset</button>
-            </div>
-            <div class="mt-8">
-                <div class="grid grid-cols-3 gap-3 mb-2 px-2">
-                    <span class="tier-label text-amber-600">Bronze (1.5x)</span>
-                    <span class="tier-label text-zinc-400">Silver (5x)</span>
-                    <span class="tier-label text-yellow-400">Gold (50x)</span>
-                </div>
-                <div class="grid grid-cols-3 gap-3 mb-3 px-2 relative z-10">
-                    ${gameState.guesses.map(g => `
-                        <div class="guess-box rounded-xl h-10 flex items-center justify-center font-bold text-lg shadow-lg relative">
-                            ${g}
-                            <div class="absolute -bottom-3 left-1/2 -translate-x-1/2 text-[10px] text-blue-500/50"><i class="fa-solid fa-arrow-down"></i></div>
-                        </div>`).join('')}
-                </div>
-                <div class="grid grid-cols-3 gap-3 mb-3 px-2 relative z-10">
-                    ${[1,2,3].map(i => `<div id="slot-${i}" class="slot-box rounded-2xl h-20 flex items-center justify-center text-4xl font-black transition-all duration-500">?</div>`).join('')}
-                </div>
-                <div class="grid grid-cols-3 gap-3 mb-2 px-2">
-                    <div id="win-pot-1" class="profit-tag text-zinc-600">---</div>
-                    <div id="win-pot-2" class="profit-tag text-zinc-600">---</div>
-                    <div id="win-pot-3" class="profit-tag text-zinc-600">---</div>
-                </div>
-            </div>
-            <div id="status-area" class="hidden-force flex-col items-center justify-center h-48 animate-fadeIn mt-4">
-                <img src="assets/bkc_logo_3d.png" class="w-12 h-12 mb-3 bkc-anim" alt="Mining...">
-                <div class="text-sm text-white font-bold mb-1" id="status-title">PROCESSING...</div>
-                <div class="text-[10px] text-amber-500 font-mono mb-2 uppercase tracking-widest" id="status-text">INITIALIZING...</div>
-                <div class="progress-track w-full max-w-xs mx-auto"><div id="progress-bar" class="progress-fill"></div></div>
-            </div>
-            <div id="controls-area" class="bg-zinc-900/50 p-4 rounded-3xl border border-zinc-800 transition-opacity duration-500 mt-2">
-                <div class="flex items-center justify-between mb-4 bg-black/40 rounded-xl p-2 px-4 border border-zinc-700/50">
-                    <span class="text-zinc-500 text-xs font-bold">BET AMOUNT</span>
-                    <div class="flex items-center">
-                        <input type="number" id="bet-input" class="bg-transparent text-right text-white font-mono text-xl font-bold w-24 outline-none" placeholder="0" step="any">
-                        <span class="text-amber-500 font-bold text-xs ml-2">BKC</span>
+        <div class="relative">
+            <!-- Reset Button -->
+            <button id="btn-reset" class="absolute top-0 right-0 text-[10px] text-zinc-500 hover:text-white">
+                <i class="fa-solid fa-rotate-left mr-1"></i> Reset
+            </button>
+
+            <!-- Guesses Display -->
+            <div class="grid grid-cols-3 gap-2 mb-2 mt-6">
+                ${TIERS.map((t, i) => `
+                    <div class="text-center">
+                        <div class="text-[9px] text-${t.color}-500 font-bold mb-1">${t.name}</div>
+                        <div class="guess-display rounded-lg py-2 text-blue-400 font-bold">${gameState.guesses[i]}</div>
+                        <div class="text-[9px] text-zinc-600 mt-1">${t.multiplier}x</div>
                     </div>
+                `).join('')}
+            </div>
+
+            <!-- Slots -->
+            <div class="grid grid-cols-3 gap-2 mb-2">
+                ${[1, 2, 3].map(i => `
+                    <div id="slot-${i}" class="fortune-slot rounded-xl h-16 flex items-center justify-center text-3xl font-black text-zinc-600">
+                        ?
+                    </div>
+                `).join('')}
+            </div>
+
+            <!-- Potential Wins -->
+            <div class="grid grid-cols-3 gap-2 mb-4">
+                ${TIERS.map((t, i) => `
+                    <div id="pot-${i+1}" class="text-center text-[10px] font-mono text-zinc-600 py-1 rounded bg-zinc-900/50">
+                        --
+                    </div>
+                `).join('')}
+            </div>
+
+            <!-- Status Area (hidden by default) -->
+            <div id="status-area" class="hidden flex-col items-center justify-center py-8">
+                <img src="assets/bkc_logo_3d.png" class="w-10 h-10 mb-2 coin-pulse" alt="">
+                <div id="status-title" class="text-sm text-white font-bold mb-1">Processing...</div>
+                <div id="status-text" class="text-[10px] text-amber-500 font-mono mb-2">INITIALIZING</div>
+                <div class="w-full max-w-xs h-2 bg-zinc-800 rounded-full overflow-hidden">
+                    <div id="progress-bar" class="progress-bar-fill h-full w-0"></div>
                 </div>
-                
-                <div class="grid grid-cols-5 gap-2 mb-4">
-                    <button class="add-bet bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-[10px] font-bold py-2 rounded-lg transition-colors border border-zinc-700" data-amt="0.5">+0.5</button>
-                    <button class="add-bet bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-[10px] font-bold py-2 rounded-lg transition-colors border border-zinc-700" data-amt="1">+1</button>
-                    <button class="add-bet bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-[10px] font-bold py-2 rounded-lg transition-colors border border-zinc-700" data-amt="10">+10</button>
-                    <button class="add-bet bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-[10px] font-bold py-2 rounded-lg transition-colors border border-zinc-700" data-amt="100">+100</button>
-                    <button id="btn-clear-bet" class="bg-red-900/30 hover:bg-red-900/50 text-red-400 text-[10px] font-bold py-2 rounded-lg transition-colors border border-red-500/20"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+
+            <!-- Controls -->
+            <div id="controls-area" class="space-y-3">
+                <!-- Bet Input -->
+                <div class="flex items-center justify-between bg-black/40 rounded-xl p-3 border border-zinc-700/50">
+                    <span class="text-zinc-500 text-xs font-bold">BET</span>
+                    <div class="flex items-center gap-2">
+                        <input type="number" id="bet-input" 
+                            class="bg-transparent text-right text-white font-mono text-lg font-bold w-20 outline-none" 
+                            placeholder="0" step="any" value="${gameState.betAmount || ''}">
+                        <span class="text-amber-500 font-bold text-xs">BKC</span>
+                    </div>
                 </div>
 
-                <div class="mb-4">
-                    <div id="mode-toggle" class="mode-container mode-active-cumulative p-3 rounded-xl flex items-center justify-between cursor-pointer group">
-                        <div class="flex items-center gap-3">
-                            <div class="w-12 h-12 rounded-lg bg-purple-600/30 flex items-center justify-center border border-purple-500/50 text-xl" id="mode-icon">🚀</div>
-                            <div class="text-left">
-                                <div class="text-xs font-black text-white drop-shadow-md transition-colors uppercase" id="mode-title">🚀 TRIPLE WIN CHANCE</div>
-                                <div class="text-[9px] text-purple-200" id="mode-desc">Combo Mode Active: Win on all 3 pools!</div>
+                <!-- Quick Amounts -->
+                <div class="grid grid-cols-5 gap-2">
+                    <button class="add-bet bg-zinc-800 hover:bg-zinc-700 text-zinc-400 text-[10px] font-bold py-2 rounded transition-colors" data-amt="1">+1</button>
+                    <button class="add-bet bg-zinc-800 hover:bg-zinc-700 text-zinc-400 text-[10px] font-bold py-2 rounded transition-colors" data-amt="5">+5</button>
+                    <button class="add-bet bg-zinc-800 hover:bg-zinc-700 text-zinc-400 text-[10px] font-bold py-2 rounded transition-colors" data-amt="10">+10</button>
+                    <button class="add-bet bg-zinc-800 hover:bg-zinc-700 text-zinc-400 text-[10px] font-bold py-2 rounded transition-colors" data-amt="50">+50</button>
+                    <button id="btn-clear" class="bg-red-900/30 hover:bg-red-900/50 text-red-400 text-[10px] font-bold py-2 rounded transition-colors">
+                        <i class="fa-solid fa-xmark"></i>
+                    </button>
+                </div>
+
+                <!-- Mode Toggle -->
+                <div id="mode-toggle" class="p-3 rounded-xl border cursor-pointer transition-all ${gameState.isCumulative ? 'bg-purple-500/10 border-purple-500/30' : 'bg-zinc-800/50 border-zinc-700'}">
+                    <div class="flex items-center justify-between">
+                        <div class="flex items-center gap-2">
+                            <span id="mode-icon" class="text-lg">${gameState.isCumulative ? '🚀' : '🎯'}</span>
+                            <div>
+                                <div id="mode-title" class="text-xs font-bold text-white">${gameState.isCumulative ? 'Combo Mode' : 'Single Mode'}</div>
+                                <div id="mode-desc" class="text-[9px] text-zinc-400">${gameState.isCumulative ? 'Stack all winning multipliers' : 'Keep highest win only'}</div>
                             </div>
                         </div>
-                        <div class="text-xs font-black text-white bg-purple-600 px-2 py-1 rounded shadow-lg" id="mode-badge">ACTIVE</div>
+                        <div id="mode-badge" class="text-[10px] font-bold px-2 py-1 rounded ${gameState.isCumulative ? 'bg-purple-500 text-white' : 'bg-zinc-700 text-zinc-400'}">
+                            ${gameState.isCumulative ? 'COMBO' : 'SINGLE'}
+                        </div>
                     </div>
                 </div>
-                <button id="btn-spin" class="w-full btn-action py-4 rounded-xl shadow-lg shadow-amber-900/20 text-sm disabled:opacity-50" disabled>ENTER AMOUNT</button>
-            </div>
-        </div>
-        <div id="result-overlay" class="absolute inset-0 z-50 hidden flex-col items-center justify-center glass-panel rounded-3xl bg-black/95"></div>
-        
-        <div id="no-gas-modal" class="absolute inset-0 z-50 hidden flex-col items-center justify-center glass-panel rounded-3xl bg-black/95 backdrop-blur-xl">
-            <div class="p-6 max-w-sm text-center animate-fadeIn bg-zinc-900/90 border border-red-500/30 rounded-2xl">
-                <div class="w-16 h-16 bg-red-500/10 rounded-full flex items-center justify-center mx-auto mb-4 border border-red-500/30">
-                    <i class="fa-solid fa-gas-pump text-2xl text-red-500"></i>
-                </div>
-                <h3 class="text-xl font-bold text-white mb-2">Out of Gas!</h3>
-                <p class="text-zinc-400 text-xs mb-6">You need ETH to pay for the mining fee. We can send you a starter pack to keep playing.</p>
-                
-                <button id="btn-emergency-faucet" class="w-full bg-green-600 hover:bg-green-500 text-white font-bold py-3 px-4 rounded-xl flex justify-center items-center gap-2 shadow-lg shadow-green-900/20 mb-3 transition-transform hover:scale-105">
-                    <i class="fa-solid fa-hand-holding-medical"></i> Get Gas + Tokens (Free)
+
+                <!-- Spin Button -->
+                <button id="btn-spin" class="w-full bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-black font-black py-3 rounded-xl transition-all disabled:opacity-40 disabled:cursor-not-allowed" disabled>
+                    ENTER AMOUNT
                 </button>
-                
-                <button id="close-gas-modal" class="text-zinc-600 hover:text-white text-xs underline">I'll get my own</button>
             </div>
+
+            <!-- Result Overlay -->
+            <div id="result-overlay" class="absolute inset-0 z-10 hidden items-center justify-center bg-black/95 rounded-xl"></div>
         </div>
     `;
 
-    document.getElementById('btn-reset').onclick = () => { gameState.step = 0; renderStep(); };
-    const inp = document.getElementById('bet-input');
-    const btn = document.getElementById('btn-spin');
-    
-    if (gameState.betAmount > 0) inp.value = gameState.betAmount;
+    attachBettingListeners();
+}
 
+function attachBettingListeners() {
+    const betInput = document.getElementById('bet-input');
+    const spinBtn = document.getElementById('btn-spin');
+
+    // Validation
     const validate = () => {
-        const val = parseFloat(inp.value);
-        gameState.betAmount = val || 0;
-        updateToggleVisuals();
+        const val = parseFloat(betInput.value) || 0;
+        gameState.betAmount = val;
 
-        const pot1 = document.getElementById('win-pot-1');
-        const pot2 = document.getElementById('win-pot-2');
-        const pot3 = document.getElementById('win-pot-3');
+        TIERS.forEach((t, i) => {
+            const potEl = document.getElementById(`pot-${i + 1}`);
+            if (potEl) {
+                if (val > 0) {
+                    potEl.textContent = `+${(val * t.multiplier).toFixed(1)}`;
+                    potEl.className = 'text-center text-[10px] font-mono text-green-400 py-1 rounded bg-green-500/10 border border-green-500/20';
+                } else {
+                    potEl.textContent = '--';
+                    potEl.className = 'text-center text-[10px] font-mono text-zinc-600 py-1 rounded bg-zinc-900/50';
+                }
+            }
+        });
 
-        const hasZeros = gameState.guesses.includes(0);
-
-        if (val > 0 && !hasZeros) { 
-            pot1.innerText = `+ ${(val * 1.5).toLocaleString()} BKC`; pot1.classList.add('profit-active');
-            pot2.innerText = `+ ${(val * 5).toLocaleString()} BKC`; pot2.classList.add('profit-active');
-            pot3.innerText = `+ ${(val * 50).toLocaleString()} BKC`; pot3.classList.add('profit-active');
-            btn.disabled = false; btn.innerText = "SPIN TO WIN";
+        if (val > 0 && gameState.systemReady) {
+            spinBtn.disabled = false;
+            spinBtn.textContent = 'SPIN TO WIN';
         } else {
-            pot1.innerText = "---"; pot1.classList.remove('profit-active');
-            pot2.innerText = "---"; pot2.classList.remove('profit-active');
-            pot3.innerText = "---"; pot3.classList.remove('profit-active');
-            btn.disabled = true; 
-            if (hasZeros) btn.innerText = "PICK NUMBERS";
-            else btn.innerText = "ENTER AMOUNT";
+            spinBtn.disabled = true;
+            spinBtn.textContent = val > 0 ? 'SYSTEM OFFLINE' : 'ENTER AMOUNT';
         }
-        if (!gameState.systemReady) { btn.disabled = true; btn.innerText = "NETWORK ERROR"; }
     };
 
-    inp.oninput = validate;
-    
-    document.querySelectorAll('.add-bet').forEach(b => b.onclick = () => { 
-        let current = parseFloat(inp.value) || 0;
-        let toAdd = parseFloat(b.dataset.amt);
-        let newVal = current + toAdd;
-        inp.value = parseFloat(newVal.toFixed(4)); 
-        validate(); 
+    betInput.oninput = validate;
+
+    // Quick add buttons
+    document.querySelectorAll('.add-bet').forEach(btn => {
+        btn.onclick = () => {
+            const current = parseFloat(betInput.value) || 0;
+            betInput.value = (current + parseFloat(btn.dataset.amt)).toFixed(2);
+            validate();
+        };
     });
 
-    document.getElementById('btn-clear-bet').onclick = () => {
-        inp.value = '';
+    document.getElementById('btn-clear').onclick = () => {
+        betInput.value = '';
         validate();
     };
-    
+
+    // Mode toggle
     document.getElementById('mode-toggle').onclick = () => {
-        const inpVal = document.getElementById('bet-input').value;
-        if (!inpVal || parseFloat(inpVal) <= 0) return; 
+        if (gameState.betAmount <= 0) return;
         gameState.isCumulative = !gameState.isCumulative;
-        updateToggleVisuals();
+        updateModeVisuals();
         FortunePoolPage.checkReqs();
     };
-    
-    const faucetBtn = document.getElementById('btn-emergency-faucet');
-    if (faucetBtn) faucetBtn.onclick = function() { requestGaslessRefuel(this); };
 
-    const closeBtn = document.getElementById('close-gas-modal');
-    if (closeBtn) closeBtn.onclick = () => {
-        const modal = document.getElementById('no-gas-modal');
-        if(modal) { modal.classList.remove('flex'); modal.classList.add('hidden'); }
+    // Reset
+    document.getElementById('btn-reset').onclick = () => {
+        gameState.step = 0;
+        gameState.guesses = [0, 0, 0];
+        renderGameStep();
     };
-    
-    btn.onclick = executeTransaction;
+
+    // Spin
+    spinBtn.onclick = executeTransaction;
+
+    // Gas modal
+    const faucetBtn = document.getElementById('btn-faucet');
+    if (faucetBtn) faucetBtn.onclick = function() { requestFaucet(this); };
+
+    const closeGasBtn = document.getElementById('btn-close-gas');
+    if (closeGasBtn) closeGasBtn.onclick = () => {
+        document.getElementById('gas-modal').classList.add('hidden');
+        document.getElementById('gas-modal').classList.remove('flex');
+    };
+
     validate();
 }
 
-function updateToggleVisuals() {
-    const container = document.getElementById('mode-toggle');
+function updateModeVisuals() {
+    const toggle = document.getElementById('mode-toggle');
+    const icon = document.getElementById('mode-icon');
     const title = document.getElementById('mode-title');
     const desc = document.getElementById('mode-desc');
-    const icon = document.getElementById('mode-icon');
     const badge = document.getElementById('mode-badge');
 
-    if(gameState.isCumulative) {
-        container.className = "mode-container mode-active-cumulative p-3 rounded-xl flex items-center justify-between cursor-pointer group";
-        title.innerText = "🚀 TRIPLE WIN CHANCE";
-        desc.innerText = "Combo Mode Active: Win on all 3 pools!";
-        desc.className = "text-[9px] text-purple-200";
-        icon.innerHTML = "🚀"; icon.className = "w-12 h-12 rounded-lg bg-purple-600/30 flex items-center justify-center border border-purple-500/50 text-xl";
-        badge.innerText = "ACTIVE"; badge.className = "text-xs font-black text-white bg-purple-600 px-2 py-1 rounded shadow-lg";
+    if (gameState.isCumulative) {
+        toggle.className = 'p-3 rounded-xl border cursor-pointer transition-all bg-purple-500/10 border-purple-500/30';
+        icon.textContent = '🚀';
+        title.textContent = 'Combo Mode';
+        desc.textContent = 'Stack all winning multipliers';
+        badge.textContent = 'COMBO';
+        badge.className = 'text-[10px] font-bold px-2 py-1 rounded bg-purple-500 text-white';
     } else {
-        container.className = "mode-container mode-locked p-3 rounded-xl flex items-center justify-between cursor-pointer group";
-        title.innerText = "⚠️ SINGLE WIN LIMIT";
-        desc.innerText = "Capped Winnings. You keep only 1 prize.";
-        desc.className = "text-[9px] text-zinc-500";
-        icon.innerHTML = "🛑"; icon.className = "w-12 h-12 rounded-lg bg-zinc-800 flex items-center justify-center border border-zinc-700 text-xl grayscale";
-        badge.innerText = "LIMITED"; badge.className = "text-xs font-bold text-zinc-600 border border-zinc-700 px-2 py-1 rounded";
+        toggle.className = 'p-3 rounded-xl border cursor-pointer transition-all bg-zinc-800/50 border-zinc-700';
+        icon.textContent = '🎯';
+        title.textContent = 'Single Mode';
+        desc.textContent = 'Keep highest win only';
+        badge.textContent = 'SINGLE';
+        badge.className = 'text-[10px] font-bold px-2 py-1 rounded bg-zinc-700 text-zinc-400';
+    }
+}
+
+// ============================================================================
+// 4. GAME EXECUTION
+// ============================================================================
+
+async function executeTransaction() {
+    if (!State.isConnected) return showToast("Connect wallet", "error");
+
+    const hasGas = await checkGas();
+    if (!hasGas) return;
+
+    await FortunePoolPage.checkReqs();
+    if (!gameState.systemReady) return showToast("System offline", "error");
+    if (gameState.betAmount <= 0) return;
+
+    const btn = document.getElementById('btn-spin');
+    const amountWei = ethers.parseEther(gameState.betAmount.toString());
+    const isCumulative = gameState.isCumulative;
+
+    // Get fee from contract (V2.1: oracleFee instead of oracleFeeInWei)
+    let fee = 0n;
+    try {
+        let baseFee = await safeContractCall(State.actionsManagerContract, 'oracleFee', [], 0n);
+        if (baseFee === 0n) {
+            baseFee = await safeContractCall(State.actionsManagerContract, 'oracleFeeInWei', [], 0n);
+        }
+        if (baseFee === 0n) baseFee = ethers.parseEther("0.00035");
+        fee = isCumulative ? (baseFee * 5n) : baseFee;
+    } catch (e) {
+        fee = ethers.parseEther(isCumulative ? "0.00175" : "0.00035");
+    }
+
+    btn.disabled = true;
+
+    try {
+        // Approve
+        btn.innerHTML = `<i class="fa-solid fa-circle-notch fa-spin mr-2"></i> Approving...`;
+        const spender = addresses.fortunePool;
+        
+        const currentAllowance = await State.bkcTokenContract.allowance(State.userAddress, spender);
+        if (currentAllowance < amountWei) {
+            const approveTx = await State.bkcTokenContract.approve(spender, amountWei, { gasLimit: 300000 });
+            await approveTx.wait();
+        }
+
+        // Execute
+        btn.innerHTML = `<i class="fa-solid fa-circle-notch fa-spin mr-2"></i> Confirming...`;
+        const guessesAsBigInt = gameState.guesses.map(g => BigInt(g));
+
+        const tx = await State.actionsManagerContract.participate(
+            amountWei,
+            guessesAsBigInt,
+            isCumulative,
+            { value: fee, gasLimit: 3000000 }
+        );
+
+        startSpinning();
+        await tx.wait();
+        updateProgress(40, "Waiting for Oracle...");
+
+        const counter = await safeContractCall(State.actionsManagerContract, 'gameCounter', [], 0, 2, true);
+        const gameId = Number(counter) > 0 ? Number(counter) - 1 : 0;
+
+        setTimeout(() => pollForResult(gameId), 2000);
+
+    } catch (e) {
+        console.error("Transaction failed:", e);
+        btn.disabled = false;
+        btn.textContent = 'SPIN TO WIN';
+        
+        await checkGas();
+        showToast("Transaction failed", "error");
+        
+        document.getElementById('status-area').classList.add('hidden');
+        document.getElementById('status-area').classList.remove('flex');
+        document.getElementById('controls-area').classList.remove('hidden');
     }
 }
 
 function startSpinning() {
     gameState.isSpinning = true;
-    const controls = document.getElementById('controls-area');
-    const status = document.getElementById('status-area');
-    controls.classList.add('hidden-force'); status.classList.remove('hidden-force'); status.classList.add('flex'); 
-    [1,2,3].forEach(i => {
+
+    document.getElementById('controls-area').classList.add('hidden');
+    document.getElementById('status-area').classList.remove('hidden');
+    document.getElementById('status-area').classList.add('flex');
+
+    [1, 2, 3].forEach(i => {
         const el = document.getElementById(`slot-${i}`);
-        el.innerText = '?'; el.className = "slot-box rounded-2xl h-20 flex items-center justify-center text-4xl font-black slot-spinning";
+        el.textContent = '?';
+        el.className = 'fortune-slot spinning rounded-xl h-16 flex items-center justify-center text-3xl font-black';
     });
+
     gameState.spinInterval = setInterval(() => {
-        if(document.getElementById('slot-1')) document.getElementById('slot-1').innerText = rand(5);
-        if(document.getElementById('slot-2')) document.getElementById('slot-2').innerText = rand(15);
-        if(document.getElementById('slot-3')) document.getElementById('slot-3').innerText = rand(150);
-    }, 50);
-    updateProgressBar(10, "MINING TRANSACTION..."); 
+        if (document.getElementById('slot-1')) document.getElementById('slot-1').textContent = rand(5);
+        if (document.getElementById('slot-2')) document.getElementById('slot-2').textContent = rand(15);
+        if (document.getElementById('slot-3')) document.getElementById('slot-3').textContent = rand(100);
+    }, 60);
+
+    updateProgress(10, "Mining transaction...");
 }
 
-function updateProgressBar(percent, text) {
+function updateProgress(percent, text) {
     const bar = document.getElementById('progress-bar');
     const txt = document.getElementById('status-text');
-    if(bar) bar.style.width = `${percent}%`;
-    if(txt) txt.innerText = text;
+    if (bar) bar.style.width = `${percent}%`;
+    if (txt) txt.textContent = text.toUpperCase();
+}
+
+async function pollForResult(gameId) {
+    let attempts = 0;
+    let progress = 40;
+
+    if (gameState.pollInterval) clearInterval(gameState.pollInterval);
+
+    gameState.pollInterval = setInterval(async () => {
+        attempts++;
+        progress = Math.min(progress + 2, 95);
+        updateProgress(progress, `Oracle processing (#${gameId})...`);
+
+        if (attempts > 60) {
+            clearInterval(gameState.pollInterval);
+            stopSpinning([0, 0, 0], 0n);
+            showToast("Oracle timeout. Check history.", "info");
+            return;
+        }
+
+        try {
+            const rolls = await safeContractCall(State.actionsManagerContract, 'gameResults', [gameId], [], 0, true);
+
+            if (rolls && rolls.length > 0) {
+                clearInterval(gameState.pollInterval);
+                const resultRolls = [Number(rolls[0]), Number(rolls[1]), Number(rolls[2])];
+
+                let win = 0n;
+                if (resultRolls[0] === gameState.guesses[0] || resultRolls[1] === gameState.guesses[1] || resultRolls[2] === gameState.guesses[2]) {
+                    let mult = 0;
+                    if (resultRolls[0] === gameState.guesses[0]) mult = 1.5;
+                    if (resultRolls[1] === gameState.guesses[1]) {
+                        mult = gameState.isCumulative ? mult + 5 : Math.max(mult, 5);
+                    }
+                    if (resultRolls[2] === gameState.guesses[2]) {
+                        mult = gameState.isCumulative ? mult + 50 : Math.max(mult, 50);
+                    }
+                    win = ethers.parseEther((gameState.betAmount * mult).toFixed(18));
+                }
+
+                stopSpinning(resultRolls, win);
+            }
+        } catch (e) {
+            console.error("Poll error:", e);
+        }
+    }, 2000);
 }
 
 async function stopSpinning(rolls, winAmount) {
     clearInterval(gameState.spinInterval);
     clearInterval(gameState.pollInterval);
-    updateProgressBar(100, "REVEALING DESTINY...");
+
+    updateProgress(100, "Revealing...");
     gameState.lastWinAmount = parseFloat(formatBigNumber(BigInt(winAmount)));
+
     const wait = ms => new Promise(r => setTimeout(r, ms));
-    const reveal = async (i) => {
-        const el = document.getElementById(`slot-${i+1}`);
-        if(!el) return;
-        el.classList.remove('slot-spinning');
-        el.innerText = rolls[i];
-        if (rolls[i] === gameState.guesses[i]) el.classList.add('slot-hit');
-        else el.classList.add('slot-miss');
-    };
-    await wait(500); await reveal(0); await wait(1000); await reveal(1); await wait(1000); await reveal(2); await wait(1500);
-    showResultOverlay(winAmount > 0n);
+
+    for (let i = 0; i < 3; i++) {
+        await wait(600);
+        const el = document.getElementById(`slot-${i + 1}`);
+        if (!el) continue;
+
+        el.classList.remove('spinning');
+        el.textContent = rolls[i];
+
+        if (rolls[i] === gameState.guesses[i]) {
+            el.classList.add('hit');
+        } else {
+            el.classList.add('miss');
+        }
+    }
+
+    await wait(1000);
+    showResult(winAmount > 0n);
 }
 
-function showResultOverlay(isWin) {
+function showResult(isWin) {
     const overlay = document.getElementById('result-overlay');
-    overlay.classList.remove('hidden'); overlay.classList.add('flex');
-    
-    const winText = `🏆 I just won ${gameState.lastWinAmount.toFixed(2)} $BKC on the Fortune Pool! The Backchain Protocol is changing the game. Real Yield, Real Utility. 🚀🔥 #BKC #BACKCOIN #AIRDROP`;
-    const lossText = `⛏️ Mining the future with Proof-of-Purchase! Every interaction counts in the Backchain Protocol. Join the revolution. 💎🔨 #BKC #BACKCOIN #AIRDROP`;
-    
-    const shareText = isWin ? winText : lossText;
-    const shareUrl = `https://twitter.com/intent/tweet?text=${encodeURIComponent(shareText)}&url=${encodeURIComponent('https://backcoin.org')}`;
+    overlay.classList.remove('hidden');
+    overlay.classList.add('flex');
 
     if (isWin) {
         overlay.innerHTML = `
-            <div class="text-center p-6 w-full animate-fadeIn">
-                <div class="text-6xl mb-4">🏆</div>
-                <h2 class="text-4xl font-black text-amber-400 italic mb-2 drop-shadow-lg">BIG WIN!</h2>
-                <div class="text-6xl font-mono font-bold text-white mb-6">${gameState.lastWinAmount.toFixed(2)} <span class="text-xl text-zinc-500">BKC</span></div>
-                
-                <div class="flex flex-col gap-3 justify-center">
-                    <button id="btn-collect" class="bg-white text-black font-black py-4 px-10 rounded-xl shadow-[0_0_20px_rgba(255,255,255,0.3)] hover:scale-105 transition-transform">
-                        COLLECT & REPLAY
-                    </button>
-                    <button id="btn-share-win" class="bg-[#1DA1F2] hover:bg-[#1a91da] text-white font-bold py-3 px-10 rounded-xl flex items-center justify-center gap-2 transition-all">
-                        <i class="fa-brands fa-twitter"></i> SHARE VICTORY
-                    </button>
+            <div class="text-center p-4 w-full">
+                <div class="text-5xl mb-3">🏆</div>
+                <h2 class="text-3xl font-black text-amber-400 mb-2">YOU WON!</h2>
+                <div class="text-4xl font-mono font-bold text-white mb-4">
+                    ${gameState.lastWinAmount.toFixed(2)} <span class="text-lg text-zinc-500">BKC</span>
                 </div>
-            </div>`;
+                <button id="btn-collect" class="w-full bg-white text-black font-black py-3 rounded-xl hover:scale-105 transition-transform">
+                    COLLECT & PLAY AGAIN
+                </button>
+            </div>
+        `;
         addXP(500);
     } else {
         overlay.innerHTML = `
-            <div class="text-center p-6 w-full animate-fadeIn">
-                <div class="text-6xl mb-4 grayscale opacity-50">💔</div>
-                <h2 class="text-2xl font-bold text-zinc-300 mb-2">NOT THIS TIME</h2>
-                <p class="text-zinc-500 mb-8 text-sm">Proof of Purchase generated. Ecosystem mining active.</p>
-                
-                <div class="flex flex-col gap-3 justify-center">
-                    <button id="btn-collect" class="bg-zinc-800 text-white font-bold py-3 px-8 rounded-xl border border-zinc-600 hover:bg-zinc-700">
-                        TRY AGAIN
-                    </button>
-                    <button id="btn-share-loss" class="bg-transparent border border-zinc-600 text-zinc-400 hover:text-white hover:border-zinc-400 font-bold py-3 px-8 rounded-xl transition-all flex items-center justify-center gap-2">
-                        <i class="fa-brands fa-twitter"></i> SHARE MINING
-                    </button>
-                </div>
-            </div>`;
+            <div class="text-center p-4 w-full">
+                <div class="text-4xl mb-3 opacity-50">💔</div>
+                <h2 class="text-xl font-bold text-zinc-300 mb-2">Not This Time</h2>
+                <p class="text-zinc-500 text-sm mb-4">Your purchase generated mining power</p>
+                <button id="btn-collect" class="w-full bg-zinc-800 text-white font-bold py-3 rounded-xl hover:bg-zinc-700 transition-colors">
+                    TRY AGAIN
+                </button>
+            </div>
+        `;
         addXP(50);
     }
 
-    document.getElementById('btn-collect').onclick = closeOverlay;
-    
-    if (isWin) {
-        document.getElementById('btn-share-win').onclick = () => window.open(shareUrl, '_blank');
-    } else {
-        document.getElementById('btn-share-loss').onclick = () => window.open(shareUrl, '_blank');
-    }
+    document.getElementById('btn-collect').onclick = closeResult;
 }
 
-function closeOverlay() {
+function closeResult() {
     const overlay = document.getElementById('result-overlay');
-    overlay.classList.add('hidden'); overlay.classList.remove('flex');
-    document.getElementById('status-area').classList.add('hidden-force'); document.getElementById('status-area').classList.remove('flex');
-    document.getElementById('controls-area').classList.remove('hidden-force');
-    document.getElementById('progress-bar').classList.remove('finish'); document.getElementById('progress-bar').style.width = '0%';
-    [1,2,3].forEach(i => {
+    overlay.classList.add('hidden');
+    overlay.classList.remove('flex');
+
+    document.getElementById('status-area').classList.add('hidden');
+    document.getElementById('status-area').classList.remove('flex');
+    document.getElementById('controls-area').classList.remove('hidden');
+    document.getElementById('progress-bar').style.width = '0%';
+
+    [1, 2, 3].forEach(i => {
         const el = document.getElementById(`slot-${i}`);
-        el.className = "slot-box rounded-2xl h-20 flex items-center justify-center text-4xl font-black text-zinc-700 transition-all";
-        el.innerText = "?"; el.classList.remove('slot-hit', 'slot-miss');
+        el.className = 'fortune-slot rounded-xl h-16 flex items-center justify-center text-3xl font-black text-zinc-600';
+        el.textContent = '?';
     });
-    
-    const btnSpin = document.getElementById('btn-spin');
-    if (btnSpin && gameState.betAmount > 0) {
-        btnSpin.disabled = false;
-        btnSpin.innerText = "SPIN TO WIN";
+
+    const btn = document.getElementById('btn-spin');
+    if (btn && gameState.betAmount > 0) {
+        btn.disabled = false;
+        btn.textContent = 'SPIN TO WIN';
     }
-    
+
     FortunePoolPage.loadHistory();
     loadUserData(true);
 }
 
-async function checkGasAndWarn() {
+// ============================================================================
+// 5. HELPERS
+// ============================================================================
+
+async function checkGas() {
     try {
-        const nativeBalance = await State.provider.getBalance(State.userAddress);
-        const minGas = ethers.parseEther("0.002"); 
-        
-        if (nativeBalance < minGas) {
-            console.warn("⚠️ Low Gas Detected:", ethers.formatEther(nativeBalance));
-            const modal = document.getElementById('no-gas-modal');
-            if(modal) {
+        const balance = await State.provider.getBalance(State.userAddress);
+        if (balance < ethers.parseEther("0.002")) {
+            const modal = document.getElementById('gas-modal');
+            if (modal) {
                 modal.classList.remove('hidden');
                 modal.classList.add('flex');
             }
@@ -542,299 +820,150 @@ async function checkGasAndWarn() {
         }
         return true;
     } catch (e) {
-        console.error("Gas check failed", e);
-        return true; // Fail safe
+        return true;
     }
 }
 
-async function executeTransaction() {
-    if (!State.isConnected) return showToast("Connect wallet", "error");
-    
-    if (gameState.guesses.includes(0)) {
-        showToast("Select all 3 numbers!", "error");
-        if(gameState.guesses[0] === 0) { gameState.step = 1; renderStep(); }
-        return;
-    }
+async function requestFaucet(btn) {
+    if (!State.isConnected) return;
 
-    const hasGas = await checkGasAndWarn();
-    if (!hasGas) return; 
-
-    await FortunePoolPage.checkReqs();
-    if (!gameState.systemReady) { showToast("System Offline", "error"); return; }
-    if (gameState.betAmount <= 0) return;
-    
-    const btn = document.getElementById('btn-spin');
-    const amountWei = ethers.parseEther(gameState.betAmount.toString());
-    const isCumulative = gameState.isCumulative;
-    let fee = 0n;
-
-    try {
-        const baseFee = await safeContractCall(State.actionsManagerContract, 'oracleFeeInWei', [], 0n);
-        const baseFeeBigInt = BigInt(baseFee); 
-        const rawFee = isCumulative ? (baseFeeBigInt * 5n) : baseFeeBigInt;
-        fee = rawFee; 
-    } catch (e) {
-        const FALLBACK_BASE_FEE = ethers.parseEther("0.00035"); 
-        fee = isCumulative ? (FALLBACK_BASE_FEE * 5n) : FALLBACK_BASE_FEE;
-    }
-    
+    const original = btn.innerHTML;
     btn.disabled = true;
-    
+    btn.innerHTML = `<i class="fa-solid fa-circle-notch fa-spin mr-2"></i> Sending...`;
+
     try {
-        const spender = addresses.fortunePool;
-        btn.innerHTML = `<div class="loader inline-block"></div> APPROVING BKC...`;
-        
-        try {
-            const currentAllowance = await State.bkcTokenContract.allowance(State.userAddress, spender);
-            if (currentAllowance < amountWei) {
-                const approveTx = await State.bkcTokenContract.approve(spender, amountWei, { gasLimit: 300000 });
-                await approveTx.wait();
-                showToast("✅ BKC Approved!", "success");
-            }
-        } catch (approvalError) {
-            console.error("❌ Approval Failed:", approvalError);
-            await checkGasAndWarn();
-            showToast("Approval failed.", "error");
-            btn.disabled = false;
-            btn.innerText = "START MINING";
-            return;
-        } 
-        
-        btn.innerHTML = `<div class="loader inline-block"></div> CONFIRMING...`;
-        const guessesAsBigInt = gameState.guesses.map(g => BigInt(g));
-        
-        const tx = await State.actionsManagerContract.participate(
-            amountWei, 
-            guessesAsBigInt,
-            isCumulative, 
-            { value: fee, gasLimit: 3000000 }
-        );
-        
-        startSpinning(); 
-        await tx.wait();
-        updateProgressBar(40, "BLOCK MINED. WAITING ORACLE...");
-        
-        const ctr = await safeContractCall(State.actionsManagerContract, 'gameCounter', [], 0, 2, true);
-        const gameIdToWatch = Number(ctr) > 0 ? Number(ctr) - 1 : 0; 
-        
-        setTimeout(() => waitForOracle(gameIdToWatch), 2000);
-        
+        const res = await fetch(`${FAUCET_API_URL}?address=${State.userAddress}`);
+        const data = await res.json();
+
+        if (res.ok && data.success) {
+            showToast("✅ Gas + BKC sent!", "success");
+            document.getElementById('gas-modal').classList.add('hidden');
+        } else {
+            showToast(data.error || "Faucet unavailable", "warning");
+        }
     } catch (e) {
-        console.error("❌ Tx Failed:", e);
-        btn.disabled = false; 
-        btn.innerText = "START MINING";
-        
-        await checkGasAndWarn();
-        let msg = "Transaction Failed";
-        if (e.message.includes("insufficient funds")) msg = "Insufficient ETH for Gas";
-        showToast(msg, "error");
-        
-        document.getElementById('status-area').classList.add('hidden-force');
-        document.getElementById('controls-area').classList.remove('hidden-force');
+        showToast("Faucet offline", "error");
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = original;
     }
 }
 
-async function waitForOracle(gameId) {
-    let attempts = 0; 
-    let progress = 40;
-    
-    if (gameState.pollInterval) clearInterval(gameState.pollInterval);
-    
-    gameState.pollInterval = setInterval(async () => {
-        attempts++; 
-        progress += 2; 
-        if(progress > 95) progress = 95;
-        
-        updateProgressBar(progress, `ORACLE CONSENSUS (Game ${gameId})...`);
-        
-        if (attempts > 60) {
-            clearInterval(gameState.pollInterval); 
-            stopSpinning([0,0,0], 0n); 
-            showToast("Oracle delay. Check history later.", "info"); 
-            return;
-        }
-        
-        try {
-            // V5: gameResults returns array uint256[]
-            const rolls = await safeContractCall(State.actionsManagerContract, 'gameResults', [gameId], [], 0, true);
-            
-            if (rolls && rolls.length > 0) {
-                clearInterval(gameState.pollInterval);
-                const r1 = Number(rolls[0]);
-                const r2 = Number(rolls[1]);
-                const r3 = Number(rolls[2]);
-                
-                const resultRolls = [r1, r2, r3];
-                let win = 0n;
-                
-                if(r1 === gameState.guesses[0] || r2 === gameState.guesses[1] || r3 === gameState.guesses[2]) {
-                    let mult = 0;
-                    if(r1 === gameState.guesses[0]) mult = 1.5; 
-                    if(r2 === gameState.guesses[1]) {
-                        mult = gameState.isCumulative ? mult + 5 : Math.max(mult, 5); 
-                    }
-                    if(r3 === gameState.guesses[2]) {
-                        mult = gameState.isCumulative ? mult + 50 : Math.max(mult, 50); 
-                    }
-                    win = ethers.parseEther((gameState.betAmount * mult).toFixed(18));
-                }
-                
-                stopSpinning(resultRolls, win);
-            }
-        } catch (e) { console.error("Poll error:", e); }
-    }, 2000);
-}
-
-function updateGamificationUI() { const el = document.getElementById('currentLevel'); if (el) el.innerText = gameState.currentLevel; }
+// ============================================================================
+// 6. EXPORT
+// ============================================================================
 
 export const FortunePoolPage = {
-    checkReqs: async () => {
-        const el = document.getElementById('oracleFeeStatus');
-        const pstakeEl = document.getElementById('pstakeStatus');
-        const btn = document.getElementById('btn-spin');
+    async checkReqs() {
+        const systemEl = document.getElementById('system-status');
+        const feeEl = document.getElementById('fee-status');
+        const spinBtn = document.getElementById('btn-spin');
 
-        if(!State.isConnected) { 
-            if(el) el.innerHTML = `<span class="text-zinc-500">Connect Wallet</span>`; 
-            if(pstakeEl) pstakeEl.innerHTML = `<span class="text-zinc-500">Ready</span>`; 
-            return; 
+        if (!State.isConnected) {
+            if (systemEl) systemEl.innerHTML = `<span class="text-zinc-500">Connect wallet</span>`;
+            if (feeEl) feeEl.textContent = '--';
+            return;
         }
-        
+
+        if (!addresses.fortunePool || !State.actionsManagerContract) {
+            gameState.systemReady = false;
+            if (systemEl) systemEl.innerHTML = `<span class="text-red-500">⚠️ Contract Error</span>`;
+            if (spinBtn) { spinBtn.disabled = true; spinBtn.textContent = 'SYSTEM ERROR'; }
+            return;
+        }
+
         gameState.systemReady = true;
+        if (systemEl) systemEl.innerHTML = `<span class="text-green-500">● Online</span>`;
 
-        if (!addresses.fortunePool || !State.actionsManagerContract) { 
-            gameState.systemReady = false; 
-            if(el) el.innerHTML = `<span class="text-red-500 font-bold">⚠️ CONTRACT ERROR</span>`; 
-            if(btn) { btn.disabled = true; btn.innerText = "SYSTEM ERROR"; } 
-            return; 
-        }
-        
-        // V5: Only Check Fee
-        pstakeEl.innerHTML = `<span class="text-green-500">SYSTEM: ONLINE</span>`;
-        pstakeEl.className = "text-[10px] text-zinc-400 font-mono mt-2 px-4";
-
+        // Get fee (V2.1 compatible)
         let fee = 0n;
         try {
-            let baseFee = await safeContractCall(State.actionsManagerContract, 'oracleFeeInWei', [], 0n);
-            if (baseFee === 0n) baseFee = ethers.parseEther("0.00035"); 
+            let baseFee = await safeContractCall(State.actionsManagerContract, 'oracleFee', [], 0n);
+            if (baseFee === 0n) {
+                baseFee = await safeContractCall(State.actionsManagerContract, 'oracleFeeInWei', [], 0n);
+            }
+            if (baseFee === 0n) baseFee = ethers.parseEther("0.00035");
             fee = gameState.isCumulative ? (baseFee * 5n) : baseFee;
-        } catch (e) { 
+        } catch (e) {
             fee = ethers.parseEther(gameState.isCumulative ? "0.00175" : "0.00035");
         }
-        
-        if(el) { 
-            const feeEth = ethers.formatEther(fee); 
-            el.innerText = `GAME FEE: ${feeEth} ETH`; 
-            el.className = "text-[10px] text-zinc-400 font-mono mt-2 px-4"; 
+
+        if (feeEl) {
+            feeEl.textContent = `Fee: ${ethers.formatEther(fee)} ETH`;
         }
-        
-        const inp = document.getElementById('bet-input');
-        if(inp && parseFloat(inp.value) > 0) { 
-            if(btn) { 
-                btn.disabled = !gameState.systemReady; 
-                btn.innerText = gameState.systemReady ? "SPIN TO WIN" : "SYSTEM ERROR";
-            } 
+
+        // Update spin button
+        if (spinBtn && gameState.betAmount > 0) {
+            spinBtn.disabled = !gameState.systemReady;
+            spinBtn.textContent = gameState.systemReady ? 'SPIN TO WIN' : 'SYSTEM ERROR';
         }
     },
 
-    loadHistory: async () => {
-        const list = document.getElementById('gameHistoryList');
-        const statsEl = document.getElementById('totalWinningsDisplay');
-        if(!list || !State.isConnected) return;
-        
+    async loadHistory() {
+        const list = document.getElementById('game-history');
+        const totalEl = document.getElementById('total-winnings');
+        if (!list || !State.isConnected) return;
+
         try {
             const res = await fetch(`${API_ENDPOINTS.getHistory}/${State.userAddress}`);
             const data = await res.json();
-            const games = data.filter(a => a.type === 'GameResult');
-            
-            let totalWinnings = 0;
+            const games = data.filter(a => a.type === 'GameResult' || a.type === 'FortuneGameResult');
+
+            let totalWon = 0;
             games.forEach(g => {
-                if(g.details.isWin) totalWinnings += parseFloat(ethers.formatEther(g.details.amount));
+                if (g.details?.isWin) totalWon += parseFloat(ethers.formatEther(g.details.amount || '0'));
             });
-            if(statsEl) statsEl.innerHTML = `Total Won: <span class="text-amber-400 font-bold">${totalWinnings.toFixed(2)} BKC</span>`;
+
+            if (totalEl) {
+                totalEl.innerHTML = totalWon > 0 ? `<span class="text-amber-400">+${totalWon.toFixed(2)} BKC</span>` : '';
+            }
+
+            if (games.length === 0) {
+                list.innerHTML = `<div class="text-center py-4 text-zinc-600 text-xs">No games yet</div>`;
+                return;
+            }
 
             list.innerHTML = games.slice(0, 10).map(g => {
-                const isWin = g.details.isWin || false;
-                const winAmount = g.details.amount || '0';
-                const dateStr = formatDate(g.timestamp || g.createdAt);
-                
-                const explorerLink = g.txHash ? `${EXPLORER_BASE}${g.txHash}` : '#';
-                const userGuesses = g.details.userGuesses || ['?', '?', '?'];
-                const oracleRolls = g.details.rolls || ['?', '?', '?'];
-                
-                const numbersHTML = `
-                    <div class="flex flex-col gap-1 items-center font-mono text-[12px]">
-                        <div class="flex gap-2 items-center text-blue-400" title="Your Guesses">
-                            <i class="fa-solid fa-user text-[10px]"></i>
-                            ${userGuesses.map(n => `<span class="font-bold">${n}</span>`).join('<span class="text-zinc-700 mx-1">|</span>')}
-                        </div>
-                        <div class="flex gap-2 items-center text-zinc-500" title="Oracle Result">
-                            <i class="fa-solid fa-robot text-[10px]"></i>
-                            ${oracleRolls.map((n, i) => {
-                                const isMatch = parseInt(n) === parseInt(userGuesses[i]);
-                                return `<span class="${isMatch ? 'text-green-400 font-black animate-pulse' : ''}">${n}</span>`;
-                            }).join('<span class="text-zinc-700 mx-1">|</span>')}
-                        </div>
-                    </div>
-                `;
-
-                let outcomeDisplay = isWin 
-                    ? `<div class="text-right"><div class="text-green-400 font-bold text-sm">WIN</div><div class="text-white text-xs font-mono">+${formatBigNumber(BigInt(winAmount)).toFixed(2)}</div></div>`
-                    : `<div class="text-right"><div class="text-red-500 font-bold text-sm">LOSS</div><div class="text-red-900/50 text-[10px] font-mono">BET LOST</div></div>`;
+                const isWin = g.details?.isWin || false;
+                const winAmount = g.details?.amount || '0';
+                const date = formatDate(g.timestamp || g.createdAt);
+                const guesses = g.details?.userGuesses || ['?', '?', '?'];
+                const rolls = g.details?.rolls || ['?', '?', '?'];
+                const link = g.txHash ? `${EXPLORER_BASE}${g.txHash}` : '#';
 
                 return `
-                    <tr class="border-b border-zinc-800/50 hover:bg-zinc-800/30 transition-colors">
-                        <td class="p-4 align-middle">
-                            <a href="${explorerLink}" target="_blank" class="flex flex-col group text-left">
-                                <span class="text-sm font-mono text-zinc-400 group-hover:text-amber-500 transition-colors">
-                                    #${g.details.gameId} <i class="fa-solid fa-arrow-up-right-from-square text-[10px] opacity-50"></i>
-                                </span>
-                                <span class="text-[10px] text-zinc-600">${dateStr}</span>
-                            </a>
-                        </td>
-                        <td class="text-center p-2 align-middle">${numbersHTML}</td>
-                        <td class="p-4 align-middle">${outcomeDisplay}</td>
-                    </tr>
+                    <a href="${link}" target="_blank" class="flex items-center justify-between p-2 bg-zinc-800/30 hover:bg-zinc-800/50 rounded-lg transition-colors group">
+                        <div class="flex items-center gap-3">
+                            <div class="w-8 h-8 rounded-lg flex items-center justify-center ${isWin ? 'bg-green-500/20' : 'bg-zinc-800'}">
+                                <span class="text-sm">${isWin ? '🏆' : '💔'}</span>
+                            </div>
+                            <div>
+                                <div class="flex gap-1 text-[10px] font-mono">
+                                    ${rolls.map((r, i) => `
+                                        <span class="${parseInt(r) === parseInt(guesses[i]) ? 'text-green-400' : 'text-zinc-500'}">${r}</span>
+                                    `).join('<span class="text-zinc-700">/</span>')}
+                                </div>
+                                <div class="text-[9px] text-zinc-600">${date}</div>
+                            </div>
+                        </div>
+                        <div class="text-right">
+                            ${isWin 
+                                ? `<div class="text-green-400 font-bold text-xs">+${formatBigNumber(BigInt(winAmount)).toFixed(2)}</div>`
+                                : `<div class="text-zinc-600 text-xs">Lost</div>`
+                            }
+                        </div>
+                    </a>
                 `;
             }).join('');
+
         } catch (e) {
-            console.error("History Error", e);
-            list.innerHTML = `<tr><td colspan="3" class="text-center text-xs text-zinc-600 py-4">History unavailable</td></tr>`;
+            list.innerHTML = `<div class="text-center py-4 text-zinc-600 text-xs">Failed to load</div>`;
         }
     },
+
     render(isActive) {
         if (!isActive) return;
-        const container = document.getElementById('actions');
-        if (!addresses.fortunePool) { container.innerHTML = "Error Config"; return; }
-        
-        container.innerHTML = `
-            <div class="fortune-pool-wrapper max-w-2xl mx-auto py-8 animate-fadeIn">
-                <header class="flex justify-between items-end border-b border-zinc-800 pb-4 mb-6">
-                    <div><h1 class="text-3xl font-black text-transparent bg-clip-text bg-gradient-to-r from-amber-400 to-yellow-600 italic">FORTUNE POOL</h1></div>
-                    <div class="text-right"><div class="text-xs font-bold text-amber-500">LVL <span id="currentLevel">1</span></div></div>
-                </header>
-                <div class="glass-panel p-1 rounded-3xl relative overflow-hidden min-h-[450px] flex flex-col justify-center bg-black/40">
-                    <div id="game-interaction-area" class="p-4 transition-opacity duration-300"></div>
-                </div>
-                <div class="flex justify-between text-[10px] text-zinc-500 font-mono mt-4 px-4">
-                    <div id="pstakeStatus" class="flex-1">Checking Status...</div>
-                    <div id="oracleFeeStatus" class="text-right flex-1">Checking...</div>
-                </div>
-                <div class="mt-8">
-                    <div class="flex justify-between items-center mb-3 ml-2 mr-2">
-                        <h4 class="text-zinc-500 text-xs font-bold uppercase">Recent Results</h4>
-                        <div id="totalWinningsDisplay" class="text-xs font-mono text-zinc-400"></div>
-                    </div>
-                    <div class="bg-zinc-900/50 rounded-xl overflow-hidden border border-zinc-800">
-                        <table class="w-full">
-                            <tbody id="gameHistoryList">
-                                <tr><td colspan="3" class="text-center py-4"><div class="simple-loader"></div></td></tr>
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            </div>`;
-        
-        gameState.step = 0; renderStep(); this.checkReqs(); this.loadHistory(); updateGamificationUI();
+        renderMainLayout();
     }
 };
 
