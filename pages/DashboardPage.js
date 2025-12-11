@@ -1,5 +1,5 @@
 // js/pages/DashboardPage.js
-// ✅ VERSION V7.0: Complete Redesign - New Metrics, Clean UI, Mobile-First
+// ✅ VERSION V7.1: English UI, Fixed Metrics, Network Activity Feed
 
 const ethers = window.ethers;
 
@@ -19,25 +19,28 @@ import {
     renderNoData, renderError
 } from '../utils.js';
 import { showToast, addNftToWallet } from '../ui-feedback.js';
-import { addresses, boosterTiers } from '../config.js'; 
+import { addresses, boosterTiers } from '../config.js';
 
 // --- LOCAL STATE ---
 const DashboardState = {
     hasRenderedOnce: false,
     lastUpdate: 0,
-    activities: [], 
-    filteredActivities: [], 
-    userProfile: null, 
+    activities: [],
+    networkActivities: [],
+    filteredActivities: [],
+    userProfile: null,
     pagination: { currentPage: 1, itemsPerPage: 8 },
     filters: { type: 'ALL', sort: 'NEWEST' },
-    // Cache para métricas (detectar variação)
-    metricsCache: {}
+    metricsCache: {},
+    isLoadingNetworkActivity: false,
+    networkActivitiesTimestamp: 0
 };
 
 // --- CONFIG ---
 const EXPLORER_BASE_URL = "https://sepolia.arbiscan.io/tx/";
 const CONTRACT_EXPLORER_URL = "https://sepolia.arbiscan.io/address/";
 const FAUCET_API_URL = "https://api.backcoin.org/faucet";
+const NETWORK_ACTIVITY_API = "https://api.backcoin.org/activity/recent";
 
 // --- HELPERS ---
 function formatDate(timestamp) {
@@ -50,7 +53,7 @@ function formatDate(timestamp) {
         const diffMins = Math.floor(diffMs / 60000);
         const diffHours = Math.floor(diffMs / 3600000);
         const diffDays = Math.floor(diffMs / 86400000);
-        
+
         if (diffMins < 1) return 'Just now';
         if (diffMins < 60) return `${diffMins}m ago`;
         if (diffHours < 24) return `${diffHours}h ago`;
@@ -65,18 +68,16 @@ function formatCompact(num) {
     return num.toFixed(0);
 }
 
+function truncateAddress(addr) {
+    if (!addr) return '';
+    return `${addr.slice(0, 6)}...${addr.slice(-4)}`;
+}
+
 function getScarcityColor(percent) {
     if (percent >= 70) return 'text-green-400';
     if (percent >= 40) return 'text-yellow-400';
     if (percent >= 20) return 'text-orange-400';
     return 'text-red-400';
-}
-
-function getScarcityBg(percent) {
-    if (percent >= 70) return 'from-green-500/20';
-    if (percent >= 40) return 'from-yellow-500/20';
-    if (percent >= 20) return 'from-orange-500/20';
-    return 'from-red-500/20';
 }
 
 // --- REWARDS ANIMATION ---
@@ -86,17 +87,17 @@ let displayedRewardValue = 0n;
 function animateClaimableRewards(targetNetValue) {
     const rewardsEl = document.getElementById('dash-user-rewards');
     if (!rewardsEl || !State.isConnected) {
-        if(animationFrameId) cancelAnimationFrame(animationFrameId);
+        if (animationFrameId) cancelAnimationFrame(animationFrameId);
         return;
     }
     const diff = targetNetValue - displayedRewardValue;
     if (diff > -1000000000n && diff < 1000000000n) displayedRewardValue = targetNetValue;
-    else displayedRewardValue += diff / 8n; 
-    
+    else displayedRewardValue += diff / 8n;
+
     if (displayedRewardValue < 0n) displayedRewardValue = 0n;
-    
+
     rewardsEl.innerHTML = `${formatBigNumber(displayedRewardValue).toFixed(4)} <span class="text-sm text-amber-500/80">BKC</span>`;
-    
+
     if (displayedRewardValue !== targetNetValue) {
         animationFrameId = requestAnimationFrame(() => animateClaimableRewards(targetNetValue));
     }
@@ -117,8 +118,8 @@ async function requestSmartFaucet(btnElement) {
         if (response.ok && data.success) {
             showToast("✅ Starter Pack Sent!", "success");
             const widget = document.getElementById('dashboard-faucet-widget');
-            if(widget) widget.classList.add('hidden');
-            setTimeout(() => DashboardPage.update(true), 4000); 
+            if (widget) widget.classList.add('hidden');
+            setTimeout(() => DashboardPage.update(true), 4000);
         } else {
             const msg = data.error || "Faucet unavailable";
             if (msg.includes("Cooldown")) showToast(`⏳ ${msg}`, "warning");
@@ -137,7 +138,7 @@ async function checkGasAndWarn() {
         const nativeBalance = await State.provider.getBalance(State.userAddress);
         if (nativeBalance < ethers.parseEther("0.002")) {
             const modal = document.getElementById('no-gas-modal-dash');
-            if(modal) { modal.classList.remove('hidden'); modal.classList.add('flex'); }
+            if (modal) { modal.classList.remove('hidden'); modal.classList.add('flex'); }
             return false;
         }
         return true;
@@ -145,7 +146,7 @@ async function checkGasAndWarn() {
 }
 
 // ============================================================================
-// 1. RENDER LAYOUT - CLEAN & MOBILE-FIRST
+// 1. RENDER LAYOUT - ENGLISH UI
 // ============================================================================
 
 function renderDashboardLayout() {
@@ -165,13 +166,13 @@ function renderDashboardLayout() {
                 </button>
             </div>
 
-            <!-- METRICS GRID - 5 cards responsive -->
+            <!-- METRICS GRID -->
             <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-                ${renderMetricCard('Total Supply', 'fa-coins', 'dash-metric-supply', 'Total de tokens BKC em circulação')}
-                ${renderMetricCard('Net pStake', 'fa-layer-group', 'dash-metric-pstake', 'Poder de stake total da rede', 'purple')}
-                ${renderMetricCard('Taxas Arrecadadas', 'fa-chart-line', 'dash-metric-taxes', 'Mineração pós-TGE + taxas coletadas', 'blue')}
-                ${renderMetricCard('Taxa de Escassez', 'fa-fire', 'dash-metric-scarcity', 'Porcentagem de tokens ainda disponíveis para mineração', 'orange')}
-                ${renderMetricCard('Capital Travado', 'fa-lock', 'dash-metric-locked', 'Porcentagem do supply travado em contratos', 'green')}
+                ${renderMetricCard('Total Supply', 'fa-coins', 'dash-metric-supply', 'Total BKC tokens in circulation')}
+                ${renderMetricCard('Net pStake', 'fa-layer-group', 'dash-metric-pstake', 'Total staking power on network', 'purple')}
+                ${renderMetricCard('Treasury', 'fa-vault', 'dash-metric-treasury', 'Protocol treasury balance', 'blue')}
+                ${renderMetricCard('Scarcity Rate', 'fa-fire', 'dash-metric-scarcity', 'Tokens available for mining', 'orange')}
+                ${renderMetricCard('Locked Capital', 'fa-lock', 'dash-metric-locked', 'Supply locked in contracts', 'green')}
             </div>
 
             <!-- MAIN CONTENT -->
@@ -180,7 +181,7 @@ function renderDashboardLayout() {
                 <!-- LEFT: User Hub + Activity -->
                 <div class="lg:col-span-2 flex flex-col gap-6">
                     
-                    <!-- FAUCET WIDGET (conditional) -->
+                    <!-- FAUCET WIDGET -->
                     <div id="dashboard-faucet-widget" class="hidden glass-panel border-l-4 p-4">
                         <div class="flex flex-col sm:flex-row justify-between items-center gap-3">
                             <div class="text-center sm:text-left">
@@ -191,19 +192,18 @@ function renderDashboardLayout() {
                         </div>
                     </div>
 
-                    <!-- USER HUB - Rewards Card -->
+                    <!-- USER HUB -->
                     <div class="glass-panel p-5 relative overflow-hidden">
                         <div class="absolute top-0 right-0 opacity-5">
                             <i class="fa-solid fa-rocket text-8xl"></i>
                         </div>
                         
                         <div class="flex flex-col md:flex-row gap-6 relative z-10">
-                            <!-- Rewards Section -->
                             <div class="flex-1 space-y-4">
                                 <div>
                                     <div class="flex items-center gap-2 mb-1">
                                         <p class="text-zinc-400 text-xs font-medium uppercase tracking-wider">Claimable Rewards</p>
-                                        <span class="text-zinc-600 text-[10px] cursor-help" title="Valor líquido após taxas">ⓘ</span>
+                                        <span class="text-zinc-600 text-[10px] cursor-help" title="Net value after fees">ⓘ</span>
                                     </div>
                                     <div id="dash-user-rewards" class="text-3xl md:text-4xl font-bold text-white">--</div>
                                 </div>
@@ -211,7 +211,7 @@ function renderDashboardLayout() {
                                 <div id="dash-user-gain-area" class="hidden p-2 bg-green-900/20 border border-green-500/20 rounded-lg inline-block">
                                     <p class="text-[10px] text-green-400 font-bold flex items-center gap-1">
                                         <i class="fa-solid fa-arrow-up"></i>
-                                        +<span id="dash-user-potential-gain">0</span> BKC com NFT
+                                        +<span id="dash-user-potential-gain">0</span> BKC with NFT
                                     </p>
                                 </div>
 
@@ -230,7 +230,6 @@ function renderDashboardLayout() {
                                 </div>
                             </div>
 
-                            <!-- Booster Section -->
                             <div id="dash-booster-area" class="flex-1 md:border-l md:border-zinc-700/50 md:pl-6 flex flex-col justify-center min-h-[140px]">
                                 ${renderLoading()}
                             </div>
@@ -241,7 +240,8 @@ function renderDashboardLayout() {
                     <div class="glass-panel p-4">
                         <div class="flex justify-between items-center mb-4">
                             <h3 class="text-sm font-bold text-white flex items-center gap-2">
-                                <i class="fa-solid fa-clock-rotate-left text-zinc-500"></i> Activity
+                                <i class="fa-solid fa-clock-rotate-left text-zinc-500"></i> 
+                                <span id="activity-title">Activity</span>
                             </h3>
                             
                             <div class="flex gap-2">
@@ -259,7 +259,7 @@ function renderDashboardLayout() {
                         </div>
 
                         <div id="dash-activity-list" class="space-y-2 min-h-[150px] max-h-[400px] overflow-y-auto custom-scrollbar">
-                            ${renderNoData("Connect wallet to view history")}
+                            ${renderLoading()}
                         </div>
                         
                         <div id="dash-pagination-controls" class="flex justify-between items-center mt-4 pt-3 border-t border-zinc-700/30 hidden">
@@ -277,7 +277,7 @@ function renderDashboardLayout() {
                 <!-- RIGHT SIDEBAR -->
                 <div class="flex flex-col gap-4">
                     
-                    <!-- NETWORK STATUS with Contract Link -->
+                    <!-- NETWORK STATUS -->
                     <div class="glass-panel p-4">
                         <div class="flex justify-between items-center mb-3">
                             <h3 class="text-sm font-bold text-white">Network</h3>
@@ -320,7 +320,7 @@ function renderDashboardLayout() {
                         </button>
                     </div>
 
-                    <!-- PORTFOLIO STATS (conditional) -->
+                    <!-- PORTFOLIO STATS -->
                     <div id="dash-presale-stats" class="hidden glass-panel p-4 border-amber-500/20">
                         <h3 class="text-xs font-bold text-amber-500 uppercase tracking-wider mb-3">
                             <i class="fa-solid fa-wallet mr-1"></i> Portfolio
@@ -341,11 +341,10 @@ function renderDashboardLayout() {
             </div>
         </div>
         
-        <!-- MODALS -->
         ${renderBoosterModal()}
         ${renderGasModal()}
     `;
-    
+
     attachDashboardListeners();
 }
 
@@ -358,7 +357,7 @@ function renderMetricCard(label, icon, id, tooltip, color = 'zinc') {
         green: 'text-green-400'
     };
     const iconColor = colorClasses[color] || colorClasses.zinc;
-    
+
     return `
         <div class="glass-panel p-3 sm:p-4 group hover:border-zinc-600 transition-all cursor-default" title="${tooltip}">
             <div class="flex items-center gap-1.5 mb-1">
@@ -366,7 +365,6 @@ function renderMetricCard(label, icon, id, tooltip, color = 'zinc') {
                 <span class="text-[10px] text-zinc-500 uppercase font-bold tracking-wider truncate">${label}</span>
             </div>
             <p id="${id}" class="text-base sm:text-lg font-bold text-white truncate">--</p>
-            <div id="${id}-trend" class="text-[10px] text-zinc-600 mt-0.5 hidden"></div>
         </div>
     `;
 }
@@ -421,40 +419,36 @@ function renderGasModal() {
 }
 
 // ============================================================================
-// 2. DATA LOGIC - UPDATED METRICS
+// 2. DATA LOGIC - FIXED METRICS
 // ============================================================================
 
 async function updateGlobalMetrics() {
     try {
         if (!State.bkcTokenContractPublic) return;
 
-        // Fetch all data in parallel
-        const [totalSupply, totalPStake, maxSupply, tgeSupply] = await Promise.all([
+        const [totalSupply, totalPStake, maxSupply] = await Promise.all([
             safeContractCall(State.bkcTokenContractPublic, 'totalSupply', [], 0n),
             safeContractCall(State.delegationManagerContractPublic, 'totalNetworkPStake', [], 0n),
-            safeContractCall(State.bkcTokenContractPublic, 'MAX_SUPPLY', [], 0n),
-            safeContractCall(State.bkcTokenContractPublic, 'TGE_SUPPLY', [], 0n)
+            safeContractCall(State.bkcTokenContractPublic, 'MAX_SUPPLY', [], 0n)
         ]);
 
-        // Get Treasury Address & Balance
         let treasuryAddr = addresses.treasuryWallet;
         if (!treasuryAddr || treasuryAddr === ethers.ZeroAddress) {
             try {
                 if (State.ecosystemManagerContractPublic) {
                     treasuryAddr = await safeContractCall(State.ecosystemManagerContractPublic, 'getTreasuryAddress', [], ethers.ZeroAddress);
                 }
-            } catch(e) {}
+            } catch (e) { }
         }
-        
+
         let treasuryBalance = 0n;
         if (treasuryAddr && treasuryAddr !== ethers.ZeroAddress) {
             treasuryBalance = await safeContractCall(State.bkcTokenContractPublic, 'balanceOf', [treasuryAddr], 0n);
         }
 
-        // Get locked amounts from various contracts
         let fortunePoolBalance = 0n;
         let delegationBalance = 0n;
-        
+
         try {
             if (addresses.fortunePool) {
                 fortunePoolBalance = await safeContractCall(State.bkcTokenContractPublic, 'balanceOf', [addresses.fortunePool], 0n);
@@ -462,84 +456,53 @@ async function updateGlobalMetrics() {
             if (addresses.delegationManager) {
                 delegationBalance = await safeContractCall(State.bkcTokenContractPublic, 'balanceOf', [addresses.delegationManager], 0n);
             }
-        } catch(e) {}
+        } catch (e) { }
 
-        // ═══════════════════════════════════════════════════════════════════
-        // CALCULATE NEW METRICS
-        // ═══════════════════════════════════════════════════════════════════
-        
-        // 1. Total Supply (unchanged)
+        // METRICS CALCULATION
         const supplyNum = formatBigNumber(totalSupply);
-        
-        // 2. Net pStake (unchanged)
-        const pStakeNum = formatBigNumber(totalPStake);
-        
-        // 3. TAXAS ARRECADADAS = (TotalSupply - TGE) + TreasuryBalance
-        // Represents: Mined tokens post-TGE + Fees collected
-        const totalMined = totalSupply > tgeSupply ? totalSupply - tgeSupply : 0n;
-        const totalTaxes = totalMined + treasuryBalance;
-        const taxesNum = formatBigNumber(totalTaxes);
-        
-        // 4. TAXA DE ESCASSEZ = % remaining to mint
+        const treasuryNum = formatBigNumber(treasuryBalance);
+
+        // Scarcity = % remaining to mint
         const remainingToMint = maxSupply > totalSupply ? maxSupply - totalSupply : 0n;
-        const mintableBase = 160000000n * 10n**18n;
         let scarcityPercent = 0;
-        if (mintableBase > 0n) {
-            scarcityPercent = Number((remainingToMint * 10000n) / mintableBase) / 100;
+        if (maxSupply > 0n) {
+            scarcityPercent = Number((remainingToMint * 10000n) / maxSupply) / 100;
         }
         if (scarcityPercent > 100) scarcityPercent = 100;
-        
-        // 5. CAPITAL TRAVADO = % of supply locked in contracts
-        const totalLocked = delegationBalance + fortunePoolBalance + treasuryBalance;
+
+        // Locked = staking + fortune (not treasury)
+        const totalLocked = delegationBalance + fortunePoolBalance;
         let lockedPercent = 0;
         if (totalSupply > 0n) {
             lockedPercent = Number((totalLocked * 10000n) / totalSupply) / 100;
         }
-        
-        // ═══════════════════════════════════════════════════════════════════
+
         // UPDATE UI
-        // ═══════════════════════════════════════════════════════════════════
-        
         const setMetric = (id, value, suffix = '') => {
             const el = document.getElementById(id);
             if (el) el.innerHTML = `${value}${suffix ? ` <span class="text-xs text-zinc-500">${suffix}</span>` : ''}`;
         };
-        
-        // 1. Total Supply
+
         setMetric('dash-metric-supply', formatCompact(supplyNum), 'BKC');
-        
-        // 2. Net pStake
         setMetric('dash-metric-pstake', formatPStake(totalPStake));
-        
-        // 3. Taxas Arrecadadas
-        setMetric('dash-metric-taxes', formatCompact(taxesNum), 'BKC');
-        
-        // 4. Taxa de Escassez (with color coding)
+        setMetric('dash-metric-treasury', formatCompact(treasuryNum), 'BKC');
+
         const scarcityEl = document.getElementById('dash-metric-scarcity');
         if (scarcityEl) {
             const color = getScarcityColor(scarcityPercent);
             scarcityEl.innerHTML = `<span class="${color}">${scarcityPercent.toFixed(1)}%</span>`;
         }
-        
-        // 5. Capital Travado
+
         const lockedEl = document.getElementById('dash-metric-locked');
         if (lockedEl) {
             const lockColor = lockedPercent > 30 ? 'text-green-400' : lockedPercent > 10 ? 'text-yellow-400' : 'text-zinc-400';
             lockedEl.innerHTML = `<span class="${lockColor}">${lockedPercent.toFixed(1)}%</span>`;
         }
 
-        // Store in cache for trend detection (future feature)
-        DashboardState.metricsCache = {
-            supply: supplyNum,
-            pstake: pStakeNum,
-            taxes: taxesNum,
-            scarcity: scarcityPercent,
-            locked: lockedPercent,
-            timestamp: Date.now()
-        };
+        DashboardState.metricsCache = { supply: supplyNum, treasury: treasuryNum, scarcity: scarcityPercent, locked: lockedPercent, timestamp: Date.now() };
 
-    } catch (e) { 
-        console.error("Metrics Error", e); 
+    } catch (e) {
+        console.error("Metrics Error", e);
     }
 }
 
@@ -551,7 +514,7 @@ async function fetchUserProfile() {
             DashboardState.userProfile = await response.json();
             renderPresaleStats(DashboardState.userProfile);
         }
-    } catch (e) {}
+    } catch (e) { }
 }
 
 function renderPresaleStats(profile) {
@@ -563,7 +526,7 @@ function renderPresaleStats(profile) {
 
     const spentWei = profile.presale.totalSpentWei || 0;
     const spentEth = parseFloat(ethers.formatEther(BigInt(spentWei))).toFixed(4);
-    
+
     document.getElementById('stats-total-spent').innerText = `${spentEth} ETH`;
     document.getElementById('stats-total-boosters').innerText = profile.presale.totalBoosters || 0;
 
@@ -571,18 +534,18 @@ function renderPresaleStats(profile) {
     if (badgesContainer && profile.presale.tiersOwned) {
         let html = '';
         Object.entries(profile.presale.tiersOwned).forEach(([tierId, count]) => {
-            const tierConfig = boosterTiers[Number(tierId)-1]; 
+            const tierConfig = boosterTiers[Number(tierId) - 1];
             const name = tierConfig ? tierConfig.name : `T${tierId}`;
             html += `<span class="text-[9px] bg-zinc-800 text-zinc-400 px-1.5 py-0.5 rounded">${count}x ${name}</span>`;
         });
-        if(html) badgesContainer.innerHTML = html;
+        if (html) badgesContainer.innerHTML = html;
     }
 }
 
 async function updateUserHub(forceRefresh = false) {
     if (!State.isConnected) {
         const boosterArea = document.getElementById('dash-booster-area');
-        if(boosterArea) {
+        if (boosterArea) {
             boosterArea.innerHTML = `
                 <div class="text-center">
                     <p class="text-zinc-500 text-xs mb-2">Connect wallet to view</p>
@@ -600,102 +563,97 @@ async function updateUserHub(forceRefresh = false) {
             rewardsEl.classList.add('animate-pulse', 'opacity-70');
         }
 
-        await loadUserData(forceRefresh); 
-        fetchUserProfile();
+        const [, claimDetails, boosterData] = await Promise.all([
+            loadUserData(),
+            calculateClaimDetails(),
+            getHighestBoosterBoostFromAPI()
+        ]);
 
-        // Faucet Widget Logic
-        const widget = document.getElementById('dashboard-faucet-widget');
-        if (widget) {
-            const ethBalance = await State.provider.getBalance(State.userAddress);
-            const bkcBalance = State.currentUserBalance;
-            const minEth = ethers.parseEther("0.002");
-            const minBkc = ethers.parseUnits("10", 18);
-
-            const title = widget.querySelector('#faucet-title');
-            const desc = widget.querySelector('#faucet-desc');
-            const btn = widget.querySelector('#faucet-action-btn');
-
-            if (ethBalance < minEth) {
-                widget.classList.remove('hidden', 'border-l-amber-500');
-                widget.classList.add('border-l-red-500');
-                title.innerHTML = '<i class="fa-solid fa-gas-pump text-red-500"></i> Low Gas';
-                desc.innerHTML = 'Get free ETH to transact';
-                btn.innerHTML = '<i class="fa-solid fa-hand-holding-medical mr-1"></i> Get Gas';
-                btn.className = "w-full sm:w-auto bg-red-600 hover:bg-red-500 text-white font-bold py-2 px-5 rounded-lg text-sm";
-            } else if (bkcBalance < minBkc) {
-                widget.classList.remove('hidden', 'border-l-red-500');
-                widget.classList.add('border-l-amber-500');
-                title.innerHTML = '<i class="fa-solid fa-faucet text-amber-500"></i> Get Tokens';
-                desc.innerHTML = 'Claim 20 free BKC';
-                btn.innerHTML = '<i class="fa-solid fa-coins mr-1"></i> Get BKC';
-                btn.className = "w-full sm:w-auto bg-amber-600 hover:bg-amber-500 text-white font-bold py-2 px-5 rounded-lg text-sm";
-            } else {
-                widget.classList.add('hidden');
-            }
-        }
-
-        const claimDetails = await calculateClaimDetails();
-        const { totalRewards, netClaimAmount, feeAmount } = claimDetails;
-        
+        const netClaimAmount = claimDetails?.netClaimAmount || 0n;
         animateClaimableRewards(netClaimAmount);
-
-        const gainArea = document.getElementById('dash-user-gain-area');
-        const gainVal = document.getElementById('dash-user-potential-gain');
-        if (gainArea && gainVal) {
-            if (totalRewards > 0n && feeAmount > 0n) {
-                gainVal.textContent = formatBigNumber(feeAmount).toFixed(2);
-                gainArea.classList.remove('hidden');
-            } else {
-                gainArea.classList.add('hidden');
-            }
-        }
-        
-        const claimBtn = document.getElementById('dashboardClaimBtn');
-        if(claimBtn) claimBtn.disabled = netClaimAmount <= 0n;
-
-        const pStakeEl = document.getElementById('dash-user-pstake');
-        if(pStakeEl) pStakeEl.textContent = formatPStake(State.userTotalPStake);
-
-        const boosterData = await getHighestBoosterBoostFromAPI();
-        renderBoosterCard(boosterData, claimDetails);
 
         if (rewardsEl) rewardsEl.classList.remove('animate-pulse', 'opacity-70');
 
-    } catch (e) { console.error("User Hub Error", e); }
+        const claimBtn = document.getElementById('dashboardClaimBtn');
+        if (claimBtn) claimBtn.disabled = netClaimAmount <= 0n;
+
+        const pStakeEl = document.getElementById('dash-user-pstake');
+        if (pStakeEl) pStakeEl.innerText = formatPStake(State.userData?.pStake || 0n);
+
+        updateBoosterDisplay(boosterData, claimDetails);
+        fetchUserProfile();
+        checkFaucetEligibility();
+
+    } catch (e) {
+        console.error("User Hub Error:", e);
+    }
 }
 
-function renderBoosterCard(data, claimDetails) {
+function checkFaucetEligibility() {
+    const widget = document.getElementById('dashboard-faucet-widget');
+    if (!widget || !State.isConnected) return;
+
+    const bkcBalance = State.bkcBalance || 0n;
+    const pStake = State.userData?.pStake || 0n;
+
+    if (bkcBalance === 0n && pStake === 0n) {
+        widget.classList.remove('hidden');
+        widget.classList.add('border-green-500');
+        document.getElementById('faucet-title').innerText = "Welcome! Get Started";
+        document.getElementById('faucet-desc').innerText = "Claim your free starter pack of BKC + Gas";
+        const btn = document.getElementById('faucet-action-btn');
+        btn.classList.add('bg-green-600', 'hover:bg-green-500', 'text-white');
+        btn.innerHTML = '<i class="fa-solid fa-gift mr-2"></i> Claim Starter Pack';
+    } else if (bkcBalance < ethers.parseUnits("10", 18) && pStake === 0n) {
+        widget.classList.remove('hidden');
+        widget.classList.add('border-blue-500');
+        document.getElementById('faucet-title').innerText = "Low Balance";
+        document.getElementById('faucet-desc').innerText = "Get more BKC to start staking";
+        const btn = document.getElementById('faucet-action-btn');
+        btn.classList.add('bg-blue-600', 'hover:bg-blue-500', 'text-white');
+        btn.innerHTML = '<i class="fa-solid fa-coins mr-2"></i> Request BKC';
+    } else {
+        widget.classList.add('hidden');
+    }
+}
+
+function updateBoosterDisplay(data, claimDetails) {
     const container = document.getElementById('dash-booster-area');
     if (!container) return;
 
-    const hasValidBooster = data && data.highestBoost > 0 && data.source !== 'none';
-    const currentBoostBips = hasValidBooster ? data.highestBoost : 0;
-    
-    let efficiency = 50 + (currentBoostBips / 100);
-    if (efficiency > 100) efficiency = 100;
+    const currentBoostBips = data?.highestBoost || 0;
 
-    if (efficiency < 100) {
-        const feeAmount = claimDetails?.feeAmount || 0n; 
-        const lostFormatted = formatBigNumber(feeAmount).toFixed(2);
+    if (currentBoostBips === 0) {
+        const grossReward = claimDetails?.totalRewards || 0n;
+        const potentialGain = (grossReward * 5000n) / 10000n;
 
-        const effColor = efficiency >= 80 ? 'from-yellow-500 to-amber-500' : 'from-red-500 to-orange-500';
+        if (potentialGain > 0n) {
+            const gainArea = document.getElementById('dash-user-gain-area');
+            if (gainArea) {
+                gainArea.classList.remove('hidden');
+                document.getElementById('dash-user-potential-gain').innerText = formatBigNumber(potentialGain).toFixed(2);
+            }
+        }
 
         container.innerHTML = `
-            <div class="text-center">
-                <div class="flex items-center justify-center gap-2 mb-2">
-                    <i class="fa-solid fa-gauge-high text-amber-500"></i>
-                    <span class="text-white font-bold text-sm">Efficiency</span>
+            <div class="text-center space-y-3">
+                <div class="flex items-center justify-center gap-2">
+                    <div class="w-10 h-10 bg-amber-500/20 rounded-full flex items-center justify-center">
+                        <i class="fa-solid fa-rocket text-amber-400"></i>
+                    </div>
+                    <div class="text-left">
+                        <p class="text-white text-sm font-bold">50% Efficiency</p>
+                        <p class="text-[10px] text-zinc-500">No NFT active</p>
+                    </div>
                 </div>
                 
-                <div class="w-full bg-zinc-800 rounded-full h-2 mb-1 overflow-hidden">
-                    <div class="bg-gradient-to-r ${effColor} h-2 rounded-full transition-all" style="width: ${efficiency}%"></div>
+                <div class="w-full bg-zinc-800 rounded-full h-2 overflow-hidden">
+                    <div class="bg-gradient-to-r from-red-500 to-amber-500 h-full rounded-full" style="width: 50%"></div>
                 </div>
-                <div class="flex justify-between text-[10px] text-zinc-500 mb-3">
-                    <span>${efficiency}%</span>
-                    <span>100%</span>
-                </div>
-
-                ${feeAmount > 0n ? `<p class="text-[10px] text-amber-400 mb-3">-${lostFormatted} BKC in fees</p>` : ''}
+                
+                <button id="open-booster-info" class="text-xs text-amber-400 hover:text-white font-medium">
+                    <i class="fa-solid fa-circle-info mr-1"></i> How to boost?
+                </button>
                 
                 <div class="flex gap-2 justify-center">
                     <button class="go-to-store bg-amber-600 hover:bg-amber-500 text-white text-[10px] font-bold py-1.5 px-3 rounded">Buy NFT</button>
@@ -706,7 +664,6 @@ function renderBoosterCard(data, claimDetails) {
         return;
     }
 
-    // 100% Efficiency - Show NFT card
     const isRented = data.source === 'rented';
     const badgeColor = isRented ? 'bg-cyan-500/20 text-cyan-300' : 'bg-green-500/20 text-green-300';
     const badgeText = isRented ? 'Rented' : 'Owned';
@@ -721,9 +678,7 @@ function renderBoosterCard(data, claimDetails) {
         <div class="flex items-center gap-3 bg-zinc-800/40 border border-green-500/20 rounded-lg p-3 nft-clickable-image cursor-pointer" data-address="${addresses.rewardBoosterNFT}" data-tokenid="${data.tokenId}">
             <div class="relative w-14 h-14 flex-shrink-0">
                 <img src="${finalImageUrl}" class="w-full h-full object-cover rounded-lg" onerror="this.src='./assets/bkc_logo_3d.png'">
-                <div class="absolute -top-1 -left-1 bg-green-500 text-black font-black text-[9px] px-1.5 py-0.5 rounded">
-                    100%
-                </div>
+                <div class="absolute -top-1 -left-1 bg-green-500 text-black font-black text-[9px] px-1.5 py-0.5 rounded">100%</div>
             </div>
             <div class="flex-1 min-w-0">
                 <div class="flex items-center gap-2 mb-0.5">
@@ -738,32 +693,136 @@ function renderBoosterCard(data, claimDetails) {
 }
 
 // ============================================================================
-// 3. ACTIVITY TABLE
+// 3. ACTIVITY - USER OR NETWORK
 // ============================================================================
 
 async function fetchAndProcessActivities() {
     const listEl = document.getElementById('dash-activity-list');
-    if (!State.isConnected) {
-        if(listEl) listEl.innerHTML = renderNoData("Connect wallet to view history");
+    const titleEl = document.getElementById('activity-title');
+
+    try {
+        if (State.isConnected) {
+            if (DashboardState.activities.length === 0) {
+                if (listEl) listEl.innerHTML = renderLoading();
+                const response = await fetch(`${API_ENDPOINTS.getHistory}/${State.userAddress}`);
+                if (response.ok) {
+                    DashboardState.activities = await response.json();
+                }
+            }
+
+            if (DashboardState.activities.length > 0) {
+                if (titleEl) titleEl.textContent = 'Your Activity';
+                applyFiltersAndRender();
+                return;
+            }
+        }
+
+        // Fallback: Network Activity
+        if (titleEl) titleEl.textContent = 'Network Activity';
+        await fetchNetworkActivity();
+
+    } catch (e) {
+        console.error("Activity fetch error:", e);
+        if (titleEl) titleEl.textContent = 'Network Activity';
+        await fetchNetworkActivity();
+    }
+}
+
+async function fetchNetworkActivity() {
+    const listEl = document.getElementById('dash-activity-list');
+    if (!listEl) return;
+
+    if (DashboardState.isLoadingNetworkActivity) return;
+
+    // 5 minute cache
+    const cacheAge = Date.now() - DashboardState.networkActivitiesTimestamp;
+    if (DashboardState.networkActivities.length > 0 && cacheAge < 300000) {
+        renderNetworkActivityList();
         return;
     }
 
+    DashboardState.isLoadingNetworkActivity = true;
+    listEl.innerHTML = renderLoading();
+
     try {
-        if (listEl && DashboardState.activities.length === 0) {
-            listEl.innerHTML = renderLoading();
+        const response = await fetch(`${NETWORK_ACTIVITY_API}?limit=20`);
+        if (response.ok) {
+            DashboardState.networkActivities = await response.json();
+            DashboardState.networkActivitiesTimestamp = Date.now();
+        } else {
+            DashboardState.networkActivities = [];
         }
-
-        if (DashboardState.activities.length === 0) {
-            const response = await fetch(`${API_ENDPOINTS.getHistory}/${State.userAddress}`);
-            if (!response.ok) throw new Error("API Error");
-            DashboardState.activities = await response.json();
-        }
-        
-        applyFiltersAndRender();
-
     } catch (e) {
-        if(listEl) listEl.innerHTML = renderError("Failed to load");
+        console.error("Network activity fetch error:", e);
+        DashboardState.networkActivities = [];
+    } finally {
+        DashboardState.isLoadingNetworkActivity = false;
     }
+
+    renderNetworkActivityList();
+}
+
+function renderNetworkActivityList() {
+    const listEl = document.getElementById('dash-activity-list');
+    const controlsEl = document.getElementById('dash-pagination-controls');
+    if (!listEl) return;
+
+    if (DashboardState.networkActivities.length === 0) {
+        listEl.innerHTML = `
+            <div class="text-center py-8">
+                <div class="w-12 h-12 bg-zinc-800 rounded-full flex items-center justify-center mx-auto mb-3">
+                    <i class="fa-solid fa-globe text-zinc-600"></i>
+                </div>
+                <p class="text-zinc-500 text-xs">No recent network activity</p>
+                <p class="text-zinc-600 text-[10px] mt-1">Transactions will appear here</p>
+            </div>
+        `;
+        if (controlsEl) controlsEl.classList.add('hidden');
+        return;
+    }
+
+    listEl.innerHTML = DashboardState.networkActivities.slice(0, 10).map(item => {
+        const dateStr = formatDate(item.timestamp || item.createdAt);
+        const address = item.userAddress || item.from || '';
+        const truncAddr = truncateAddress(address);
+
+        let icon = 'fa-circle', color = 'text-zinc-500', label = item.type;
+        const t = (item.type || '').toUpperCase();
+
+        if (t.includes('DELEGATION') || t.includes('STAKE')) { icon = 'fa-arrow-up'; color = 'text-green-400'; label = 'Staked'; }
+        else if (t.includes('UNSTAKE')) { icon = 'fa-arrow-down'; color = 'text-orange-400'; label = 'Unstaked'; }
+        else if (t.includes('REWARD') || t.includes('CLAIM')) { icon = 'fa-gift'; color = 'text-amber-400'; label = 'Claimed'; }
+        else if (t.includes('NFTBOUGHT') || t.includes('BOOSTERBUY')) { icon = 'fa-star'; color = 'text-yellow-300'; label = 'Minted NFT'; }
+        else if (t.includes('RENTAL')) { icon = 'fa-handshake'; color = 'text-cyan-400'; label = 'Rental'; }
+        else if (t.includes('NOTARY')) { icon = 'fa-file-signature'; color = 'text-indigo-400'; label = 'Notarized'; }
+        else if (t.includes('FORTUNE') || t.includes('GAME')) { icon = 'fa-dice'; color = 'text-purple-400'; label = 'Fortune'; }
+        else if (t.includes('FAUCET')) { icon = 'fa-faucet'; color = 'text-cyan-400'; label = 'Faucet'; }
+
+        const txLink = item.txHash ? `${EXPLORER_BASE_URL}${item.txHash}` : '#';
+        let rawAmount = item.amount || item.details?.amount || "0";
+        const amountNum = formatBigNumber(BigInt(rawAmount));
+        const amountDisplay = amountNum > 0.01 ? amountNum.toFixed(2) : '';
+
+        return `
+            <a href="${txLink}" target="_blank" class="flex items-center justify-between p-2.5 bg-zinc-800/30 hover:bg-zinc-800/60 border border-zinc-700/30 rounded-lg transition-colors group">
+                <div class="flex items-center gap-2.5">
+                    <div class="w-7 h-7 rounded-full bg-zinc-900 flex items-center justify-center">
+                        <i class="fa-solid ${icon} ${color} text-[10px]"></i>
+                    </div>
+                    <div>
+                        <p class="text-white text-xs font-medium">${label}</p>
+                        <p class="text-[10px] text-zinc-600">${truncAddr} • ${dateStr}</p>
+                    </div>
+                </div>
+                <div class="text-right">
+                    ${amountDisplay ? `<p class="text-white text-xs font-mono">${amountDisplay}</p>` : ''}
+                    <i class="fa-solid fa-external-link text-[8px] text-zinc-600 group-hover:text-blue-400 transition-colors"></i>
+                </div>
+            </a>
+        `;
+    }).join('');
+
+    if (controlsEl) controlsEl.classList.add('hidden');
 }
 
 function applyFiltersAndRender() {
@@ -793,7 +852,7 @@ function applyFiltersAndRender() {
     });
 
     DashboardState.filteredActivities = result;
-    DashboardState.pagination.currentPage = 1; 
+    DashboardState.pagination.currentPage = 1;
     renderActivityPage();
 }
 
@@ -804,7 +863,7 @@ function renderActivityPage() {
 
     if (DashboardState.filteredActivities.length === 0) {
         listEl.innerHTML = renderNoData("No activities found");
-        if(controlsEl) controlsEl.classList.add('hidden');
+        if (controlsEl) controlsEl.classList.add('hidden');
         return;
     }
 
@@ -814,27 +873,27 @@ function renderActivityPage() {
 
     listEl.innerHTML = pageItems.map(item => {
         const dateStr = formatDate(item.timestamp || item.createdAt);
-        
+
         let icon = 'fa-circle', color = 'text-zinc-500', label = item.type;
         const t = (item.type || '').toUpperCase();
-        
-        if(t.includes('DELEGATION') || t.includes('STAKE')) { icon = 'fa-arrow-up'; color = 'text-green-400'; label = 'Staked'; }
-        else if(t.includes('UNSTAKE')) { icon = 'fa-arrow-down'; color = 'text-orange-400'; label = 'Unstaked'; }
-        else if(t.includes('REWARD') || t.includes('CLAIM')) { icon = 'fa-gift'; color = 'text-amber-400'; label = 'Claimed'; }
-        else if(t.includes('NFTBOUGHT')) { icon = 'fa-cart-shopping'; color = 'text-green-400'; label = 'Bought NFT'; }
-        else if(t.includes('BOOSTERBUY')) { icon = 'fa-star'; color = 'text-yellow-300'; label = 'Minted NFT'; }
-        else if(t.includes('NFTSOLD')) { icon = 'fa-money-bill'; color = 'text-orange-400'; label = 'Sold NFT'; }
-        else if(t.includes('RENTAL')) { icon = 'fa-house'; color = 'text-blue-400'; label = 'Rental'; }
-        else if(t.includes('NOTARY')) { icon = 'fa-file-signature'; color = 'text-indigo-400'; label = 'Notarized'; }
-        else if(t.includes('FAUCET')) { icon = 'fa-faucet'; color = 'text-cyan-400'; label = 'Faucet'; }
-        else if(t === 'GAMEREQUESTED' || t.includes('FORTUNEGAMEREQUEST')) { icon = 'fa-dice'; color = 'text-purple-400'; label = 'Fortune Bet'; }
-        else if(t === 'GAMERESULT' || t.includes('FORTUNEGAMERESULT')) { 
+
+        if (t.includes('DELEGATION') || t.includes('STAKE')) { icon = 'fa-arrow-up'; color = 'text-green-400'; label = 'Staked'; }
+        else if (t.includes('UNSTAKE')) { icon = 'fa-arrow-down'; color = 'text-orange-400'; label = 'Unstaked'; }
+        else if (t.includes('REWARD') || t.includes('CLAIM')) { icon = 'fa-gift'; color = 'text-amber-400'; label = 'Claimed'; }
+        else if (t.includes('NFTBOUGHT')) { icon = 'fa-cart-shopping'; color = 'text-green-400'; label = 'Bought NFT'; }
+        else if (t.includes('BOOSTERBUY')) { icon = 'fa-star'; color = 'text-yellow-300'; label = 'Minted NFT'; }
+        else if (t.includes('NFTSOLD')) { icon = 'fa-money-bill'; color = 'text-orange-400'; label = 'Sold NFT'; }
+        else if (t.includes('RENTAL')) { icon = 'fa-handshake'; color = 'text-cyan-400'; label = 'Rental'; }
+        else if (t.includes('NOTARY')) { icon = 'fa-file-signature'; color = 'text-indigo-400'; label = 'Notarized'; }
+        else if (t.includes('FAUCET')) { icon = 'fa-faucet'; color = 'text-cyan-400'; label = 'Faucet'; }
+        else if (t === 'GAMEREQUESTED' || t.includes('FORTUNEGAMEREQUEST')) { icon = 'fa-dice'; color = 'text-purple-400'; label = 'Fortune Bet'; }
+        else if (t === 'GAMERESULT' || t.includes('FORTUNEGAMERESULT')) {
             const isWin = item.details?.isWin;
-            icon = isWin ? 'fa-trophy' : 'fa-dice'; 
-            color = isWin ? 'text-yellow-400' : 'text-zinc-400'; 
-            label = isWin ? 'Won!' : 'Lost'; 
+            icon = isWin ? 'fa-trophy' : 'fa-dice';
+            color = isWin ? 'text-yellow-400' : 'text-zinc-400';
+            label = isWin ? 'Won!' : 'Lost';
         }
-        
+
         const txLink = item.txHash ? `${EXPLORER_BASE_URL}${item.txHash}` : '#';
         let rawAmount = item.amount || item.details?.amount || "0";
         const amountNum = formatBigNumber(BigInt(rawAmount));
@@ -859,7 +918,7 @@ function renderActivityPage() {
         `;
     }).join('');
 
-    if(controlsEl) {
+    if (controlsEl) {
         const maxPage = Math.ceil(DashboardState.filteredActivities.length / DashboardState.pagination.itemsPerPage);
         if (maxPage > 1) {
             controlsEl.classList.remove('hidden');
@@ -878,56 +937,51 @@ function renderActivityPage() {
 
 function attachDashboardListeners() {
     if (!DOMElements.dashboard) return;
-    
+
     DOMElements.dashboard.addEventListener('click', async (e) => {
         const target = e.target;
 
-        // Refresh
         if (target.closest('#manual-refresh-btn')) {
             const btn = target.closest('#manual-refresh-btn');
             btn.disabled = true;
             btn.innerHTML = `<i class="fa-solid fa-rotate fa-spin"></i>`;
-            await updateUserHub(true); 
+            await updateUserHub(true);
             await updateGlobalMetrics();
-            DashboardState.activities = []; 
-            await fetchAndProcessActivities(); 
+            DashboardState.activities = [];
+            DashboardState.networkActivities = [];
+            DashboardState.networkActivitiesTimestamp = 0;
+            await fetchAndProcessActivities();
             setTimeout(() => { btn.innerHTML = `<i class="fa-solid fa-rotate"></i> <span class="hidden sm:inline">Sync</span>`; btn.disabled = false; }, 1000);
         }
 
-        // Faucet
         if (target.closest('#faucet-action-btn')) await requestSmartFaucet(target.closest('#faucet-action-btn'));
         if (target.closest('#emergency-faucet-btn')) await requestSmartFaucet(target.closest('#emergency-faucet-btn'));
 
-        // Navigation
         if (target.closest('.delegate-link')) { e.preventDefault(); window.navigateTo('mine'); }
         if (target.closest('.go-to-store')) { e.preventDefault(); window.navigateTo('store'); }
         if (target.closest('.go-to-rental')) { e.preventDefault(); window.navigateTo('rental'); }
 
-        // Booster Modal
         if (target.closest('#open-booster-info')) {
             const modal = document.getElementById('booster-info-modal');
-            if(modal) { modal.classList.remove('hidden'); modal.classList.add('flex'); setTimeout(() => { modal.classList.remove('opacity-0'); modal.querySelector('div').classList.remove('scale-95'); }, 10); }
+            if (modal) { modal.classList.remove('hidden'); modal.classList.add('flex'); setTimeout(() => { modal.classList.remove('opacity-0'); modal.querySelector('div').classList.remove('scale-95'); }, 10); }
         }
         if (target.closest('#close-booster-modal') || target.id === 'booster-info-modal') {
             const modal = document.getElementById('booster-info-modal');
-            if(modal) { modal.classList.add('opacity-0'); modal.querySelector('div').classList.add('scale-95'); setTimeout(() => modal.classList.add('hidden'), 200); }
+            if (modal) { modal.classList.add('opacity-0'); modal.querySelector('div').classList.add('scale-95'); setTimeout(() => modal.classList.add('hidden'), 200); }
         }
 
-        // Gas Modal
         if (target.closest('#close-gas-modal-dash') || target.id === 'no-gas-modal-dash') {
             const modal = document.getElementById('no-gas-modal-dash');
-            if(modal) { modal.classList.remove('flex'); modal.classList.add('hidden'); }
+            if (modal) { modal.classList.remove('flex'); modal.classList.add('hidden'); }
         }
 
-        // NFT Wallet
         const nftClick = target.closest('.nft-clickable-image');
         if (nftClick) {
             const address = nftClick.dataset.address;
             const id = nftClick.dataset.tokenid;
-            if(address && id) addNftToWallet(address, id);
+            if (address && id) addNftToWallet(address, id);
         }
 
-        // Claim
         const claimBtn = target.closest('#dashboardClaimBtn');
         if (claimBtn && !claimBtn.disabled) {
             try {
@@ -942,8 +996,8 @@ function attachDashboardListeners() {
                     const success = await executeUniversalClaim(stakingRewards, minerRewards, null);
                     if (success) {
                         showToast("Rewards claimed!", "success");
-                        await updateUserHub(true); 
-                        DashboardState.activities = []; 
+                        await updateUserHub(true);
+                        DashboardState.activities = [];
                         fetchAndProcessActivities();
                     }
                 }
@@ -955,7 +1009,6 @@ function attachDashboardListeners() {
             }
         }
 
-        // Pagination
         if (target.closest('#page-prev') && DashboardState.pagination.currentPage > 1) {
             DashboardState.pagination.currentPage--; renderActivityPage();
         }
@@ -964,14 +1017,12 @@ function attachDashboardListeners() {
             if (DashboardState.pagination.currentPage < max) { DashboardState.pagination.currentPage++; renderActivityPage(); }
         }
 
-        // Sort Toggle
         if (target.closest('#activity-sort-toggle')) {
             DashboardState.filters.sort = DashboardState.filters.sort === 'NEWEST' ? 'OLDEST' : 'NEWEST';
             applyFiltersAndRender();
         }
     });
 
-    // Filter Select
     const filterSelect = document.getElementById('activity-filter-type');
     if (filterSelect) {
         filterSelect.addEventListener('change', (e) => {
@@ -989,21 +1040,24 @@ export const DashboardPage = {
     async render(isNewPage) {
         renderDashboardLayout();
         updateGlobalMetrics();
+        fetchAndProcessActivities();
+
         if (State.isConnected) {
-            await updateUserHub(false); 
-            fetchAndProcessActivities();
+            await updateUserHub(false);
         }
     },
 
     update(isConnected) {
         const now = Date.now();
-        if (isConnected) {
-            if (now - DashboardState.lastUpdate > 10000) {
-                DashboardState.lastUpdate = now;
-                updateGlobalMetrics();
-                updateUserHub(false); 
-                fetchAndProcessActivities(); 
+        if (now - DashboardState.lastUpdate > 10000) {
+            DashboardState.lastUpdate = now;
+            updateGlobalMetrics();
+
+            if (isConnected) {
+                updateUserHub(false);
             }
+
+            fetchAndProcessActivities();
         }
     }
 };

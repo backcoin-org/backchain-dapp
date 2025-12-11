@@ -1,164 +1,62 @@
 // pages/StorePage.js
-// ✅ VERSÃO V5.3: Removida a Verificação de pStake (Acesso Livre)
+// ✅ VERSION V6.0: Clean UI, Mobile-First, V2.1 Compatible
 
 const ethers = window.ethers;
 
 import { State } from '../state.js';
 import { loadUserData, loadMyBoostersFromAPI, safeContractCall, getHighestBoosterBoostFromAPI, loadSystemDataFromAPI, API_ENDPOINTS } from '../modules/data.js';
 import { executeBuyBooster, executeSellBooster } from '../modules/transactions.js';
-import { formatBigNumber } from '../utils.js'; 
-import { boosterTiers, addresses, nftPoolABI, ipfsGateway, sepoliaRpcUrl } from '../config.js'; 
+import { formatBigNumber, renderLoading, renderNoData } from '../utils.js';
+import { showToast } from '../ui-feedback.js';
+import { boosterTiers, addresses, nftPoolABI, ipfsGateway } from '../config.js';
 
-// --- HELPER: DATA FORMATAÇÃO ROBUSTA ---
+// --- LOCAL STATE ---
+const TradeState = {
+    tradeDirection: 'buy',
+    selectedPoolBoostBips: null,
+    buyPrice: 0n,
+    sellPrice: 0n,
+    netSellPrice: 0n,
+    userBalanceOfSelectedNFT: 0,
+    firstAvailableTokenId: null,
+    firstAvailableTokenIdForBuy: null,
+    bestBoosterTokenId: 0n,
+    bestBoosterBips: 0,
+    meetsPStakeRequirement: true,
+    isDataLoading: false,
+    lastFetchTimestamp: 0
+};
+
+// --- HELPERS ---
+const EXPLORER_BASE_URL = "https://sepolia.arbiscan.io/tx/";
+
 function formatDate(timestamp) {
     if (!timestamp) return 'Just now';
     try {
-        if (timestamp.seconds || timestamp._seconds) {
-            const secs = timestamp.seconds || timestamp._seconds;
-            return new Date(secs * 1000).toLocaleString(); 
-        }
-        return new Date(timestamp).toLocaleString();
-    } catch (e) {
-        return 'Recent';
-    }
+        const secs = timestamp.seconds || timestamp._seconds || (new Date(timestamp).getTime() / 1000);
+        const date = new Date(secs * 1000);
+        const now = new Date();
+        const diffMs = now - date;
+        const diffMins = Math.floor(diffMs / 60000);
+        const diffHours = Math.floor(diffMs / 3600000);
+        const diffDays = Math.floor(diffMs / 86400000);
+
+        if (diffMins < 1) return 'Just now';
+        if (diffMins < 60) return `${diffMins}m ago`;
+        if (diffHours < 24) return `${diffHours}h ago`;
+        if (diffDays < 7) return `${diffDays}d ago`;
+        return date.toLocaleDateString();
+    } catch (e) { return 'Recent'; }
 }
 
-// --- HELPER: BLOCKCHAIN EXPLORER URL ---
-function getExplorerUrl(txHash) {
-    const baseUrl = "https://sepolia.arbiscan.io/tx/";
-    return `${baseUrl}${txHash}`;
-}
-
-// --- INJEÇÃO DE ESTILOS (CSS) ---
-const style = document.createElement('style');
-style.innerHTML = `
-    /* LAYOUT GRID */
-    .store-layout { display: grid; grid-template-columns: 1fr 380px; gap: 24px; width: 100%; max-width: 1100px; margin: 0 auto; padding-top: 2rem; }
-    @media (max-width: 1024px) { .store-layout { grid-template-columns: 1fr; } }
-
-    /* SWAP CARD */
-    .swap-card { background: #131313; border: 1px solid #27272a; border-radius: 24px; padding: 8px; box-shadow: 0 10px 40px rgba(0,0,0,0.5); }
-    .swap-header { display: flex; justify-content: space-between; align-items: center; padding: 12px 20px; color: #fff; }
-    .swap-header h3 { font-size: 16px; font-weight: 600; margin: 0; }
-    
-    .swap-panel { background: #1b1b1b; border-radius: 16px; padding: 16px; border: 1px solid transparent; transition: border 0.2s; }
-    .swap-panel:hover { border-color: #27272a; }
-    
-    .panel-header { display: flex; justify-content: space-between; font-size: 12px; color: #71717a; margin-bottom: 8px; }
-    .panel-content { display: flex; justify-content: space-between; align-items: center; }
-    .swap-input { background: transparent; border: none; color: #fff; font-size: 28px; font-weight: 500; width: 60%; outline: none; padding: 0; }
-    
-    .token-selector { background: #27272a; border-radius: 20px; padding: 6px 12px; display: flex; align-items: center; gap: 8px; color: #fff; border: none; cursor: pointer; transition: background 0.2s; font-weight: 600; font-size: 16px; }
-    .token-selector:hover { background: #3f3f46; }
-    .token-selector img { width: 24px; height: 24px; border-radius: 50%; }
-    
-    .swap-arrow-container { position: relative; height: 14px; display: flex; justify-content: center; align-items: center; z-index: 10; }
-    .swap-arrow-btn { background: #1b1b1b; border: 4px solid #131313; border-radius: 12px; width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; color: #71717a; cursor: pointer; transition: all 0.2s; }
-    .swap-arrow-btn:hover { color: #f59e0b; border-color: #131313; transform: scale(1.1); }
-
-    .action-btn { width: 100%; padding: 16px; border-radius: 20px; border: none; font-size: 18px; font-weight: 600; margin-top: 8px; cursor: pointer; transition: all 0.2s; background: #2d2d35; color: #71717a; }
-    .action-btn.active { background: linear-gradient(90deg, #f59e0b 0%, #d97706 100%); color: #1a1a1a; box-shadow: 0 4px 15px rgba(245, 158, 11, 0.3); }
-    .action-btn.active:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(245, 158, 11, 0.4); }
-
-    /* MODAL POOL SELECTOR FIX */
-    .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.8); display: none; align-items: center; justify-content: center; z-index: 1000; }
-    .modal-overlay.open { display: flex; }
-    
-    .pool-list { max-height: 400px; overflow-y: auto; padding-right: 5px; display: flex; flex-direction: column; gap: 8px; }
-    .pool-item { 
-        display: flex; align-items: center; gap: 12px; padding: 12px; 
-        background: #27272a; border-radius: 12px; cursor: pointer; transition: background 0.2s;
-        border: 1px solid transparent;
-    }
-    .pool-item:hover { background: #3f3f46; border-color: #f59e0b; }
-    .pool-item img { width: 32px; height: 32px; border-radius: 50%; }
-    
-    /* INVENTORY & ADD TO WALLET */
-    .info-card { background: #18181b; border: 1px solid #27272a; border-radius: 20px; padding: 20px; margin-bottom: 20px; }
-    .info-title { font-size: 14px; font-weight: 700; color: #fff; margin-bottom: 15px; display: flex; align-items: center; gap: 8px; }
-    
-    .inventory-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(85px, 1fr)); gap: 12px; }
-    .inventory-item { 
-        background: #27272a; border-radius: 12px; padding: 10px; position: relative; 
-        transition: all 0.2s; display: flex; flex-direction: column; align-items: center; 
-        border: 1px solid transparent; cursor: pointer;
-    }
-    .inventory-item:hover { border-color: #f59e0b; background: #3f3f46; transform: translateY(-2px); }
-    .inventory-item img { width: 48px; height: 48px; margin-bottom: 8px; }
-    
-    .add-wallet-btn { 
-        position: absolute; top: -6px; right: -6px; 
-        width: 24px; height: 24px; 
-        background: #f59e0b; 
-        border: 2px solid #18181b; 
-        border-radius: 50%; 
-        color: #000; 
-        font-size: 11px;
-        display: flex; align-items: center; justify-content: center; 
-        opacity: 1; 
-        box-shadow: 0 2px 5px rgba(0,0,0,0.5);
-        cursor: pointer; z-index: 10;
-        transition: transform 0.2s;
-    }
-    .add-wallet-btn:hover { transform: scale(1.15); background: #fbbf24; }
-
-    /* HISTORY & PERKS */
-    .history-card { background: #18181b; border: 1px solid #27272a; border-radius: 20px; padding: 20px; margin-top: 24px; }
-    .history-table { width: 100%; border-collapse: collapse; }
-    .history-table th { text-align: left; font-size: 11px; color: #71717a; padding-bottom: 10px; text-transform: uppercase; }
-    .history-table td { padding: 10px 0; font-size: 13px; color: #d4d4d8; border-bottom: 1px solid #27272a; }
-    .history-table tr:last-child td { border-bottom: none; }
-    .tx-type { font-weight: 700; font-size: 11px; padding: 4px 8px; border-radius: 6px; text-transform: uppercase; }
-    .type-buy { background: rgba(16, 185, 129, 0.1); color: #10b981; }
-    .type-sell { background: rgba(239, 68, 68, 0.1); color: #ef4444; }
-    
-    .tx-link { color: #71717a; text-decoration: none; display: flex; align-items: center; gap: 4px; transition: color 0.2s; font-size: 12px; }
-    .tx-link:hover { color: #f59e0b; text-decoration: underline; }
-
-    .perk-item { display: flex; gap: 12px; margin-bottom: 12px; align-items: flex-start; }
-    .perk-icon { width: 32px; height: 32px; background: rgba(245, 158, 11, 0.1); border-radius: 8px; display: flex; align-items: center; justify-content: center; color: #f59e0b; flex-shrink: 0; }
-    .perk-text h4 { font-size: 13px; color: #fff; margin: 0 0 2px 0; font-weight: 600; }
-    .perk-text p { font-size: 11px; color: #a1a1aa; margin: 0; line-height: 1.4; }
-
-    /* LOADERS */
-    .store-loader-container { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 300px; width: 100%; }
-    .store-logo-pulse { width: 64px; height: 64px; margin-bottom: 20px; animation: logoPulse 2s infinite ease-in-out; }
-    @keyframes logoPulse { 0%, 100% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.1); opacity: 0.8; } }
-    .loader-bar-track { width: 80%; height: 4px; background: #27272a; border-radius: 10px; overflow: hidden; position: relative; }
-    .loader-bar-fill { height: 100%; background: #f59e0b; width: 0%; border-radius: 10px; transition: width 0.1s linear; }
-`;
-document.head.appendChild(style);
-
-// --- ESTADO LOCAL ---
-const TradeState = {
-    tradeDirection: 'buy', 
-    selectedPoolBoostBips: null, 
-    buyPrice: 0n,
-    sellPrice: 0n,
-    netSellPrice: 0n, 
-    userBalanceOfSelectedNFT: 0,
-    firstAvailableTokenId: null, 
-    firstAvailableTokenIdForBuy: null,
-    bestBoosterTokenId: 0n, 
-    bestBoosterBips: 0, 
-    // V5 FIX: Requisito de pStake removido. Deve ser sempre true.
-    meetsPStakeRequirement: true, 
-    isDataLoading: false,
-    lastFetchTimestamp: 0,
-    loaderInterval: null,
-    loadingProgress: 0
-};
-
-// --- HELPER: IMAGENS ---
 function buildImageUrl(ipfsIoUrl) {
-    if (!ipfsIoUrl) return './assets/bkc_logo_3d.png'; 
+    if (!ipfsIoUrl) return './assets/bkc_logo_3d.png';
     if (ipfsIoUrl.startsWith('https://') || ipfsIoUrl.startsWith('http://')) return ipfsIoUrl;
     if (ipfsIoUrl.includes('ipfs.io/ipfs/')) return `${ipfsGateway}${ipfsIoUrl.split('ipfs.io/ipfs/')[1]}`;
     if (ipfsIoUrl.startsWith('ipfs://')) return `${ipfsGateway}${ipfsIoUrl.substring(7)}`;
     return ipfsIoUrl;
 }
 
-// --- ADD TO METAMASK ---
 async function addToWallet(tokenId, imageUrl) {
     try {
         await window.ethereum.request({
@@ -169,372 +67,480 @@ async function addToWallet(tokenId, imageUrl) {
                     address: addresses.rewardBoosterNFT,
                     tokenId: tokenId.toString(),
                     symbol: "BKCB",
-                    image: imageUrl 
+                    image: imageUrl
                 },
             },
         });
+        showToast("Added to wallet!", "success");
     } catch (error) {
         console.error("MetaMask Error:", error);
     }
 }
 
-// --- LOADERS ---
-function renderStoreLoader() {
-    return `
-        <div class="store-loader-container">
-            <img src="assets/bkc_logo_3d.png" class="store-logo-pulse">
-            <div id="store-loader-msg" class="text-xs text-zinc-500 font-mono mb-4">INITIALIZING MARKET...</div>
-            <div class="loader-bar-track"><div id="store-loader-fill" class="loader-bar-fill"></div></div>
-        </div>`;
-}
+// ============================================================================
+// 1. MAIN RENDER
+// ============================================================================
 
-function startLoadingAnimation() {
-    TradeState.loadingProgress = 0;
-    const barEl = document.getElementById('store-loader-fill');
-    if (!barEl) return;
-    if (TradeState.loaderInterval) clearInterval(TradeState.loaderInterval);
-    TradeState.loaderInterval = setInterval(() => {
-        if(TradeState.loadingProgress < 90) TradeState.loadingProgress += 2;
-        if (barEl) barEl.style.width = `${TradeState.loadingProgress}%`;
-    }, 50);
-}
+export const StorePage = {
+    async render(isNewPage) {
+        await loadSystemDataFromAPI();
+        const container = document.getElementById('store');
+        if (!container) return;
 
-function stopLoadingAnimation() {
-    if (TradeState.loaderInterval) clearInterval(TradeState.loaderInterval);
-    const barEl = document.getElementById('store-loader-fill');
-    if (barEl) barEl.style.width = '100%';
-}
-
-// --- RENDERIZAÇÃO PRINCIPAL ---
-
-async function renderPageStructure() {
-    const root = document.getElementById('store'); 
-    if (!root) return;
-    
-    if (!root.innerHTML.includes('store-layout')) {
-        root.innerHTML = `
-            <div class="store-layout animate-fadeIn">
-                <div class="left-column">
-                    <div class="swap-card">
-                        <div class="swap-header">
-                            <h3>NFT Market</h3>
-                            <div class="text-xs text-zinc-500 font-mono"><span id="refresh-status"><i class="fa-solid fa-rotate"></i> Auto</span></div>
+        if (container.innerHTML.trim() === '' || isNewPage) {
+            container.innerHTML = `
+                <div class="max-w-5xl mx-auto py-6 px-4">
+                    
+                    <!-- HEADER -->
+                    <div class="flex justify-between items-center mb-6">
+                        <div>
+                            <h1 class="text-xl font-bold text-white flex items-center gap-2">
+                                <i class="fa-solid fa-store text-amber-400"></i> NFT Market
+                            </h1>
+                            <p class="text-xs text-zinc-500 mt-0.5">Buy & sell booster NFTs</p>
                         </div>
-                        <div id="swap-box-content"></div>
-                        <div id="swap-box-button-container" class="mt-2"></div>
-                    </div>
-                    <div class="history-card">
-                        <div class="info-title"><i class="fa-solid fa-clock-rotate-left text-zinc-500"></i> Recent Activity</div>
-                        <div id="store-history-content"><div class="text-center py-4"><div class="simple-loader"></div></div></div>
-                    </div>
-                </div>
-                <div class="right-column">
-                    <div class="info-card">
-                        <div class="info-title"><i class="fa-solid fa-box-open text-amber-500"></i> My Inventory</div>
-                        <div id="inventory-content" class="min-h-[80px]"></div>
-                    </div>
-                    <div class="info-card">
-                        <div class="info-title"><i class="fa-solid fa-star text-purple-500"></i> Perks</div>
-                        <div class="perk-item"><div class="perk-icon"><i class="fa-solid fa-bolt"></i></div><div class="perk-text"><h4>Staking Power</h4><p>Higher tiers boost staking APY.</p></div></div>
-                        <div class="perk-item"><div class="perk-icon"><i class="fa-solid fa-tag"></i></div><div class="perk-text"><h4>Fee Discounts</h4><p>Up to 70% off ecosystem fees.</p></div></div>
-                    </div>
-                </div>
-            </div>
-            <div id="pool-select-modal" class="modal-overlay">
-                <div class="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-md p-4 shadow-2xl relative animate-bounce-slow max-h-[80vh] flex flex-col">
-                    <div class="flex justify-between items-center mb-4 px-2 pt-2">
-                        <h4 class="text-white font-bold">Select Booster Tier</h4>
-                        <button class="pool-modal-close text-zinc-400 hover:text-white text-2xl">&times;</button>
-                    </div>
-                    <div id="pool-modal-list" class="pool-list custom-scrollbar flex-1 overflow-y-auto"></div>
-                </div>
-            </div>
-        `;
-    }
-    
-    if (TradeState.isDataLoading) {
-        document.getElementById('swap-box-content').innerHTML = renderStoreLoader();
-        startLoadingAnimation();
-    } else {
-        await renderSwapPanels();
-        renderExecuteButton();
-    }
-    
-    renderPoolSelectorModal();
-    renderInventory(); 
-    loadStoreHistory();
-}
-
-async function renderSwapPanels() {
-    const contentEl = document.getElementById('swap-box-content');
-    if (!contentEl || TradeState.isDataLoading) return;
-
-    const selectedTier = boosterTiers.find(t => t.boostBips === TradeState.selectedPoolBoostBips);
-    const bkcLogoPath = "assets/bkc_logo_3d.png";
-
-    let topPanel, bottomPanel;
-
-    if (TradeState.tradeDirection === 'buy') {
-        topPanel = {
-            label: "You Pay",
-            balance: `Balance: ${formatBigNumber(State.currentUserBalance || 0n).toFixed(2)}`,
-            amount: (TradeState.buyPrice > 0n ? formatBigNumber(TradeState.buyPrice).toFixed(2) : "0.00"),
-            symbol: "BKC", img: bkcLogoPath, isSelector: false
-        };
-        const soldOutText = (selectedTier && TradeState.firstAvailableTokenIdForBuy === null) ? '(Sold Out)' : '';
-        bottomPanel = {
-            label: "You Receive",
-            balance: soldOutText,
-            amount: selectedTier ? "1" : "0",
-            symbol: selectedTier ? selectedTier.name : "Select Tier",
-            img: selectedTier ? selectedTier.img : null,
-            isSelector: true
-        };
-    } else {
-        topPanel = {
-            label: "You Sell",
-            balance: `Owned: ${TradeState.userBalanceOfSelectedNFT}`,
-            amount: selectedTier ? "1" : "0",
-            symbol: selectedTier ? selectedTier.name : "Select Tier",
-            img: selectedTier ? selectedTier.img : null,
-            isSelector: true
-        };
-        
-        // MOSTRA O PREÇO LÍQUIDO (COM TAXA DE 10%)
-        const netAmount = (TradeState.netSellPrice > 0n ? formatBigNumber(TradeState.netSellPrice).toFixed(2) : "0.00");
-        const taxInfo = TradeState.netSellPrice < TradeState.sellPrice 
-            ? `<span class="text-xs text-red-500 ml-2 font-bold">(-10% Fee)</span>` 
-            : "";
-
-        bottomPanel = {
-            label: "You Receive",
-            balance: `Balance: ${formatBigNumber(State.currentUserBalance || 0n).toFixed(2)}`,
-            amount: netAmount,
-            symbol: "BKC", img: bkcLogoPath, isSelector: false,
-            extraHtml: taxInfo
-        };
-    }
-
-    contentEl.innerHTML = `
-        <div class="swap-panel mb-1">
-            <div class="panel-header"><span>${topPanel.label}</span><span>${topPanel.balance}</span></div>
-            <div class="panel-content">
-                <input type="text" class="swap-input" value="${topPanel.amount}" readonly placeholder="0.0">
-                <button class="token-selector ${topPanel.isSelector ? 'is-selector' : 'cursor-default'}" ${!topPanel.isSelector ? 'disabled' : ''}>
-                    <img src="${buildImageUrl(topPanel.img || bkcLogoPath)}" alt="${topPanel.symbol}">
-                    <span>${topPanel.symbol}</span>
-                    ${topPanel.isSelector ? '<i class="fa-solid fa-chevron-down text-xs ml-1"></i>' : ''}
-                </button>
-            </div>
-        </div>
-        <div class="swap-arrow-container"><button class="swap-arrow-btn"><i class="fa-solid fa-arrow-down"></i></button></div>
-        <div class="swap-panel mt-1">
-            <div class="panel-header"><span>${bottomPanel.label}</span><span>${bottomPanel.balance}</span></div>
-            <div class="panel-content">
-                <div class="flex flex-col w-full">
-                    <div class="flex justify-between items-center w-full">
-                         <input type="text" class="swap-input" value="${bottomPanel.amount}" readonly placeholder="0.0">
-                         <button class="token-selector ${bottomPanel.isSelector ? 'is-selector' : 'cursor-default'}" ${!bottomPanel.isSelector ? 'disabled' : ''}>
-                            <img src="${buildImageUrl(bottomPanel.img || bkcLogoPath)}" alt="${bottomPanel.symbol}">
-                            <span>${bottomPanel.symbol}</span>
-                            ${bottomPanel.isSelector ? '<i class="fa-solid fa-chevron-down text-xs ml-1"></i>' : ''}
+                        <button id="store-refresh-btn" class="text-xs bg-zinc-800/50 hover:bg-zinc-700 text-zinc-400 hover:text-white px-3 py-1.5 rounded-lg transition-all">
+                            <i class="fa-solid fa-rotate"></i>
                         </button>
                     </div>
-                    ${bottomPanel.extraHtml ? `<div class="mt-1 text-right">${bottomPanel.extraHtml}</div>` : ''}
-                </div>
-            </div>
-        </div>
-    `;
-}
 
-function renderExecuteButton() {
-    const container = document.getElementById('swap-box-button-container');
-    if (!container || TradeState.isDataLoading) return;
+                    <!-- MAIN GRID -->
+                    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                        
+                        <!-- SWAP CARD (2 cols) -->
+                        <div class="lg:col-span-2">
+                            <div class="glass-panel p-4 rounded-xl">
+                                
+                                <!-- TIER SELECTOR -->
+                                <div class="mb-4">
+                                    <p class="text-[10px] text-zinc-500 uppercase mb-2">Select Tier</p>
+                                    <div id="tier-selector" class="flex gap-2 overflow-x-auto pb-2 no-scrollbar">
+                                        ${renderTierButtons()}
+                                    </div>
+                                </div>
 
-    let text = "Select a Booster", active = false, actionType = "trade"; 
+                                <!-- SWAP INTERFACE -->
+                                <div id="swap-content">
+                                    ${renderLoading()}
+                                </div>
 
-    if (!State.isConnected) { text = "Connect Wallet"; actionType = "connect"; active = true; } 
-    // V5 FIX: Removido TradeState.meetsPStakeRequirement (Acesso sempre true)
-    else if (TradeState.selectedPoolBoostBips !== null) {
-        if (TradeState.tradeDirection === 'buy') {
-            if (TradeState.buyPrice === 0n) text = "Price Unavailable";
-            else if (TradeState.buyPrice > State.currentUserBalance) text = "Insufficient BKC Balance";
-            else if (TradeState.firstAvailableTokenIdForBuy === null) text = "Sold Out";
-            else { text = "Buy Booster"; active = true; }
-        } 
-        else { 
-            if (TradeState.userBalanceOfSelectedNFT === 0) text = "No NFT to Sell";
-            else if (TradeState.netSellPrice === 0n) text = "Pool Liquidity Low";
-            else if (TradeState.firstAvailableTokenId === null) text = "Loading NFT ID...";
-            else { text = "Sell Booster (-10% Fee)"; active = true; }
-        }
-    }
-    container.innerHTML = `<button id="execute-trade-btn" class="action-btn ${active ? 'active' : ''}" ${!active ? 'disabled' : ''} data-action="${actionType}">${text}</button>`;
-}
+                                <!-- EXECUTE BUTTON -->
+                                <div id="swap-button" class="mt-4"></div>
+                            </div>
 
-function renderPoolSelectorModal() {
-    const list = document.getElementById('pool-modal-list');
-    if (!list) return;
-    list.innerHTML = boosterTiers.map(tier => `
-        <div class="pool-item" data-boostbips="${tier.boostBips}">
-            <img src="${buildImageUrl(tier.img)}" alt="${tier.name}">
-            <div class="flex flex-col"><span class="text-white font-bold">${tier.name}</span><span class="text-xs text-zinc-500">+${tier.boostBips / 100}% Power</span></div>
-            <div class="ml-auto text-amber-500 text-xs font-mono">${TradeState.selectedPoolBoostBips === tier.boostBips ? '<i class="fa-solid fa-check"></i>' : ''}</div>
-        </div>`).join('');
-}
+                            <!-- HISTORY -->
+                            <div class="glass-panel p-4 rounded-xl mt-4">
+                                <h3 class="text-sm font-bold text-zinc-400 uppercase mb-3 flex items-center gap-2">
+                                    <i class="fa-solid fa-clock-rotate-left text-zinc-500"></i> Recent Trades
+                                </h3>
+                                <div id="store-history" class="space-y-2 max-h-[200px] overflow-y-auto custom-scrollbar">
+                                    ${renderNoData("Connect wallet to view")}
+                                </div>
+                            </div>
+                        </div>
 
-// --- RENDERIZAÇÃO DE INVENTÁRIO (BOTÃO VISÍVEL) ---
+                        <!-- SIDEBAR (1 col) -->
+                        <div class="space-y-4">
+                            
+                            <!-- INVENTORY -->
+                            <div class="glass-panel p-4 rounded-xl">
+                                <div class="flex justify-between items-center mb-3">
+                                    <h3 class="text-sm font-bold text-zinc-400 uppercase flex items-center gap-2">
+                                        <i class="fa-solid fa-box-open text-amber-500"></i> My NFTs
+                                    </h3>
+                                    <span id="inventory-count" class="text-[10px] bg-zinc-800 px-2 py-0.5 rounded text-white font-mono">0</span>
+                                </div>
+                                <div id="inventory-grid" class="grid grid-cols-3 gap-2 max-h-[250px] overflow-y-auto custom-scrollbar">
+                                    ${renderNoData("No NFTs")}
+                                </div>
+                            </div>
 
-function renderInventory() {
-    const el = document.getElementById('inventory-content');
-    if (!el) return;
-    
-    if (!State.isConnected) {
-        el.innerHTML = `<div class="text-zinc-500 text-xs text-center py-4">Connect wallet to view inventory</div>`;
-        return;
-    }
+                            <!-- PERKS INFO -->
+                            <div class="glass-panel p-4 rounded-xl">
+                                <h3 class="text-sm font-bold text-zinc-400 uppercase mb-3 flex items-center gap-2">
+                                    <i class="fa-solid fa-star text-purple-400"></i> NFT Perks
+                                </h3>
+                                <div class="space-y-3">
+                                    <div class="flex gap-3">
+                                        <div class="w-8 h-8 bg-amber-500/20 rounded-lg flex items-center justify-center flex-shrink-0">
+                                            <i class="fa-solid fa-bolt text-amber-400 text-sm"></i>
+                                        </div>
+                                        <div>
+                                            <p class="text-white text-xs font-bold">Boost Yield</p>
+                                            <p class="text-[10px] text-zinc-500">Up to 100% staking efficiency</p>
+                                        </div>
+                                    </div>
+                                    <div class="flex gap-3">
+                                        <div class="w-8 h-8 bg-green-500/20 rounded-lg flex items-center justify-center flex-shrink-0">
+                                            <i class="fa-solid fa-percent text-green-400 text-sm"></i>
+                                        </div>
+                                        <div>
+                                            <p class="text-white text-xs font-bold">Fee Discounts</p>
+                                            <p class="text-[10px] text-zinc-500">Up to 70% off protocol fees</p>
+                                        </div>
+                                    </div>
+                                    <div class="flex gap-3">
+                                        <div class="w-8 h-8 bg-cyan-500/20 rounded-lg flex items-center justify-center flex-shrink-0">
+                                            <i class="fa-solid fa-handshake text-cyan-400 text-sm"></i>
+                                        </div>
+                                        <div>
+                                            <p class="text-white text-xs font-bold">Rental Income</p>
+                                            <p class="text-[10px] text-zinc-500">Earn by renting to others</p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
 
-    if (!State.myBoosters || State.myBoosters.length === 0) {
-        el.innerHTML = `<div class="text-zinc-500 text-xs text-center py-4">No Boosters found</div>`;
-        return;
-    }
-
-    el.innerHTML = `<div class="inventory-grid">
-        ${State.myBoosters.map(nft => {
-            const tier = boosterTiers.find(t => t.boostBips === nft.boostBips) || { name: 'Unknown', img: null };
-            const imgUrl = buildImageUrl(tier.img);
-            return `
-                <div class="inventory-item group" data-boostbips="${nft.boostBips}" title="Click to Sell">
-                    <button class="add-wallet-btn" onclick="event.stopPropagation();" data-id="${nft.tokenId}" data-img="${imgUrl}" title="Add to Metamask">
-                        <i class="fa-solid fa-wallet"></i>
-                    </button>
-                    <img src="${imgUrl}" alt="${tier.name}" class="item-img">
-                    <span class="text-[9px] text-zinc-400 font-bold">${tier.name}</span>
-                    <span class="text-[9px] text-zinc-600">#${nft.tokenId}</span>
+                            <!-- MARKET STATS -->
+                            <div class="glass-panel p-4 rounded-xl">
+                                <h3 class="text-sm font-bold text-zinc-400 uppercase mb-3 flex items-center gap-2">
+                                    <i class="fa-solid fa-chart-simple text-blue-400"></i> Pool Stats
+                                </h3>
+                                <div class="space-y-2">
+                                    <div class="flex justify-between text-xs">
+                                        <span class="text-zinc-500">Buy Price</span>
+                                        <span id="stat-buy-price" class="text-white font-mono">--</span>
+                                    </div>
+                                    <div class="flex justify-between text-xs">
+                                        <span class="text-zinc-500">Sell Price</span>
+                                        <span id="stat-sell-price" class="text-white font-mono">--</span>
+                                    </div>
+                                    <div class="flex justify-between text-xs">
+                                        <span class="text-zinc-500">Sell Fee</span>
+                                        <span class="text-red-400 font-mono">10%</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             `;
-        }).join('')}
-    </div>`;
 
-    // Bind listeners
-    el.querySelectorAll('.add-wallet-btn').forEach(btn => {
-        btn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            addToWallet(btn.dataset.id, btn.dataset.img);
-        });
+            setupEventListeners();
+        }
+
+        // Initialize
+        if (TradeState.selectedPoolBoostBips === null && boosterTiers.length > 0) {
+            TradeState.selectedPoolBoostBips = boosterTiers[0].boostBips;
+        }
+
+        await loadDataForSelectedPool();
+    },
+
+    async update() {
+        if (TradeState.selectedPoolBoostBips !== null && !TradeState.isDataLoading) {
+            const container = document.getElementById('store');
+            if (container && !document.hidden) {
+                await loadDataForSelectedPool();
+            }
+        }
+    }
+};
+
+// ============================================================================
+// 2. TIER SELECTOR
+// ============================================================================
+
+function renderTierButtons() {
+    return boosterTiers.map((tier, idx) => `
+        <button class="tier-btn flex-shrink-0 flex items-center gap-2 px-3 py-2 rounded-lg border transition-all ${idx === 0 ? 'bg-amber-500/20 border-amber-500/50 text-amber-400' : 'bg-zinc-800/50 border-zinc-700 text-zinc-400 hover:border-zinc-600'}" data-boost="${tier.boostBips}">
+            <img src="${buildImageUrl(tier.img)}" class="w-6 h-6 rounded" onerror="this.src='./assets/bkc_logo_3d.png'">
+            <span class="text-xs font-bold">${tier.name}</span>
+        </button>
+    `).join('');
+}
+
+function updateTierSelection(boostBips) {
+    document.querySelectorAll('.tier-btn').forEach(btn => {
+        const isSelected = Number(btn.dataset.boost) === boostBips;
+        btn.classList.toggle('bg-amber-500/20', isSelected);
+        btn.classList.toggle('border-amber-500/50', isSelected);
+        btn.classList.toggle('text-amber-400', isSelected);
+        btn.classList.toggle('bg-zinc-800/50', !isSelected);
+        btn.classList.toggle('border-zinc-700', !isSelected);
+        btn.classList.toggle('text-zinc-400', !isSelected);
     });
 }
 
-// --- HISTÓRICO COM LINK E DATA CORRIGIDA ---
+// ============================================================================
+// 3. SWAP INTERFACE
+// ============================================================================
+
+function renderSwapInterface() {
+    const content = document.getElementById('swap-content');
+    if (!content) return;
+
+    const selectedTier = boosterTiers.find(t => t.boostBips === TradeState.selectedPoolBoostBips);
+    const isBuy = TradeState.tradeDirection === 'buy';
+
+    const price = isBuy ? TradeState.buyPrice : TradeState.netSellPrice;
+    const priceFormatted = formatBigNumber(price).toFixed(2);
+    const balance = formatBigNumber(State.currentUserBalance || 0n).toFixed(2);
+
+    const soldOut = isBuy && TradeState.firstAvailableTokenIdForBuy === null;
+
+    content.innerHTML = `
+        <!-- Direction Toggle -->
+        <div class="flex bg-zinc-800/50 rounded-lg p-1 mb-4">
+            <button class="direction-btn flex-1 py-2 rounded-md text-sm font-bold transition-all ${isBuy ? 'bg-green-500/20 text-green-400' : 'text-zinc-500 hover:text-zinc-300'}" data-direction="buy">
+                <i class="fa-solid fa-cart-plus mr-1"></i> Buy
+            </button>
+            <button class="direction-btn flex-1 py-2 rounded-md text-sm font-bold transition-all ${!isBuy ? 'bg-red-500/20 text-red-400' : 'text-zinc-500 hover:text-zinc-300'}" data-direction="sell">
+                <i class="fa-solid fa-money-bill-transfer mr-1"></i> Sell
+            </button>
+        </div>
+
+        <!-- Swap Card -->
+        <div class="bg-zinc-800/30 rounded-xl p-4 border border-zinc-700/50">
+            
+            <!-- Top Row -->
+            <div class="flex justify-between items-center mb-1">
+                <span class="text-[10px] text-zinc-500 uppercase">${isBuy ? 'You Pay' : 'You Sell'}</span>
+                <span class="text-[10px] text-zinc-600">${isBuy ? `Balance: ${balance} BKC` : `Owned: ${TradeState.userBalanceOfSelectedNFT}`}</span>
+            </div>
+            <div class="flex justify-between items-center mb-4">
+                <span class="text-2xl font-bold text-white">${isBuy ? priceFormatted : '1'}</span>
+                <div class="flex items-center gap-2 bg-zinc-700/50 px-3 py-1.5 rounded-lg">
+                    <img src="${isBuy ? './assets/bkc_logo_3d.png' : buildImageUrl(selectedTier?.img)}" class="w-6 h-6 rounded">
+                    <span class="text-white text-sm font-bold">${isBuy ? 'BKC' : (selectedTier?.name || 'NFT')}</span>
+                </div>
+            </div>
+
+            <!-- Arrow -->
+            <div class="flex justify-center my-2">
+                <div class="w-8 h-8 bg-zinc-700 rounded-full flex items-center justify-center">
+                    <i class="fa-solid fa-arrow-down text-zinc-400 text-sm"></i>
+                </div>
+            </div>
+
+            <!-- Bottom Row -->
+            <div class="flex justify-between items-center mb-1 mt-4">
+                <span class="text-[10px] text-zinc-500 uppercase">${isBuy ? 'You Receive' : 'You Get'}</span>
+                ${soldOut ? '<span class="text-[10px] text-red-400">Sold Out</span>' : ''}
+                ${!isBuy && price < TradeState.sellPrice ? '<span class="text-[10px] text-red-400">-10% Fee</span>' : ''}
+            </div>
+            <div class="flex justify-between items-center">
+                <span class="text-2xl font-bold text-white">${isBuy ? '1' : priceFormatted}</span>
+                <div class="flex items-center gap-2 bg-zinc-700/50 px-3 py-1.5 rounded-lg">
+                    <img src="${isBuy ? buildImageUrl(selectedTier?.img) : './assets/bkc_logo_3d.png'}" class="w-6 h-6 rounded">
+                    <span class="text-white text-sm font-bold">${isBuy ? (selectedTier?.name || 'NFT') : 'BKC'}</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Info Row -->
+        <div class="flex justify-between items-center mt-3 text-xs">
+            <span class="text-zinc-500">
+                <i class="fa-solid fa-info-circle mr-1"></i>
+                ${isBuy ? 'Bonding curve pricing' : 'Net after 10% sell fee'}
+            </span>
+            <span class="text-zinc-600">
+                +${(selectedTier?.boostBips || 0) / 100}% boost
+            </span>
+        </div>
+    `;
+
+    // Update stats
+    const buyPriceEl = document.getElementById('stat-buy-price');
+    const sellPriceEl = document.getElementById('stat-sell-price');
+    if (buyPriceEl) buyPriceEl.textContent = `${formatBigNumber(TradeState.buyPrice).toFixed(2)} BKC`;
+    if (sellPriceEl) sellPriceEl.textContent = `${formatBigNumber(TradeState.netSellPrice).toFixed(2)} BKC`;
+}
+
+function renderExecuteButton() {
+    const container = document.getElementById('swap-button');
+    if (!container) return;
+
+    let text = "Select a Tier";
+    let active = false;
+    let actionType = "trade";
+
+    if (!State.isConnected) {
+        text = "Connect Wallet";
+        actionType = "connect";
+        active = true;
+    } else if (TradeState.selectedPoolBoostBips !== null) {
+        if (TradeState.tradeDirection === 'buy') {
+            if (TradeState.buyPrice === 0n) text = "Price Unavailable";
+            else if (TradeState.buyPrice > (State.currentUserBalance || 0n)) text = "Insufficient Balance";
+            else if (TradeState.firstAvailableTokenIdForBuy === null) text = "Sold Out";
+            else { text = "Buy NFT"; active = true; }
+        } else {
+            if (TradeState.userBalanceOfSelectedNFT === 0) text = "No NFT to Sell";
+            else if (TradeState.netSellPrice === 0n) text = "Pool Empty";
+            else if (TradeState.firstAvailableTokenId === null) text = "Loading...";
+            else { text = "Sell NFT"; active = true; }
+        }
+    }
+
+    const bgClass = TradeState.tradeDirection === 'buy'
+        ? (active ? 'bg-green-500 hover:bg-green-400 text-black' : 'bg-zinc-700 text-zinc-500')
+        : (active ? 'bg-red-500 hover:bg-red-400 text-white' : 'bg-zinc-700 text-zinc-500');
+
+    container.innerHTML = `
+        <button id="execute-trade-btn" class="w-full py-3 rounded-xl font-bold text-sm transition-all ${bgClass}" ${!active ? 'disabled' : ''} data-action="${actionType}">
+            ${text}
+        </button>
+    `;
+}
+
+// ============================================================================
+// 4. INVENTORY
+// ============================================================================
+
+function renderInventory() {
+    const grid = document.getElementById('inventory-grid');
+    const countEl = document.getElementById('inventory-count');
+    if (!grid) return;
+
+    if (!State.isConnected) {
+        grid.innerHTML = `<div class="col-span-3 text-center py-6 text-xs text-zinc-600">Connect wallet</div>`;
+        if (countEl) countEl.textContent = '0';
+        return;
+    }
+
+    const boosters = State.myBoosters || [];
+    if (countEl) countEl.textContent = boosters.length;
+
+    if (boosters.length === 0) {
+        grid.innerHTML = `<div class="col-span-3 text-center py-6 text-xs text-zinc-600">No NFTs yet</div>`;
+        return;
+    }
+
+    grid.innerHTML = boosters.map(nft => {
+        const tier = boosterTiers.find(t => t.boostBips === nft.boostBips) || { name: 'Unknown', img: null };
+        const imgUrl = buildImageUrl(tier.img);
+
+        return `
+            <div class="inv-item relative bg-zinc-800/50 border border-zinc-700/50 rounded-lg p-2 cursor-pointer hover:border-amber-500/50 hover:bg-zinc-800 transition-all group" data-boost="${nft.boostBips}" data-id="${nft.tokenId}">
+                <button class="wallet-btn absolute -top-1 -right-1 w-5 h-5 bg-amber-500 rounded-full flex items-center justify-center text-black text-[9px] opacity-0 group-hover:opacity-100 transition-opacity z-10" data-id="${nft.tokenId}" data-img="${imgUrl}">
+                    <i class="fa-solid fa-wallet"></i>
+                </button>
+                <img src="${imgUrl}" class="w-full aspect-square object-contain mb-1" onerror="this.src='./assets/bkc_logo_3d.png'">
+                <p class="text-[9px] text-zinc-400 text-center font-bold truncate">${tier.name}</p>
+                <p class="text-[8px] text-zinc-600 text-center">#${nft.tokenId}</p>
+            </div>
+        `;
+    }).join('');
+}
+
+// ============================================================================
+// 5. HISTORY
+// ============================================================================
 
 async function loadStoreHistory() {
-    const el = document.getElementById('store-history-content');
-    if (!el || !State.isConnected) { if(el) el.innerHTML = `<div class="text-zinc-500 text-xs text-center py-4">Connect to view history</div>`; return; }
+    const el = document.getElementById('store-history');
+    if (!el) return;
+
+    if (!State.isConnected) {
+        el.innerHTML = `<div class="text-center py-4 text-xs text-zinc-600">Connect wallet</div>`;
+        return;
+    }
 
     try {
         const response = await fetch(`${API_ENDPOINTS.getHistory}/${State.userAddress}`);
         if (!response.ok) throw new Error("API Error");
-        
+
         const data = await response.json();
-        // Filtro completo
-        const history = data.filter(tx => 
-            tx.type === 'BoosterBuy' || 
-            tx.type === 'NFTSold' || 
+        const history = data.filter(tx =>
+            tx.type === 'BoosterBuy' ||
+            tx.type === 'NFTSold' ||
             tx.type === 'NFTBought' ||
-            tx.type === 'PublicSale' 
+            tx.type === 'PublicSale'
         );
-        
+
         if (history.length === 0) {
-            el.innerHTML = `<div class="text-zinc-500 text-xs text-center py-4">No recent trades found</div>`;
+            el.innerHTML = `<div class="text-center py-4 text-xs text-zinc-600">No trades yet</div>`;
             return;
         }
 
-        el.innerHTML = `
-            <table class="history-table">
-                <thead><tr><th>Action</th><th>Item</th><th>Price</th><th>Time</th></tr></thead>
-                <tbody>
-                    ${history.slice(0, 5).map(tx => {
-                        const isBuy = tx.type === 'BoosterBuy' || tx.type === 'NFTBought' || tx.type === 'PublicSale';
-                        const itemName = "Booster";
-                        const price = formatBigNumber(BigInt(tx.details.amount || tx.amount || 0)).toFixed(2);
-                        
-                        const dateStr = formatDate(tx.timestamp || tx.createdAt);
-                        const tokenId = tx.details.tokenId || tx.tokenId || '?';
-                        const txLink = getExplorerUrl(tx.txHash);
-                        
-                        return `
-                            <tr>
-                                <td><span class="tx-type ${isBuy ? 'type-buy' : 'type-sell'}">${isBuy ? 'BUY' : 'SELL'}</span></td>
-                                <td>${itemName} #${tokenId}</td>
-                                <td>${price} BKC</td>
-                                <td>
-                                    <a href="${txLink}" target="_blank" class="tx-link">
-                                        ${dateStr} <i class="fa-solid fa-arrow-up-right-from-square text-[10px]"></i>
-                                    </a>
-                                </td>
-                            </tr>
-                        `;
-                    }).join('')}
-                </tbody>
-            </table>
-        `;
+        el.innerHTML = history.slice(0, 5).map(tx => {
+            const isBuy = tx.type === 'BoosterBuy' || tx.type === 'NFTBought' || tx.type === 'PublicSale';
+            const price = formatBigNumber(BigInt(tx.details?.amount || tx.amount || 0)).toFixed(2);
+            const dateStr = formatDate(tx.timestamp || tx.createdAt);
+            const tokenId = tx.details?.tokenId || tx.tokenId || '?';
+            const txLink = `${EXPLORER_BASE_URL}${tx.txHash}`;
+
+            return `
+                <a href="${txLink}" target="_blank" class="flex items-center justify-between p-2 bg-zinc-800/30 hover:bg-zinc-800/60 border border-zinc-700/30 rounded-lg transition-colors group">
+                    <div class="flex items-center gap-2">
+                        <div class="w-7 h-7 rounded-full ${isBuy ? 'bg-green-500/20' : 'bg-red-500/20'} flex items-center justify-center">
+                            <i class="fa-solid ${isBuy ? 'fa-cart-plus text-green-400' : 'fa-money-bill text-red-400'} text-[10px]"></i>
+                        </div>
+                        <div>
+                            <p class="text-white text-xs font-medium">${isBuy ? 'Bought' : 'Sold'} #${tokenId}</p>
+                            <p class="text-[10px] text-zinc-600">${dateStr}</p>
+                        </div>
+                    </div>
+                    <div class="text-right">
+                        <p class="text-white text-xs font-mono">${price} BKC</p>
+                        <i class="fa-solid fa-external-link text-[8px] text-zinc-600 group-hover:text-blue-400"></i>
+                    </div>
+                </a>
+            `;
+        }).join('');
 
     } catch (e) {
-        console.error("Hist error", e);
-        el.innerHTML = `<div class="text-red-500/50 text-xs text-center py-4">History unavailable</div>`;
+        console.error("History error:", e);
+        el.innerHTML = `<div class="text-center py-4 text-xs text-red-400/50">Failed to load</div>`;
     }
 }
 
-// --- DATA FETCHING ---
+// ============================================================================
+// 6. DATA LOADING
+// ============================================================================
 
 async function loadDataForSelectedPool() {
     const now = Date.now();
     if (now - TradeState.lastFetchTimestamp < 3000 && TradeState.isDataLoading) return;
     if (TradeState.selectedPoolBoostBips === null) return;
-    
+
     TradeState.isDataLoading = true;
     TradeState.lastFetchTimestamp = now;
-    
-    await renderPageStructure();
+
+    const content = document.getElementById('swap-content');
+    if (content) content.innerHTML = renderLoading();
 
     try {
         const boostBips = TradeState.selectedPoolBoostBips;
         const tier = boosterTiers.find(t => t.boostBips === boostBips);
         const poolKey = `pool_${tier.name.toLowerCase()}`;
         const poolAddress = addresses[poolKey];
-        
-        if (!poolAddress || !poolAddress.startsWith('0x')) throw new Error("Pool not deployed.");
+
+        if (!poolAddress || !poolAddress.startsWith('0x')) {
+            throw new Error("Pool not deployed.");
+        }
 
         const poolContract = new ethers.Contract(poolAddress, nftPoolABI, State.publicProvider);
         const boosterContract = State.rewardBoosterContract || State.rewardBoosterContractPublic;
 
+        // Load user data
         if (State.isConnected) {
             await Promise.all([loadUserData(), loadMyBoostersFromAPI()]);
-            const { highestBoost, tokenId } = await getHighestBoosterBoostFromAPI(); 
+            const { highestBoost, tokenId } = await getHighestBoosterBoostFromAPI();
             TradeState.bestBoosterTokenId = tokenId ? BigInt(tokenId) : 0n;
             TradeState.bestBoosterBips = Number(highestBoost);
 
             const myTierBoosters = State.myBoosters.filter(b => b.boostBips === Number(boostBips));
             TradeState.firstAvailableTokenId = null;
             TradeState.userBalanceOfSelectedNFT = myTierBoosters.length;
-            
+
             if (myTierBoosters.length > 0 && boosterContract) {
                 for (const booster of myTierBoosters) {
                     try {
                         const owner = await safeContractCall(boosterContract, 'ownerOf', [booster.tokenId], ethers.ZeroAddress);
                         if (owner.toLowerCase() === State.userAddress.toLowerCase()) {
                             TradeState.firstAvailableTokenId = BigInt(booster.tokenId);
-                            break; 
+                            break;
                         }
-                        await new Promise(r => setTimeout(r, 100)); 
                     } catch (e) {
-                         if (!TradeState.firstAvailableTokenId) TradeState.firstAvailableTokenId = BigInt(booster.tokenId);
+                        if (!TradeState.firstAvailableTokenId) TradeState.firstAvailableTokenId = BigInt(booster.tokenId);
                     }
                 }
             }
         }
 
-        // V5 FIX: Removido requiredPStake da chamada Promise.all
+        // Load pool data
         const [buyPrice, sellPrice, availableTokenIds, baseTaxBips, discountBips] = await Promise.all([
             safeContractCall(poolContract, 'getBuyPrice', [], ethers.MaxUint256),
             safeContractCall(poolContract, 'getSellPrice', [], 0n),
@@ -544,118 +550,118 @@ async function loadDataForSelectedPool() {
         ]);
 
         TradeState.firstAvailableTokenIdForBuy = (availableTokenIds.length > 0) ? BigInt(availableTokenIds[availableTokenIds.length - 1]) : null;
-        TradeState.buyPrice = (buyPrice === ethers.MaxUint256) ? 0n : buyPrice; 
+        TradeState.buyPrice = (buyPrice === ethers.MaxUint256) ? 0n : buyPrice;
         TradeState.sellPrice = sellPrice;
-        
-        // CÁLCULO DA TAXA DE VENDA
+
+        // Calculate sell fee
         const finalTaxBips = (baseTaxBips > discountBips) ? (baseTaxBips - discountBips) : 0n;
         const taxAmount = (sellPrice * finalTaxBips) / 10000n;
         TradeState.netSellPrice = sellPrice - taxAmount;
 
-        // V5 FIX: Acesso sempre TRUE (Removida a verificação de State.userTotalPStake)
-        TradeState.meetsPStakeRequirement = true; 
+        TradeState.meetsPStakeRequirement = true;
 
     } catch (err) {
         console.warn("Store Data Warning:", err.message);
     } finally {
-        stopLoadingAnimation();
-        setTimeout(async () => {
-            TradeState.isDataLoading = false;
-            await renderSwapPanels();
-            renderExecuteButton();
-            renderInventory(); 
-        }, 500);
+        TradeState.isDataLoading = false;
+        renderSwapInterface();
+        renderExecuteButton();
+        renderInventory();
+        loadStoreHistory();
     }
 }
 
-// --- EVENT LISTENERS ---
+// ============================================================================
+// 7. EVENT LISTENERS
+// ============================================================================
 
-function setupStorePageListeners() {
-    const storeSection = document.getElementById('store');
-    if (!storeSection) return;
+function setupEventListeners() {
+    const container = document.getElementById('store');
+    if (!container) return;
 
-    storeSection.addEventListener('click', async (e) => {
-        if (e.target.closest('.add-wallet-btn')) return; 
-
-        if (e.target.closest('.swap-arrow-btn')) {
-            e.preventDefault();
-            TradeState.tradeDirection = (TradeState.tradeDirection === 'buy') ? 'sell' : 'buy';
-            await renderSwapPanels();
-            renderExecuteButton();
-            return;
-        }
-        if (e.target.closest('.token-selector.is-selector')) { e.preventDefault(); document.getElementById('pool-select-modal').classList.add('open'); return; }
-        if (e.target.closest('.pool-modal-close') || e.target.classList.contains('modal-overlay')) { e.preventDefault(); document.getElementById('pool-select-modal').classList.remove('open'); return; }
-        
-        const poolItem = e.target.closest('.pool-item');
-        if (poolItem) {
-            e.preventDefault();
-            TradeState.selectedPoolBoostBips = Number(poolItem.dataset.boostbips);
-            document.getElementById('pool-select-modal').classList.remove('open');
+    container.addEventListener('click', async (e) => {
+        // Refresh button
+        if (e.target.closest('#store-refresh-btn')) {
+            const btn = e.target.closest('#store-refresh-btn');
+            const icon = btn.querySelector('i');
+            icon.classList.add('fa-spin');
             await loadDataForSelectedPool();
+            icon.classList.remove('fa-spin');
             return;
         }
 
-        const invItem = e.target.closest('.inventory-item');
-        if (invItem && !e.target.closest('.add-wallet-btn')) {
-            e.preventDefault();
-            const boostBips = Number(invItem.dataset.boostbips);
-            if (TradeState.selectedPoolBoostBips !== boostBips || TradeState.tradeDirection !== 'sell') {
-                TradeState.selectedPoolBoostBips = boostBips;
-                TradeState.tradeDirection = 'sell';
+        // Tier selection
+        const tierBtn = e.target.closest('.tier-btn');
+        if (tierBtn) {
+            const boost = Number(tierBtn.dataset.boost);
+            if (TradeState.selectedPoolBoostBips !== boost) {
+                TradeState.selectedPoolBoostBips = boost;
+                updateTierSelection(boost);
                 await loadDataForSelectedPool();
             }
             return;
         }
 
+        // Direction toggle
+        const dirBtn = e.target.closest('.direction-btn');
+        if (dirBtn) {
+            const direction = dirBtn.dataset.direction;
+            if (TradeState.tradeDirection !== direction) {
+                TradeState.tradeDirection = direction;
+                renderSwapInterface();
+                renderExecuteButton();
+            }
+            return;
+        }
+
+        // Inventory item click (sell)
+        const invItem = e.target.closest('.inv-item');
+        if (invItem && !e.target.closest('.wallet-btn')) {
+            const boost = Number(invItem.dataset.boost);
+            TradeState.selectedPoolBoostBips = boost;
+            TradeState.tradeDirection = 'sell';
+            updateTierSelection(boost);
+            await loadDataForSelectedPool();
+            return;
+        }
+
+        // Wallet button
+        const walletBtn = e.target.closest('.wallet-btn');
+        if (walletBtn) {
+            e.stopPropagation();
+            addToWallet(walletBtn.dataset.id, walletBtn.dataset.img);
+            return;
+        }
+
+        // Execute trade
         const executeBtn = e.target.closest('#execute-trade-btn');
         if (executeBtn && !executeBtn.disabled) {
-            e.preventDefault();
             const action = executeBtn.dataset.action;
-            if (action === "connect") { window.openConnectModal(); return; }
-            if (action === "delegate") { document.querySelector('.sidebar-link[data-target="mine"]')?.click(); return; }
+
+            if (action === "connect") {
+                window.openConnectModal();
+                return;
+            }
 
             const tier = boosterTiers.find(t => t.boostBips === TradeState.selectedPoolBoostBips);
             if (!tier) return;
+
             const poolKey = `pool_${tier.name.toLowerCase()}`;
             const poolAddress = addresses[poolKey];
 
             if (TradeState.tradeDirection === 'buy') {
-                // V5 FIX: Passa TradeState.bestBoosterTokenId para aplicar desconto na compra
                 const success = await executeBuyBooster(poolAddress, TradeState.buyPrice, TradeState.bestBoosterTokenId, executeBtn);
-                if (success) { await loadDataForSelectedPool(); loadStoreHistory(); }
+                if (success) {
+                    showToast("NFT Purchased!", "success");
+                    await loadDataForSelectedPool();
+                }
             } else {
-                // V5 FIX: Passa TradeState.bestBoosterTokenId para aplicar desconto na venda
                 const success = await executeSellBooster(poolAddress, TradeState.firstAvailableTokenId, TradeState.bestBoosterTokenId, executeBtn);
-                if (success) { await loadDataForSelectedPool(); loadStoreHistory(); }
+                if (success) {
+                    showToast("NFT Sold!", "success");
+                    await loadDataForSelectedPool();
+                }
             }
         }
     });
 }
-
-const storeEl = document.getElementById('store');
-if (storeEl && !storeEl._listenersInitialized) {
-    setupStorePageListeners();
-    storeEl._listenersInitialized = true;
-}
-
-export const StorePage = {
-    async render(isNewPage) {
-        await loadSystemDataFromAPI();
-        const container = document.getElementById('store');
-        if (container && !container.innerHTML.includes('store-layout')) {
-            await renderPageStructure();
-        }
-        if (TradeState.selectedPoolBoostBips === null && boosterTiers.length > 0) {
-            TradeState.selectedPoolBoostBips = boosterTiers[0].boostBips; 
-        }
-        await loadDataForSelectedPool();
-    },
-    async update() {
-        if (TradeState.selectedPoolBoostBips !== null) {
-            if (!document.hidden && document.getElementById('store').classList.contains('active')) {
-                if(!TradeState.isDataLoading) await loadDataForSelectedPool();
-            }
-        }
-    }
-};
