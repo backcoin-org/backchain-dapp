@@ -1,9 +1,8 @@
 // pages/RewardsPage.js
-// ✅ VERSION V6.0: Clean UI, Mobile-First, V2.1 Compatible
+// ✅ VERSION V7.0: Cleaner UX, Mobile-First, Safe Button States
 
 const ethers = window.ethers;
 
-import { DOMElements } from '../dom-elements.js';
 import { State } from '../state.js';
 import {
     calculateUserTotalRewards,
@@ -12,20 +11,16 @@ import {
     loadUserData
 } from '../modules/data.js';
 import { executeUniversalClaim } from '../modules/transactions.js';
-import {
-    formatBigNumber,
-    renderLoading,
-    renderNoData,
-    renderError
-} from '../utils.js';
+import { formatBigNumber } from '../utils.js';
 import { showToast } from '../ui-feedback.js';
 
 // --- LOCAL STATE ---
-let lastRewardsFetch = 0;
-let isRewardsLoading = false;
+let lastFetch = 0;
+let isLoading = false;
+let isProcessing = false;
 
 // ============================================================================
-// 1. MAIN RENDER
+// MAIN EXPORT
 // ============================================================================
 
 export const RewardsPage = {
@@ -34,37 +29,7 @@ export const RewardsPage = {
         if (!container) return;
 
         if (container.innerHTML.trim() === '' || isNewPage) {
-            container.innerHTML = `
-                <div class="max-w-4xl mx-auto py-6 px-4">
-                    
-                    <!-- HEADER -->
-                    <div class="flex justify-between items-center mb-6">
-                        <div>
-                            <h1 class="text-xl font-bold text-white flex items-center gap-2">
-                                <i class="fa-solid fa-gift text-amber-400"></i> Rewards
-                            </h1>
-                            <p class="text-xs text-zinc-500 mt-0.5">Claim your staking earnings</p>
-                        </div>
-                        <div id="rewards-last-update" class="text-[10px] text-zinc-600 font-mono"></div>
-                    </div>
-
-                    <!-- CONTENT -->
-                    <div id="rewards-content-area" class="min-h-[300px]">
-                        ${renderLoading()}
-                    </div>
-
-                    <!-- LEGACY VAULT (collapsed) -->
-                    <details class="mt-8 group">
-                        <summary class="text-xs text-zinc-600 cursor-pointer hover:text-zinc-400 flex items-center gap-2">
-                            <i class="fa-solid fa-box-archive"></i> Legacy Vault
-                            <i class="fa-solid fa-chevron-down text-[10px] group-open:rotate-180 transition-transform"></i>
-                        </summary>
-                        <div class="mt-3 p-4 bg-zinc-900/30 border border-dashed border-zinc-800 rounded-xl">
-                            <p class="text-xs text-zinc-600 text-center">Vesting Certificates have been migrated to the Global Staking Pool.</p>
-                        </div>
-                    </details>
-                </div>
-            `;
+            container.innerHTML = getPageHTML();
         }
 
         if (State.isConnected) {
@@ -74,77 +39,124 @@ export const RewardsPage = {
         }
     },
 
-    async update(forceRefresh = false) {
-        if (!State.isConnected) return;
-
-        const contentArea = document.getElementById('rewards-content-area');
-        const updateLabel = document.getElementById('rewards-last-update');
-        const now = Date.now();
-
-        // 1 minute cache
-        if (!forceRefresh && !isRewardsLoading && (now - lastRewardsFetch < 60000)) {
-            if (contentArea && !contentArea.innerHTML.includes('loader')) return;
+    async update(force = false) {
+        if (!State.isConnected) {
+            renderNotConnected();
+            return;
         }
 
-        isRewardsLoading = true;
-        if (updateLabel) updateLabel.textContent = "Syncing...";
+        const now = Date.now();
+        if (!force && isLoading) return;
+        if (!force && (now - lastFetch < 60000)) return;
+
+        isLoading = true;
+        updateSyncStatus('Syncing...');
 
         try {
             await loadUserData();
 
-            const [claimDetails, totalGrossRewards, boosterData] = await Promise.all([
+            const [claimDetails, grossRewards, boosterData] = await Promise.all([
                 calculateClaimDetails(),
                 calculateUserTotalRewards(),
                 getHighestBoosterBoostFromAPI()
             ]);
 
-            const boosterTokenId = BigInt(boosterData.tokenId || 0);
-            renderRewardsUI(contentArea, claimDetails, totalGrossRewards, boosterData, boosterTokenId);
-
-            lastRewardsFetch = now;
-            if (updateLabel) updateLabel.textContent = `Updated ${new Date().toLocaleTimeString()}`;
+            renderContent(claimDetails, grossRewards, boosterData);
+            lastFetch = now;
+            updateSyncStatus(`Updated ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`);
 
         } catch (e) {
-            console.error("Rewards Update Error:", e);
-            if (contentArea) contentArea.innerHTML = renderError("Unable to load rewards data.");
+            console.error("Rewards Error:", e);
+            renderError();
         } finally {
-            isRewardsLoading = false;
+            isLoading = false;
         }
     }
 };
 
 // ============================================================================
-// 2. NOT CONNECTED STATE
+// PAGE STRUCTURE
+// ============================================================================
+
+function getPageHTML() {
+    return `
+        <div class="max-w-2xl mx-auto py-6 px-4">
+            <!-- Header -->
+            <div class="flex justify-between items-center mb-6">
+                <div>
+                    <h1 class="text-xl font-bold text-white flex items-center gap-2">
+                        <i class="fa-solid fa-gift text-amber-400"></i> Rewards
+                    </h1>
+                    <p class="text-xs text-zinc-500 mt-0.5">Claim your earnings</p>
+                </div>
+                <div id="rewards-sync" class="text-[10px] text-zinc-600 font-mono"></div>
+            </div>
+
+            <!-- Content -->
+            <div id="rewards-content">
+                <div class="flex items-center justify-center py-20">
+                    <div class="w-8 h-8 border-2 border-amber-500/30 border-t-amber-500 rounded-full animate-spin"></div>
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+function updateSyncStatus(text) {
+    const el = document.getElementById('rewards-sync');
+    if (el) el.textContent = text;
+}
+
+// ============================================================================
+// RENDER STATES
 // ============================================================================
 
 function renderNotConnected() {
-    const content = document.getElementById('rewards-content-area');
-    if (!content) return;
+    const container = document.getElementById('rewards-content');
+    if (!container) return;
 
-    content.innerHTML = `
-        <div class="flex flex-col items-center justify-center py-16 bg-zinc-900/50 border border-zinc-800 rounded-xl">
+    container.innerHTML = `
+        <div class="flex flex-col items-center justify-center py-16 bg-zinc-900/50 border border-zinc-800 rounded-2xl">
             <div class="w-14 h-14 bg-zinc-800 rounded-full flex items-center justify-center mb-4">
                 <i class="fa-solid fa-wallet text-xl text-zinc-600"></i>
             </div>
-            <p class="text-zinc-500 text-sm mb-3">Connect wallet to view earnings</p>
+            <p class="text-zinc-500 text-sm mb-3">Connect wallet to view rewards</p>
             <button onclick="window.openConnectModal()" class="text-amber-500 hover:text-amber-400 text-sm font-bold">
-                Connect Now
+                Connect Wallet
+            </button>
+        </div>
+    `;
+}
+
+function renderError() {
+    const container = document.getElementById('rewards-content');
+    if (!container) return;
+
+    container.innerHTML = `
+        <div class="flex flex-col items-center justify-center py-16 bg-zinc-900/50 border border-red-500/20 rounded-2xl">
+            <div class="w-14 h-14 bg-red-500/10 rounded-full flex items-center justify-center mb-4">
+                <i class="fa-solid fa-exclamation-triangle text-xl text-red-400"></i>
+            </div>
+            <p class="text-zinc-400 text-sm mb-3">Failed to load rewards</p>
+            <button onclick="window.RewardsPage.update(true)" class="text-amber-500 hover:text-amber-400 text-sm font-bold">
+                Try Again
             </button>
         </div>
     `;
 }
 
 // ============================================================================
-// 3. REWARDS UI
+// MAIN CONTENT
 // ============================================================================
 
-function renderRewardsUI(container, claimDetails, grossRewards, boosterData, boosterTokenId) {
+function renderContent(claimDetails, grossRewards, boosterData) {
+    const container = document.getElementById('rewards-content');
     if (!container) return;
 
-    // Data Processing
+    // Process data
     const details = claimDetails || {};
     const gross = grossRewards || { stakingRewards: 0n, minerRewards: 0n };
-    const booster = boosterData || { highestBoost: 0, boostName: 'None' };
+    const booster = boosterData || { highestBoost: 0, boostName: 'None', tokenId: 0 };
 
     const netReward = details.netClaimAmount || 0n;
     const totalReward = details.totalRewards || 0n;
@@ -152,191 +164,205 @@ function renderRewardsUI(container, claimDetails, grossRewards, boosterData, boo
 
     const feeBips = State.systemFees?.["CLAIM_REWARD_FEE_BIPS"] || 50n;
     const feePercent = Number(feeBips) / 100;
+    const boostPercent = booster.highestBoost / 100;
+    const effectiveFee = feePercent * (1 - booster.highestBoost / 10000);
 
-    // Savings calculation
-    const baseFeeVal = (totalReward * feeBips) / 10000n;
-    const savedAmount = baseFeeVal > feeAmount ? baseFeeVal - feeAmount : 0n;
+    // Savings
+    const baseFee = (totalReward * feeBips) / 10000n;
+    const savedAmount = baseFee > feeAmount ? baseFee - feeAmount : 0n;
 
     const hasRewards = netReward > 0n;
+    const boosterTokenId = BigInt(booster.tokenId || 0);
 
     container.innerHTML = `
         <div class="space-y-4">
             
-            <!-- MAIN CLAIM CARD -->
-            <div class="glass-panel p-5 rounded-xl relative overflow-hidden">
-                <!-- Background glow -->
-                <div class="absolute top-0 right-0 w-32 h-32 bg-amber-500/10 blur-[60px] rounded-full pointer-events-none"></div>
+            <!-- CLAIM CARD -->
+            <div class="bg-gradient-to-br from-zinc-900 to-zinc-900/50 border border-zinc-800 rounded-2xl p-5">
                 
-                <div class="relative z-10">
-                    <!-- Net Claimable -->
-                    <div class="mb-6">
-                        <p class="text-[10px] text-zinc-500 uppercase tracking-wider mb-1">Net Claimable</p>
-                        <div class="flex items-baseline gap-2">
-                            <span class="text-4xl font-black text-white">
-                                ${formatBigNumber(netReward).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 4 })}
-                            </span>
-                            <span class="text-lg font-bold text-amber-500">BKC</span>
-                        </div>
+                <!-- Amount Display -->
+                <div class="text-center mb-5">
+                    <p class="text-xs text-zinc-500 uppercase tracking-wider mb-1">Available to Claim</p>
+                    <div class="flex items-baseline justify-center gap-2">
+                        <span class="text-4xl font-bold text-white font-mono">${formatBigNumber(netReward).toFixed(2)}</span>
+                        <span class="text-lg text-amber-400 font-bold">BKC</span>
                     </div>
-
-                    <!-- Breakdown -->
-                    <div class="flex flex-wrap gap-2 mb-6">
-                        <div class="bg-zinc-800/50 px-3 py-1.5 rounded-lg text-xs">
-                            <span class="text-zinc-500">Gross:</span>
-                            <span class="text-white font-mono ml-1">${formatBigNumber(totalReward).toFixed(4)}</span>
-                        </div>
-                        <div class="bg-red-500/10 px-3 py-1.5 rounded-lg text-xs border border-red-500/20">
-                            <span class="text-red-400">Fee:</span>
-                            <span class="text-red-300 font-mono ml-1">-${formatBigNumber(feeAmount).toFixed(4)}</span>
-                        </div>
-                        ${savedAmount > 0n ? `
-                            <div class="bg-green-500/10 px-3 py-1.5 rounded-lg text-xs border border-green-500/20">
-                                <span class="text-green-400">Saved:</span>
-                                <span class="text-green-300 font-mono ml-1">+${formatBigNumber(savedAmount).toFixed(4)}</span>
-                            </div>
-                        ` : ''}
-                    </div>
-
-                    <!-- Claim Button -->
-                    <button id="claim-btn-action" 
-                        class="w-full py-3.5 rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition-all ${hasRewards
-                            ? 'bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-400 hover:to-orange-500 text-black'
-                            : 'bg-zinc-800 text-zinc-500 cursor-not-allowed'
-                        }"
-                        ${!hasRewards ? 'disabled' : ''}>
-                        <i class="fa-solid fa-gift"></i>
-                        <span>${hasRewards ? 'Claim to Wallet' : 'No Rewards Yet'}</span>
-                    </button>
-                    ${!hasRewards ? '<p class="text-center text-[10px] text-zinc-600 mt-2">Stake BKC to start earning</p>' : ''}
                 </div>
-            </div>
 
-            <!-- INFO CARDS ROW -->
-            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                
-                <!-- BOOSTER CARD -->
-                <div class="glass-panel p-4 rounded-xl">
-                    <div class="flex items-center gap-3 mb-3">
-                        <div class="relative w-12 h-12 bg-black/40 rounded-lg border border-zinc-700 flex-shrink-0 overflow-hidden">
-                            <img src="${booster.imageUrl || './assets/bkc_logo_3d.png'}" 
-                                class="w-full h-full object-cover" 
-                                onerror="this.src='./assets/bkc_logo_3d.png'">
-                            <div class="absolute bottom-0 right-0 bg-cyan-500 text-black text-[8px] font-bold px-1 rounded-tl">
-                                +${(booster.highestBoost / 100)}%
-                            </div>
-                        </div>
-                        <div class="min-w-0">
-                            <p class="text-white font-bold text-sm truncate">${booster.boostName || 'No Booster'}</p>
-                            <p class="text-[10px] ${booster.highestBoost > 0 ? 'text-green-400' : 'text-zinc-500'}">
-                                ${booster.source === 'rented' ? '🔗 Rented' : (booster.source === 'owned' ? '✓ Active' : '○ Inactive')}
-                            </p>
-                        </div>
-                    </div>
-
-                    <div class="space-y-1.5 text-xs">
-                        <div class="flex justify-between p-2 bg-zinc-800/50 rounded">
-                            <span class="text-zinc-500">Base Fee</span>
-                            <span class="text-white font-mono">${feePercent.toFixed(2)}%</span>
-                        </div>
-                        <div class="flex justify-between p-2 bg-green-500/10 rounded border border-green-500/10">
-                            <span class="text-green-400">Boost Savings</span>
-                            <span class="text-green-300 font-mono">${formatBigNumber(savedAmount).toFixed(4)} BKC</span>
-                        </div>
-                    </div>
-
-                    ${booster.highestBoost === 0 ? `
-                        <button onclick="window.navigateTo('store')" 
-                            class="w-full mt-3 py-2 text-xs font-bold bg-zinc-800 hover:bg-zinc-700 text-white rounded-lg transition-colors">
-                            Get Booster
-                        </button>
+                <!-- Breakdown Pills -->
+                <div class="flex flex-wrap justify-center gap-2 mb-5">
+                    <span class="px-3 py-1 bg-zinc-800/80 rounded-full text-xs">
+                        <span class="text-zinc-500">Gross</span>
+                        <span class="text-white font-mono ml-1">${formatBigNumber(totalReward).toFixed(2)}</span>
+                    </span>
+                    <span class="px-3 py-1 bg-red-500/10 border border-red-500/20 rounded-full text-xs">
+                        <span class="text-red-400">Fee</span>
+                        <span class="text-red-300 font-mono ml-1">-${formatBigNumber(feeAmount).toFixed(2)}</span>
+                    </span>
+                    ${savedAmount > 0n ? `
+                        <span class="px-3 py-1 bg-green-500/10 border border-green-500/20 rounded-full text-xs">
+                            <span class="text-green-400">Saved</span>
+                            <span class="text-green-300 font-mono ml-1">+${formatBigNumber(savedAmount).toFixed(2)}</span>
+                        </span>
                     ` : ''}
                 </div>
 
-                <!-- SOURCES CARD -->
-                <div class="glass-panel p-4 rounded-xl">
-                    <h3 class="text-xs font-bold text-zinc-400 uppercase mb-3 flex items-center gap-1.5">
-                        <i class="fa-solid fa-chart-pie text-blue-400"></i> Sources
-                    </h3>
+                <!-- Claim Button -->
+                <button id="claim-btn" 
+                    class="w-full py-3.5 rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition-all ${hasRewards
+                        ? 'bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-400 hover:to-orange-500 text-black shadow-lg shadow-amber-500/20'
+                        : 'bg-zinc-800 text-zinc-500 cursor-not-allowed'
+                    }" ${!hasRewards ? 'disabled' : ''}>
+                    <i id="claim-btn-icon" class="fa-solid fa-gift"></i>
+                    <span id="claim-btn-text">${hasRewards ? 'Claim Rewards' : 'No Rewards Yet'}</span>
+                </button>
+                
+                ${!hasRewards ? `
+                    <p class="text-center text-[10px] text-zinc-600 mt-2">
+                        <a href="#mine" onclick="window.navigateTo('mine')" class="text-amber-500/70 hover:text-amber-400">Stake BKC</a> to start earning
+                    </p>
+                ` : ''}
+            </div>
 
-                    <div class="space-y-2 text-sm">
-                        <div class="flex justify-between items-center">
-                            <span class="text-zinc-400 flex items-center gap-1.5">
-                                <i class="fa-solid fa-layer-group text-purple-400 text-xs"></i> Staking
-                            </span>
-                            <span class="text-white font-mono">${formatBigNumber(gross.stakingRewards).toFixed(2)}</span>
+            <!-- INFO GRID -->
+            <div class="grid grid-cols-2 gap-3">
+                
+                <!-- Booster Card -->
+                <div class="bg-zinc-900/50 border border-zinc-800 rounded-xl p-4">
+                    <div class="flex items-center gap-3 mb-3">
+                        <div class="relative w-10 h-10 bg-black/50 rounded-lg border border-zinc-700 overflow-hidden flex-shrink-0">
+                            <img src="${booster.imageUrl || './assets/bkc_logo_3d.png'}" 
+                                 class="w-full h-full object-cover"
+                                 onerror="this.src='./assets/bkc_logo_3d.png'">
                         </div>
-                        <div class="flex justify-between items-center">
-                            <span class="text-zinc-400 flex items-center gap-1.5">
-                                <i class="fa-solid fa-dice text-cyan-400 text-xs"></i> Fortune
-                            </span>
-                            <span class="text-white font-mono">0.00</span>
-                        </div>
-                        <div class="flex justify-between items-center">
-                            <span class="text-zinc-400 flex items-center gap-1.5">
-                                <i class="fa-solid fa-hammer text-orange-400 text-xs"></i> Mining
-                            </span>
-                            <span class="text-white font-mono">${formatBigNumber(gross.minerRewards).toFixed(2)}</span>
+                        <div class="min-w-0 flex-1">
+                            <p class="text-white font-bold text-sm truncate">${booster.boostName || 'No Booster'}</p>
+                            <p class="text-[10px] ${booster.highestBoost > 0 ? 'text-cyan-400' : 'text-zinc-600'}">
+                                ${booster.highestBoost > 0 ? `+${boostPercent}% fee reduction` : 'No boost active'}
+                            </p>
                         </div>
                     </div>
+                    ${booster.highestBoost === 0 ? `
+                        <button onclick="window.navigateTo('store')" 
+                            class="w-full py-2 text-xs font-medium bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded-lg transition-colors">
+                            Get Booster
+                        </button>
+                    ` : `
+                        <div class="text-xs text-zinc-500">
+                            ${booster.source === 'rented' ? '🔗 Rented' : '✓ Owned'}
+                        </div>
+                    `}
+                </div>
 
-                    <div class="mt-3 pt-3 border-t border-zinc-800 flex justify-between items-center">
-                        <span class="text-xs font-bold text-zinc-400">Total Gross</span>
-                        <span class="text-amber-400 font-bold font-mono">${formatBigNumber(totalReward).toFixed(2)} BKC</span>
+                <!-- Fee Card -->
+                <div class="bg-zinc-900/50 border border-zinc-800 rounded-xl p-4">
+                    <p class="text-[10px] text-zinc-500 uppercase mb-2">Fee Structure</p>
+                    <div class="space-y-1.5">
+                        <div class="flex justify-between text-xs">
+                            <span class="text-zinc-500">Base Fee</span>
+                            <span class="text-white font-mono">${feePercent.toFixed(2)}%</span>
+                        </div>
+                        <div class="flex justify-between text-xs">
+                            <span class="text-zinc-500">Boost</span>
+                            <span class="text-cyan-400 font-mono">-${boostPercent}%</span>
+                        </div>
+                        <div class="flex justify-between text-xs pt-1.5 border-t border-zinc-800">
+                            <span class="text-zinc-400 font-medium">Effective</span>
+                            <span class="text-green-400 font-mono font-bold">${effectiveFee.toFixed(2)}%</span>
+                        </div>
                     </div>
                 </div>
             </div>
 
-            <!-- QUICK STATS -->
-            <div class="flex gap-3 overflow-x-auto pb-1 no-scrollbar">
-                <div class="flex-shrink-0 bg-zinc-900/50 border border-zinc-800 rounded-lg px-4 py-3 min-w-[120px]">
-                    <p class="text-[10px] text-zinc-500 uppercase">Fee Rate</p>
-                    <p class="text-white font-bold">${feePercent.toFixed(2)}%</p>
-                </div>
-                <div class="flex-shrink-0 bg-zinc-900/50 border border-zinc-800 rounded-lg px-4 py-3 min-w-[120px]">
-                    <p class="text-[10px] text-zinc-500 uppercase">Boost</p>
-                    <p class="text-cyan-400 font-bold">+${(booster.highestBoost / 100).toFixed(0)}%</p>
-                </div>
-                <div class="flex-shrink-0 bg-zinc-900/50 border border-zinc-800 rounded-lg px-4 py-3 min-w-[120px]">
-                    <p class="text-[10px] text-zinc-500 uppercase">Effective Fee</p>
-                    <p class="text-green-400 font-bold">${(feePercent * (1 - booster.highestBoost / 10000)).toFixed(2)}%</p>
+            <!-- Sources Breakdown -->
+            <div class="bg-zinc-900/50 border border-zinc-800 rounded-xl p-4">
+                <p class="text-[10px] text-zinc-500 uppercase mb-3">Reward Sources</p>
+                <div class="grid grid-cols-3 gap-3 text-center">
+                    <div>
+                        <div class="w-8 h-8 mx-auto mb-1.5 bg-purple-500/10 rounded-lg flex items-center justify-center">
+                            <i class="fa-solid fa-layer-group text-purple-400 text-xs"></i>
+                        </div>
+                        <p class="text-white font-mono text-sm font-bold">${formatBigNumber(gross.stakingRewards).toFixed(2)}</p>
+                        <p class="text-[10px] text-zinc-500">Staking</p>
+                    </div>
+                    <div>
+                        <div class="w-8 h-8 mx-auto mb-1.5 bg-orange-500/10 rounded-lg flex items-center justify-center">
+                            <i class="fa-solid fa-hammer text-orange-400 text-xs"></i>
+                        </div>
+                        <p class="text-white font-mono text-sm font-bold">${formatBigNumber(gross.minerRewards).toFixed(2)}</p>
+                        <p class="text-[10px] text-zinc-500">Mining</p>
+                    </div>
+                    <div>
+                        <div class="w-8 h-8 mx-auto mb-1.5 bg-cyan-500/10 rounded-lg flex items-center justify-center">
+                            <i class="fa-solid fa-dice text-cyan-400 text-xs"></i>
+                        </div>
+                        <p class="text-white font-mono text-sm font-bold">0.00</p>
+                        <p class="text-[10px] text-zinc-500">Fortune</p>
+                    </div>
                 </div>
             </div>
         </div>
     `;
 
-    // Bind Claim Button
-    const btn = document.getElementById('claim-btn-action');
+    // Bind claim button
+    const btn = document.getElementById('claim-btn');
     if (btn && hasRewards) {
-        btn.onclick = async () => {
-            const { stakingRewards, minerRewards } = gross;
-            await handleClaimClick(btn, stakingRewards, minerRewards, boosterTokenId);
-        };
+        btn.onclick = () => handleClaim(gross.stakingRewards, gross.minerRewards, boosterTokenId);
     }
 }
 
 // ============================================================================
-// 4. CLAIM HANDLER
+// CLAIM HANDLER
 // ============================================================================
 
-async function handleClaimClick(btn, stakingRewards, minerRewards, boosterTokenId) {
-    const originalContent = btn.innerHTML;
+async function handleClaim(stakingRewards, minerRewards, boosterTokenId) {
+    if (isProcessing) return;
+
+    const btn = document.getElementById('claim-btn');
+    const btnText = document.getElementById('claim-btn-text');
+    const btnIcon = document.getElementById('claim-btn-icon');
+
+    if (!btn) return;
+
+    isProcessing = true;
+    
+    // Update button state
     btn.disabled = true;
-    btn.innerHTML = '<div class="loader inline-block w-4 h-4"></div> Processing...';
-    btn.classList.remove('bg-gradient-to-r', 'from-amber-500', 'to-orange-600');
+    btn.classList.remove('bg-gradient-to-r', 'from-amber-500', 'to-orange-600', 'shadow-lg', 'shadow-amber-500/20');
     btn.classList.add('bg-zinc-700');
+    btnText.textContent = 'Processing...';
+    btnIcon.className = 'fa-solid fa-spinner fa-spin';
 
     try {
-        const success = await executeUniversalClaim(stakingRewards, minerRewards, boosterTokenId, btn);
+        const success = await executeUniversalClaim(stakingRewards, minerRewards, boosterTokenId, null);
+
         if (success) {
-            showToast("Rewards claimed successfully!", "success");
+            showToast('Rewards claimed successfully!', 'success');
+            
+            // Force refresh
+            lastFetch = 0;
             await RewardsPage.update(true);
         }
     } catch (e) {
-        console.error(e);
-        showToast("Claim failed.", "error");
-        btn.disabled = false;
-        btn.innerHTML = originalContent;
-        btn.classList.add('bg-gradient-to-r', 'from-amber-500', 'to-orange-600');
-        btn.classList.remove('bg-zinc-700');
+        console.error('Claim error:', e);
+        showToast('Claim failed: ' + (e.reason || e.message || 'Unknown error'), 'error');
+    } finally {
+        // ALWAYS reset button state
+        isProcessing = false;
+        
+        const btn = document.getElementById('claim-btn');
+        const btnText = document.getElementById('claim-btn-text');
+        const btnIcon = document.getElementById('claim-btn-icon');
+        
+        if (btn && btnText && btnIcon) {
+            btn.disabled = false;
+            btn.classList.add('bg-gradient-to-r', 'from-amber-500', 'to-orange-600', 'shadow-lg', 'shadow-amber-500/20');
+            btn.classList.remove('bg-zinc-700');
+            btnText.textContent = 'Claim Rewards';
+            btnIcon.className = 'fa-solid fa-gift';
+        }
     }
 }
+
+// Make available globally for error retry
+window.RewardsPage = RewardsPage;
