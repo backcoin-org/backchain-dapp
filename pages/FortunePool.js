@@ -1,5 +1,5 @@
 // js/pages/FortunePool.js
-// ✅ VERSION V9.3: Fixed tier ORDER to match contract (Easy→Medium→Hard)
+// ✅ VERSION V9.4: Animated slot machine during spin
 
 import { State } from '../state.js';
 import { loadUserData, safeContractCall, API_ENDPOINTS } from '../modules/data.js';
@@ -57,30 +57,79 @@ function injectStyles() {
     style.id = 'fortune-styles';
     style.textContent = `
         .fortune-glow { box-shadow: 0 0 30px rgba(245,158,11,0.3); }
-        .slot-spin { animation: slotSpin 0.1s infinite; }
-        @keyframes slotSpin {
-            0%, 100% { transform: translateY(0); }
-            50% { transform: translateY(-2px); }
+        
+        /* Slot Machine Animation */
+        .slot-container {
+            box-shadow: inset 0 0 20px rgba(0,0,0,0.5);
         }
+        .slot-reel {
+            transition: none;
+        }
+        @keyframes slotSpin {
+            0% { transform: translateY(0); }
+            100% { transform: translateY(-400px); }
+        }
+        
+        /* Spinner */
+        .slot-spinner {
+            width: 24px;
+            height: 24px;
+            position: relative;
+        }
+        .slot-spinner-inner {
+            width: 100%;
+            height: 100%;
+            border: 3px solid transparent;
+            border-top-color: #f59e0b;
+            border-right-color: #f59e0b;
+            border-radius: 50%;
+            animation: spinnerRotate 0.8s linear infinite;
+        }
+        @keyframes spinnerRotate {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        /* Result animations */
         .slot-hit { 
             border-color: #10b981 !important; 
             background: rgba(16,185,129,0.1) !important;
             box-shadow: 0 0 20px rgba(16,185,129,0.4);
+            animation: hitPulse 0.5s ease-out;
         }
-        .slot-miss { opacity: 0.4; border-color: #3f3f46 !important; }
+        @keyframes hitPulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+        }
+        .slot-miss { 
+            opacity: 0.5; 
+            border-color: #3f3f46 !important; 
+        }
+        
+        /* Buttons */
         .digit-btn { transition: all 0.15s ease; }
         .digit-btn:hover { transform: scale(1.05); }
         .digit-btn.selected { 
             background: linear-gradient(135deg, #f59e0b, #d97706) !important; 
             color: #000 !important;
             border-color: #f59e0b !important;
+            box-shadow: 0 0 15px rgba(245,158,11,0.4);
         }
+        .mode-card { transition: all 0.2s ease; }
         .mode-card:hover { transform: translateY(-2px); }
+        
+        /* Win celebration */
         .win-pulse { animation: winPulse 0.5s ease-out; }
         @keyframes winPulse {
             0% { transform: scale(0.8); opacity: 0; }
             50% { transform: scale(1.1); }
             100% { transform: scale(1); opacity: 1; }
+        }
+        
+        /* Confetti for wins */
+        @keyframes confetti {
+            0% { transform: translateY(0) rotate(0deg); opacity: 1; }
+            100% { transform: translateY(100px) rotate(720deg); opacity: 0; }
         }
     `;
     document.head.appendChild(style);
@@ -699,32 +748,72 @@ async function executeGame() {
 function renderSpin(container) {
     const isJackpot = Game.mode === 'jackpot';
     const picks = isJackpot ? [Game.guess] : Game.guesses;
+    const tierNames = isJackpot ? ['Jackpot'] : TIERS.map(t => t.name);
+    const tierColors = isJackpot ? ['amber'] : TIERS.map(t => t.color);
 
     container.innerHTML = `
-        <div class="text-center py-8">
-            <!-- Slots -->
-            <div class="flex justify-center gap-4 mb-8">
+        <div class="text-center py-6">
+            <!-- Slot Machine -->
+            <div class="flex justify-center gap-3 mb-6">
                 ${picks.map((p, i) => `
                     <div class="text-center">
-                        <div id="slot-${i}" class="w-20 h-20 rounded-xl bg-zinc-900 border-2 border-amber-500 slot-spin flex items-center justify-center">
-                            <span class="text-3xl font-black text-amber-400">?</span>
+                        <p class="text-xs text-${tierColors[i]}-400 mb-2 font-bold">${tierNames[i]}</p>
+                        <div class="slot-container w-16 h-20 rounded-xl bg-black border-2 border-${tierColors[i]}-500/50 overflow-hidden relative">
+                            <div id="slot-reel-${i}" class="slot-reel absolute w-full">
+                                ${generateSlotNumbers(TIERS[isJackpot ? 2 : i].range)}
+                            </div>
                         </div>
-                        <p class="text-xs text-zinc-500 mt-2">Pick: ${p}</p>
+                        <p class="text-xs text-zinc-600 mt-1">You: <span class="text-white">${p}</span></p>
                     </div>
                 `).join('')}
             </div>
 
             <!-- Status -->
-            <div class="flex items-center justify-center gap-2 mb-4">
-                <div class="w-5 h-5 border-2 border-amber-500 border-t-transparent rounded-full animate-spin"></div>
-                <span id="spin-status" class="text-white font-bold">Processing...</span>
+            <div class="bg-zinc-900/50 rounded-xl p-4 border border-zinc-800 mb-4">
+                <div class="flex items-center justify-center gap-3 mb-3">
+                    <div class="slot-spinner">
+                        <div class="slot-spinner-inner"></div>
+                    </div>
+                    <span id="spin-status" class="text-lg font-bold text-white">Spinning...</span>
+                </div>
+                
+                <div class="w-full bg-zinc-800 rounded-full h-1.5 overflow-hidden">
+                    <div id="spin-progress" class="bg-gradient-to-r from-amber-500 to-orange-500 h-full rounded-full transition-all duration-300" style="width: 10%"></div>
+                </div>
             </div>
-
-            <div class="w-full max-w-xs mx-auto bg-zinc-800 rounded-full h-2">
-                <div id="spin-progress" class="bg-amber-500 h-2 rounded-full transition-all" style="width: 10%"></div>
-            </div>
+            
+            <p class="text-xs text-zinc-500">🎲 Oracle generating random numbers...</p>
         </div>
     `;
+
+    // Start slot animations
+    startSlotAnimation(picks.length);
+}
+
+function generateSlotNumbers(range) {
+    // Generate limited numbers for slot effect (max 20 for performance)
+    let html = '';
+    const numbersToShow = Math.min(range, 10);
+    
+    for (let round = 0; round < 4; round++) {
+        for (let i = 1; i <= numbersToShow; i++) {
+            // For large ranges, show random samples
+            const num = range > 10 ? Math.floor(Math.random() * range) + 1 : i;
+            html += `<div class="slot-number h-20 flex items-center justify-center text-2xl font-black text-amber-400">${num}</div>`;
+        }
+    }
+    return html;
+}
+
+function startSlotAnimation(numSlots) {
+    for (let i = 0; i < numSlots; i++) {
+        const reel = document.getElementById(`slot-reel-${i}`);
+        if (reel) {
+            // Different speed for each reel
+            const duration = 0.5 + (i * 0.3);
+            reel.style.animation = `slotSpin ${duration}s linear infinite`;
+        }
+    }
 }
 
 function updateSpinStatus(text, progress) {
