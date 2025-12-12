@@ -4,224 +4,218 @@ import fs from "fs";
 import path from "path";
 
 // ######################################################################
-// ###               RULES CONTROL PANEL SCRIPT (FINAL V3)            ###
+// ###          RULES CONTROL PANEL SCRIPT V3.1 (CORRIGIDO)           ###
+// ###     IMPORTANTE: BIPS != BKC - Nao misturar conversores!        ###
 // ######################################################################
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-const DESCRIPTION_KEYS = ["DESCRIPTION", "COMMENT"];
+const IGNORE_KEYS = ["DESCRIPTION", "COMMENT", "SUMMARY"];
 
 /**
- * Robust function to process EcosystemManager (Hub) rule categories.
+ * Process rules with specified converter
  */
-async function processRuleCategory(
+async function processRules(
     hub: any, 
     rules: any, 
     setter: (key: string | bigint, value: bigint) => Promise<any>, 
     converter: (value: string) => bigint,
     description: string,
-    isBoosterDiscount: boolean = false
+    useNumericKey: boolean = false
 ) {
-    if (!rules) return;
+    if (!rules || Object.keys(rules).length === 0) {
+        console.log(`   [SKIP] No rules for ${description}`);
+        return 0;
+    }
+    
+    let count = 0;
     
     for (const ruleKey of Object.keys(rules)) {
-        // Ignore comment keys
-        if (DESCRIPTION_KEYS.includes(ruleKey.toUpperCase())) continue;
+        if (IGNORE_KEYS.includes(ruleKey.toUpperCase())) continue;
 
         const valueStr = rules[ruleKey];
-        if (valueStr && valueStr.trim() !== "") {
-            try {
-                // Convert value (Wei or Integer/Bips)
-                const valueBigInt = converter(valueStr);
-                
-                let finalKey: string | bigint;
-                
-                // Determine if key is a String (Hash) or Number (Booster ID)
-                if (isBoosterDiscount) {
-                    finalKey = converter(ruleKey); 
-                } else {
-                    finalKey = ethers.id(ruleKey); 
-                }
-                
-                console.log(`   -> UPDATING ${description} [${ruleKey}] to ${valueStr}...`);
-                
-                // Execute transaction
-                const tx = await setter(finalKey, valueBigInt);
-                await tx.wait();
-                
-                console.log("   ✅ SUCCESS.");
-                await sleep(500); // Pause to avoid RPC rate limits
-            } catch (e: any) {
-                 console.error(`   ❌ ERROR applying rule [${ruleKey}]: ${e.message}`);
-                 // Don't abort script, just log error
-            }
+        if (!valueStr || String(valueStr).trim() === "") continue;
+        
+        try {
+            const valueBigInt = converter(String(valueStr));
+            const finalKey = useNumericKey ? BigInt(ruleKey) : ethers.id(ruleKey);
+            
+            console.log(`   -> ${ruleKey} = ${valueStr}`);
+            
+            const tx = await setter(finalKey, valueBigInt);
+            await tx.wait();
+            
+            console.log(`      OK`);
+            count++;
+            await sleep(500);
+        } catch (e: any) {
+            console.error(`      ERROR: ${e.message?.slice(0, 80)}`);
         }
     }
+    
+    return count;
 }
 
 /**
- * Special function for Fortune Pool Tiers (ID -> Range, Multiplier)
+ * Fortune Pool Tiers
  */
 async function processFortuneTiers(fortunePool: any, rules: any) {
     if (!rules || !fortunePool) return;
     
-    console.log("\n🎰 Processing Fortune Pool Tiers...");
+    console.log("\n[FORTUNE] Setting Prize Tiers...");
 
     for (const tierIdStr of Object.keys(rules)) {
-        if (DESCRIPTION_KEYS.includes(tierIdStr.toUpperCase())) continue;
+        if (IGNORE_KEYS.includes(tierIdStr.toUpperCase())) continue;
 
-        const valueStr = rules[tierIdStr]; // Expected format: "50,20000" (Range 50, 2x Multiplier)
-        if (valueStr && valueStr.includes(",")) {
-            try {
-                const [rangeStr, multStr] = valueStr.split(",");
-                const tierId = BigInt(tierIdStr);
-                const range = BigInt(rangeStr.trim());
-                const multiplier = BigInt(multStr.trim());
+        const valueStr = rules[tierIdStr];
+        if (!valueStr || !String(valueStr).includes(",")) continue;
+        
+        try {
+            const [rangeStr, multStr] = String(valueStr).split(",");
+            const tierId = BigInt(tierIdStr);
+            const range = BigInt(rangeStr.trim());
+            const multiplier = BigInt(multStr.trim());
 
-                console.log(`   -> SETTING Tier ${tierId}: Range 1-${range}, Mult ${multiplier} BIPS...`);
-                
-                // ABI: setPrizeTier(uint256 _tierId, uint128 _range, uint64 _multiplierBips)
-                const tx = await fortunePool.setPrizeTier(tierId, range, multiplier);
-                await tx.wait();
-                
-                console.log("   ✅ SUCCESS.");
-                await sleep(500);
-            } catch (e: any) {
-                console.error(`   ❌ ERROR setting Tier ${tierIdStr}: ${e.message}`);
-            }
+            console.log(`   -> Tier ${tierId}: Range=1-${range}, Mult=${Number(multiplier)/10000}x`);
+            
+            const tx = await fortunePool.setPrizeTier(tierId, range, multiplier);
+            await tx.wait();
+            
+            console.log(`      OK`);
+            await sleep(500);
+        } catch (e: any) {
+            console.error(`      ERROR: ${e.message?.slice(0, 80)}`);
         }
     }
 }
 
 export async function runScript(hre: HardhatRuntimeEnvironment) {
-  const { ethers } = hre;
-  const [deployer] = await ethers.getSigners();
-  const networkName = hre.network.name;
+    const { ethers } = hre;
+    const [deployer] = await ethers.getSigners();
+    const networkName = hre.network.name;
 
-  console.log(
-    `🚀 (MANAGEMENT) Running ecosystem rules update script on network: ${networkName}`
-  );
-  console.log(`Using account: ${deployer.address}`);
-  console.log("----------------------------------------------------");
+    console.log("\n======================================================");
+    console.log("     BACKCHAIN RULES MANAGER V3.1 (CORRIGIDO)");
+    console.log("======================================================");
+    console.log(`Network: ${networkName}`);
+    console.log(`Account: ${deployer.address}`);
+    console.log("------------------------------------------------------\n");
 
-  // --- 1. Load Addresses ---
-  const addressesFilePath = path.join(__dirname, "../deployment-addresses.json");
-  if (!fs.existsSync(addressesFilePath)) throw new Error("Missing deployment-addresses.json");
-  
-  const addresses = JSON.parse(fs.readFileSync(addressesFilePath, "utf8"));
-  const hubAddress = addresses.ecosystemManager;
-  const fortuneAddress = addresses.fortunePool;
-
-  if (!hubAddress) throw new Error("EcosystemManager address not found in JSON.");
-
-  // --- 2. Connect to Contracts ---
-  const hub = await ethers.getContractAt("EcosystemManager", hubAddress, deployer);
-  
-  // Connect to Fortune Pool only if address exists
-  let fortunePool = null;
-  if (fortuneAddress) {
-      // Manual minimal ABI to avoid complex artifact dependencies
-      const fortuneAbi = ["function setPrizeTier(uint256, uint128, uint64) external"];
-      fortunePool = new ethers.Contract(fortuneAddress, fortuneAbi, deployer);
-      console.log(`Connected to Fortune Pool at: ${fortuneAddress}`);
-  }
-  console.log(`Connected to Hub at: ${hubAddress}`);
-
-  // --- 3. Load Rules from JSON ---
-  const rulesConfigPath = path.join(__dirname, "../rules-config.json"); 
-  if (!fs.existsSync(rulesConfigPath)) throw new Error("rules-config.json not found.");
-  
-  const RULES_TO_APPLY = JSON.parse(fs.readFileSync(rulesConfigPath, "utf8"));
-  console.log("'rules-config.json' loaded.");
-
-  try {
-    console.log("\nInitiating rule verification and application...");
-
-    // --- CONVERTERS ---
-    // For monetary values (1 BKC = 10^18 Wei)
-    const weiConverter = (value: string) => ethers.parseUnits(value, 18);
-    // For pure integer values (BIPS, Quantities)
-    const bigIntConverter = (value: string) => BigInt(value);
+    // --- Load Addresses ---
+    const addressesPath = path.join(__dirname, "../deployment-addresses.json");
+    if (!fs.existsSync(addressesPath)) throw new Error("Missing deployment-addresses.json");
     
-    // --- EXECUTE HUB RULES ---
+    const addresses = JSON.parse(fs.readFileSync(addressesPath, "utf8"));
+    const hubAddress = addresses.ecosystemManager;
+    const fortuneAddress = addresses.fortunePool;
 
-    // A. Service Fees (Wei Values) - e.g., Notary Fee
-    await processRuleCategory(
-        hub, 
-        RULES_TO_APPLY.serviceFees, 
-        (k, v) => hub.setServiceFee(k, v), 
-        weiConverter, 
-        "Service Fee (BKC)"
-    );
+    if (!hubAddress) throw new Error("EcosystemManager address not found");
 
-    // NOTE: 'pStakeMinimums' removed as Open Access architecture does not support gatekeeping.
-
-    // B. Staking Fees (BIPS)
-    // Both Staking Fees and AMM Taxes use 'setServiceFee' in the contract, 
-    // but we use bigIntConverter because they are BIPS (100 = 1%).
-    await processRuleCategory(
-        hub, 
-        RULES_TO_APPLY.stakingFees, 
-        (k, v) => hub.setServiceFee(k, v), 
-        bigIntConverter, 
-        "Staking Fee (BIPS)"
-    );
+    // --- Connect ---
+    console.log("[CONNECT] Connecting to contracts...");
+    const hub = await ethers.getContractAt("EcosystemManager", hubAddress, deployer);
+    console.log(`   Hub: ${hubAddress}`);
     
-    // C. AMM Tax Fees (BIPS)
-    await processRuleCategory(
-        hub, 
-        RULES_TO_APPLY.ammTaxFees, 
-        (k, v) => hub.setServiceFee(k, v), 
-        bigIntConverter, 
-        "AMM Tax (BIPS)"
-    );
-
-    // D. Booster Discounts (BIPS)
-    await processRuleCategory(
-        hub, 
-        RULES_TO_APPLY.boosterDiscounts, 
-        (k, v) => hub.setBoosterDiscount(k, v), 
-        bigIntConverter, 
-        "Booster Discount (BIPS)", 
-        true
-    );
-
-    // E. Mining Distribution (BIPS)
-    await processRuleCategory(
-        hub, 
-        RULES_TO_APPLY.miningDistribution, 
-        (k, v) => hub.setMiningDistributionBips(k, v), 
-        bigIntConverter, 
-        "Mining Distribution (BIPS)"
-    );
-
-    // F. Fee Distribution (BIPS)
-    await processRuleCategory(
-        hub, 
-        RULES_TO_APPLY.feeDistribution, 
-        (k, v) => hub.setFeeDistributionBips(k, v), 
-        bigIntConverter, 
-        "Fee Distribution (BIPS)"
-    );
-
-    // G. Fortune Pool Tiers
-    if (fortunePool && RULES_TO_APPLY.fortunePoolTiers) {
-        await processFortuneTiers(fortunePool, RULES_TO_APPLY.fortunePoolTiers);
-    } else {
-        console.log("\n⚠️ Skipping Fortune Pool Tiers (Address missing or Config empty).");
+    let fortunePool = null;
+    if (fortuneAddress) {
+        const abi = ["function setPrizeTier(uint256, uint128, uint64) external"];
+        fortunePool = new ethers.Contract(fortuneAddress, abi, deployer);
+        console.log(`   Fortune: ${fortuneAddress}`);
     }
 
-    console.log("\n----------------------------------------------------");
-    console.log("🎉🎉🎉 RULES UPDATE SCRIPT COMPLETE! 🎉🎉🎉");
+    // --- Load Rules ---
+    const rulesPath = path.join(__dirname, "../rules-config.json"); 
+    if (!fs.existsSync(rulesPath)) throw new Error("rules-config.json not found");
+    
+    const RULES = JSON.parse(fs.readFileSync(rulesPath, "utf8"));
+    console.log(`\n[CONFIG] Loaded v${RULES.VERSION || 'unknown'}`);
+
+    // --- Converters ---
+    const weiConverter = (value: string) => ethers.parseUnits(value, 18);
+    const bipsConverter = (value: string) => BigInt(value);
+
+    try {
+        console.log("\n======================================================");
+        console.log("     APPLYING RULES");
+        console.log("======================================================");
+
+        // 1. Service Fees in BKC (Wei) - e.g., NOTARY_SERVICE
+        if (RULES.serviceFeesBKC) {
+            console.log("\n[FEES-BKC] Service Fees in BKC (converted to Wei):");
+            await processRules(
+                hub, RULES.serviceFeesBKC,
+                (k, v) => hub.setServiceFee(k, v),
+                weiConverter,
+                "Fee BKC"
+            );
+        }
+
+        // 2. Service Fees in BIPS - ALL OTHER FEES
+        if (RULES.serviceFeesBIPS) {
+            console.log("\n[FEES-BIPS] Service Fees in BIPS (100 = 1%):");
+            await processRules(
+                hub, RULES.serviceFeesBIPS,
+                (k, v) => hub.setServiceFee(k, v),
+                bipsConverter,  // <-- IMPORTANTE: NAO usar weiConverter!
+                "Fee BIPS"
+            );
+        }
+
+        // 3. Booster Discounts
+        if (RULES.boosterDiscounts) {
+            console.log("\n[BOOSTERS] Booster Discounts:");
+            await processRules(
+                hub, RULES.boosterDiscounts,
+                (k, v) => hub.setBoosterDiscount(k, v),
+                bipsConverter,
+                "Booster",
+                true // useNumericKey
+            );
+        }
+
+        // 4. Mining Distribution
+        if (RULES.miningDistribution) {
+            console.log("\n[MINING] Mining Distribution:");
+            await processRules(
+                hub, RULES.miningDistribution,
+                (k, v) => hub.setMiningDistributionBips(k, v),
+                bipsConverter,
+                "Mining Dist"
+            );
+        }
+
+        // 5. Fee Distribution
+        if (RULES.feeDistribution) {
+            console.log("\n[FEES] Fee Distribution:");
+            await processRules(
+                hub, RULES.feeDistribution,
+                (k, v) => hub.setFeeDistributionBips(k, v),
+                bipsConverter,
+                "Fee Dist"
+            );
+        }
+
+        // 6. Fortune Pool Tiers
+        if (fortunePool && RULES.fortunePoolTiers) {
+            await processFortuneTiers(fortunePool, RULES.fortunePoolTiers);
+        }
+
+        console.log("\n======================================================");
+        console.log("     COMPLETE!");
+        console.log("======================================================");
+        console.log("\nKey Settings Applied:");
+        console.log(`   CLAIM_REWARD_FEE_BIPS = ${RULES.serviceFeesBIPS?.CLAIM_REWARD_FEE_BIPS || '?'} (${Number(RULES.serviceFeesBIPS?.CLAIM_REWARD_FEE_BIPS || 0) / 100}%)`);
+        console.log(`   Booster Discounts = 7 tiers (10% - 70%)`);
+        console.log("");
   
-  } catch (error: any) {
-    console.error("\n❌ Critical failure:", error.message);
-    process.exit(1);
-  }
+    } catch (error: any) {
+        console.error("\nCRITICAL ERROR:", error.message);
+        process.exit(1);
+    }
 }
 
 if (require.main === module) {
-  runScript(require("hardhat")).catch((error) => {
-    console.error(error);
-    process.exit(1);
-  });
+    runScript(require("hardhat")).catch((error) => {
+        console.error(error);
+        process.exit(1);
+    });
 }

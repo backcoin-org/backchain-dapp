@@ -1,5 +1,5 @@
 // js/pages/DashboardPage.js
-// ✅ VERSION V8.4: TVL from all contracts, Dynamic Scarcity, Fortune details, new filters
+// ✅ VERSION V7.2: Fixed Faucet Functionality + Cooldown Status
 
 const ethers = window.ethers;
 
@@ -13,7 +13,7 @@ import {
     calculateClaimDetails,
     API_ENDPOINTS
 } from '../modules/data.js';
-import { executeUniversalClaim, getFortunePoolStatus } from '../modules/transactions.js';
+import { executeUniversalClaim } from '../modules/transactions.js';
 import {
     formatBigNumber, formatPStake, renderLoading,
     renderNoData, renderError
@@ -21,1078 +21,1189 @@ import {
 import { showToast, addNftToWallet } from '../ui-feedback.js';
 import { addresses, boosterTiers } from '../config.js';
 
-// ============================================================================
-// LOCAL STATE
-// ============================================================================
-const DashState = {
+// --- LOCAL STATE ---
+const DashboardState = {
+    hasRenderedOnce: false,
     lastUpdate: 0,
     activities: [],
-    pagination: { page: 1, perPage: 20, total: 0 },
-    filters: { type: 'ALL' },
-    metrics: {
-        totalSupply: 0n,
-        maxSupply: 0n,
-        tgeSupply: 0n,
-        networkPStake: 0n,
-        tvl: 0n,
-        tvlPercent: 0,
-        miningPowerPercent: 100,
-        feesCollected: 0n,
-        prizePool: 0n
-    },
-    faucet: { canClaim: false, cooldownLeft: 0, loading: false },
-    isLoadingActivities: false,
-    isLoadingMetrics: false
-};
-
-// ============================================================================
-// CONSTANTS
-// ============================================================================
-const EXPLORER_TX = "https://sepolia.arbiscan.io/tx/";
-const EXPLORER_ADDR = "https://sepolia.arbiscan.io/address/";
-const CACHE_TTL = 30000; // 30s cache
-const FAUCET_API = "https://faucet-4wvdcuoouq-uc.a.run.app";
-
-// ============================================================================
-// HELPERS
-// ============================================================================
-const fmt = {
-    num: (n) => {
-        if (n >= 1e9) return (n / 1e9).toFixed(2) + 'B';
-        if (n >= 1e6) return (n / 1e6).toFixed(2) + 'M';
-        if (n >= 1e3) return (n / 1e3).toFixed(1) + 'K';
-        return n.toFixed(0);
-    },
-    bkc: (wei) => {
-        const n = formatBigNumber(wei);
-        if (n >= 1e6) return (n / 1e6).toFixed(2) + 'M';
-        if (n >= 1e3) return (n / 1e3).toFixed(1) + 'K';
-        return n.toFixed(2);
-    },
-    percent: (n) => `${n.toFixed(1)}%`,
-    addr: (a) => a ? `${a.slice(0,6)}...${a.slice(-4)}` : '',
-    time: (ts) => {
-        if (!ts) return 'Just now';
-        const secs = ts.seconds || ts._seconds || (new Date(ts).getTime() / 1000);
-        const diff = Math.floor(Date.now() / 1000 - secs);
-        if (diff < 60) return 'Just now';
-        if (diff < 3600) return `${Math.floor(diff/60)}m ago`;
-        if (diff < 86400) return `${Math.floor(diff/3600)}h ago`;
-        if (diff < 604800) return `${Math.floor(diff/86400)}d ago`;
-        return new Date(secs * 1000).toLocaleDateString();
-    },
-    cooldown: (secs) => {
-        if (secs <= 0) return 'Ready';
-        const h = Math.floor(secs / 3600);
-        const m = Math.floor((secs % 3600) / 60);
-        return h > 0 ? `${h}h ${m}m` : `${m}m`;
+    networkActivities: [],
+    filteredActivities: [],
+    userProfile: null,
+    pagination: { currentPage: 1, itemsPerPage: 8 },
+    filters: { type: 'ALL', sort: 'NEWEST' },
+    metricsCache: {},
+    isLoadingNetworkActivity: false,
+    networkActivitiesTimestamp: 0,
+    // ✅ NEW: Faucet state
+    faucet: {
+        canClaim: true,
+        cooldownEnd: null,
+        isLoading: false,
+        lastCheck: 0
     }
 };
 
-// Skeleton loader component
-const Skeleton = (w = 'w-20', h = 'h-6') => 
-    `<div class="${w} ${h} bg-zinc-800 rounded animate-pulse"></div>`;
+// --- CONFIG ---
+const EXPLORER_BASE_URL = "https://sepolia.arbiscan.io/tx/";
+const CONTRACT_EXPLORER_URL = "https://sepolia.arbiscan.io/address/";
+const FAUCET_API_URL = "https://api.backcoin.org/faucet";
+const FAUCET_STATUS_URL = "https://api.backcoin.org/faucet/status";
+const NETWORK_ACTIVITY_API = "https://api.backcoin.org/activity/recent";
+
+// ✅ Faucet trigger threshold (show faucet if balance below this)
+const FAUCET_BALANCE_THRESHOLD = ethers.parseUnits("100", 18); // 100 BKC
+
+// --- HELPERS ---
+function formatDate(timestamp) {
+    if (!timestamp) return 'Just now';
+    try {
+        const secs = timestamp.seconds || timestamp._seconds || (new Date(timestamp).getTime() / 1000);
+        const date = new Date(secs * 1000);
+        const now = new Date();
+        const diffMs = now - date;
+        const diffMins = Math.floor(diffMs / 60000);
+        const diffHours = Math.floor(diffMs / 3600000);
+        const diffDays = Math.floor(diffMs / 86400000);
+
+        if (diffMins < 1) return 'Just now';
+        if (diffMins < 60) return `${diffMins}m ago`;
+        if (diffHours < 24) return `${diffHours}h ago`;
+        if (diffDays < 7) return `${diffDays}d ago`;
+        return date.toLocaleDateString();
+    } catch (e) { return 'Recent'; }
+}
+
+function formatCompact(num) {
+    if (num >= 1_000_000) return (num / 1_000_000).toFixed(2) + 'M';
+    if (num >= 1_000) return (num / 1_000).toFixed(1) + 'K';
+    return num.toFixed(0);
+}
+
+function truncateAddress(addr) {
+    if (!addr) return '';
+    return `${addr.slice(0, 6)}...${addr.slice(-4)}`;
+}
+
+function getScarcityColor(percent) {
+    if (percent >= 70) return 'text-green-400';
+    if (percent >= 40) return 'text-yellow-400';
+    if (percent >= 20) return 'text-orange-400';
+    return 'text-red-400';
+}
+
+// ✅ NEW: Format cooldown time remaining
+function formatCooldownTime(endTime) {
+    if (!endTime) return '';
+    const now = Date.now();
+    const end = new Date(endTime).getTime();
+    const diff = end - now;
+    
+    if (diff <= 0) return '';
+    
+    const hours = Math.floor(diff / 3600000);
+    const minutes = Math.floor((diff % 3600000) / 60000);
+    
+    if (hours > 0) {
+        return `${hours}h ${minutes}m`;
+    }
+    return `${minutes}m`;
+}
+
+// --- REWARDS ANIMATION ---
+let animationFrameId = null;
+let displayedRewardValue = 0n;
+
+function animateClaimableRewards(targetNetValue) {
+    const rewardsEl = document.getElementById('dash-user-rewards');
+    if (!rewardsEl || !State.isConnected) {
+        if (animationFrameId) cancelAnimationFrame(animationFrameId);
+        return;
+    }
+    const diff = targetNetValue - displayedRewardValue;
+    if (diff > -1000000000n && diff < 1000000000n) displayedRewardValue = targetNetValue;
+    else displayedRewardValue += diff / 8n;
+
+    if (displayedRewardValue < 0n) displayedRewardValue = 0n;
+
+    rewardsEl.innerHTML = `${formatBigNumber(displayedRewardValue).toFixed(4)} <span class="text-sm text-amber-500/80">BKC</span>`;
+
+    if (displayedRewardValue !== targetNetValue) {
+        animationFrameId = requestAnimationFrame(() => animateClaimableRewards(targetNetValue));
+    }
+}
 
 // ============================================================================
-// MAIN RENDER
+// ✅ FAUCET FUNCTIONS - FIXED & IMPROVED
 // ============================================================================
-function render() {
-    // Fallback: try to get dashboard element directly if DOMElements is not set
-    const dashboardEl = DOMElements.dashboard || document.getElementById('dashboard');
+
+// Check faucet status from API (cooldown, eligibility)
+async function checkFaucetStatus() {
+    if (!State.isConnected || !State.userAddress) return;
     
-    if (!dashboardEl) {
-        console.warn('❌ Dashboard element not found');
+    // Cache check - don't spam API (check every 30 seconds max)
+    const now = Date.now();
+    if (now - DashboardState.faucet.lastCheck < 30000) {
         return;
     }
     
-    // Update DOMElements if it was null
-    if (!DOMElements.dashboard) {
-        DOMElements.dashboard = dashboardEl;
-    }
+    DashboardState.faucet.lastCheck = now;
     
-    console.log('📊 Dashboard render started');
-
-    DOMElements.dashboard.innerHTML = `
-        <div class="min-h-screen pb-24 md:pb-10">
-            <!-- MOBILE HEADER -->
-            <header class="sticky top-0 z-40 bg-zinc-950/95 backdrop-blur-lg border-b border-zinc-800/50 -mx-4 px-4 py-3 md:hidden">
-                <div class="flex items-center justify-between">
-                    <h1 class="text-lg font-bold text-white">Dashboard</h1>
-                    <button id="dash-refresh" class="w-10 h-10 flex items-center justify-center rounded-full bg-zinc-800/50 active:bg-zinc-700 transition-colors">
-                        <i class="fa-solid fa-rotate text-zinc-400"></i>
-                    </button>
-                </div>
-            </header>
-
-            <!-- DESKTOP HEADER -->
-            <div class="hidden md:flex items-center justify-between mb-6">
-                <h1 class="text-2xl font-bold text-white">Dashboard</h1>
-                <button id="dash-refresh-desktop" class="flex items-center gap-2 px-4 py-2 bg-zinc-800/50 hover:bg-zinc-700 rounded-lg text-sm text-zinc-400 hover:text-white transition-all">
-                    <i class="fa-solid fa-rotate"></i> Refresh
-                </button>
-            </div>
-
-            <!-- HERO: BALANCE & REWARDS -->
-            <section id="hero-section" class="mt-4 md:mt-0">
-                ${renderHeroSection()}
-            </section>
-
-            <!-- FAUCET CARD -->
-            <section id="faucet-section" class="mt-4">
-                ${renderFaucetCard()}
-            </section>
-
-            <!-- METRICS GRID -->
-            <section id="metrics-section" class="mt-6">
-                ${renderMetricsGrid()}
-            </section>
-
-            <!-- QUICK ACTIONS (Mobile) -->
-            <section class="mt-6 md:hidden">
-                ${renderQuickActions()}
-            </section>
-
-            <!-- TWO COLUMN LAYOUT -->
-            <div class="mt-6 grid grid-cols-1 lg:grid-cols-3 gap-6">
-                <!-- TRANSACTIONS -->
-                <section id="transactions-section" class="lg:col-span-2">
-                    ${renderTransactionsCard()}
-                </section>
-
-                <!-- SIDEBAR -->
-                <aside class="space-y-4 hidden lg:block">
-                    ${renderSidebarCards()}
-                </aside>
-            </div>
-        </div>
-    `;
-
-    attachListeners();
-    loadAllData();
-}
-
-// ============================================================================
-// HERO SECTION - Balance & Rewards
-// ============================================================================
-function renderHeroSection() {
-    return `
-        <div class="relative overflow-hidden rounded-2xl bg-gradient-to-br from-zinc-900 via-zinc-900 to-zinc-800 border border-zinc-800">
-            <!-- Background Pattern -->
-            <div class="absolute inset-0 opacity-5">
-                <div class="absolute top-0 right-0 w-64 h-64 bg-amber-500 rounded-full blur-3xl"></div>
-                <div class="absolute bottom-0 left-0 w-48 h-48 bg-purple-500 rounded-full blur-3xl"></div>
-            </div>
-
-            <div class="relative p-5 md:p-6">
-                <!-- Balance Row -->
-                <div class="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
-                    <!-- Left: Balance -->
-                    <div class="flex-1">
-                        <p class="text-xs text-zinc-500 uppercase tracking-wider font-medium mb-1">Your Balance</p>
-                        <div class="flex items-baseline gap-2">
-                            <span id="hero-balance" class="text-3xl md:text-4xl font-bold text-white">--</span>
-                            <span class="text-lg text-amber-500 font-medium">BKC</span>
-                        </div>
-                        <p id="hero-pstake" class="text-sm text-purple-400 mt-1">
-                            <i class="fa-solid fa-bolt mr-1"></i>
-                            <span>-- pStake</span>
-                        </p>
-                    </div>
-
-                    <!-- Right: Rewards -->
-                    <div class="flex-1 md:text-right">
-                        <p class="text-xs text-zinc-500 uppercase tracking-wider font-medium mb-1">Claimable Rewards</p>
-                        <div class="flex items-baseline gap-2 md:justify-end">
-                            <span id="hero-rewards" class="text-3xl md:text-4xl font-bold text-green-400">--</span>
-                            <span class="text-lg text-green-500/70 font-medium">BKC</span>
-                        </div>
-                        <button id="claim-rewards-btn" disabled
-                            class="mt-3 w-full md:w-auto bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-500 hover:to-emerald-500 disabled:from-zinc-700 disabled:to-zinc-700 disabled:cursor-not-allowed text-white font-bold py-3 px-6 rounded-xl text-sm transition-all shadow-lg shadow-green-900/20 disabled:shadow-none">
-                            <i class="fa-solid fa-gift mr-2"></i> Claim Rewards
-                        </button>
-                    </div>
-                </div>
-
-                <!-- Booster Status Bar -->
-                <div id="booster-bar" class="mt-5 pt-4 border-t border-zinc-800/50">
-                    <div class="flex items-center justify-between">
-                        <div class="flex items-center gap-3">
-                            <div id="booster-icon" class="w-10 h-10 rounded-full bg-zinc-800 flex items-center justify-center">
-                                <i class="fa-solid fa-rocket text-zinc-600"></i>
-                            </div>
-                            <div>
-                                <p id="booster-name" class="text-sm font-medium text-zinc-400">No Booster Active</p>
-                                <p id="booster-discount" class="text-xs text-zinc-600">0% fee discount</p>
-                            </div>
-                        </div>
-                        <button data-nav="store" class="text-xs text-amber-500 hover:text-amber-400 font-medium">
-                            Get Booster <i class="fa-solid fa-chevron-right ml-1"></i>
-                        </button>
-                    </div>
-                </div>
-            </div>
-        </div>
-    `;
-}
-
-// ============================================================================
-// FAUCET CARD
-// ============================================================================
-function renderFaucetCard() {
-    return `
-        <div id="faucet-card" class="hidden rounded-xl bg-gradient-to-r from-cyan-900/30 to-blue-900/30 border border-cyan-500/20 p-4">
-            <div class="flex items-center justify-between gap-4">
-                <div class="flex items-center gap-3">
-                    <div class="w-10 h-10 rounded-full bg-cyan-500/20 flex items-center justify-center flex-shrink-0">
-                        <i class="fa-solid fa-faucet text-cyan-400"></i>
-                    </div>
-                    <div>
-                        <p class="text-sm font-bold text-white">Testnet Faucet</p>
-                        <p id="faucet-status" class="text-xs text-zinc-400">Get free BKC + ETH</p>
-                    </div>
-                </div>
-                <button id="faucet-btn" 
-                    class="flex-shrink-0 bg-cyan-600 hover:bg-cyan-500 disabled:bg-zinc-700 disabled:cursor-not-allowed text-white font-bold py-2.5 px-5 rounded-lg text-sm transition-all">
-                    <i class="fa-solid fa-droplet mr-2"></i> Claim
-                </button>
-            </div>
-        </div>
-    `;
-}
-
-// ============================================================================
-// METRICS GRID
-// ============================================================================
-function renderMetricsGrid() {
-    return `
-        <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-            ${metricCard('Total Supply', 'metric-supply', 'fa-coins', 'amber')}
-            ${metricCard('TVL', 'metric-tvl', 'fa-lock', 'green')}
-            ${metricCard('Dynamic Scarcity', 'metric-scarcity', 'fa-fire', 'orange')}
-            ${metricCard('Net pStake', 'metric-pstake', 'fa-bolt', 'purple')}
-            ${metricCard('Prize Pool', 'metric-prize', 'fa-trophy', 'yellow')}
-            ${metricCard('Total Fees', 'metric-fees', 'fa-chart-line', 'blue')}
-        </div>
-    `;
-}
-
-function metricCard(label, id, icon, color) {
-    const colors = {
-        amber: 'text-amber-400 bg-amber-500/10',
-        green: 'text-green-400 bg-green-500/10',
-        orange: 'text-orange-400 bg-orange-500/10',
-        purple: 'text-purple-400 bg-purple-500/10',
-        yellow: 'text-yellow-400 bg-yellow-500/10',
-        blue: 'text-blue-400 bg-blue-500/10'
-    };
-    const [textColor, bgColor] = colors[color].split(' ');
-
-    return `
-        <div class="bg-zinc-900/50 border border-zinc-800/50 rounded-xl p-4 hover:border-zinc-700/50 transition-colors">
-            <div class="flex items-center gap-2 mb-2">
-                <div class="w-7 h-7 rounded-lg ${bgColor} flex items-center justify-center">
-                    <i class="fa-solid ${icon} ${textColor} text-xs"></i>
-                </div>
-                <span class="text-[10px] text-zinc-500 uppercase font-bold tracking-wider">${label}</span>
-            </div>
-            <p id="${id}" class="text-lg font-bold text-white truncate">--</p>
-            <p id="${id}-sub" class="text-[10px] text-zinc-500 mt-1 truncate">&nbsp;</p>
-        </div>
-    `;
-}
-
-// ============================================================================
-// QUICK ACTIONS (Mobile)
-// ============================================================================
-function renderQuickActions() {
-    return `
-        <div class="grid grid-cols-3 gap-3">
-            <button data-nav="mine" class="flex flex-col items-center gap-2 p-4 bg-zinc-900/50 border border-zinc-800/50 rounded-xl active:bg-zinc-800 transition-colors w-full">
-                <div class="w-10 h-10 rounded-full bg-purple-500/20 flex items-center justify-center">
-                    <i class="fa-solid fa-layer-group text-purple-400"></i>
-                </div>
-                <span class="text-xs font-medium text-zinc-300">Stake</span>
-            </button>
-            <button data-nav="store" class="flex flex-col items-center gap-2 p-4 bg-zinc-900/50 border border-zinc-800/50 rounded-xl active:bg-zinc-800 transition-colors w-full">
-                <div class="w-10 h-10 rounded-full bg-amber-500/20 flex items-center justify-center">
-                    <i class="fa-solid fa-store text-amber-400"></i>
-                </div>
-                <span class="text-xs font-medium text-zinc-300">Store</span>
-            </button>
-            <button data-nav="actions" class="flex flex-col items-center gap-2 p-4 bg-zinc-900/50 border border-zinc-800/50 rounded-xl active:bg-zinc-800 transition-colors w-full">
-                <div class="w-10 h-10 rounded-full bg-pink-500/20 flex items-center justify-center">
-                    <i class="fa-solid fa-dice text-pink-400"></i>
-                </div>
-                <span class="text-xs font-medium text-zinc-300">Fortune</span>
-            </button>
-        </div>
-    `;
-}
-
-// ============================================================================
-// TRANSACTIONS CARD
-// ============================================================================
-function renderTransactionsCard() {
-    return `
-        <div class="bg-zinc-900/50 border border-zinc-800/50 rounded-xl overflow-hidden">
-            <!-- Header -->
-            <div class="flex items-center justify-between p-4 border-b border-zinc-800/50">
-                <h3 class="font-bold text-white flex items-center gap-2">
-                    <i class="fa-solid fa-clock-rotate-left text-zinc-500"></i>
-                    Your Transactions
-                </h3>
-                <select id="tx-filter" class="bg-zinc-800 border border-zinc-700 text-zinc-300 text-xs rounded-lg px-3 py-1.5 outline-none">
-                    <option value="ALL">All Types</option>
-                    <option value="STAKE">Staking</option>
-                    <option value="CLAIM">Claims</option>
-                    <option value="NFT">NFT</option>
-                    <option value="RENTAL">Rental</option>
-                    <option value="GAME">Fortune</option>
-                    <option value="ORACLE">Oracle</option>
-                    <option value="NOTARY">Notary</option>
-                    <option value="FAUCET">Faucet</option>
-                </select>
-            </div>
-
-            <!-- Transaction List -->
-            <div id="tx-list" class="divide-y divide-zinc-800/30 min-h-[300px] max-h-[600px] overflow-y-auto">
-                ${renderTxSkeleton(5)}
-            </div>
-
-            <!-- Pagination -->
-            <div id="tx-pagination" class="flex items-center justify-between p-4 border-t border-zinc-800/50 bg-zinc-900/30">
-                <button id="tx-prev" disabled class="flex items-center gap-2 text-sm text-zinc-500 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-colors">
-                    <i class="fa-solid fa-chevron-left"></i> Previous
-                </button>
-                <span id="tx-page-info" class="text-xs text-zinc-600 font-mono">Page 1</span>
-                <button id="tx-next" disabled class="flex items-center gap-2 text-sm text-zinc-500 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-colors">
-                    Next <i class="fa-solid fa-chevron-right"></i>
-                </button>
-            </div>
-        </div>
-    `;
-}
-
-function renderTxSkeleton(count) {
-    return Array(count).fill(0).map(() => `
-        <div class="flex items-center gap-4 p-4">
-            <div class="w-10 h-10 rounded-full bg-zinc-800 animate-pulse"></div>
-            <div class="flex-1 space-y-2">
-                <div class="w-24 h-4 bg-zinc-800 rounded animate-pulse"></div>
-                <div class="w-16 h-3 bg-zinc-800/50 rounded animate-pulse"></div>
-            </div>
-            <div class="w-16 h-4 bg-zinc-800 rounded animate-pulse"></div>
-        </div>
-    `).join('');
-}
-
-// ============================================================================
-// SIDEBAR CARDS
-// ============================================================================
-function renderSidebarCards() {
-    return `
-        <!-- Network Status -->
-        <div class="bg-zinc-900/50 border border-zinc-800/50 rounded-xl p-4">
-            <div class="flex items-center justify-between mb-4">
-                <h3 class="font-bold text-white text-sm">Network</h3>
-                <span class="flex items-center gap-1.5 text-[10px] bg-green-500/20 text-green-400 px-2 py-1 rounded-full">
-                    <span class="w-1.5 h-1.5 bg-green-400 rounded-full animate-pulse"></span>
-                    Synced
-                </span>
-            </div>
-            <div class="space-y-3 text-xs">
-                <div class="flex justify-between">
-                    <span class="text-zinc-500">Chain</span>
-                    <span class="text-white font-medium">Arbitrum Sepolia</span>
-                </div>
-                <div class="flex justify-between">
-                    <span class="text-zinc-500">Block</span>
-                    <span id="current-block" class="text-zinc-400 font-mono">--</span>
-                </div>
-                <a href="${EXPLORER_ADDR}${addresses.ecosystemManager || ''}" target="_blank" 
-                   class="flex justify-between items-center hover:bg-zinc-800/50 -mx-2 px-2 py-1.5 rounded-lg transition-colors">
-                    <span class="text-zinc-500">Contracts</span>
-                    <span class="text-blue-400 flex items-center gap-1">
-                        View <i class="fa-solid fa-external-link text-[8px]"></i>
-                    </span>
-                </a>
-            </div>
-        </div>
-
-        <!-- Yield CTA -->
-        <div class="bg-gradient-to-br from-purple-900/30 to-purple-900/10 border border-purple-500/20 rounded-xl p-4">
-            <div class="flex items-center gap-3 mb-3">
-                <div class="w-10 h-10 rounded-full bg-purple-500/20 flex items-center justify-center">
-                    <i class="fa-solid fa-coins text-purple-400"></i>
-                </div>
-                <div>
-                    <h3 class="font-bold text-white text-sm">Earn Yield</h3>
-                    <p class="text-xs text-zinc-400">Stake BKC, earn rewards</p>
-                </div>
-            </div>
-            <button data-nav="mine" class="block w-full bg-purple-600 hover:bg-purple-500 text-white font-bold py-2.5 rounded-lg text-sm text-center transition-colors">
-                Start Staking <i class="fa-solid fa-arrow-right ml-2"></i>
-            </button>
-        </div>
-
-        <!-- Fortune CTA -->
-        <div class="bg-gradient-to-br from-pink-900/30 to-pink-900/10 border border-pink-500/20 rounded-xl p-4">
-            <div class="flex items-center gap-3 mb-3">
-                <div class="w-10 h-10 rounded-full bg-pink-500/20 flex items-center justify-center">
-                    <i class="fa-solid fa-dice text-pink-400"></i>
-                </div>
-                <div>
-                    <h3 class="font-bold text-white text-sm">Fortune Pool</h3>
-                    <p class="text-xs text-zinc-400">Win up to 100x</p>
-                </div>
-            </div>
-            <button data-nav="actions" class="block w-full border border-pink-500/30 text-pink-400 hover:bg-pink-900/20 font-bold py-2.5 rounded-lg text-sm text-center transition-colors">
-                Play Now
-            </button>
-        </div>
-
-        <!-- Protocol Stats -->
-        <div class="bg-zinc-900/50 border border-zinc-800/50 rounded-xl p-4">
-            <h3 class="font-bold text-white text-sm mb-4">Protocol Stats</h3>
-            <div class="space-y-3">
-                <div class="flex justify-between items-center">
-                    <span class="text-xs text-zinc-500">Max Supply</span>
-                    <span id="stat-max-supply" class="text-xs text-zinc-300 font-mono">--</span>
-                </div>
-                <div class="flex justify-between items-center">
-                    <span class="text-xs text-zinc-500">Mined</span>
-                    <span id="stat-mined" class="text-xs text-zinc-300 font-mono">--</span>
-                </div>
-                <div class="flex justify-between items-center">
-                    <span class="text-xs text-zinc-500">Remaining</span>
-                    <span id="stat-remaining" class="text-xs text-green-400 font-mono">--</span>
-                </div>
-                <div class="w-full bg-zinc-800 rounded-full h-2 mt-2">
-                    <div id="stat-progress" class="bg-gradient-to-r from-amber-500 to-orange-500 h-2 rounded-full transition-all" style="width: 0%"></div>
-                </div>
-            </div>
-        </div>
-    `;
-}
-
-// ============================================================================
-// DATA LOADING
-// ============================================================================
-async function loadAllData() {
-    // Load in parallel for speed
-    await Promise.allSettled([
-        loadMetrics(),
-        loadUserData(),
-        loadTransactions(),
-        checkFaucetStatus()
-    ]);
-}
-
-async function loadMetrics() {
-    if (DashState.isLoadingMetrics) return;
-    DashState.isLoadingMetrics = true;
-
     try {
-        // Fetch from backend API (has accurate miningPower and fees)
-        const systemStatsPromise = fetch(API_ENDPOINTS.systemStats || 'https://getsystemstats-4wvdcuoouq-uc.a.run.app')
-            .then(r => r.json())
-            .catch(() => null);
-
-        // Contract addresses for TVL calculation
-        const contractAddrs = [
-            addresses.delegationManager,
-            addresses.fortunePool,
-            addresses.miningManager,
-            addresses.decentralizedNotary,
-            addresses.nftLiquidityPoolFactory,
-            addresses.rentalManager
-        ].filter(a => a && a !== ethers.ZeroAddress);
-
-        // Parallel fetch from blockchain
-        const [totalSupply, maxSupply, tgeSupply, networkPStake, fortuneStatus, systemStats, ...contractBalances] = await Promise.allSettled([
-            safeContractCall(State.bkcTokenContractPublic, 'totalSupply', [], 0n),
-            safeContractCall(State.bkcTokenContractPublic, 'MAX_SUPPLY', [], 21000000n * 10n**18n),
-            safeContractCall(State.bkcTokenContractPublic, 'TGE_SUPPLY', [], 10000000n * 10n**18n),
-            safeContractCall(State.delegationManagerContractPublic, 'totalNetworkPStake', [], 0n),
-            getFortunePoolStatus(),
-            systemStatsPromise,
-            // Fetch BKC balance of each contract
-            ...contractAddrs.map(addr => 
-                safeContractCall(State.bkcTokenContractPublic, 'balanceOf', [addr], 0n)
-            )
-        ]);
-
-        // Process values
-        const supply = totalSupply.status === 'fulfilled' ? totalSupply.value : 0n;
-        const max = maxSupply.status === 'fulfilled' ? maxSupply.value : 21000000n * 10n**18n;
-        const tge = tgeSupply.status === 'fulfilled' ? tgeSupply.value : 10000000n * 10n**18n;
-        const pstake = networkPStake.status === 'fulfilled' ? networkPStake.value : 0n;
-        const fortune = fortuneStatus.status === 'fulfilled' ? fortuneStatus.value : { prizePool: 0n };
-        const stats = systemStats.status === 'fulfilled' ? systemStats.value : null;
-
-        // Calculate TVL = sum of all BKC locked in contracts
-        let tvl = 0n;
-        contractBalances.forEach(result => {
-            if (result.status === 'fulfilled' && result.value) {
-                tvl += result.value;
-            }
-        });
-
-        // Calculate metrics
-        const minableTokens = max - tge; // Tokens that can be mined
-        const minedTokens = supply > tge ? supply - tge : 0n;
-        const remainingToMine = minableTokens - minedTokens;
-        
-        // Dynamic Scarcity from backend or calculate locally
-        let miningPowerPercent = 100;
-        if (stats?.miningPowerBips !== undefined) {
-            miningPowerPercent = Number(stats.miningPowerBips) / 100;
-        } else if (minableTokens > 0n) {
-            miningPowerPercent = Number((remainingToMine * 10000n) / minableTokens) / 100;
-        }
-
-        // Fees from backend
-        let feesCollected = 0n;
-        if (stats?.totalFeesCollected) {
-            try {
-                feesCollected = BigInt(stats.totalFeesCollected);
-            } catch (e) {
-                feesCollected = 0n;
-            }
-        }
-
-        // TVL percent of total supply
-        const tvlPercent = supply > 0n ? Number((tvl * 10000n) / supply) / 100 : 0;
-
-        // Store metrics
-        DashState.metrics = {
-            totalSupply: supply,
-            maxSupply: max,
-            tgeSupply: tge,
-            networkPStake: pstake,
-            tvl,
-            tvlPercent,
-            miningPowerPercent,
-            minedTokens,
-            remainingToMine,
-            prizePool: fortune.prizePool || 0n,
-            feesCollected,
-            lastUpdate: stats?.lastUpdate || null
-        };
-
-        // Update UI
-        updateMetricsUI();
-
-    } catch (e) {
-        console.error('Metrics load error:', e);
-    } finally {
-        DashState.isLoadingMetrics = false;
-    }
-}
-
-function updateMetricsUI() {
-    const m = DashState.metrics;
-
-    // Total Supply
-    setEl('metric-supply', fmt.bkc(m.totalSupply));
-    setEl('metric-supply-sub', `of ${fmt.bkc(m.maxSupply)} max`);
-
-    // TVL (Total Value Locked in all contracts)
-    setEl('metric-tvl', fmt.bkc(m.tvl));
-    if (m.tvl > 0n) {
-        setEl('metric-tvl-sub', `${m.tvlPercent.toFixed(1)}% of supply`);
-    } else {
-        setEl('metric-tvl-sub', 'in contracts');
-    }
-
-    // Dynamic Scarcity
-    const mpColor = m.miningPowerPercent > 50 ? 'text-green-400' : m.miningPowerPercent > 20 ? 'text-yellow-400' : 'text-red-400';
-    setEl('metric-scarcity', `<span class="${mpColor}">${m.miningPowerPercent.toFixed(1)}%</span>`, true);
-    setEl('metric-scarcity-sub', 'tokens remaining');
-
-    // Network pStake
-    setEl('metric-pstake', formatPStake(m.networkPStake));
-    if (m.networkPStake > 0n) {
-        setEl('metric-pstake-sub', 'total staking power');
-    } else {
-        setEl('metric-pstake-sub', 'staking power');
-    }
-
-    // Prize Pool
-    setEl('metric-prize', fmt.bkc(m.prizePool));
-    setEl('metric-prize-sub', 'Fortune Pool');
-
-    // Fees Collected
-    if (m.feesCollected > 0n) {
-        setEl('metric-fees', fmt.bkc(m.feesCollected));
-        setEl('metric-fees-sub', 'total collected');
-    } else {
-        setEl('metric-fees', '0.00');
-        setEl('metric-fees-sub', 'total collected');
-    }
-
-    // Sidebar stats
-    setEl('stat-max-supply', fmt.bkc(m.maxSupply));
-    setEl('stat-mined', fmt.bkc(m.minedTokens || 0n));
-    setEl('stat-remaining', fmt.bkc(m.remainingToMine || 0n));
-    
-    const progressEl = document.getElementById('stat-progress');
-    if (progressEl) {
-        const progress = 100 - m.miningPowerPercent;
-        progressEl.style.width = `${Math.min(100, Math.max(0, progress))}%`;
-    }
-}
-
-async function updateUserUI() {
-    if (!State.isConnected) {
-        setEl('hero-balance', '0.00');
-        setEl('hero-rewards', '0.00');
-        setEl('hero-pstake', '<i class="fa-solid fa-bolt mr-1"></i> 0 pStake');
-        return;
-    }
-
-    // Balance
-    const balance = State.currentUserBalance || 0n;
-    setEl('hero-balance', fmt.bkc(balance));
-
-    // pStake
-    const userPStake = State.userTotalPStake || 0n;
-    setEl('hero-pstake', `<i class="fa-solid fa-bolt mr-1"></i> ${formatPStake(userPStake)} pStake`, true);
-
-    // Rewards
-    try {
-        const { netClaimAmount } = await calculateClaimDetails();
-        setEl('hero-rewards', fmt.bkc(netClaimAmount));
-        
-        const claimBtn = document.getElementById('claim-rewards-btn');
-        if (claimBtn) {
-            claimBtn.disabled = netClaimAmount <= 0n;
+        const response = await fetch(`${FAUCET_STATUS_URL}?address=${State.userAddress}`);
+        if (response.ok) {
+            const data = await response.json();
+            DashboardState.faucet.canClaim = data.canClaim !== false;
+            DashboardState.faucet.cooldownEnd = data.cooldownEnd || null;
         }
     } catch (e) {
-        setEl('hero-rewards', '0.00');
-    }
-
-    // Booster
-    try {
-        const booster = await getHighestBoosterBoostFromAPI();
-        const boostBips = booster?.highestBoost || 0;
-        const discountPercent = boostBips / 100;
-        
-        setEl('booster-name', booster?.boostName || 'No Booster Active');
-        setEl('booster-discount', `${discountPercent}% fee discount`);
-        
-        const iconEl = document.getElementById('booster-icon');
-        if (iconEl && boostBips > 0) {
-            const tier = boosterTiers.find(t => t.boostBips === boostBips);
-            iconEl.innerHTML = `<img src="${tier?.realImg || 'assets/bkc_logo_3d.png'}" class="w-full h-full rounded-full object-cover" onerror="this.outerHTML='<i class=\\'fa-solid fa-rocket text-amber-400\\'></i>'" />`;
-            iconEl.classList.remove('bg-zinc-800');
-        }
-    } catch (e) {
-        console.warn('Booster load error:', e);
+        // If status check fails, assume can claim
+        DashboardState.faucet.canClaim = true;
+        DashboardState.faucet.cooldownEnd = null;
     }
 }
 
-async function loadTransactions() {
+// Request faucet tokens
+async function requestSmartFaucet(btnElement) {
     if (!State.isConnected || !State.userAddress) {
-        renderNoTransactions();
-        return;
-    }
-
-    DashState.isLoadingActivities = true;
-
-    try {
-        const response = await fetch(`${API_ENDPOINTS.getHistory}/${State.userAddress}?limit=100`);
-        if (!response.ok) throw new Error('API Error');
-        
-        const data = await response.json();
-        DashState.activities = Array.isArray(data) ? data : [];
-        DashState.pagination.total = DashState.activities.length;
-        DashState.pagination.page = 1;
-        
-        renderTransactions();
-
-    } catch (e) {
-        console.warn('Transactions load error:', e);
-        DashState.activities = [];
-        renderNoTransactions();
-    } finally {
-        DashState.isLoadingActivities = false;
-    }
-}
-
-function renderTransactions() {
-    const listEl = document.getElementById('tx-list');
-    if (!listEl) return;
-
-    let filtered = [...DashState.activities];
-    
-    // Apply filter
-    const filterType = DashState.filters.type;
-    if (filterType !== 'ALL') {
-        filtered = filtered.filter(tx => {
-            const t = (tx.type || '').toUpperCase();
-            if (filterType === 'STAKE') return t.includes('DELEGAT') || t.includes('UNSTAKE') || t.includes('STAKE');
-            if (filterType === 'CLAIM') return t.includes('CLAIM') || t.includes('REWARD');
-            if (filterType === 'NFT') return t.includes('NFT') || t.includes('BUY') || t.includes('SELL');
-            if (filterType === 'RENTAL') return t.includes('RENTAL');
-            if (filterType === 'GAME') return t.includes('GAME') && !t.includes('RESULT');
-            if (filterType === 'ORACLE') return t.includes('RESULT') || t.includes('FULFILLED');
-            if (filterType === 'NOTARY') return t.includes('NOTARY');
-            if (filterType === 'FAUCET') return t.includes('FAUCET');
-            return true;
-        });
-    }
-
-    // Pagination
-    const { page, perPage } = DashState.pagination;
-    const start = (page - 1) * perPage;
-    const end = start + perPage;
-    const pageItems = filtered.slice(start, end);
-    const totalPages = Math.ceil(filtered.length / perPage);
-
-    if (pageItems.length === 0) {
-        listEl.innerHTML = `
-            <div class="flex flex-col items-center justify-center py-16 text-center">
-                <div class="w-16 h-16 rounded-full bg-zinc-800/50 flex items-center justify-center mb-4">
-                    <i class="fa-solid fa-receipt text-zinc-600 text-2xl"></i>
-                </div>
-                <p class="text-zinc-500 text-sm">No transactions found</p>
-                <p class="text-zinc-600 text-xs mt-1">Start using the protocol to see activity</p>
-            </div>
-        `;
-    } else {
-        listEl.innerHTML = pageItems.map(tx => renderTxItem(tx)).join('');
-    }
-
-    // Update pagination controls
-    const prevBtn = document.getElementById('tx-prev');
-    const nextBtn = document.getElementById('tx-next');
-    const pageInfo = document.getElementById('tx-page-info');
-
-    if (prevBtn) prevBtn.disabled = page <= 1;
-    if (nextBtn) nextBtn.disabled = page >= totalPages;
-    if (pageInfo) pageInfo.textContent = `Page ${page} of ${totalPages || 1}`;
-}
-
-function renderTxItem(tx) {
-    const type = (tx.type || '').toUpperCase();
-    let icon = 'fa-circle', color = 'text-zinc-400', label = 'Transaction';
-    let extraInfo = '';
-
-    // Type mapping
-    if (type.includes('DELEGAT') || type.includes('STAKE')) {
-        icon = 'fa-layer-group'; color = 'text-purple-400'; label = 'Staked';
-    } else if (type.includes('UNSTAKE')) {
-        icon = 'fa-arrow-right-from-bracket'; color = 'text-orange-400'; label = 'Unstaked';
-    } else if (type.includes('CLAIM') || type.includes('REWARD')) {
-        icon = 'fa-gift'; color = 'text-green-400'; label = 'Claimed';
-    } else if (type.includes('BUY') || type.includes('BOUGHT')) {
-        icon = 'fa-cart-plus'; color = 'text-amber-400'; label = 'Bought NFT';
-    } else if (type.includes('SELL') || type.includes('SOLD')) {
-        icon = 'fa-tag'; color = 'text-red-400'; label = 'Sold NFT';
-    } else if (type.includes('LISTED')) {
-        icon = 'fa-hand-holding-dollar'; color = 'text-cyan-400'; label = 'Listed Rental';
-    } else if (type.includes('RENTED')) {
-        icon = 'fa-handshake'; color = 'text-cyan-400'; label = 'Rented NFT';
-    } else if (type.includes('WITHDRAWN') || type.includes('WITHDRAW')) {
-        icon = 'fa-xmark'; color = 'text-red-400'; label = 'Rental Withdrawn';
-    } else if (type.includes('NOTARY')) {
-        icon = 'fa-file-signature'; color = 'text-indigo-400'; label = 'Notarized';
-    } else if (type.includes('FAUCET')) {
-        icon = 'fa-faucet'; color = 'text-cyan-400'; label = 'Faucet Claim';
-    } else if (type.includes('GAMEREQUESTED') || type === 'GAMEREQUESTED') {
-        icon = 'fa-dice'; color = 'text-pink-400'; label = 'Fortune Bet';
-        // Show guessed numbers
-        const guesses = tx.details?.guesses || [];
-        if (guesses.length > 0) {
-            extraInfo = `Guesses: [${guesses.join(', ')}]`;
-        }
-    } else if (type.includes('GAMERESULT') || type === 'GAMERESULT') {
-        const isWin = tx.details?.isWin || Number(tx.details?.amount || 0) > 0;
-        icon = isWin ? 'fa-trophy' : 'fa-times-circle';
-        color = isWin ? 'text-yellow-400' : 'text-zinc-500';
-        label = isWin ? 'Fortune Win!' : 'Fortune Loss';
-        // Show rolled numbers
-        const rolls = tx.details?.rolls || [];
-        if (rolls.length > 0) {
-            extraInfo = `Rolls: [${rolls.join(', ')}]`;
-        }
-    } else if (type.includes('GAME')) {
-        const isWin = tx.details?.isWin || tx.details?.prizeWon > 0;
-        icon = isWin ? 'fa-trophy' : 'fa-dice';
-        color = isWin ? 'text-yellow-400' : 'text-pink-400';
-        label = isWin ? 'Fortune Win!' : 'Fortune';
-    }
-
-    const amount = tx.amount || tx.details?.amount || '0';
-    const amountNum = formatBigNumber(BigInt(amount));
-    const amountStr = amountNum > 0.01 ? amountNum.toFixed(2) : '';
-    const timeStr = fmt.time(tx.timestamp || tx.createdAt);
-    const txLink = tx.txHash ? `${EXPLORER_TX}${tx.txHash}` : '#';
-
-    return `
-        <a href="${txLink}" target="_blank" rel="noopener" 
-           class="flex items-center gap-4 p-4 hover:bg-zinc-800/30 transition-colors group">
-            <div class="w-10 h-10 rounded-full bg-zinc-800/50 flex items-center justify-center flex-shrink-0">
-                <i class="fa-solid ${icon} ${color} text-sm"></i>
-            </div>
-            <div class="flex-1 min-w-0">
-                <p class="text-sm font-medium text-white truncate">${label}</p>
-                <p class="text-xs text-zinc-500">${timeStr}${extraInfo ? ` · ${extraInfo}` : ''}</p>
-            </div>
-            <div class="text-right flex-shrink-0">
-                ${amountStr ? `<p class="text-sm font-mono text-white">${amountStr}</p>` : ''}
-                <i class="fa-solid fa-external-link text-[10px] text-zinc-600 group-hover:text-blue-400 transition-colors"></i>
-            </div>
-        </a>
-    `;
-}
-
-function renderNoTransactions() {
-    const listEl = document.getElementById('tx-list');
-    if (listEl) {
-        listEl.innerHTML = `
-            <div class="flex flex-col items-center justify-center py-16 text-center">
-                <div class="w-16 h-16 rounded-full bg-zinc-800/50 flex items-center justify-center mb-4">
-                    <i class="fa-solid fa-wallet text-zinc-600 text-2xl"></i>
-                </div>
-                <p class="text-zinc-500 text-sm">Connect wallet to see transactions</p>
-            </div>
-        `;
-    }
-}
-
-// ============================================================================
-// FAUCET API - Oracle pays gas, user receives BKC + ETH
-// ============================================================================
-async function requestFaucetAPI(btnElement) {
-    if (!State.isConnected || !State.userAddress) {
-        showToast("Connect wallet first", "error");
-        return false;
+        return showToast("Connect wallet first", "error");
     }
 
     const originalHTML = btnElement.innerHTML;
     btnElement.disabled = true;
-    btnElement.innerHTML = `<i class="fa-solid fa-circle-notch fa-spin mr-2"></i> Requesting...`;
+    btnElement.innerHTML = `<i class="fa-solid fa-circle-notch fa-spin mr-2"></i> Sending...`;
+    DashboardState.faucet.isLoading = true;
 
     try {
-        console.log('📡 Calling Faucet API for:', State.userAddress);
-        
-        const response = await fetch(`${FAUCET_API}?address=${State.userAddress}`);
+        const response = await fetch(`${FAUCET_API_URL}?address=${State.userAddress}`);
         const data = await response.json();
 
-        console.log('📡 Faucet API response:', data);
-
         if (response.ok && data.success) {
-            showToast("✅ Tokens sent! Check your wallet in a few seconds.", "success");
+            showToast("✅ Faucet Sent! 20 BKC + 0.005 ETH", "success");
             
-            // Hide faucet card after success
-            const card = document.getElementById('faucet-card');
-            if (card) card.classList.add('hidden');
+            // Update faucet state
+            DashboardState.faucet.canClaim = false;
+            DashboardState.faucet.cooldownEnd = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
             
-            // Refresh data after a delay (wait for tx to confirm)
+            // Update widget to show cooldown
+            updateFaucetWidget();
+            
+            // Refresh data after delay
             setTimeout(() => {
-                loadAllData();
-                updateUserUI();
-            }, 5000);
-            
-            return true;
+                DashboardPage.update(true);
+            }, 4000);
         } else {
-            // Handle specific error messages
             const msg = data.error || data.message || "Faucet unavailable";
             
-            if (msg.toLowerCase().includes('cooldown') || msg.toLowerCase().includes('already')) {
+            if (msg.toLowerCase().includes("cooldown") || msg.toLowerCase().includes("wait")) {
+                // Extract cooldown info if available
+                if (data.cooldownEnd) {
+                    DashboardState.faucet.canClaim = false;
+                    DashboardState.faucet.cooldownEnd = data.cooldownEnd;
+                    updateFaucetWidget();
+                }
                 showToast(`⏳ ${msg}`, "warning");
-            } else if (msg.toLowerCase().includes('insufficient') || msg.toLowerCase().includes('empty')) {
-                showToast("🚫 Faucet is empty. Contact admin.", "error");
             } else {
                 showToast(`❌ ${msg}`, "error");
             }
-            return false;
         }
     } catch (e) {
-        console.error('Faucet API Error:', e);
-        
-        if (e.message?.includes('Failed to fetch') || e.message?.includes('NetworkError')) {
-            showToast("🔌 Faucet API offline. Try again later.", "error");
-        } else {
-            showToast("❌ Faucet request failed", "error");
-        }
-        return false;
+        console.error("Faucet error:", e);
+        showToast("Faucet Offline - Try again later", "error");
     } finally {
+        DashboardState.faucet.isLoading = false;
         btnElement.disabled = false;
         btnElement.innerHTML = originalHTML;
     }
 }
 
-async function checkFaucetStatus() {
+// Check if user should see faucet widget
+function shouldShowFaucet() {
+    if (!State.isConnected) return false;
+    
+    const bkcBalance = State.bkcBalance || 0n;
+    
+    // Show faucet if balance is below threshold
+    return bkcBalance < FAUCET_BALANCE_THRESHOLD;
+}
+
+// Update faucet widget UI
+function updateFaucetWidget() {
+    const widget = document.getElementById('dashboard-faucet-widget');
+    if (!widget) return;
+    
+    if (!shouldShowFaucet()) {
+        widget.classList.add('hidden');
+        return;
+    }
+    
+    widget.classList.remove('hidden');
+    
+    const bkcBalance = State.bkcBalance || 0n;
+    const isNewUser = bkcBalance === 0n;
+    const cooldownTime = formatCooldownTime(DashboardState.faucet.cooldownEnd);
+    const canClaim = DashboardState.faucet.canClaim && !cooldownTime;
+    
+    const titleEl = document.getElementById('faucet-title');
+    const descEl = document.getElementById('faucet-desc');
+    const statusEl = document.getElementById('faucet-status');
+    const btn = document.getElementById('faucet-action-btn');
+    
+    // Clear previous classes
+    widget.className = 'glass-panel border-l-4 p-4';
+    if (btn) btn.className = 'w-full sm:w-auto font-bold py-2.5 px-5 rounded-lg text-sm transition-all';
+    
+    if (!canClaim && cooldownTime) {
+        // ON COOLDOWN
+        widget.classList.add('border-zinc-500');
+        if (titleEl) titleEl.innerText = "Faucet Cooldown";
+        if (descEl) descEl.innerText = "Come back when the timer ends";
+        if (statusEl) {
+            statusEl.classList.remove('hidden');
+            statusEl.innerHTML = `<i class="fa-solid fa-clock mr-1"></i> ${cooldownTime} remaining`;
+        }
+        if (btn) {
+            btn.classList.add('bg-zinc-700', 'text-zinc-400', 'cursor-not-allowed');
+            btn.innerHTML = '<i class="fa-solid fa-hourglass-half mr-2"></i> On Cooldown';
+            btn.disabled = true;
+        }
+    } else if (isNewUser) {
+        // NEW USER - GREEN WELCOME
+        widget.classList.add('border-green-500');
+        if (titleEl) titleEl.innerText = "🎉 Welcome to BackCoin!";
+        if (descEl) descEl.innerText = "Claim your free starter pack: 20 BKC + 0.005 ETH for gas";
+        if (statusEl) statusEl.classList.add('hidden');
+        if (btn) {
+            btn.classList.add('bg-green-600', 'hover:bg-green-500', 'text-white', 'hover:scale-105');
+            btn.innerHTML = '<i class="fa-solid fa-gift mr-2"></i> Claim Starter Pack';
+            btn.disabled = false;
+        }
+    } else {
+        // LOW BALANCE - BLUE
+        const balanceNum = formatBigNumber(bkcBalance).toFixed(2);
+        widget.classList.add('border-cyan-500');
+        if (titleEl) titleEl.innerText = "💧 Need More BKC?";
+        if (descEl) descEl.innerText = `Current balance: ${balanceNum} BKC • Get 20 BKC + ETH for gas`;
+        if (statusEl) statusEl.classList.add('hidden');
+        if (btn) {
+            btn.classList.add('bg-cyan-600', 'hover:bg-cyan-500', 'text-white', 'hover:scale-105');
+            btn.innerHTML = '<i class="fa-solid fa-faucet mr-2"></i> Request Tokens';
+            btn.disabled = false;
+        }
+    }
+}
+
+async function checkGasAndWarn() {
+    try {
+        const nativeBalance = await State.provider.getBalance(State.userAddress);
+        if (nativeBalance < ethers.parseEther("0.002")) {
+            const modal = document.getElementById('no-gas-modal-dash');
+            if (modal) { modal.classList.remove('hidden'); modal.classList.add('flex'); }
+            return false;
+        }
+        return true;
+    } catch (e) { return true; }
+}
+
+// ============================================================================
+// 1. RENDER LAYOUT - ENGLISH UI WITH IMPROVED FAUCET
+// ============================================================================
+
+function renderDashboardLayout() {
+    if (!DOMElements.dashboard) return;
+
+    const ecosystemAddr = addresses.ecosystemManager || '';
+    const explorerLink = ecosystemAddr ? `${CONTRACT_EXPLORER_URL}${ecosystemAddr}` : '#';
+
+    DOMElements.dashboard.innerHTML = `
+        <div class="flex flex-col gap-6 pb-10 max-w-7xl mx-auto">
+            
+            <!-- HEADER -->
+            <div class="flex justify-between items-center">
+                <h1 class="text-xl font-bold text-white">Dashboard</h1>
+                <button id="manual-refresh-btn" class="text-xs bg-zinc-800/50 hover:bg-zinc-700 text-zinc-400 hover:text-white px-3 py-1.5 rounded-lg flex items-center gap-2 transition-all">
+                    <i class="fa-solid fa-rotate"></i> <span class="hidden sm:inline">Sync</span>
+                </button>
+            </div>
+
+            <!-- METRICS GRID -->
+            <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+                ${renderMetricCard('Total Supply', 'fa-coins', 'dash-metric-supply', 'Total BKC tokens in circulation')}
+                ${renderMetricCard('Net pStake', 'fa-layer-group', 'dash-metric-pstake', 'Total staking power on network', 'purple')}
+                ${renderMetricCard('Treasury', 'fa-vault', 'dash-metric-treasury', 'Protocol treasury balance', 'blue')}
+                ${renderMetricCard('Scarcity Rate', 'fa-fire', 'dash-metric-scarcity', 'Tokens available for mining', 'orange')}
+                ${renderMetricCard('Locked Capital', 'fa-lock', 'dash-metric-locked', 'Supply locked in contracts', 'green')}
+            </div>
+
+            <!-- MAIN CONTENT -->
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                
+                <!-- LEFT: User Hub + Activity -->
+                <div class="lg:col-span-2 flex flex-col gap-6">
+                    
+                    <!-- ✅ FAUCET WIDGET - IMPROVED -->
+                    <div id="dashboard-faucet-widget" class="hidden glass-panel border-l-4 p-4">
+                        <div class="flex flex-col sm:flex-row justify-between items-center gap-3">
+                            <div class="text-center sm:text-left flex-1">
+                                <h3 id="faucet-title" class="text-white font-bold text-sm"></h3>
+                                <p id="faucet-desc" class="text-xs text-zinc-400 mt-1"></p>
+                                <p id="faucet-status" class="hidden text-xs text-amber-400 mt-1 font-mono"></p>
+                            </div>
+                            <button id="faucet-action-btn" class="w-full sm:w-auto font-bold py-2.5 px-5 rounded-lg text-sm transition-all"></button>
+                        </div>
+                    </div>
+
+                    <!-- USER HUB -->
+                    <div class="glass-panel p-5 relative overflow-hidden">
+                        <div class="absolute top-0 right-0 opacity-5">
+                            <i class="fa-solid fa-rocket text-8xl"></i>
+                        </div>
+                        
+                        <div class="flex flex-col md:flex-row gap-6 relative z-10">
+                            <div class="flex-1 space-y-4">
+                                <div>
+                                    <div class="flex items-center gap-2 mb-1">
+                                        <p class="text-zinc-400 text-xs font-medium uppercase tracking-wider">Claimable Rewards</p>
+                                        <span class="text-zinc-600 text-[10px] cursor-help" title="Net value after fees">ⓘ</span>
+                                    </div>
+                                    <div id="dash-user-rewards" class="text-3xl md:text-4xl font-bold text-white">--</div>
+                                </div>
+
+                                <div id="dash-user-gain-area" class="hidden p-2 bg-green-900/20 border border-green-500/20 rounded-lg inline-block">
+                                    <p class="text-[10px] text-green-400 font-bold flex items-center gap-1">
+                                        <i class="fa-solid fa-arrow-up"></i>
+                                        +<span id="dash-user-potential-gain">0</span> BKC with NFT
+                                    </p>
+                                </div>
+
+                                <button id="dashboardClaimBtn" class="bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700 text-white font-bold py-2.5 px-6 rounded-lg shadow-lg transition-all text-sm w-full sm:w-auto disabled:opacity-40 disabled:cursor-not-allowed" disabled>
+                                    <i class="fa-solid fa-gift mr-2"></i> Claim
+                                </button>
+                                
+                                <div class="flex items-center gap-3 pt-3 border-t border-zinc-700/50">
+                                    <div>
+                                        <p class="text-zinc-500 text-[10px] uppercase">Your pStake</p>
+                                        <p id="dash-user-pstake" class="text-lg font-bold text-purple-400 font-mono">--</p>
+                                    </div>
+                                    <button class="text-xs text-purple-400 hover:text-white font-medium delegate-link transition-colors ml-auto">
+                                        <i class="fa-solid fa-plus mr-1"></i> Stake More
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div id="dash-booster-area" class="flex-1 md:border-l md:border-zinc-700/50 md:pl-6 flex flex-col justify-center min-h-[140px]">
+                                ${renderLoading()}
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- ACTIVITY LIST -->
+                    <div class="glass-panel p-4">
+                        <div class="flex justify-between items-center mb-4">
+                            <h3 class="text-sm font-bold text-white flex items-center gap-2">
+                                <i class="fa-solid fa-clock-rotate-left text-zinc-500"></i> 
+                                <span id="activity-title">Activity</span>
+                            </h3>
+                            
+                            <div class="flex gap-2">
+                                <select id="activity-filter-type" class="bg-zinc-800 border border-zinc-700 text-zinc-300 text-[10px] rounded px-2 py-1 outline-none cursor-pointer">
+                                    <option value="ALL">All</option>
+                                    <option value="STAKE">Staking</option>
+                                    <option value="CLAIM">Claims</option>
+                                    <option value="NFT">NFT</option>
+                                    <option value="GAME">Fortune</option>
+                                    <option value="FAUCET">Faucet</option>
+                                </select>
+                                <button id="activity-sort-toggle" class="bg-zinc-800 border border-zinc-700 text-zinc-400 text-[10px] rounded px-2 py-1 hover:bg-zinc-700">
+                                    <i class="fa-solid fa-arrow-down-wide-short"></i>
+                                </button>
+                            </div>
+                        </div>
+
+                        <div id="dash-activity-list" class="space-y-2 min-h-[150px] max-h-[400px] overflow-y-auto custom-scrollbar">
+                            ${renderLoading()}
+                        </div>
+                        
+                        <div id="dash-pagination-controls" class="flex justify-between items-center mt-4 pt-3 border-t border-zinc-700/30 hidden">
+                            <button class="text-xs text-zinc-500 hover:text-white disabled:opacity-30 transition-colors" id="page-prev">
+                                <i class="fa-solid fa-chevron-left"></i> Prev
+                            </button>
+                            <span class="text-[10px] text-zinc-600 font-mono" id="page-indicator">1/1</span>
+                            <button class="text-xs text-zinc-500 hover:text-white disabled:opacity-30 transition-colors" id="page-next">
+                                Next <i class="fa-solid fa-chevron-right"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- RIGHT SIDEBAR -->
+                <div class="flex flex-col gap-4">
+                    
+                    <!-- NETWORK STATUS -->
+                    <div class="glass-panel p-4">
+                        <div class="flex justify-between items-center mb-3">
+                            <h3 class="text-sm font-bold text-white">Network</h3>
+                            <span class="text-[10px] bg-green-500/20 text-green-400 px-2 py-0.5 rounded border border-green-500/30 flex items-center gap-1">
+                                <span class="w-1.5 h-1.5 bg-green-400 rounded-full animate-pulse"></span> Live
+                            </span>
+                        </div>
+                        <div class="space-y-2 text-xs">
+                            <div class="flex justify-between items-center">
+                                <span class="text-zinc-500">Chain</span>
+                                <span class="text-white font-mono">Arbitrum Sepolia</span>
+                            </div>
+                            <div class="flex justify-between items-center">
+                                <span class="text-zinc-500">Contracts</span>
+                                <span class="text-green-400">Synced</span>
+                            </div>
+                            <a href="${explorerLink}" target="_blank" class="flex justify-between items-center group hover:bg-zinc-800/50 -mx-2 px-2 py-1 rounded transition-colors">
+                                <span class="text-zinc-500">Main Contract</span>
+                                <span class="text-blue-400 group-hover:text-blue-300 flex items-center gap-1">
+                                    View <i class="fa-solid fa-external-link text-[8px]"></i>
+                                </span>
+                            </a>
+                        </div>
+                    </div>
+
+                    <!-- QUICK ACTIONS -->
+                    <div class="glass-panel p-4 bg-gradient-to-b from-purple-900/20 to-transparent border-purple-500/20">
+                        <h3 class="font-bold text-white text-sm mb-2">Earn Passive Yield</h3>
+                        <p class="text-xs text-zinc-400 mb-3">Delegate BKC to the Global Pool</p>
+                        <button class="w-full bg-purple-600 hover:bg-purple-500 text-white font-bold py-2.5 rounded-lg text-sm delegate-link transition-colors">
+                            Stake Now <i class="fa-solid fa-arrow-right ml-2"></i>
+                        </button>
+                    </div>
+
+                    <div class="glass-panel p-4 border-cyan-500/20">
+                        <h3 class="font-bold text-white text-sm mb-2">Boost Rewards</h3>
+                        <p class="text-xs text-zinc-400 mb-3">Rent an NFT by the hour</p>
+                        <button class="w-full border border-cyan-500/30 text-cyan-400 hover:bg-cyan-900/20 font-bold py-2 rounded-lg text-sm go-to-rental transition-colors">
+                            AirBNFT Market
+                        </button>
+                    </div>
+
+                    <!-- PORTFOLIO STATS -->
+                    <div id="dash-presale-stats" class="hidden glass-panel p-4 border-amber-500/20">
+                        <h3 class="text-xs font-bold text-amber-500 uppercase tracking-wider mb-3">
+                            <i class="fa-solid fa-wallet mr-1"></i> Portfolio
+                        </h3>
+                        <div class="grid grid-cols-2 gap-3">
+                            <div class="bg-zinc-900/50 rounded p-2 border border-zinc-800">
+                                <p class="text-[10px] text-zinc-500">Spent</p>
+                                <p id="stats-total-spent" class="text-sm font-bold text-white">0 ETH</p>
+                            </div>
+                            <div class="bg-zinc-900/50 rounded p-2 border border-zinc-800">
+                                <p class="text-[10px] text-zinc-500">NFTs</p>
+                                <p id="stats-total-boosters" class="text-sm font-bold text-white">0</p>
+                            </div>
+                        </div>
+                        <div id="stats-tier-badges" class="flex gap-1 flex-wrap mt-2"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        ${renderBoosterModal()}
+        ${renderGasModal()}
+    `;
+
+    attachDashboardListeners();
+}
+
+function renderMetricCard(label, icon, id, tooltip, color = 'zinc') {
+    const colorClasses = {
+        zinc: 'text-zinc-400',
+        purple: 'text-purple-400',
+        blue: 'text-blue-400',
+        orange: 'text-orange-400',
+        green: 'text-green-400'
+    };
+    const iconColor = colorClasses[color] || colorClasses.zinc;
+
+    return `
+        <div class="glass-panel p-3 sm:p-4 group hover:border-zinc-600 transition-all cursor-default" title="${tooltip}">
+            <div class="flex items-center gap-1.5 mb-1">
+                <i class="fa-solid ${icon} ${iconColor} text-xs"></i>
+                <span class="text-[10px] text-zinc-500 uppercase font-bold tracking-wider truncate">${label}</span>
+            </div>
+            <p id="${id}" class="text-base sm:text-lg font-bold text-white truncate">--</p>
+        </div>
+    `;
+}
+
+function renderBoosterModal() {
+    return `
+        <div id="booster-info-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/80 backdrop-blur-sm p-4 opacity-0 transition-opacity duration-300">
+            <div class="bg-zinc-900 border border-amber-500/50 rounded-xl max-w-sm w-full p-5 shadow-2xl transform scale-95 transition-transform duration-300 relative">
+                <button id="close-booster-modal" class="absolute top-3 right-3 text-zinc-500 hover:text-white"><i class="fa-solid fa-xmark"></i></button>
+                
+                <div class="text-center mb-4">
+                    <div class="inline-block bg-amber-500/20 p-3 rounded-full mb-2">
+                        <i class="fa-solid fa-rocket text-3xl text-amber-500"></i>
+                    </div>
+                    <h3 class="text-xl font-bold text-white">Boost Efficiency</h3>
+                    <p class="text-zinc-400 text-xs mt-1">NFT holders earn up to 2x more</p>
+                </div>
+                
+                <div class="space-y-2 bg-zinc-800/50 p-3 rounded-lg text-sm">
+                    <div class="flex justify-between"><span class="text-zinc-400">No NFT:</span><span class="text-zinc-500 font-bold">50%</span></div>
+                    <div class="flex justify-between"><span class="text-zinc-400">Bronze:</span><span class="text-yellow-300 font-bold">80%</span></div>
+                    <div class="flex justify-between"><span class="text-amber-400">Diamond:</span><span class="text-green-400 font-bold">100%</span></div>
+                </div>
+                
+                <div class="grid grid-cols-2 gap-2 mt-4">
+                    <button class="bg-amber-600 hover:bg-amber-500 text-white font-bold py-2.5 rounded-lg text-sm go-to-store">Buy NFT</button>
+                    <button class="bg-cyan-700 hover:bg-cyan-600 text-white font-bold py-2.5 rounded-lg text-sm go-to-rental">Rent NFT</button>
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+function renderGasModal() {
+    return `
+        <div id="no-gas-modal-dash" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/90 backdrop-blur-sm p-4">
+            <div class="bg-zinc-900 border border-zinc-800 rounded-xl max-w-xs w-full p-5 text-center">
+                <div class="w-14 h-14 bg-red-500/10 rounded-full flex items-center justify-center mx-auto mb-3 border border-red-500/30">
+                    <i class="fa-solid fa-gas-pump text-xl text-red-500"></i>
+                </div>
+                <h3 class="text-lg font-bold text-white mb-1">No Gas</h3>
+                <p class="text-zinc-400 text-xs mb-4">You need Arbitrum Sepolia ETH</p>
+                
+                <button id="emergency-faucet-btn" class="w-full bg-green-600 hover:bg-green-500 text-white font-bold py-2.5 rounded-lg text-sm mb-3">
+                    <i class="fa-solid fa-hand-holding-medical mr-2"></i> Get Free Gas
+                </button>
+                
+                <button id="close-gas-modal-dash" class="text-zinc-500 hover:text-white text-xs">Close</button>
+            </div>
+        </div>
+    `;
+}
+
+// ============================================================================
+// 2. DATA LOGIC - FIXED METRICS
+// ============================================================================
+
+async function updateGlobalMetrics() {
+    try {
+        if (!State.bkcTokenContractPublic) return;
+
+        const [totalSupply, totalPStake, maxSupply] = await Promise.all([
+            safeContractCall(State.bkcTokenContractPublic, 'totalSupply', [], 0n),
+            safeContractCall(State.delegationManagerContractPublic, 'totalNetworkPStake', [], 0n),
+            safeContractCall(State.bkcTokenContractPublic, 'MAX_SUPPLY', [], 0n)
+        ]);
+
+        let treasuryAddr = addresses.treasuryWallet;
+        if (!treasuryAddr || treasuryAddr === ethers.ZeroAddress) {
+            try {
+                if (State.ecosystemManagerContractPublic) {
+                    treasuryAddr = await safeContractCall(State.ecosystemManagerContractPublic, 'getTreasuryAddress', [], ethers.ZeroAddress);
+                }
+            } catch (e) { }
+        }
+
+        let treasuryBalance = 0n;
+        if (treasuryAddr && treasuryAddr !== ethers.ZeroAddress) {
+            treasuryBalance = await safeContractCall(State.bkcTokenContractPublic, 'balanceOf', [treasuryAddr], 0n);
+        }
+
+        let fortunePoolBalance = 0n;
+        let delegationBalance = 0n;
+
+        try {
+            if (addresses.fortunePool) {
+                fortunePoolBalance = await safeContractCall(State.bkcTokenContractPublic, 'balanceOf', [addresses.fortunePool], 0n);
+            }
+            if (addresses.delegationManager) {
+                delegationBalance = await safeContractCall(State.bkcTokenContractPublic, 'balanceOf', [addresses.delegationManager], 0n);
+            }
+        } catch (e) { }
+
+        // METRICS CALCULATION
+        const supplyNum = formatBigNumber(totalSupply);
+        const treasuryNum = formatBigNumber(treasuryBalance);
+
+        // Scarcity = % remaining to mint
+        const remainingToMint = maxSupply > totalSupply ? maxSupply - totalSupply : 0n;
+        let scarcityPercent = 0;
+        if (maxSupply > 0n) {
+            scarcityPercent = Number((remainingToMint * 10000n) / maxSupply) / 100;
+        }
+        if (scarcityPercent > 100) scarcityPercent = 100;
+
+        // Locked = staking + fortune (not treasury)
+        const totalLocked = delegationBalance + fortunePoolBalance;
+        let lockedPercent = 0;
+        if (totalSupply > 0n) {
+            lockedPercent = Number((totalLocked * 10000n) / totalSupply) / 100;
+        }
+
+        // UPDATE UI
+        const setMetric = (id, value, suffix = '') => {
+            const el = document.getElementById(id);
+            if (el) el.innerHTML = `${value}${suffix ? ` <span class="text-xs text-zinc-500">${suffix}</span>` : ''}`;
+        };
+
+        setMetric('dash-metric-supply', formatCompact(supplyNum), 'BKC');
+        setMetric('dash-metric-pstake', formatPStake(totalPStake));
+        setMetric('dash-metric-treasury', formatCompact(treasuryNum), 'BKC');
+
+        const scarcityEl = document.getElementById('dash-metric-scarcity');
+        if (scarcityEl) {
+            const color = getScarcityColor(scarcityPercent);
+            scarcityEl.innerHTML = `<span class="${color}">${scarcityPercent.toFixed(1)}%</span>`;
+        }
+
+        const lockedEl = document.getElementById('dash-metric-locked');
+        if (lockedEl) {
+            const lockColor = lockedPercent > 30 ? 'text-green-400' : lockedPercent > 10 ? 'text-yellow-400' : 'text-zinc-400';
+            lockedEl.innerHTML = `<span class="${lockColor}">${lockedPercent.toFixed(1)}%</span>`;
+        }
+
+        DashboardState.metricsCache = { supply: supplyNum, treasury: treasuryNum, scarcity: scarcityPercent, locked: lockedPercent, timestamp: Date.now() };
+
+    } catch (e) {
+        console.error("Metrics Error", e);
+    }
+}
+
+async function fetchUserProfile() {
+    if (!State.userAddress) return;
+    try {
+        const response = await fetch(`${API_ENDPOINTS.getBoosters.replace('/boosters/', '/profile/')}/${State.userAddress}`);
+        if (response.ok) {
+            DashboardState.userProfile = await response.json();
+            renderPresaleStats(DashboardState.userProfile);
+        }
+    } catch (e) { }
+}
+
+function renderPresaleStats(profile) {
+    const statsDiv = document.getElementById('dash-presale-stats');
+    if (!statsDiv || !profile || !profile.presale) return;
+    if (!profile.presale.totalBoosters || profile.presale.totalBoosters === 0) return;
+
+    statsDiv.classList.remove('hidden');
+
+    const spentWei = profile.presale.totalSpentWei || 0;
+    const spentEth = parseFloat(ethers.formatEther(BigInt(spentWei))).toFixed(4);
+
+    document.getElementById('stats-total-spent').innerText = `${spentEth} ETH`;
+    document.getElementById('stats-total-boosters').innerText = profile.presale.totalBoosters || 0;
+
+    const badgesContainer = document.getElementById('stats-tier-badges');
+    if (badgesContainer && profile.presale.tiersOwned) {
+        let html = '';
+        Object.entries(profile.presale.tiersOwned).forEach(([tierId, count]) => {
+            const tierConfig = boosterTiers[Number(tierId) - 1];
+            const name = tierConfig ? tierConfig.name : `T${tierId}`;
+            html += `<span class="text-[9px] bg-zinc-800 text-zinc-400 px-1.5 py-0.5 rounded">${count}x ${name}</span>`;
+        });
+        if (html) badgesContainer.innerHTML = html;
+    }
+}
+
+async function updateUserHub(forceRefresh = false) {
     if (!State.isConnected) {
-        hideFaucet();
+        const boosterArea = document.getElementById('dash-booster-area');
+        if (boosterArea) {
+            boosterArea.innerHTML = `
+                <div class="text-center">
+                    <p class="text-zinc-500 text-xs mb-2">Connect wallet to view</p>
+                    <button onclick="window.openConnectModal()" class="text-amber-400 hover:text-white text-xs font-bold border border-amber-400/30 px-3 py-1.5 rounded hover:bg-amber-400/10">
+                        Connect
+                    </button>
+                </div>`;
+        }
         return;
     }
 
     try {
-        // Check if user has low balance
-        const balance = State.currentUserBalance || 0n;
-        const threshold = ethers.parseEther("100"); // Show faucet if < 100 BKC
-
-        if (balance < threshold) {
-            showFaucet(true);
-        } else {
-            hideFaucet();
+        const rewardsEl = document.getElementById('dash-user-rewards');
+        if (forceRefresh && rewardsEl) {
+            rewardsEl.classList.add('animate-pulse', 'opacity-70');
         }
+
+        const [, claimDetails, boosterData] = await Promise.all([
+            loadUserData(),
+            calculateClaimDetails(),
+            getHighestBoosterBoostFromAPI()
+        ]);
+
+        const netClaimAmount = claimDetails?.netClaimAmount || 0n;
+        animateClaimableRewards(netClaimAmount);
+
+        if (rewardsEl) rewardsEl.classList.remove('animate-pulse', 'opacity-70');
+
+        const claimBtn = document.getElementById('dashboardClaimBtn');
+        if (claimBtn) claimBtn.disabled = netClaimAmount <= 0n;
+
+        const pStakeEl = document.getElementById('dash-user-pstake');
+        if (pStakeEl) pStakeEl.innerText = formatPStake(State.userData?.pStake || 0n);
+
+        updateBoosterDisplay(boosterData, claimDetails);
+        fetchUserProfile();
+        
+        // ✅ FIXED: Check faucet status and update widget
+        await checkFaucetStatus();
+        updateFaucetWidget();
+
     } catch (e) {
-        hideFaucet();
+        console.error("User Hub Error:", e);
     }
 }
 
-function showFaucet(canClaim) {
-    const card = document.getElementById('faucet-card');
-    const btn = document.getElementById('faucet-btn');
-    const status = document.getElementById('faucet-status');
-    
-    if (card) card.classList.remove('hidden');
-    if (btn) btn.disabled = !canClaim;
-    if (status) status.textContent = canClaim ? 'Get free BKC + ETH for testing' : 'Cooldown active';
-}
+function updateBoosterDisplay(data, claimDetails) {
+    const container = document.getElementById('dash-booster-area');
+    if (!container) return;
 
-function hideFaucet() {
-    const card = document.getElementById('faucet-card');
-    if (card) card.classList.add('hidden');
-}
+    const currentBoostBips = data?.highestBoost || 0;
 
-// ============================================================================
-// EVENT LISTENERS
-// ============================================================================
-function attachListeners() {
-    const dash = DOMElements.dashboard || document.getElementById('dashboard');
-    if (!dash) {
-        console.warn('❌ Dashboard element not found for event listeners');
+    if (currentBoostBips === 0) {
+        const grossReward = claimDetails?.totalRewards || 0n;
+        const potentialGain = (grossReward * 5000n) / 10000n;
+
+        if (potentialGain > 0n) {
+            const gainArea = document.getElementById('dash-user-gain-area');
+            if (gainArea) {
+                gainArea.classList.remove('hidden');
+                document.getElementById('dash-user-potential-gain').innerText = formatBigNumber(potentialGain).toFixed(2);
+            }
+        }
+
+        container.innerHTML = `
+            <div class="text-center space-y-3">
+                <div class="flex items-center justify-center gap-2">
+                    <div class="w-10 h-10 bg-amber-500/20 rounded-full flex items-center justify-center">
+                        <i class="fa-solid fa-rocket text-amber-400"></i>
+                    </div>
+                    <div class="text-left">
+                        <p class="text-white text-sm font-bold">50% Efficiency</p>
+                        <p class="text-[10px] text-zinc-500">No NFT active</p>
+                    </div>
+                </div>
+                
+                <div class="w-full bg-zinc-800 rounded-full h-2 overflow-hidden">
+                    <div class="bg-gradient-to-r from-red-500 to-amber-500 h-full rounded-full" style="width: 50%"></div>
+                </div>
+                
+                <button id="open-booster-info" class="text-xs text-amber-400 hover:text-white font-medium">
+                    <i class="fa-solid fa-circle-info mr-1"></i> How to boost?
+                </button>
+                
+                <div class="flex gap-2 justify-center">
+                    <button class="go-to-store bg-amber-600 hover:bg-amber-500 text-white text-[10px] font-bold py-1.5 px-3 rounded">Buy NFT</button>
+                    <button class="go-to-rental bg-cyan-700 hover:bg-cyan-600 text-white text-[10px] font-bold py-1.5 px-3 rounded">Rent</button>
+                </div>
+            </div>
+        `;
         return;
     }
-    
-    console.log('📌 Dashboard listeners attached');
 
-    dash.addEventListener('click', async (e) => {
-        const target = e.target;
-        
-        // Navigation buttons (data-nav) - CHECK FIRST
-        const navBtn = target.closest('[data-nav]');
-        if (navBtn) {
-            e.preventDefault();
-            const pageId = navBtn.dataset.nav;
-            console.log('🔗 Navigation click:', pageId);
-            if (pageId && window.navigateTo) {
-                window.navigateTo(pageId);
+    const isRented = data.source === 'rented';
+    const badgeColor = isRented ? 'bg-cyan-500/20 text-cyan-300' : 'bg-green-500/20 text-green-300';
+    const badgeText = isRented ? 'Rented' : 'Owned';
+
+    let finalImageUrl = data.imageUrl;
+    if (!finalImageUrl || finalImageUrl.includes('placeholder')) {
+        const tierInfo = boosterTiers.find(t => t.boostBips === currentBoostBips);
+        if (tierInfo && tierInfo.realImg) finalImageUrl = tierInfo.realImg;
+    }
+
+    container.innerHTML = `
+        <div class="flex items-center gap-3 bg-zinc-800/40 border border-green-500/20 rounded-lg p-3 nft-clickable-image cursor-pointer" data-address="${addresses.rewardBoosterNFT}" data-tokenid="${data.tokenId}">
+            <div class="relative w-14 h-14 flex-shrink-0">
+                <img src="${finalImageUrl}" class="w-full h-full object-cover rounded-lg" onerror="this.src='./assets/bkc_logo_3d.png'">
+                <div class="absolute -top-1 -left-1 bg-green-500 text-black font-black text-[9px] px-1.5 py-0.5 rounded">100%</div>
+            </div>
+            <div class="flex-1 min-w-0">
+                <div class="flex items-center gap-2 mb-0.5">
+                    <span class="text-[9px] font-bold ${badgeColor} px-1.5 py-0.5 rounded uppercase">${badgeText}</span>
+                    <span class="text-[9px] text-zinc-600">#${data.tokenId}</span>
+                </div>
+                <h4 class="text-white font-bold text-xs truncate">${data.boostName}</h4>
+                <p class="text-[10px] text-green-400"><i class="fa-solid fa-check-circle mr-1"></i>Max Yield</p>
+            </div>
+        </div>
+    `;
+}
+
+// ============================================================================
+// 3. ACTIVITY - USER OR NETWORK
+// ============================================================================
+
+async function fetchAndProcessActivities() {
+    const listEl = document.getElementById('dash-activity-list');
+    const titleEl = document.getElementById('activity-title');
+
+    try {
+        if (State.isConnected) {
+            if (DashboardState.activities.length === 0) {
+                if (listEl) listEl.innerHTML = renderLoading();
+                const response = await fetch(`${API_ENDPOINTS.getHistory}/${State.userAddress}`);
+                if (response.ok) {
+                    DashboardState.activities = await response.json();
+                }
             }
-            return;
+
+            if (DashboardState.activities.length > 0) {
+                if (titleEl) titleEl.textContent = 'Your Activity';
+                applyFiltersAndRender();
+                return;
+            }
         }
 
-        // Refresh buttons
-        if (target.closest('#dash-refresh') || target.closest('#dash-refresh-desktop')) {
-            const btn = target.closest('#dash-refresh') || target.closest('#dash-refresh-desktop');
-            console.log('🔄 Refresh clicked');
-            btn.querySelector('i')?.classList.add('fa-spin');
-            await loadAllData();
-            await updateUserUI();
-            setTimeout(() => btn.querySelector('i')?.classList.remove('fa-spin'), 500);
-            return;
+        // Fallback: Network Activity
+        if (titleEl) titleEl.textContent = 'Network Activity';
+        await fetchNetworkActivity();
+
+    } catch (e) {
+        console.error("Activity fetch error:", e);
+        if (titleEl) titleEl.textContent = 'Network Activity';
+        await fetchNetworkActivity();
+    }
+}
+
+async function fetchNetworkActivity() {
+    const listEl = document.getElementById('dash-activity-list');
+    if (!listEl) return;
+
+    if (DashboardState.isLoadingNetworkActivity) return;
+
+    // 5 minute cache
+    const cacheAge = Date.now() - DashboardState.networkActivitiesTimestamp;
+    if (DashboardState.networkActivities.length > 0 && cacheAge < 300000) {
+        renderNetworkActivityList();
+        return;
+    }
+
+    DashboardState.isLoadingNetworkActivity = true;
+    listEl.innerHTML = renderLoading();
+
+    try {
+        const response = await fetch(`${NETWORK_ACTIVITY_API}?limit=20`);
+        if (response.ok) {
+            DashboardState.networkActivities = await response.json();
+            DashboardState.networkActivitiesTimestamp = Date.now();
+        } else {
+            DashboardState.networkActivities = [];
+        }
+    } catch (e) {
+        console.error("Network activity fetch error:", e);
+        DashboardState.networkActivities = [];
+    } finally {
+        DashboardState.isLoadingNetworkActivity = false;
+    }
+
+    renderNetworkActivityList();
+}
+
+function renderNetworkActivityList() {
+    const listEl = document.getElementById('dash-activity-list');
+    const controlsEl = document.getElementById('dash-pagination-controls');
+    if (!listEl) return;
+
+    if (DashboardState.networkActivities.length === 0) {
+        listEl.innerHTML = `
+            <div class="text-center py-8">
+                <div class="w-12 h-12 bg-zinc-800 rounded-full flex items-center justify-center mx-auto mb-3">
+                    <i class="fa-solid fa-globe text-zinc-600"></i>
+                </div>
+                <p class="text-zinc-500 text-xs">No recent network activity</p>
+                <p class="text-zinc-600 text-[10px] mt-1">Transactions will appear here</p>
+            </div>
+        `;
+        if (controlsEl) controlsEl.classList.add('hidden');
+        return;
+    }
+
+    listEl.innerHTML = DashboardState.networkActivities.slice(0, 10).map(item => {
+        const dateStr = formatDate(item.timestamp || item.createdAt);
+        const address = item.userAddress || item.from || '';
+        const truncAddr = truncateAddress(address);
+
+        let icon = 'fa-circle', color = 'text-zinc-500', label = item.type;
+        const t = (item.type || '').toUpperCase();
+
+        if (t.includes('DELEGATION') || t.includes('STAKE')) { icon = 'fa-arrow-up'; color = 'text-green-400'; label = 'Staked'; }
+        else if (t.includes('UNSTAKE')) { icon = 'fa-arrow-down'; color = 'text-orange-400'; label = 'Unstaked'; }
+        else if (t.includes('REWARD') || t.includes('CLAIM')) { icon = 'fa-gift'; color = 'text-amber-400'; label = 'Claimed'; }
+        else if (t.includes('NFTBOUGHT') || t.includes('BOOSTERBUY')) { icon = 'fa-star'; color = 'text-yellow-300'; label = 'Minted NFT'; }
+        else if (t.includes('RENTAL')) { icon = 'fa-handshake'; color = 'text-cyan-400'; label = 'Rental'; }
+        else if (t.includes('NOTARY')) { icon = 'fa-file-signature'; color = 'text-indigo-400'; label = 'Notarized'; }
+        else if (t.includes('FORTUNE') || t.includes('GAME')) { icon = 'fa-dice'; color = 'text-purple-400'; label = 'Fortune'; }
+        else if (t.includes('FAUCET')) { icon = 'fa-faucet'; color = 'text-cyan-400'; label = 'Faucet'; }
+
+        const txLink = item.txHash ? `${EXPLORER_BASE_URL}${item.txHash}` : '#';
+        let rawAmount = item.amount || item.details?.amount || "0";
+        const amountNum = formatBigNumber(BigInt(rawAmount));
+        const amountDisplay = amountNum > 0.01 ? amountNum.toFixed(2) : '';
+
+        return `
+            <a href="${txLink}" target="_blank" class="flex items-center justify-between p-2.5 bg-zinc-800/30 hover:bg-zinc-800/60 border border-zinc-700/30 rounded-lg transition-colors group">
+                <div class="flex items-center gap-2.5">
+                    <div class="w-7 h-7 rounded-full bg-zinc-900 flex items-center justify-center">
+                        <i class="fa-solid ${icon} ${color} text-[10px]"></i>
+                    </div>
+                    <div>
+                        <p class="text-white text-xs font-medium">${label}</p>
+                        <p class="text-[10px] text-zinc-600">${truncAddr} • ${dateStr}</p>
+                    </div>
+                </div>
+                <div class="text-right">
+                    ${amountDisplay ? `<p class="text-white text-xs font-mono">${amountDisplay}</p>` : ''}
+                    <i class="fa-solid fa-external-link text-[8px] text-zinc-600 group-hover:text-blue-400 transition-colors"></i>
+                </div>
+            </a>
+        `;
+    }).join('');
+
+    if (controlsEl) controlsEl.classList.add('hidden');
+}
+
+function applyFiltersAndRender() {
+    let result = [...DashboardState.activities];
+    const type = DashboardState.filters.type;
+    const normalize = (t) => (t || '').toUpperCase();
+
+    if (type !== 'ALL') {
+        result = result.filter(item => {
+            const t = normalize(item.type);
+            if (type === 'STAKE') return t.includes('DELEGATION') || t.includes('STAKE') || t.includes('UNSTAKE');
+            if (type === 'CLAIM') return t.includes('REWARD') || t.includes('CLAIM');
+            if (type === 'NFT') return t.includes('BOOSTER') || t.includes('RENT') || t.includes('NFT') || t.includes('TRANSFER');
+            if (type === 'GAME') return t.includes('FORTUNE') || t.includes('GAME') || t.includes('REQUEST') || t.includes('RESULT');
+            if (type === 'FAUCET') return t.includes('FAUCET');
+            return true;
+        });
+    }
+
+    result.sort((a, b) => {
+        const getTime = (obj) => {
+            if (obj.timestamp && obj.timestamp._seconds) return obj.timestamp._seconds;
+            if (obj.createdAt && obj.createdAt._seconds) return obj.createdAt._seconds;
+            if (obj.timestamp) return new Date(obj.timestamp).getTime() / 1000;
+            return 0;
+        };
+        return DashboardState.filters.sort === 'NEWEST' ? getTime(b) - getTime(a) : getTime(a) - getTime(b);
+    });
+
+    DashboardState.filteredActivities = result;
+    DashboardState.pagination.currentPage = 1;
+    renderActivityPage();
+}
+
+function renderActivityPage() {
+    const listEl = document.getElementById('dash-activity-list');
+    const controlsEl = document.getElementById('dash-pagination-controls');
+    if (!listEl) return;
+
+    if (DashboardState.filteredActivities.length === 0) {
+        listEl.innerHTML = renderNoData("No activities found");
+        if (controlsEl) controlsEl.classList.add('hidden');
+        return;
+    }
+
+    const start = (DashboardState.pagination.currentPage - 1) * DashboardState.pagination.itemsPerPage;
+    const end = start + DashboardState.pagination.itemsPerPage;
+    const pageItems = DashboardState.filteredActivities.slice(start, end);
+
+    listEl.innerHTML = pageItems.map(item => {
+        const dateStr = formatDate(item.timestamp || item.createdAt);
+
+        let icon = 'fa-circle', color = 'text-zinc-500', label = item.type;
+        const t = (item.type || '').toUpperCase();
+
+        if (t.includes('DELEGATION') || t.includes('STAKE')) { icon = 'fa-arrow-up'; color = 'text-green-400'; label = 'Staked'; }
+        else if (t.includes('UNSTAKE')) { icon = 'fa-arrow-down'; color = 'text-orange-400'; label = 'Unstaked'; }
+        else if (t.includes('REWARD') || t.includes('CLAIM')) { icon = 'fa-gift'; color = 'text-amber-400'; label = 'Claimed'; }
+        else if (t.includes('NFTBOUGHT')) { icon = 'fa-cart-shopping'; color = 'text-green-400'; label = 'Bought NFT'; }
+        else if (t.includes('BOOSTERBUY')) { icon = 'fa-star'; color = 'text-yellow-300'; label = 'Minted NFT'; }
+        else if (t.includes('NFTSOLD')) { icon = 'fa-money-bill'; color = 'text-orange-400'; label = 'Sold NFT'; }
+        else if (t.includes('RENTAL')) { icon = 'fa-handshake'; color = 'text-cyan-400'; label = 'Rental'; }
+        else if (t.includes('NOTARY')) { icon = 'fa-file-signature'; color = 'text-indigo-400'; label = 'Notarized'; }
+        else if (t.includes('FAUCET')) { icon = 'fa-faucet'; color = 'text-cyan-400'; label = 'Faucet'; }
+        else if (t === 'GAMEREQUESTED' || t.includes('FORTUNEGAMEREQUEST')) { icon = 'fa-dice'; color = 'text-purple-400'; label = 'Fortune Bet'; }
+        else if (t === 'GAMERESULT' || t.includes('FORTUNEGAMERESULT')) {
+            const isWin = item.details?.isWin;
+            icon = isWin ? 'fa-trophy' : 'fa-dice';
+            color = isWin ? 'text-yellow-400' : 'text-zinc-400';
+            label = isWin ? 'Won!' : 'Lost';
         }
 
-        // Claim rewards
-        if (target.closest('#claim-rewards-btn')) {
-            const btn = target.closest('#claim-rewards-btn');
-            console.log('💰 Claim clicked, disabled:', btn.disabled);
-            if (btn.disabled) return;
-            
-            const originalHTML = btn.innerHTML;
+        const txLink = item.txHash ? `${EXPLORER_BASE_URL}${item.txHash}` : '#';
+        let rawAmount = item.amount || item.details?.amount || "0";
+        const amountNum = formatBigNumber(BigInt(rawAmount));
+        const amountDisplay = amountNum > 0.01 ? amountNum.toFixed(2) : '';
+
+        return `
+            <a href="${txLink}" target="_blank" class="flex items-center justify-between p-2.5 bg-zinc-800/30 hover:bg-zinc-800/60 border border-zinc-700/30 rounded-lg transition-colors group">
+                <div class="flex items-center gap-2.5">
+                    <div class="w-7 h-7 rounded-full bg-zinc-900 flex items-center justify-center">
+                        <i class="fa-solid ${icon} ${color} text-[10px]"></i>
+                    </div>
+                    <div>
+                        <p class="text-white text-xs font-medium">${label}</p>
+                        <p class="text-[10px] text-zinc-600">${dateStr}</p>
+                    </div>
+                </div>
+                <div class="text-right">
+                    ${amountDisplay ? `<p class="text-white text-xs font-mono">${amountDisplay}</p>` : ''}
+                    <i class="fa-solid fa-external-link text-[8px] text-zinc-600 group-hover:text-blue-400 transition-colors"></i>
+                </div>
+            </a>
+        `;
+    }).join('');
+
+    if (controlsEl) {
+        const maxPage = Math.ceil(DashboardState.filteredActivities.length / DashboardState.pagination.itemsPerPage);
+        if (maxPage > 1) {
+            controlsEl.classList.remove('hidden');
+            document.getElementById('page-indicator').innerText = `${DashboardState.pagination.currentPage}/${maxPage}`;
+            document.getElementById('page-prev').disabled = DashboardState.pagination.currentPage === 1;
+            document.getElementById('page-next').disabled = DashboardState.pagination.currentPage >= maxPage;
+        } else {
+            controlsEl.classList.add('hidden');
+        }
+    }
+}
+
+// ============================================================================
+// 4. EVENT LISTENERS
+// ============================================================================
+
+function attachDashboardListeners() {
+    if (!DOMElements.dashboard) return;
+
+    DOMElements.dashboard.addEventListener('click', async (e) => {
+        const target = e.target;
+
+        if (target.closest('#manual-refresh-btn')) {
+            const btn = target.closest('#manual-refresh-btn');
             btn.disabled = true;
-            btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-2"></i> Claiming...';
+            btn.innerHTML = `<i class="fa-solid fa-rotate fa-spin"></i>`;
+            await updateUserHub(true);
+            await updateGlobalMetrics();
+            DashboardState.activities = [];
+            DashboardState.networkActivities = [];
+            DashboardState.networkActivitiesTimestamp = 0;
+            DashboardState.faucet.lastCheck = 0; // ✅ Reset faucet cache
+            await fetchAndProcessActivities();
+            setTimeout(() => { btn.innerHTML = `<i class="fa-solid fa-rotate"></i> <span class="hidden sm:inline">Sync</span>`; btn.disabled = false; }, 1000);
+        }
 
+        // ✅ Faucet button clicks
+        if (target.closest('#faucet-action-btn')) {
+            const btn = target.closest('#faucet-action-btn');
+            if (!btn.disabled) {
+                await requestSmartFaucet(btn);
+            }
+        }
+        if (target.closest('#emergency-faucet-btn')) {
+            await requestSmartFaucet(target.closest('#emergency-faucet-btn'));
+        }
+
+        if (target.closest('.delegate-link')) { e.preventDefault(); window.navigateTo('mine'); }
+        if (target.closest('.go-to-store')) { e.preventDefault(); window.navigateTo('store'); }
+        if (target.closest('.go-to-rental')) { e.preventDefault(); window.navigateTo('rental'); }
+
+        if (target.closest('#open-booster-info')) {
+            const modal = document.getElementById('booster-info-modal');
+            if (modal) { modal.classList.remove('hidden'); modal.classList.add('flex'); setTimeout(() => { modal.classList.remove('opacity-0'); modal.querySelector('div').classList.remove('scale-95'); }, 10); }
+        }
+        if (target.closest('#close-booster-modal') || target.id === 'booster-info-modal') {
+            const modal = document.getElementById('booster-info-modal');
+            if (modal) { modal.classList.add('opacity-0'); modal.querySelector('div').classList.add('scale-95'); setTimeout(() => modal.classList.add('hidden'), 200); }
+        }
+
+        if (target.closest('#close-gas-modal-dash') || target.id === 'no-gas-modal-dash') {
+            const modal = document.getElementById('no-gas-modal-dash');
+            if (modal) { modal.classList.remove('flex'); modal.classList.add('hidden'); }
+        }
+
+        const nftClick = target.closest('.nft-clickable-image');
+        if (nftClick) {
+            const address = nftClick.dataset.address;
+            const id = nftClick.dataset.tokenid;
+            if (address && id) addNftToWallet(address, id);
+        }
+
+        const claimBtn = target.closest('#dashboardClaimBtn');
+        if (claimBtn && !claimBtn.disabled) {
             try {
+                claimBtn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i>';
+                claimBtn.disabled = true;
+
+                const hasGas = await checkGasAndWarn();
+                if (!hasGas) { claimBtn.innerHTML = '<i class="fa-solid fa-gift mr-2"></i> Claim'; claimBtn.disabled = false; return; }
+
                 const { stakingRewards, minerRewards } = await calculateUserTotalRewards();
                 if (stakingRewards > 0n || minerRewards > 0n) {
-                    const booster = await getHighestBoosterBoostFromAPI();
-                    const success = await executeUniversalClaim(stakingRewards, minerRewards, booster?.tokenId || 0, btn);
+                    const success = await executeUniversalClaim(stakingRewards, minerRewards, null);
                     if (success) {
-                        await updateUserUI();
-                        loadTransactions();
+                        showToast("Rewards claimed!", "success");
+                        await updateUserHub(true);
+                        DashboardState.activities = [];
+                        fetchAndProcessActivities();
                     }
                 }
-            } catch (e) {
-                showToast('Claim failed', 'error');
+            } catch (err) {
+                showToast("Claim failed", "error");
             } finally {
-                btn.innerHTML = originalHTML;
-                btn.disabled = false;
+                claimBtn.innerHTML = '<i class="fa-solid fa-gift mr-2"></i> Claim';
+                claimBtn.disabled = false;
             }
         }
 
-        // Faucet - Uses API (Oracle pays gas)
-        if (target.closest('#faucet-btn')) {
-            console.log('💧 Faucet clicked');
-            const btn = target.closest('#faucet-btn');
-            await requestFaucetAPI(btn);
+        if (target.closest('#page-prev') && DashboardState.pagination.currentPage > 1) {
+            DashboardState.pagination.currentPage--; renderActivityPage();
+        }
+        if (target.closest('#page-next')) {
+            const max = Math.ceil(DashboardState.filteredActivities.length / DashboardState.pagination.itemsPerPage);
+            if (DashboardState.pagination.currentPage < max) { DashboardState.pagination.currentPage++; renderActivityPage(); }
         }
 
-        // Pagination
-        if (target.closest('#tx-prev') && DashState.pagination.page > 1) {
-            DashState.pagination.page--;
-            renderTransactions();
-        }
-        if (target.closest('#tx-next')) {
-            const maxPage = Math.ceil(DashState.activities.length / DashState.pagination.perPage);
-            if (DashState.pagination.page < maxPage) {
-                DashState.pagination.page++;
-                renderTransactions();
-            }
+        if (target.closest('#activity-sort-toggle')) {
+            DashboardState.filters.sort = DashboardState.filters.sort === 'NEWEST' ? 'OLDEST' : 'NEWEST';
+            applyFiltersAndRender();
         }
     });
 
-    // Filter change
-    const filterEl = document.getElementById('tx-filter');
-    if (filterEl) {
-        filterEl.addEventListener('change', (e) => {
-            DashState.filters.type = e.target.value;
-            DashState.pagination.page = 1;
-            renderTransactions();
+    const filterSelect = document.getElementById('activity-filter-type');
+    if (filterSelect) {
+        filterSelect.addEventListener('change', (e) => {
+            DashboardState.filters.type = e.target.value;
+            applyFiltersAndRender();
         });
     }
 }
 
 // ============================================================================
-// HELPERS
+// 5. EXPORT
 // ============================================================================
-function setEl(id, value, isHTML = false) {
-    const el = document.getElementById(id);
-    if (el) {
-        if (isHTML) el.innerHTML = value;
-        else el.textContent = value;
-    }
-}
 
-// ============================================================================
-// EXPORT
-// ============================================================================
 export const DashboardPage = {
     async render(isNewPage) {
-        render();
-        
+        renderDashboardLayout();
+        updateGlobalMetrics();
+        fetchAndProcessActivities();
+
         if (State.isConnected) {
-            await updateUserUI();
+            await updateUserHub(false);
         }
     },
 
-    async update(isConnected) {
+    update(isConnected) {
         const now = Date.now();
-        if (now - DashState.lastUpdate < 10000) return; // Throttle 10s
-        DashState.lastUpdate = now;
+        if (now - DashboardState.lastUpdate > 10000) {
+            DashboardState.lastUpdate = now;
+            updateGlobalMetrics();
 
-        await loadMetrics();
-        
-        if (isConnected) {
-            await updateUserUI();
-            await loadTransactions();
-            await checkFaucetStatus();
+            if (isConnected) {
+                updateUserHub(false);
+            }
+
+            fetchAndProcessActivities();
         }
     }
 };

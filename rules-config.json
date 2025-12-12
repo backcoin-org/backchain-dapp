@@ -1,44 +1,59 @@
 {
-  "VERSION": "2.1.0",
-  "DESCRIPTION": "Configuração Oficial Backcoin V2.1 - Produção",
-  "CREATED_AT": "2025-12-11T20:18:29.696Z",
-  "serviceFees": {
-    "COMMENT": "💰 Taxas em BIPS (100 = 1%) ou valor fixo em BKC",
+  "VERSION": "3.1.0",
+  "DESCRIPTION": "Configuracao Backchain V3.1 - Taxa 50% + Booster Strategy (CORRIGIDO)",
+  "CREATED_AT": "2025-12-12T23:00:00.000Z",
+  
+  "serviceFeesBKC": {
+    "COMMENT": "Taxas em valor BKC (convertido para Wei). Apenas NOTARY usa valor absoluto.",
+    "NOTARY_SERVICE": "1"
+  },
+
+  "serviceFeesBIPS": {
+    "COMMENT": "Taxas em BIPS (100 = 1%). NAO multiplicar por 10^18!",
     "DELEGATION_FEE_BIPS": "50",
     "UNSTAKE_FEE_BIPS": "100",
     "FORCE_UNSTAKE_PENALTY_BIPS": "5000",
-    "CLAIM_REWARD_FEE_BIPS": "100",
+    "CLAIM_REWARD_FEE_BIPS": "5000",
     "NFT_POOL_BUY_TAX_BIPS": "500",
     "NFT_POOL_SELL_TAX_BIPS": "1000",
     "FORTUNE_POOL_SERVICE": "2000",
-    "RENTAL_MARKET_TAX_BIPS": "1000",
-    "NOTARY_SERVICE": "1"
+    "RENTAL_MARKET_TAX_BIPS": "1000"
   },
-  "miningDistribution": {
-    "COMMENT": "⛏️ Distribuição de tokens NOVOS (soma = 10000)",
-    "TREASURY": "3000",
-    "DELEGATOR_POOL": "7000"
-  },
-  "feeDistribution": {
-    "COMMENT": "💵 Distribuição de taxas EXISTENTES (soma = 10000)",
-    "TREASURY": "3000",
-    "DELEGATOR_POOL": "7000"
-  },
+
   "boosterDiscounts": {
+    "COMMENT": "Desconto por tier do NFT Booster (boostBips -> discountBips)",
     "1000": "1000",
     "2000": "2000",
     "3000": "3000",
     "4000": "4000",
     "5000": "5000",
     "6000": "6000",
-    "7000": "7000",
-    "COMMENT": "⭐ Descontos por NFT (boostBips → discountBips)"
+    "7000": "7000"
   },
+
+  "miningDistribution": {
+    "COMMENT": "Distribuicao de tokens minerados (soma = 10000)",
+    "TREASURY": "3000",
+    "DELEGATOR_POOL": "7000"
+  },
+
+  "feeDistribution": {
+    "COMMENT": "Distribuicao de taxas coletadas (soma = 10000)",
+    "TREASURY": "3000",
+    "DELEGATOR_POOL": "7000"
+  },
+
   "fortunePoolTiers": {
+    "COMMENT": "Fortune Pool Tiers: tierId -> range,multiplierBips",
     "1": "3,20000",
     "2": "10,50000",
-    "3": "100,1000000",
-    "COMMENT": "🎰 Configuração dos Prize Tiers (range,multiplierBips)"
+    "3": "100,1000000"
   },
-  "LAST_UPDATED": "2025-12-11T20:21:27.729Z"
+
+  "SUMMARY": {
+    "CLAIM_FEE": "50% base fee (5000 BIPS)",
+    "WITH_DIAMOND": "15% fee - Users keep 85%"
+  },
+
+  "LAST_UPDATED": "2025-12-12T23:00:00.000Z"
 }
