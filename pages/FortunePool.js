@@ -1,5 +1,5 @@
 // js/pages/FortunePool.js
-// ✅ VERSION V9.1: Better balance validation, Faucet UX, Error handling
+// ✅ VERSION V9.3: Fixed tier ORDER to match contract (Easy→Medium→Hard)
 
 import { State } from '../state.js';
 import { loadUserData, safeContractCall, API_ENDPOINTS } from '../modules/data.js';
@@ -15,6 +15,21 @@ const ethers = window.ethers;
 // ============================================================================
 const EXPLORER_TX = "https://sepolia.arbiscan.io/tx/";
 const FAUCET_API = "https://faucet-4wvdcuoouq-uc.a.run.app";
+
+// TIERS CONFIG - MUST MATCH CONTRACT ORDER!
+// Contract expects guesses in order: [tier1, tier2, tier3] = [easy, medium, hard]
+// Combo mode plays all 3 tiers, prizes stack
+const TIERS = [
+    { id: 1, name: "Easy",   range: 3,   multiplier: 2,   color: "cyan",   chance: "33%" },   // 1/3 = 33%
+    { id: 2, name: "Medium", range: 10,  multiplier: 5,   color: "purple", chance: "10%" },   // 1/10 = 10%
+    { id: 3, name: "Hard",   range: 100, multiplier: 100, color: "amber",  chance: "1%" }     // 1/100 = 1%
+];
+
+// Jackpot mode = only tier 3 (1/100 for 100x)
+const JACKPOT_TIER = TIERS[2]; // Hard tier
+
+// Max combo win: 2 + 5 + 100 = 107x (if you hit all 3)
+const MAX_COMBO_MULTIPLIER = 107;
 
 // ============================================================================
 // GAME STATE
@@ -158,7 +173,7 @@ function renderPhase() {
 function renderModeSelect(container) {
     container.innerHTML = `
         <div class="space-y-3">
-            <!-- Jackpot Mode -->
+            <!-- Jackpot Mode - Single Tier 3 (Hard) -->
             <button id="btn-jackpot" class="mode-card w-full text-left p-4 bg-zinc-900/80 border-2 border-zinc-700 rounded-xl hover:border-amber-500/50 transition-all">
                 <div class="flex items-center gap-4">
                     <div class="w-14 h-14 rounded-xl bg-amber-500/20 flex items-center justify-center flex-shrink-0">
@@ -182,7 +197,7 @@ function renderModeSelect(container) {
                 </div>
             </button>
 
-            <!-- Combo Mode -->
+            <!-- Combo Mode - All 3 Tiers -->
             <button id="btn-combo" class="mode-card w-full text-left p-4 bg-zinc-900/80 border-2 border-zinc-700 rounded-xl hover:border-purple-500/50 transition-all">
                 <div class="flex items-center gap-4">
                     <div class="w-14 h-14 rounded-xl bg-purple-500/20 flex items-center justify-center flex-shrink-0">
@@ -191,13 +206,13 @@ function renderModeSelect(container) {
                     <div class="flex-1">
                         <div class="flex items-center justify-between mb-1">
                             <h3 class="text-lg font-bold text-white">Combo</h3>
-                            <span class="text-purple-400 font-bold">up to 112x</span>
+                            <span class="text-purple-400 font-bold">up to ${MAX_COMBO_MULTIPLIER}x</span>
                         </div>
                         <p class="text-zinc-400 text-sm">Pick 3 numbers, stack your wins</p>
                         <div class="flex items-center gap-2 mt-2">
+                            <span class="text-xs text-cyan-400 bg-cyan-500/10 px-2 py-0.5 rounded">33% → 2x</span>
+                            <span class="text-xs text-purple-400 bg-purple-500/10 px-2 py-0.5 rounded">10% → 5x</span>
                             <span class="text-xs text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded">1% → 100x</span>
-                            <span class="text-xs text-purple-400 bg-purple-500/10 px-2 py-0.5 rounded">10% → 10x</span>
-                            <span class="text-xs text-cyan-400 bg-cyan-500/10 px-2 py-0.5 rounded">50% → 2x</span>
                         </div>
                     </div>
                 </div>
@@ -214,7 +229,7 @@ function renderModeSelect(container) {
     document.getElementById('btn-jackpot')?.addEventListener('click', () => {
         if (!State.isConnected) return showToast('Connect wallet first', 'warning');
         Game.mode = 'jackpot';
-        Game.guess = 50;
+        Game.guess = 50; // Default for tier 3 (1-100)
         Game.phase = 'pick';
         renderPhase();
     });
@@ -222,8 +237,10 @@ function renderModeSelect(container) {
     document.getElementById('btn-combo')?.addEventListener('click', () => {
         if (!State.isConnected) return showToast('Connect wallet first', 'warning');
         Game.mode = 'combo';
-        Game.guesses = [1, 1, 1];
-        Game.comboStep = 0;
+        // Guesses in CONTRACT ORDER: [tier1 (1-3), tier2 (1-10), tier3 (1-100)]
+        // User picks in order: Easy → Medium → Hard
+        Game.guesses = [1, 1, 50]; // Default picks for each tier
+        Game.comboStep = 0; // Start with Easy tier
         Game.phase = 'pick';
         renderPhase();
     });
@@ -333,29 +350,25 @@ function renderJackpotPicker(container) {
 }
 
 function renderComboPicker(container) {
-    const tiers = [
-        { name: 'Jackpot', range: 100, multi: '100x', color: 'amber', chance: '1%' },
-        { name: 'Super', range: 10, multi: '10x', color: 'purple', chance: '10%' },
-        { name: 'Basic', range: 2, multi: '2x', color: 'cyan', chance: '50%' }
-    ];
-    const tier = tiers[Game.comboStep];
+    // Use TIERS array which matches contract configuration
+    const tier = TIERS[Game.comboStep];
     const current = Game.guesses[Game.comboStep];
 
     container.innerHTML = `
         <div class="text-center">
             <!-- Progress -->
             <div class="flex justify-center gap-2 mb-4">
-                ${tiers.map((t, i) => `
+                ${TIERS.map((t, i) => `
                     <div class="flex items-center gap-1 px-3 py-1.5 rounded-full ${i === Game.comboStep ? 'bg-zinc-700 border border-zinc-600' : 'bg-zinc-800/50'} transition-all">
                         <span class="text-xs ${i === Game.comboStep ? 'text-white font-bold' : i < Game.comboStep ? 'text-green-400' : 'text-zinc-500'}">
-                            ${i < Game.comboStep ? '✓' : t.multi}
+                            ${i < Game.comboStep ? '✓' : t.multiplier + 'x'}
                         </span>
                     </div>
                 `).join('')}
             </div>
 
             <h2 class="text-xl font-bold text-white mb-1">${tier.name} Tier</h2>
-            <p class="text-zinc-400 text-sm mb-4">Pick 1-${tier.range} • <span class="text-green-400">${tier.chance} chance</span> • <span class="text-amber-400">${tier.multi}</span></p>
+            <p class="text-zinc-400 text-sm mb-4">Pick 1-${tier.range} • <span class="text-green-400">${tier.chance} chance</span> • <span class="text-amber-400">${tier.multiplier}x</span></p>
 
             <!-- Number Grid -->
             <div class="flex flex-wrap justify-center gap-2 max-w-xs mx-auto mb-6">
@@ -424,7 +437,7 @@ function renderComboPicker(container) {
 function renderWager(container) {
     const isJackpot = Game.mode === 'jackpot';
     const picks = isJackpot ? [Game.guess] : Game.guesses;
-    const maxMulti = isJackpot ? 100 : 112;
+    const maxMulti = isJackpot ? 100 : MAX_COMBO_MULTIPLIER;
     const userBalance = State.currentUserBalance || 0n;
     const balanceNum = formatBigNumber(userBalance);
     const hasNoBalance = balanceNum < 0.01;
@@ -435,9 +448,19 @@ function renderWager(container) {
             <div class="text-center mb-6">
                 <p class="text-zinc-400 text-sm mb-2">Your ${isJackpot ? 'pick' : 'picks'}</p>
                 <div class="flex justify-center gap-3">
-                    ${picks.map((p, i) => `
-                        <div class="w-14 h-14 rounded-xl bg-zinc-800 border-2 border-amber-500/50 flex items-center justify-center">
-                            <span class="text-2xl font-bold text-white">${p}</span>
+                    ${isJackpot ? `
+                        <div class="text-center">
+                            <div class="w-16 h-16 rounded-xl bg-amber-500/10 border-2 border-amber-500/50 flex items-center justify-center">
+                                <span class="text-2xl font-bold text-amber-400">${picks[0]}</span>
+                            </div>
+                            <p class="text-xs text-amber-400 mt-1">100x</p>
+                        </div>
+                    ` : picks.map((p, i) => `
+                        <div class="text-center">
+                            <div class="w-14 h-14 rounded-xl bg-${TIERS[i].color}-500/10 border-2 border-${TIERS[i].color}-500/50 flex items-center justify-center">
+                                <span class="text-xl font-bold text-${TIERS[i].color}-400">${p}</span>
+                            </div>
+                            <p class="text-xs text-${TIERS[i].color}-400 mt-1">${TIERS[i].multiplier}x</p>
                         </div>
                     `).join('')}
                 </div>
@@ -596,34 +619,40 @@ async function executeGame() {
     const isJackpot = Game.mode === 'jackpot';
     
     // IMPORTANT: For jackpot send array with 1 element, for combo send all 3
+    // Contract expects: [tier1_guess, tier2_guess, tier3_guess] for combo
+    // Or: [tier3_guess] for jackpot (single tier)
     const guesses = isJackpot ? [Game.guess] : [...Game.guesses];
     const isCumulative = !isJackpot;
 
-    // Validate guesses for combo mode
-    if (!isJackpot) {
-        // Tier 0: 1-100, Tier 1: 1-10, Tier 2: 1-2
-        if (guesses[0] < 1 || guesses[0] > 100) {
-            showToast('Jackpot tier: pick 1-100', 'error');
-            return;
-        }
-        if (guesses[1] < 1 || guesses[1] > 10) {
-            showToast('Super tier: pick 1-10', 'error');
-            return;
-        }
-        if (guesses[2] < 1 || guesses[2] > 2) {
-            showToast('Basic tier: pick 1-2', 'error');
-            return;
-        }
-    }
-
+    // Debug log - THIS IS IMPORTANT
     console.log('🎰 Executing game:', { 
         mode: Game.mode, 
-        guesses, 
+        guesses: guesses,
+        guessesDetails: isJackpot 
+            ? `Jackpot: pick ${guesses[0]} in range 1-100` 
+            : `Combo: Easy=${guesses[0]} (1-3), Medium=${guesses[1]} (1-10), Hard=${guesses[2]} (1-100)`,
         isCumulative, 
         wager: Game.wager,
         wagerWei: wagerWei.toString(),
         userBalance: userBalance.toString()
     });
+
+    // Validate guesses for combo mode
+    if (!isJackpot) {
+        // Check each guess is in valid range for its tier
+        for (let i = 0; i < 3; i++) {
+            if (guesses[i] < 1 || guesses[i] > TIERS[i].range) {
+                showToast(`${TIERS[i].name} tier: pick must be 1-${TIERS[i].range}, got ${guesses[i]}`, 'error');
+                return;
+            }
+        }
+    } else {
+        // Jackpot: single guess for tier 3 (1-100)
+        if (guesses[0] < 1 || guesses[0] > 100) {
+            showToast(`Pick must be 1-100, got ${guesses[0]}`, 'error');
+            return;
+        }
+    }
 
     Game.phase = 'spin';
     renderPhase();
