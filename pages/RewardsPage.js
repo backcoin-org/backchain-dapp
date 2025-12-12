@@ -1,5 +1,5 @@
 // pages/RewardsPage.js
-// ✅ VERSION V7.0: Cleaner UX, Mobile-First, Safe Button States
+// ✅ VERSION V7.1: Improved Booster communication & persuasive UI
 
 const ethers = window.ethers;
 
@@ -225,52 +225,91 @@ function renderContent(claimDetails, grossRewards, boosterData) {
             </div>
 
             <!-- INFO GRID -->
-            <div class="grid grid-cols-2 gap-3">
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 
-                <!-- Booster Card -->
+                <!-- Booster Card - IMPROVED COMMUNICATION -->
                 <div class="bg-zinc-900/50 border border-zinc-800 rounded-xl p-4">
-                    <div class="flex items-center gap-3 mb-3">
-                        <div class="relative w-10 h-10 bg-black/50 rounded-lg border border-zinc-700 overflow-hidden flex-shrink-0">
-                            <img src="${booster.imageUrl || './assets/bkc_logo_3d.png'}" 
-                                 class="w-full h-full object-cover"
-                                 onerror="this.src='./assets/bkc_logo_3d.png'">
+                    ${booster.highestBoost > 0 ? `
+                        <!-- HAS BOOSTER -->
+                        <div class="flex items-center gap-3 mb-3">
+                            <div class="relative w-12 h-12 bg-black/50 rounded-lg border border-cyan-500/30 overflow-hidden flex-shrink-0 shadow-lg shadow-cyan-500/10">
+                                <img src="${booster.imageUrl || './assets/bkc_logo_3d.png'}" 
+                                     class="w-full h-full object-cover"
+                                     onerror="this.src='./assets/bkc_logo_3d.png'">
+                                <div class="absolute -top-1 -right-1 bg-cyan-500 text-black text-[8px] font-bold px-1.5 py-0.5 rounded-full">
+                                    +${boostPercent}%
+                                </div>
+                            </div>
+                            <div class="min-w-0 flex-1">
+                                <p class="text-white font-bold text-sm truncate">${booster.boostName}</p>
+                                <p class="text-[10px] text-cyan-400">
+                                    ${booster.source === 'rented' ? '🔗 Rented Booster' : '✓ Your Booster'}
+                                </p>
+                            </div>
                         </div>
-                        <div class="min-w-0 flex-1">
-                            <p class="text-white font-bold text-sm truncate">${booster.boostName || 'No Booster'}</p>
-                            <p class="text-[10px] ${booster.highestBoost > 0 ? 'text-cyan-400' : 'text-zinc-600'}">
-                                ${booster.highestBoost > 0 ? `+${boostPercent}% fee reduction` : 'No boost active'}
-                            </p>
+                        <div class="bg-green-500/10 border border-green-500/20 rounded-lg p-2.5 text-center">
+                            <p class="text-[10px] text-green-400 uppercase">You're Saving</p>
+                            <p class="text-green-300 font-bold text-lg font-mono">${boostPercent}%</p>
+                            <p class="text-[10px] text-green-400/70">on every claim</p>
                         </div>
-                    </div>
-                    ${booster.highestBoost === 0 ? `
-                        <button onclick="window.navigateTo('store')" 
-                            class="w-full py-2 text-xs font-medium bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded-lg transition-colors">
-                            Get Booster
-                        </button>
                     ` : `
-                        <div class="text-xs text-zinc-500">
-                            ${booster.source === 'rented' ? '🔗 Rented' : '✓ Owned'}
+                        <!-- NO BOOSTER - PERSUASIVE -->
+                        <div class="text-center">
+                            <div class="w-14 h-14 mx-auto mb-3 bg-gradient-to-br from-amber-500/20 to-orange-500/10 rounded-xl border border-amber-500/20 flex items-center justify-center">
+                                <i class="fa-solid fa-rocket text-2xl text-amber-400"></i>
+                            </div>
+                            <p class="text-white font-bold text-sm mb-1">Boost Your Rewards!</p>
+                            <p class="text-[11px] text-zinc-400 mb-3 leading-relaxed">
+                                Get a <span class="text-cyan-400 font-medium">Booster NFT</span> and pay <span class="text-green-400 font-medium">less fees</span> on every claim
+                            </p>
+                            <div class="bg-zinc-800/50 rounded-lg p-2 mb-3">
+                                <div class="flex justify-between text-xs mb-1">
+                                    <span class="text-zinc-500">Without Booster</span>
+                                    <span class="text-red-400 font-mono">${feePercent.toFixed(2)}% fee</span>
+                                </div>
+                                <div class="flex justify-between text-xs">
+                                    <span class="text-zinc-500">With Booster</span>
+                                    <span class="text-green-400 font-mono">Up to 50% off!</span>
+                                </div>
+                            </div>
+                            <button onclick="window.navigateTo('store')" 
+                                class="w-full py-2.5 text-xs font-bold bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-black rounded-lg transition-all shadow-lg shadow-amber-500/20">
+                                <i class="fa-solid fa-shopping-cart mr-1"></i> Get Booster NFT
+                            </button>
                         </div>
                     `}
                 </div>
 
                 <!-- Fee Card -->
                 <div class="bg-zinc-900/50 border border-zinc-800 rounded-xl p-4">
-                    <p class="text-[10px] text-zinc-500 uppercase mb-2">Fee Structure</p>
-                    <div class="space-y-1.5">
+                    <p class="text-[10px] text-zinc-500 uppercase mb-3">Fee Structure</p>
+                    <div class="space-y-2">
                         <div class="flex justify-between text-xs">
                             <span class="text-zinc-500">Base Fee</span>
                             <span class="text-white font-mono">${feePercent.toFixed(2)}%</span>
                         </div>
                         <div class="flex justify-between text-xs">
-                            <span class="text-zinc-500">Boost</span>
-                            <span class="text-cyan-400 font-mono">-${boostPercent}%</span>
+                            <span class="text-zinc-500">Your Boost</span>
+                            <span class="${booster.highestBoost > 0 ? 'text-cyan-400' : 'text-zinc-600'} font-mono">
+                                ${booster.highestBoost > 0 ? `-${boostPercent}%` : 'None'}
+                            </span>
                         </div>
-                        <div class="flex justify-between text-xs pt-1.5 border-t border-zinc-800">
-                            <span class="text-zinc-400 font-medium">Effective</span>
-                            <span class="text-green-400 font-mono font-bold">${effectiveFee.toFixed(2)}%</span>
+                        <div class="border-t border-zinc-800 pt-2 mt-2">
+                            <div class="flex justify-between text-sm">
+                                <span class="text-zinc-400 font-medium">You Pay</span>
+                                <span class="${booster.highestBoost > 0 ? 'text-green-400' : 'text-amber-400'} font-mono font-bold">
+                                    ${effectiveFee.toFixed(2)}%
+                                </span>
+                            </div>
                         </div>
                     </div>
+                    ${booster.highestBoost === 0 && totalReward > 0n ? `
+                        <div class="mt-3 p-2 bg-amber-500/10 border border-amber-500/20 rounded-lg">
+                            <p class="text-[10px] text-amber-400 text-center">
+                                💡 With a booster you'd save on this claim!
+                            </p>
+                        </div>
+                    ` : ''}
                 </div>
             </div>
 
