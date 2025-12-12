@@ -75,8 +75,11 @@ function injectStyles() {
 // MAIN RENDER
 // ============================================================================
 export function render() {
-    const container = document.getElementById('page-actions') || document.getElementById('main-content');
-    if (!container) return;
+    const container = document.getElementById('actions');
+    if (!container) {
+        console.error('FortunePool: Container #actions not found');
+        return;
+    }
 
     injectStyles();
     
