@@ -1,5 +1,5 @@
 // pages/NetworkStakingPage.js
-// ✅ VERSION V2.0: Redesigned Mobile-First, Fixed Button States, Better UX
+// ✅ VERSION V2.1: Fixed button states, ETH gas check, better error handling
 
 const ethers = window.ethers;
 
@@ -527,39 +527,80 @@ async function handleStake() {
         return;
     }
 
+    // Validate balance
+    const balance = State.currentUserBalance || 0n;
+    let amountWei;
     try {
-        isProcessing = true;
-        const amountWei = ethers.parseUnits(val, 18);
-        const durationSec = BigInt(lockDays) * 86400n;
+        amountWei = ethers.parseUnits(val, 18);
+        if (amountWei > balance) {
+            showToast('Insufficient BKC balance', 'error');
+            return;
+        }
+    } catch (e) {
+        showToast('Invalid amount', 'error');
+        return;
+    }
 
-        // Update button state
-        stakeBtn.disabled = true;
-        btnText.textContent = 'Processing...';
-        btnIcon.className = 'fa-solid fa-spinner fa-spin';
+    // Check ETH balance for gas
+    try {
+        const provider = new ethers.BrowserProvider(window.ethereum);
+        const signer = await provider.getSigner();
+        const ethBalance = await provider.getBalance(State.userAddress);
+        const minEth = ethers.parseEther("0.001"); // Minimum ~0.001 ETH for gas
+        
+        if (ethBalance < minEth) {
+            showToast('Insufficient ETH for gas. Need at least 0.001 ETH.', 'error');
+            return;
+        }
+    } catch (e) {
+        console.warn('ETH balance check failed:', e);
+    }
 
-        const success = await executeDelegation(amountWei, durationSec, highestBoosterTokenId, stakeBtn);
+    isProcessing = true;
+    const durationSec = BigInt(lockDays) * 86400n;
+
+    // Update button state
+    stakeBtn.disabled = true;
+    btnText.textContent = 'Processing...';
+    btnIcon.className = 'fa-solid fa-spinner fa-spin';
+
+    try {
+        // Pass null for btnElement to prevent double-handling
+        const success = await executeDelegation(amountWei, durationSec, highestBoosterTokenId, null);
 
         if (success) {
             amountInput.value = '';
             showToast('Delegation successful!', 'success');
-            loadData(true);
+            await loadData(true);
         }
 
     } catch (e) {
         console.error('Stake error:', e);
-        showToast('Delegation failed', 'error');
+        showToast('Delegation failed: ' + (e.reason || e.message || 'Unknown error'), 'error');
     } finally {
         // ALWAYS reset button state
         isProcessing = false;
-        if (stakeBtn) stakeBtn.disabled = false;
-        if (btnText) btnText.textContent = 'Delegate BKC';
-        if (btnIcon) btnIcon.className = 'fa-solid fa-arrow-right';
+        stakeBtn.disabled = false;
+        btnText.textContent = 'Delegate BKC';
+        btnIcon.className = 'fa-solid fa-arrow-right';
         updatePreview();
     }
 }
 
 async function handleUnstake(index, isForce) {
     if (isProcessing) return;
+    
+    // Find the button and update its state
+    const btn = document.querySelector(isForce 
+        ? `.force-unstake-btn[data-index='${index}']`
+        : `.unstake-btn[data-index='${index}']`
+    );
+    
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i>';
+    }
+    
     isProcessing = true;
 
     try {
@@ -569,10 +610,15 @@ async function handleUnstake(index, isForce) {
 
         if (success) {
             showToast(isForce ? 'Force unstaked (50% penalty)' : 'Unstaked successfully!', isForce ? 'warning' : 'success');
-            loadData(true);
+            await loadData(true);
         }
+    } catch (e) {
+        console.error('Unstake error:', e);
+        showToast('Unstake failed: ' + (e.reason || e.message || 'Unknown error'), 'error');
     } finally {
         isProcessing = false;
+        // Re-render delegations to reset button state
+        renderDelegations();
     }
 }
 
@@ -585,12 +631,15 @@ async function handleClaim(stakingRewards, minerRewards, btn) {
     btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i>';
 
     try {
-        const success = await executeUniversalClaim(stakingRewards, minerRewards, highestBoosterTokenId, btn);
+        const success = await executeUniversalClaim(stakingRewards, minerRewards, highestBoosterTokenId, null);
 
         if (success) {
             showToast('Rewards claimed!', 'success');
-            loadData(true);
+            await loadData(true);
         }
+    } catch (e) {
+        console.error('Claim error:', e);
+        showToast('Claim failed: ' + (e.reason || e.message || 'Unknown error'), 'error');
     } finally {
         isProcessing = false;
         btn.disabled = false;
