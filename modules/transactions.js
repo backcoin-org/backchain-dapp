@@ -969,76 +969,119 @@ export async function executeInternalFaucet(btnElement) {
     try {
         if (State.faucetContract) {
             const faucetContract = State.faucetContract.connect(signer);
+            const faucetAddress = await faucetContract.getAddress();
             
-            // Check cooldown first
+            // Check if faucet has tokens to distribute
+            let faucetBkcBalance = 0n;
+            let faucetEthBalance = 0n;
+            
             try {
-                const lastClaim = await faucetContract.lastClaimed(State.userAddress).catch(() => 0n);
-                const cooldown = await faucetContract.cooldownPeriod().catch(() => 86400n);
-                const now = BigInt(Math.floor(Date.now() / 1000));
-                
-                if (lastClaim > 0n && (now - lastClaim) < cooldown) {
-                    const remaining = Number(cooldown - (now - lastClaim));
-                    const hours = Math.floor(remaining / 3600);
-                    const mins = Math.floor((remaining % 3600) / 60);
-                    showToast(`⏳ Faucet cooldown: ${hours}h ${mins}m remaining`, "warning");
-                    if (btnElement) { 
-                        btnElement.disabled = false; 
-                        btnElement.innerHTML = originalText; 
-                    }
-                    return false;
+                if (State.bkcTokenContract) {
+                    faucetBkcBalance = await State.bkcTokenContract.balanceOf(faucetAddress);
                 }
-            } catch (cooldownErr) {
-                console.warn("Cooldown check skipped:", cooldownErr.message?.slice(0, 50));
+                faucetEthBalance = await State.provider.getBalance(faucetAddress);
+            } catch (balErr) {
+                console.warn("Could not check faucet balance:", balErr.message?.slice(0, 50));
+            }
+            
+            // Warn if faucet appears empty
+            if (faucetBkcBalance === 0n && faucetEthBalance === 0n) {
+                console.warn("⚠️ Faucet may be empty - BKC:", faucetBkcBalance.toString(), "ETH:", faucetEthBalance.toString());
             }
 
-            if (btnElement) btnElement.innerHTML = '<div class="loader inline-block"></div> Minting...';
+            if (btnElement) btnElement.innerHTML = '<div class="loader inline-block"></div> Claiming...';
             
-            // Try with gas estimation, fallback on error
+            // Try to claim - let the contract handle cooldown internally
             let tx;
             try {
+                // First try to estimate gas to catch errors early
                 const estimated = await faucetContract.claim.estimateGas();
-                tx = await faucetContract.claim({ gasLimit: (estimated * 130n) / 100n });
+                tx = await faucetContract.claim({ gasLimit: (estimated * 150n) / 100n });
             } catch (estError) {
-                // If estimation fails with revert, likely cooldown
-                if (estError.message?.includes('revert') || estError.data === '0x') {
-                    showToast("⏳ Faucet on cooldown. Try again later.", "warning");
+                console.warn("Faucet claim estimation failed:", estError.message?.slice(0, 100));
+                
+                // Parse the error to give better feedback
+                const errMsg = estError.message?.toLowerCase() || '';
+                const errData = estError.data || '';
+                
+                // Common faucet error patterns
+                if (errMsg.includes('cooldown') || errMsg.includes('wait') || errMsg.includes('already claimed')) {
+                    showToast("⏳ Already claimed recently. Please wait 24 hours.", "warning");
+                } else if (errMsg.includes('insufficient') || errMsg.includes('empty') || faucetBkcBalance === 0n) {
+                    showToast("🚫 Faucet is empty. Please contact admin.", "error");
+                } else if (errMsg.includes('revert') || errData === '0x') {
+                    // Generic revert - could be cooldown or other check
+                    showToast("⏳ Faucet unavailable. You may have already claimed today.", "warning");
+                } else {
+                    // Try anyway with fixed gas (might work for some edge cases)
+                    try {
+                        tx = await faucetContract.claim({ gasLimit: 300000n });
+                    } catch (retryErr) {
+                        showToast("❌ Faucet request failed. Try again later.", "error");
+                        if (btnElement) { 
+                            btnElement.disabled = false; 
+                            btnElement.innerHTML = originalText; 
+                        }
+                        return false;
+                    }
+                }
+                
+                if (!tx) {
                     if (btnElement) { 
                         btnElement.disabled = false; 
                         btnElement.innerHTML = originalText; 
                     }
                     return false;
                 }
-                // Try with fixed gas
-                tx = await faucetContract.claim({ gasLimit: 200000n });
             }
             
             return await executeTransaction(tx, '✅ Tokens received!', 'Faucet Error', btnElement);
             
         } else if (State.bkcTokenContract) {
+            // Fallback: direct mint if token has mint function
             if (btnElement) btnElement.innerHTML = '<div class="loader inline-block"></div> Minting...';
             
             const amount = ethers.parseUnits("20", 18);
             const bkcTokenContract = State.bkcTokenContract.connect(signer);
             const args = [State.userAddress, amount];
             
-            const gasOpts = await estimateGasWithFallback(bkcTokenContract, 'mint', args, 200000n);
-            const tx = await bkcTokenContract.mint(...args, gasOpts);
-            return await executeTransaction(tx, '20 BKC Minted!', 'Mint Error', btnElement);
+            try {
+                const gasOpts = await estimateGasWithFallback(bkcTokenContract, 'mint', args, 200000n);
+                const tx = await bkcTokenContract.mint(...args, gasOpts);
+                return await executeTransaction(tx, '20 BKC Minted!', 'Mint Error', btnElement);
+            } catch (mintErr) {
+                console.error("Direct mint failed:", mintErr);
+                showToast("❌ Mint not available. Use external faucet.", "error");
+                if (btnElement) { 
+                    btnElement.disabled = false; 
+                    btnElement.innerHTML = originalText; 
+                }
+                return false;
+            }
             
         } else {
-            throw new Error("Faucet not available.");
+            showToast("❌ Faucet contract not configured.", "error");
+            if (btnElement) { 
+                btnElement.disabled = false; 
+                btnElement.innerHTML = originalText; 
+            }
+            return false;
         }
         
     } catch (e) {
         console.error("Faucet Error:", e);
         
-        // Detect cooldown errors
+        // Parse error for user-friendly message
         const errMsg = (e.message || '').toLowerCase();
-        if (errMsg.includes('cooldown') || errMsg.includes('revert') || e.data === '0x') {
-            showToast("⏳ Faucet on cooldown. Try again later.", "warning");
+        
+        if (errMsg.includes('user rejected') || errMsg.includes('user denied')) {
+            showToast("Transaction cancelled.", "info");
+        } else if (errMsg.includes('insufficient funds') || errMsg.includes('gas')) {
+            showToast("❌ Not enough ETH for gas fees.", "error");
+        } else if (errMsg.includes('cooldown') || errMsg.includes('revert')) {
+            showToast("⏳ Faucet on cooldown. Try again in 24h.", "warning");
         } else {
-            const userMessage = formatErrorForUser(e, 'Faucet failed');
-            showToast(userMessage, "error");
+            showToast("❌ Faucet request failed.", "error");
         }
         
         if (btnElement) { 
@@ -1047,6 +1090,113 @@ export async function executeInternalFaucet(btnElement) {
         }
         return false;
     }
+}
+
+// Diagnostic function - can be called from console: window.diagnoseFaucet()
+export async function diagnoseFaucet() {
+    console.log("🔍 Faucet Diagnostics Starting...");
+    
+    const results = {
+        connected: State.isConnected,
+        userAddress: State.userAddress,
+        faucetContract: !!State.faucetContract,
+        faucetAddress: null,
+        faucetBkcBalance: null,
+        faucetEthBalance: null,
+        userEthBalance: null,
+        chainId: null,
+        canClaim: false,
+        error: null
+    };
+
+    try {
+        // Check network
+        if (State.provider) {
+            const network = await State.provider.getNetwork();
+            results.chainId = network.chainId.toString();
+            console.log("📡 Chain ID:", results.chainId);
+        }
+
+        // Check user ETH balance
+        if (State.userAddress && State.provider) {
+            const userEth = await State.provider.getBalance(State.userAddress);
+            results.userEthBalance = ethers.formatEther(userEth);
+            console.log("💰 User ETH Balance:", results.userEthBalance, "ETH");
+            
+            if (userEth < ethers.parseEther("0.001")) {
+                console.warn("⚠️ User has very low ETH - may not be able to pay gas");
+            }
+        }
+
+        // Check faucet contract
+        if (State.faucetContract) {
+            results.faucetAddress = await State.faucetContract.getAddress();
+            console.log("📍 Faucet Address:", results.faucetAddress);
+            
+            // Check faucet balances
+            const faucetEth = await State.provider.getBalance(results.faucetAddress);
+            results.faucetEthBalance = ethers.formatEther(faucetEth);
+            console.log("💎 Faucet ETH Balance:", results.faucetEthBalance, "ETH");
+            
+            if (State.bkcTokenContract) {
+                const faucetBkc = await State.bkcTokenContract.balanceOf(results.faucetAddress);
+                results.faucetBkcBalance = ethers.formatEther(faucetBkc);
+                console.log("🪙 Faucet BKC Balance:", results.faucetBkcBalance, "BKC");
+                
+                if (faucetBkc === 0n) {
+                    console.error("❌ FAUCET HAS NO BKC TOKENS TO DISTRIBUTE!");
+                }
+            }
+
+            // Try to simulate claim
+            try {
+                const gasEstimate = await State.faucetContract.claim.estimateGas();
+                results.canClaim = true;
+                console.log("✅ Claim would succeed! Estimated gas:", gasEstimate.toString());
+            } catch (simErr) {
+                results.canClaim = false;
+                results.error = simErr.message?.slice(0, 200);
+                console.error("❌ Claim would fail:", results.error);
+                
+                // Try to decode the error
+                if (simErr.message?.includes('revert')) {
+                    console.log("💡 This might be: cooldown active, faucet empty, or contract paused");
+                }
+            }
+        } else {
+            console.error("❌ Faucet contract not loaded!");
+        }
+
+    } catch (e) {
+        results.error = e.message;
+        console.error("Diagnostic error:", e);
+    }
+
+    console.log("📊 Full Diagnostic Results:", results);
+    console.log("\n🔧 TO FIX:");
+    
+    if (!results.connected) {
+        console.log("1. Connect your wallet first");
+    }
+    if (results.faucetBkcBalance === "0.0" || results.faucetBkcBalance === null) {
+        console.log("2. Faucet needs to be funded with BKC tokens");
+    }
+    if (parseFloat(results.faucetEthBalance || 0) < 0.01) {
+        console.log("3. Faucet needs ETH for gas refunds");
+    }
+    if (parseFloat(results.userEthBalance || 0) < 0.001) {
+        console.log("4. You need more ETH for gas fees. Get from: https://faucet.arbitrum.io/");
+    }
+    if (!results.canClaim && results.faucetBkcBalance !== "0.0") {
+        console.log("5. You may have already claimed today (24h cooldown)");
+    }
+
+    return results;
+}
+
+// Make it available globally for console debugging
+if (typeof window !== 'undefined') {
+    window.diagnoseFaucet = diagnoseFaucet;
 }
 
 export async function executeNotarizeDocument(documentURI, description, contentHash, boosterId, submitButton) {
