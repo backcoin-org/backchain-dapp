@@ -1,5 +1,5 @@
 // js/pages/DashboardPage.js
-// ✅ VERSION V8.0: Complete Redesign - Mobile-First, Performance Optimized, Clean UX
+// ✅ VERSION V8.2: Fixed Mining Power, Fees, TVL display + Backend integration
 
 const ethers = window.ethers;
 
@@ -36,7 +36,7 @@ const DashState = {
         networkPStake: 0n,
         tvl: 0n,
         tvlPercent: 0,
-        scarcityPercent: 0,
+        miningPowerPercent: 100,
         feesCollected: 0n,
         prizePool: 0n
     },
@@ -268,10 +268,10 @@ function renderMetricsGrid() {
         <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
             ${metricCard('Total Supply', 'metric-supply', 'fa-coins', 'amber')}
             ${metricCard('TVL', 'metric-tvl', 'fa-lock', 'green')}
-            ${metricCard('Scarcity', 'metric-scarcity', 'fa-fire', 'orange')}
+            ${metricCard('Mining Power', 'metric-scarcity', 'fa-fire', 'orange')}
             ${metricCard('Net pStake', 'metric-pstake', 'fa-bolt', 'purple')}
             ${metricCard('Prize Pool', 'metric-prize', 'fa-trophy', 'yellow')}
-            ${metricCard('Fees 24h', 'metric-fees', 'fa-chart-line', 'blue')}
+            ${metricCard('Total Fees', 'metric-fees', 'fa-chart-line', 'blue')}
         </div>
     `;
 }
@@ -490,13 +490,19 @@ async function loadMetrics() {
     DashState.isLoadingMetrics = true;
 
     try {
-        // Parallel fetch
-        const [totalSupply, maxSupply, tgeSupply, networkPStake, fortuneStatus] = await Promise.allSettled([
+        // Fetch from backend API (has accurate miningPower and fees)
+        const systemStatsPromise = fetch(API_ENDPOINTS.systemStats || 'https://getsystemstats-4wvdcuoouq-uc.a.run.app')
+            .then(r => r.json())
+            .catch(() => null);
+
+        // Parallel fetch from blockchain
+        const [totalSupply, maxSupply, tgeSupply, networkPStake, fortuneStatus, systemStats] = await Promise.allSettled([
             safeContractCall(State.bkcTokenContractPublic, 'totalSupply', [], 0n),
             safeContractCall(State.bkcTokenContractPublic, 'MAX_SUPPLY', [], 21000000n * 10n**18n),
             safeContractCall(State.bkcTokenContractPublic, 'TGE_SUPPLY', [], 10000000n * 10n**18n),
             safeContractCall(State.delegationManagerContractPublic, 'totalNetworkPStake', [], 0n),
-            getFortunePoolStatus()
+            getFortunePoolStatus(),
+            systemStatsPromise
         ]);
 
         // Process values
@@ -505,12 +511,30 @@ async function loadMetrics() {
         const tge = tgeSupply.status === 'fulfilled' ? tgeSupply.value : 10000000n * 10n**18n;
         const pstake = networkPStake.status === 'fulfilled' ? networkPStake.value : 0n;
         const fortune = fortuneStatus.status === 'fulfilled' ? fortuneStatus.value : { prizePool: 0n };
+        const stats = systemStats.status === 'fulfilled' ? systemStats.value : null;
 
         // Calculate metrics
         const minableTokens = max - tge; // Tokens that can be mined
         const minedTokens = supply > tge ? supply - tge : 0n;
         const remainingToMine = minableTokens - minedTokens;
-        const scarcityPercent = minableTokens > 0n ? Number((remainingToMine * 10000n) / minableTokens) / 100 : 0;
+        
+        // Mining Power from backend (more accurate) or calculate locally
+        let miningPowerPercent = 100;
+        if (stats?.miningPowerBips !== undefined) {
+            miningPowerPercent = Number(stats.miningPowerBips) / 100;
+        } else if (minableTokens > 0n) {
+            miningPowerPercent = Number((remainingToMine * 10000n) / minableTokens) / 100;
+        }
+
+        // Fees from backend
+        let feesCollected = 0n;
+        if (stats?.totalFeesCollected) {
+            try {
+                feesCollected = BigInt(stats.totalFeesCollected);
+            } catch (e) {
+                feesCollected = 0n;
+            }
+        }
 
         // TVL = pStake (locked in delegation)
         const tvl = pstake;
@@ -524,10 +548,12 @@ async function loadMetrics() {
             networkPStake: pstake,
             tvl,
             tvlPercent,
-            scarcityPercent,
+            miningPowerPercent,
             minedTokens,
             remainingToMine,
-            prizePool: fortune.prizePool || 0n
+            prizePool: fortune.prizePool || 0n,
+            feesCollected,
+            lastUpdate: stats?.lastUpdate || null
         };
 
         // Update UI
@@ -548,25 +574,40 @@ function updateMetricsUI() {
     setEl('metric-supply-sub', `of ${fmt.bkc(m.maxSupply)} max`);
 
     // TVL
-    setEl('metric-tvl', fmt.bkc(m.tvl));
-    setEl('metric-tvl-sub', `${m.tvlPercent.toFixed(1)}% of supply`);
+    if (m.tvl === 0n) {
+        setEl('metric-tvl', '0.00');
+        setEl('metric-tvl-sub', 'no stakes yet');
+    } else {
+        setEl('metric-tvl', fmt.bkc(m.tvl));
+        setEl('metric-tvl-sub', `${m.tvlPercent.toFixed(1)}% of supply`);
+    }
 
-    // Scarcity
-    const scarcityColor = m.scarcityPercent > 50 ? 'text-green-400' : m.scarcityPercent > 20 ? 'text-yellow-400' : 'text-red-400';
-    setEl('metric-scarcity', `<span class="${scarcityColor}">${m.scarcityPercent.toFixed(1)}%</span>`, true);
-    setEl('metric-scarcity-sub', 'tokens remaining');
+    // Mining Power (was Scarcity)
+    const mpColor = m.miningPowerPercent > 50 ? 'text-green-400' : m.miningPowerPercent > 20 ? 'text-yellow-400' : 'text-red-400';
+    setEl('metric-scarcity', `<span class="${mpColor}">${m.miningPowerPercent.toFixed(1)}%</span>`, true);
+    setEl('metric-scarcity-sub', 'mining power');
 
     // Network pStake
-    setEl('metric-pstake', formatPStake(m.networkPStake));
-    setEl('metric-pstake-sub', 'total staking power');
+    if (m.networkPStake === 0n) {
+        setEl('metric-pstake', '0');
+        setEl('metric-pstake-sub', 'no stakers yet');
+    } else {
+        setEl('metric-pstake', formatPStake(m.networkPStake));
+        setEl('metric-pstake-sub', 'total staking power');
+    }
 
     // Prize Pool
     setEl('metric-prize', fmt.bkc(m.prizePool));
     setEl('metric-prize-sub', 'Fortune Pool');
 
-    // Fees (placeholder - would need API)
-    setEl('metric-fees', '--');
-    setEl('metric-fees-sub', 'coming soon');
+    // Fees Collected
+    if (m.feesCollected > 0n) {
+        setEl('metric-fees', fmt.bkc(m.feesCollected));
+        setEl('metric-fees-sub', 'total collected');
+    } else {
+        setEl('metric-fees', '0.00');
+        setEl('metric-fees-sub', 'total collected');
+    }
 
     // Sidebar stats
     setEl('stat-max-supply', fmt.bkc(m.maxSupply));
@@ -575,8 +616,8 @@ function updateMetricsUI() {
     
     const progressEl = document.getElementById('stat-progress');
     if (progressEl) {
-        const progress = 100 - m.scarcityPercent;
-        progressEl.style.width = `${Math.min(100, progress)}%`;
+        const progress = 100 - m.miningPowerPercent;
+        progressEl.style.width = `${Math.min(100, Math.max(0, progress))}%`;
     }
 }
 
