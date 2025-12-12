@@ -97,7 +97,20 @@ const Skeleton = (w = 'w-20', h = 'h-6') =>
 // MAIN RENDER
 // ============================================================================
 function render() {
-    if (!DOMElements.dashboard) return;
+    // Fallback: try to get dashboard element directly if DOMElements is not set
+    const dashboardEl = DOMElements.dashboard || document.getElementById('dashboard');
+    
+    if (!dashboardEl) {
+        console.warn('❌ Dashboard element not found');
+        return;
+    }
+    
+    // Update DOMElements if it was null
+    if (!DOMElements.dashboard) {
+        DOMElements.dashboard = dashboardEl;
+    }
+    
+    console.log('📊 Dashboard render started');
 
     DOMElements.dashboard.innerHTML = `
         <div class="min-h-screen pb-24 md:pb-10">
@@ -212,9 +225,9 @@ function renderHeroSection() {
                                 <p id="booster-discount" class="text-xs text-zinc-600">0% fee discount</p>
                             </div>
                         </div>
-                        <a href="#store" class="text-xs text-amber-500 hover:text-amber-400 font-medium">
+                        <button data-nav="store" class="text-xs text-amber-500 hover:text-amber-400 font-medium">
                             Get Booster <i class="fa-solid fa-chevron-right ml-1"></i>
-                        </a>
+                        </button>
                     </div>
                 </div>
             </div>
@@ -294,24 +307,24 @@ function metricCard(label, id, icon, color) {
 function renderQuickActions() {
     return `
         <div class="grid grid-cols-3 gap-3">
-            <a href="#mine" class="flex flex-col items-center gap-2 p-4 bg-zinc-900/50 border border-zinc-800/50 rounded-xl active:bg-zinc-800 transition-colors">
+            <button data-nav="mine" class="flex flex-col items-center gap-2 p-4 bg-zinc-900/50 border border-zinc-800/50 rounded-xl active:bg-zinc-800 transition-colors w-full">
                 <div class="w-10 h-10 rounded-full bg-purple-500/20 flex items-center justify-center">
                     <i class="fa-solid fa-layer-group text-purple-400"></i>
                 </div>
                 <span class="text-xs font-medium text-zinc-300">Stake</span>
-            </a>
-            <a href="#store" class="flex flex-col items-center gap-2 p-4 bg-zinc-900/50 border border-zinc-800/50 rounded-xl active:bg-zinc-800 transition-colors">
+            </button>
+            <button data-nav="store" class="flex flex-col items-center gap-2 p-4 bg-zinc-900/50 border border-zinc-800/50 rounded-xl active:bg-zinc-800 transition-colors w-full">
                 <div class="w-10 h-10 rounded-full bg-amber-500/20 flex items-center justify-center">
                     <i class="fa-solid fa-store text-amber-400"></i>
                 </div>
                 <span class="text-xs font-medium text-zinc-300">Store</span>
-            </a>
-            <a href="#fortune" class="flex flex-col items-center gap-2 p-4 bg-zinc-900/50 border border-zinc-800/50 rounded-xl active:bg-zinc-800 transition-colors">
+            </button>
+            <button data-nav="actions" class="flex flex-col items-center gap-2 p-4 bg-zinc-900/50 border border-zinc-800/50 rounded-xl active:bg-zinc-800 transition-colors w-full">
                 <div class="w-10 h-10 rounded-full bg-pink-500/20 flex items-center justify-center">
                     <i class="fa-solid fa-dice text-pink-400"></i>
                 </div>
                 <span class="text-xs font-medium text-zinc-300">Fortune</span>
-            </a>
+            </button>
         </div>
     `;
 }
@@ -414,9 +427,9 @@ function renderSidebarCards() {
                     <p class="text-xs text-zinc-400">Stake BKC, earn rewards</p>
                 </div>
             </div>
-            <a href="#mine" class="block w-full bg-purple-600 hover:bg-purple-500 text-white font-bold py-2.5 rounded-lg text-sm text-center transition-colors">
+            <button data-nav="mine" class="block w-full bg-purple-600 hover:bg-purple-500 text-white font-bold py-2.5 rounded-lg text-sm text-center transition-colors">
                 Start Staking <i class="fa-solid fa-arrow-right ml-2"></i>
-            </a>
+            </button>
         </div>
 
         <!-- Fortune CTA -->
@@ -430,9 +443,9 @@ function renderSidebarCards() {
                     <p class="text-xs text-zinc-400">Win up to 100x</p>
                 </div>
             </div>
-            <a href="#fortune" class="block w-full border border-pink-500/30 text-pink-400 hover:bg-pink-900/20 font-bold py-2.5 rounded-lg text-sm text-center transition-colors">
+            <button data-nav="actions" class="block w-full border border-pink-500/30 text-pink-400 hover:bg-pink-900/20 font-bold py-2.5 rounded-lg text-sm text-center transition-colors">
                 Play Now
-            </a>
+            </button>
         </div>
 
         <!-- Protocol Stats -->
@@ -801,24 +814,44 @@ function hideFaucet() {
 // EVENT LISTENERS
 // ============================================================================
 function attachListeners() {
-    const dash = DOMElements.dashboard;
-    if (!dash) return;
+    const dash = DOMElements.dashboard || document.getElementById('dashboard');
+    if (!dash) {
+        console.warn('❌ Dashboard element not found for event listeners');
+        return;
+    }
+    
+    console.log('📌 Dashboard listeners attached');
 
     dash.addEventListener('click', async (e) => {
         const target = e.target;
+        
+        // Navigation buttons (data-nav) - CHECK FIRST
+        const navBtn = target.closest('[data-nav]');
+        if (navBtn) {
+            e.preventDefault();
+            const pageId = navBtn.dataset.nav;
+            console.log('🔗 Navigation click:', pageId);
+            if (pageId && window.navigateTo) {
+                window.navigateTo(pageId);
+            }
+            return;
+        }
 
         // Refresh buttons
         if (target.closest('#dash-refresh') || target.closest('#dash-refresh-desktop')) {
             const btn = target.closest('#dash-refresh') || target.closest('#dash-refresh-desktop');
+            console.log('🔄 Refresh clicked');
             btn.querySelector('i')?.classList.add('fa-spin');
             await loadAllData();
             await updateUserUI();
             setTimeout(() => btn.querySelector('i')?.classList.remove('fa-spin'), 500);
+            return;
         }
 
         // Claim rewards
         if (target.closest('#claim-rewards-btn')) {
             const btn = target.closest('#claim-rewards-btn');
+            console.log('💰 Claim clicked, disabled:', btn.disabled);
             if (btn.disabled) return;
             
             const originalHTML = btn.innerHTML;
@@ -845,6 +878,7 @@ function attachListeners() {
 
         // Faucet
         if (target.closest('#faucet-btn')) {
+            console.log('💧 Faucet clicked');
             const btn = target.closest('#faucet-btn');
             const success = await executeInternalFaucet(btn);
             if (success) {
