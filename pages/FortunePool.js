@@ -14,7 +14,7 @@ const ethers = window.ethers;
 // CONSTANTS
 // ============================================================================
 const EXPLORER_TX = "https://sepolia.arbiscan.io/tx/";
-const FAUCET_API = "https://us-central1-backchain-backand.cloudfunctions.net/faucet";
+const FAUCET_API = "https://faucet-4wvdcuoouq-uc.a.run.app";
 
 // Prize tiers configuration (from contract)
 const TIERS = [

@@ -51,7 +51,7 @@ const DashState = {
 const EXPLORER_TX = "https://sepolia.arbiscan.io/tx/";
 const EXPLORER_ADDR = "https://sepolia.arbiscan.io/address/";
 const CACHE_TTL = 30000; // 30s cache
-const FAUCET_API = "https://us-central1-backchain-backand.cloudfunctions.net/faucet";
+const FAUCET_API = "https://faucet-4wvdcuoouq-uc.a.run.app";
 
 // ============================================================================
 // HELPERS
