@@ -1,535 +1,692 @@
-// pages/NotaryPage.js
-// ✅ VERSION V6.0: Clean UI, Mobile-First, V2.1 Compatible
+// js/pages/NotaryPage.js
+// ✅ VERSION V8.0: Complete Redesign - Mobile-First, Fixed V2.1 Event Name Bug
 
 import { State } from '../state.js';
-import { formatBigNumber, renderLoading, renderNoData } from '../utils.js';
+import { formatBigNumber } from '../utils.js';
 import { safeContractCall, API_ENDPOINTS, loadPublicData, loadUserData } from '../modules/data.js';
-import { showToast, addNftToWallet } from '../ui-feedback.js';
 import { executeNotarizeDocument } from '../modules/transactions.js';
+import { showToast, addNftToWallet } from '../ui-feedback.js';
 
 const ethers = window.ethers;
 
-// --- CONFIG ---
-const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024; // 10MB
-const EXPLORER_BASE = "https://sepolia.arbiscan.io/tx/";
-
-// --- LOCAL STATE ---
-let currentFile = null;
-let descriptionCache = "";
-let lastDataFetch = 0;
-
-// --- STYLES ---
-const style = document.createElement('style');
-style.innerHTML = `
-    .notary-drop-zone {
-        border: 2px dashed #3f3f46;
-        transition: all 0.2s ease;
-    }
-    .notary-drop-zone.active {
-        border-color: #f59e0b;
-        background: rgba(245, 158, 11, 0.05);
-    }
-    .notary-drop-zone:hover {
-        border-color: #52525b;
-        background: rgba(255, 255, 255, 0.02);
-    }
-    .step-indicator {
-        width: 28px;
-        height: 28px;
-        border-radius: 50%;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-size: 11px;
-        font-weight: bold;
-        transition: all 0.3s ease;
-    }
-    .step-indicator.pending {
-        background: #27272a;
-        color: #71717a;
-        border: 2px solid #3f3f46;
-    }
-    .step-indicator.active {
-        background: #f59e0b;
-        color: #000;
-        border: 2px solid #f59e0b;
-        box-shadow: 0 0 12px rgba(245, 158, 11, 0.4);
-    }
-    .step-indicator.completed {
-        background: #10b981;
-        color: #fff;
-        border: 2px solid #10b981;
-    }
-    @keyframes scanLine {
-        0% { top: 0; opacity: 0; }
-        50% { opacity: 1; }
-        100% { top: 100%; opacity: 0; }
-    }
-    .scan-animation {
-        position: absolute;
-        left: 0;
-        right: 0;
-        height: 2px;
-        background: linear-gradient(90deg, transparent, #f59e0b, transparent);
-        animation: scanLine 2s ease-in-out infinite;
-    }
-`;
-document.head.appendChild(style);
+// ============================================================================
+// CONSTANTS
+// ============================================================================
+const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
+const EXPLORER_TX = "https://sepolia.arbiscan.io/tx/";
+const IPFS_GATEWAY = "https://ipfs.io/ipfs/";
 
 // ============================================================================
-// 1. REQUIREMENTS CHECK
+// STATE
 // ============================================================================
+const Notary = {
+    step: 1,
+    file: null,
+    description: '',
+    hash: null,
+    isProcessing: false,
+    certificates: [],
+    lastFetch: 0
+};
 
-function checkRequirements() {
-    if (!State.isConnected) return { allowed: false, reason: 'wallet' };
+// ============================================================================
+// STYLES
+// ============================================================================
+const injectStyles = () => {
+    if (document.getElementById('notary-styles')) return;
     
-    const userBalance = State.currentUserBalance || 0n;
-    const fee = State.notaryFee || ethers.parseEther("1");
-    
-    if (userBalance < fee) {
-        return { allowed: false, reason: 'balance', current: userBalance, required: fee };
-    }
-    
-    return { allowed: true };
-}
+    const style = document.createElement('style');
+    style.id = 'notary-styles';
+    style.textContent = `
+        .notary-dropzone {
+            border: 2px dashed #3f3f46;
+            transition: all 0.2s ease;
+        }
+        .notary-dropzone.drag-over {
+            border-color: #f59e0b;
+            background: rgba(245, 158, 11, 0.05);
+        }
+        .notary-dropzone:hover {
+            border-color: #52525b;
+        }
+        .step-dot {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            font-weight: bold;
+            transition: all 0.3s ease;
+        }
+        .step-dot.pending {
+            background: #27272a;
+            color: #71717a;
+            border: 2px solid #3f3f46;
+        }
+        .step-dot.active {
+            background: linear-gradient(135deg, #f59e0b, #d97706);
+            color: #000;
+            box-shadow: 0 0 15px rgba(245, 158, 11, 0.4);
+        }
+        .step-dot.done {
+            background: #10b981;
+            color: #fff;
+        }
+        .step-line {
+            height: 2px;
+            flex: 1;
+            background: #3f3f46;
+            transition: background 0.3s ease;
+        }
+        .step-line.active {
+            background: linear-gradient(90deg, #10b981, #f59e0b);
+        }
+        .step-line.done {
+            background: #10b981;
+        }
+        @keyframes scanPulse {
+            0%, 100% { opacity: 0.5; transform: scaleY(1); }
+            50% { opacity: 1; transform: scaleY(1.5); }
+        }
+        .scan-line {
+            animation: scanPulse 1.5s ease-in-out infinite;
+        }
+        .cert-card {
+            transition: all 0.2s ease;
+        }
+        .cert-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+        }
+    `;
+    document.head.appendChild(style);
+};
 
 // ============================================================================
-// 2. MAIN RENDER
+// MAIN RENDER
 // ============================================================================
-
-function renderLayout() {
+function render() {
     const container = document.getElementById('notary');
     if (!container) return;
-    if (container.querySelector('#notary-main')) {
-        updateInterface();
-        return;
-    }
-
+    
+    injectStyles();
+    
     container.innerHTML = `
-        <div id="notary-main" class="max-w-4xl mx-auto py-6 px-4">
-            
-            <!-- HEADER -->
-            <div class="flex justify-between items-start mb-6">
-                <div>
-                    <h1 class="text-xl font-bold text-white flex items-center gap-2">
-                        <i class="fa-solid fa-stamp text-amber-500"></i> Notary
-                    </h1>
-                    <p class="text-xs text-zinc-500 mt-1">Permanent on-chain document certification</p>
+        <div class="min-h-screen pb-24 md:pb-10">
+            <!-- MOBILE HEADER -->
+            <header class="sticky top-0 z-40 bg-zinc-950/95 backdrop-blur-lg border-b border-zinc-800/50 -mx-4 px-4 py-3 md:hidden">
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center gap-3">
+                        <div class="w-8 h-8 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center">
+                            <i class="fa-solid fa-stamp text-white text-sm"></i>
+                        </div>
+                        <div>
+                            <h1 class="text-lg font-bold text-white">Notary</h1>
+                            <p id="mobile-status" class="text-[10px] text-zinc-500">Document Certification</p>
+                        </div>
+                    </div>
+                    <div id="mobile-badge" class="text-[10px] px-2 py-1 rounded-full bg-zinc-800 text-zinc-500">
+                        --
+                    </div>
                 </div>
-                <div id="status-badge" class="text-[10px] font-mono px-2 py-1 rounded bg-zinc-800 text-zinc-500">
-                    CHECKING...
+            </header>
+
+            <!-- DESKTOP HEADER -->
+            <div class="hidden md:flex items-center justify-between mb-6">
+                <div class="flex items-center gap-4">
+                    <div class="w-12 h-12 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center">
+                        <i class="fa-solid fa-stamp text-white text-xl"></i>
+                    </div>
+                    <div>
+                        <h1 class="text-2xl font-bold text-white">Document Notary</h1>
+                        <p class="text-sm text-zinc-500">Permanent on-chain certification</p>
+                    </div>
+                </div>
+                <div id="desktop-badge" class="flex items-center gap-2 px-3 py-1.5 rounded-full bg-zinc-800/50 text-sm">
+                    <span class="w-2 h-2 rounded-full bg-zinc-600"></span>
+                    <span class="text-zinc-400">Checking...</span>
                 </div>
             </div>
 
-            <!-- MAIN GRID -->
-            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <!-- MAIN CONTENT -->
+            <div class="mt-4 md:mt-0 grid grid-cols-1 lg:grid-cols-3 gap-6">
                 
-                <!-- LEFT: Action Area -->
+                <!-- LEFT: Action Panel -->
                 <div class="lg:col-span-2 space-y-4">
                     
                     <!-- Progress Steps -->
-                    <div class="glass-panel p-4 rounded-xl">
+                    <div class="bg-zinc-900/50 border border-zinc-800/50 rounded-xl p-4">
                         <div class="flex items-center justify-between">
-                            <div class="flex items-center gap-2">
-                                <div id="step-1" class="step-indicator active">1</div>
-                                <span class="text-xs text-zinc-400 hidden sm:inline">File</span>
+                            <div class="flex flex-col items-center">
+                                <div id="step-1" class="step-dot active">1</div>
+                                <span class="text-[10px] text-zinc-500 mt-1">Upload</span>
                             </div>
-                            <div class="flex-1 h-px bg-zinc-700 mx-2 sm:mx-4" id="line-1-2"></div>
-                            <div class="flex items-center gap-2">
-                                <div id="step-2" class="step-indicator pending">2</div>
-                                <span class="text-xs text-zinc-400 hidden sm:inline">Details</span>
+                            <div id="line-1" class="step-line mx-2"></div>
+                            <div class="flex flex-col items-center">
+                                <div id="step-2" class="step-dot pending">2</div>
+                                <span class="text-[10px] text-zinc-500 mt-1">Details</span>
                             </div>
-                            <div class="flex-1 h-px bg-zinc-700 mx-2 sm:mx-4" id="line-2-3"></div>
-                            <div class="flex items-center gap-2">
-                                <div id="step-3" class="step-indicator pending">3</div>
-                                <span class="text-xs text-zinc-400 hidden sm:inline">Mint</span>
+                            <div id="line-2" class="step-line mx-2"></div>
+                            <div class="flex flex-col items-center">
+                                <div id="step-3" class="step-dot pending">3</div>
+                                <span class="text-[10px] text-zinc-500 mt-1">Mint</span>
                             </div>
                         </div>
                     </div>
 
-                    <!-- Dynamic Content Area -->
-                    <div id="action-area" class="glass-panel p-6 rounded-xl min-h-[300px] flex flex-col justify-center">
-                        ${renderLoading()}
+                    <!-- Dynamic Content -->
+                    <div id="action-panel" class="bg-zinc-900/50 border border-zinc-800/50 rounded-xl p-6 min-h-[320px]">
+                        <!-- Step content renders here -->
                     </div>
                 </div>
 
-                <!-- RIGHT: Info Panel -->
+                <!-- RIGHT: Info Sidebar -->
                 <div class="space-y-4">
                     
-                    <!-- Cost Info -->
-                    <div class="glass-panel p-4 rounded-xl border-l-2 border-amber-500">
-                        <h3 class="text-xs font-bold text-zinc-400 uppercase tracking-wider mb-3">Service Cost</h3>
-                        <div id="cost-info" class="space-y-2">
-                            <!-- Dynamic -->
+                    <!-- Cost Card -->
+                    <div class="bg-gradient-to-br from-indigo-900/30 to-purple-900/20 border border-indigo-500/20 rounded-xl p-4">
+                        <div class="flex items-center gap-2 mb-3">
+                            <i class="fa-solid fa-coins text-amber-400"></i>
+                            <span class="text-xs font-bold text-zinc-300">Service Cost</span>
+                        </div>
+                        <div id="cost-display" class="space-y-2">
+                            <div class="flex justify-between">
+                                <span class="text-zinc-500 text-sm">Fee</span>
+                                <span id="fee-amount" class="text-white font-mono font-bold">-- BKC</span>
+                            </div>
+                            <div class="flex justify-between pt-2 border-t border-zinc-700/50">
+                                <span class="text-zinc-500 text-sm">Your Balance</span>
+                                <span id="user-balance" class="font-mono font-bold">-- BKC</span>
+                            </div>
                         </div>
                     </div>
 
                     <!-- How It Works -->
-                    <div class="glass-panel p-4 rounded-xl">
-                        <h3 class="text-xs font-bold text-zinc-400 uppercase tracking-wider mb-3">
-                            <i class="fa-solid fa-info-circle text-blue-400 mr-1"></i> How It Works
+                    <div class="bg-zinc-900/50 border border-zinc-800/50 rounded-xl p-4">
+                        <h3 class="text-xs font-bold text-zinc-400 uppercase tracking-wider mb-3 flex items-center gap-2">
+                            <i class="fa-solid fa-circle-info text-blue-400"></i> How It Works
                         </h3>
-                        <ul class="text-[11px] text-zinc-500 space-y-2">
-                            <li class="flex items-start gap-2">
-                                <span class="text-amber-500">1.</span>
-                                <span>Upload any file (max 10MB)</span>
-                            </li>
-                            <li class="flex items-start gap-2">
-                                <span class="text-amber-500">2.</span>
-                                <span>Add optional description</span>
-                            </li>
-                            <li class="flex items-start gap-2">
-                                <span class="text-amber-500">3.</span>
-                                <span>Sign & mint as NFT certificate</span>
-                            </li>
-                            <li class="flex items-start gap-2">
-                                <span class="text-green-500">✓</span>
-                                <span>Hash stored permanently on-chain</span>
-                            </li>
-                        </ul>
+                        <div class="space-y-3">
+                            <div class="flex items-start gap-3">
+                                <div class="w-6 h-6 rounded-full bg-amber-500/20 flex items-center justify-center flex-shrink-0">
+                                    <span class="text-amber-400 text-[10px] font-bold">1</span>
+                                </div>
+                                <p class="text-xs text-zinc-400">Upload any document (max 10MB)</p>
+                            </div>
+                            <div class="flex items-start gap-3">
+                                <div class="w-6 h-6 rounded-full bg-amber-500/20 flex items-center justify-center flex-shrink-0">
+                                    <span class="text-amber-400 text-[10px] font-bold">2</span>
+                                </div>
+                                <p class="text-xs text-zinc-400">Add description for your records</p>
+                            </div>
+                            <div class="flex items-start gap-3">
+                                <div class="w-6 h-6 rounded-full bg-amber-500/20 flex items-center justify-center flex-shrink-0">
+                                    <span class="text-amber-400 text-[10px] font-bold">3</span>
+                                </div>
+                                <p class="text-xs text-zinc-400">Sign & mint NFT certificate</p>
+                            </div>
+                            <div class="flex items-start gap-3 pt-2 border-t border-zinc-800/50">
+                                <div class="w-6 h-6 rounded-full bg-green-500/20 flex items-center justify-center flex-shrink-0">
+                                    <i class="fa-solid fa-check text-green-400 text-[10px]"></i>
+                                </div>
+                                <p class="text-xs text-zinc-400">Hash stored permanently on-chain</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Features -->
+                    <div class="grid grid-cols-2 gap-3">
+                        <div class="bg-zinc-900/50 border border-zinc-800/50 rounded-xl p-3 text-center">
+                            <i class="fa-solid fa-shield-halved text-green-400 text-lg mb-1"></i>
+                            <p class="text-[10px] text-zinc-500">Tamper-Proof</p>
+                        </div>
+                        <div class="bg-zinc-900/50 border border-zinc-800/50 rounded-xl p-3 text-center">
+                            <i class="fa-solid fa-infinity text-purple-400 text-lg mb-1"></i>
+                            <p class="text-[10px] text-zinc-500">Permanent</p>
+                        </div>
                     </div>
                 </div>
             </div>
 
-            <!-- HISTORY -->
+            <!-- CERTIFICATES HISTORY -->
             <div class="mt-8">
-                <div class="flex justify-between items-center mb-4">
+                <div class="flex items-center justify-between mb-4">
                     <h2 class="text-sm font-bold text-white flex items-center gap-2">
-                        <i class="fa-solid fa-clock-rotate-left text-zinc-500"></i> Your Certificates
+                        <i class="fa-solid fa-certificate text-indigo-400"></i>
+                        Your Certificates
                     </h2>
-                    <button id="btn-refresh-history" class="text-[10px] text-amber-500 hover:text-white transition-colors">
-                        <i class="fa-solid fa-rotate mr-1"></i> Refresh
+                    <button id="btn-refresh" class="text-xs text-indigo-400 hover:text-white transition-colors flex items-center gap-1">
+                        <i class="fa-solid fa-rotate"></i> Refresh
                     </button>
                 </div>
-                <div id="history-container" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                    ${renderLoading()}
+                <div id="certificates-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                    <div class="col-span-full text-center py-8 text-zinc-600">
+                        <div class="w-8 h-8 border-2 border-zinc-700 border-t-indigo-500 rounded-full animate-spin mx-auto mb-2"></div>
+                        Loading...
+                    </div>
                 </div>
             </div>
         </div>
 
         <!-- Processing Overlay -->
-        ${renderProcessingOverlay()}
-    `;
-
-    attachListeners();
-    updateInterface();
-    fetchHistory();
-}
-
-function renderProcessingOverlay() {
-    return `
         <div id="processing-overlay" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/95 backdrop-blur-sm">
-            <div class="text-center p-6">
-                <div class="relative w-24 h-24 mx-auto mb-4">
-                    <div class="scan-animation"></div>
-                    <img src="assets/bkc_logo_3d.png" class="w-full h-full object-contain opacity-80" alt="">
+            <div class="text-center p-6 max-w-sm">
+                <div class="w-20 h-20 mx-auto mb-4 relative">
+                    <div class="absolute inset-0 rounded-full bg-gradient-to-br from-indigo-500/20 to-purple-500/20"></div>
+                    <div class="absolute inset-2 rounded-full bg-zinc-900 flex items-center justify-center">
+                        <i class="fa-solid fa-stamp text-3xl text-indigo-400"></i>
+                    </div>
+                    <div class="absolute inset-0 rounded-full border-2 border-indigo-500 border-t-transparent animate-spin"></div>
                 </div>
                 <h3 class="text-xl font-bold text-white mb-1">Notarizing</h3>
-                <p id="processing-status" class="text-amber-500 text-xs font-mono mb-4">UPLOADING...</p>
-                <div class="w-48 h-1.5 bg-zinc-800 rounded-full mx-auto overflow-hidden">
-                    <div id="processing-bar" class="h-full bg-amber-500 rounded-full w-0 transition-all duration-300"></div>
+                <p id="process-status" class="text-indigo-400 text-sm font-mono mb-4">PREPARING...</p>
+                <div class="w-full h-2 bg-zinc-800 rounded-full overflow-hidden">
+                    <div id="process-bar" class="h-full bg-gradient-to-r from-indigo-500 to-purple-500 rounded-full transition-all duration-500" style="width: 0%"></div>
                 </div>
                 <p class="text-[10px] text-zinc-600 mt-3">Do not close this window</p>
             </div>
         </div>
     `;
+
+    // Initial render
+    updateStatusBadges();
+    renderStepContent();
+    loadCertificates();
+    attachGlobalListeners();
 }
 
 // ============================================================================
-// 3. INTERFACE UPDATE
+// STATUS BADGES
 // ============================================================================
-
-function updateInterface() {
-    const badge = document.getElementById('status-badge');
-    const costInfo = document.getElementById('cost-info');
-    const actionArea = document.getElementById('action-area');
+function updateStatusBadges() {
+    const mobileBadge = document.getElementById('mobile-badge');
+    const desktopBadge = document.getElementById('desktop-badge');
+    const feeEl = document.getElementById('fee-amount');
+    const balanceEl = document.getElementById('user-balance');
     
-    if (!badge || !costInfo || !actionArea) return;
-
-    const check = checkRequirements();
-    const isOnline = State.isConnected;
     const fee = State.notaryFee || ethers.parseEther("1");
-    const userBalance = State.currentUserBalance || 0n;
+    const balance = State.currentUserBalance || 0n;
+    const hasBalance = balance >= fee;
+    const isOnline = State.isConnected;
 
-    // Status Badge
-    badge.innerHTML = isOnline 
-        ? `<span class="w-1.5 h-1.5 bg-green-500 rounded-full inline-block mr-1 animate-pulse"></span> Online`
-        : `<span class="w-1.5 h-1.5 bg-red-500 rounded-full inline-block mr-1"></span> Disconnected`;
-    badge.className = `text-[10px] font-mono px-2 py-1 rounded ${isOnline ? 'bg-green-500/10 text-green-400 border border-green-500/20' : 'bg-zinc-800 text-zinc-500'}`;
-
-    // Cost Info
-    const hasBalance = userBalance >= fee;
-    costInfo.innerHTML = `
-        <div class="flex justify-between items-center text-sm">
-            <span class="text-zinc-500">Fee</span>
-            <span class="text-white font-mono font-bold">${formatBigNumber(fee)} BKC</span>
-        </div>
-        <div class="flex justify-between items-center text-sm pt-2 border-t border-zinc-700/50 mt-2">
-            <span class="text-zinc-500">Balance</span>
-            <span class="${hasBalance ? 'text-green-400' : 'text-red-400'} font-mono font-bold">${formatBigNumber(userBalance)} BKC</span>
-        </div>
-        ${!hasBalance && isOnline ? `
-            <div class="mt-2 p-2 bg-red-500/10 border border-red-500/20 rounded text-[10px] text-red-400">
-                <i class="fa-solid fa-exclamation-circle mr-1"></i> Insufficient balance
-            </div>
-        ` : ''}
-    `;
-
-    // Action Area
-    if (!check.allowed) {
-        if (check.reason === 'wallet') {
-            actionArea.innerHTML = `
-                <div class="text-center py-8">
-                    <div class="w-14 h-14 bg-zinc-800 rounded-full flex items-center justify-center mx-auto mb-3">
-                        <i class="fa-solid fa-wallet text-xl text-zinc-500"></i>
-                    </div>
-                    <h3 class="text-white font-bold mb-2">Connect Wallet</h3>
-                    <p class="text-zinc-500 text-xs mb-4">Connect to notarize documents</p>
-                    <button onclick="window.openConnectModal()" class="bg-amber-500 hover:bg-amber-400 text-black font-bold py-2 px-6 rounded-lg text-sm">
-                        Connect
-                    </button>
-                </div>
-            `;
-        } else if (check.reason === 'balance') {
-            actionArea.innerHTML = `
-                <div class="text-center py-8">
-                    <div class="w-14 h-14 bg-red-500/10 rounded-full flex items-center justify-center mx-auto mb-3">
-                        <i class="fa-solid fa-coins text-xl text-red-500"></i>
-                    </div>
-                    <h3 class="text-white font-bold mb-2">Insufficient Balance</h3>
-                    <p class="text-zinc-500 text-xs">You need ${formatBigNumber(fee)} BKC to notarize</p>
-                </div>
-            `;
-        }
-        return;
+    // Fee display
+    if (feeEl) feeEl.textContent = `${formatBigNumber(fee)} BKC`;
+    if (balanceEl) {
+        balanceEl.textContent = `${formatBigNumber(balance)} BKC`;
+        balanceEl.className = `font-mono font-bold ${hasBalance ? 'text-green-400' : 'text-red-400'}`;
     }
 
-    // Show current step
-    if (!currentFile) {
-        renderStep(1);
+    // Badges
+    if (isOnline) {
+        if (hasBalance) {
+            if (mobileBadge) {
+                mobileBadge.className = 'text-[10px] px-2 py-1 rounded-full bg-green-500/20 text-green-400';
+                mobileBadge.textContent = 'Ready';
+            }
+            if (desktopBadge) {
+                desktopBadge.innerHTML = `
+                    <span class="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
+                    <span class="text-green-400">Ready to Notarize</span>
+                `;
+                desktopBadge.className = 'flex items-center gap-2 px-3 py-1.5 rounded-full bg-green-500/10 border border-green-500/20 text-sm';
+            }
+        } else {
+            if (mobileBadge) {
+                mobileBadge.className = 'text-[10px] px-2 py-1 rounded-full bg-red-500/20 text-red-400';
+                mobileBadge.textContent = 'Low Balance';
+            }
+            if (desktopBadge) {
+                desktopBadge.innerHTML = `
+                    <span class="w-2 h-2 rounded-full bg-red-500"></span>
+                    <span class="text-red-400">Insufficient Balance</span>
+                `;
+                desktopBadge.className = 'flex items-center gap-2 px-3 py-1.5 rounded-full bg-red-500/10 border border-red-500/20 text-sm';
+            }
+        }
+    } else {
+        if (mobileBadge) {
+            mobileBadge.className = 'text-[10px] px-2 py-1 rounded-full bg-zinc-800 text-zinc-500';
+            mobileBadge.textContent = 'Disconnected';
+        }
+        if (desktopBadge) {
+            desktopBadge.innerHTML = `
+                <span class="w-2 h-2 rounded-full bg-zinc-600"></span>
+                <span class="text-zinc-400">Connect Wallet</span>
+            `;
+            desktopBadge.className = 'flex items-center gap-2 px-3 py-1.5 rounded-full bg-zinc-800/50 text-sm';
+        }
     }
 }
 
 // ============================================================================
-// 4. STEP RENDERING
+// STEP INDICATOR UPDATE
 // ============================================================================
-
-function renderStep(step) {
-    const actionArea = document.getElementById('action-area');
-    if (!actionArea) return;
-
-    // Update step indicators
+function updateStepIndicators() {
     [1, 2, 3].forEach(i => {
-        const el = document.getElementById(`step-${i}`);
-        if (el) {
-            el.className = `step-indicator ${i < step ? 'completed' : (i === step ? 'active' : 'pending')}`;
-            el.innerHTML = i < step ? '<i class="fa-solid fa-check text-[10px]"></i>' : i;
+        const dot = document.getElementById(`step-${i}`);
+        if (!dot) return;
+        
+        if (i < Notary.step) {
+            dot.className = 'step-dot done';
+            dot.innerHTML = '<i class="fa-solid fa-check text-xs"></i>';
+        } else if (i === Notary.step) {
+            dot.className = 'step-dot active';
+            dot.textContent = i;
+        } else {
+            dot.className = 'step-dot pending';
+            dot.textContent = i;
         }
     });
 
-    // Update lines
-    const line12 = document.getElementById('line-1-2');
-    const line23 = document.getElementById('line-2-3');
-    if (line12) line12.className = `flex-1 h-px mx-2 sm:mx-4 ${step > 1 ? 'bg-amber-500' : 'bg-zinc-700'}`;
-    if (line23) line23.className = `flex-1 h-px mx-2 sm:mx-4 ${step > 2 ? 'bg-amber-500' : 'bg-zinc-700'}`;
+    const line1 = document.getElementById('line-1');
+    const line2 = document.getElementById('line-2');
+    
+    if (line1) line1.className = `step-line mx-2 ${Notary.step > 1 ? 'done' : ''}`;
+    if (line2) line2.className = `step-line mx-2 ${Notary.step > 2 ? 'done' : ''}`;
+}
 
-    // Step Content
-    if (step === 1) {
-        actionArea.innerHTML = `
-            <div class="text-center">
-                <h3 class="text-lg font-bold text-white mb-4">Select File</h3>
-                <div id="drop-zone" class="notary-drop-zone rounded-xl p-8 cursor-pointer">
-                    <input type="file" id="file-input" class="hidden" accept="*">
-                    <i class="fa-solid fa-cloud-arrow-up text-3xl text-amber-500 mb-3"></i>
-                    <p class="text-zinc-300 text-sm font-medium mb-1">Click or drag file here</p>
-                    <p class="text-[10px] text-zinc-600">Max 10MB • Any format</p>
+// ============================================================================
+// STEP CONTENT RENDER
+// ============================================================================
+function renderStepContent() {
+    const panel = document.getElementById('action-panel');
+    if (!panel) return;
+
+    updateStepIndicators();
+
+    // Check requirements first
+    if (!State.isConnected) {
+        panel.innerHTML = `
+            <div class="flex flex-col items-center justify-center h-full py-8">
+                <div class="w-16 h-16 rounded-full bg-zinc-800 flex items-center justify-center mb-4">
+                    <i class="fa-solid fa-wallet text-2xl text-zinc-500"></i>
                 </div>
+                <h3 class="text-lg font-bold text-white mb-2">Connect Wallet</h3>
+                <p class="text-zinc-500 text-sm mb-4 text-center">Connect your wallet to start notarizing documents</p>
+                <button onclick="window.openConnectModal && window.openConnectModal()" 
+                    class="bg-indigo-500 hover:bg-indigo-400 text-white font-bold py-2.5 px-6 rounded-xl transition-colors">
+                    Connect Wallet
+                </button>
             </div>
         `;
-        initDropZone();
-    } 
-    else if (step === 2) {
-        actionArea.innerHTML = `
-            <div class="w-full max-w-md mx-auto">
-                <h3 class="text-lg font-bold text-white mb-4 text-center">Add Details</h3>
-                
-                <!-- File Preview -->
-                <div class="bg-zinc-800/50 border border-zinc-700 rounded-lg p-3 mb-4 flex items-center gap-3">
-                    <div class="w-10 h-10 bg-amber-500/10 rounded-lg flex items-center justify-center">
-                        <i class="fa-regular fa-file text-amber-500"></i>
-                    </div>
-                    <div class="flex-1 min-w-0">
-                        <p class="text-white text-sm font-medium truncate">${currentFile?.name || 'Unknown'}</p>
-                        <p class="text-[10px] text-zinc-500">${currentFile ? (currentFile.size / 1024).toFixed(1) + ' KB' : ''}</p>
-                    </div>
-                    <button id="btn-remove-file" class="text-zinc-500 hover:text-red-400 transition-colors">
-                        <i class="fa-solid fa-trash text-sm"></i>
-                    </button>
-                </div>
-
-                <!-- Description -->
-                <div class="mb-4">
-                    <label class="text-[10px] font-bold text-zinc-500 uppercase tracking-wider block mb-2">
-                        Description (Optional)
-                    </label>
-                    <textarea id="description-input" rows="3" 
-                        class="w-full bg-black/40 border border-zinc-700 rounded-lg p-3 text-sm text-white focus:border-amber-500 focus:outline-none placeholder-zinc-600 resize-none"
-                        placeholder="E.g., Property deed, Contract #123...">${descriptionCache}</textarea>
-                </div>
-
-                <!-- Actions -->
-                <div class="flex gap-3">
-                    <button id="btn-back-step1" class="flex-1 border border-zinc-700 text-zinc-400 font-bold py-2.5 rounded-lg hover:bg-zinc-800 transition-colors text-sm">
-                        Back
-                    </button>
-                    <button id="btn-next-step3" class="flex-[2] bg-amber-500 hover:bg-amber-400 text-black font-bold py-2.5 rounded-lg transition-colors text-sm">
-                        Continue
-                    </button>
-                </div>
-            </div>
-        `;
-
-        document.getElementById('btn-remove-file').onclick = () => {
-            currentFile = null;
-            descriptionCache = "";
-            renderStep(1);
-        };
-        document.getElementById('btn-back-step1').onclick = () => renderStep(1);
-        document.getElementById('btn-next-step3').onclick = () => {
-            const input = document.getElementById('description-input');
-            if (input) descriptionCache = input.value;
-            renderStep(3);
-        };
+        return;
     }
-    else if (step === 3) {
-        const desc = descriptionCache || "No description provided";
-        actionArea.innerHTML = `
-            <div class="w-full max-w-md mx-auto text-center">
-                <h3 class="text-lg font-bold text-white mb-2">Confirm & Mint</h3>
-                <p class="text-xs text-zinc-500 mb-4">This will permanently store the file hash on-chain</p>
 
-                <!-- Summary -->
-                <div class="bg-zinc-800/50 border border-zinc-700 rounded-lg p-4 mb-4 text-left">
-                    <div class="flex items-center gap-3 mb-3 pb-3 border-b border-zinc-700/50">
-                        <div class="w-8 h-8 bg-amber-500/10 rounded flex items-center justify-center">
-                            <i class="fa-regular fa-file text-amber-500 text-sm"></i>
-                        </div>
-                        <div class="flex-1 min-w-0">
-                            <p class="text-white text-sm font-medium truncate">${currentFile?.name}</p>
-                        </div>
-                    </div>
-                    <p class="text-xs text-zinc-400 italic">"${desc}"</p>
+    const fee = State.notaryFee || ethers.parseEther("1");
+    const balance = State.currentUserBalance || 0n;
+    
+    if (balance < fee) {
+        panel.innerHTML = `
+            <div class="flex flex-col items-center justify-center h-full py-8">
+                <div class="w-16 h-16 rounded-full bg-red-500/10 flex items-center justify-center mb-4">
+                    <i class="fa-solid fa-coins text-2xl text-red-400"></i>
                 </div>
-
-                <!-- Actions -->
-                <div class="flex gap-3">
-                    <button id="btn-back-step2" class="flex-1 border border-zinc-700 text-zinc-400 font-bold py-2.5 rounded-lg hover:bg-zinc-800 transition-colors text-sm">
-                        Back
-                    </button>
-                    <button id="btn-mint" class="flex-[2] bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-black font-bold py-2.5 rounded-lg transition-all text-sm">
-                        <i class="fa-solid fa-stamp mr-2"></i> Sign & Mint
-                    </button>
-                </div>
+                <h3 class="text-lg font-bold text-white mb-2">Insufficient Balance</h3>
+                <p class="text-zinc-500 text-sm text-center">You need at least <span class="text-amber-400 font-bold">${formatBigNumber(fee)} BKC</span> to notarize</p>
+                <p class="text-zinc-600 text-xs mt-2">Current: ${formatBigNumber(balance)} BKC</p>
             </div>
         `;
+        return;
+    }
 
-        document.getElementById('btn-back-step2').onclick = () => renderStep(2);
-        document.getElementById('btn-mint').onclick = () => handleMint();
+    // Render current step
+    switch (Notary.step) {
+        case 1:
+            renderStep1(panel);
+            break;
+        case 2:
+            renderStep2(panel);
+            break;
+        case 3:
+            renderStep3(panel);
+            break;
     }
 }
 
 // ============================================================================
-// 5. FILE HANDLING
+// STEP 1: FILE UPLOAD
 // ============================================================================
+function renderStep1(panel) {
+    panel.innerHTML = `
+        <div class="flex flex-col items-center justify-center h-full">
+            <h3 class="text-lg font-bold text-white mb-2">Upload Document</h3>
+            <p class="text-zinc-500 text-sm mb-6 text-center">Select any file to certify on the blockchain</p>
+            
+            <div id="dropzone" class="notary-dropzone w-full max-w-md rounded-xl p-8 cursor-pointer text-center">
+                <input type="file" id="file-input" class="hidden">
+                <div class="w-16 h-16 mx-auto mb-4 rounded-full bg-indigo-500/10 flex items-center justify-center">
+                    <i class="fa-solid fa-cloud-arrow-up text-2xl text-indigo-400"></i>
+                </div>
+                <p class="text-white font-medium mb-1">Click or drag file here</p>
+                <p class="text-[10px] text-zinc-600">Max 10MB • Any format</p>
+            </div>
 
-function initDropZone() {
-    const dropZone = document.getElementById('drop-zone');
+            <div class="flex items-center gap-4 mt-6 text-[10px] text-zinc-600">
+                <span><i class="fa-solid fa-lock mr-1"></i> Encrypted upload</span>
+                <span><i class="fa-solid fa-shield mr-1"></i> IPFS storage</span>
+            </div>
+        </div>
+    `;
+
+    initDropzone();
+}
+
+function initDropzone() {
+    const dropzone = document.getElementById('dropzone');
     const fileInput = document.getElementById('file-input');
-    if (!dropZone || !fileInput) return;
+    if (!dropzone || !fileInput) return;
 
-    dropZone.onclick = () => fileInput.click();
+    dropzone.onclick = () => fileInput.click();
 
-    ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(event => {
-        dropZone.addEventListener(event, e => {
-            e.preventDefault();
-            e.stopPropagation();
+    ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(e => {
+        dropzone.addEventListener(e, ev => {
+            ev.preventDefault();
+            ev.stopPropagation();
         });
     });
 
-    ['dragenter', 'dragover'].forEach(event => {
-        dropZone.addEventListener(event, () => dropZone.classList.add('active'));
+    dropzone.addEventListener('dragenter', () => dropzone.classList.add('drag-over'));
+    dropzone.addEventListener('dragover', () => dropzone.classList.add('drag-over'));
+    dropzone.addEventListener('dragleave', () => dropzone.classList.remove('drag-over'));
+    dropzone.addEventListener('drop', e => {
+        dropzone.classList.remove('drag-over');
+        handleFileSelect(e.dataTransfer?.files?.[0]);
     });
 
-    ['dragleave', 'drop'].forEach(event => {
-        dropZone.addEventListener(event, () => dropZone.classList.remove('active'));
-    });
-
-    dropZone.addEventListener('drop', handleFile);
-    fileInput.addEventListener('change', handleFile);
+    fileInput.addEventListener('change', e => handleFileSelect(e.target.files?.[0]));
 }
 
-function handleFile(e) {
-    const check = checkRequirements();
-    if (!check.allowed) {
-        if (check.reason === 'balance') showToast("Insufficient BKC balance", "error");
-        else showToast("Connect wallet first", "error");
-        return;
-    }
-
-    const file = e.target?.files?.[0] || e.dataTransfer?.files?.[0];
+function handleFileSelect(file) {
     if (!file) return;
 
-    if (file.size > MAX_FILE_SIZE_BYTES) {
-        showToast("File too large (max 10MB)", "error");
+    if (file.size > MAX_FILE_SIZE) {
+        showToast('File too large (max 10MB)', 'error');
         return;
     }
 
-    currentFile = file;
-    renderStep(2);
+    Notary.file = file;
+    Notary.step = 2;
+    renderStepContent();
 }
 
 // ============================================================================
-// 6. MINT PROCESS
+// STEP 2: DETAILS
 // ============================================================================
+function renderStep2(panel) {
+    const file = Notary.file;
+    const fileSize = file ? (file.size / 1024).toFixed(1) : '0';
+    const fileIcon = getFileIcon(file?.type || '');
 
+    panel.innerHTML = `
+        <div class="max-w-md mx-auto">
+            <h3 class="text-lg font-bold text-white mb-2 text-center">Add Details</h3>
+            <p class="text-zinc-500 text-sm mb-6 text-center">Describe your document for easy reference</p>
+
+            <!-- File Preview -->
+            <div class="bg-zinc-800/50 border border-zinc-700 rounded-xl p-4 mb-4">
+                <div class="flex items-center gap-3">
+                    <div class="w-12 h-12 rounded-lg bg-indigo-500/10 flex items-center justify-center">
+                        <i class="${fileIcon} text-xl text-indigo-400"></i>
+                    </div>
+                    <div class="flex-1 min-w-0">
+                        <p class="text-white font-medium truncate">${file?.name || 'Unknown'}</p>
+                        <p class="text-[10px] text-zinc-500">${fileSize} KB</p>
+                    </div>
+                    <button id="btn-remove" class="w-8 h-8 rounded-lg bg-red-500/10 hover:bg-red-500/20 flex items-center justify-center transition-colors">
+                        <i class="fa-solid fa-trash text-red-400 text-sm"></i>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Description Input -->
+            <div class="mb-6">
+                <label class="text-xs font-bold text-zinc-400 uppercase tracking-wider block mb-2">
+                    Description <span class="text-zinc-600 font-normal">(optional)</span>
+                </label>
+                <textarea id="desc-input" rows="3" 
+                    class="w-full bg-black/40 border border-zinc-700 rounded-xl p-4 text-sm text-white focus:border-indigo-500 focus:outline-none placeholder-zinc-600 resize-none"
+                    placeholder="E.g., Property deed signed on Jan 2025...">${Notary.description}</textarea>
+            </div>
+
+            <!-- Actions -->
+            <div class="flex gap-3">
+                <button id="btn-back" class="flex-1 py-3 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-bold rounded-xl transition-colors">
+                    <i class="fa-solid fa-arrow-left mr-2"></i> Back
+                </button>
+                <button id="btn-next" class="flex-[2] py-3 bg-indigo-500 hover:bg-indigo-400 text-white font-bold rounded-xl transition-colors">
+                    Continue <i class="fa-solid fa-arrow-right ml-2"></i>
+                </button>
+            </div>
+        </div>
+    `;
+
+    document.getElementById('btn-remove')?.addEventListener('click', () => {
+        Notary.file = null;
+        Notary.description = '';
+        Notary.step = 1;
+        renderStepContent();
+    });
+
+    document.getElementById('btn-back')?.addEventListener('click', () => {
+        Notary.step = 1;
+        renderStepContent();
+    });
+
+    document.getElementById('btn-next')?.addEventListener('click', () => {
+        const input = document.getElementById('desc-input');
+        Notary.description = input?.value || '';
+        Notary.step = 3;
+        renderStepContent();
+    });
+}
+
+function getFileIcon(mimeType) {
+    if (mimeType.includes('image')) return 'fa-regular fa-image';
+    if (mimeType.includes('pdf')) return 'fa-regular fa-file-pdf';
+    if (mimeType.includes('word') || mimeType.includes('document')) return 'fa-regular fa-file-word';
+    if (mimeType.includes('sheet') || mimeType.includes('excel')) return 'fa-regular fa-file-excel';
+    if (mimeType.includes('video')) return 'fa-regular fa-file-video';
+    if (mimeType.includes('audio')) return 'fa-regular fa-file-audio';
+    if (mimeType.includes('zip') || mimeType.includes('archive')) return 'fa-regular fa-file-zipper';
+    return 'fa-regular fa-file';
+}
+
+// ============================================================================
+// STEP 3: CONFIRM & MINT
+// ============================================================================
+function renderStep3(panel) {
+    const file = Notary.file;
+    const desc = Notary.description || 'No description';
+    const fee = State.notaryFee || ethers.parseEther("1");
+
+    panel.innerHTML = `
+        <div class="max-w-md mx-auto text-center">
+            <h3 class="text-lg font-bold text-white mb-2">Confirm & Mint</h3>
+            <p class="text-zinc-500 text-sm mb-6">Review and sign to create your certificate</p>
+
+            <!-- Summary Card -->
+            <div class="bg-zinc-800/50 border border-zinc-700 rounded-xl p-4 mb-4 text-left">
+                <div class="flex items-center gap-3 pb-3 border-b border-zinc-700/50 mb-3">
+                    <div class="w-10 h-10 rounded-lg bg-indigo-500/10 flex items-center justify-center">
+                        <i class="${getFileIcon(file?.type || '')} text-indigo-400"></i>
+                    </div>
+                    <div class="flex-1 min-w-0">
+                        <p class="text-white font-medium truncate text-sm">${file?.name}</p>
+                        <p class="text-[10px] text-zinc-500">${(file?.size / 1024).toFixed(1)} KB</p>
+                    </div>
+                </div>
+                <p class="text-xs text-zinc-400 italic">"${desc}"</p>
+            </div>
+
+            <!-- Cost Summary -->
+            <div class="bg-amber-500/10 border border-amber-500/20 rounded-xl p-3 mb-6">
+                <div class="flex justify-between items-center">
+                    <span class="text-zinc-400 text-sm">Total Cost</span>
+                    <span class="text-amber-400 font-bold">${formatBigNumber(fee)} BKC</span>
+                </div>
+            </div>
+
+            <!-- Actions -->
+            <div class="flex gap-3">
+                <button id="btn-back" class="flex-1 py-3 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-bold rounded-xl transition-colors">
+                    <i class="fa-solid fa-arrow-left mr-2"></i> Back
+                </button>
+                <button id="btn-mint" class="flex-[2] py-3 bg-gradient-to-r from-indigo-500 to-purple-500 hover:from-indigo-400 hover:to-purple-400 text-white font-bold rounded-xl transition-all">
+                    <i class="fa-solid fa-stamp mr-2"></i> Sign & Mint
+                </button>
+            </div>
+        </div>
+    `;
+
+    document.getElementById('btn-back')?.addEventListener('click', () => {
+        Notary.step = 2;
+        renderStepContent();
+    });
+
+    document.getElementById('btn-mint')?.addEventListener('click', handleMint);
+}
+
+// ============================================================================
+// MINT PROCESS
+// ============================================================================
 async function handleMint() {
+    if (Notary.isProcessing) return;
+    Notary.isProcessing = true;
+
     const btn = document.getElementById('btn-mint');
     if (btn) {
         btn.disabled = true;
-        btn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin mr-2"></i> Signing...';
+        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-2"></i> Signing...';
     }
 
-    let progressTimer;
+    const overlay = document.getElementById('processing-overlay');
+    const statusEl = document.getElementById('process-status');
+    const barEl = document.getElementById('process-bar');
+
+    const setProgress = (percent, text) => {
+        if (barEl) barEl.style.width = `${percent}%`;
+        if (statusEl) statusEl.textContent = text;
+    };
 
     try {
-        const description = descriptionCache?.trim() || "No description provided";
-
-        // Sign message
+        // Sign authentication message
         const signer = await State.provider.getSigner();
         const message = "I am signing to authenticate my file for notarization on Backchain.";
         const signature = await signer.signMessage(message);
 
         // Show overlay
-        const overlay = document.getElementById('processing-overlay');
-        const progressBar = document.getElementById('processing-bar');
-        const statusText = document.getElementById('processing-status');
-        
         if (overlay) {
             overlay.classList.remove('hidden');
             overlay.classList.add('flex');
         }
 
-        let progress = 0;
-        progressTimer = setInterval(() => {
-            progress = Math.min(progress + 0.5, 90);
-            if (progressBar) progressBar.style.width = `${progress}%`;
-        }, 500);
+        setProgress(10, 'UPLOADING TO IPFS...');
 
         // Upload to IPFS
-        if (statusText) statusText.textContent = "UPLOADING TO IPFS...";
-
         const formData = new FormData();
-        formData.append('file', currentFile);
+        formData.append('file', Notary.file);
         formData.append('signature', signature);
         formData.append('address', State.userAddress);
 
@@ -540,141 +697,196 @@ async function handleMint() {
             signal: AbortSignal.timeout(180000)
         });
 
-        if (!res.ok) throw new Error("Upload failed");
+        if (!res.ok) throw new Error('Upload failed');
         const data = await res.json();
 
-        // Mint on-chain
-        if (statusText) statusText.textContent = "MINTING ON BLOCKCHAIN...";
+        setProgress(50, 'MINTING ON BLOCKCHAIN...');
 
-        await executeNotarizeDocument(
+        // Execute mint
+        const success = await executeNotarizeDocument(
             data.ipfsUri,
-            description,
+            Notary.description || 'No description',
             data.contentHash,
             0n,
             btn
         );
 
-        // Success
-        clearInterval(progressTimer);
-        if (progressBar) progressBar.style.width = '100%';
-        if (statusText) statusText.textContent = "SUCCESS!";
-
-        setTimeout(() => {
-            if (overlay) {
-                overlay.classList.add('hidden');
-                overlay.classList.remove('flex');
-            }
-            NotaryPage.reset();
-            fetchHistory();
-            loadUserData(true);
-        }, 2000);
+        if (success) {
+            setProgress(100, 'SUCCESS!');
+            
+            setTimeout(() => {
+                if (overlay) {
+                    overlay.classList.add('hidden');
+                    overlay.classList.remove('flex');
+                }
+                
+                // Reset state
+                Notary.file = null;
+                Notary.description = '';
+                Notary.step = 1;
+                Notary.isProcessing = false;
+                
+                renderStepContent();
+                loadCertificates();
+                loadUserData(true);
+                
+                showToast('🎉 Document notarized successfully!', 'success');
+            }, 2000);
+        } else {
+            throw new Error('Minting failed');
+        }
 
     } catch (e) {
-        clearInterval(progressTimer);
+        console.error('Notary Error:', e);
         
-        const overlay = document.getElementById('processing-overlay');
         if (overlay) {
             overlay.classList.add('hidden');
             overlay.classList.remove('flex');
         }
-
-        showToast(e.message || "Notarization failed", "error");
         
         if (btn) {
             btn.disabled = false;
             btn.innerHTML = '<i class="fa-solid fa-stamp mr-2"></i> Sign & Mint';
         }
+        
+        Notary.isProcessing = false;
+        showToast(e.message || 'Notarization failed', 'error');
     }
 }
 
 // ============================================================================
-// 7. HISTORY
+// CERTIFICATES HISTORY
 // ============================================================================
+async function loadCertificates() {
+    const grid = document.getElementById('certificates-grid');
+    if (!grid) return;
 
-async function fetchHistory() {
-    const container = document.getElementById('history-container');
-    if (!container || !State.isConnected) return;
+    if (!State.isConnected) {
+        grid.innerHTML = `
+            <div class="col-span-full text-center py-8">
+                <p class="text-zinc-500 text-sm">Connect wallet to view certificates</p>
+            </div>
+        `;
+        return;
+    }
 
     try {
         if (!State.decentralizedNotaryContract) await loadPublicData();
         const contract = State.decentralizedNotaryContract;
         
         if (!contract) {
-            container.innerHTML = renderNoData("Contract not available");
+            grid.innerHTML = `<div class="col-span-full text-center py-8 text-zinc-500 text-sm">Contract not available</div>`;
             return;
         }
 
-        const filter = contract.filters.NotarizationEvent(null, State.userAddress);
-        const events = await contract.queryFilter(filter, -50000);
-
-        const docs = await Promise.all(events.map(async (e) => {
-            const tokenId = e.args[0];
-            let info = { ipfsCid: "", description: "", contentHash: "" };
+        // V2.1 FIX: Use correct event name "DocumentNotarized" instead of "NotarizationEvent"
+        let events = [];
+        try {
+            // Try V2.1 event name first
+            const filter = contract.filters.DocumentNotarized 
+                ? contract.filters.DocumentNotarized(null, State.userAddress)
+                : contract.filters.NotarizationEvent?.(null, State.userAddress);
             
-            try {
-                info = await contract.getDocumentInfo(tokenId);
-            } catch (err) {
-                console.warn("Could not read doc info for token", tokenId);
+            if (filter) {
+                events = await contract.queryFilter(filter, -50000);
             }
+        } catch (filterErr) {
+            console.warn('Event filter error:', filterErr.message?.slice(0, 100));
+            // Fallback: try to get tokens by checking balance
+            try {
+                const balance = await contract.balanceOf(State.userAddress);
+                if (balance > 0n) {
+                    // Manual token fetch if events fail
+                    for (let i = 0n; i < balance; i++) {
+                        try {
+                            const tokenId = await contract.tokenOfOwnerByIndex(State.userAddress, i);
+                            events.push({ args: [tokenId], transactionHash: null });
+                        } catch (e) { break; }
+                    }
+                }
+            } catch (balErr) {
+                console.warn('Balance fallback failed:', balErr);
+            }
+        }
 
-            return {
-                id: tokenId.toString(),
-                image: info.ipfsCid,
-                description: info.description,
-                hash: info.contentHash,
-                txHash: e.transactionHash
-            };
-        }));
-
-        const sorted = docs.reverse();
-
-        if (sorted.length === 0) {
-            container.innerHTML = `
+        if (events.length === 0) {
+            grid.innerHTML = `
                 <div class="col-span-full text-center py-8">
-                    <div class="w-12 h-12 bg-zinc-800 rounded-full flex items-center justify-center mx-auto mb-3">
-                        <i class="fa-solid fa-stamp text-zinc-600 text-lg"></i>
+                    <div class="w-14 h-14 rounded-full bg-zinc-800 flex items-center justify-center mx-auto mb-3">
+                        <i class="fa-solid fa-certificate text-xl text-zinc-600"></i>
                     </div>
-                    <p class="text-zinc-500 text-sm">No certificates yet</p>
+                    <p class="text-zinc-500 text-sm mb-1">No certificates yet</p>
+                    <p class="text-zinc-600 text-xs">Upload a document to get started</p>
                 </div>
             `;
             return;
         }
 
-        container.innerHTML = sorted.map(doc => {
-            const ipfsLink = doc.image.startsWith('ipfs://') 
-                ? `https://ipfs.io/ipfs/${doc.image.replace('ipfs://', '')}` 
-                : doc.image;
+        // Fetch certificate details
+        const certs = await Promise.all(events.map(async (e) => {
+            const tokenId = e.args[0];
+            let info = { ipfsCid: '', description: '', contentHash: '' };
+            
+            try {
+                info = await contract.getDocumentInfo(tokenId);
+            } catch (err) {
+                console.warn('Doc info error for token', tokenId?.toString());
+            }
+
+            return {
+                id: tokenId?.toString() || '?',
+                ipfs: info.ipfsCid || '',
+                description: info.description || '',
+                hash: info.contentHash || '',
+                txHash: e.transactionHash || ''
+            };
+        }));
+
+        const sorted = certs.reverse();
+
+        grid.innerHTML = sorted.map(cert => {
+            const ipfsUrl = cert.ipfs.startsWith('ipfs://') 
+                ? `${IPFS_GATEWAY}${cert.ipfs.replace('ipfs://', '')}`
+                : cert.ipfs;
 
             return `
-                <div class="glass-panel rounded-xl overflow-hidden hover:border-amber-500/30 transition-colors group">
+                <div class="cert-card bg-zinc-900/50 border border-zinc-800/50 rounded-xl overflow-hidden">
                     <!-- Preview -->
-                    <div class="h-24 bg-zinc-900/50 flex items-center justify-center relative overflow-hidden">
-                        <img src="${ipfsLink}" 
-                             class="w-full h-full object-cover opacity-70 group-hover:opacity-100 transition-opacity"
-                             onerror="this.style.display='none'; this.parentElement.innerHTML='<i class=\\'fa-solid fa-file-contract text-2xl text-zinc-600\\'></i>'">
+                    <div class="h-24 bg-gradient-to-br from-indigo-900/20 to-purple-900/20 flex items-center justify-center relative">
+                        <img src="${ipfsUrl}" 
+                             class="absolute inset-0 w-full h-full object-cover opacity-30"
+                             onerror="this.style.display='none'">
+                        <i class="fa-solid fa-certificate text-3xl text-indigo-400/50 relative z-10"></i>
+                        <span class="absolute top-2 right-2 text-[9px] font-mono text-zinc-500 bg-black/50 px-1.5 py-0.5 rounded">#${cert.id}</span>
                     </div>
                     
                     <!-- Info -->
                     <div class="p-3">
-                        <p class="text-[10px] text-zinc-600 uppercase mb-1">Description</p>
-                        <p class="text-xs text-zinc-300 truncate mb-2" title="${doc.description || ''}">${doc.description || 'No description'}</p>
-                        
-                        <p class="text-[10px] text-zinc-600 uppercase mb-1">Hash</p>
-                        <p class="text-[9px] font-mono text-zinc-500 truncate mb-3" title="${doc.hash}">${doc.hash?.slice(0, 20)}...</p>
+                        <p class="text-xs text-white font-medium truncate mb-1" title="${cert.description}">
+                            ${cert.description || 'No description'}
+                        </p>
+                        <p class="text-[9px] font-mono text-zinc-600 truncate mb-3" title="${cert.hash}">
+                            ${cert.hash?.slice(0, 24)}...
+                        </p>
                         
                         <!-- Actions -->
-                        <div class="flex justify-between items-center pt-2 border-t border-zinc-800">
+                        <div class="flex items-center justify-between pt-2 border-t border-zinc-800/50">
                             <div class="flex gap-2">
-                                <a href="${ipfsLink}" target="_blank" class="text-[10px] text-amber-500 hover:text-white font-bold">
-                                    View
+                                <a href="${ipfsUrl}" target="_blank" 
+                                   class="text-[10px] text-indigo-400 hover:text-white font-bold transition-colors">
+                                    <i class="fa-solid fa-eye mr-1"></i> View
                                 </a>
-                                <button onclick="NotaryPage.addToWallet('${doc.id}')" class="text-zinc-500 hover:text-amber-400 transition-colors">
-                                    <i class="fa-solid fa-wallet text-[10px]"></i>
+                                <button onclick="NotaryPage.addToWallet('${cert.id}')" 
+                                    class="text-[10px] text-zinc-500 hover:text-amber-400 transition-colors">
+                                    <i class="fa-solid fa-wallet"></i>
                                 </button>
                             </div>
-                            <a href="${EXPLORER_BASE}${doc.txHash}" target="_blank" class="text-zinc-600 hover:text-white">
-                                <i class="fa-solid fa-external-link text-[10px]"></i>
-                            </a>
+                            ${cert.txHash ? `
+                                <a href="${EXPLORER_TX}${cert.txHash}" target="_blank" 
+                                   class="text-zinc-600 hover:text-white transition-colors">
+                                    <i class="fa-solid fa-external-link text-[10px]"></i>
+                                </a>
+                            ` : ''}
                         </div>
                     </div>
                 </div>
@@ -682,34 +894,34 @@ async function fetchHistory() {
         }).join('');
 
     } catch (e) {
-        console.error("History Error:", e);
-        container.innerHTML = renderNoData("Failed to load history");
+        console.error('History Error:', e);
+        grid.innerHTML = `
+            <div class="col-span-full text-center py-8">
+                <p class="text-red-400 text-sm"><i class="fa-solid fa-exclamation-circle mr-2"></i> Failed to load</p>
+                <p class="text-zinc-600 text-xs mt-1">${e.message?.slice(0, 50) || 'Unknown error'}</p>
+            </div>
+        `;
     }
 }
 
 // ============================================================================
-// 8. LISTENERS
+// GLOBAL LISTENERS
 // ============================================================================
-
-function attachListeners() {
-    const refreshBtn = document.getElementById('btn-refresh-history');
-    if (refreshBtn) {
-        refreshBtn.onclick = () => {
-            refreshBtn.innerHTML = '<i class="fa-solid fa-rotate fa-spin mr-1"></i> Loading...';
-            fetchHistory().then(() => {
-                refreshBtn.innerHTML = '<i class="fa-solid fa-rotate mr-1"></i> Refresh';
-            });
-        };
-    }
+function attachGlobalListeners() {
+    document.getElementById('btn-refresh')?.addEventListener('click', async () => {
+        const btn = document.getElementById('btn-refresh');
+        if (btn) btn.innerHTML = '<i class="fa-solid fa-rotate fa-spin"></i> Loading...';
+        await loadCertificates();
+        if (btn) btn.innerHTML = '<i class="fa-solid fa-rotate"></i> Refresh';
+    });
 }
 
 // ============================================================================
-// 9. DATA LOADING
+// DATA LOADING
 // ============================================================================
-
 async function loadNotaryData() {
     const now = Date.now();
-    if (now - lastDataFetch < 30000 && State.notaryFee > 0n) return;
+    if (now - Notary.lastFetch < 30000 && State.notaryFee > 0n) return;
 
     try {
         const hub = State.ecosystemManagerContractPublic || State.ecosystemManagerContract;
@@ -721,46 +933,47 @@ async function loadNotaryData() {
 
         if (fee > 0n) {
             State.notaryFee = fee;
-            State.notaryMinPStake = 0n;
-            lastDataFetch = now;
+            Notary.lastFetch = now;
         }
     } catch (e) {
-        console.error("Notary Data Error:", e);
+        console.warn('Notary data error:', e);
     }
 }
 
 // ============================================================================
-// 10. EXPORT
+// EXPORT
 // ============================================================================
-
 export const NotaryPage = {
-    render: async (isActive) => {
+    async render(isActive) {
         if (!isActive) return;
-        renderLayout();
+        render();
         await loadNotaryData();
         if (State.isConnected) await loadUserData();
-        updateInterface();
+        updateStatusBadges();
+        renderStepContent();
     },
 
-    reset: () => {
-        currentFile = null;
-        descriptionCache = "";
-        renderStep(1);
+    reset() {
+        Notary.file = null;
+        Notary.description = '';
+        Notary.step = 1;
+        renderStepContent();
     },
 
-    update: () => {
-        updateInterface();
+    update() {
+        updateStatusBadges();
+        if (!Notary.isProcessing) renderStepContent();
     },
 
-    refreshHistory: () => {
-        fetchHistory();
+    refreshHistory() {
+        loadCertificates();
     },
 
-    addToWallet: (tokenId) => {
+    addToWallet(tokenId) {
         if (State.decentralizedNotaryContract) {
             addNftToWallet(State.decentralizedNotaryContract.target, tokenId);
         } else {
-            showToast("Contract not loaded", "error");
+            showToast('Contract not loaded', 'error');
         }
     }
 };

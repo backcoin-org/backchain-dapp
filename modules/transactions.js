@@ -963,17 +963,60 @@ export async function executeInternalFaucet(btnElement) {
     const originalText = btnElement ? btnElement.innerHTML : 'Get Tokens';
     if (btnElement) { 
         btnElement.disabled = true; 
-        btnElement.innerHTML = '<div class="loader inline-block"></div> Minting...'; 
+        btnElement.innerHTML = '<div class="loader inline-block"></div> Checking...'; 
     }
 
     try {
         if (State.faucetContract) {
             const faucetContract = State.faucetContract.connect(signer);
-            const gasOpts = await estimateGasWithFallback(faucetContract, 'claim', [], 200000n);
-            const tx = await faucetContract.claim(gasOpts);
-            return await executeTransaction(tx, 'Tokens received!', 'Faucet Error', btnElement);
+            
+            // Check cooldown first
+            try {
+                const lastClaim = await faucetContract.lastClaimed(State.userAddress).catch(() => 0n);
+                const cooldown = await faucetContract.cooldownPeriod().catch(() => 86400n);
+                const now = BigInt(Math.floor(Date.now() / 1000));
+                
+                if (lastClaim > 0n && (now - lastClaim) < cooldown) {
+                    const remaining = Number(cooldown - (now - lastClaim));
+                    const hours = Math.floor(remaining / 3600);
+                    const mins = Math.floor((remaining % 3600) / 60);
+                    showToast(`⏳ Faucet cooldown: ${hours}h ${mins}m remaining`, "warning");
+                    if (btnElement) { 
+                        btnElement.disabled = false; 
+                        btnElement.innerHTML = originalText; 
+                    }
+                    return false;
+                }
+            } catch (cooldownErr) {
+                console.warn("Cooldown check skipped:", cooldownErr.message?.slice(0, 50));
+            }
+
+            if (btnElement) btnElement.innerHTML = '<div class="loader inline-block"></div> Minting...';
+            
+            // Try with gas estimation, fallback on error
+            let tx;
+            try {
+                const estimated = await faucetContract.claim.estimateGas();
+                tx = await faucetContract.claim({ gasLimit: (estimated * 130n) / 100n });
+            } catch (estError) {
+                // If estimation fails with revert, likely cooldown
+                if (estError.message?.includes('revert') || estError.data === '0x') {
+                    showToast("⏳ Faucet on cooldown. Try again later.", "warning");
+                    if (btnElement) { 
+                        btnElement.disabled = false; 
+                        btnElement.innerHTML = originalText; 
+                    }
+                    return false;
+                }
+                // Try with fixed gas
+                tx = await faucetContract.claim({ gasLimit: 200000n });
+            }
+            
+            return await executeTransaction(tx, '✅ Tokens received!', 'Faucet Error', btnElement);
             
         } else if (State.bkcTokenContract) {
+            if (btnElement) btnElement.innerHTML = '<div class="loader inline-block"></div> Minting...';
+            
             const amount = ethers.parseUnits("20", 18);
             const bkcTokenContract = State.bkcTokenContract.connect(signer);
             const args = [State.userAddress, amount];
@@ -988,8 +1031,16 @@ export async function executeInternalFaucet(btnElement) {
         
     } catch (e) {
         console.error("Faucet Error:", e);
-        const userMessage = formatErrorForUser(e, 'Faucet failed');
-        showToast(userMessage, "error");
+        
+        // Detect cooldown errors
+        const errMsg = (e.message || '').toLowerCase();
+        if (errMsg.includes('cooldown') || errMsg.includes('revert') || e.data === '0x') {
+            showToast("⏳ Faucet on cooldown. Try again later.", "warning");
+        } else {
+            const userMessage = formatErrorForUser(e, 'Faucet failed');
+            showToast(userMessage, "error");
+        }
+        
         if (btnElement) { 
             btnElement.disabled = false; 
             btnElement.innerHTML = originalText; 
