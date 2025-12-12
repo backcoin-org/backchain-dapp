@@ -1,5 +1,5 @@
 // pages/NetworkStakingPage.js
-// ✅ VERSION V2.1: Fixed button states, ETH gas check, better error handling
+// ✅ VERSION V2.2: Fixed timer flicker (update every minute), removed pulse animation
 
 const ethers = window.ethers;
 
@@ -22,7 +22,7 @@ import {
     executeForceUnstake, 
     executeUniversalClaim 
 } from '../modules/transactions.js';
-import { showToast, startCountdownTimers } from '../ui-feedback.js';
+import { showToast } from '../ui-feedback.js';
 
 // ============================================================================
 // LOCAL STATE
@@ -42,12 +42,19 @@ function formatTimeRemaining(seconds) {
     const d = Math.floor(seconds / 86400);
     const h = Math.floor((seconds % 86400) / 3600);
     const m = Math.floor((seconds % 3600) / 60);
-    const s = Math.floor(seconds % 60);
     
-    if (d > 365) return `${Math.floor(d/365)}y : ${d%365}d`;
-    if (d > 0) return `${d}d : ${h}h : ${m}m : ${s}s`;
-    if (h > 0) return `${h}h : ${m}m : ${s}s`;
-    return `${m}m : ${s}s`;
+    // Years format for very long durations
+    if (d > 365) {
+        const years = Math.floor(d / 365);
+        const remainingDays = d % 365;
+        return `${years}y : ${remainingDays}d`;
+    }
+    // Days format
+    if (d > 0) return `${d}d : ${h}h : ${m}m`;
+    // Hours format
+    if (h > 0) return `${h}h : ${m}m`;
+    // Minutes only
+    return `${m}m`;
 }
 
 function formatDuration(days) {
@@ -107,14 +114,6 @@ function injectStyles() {
             transition: all 0.2s ease;
         }
         .delegation-item:hover { background: rgba(63,63,70,0.3); }
-        
-        .countdown-active {
-            animation: pulse 2s infinite;
-        }
-        @keyframes pulse {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.7; }
-        }
         
         .stat-glow-purple { box-shadow: 0 0 20px rgba(139,92,246,0.1); }
         .stat-glow-amber { box-shadow: 0 0 20px rgba(245,158,11,0.1); }
@@ -288,7 +287,9 @@ async function loadData(force = false) {
     }
 
     const now = Date.now();
-    if (!force && isLoading && (now - lastFetch < 10000)) return;
+    // Skip if recently loaded (unless force)
+    if (!force && isLoading) return;
+    if (!force && (now - lastFetch < 10000)) return;
     
     isLoading = true;
     lastFetch = now;
@@ -298,10 +299,10 @@ async function loadData(force = false) {
         const boosterData = await getHighestBoosterBoostFromAPI();
         highestBoosterTokenId = boosterData?.tokenId ? BigInt(boosterData.tokenId) : 0n;
 
-        // Load data in parallel
+        // Load data in parallel - always force refresh user data
         await Promise.all([
-            loadUserData(force),
-            loadUserDelegations(force),
+            loadUserData(true), // Always force refresh user data
+            loadUserDelegations(true), // Always force refresh delegations
             loadPublicData()
         ]);
 
@@ -376,9 +377,17 @@ function resetUI() {
 // ============================================================================
 // DELEGATIONS LIST
 // ============================================================================
+let countdownInterval = null;
+
 function renderDelegations() {
     const container = document.getElementById('delegations-list');
     if (!container) return;
+
+    // Clear previous interval
+    if (countdownInterval) {
+        clearInterval(countdownInterval);
+        countdownInterval = null;
+    }
 
     const delegations = State.userDelegations || [];
     
@@ -404,8 +413,9 @@ function renderDelegations() {
     
     container.innerHTML = sorted.map(d => renderDelegationItem(d)).join('');
 
-    // Start countdown timers
-    startCountdownTimers(Array.from(container.querySelectorAll('.countdown-timer')));
+    // Start countdown update every minute (not every second)
+    updateCountdowns();
+    countdownInterval = setInterval(updateCountdowns, 60000); // Update every minute
 
     // Attach event listeners
     container.querySelectorAll('.unstake-btn').forEach(btn => {
@@ -413,6 +423,17 @@ function renderDelegations() {
     });
     container.querySelectorAll('.force-unstake-btn').forEach(btn => {
         btn.addEventListener('click', () => handleUnstake(btn.dataset.index, true));
+    });
+}
+
+function updateCountdowns() {
+    const timers = document.querySelectorAll('.countdown-timer');
+    const now = Math.floor(Date.now() / 1000);
+    
+    timers.forEach(timer => {
+        const unlockTime = parseInt(timer.dataset.unlockTime);
+        const remaining = unlockTime - now;
+        timer.textContent = formatTimeRemaining(remaining);
     });
 }
 
@@ -441,7 +462,7 @@ function renderDelegationItem(d) {
                 <!-- Right: Timer & Action -->
                 <div class="flex items-center gap-2 flex-shrink-0">
                     ${isLocked ? `
-                        <div class="countdown-timer countdown-active text-[10px] font-mono bg-amber-500/10 text-amber-400 px-2 py-1 rounded-lg border border-amber-500/20" 
+                        <div class="countdown-timer text-[10px] font-mono bg-amber-500/10 text-amber-400 px-2 py-1 rounded-lg border border-amber-500/20" 
                              data-unlock-time="${unlockTime}">
                             ${formatTimeRemaining(remaining)}
                         </div>
@@ -571,6 +592,10 @@ async function handleStake() {
         if (success) {
             amountInput.value = '';
             showToast('Delegation successful!', 'success');
+            
+            // Force refresh all data to update allowance cache
+            isLoading = false; // Reset loading flag
+            lastFetch = 0; // Force refresh
             await loadData(true);
         }
 
@@ -695,6 +720,13 @@ function setupListeners() {
 // ============================================================================
 // EXPORTS
 // ============================================================================
+export function cleanup() {
+    if (countdownInterval) {
+        clearInterval(countdownInterval);
+        countdownInterval = null;
+    }
+}
+
 export function update(isConnected) {
     if (isConnected) {
         loadData();
@@ -705,5 +737,6 @@ export function update(isConnected) {
 
 export const EarnPage = {
     render,
-    update
+    update,
+    cleanup
 };
