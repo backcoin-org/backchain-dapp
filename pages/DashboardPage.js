@@ -1,5 +1,5 @@
 // js/pages/DashboardPage.js
-// ✅ VERSION V8.3: Removed skeleton loaders, cleaner cards
+// ✅ VERSION V8.4: TVL from all contracts, Dynamic Scarcity, Fortune details, new filters
 
 const ethers = window.ethers;
 
@@ -268,7 +268,7 @@ function renderMetricsGrid() {
         <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
             ${metricCard('Total Supply', 'metric-supply', 'fa-coins', 'amber')}
             ${metricCard('TVL', 'metric-tvl', 'fa-lock', 'green')}
-            ${metricCard('Mining Power', 'metric-scarcity', 'fa-fire', 'orange')}
+            ${metricCard('Dynamic Scarcity', 'metric-scarcity', 'fa-fire', 'orange')}
             ${metricCard('Net pStake', 'metric-pstake', 'fa-bolt', 'purple')}
             ${metricCard('Prize Pool', 'metric-prize', 'fa-trophy', 'yellow')}
             ${metricCard('Total Fees', 'metric-fees', 'fa-chart-line', 'blue')}
@@ -346,8 +346,11 @@ function renderTransactionsCard() {
                     <option value="STAKE">Staking</option>
                     <option value="CLAIM">Claims</option>
                     <option value="NFT">NFT</option>
+                    <option value="RENTAL">Rental</option>
                     <option value="GAME">Fortune</option>
+                    <option value="ORACLE">Oracle</option>
                     <option value="NOTARY">Notary</option>
+                    <option value="FAUCET">Faucet</option>
                 </select>
             </div>
 
@@ -495,14 +498,28 @@ async function loadMetrics() {
             .then(r => r.json())
             .catch(() => null);
 
+        // Contract addresses for TVL calculation
+        const contractAddrs = [
+            addresses.delegationManager,
+            addresses.fortunePool,
+            addresses.miningManager,
+            addresses.decentralizedNotary,
+            addresses.nftLiquidityPoolFactory,
+            addresses.rentalManager
+        ].filter(a => a && a !== ethers.ZeroAddress);
+
         // Parallel fetch from blockchain
-        const [totalSupply, maxSupply, tgeSupply, networkPStake, fortuneStatus, systemStats] = await Promise.allSettled([
+        const [totalSupply, maxSupply, tgeSupply, networkPStake, fortuneStatus, systemStats, ...contractBalances] = await Promise.allSettled([
             safeContractCall(State.bkcTokenContractPublic, 'totalSupply', [], 0n),
             safeContractCall(State.bkcTokenContractPublic, 'MAX_SUPPLY', [], 21000000n * 10n**18n),
             safeContractCall(State.bkcTokenContractPublic, 'TGE_SUPPLY', [], 10000000n * 10n**18n),
             safeContractCall(State.delegationManagerContractPublic, 'totalNetworkPStake', [], 0n),
             getFortunePoolStatus(),
-            systemStatsPromise
+            systemStatsPromise,
+            // Fetch BKC balance of each contract
+            ...contractAddrs.map(addr => 
+                safeContractCall(State.bkcTokenContractPublic, 'balanceOf', [addr], 0n)
+            )
         ]);
 
         // Process values
@@ -513,12 +530,20 @@ async function loadMetrics() {
         const fortune = fortuneStatus.status === 'fulfilled' ? fortuneStatus.value : { prizePool: 0n };
         const stats = systemStats.status === 'fulfilled' ? systemStats.value : null;
 
+        // Calculate TVL = sum of all BKC locked in contracts
+        let tvl = 0n;
+        contractBalances.forEach(result => {
+            if (result.status === 'fulfilled' && result.value) {
+                tvl += result.value;
+            }
+        });
+
         // Calculate metrics
         const minableTokens = max - tge; // Tokens that can be mined
         const minedTokens = supply > tge ? supply - tge : 0n;
         const remainingToMine = minableTokens - minedTokens;
         
-        // Mining Power from backend (more accurate) or calculate locally
+        // Dynamic Scarcity from backend or calculate locally
         let miningPowerPercent = 100;
         if (stats?.miningPowerBips !== undefined) {
             miningPowerPercent = Number(stats.miningPowerBips) / 100;
@@ -536,8 +561,7 @@ async function loadMetrics() {
             }
         }
 
-        // TVL = pStake (locked in delegation)
-        const tvl = pstake;
+        // TVL percent of total supply
         const tvlPercent = supply > 0n ? Number((tvl * 10000n) / supply) / 100 : 0;
 
         // Store metrics
@@ -573,27 +597,25 @@ function updateMetricsUI() {
     setEl('metric-supply', fmt.bkc(m.totalSupply));
     setEl('metric-supply-sub', `of ${fmt.bkc(m.maxSupply)} max`);
 
-    // TVL
-    if (m.tvl === 0n) {
-        setEl('metric-tvl', '0.00');
-        setEl('metric-tvl-sub', 'no stakes yet');
-    } else {
-        setEl('metric-tvl', fmt.bkc(m.tvl));
+    // TVL (Total Value Locked in all contracts)
+    setEl('metric-tvl', fmt.bkc(m.tvl));
+    if (m.tvl > 0n) {
         setEl('metric-tvl-sub', `${m.tvlPercent.toFixed(1)}% of supply`);
+    } else {
+        setEl('metric-tvl-sub', 'in contracts');
     }
 
-    // Mining Power (was Scarcity)
+    // Dynamic Scarcity
     const mpColor = m.miningPowerPercent > 50 ? 'text-green-400' : m.miningPowerPercent > 20 ? 'text-yellow-400' : 'text-red-400';
     setEl('metric-scarcity', `<span class="${mpColor}">${m.miningPowerPercent.toFixed(1)}%</span>`, true);
-    setEl('metric-scarcity-sub', 'mining power');
+    setEl('metric-scarcity-sub', 'tokens remaining');
 
     // Network pStake
-    if (m.networkPStake === 0n) {
-        setEl('metric-pstake', '0');
-        setEl('metric-pstake-sub', 'no stakers yet');
-    } else {
-        setEl('metric-pstake', formatPStake(m.networkPStake));
+    setEl('metric-pstake', formatPStake(m.networkPStake));
+    if (m.networkPStake > 0n) {
         setEl('metric-pstake-sub', 'total staking power');
+    } else {
+        setEl('metric-pstake-sub', 'staking power');
     }
 
     // Prize Pool
@@ -711,9 +733,12 @@ function renderTransactions() {
             const t = (tx.type || '').toUpperCase();
             if (filterType === 'STAKE') return t.includes('DELEGAT') || t.includes('UNSTAKE') || t.includes('STAKE');
             if (filterType === 'CLAIM') return t.includes('CLAIM') || t.includes('REWARD');
-            if (filterType === 'NFT') return t.includes('NFT') || t.includes('BUY') || t.includes('SELL') || t.includes('RENTAL');
-            if (filterType === 'GAME') return t.includes('GAME') || t.includes('FORTUNE');
+            if (filterType === 'NFT') return t.includes('NFT') || t.includes('BUY') || t.includes('SELL');
+            if (filterType === 'RENTAL') return t.includes('RENTAL');
+            if (filterType === 'GAME') return t.includes('GAME') && !t.includes('RESULT');
+            if (filterType === 'ORACLE') return t.includes('RESULT') || t.includes('FULFILLED');
             if (filterType === 'NOTARY') return t.includes('NOTARY');
+            if (filterType === 'FAUCET') return t.includes('FAUCET');
             return true;
         });
     }
@@ -752,6 +777,7 @@ function renderTransactions() {
 function renderTxItem(tx) {
     const type = (tx.type || '').toUpperCase();
     let icon = 'fa-circle', color = 'text-zinc-400', label = 'Transaction';
+    let extraInfo = '';
 
     // Type mapping
     if (type.includes('DELEGAT') || type.includes('STAKE')) {
@@ -764,12 +790,33 @@ function renderTxItem(tx) {
         icon = 'fa-cart-plus'; color = 'text-amber-400'; label = 'Bought NFT';
     } else if (type.includes('SELL') || type.includes('SOLD')) {
         icon = 'fa-tag'; color = 'text-red-400'; label = 'Sold NFT';
-    } else if (type.includes('RENTAL') || type.includes('RENT')) {
-        icon = 'fa-handshake'; color = 'text-cyan-400'; label = 'Rental';
+    } else if (type.includes('LISTED')) {
+        icon = 'fa-hand-holding-dollar'; color = 'text-cyan-400'; label = 'Listed Rental';
+    } else if (type.includes('RENTED')) {
+        icon = 'fa-handshake'; color = 'text-cyan-400'; label = 'Rented NFT';
+    } else if (type.includes('WITHDRAWN') || type.includes('WITHDRAW')) {
+        icon = 'fa-xmark'; color = 'text-red-400'; label = 'Rental Withdrawn';
     } else if (type.includes('NOTARY')) {
         icon = 'fa-file-signature'; color = 'text-indigo-400'; label = 'Notarized';
     } else if (type.includes('FAUCET')) {
-        icon = 'fa-faucet'; color = 'text-cyan-400'; label = 'Faucet';
+        icon = 'fa-faucet'; color = 'text-cyan-400'; label = 'Faucet Claim';
+    } else if (type.includes('GAMEREQUESTED') || type === 'GAMEREQUESTED') {
+        icon = 'fa-dice'; color = 'text-pink-400'; label = 'Fortune Bet';
+        // Show guessed numbers
+        const guesses = tx.details?.guesses || [];
+        if (guesses.length > 0) {
+            extraInfo = `Guesses: [${guesses.join(', ')}]`;
+        }
+    } else if (type.includes('GAMERESULT') || type === 'GAMERESULT') {
+        const isWin = tx.details?.isWin || Number(tx.details?.amount || 0) > 0;
+        icon = isWin ? 'fa-trophy' : 'fa-times-circle';
+        color = isWin ? 'text-yellow-400' : 'text-zinc-500';
+        label = isWin ? 'Fortune Win!' : 'Fortune Loss';
+        // Show rolled numbers
+        const rolls = tx.details?.rolls || [];
+        if (rolls.length > 0) {
+            extraInfo = `Rolls: [${rolls.join(', ')}]`;
+        }
     } else if (type.includes('GAME')) {
         const isWin = tx.details?.isWin || tx.details?.prizeWon > 0;
         icon = isWin ? 'fa-trophy' : 'fa-dice';
@@ -791,7 +838,7 @@ function renderTxItem(tx) {
             </div>
             <div class="flex-1 min-w-0">
                 <p class="text-sm font-medium text-white truncate">${label}</p>
-                <p class="text-xs text-zinc-500">${timeStr}</p>
+                <p class="text-xs text-zinc-500">${timeStr}${extraInfo ? ` · ${extraInfo}` : ''}</p>
             </div>
             <div class="text-right flex-shrink-0">
                 ${amountStr ? `<p class="text-sm font-mono text-white">${amountStr}</p>` : ''}
