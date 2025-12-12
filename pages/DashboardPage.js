@@ -1,5 +1,5 @@
 // js/pages/DashboardPage.js
-// ✅ VERSION V8.2: Fixed Mining Power, Fees, TVL display + Backend integration
+// ✅ VERSION V8.3: Removed skeleton loaders, cleaner cards
 
 const ethers = window.ethers;
 
@@ -295,8 +295,8 @@ function metricCard(label, id, icon, color) {
                 </div>
                 <span class="text-[10px] text-zinc-500 uppercase font-bold tracking-wider">${label}</span>
             </div>
-            <p id="${id}" class="text-lg font-bold text-white truncate">${Skeleton('w-16', 'h-6')}</p>
-            <p id="${id}-sub" class="text-[10px] text-zinc-600 mt-1 truncate">&nbsp;</p>
+            <p id="${id}" class="text-lg font-bold text-white truncate">--</p>
+            <p id="${id}-sub" class="text-[10px] text-zinc-500 mt-1 truncate">&nbsp;</p>
         </div>
     `;
 }
