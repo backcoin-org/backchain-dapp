@@ -818,4 +818,6 @@ export function cleanup() {
     // Cleanup timers if any
 }
 
+export const FortunePoolPage = { render, cleanup };
+
 export default { render, cleanup };
