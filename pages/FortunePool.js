@@ -1,5 +1,5 @@
 // js/pages/FortunePool.js
-// ✅ VERSION V9.4: Animated slot machine during spin
+// ✅ VERSION V9.5: Fixed result screen sync - shows win when any tier matches
 
 import { State } from '../state.js';
 import { loadUserData, safeContractCall, API_ENDPOINTS } from '../modules/data.js';
@@ -861,8 +861,30 @@ function renderResult(container) {
     const picks = isJackpot ? [Game.guess] : Game.guesses;
     const rolls = r.rolls || [];
     const prize = r.prizeWon || 0n;
-    const isWin = prize > 0n;
     const prizeNum = formatBigNumber(prize);
+    
+    // Count matches
+    const matches = picks.map((pick, i) => {
+        const roll = rolls[i] !== undefined ? Number(rolls[i]) : null;
+        return roll !== null && roll == pick;
+    });
+    const matchCount = matches.filter(m => m).length;
+    
+    // Determine win state
+    // Win = has prize OR has at least one match (fallback for display)
+    const hasMatches = matchCount > 0;
+    const hasPrize = prize > 0n;
+    const isWin = hasPrize || hasMatches;
+    
+    // Calculate expected multiplier for display
+    let expectedMulti = 0;
+    if (!isJackpot) {
+        matches.forEach((hit, i) => {
+            if (hit) expectedMulti += TIERS[i].multiplier;
+        });
+    } else if (matches[0]) {
+        expectedMulti = 100;
+    }
 
     container.innerHTML = `
         <div class="text-center py-6">
@@ -870,8 +892,15 @@ function renderResult(container) {
             <div class="mb-6 win-pulse">
                 ${isWin ? `
                     <div class="text-6xl mb-3">🎉</div>
-                    <h2 class="text-2xl font-bold text-green-400">YOU WON!</h2>
-                    <p class="text-3xl font-black text-white mt-2">+${prizeNum.toFixed(2)} BKC</p>
+                    <h2 class="text-2xl font-bold text-green-400">${matchCount === picks.length ? 'JACKPOT!' : 'YOU WON!'}</h2>
+                    ${hasPrize ? `
+                        <p class="text-3xl font-black text-white mt-2">+${prizeNum.toFixed(2)} BKC</p>
+                    ` : `
+                        <p class="text-lg text-green-400 mt-2">${matchCount}/${picks.length} matches!</p>
+                    `}
+                    ${!isJackpot && matchCount > 0 ? `
+                        <p class="text-sm text-zinc-400 mt-1">${expectedMulti}x multiplier</p>
+                    ` : ''}
                 ` : `
                     <div class="text-5xl mb-3">😔</div>
                     <h2 class="text-2xl font-bold text-zinc-400">No Match</h2>
@@ -880,26 +909,38 @@ function renderResult(container) {
             </div>
 
             <!-- Slots Result -->
-            <div class="flex justify-center gap-4 mb-8">
+            <div class="flex justify-center gap-3 mb-6">
                 ${picks.map((pick, i) => {
                     const roll = rolls[i] !== undefined ? Number(rolls[i]) : '?';
-                    const hit = roll == pick;
+                    const hit = matches[i];
+                    const tierInfo = isJackpot ? { name: 'Jackpot', multiplier: 100, color: 'amber' } : TIERS[i];
                     return `
                         <div class="text-center">
-                            <div class="w-20 h-20 rounded-xl bg-zinc-900 border-2 ${hit ? 'slot-hit' : 'slot-miss'} flex items-center justify-center">
-                                <span class="text-3xl font-black ${hit ? 'text-green-400' : 'text-zinc-500'}">${roll}</span>
+                            <p class="text-xs text-${tierInfo.color}-400 mb-1 font-bold">${tierInfo.name}</p>
+                            <div class="w-16 h-16 rounded-xl bg-zinc-900 border-2 ${hit ? 'slot-hit' : 'slot-miss'} flex items-center justify-center">
+                                <span class="text-2xl font-black ${hit ? 'text-green-400' : 'text-zinc-500'}">${roll}</span>
                             </div>
-                            <p class="text-xs ${hit ? 'text-green-400' : 'text-zinc-500'} mt-2">
-                                ${hit ? '✓ Match!' : `Pick: ${pick}`}
+                            <p class="text-xs mt-1 ${hit ? 'text-green-400 font-bold' : 'text-zinc-600'}">
+                                ${hit ? `✓ +${tierInfo.multiplier}x` : `You: ${pick}`}
                             </p>
                         </div>
                     `;
                 }).join('')}
             </div>
 
+            <!-- Match Summary for Combo -->
+            ${!isJackpot && matchCount > 0 && matchCount < 3 ? `
+                <div class="mb-6 p-3 bg-green-900/20 rounded-xl border border-green-500/20">
+                    <p class="text-sm text-green-400">
+                        <i class="fa-solid fa-check mr-1"></i>
+                        Hit ${matchCount} of 3 tiers!
+                    </p>
+                </div>
+            ` : ''}
+
             <!-- Actions -->
             <div class="flex gap-3">
-                <button id="btn-new-game" class="flex-1 py-3 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-black font-bold rounded-xl">
+                <button id="btn-new-game" class="flex-1 py-3 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-black font-bold rounded-xl transition-all">
                     🎰 Play Again
                 </button>
             </div>
