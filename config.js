@@ -1,5 +1,5 @@
 // js/config.js
-// ✅ PRODUCTION V20: Fixed FortunePool ABI (uint256[] dynamic arrays)
+// ✅ PRODUCTION V21: Fixed FortunePool ABI V2.1 + Notary Event + RentalManager
 
 // ============================================================================
 // 1. ENVIRONMENT & ALCHEMY CONFIG
@@ -134,8 +134,10 @@ export const rewardBoosterABI = [
     "function getApproved(uint256 tokenId) view returns (address)"
 ];
 
+// V21: Added listNFTSimple + NFTWithdrawn event
 export const rentalManagerABI = [
     "function listNFT(uint256 tokenId, uint256 pricePerHour, uint256 maxDurationHours) external",
+    "function listNFTSimple(uint256 tokenId, uint256 pricePerHour) external",
     "function withdrawNFT(uint256 tokenId) external",
     "function rentNFT(uint256 tokenId, uint256 hoursToRent) external",
     "function getListing(uint256 tokenId) view returns (tuple(address owner, uint256 pricePerHour, uint256 maxDuration, bool isActive))",
@@ -143,7 +145,8 @@ export const rentalManagerABI = [
     "function isRented(uint256 tokenId) view returns (bool)",
     "function getAllListedTokenIds() view returns (uint256[])",
     "event NFTListed(uint256 indexed tokenId, address indexed owner, uint256 pricePerHour, uint256 maxDurationHours)",
-    "event NFTRented(uint256 indexed tokenId, address indexed tenant, address indexed owner, uint256 hoursRented, uint256 totalCost, uint256 feePaid)"
+    "event NFTRented(uint256 indexed tokenId, address indexed tenant, address indexed owner, uint256 hoursRented, uint256 totalCost, uint256 feePaid)",
+    "event NFTWithdrawn(uint256 indexed tokenId, address indexed owner)"
 ];
 
 export const nftPoolABI = [
@@ -159,18 +162,25 @@ export const nftPoolABI = [
     "event NFTSold(address indexed seller, uint256 indexed boostBips, uint256 tokenId, uint256 payout, uint256 taxPaid)"
 ];
 
-// CRITICAL FIX: FortunePool ABI with uint256[] dynamic arrays (NOT uint8[3])
+// V21 CRITICAL: FortunePool V2.1 ABI - Updated function names
 export const actionsManagerABI = [
-    "function participate(uint256 _amount, uint256[] _guesses, bool _isCumulative) payable",
-    "function oracleFeeInWei() view returns (uint256)",
-    "function gameFeeBips() view returns (uint256)",
+    // Core functions
+    "function participate(uint256 _wagerAmount, uint256[] calldata _guesses, bool _isCumulative) external payable",
+    "function oracleFee() view returns (uint256)",
+    "function gameFee() view returns (uint256)",
     "function activeTierCount() view returns (uint256)",
-    "function gameResults(uint256 gameId, uint256 index) view returns (uint256)",
     "function gameCounter() view returns (uint256)",
     "function prizePoolBalance() view returns (uint256)",
-    "function prizeTiers(uint256 tierId) view returns (uint128 range, uint64 multiplierBips, bool isActive)",
-    "event GameRequested(uint256 indexed gameId, address indexed user, uint256 purchaseAmount, uint256[] guesses, bool isCumulative)",
-    "event GameFulfilled(uint256 indexed gameId, address indexed user, uint256 prizeWon, uint256[] rolls, uint256[] guesses)"
+    // View functions V2.1
+    "function getRequiredOracleFee(bool _isCumulative) view returns (uint256)",
+    "function getExpectedGuessCount(bool _isCumulative) view returns (uint256)",
+    "function isGameFulfilled(uint256 _gameId) view returns (bool)",
+    "function getGameResults(uint256 _gameId) view returns (uint256[])",
+    // Tier info
+    "function prizeTiers(uint256 tierId) view returns (uint128 maxRange, uint64 multiplierBips, bool active)",
+    // Events V2.1
+    "event GameRequested(uint256 indexed gameId, address indexed player, uint256 wagerAmount, uint256[] guesses, bool isCumulative, uint256 targetTier)",
+    "event GameFulfilled(uint256 indexed gameId, address indexed player, uint256 prizeWon, uint256[] rolls, uint256[] guesses, bool isCumulative)"
 ];
 
 export const publicSaleABI = [
@@ -180,16 +190,18 @@ export const publicSaleABI = [
     "event NFTSold(address indexed buyer, uint256 indexed tierId, uint256 indexed tokenId, uint256 price)"
 ];
 
+// V21 CRITICAL: Notary V2.1 - Event name is DocumentNotarized (NOT NotarizationEvent)
 export const decentralizedNotaryABI = [
-    "event NotarizationEvent(uint256 indexed tokenId, address indexed owner, string ipfsCid, bytes32 contentHash)",
+    "event DocumentNotarized(uint256 indexed tokenId, address indexed owner, string ipfsCid, bytes32 indexed contentHash, uint256 feePaid)",
     "function balanceOf(address owner) view returns (uint256)",
     "function tokenURI(uint256 tokenId) view returns (string)",
     "function getDocumentInfo(uint256 tokenId) view returns (tuple(string ipfsCid, string description, bytes32 contentHash, uint256 timestamp))",
     "function notarize(string calldata _ipfsCid, string calldata _description, bytes32 _contentHash, uint256 _boosterTokenId)"
 ];
 
+// V21: Faucet with correct event
 export const faucetABI = [
-    "event TokensClaimed(address indexed recipient, uint256 amount)",
+    "event TokensDistributed(address indexed recipient, uint256 tokenAmount, uint256 ethAmount, address indexed relayer)",
     "function claim()"
 ];
 
