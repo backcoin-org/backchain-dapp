@@ -1,5 +1,5 @@
 // js/pages/FortunePool.js
-// ✅ VERSION V9.0: Simplified UX, Clear Odds, Digit Picker, Fixed Combo Mode
+// ✅ VERSION V9.1: Better balance validation, Faucet UX, Error handling
 
 import { State } from '../state.js';
 import { loadUserData, safeContractCall, API_ENDPOINTS } from '../modules/data.js';
@@ -427,7 +427,7 @@ function renderWager(container) {
     const maxMulti = isJackpot ? 100 : 112;
     const userBalance = State.currentUserBalance || 0n;
     const balanceNum = formatBigNumber(userBalance);
-    const lowBalance = balanceNum < 1;
+    const hasNoBalance = balanceNum < 0.01;
 
     container.innerHTML = `
         <div>
@@ -443,84 +443,104 @@ function renderWager(container) {
                 </div>
             </div>
 
-            ${lowBalance ? `
-                <div class="mb-4 p-3 bg-cyan-900/20 rounded-xl border border-cyan-500/30">
-                    <div class="flex items-center justify-between">
-                        <div class="flex items-center gap-2">
-                            <i class="fa-solid fa-faucet text-cyan-400"></i>
-                            <span class="text-sm text-white">Need tokens?</span>
+            ${hasNoBalance ? `
+                <!-- No Balance - Show Faucet Prominently -->
+                <div class="mb-6 p-4 bg-gradient-to-r from-red-900/30 to-orange-900/30 rounded-xl border border-red-500/30">
+                    <div class="flex items-center gap-3 mb-3">
+                        <div class="w-10 h-10 rounded-full bg-red-500/20 flex items-center justify-center">
+                            <i class="fa-solid fa-exclamation-triangle text-red-400"></i>
                         </div>
-                        <button id="btn-faucet" class="px-3 py-1.5 bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-bold rounded-lg transition-colors">
-                            Get Free BKC
-                        </button>
+                        <div>
+                            <p class="text-white font-bold">No BKC Balance</p>
+                            <p class="text-xs text-zinc-400">You need BKC tokens to play</p>
+                        </div>
+                    </div>
+                    <button id="btn-faucet" class="w-full bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-bold py-3 rounded-xl transition-all">
+                        <i class="fa-solid fa-faucet mr-2"></i> Get Free 1000 BKC + ETH
+                    </button>
+                </div>
+            ` : `
+                <!-- Wager Input -->
+                <div class="bg-zinc-900/50 rounded-xl p-4 border border-zinc-700/50 mb-4">
+                    <div class="flex items-center justify-between mb-3">
+                        <span class="text-zinc-400 text-sm">Wager Amount</span>
+                        <span class="text-xs text-zinc-500">Balance: <span class="text-amber-400">${balanceNum.toFixed(2)} BKC</span></span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <input type="number" id="wager-input" value="${Game.wager || 10}" min="1" step="any"
+                            class="flex-1 bg-black/50 border border-zinc-700 rounded-lg px-4 py-3 text-xl font-bold text-white outline-none focus:border-amber-500 transition-colors text-right">
+                        <span class="text-amber-500 font-bold">BKC</span>
+                    </div>
+                    <div class="flex gap-2 mt-3">
+                        <button class="quick-bet flex-1 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-sm font-bold rounded-lg" data-amt="10">+10</button>
+                        <button class="quick-bet flex-1 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-sm font-bold rounded-lg" data-amt="50">+50</button>
+                        <button class="quick-bet flex-1 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-sm font-bold rounded-lg" data-amt="100">+100</button>
+                        <button id="btn-max" class="flex-1 py-2 bg-amber-500/20 hover:bg-amber-500/30 text-amber-400 text-sm font-bold rounded-lg">MAX</button>
                     </div>
                 </div>
-            ` : ''}
 
-            <!-- Wager Input -->
-            <div class="bg-zinc-900/50 rounded-xl p-4 border border-zinc-700/50 mb-4">
-                <div class="flex items-center justify-between mb-3">
-                    <span class="text-zinc-400 text-sm">Wager Amount</span>
-                    <span class="text-xs text-zinc-500">Balance: ${balanceNum.toFixed(2)} BKC</span>
+                <!-- Potential Win -->
+                <div class="bg-green-900/20 rounded-xl p-4 border border-green-500/20 mb-6 text-center">
+                    <p class="text-green-400 text-xs uppercase mb-1">Potential Win</p>
+                    <p id="potential-win" class="text-2xl font-bold text-green-400">--</p>
+                    <p class="text-xs text-zinc-500 mt-1">Max ${maxMulti}x multiplier</p>
                 </div>
-                <div class="flex items-center gap-2">
-                    <input type="number" id="wager-input" value="${Game.wager || 10}" min="1" step="any"
-                        class="flex-1 bg-black/50 border border-zinc-700 rounded-lg px-4 py-3 text-xl font-bold text-white outline-none focus:border-amber-500 transition-colors text-right">
-                    <span class="text-amber-500 font-bold">BKC</span>
-                </div>
-                <div class="flex gap-2 mt-3">
-                    <button class="quick-bet flex-1 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-sm font-bold rounded-lg" data-amt="10">+10</button>
-                    <button class="quick-bet flex-1 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-sm font-bold rounded-lg" data-amt="50">+50</button>
-                    <button class="quick-bet flex-1 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-sm font-bold rounded-lg" data-amt="100">+100</button>
-                    <button id="btn-max" class="flex-1 py-2 bg-amber-500/20 hover:bg-amber-500/30 text-amber-400 text-sm font-bold rounded-lg">MAX</button>
-                </div>
-            </div>
-
-            <!-- Potential Win -->
-            <div class="bg-green-900/20 rounded-xl p-4 border border-green-500/20 mb-6 text-center">
-                <p class="text-green-400 text-xs uppercase mb-1">Potential Win</p>
-                <p id="potential-win" class="text-2xl font-bold text-green-400">--</p>
-                <p class="text-xs text-zinc-500 mt-1">Max ${maxMulti}x multiplier</p>
-            </div>
+            `}
 
             <!-- Actions -->
             <div class="flex gap-3">
                 <button id="btn-back" class="flex-1 py-3 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-bold rounded-xl">
                     ← Back
                 </button>
-                <button id="btn-play" class="flex-1 py-3 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-black font-bold rounded-xl disabled:opacity-50">
-                    🎰 SPIN
-                </button>
+                ${!hasNoBalance ? `
+                    <button id="btn-play" class="flex-1 py-3 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-black font-bold rounded-xl disabled:opacity-50">
+                        🎰 SPIN
+                    </button>
+                ` : ''}
             </div>
         </div>
     `;
 
-    const wagerInput = document.getElementById('wager-input');
-    const potentialWin = document.getElementById('potential-win');
-    const playBtn = document.getElementById('btn-play');
+    // Only setup wager controls if user has balance
+    if (!hasNoBalance) {
+        const wagerInput = document.getElementById('wager-input');
+        const potentialWin = document.getElementById('potential-win');
+        const playBtn = document.getElementById('btn-play');
 
-    const updatePotential = () => {
-        const w = parseFloat(wagerInput.value) || 0;
-        Game.wager = w;
-        potentialWin.textContent = w > 0 ? `+${(w * maxMulti).toFixed(2)} BKC` : '--';
-        playBtn.disabled = w <= 0;
-    };
+        const updatePotential = () => {
+            const w = parseFloat(wagerInput.value) || 0;
+            Game.wager = w;
+            potentialWin.textContent = w > 0 ? `+${(w * maxMulti).toFixed(2)} BKC` : '--';
+            
+            // Disable if no wager or insufficient balance
+            const hasEnoughBalance = w > 0 && w <= balanceNum;
+            playBtn.disabled = !hasEnoughBalance;
+            
+            if (w > balanceNum && w > 0) {
+                playBtn.textContent = '⚠️ Insufficient Balance';
+            } else {
+                playBtn.textContent = '🎰 SPIN';
+            }
+        };
 
-    wagerInput.addEventListener('input', updatePotential);
-    updatePotential();
+        wagerInput.addEventListener('input', updatePotential);
+        updatePotential();
 
-    document.querySelectorAll('.quick-bet').forEach(btn => {
-        btn.addEventListener('click', () => {
-            const current = parseFloat(wagerInput.value) || 0;
-            wagerInput.value = (current + parseFloat(btn.dataset.amt)).toFixed(2);
+        document.querySelectorAll('.quick-bet').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const current = parseFloat(wagerInput.value) || 0;
+                wagerInput.value = (current + parseFloat(btn.dataset.amt)).toFixed(2);
+                updatePotential();
+            });
+        });
+
+        document.getElementById('btn-max')?.addEventListener('click', () => {
+            wagerInput.value = Math.floor(balanceNum).toString();
             updatePotential();
         });
-    });
 
-    document.getElementById('btn-max')?.addEventListener('click', () => {
-        wagerInput.value = Math.floor(balanceNum).toString();
-        updatePotential();
-    });
+        playBtn.addEventListener('click', executeGame);
+    }
 
     document.getElementById('btn-back')?.addEventListener('click', () => {
         Game.phase = 'pick';
@@ -528,27 +548,31 @@ function renderWager(container) {
         renderPhase();
     });
 
-    playBtn.addEventListener('click', executeGame);
-
+    // Faucet button
     document.getElementById('btn-faucet')?.addEventListener('click', async (e) => {
-        const btn = e.target;
+        const btn = e.target.closest('button');
         btn.disabled = true;
-        btn.textContent = 'Claiming...';
+        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-2"></i> Claiming...';
         try {
             const res = await fetch(`${FAUCET_API}?address=${State.userAddress}`);
             const data = await res.json();
             if (data.success) {
-                showToast('Tokens received! Refreshing...', 'success');
-                setTimeout(() => loadUserData().then(() => renderPhase()), 3000);
+                showToast('🎉 1000 BKC + 0.01 ETH received!', 'success');
+                btn.innerHTML = '<i class="fa-solid fa-check mr-2"></i> Tokens Received!';
+                // Refresh balance after a few seconds
+                setTimeout(async () => {
+                    await loadUserData();
+                    renderPhase();
+                }, 5000);
             } else {
                 showToast(data.error || 'Faucet error', 'error');
                 btn.disabled = false;
-                btn.textContent = 'Get Free BKC';
+                btn.innerHTML = '<i class="fa-solid fa-faucet mr-2"></i> Get Free 1000 BKC + ETH';
             }
         } catch (e) {
-            showToast('Faucet error', 'error');
+            showToast('Faucet error: ' + e.message, 'error');
             btn.disabled = false;
-            btn.textContent = 'Get Free BKC';
+            btn.innerHTML = '<i class="fa-solid fa-faucet mr-2"></i> Get Free 1000 BKC + ETH';
         }
     });
 }
@@ -560,14 +584,46 @@ async function executeGame() {
     if (!State.isConnected) return showToast('Connect wallet first', 'warning');
     if (Game.wager <= 0) return showToast('Enter wager amount', 'warning');
 
-    const isJackpot = Game.mode === 'jackpot';
+    // Check balance before attempting
+    const userBalance = State.currentUserBalance || 0n;
     const wagerWei = ethers.parseEther(Game.wager.toString());
+    
+    if (userBalance < wagerWei) {
+        showToast('Insufficient BKC balance. Use faucet to get tokens.', 'error');
+        return;
+    }
+
+    const isJackpot = Game.mode === 'jackpot';
     
     // IMPORTANT: For jackpot send array with 1 element, for combo send all 3
     const guesses = isJackpot ? [Game.guess] : [...Game.guesses];
     const isCumulative = !isJackpot;
 
-    console.log('🎰 Executing game:', { mode: Game.mode, guesses, isCumulative, wager: Game.wager });
+    // Validate guesses for combo mode
+    if (!isJackpot) {
+        // Tier 0: 1-100, Tier 1: 1-10, Tier 2: 1-2
+        if (guesses[0] < 1 || guesses[0] > 100) {
+            showToast('Jackpot tier: pick 1-100', 'error');
+            return;
+        }
+        if (guesses[1] < 1 || guesses[1] > 10) {
+            showToast('Super tier: pick 1-10', 'error');
+            return;
+        }
+        if (guesses[2] < 1 || guesses[2] > 2) {
+            showToast('Basic tier: pick 1-2', 'error');
+            return;
+        }
+    }
+
+    console.log('🎰 Executing game:', { 
+        mode: Game.mode, 
+        guesses, 
+        isCumulative, 
+        wager: Game.wager,
+        wagerWei: wagerWei.toString(),
+        userBalance: userBalance.toString()
+    });
 
     Game.phase = 'spin';
     renderPhase();
@@ -587,12 +643,27 @@ async function executeGame() {
         } else {
             Game.phase = 'wager';
             renderPhase();
+            if (result?.error) {
+                showToast(result.error, 'error');
+            }
         }
     } catch (e) {
         console.error('Game error:', e);
         Game.phase = 'wager';
         renderPhase();
-        showToast('Transaction failed: ' + (e.message || 'Unknown error'), 'error');
+        
+        // Parse error message
+        let errorMsg = 'Transaction failed';
+        if (e.message) {
+            if (e.message.includes('insufficient')) {
+                errorMsg = 'Insufficient balance or allowance';
+            } else if (e.message.includes('user rejected')) {
+                errorMsg = 'Transaction cancelled';
+            } else if (e.message.includes('reverted')) {
+                errorMsg = 'Contract rejected transaction. Check balance and allowance.';
+            }
+        }
+        showToast(errorMsg, 'error');
     }
 }
 
