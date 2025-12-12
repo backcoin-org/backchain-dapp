@@ -13,7 +13,7 @@ import {
     calculateClaimDetails,
     API_ENDPOINTS
 } from '../modules/data.js';
-import { executeUniversalClaim, executeInternalFaucet, getFortunePoolStatus } from '../modules/transactions.js';
+import { executeUniversalClaim, getFortunePoolStatus } from '../modules/transactions.js';
 import {
     formatBigNumber, formatPStake, renderLoading,
     renderNoData, renderError
@@ -774,6 +774,69 @@ function renderNoTransactions() {
     }
 }
 
+// ============================================================================
+// FAUCET API - Oracle pays gas, user receives BKC + ETH
+// ============================================================================
+async function requestFaucetAPI(btnElement) {
+    if (!State.isConnected || !State.userAddress) {
+        showToast("Connect wallet first", "error");
+        return false;
+    }
+
+    const originalHTML = btnElement.innerHTML;
+    btnElement.disabled = true;
+    btnElement.innerHTML = `<i class="fa-solid fa-circle-notch fa-spin mr-2"></i> Requesting...`;
+
+    try {
+        console.log('📡 Calling Faucet API for:', State.userAddress);
+        
+        const response = await fetch(`${FAUCET_API}?address=${State.userAddress}`);
+        const data = await response.json();
+
+        console.log('📡 Faucet API response:', data);
+
+        if (response.ok && data.success) {
+            showToast("✅ Tokens sent! Check your wallet in a few seconds.", "success");
+            
+            // Hide faucet card after success
+            const card = document.getElementById('faucet-card');
+            if (card) card.classList.add('hidden');
+            
+            // Refresh data after a delay (wait for tx to confirm)
+            setTimeout(() => {
+                loadAllData();
+                updateUserUI();
+            }, 5000);
+            
+            return true;
+        } else {
+            // Handle specific error messages
+            const msg = data.error || data.message || "Faucet unavailable";
+            
+            if (msg.toLowerCase().includes('cooldown') || msg.toLowerCase().includes('already')) {
+                showToast(`⏳ ${msg}`, "warning");
+            } else if (msg.toLowerCase().includes('insufficient') || msg.toLowerCase().includes('empty')) {
+                showToast("🚫 Faucet is empty. Contact admin.", "error");
+            } else {
+                showToast(`❌ ${msg}`, "error");
+            }
+            return false;
+        }
+    } catch (e) {
+        console.error('Faucet API Error:', e);
+        
+        if (e.message?.includes('Failed to fetch') || e.message?.includes('NetworkError')) {
+            showToast("🔌 Faucet API offline. Try again later.", "error");
+        } else {
+            showToast("❌ Faucet request failed", "error");
+        }
+        return false;
+    } finally {
+        btnElement.disabled = false;
+        btnElement.innerHTML = originalHTML;
+    }
+}
+
 async function checkFaucetStatus() {
     if (!State.isConnected) {
         hideFaucet();
@@ -876,17 +939,11 @@ function attachListeners() {
             }
         }
 
-        // Faucet
+        // Faucet - Uses API (Oracle pays gas)
         if (target.closest('#faucet-btn')) {
             console.log('💧 Faucet clicked');
             const btn = target.closest('#faucet-btn');
-            const success = await executeInternalFaucet(btn);
-            if (success) {
-                setTimeout(() => {
-                    loadAllData();
-                    updateUserUI();
-                }, 3000);
-            }
+            await requestFaucetAPI(btn);
         }
 
         // Pagination

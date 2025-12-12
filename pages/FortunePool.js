@@ -14,6 +14,7 @@ const ethers = window.ethers;
 // CONSTANTS
 // ============================================================================
 const EXPLORER_TX = "https://sepolia.arbiscan.io/tx/";
+const FAUCET_API = "https://api.backcoin.org/faucet";
 
 // Prize tiers configuration (from contract)
 const TIERS = [
@@ -474,6 +475,10 @@ function renderBettingScreen(container) {
     const comboFee = Game.poolStatus?.oracleFee5x || 0n;
     const fee = isJackpot ? oracleFee : comboFee;
     const feeDisplay = fee ? parseFloat(ethers.formatEther(fee)).toFixed(4) : '~0.001';
+    
+    // Check user balance for faucet prompt
+    const userBalance = State.currentUserBalance || 0n;
+    const lowBalance = userBalance < ethers.parseEther("1");
 
     container.innerHTML = `
         <div class="py-2">
@@ -486,6 +491,22 @@ function renderBettingScreen(container) {
                     ${isJackpot ? 'JACKPOT' : 'COMBO'} MODE
                 </span>
             </div>
+
+            ${lowBalance ? `
+                <!-- Low Balance Warning + Faucet -->
+                <div class="mb-6 p-4 bg-gradient-to-r from-cyan-900/30 to-blue-900/30 rounded-xl border border-cyan-500/30">
+                    <div class="flex items-center gap-3 mb-3">
+                        <i class="fa-solid fa-faucet text-cyan-400 text-lg"></i>
+                        <div>
+                            <p class="text-white font-bold text-sm">Need tokens to play?</p>
+                            <p class="text-xs text-zinc-400">Get free BKC + ETH from faucet</p>
+                        </div>
+                    </div>
+                    <button id="btn-faucet" class="w-full bg-cyan-600 hover:bg-cyan-500 text-white font-bold py-2.5 rounded-lg text-sm transition-colors">
+                        <i class="fa-solid fa-gift mr-2"></i> Get Free Tokens
+                    </button>
+                </div>
+            ` : ''}
 
             <!-- Your Picks -->
             <div class="mb-6">
@@ -622,6 +643,12 @@ function attachBettingListeners() {
 
     // Play
     playBtn?.addEventListener('click', executeGame);
+
+    // Faucet button (if shown)
+    const faucetBtn = document.getElementById('btn-faucet');
+    if (faucetBtn) {
+        faucetBtn.addEventListener('click', () => requestFaucetAPI(faucetBtn));
+    }
 
     updatePotentialWins();
 }
@@ -1021,6 +1048,48 @@ function formatTime(ts) {
     if (diff < 3600) return `${Math.floor(diff/60)}m ago`;
     if (diff < 86400) return `${Math.floor(diff/3600)}h ago`;
     return new Date(secs * 1000).toLocaleDateString();
+}
+
+// ============================================================================
+// FAUCET API - For users without tokens
+// ============================================================================
+async function requestFaucetAPI(btnElement) {
+    if (!State.isConnected || !State.userAddress) {
+        showToast("Connect wallet first", "error");
+        return false;
+    }
+
+    const originalHTML = btnElement.innerHTML;
+    btnElement.disabled = true;
+    btnElement.innerHTML = `<i class="fa-solid fa-circle-notch fa-spin mr-2"></i> Sending...`;
+
+    try {
+        const response = await fetch(`${FAUCET_API}?address=${State.userAddress}`);
+        const data = await response.json();
+
+        if (response.ok && data.success) {
+            showToast("✅ Tokens sent! Refreshing...", "success");
+            setTimeout(() => {
+                loadPoolStatus();
+                loadHistory();
+            }, 4000);
+            return true;
+        } else {
+            const msg = data.error || "Faucet unavailable";
+            if (msg.toLowerCase().includes('cooldown')) {
+                showToast(`⏳ ${msg}`, "warning");
+            } else {
+                showToast(`❌ ${msg}`, "error");
+            }
+            return false;
+        }
+    } catch (e) {
+        showToast("🔌 Faucet offline", "error");
+        return false;
+    } finally {
+        btnElement.disabled = false;
+        btnElement.innerHTML = originalHTML;
+    }
 }
 
 // ============================================================================
