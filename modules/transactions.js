@@ -1,5 +1,5 @@
 // js/modules/transactions.js
-// ✅ VERSÃO V7.0 - FORTUNE POOL V2.1 SUPPORT + Anti-Revert System + Pre-Flight Checks
+// ✅ VERSÃO V7.1 - MAX_UINT256 approval (fixes repeated delegation issue)
 
 const ethers = window.ethers;
 
@@ -349,25 +349,25 @@ async function ensureApproval(tokenContract, spenderAddress, amountOrTokenId, bt
                 return false;
             }
 
-            // Calculate approval amount with small buffer
-            const approvalAmount = (requiredAmount * (100n + APPROVAL_BUFFER_PERCENT)) / 100n;
+            // Use MAX_UINT256 for infinite approval (standard DeFi pattern)
+            // This avoids repeated approval transactions
+            const MAX_UINT256 = ethers.MaxUint256;
 
             if (allowance < requiredAmount) {
-                const formatted = formatBigNumber(approvalAmount);
-                showToast(`Approving ${formatted.toFixed(2)} BKC for ${purpose}...`, "info");
+                showToast(`Approving BKC for ${purpose}...`, "info");
                 setButtonState("Approving tokens");
 
                 // Estimate gas for approval
                 const gasOpts = await estimateGasWithFallback(
                     approvedTokenContract, 
                     'approve', 
-                    [spenderAddress, approvalAmount],
+                    [spenderAddress, MAX_UINT256],
                     100000n
                 );
                 
                 const approveTx = await approvedTokenContract.approve(
                     spenderAddress, 
-                    approvalAmount, 
+                    MAX_UINT256, 
                     gasOpts
                 );
                 
@@ -378,6 +378,9 @@ async function ensureApproval(tokenContract, spenderAddress, amountOrTokenId, bt
                 }
                 
                 showToast('Approval successful!', "success");
+                
+                // Small delay to ensure blockchain state is updated
+                await new Promise(resolve => setTimeout(resolve, 1000));
             }
             
             return true;
