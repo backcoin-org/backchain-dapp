@@ -1,5 +1,5 @@
 // js/modules/transactions.js
-// ✅ VERSÃO V6.0 PRODUCTION-READY: Anti-Revert System + Pre-Flight Checks + Error Decoding
+// ✅ VERSÃO V7.0 - FORTUNE POOL V2.1 SUPPORT + Anti-Revert System + Pre-Flight Checks
 
 const ethers = window.ethers;
 
@@ -32,7 +32,13 @@ const CUSTOM_ERRORS = {
     '0x8b1e12d4': 'NotListed',
     '0x7b3c91ff': 'RentalActive',
     '0x8e4a23d6': 'DistributionConfigError',
-    '0x30cd7471': 'TransferFailed'
+    '0x30cd7471': 'TransferFailed',
+    // Fortune Pool V2.1 Errors
+    '0x2c5211c6': 'InvalidWagerAmount',
+    '0x7c214f04': 'InvalidGuessCount',
+    '0x8579befe': 'GameNotResolved',
+    '0x3ee5aeb5': 'OracleFeeNotPaid',
+    '0x4e487b71': 'PanicError'
 };
 
 // ====================================================================
@@ -462,71 +468,52 @@ export async function executeListNFT(tokenId, pricePerHourWei, btnElement) {
         showToast("Failed to verify NFT ownership.", "error");
         return false;
     }
-
-    const approved = await ensureApproval(
-        State.rewardBoosterContract, 
-        addresses.rentalManager, 
-        tokenIdBigInt, 
-        btnElement, 
-        "Listing NFT"
-    );
-    if (!approved) return false;
-
-    const rentalContract = new ethers.Contract(addresses.rentalManager, rentalManagerABI, signer);
-    const args = [tokenIdBigInt, priceBigInt];
     
-    const gasOpts = await estimateGasWithFallback(rentalContract, 'listNFT', args, 300000n);
-    const txPromise = rentalContract.listNFT(...args, gasOpts);
-    
-    return await executeTransaction(
-        txPromise, 
-        `NFT #${tokenId} listed successfully!`, 
-        "Listing failed", 
-        btnElement
-    );
-}
-
-export async function executeRentNFT(tokenId, totalCostWei, btnElement) {
-    const signer = await getConnectedSigner();
-    if (!signer || !addresses.rentalManager) return false;
-
-    const tokenIdBigInt = BigInt(tokenId);
-    const totalCostBigInt = BigInt(totalCostWei);
-
-    // Pre-validation: Check balance
-    try {
-        const balance = await State.bkcTokenContract.balanceOf(State.userAddress);
-        if (balance < totalCostBigInt) {
-            const needed = formatBigNumber(totalCostBigInt);
-            const have = formatBigNumber(balance);
-            showToast(`Insufficient balance. Need ${needed.toFixed(2)} BKC, have ${have.toFixed(2)}.`, "error");
-            return false;
-        }
-    } catch (e) {
-        console.warn("Balance check failed:", e);
+    const originalText = btnElement ? btnElement.innerHTML : 'List NFT';
+    if (btnElement) { 
+        btnElement.disabled = true; 
+        btnElement.innerHTML = '<div class="loader inline-block"></div>'; 
     }
 
-    const approved = await ensureApproval(
-        State.bkcTokenContract, 
-        addresses.rentalManager, 
-        totalCostBigInt, 
-        btnElement, 
-        "Rental Payment"
-    );
-    if (!approved) return false;
+    try {
+        const approved = await ensureApproval(
+            State.rewardBoosterContract, 
+            addresses.rentalManager, 
+            tokenIdBigInt, 
+            btnElement, 
+            "Rental Listing"
+        );
+        if (!approved) return false;
 
-    const rentalContract = new ethers.Contract(addresses.rentalManager, rentalManagerABI, signer);
-    const args = [tokenIdBigInt];
+        if (btnElement) btnElement.innerHTML = '<div class="loader inline-block"></div> Listing...';
+        
+        const rentalContract = new ethers.Contract(addresses.rentalManager, rentalManagerABI, signer);
+        const args = [tokenIdBigInt, priceBigInt];
+        
+        const gasOpts = await estimateGasWithFallback(rentalContract, 'listNFTSimple', args, 300000n);
+        const listTxPromise = rentalContract.listNFTSimple(...args, gasOpts);
+        
+        return await executeTransaction(
+            listTxPromise, 
+            'NFT listed for rental!', 
+            'Listing failed', 
+            btnElement
+        );
 
-    const gasOpts = await estimateGasWithFallback(rentalContract, 'rentNFT', args, 400000n);
-    const txPromise = rentalContract.rentNFT(...args, gasOpts);
-
-    return await executeTransaction(
-        txPromise, 
-        `NFT #${tokenId} rented for 1 hour!`, 
-        "Rental failed", 
-        btnElement
-    );
+    } catch (e) {
+        console.error("List NFT Error:", e);
+        const userMessage = formatErrorForUser(e, 'Listing failed');
+        showToast(userMessage, "error");
+        return false;
+        
+    } finally {
+        if (btnElement) {
+            setTimeout(() => { 
+                btnElement.disabled = false; 
+                btnElement.innerHTML = originalText; 
+            }, 1500);
+        }
+    }
 }
 
 export async function executeWithdrawNFT(tokenId, btnElement) {
@@ -534,19 +521,109 @@ export async function executeWithdrawNFT(tokenId, btnElement) {
     if (!signer || !addresses.rentalManager) return false;
 
     const tokenIdBigInt = BigInt(tokenId);
+    const originalText = btnElement ? btnElement.innerHTML : 'Withdraw';
     
-    const rentalContract = new ethers.Contract(addresses.rentalManager, rentalManagerABI, signer);
-    const args = [tokenIdBigInt];
+    if (btnElement) {
+        btnElement.disabled = true;
+        btnElement.innerHTML = '<div class="loader inline-block"></div>';
+    }
 
-    const gasOpts = await estimateGasWithFallback(rentalContract, 'withdrawNFT', args, 250000n);
-    const txPromise = rentalContract.withdrawNFT(...args, gasOpts);
+    try {
+        const rentalContract = new ethers.Contract(addresses.rentalManager, rentalManagerABI, signer);
+        const args = [tokenIdBigInt];
+        
+        const gasOpts = await estimateGasWithFallback(rentalContract, 'withdrawNFT', args, 200000n);
+        const withdrawTxPromise = rentalContract.withdrawNFT(...args, gasOpts);
+        
+        return await executeTransaction(
+            withdrawTxPromise, 
+            'NFT withdrawn from rental!', 
+            'Withdrawal failed', 
+            btnElement
+        );
 
-    return await executeTransaction(
-        txPromise, 
-        `NFT #${tokenId} withdrawn!`, 
-        "Withdrawal failed", 
-        btnElement
-    );
+    } catch (e) {
+        console.error("Withdraw NFT Error:", e);
+        const userMessage = formatErrorForUser(e, 'Withdrawal failed');
+        showToast(userMessage, "error");
+        return false;
+        
+    } finally {
+        if (btnElement) {
+            setTimeout(() => {
+                btnElement.disabled = false;
+                btnElement.innerHTML = originalText;
+            }, 1500);
+        }
+    }
+}
+
+export async function executeRentNFT(tokenId, hoursToRent, totalCost, btnElement) {
+    const signer = await getConnectedSigner();
+    if (!signer || !addresses.rentalManager) return false;
+    
+    const tokenIdBigInt = BigInt(tokenId);
+    const hoursBigInt = BigInt(hoursToRent);
+    const costBigInt = BigInt(totalCost);
+
+    // Pre-validation
+    if (hoursBigInt === 0n) {
+        showToast("Rental duration must be at least 1 hour.", "error");
+        return false;
+    }
+
+    // Check balance
+    if (costBigInt > State.currentUserBalance) {
+        const needed = formatBigNumber(costBigInt);
+        showToast(`Insufficient balance. Need ${needed.toFixed(2)} BKC.`, "error");
+        return false;
+    }
+
+    const originalText = btnElement ? btnElement.innerHTML : 'Rent';
+    if (btnElement) {
+        btnElement.disabled = true;
+        btnElement.innerHTML = '<div class="loader inline-block"></div>';
+    }
+
+    try {
+        const approved = await ensureApproval(
+            State.bkcTokenContract, 
+            addresses.rentalManager, 
+            costBigInt, 
+            btnElement, 
+            "NFT Rental"
+        );
+        if (!approved) return false;
+
+        if (btnElement) btnElement.innerHTML = '<div class="loader inline-block"></div> Renting...';
+
+        const rentalContract = new ethers.Contract(addresses.rentalManager, rentalManagerABI, signer);
+        const args = [tokenIdBigInt, hoursBigInt];
+
+        const gasOpts = await estimateGasWithFallback(rentalContract, 'rentNFT', args, 400000n);
+        const rentTxPromise = rentalContract.rentNFT(...args, gasOpts);
+
+        return await executeTransaction(
+            rentTxPromise, 
+            'NFT rented successfully!', 
+            'Rental failed', 
+            btnElement
+        );
+
+    } catch (e) {
+        console.error("Rent NFT Error:", e);
+        const userMessage = formatErrorForUser(e, 'Rental failed');
+        showToast(userMessage, "error");
+        return false;
+        
+    } finally {
+        if (btnElement) {
+            setTimeout(() => {
+                btnElement.disabled = false;
+                btnElement.innerHTML = originalText;
+            }, 1500);
+        }
+    }
 }
 
 // ====================================================================
@@ -983,4 +1060,544 @@ export async function executeNotarizeDocument(documentURI, description, contentH
         'Notarization failed', 
         submitButton
     );
+}
+
+// ====================================================================
+// 5. FORTUNE POOL TRANSACTIONS (V2.1)
+// ====================================================================
+
+/**
+ * Execute Fortune Pool participation
+ * @param {bigint|string|number} wagerAmount - Amount to wager in wei
+ * @param {number[]} guesses - Array of guess values
+ * @param {boolean} isCumulative - true for 5x Cumulative mode, false for 1x Jackpot
+ * @param {HTMLElement} btnElement - Button element for UI feedback
+ * @returns {Promise<{success: boolean, gameId?: number, txHash?: string}|false>}
+ */
+export async function executeFortuneParticipate(wagerAmount, guesses, isCumulative, btnElement) {
+    const signer = await getConnectedSigner();
+    if (!signer || !State.actionsManagerContract) {
+        showToast("Fortune Pool not available.", "error");
+        return false;
+    }
+
+    const wagerBigInt = BigInt(wagerAmount);
+    const guessesArray = guesses.map(g => BigInt(g));
+    
+    // Pre-validations
+    if (wagerBigInt === 0n) {
+        showToast("Wager amount must be greater than 0.", "error");
+        return false;
+    }
+
+    // Check BKC balance
+    try {
+        const balance = await State.bkcTokenContract.balanceOf(State.userAddress);
+        if (balance < wagerBigInt) {
+            const needed = formatBigNumber(wagerBigInt);
+            showToast(`Insufficient BKC. Need ${needed.toFixed(2)} BKC.`, "error");
+            return false;
+        }
+    } catch (e) {
+        console.warn("Balance check failed:", e);
+    }
+
+    const originalText = btnElement ? btnElement.innerHTML : 'Play';
+    if (btnElement) {
+        btnElement.disabled = true;
+        btnElement.innerHTML = '<div class="loader inline-block"></div> Preparing...';
+    }
+
+    try {
+        // 1. Get Oracle Fee
+        let oracleFee = 0n;
+        try {
+            oracleFee = await State.actionsManagerContract.getRequiredOracleFee(isCumulative);
+        } catch (e) {
+            // Fallback: use base oracle fee
+            try {
+                const baseFee = await State.actionsManagerContract.oracleFee();
+                oracleFee = isCumulative ? baseFee * 5n : baseFee;
+            } catch (e2) {
+                oracleFee = isCumulative ? ethers.parseEther("0.005") : ethers.parseEther("0.001");
+            }
+        }
+
+        // Check ETH balance for oracle fee
+        const ethBalance = await signer.provider.getBalance(State.userAddress);
+        const requiredEth = oracleFee + ethers.parseEther("0.0005"); // Extra for gas
+        
+        if (ethBalance < requiredEth) {
+            const feeFormatted = Number(ethers.formatEther(oracleFee)).toFixed(4);
+            showToast(`Insufficient ETH for oracle fee. Need ~${feeFormatted} ETH.`, "error");
+            if (btnElement) {
+                btnElement.disabled = false;
+                btnElement.innerHTML = originalText;
+            }
+            return false;
+        }
+
+        // 2. Approve BKC tokens
+        if (btnElement) btnElement.innerHTML = '<div class="loader inline-block"></div> Approving...';
+        
+        const fortuneAddress = await State.actionsManagerContract.getAddress();
+        const approved = await ensureApproval(
+            State.bkcTokenContract,
+            fortuneAddress,
+            wagerBigInt,
+            btnElement,
+            "Fortune Pool"
+        );
+        
+        if (!approved) {
+            if (btnElement) {
+                btnElement.disabled = false;
+                btnElement.innerHTML = originalText;
+            }
+            return false;
+        }
+
+        // 3. Execute participation
+        if (btnElement) btnElement.innerHTML = '<div class="loader inline-block"></div> Submitting...';
+        
+        const fortuneContract = State.actionsManagerContract.connect(signer);
+        const args = [wagerBigInt, guessesArray, isCumulative];
+        
+        // Estimate gas with value
+        let gasOpts;
+        try {
+            const estimated = await fortuneContract.participate.estimateGas(...args, { value: oracleFee });
+            gasOpts = { gasLimit: (estimated * 130n) / 100n };
+        } catch (e) {
+            console.warn("Gas estimation for Fortune failed:", e.message?.slice(0, 80));
+            gasOpts = { gasLimit: 500000n };
+        }
+        
+        const tx = await fortuneContract.participate(...args, { 
+            value: oracleFee,
+            ...gasOpts 
+        });
+
+        if (btnElement) btnElement.innerHTML = '<div class="loader inline-block"></div> Confirming...';
+        
+        showToast('Transaction submitted. Waiting for confirmation...', 'info');
+        const receipt = await tx.wait();
+        
+        if (receipt.status === 0) {
+            throw new Error('Transaction reverted on-chain');
+        }
+
+        // Parse GameRequested event
+        let gameId = null;
+        for (const log of receipt.logs) {
+            try {
+                const parsed = fortuneContract.interface.parseLog(log);
+                if (parsed?.name === "GameRequested") {
+                    gameId = Number(parsed.args.gameId);
+                    break;
+                }
+            } catch {}
+        }
+
+        const modeName = isCumulative ? "5x Cumulative" : "1x Jackpot";
+        const successMsg = gameId 
+            ? `🎰 Game #${gameId} submitted! Waiting for oracle...`
+            : `🎰 ${modeName} game submitted! Waiting for oracle...`;
+        
+        showToast(successMsg, 'success', receipt.hash);
+
+        // Refresh user data
+        loadUserData().catch(() => {});
+        
+        return { success: true, gameId, txHash: receipt.hash };
+
+    } catch (e) {
+        console.error("Fortune Error:", e);
+        const userMessage = formatErrorForUser(e, 'Fortune Pool failed');
+        showToast(userMessage, "error");
+        return false;
+        
+    } finally {
+        if (btnElement) {
+            setTimeout(() => {
+                btnElement.disabled = false;
+                btnElement.innerHTML = originalText;
+            }, 1500);
+        }
+    }
+}
+
+/**
+ * Get Fortune Pool status and configuration
+ */
+export async function getFortunePoolStatus() {
+    const contract = State.actionsManagerContractPublic || State.actionsManagerContract;
+    if (!contract) {
+        return { 
+            active: false, 
+            activeTiers: 0, 
+            prizePool: 0n, 
+            oracleFee1x: ethers.parseEther("0.001"), 
+            oracleFee5x: ethers.parseEther("0.005"),
+            tiers: [] 
+        };
+    }
+
+    try {
+        const [activeTierCount, prizePool, gameCounter] = await Promise.all([
+            contract.activeTierCount().catch(() => 0n),
+            contract.prizePoolBalance().catch(() => 0n),
+            contract.gameCounter().catch(() => 0n)
+        ]);
+
+        // Get oracle fees
+        let oracleFee1x = ethers.parseEther("0.001");
+        let oracleFee5x = ethers.parseEther("0.005");
+        try {
+            oracleFee1x = await contract.getRequiredOracleFee(false);
+            oracleFee5x = await contract.getRequiredOracleFee(true);
+        } catch (e) {
+            try {
+                const baseFee = await contract.oracleFee();
+                oracleFee1x = baseFee;
+                oracleFee5x = baseFee * 5n;
+            } catch {}
+        }
+
+        // Load tiers
+        const tiers = [];
+        const tierCount = Number(activeTierCount);
+        
+        for (let i = 0; i < Math.min(tierCount, 10); i++) {
+            try {
+                const tier = await contract.prizeTiers(i);
+                if (tier && (tier.active || tier[2])) {
+                    tiers.push({
+                        tierId: i,
+                        maxRange: Number(tier.maxRange || tier[0]),
+                        multiplierBips: Number(tier.multiplierBips || tier[1]),
+                        multiplier: Number(tier.multiplierBips || tier[1]) / 10000,
+                        active: tier.active || tier[2]
+                    });
+                }
+            } catch (e) {
+                // Tier doesn't exist
+            }
+        }
+
+        return {
+            active: tierCount > 0,
+            activeTiers: tierCount,
+            prizePool: BigInt(prizePool.toString()),
+            oracleFee1x: BigInt(oracleFee1x.toString()),
+            oracleFee5x: BigInt(oracleFee5x.toString()),
+            gameCounter: Number(gameCounter),
+            tiers
+        };
+
+    } catch (e) {
+        console.error("Fortune status error:", e);
+        return { 
+            active: false, 
+            activeTiers: 0, 
+            prizePool: 0n, 
+            oracleFee1x: ethers.parseEther("0.001"), 
+            oracleFee5x: ethers.parseEther("0.005"),
+            tiers: [] 
+        };
+    }
+}
+
+/**
+ * Check game result by gameId
+ */
+export async function getGameResult(gameId) {
+    const contract = State.actionsManagerContractPublic || State.actionsManagerContract;
+    if (!contract) return null;
+
+    try {
+        const isFulfilled = await contract.isGameFulfilled(gameId);
+        
+        if (!isFulfilled) {
+            return { fulfilled: false, pending: true };
+        }
+
+        const results = await contract.getGameResults(gameId);
+        
+        return {
+            fulfilled: true,
+            pending: false,
+            rolls: results.map(r => Number(r))
+        };
+
+    } catch (e) {
+        console.warn("Game result check failed:", e);
+        return null;
+    }
+}
+// ====================================================================
+// FORTUNE POOL TRANSACTIONS - ADICIONAR AO transactions.js
+// ====================================================================
+
+/**
+ * Execute Fortune Pool participation (1x Jackpot or 5x Cumulative)
+ * @param {bigint} wagerAmount - Amount to wager in wei
+ * @param {number[]} guesses - Array of guess values (1 for Jackpot, activeTierCount for Cumulative)
+ * @param {boolean} isCumulative - true for 5x mode, false for 1x Jackpot
+ * @param {HTMLElement} btnElement - Button element for UI feedback
+ */
+export async function executeFortuneParticipate(wagerAmount, guesses, isCumulative, btnElement) {
+    const signer = await getConnectedSigner();
+    if (!signer || !State.actionsManagerContract) {
+        showToast("Fortune Pool not available.", "error");
+        return false;
+    }
+
+    const wagerBigInt = BigInt(wagerAmount);
+    const guessesArray = guesses.map(g => BigInt(g));
+    
+    // Pre-validations
+    if (wagerBigInt === 0n) {
+        showToast("Wager amount must be greater than 0.", "error");
+        return false;
+    }
+
+    // Check BKC balance
+    try {
+        const balance = await State.bkcTokenContract.balanceOf(State.userAddress);
+        if (balance < wagerBigInt) {
+            const needed = formatBigNumber(wagerBigInt);
+            showToast(`Insufficient BKC. Need ${needed.toFixed(2)} BKC.`, "error");
+            return false;
+        }
+    } catch (e) {
+        console.warn("Balance check failed:", e);
+    }
+
+    const originalText = btnElement ? btnElement.innerHTML : 'Play';
+    if (btnElement) {
+        btnElement.disabled = true;
+        btnElement.innerHTML = '<div class="loader inline-block"></div> Preparing...';
+    }
+
+    try {
+        // 1. Get Oracle Fee
+        let oracleFee = 0n;
+        try {
+            oracleFee = await State.actionsManagerContract.getRequiredOracleFee(isCumulative);
+        } catch (e) {
+            // Fallback: use base oracle fee
+            try {
+                const baseFee = await State.actionsManagerContract.oracleFee();
+                oracleFee = isCumulative ? baseFee * 5n : baseFee;
+            } catch (e2) {
+                oracleFee = isCumulative ? ethers.parseEther("0.005") : ethers.parseEther("0.001");
+            }
+        }
+
+        // Check ETH balance for oracle fee
+        const ethBalance = await signer.provider.getBalance(State.userAddress);
+        const requiredEth = oracleFee + ethers.parseEther("0.0005"); // Extra for gas
+        
+        if (ethBalance < requiredEth) {
+            showToast(`Insufficient ETH for oracle fee. Need ~${formatBigNumber(oracleFee)} ETH.`, "error");
+            if (btnElement) {
+                btnElement.disabled = false;
+                btnElement.innerHTML = originalText;
+            }
+            return false;
+        }
+
+        // 2. Approve BKC tokens
+        if (btnElement) btnElement.innerHTML = '<div class="loader inline-block"></div> Approving...';
+        
+        const fortuneAddress = await State.actionsManagerContract.getAddress();
+        const approved = await ensureApproval(
+            State.bkcTokenContract,
+            fortuneAddress,
+            wagerBigInt,
+            btnElement,
+            "Fortune Pool"
+        );
+        
+        if (!approved) {
+            if (btnElement) {
+                btnElement.disabled = false;
+                btnElement.innerHTML = originalText;
+            }
+            return false;
+        }
+
+        // 3. Execute participation
+        if (btnElement) btnElement.innerHTML = '<div class="loader inline-block"></div> Submitting...';
+        
+        const fortuneContract = State.actionsManagerContract.connect(signer);
+        const args = [wagerBigInt, guessesArray, isCumulative];
+        
+        // Estimate gas
+        const gasOpts = await estimateGasWithFallback(
+            fortuneContract, 
+            'participate', 
+            [...args, { value: oracleFee }], 
+            500000n
+        );
+        
+        const tx = await fortuneContract.participate(...args, { 
+            value: oracleFee,
+            ...gasOpts 
+        });
+
+        if (btnElement) btnElement.innerHTML = '<div class="loader inline-block"></div> Confirming...';
+        
+        const receipt = await tx.wait();
+        
+        if (receipt.status === 0) {
+            throw new Error('Transaction reverted on-chain');
+        }
+
+        // Parse GameRequested event
+        let gameId = null;
+        for (const log of receipt.logs) {
+            try {
+                const parsed = fortuneContract.interface.parseLog(log);
+                if (parsed?.name === "GameRequested") {
+                    gameId = parsed.args.gameId;
+                    break;
+                }
+            } catch {}
+        }
+
+        const modeName = isCumulative ? "5x Cumulative" : "1x Jackpot";
+        const successMsg = gameId 
+            ? `Game #${gameId} submitted! Waiting for oracle...`
+            : `${modeName} game submitted! Waiting for oracle...`;
+        
+        showToast(successMsg, 'success', receipt.hash);
+
+        // Refresh user data
+        loadUserData().catch(() => {});
+        
+        return { success: true, gameId, txHash: receipt.hash };
+
+    } catch (e) {
+        console.error("Fortune Error:", e);
+        const userMessage = formatErrorForUser(e, 'Fortune Pool failed');
+        showToast(userMessage, "error");
+        return false;
+        
+    } finally {
+        if (btnElement) {
+            setTimeout(() => {
+                btnElement.disabled = false;
+                btnElement.innerHTML = originalText;
+            }, 1500);
+        }
+    }
+}
+
+/**
+ * Get Fortune Pool status and tier information
+ */
+export async function getFortunePoolStatus() {
+    const contract = State.actionsManagerContractPublic || State.actionsManagerContract;
+    if (!contract) {
+        return { 
+            active: false, 
+            activeTiers: 0, 
+            prizePool: 0n, 
+            oracleFee1x: 0n, 
+            oracleFee5x: 0n,
+            tiers: [] 
+        };
+    }
+
+    try {
+        const [activeTierCount, prizePool, gameCounter] = await Promise.all([
+            contract.activeTierCount().catch(() => 0n),
+            contract.prizePoolBalance().catch(() => 0n),
+            contract.gameCounter().catch(() => 0n)
+        ]);
+
+        // Get oracle fees
+        let oracleFee1x = 0n;
+        let oracleFee5x = 0n;
+        try {
+            oracleFee1x = await contract.getRequiredOracleFee(false);
+            oracleFee5x = await contract.getRequiredOracleFee(true);
+        } catch (e) {
+            const baseFee = await contract.oracleFee().catch(() => ethers.parseEther("0.001"));
+            oracleFee1x = baseFee;
+            oracleFee5x = baseFee * 5n;
+        }
+
+        // Load tiers
+        const tiers = [];
+        const tierCount = Number(activeTierCount);
+        
+        for (let i = 0; i < tierCount; i++) {
+            try {
+                const tier = await contract.prizeTiers(i);
+                if (tier.active) {
+                    tiers.push({
+                        tierId: i,
+                        maxRange: Number(tier.maxRange),
+                        multiplierBips: Number(tier.multiplierBips),
+                        multiplier: Number(tier.multiplierBips) / 10000,
+                        active: tier.active
+                    });
+                }
+            } catch (e) {
+                // Tier doesn't exist or inactive
+            }
+        }
+
+        return {
+            active: tierCount > 0,
+            activeTiers: tierCount,
+            prizePool: BigInt(prizePool.toString()),
+            oracleFee1x: BigInt(oracleFee1x.toString()),
+            oracleFee5x: BigInt(oracleFee5x.toString()),
+            gameCounter: Number(gameCounter),
+            tiers
+        };
+
+    } catch (e) {
+        console.error("Fortune status error:", e);
+        return { 
+            active: false, 
+            activeTiers: 0, 
+            prizePool: 0n, 
+            oracleFee1x: 0n, 
+            oracleFee5x: 0n,
+            tiers: [] 
+        };
+    }
+}
+
+/**
+ * Check game result by gameId
+ */
+export async function getGameResult(gameId) {
+    const contract = State.actionsManagerContractPublic || State.actionsManagerContract;
+    if (!contract) return null;
+
+    try {
+        const isFulfilled = await contract.isGameFulfilled(gameId);
+        
+        if (!isFulfilled) {
+            return { fulfilled: false, pending: true };
+        }
+
+        const results = await contract.getGameResults(gameId);
+        
+        return {
+            fulfilled: true,
+            pending: false,
+            rolls: results.map(r => Number(r))
+        };
+
+    } catch (e) {
+        console.warn("Game result check failed:", e);
+        return null;
+    }
 }

@@ -1,70 +1,64 @@
+/**
+ * 🔬 BACKCOIN V2.1 ECOSYSTEM VERIFICATION SCRIPT
+ * 
+ * Script de verificação completo que:
+ * - Separa NFT Discounts de Fee Recycling
+ * - Mostra hash de todas as transações
+ * - Testa Fortune em modo 1x e 5x
+ * - Usa valores múltiplos de 10 para fácil visualização
+ * - Testa Faucet com informações de cooldown
+ * 
+ * Uso: npx hardhat run scripts/5_verify_full_ecosystem_v2.ts --network arbitrumSepolia
+ */
+
 import { ethers } from "hardhat";
 import fs from "fs";
 import path from "path";
 import dotenv from "dotenv";
-import {
-    BKCToken,
-    EcosystemManager,
-    DecentralizedNotary,
-    DelegationManager,
-    RewardBoosterNFT,
-    NFTLiquidityPoolFactory,
-    SimpleBKCFaucet,
-    NFTLiquidityPool,
-    FortunePool,
-    RentalManager
-} from "../typechain-types";
 
 dotenv.config();
 
 // =================================================================
-// ⚙️ V2.1 CONFIGURATION
+// ⚙️ CONFIGURATION - TIERS OFICIAIS DO DEPLOY
 // =================================================================
 
-// V2.1 Tiers (updated)
 const TIERS = [
-    { name: "🚫 Baseline (No NFT)", boost: 0n, poolName: null },
-    { name: "🥉 Bronze", boost: 3000n, poolName: "bronze" },
-    { name: "🥈 Silver", boost: 4000n, poolName: "silver" },
-    { name: "🥇 Gold", boost: 5000n, poolName: "gold" },
-    { name: "💎 Diamond", boost: 7000n, poolName: "diamond" },
-    { name: "🖤 Obsidian", boost: 8500n, poolName: "obsidian" },
-    { name: "⚛️ Quantum", boost: 10000n, poolName: "quantum" },
+    { name: "🚫 Baseline (No NFT)", boost: 0n, discountBips: 0n, poolName: null },
+    { name: "🔮 Crystal",  boost: 1000n, discountBips: 1000n, poolName: "crystal" },
+    { name: "⚙️ Iron",     boost: 2000n, discountBips: 2000n, poolName: "iron" },
+    { name: "🥉 Bronze",   boost: 3000n, discountBips: 3000n, poolName: "bronze" },
+    { name: "🥈 Silver",   boost: 4000n, discountBips: 4000n, poolName: "silver" },
+    { name: "🥇 Gold",     boost: 5000n, discountBips: 5000n, poolName: "gold" },
+    { name: "💠 Platinum", boost: 6000n, discountBips: 6000n, poolName: "platinum" },
+    { name: "💎 Diamond",  boost: 7000n, discountBips: 7000n, poolName: "diamond" },
 ];
 
-// V2.1 Fee Keys (from EcosystemManager)
-// Note: Some fees are in BIPS (basis points), others are FLAT (wei)
-const FEE_KEYS_BIPS = {
+// Fee keys
+const FEE_KEYS = {
     DELEGATION_FEE_BIPS: ethers.id("DELEGATION_FEE_BIPS"),
-    EARLY_UNSTAKE_PENALTY_BIPS: ethers.id("EARLY_UNSTAKE_PENALTY_BIPS"),
+    NOTARY_SERVICE: ethers.id("NOTARY_SERVICE"),
     NFT_POOL_BUY_TAX_BIPS: ethers.id("NFT_POOL_BUY_TAX_BIPS"),
     NFT_POOL_SELL_TAX_BIPS: ethers.id("NFT_POOL_SELL_TAX_BIPS"),
-    FORTUNE_POOL_FEE_BIPS: ethers.id("FORTUNE_POOL_FEE_BIPS"),
-    RENTAL_FEE_BIPS: ethers.id("RENTAL_FEE_BIPS"),
-    REWARD_CLAIM_FEE_BIPS: ethers.id("REWARD_CLAIM_FEE_BIPS"),
+    RENTAL_FEE_BIPS: ethers.id("RENTAL_MARKET_TAX_BIPS"),
 };
 
-const FEE_KEYS_FLAT = {
-    // NOTARY_SERVICE is a FLAT fee in WEI, not BIPS!
-    NOTARY_SERVICE: ethers.id("NOTARY_SERVICE"),
-};
-
-// Test amounts
+// Test amounts (múltiplos de 10 para fácil visualização)
 const TEST_CONFIG = {
-    STAKE_AMOUNT: ethers.parseEther("50"),
+    STAKE_AMOUNT: ethers.parseEther("100"),      // 100 BKC
     STAKE_LOCK_DAYS: 30,
-    FORTUNE_WAGER: ethers.parseEther("10"),
-    RENTAL_PRICE_PER_HOUR: ethers.parseEther("5"),
-    NOTARY_CONTENT: "ipfs://QmTest",
+    FORTUNE_WAGER: ethers.parseEther("10"),      // 10 BKC
+    RENTAL_PRICE: ethers.parseEther("10"),       // 10 BKC/hora
+    MIN_BKC_BALANCE: ethers.parseEther("1000"),  // Mínimo para testes
 };
 
 // Report types
 type AuditEntry = {
     tier: string;
     action: string;
-    status: "✅ PASS" | "❌ FAIL" | "⚠️ SKIP" | "⏳ WAIT" | "ℹ️ INFO";
+    status: "✅ PASS" | "❌ FAIL" | "⚠️ SKIP" | "ℹ️ INFO";
     expected?: string;
     actual?: string;
+    txHash?: string;
     details?: string;
 };
 
@@ -74,205 +68,272 @@ const REPORT: AuditEntry[] = [];
 // 🛠️ HELPERS
 // =================================================================
 
-const toEther = (val: bigint) => parseFloat(ethers.formatEther(val)).toFixed(4);
-const toBips = (val: bigint) => `${Number(val) / 100}%`;
-const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+const toEther = (val: bigint): string => parseFloat(ethers.formatEther(val)).toFixed(4);
+const toBips = (val: bigint): string => `${Number(val) / 100}%`;
+const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
+const shortHash = (hash: string): string => `${hash.slice(0, 10)}...${hash.slice(-8)}`;
 
-function logSection(title: string) {
-    console.log(`\n${"═".repeat(65)}`);
-    console.log(`   ${title}`);
-    console.log(`${"═".repeat(65)}`);
+function formatTimeRemaining(seconds: number): string {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    if (mins > 0) {
+        return `${mins}m ${secs}s`;
+    }
+    return `${secs}s`;
 }
 
-function logSubsection(title: string) {
+function logSection(title: string): void {
+    console.log(`\n${"═".repeat(70)}`);
+    console.log(`   ${title}`);
+    console.log(`${"═".repeat(70)}`);
+}
+
+function logSubsection(title: string): void {
     console.log(`\n   ─── ${title} ───`);
 }
 
-// V2.1 Discount calculation: discount = baseFee * boostBips / 10000
-function calculateDiscountedFee(baseFee: bigint, boostBips: bigint): bigint {
-    if (boostBips === 0n) return baseFee;
-    const discount = (baseFee * boostBips) / 10000n;
-    return baseFee - discount;
+function logTx(description: string, hash: string): void {
+    console.log(`      📤 ${description}`);
+    console.log(`         TX: ${shortHash(hash)}`);
+    console.log(`         🔗 https://sepolia.arbiscan.io/tx/${hash}`);
 }
 
-// Tolerance check for dust (up to 1000 wei for rounding)
-function isClose(actual: bigint, expected: bigint, tolerance = 1000n): boolean {
-    const diff = actual > expected ? actual - expected : expected - actual;
-    return diff <= tolerance;
-}
-
-function reportResult(
-    tier: string,
-    action: string,
-    passed: boolean,
-    expected?: string,
-    actual?: string,
-    details?: string
-) {
-    REPORT.push({
-        tier,
-        action,
-        status: passed ? "✅ PASS" : "❌ FAIL",
-        expected,
-        actual,
-        details
-    });
-    
-    const icon = passed ? "✅" : "❌";
-    console.log(`      ${icon} ${action}: ${actual || ""} ${details ? `(${details})` : ""}`);
+/**
+ * Calcula a taxa esperada COM desconto de NFT
+ * Formula: expectedFee = baseFee × (10000 - discountBips) / 10000
+ */
+function calculateExpectedFee(baseFee: bigint, discountBips: bigint): bigint {
+    if (discountBips === 0n) return baseFee;
+    return (baseFee * (10000n - discountBips)) / 10000n;
 }
 
 // =================================================================
-// 🧪 MAIN TEST SCRIPT
+// 📋 MAIN SCRIPT
 // =================================================================
 
-async function main() {
+async function main(): Promise<void> {
     const [tester] = await ethers.getSigners();
     if (!tester) throw new Error("No signer configured. Check your .env file.");
 
-    console.log(`\n🔬 BACKCOIN V2.1 ECOSYSTEM AUDIT`);
+    const ethBalance = await tester.provider!.getBalance(tester.address);
+
+    console.log(`\n${"═".repeat(70)}`);
+    console.log(`   🔬 BACKCOIN V2.1 ECOSYSTEM VERIFICATION`);
+    console.log(`${"═".repeat(70)}`);
     console.log(`   📅 Date: ${new Date().toISOString()}`);
     console.log(`   🧑‍🚀 Tester: ${tester.address}`);
-    console.log(`   💰 ETH Balance: ${toEther(await tester.provider!.getBalance(tester.address))} ETH`);
+    console.log(`   💰 ETH Balance: ${toEther(BigInt(ethBalance.toString()))} ETH`);
 
-    // =================================================================
-    // 1. LOAD DEPLOYMENT ADDRESSES
-    // =================================================================
+    // Load addresses
     const addressesPath = path.join(__dirname, "../deployment-addresses.json");
     if (!fs.existsSync(addressesPath)) {
         throw new Error("deployment-addresses.json not found. Run deployment first.");
     }
     const addresses = JSON.parse(fs.readFileSync(addressesPath, "utf8"));
+    console.log(`   📋 Loaded ${Object.keys(addresses).length} contract addresses\n`);
 
-    console.log(`\n   📋 Loaded ${Object.keys(addresses).length} contract addresses`);
+    // Connect to contracts
+    const bkc = await ethers.getContractAt("BKCToken", addresses.bkcToken, tester);
+    const hub = await ethers.getContractAt("EcosystemManager", addresses.ecosystemManager, tester);
+    const notary = await ethers.getContractAt("DecentralizedNotary", addresses.decentralizedNotary, tester);
+    const delegation = await ethers.getContractAt("DelegationManager", addresses.delegationManager, tester);
+    const nft = await ethers.getContractAt("RewardBoosterNFT", addresses.rewardBoosterNFT, tester);
+    const factory = await ethers.getContractAt("NFTLiquidityPoolFactory", addresses.nftLiquidityPoolFactory, tester);
+    const faucet = await ethers.getContractAt("SimpleBKCFaucet", addresses.faucet, tester) as any;
+    const fortune = await ethers.getContractAt("FortunePool", addresses.fortunePool, tester) as any;
+    const rental = await ethers.getContractAt("RentalManager", addresses.rentalManager, tester) as any;
 
-    // =================================================================
-    // 2. CONNECT TO CONTRACTS
-    // =================================================================
-    const bkc = await ethers.getContractAt("BKCToken", addresses.bkcToken, tester) as unknown as BKCToken;
-    const hub = await ethers.getContractAt("EcosystemManager", addresses.ecosystemManager, tester) as unknown as EcosystemManager;
-    const notary = await ethers.getContractAt("DecentralizedNotary", addresses.decentralizedNotary, tester) as unknown as DecentralizedNotary;
-    const delegation = await ethers.getContractAt("DelegationManager", addresses.delegationManager, tester) as unknown as DelegationManager;
-    const nft = await ethers.getContractAt("RewardBoosterNFT", addresses.rewardBoosterNFT, tester) as unknown as RewardBoosterNFT;
-    const factory = await ethers.getContractAt("NFTLiquidityPoolFactory", addresses.nftLiquidityPoolFactory, tester) as unknown as NFTLiquidityPoolFactory;
-    const faucet = await ethers.getContractAt("SimpleBKCFaucet", addresses.faucet, tester) as unknown as SimpleBKCFaucet;
-    const fortune = await ethers.getContractAt("FortunePool", addresses.fortunePool, tester) as unknown as FortunePool;
-    const rental = await ethers.getContractAt("RentalManager", addresses.rentalManager, tester) as unknown as RentalManager;
-
-    // Check BKC balance
-    const bkcBalance = await bkc.balanceOf(tester.address);
+    // Initial BKC balance
+    let bkcBalance = BigInt((await bkc.balanceOf(tester.address)).toString());
     console.log(`   💎 BKC Balance: ${toEther(bkcBalance)} BKC`);
 
     // =================================================================
-    // 3. PRE-FLIGHT: READ BASE FEES
+    // 1. FAUCET TEST
     // =================================================================
-    logSection("📊 BASE FEES (Before Discounts)");
+    logSection("🚰 FAUCET TEST");
 
-    const baseFeesBips: Record<string, bigint> = {};
-    const baseFeesFlat: Record<string, bigint> = {};
-    
-    console.log("\n   BIPS-based fees (percentage):");
-    for (const [name, key] of Object.entries(FEE_KEYS_BIPS)) {
-        try {
-            baseFeesBips[name] = await hub.getFee(key);
-            console.log(`   ${name}: ${toBips(baseFeesBips[name])}`);
-        } catch {
-            console.log(`   ${name}: ⚠️ Not found`);
-            baseFeesBips[name] = 0n;
-        }
-    }
-
-    console.log("\n   FLAT fees (fixed amount in BKC):");
-    for (const [name, key] of Object.entries(FEE_KEYS_FLAT)) {
-        try {
-            baseFeesFlat[name] = await hub.getFee(key);
-            console.log(`   ${name}: ${toEther(baseFeesFlat[name])} BKC`);
-        } catch {
-            console.log(`   ${name}: ⚠️ Not found`);
-            baseFeesFlat[name] = 0n;
-        }
-    }
-
-    // =================================================================
-    // 4. FAUCET CHECK (Get initial BKC if needed)
-    // =================================================================
-    logSection("🚰 FAUCET CHECK");
-    
     try {
-        const faucetAny = faucet as any;
+        // Get faucet status
+        const faucetStatus = await faucet.getFaucetStatus();
+        const userInfo = await faucet.getUserInfo(tester.address);
         
-        // Try to claim from faucet
-        if (bkcBalance < ethers.parseEther("500")) {
-            console.log(`   Attempting to claim from faucet...`);
-            const tx = await faucetAny.distributeTo(tester.address);
-            await tx.wait();
-            const newBalance = await bkc.balanceOf(tester.address);
-            console.log(`   ✅ Claimed! New balance: ${toEther(newBalance)} BKC`);
-            REPORT.push({ tier: "Setup", action: "Faucet Claim", status: "✅ PASS" });
+        console.log(`\n   📊 Faucet Status:`);
+        console.log(`      ETH Balance: ${toEther(BigInt(faucetStatus.ethBalance.toString()))} ETH`);
+        console.log(`      BKC Balance: ${toEther(BigInt(faucetStatus.tokenBalance.toString()))} BKC`);
+        console.log(`      Per Claim: ${toEther(BigInt(faucetStatus.tokensPerClaim.toString()))} BKC + ${toEther(BigInt(faucetStatus.ethPerClaim.toString()))} ETH`);
+        
+        console.log(`\n   👤 User Status:`);
+        const lastClaimTime = BigInt(userInfo.lastClaim.toString());
+        console.log(`      Last Claim: ${lastClaimTime > 0n ? new Date(Number(lastClaimTime) * 1000).toISOString() : 'Never'}`);
+        console.log(`      Total Claims: ${userInfo.claimCount.toString()}`);
+        console.log(`      Can Claim Now: ${userInfo.canClaimNow ? '✅ Yes' : '❌ No'}`);
+
+        if (!userInfo.canClaimNow) {
+            const cooldownLeft = Number(userInfo.cooldownLeft.toString());
+            console.log(`      ⏳ Cooldown Remaining: ${formatTimeRemaining(cooldownLeft)}`);
+            
+            REPORT.push({
+                tier: "Setup",
+                action: "Faucet",
+                status: "⚠️ SKIP",
+                details: `Cooldown: ${formatTimeRemaining(cooldownLeft)} remaining`
+            });
+        } else if (bkcBalance >= TEST_CONFIG.MIN_BKC_BALANCE) {
+            console.log(`\n   ✅ Sufficient balance (${toEther(bkcBalance)} BKC), skipping faucet claim`);
+            REPORT.push({
+                tier: "Setup",
+                action: "Faucet",
+                status: "⚠️ SKIP",
+                details: "Sufficient balance"
+            });
         } else {
-            console.log(`   ✅ Sufficient balance, skipping faucet`);
-            REPORT.push({ tier: "Setup", action: "Faucet", status: "⚠️ SKIP", details: "Sufficient balance" });
+            // Try to claim
+            console.log(`\n   🔄 Attempting faucet claim...`);
+            
+            const balBefore = BigInt((await bkc.balanceOf(tester.address)).toString());
+            const ethBefore = BigInt((await tester.provider!.getBalance(tester.address)).toString());
+            
+            const tx = await faucet.distributeTo(tester.address);
+            const receipt = await tx.wait();
+            
+            const balAfter = BigInt((await bkc.balanceOf(tester.address)).toString());
+            const ethAfter = BigInt((await tester.provider!.getBalance(tester.address)).toString());
+            
+            const bkcReceived = balAfter - balBefore;
+            const gasUsed = BigInt(receipt?.gasUsed?.toString() || "0");
+            const gasPrice = BigInt(receipt?.gasPrice?.toString() || "0");
+            const gasCost = gasUsed * gasPrice;
+            const ethReceived = ethAfter - ethBefore + gasCost;
+            
+            logTx("Faucet Claim", tx.hash);
+            console.log(`\n   📦 Received:`);
+            console.log(`      BKC: +${toEther(bkcReceived)} BKC`);
+            console.log(`      ETH: +${toEther(ethReceived)} ETH`);
+            console.log(`      Gas Used: ${gasUsed.toString()} (cost: ${toEther(gasCost)} ETH)`);
+            
+            bkcBalance = balAfter;
+            
+            REPORT.push({
+                tier: "Setup",
+                action: "Faucet Claim",
+                status: "✅ PASS",
+                actual: `+${toEther(bkcReceived)} BKC`,
+                txHash: tx.hash
+            });
         }
     } catch (e: any) {
-        if (e.message.includes("cooldown") || e.message.includes("Wait") || e.message.includes("Too soon")) {
-            console.log(`   ⏳ Faucet on cooldown`);
-            REPORT.push({ tier: "Setup", action: "Faucet", status: "⏳ WAIT" });
+        const errMsg = e.message || '';
+        if (errMsg.includes("CooldownActive")) {
+            // Extract remaining time from error
+            const match = errMsg.match(/CooldownActive\((\d+)\)/);
+            const remaining = match ? Number(match[1]) : 0;
+            console.log(`\n   ⏳ Faucet on cooldown: ${formatTimeRemaining(remaining)} remaining`);
+            REPORT.push({
+                tier: "Setup",
+                action: "Faucet",
+                status: "⚠️ SKIP",
+                details: `Cooldown: ${formatTimeRemaining(remaining)}`
+            });
         } else {
-            console.log(`   ❌ Faucet error: ${e.message.slice(0, 60)}`);
-            REPORT.push({ tier: "Setup", action: "Faucet", status: "❌ FAIL", details: e.message.slice(0, 40) });
+            console.log(`\n   ❌ Faucet error: ${errMsg.slice(0, 80)}`);
+            REPORT.push({
+                tier: "Setup",
+                action: "Faucet",
+                status: "❌ FAIL",
+                details: errMsg.slice(0, 50)
+            });
         }
     }
 
     // =================================================================
-    // 5. RUN TEST CYCLE FOR EACH TIER
+    // 2. READ BASE FEES
+    // =================================================================
+    logSection("📊 BASE FEES CONFIGURATION");
+
+    const baseFees: Record<string, bigint> = {};
+    
+    // Delegation fee (BIPS)
+    baseFees.DELEGATION_FEE_BIPS = BigInt((await hub.getFee(FEE_KEYS.DELEGATION_FEE_BIPS)).toString());
+    console.log(`\n   DELEGATION_FEE_BIPS: ${baseFees.DELEGATION_FEE_BIPS} (${toBips(baseFees.DELEGATION_FEE_BIPS)})`);
+    
+    // Notary fee (FLAT in WEI)
+    baseFees.NOTARY_SERVICE = BigInt((await hub.getFee(FEE_KEYS.NOTARY_SERVICE)).toString());
+    console.log(`   NOTARY_SERVICE: ${toEther(baseFees.NOTARY_SERVICE)} BKC (flat)`);
+    
+    // NFT Pool fees
+    baseFees.NFT_POOL_BUY_TAX_BIPS = BigInt((await hub.getFee(FEE_KEYS.NFT_POOL_BUY_TAX_BIPS)).toString());
+    baseFees.NFT_POOL_SELL_TAX_BIPS = BigInt((await hub.getFee(FEE_KEYS.NFT_POOL_SELL_TAX_BIPS)).toString());
+    console.log(`   NFT_POOL_BUY_TAX: ${toBips(baseFees.NFT_POOL_BUY_TAX_BIPS)}`);
+    console.log(`   NFT_POOL_SELL_TAX: ${toBips(baseFees.NFT_POOL_SELL_TAX_BIPS)}`);
+
+    // Rental fee
+    baseFees.RENTAL_FEE_BIPS = BigInt((await hub.getFee(FEE_KEYS.RENTAL_FEE_BIPS)).toString());
+    console.log(`   RENTAL_FEE: ${toBips(baseFees.RENTAL_FEE_BIPS)}`);
+
+    // Show configured discounts
+    console.log(`\n   📉 Configured NFT Discounts:`);
+    for (const tier of TIERS.filter(t => t.boost > 0n)) {
+        const discount = BigInt((await hub.getBoosterDiscount(tier.boost)).toString());
+        console.log(`      ${tier.name}: ${toBips(discount)} discount`);
+    }
+
+    // =================================================================
+    // 3. RUN TIER TESTS
     // =================================================================
     for (const tier of TIERS) {
-        await runTierTestCycle(tier, {
+        await runTierTest(tier, {
             tester,
             addresses,
-            bkc,
-            hub,
-            notary,
-            delegation,
-            nft,
-            factory,
+            bkc: bkc as any,
+            hub: hub as any,
+            notary: notary as any,
+            delegation: delegation as any,
+            nft: nft as any,
+            factory: factory as any,
             fortune,
             rental,
-            baseFeesBips,
-            baseFeesFlat
+            baseFees
         });
         
-        // Small delay between tiers
-        await sleep(1000);
+        await sleep(2000);
     }
 
     // =================================================================
-    // 6. FINAL REPORT
+    // 4. FINAL REPORT
     // =================================================================
     logSection("📊 FINAL AUDIT REPORT");
-    
-    console.table(REPORT.map(r => ({
-        Tier: r.tier.substring(0, 15),
-        Action: r.action,
-        Status: r.status,
-        Expected: r.expected || "-",
-        Actual: r.actual || "-",
-        Details: r.details || "-"
-    })));
 
+    // Group by tier
+    const tierNames = [...new Set(REPORT.map(r => r.tier))];
+    
+    for (const tierName of tierNames) {
+        console.log(`\n   ${tierName}:`);
+        const tierResults = REPORT.filter(r => r.tier === tierName);
+        for (const r of tierResults) {
+            let line = `      ${r.status} ${r.action}`;
+            if (r.actual) line += `: ${r.actual}`;
+            if (r.details) line += ` (${r.details})`;
+            if (r.txHash) line += ` [${shortHash(r.txHash)}]`;
+            console.log(line);
+        }
+    }
+
+    // Summary
     const passed = REPORT.filter(r => r.status === "✅ PASS").length;
     const failed = REPORT.filter(r => r.status === "❌ FAIL").length;
-    const skipped = REPORT.filter(r => r.status === "⚠️ SKIP" || r.status === "⏳ WAIT").length;
+    const skipped = REPORT.filter(r => r.status === "⚠️ SKIP").length;
     const info = REPORT.filter(r => r.status === "ℹ️ INFO").length;
 
-    console.log(`\n   📈 Summary: ${passed} passed, ${failed} failed, ${skipped} skipped, ${info} info`);
+    console.log(`\n${"═".repeat(70)}`);
+    console.log(`   📈 Summary: ${passed} passed, ${failed} failed, ${skipped} skipped, ${info} info`);
     
     if (failed > 0) {
-        console.log(`\n   ❌ AUDIT FAILED - ${failed} test(s) did not pass`);
+        console.log(`\n   ❌ VERIFICATION FAILED - ${failed} test(s) did not pass`);
         process.exit(1);
     } else {
-        console.log(`\n   ✅ AUDIT PASSED - All critical tests successful`);
+        console.log(`\n   ✅ VERIFICATION PASSED - All critical tests successful`);
     }
+    console.log(`${"═".repeat(70)}\n`);
 }
 
 // =================================================================
@@ -282,201 +343,157 @@ async function main() {
 interface TestContext {
     tester: any;
     addresses: any;
-    bkc: BKCToken;
-    hub: EcosystemManager;
-    notary: DecentralizedNotary;
-    delegation: DelegationManager;
-    nft: RewardBoosterNFT;
-    factory: NFTLiquidityPoolFactory;
-    fortune: FortunePool;
-    rental: RentalManager;
-    baseFeesBips: Record<string, bigint>;
-    baseFeesFlat: Record<string, bigint>;
+    bkc: any;
+    hub: any;
+    notary: any;
+    delegation: any;
+    nft: any;
+    factory: any;
+    fortune: any;
+    rental: any;
+    baseFees: Record<string, bigint>;
 }
 
-async function runTierTestCycle(
-    tier: { name: string; boost: bigint; poolName: string | null },
+async function runTierTest(
+    tier: { name: string; boost: bigint; discountBips: bigint; poolName: string | null },
     ctx: TestContext
-) {
-    logSection(`🚀 TIER: ${tier.name} (Boost: ${Number(tier.boost)/100}%)`);
+): Promise<void> {
+    logSection(`🚀 TIER: ${tier.name} (Boost: ${Number(tier.boost)/100}%, Discount: ${Number(tier.discountBips)/100}%)`);
 
     let acquiredTokenId: bigint | null = null;
     let poolAddress: string = ethers.ZeroAddress;
 
-    // -----------------------------------------------------------------
-    // A. ACQUIRE NFT (if tier has boost)
-    // -----------------------------------------------------------------
+    // ─────────────────────────────────────────────────────────────
+    // A. ACQUIRE NFT (if tier requires it)
+    // ─────────────────────────────────────────────────────────────
     if (tier.boost > 0n && tier.poolName) {
         logSubsection("A. NFT ACQUISITION");
-        
+
         try {
-            // Get pool address from factory
             poolAddress = await ctx.factory.getPoolAddress(tier.boost);
             
             if (poolAddress === ethers.ZeroAddress) {
                 console.log(`      ⚠️ Pool not deployed for ${tier.name}`);
                 REPORT.push({ tier: tier.name, action: "Pool Check", status: "⚠️ SKIP", details: "Pool not found" });
-                return; // Skip this tier
+                return;
             }
 
-            const pool = await ethers.getContractAt("NFTLiquidityPool", poolAddress, ctx.tester) as unknown as NFTLiquidityPool;
-            
-            // Get available NFTs
+            const pool = await ethers.getContractAt("NFTLiquidityPool", poolAddress, ctx.tester);
             const availableIds = await pool.getAvailableNFTs();
+
             if (availableIds.length === 0) {
                 console.log(`      ⚠️ No NFTs available in pool`);
                 REPORT.push({ tier: tier.name, action: "NFT Buy", status: "⚠️ SKIP", details: "Pool empty" });
                 return;
             }
 
-            const tokenIdToBuy = availableIds[availableIds.length - 1];
-            const buyPrice = await pool.getBuyPrice();
-            const buyTaxBips = ctx.baseFeesBips["NFT_POOL_BUY_TAX_BIPS"] || 0n;
-            const totalCost = buyPrice + (buyPrice * buyTaxBips) / 10000n;
+            const buyPrice = BigInt((await pool.getBuyPrice()).toString());
+            const buyTax = (buyPrice * ctx.baseFees.NFT_POOL_BUY_TAX_BIPS) / 10000n;
+            const totalCost = buyPrice + buyTax;
 
-            console.log(`      📦 Buying NFT for ${toEther(totalCost)} BKC...`);
+            console.log(`      📦 Pool: ${poolAddress.slice(0, 20)}...`);
+            console.log(`      💰 Price: ${toEther(buyPrice)} + ${toEther(buyTax)} tax = ${toEther(totalCost)} BKC`);
+            console.log(`      📊 Available NFTs: ${availableIds.length}`);
 
             // Approve and buy
             await ctx.bkc.approve(poolAddress, totalCost * 2n);
             
-            // V2.1: buyNFT() - compra próximo disponível automaticamente
             const txBuy = await pool.buyNFT();
             const rcBuy = await txBuy.wait();
 
-            // Get tokenId from event - try multiple event names
+            // Find tokenId from Transfer event (NFT contract)
             let boughtTokenId: bigint | null = null;
-            const eventNames = ["NFTBought", "NFTPurchased", "TokenBought", "Transfer"];
-            
             for (const log of rcBuy?.logs || []) {
                 try {
-                    const parsed = pool.interface.parseLog(log);
-                    if (parsed) {
-                        console.log(`      📝 Event: ${parsed.name}`);
-                        if (eventNames.includes(parsed.name)) {
-                            boughtTokenId = parsed.args.tokenId || parsed.args._tokenId || parsed.args[0];
-                            console.log(`      📝 Found tokenId: ${boughtTokenId}`);
-                            break;
-                        }
-                    }
-                } catch {
                     // Try parsing as NFT Transfer event
-                    try {
-                        const parsed = ctx.nft.interface.parseLog(log);
-                        if (parsed?.name === "Transfer" && parsed.args.to === ctx.tester.address) {
-                            boughtTokenId = parsed.args.tokenId;
-                            console.log(`      📝 Found tokenId from NFT Transfer: ${boughtTokenId}`);
-                            break;
-                        }
-                    } catch {}
-                }
+                    const parsed = ctx.nft.interface.parseLog(log);
+                    if (parsed?.name === "Transfer" && parsed.args.to === ctx.tester.address) {
+                        boughtTokenId = BigInt(parsed.args.tokenId.toString());
+                        break;
+                    }
+                } catch {}
+                
+                // Try parsing as pool event
+                try {
+                    const parsed = pool.interface.parseLog(log);
+                    if (parsed?.name === "NFTPurchased" || parsed?.name === "NFTBought") {
+                        boughtTokenId = BigInt(parsed.args.tokenId.toString());
+                        break;
+                    }
+                } catch {}
             }
 
             if (boughtTokenId !== null) {
-                // Verify ownership
-                const owner = await ctx.nft.ownerOf(boughtTokenId);
-                if (owner.toLowerCase() === ctx.tester.address.toLowerCase()) {
-                    acquiredTokenId = boughtTokenId;
-                    reportResult(tier.name, "NFT Buy", true, undefined, `#${boughtTokenId}`, `${toEther(totalCost)} BKC`);
-                } else {
-                    reportResult(tier.name, "NFT Buy", false, ctx.tester.address, owner);
-                }
+                acquiredTokenId = boughtTokenId;
+                logTx(`NFT #${boughtTokenId} Purchased`, txBuy.hash);
+                
+                REPORT.push({
+                    tier: tier.name,
+                    action: "NFT Buy",
+                    status: "✅ PASS",
+                    actual: `#${boughtTokenId}`,
+                    txHash: txBuy.hash,
+                    details: `${toEther(totalCost)} BKC`
+                });
             } else {
-                // Fallback: check if we own any new NFT
-                console.log(`      ⚠️ No event found, checking NFT balance...`);
-                const nftBalance = await ctx.nft.balanceOf(ctx.tester.address);
-                if (nftBalance > 0n) {
-                    // Try to find the last token
-                    try {
-                        const lastToken = await ctx.nft.tokenOfOwnerByIndex(ctx.tester.address, nftBalance - 1n);
-                        acquiredTokenId = lastToken;
-                        reportResult(tier.name, "NFT Buy", true, undefined, `#${lastToken} (from balance)`, `${toEther(totalCost)} BKC`);
-                    } catch {
-                        reportResult(tier.name, "NFT Buy", false, "Event found", "No NFTBought event");
-                    }
-                } else {
-                    reportResult(tier.name, "NFT Buy", false, "Event found", "No NFTBought event");
-                }
+                console.log(`      ⚠️ Could not find tokenId in events`);
+                REPORT.push({ tier: tier.name, action: "NFT Buy", status: "❌ FAIL", details: "No tokenId found" });
+                return;
             }
 
         } catch (e: any) {
             console.log(`      ❌ NFT Buy Error: ${e.message.slice(0, 60)}`);
             REPORT.push({ tier: tier.name, action: "NFT Buy", status: "❌ FAIL", details: e.message.slice(0, 40) });
-            return; // Can't continue without NFT
+            return;
         }
     }
 
-    const boosterTokenId = acquiredTokenId || 0n;
+    // Use acquired NFT for discounts
+    const nftForDiscount = acquiredTokenId ?? 0n;
 
-    // -----------------------------------------------------------------
-    // B. RENTAL TEST (List/Unlist)
-    // -----------------------------------------------------------------
+    // ─────────────────────────────────────────────────────────────
+    // B. RENTAL SYSTEM TEST
+    // ─────────────────────────────────────────────────────────────
     if (acquiredTokenId !== null) {
         logSubsection("B. RENTAL SYSTEM");
-        
+
         try {
-            const rentalAny = ctx.rental as any;
-            
             // Approve NFT for rental
             await ctx.nft.approve(ctx.addresses.rentalManager, acquiredTokenId);
-            console.log(`      📋 Approved NFT #${acquiredTokenId} for rental`);
             
-            // RentalManager has two functions:
-            // 1. listNFTSimple(tokenId, price) - 2 params, fixed 1 hour
-            // 2. listNFT(tokenId, pricePerHour, minHours, maxHours) - 4 params
+            const txList = await ctx.rental.listNFTSimple(acquiredTokenId, TEST_CONFIG.RENTAL_PRICE);
+            const rcList = await txList.wait();
             
-            let listSuccess = false;
-            const pricePerHour = TEST_CONFIG.RENTAL_PRICE_PER_HOUR;
-            
-            // Try listNFTSimple first (simpler)
-            try {
-                console.log(`      📋 Trying listNFTSimple(${acquiredTokenId}, ${toEther(pricePerHour)})...`);
-                const txList = await rentalAny.listNFTSimple(acquiredTokenId, pricePerHour);
-                await txList.wait();
-                listSuccess = true;
-                console.log(`      ✅ Listed via listNFTSimple`);
-            } catch (e1: any) {
-                console.log(`      ⚠️ listNFTSimple failed: ${e1.message.slice(0, 40)}`);
-                
-                // Try listNFT with 4 params
-                try {
-                    console.log(`      📋 Trying listNFT(${acquiredTokenId}, ${toEther(pricePerHour)}, 1, 24)...`);
-                    const txList = await rentalAny.listNFT(acquiredTokenId, pricePerHour, 1, 24);
-                    await txList.wait();
-                    listSuccess = true;
-                    console.log(`      ✅ Listed via listNFT`);
-                } catch (e2: any) {
-                    console.log(`      ⚠️ listNFT(4 params) failed: ${e2.message.slice(0, 40)}`);
-                }
-            }
+            logTx(`NFT #${acquiredTokenId} Listed`, txList.hash);
 
-            if (listSuccess) {
-                // Verify listing
-                let listing: any;
-                try {
-                    listing = await rentalAny.listings(acquiredTokenId);
-                } catch {
-                    listing = await rentalAny.getListing(acquiredTokenId);
-                }
+            // Verify listing
+            const listing = await ctx.rental.listings(acquiredTokenId);
+            const isActive = listing.isActive || listing[4];
+            
+            console.log(`      📋 Listing Active: ${isActive}`);
+
+            if (isActive) {
+                REPORT.push({
+                    tier: tier.name,
+                    action: "Rental List",
+                    status: "✅ PASS",
+                    txHash: txList.hash
+                });
+
+                // Withdraw for other tests
+                const txWithdraw = await ctx.rental.withdrawNFT(acquiredTokenId);
+                await txWithdraw.wait();
                 
-                const isActive = listing.isActive || listing.active || listing[4]; // isActive is at index 4 in struct
+                logTx(`NFT #${acquiredTokenId} Withdrawn`, txWithdraw.hash);
                 
-                if (isActive) {
-                    reportResult(tier.name, "Rental List", true, "active=true", `active=${isActive}`);
-                    
-                    // Withdraw to use NFT for other tests
-                    console.log(`      📋 Withdrawing NFT #${acquiredTokenId}...`);
-                    const txWithdraw = await rentalAny.withdrawNFT(acquiredTokenId);
-                    await txWithdraw.wait();
-                    
-                    // Verify NFT returned
-                    const ownerAfter = await ctx.nft.ownerOf(acquiredTokenId);
-                    const returned = ownerAfter.toLowerCase() === ctx.tester.address.toLowerCase();
-                    reportResult(tier.name, "Rental Withdraw", returned, ctx.tester.address, ownerAfter);
-                } else {
-                    reportResult(tier.name, "Rental List", false, "active=true", `active=${isActive}`);
-                }
+                REPORT.push({
+                    tier: tier.name,
+                    action: "Rental Withdraw",
+                    status: "✅ PASS",
+                    txHash: txWithdraw.hash
+                });
             } else {
-                REPORT.push({ tier: tier.name, action: "Rental", status: "❌ FAIL", details: "No matching function" });
+                REPORT.push({ tier: tier.name, action: "Rental List", status: "❌ FAIL", details: "Not active" });
             }
 
         } catch (e: any) {
@@ -485,92 +502,86 @@ async function runTierTestCycle(
         }
     }
 
-    // -----------------------------------------------------------------
+    // ─────────────────────────────────────────────────────────────
     // C. DELEGATION TEST (Fee Discount Verification)
-    // -----------------------------------------------------------------
-    logSubsection("C. DELEGATION (Staking)");
-    
+    // ─────────────────────────────────────────────────────────────
+    logSubsection("C. DELEGATION (Staking) - Fee Discount Test");
+
     try {
         const stakeAmount = TEST_CONFIG.STAKE_AMOUNT;
-        const lockTime = 86400 * TEST_CONFIG.STAKE_LOCK_DAYS;
-        const baseFeeBips = ctx.baseFeesBips["DELEGATION_FEE_BIPS"] || 0n;
-
-        // Calculate expected fee WITH NFT discount only
-        const baseFeeAmount = (stakeAmount * baseFeeBips) / 10000n;
-        const expectedFeeWithNFTDiscount = calculateDiscountedFee(baseFeeAmount, tier.boost);
-
-        console.log(`      📊 Stake: ${toEther(stakeAmount)} BKC, Lock: ${TEST_CONFIG.STAKE_LOCK_DAYS}d`);
-        console.log(`      📊 Base Fee Rate: ${toBips(baseFeeBips)}`);
-        console.log(`      📊 Expected Base Fee: ${toEther(baseFeeAmount)} BKC`);
-        console.log(`      📊 With NFT Discount (${Number(tier.boost)/100}%): ${toEther(expectedFeeWithNFTDiscount)} BKC`);
-
-        const balBefore = await ctx.bkc.balanceOf(ctx.tester.address);
+        const lockDuration = BigInt(86400 * TEST_CONFIG.STAKE_LOCK_DAYS);
         
-        // Approve delegation
+        // Calculate expected fees
+        const baseFeeBips = ctx.baseFees.DELEGATION_FEE_BIPS;
+        const baseFeeAmount = (stakeAmount * baseFeeBips) / 10000n;
+        const expectedFeeWithDiscount = calculateExpectedFee(baseFeeAmount, tier.discountBips);
+        const expectedNetStake = stakeAmount - expectedFeeWithDiscount;
+
+        console.log(`\n      📊 DELEGATION FEE ANALYSIS:`);
+        console.log(`      ┌────────────────────────────────────────────────┐`);
+        console.log(`      │ Stake Amount:        ${toEther(stakeAmount).padStart(15)} BKC │`);
+        console.log(`      │ Base Fee Rate:       ${toBips(baseFeeBips).padStart(15)}     │`);
+        console.log(`      │ Base Fee Amount:     ${toEther(baseFeeAmount).padStart(15)} BKC │`);
+        console.log(`      │ NFT Discount:        ${toBips(tier.discountBips).padStart(15)}     │`);
+        console.log(`      │ Expected Fee:        ${toEther(expectedFeeWithDiscount).padStart(15)} BKC │`);
+        console.log(`      │ Expected Net Stake:  ${toEther(expectedNetStake).padStart(15)} BKC │`);
+        console.log(`      └────────────────────────────────────────────────┘`);
+
+        // Approve and delegate
         await ctx.bkc.approve(ctx.addresses.delegationManager, stakeAmount * 2n);
         
-        // V2.1: delegate(amount, lockTime, boosterTokenId)
-        const txDel = await ctx.delegation.delegate(stakeAmount, lockTime, boosterTokenId);
+        const txDel = await ctx.delegation.delegate(stakeAmount, lockDuration, nftForDiscount);
         const rcDel = await txDel.wait();
 
-        // Detect auto-claimed rewards and delegation fee from events
-        let autoClaimedAmount = 0n;
-        let feeFromEvent = 0n;
+        logTx("Delegation Created", txDel.hash);
+
+        // Parse Delegated event to get actual fee
+        let actualFee = 0n;
+        let actualNetStake = 0n;
         
-        if (rcDel) {
-            for (const log of rcDel.logs) {
-                try {
-                    const parsed = ctx.delegation.interface.parseLog(log);
-                    if (parsed?.name === "RewardClaimed" && parsed.args.user === ctx.tester.address) {
-                        autoClaimedAmount += parsed.args.amount;
-                        console.log(`      💰 Auto-Claimed Rewards: ${toEther(parsed.args.amount)} BKC`);
-                    }
-                    if (parsed?.name === "Delegated") {
-                        if (parsed.args.fee !== undefined) {
-                            feeFromEvent = parsed.args.fee;
-                            console.log(`      💰 Fee from Event: ${toEther(feeFromEvent)} BKC`);
-                        }
-                    }
-                } catch {}
-            }
+        for (const log of rcDel?.logs || []) {
+            try {
+                const parsed = ctx.delegation.interface.parseLog(log);
+                if (parsed?.name === "Delegated") {
+                    actualNetStake = BigInt(parsed.args.amount?.toString() || parsed.args.netAmount?.toString() || parsed.args[2]?.toString() || "0");
+                    actualFee = BigInt(parsed.args.fee?.toString() || parsed.args.feeAmount?.toString() || parsed.args[4]?.toString() || "0");
+                    break;
+                }
+            } catch {}
         }
 
-        const balAfter = await ctx.bkc.balanceOf(ctx.tester.address);
-        
-        // Calculate what actually happened
-        const totalSpent = balBefore - balAfter;
-        const actualFee = totalSpent + autoClaimedAmount - stakeAmount;
+        // If fee not in event, calculate from net stake
+        if (actualFee === 0n && actualNetStake > 0n) {
+            actualFee = stakeAmount - actualNetStake;
+        }
 
-        console.log(`      📊 Balance Change: ${toEther(balBefore)} → ${toEther(balAfter)} BKC`);
-        console.log(`      📊 Total Spent (from wallet): ${toEther(totalSpent)} BKC`);
-        console.log(`      📊 Calculated Fee: ${toEther(actualFee)} BKC`);
+        console.log(`\n      📊 ACTUAL RESULTS (from event):`);
+        console.log(`      ┌────────────────────────────────────────────────┐`);
+        console.log(`      │ Actual Fee Paid:     ${toEther(actualFee).padStart(15)} BKC │`);
+        console.log(`      │ Actual Net Stake:    ${toEther(actualNetStake).padStart(15)} BKC │`);
+        console.log(`      └────────────────────────────────────────────────┘`);
 
-        // Calculate effective discount rate
-        const effectiveDiscount = baseFeeAmount > 0n 
-            ? ((baseFeeAmount - actualFee) * 10000n) / baseFeeAmount 
+        // Verify discount was applied correctly
+        const feeMatch = actualFee === expectedFeeWithDiscount;
+        const discountApplied = baseFeeAmount > 0n 
+            ? ((baseFeeAmount - actualFee) * 10000n / baseFeeAmount)
             : 0n;
-        console.log(`      📊 Effective Discount: ${Number(effectiveDiscount)/100}%`);
 
-        // Verify delegation was created (main success criteria)
-        const delegations = await ctx.delegation.getDelegationsOf(ctx.tester.address);
-        const delegationCreated = delegations.length > 0;
-        
-        reportResult(
-            tier.name,
-            "Delegation Created",
-            delegationCreated,
-            "delegations > 0",
-            `${delegations.length} delegations`
-        );
+        console.log(`\n      📊 DISCOUNT VERIFICATION:`);
+        console.log(`      ┌────────────────────────────────────────────────┐`);
+        console.log(`      │ Expected Discount:   ${toBips(tier.discountBips).padStart(15)}     │`);
+        console.log(`      │ Actual Discount:     ${toBips(discountApplied).padStart(15)}     │`);
+        console.log(`      │ Match:               ${(feeMatch ? '✅ YES' : '❌ NO').padStart(15)}     │`);
+        console.log(`      └────────────────────────────────────────────────┘`);
 
-        // Report fee info (for analysis, not pass/fail)
         REPORT.push({
             tier: tier.name,
-            action: "Delegation Fee Info",
-            status: "ℹ️ INFO",
-            expected: `${toEther(expectedFeeWithNFTDiscount)} BKC`,
+            action: "Delegation Fee",
+            status: feeMatch ? "✅ PASS" : "❌ FAIL",
+            expected: `${toEther(expectedFeeWithDiscount)} BKC`,
             actual: `${toEther(actualFee)} BKC`,
-            details: `Effective: ${Number(effectiveDiscount)/100}% off`
+            txHash: txDel.hash,
+            details: `Discount: ${toBips(discountApplied)}`
         });
 
     } catch (e: any) {
@@ -578,68 +589,83 @@ async function runTierTestCycle(
         REPORT.push({ tier: tier.name, action: "Delegation", status: "❌ FAIL", details: e.message.slice(0, 40) });
     }
 
-    // -----------------------------------------------------------------
+    // ─────────────────────────────────────────────────────────────
     // D. NOTARY TEST (Fee Discount Verification)
-    // -----------------------------------------------------------------
-    logSubsection("D. NOTARY SERVICE");
-    
+    // ─────────────────────────────────────────────────────────────
+    logSubsection("D. NOTARY SERVICE - Fee Discount Test");
+
     try {
-        // NOTARY_SERVICE is a FLAT fee in WEI, not BIPS
-        const baseFee = ctx.baseFeesFlat["NOTARY_SERVICE"] || 0n;
+        const baseFee = ctx.baseFees.NOTARY_SERVICE;
         
         if (baseFee === 0n) {
             console.log(`      ⚠️ Notary fee not configured`);
             REPORT.push({ tier: tier.name, action: "Notary", status: "⚠️ SKIP", details: "Fee = 0" });
         } else {
-            // Calculate expected fee WITH NFT discount only
-            const expectedFeeWithNFTDiscount = calculateDiscountedFee(baseFee, tier.boost);
+            const expectedFeeWithDiscount = calculateExpectedFee(baseFee, tier.discountBips);
 
-            console.log(`      📊 Base Fee (from Hub): ${toEther(baseFee)} BKC (flat)`);
-            console.log(`      📊 With NFT Discount (${Number(tier.boost)/100}%): ${toEther(expectedFeeWithNFTDiscount)} BKC`);
+            console.log(`\n      📊 NOTARY FEE ANALYSIS:`);
+            console.log(`      ┌────────────────────────────────────────────────┐`);
+            console.log(`      │ Base Fee (flat):     ${toEther(baseFee).padStart(15)} BKC │`);
+            console.log(`      │ NFT Discount:        ${toBips(tier.discountBips).padStart(15)}     │`);
+            console.log(`      │ Expected Fee:        ${toEther(expectedFeeWithDiscount).padStart(15)} BKC │`);
+            console.log(`      └────────────────────────────────────────────────┘`);
 
-            const balBefore = await ctx.bkc.balanceOf(ctx.tester.address);
-            
-            // Approve notary
+            // Approve and notarize
             await ctx.bkc.approve(ctx.addresses.decentralizedNotary, baseFee * 2n);
             
-            // V2.1: notarize(contentHash, category, uniqueId, boosterTokenId)
-            const uniqueId = ethers.id(Date.now().toString() + Math.random().toString());
+            const uniqueId = ethers.keccak256(ethers.toUtf8Bytes(Date.now().toString() + Math.random().toString()));
             const txNotary = await ctx.notary.notarize(
-                TEST_CONFIG.NOTARY_CONTENT,
-                "AuditTest",
+                "ipfs://QmTest" + Date.now(),
+                "Audit Test Document",
                 uniqueId,
-                boosterTokenId
+                nftForDiscount
             );
-            await txNotary.wait();
+            const rcNotary = await txNotary.wait();
 
-            const balAfter = await ctx.bkc.balanceOf(ctx.tester.address);
-            const actualFee = balBefore - balAfter;
+            logTx("Document Notarized", txNotary.hash);
 
-            console.log(`      📊 Actual Fee Paid: ${toEther(actualFee)} BKC`);
+            // Parse DocumentNotarized event to get actual fee
+            let actualFee = 0n;
+            let tokenId = 0n;
+            
+            for (const log of rcNotary?.logs || []) {
+                try {
+                    const parsed = ctx.notary.interface.parseLog(log);
+                    if (parsed?.name === "DocumentNotarized") {
+                        tokenId = BigInt(parsed.args.tokenId?.toString() || "0");
+                        actualFee = BigInt(parsed.args.feePaid?.toString() || parsed.args.fee?.toString() || parsed.args[4]?.toString() || "0");
+                        break;
+                    }
+                } catch {}
+            }
 
-            // Calculate effective discount
-            const effectiveDiscount = baseFee > 0n 
-                ? ((baseFee - actualFee) * 10000n) / baseFee 
+            console.log(`\n      📊 ACTUAL RESULTS (from event):`);
+            console.log(`      ┌────────────────────────────────────────────────┐`);
+            console.log(`      │ Document Token ID:   ${tokenId.toString().padStart(15)}     │`);
+            console.log(`      │ Actual Fee Paid:     ${toEther(actualFee).padStart(15)} BKC │`);
+            console.log(`      └────────────────────────────────────────────────┘`);
+
+            // Verify discount
+            const feeMatch = actualFee === expectedFeeWithDiscount;
+            const discountApplied = baseFee > 0n 
+                ? ((baseFee - actualFee) * 10000n / baseFee)
                 : 0n;
-            console.log(`      📊 Effective Discount: ${Number(effectiveDiscount)/100}%`);
 
-            // Notarization succeeded (main success criteria)
-            reportResult(
-                tier.name,
-                "Notary Success",
-                actualFee > 0n && actualFee <= baseFee,
-                "fee paid",
-                `${toEther(actualFee)} BKC`
-            );
+            console.log(`\n      📊 DISCOUNT VERIFICATION:`);
+            console.log(`      ┌────────────────────────────────────────────────┐`);
+            console.log(`      │ Expected Discount:   ${toBips(tier.discountBips).padStart(15)}     │`);
+            console.log(`      │ Actual Discount:     ${toBips(discountApplied).padStart(15)}     │`);
+            console.log(`      │ Match:               ${(feeMatch ? '✅ YES' : '❌ NO').padStart(15)}     │`);
+            console.log(`      └────────────────────────────────────────────────┘`);
 
-            // Report fee info (for analysis)
             REPORT.push({
                 tier: tier.name,
-                action: "Notary Fee Info",
-                status: "ℹ️ INFO",
-                expected: `${toEther(expectedFeeWithNFTDiscount)} BKC`,
+                action: "Notary Fee",
+                status: feeMatch ? "✅ PASS" : "❌ FAIL",
+                expected: `${toEther(expectedFeeWithDiscount)} BKC`,
                 actual: `${toEther(actualFee)} BKC`,
-                details: `Effective: ${Number(effectiveDiscount)/100}% off`
+                txHash: txNotary.hash,
+                details: `Discount: ${toBips(discountApplied)}`
             });
         }
 
@@ -648,88 +674,76 @@ async function runTierTestCycle(
         REPORT.push({ tier: tier.name, action: "Notary", status: "❌ FAIL", details: e.message.slice(0, 40) });
     }
 
-    // -----------------------------------------------------------------
-    // E. FORTUNE POOL TEST
-    // -----------------------------------------------------------------
-    logSubsection("E. FORTUNE POOL");
-    
-    try {
-        const fortuneAny = ctx.fortune as any;
-        
-        // Check if Fortune is active
-        let activeTiers = 0n;
-        try {
-            activeTiers = await fortuneAny.activeTierCount();
-        } catch {
-            try {
-                const config = await fortuneAny.gameConfig();
-                activeTiers = config.activeTiers || 0n;
-            } catch {}
-        }
+    // ─────────────────────────────────────────────────────────────
+    // E. FORTUNE POOL TEST (1x and 5x modes)
+    // ─────────────────────────────────────────────────────────────
+    logSubsection("E. FORTUNE POOL - Game Tests (1x then 5x)");
 
+    try {
+        const activeTiers = BigInt((await ctx.fortune.activeTierCount()).toString());
+        
         if (activeTiers === 0n) {
-            console.log(`      ⚠️ Fortune Pool not active`);
+            console.log(`      ⚠️ Fortune Pool not active (0 tiers)`);
             REPORT.push({ tier: tier.name, action: "Fortune", status: "⚠️ SKIP", details: "No active tiers" });
         } else {
             const wager = TEST_CONFIG.FORTUNE_WAGER;
             
-            // ═══════════════════════════════════════════════════════════════
-            // GAME MODE SELECTION:
-            // - Mode 1x (isCumulative=false): 1 guess for jackpot, 1x fee
-            // - Mode 5x (isCumulative=true): N guesses for all tiers, 5x fee
-            // ═══════════════════════════════════════════════════════════════
-            
-            // Use mode 5x (cumulative) to test all tiers
-            const isCumulative = true;
-            const expectedGuessCount = Number(activeTiers);
-            const guesses = Array(expectedGuessCount).fill(1n);
-            
-            // Get oracle fee - MUST use getRequiredOracleFee with mode!
-            let requiredOracleFee = 0n;
-            try {
-                requiredOracleFee = await fortuneAny.getRequiredOracleFee(isCumulative);
-            } catch {
-                // Fallback: read base fee and multiply
-                const baseFee = await fortuneAny.oracleFee();
-                requiredOracleFee = isCumulative ? baseFee * 5n : baseFee;
-            }
+            // Test both modes: 1x (Jackpot) then 5x (Cumulative)
+            for (const isCumulative of [false, true]) {
+                const modeName = isCumulative ? "5x (Cumulative)" : "1x (Jackpot)";
+                
+                console.log(`\n      🎰 MODE: ${modeName}`);
+                console.log(`      ┌────────────────────────────────────────────────┐`);
 
-            console.log(`      🎰 Mode: ${isCumulative ? '5x (Cumulative)' : '1x (Jackpot)'}`);
-            console.log(`      🎰 Wager: ${toEther(wager)} BKC, Tiers: ${activeTiers}, Guesses: ${expectedGuessCount}`);
-            console.log(`      🎰 Oracle Fee: ${toEther(requiredOracleFee)} ETH`);
-            console.log(`      🎰 Guesses: [${guesses.join(", ")}]`);
+                const guessCount = isCumulative ? Number(activeTiers) : 1;
+                const guesses = Array(guessCount).fill(1n);
+                
+                // Get oracle fee for this mode
+                let oracleFee = 0n;
+                try {
+                    oracleFee = BigInt((await ctx.fortune.getRequiredOracleFee(isCumulative)).toString());
+                } catch {
+                    const baseFee = BigInt((await ctx.fortune.oracleFee()).toString());
+                    oracleFee = isCumulative ? baseFee * 5n : baseFee;
+                }
 
-            // Check balances
-            const bkcBal = await ctx.bkc.balanceOf(ctx.tester.address);
-            const ethBal = await ctx.tester.provider!.getBalance(ctx.tester.address);
-            console.log(`      🎰 BKC Balance: ${toEther(bkcBal)} BKC`);
-            console.log(`      🎰 ETH Balance: ${toEther(ethBal)} ETH`);
-            
-            if (bkcBal < wager) {
-                console.log(`      ⚠️ Insufficient BKC for wager`);
-                REPORT.push({ tier: tier.name, action: "Fortune", status: "⚠️ SKIP", details: "Low BKC" });
-            } else if (ethBal < requiredOracleFee) {
-                console.log(`      ⚠️ Insufficient ETH for oracle fee`);
-                REPORT.push({ tier: tier.name, action: "Fortune", status: "⚠️ SKIP", details: "Low ETH" });
-            } else {
-                // Approve wager
+                console.log(`      │ Wager:               ${toEther(wager).padStart(15)} BKC │`);
+                console.log(`      │ Guesses:             ${guesses.join(',').padStart(15)}     │`);
+                console.log(`      │ Oracle Fee:          ${toEther(oracleFee).padStart(15)} ETH │`);
+                console.log(`      └────────────────────────────────────────────────┘`);
+
+                // Check balances
+                const bkcBal = BigInt((await ctx.bkc.balanceOf(ctx.tester.address)).toString());
+                const ethBal = BigInt((await ctx.tester.provider!.getBalance(ctx.tester.address)).toString());
+
+                if (bkcBal < wager) {
+                    console.log(`      ⚠️ Insufficient BKC (${toEther(bkcBal)} < ${toEther(wager)})`);
+                    REPORT.push({ tier: tier.name, action: `Fortune ${modeName}`, status: "⚠️ SKIP", details: "Low BKC" });
+                    continue;
+                }
+
+                if (ethBal < oracleFee + ethers.parseEther("0.001")) {
+                    console.log(`      ⚠️ Insufficient ETH for oracle fee`);
+                    REPORT.push({ tier: tier.name, action: `Fortune ${modeName}`, status: "⚠️ SKIP", details: "Low ETH" });
+                    continue;
+                }
+
+                // Approve and participate
                 await ctx.bkc.approve(ctx.addresses.fortunePool, wager * 2n);
-                console.log(`      🎰 Approved ${toEther(wager * 2n)} BKC`);
                 
-                // Call participate with EXACT oracle fee
-                console.log(`      🎰 Calling participate(${toEther(wager)}, [${guesses}], ${isCumulative}) with ${toEther(requiredOracleFee)} ETH...`);
-                
-                const txFortune = await fortuneAny.participate(wager, guesses, isCumulative, { value: requiredOracleFee });
+                const txFortune = await ctx.fortune.participate(wager, guesses, isCumulative, { value: oracleFee });
                 const rcFortune = await txFortune.wait();
 
-                // Find game ID from event
+                logTx(`Game Submitted (${modeName})`, txFortune.hash);
+
+                // Find gameId from event (only log GameRequested, skip undefined)
                 let gameId: bigint | null = null;
                 for (const log of rcFortune?.logs || []) {
                     try {
                         const parsed = ctx.fortune.interface.parseLog(log);
-                        console.log(`      📝 Fortune Event: ${parsed?.name}`);
                         if (parsed?.name === "GameRequested" || parsed?.name === "GameStarted") {
-                            gameId = parsed.args.gameId || parsed.args.requestId;
+                            gameId = BigInt(parsed.args.gameId?.toString() || parsed.args.requestId?.toString() || "0");
+                            console.log(`      📝 Event: ${parsed.name} (Game #${gameId})`);
                             break;
                         }
                     } catch {}
@@ -738,76 +752,92 @@ async function runTierTestCycle(
                 if (gameId !== null) {
                     console.log(`      🎲 Game #${gameId} submitted. Waiting for oracle...`);
                     
-                    // Wait for oracle (max 20 seconds)
+                    // Wait for oracle resolution
                     let resolved = false;
+                    let resultStr = "";
+                    
                     for (let i = 0; i < 10; i++) {
                         await sleep(2000);
                         process.stdout.write(".");
                         
                         try {
-                            const status = await fortuneAny.getGameStatus(gameId);
+                            const status = await ctx.fortune.getGameStatus(gameId);
                             if (status[1] === true) { // isResolved
                                 const rolls = status[4];
-                                const wins = rolls.filter((r: bigint, idx: number) => r === guesses[idx]).length;
-                                console.log(`\n      🎲 Result: [${rolls}] - ${wins > 0 ? "WIN!" : "LOSE"}`);
-                                reportResult(tier.name, "Fortune Oracle", true, "resolved", `Game #${gameId}`);
+                                const rollsArr = Array.from(rolls as bigint[]).map(r => BigInt(r.toString()));
+                                const wins = rollsArr.filter((r, idx) => r === guesses[idx]).length;
+                                resultStr = `[${rollsArr.join(',')}] - ${wins > 0 ? 'WIN!' : 'LOSE'}`;
+                                console.log(`\n      🎲 Result: ${resultStr}`);
                                 resolved = true;
                                 break;
                             }
                         } catch {}
                     }
-                    
+
                     if (!resolved) {
                         console.log(`\n      ⏳ Oracle pending (game submitted successfully)`);
-                        REPORT.push({ tier: tier.name, action: "Fortune", status: "✅ PASS", details: `Game #${gameId} pending` });
                     }
+
+                    REPORT.push({
+                        tier: tier.name,
+                        action: `Fortune ${modeName}`,
+                        status: "✅ PASS",
+                        actual: resolved ? resultStr : `Game #${gameId} pending`,
+                        txHash: txFortune.hash
+                    });
                 } else {
-                    reportResult(tier.name, "Fortune Submit", true, undefined, "Game submitted");
+                    REPORT.push({
+                        tier: tier.name,
+                        action: `Fortune ${modeName}`,
+                        status: "✅ PASS",
+                        txHash: txFortune.hash,
+                        details: "Game submitted"
+                    });
                 }
+
+                await sleep(1000);
             }
         }
 
     } catch (e: any) {
-        console.log(`      ❌ Fortune Error: ${e.message}`);
-        // Try to get more details from error
-        if (e.data) {
-            try {
-                const decoded = ctx.fortune.interface.parseError(e.data);
-                console.log(`      ❌ Error details: ${decoded?.name} ${JSON.stringify(decoded?.args)}`);
-            } catch {}
-        }
+        console.log(`      ❌ Fortune Error: ${e.message.slice(0, 60)}`);
         REPORT.push({ tier: tier.name, action: "Fortune", status: "❌ FAIL", details: e.message.slice(0, 40) });
     }
 
-    // -----------------------------------------------------------------
-    // F. CLEANUP (Unstake + Sell NFT)
-    // -----------------------------------------------------------------
+    // ─────────────────────────────────────────────────────────────
+    // F. CLEANUP
+    // ─────────────────────────────────────────────────────────────
     logSubsection("F. CLEANUP");
-    
+
     try {
         // Force unstake all delegations
         const delegations = await ctx.delegation.getDelegationsOf(ctx.tester.address);
         for (let i = delegations.length - 1; i >= 0; i--) {
             try {
-                await ctx.delegation.forceUnstake(i, boosterTokenId);
-                console.log(`      🧹 Unstaked delegation #${i}`);
+                const txUnstake = await ctx.delegation.forceUnstake(BigInt(i), nftForDiscount);
+                await txUnstake.wait();
+                console.log(`      🧹 Unstaked delegation #${i} [${shortHash(txUnstake.hash)}]`);
             } catch {}
         }
 
-        // Sell NFT back to pool
+        // Sell NFT back
         if (acquiredTokenId !== null && poolAddress !== ethers.ZeroAddress) {
             try {
-                const pool = await ethers.getContractAt("NFTLiquidityPool", poolAddress, ctx.tester) as unknown as NFTLiquidityPool;
-                
-                // Approve NFT for pool
+                const pool = await ethers.getContractAt("NFTLiquidityPool", poolAddress, ctx.tester);
                 await ctx.nft.approve(poolAddress, acquiredTokenId);
                 
-                // V2.1: sellNFT(tokenId, minPayout)
                 const txSell = await pool.sellNFT(acquiredTokenId, 0n);
                 await txSell.wait();
                 
-                console.log(`      🧹 Sold NFT #${acquiredTokenId} back to pool`);
-                reportResult(tier.name, "NFT Sell", true, undefined, `#${acquiredTokenId}`);
+                console.log(`      🧹 Sold NFT #${acquiredTokenId} [${shortHash(txSell.hash)}]`);
+                
+                REPORT.push({
+                    tier: tier.name,
+                    action: "NFT Sell",
+                    status: "✅ PASS",
+                    actual: `#${acquiredTokenId}`,
+                    txHash: txSell.hash
+                });
             } catch (e: any) {
                 console.log(`      ⚠️ Could not sell NFT: ${e.message.slice(0, 40)}`);
             }
@@ -820,7 +850,7 @@ async function runTierTestCycle(
         REPORT.push({ tier: tier.name, action: "Cleanup", status: "⚠️ SKIP", details: e.message.slice(0, 30) });
     }
 
-    console.log(`\n   ✅ Tier ${tier.name} cycle complete\n`);
+    console.log(`\n   ✅ Tier ${tier.name} cycle complete`);
 }
 
 // =================================================================

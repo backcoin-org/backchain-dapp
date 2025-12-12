@@ -1,5 +1,5 @@
-// hardhat.config.cts
-// ✅ VERSÃO FINAL: Configurado para .env Seguro e Etherscan V2
+// hardhat.config.ts
+// ✅ VERSÃO CORRIGIDA: Usa API V1 do Arbiscan (ainda suportada)
 
 import { HardhatUserConfig } from "hardhat/config";
 import "@nomicfoundation/hardhat-toolbox";
@@ -11,7 +11,6 @@ import "dotenv/config";
 // 🔐 CONFIGURAÇÃO DE CHAVES (Backend)
 // ========================================
 
-// Lê as chaves da seção "BACKEND & HARDHAT" do seu .env
 const ALCHEMY_API_KEY = process.env.ALCHEMY_API_KEY || "";
 const PRIVATE_KEY = process.env.PRIVATE_KEY || "";
 const ETHERSCAN_API_KEY = process.env.ETHERSCAN_API_KEY || "";
@@ -49,6 +48,10 @@ const config: HardhatUserConfig = {
     hardhat: {
       chainId: 31337,
     },
+    localhost: {
+      url: "http://127.0.0.1:8545",
+      chainId: 31337,
+    },
     // 🟢 TESTNET: Arbitrum Sepolia
     arbitrumSepolia: {
       url: ALCHEMY_API_KEY 
@@ -68,22 +71,21 @@ const config: HardhatUserConfig = {
   },
 
   // ========================================
-  // 🔍 VERIFICAÇÃO (Etherscan V2)
+  // 🔍 VERIFICAÇÃO - USA API V1 DO ARBISCAN
   // ========================================
   etherscan: {
-    // ⚠️ CRUCIAL: O plugin exige um objeto mapeando a rede -> chave
-    apiKey: {
-      arbitrumSepolia: ETHERSCAN_API_KEY,
-      arbitrumOne: ETHERSCAN_API_KEY,
-    },
+    // IMPORTANTE: Usar uma única chave API (não objeto)
+    // O warning sobre V2 pode ser ignorado - V1 ainda funciona
+    apiKey: ETHERSCAN_API_KEY,
     
-    // Configuração customizada para usar os endpoints V2
+    // Configuração customizada para Arbitrum
     customChains: [
       {
         network: "arbitrumSepolia",
         chainId: 421614,
         urls: {
-          apiURL: "https://api.etherscan.io/v2/api?chainid=421614", 
+          // USA API V1 DO ARBISCAN - SEM "?" NA URL
+          apiURL: "https://api-sepolia.arbiscan.io/api",
           browserURL: "https://sepolia.arbiscan.io",
         },
       },
@@ -91,7 +93,7 @@ const config: HardhatUserConfig = {
         network: "arbitrumOne",
         chainId: 42161,
         urls: {
-          apiURL: "https://api.etherscan.io/v2/api?chainid=42161",
+          apiURL: "https://api.arbiscan.io/api",
           browserURL: "https://arbiscan.io",
         },
       },

@@ -1,5 +1,5 @@
 // js/pages/DashboardPage.js
-// ✅ VERSION V8.0: Fixed Metrics - Mining Power, Fees Collected, Full Locked Capital
+// ✅ VERSION V7.1: English UI, Fixed Metrics, Network Activity Feed
 
 const ethers = window.ethers;
 
@@ -170,8 +170,8 @@ function renderDashboardLayout() {
             <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
                 ${renderMetricCard('Total Supply', 'fa-coins', 'dash-metric-supply', 'Total BKC tokens in circulation')}
                 ${renderMetricCard('Net pStake', 'fa-layer-group', 'dash-metric-pstake', 'Total staking power on network', 'purple')}
-                ${renderMetricCard('Fees Collected', 'fa-hand-holding-dollar', 'dash-metric-fees', 'Total fees collected by protocol', 'blue')}
-                ${renderMetricCard('Mining Power', 'fa-bolt', 'dash-metric-scarcity', 'Current mining reward rate', 'orange')}
+                ${renderMetricCard('Treasury', 'fa-vault', 'dash-metric-treasury', 'Protocol treasury balance', 'blue')}
+                ${renderMetricCard('Scarcity Rate', 'fa-fire', 'dash-metric-scarcity', 'Tokens available for mining', 'orange')}
                 ${renderMetricCard('Locked Capital', 'fa-lock', 'dash-metric-locked', 'Supply locked in contracts', 'green')}
             </div>
 
@@ -418,9 +418,8 @@ function renderGasModal() {
     `;
 }
 
-
 // ============================================================================
-// 2. DATA LOGIC - FIXED METRICS V8
+// 2. DATA LOGIC - FIXED METRICS
 // ============================================================================
 
 async function updateGlobalMetrics() {
@@ -433,76 +432,46 @@ async function updateGlobalMetrics() {
             safeContractCall(State.bkcTokenContractPublic, 'MAX_SUPPLY', [], 0n)
         ]);
 
-        // ============================================
-        // FEES COLLECTED: Saldo do MiningManager (onde as taxas vão)
-        // ============================================
-        let feesCollected = 0n;
-        try {
-            if (addresses.miningManager) {
-                feesCollected = await safeContractCall(State.bkcTokenContractPublic, 'balanceOf', [addresses.miningManager], 0n);
-            }
-        } catch (e) { console.warn("Could not fetch fees:", e); }
-
-        // ============================================
-        // LOCKED CAPITAL: Soma de TODOS os contratos
-        // ============================================
-        let totalLocked = 0n;
-        
-        const contractsToCheck = [
-            addresses.delegationManager,      // Staking pool
-            addresses.fortunePool,            // Game prizes
-            addresses.rentalManager,          // Rental escrow
-            addresses.decentralizedNotary,    // Notary fees
-            addresses.rewardPoolManager,      // Reward distribution
-            addresses.publicSale,             // Presale contract
-            // NFT Liquidity Pools
-            addresses.pool_3000,              // Bronze
-            addresses.pool_4000,              // Silver
-            addresses.pool_5000,              // Gold
-            addresses.pool_7000,              // Diamond
-            addresses.pool_8500,              // Obsidian
-            addresses.pool_10000              // Quantum
-        ].filter(addr => addr && addr !== ethers.ZeroAddress);
-
-        try {
-            const balancePromises = contractsToCheck.map(addr => 
-                safeContractCall(State.bkcTokenContractPublic, 'balanceOf', [addr], 0n)
-            );
-            const balances = await Promise.all(balancePromises);
-            totalLocked = balances.reduce((sum, bal) => sum + bal, 0n);
-        } catch (e) { 
-            console.warn("Could not fetch all locked balances:", e);
-            // Fallback: pelo menos delegation + fortune
-            if (addresses.delegationManager) {
-                totalLocked += await safeContractCall(State.bkcTokenContractPublic, 'balanceOf', [addresses.delegationManager], 0n);
-            }
-            if (addresses.fortunePool) {
-                totalLocked += await safeContractCall(State.bkcTokenContractPublic, 'balanceOf', [addresses.fortunePool], 0n);
-            }
+        let treasuryAddr = addresses.treasuryWallet;
+        if (!treasuryAddr || treasuryAddr === ethers.ZeroAddress) {
+            try {
+                if (State.ecosystemManagerContractPublic) {
+                    treasuryAddr = await safeContractCall(State.ecosystemManagerContractPublic, 'getTreasuryAddress', [], ethers.ZeroAddress);
+                }
+            } catch (e) { }
         }
+
+        let treasuryBalance = 0n;
+        if (treasuryAddr && treasuryAddr !== ethers.ZeroAddress) {
+            treasuryBalance = await safeContractCall(State.bkcTokenContractPublic, 'balanceOf', [treasuryAddr], 0n);
+        }
+
+        let fortunePoolBalance = 0n;
+        let delegationBalance = 0n;
+
+        try {
+            if (addresses.fortunePool) {
+                fortunePoolBalance = await safeContractCall(State.bkcTokenContractPublic, 'balanceOf', [addresses.fortunePool], 0n);
+            }
+            if (addresses.delegationManager) {
+                delegationBalance = await safeContractCall(State.bkcTokenContractPublic, 'balanceOf', [addresses.delegationManager], 0n);
+            }
+        } catch (e) { }
 
         // METRICS CALCULATION
         const supplyNum = formatBigNumber(totalSupply);
-        const feesNum = formatBigNumber(feesCollected);
+        const treasuryNum = formatBigNumber(treasuryBalance);
 
-        // ============================================
-        // MINING POWER (Escassez Dinâmica):
-        // 100% quando restam 160M, 0% quando tudo minerado
-        // Formula: remainingToMint / 160_000_000 * 100
-        // ============================================
-        const MINTABLE_BASE = 160000000n * 10n**18n; // 160M tokens que podem ser minerados
+        // Scarcity = % remaining to mint
         const remainingToMint = maxSupply > totalSupply ? maxSupply - totalSupply : 0n;
-        
-        let miningPowerPercent = 0;
-        if (MINTABLE_BASE > 0n) {
-            // Calcular porcentagem: (remaining / 160M) * 100
-            miningPowerPercent = Number((remainingToMint * 10000n) / MINTABLE_BASE) / 100;
+        let scarcityPercent = 0;
+        if (maxSupply > 0n) {
+            scarcityPercent = Number((remainingToMint * 10000n) / maxSupply) / 100;
         }
-        // Limitar entre 0 e 100
-        if (miningPowerPercent > 100) miningPowerPercent = 100;
-        if (miningPowerPercent < 0) miningPowerPercent = 0;
+        if (scarcityPercent > 100) scarcityPercent = 100;
 
-        // Locked % of total supply
+        // Locked = staking + fortune (not treasury)
+        const totalLocked = delegationBalance + fortunePoolBalance;
         let lockedPercent = 0;
         if (totalSupply > 0n) {
             lockedPercent = Number((totalLocked * 10000n) / totalSupply) / 100;
@@ -516,13 +485,12 @@ async function updateGlobalMetrics() {
 
         setMetric('dash-metric-supply', formatCompact(supplyNum), 'BKC');
         setMetric('dash-metric-pstake', formatPStake(totalPStake));
-        setMetric('dash-metric-fees', formatCompact(feesNum), 'BKC');
+        setMetric('dash-metric-treasury', formatCompact(treasuryNum), 'BKC');
 
-        // Mining Power com cor baseada no valor
         const scarcityEl = document.getElementById('dash-metric-scarcity');
         if (scarcityEl) {
-            const color = getScarcityColor(miningPowerPercent);
-            scarcityEl.innerHTML = `<span class="${color}">${miningPowerPercent.toFixed(1)}%</span>`;
+            const color = getScarcityColor(scarcityPercent);
+            scarcityEl.innerHTML = `<span class="${color}">${scarcityPercent.toFixed(1)}%</span>`;
         }
 
         const lockedEl = document.getElementById('dash-metric-locked');
@@ -531,13 +499,7 @@ async function updateGlobalMetrics() {
             lockedEl.innerHTML = `<span class="${lockColor}">${lockedPercent.toFixed(1)}%</span>`;
         }
 
-        DashboardState.metricsCache = { 
-            supply: supplyNum, 
-            fees: feesNum, 
-            miningPower: miningPowerPercent, 
-            locked: lockedPercent, 
-            timestamp: Date.now() 
-        };
+        DashboardState.metricsCache = { supply: supplyNum, treasury: treasuryNum, scarcity: scarcityPercent, locked: lockedPercent, timestamp: Date.now() };
 
     } catch (e) {
         console.error("Metrics Error", e);

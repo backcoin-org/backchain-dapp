@@ -805,3 +805,191 @@ export async function forceRefreshUserData() {
     await loadUserDelegations(true);
     await loadUserRentals(true);
 }
+// ====================================================================
+// FORTUNE POOL DATA FUNCTIONS - ADICIONAR AO data.js
+// ====================================================================
+
+/**
+ * Load Fortune Pool configuration and status
+ */
+export async function loadFortunePoolData(forceRefresh = false) {
+    const contract = State.actionsManagerContractPublic || State.actionsManagerContract;
+    
+    if (!contract) {
+        State.fortunePool = { 
+            active: false, 
+            activeTiers: 0, 
+            prizePool: 0n,
+            tiers: [],
+            oracleFee1x: 0n,
+            oracleFee5x: 0n
+        };
+        return State.fortunePool;
+    }
+
+    const cacheKey = 'fortunePool-status';
+    const now = Date.now();
+
+    if (!forceRefresh && contractReadCache.has(cacheKey)) {
+        const cached = contractReadCache.get(cacheKey);
+        if (now - cached.timestamp < CONTRACT_READ_CACHE_MS) {
+            State.fortunePool = cached.value;
+            return cached.value;
+        }
+    }
+
+    try {
+        // Parallel fetch core data
+        const [activeTierCount, prizePool, gameCounter] = await Promise.allSettled([
+            safeContractCall(contract, 'activeTierCount', [], 0n),
+            safeContractCall(contract, 'prizePoolBalance', [], 0n),
+            safeContractCall(contract, 'gameCounter', [], 0n)
+        ]);
+
+        const tierCount = Number(activeTierCount.status === 'fulfilled' ? activeTierCount.value : 0n);
+        const pool = prizePool.status === 'fulfilled' ? BigInt(prizePool.value.toString()) : 0n;
+        const games = Number(gameCounter.status === 'fulfilled' ? gameCounter.value : 0n);
+
+        // Get oracle fees
+        let oracleFee1x = ethers.parseEther("0.001");
+        let oracleFee5x = ethers.parseEther("0.005");
+        
+        try {
+            const [fee1x, fee5x] = await Promise.all([
+                contract.getRequiredOracleFee(false),
+                contract.getRequiredOracleFee(true)
+            ]);
+            oracleFee1x = BigInt(fee1x.toString());
+            oracleFee5x = BigInt(fee5x.toString());
+        } catch (e) {
+            // Use defaults
+            try {
+                const baseFee = await contract.oracleFee();
+                oracleFee1x = BigInt(baseFee.toString());
+                oracleFee5x = oracleFee1x * 5n;
+            } catch {}
+        }
+
+        // Load tier details
+        const tiers = [];
+        for (let i = 0; i < Math.min(tierCount, 10); i++) {
+            try {
+                const tier = await safeContractCall(contract, 'prizeTiers', [i], null);
+                if (tier && tier.active) {
+                    tiers.push({
+                        tierId: i,
+                        maxRange: Number(tier.maxRange || tier[0]),
+                        multiplierBips: Number(tier.multiplierBips || tier[1]),
+                        multiplier: Number(tier.multiplierBips || tier[1]) / 10000,
+                        active: tier.active || tier[2]
+                    });
+                }
+            } catch {}
+        }
+
+        const fortuneData = {
+            active: tierCount > 0,
+            activeTiers: tierCount,
+            prizePool: pool,
+            gameCounter: games,
+            oracleFee1x,
+            oracleFee5x,
+            tiers
+        };
+
+        // Cache result
+        contractReadCache.set(cacheKey, { value: fortuneData, timestamp: now });
+        State.fortunePool = fortuneData;
+
+        return fortuneData;
+
+    } catch (e) {
+        console.warn("Fortune Pool data load failed:", e.message);
+        State.fortunePool = { 
+            active: false, 
+            activeTiers: 0, 
+            prizePool: 0n,
+            tiers: [],
+            oracleFee1x: ethers.parseEther("0.001"),
+            oracleFee5x: ethers.parseEther("0.005")
+        };
+        return State.fortunePool;
+    }
+}
+
+/**
+ * Get user's Fortune Pool game history
+ * @param {string} userAddress - User wallet address
+ * @param {number} limit - Max games to fetch (default 20)
+ */
+export async function loadUserFortuneHistory(userAddress, limit = 20) {
+    if (!userAddress) return [];
+
+    const contract = State.actionsManagerContractPublic || State.actionsManagerContract;
+    if (!contract) return [];
+
+    try {
+        // Get game events for user
+        const filter = contract.filters.GameFulfilled(null, userAddress);
+        const events = await contract.queryFilter(filter, -10000); // Last 10k blocks
+
+        const games = events.slice(-limit).reverse().map(event => {
+            const args = event.args;
+            return {
+                gameId: Number(args.gameId),
+                player: args.player,
+                prizeWon: BigInt(args.prizeWon?.toString() || '0'),
+                rolls: args.rolls?.map(r => Number(r)) || [],
+                guesses: args.guesses?.map(g => Number(g)) || [],
+                isCumulative: args.isCumulative,
+                txHash: event.transactionHash,
+                blockNumber: event.blockNumber,
+                won: BigInt(args.prizeWon?.toString() || '0') > 0n
+            };
+        });
+
+        State.userFortuneHistory = games;
+        return games;
+
+    } catch (e) {
+        console.warn("Fortune history load failed:", e.message);
+        return [];
+    }
+}
+
+/**
+ * Calculate expected payout based on tier and multiplier
+ */
+export function calculateExpectedPayout(wagerAmount, tierIndex, isWin) {
+    if (!State.fortunePool?.tiers || !isWin) return 0n;
+    
+    const tier = State.fortunePool.tiers[tierIndex];
+    if (!tier) return 0n;
+
+    const wager = BigInt(wagerAmount);
+    const multiplierBips = BigInt(tier.multiplierBips);
+    
+    return (wager * multiplierBips) / 10000n;
+}
+
+/**
+ * Get recommended guess count based on mode
+ */
+export async function getExpectedGuessCount(isCumulative) {
+    const contract = State.actionsManagerContractPublic || State.actionsManagerContract;
+    
+    if (!contract) {
+        return isCumulative ? 3 : 1; // Default values
+    }
+
+    try {
+        const count = await contract.getExpectedGuessCount(isCumulative);
+        return Number(count);
+    } catch (e) {
+        // Fallback: 1 for jackpot, activeTierCount for cumulative
+        if (isCumulative) {
+            return State.fortunePool?.activeTiers || 3;
+        }
+        return 1;
+    }
+}
