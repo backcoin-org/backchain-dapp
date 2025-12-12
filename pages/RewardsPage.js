@@ -1,5 +1,5 @@
 // pages/RewardsPage.js
-// ✅ VERSION V8.0: Greed Strategy - Show NET rewards, highlight POTENTIAL gains with Booster
+// ✅ VERSION V8.1: FIXED - No duplicate API calls, uses cached booster data
 
 const ethers = window.ethers;
 
@@ -66,12 +66,17 @@ export const RewardsPage = {
         try {
             await loadUserData();
 
-            const [claimDetails, grossRewards, boosterData] = await Promise.all([
+            // 🔥 FIX: Get booster data ONCE, then pass it to calculateClaimDetails
+            // Previously we were calling getHighestBoosterBoostFromAPI() twice!
+            const boosterData = await getHighestBoosterBoostFromAPI();
+            
+            // 🔥 FIX: calculateClaimDetails now uses cached data internally
+            const [claimDetails, grossRewards] = await Promise.all([
                 calculateClaimDetails(),
-                calculateUserTotalRewards(),
-                getHighestBoosterBoostFromAPI()
+                calculateUserTotalRewards()
             ]);
 
+            // Pass the already-fetched booster data
             renderContent(claimDetails, grossRewards, boosterData);
             lastFetch = now;
             updateSyncStatus(`Updated ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`);
@@ -173,14 +178,14 @@ function renderContent(claimDetails, grossRewards, boosterData) {
     const totalGross = details.totalRewards || 0n;
     const feeAmount = details.feeAmount || 0n;
 
-    // Fee calculations
-    const feeBips = State.systemFees?.["CLAIM_REWARD_FEE_BIPS"] || 5000n; // Default 50%
-    const feePercent = Number(feeBips) / 100;
+    // Fee calculations - use values from claimDetails if available
+    const feeBips = details.baseFeeBips || Number(State.systemFees?.["CLAIM_REWARD_FEE_BIPS"] || 5000n);
+    const feePercent = feeBips / 100;
     const boostPercent = booster.highestBoost / 100;
     
     // Calculate effective rate (what user keeps)
-    const discountBips = booster.highestBoost > 0 ? booster.highestBoost : 0;
-    const effectiveFeeBips = Number(feeBips) - (Number(feeBips) * discountBips / 10000);
+    // 🔥 FIX: Use finalFeeBips from claimDetails if available
+    const effectiveFeeBips = details.finalFeeBips || (feeBips - (feeBips * booster.highestBoost / 10000));
     const keepPercent = 100 - (effectiveFeeBips / 100);
     
     // Calculate potential with best booster (Diamond = 70% discount)
@@ -307,7 +312,7 @@ function renderContent(claimDetails, grossRewards, boosterData) {
                                 class="flex-1 py-2.5 text-xs font-bold bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-black rounded-lg transition-all">
                                 <i class="fa-solid fa-shopping-cart mr-1"></i> Buy Booster
                             </button>
-                            <button onclick="window.navigateTo('rentals')" 
+                            <button onclick="window.navigateTo('rental')" 
                                 class="flex-1 py-2.5 text-xs font-bold bg-zinc-800 hover:bg-zinc-700 text-white rounded-lg transition-all">
                                 <i class="fa-solid fa-handshake mr-1"></i> Rent One
                             </button>

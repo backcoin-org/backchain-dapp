@@ -1,5 +1,5 @@
 // js/modules/wallet.js
-// ✅ VERSÃO FINAL V6.8: Blindagem de Conexão e Signer Garantido
+// ✅ VERSÃO V6.9: CRITICAL FIX - Evita loop infinito de updates em erros de RPC
 
 import { createWeb3Modal, defaultConfig } from 'https://esm.sh/@web3modal/ethers@5.1.11?bundle';
 
@@ -28,7 +28,13 @@ const ARBITRUM_SEPOLIA_ID_DECIMAL = 421614;
 const ARBITRUM_SEPOLIA_ID_HEX = '0x66eee'; 
 
 let balancePollingInterval = null;
-let CURRENT_POLLING_MS = 5000; 
+
+// 🔥 V6.9: Novas variáveis para controle de throttle
+let lastBalanceUpdate = 0;
+let balanceErrorCount = 0;
+const BALANCE_UPDATE_THROTTLE_MS = 5000;  // Mínimo 5s entre updates de UI
+const MAX_BALANCE_ERRORS = 3;              // Para de tentar após 3 erros
+const POLLING_INTERVAL_MS = 10000;         // 10s entre checks (era 5s)
 
 // ============================================================================
 // 2. WEB3MODAL SETUP
@@ -57,7 +63,7 @@ const ethersConfig = defaultConfig({
     enableCoinbase: false,    
     rpcUrl: sepoliaRpcUrl,
     defaultChainId: ARBITRUM_SEPOLIA_ID_DECIMAL,
-    enableEmail: true, // Web 2.5 Ativo
+    enableEmail: true,
     enableEns: false,
     auth: {
         email: true,
@@ -130,33 +136,97 @@ function instantiateContracts(signerOrProvider) {
     } catch (e) { console.warn("Contract init partial failure"); }
 }
 
+// 🔥 V6.9: Função corrigida - evita loop infinito
 function startBalancePolling() {
-    if (balancePollingInterval) clearInterval(balancePollingInterval);
-    if (!State.bkcTokenContractPublic || !State.userAddress) return;
+    // Limpa interval existente
+    if (balancePollingInterval) {
+        clearInterval(balancePollingInterval);
+        balancePollingInterval = null;
+    }
     
-    checkBalance(); 
-    let currentPollingMS = 5000;
-    balancePollingInterval = setInterval(checkBalance, currentPollingMS); 
+    // Valida requisitos
+    if (!State.bkcTokenContractPublic || !State.userAddress) {
+        console.warn("Cannot start balance polling: missing contract or address");
+        return;
+    }
+    
+    // Reset contador de erros
+    balanceErrorCount = 0;
+    
+    // Check inicial com delay para UI estabilizar
+    setTimeout(() => {
+        checkBalance();
+    }, 1000);
+    
+    // Inicia polling com intervalo mais longo (10s ao invés de 5s)
+    balancePollingInterval = setInterval(checkBalance, POLLING_INTERVAL_MS);
+    
+    console.log("Balance polling started (10s interval)");
 }
 
+// 🔥 V6.9: Função completamente reescrita para evitar loop infinito
 async function checkBalance() {
-    if (document.hidden) return; 
+    // Skip se tab está escondida
+    if (document.hidden) return;
+    
+    // Skip se não conectado
+    if (!State.isConnected || !State.userAddress) return;
+    
+    // Skip se contrato não disponível
+    if (!State.bkcTokenContractPublic) return;
+    
+    const now = Date.now();
+    
     try {
-        if (!State.isConnected || !State.userAddress) return;
-
         const newBalance = await State.bkcTokenContractPublic.balanceOf(State.userAddress);
         
-        if (newBalance !== State.currentUserBalance) {
+        // Reset contador de erros em sucesso
+        balanceErrorCount = 0;
+        
+        // Compara saldos corretamente (BigInt comparison)
+        const currentBalance = State.currentUserBalance || 0n;
+        const hasChanged = newBalance.toString() !== currentBalance.toString();
+        
+        if (hasChanged) {
             State.currentUserBalance = newBalance;
             localStorage.setItem(`balance_${State.userAddress.toLowerCase()}`, newBalance.toString());
-            if (window.updateUIState) window.updateUIState(true);
+            
+            // 🔥 THROTTLE: Só atualiza UI se passou tempo suficiente
+            if (now - lastBalanceUpdate > BALANCE_UPDATE_THROTTLE_MS) {
+                lastBalanceUpdate = now;
+                // 🔥 Usa false para não forçar re-render completo da página
+                if (window.updateUIState) window.updateUIState(false);
+            }
         }
-    } catch (error) { 
-        // IGNORAR ERROS 503 DE SALDO: Assume 0 para não travar a UI
-        if (State.currentUserBalance !== 0n) {
-             State.currentUserBalance = 0n;
-             if (window.updateUIState) window.updateUIState(true);
+        
+    } catch (error) {
+        // Incrementa contador de erros
+        balanceErrorCount++;
+        
+        // Log apenas os primeiros erros
+        if (balanceErrorCount <= 3) {
+            console.warn(`Balance check failed (${balanceErrorCount}/${MAX_BALANCE_ERRORS}):`, error.message?.slice(0, 50));
         }
+        
+        // 🔥 CRITICAL FIX: NÃO dispara updates em erros!
+        // Apenas para o polling se muitos erros
+        if (balanceErrorCount >= MAX_BALANCE_ERRORS) {
+            console.warn("Too many balance check errors. Stopping polling temporarily.");
+            if (balancePollingInterval) {
+                clearInterval(balancePollingInterval);
+                balancePollingInterval = null;
+            }
+            
+            // Tenta reiniciar após 60 segundos
+            setTimeout(() => {
+                console.log("Attempting to restart balance polling...");
+                balanceErrorCount = 0;
+                startBalancePolling();
+            }, 60000);
+        }
+        
+        // 🔥 REMOVIDO: Não seta balance para 0n em erro
+        // 🔥 REMOVIDO: Não chama updateUIState em erro
     }
 }
 
@@ -180,12 +250,10 @@ async function setupSignerAndLoadData(provider, address) {
 
         State.provider = provider;
         
-        // 🔥 CORREÇÃO FINAL: Garante que State.signer nunca seja nulo.
+        // Garante que State.signer nunca seja nulo
         try {
-            // Tenta obter o Signer canônico.
             State.signer = await provider.getSigner(); 
         } catch(signerError) {
-            // Se o getSigner falhar (erro 'eth_requestAccounts' do AppKit), usa o provider.
             State.signer = provider; 
             console.warn(`Could not get standard Signer. Using Provider as read-only. Warning: ${signerError.message}`);
         }
@@ -195,15 +263,14 @@ async function setupSignerAndLoadData(provider, address) {
 
         // Cache + Contratos
         loadCachedBalance(address);
-        // Passa State.signer (que agora é Signer OU Provider, mas não nulo)
         instantiateContracts(State.signer);
         
         // Login Firebase
         try { signIn(State.userAddress); } catch (e) { }
 
-        // Carregamento Assíncrono
+        // Carregamento Assíncrono - usa false para não forçar re-render
         loadUserData().then(() => {
-            if (window.updateUIState) window.updateUIState(true);
+            if (window.updateUIState) window.updateUIState(false);
         }).catch(() => {});
 
         startBalancePolling();
