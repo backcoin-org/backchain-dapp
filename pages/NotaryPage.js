@@ -825,19 +825,45 @@ async function loadCertificates() {
         // Fetch certificate details
         const certs = await Promise.all(events.map(async (e) => {
             const tokenId = e.args[0];
-            let info = { ipfsCid: '', description: '', contentHash: '' };
+            let ipfsCid = '';
+            let description = '';
+            let contentHash = '';
+            let timestamp = 0;
             
             try {
-                info = await contract.getDocumentInfo(tokenId);
+                // V7.2 FIX: Use correct function name 'getDocument' instead of 'getDocumentInfo'
+                const doc = await contract.getDocument(tokenId);
+                
+                // Handle both array-style and object-style returns
+                if (Array.isArray(doc)) {
+                    ipfsCid = doc[0] || '';
+                    description = doc[1] || '';
+                    contentHash = doc[2] || '';
+                    timestamp = doc[3] || 0;
+                } else {
+                    ipfsCid = doc.ipfsCid || '';
+                    description = doc.description || '';
+                    contentHash = doc.contentHash || '';
+                    timestamp = doc.timestamp || 0;
+                }
+                
+                // Convert bytes32 contentHash to hex string if needed
+                if (contentHash && typeof contentHash !== 'string') {
+                    contentHash = contentHash.toString();
+                }
+                
+                console.log(`📜 Certificate #${tokenId}: ipfs=${ipfsCid?.slice(0,30)}..., desc=${description?.slice(0,20)}...`);
+                
             } catch (err) {
-                console.warn('Doc info error for token', tokenId?.toString());
+                console.warn('Doc info error for token', tokenId?.toString(), err.message?.slice(0, 50));
             }
 
             return {
                 id: tokenId?.toString() || '?',
-                ipfs: info.ipfsCid || '',
-                description: info.description || '',
-                hash: info.contentHash || '',
+                ipfs: ipfsCid,
+                description: description,
+                hash: contentHash,
+                timestamp: timestamp,
                 txHash: e.transactionHash || ''
             };
         }));
