@@ -1,5 +1,5 @@
 // js/modules/transactions.js
-// ✅ VERSÃO V7.1 - MAX_UINT256 approval (fixes repeated delegation issue)
+// ✅ VERSÃO V7.2 - FIX: contentHash bytes32 conversion for Notary
 
 const ethers = window.ethers;
 
@@ -1202,6 +1202,51 @@ if (typeof window !== 'undefined') {
     window.diagnoseFaucet = diagnoseFaucet;
 }
 
+// ====================================================================
+// HELPER: Format contentHash to valid bytes32
+// ====================================================================
+
+/**
+ * Converts a content hash string to a valid bytes32 format
+ * @param {string} hash - The hash string (with or without 0x prefix)
+ * @returns {string} - A valid bytes32 hex string (0x + 64 hex chars)
+ */
+function formatContentHashToBytes32(hash) {
+    if (!hash) {
+        // Return zero bytes32 if no hash provided
+        return '0x' + '0'.repeat(64);
+    }
+    
+    // If it's already a valid bytes32
+    if (typeof hash === 'string' && hash.startsWith('0x') && hash.length === 66) {
+        return hash;
+    }
+    
+    // Remove 0x prefix if present
+    let cleanHash = typeof hash === 'string' ? hash : String(hash);
+    if (cleanHash.startsWith('0x')) {
+        cleanHash = cleanHash.slice(2);
+    }
+    
+    // Remove any non-hex characters
+    cleanHash = cleanHash.replace(/[^0-9a-fA-F]/g, '');
+    
+    // Ensure exactly 64 hex characters (32 bytes)
+    if (cleanHash.length > 64) {
+        // Truncate if too long
+        cleanHash = cleanHash.slice(0, 64);
+    } else if (cleanHash.length < 64) {
+        // Pad with zeros if too short
+        cleanHash = cleanHash.padStart(64, '0');
+    }
+    
+    return '0x' + cleanHash.toLowerCase();
+}
+
+// ====================================================================
+// NOTARY DOCUMENT FUNCTION (V7.2 - Fixed bytes32 conversion)
+// ====================================================================
+
 export async function executeNotarizeDocument(documentURI, description, contentHash, boosterId, submitButton) {
     const signer = await getConnectedSigner();
     
@@ -1250,9 +1295,22 @@ export async function executeNotarizeDocument(documentURI, description, contentH
         }
     }
 
-    // 2. Prepare Parameters
+    // 2. Prepare Parameters - FIX: Convert contentHash to valid bytes32
     const bId = boosterId ? BigInt(boosterId) : 0n;
-    const args = [documentURI, description, contentHash, bId];
+    
+    // Convert contentHash to proper bytes32 format
+    const formattedHash = formatContentHashToBytes32(contentHash);
+    
+    // Debug log to help troubleshoot
+    console.log('📝 Notary Parameters:', {
+        documentURI,
+        description: description?.slice(0, 50) + '...',
+        originalHash: contentHash,
+        formattedHash,
+        boosterId: bId.toString()
+    });
+    
+    const args = [documentURI, description, formattedHash, bId];
     
     // 3. Execute with gas estimation
     const gasOpts = await estimateGasWithFallback(notaryContract, 'notarize', args, 500000n);
@@ -1278,43 +1336,43 @@ export async function executeNotarizeDocument(documentURI, description, contentH
  * @param {HTMLElement} btnElement - Button element for UI feedback
  * @returns {Promise<{success: boolean, gameId?: number, txHash?: string}|false>}
  */
-export async function executeFortuneParticipate(wagerAmount, guesses, isCumulative, btnElement) {
+export async function executeFortuneParticipation(wagerAmount, guesses, isCumulative, btnElement) {
     const signer = await getConnectedSigner();
     if (!signer || !State.actionsManagerContract) {
-        showToast("Fortune Pool not available.", "error");
+        showToast("Contracts not ready. Please refresh.", "error");
         return false;
     }
 
-    const wagerBigInt = BigInt(wagerAmount);
-    const guessesArray = guesses.map(g => BigInt(g));
+    const originalText = btnElement ? btnElement.innerHTML : 'Play';
     
-    // Pre-validations
-    if (wagerBigInt === 0n) {
-        showToast("Wager amount must be greater than 0.", "error");
-        return false;
-    }
-
-    // Check BKC balance
     try {
+        // Parse inputs
+        const wagerBigInt = BigInt(wagerAmount);
+        const guessesArray = guesses.map(g => BigInt(g));
+
+        // Pre-validations
+        if (wagerBigInt === 0n) {
+            showToast("Wager amount must be greater than 0.", "error");
+            return false;
+        }
+
+        if (guessesArray.length === 0) {
+            showToast("Please select at least one number.", "error");
+            return false;
+        }
+
+        // Check BKC balance
         const balance = await State.bkcTokenContract.balanceOf(State.userAddress);
         if (balance < wagerBigInt) {
             const needed = formatBigNumber(wagerBigInt);
             showToast(`Insufficient BKC. Need ${needed.toFixed(2)} BKC.`, "error");
             return false;
         }
-    } catch (e) {
-        console.warn("Balance check failed:", e);
-    }
 
-    const originalText = btnElement ? btnElement.innerHTML : 'Play';
-    if (btnElement) {
-        btnElement.disabled = true;
-        btnElement.innerHTML = '<div class="loader inline-block"></div> Preparing...';
-    }
-
-    try {
-        // 1. Get Oracle Fee
-        let oracleFee = 0n;
+        // 1. Get oracle fee
+        if (btnElement) btnElement.innerHTML = '<div class="loader inline-block"></div> Preparing...';
+        
+        let oracleFee;
         try {
             oracleFee = await State.actionsManagerContract.getRequiredOracleFee(isCumulative);
         } catch (e) {
