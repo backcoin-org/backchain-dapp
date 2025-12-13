@@ -1336,7 +1336,7 @@ export async function executeNotarizeDocument(documentURI, description, contentH
  * @param {HTMLElement} btnElement - Button element for UI feedback
  * @returns {Promise<{success: boolean, gameId?: number, txHash?: string}|false>}
  */
-export async function executeFortuneParticipation(wagerAmount, guesses, isCumulative, btnElement) {
+export async function executeFortuneParticipate(wagerAmount, guesses, isCumulative, btnElement) {
     const signer = await getConnectedSigner();
     if (!signer || !State.actionsManagerContract) {
         showToast("Contracts not ready. Please refresh.", "error");
