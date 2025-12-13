@@ -1,5 +1,5 @@
 // js/pages/DashboardPage.js
-// ✅ VERSION V7.2: Fixed Faucet (1000 BKC + 0.01 ETH) + Cooldown Status
+// ✅ VERSION V7.2: Fixed Faucet (1000 BKC + 0.01 ETH) - Firebase Cloud Function URL
 
 const ethers = window.ethers;
 
@@ -45,8 +45,10 @@ const DashboardState = {
 // --- CONFIG ---
 const EXPLORER_BASE_URL = "https://sepolia.arbiscan.io/tx/";
 const CONTRACT_EXPLORER_URL = "https://sepolia.arbiscan.io/address/";
-const FAUCET_API_URL = "https://api.backcoin.org/faucet";
-const NETWORK_ACTIVITY_API = "https://api.backcoin.org/activity/recent";
+
+// ✅ Firebase Cloud Function URL (proxy to Digital Ocean Indexer)
+const FAUCET_API_URL = "https://faucet-4wvdcuoouq-uc.a.run.app";
+const NETWORK_ACTIVITY_API = "https://getrecentactivity-4wvdcuoouq-uc.a.run.app";
 
 // ✅ Faucet values (must match indexer.js)
 const FAUCET_BKC_AMOUNT = "1,000";  // Display string
@@ -144,7 +146,11 @@ async function requestSmartFaucet(btnElement) {
     DashboardState.faucet.isLoading = true;
 
     try {
-        const response = await fetch(`${FAUCET_API_URL}?address=${State.userAddress}`);
+        const response = await fetch(`${FAUCET_API_URL}?address=${State.userAddress}`, {
+            method: 'GET',
+            headers: { 'Accept': 'application/json' }
+        });
+        
         const data = await response.json();
 
         if (response.ok && data.success) {
