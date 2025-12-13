@@ -684,13 +684,14 @@ async function handleMint() {
 
         setProgress(10, 'UPLOADING TO IPFS...');
 
-        // Upload to IPFS
+        // V7.4: Upload to IPFS with description
         const formData = new FormData();
         formData.append('file', Notary.file);
         formData.append('signature', signature);
         formData.append('address', State.userAddress);
+        formData.append('description', Notary.description || 'No description');
 
-        const uploadUrl = API_ENDPOINTS.uploadFileToIPFS || "https://api.backcoin.org/upload";
+        const uploadUrl = API_ENDPOINTS.uploadFileToIPFS || "https://us-central1-backchain-415921.cloudfunctions.net/uploadfiletoipfs";
         const res = await fetch(uploadUrl, {
             method: 'POST',
             body: formData,
@@ -699,14 +700,24 @@ async function handleMint() {
 
         if (!res.ok) throw new Error('Upload failed');
         const data = await res.json();
+        
+        console.log('📤 Upload response:', data);
+
+        // V7.4: Use ipfsUri for the image CID (what goes to contract)
+        // contentHash is the SHA-256 of the file
+        const ipfsCid = data.ipfsUri || data.metadataUri;
+        const contentHash = data.contentHash;
+        
+        if (!ipfsCid) throw new Error('No IPFS URI returned');
+        if (!contentHash) throw new Error('No content hash returned');
 
         setProgress(50, 'MINTING ON BLOCKCHAIN...');
 
-        // Execute mint
+        // Execute mint - pass the image IPFS URI and content hash
         const success = await executeNotarizeDocument(
-            data.ipfsUri,
+            ipfsCid,
             Notary.description || 'No description',
-            data.contentHash,
+            contentHash,
             0n,
             btn
         );
@@ -771,45 +782,111 @@ async function loadCertificates() {
     }
 
     try {
-        if (!State.decentralizedNotaryContract) await loadPublicData();
-        const contract = State.decentralizedNotaryContract;
+        // V7.4: First try to fetch from API (Firebase)
+        let certs = [];
         
-        if (!contract) {
-            grid.innerHTML = `<div class="col-span-full text-center py-8 text-zinc-500 text-sm">Contract not available</div>`;
-            return;
-        }
-
-        // V2.1 FIX: Use correct event name "DocumentNotarized" instead of "NotarizationEvent"
-        let events = [];
         try {
-            // Try V2.1 event name first
-            const filter = contract.filters.DocumentNotarized 
-                ? contract.filters.DocumentNotarized(null, State.userAddress)
-                : contract.filters.NotarizationEvent?.(null, State.userAddress);
+            const apiUrl = API_ENDPOINTS.getNotarizedDocuments || 
+                `https://us-central1-backchain-415921.cloudfunctions.net/getNotarizedDocuments/${State.userAddress}`;
             
-            if (filter) {
-                events = await contract.queryFilter(filter, -50000);
-            }
-        } catch (filterErr) {
-            console.warn('Event filter error:', filterErr.message?.slice(0, 100));
-            // Fallback: try to get tokens by checking balance
-            try {
-                const balance = await contract.balanceOf(State.userAddress);
-                if (balance > 0n) {
-                    // Manual token fetch if events fail
-                    for (let i = 0n; i < balance; i++) {
-                        try {
-                            const tokenId = await contract.tokenOfOwnerByIndex(State.userAddress, i);
-                            events.push({ args: [tokenId], transactionHash: null });
-                        } catch (e) { break; }
-                    }
+            const response = await fetch(apiUrl);
+            if (response.ok) {
+                const data = await response.json();
+                if (Array.isArray(data) && data.length > 0) {
+                    certs = data.map(doc => ({
+                        id: doc.tokenId || '?',
+                        ipfs: doc.ipfsCid || '',
+                        description: doc.description || '',
+                        hash: doc.contentHash || '',
+                        timestamp: doc.timestamp || '',
+                        txHash: doc.txHash || ''
+                    }));
+                    console.log(`📜 Loaded ${certs.length} certificates from API`);
                 }
-            } catch (balErr) {
-                console.warn('Balance fallback failed:', balErr);
             }
+        } catch (apiErr) {
+            console.warn('API fetch failed, falling back to contract:', apiErr.message?.slice(0, 50));
+        }
+        
+        // Fallback: Query contract events if API returned nothing
+        if (certs.length === 0) {
+            if (!State.decentralizedNotaryContract) await loadPublicData();
+            const contract = State.decentralizedNotaryContract;
+            
+            if (!contract) {
+                grid.innerHTML = `<div class="col-span-full text-center py-8 text-zinc-500 text-sm">Contract not available</div>`;
+                return;
+            }
+
+            let events = [];
+            try {
+                const filter = contract.filters.DocumentNotarized 
+                    ? contract.filters.DocumentNotarized(null, State.userAddress)
+                    : contract.filters.NotarizationEvent?.(null, State.userAddress);
+                
+                if (filter) {
+                    events = await contract.queryFilter(filter, -50000);
+                }
+            } catch (filterErr) {
+                console.warn('Event filter error:', filterErr.message?.slice(0, 100));
+                try {
+                    const balance = await contract.balanceOf(State.userAddress);
+                    if (balance > 0n) {
+                        for (let i = 0n; i < balance; i++) {
+                            try {
+                                const tokenId = await contract.tokenOfOwnerByIndex(State.userAddress, i);
+                                events.push({ args: [tokenId], transactionHash: null });
+                            } catch (e) { break; }
+                        }
+                    }
+                } catch (balErr) {
+                    console.warn('Balance fallback failed:', balErr);
+                }
+            }
+
+            // Fetch certificate details from tokenURI (always works)
+            certs = await Promise.all(events.map(async (e) => {
+                const tokenId = e.args[0];
+                let ipfsCid = '';
+                let description = '';
+                let contentHash = '';
+                
+                try {
+                    // Use tokenURI which is always available in ERC721
+                    if (typeof contract.tokenURI === 'function') {
+                        const uri = await contract.tokenURI(tokenId);
+                        if (uri && uri.startsWith('data:application/json;base64,')) {
+                            const base64Data = uri.replace('data:application/json;base64,', '');
+                            const jsonStr = atob(base64Data);
+                            const metadata = JSON.parse(jsonStr);
+                            
+                            ipfsCid = metadata.image || '';
+                            description = metadata.description || '';
+                            
+                            // Extract content hash from attributes if available
+                            if (metadata.attributes) {
+                                const hashAttr = metadata.attributes.find(a => a.trait_type === 'Algorithm');
+                                if (hashAttr) contentHash = 'SHA-256';
+                            }
+                            
+                            console.log(`📜 Certificate #${tokenId} from tokenURI: ${description?.slice(0,30)}...`);
+                        }
+                    }
+                } catch (err) {
+                    console.warn('tokenURI error for token', tokenId?.toString(), err.message?.slice(0, 50));
+                }
+
+                return {
+                    id: tokenId?.toString() || '?',
+                    ipfs: ipfsCid,
+                    description: description,
+                    hash: contentHash,
+                    txHash: e.transactionHash || ''
+                };
+            }));
         }
 
-        if (events.length === 0) {
+        if (certs.length === 0) {
             grid.innerHTML = `
                 <div class="col-span-full text-center py-8">
                     <div class="w-14 h-14 rounded-full bg-zinc-800 flex items-center justify-center mx-auto mb-3">
@@ -822,100 +899,8 @@ async function loadCertificates() {
             return;
         }
 
-        // Fetch certificate details
-        const certs = await Promise.all(events.map(async (e) => {
-            const tokenId = e.args[0];
-            let ipfsCid = '';
-            let description = '';
-            let contentHash = '';
-            let timestamp = 0;
-            
-            try {
-                // V7.3: Try multiple methods to get document data
-                let doc = null;
-                
-                // Method 1: Try public mapping 'documents(tokenId)'
-                if (typeof contract.documents === 'function') {
-                    try {
-                        doc = await contract.documents(tokenId);
-                    } catch (e1) {
-                        console.log('documents() not available, trying alternatives...');
-                    }
-                }
-                
-                // Method 2: Try getDocument function
-                if (!doc && typeof contract.getDocument === 'function') {
-                    try {
-                        doc = await contract.getDocument(tokenId);
-                    } catch (e2) {
-                        console.log('getDocument() not available, trying tokenURI...');
-                    }
-                }
-                
-                // Method 3: Parse from tokenURI (always available in ERC721)
-                if (!doc && typeof contract.tokenURI === 'function') {
-                    try {
-                        const uri = await contract.tokenURI(tokenId);
-                        // tokenURI returns base64 JSON: "data:application/json;base64,..."
-                        if (uri && uri.startsWith('data:application/json;base64,')) {
-                            const base64Data = uri.replace('data:application/json;base64,', '');
-                            const jsonStr = atob(base64Data);
-                            const metadata = JSON.parse(jsonStr);
-                            
-                            // Extract data from metadata
-                            ipfsCid = metadata.image || '';
-                            description = metadata.description || '';
-                            
-                            // Convert IPFS gateway URL back to ipfs:// format if needed
-                            if (ipfsCid.includes('ipfs.io/ipfs/')) {
-                                const cid = ipfsCid.split('ipfs.io/ipfs/')[1];
-                                ipfsCid = `ipfs://${cid}`;
-                            }
-                            
-                            console.log(`📜 Certificate #${tokenId} (from tokenURI): ipfs=${ipfsCid?.slice(0,30)}...`);
-                        }
-                    } catch (e3) {
-                        console.warn('tokenURI parsing failed:', e3.message?.slice(0, 50));
-                    }
-                }
-                
-                // Parse doc if we got it from documents() or getDocument()
-                if (doc) {
-                    if (Array.isArray(doc)) {
-                        ipfsCid = doc[0] || '';
-                        description = doc[1] || '';
-                        contentHash = doc[2] || '';
-                        timestamp = doc[3] || 0;
-                    } else {
-                        ipfsCid = doc.ipfsCid || doc[0] || '';
-                        description = doc.description || doc[1] || '';
-                        contentHash = doc.contentHash || doc[2] || '';
-                        timestamp = doc.timestamp || doc[3] || 0;
-                    }
-                    
-                    // Convert bytes32 contentHash to hex string if needed
-                    if (contentHash && typeof contentHash !== 'string') {
-                        contentHash = contentHash.toString();
-                    }
-                    
-                    console.log(`📜 Certificate #${tokenId}: ipfs=${ipfsCid?.slice(0,30)}..., desc=${description?.slice(0,20)}...`);
-                }
-                
-            } catch (err) {
-                console.warn('Doc info error for token', tokenId?.toString(), err.message?.slice(0, 50));
-            }
-
-            return {
-                id: tokenId?.toString() || '?',
-                ipfs: ipfsCid,
-                description: description,
-                hash: contentHash,
-                timestamp: timestamp,
-                txHash: e.transactionHash || ''
-            };
-        }));
-
-        const sorted = certs.reverse();
+        // Sort by ID descending (newest first)
+        const sorted = certs.sort((a, b) => parseInt(b.id) - parseInt(a.id));
 
         grid.innerHTML = sorted.map(cert => {
             const ipfsUrl = cert.ipfs.startsWith('ipfs://') 
@@ -939,7 +924,7 @@ async function loadCertificates() {
                             ${cert.description || 'No description'}
                         </p>
                         <p class="text-[9px] font-mono text-zinc-600 truncate mb-3" title="${cert.hash}">
-                            ${cert.hash?.slice(0, 24)}...
+                            ${cert.hash?.slice(0, 24) || '...'}
                         </p>
                         
                         <!-- Actions -->
