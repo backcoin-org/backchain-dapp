@@ -1,5 +1,5 @@
 // js/pages/DashboardPage.js
-// ✅ VERSION V7.2: Fixed Faucet Functionality + Cooldown Status
+// ✅ VERSION V7.2: Fixed Faucet (1000 BKC + 0.01 ETH) + Cooldown Status
 
 const ethers = window.ethers;
 
@@ -34,7 +34,6 @@ const DashboardState = {
     metricsCache: {},
     isLoadingNetworkActivity: false,
     networkActivitiesTimestamp: 0,
-    // ✅ NEW: Faucet state
     faucet: {
         canClaim: true,
         cooldownEnd: null,
@@ -47,11 +46,12 @@ const DashboardState = {
 const EXPLORER_BASE_URL = "https://sepolia.arbiscan.io/tx/";
 const CONTRACT_EXPLORER_URL = "https://sepolia.arbiscan.io/address/";
 const FAUCET_API_URL = "https://api.backcoin.org/faucet";
-const FAUCET_STATUS_URL = "https://api.backcoin.org/faucet/status";
 const NETWORK_ACTIVITY_API = "https://api.backcoin.org/activity/recent";
 
-// ✅ Faucet trigger threshold (show faucet if balance below this)
-const FAUCET_BALANCE_THRESHOLD = ethers.parseUnits("100", 18); // 100 BKC
+// ✅ Faucet values (must match indexer.js)
+const FAUCET_BKC_AMOUNT = "1,000";  // Display string
+const FAUCET_ETH_AMOUNT = "0.01";   // Display string
+const FAUCET_BALANCE_THRESHOLD = ethers.parseUnits("100", 18); // Show faucet if balance < 100 BKC
 
 // --- HELPERS ---
 function formatDate(timestamp) {
@@ -91,7 +91,6 @@ function getScarcityColor(percent) {
     return 'text-red-400';
 }
 
-// ✅ NEW: Format cooldown time remaining
 function formatCooldownTime(endTime) {
     if (!endTime) return '';
     const now = Date.now();
@@ -103,9 +102,7 @@ function formatCooldownTime(endTime) {
     const hours = Math.floor(diff / 3600000);
     const minutes = Math.floor((diff % 3600000) / 60000);
     
-    if (hours > 0) {
-        return `${hours}h ${minutes}m`;
-    }
+    if (hours > 0) return `${hours}h ${minutes}m`;
     return `${minutes}m`;
 }
 
@@ -133,36 +130,9 @@ function animateClaimableRewards(targetNetValue) {
 }
 
 // ============================================================================
-// ✅ FAUCET FUNCTIONS - FIXED & IMPROVED
+// FAUCET FUNCTIONS
 // ============================================================================
 
-// Check faucet status from API (cooldown, eligibility)
-async function checkFaucetStatus() {
-    if (!State.isConnected || !State.userAddress) return;
-    
-    // Cache check - don't spam API (check every 30 seconds max)
-    const now = Date.now();
-    if (now - DashboardState.faucet.lastCheck < 30000) {
-        return;
-    }
-    
-    DashboardState.faucet.lastCheck = now;
-    
-    try {
-        const response = await fetch(`${FAUCET_STATUS_URL}?address=${State.userAddress}`);
-        if (response.ok) {
-            const data = await response.json();
-            DashboardState.faucet.canClaim = data.canClaim !== false;
-            DashboardState.faucet.cooldownEnd = data.cooldownEnd || null;
-        }
-    } catch (e) {
-        // If status check fails, assume can claim
-        DashboardState.faucet.canClaim = true;
-        DashboardState.faucet.cooldownEnd = null;
-    }
-}
-
-// Request faucet tokens
 async function requestSmartFaucet(btnElement) {
     if (!State.isConnected || !State.userAddress) {
         return showToast("Connect wallet first", "error");
@@ -178,13 +148,12 @@ async function requestSmartFaucet(btnElement) {
         const data = await response.json();
 
         if (response.ok && data.success) {
-            showToast("✅ Faucet Sent! 20 BKC + 0.005 ETH", "success");
+            showToast(`✅ Faucet Sent! ${FAUCET_BKC_AMOUNT} BKC + ${FAUCET_ETH_AMOUNT} ETH`, "success");
             
-            // Update faucet state
+            // Update faucet state - 24h cooldown
             DashboardState.faucet.canClaim = false;
             DashboardState.faucet.cooldownEnd = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
             
-            // Update widget to show cooldown
             updateFaucetWidget();
             
             // Refresh data after delay
@@ -194,14 +163,16 @@ async function requestSmartFaucet(btnElement) {
         } else {
             const msg = data.error || data.message || "Faucet unavailable";
             
-            if (msg.toLowerCase().includes("cooldown") || msg.toLowerCase().includes("wait")) {
-                // Extract cooldown info if available
-                if (data.cooldownEnd) {
+            if (msg.toLowerCase().includes("cooldown") || msg.toLowerCase().includes("wait") || msg.toLowerCase().includes("hour")) {
+                showToast(`⏳ ${msg}`, "warning");
+                // Try to extract cooldown from message
+                const hoursMatch = msg.match(/(\d+)\s*hour/i);
+                if (hoursMatch) {
+                    const hours = parseInt(hoursMatch[1]);
                     DashboardState.faucet.canClaim = false;
-                    DashboardState.faucet.cooldownEnd = data.cooldownEnd;
+                    DashboardState.faucet.cooldownEnd = new Date(Date.now() + hours * 60 * 60 * 1000).toISOString();
                     updateFaucetWidget();
                 }
-                showToast(`⏳ ${msg}`, "warning");
             } else {
                 showToast(`❌ ${msg}`, "error");
             }
@@ -216,17 +187,12 @@ async function requestSmartFaucet(btnElement) {
     }
 }
 
-// Check if user should see faucet widget
 function shouldShowFaucet() {
     if (!State.isConnected) return false;
-    
     const bkcBalance = State.bkcBalance || 0n;
-    
-    // Show faucet if balance is below threshold
     return bkcBalance < FAUCET_BALANCE_THRESHOLD;
 }
 
-// Update faucet widget UI
 function updateFaucetWidget() {
     const widget = document.getElementById('dashboard-faucet-widget');
     if (!widget) return;
@@ -255,7 +221,7 @@ function updateFaucetWidget() {
     if (!canClaim && cooldownTime) {
         // ON COOLDOWN
         widget.classList.add('border-zinc-500');
-        if (titleEl) titleEl.innerText = "Faucet Cooldown";
+        if (titleEl) titleEl.innerText = "⏳ Faucet Cooldown";
         if (descEl) descEl.innerText = "Come back when the timer ends";
         if (statusEl) {
             statusEl.classList.remove('hidden');
@@ -270,7 +236,7 @@ function updateFaucetWidget() {
         // NEW USER - GREEN WELCOME
         widget.classList.add('border-green-500');
         if (titleEl) titleEl.innerText = "🎉 Welcome to BackCoin!";
-        if (descEl) descEl.innerText = "Claim your free starter pack: 20 BKC + 0.005 ETH for gas";
+        if (descEl) descEl.innerText = `Claim your free starter pack: ${FAUCET_BKC_AMOUNT} BKC + ${FAUCET_ETH_AMOUNT} ETH for gas`;
         if (statusEl) statusEl.classList.add('hidden');
         if (btn) {
             btn.classList.add('bg-green-600', 'hover:bg-green-500', 'text-white', 'hover:scale-105');
@@ -278,11 +244,11 @@ function updateFaucetWidget() {
             btn.disabled = false;
         }
     } else {
-        // LOW BALANCE - BLUE
+        // LOW BALANCE - CYAN
         const balanceNum = formatBigNumber(bkcBalance).toFixed(2);
         widget.classList.add('border-cyan-500');
         if (titleEl) titleEl.innerText = "💧 Need More BKC?";
-        if (descEl) descEl.innerText = `Current balance: ${balanceNum} BKC • Get 20 BKC + ETH for gas`;
+        if (descEl) descEl.innerText = `Balance: ${balanceNum} BKC • Get ${FAUCET_BKC_AMOUNT} BKC + ${FAUCET_ETH_AMOUNT} ETH`;
         if (statusEl) statusEl.classList.add('hidden');
         if (btn) {
             btn.classList.add('bg-cyan-600', 'hover:bg-cyan-500', 'text-white', 'hover:scale-105');
@@ -305,7 +271,7 @@ async function checkGasAndWarn() {
 }
 
 // ============================================================================
-// 1. RENDER LAYOUT - ENGLISH UI WITH IMPROVED FAUCET
+// 1. RENDER LAYOUT
 // ============================================================================
 
 function renderDashboardLayout() {
@@ -340,7 +306,7 @@ function renderDashboardLayout() {
                 <!-- LEFT: User Hub + Activity -->
                 <div class="lg:col-span-2 flex flex-col gap-6">
                     
-                    <!-- ✅ FAUCET WIDGET - IMPROVED -->
+                    <!-- FAUCET WIDGET -->
                     <div id="dashboard-faucet-widget" class="hidden glass-panel border-l-4 p-4">
                         <div class="flex flex-col sm:flex-row justify-between items-center gap-3">
                             <div class="text-center sm:text-left flex-1">
@@ -570,7 +536,7 @@ function renderGasModal() {
                 <p class="text-zinc-400 text-xs mb-4">You need Arbitrum Sepolia ETH</p>
                 
                 <button id="emergency-faucet-btn" class="w-full bg-green-600 hover:bg-green-500 text-white font-bold py-2.5 rounded-lg text-sm mb-3">
-                    <i class="fa-solid fa-hand-holding-medical mr-2"></i> Get Free Gas
+                    <i class="fa-solid fa-hand-holding-medical mr-2"></i> Get Free Gas + BKC
                 </button>
                 
                 <button id="close-gas-modal-dash" class="text-zinc-500 hover:text-white text-xs">Close</button>
@@ -580,7 +546,7 @@ function renderGasModal() {
 }
 
 // ============================================================================
-// 2. DATA LOGIC - FIXED METRICS
+// 2. DATA LOGIC
 // ============================================================================
 
 async function updateGlobalMetrics() {
@@ -619,11 +585,9 @@ async function updateGlobalMetrics() {
             }
         } catch (e) { }
 
-        // METRICS CALCULATION
         const supplyNum = formatBigNumber(totalSupply);
         const treasuryNum = formatBigNumber(treasuryBalance);
 
-        // Scarcity = % remaining to mint
         const remainingToMint = maxSupply > totalSupply ? maxSupply - totalSupply : 0n;
         let scarcityPercent = 0;
         if (maxSupply > 0n) {
@@ -631,14 +595,12 @@ async function updateGlobalMetrics() {
         }
         if (scarcityPercent > 100) scarcityPercent = 100;
 
-        // Locked = staking + fortune (not treasury)
         const totalLocked = delegationBalance + fortunePoolBalance;
         let lockedPercent = 0;
         if (totalSupply > 0n) {
             lockedPercent = Number((totalLocked * 10000n) / totalSupply) / 100;
         }
 
-        // UPDATE UI
         const setMetric = (id, value, suffix = '') => {
             const el = document.getElementById(id);
             if (el) el.innerHTML = `${value}${suffix ? ` <span class="text-xs text-zinc-500">${suffix}</span>` : ''}`;
@@ -743,9 +705,6 @@ async function updateUserHub(forceRefresh = false) {
 
         updateBoosterDisplay(boosterData, claimDetails);
         fetchUserProfile();
-        
-        // ✅ FIXED: Check faucet status and update widget
-        await checkFaucetStatus();
         updateFaucetWidget();
 
     } catch (e) {
@@ -829,7 +788,7 @@ function updateBoosterDisplay(data, claimDetails) {
 }
 
 // ============================================================================
-// 3. ACTIVITY - USER OR NETWORK
+// 3. ACTIVITY
 // ============================================================================
 
 async function fetchAndProcessActivities() {
@@ -853,7 +812,6 @@ async function fetchAndProcessActivities() {
             }
         }
 
-        // Fallback: Network Activity
         if (titleEl) titleEl.textContent = 'Network Activity';
         await fetchNetworkActivity();
 
@@ -870,7 +828,6 @@ async function fetchNetworkActivity() {
 
     if (DashboardState.isLoadingNetworkActivity) return;
 
-    // 5 minute cache
     const cacheAge = Date.now() - DashboardState.networkActivitiesTimestamp;
     if (DashboardState.networkActivities.length > 0 && cacheAge < 300000) {
         renderNetworkActivityList();
@@ -910,7 +867,6 @@ function renderNetworkActivityList() {
                     <i class="fa-solid fa-globe text-zinc-600"></i>
                 </div>
                 <p class="text-zinc-500 text-xs">No recent network activity</p>
-                <p class="text-zinc-600 text-[10px] mt-1">Transactions will appear here</p>
             </div>
         `;
         if (controlsEl) controlsEl.classList.add('hidden');
@@ -1087,12 +1043,11 @@ function attachDashboardListeners() {
             DashboardState.activities = [];
             DashboardState.networkActivities = [];
             DashboardState.networkActivitiesTimestamp = 0;
-            DashboardState.faucet.lastCheck = 0; // ✅ Reset faucet cache
+            DashboardState.faucet.lastCheck = 0;
             await fetchAndProcessActivities();
             setTimeout(() => { btn.innerHTML = `<i class="fa-solid fa-rotate"></i> <span class="hidden sm:inline">Sync</span>`; btn.disabled = false; }, 1000);
         }
 
-        // ✅ Faucet button clicks
         if (target.closest('#faucet-action-btn')) {
             const btn = target.closest('#faucet-action-btn');
             if (!btn.disabled) {
