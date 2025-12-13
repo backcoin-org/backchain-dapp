@@ -831,28 +831,75 @@ async function loadCertificates() {
             let timestamp = 0;
             
             try {
-                // V7.2 FIX: Use correct function name 'getDocument' instead of 'getDocumentInfo'
-                const doc = await contract.getDocument(tokenId);
+                // V7.3: Try multiple methods to get document data
+                let doc = null;
                 
-                // Handle both array-style and object-style returns
-                if (Array.isArray(doc)) {
-                    ipfsCid = doc[0] || '';
-                    description = doc[1] || '';
-                    contentHash = doc[2] || '';
-                    timestamp = doc[3] || 0;
-                } else {
-                    ipfsCid = doc.ipfsCid || '';
-                    description = doc.description || '';
-                    contentHash = doc.contentHash || '';
-                    timestamp = doc.timestamp || 0;
+                // Method 1: Try public mapping 'documents(tokenId)'
+                if (typeof contract.documents === 'function') {
+                    try {
+                        doc = await contract.documents(tokenId);
+                    } catch (e1) {
+                        console.log('documents() not available, trying alternatives...');
+                    }
                 }
                 
-                // Convert bytes32 contentHash to hex string if needed
-                if (contentHash && typeof contentHash !== 'string') {
-                    contentHash = contentHash.toString();
+                // Method 2: Try getDocument function
+                if (!doc && typeof contract.getDocument === 'function') {
+                    try {
+                        doc = await contract.getDocument(tokenId);
+                    } catch (e2) {
+                        console.log('getDocument() not available, trying tokenURI...');
+                    }
                 }
                 
-                console.log(`📜 Certificate #${tokenId}: ipfs=${ipfsCid?.slice(0,30)}..., desc=${description?.slice(0,20)}...`);
+                // Method 3: Parse from tokenURI (always available in ERC721)
+                if (!doc && typeof contract.tokenURI === 'function') {
+                    try {
+                        const uri = await contract.tokenURI(tokenId);
+                        // tokenURI returns base64 JSON: "data:application/json;base64,..."
+                        if (uri && uri.startsWith('data:application/json;base64,')) {
+                            const base64Data = uri.replace('data:application/json;base64,', '');
+                            const jsonStr = atob(base64Data);
+                            const metadata = JSON.parse(jsonStr);
+                            
+                            // Extract data from metadata
+                            ipfsCid = metadata.image || '';
+                            description = metadata.description || '';
+                            
+                            // Convert IPFS gateway URL back to ipfs:// format if needed
+                            if (ipfsCid.includes('ipfs.io/ipfs/')) {
+                                const cid = ipfsCid.split('ipfs.io/ipfs/')[1];
+                                ipfsCid = `ipfs://${cid}`;
+                            }
+                            
+                            console.log(`📜 Certificate #${tokenId} (from tokenURI): ipfs=${ipfsCid?.slice(0,30)}...`);
+                        }
+                    } catch (e3) {
+                        console.warn('tokenURI parsing failed:', e3.message?.slice(0, 50));
+                    }
+                }
+                
+                // Parse doc if we got it from documents() or getDocument()
+                if (doc) {
+                    if (Array.isArray(doc)) {
+                        ipfsCid = doc[0] || '';
+                        description = doc[1] || '';
+                        contentHash = doc[2] || '';
+                        timestamp = doc[3] || 0;
+                    } else {
+                        ipfsCid = doc.ipfsCid || doc[0] || '';
+                        description = doc.description || doc[1] || '';
+                        contentHash = doc.contentHash || doc[2] || '';
+                        timestamp = doc.timestamp || doc[3] || 0;
+                    }
+                    
+                    // Convert bytes32 contentHash to hex string if needed
+                    if (contentHash && typeof contentHash !== 'string') {
+                        contentHash = contentHash.toString();
+                    }
+                    
+                    console.log(`📜 Certificate #${tokenId}: ipfs=${ipfsCid?.slice(0,30)}..., desc=${description?.slice(0,20)}...`);
+                }
                 
             } catch (err) {
                 console.warn('Doc info error for token', tokenId?.toString(), err.message?.slice(0, 50));
