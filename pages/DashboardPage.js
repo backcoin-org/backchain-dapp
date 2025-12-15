@@ -1,5 +1,5 @@
 // js/pages/DashboardPage.js
-// ✅ VERSION V7.7: Fixed type detection (exact match), Tiger icon for Fortune, mobile balance card, full Total Supply
+// ✅ VERSION V7.8: Fortune Oracle destacado, números com visual especial, Balance card
 
 const ethers = window.ethers;
 
@@ -1149,8 +1149,20 @@ function renderNetworkActivityList() {
         else if (t.includes('NOTARY') || t.includes('DOCUMENT')) { 
             icon = 'fa-stamp'; iconColor = '#818cf8'; bgColor = 'rgba(99,102,241,0.15)'; label = '📜 Notarized'; 
         }
-        // FORTUNE - Tiger 🐯
-        else if (t.includes('FORTUNE') || t.includes('GAME') || t.includes('REQUEST')) { 
+        // FORTUNE ORACLE - 🔮 Destacado!
+        else if (t.includes('FULFILLED') || t.includes('ORACLE')) { 
+            icon = 'fa-eye'; iconColor = '#e879f9'; bgColor = 'rgba(232,121,249,0.2)'; label = '🔮 Oracle'; 
+        }
+        // FORTUNE BET - 🐯 Tiger
+        else if (t.includes('REQUEST') || t.includes('GAME_REQUEST')) { 
+            icon = 'fa-paw'; iconColor = '#f97316'; bgColor = 'rgba(249,115,22,0.15)'; label = '🐯 Fortune Bet'; 
+        }
+        // FORTUNE RESULT
+        else if (t.includes('RESULT') || t.includes('GAMERESULT')) { 
+            icon = 'fa-crown'; iconColor = '#facc15'; bgColor = 'rgba(234,179,8,0.15)'; label = '🏆 Fortune'; 
+        }
+        // FORTUNE GENERIC
+        else if (t.includes('FORTUNE') || t.includes('GAME')) { 
             icon = 'fa-paw'; iconColor = '#f97316'; bgColor = 'rgba(249,115,22,0.15)'; label = '🐯 Fortune'; 
         }
 
@@ -1295,16 +1307,17 @@ function renderActivityPage() {
             label = '🐯 Fortune Bet';
             const guesses = item.details?.guesses || item.guesses;
             if (guesses && Array.isArray(guesses) && guesses.length > 0) {
-                extraInfo = ` <span style="color: #f97316; font-size: 9px">[${guesses.join(', ')}]</span>`;
+                extraInfo = ` <span style="color: #fb923c; font-size: 10px; font-weight: 600; background: rgba(249,115,22,0.15); padding: 1px 6px; border-radius: 4px; margin-left: 4px">${guesses.join(' • ')}</span>`;
             }
         }
-        // FORTUNE ORACLE (Game Fulfilled)
+        // 🔮 FORTUNE ORACLE (Game Fulfilled) - DESTACADO!
         else if (t === 'GAMEFULFILLED' || t === 'ORACLE' || t.includes('FULFILLED') || t.includes('ORACLE')) {
-            icon = 'fa-eye'; iconColor = '#a855f7'; bgColor = 'rgba(168,85,247,0.2)'; 
+            icon = 'fa-eye'; iconColor = '#e879f9'; bgColor = 'rgba(232,121,249,0.25)'; 
             label = '🔮 Fortune Oracle';
-            const rolls = item.details?.rolls || item.rolls;
+            const rolls = item.details?.rolls || item.rolls || item.details?.oracleNumbers;
             if (rolls && Array.isArray(rolls) && rolls.length > 0) {
-                extraInfo = ` <span style="color: #a855f7; font-size: 9px">[${rolls.join(', ')}]</span>`;
+                // Números do oráculo destacados com estilo especial
+                extraInfo = ` <span style="color: #e879f9; font-size: 11px; font-weight: 700; background: linear-gradient(135deg, rgba(168,85,247,0.3), rgba(232,121,249,0.3)); padding: 2px 8px; border-radius: 6px; margin-left: 6px; border: 1px solid rgba(232,121,249,0.4)">${rolls.join(' • ')}</span>`;
             }
         }
         // FORTUNE RESULT (Win/Loss)
@@ -1313,13 +1326,17 @@ function renderActivityPage() {
             if (isWin) {
                 icon = 'fa-crown'; iconColor = '#facc15'; bgColor = 'rgba(234,179,8,0.25)'; 
                 label = '🏆 Fortune Winner!';
+                const rolls = item.details?.rolls || item.rolls;
+                if (rolls && Array.isArray(rolls) && rolls.length > 0) {
+                    extraInfo = ` <span style="color: #fde047; font-size: 10px; font-weight: 600; background: rgba(234,179,8,0.2); padding: 1px 6px; border-radius: 4px; margin-left: 4px">${rolls.join(' • ')}</span>`;
+                }
             } else {
                 icon = 'fa-paw'; iconColor = '#71717a'; bgColor = 'rgba(39,39,42,0.5)'; 
                 label = '🐯 No Luck';
-            }
-            const rolls = item.details?.rolls || item.rolls;
-            if (rolls && Array.isArray(rolls) && rolls.length > 0) {
-                extraInfo = ` <span style="color: ${isWin ? '#facc15' : '#71717a'}; font-size: 9px">[${rolls.join(', ')}]</span>`;
+                const rolls = item.details?.rolls || item.rolls;
+                if (rolls && Array.isArray(rolls) && rolls.length > 0) {
+                    extraInfo = ` <span style="color: #71717a; font-size: 9px">[${rolls.join(', ')}]</span>`;
+                }
             }
         }
         // TRANSFER
