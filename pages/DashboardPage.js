@@ -1,5 +1,5 @@
 // js/pages/DashboardPage.js
-// ✅ VERSION V7.3: Economic Output, Fees Collected, TVL Metrics, Fortune & Notary Cards
+// ✅ VERSION V7.4: Enhanced activity icons, fixed pStake, custom loading with logo
 
 const ethers = window.ethers;
 
@@ -365,7 +365,10 @@ function renderDashboardLayout() {
                             </div>
 
                             <div id="dash-booster-area" class="flex-1 md:border-l md:border-zinc-700/50 md:pl-6 flex flex-col justify-center min-h-[140px]">
-                                ${renderLoading()}
+                                <div class="flex items-center justify-center gap-2">
+                                    <img src="./assets/bkc_logo_3d.png" class="w-8 h-8 object-contain animate-pulse opacity-50" alt="">
+                                    <span class="text-zinc-600 text-xs animate-pulse">Loading...</span>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -395,7 +398,13 @@ function renderDashboardLayout() {
                         </div>
 
                         <div id="dash-activity-list" class="space-y-2 min-h-[150px] max-h-[400px] overflow-y-auto custom-scrollbar">
-                            ${renderLoading()}
+                            <div class="flex flex-col items-center justify-center py-8">
+                                <div class="relative">
+                                    <div class="absolute inset-0 bg-amber-500/30 blur-xl rounded-full animate-pulse"></div>
+                                    <img src="./assets/bkc_logo_3d.png" class="relative w-12 h-12 object-contain animate-bounce" alt="Loading">
+                                </div>
+                                <p class="text-zinc-500 text-xs mt-3 animate-pulse">Loading activity...</p>
+                            </div>
                         </div>
                         
                         <div id="dash-pagination-controls" class="flex justify-between items-center mt-4 pt-3 border-t border-zinc-700/30 hidden">
@@ -800,7 +809,26 @@ async function updateUserHub(forceRefresh = false) {
         if (claimBtn) claimBtn.disabled = netClaimAmount <= 0n;
 
         const pStakeEl = document.getElementById('dash-user-pstake');
-        if (pStakeEl) pStakeEl.innerText = formatPStake(State.userData?.pStake || 0n);
+        if (pStakeEl) {
+            // V7.4: Try multiple sources for pStake
+            let userPStake = State.userData?.pStake || State.userData?.userTotalPStake || 0n;
+            
+            // Fallback: fetch directly from contract if userData is empty
+            if (userPStake === 0n && State.delegationManagerContractPublic && State.userAddress) {
+                try {
+                    userPStake = await safeContractCall(
+                        State.delegationManagerContractPublic, 
+                        'userTotalPStake', 
+                        [State.userAddress], 
+                        0n
+                    );
+                } catch (e) {
+                    console.warn("Failed to fetch pStake from contract:", e);
+                }
+            }
+            
+            pStakeEl.innerText = formatPStake(userPStake);
+        }
 
         updateBoosterDisplay(boosterData, claimDetails);
         fetchUserProfile();
@@ -897,7 +925,17 @@ async function fetchAndProcessActivities() {
     try {
         if (State.isConnected) {
             if (DashboardState.activities.length === 0) {
-                if (listEl) listEl.innerHTML = renderLoading();
+                if (listEl) {
+                    listEl.innerHTML = `
+                        <div class="flex flex-col items-center justify-center py-8">
+                            <div class="relative">
+                                <div class="absolute inset-0 bg-amber-500/30 blur-xl rounded-full animate-pulse"></div>
+                                <img src="./assets/bkc_logo_3d.png" class="relative w-12 h-12 object-contain animate-bounce" alt="Loading">
+                            </div>
+                            <p class="text-zinc-500 text-xs mt-3 animate-pulse">Loading your activity...</p>
+                        </div>
+                    `;
+                }
                 const response = await fetch(`${API_ENDPOINTS.getHistory}/${State.userAddress}`);
                 if (response.ok) {
                     DashboardState.activities = await response.json();
@@ -934,7 +972,16 @@ async function fetchNetworkActivity() {
     }
 
     DashboardState.isLoadingNetworkActivity = true;
-    listEl.innerHTML = renderLoading();
+    // V7.4: Custom loading with project logo
+    listEl.innerHTML = `
+        <div class="flex flex-col items-center justify-center py-8">
+            <div class="relative">
+                <div class="absolute inset-0 bg-amber-500/30 blur-xl rounded-full animate-pulse"></div>
+                <img src="./assets/bkc_logo_3d.png" class="relative w-12 h-12 object-contain animate-bounce" alt="Loading">
+            </div>
+            <p class="text-zinc-500 text-xs mt-3 animate-pulse">Loading activity...</p>
+        </div>
+    `;
 
     try {
         const response = await fetch(`${NETWORK_ACTIVITY_API}?limit=20`);
@@ -960,12 +1007,15 @@ function renderNetworkActivityList() {
     if (!listEl) return;
 
     if (DashboardState.networkActivities.length === 0) {
+        // V7.4: Custom empty state with logo
         listEl.innerHTML = `
-            <div class="text-center py-8">
-                <div class="w-12 h-12 bg-zinc-800 rounded-full flex items-center justify-center mx-auto mb-3">
-                    <i class="fa-solid fa-globe text-zinc-600"></i>
+            <div class="flex flex-col items-center justify-center py-8 px-4">
+                <div class="relative mb-4">
+                    <div class="absolute inset-0 bg-amber-500/20 blur-xl rounded-full animate-pulse"></div>
+                    <img src="./assets/bkc_logo_3d.png" class="relative w-14 h-14 object-contain opacity-30" alt="BKC">
                 </div>
-                <p class="text-zinc-500 text-xs">No recent network activity</p>
+                <p class="text-zinc-500 text-sm font-medium mb-1">No Network Activity</p>
+                <p class="text-zinc-600 text-xs text-center">Be the first to make a move!</p>
             </div>
         `;
         if (controlsEl) controlsEl.classList.add('hidden');
@@ -1055,7 +1105,17 @@ function renderActivityPage() {
     if (!listEl) return;
 
     if (DashboardState.filteredActivities.length === 0) {
-        listEl.innerHTML = renderNoData("No activities found");
+        // V7.4: Custom no-data state with project logo
+        listEl.innerHTML = `
+            <div class="flex flex-col items-center justify-center py-8 px-4">
+                <div class="relative mb-4">
+                    <div class="absolute inset-0 bg-amber-500/20 blur-xl rounded-full animate-pulse"></div>
+                    <img src="./assets/bkc_logo_3d.png" class="relative w-16 h-16 object-contain opacity-40" alt="BKC">
+                </div>
+                <p class="text-zinc-500 text-sm font-medium mb-1">No Activity Yet</p>
+                <p class="text-zinc-600 text-xs text-center max-w-[200px]">Start staking, trading or playing to see your history here</p>
+            </div>
+        `;
         if (controlsEl) controlsEl.classList.add('hidden');
         return;
     }
@@ -1067,24 +1127,55 @@ function renderActivityPage() {
     listEl.innerHTML = pageItems.map(item => {
         const dateStr = formatDate(item.timestamp || item.createdAt);
 
-        let icon = 'fa-circle', color = 'text-zinc-500', label = item.type;
+        // V7.4: Enhanced icons with better visuals
+        let icon = 'fa-circle', color = 'text-zinc-500', bgColor = 'bg-zinc-800', label = item.type;
         const t = (item.type || '').toUpperCase();
 
-        if (t.includes('DELEGATION') || t.includes('STAKE')) { icon = 'fa-arrow-up'; color = 'text-green-400'; label = 'Staked'; }
-        else if (t.includes('UNSTAKE')) { icon = 'fa-arrow-down'; color = 'text-orange-400'; label = 'Unstaked'; }
-        else if (t.includes('REWARD') || t.includes('CLAIM')) { icon = 'fa-gift'; color = 'text-amber-400'; label = 'Claimed'; }
-        else if (t.includes('NFTBOUGHT')) { icon = 'fa-cart-shopping'; color = 'text-green-400'; label = 'Bought NFT'; }
-        else if (t.includes('BOOSTERBUY')) { icon = 'fa-star'; color = 'text-yellow-300'; label = 'Minted NFT'; }
-        else if (t.includes('NFTSOLD')) { icon = 'fa-money-bill'; color = 'text-orange-400'; label = 'Sold NFT'; }
-        else if (t.includes('RENTAL')) { icon = 'fa-handshake'; color = 'text-cyan-400'; label = 'Rental'; }
-        else if (t.includes('NOTARY')) { icon = 'fa-file-signature'; color = 'text-indigo-400'; label = 'Notarized'; }
-        else if (t.includes('FAUCET')) { icon = 'fa-faucet'; color = 'text-cyan-400'; label = 'Faucet'; }
-        else if (t === 'GAMEREQUESTED' || t.includes('FORTUNEGAMEREQUEST')) { icon = 'fa-dice'; color = 'text-purple-400'; label = 'Fortune Bet'; }
-        else if (t === 'GAMERESULT' || t.includes('FORTUNEGAMERESULT')) {
-            const isWin = item.details?.isWin;
-            icon = isWin ? 'fa-trophy' : 'fa-dice';
-            color = isWin ? 'text-yellow-400' : 'text-zinc-400';
-            label = isWin ? 'Won!' : 'Lost';
+        if (t.includes('DELEGATION') || (t.includes('STAKE') && !t.includes('UNSTAKE'))) { 
+            icon = 'fa-lock'; color = 'text-green-400'; bgColor = 'bg-green-500/20'; label = 'Staked'; 
+        }
+        else if (t.includes('UNSTAKE') || t.includes('FORCE')) { 
+            icon = 'fa-unlock'; color = 'text-orange-400'; bgColor = 'bg-orange-500/20'; label = t.includes('FORCE') ? 'Force Unstaked' : 'Unstaked'; 
+        }
+        else if (t.includes('REWARD') || t.includes('CLAIM')) { 
+            icon = 'fa-coins'; color = 'text-amber-400'; bgColor = 'bg-amber-500/20'; label = 'Rewards Claimed'; 
+        }
+        else if (t.includes('NFTBOUGHT')) { 
+            icon = 'fa-bag-shopping'; color = 'text-green-400'; bgColor = 'bg-green-500/20'; label = 'Bought NFT'; 
+        }
+        else if (t.includes('BOOSTERBUY') || t.includes('NFTSOLD_PRESALE')) { 
+            icon = 'fa-gem'; color = 'text-yellow-300'; bgColor = 'bg-yellow-500/20'; label = 'Minted Booster'; 
+        }
+        else if (t.includes('NFTSOLD')) { 
+            icon = 'fa-hand-holding-dollar'; color = 'text-orange-400'; bgColor = 'bg-orange-500/20'; label = 'Sold NFT'; 
+        }
+        else if (t.includes('RENTAL') || t.includes('RENTED')) { 
+            icon = 'fa-clock'; color = 'text-cyan-400'; bgColor = 'bg-cyan-500/20'; label = 'Rented NFT'; 
+        }
+        else if (t.includes('NOTARY') || t.includes('DOCUMENT')) { 
+            icon = 'fa-stamp'; color = 'text-indigo-400'; bgColor = 'bg-indigo-500/20'; label = 'Notarized'; 
+        }
+        else if (t.includes('FAUCET')) { 
+            icon = 'fa-droplet'; color = 'text-cyan-400'; bgColor = 'bg-cyan-500/20'; label = 'Faucet Claim'; 
+        }
+        else if (t === 'GAMEREQUESTED' || t.includes('FORTUNEGAMEREQUEST') || t.includes('GAME_REQUEST')) { 
+            icon = 'fa-dice-d20'; color = 'text-purple-400'; bgColor = 'bg-purple-500/20'; label = 'Fortune Bet'; 
+        }
+        else if (t === 'GAMERESULT' || t.includes('FORTUNEGAMERESULT') || t.includes('GAME_RESULT')) {
+            const isWin = item.details?.isWin || item.details?.prizeWon > 0;
+            icon = isWin ? 'fa-crown' : 'fa-dice';
+            color = isWin ? 'text-yellow-400' : 'text-zinc-500';
+            bgColor = isWin ? 'bg-yellow-500/20' : 'bg-zinc-800';
+            label = isWin ? '🎉 Winner!' : 'No Luck';
+        }
+        else if (t.includes('TRANSFER')) {
+            icon = 'fa-arrow-right-arrow-left'; color = 'text-blue-400'; bgColor = 'bg-blue-500/20'; label = 'Transfer';
+        }
+        else if (t.includes('LISTED')) {
+            icon = 'fa-tag'; color = 'text-green-400'; bgColor = 'bg-green-500/20'; label = 'Listed NFT';
+        }
+        else if (t.includes('WITHDRAW')) {
+            icon = 'fa-rotate-left'; color = 'text-orange-400'; bgColor = 'bg-orange-500/20'; label = 'Withdrawn';
         }
 
         const txLink = item.txHash ? `${EXPLORER_BASE_URL}${item.txHash}` : '#';
@@ -1093,19 +1184,19 @@ function renderActivityPage() {
         const amountDisplay = amountNum > 0.01 ? amountNum.toFixed(2) : '';
 
         return `
-            <a href="${txLink}" target="_blank" class="flex items-center justify-between p-2.5 bg-zinc-800/30 hover:bg-zinc-800/60 border border-zinc-700/30 rounded-lg transition-colors group">
+            <a href="${txLink}" target="_blank" class="flex items-center justify-between p-2.5 bg-zinc-800/30 hover:bg-zinc-800/60 border border-zinc-700/30 rounded-lg transition-all hover:border-zinc-600/50 group">
                 <div class="flex items-center gap-2.5">
-                    <div class="w-7 h-7 rounded-full bg-zinc-900 flex items-center justify-center">
-                        <i class="fa-solid ${icon} ${color} text-[10px]"></i>
+                    <div class="w-8 h-8 rounded-lg ${bgColor} flex items-center justify-center border border-zinc-700/30">
+                        <i class="fa-solid ${icon} ${color} text-xs"></i>
                     </div>
                     <div>
                         <p class="text-white text-xs font-medium">${label}</p>
                         <p class="text-[10px] text-zinc-600">${dateStr}</p>
                     </div>
                 </div>
-                <div class="text-right">
-                    ${amountDisplay ? `<p class="text-white text-xs font-mono">${amountDisplay}</p>` : ''}
-                    <i class="fa-solid fa-external-link text-[8px] text-zinc-600 group-hover:text-blue-400 transition-colors"></i>
+                <div class="text-right flex items-center gap-2">
+                    ${amountDisplay ? `<p class="text-white text-xs font-mono">${amountDisplay} <span class="text-zinc-500">BKC</span></p>` : ''}
+                    <i class="fa-solid fa-arrow-up-right-from-square text-[9px] text-zinc-600 group-hover:text-blue-400 transition-colors"></i>
                 </div>
             </a>
         `;
