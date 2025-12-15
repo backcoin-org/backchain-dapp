@@ -1,5 +1,5 @@
 // js/pages/FortunePool.js
-// ✅ VERSION V9.7: Fixed dual loader issue, improved number picker (slider + grid), Oracle messaging
+// ✅ VERSION V9.8: Unified number picker (slider+grid for all), aligned history icons with Dashboard
 
 import { State } from '../state.js';
 import { loadUserData, safeContractCall, API_ENDPOINTS } from '../modules/data.js';
@@ -333,18 +333,23 @@ function renderPicker(container) {
 }
 
 function renderJackpotPicker(container) {
+    const range = 100;
+    const current = Game.guess;
+    
     container.innerHTML = `
         <div class="text-center">
-            <p class="text-zinc-400 text-sm mb-4">Pick a number from 1-100</p>
+            <!-- Header similar ao Combo -->
+            <h2 class="text-xl font-bold text-white mb-1">Jackpot Mode</h2>
+            <p class="text-zinc-400 text-sm mb-4">Pick 1-${range} • <span class="text-green-400">1% chance</span> • <span class="text-amber-400">100x</span></p>
             
             <!-- Display -->
-            <div class="text-6xl font-black text-amber-400 mb-4" id="jackpot-number">${Game.guess}</div>
+            <div class="text-5xl font-black text-amber-400 mb-4" id="jackpot-number">${current}</div>
             
             <!-- Slider -->
-            <div class="mb-6 px-4">
-                <input type="range" id="number-slider" min="1" max="100" value="${Game.guess}" 
+            <div class="mb-4 px-4">
+                <input type="range" id="number-slider" min="1" max="${range}" value="${current}" 
                     class="w-full h-3 rounded-full appearance-none cursor-pointer"
-                    style="background: linear-gradient(to right, #f59e0b 0%, #f59e0b ${Game.guess}%, #27272a ${Game.guess}%, #27272a 100%)">
+                    style="background: linear-gradient(to right, #f59e0b 0%, #f59e0b ${current}%, #27272a ${current}%, #27272a 100%)">
                 <div class="flex justify-between text-xs text-zinc-600 mt-1">
                     <span>1</span>
                     <span>25</span>
@@ -357,15 +362,13 @@ function renderJackpotPicker(container) {
             <!-- Quick Pick Grid - 10 columns x 10 rows -->
             <div class="mb-6">
                 <p class="text-xs text-zinc-500 mb-2 uppercase">Quick Pick</p>
-                <div class="grid grid-cols-10 gap-1 max-w-xs mx-auto">
-                    ${Array.from({length: 100}, (_, i) => i + 1).map(n => `
-                        <button class="num-btn w-7 h-7 rounded text-xs font-bold transition-all ${Game.guess === n ? 'bg-amber-500 text-black' : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'}" 
+                <div class="grid gap-1 max-w-xs mx-auto" style="grid-template-columns: repeat(10, minmax(0, 1fr))">
+                    ${Array.from({length: range}, (_, i) => i + 1).map(n => `
+                        <button class="num-btn w-7 h-7 rounded-lg text-xs font-bold transition-all ${current === n ? 'bg-amber-500 text-black' : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'}" 
                                 data-num="${n}">${n}</button>
                     `).join('')}
                 </div>
             </div>
-
-            <p class="text-xs text-zinc-500 mb-6">You have <span class="text-amber-400 font-bold">1%</span> chance to win <span class="text-green-400 font-bold">100x</span></p>
 
             <!-- Actions -->
             <div class="flex gap-3">
@@ -382,12 +385,14 @@ function renderJackpotPicker(container) {
     const slider = document.getElementById('number-slider');
     const display = document.getElementById('jackpot-number');
     
-    // Update number from slider
+    // Update number
     const updateNumber = (num) => {
         Game.guess = num;
-        display.textContent = num;
-        slider.value = num;
-        slider.style.background = `linear-gradient(to right, #f59e0b 0%, #f59e0b ${num}%, #27272a ${num}%, #27272a 100%)`;
+        if (display) display.textContent = num;
+        if (slider) {
+            slider.value = num;
+            slider.style.background = `linear-gradient(to right, #f59e0b 0%, #f59e0b ${num}%, #27272a ${num}%, #27272a 100%)`;
+        }
         
         // Update grid selection
         document.querySelectorAll('.num-btn').forEach(btn => {
@@ -403,9 +408,11 @@ function renderJackpotPicker(container) {
     };
 
     // Slider event
-    slider.addEventListener('input', (e) => {
-        updateNumber(parseInt(e.target.value));
-    });
+    if (slider) {
+        slider.addEventListener('input', (e) => {
+            updateNumber(parseInt(e.target.value));
+        });
+    }
 
     // Grid click
     document.querySelectorAll('.num-btn').forEach(btn => {
@@ -429,6 +436,10 @@ function renderComboPicker(container) {
     // Use TIERS array which matches contract configuration
     const tier = TIERS[Game.comboStep];
     const current = Game.guesses[Game.comboStep];
+    const range = tier.range;
+    
+    // Determina se precisa de slider (para ranges grandes)
+    const needsSlider = range > 10;
 
     container.innerHTML = `
         <div class="text-center">
@@ -444,20 +455,37 @@ function renderComboPicker(container) {
             </div>
 
             <h2 class="text-xl font-bold text-white mb-1">${tier.name} Tier</h2>
-            <p class="text-zinc-400 text-sm mb-4">Pick 1-${tier.range} • <span class="text-green-400">${tier.chance} chance</span> • <span class="text-amber-400">${tier.multiplier}x</span></p>
+            <p class="text-zinc-400 text-sm mb-4">Pick 1-${range} • <span class="text-green-400">${tier.chance} chance</span> • <span class="text-amber-400">${tier.multiplier}x</span></p>
+
+            <!-- Display -->
+            <div class="text-5xl font-black text-amber-400 mb-4" id="combo-number">${current}</div>
+            
+            ${needsSlider ? `
+                <!-- Slider para ranges grandes -->
+                <div class="mb-4 px-4">
+                    <input type="range" id="number-slider" min="1" max="${range}" value="${current}" 
+                        class="w-full h-3 rounded-full appearance-none cursor-pointer"
+                        style="background: linear-gradient(to right, #f59e0b 0%, #f59e0b ${(current/range)*100}%, #27272a ${(current/range)*100}%, #27272a 100%)">
+                    <div class="flex justify-between text-xs text-zinc-600 mt-1">
+                        <span>1</span>
+                        <span>${Math.floor(range/4)}</span>
+                        <span>${Math.floor(range/2)}</span>
+                        <span>${Math.floor(range*3/4)}</span>
+                        <span>${range}</span>
+                    </div>
+                </div>
+            ` : ''}
 
             <!-- Number Grid -->
-            <div class="flex flex-wrap justify-center gap-2 max-w-xs mx-auto mb-6">
-                ${Array(tier.range).fill(0).map((_, i) => {
-                    const n = i + 1;
-                    return `
-                        <button class="digit-btn w-12 h-12 rounded-xl bg-zinc-800 border-2 ${current === n ? 'selected' : 'border-zinc-700'} text-white font-bold text-lg hover:border-amber-500/50" 
-                                data-value="${n}">${n}</button>
-                    `;
-                }).join('')}
+            <div class="mb-6">
+                ${needsSlider ? `<p class="text-xs text-zinc-500 mb-2 uppercase">Quick Pick</p>` : ''}
+                <div class="grid gap-1.5 max-w-xs mx-auto" style="grid-template-columns: repeat(${range <= 5 ? range : 10}, minmax(0, 1fr))">
+                    ${Array.from({length: range}, (_, i) => i + 1).map(n => `
+                        <button class="num-btn ${range <= 10 ? 'w-10 h-10' : 'w-7 h-7'} rounded-lg text-xs font-bold transition-all ${current === n ? 'bg-amber-500 text-black' : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'}" 
+                                data-num="${n}">${n}</button>
+                    `).join('')}
+                </div>
             </div>
-
-            <p class="text-sm text-white mb-6">Your pick: <span id="current-pick" class="text-2xl font-bold text-amber-400">${current}</span></p>
 
             <!-- Actions -->
             <div class="flex gap-3">
@@ -471,18 +499,42 @@ function renderComboPicker(container) {
         </div>
     `;
 
-    // Number selection
-    document.querySelectorAll('.digit-btn').forEach(btn => {
+    const display = document.getElementById('combo-number');
+    const slider = document.getElementById('number-slider');
+    
+    // Função para atualizar seleção
+    const updateNumber = (num) => {
+        Game.guesses[Game.comboStep] = num;
+        if (display) display.textContent = num;
+        if (slider) {
+            slider.value = num;
+            slider.style.background = `linear-gradient(to right, #f59e0b 0%, #f59e0b ${(num/range)*100}%, #27272a ${(num/range)*100}%, #27272a 100%)`;
+        }
+        
+        // Update grid selection
+        document.querySelectorAll('.num-btn').forEach(btn => {
+            const btnNum = parseInt(btn.dataset.num);
+            if (btnNum === num) {
+                btn.classList.remove('bg-zinc-800', 'text-zinc-400', 'hover:bg-zinc-700');
+                btn.classList.add('bg-amber-500', 'text-black');
+            } else {
+                btn.classList.remove('bg-amber-500', 'text-black');
+                btn.classList.add('bg-zinc-800', 'text-zinc-400', 'hover:bg-zinc-700');
+            }
+        });
+    };
+
+    // Slider event
+    if (slider) {
+        slider.addEventListener('input', (e) => {
+            updateNumber(parseInt(e.target.value));
+        });
+    }
+
+    // Grid click
+    document.querySelectorAll('.num-btn').forEach(btn => {
         btn.addEventListener('click', () => {
-            const val = parseInt(btn.dataset.value);
-            Game.guesses[Game.comboStep] = val;
-            
-            document.querySelectorAll('.digit-btn').forEach(b => {
-                b.classList.remove('selected');
-            });
-            btn.classList.add('selected');
-            
-            document.getElementById('current-pick').textContent = val;
+            updateNumber(parseInt(btn.dataset.num));
         });
     });
 
@@ -1071,26 +1123,29 @@ function renderHistory(games) {
         const prize = g.prizeWon ? formatBigNumber(BigInt(g.prizeWon)) : 0;
         const wager = g.wagerAmount ? formatBigNumber(BigInt(g.wagerAmount)) : 0;
         const time = g.timestamp ? new Date(g.timestamp._seconds * 1000).toLocaleString() : '';
+        
+        // Ícones alinhados com Dashboard
+        const icon = isWin ? 'fa-crown' : 'fa-paw';
+        const iconColor = isWin ? '#facc15' : '#71717a';
+        const bgColor = isWin ? 'rgba(234,179,8,0.2)' : 'rgba(39,39,42,0.5)';
+        const label = isWin ? '🏆 Winner!' : '🐯 No Luck';
 
         return `
-            <div class="flex items-center justify-between p-3 border-b border-zinc-800/50 last:border-0">
-                <div class="flex items-center gap-3">
-                    <div class="w-8 h-8 rounded-full ${isWin ? 'bg-green-500/20' : 'bg-zinc-800'} flex items-center justify-center">
-                        <span class="${isWin ? 'text-green-400' : 'text-zinc-500'}">${isWin ? '🏆' : '🎲'}</span>
+            <a href="${g.txHash ? EXPLORER_TX + g.txHash : '#'}" target="_blank" 
+               class="flex items-center justify-between p-2.5 hover:bg-zinc-800/60 border-b border-zinc-800/30 last:border-0 transition-colors group">
+                <div class="flex items-center gap-2.5">
+                    <div class="w-8 h-8 rounded-lg flex items-center justify-center border border-zinc-700/30" style="background: ${bgColor}">
+                        <i class="fa-solid ${icon}" style="color: ${iconColor}; font-size: 12px"></i>
                     </div>
                     <div>
-                        <p class="text-sm font-medium ${isWin ? 'text-green-400' : 'text-zinc-400'}">
+                        <p class="text-xs font-medium" style="color: ${isWin ? '#4ade80' : '#a1a1aa'}">
                             ${isWin ? `+${prize.toFixed(2)} BKC` : `-${wager.toFixed(2)} BKC`}
                         </p>
-                        <p class="text-xs text-zinc-600">${time}</p>
+                        <p class="text-zinc-600" style="font-size: 10px">${time}</p>
                     </div>
                 </div>
-                ${g.txHash ? `
-                    <a href="${EXPLORER_TX}${g.txHash}" target="_blank" class="text-zinc-600 hover:text-blue-400">
-                        <i class="fa-solid fa-external-link text-xs"></i>
-                    </a>
-                ` : ''}
-            </div>
+                <i class="fa-solid fa-arrow-up-right-from-square text-zinc-600 group-hover:text-blue-400 transition-colors" style="font-size: 9px"></i>
+            </a>
         `;
     }).join('');
 }
