@@ -1,5 +1,5 @@
 // js/pages/FortunePool.js
-// ✅ VERSION V9.5: Fixed result screen sync - shows win when any tier matches
+// ✅ VERSION V9.7: Fixed dual loader issue, improved number picker (slider + grid), Oracle messaging
 
 import { State } from '../state.js';
 import { loadUserData, safeContractCall, API_ENDPOINTS } from '../modules/data.js';
@@ -70,24 +70,50 @@ function injectStyles() {
             100% { transform: translateY(-400px); }
         }
         
-        /* Spinner */
-        .slot-spinner {
+        /* Custom Slider */
+        input[type="range"] {
+            -webkit-appearance: none;
+            appearance: none;
+            background: transparent;
+            cursor: pointer;
+        }
+        input[type="range"]::-webkit-slider-runnable-track {
+            height: 8px;
+            border-radius: 4px;
+        }
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
             width: 24px;
             height: 24px;
-            position: relative;
-        }
-        .slot-spinner-inner {
-            width: 100%;
-            height: 100%;
-            border: 3px solid transparent;
-            border-top-color: #f59e0b;
-            border-right-color: #f59e0b;
             border-radius: 50%;
-            animation: spinnerRotate 0.8s linear infinite;
+            background: linear-gradient(135deg, #fbbf24, #f59e0b);
+            border: 3px solid #000;
+            box-shadow: 0 2px 10px rgba(245,158,11,0.5);
+            margin-top: -8px;
+            cursor: grab;
         }
-        @keyframes spinnerRotate {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
+        input[type="range"]::-webkit-slider-thumb:active {
+            cursor: grabbing;
+            transform: scale(1.1);
+        }
+        input[type="range"]::-moz-range-thumb {
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #fbbf24, #f59e0b);
+            border: 3px solid #000;
+            box-shadow: 0 2px 10px rgba(245,158,11,0.5);
+            cursor: grab;
+        }
+        
+        /* Number Grid */
+        .num-btn {
+            font-size: 10px;
+        }
+        .num-btn:hover {
+            transform: scale(1.1);
+            z-index: 10;
         }
         
         /* Result animations */
@@ -307,38 +333,35 @@ function renderPicker(container) {
 }
 
 function renderJackpotPicker(container) {
-    // Split into digits: tens (0-9) and units (0-9) for 1-100
-    const tens = Math.floor((Game.guess - 1) / 10); // 0-9
-    const units = (Game.guess - 1) % 10; // 0-9
-
     container.innerHTML = `
         <div class="text-center">
             <p class="text-zinc-400 text-sm mb-4">Pick a number from 1-100</p>
             
             <!-- Display -->
-            <div class="text-6xl font-black text-amber-400 mb-6" id="jackpot-number">${Game.guess}</div>
+            <div class="text-6xl font-black text-amber-400 mb-4" id="jackpot-number">${Game.guess}</div>
             
-            <!-- Digit Selectors -->
-            <div class="flex justify-center gap-6 mb-6">
-                <!-- Tens Digit -->
-                <div>
-                    <p class="text-xs text-zinc-500 mb-2 uppercase">Tens</p>
-                    <div class="grid grid-cols-5 gap-1">
-                        ${[0,1,2,3,4,5,6,7,8,9].map(d => `
-                            <button class="digit-btn w-10 h-10 rounded-lg bg-zinc-800 border border-zinc-700 text-white font-bold ${tens === d ? 'selected' : ''}" 
-                                    data-type="tens" data-digit="${d}">${d}</button>
-                        `).join('')}
-                    </div>
+            <!-- Slider -->
+            <div class="mb-6 px-4">
+                <input type="range" id="number-slider" min="1" max="100" value="${Game.guess}" 
+                    class="w-full h-3 rounded-full appearance-none cursor-pointer"
+                    style="background: linear-gradient(to right, #f59e0b 0%, #f59e0b ${Game.guess}%, #27272a ${Game.guess}%, #27272a 100%)">
+                <div class="flex justify-between text-xs text-zinc-600 mt-1">
+                    <span>1</span>
+                    <span>25</span>
+                    <span>50</span>
+                    <span>75</span>
+                    <span>100</span>
                 </div>
-                <!-- Units Digit -->
-                <div>
-                    <p class="text-xs text-zinc-500 mb-2 uppercase">Units</p>
-                    <div class="grid grid-cols-5 gap-1">
-                        ${[0,1,2,3,4,5,6,7,8,9].map(d => `
-                            <button class="digit-btn w-10 h-10 rounded-lg bg-zinc-800 border border-zinc-700 text-white font-bold ${units === d ? 'selected' : ''}" 
-                                    data-type="units" data-digit="${d}">${d}</button>
-                        `).join('')}
-                    </div>
+            </div>
+            
+            <!-- Quick Pick Grid - 10 columns x 10 rows -->
+            <div class="mb-6">
+                <p class="text-xs text-zinc-500 mb-2 uppercase">Quick Pick</p>
+                <div class="grid grid-cols-10 gap-1 max-w-xs mx-auto">
+                    ${Array.from({length: 100}, (_, i) => i + 1).map(n => `
+                        <button class="num-btn w-7 h-7 rounded text-xs font-bold transition-all ${Game.guess === n ? 'bg-amber-500 text-black' : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'}" 
+                                data-num="${n}">${n}</button>
+                    `).join('')}
                 </div>
             </div>
 
@@ -356,34 +379,38 @@ function renderJackpotPicker(container) {
         </div>
     `;
 
-    // Digit selection
-    document.querySelectorAll('.digit-btn').forEach(btn => {
-        btn.addEventListener('click', () => {
-            const type = btn.dataset.type;
-            const digit = parseInt(btn.dataset.digit);
-            
-            let currentTens = Math.floor((Game.guess - 1) / 10);
-            let currentUnits = (Game.guess - 1) % 10;
-            
-            if (type === 'tens') {
-                currentTens = digit;
+    const slider = document.getElementById('number-slider');
+    const display = document.getElementById('jackpot-number');
+    
+    // Update number from slider
+    const updateNumber = (num) => {
+        Game.guess = num;
+        display.textContent = num;
+        slider.value = num;
+        slider.style.background = `linear-gradient(to right, #f59e0b 0%, #f59e0b ${num}%, #27272a ${num}%, #27272a 100%)`;
+        
+        // Update grid selection
+        document.querySelectorAll('.num-btn').forEach(btn => {
+            const btnNum = parseInt(btn.dataset.num);
+            if (btnNum === num) {
+                btn.classList.remove('bg-zinc-800', 'text-zinc-400', 'hover:bg-zinc-700');
+                btn.classList.add('bg-amber-500', 'text-black');
             } else {
-                currentUnits = digit;
+                btn.classList.remove('bg-amber-500', 'text-black');
+                btn.classList.add('bg-zinc-800', 'text-zinc-400', 'hover:bg-zinc-700');
             }
-            
-            // Calculate new number (1-100)
-            let newNum = currentTens * 10 + currentUnits + 1;
-            if (newNum > 100) newNum = 100;
-            if (newNum < 1) newNum = 1;
-            
-            Game.guess = newNum;
-            
-            // Update display
-            document.getElementById('jackpot-number').textContent = Game.guess;
-            
-            // Update selection
-            document.querySelectorAll(`.digit-btn[data-type="${type}"]`).forEach(b => b.classList.remove('selected'));
-            btn.classList.add('selected');
+        });
+    };
+
+    // Slider event
+    slider.addEventListener('input', (e) => {
+        updateNumber(parseInt(e.target.value));
+    });
+
+    // Grid click
+    document.querySelectorAll('.num-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            updateNumber(parseInt(btn.dataset.num));
         });
     });
 
@@ -706,19 +733,33 @@ async function executeGame() {
     Game.phase = 'spin';
     renderPhase();
 
+    // Progress tracker durante a transação
+    let progress = 5;
+    const progressInterval = setInterval(() => {
+        if (progress < 35) {
+            progress += 2;
+            const messages = ['Checking wallet...', 'Approving tokens...', 'Submitting to blockchain...', 'Confirming transaction...'];
+            const msgIndex = Math.floor(progress / 10);
+            updateSpinStatus(messages[Math.min(msgIndex, messages.length - 1)], progress);
+        }
+    }, 500);
+
     try {
         const result = await executeFortuneParticipate(
             wagerWei,
             guesses,
             isCumulative,
-            document.getElementById('spin-status')
+            null  // Don't pass element - we handle status ourselves
         );
+        
+        clearInterval(progressInterval);
 
         if (result && result.success) {
             Game.gameId = result.gameId;
-            updateSpinStatus('Waiting for oracle...', 40);
+            updateSpinStatus('🔮 Waiting for Fortune Oracle...', 40);
             pollForResult(result.gameId);
         } else {
+            clearInterval(progressInterval);
             Game.phase = 'wager';
             renderPhase();
             if (result?.error) {
@@ -726,6 +767,7 @@ async function executeGame() {
             }
         }
     } catch (e) {
+        clearInterval(progressInterval);
         console.error('Game error:', e);
         Game.phase = 'wager';
         renderPhase();
@@ -768,21 +810,19 @@ function renderSpin(container) {
                 `).join('')}
             </div>
 
-            <!-- Status -->
+            <!-- Single Status Area - Only progress bar, no extra spinner -->
             <div class="bg-zinc-900/50 rounded-xl p-4 border border-zinc-800 mb-4">
-                <div class="flex items-center justify-center gap-3 mb-3">
-                    <div class="slot-spinner">
-                        <div class="slot-spinner-inner"></div>
-                    </div>
-                    <span id="spin-status" class="text-lg font-bold text-white">Spinning...</span>
-                </div>
+                <p id="spin-status" class="text-lg font-bold text-amber-400 mb-3">Submitting...</p>
                 
-                <div class="w-full bg-zinc-800 rounded-full h-1.5 overflow-hidden">
-                    <div id="spin-progress" class="bg-gradient-to-r from-amber-500 to-orange-500 h-full rounded-full transition-all duration-300" style="width: 10%"></div>
+                <div class="w-full bg-zinc-800 rounded-full h-2 overflow-hidden">
+                    <div id="spin-progress" class="bg-gradient-to-r from-amber-500 to-orange-500 h-full rounded-full transition-all duration-500" style="width: 5%"></div>
                 </div>
             </div>
             
-            <p class="text-xs text-zinc-500">🎲 Oracle generating random numbers...</p>
+            <p class="text-xs text-zinc-500">
+                <i class="fa-solid fa-wand-magic-sparkles mr-1 text-purple-400"></i>
+                🔮 Fortune Oracle revealing your destiny...
+            </p>
         </div>
     `;
 
@@ -831,12 +871,23 @@ async function pollForResult(gameId, attempts = 0) {
         return;
     }
 
-    updateSpinStatus('Waiting for result...', 40 + attempts);
+    // Mensagens rotativas para engajar o usuário
+    const oracleMessages = [
+        '🔮 Fortune Oracle processing...',
+        '✨ Oracle consulting the stars...',
+        '🎲 Generating random numbers...',
+        '🔮 Oracle revealing destiny...',
+        '⚡ Blockchain confirming...'
+    ];
+    const msgIndex = Math.floor(attempts / 3) % oracleMessages.length;
+    updateSpinStatus(oracleMessages[msgIndex], Math.min(40 + attempts, 95));
 
     try {
         const result = await getGameResult(gameId);
         
         if (result && result.fulfilled) {
+            updateSpinStatus('🎉 Result received!', 100);
+            await new Promise(r => setTimeout(r, 500)); // Brief pause for effect
             Game.result = result;
             Game.phase = 'result';
             renderPhase();

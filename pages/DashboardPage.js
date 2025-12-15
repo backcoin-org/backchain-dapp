@@ -1254,14 +1254,11 @@ function renderActivityPage() {
     listEl.innerHTML = pageItems.map(item => {
         const dateStr = formatDate(item.timestamp || item.createdAt);
 
-        // V7.7: Enhanced type detection with exact matches
+        // V7.8: Enhanced type detection with exact matches
         let icon = 'fa-circle', iconColor = '#71717a', bgColor = 'rgba(39,39,42,0.5)', label = item.type || 'Activity';
         let extraInfo = '';
         const t = (item.type || '').toUpperCase().trim();
         const eventName = (item.eventName || '').toUpperCase().trim();
-
-        // DEBUG - See actual types in browser console (F12)
-        console.log('🔍 Activity:', { type: t, eventName, raw: item.type });
 
         // STAKING - All variations including exact "STAKING"
         if (t === 'STAKING' || t === 'STAKED' || t === 'STAKE' || t === 'DELEGATED' || t === 'DELEGATION' ||
