@@ -1,5 +1,5 @@
 // js/pages/DashboardPage.js
-// ✅ VERSION V7.4: Enhanced activity icons, fixed pStake, custom loading with logo
+// ✅ VERSION V7.5: Fixed activity icons (inline styles), fixed networkActivities API response parsing
 
 const ethers = window.ethers;
 
@@ -986,7 +986,9 @@ async function fetchNetworkActivity() {
     try {
         const response = await fetch(`${NETWORK_ACTIVITY_API}?limit=20`);
         if (response.ok) {
-            DashboardState.networkActivities = await response.json();
+            const data = await response.json();
+            // V7.5: API returns { activities: [...] }, extract the array
+            DashboardState.networkActivities = Array.isArray(data) ? data : (data.activities || []);
             DashboardState.networkActivitiesTimestamp = Date.now();
         } else {
             DashboardState.networkActivities = [];
@@ -1027,17 +1029,34 @@ function renderNetworkActivityList() {
         const address = item.userAddress || item.from || '';
         const truncAddr = truncateAddress(address);
 
-        let icon = 'fa-circle', color = 'text-zinc-500', label = item.type;
+        // V7.5: Use inline styles for Vite/Tailwind compatibility
+        let icon = 'fa-circle', iconColor = '#71717a', bgColor = 'rgba(24,24,27,0.8)', label = item.type;
         const t = (item.type || '').toUpperCase();
 
-        if (t.includes('DELEGATION') || t.includes('STAKE')) { icon = 'fa-arrow-up'; color = 'text-green-400'; label = 'Staked'; }
-        else if (t.includes('UNSTAKE')) { icon = 'fa-arrow-down'; color = 'text-orange-400'; label = 'Unstaked'; }
-        else if (t.includes('REWARD') || t.includes('CLAIM')) { icon = 'fa-gift'; color = 'text-amber-400'; label = 'Claimed'; }
-        else if (t.includes('NFTBOUGHT') || t.includes('BOOSTERBUY')) { icon = 'fa-star'; color = 'text-yellow-300'; label = 'Minted NFT'; }
-        else if (t.includes('RENTAL')) { icon = 'fa-handshake'; color = 'text-cyan-400'; label = 'Rental'; }
-        else if (t.includes('NOTARY')) { icon = 'fa-file-signature'; color = 'text-indigo-400'; label = 'Notarized'; }
-        else if (t.includes('FORTUNE') || t.includes('GAME')) { icon = 'fa-dice'; color = 'text-purple-400'; label = 'Fortune'; }
-        else if (t.includes('FAUCET')) { icon = 'fa-faucet'; color = 'text-cyan-400'; label = 'Faucet'; }
+        if (t.includes('DELEGATION') || (t.includes('STAKE') && !t.includes('UNSTAKE'))) { 
+            icon = 'fa-lock'; iconColor = '#4ade80'; bgColor = 'rgba(34,197,94,0.15)'; label = 'Staked'; 
+        }
+        else if (t.includes('UNSTAKE')) { 
+            icon = 'fa-unlock'; iconColor = '#fb923c'; bgColor = 'rgba(249,115,22,0.15)'; label = 'Unstaked'; 
+        }
+        else if (t.includes('REWARD') || t.includes('CLAIM')) { 
+            icon = 'fa-coins'; iconColor = '#fbbf24'; bgColor = 'rgba(245,158,11,0.15)'; label = 'Claimed'; 
+        }
+        else if (t.includes('NFTBOUGHT') || t.includes('BOOSTERBUY')) { 
+            icon = 'fa-gem'; iconColor = '#fde047'; bgColor = 'rgba(234,179,8,0.15)'; label = 'Minted NFT'; 
+        }
+        else if (t.includes('RENTAL')) { 
+            icon = 'fa-clock'; iconColor = '#22d3ee'; bgColor = 'rgba(6,182,212,0.15)'; label = 'Rental'; 
+        }
+        else if (t.includes('NOTARY')) { 
+            icon = 'fa-stamp'; iconColor = '#818cf8'; bgColor = 'rgba(99,102,241,0.15)'; label = 'Notarized'; 
+        }
+        else if (t.includes('FORTUNE') || t.includes('GAME')) { 
+            icon = 'fa-dice-d20'; iconColor = '#c084fc'; bgColor = 'rgba(168,85,247,0.15)'; label = 'Fortune'; 
+        }
+        else if (t.includes('FAUCET')) { 
+            icon = 'fa-droplet'; iconColor = '#22d3ee'; bgColor = 'rgba(6,182,212,0.15)'; label = 'Faucet'; 
+        }
 
         const txLink = item.txHash ? `${EXPLORER_BASE_URL}${item.txHash}` : '#';
         let rawAmount = item.amount || item.details?.amount || "0";
@@ -1045,19 +1064,19 @@ function renderNetworkActivityList() {
         const amountDisplay = amountNum > 0.01 ? amountNum.toFixed(2) : '';
 
         return `
-            <a href="${txLink}" target="_blank" class="flex items-center justify-between p-2.5 bg-zinc-800/30 hover:bg-zinc-800/60 border border-zinc-700/30 rounded-lg transition-colors group">
+            <a href="${txLink}" target="_blank" class="flex items-center justify-between p-2.5 hover:bg-zinc-800/60 border border-zinc-700/30 rounded-lg transition-colors group" style="background: rgba(39,39,42,0.3)">
                 <div class="flex items-center gap-2.5">
-                    <div class="w-7 h-7 rounded-full bg-zinc-900 flex items-center justify-center">
-                        <i class="fa-solid ${icon} ${color} text-[10px]"></i>
+                    <div class="w-7 h-7 rounded-full flex items-center justify-center" style="background: ${bgColor}">
+                        <i class="fa-solid ${icon}" style="color: ${iconColor}; font-size: 10px"></i>
                     </div>
                     <div>
                         <p class="text-white text-xs font-medium">${label}</p>
-                        <p class="text-[10px] text-zinc-600">${truncAddr} • ${dateStr}</p>
+                        <p class="text-zinc-600" style="font-size: 10px">${truncAddr} • ${dateStr}</p>
                     </div>
                 </div>
-                <div class="text-right">
-                    ${amountDisplay ? `<p class="text-white text-xs font-mono">${amountDisplay}</p>` : ''}
-                    <i class="fa-solid fa-external-link text-[8px] text-zinc-600 group-hover:text-blue-400 transition-colors"></i>
+                <div class="text-right flex items-center gap-2">
+                    ${amountDisplay ? `<p class="text-white text-xs font-mono">${amountDisplay} <span class="text-zinc-500">BKC</span></p>` : ''}
+                    <i class="fa-solid fa-arrow-up-right-from-square text-zinc-600 group-hover:text-blue-400 transition-colors" style="font-size: 8px"></i>
                 </div>
             </a>
         `;
@@ -1127,55 +1146,55 @@ function renderActivityPage() {
     listEl.innerHTML = pageItems.map(item => {
         const dateStr = formatDate(item.timestamp || item.createdAt);
 
-        // V7.4: Enhanced icons with better visuals
-        let icon = 'fa-circle', color = 'text-zinc-500', bgColor = 'bg-zinc-800', label = item.type;
+        // V7.5: Enhanced icons with inline styles (Tailwind JIT safe)
+        let icon = 'fa-circle', iconColor = '#71717a', bgColor = 'rgba(39,39,42,0.5)', label = item.type;
         const t = (item.type || '').toUpperCase();
 
         if (t.includes('DELEGATION') || (t.includes('STAKE') && !t.includes('UNSTAKE'))) { 
-            icon = 'fa-lock'; color = 'text-green-400'; bgColor = 'bg-green-500/20'; label = 'Staked'; 
+            icon = 'fa-lock'; iconColor = '#4ade80'; bgColor = 'rgba(34,197,94,0.2)'; label = 'Staked'; 
         }
         else if (t.includes('UNSTAKE') || t.includes('FORCE')) { 
-            icon = 'fa-unlock'; color = 'text-orange-400'; bgColor = 'bg-orange-500/20'; label = t.includes('FORCE') ? 'Force Unstaked' : 'Unstaked'; 
+            icon = 'fa-unlock'; iconColor = '#fb923c'; bgColor = 'rgba(249,115,22,0.2)'; label = t.includes('FORCE') ? 'Force Unstaked' : 'Unstaked'; 
         }
         else if (t.includes('REWARD') || t.includes('CLAIM')) { 
-            icon = 'fa-coins'; color = 'text-amber-400'; bgColor = 'bg-amber-500/20'; label = 'Rewards Claimed'; 
+            icon = 'fa-coins'; iconColor = '#fbbf24'; bgColor = 'rgba(245,158,11,0.2)'; label = 'Rewards Claimed'; 
         }
         else if (t.includes('NFTBOUGHT')) { 
-            icon = 'fa-bag-shopping'; color = 'text-green-400'; bgColor = 'bg-green-500/20'; label = 'Bought NFT'; 
+            icon = 'fa-bag-shopping'; iconColor = '#4ade80'; bgColor = 'rgba(34,197,94,0.2)'; label = 'Bought NFT'; 
         }
         else if (t.includes('BOOSTERBUY') || t.includes('NFTSOLD_PRESALE')) { 
-            icon = 'fa-gem'; color = 'text-yellow-300'; bgColor = 'bg-yellow-500/20'; label = 'Minted Booster'; 
+            icon = 'fa-gem'; iconColor = '#fde047'; bgColor = 'rgba(234,179,8,0.2)'; label = 'Minted Booster'; 
         }
         else if (t.includes('NFTSOLD')) { 
-            icon = 'fa-hand-holding-dollar'; color = 'text-orange-400'; bgColor = 'bg-orange-500/20'; label = 'Sold NFT'; 
+            icon = 'fa-hand-holding-dollar'; iconColor = '#fb923c'; bgColor = 'rgba(249,115,22,0.2)'; label = 'Sold NFT'; 
         }
         else if (t.includes('RENTAL') || t.includes('RENTED')) { 
-            icon = 'fa-clock'; color = 'text-cyan-400'; bgColor = 'bg-cyan-500/20'; label = 'Rented NFT'; 
+            icon = 'fa-clock'; iconColor = '#22d3ee'; bgColor = 'rgba(6,182,212,0.2)'; label = 'Rented NFT'; 
         }
         else if (t.includes('NOTARY') || t.includes('DOCUMENT')) { 
-            icon = 'fa-stamp'; color = 'text-indigo-400'; bgColor = 'bg-indigo-500/20'; label = 'Notarized'; 
+            icon = 'fa-stamp'; iconColor = '#818cf8'; bgColor = 'rgba(99,102,241,0.2)'; label = 'Notarized'; 
         }
         else if (t.includes('FAUCET')) { 
-            icon = 'fa-droplet'; color = 'text-cyan-400'; bgColor = 'bg-cyan-500/20'; label = 'Faucet Claim'; 
+            icon = 'fa-droplet'; iconColor = '#22d3ee'; bgColor = 'rgba(6,182,212,0.2)'; label = 'Faucet Claim'; 
         }
         else if (t === 'GAMEREQUESTED' || t.includes('FORTUNEGAMEREQUEST') || t.includes('GAME_REQUEST')) { 
-            icon = 'fa-dice-d20'; color = 'text-purple-400'; bgColor = 'bg-purple-500/20'; label = 'Fortune Bet'; 
+            icon = 'fa-dice-d20'; iconColor = '#c084fc'; bgColor = 'rgba(168,85,247,0.2)'; label = 'Fortune Bet'; 
         }
         else if (t === 'GAMERESULT' || t.includes('FORTUNEGAMERESULT') || t.includes('GAME_RESULT')) {
             const isWin = item.details?.isWin || item.details?.prizeWon > 0;
             icon = isWin ? 'fa-crown' : 'fa-dice';
-            color = isWin ? 'text-yellow-400' : 'text-zinc-500';
-            bgColor = isWin ? 'bg-yellow-500/20' : 'bg-zinc-800';
+            iconColor = isWin ? '#facc15' : '#71717a';
+            bgColor = isWin ? 'rgba(234,179,8,0.2)' : 'rgba(39,39,42,0.5)';
             label = isWin ? '🎉 Winner!' : 'No Luck';
         }
         else if (t.includes('TRANSFER')) {
-            icon = 'fa-arrow-right-arrow-left'; color = 'text-blue-400'; bgColor = 'bg-blue-500/20'; label = 'Transfer';
+            icon = 'fa-arrow-right-arrow-left'; iconColor = '#60a5fa'; bgColor = 'rgba(59,130,246,0.2)'; label = 'Transfer';
         }
         else if (t.includes('LISTED')) {
-            icon = 'fa-tag'; color = 'text-green-400'; bgColor = 'bg-green-500/20'; label = 'Listed NFT';
+            icon = 'fa-tag'; iconColor = '#4ade80'; bgColor = 'rgba(34,197,94,0.2)'; label = 'Listed NFT';
         }
         else if (t.includes('WITHDRAW')) {
-            icon = 'fa-rotate-left'; color = 'text-orange-400'; bgColor = 'bg-orange-500/20'; label = 'Withdrawn';
+            icon = 'fa-rotate-left'; iconColor = '#fb923c'; bgColor = 'rgba(249,115,22,0.2)'; label = 'Withdrawn';
         }
 
         const txLink = item.txHash ? `${EXPLORER_BASE_URL}${item.txHash}` : '#';
@@ -1184,19 +1203,19 @@ function renderActivityPage() {
         const amountDisplay = amountNum > 0.01 ? amountNum.toFixed(2) : '';
 
         return `
-            <a href="${txLink}" target="_blank" class="flex items-center justify-between p-2.5 bg-zinc-800/30 hover:bg-zinc-800/60 border border-zinc-700/30 rounded-lg transition-all hover:border-zinc-600/50 group">
+            <a href="${txLink}" target="_blank" class="flex items-center justify-between p-2.5 hover:bg-zinc-800/60 border border-zinc-700/30 rounded-lg transition-all hover:border-zinc-600/50 group" style="background: rgba(39,39,42,0.3)">
                 <div class="flex items-center gap-2.5">
-                    <div class="w-8 h-8 rounded-lg ${bgColor} flex items-center justify-center border border-zinc-700/30">
-                        <i class="fa-solid ${icon} ${color} text-xs"></i>
+                    <div class="w-8 h-8 rounded-lg flex items-center justify-center border border-zinc-700/30" style="background: ${bgColor}">
+                        <i class="fa-solid ${icon} text-xs" style="color: ${iconColor}"></i>
                     </div>
                     <div>
                         <p class="text-white text-xs font-medium">${label}</p>
-                        <p class="text-[10px] text-zinc-600">${dateStr}</p>
+                        <p class="text-zinc-600 text-[10px]">${dateStr}</p>
                     </div>
                 </div>
                 <div class="text-right flex items-center gap-2">
                     ${amountDisplay ? `<p class="text-white text-xs font-mono">${amountDisplay} <span class="text-zinc-500">BKC</span></p>` : ''}
-                    <i class="fa-solid fa-arrow-up-right-from-square text-[9px] text-zinc-600 group-hover:text-blue-400 transition-colors"></i>
+                    <i class="fa-solid fa-arrow-up-right-from-square text-zinc-600 group-hover:text-blue-400 transition-colors" style="font-size: 9px"></i>
                 </div>
             </a>
         `;
