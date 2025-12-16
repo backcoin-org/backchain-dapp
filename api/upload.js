@@ -1,16 +1,20 @@
+// api/upload.js
+// ✅ VERSION V2.0: Fixed file size limit (4MB for Vercel serverless)
+
 import pinataSDK from '@pinata/sdk';
 import { Formidable } from 'formidable';
 import fs from 'fs';
 import { ethers } from 'ethers';
-import crypto from 'crypto'; // Necessário para calcular o Hash SHA-256
+import crypto from 'crypto';
 
 export const config = {
     api: {
         bodyParser: false,
+        responseLimit: false,
     },
 };
 
-// --- FUNÇÃO AUXILIAR PARA CORS ---
+// --- CORS Headers ---
 const setCorsHeaders = (res) => {
     res.setHeader('Access-Control-Allow-Credentials', true);
     res.setHeader('Access-Control-Allow-Origin', '*');
@@ -22,7 +26,7 @@ const setCorsHeaders = (res) => {
 };
 
 export default async function handler(req, res) {
-    // 1. Configurar CORS
+    // 1. CORS
     setCorsHeaders(res);
 
     if (req.method === 'OPTIONS') {
@@ -33,11 +37,11 @@ export default async function handler(req, res) {
         return res.status(405).json({ error: 'Method Not Allowed' });
     }
 
-    console.log(`[${new Date().toISOString()}] Upload request received (Enterprise Mode)`);
+    console.log(`[${new Date().toISOString()}] Upload request received`);
 
     const PINATA_JWT = process.env.PINATA_JWT;
     if (!PINATA_JWT) {
-        console.error('❌ Server Error: PINATA_JWT key not found.');
+        console.error('❌ PINATA_JWT not configured');
         return res.status(500).json({ error: 'Server configuration error.' });
     }
 
@@ -45,17 +49,23 @@ export default async function handler(req, res) {
     let file = null;
 
     try {
-        // 2. Processar o Formulário
+        // 2. Parse form with 4MB limit (Vercel serverless limit is 4.5MB)
         const form = new Formidable({
-            maxFileSize: 50 * 1024 * 1024, // 50MB Limite
+            maxFileSize: 4 * 1024 * 1024, // 4MB
             uploadDir: '/tmp',
             keepExtensions: true,
-            multiples: true,
+            multiples: false,
         });
 
         const [fields, files] = await new Promise((resolve, reject) => {
             form.parse(req, (err, fields, files) => {
-                if (err) reject(new Error('Form parsing failed: ' + err.message));
+                if (err) {
+                    if (err.code === 'LIMIT_FILE_SIZE' || err.message?.includes('maxFileSize')) {
+                        reject(new Error('FILE_TOO_LARGE'));
+                    } else {
+                        reject(new Error('Form parsing failed: ' + err.message));
+                    }
+                }
                 resolve([fields, files]);
             });
         });
@@ -66,11 +76,12 @@ export default async function handler(req, res) {
             return res.status(400).json({ error: 'No file received.' });
         }
 
-        // 3. Validar Assinatura (Segurança)
+        console.log(`📄 File received: ${file.originalFilename} (${(file.size / 1024).toFixed(1)} KB)`);
+
+        // 3. Validate signature
         const signature = (Array.isArray(fields.signature)) ? fields.signature[0] : fields.signature;
         const address = (Array.isArray(fields.address)) ? fields.address[0] : fields.address;
         
-        // Mensagem Exata que o Frontend assina
         const message = "I am signing to authenticate my file for notarization on Backchain."; 
 
         if (!signature || !address) {
@@ -88,36 +99,27 @@ export default async function handler(req, res) {
             return res.status(401).json({ error: 'Unauthorized', details: 'Invalid signature format.' });
         }
 
-        if (recoveredAddress.toLowerCase() !== address.toLowerCase()) {
+        if (!recoveredAddress || recoveredAddress.toLowerCase() !== address.toLowerCase()) {
             return res.status(401).json({ error: 'Unauthorized', details: 'Signature mismatch.' });
         }
 
-        console.log('✅ Signature verified.');
+        console.log('✅ Signature verified for:', address.slice(0, 10) + '...');
 
-        // =======================================================
-        // ### 4. CALCULAR HASH SHA-256 (PROVA MATEMÁTICA) ###
-        // =======================================================
-        console.log('🔒 Calculating SHA-256 Content Hash...');
-        
-        // Lê o buffer do arquivo para calcular o hash
+        // 4. Calculate SHA-256 hash
+        console.log('🔒 Calculating SHA-256...');
         const fileBuffer = fs.readFileSync(file.filepath);
         const hashSum = crypto.createHash('sha256');
         hashSum.update(fileBuffer);
-        
-        // Formata para string Hexadecimal com prefixo 0x (Para o tipo bytes32 do Solidity)
         const contentHash = '0x' + hashSum.digest('hex');
-        
-        console.log('🔹 Generated Hash:', contentHash);
+        console.log('🔹 Hash:', contentHash.slice(0, 20) + '...');
 
-        // =======================================================
-        // ### 5. UPLOAD DO ARQUIVO PARA O IPFS ###
-        // =======================================================
-        console.log('☁️ Uploading Raw File to Piñata IPFS...');
+        // 5. Upload to IPFS via Pinata
+        console.log('☁️ Uploading to Pinata IPFS...');
         
         const stream = fs.createReadStream(file.filepath);
         const fileOptions = {
             pinataMetadata: {
-                name: `Notary_Asset_${file.originalFilename || 'Unknown'}`,
+                name: `Notary_${file.originalFilename || 'document'}`,
                 keyvalues: {
                     owner: address,
                     timestamp: new Date().toISOString()
@@ -129,28 +131,34 @@ export default async function handler(req, res) {
         const fileResult = await pinata.pinFileToIPFS(stream, fileOptions);
         const ipfsUri = `ipfs://${fileResult.IpfsHash}`;
         
-        console.log('✅ File Uploaded:', ipfsUri);
+        console.log('✅ Uploaded:', ipfsUri);
 
-        // =======================================================
-        // ### 6. RETORNO PARA O FRONTEND ###
-        // =======================================================
-        // O Frontend pegará esses dados e enviará para a Blockchain
+        // 6. Return success
         return res.status(200).json({ 
             success: true,
-            ipfsUri: ipfsUri,       // Vai para o campo string ipfsCid
-            contentHash: contentHash, // Vai para o campo bytes32 contentHash
-            fileName: file.originalFilename
+            ipfsUri: ipfsUri,
+            contentHash: contentHash,
+            fileName: file.originalFilename,
+            fileSize: file.size
         });
 
     } catch (error) {
-        console.error('❌ Upload API Error:', error);
+        console.error('❌ Upload Error:', error.message);
+        
+        if (error.message === 'FILE_TOO_LARGE') {
+            return res.status(413).json({
+                error: 'File too large',
+                details: 'Maximum file size is 4MB.'
+            });
+        }
+        
         return res.status(500).json({
-            error: 'Server Error during upload.',
+            error: 'Upload failed',
             details: error.message
         });
 
     } finally {
-        // Limpeza do arquivo temporário do servidor
+        // Cleanup temp file
         if (file && file.filepath && fs.existsSync(file.filepath)) {
             try {
                 fs.unlinkSync(file.filepath);

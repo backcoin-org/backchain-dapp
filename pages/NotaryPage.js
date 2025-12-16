@@ -1,5 +1,5 @@
 // js/pages/NotaryPage.js
-// ✅ VERSION V8.1: Added notary.png for loading, processing overlay, and success animation
+// ✅ VERSION V8.2: Fixed file size limit (4MB for Vercel), better error handling
 
 import { State } from '../state.js';
 import { formatBigNumber } from '../utils.js';
@@ -12,7 +12,7 @@ const ethers = window.ethers;
 // ============================================================================
 // CONSTANTS
 // ============================================================================
-const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
+const MAX_FILE_SIZE = 4 * 1024 * 1024; // 4MB (Vercel serverless limit)
 const EXPLORER_TX = "https://sepolia.arbiscan.io/tx/";
 const IPFS_GATEWAY = "https://ipfs.io/ipfs/";
 
@@ -220,7 +220,7 @@ function render() {
                                 <div class="w-6 h-6 rounded-full bg-amber-500/20 flex items-center justify-center flex-shrink-0">
                                     <span class="text-amber-400 text-[10px] font-bold">1</span>
                                 </div>
-                                <p class="text-xs text-zinc-400">Upload any document (max 10MB)</p>
+                                <p class="text-xs text-zinc-400">Upload any document (max 4MB)</p>
                             </div>
                             <div class="flex items-start gap-3">
                                 <div class="w-6 h-6 rounded-full bg-amber-500/20 flex items-center justify-center flex-shrink-0">
@@ -475,7 +475,7 @@ function renderStep1(panel) {
                     <i class="fa-solid fa-cloud-arrow-up text-2xl text-amber-400"></i>
                 </div>
                 <p class="text-white font-medium mb-1">Click or drag file here</p>
-                <p class="text-[10px] text-zinc-600">Max 10MB • Any format</p>
+                <p class="text-[10px] text-zinc-600">Max 4MB • Any format</p>
             </div>
 
             <div class="flex items-center gap-4 mt-6 text-[10px] text-zinc-600">
@@ -517,7 +517,7 @@ function handleFileSelect(file) {
     if (!file) return;
 
     if (file.size > MAX_FILE_SIZE) {
-        showToast('File too large (max 10MB)', 'error');
+        showToast('File too large (max 4MB)', 'error');
         return;
     }
 
@@ -706,14 +706,25 @@ async function handleMint() {
         formData.append('address', State.userAddress);
         formData.append('description', Notary.description || 'No description');
 
-        const uploadUrl = API_ENDPOINTS.uploadFileToIPFS || "https://us-central1-backchain-415921.cloudfunctions.net/uploadfiletoipfs";
+        const uploadUrl = API_ENDPOINTS.uploadFileToIPFS || "/api/upload";
         const res = await fetch(uploadUrl, {
             method: 'POST',
             body: formData,
             signal: AbortSignal.timeout(180000)
         });
 
-        if (!res.ok) throw new Error('Upload failed');
+        if (!res.ok) {
+            // Handle specific error codes
+            if (res.status === 413) {
+                throw new Error('File too large. Maximum size is 4MB.');
+            } else if (res.status === 401) {
+                throw new Error('Signature verification failed. Please try again.');
+            } else if (res.status === 500) {
+                const errorData = await res.json().catch(() => ({}));
+                throw new Error(errorData.details || 'Server error during upload.');
+            }
+            throw new Error(`Upload failed (${res.status})`);
+        }
         const data = await res.json();
         
         console.log('📤 Upload response:', data);
