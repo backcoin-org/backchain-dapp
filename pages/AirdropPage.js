@@ -1,5 +1,5 @@
 // pages/AirdropPage.js
-// ✅ VERSION V2.2: Extended loading with NFT tier rewards info (7 tiers: Diamond to Crystal)
+// ✅ VERSION V3.0: Social Posting Focus - Share & Earn redesign
 
 import { State } from '../state.js';
 import * as db from '../modules/firebase-auth-service.js';
@@ -15,14 +15,14 @@ const AUTO_APPROVE_HOURS = 2;
 
 // Motivational messages for loading screen
 const LOADING_MESSAGES = [
-    { title: "🚀 The More You Share, The More You Earn!", subtitle: "Every post brings you closer to amazing NFT rewards" },
-    { title: "💎 Diamond NFT Awaits Top Creators!", subtitle: "Rank #1-2 and receive the most exclusive booster" },
-    { title: "🔥 Join the Movement!", subtitle: "Be part of something bigger and earn while doing it" },
-    { title: "⭐ Early Supporters Win Big!", subtitle: "Top 500 creators will receive exclusive NFT Boosters" },
-    { title: "🎯 Complete Tasks, Earn Points!", subtitle: "Simple actions, real rewards - climb the leaderboard!" },
+    { title: "🚀 Share & Earn!", subtitle: "Post on social media and get rewarded with NFT Boosters" },
+    { title: "💎 Top Creators Get Diamond NFTs!", subtitle: "Rank #1-2 and receive the most exclusive booster" },
+    { title: "📱 Post. Share. Earn.", subtitle: "It's that simple - spread the word and win rewards" },
+    { title: "🔥 Go Viral, Get Rewarded!", subtitle: "The more you post, the higher you climb" },
+    { title: "🎯 500 Creators Will Win NFTs!", subtitle: "From Diamond to Crystal - every post counts" },
     { title: "🏆 7 Tiers of NFT Rewards!", subtitle: "Diamond, Platinum, Gold, Silver, Bronze, Iron & Crystal" },
-    { title: "🎁 Your Effort = Your Reward!", subtitle: "The more you contribute, the better your NFT tier" },
-    { title: "📈 Climb the Leaderboard!", subtitle: "From Crystal to Diamond - every post counts!" }
+    { title: "📈 Your Posts = Your Rewards!", subtitle: "Each submission brings you closer to the top" },
+    { title: "⭐ Be a Backcoin Ambassador!", subtitle: "Share our vision and earn exclusive rewards" }
 ];
 
 function getRandomLoadingMessage() {
@@ -52,9 +52,8 @@ let airdropState = {
     dailyTasks: [],
     userSubmissions: [],
     isBanned: false,
-    activeTab: 'dashboard', 
-    activeEarnSubTab: 'tasks',
-    isGuideOpen: true 
+    activeTab: 'post',
+    isGuideOpen: false 
 };
 
 // ==========================================================
@@ -82,11 +81,6 @@ function injectAirdropStyles() {
             50% { box-shadow: 0 0 40px rgba(245, 158, 11, 0.4); }
         }
         
-        @keyframes shine {
-            0% { background-position: -200% center; }
-            100% { background-position: 200% center; }
-        }
-        
         @keyframes bounce-gentle {
             0%, 100% { transform: translateY(0); }
             50% { transform: translateY(-5px); }
@@ -102,31 +96,29 @@ function injectAirdropStyles() {
             to { opacity: 1; transform: translateY(0); }
         }
         
-        @keyframes coin-drop {
-            0% { transform: translateY(-20px) rotate(0deg); opacity: 0; }
-            50% { opacity: 1; }
-            100% { transform: translateY(0) rotate(360deg); opacity: 1; }
+        @keyframes shimmer {
+            0% { background-position: -200% center; }
+            100% { background-position: 200% center; }
         }
         
         .airdrop-float { animation: float 4s ease-in-out infinite; }
         .airdrop-float-slow { animation: float-slow 3s ease-in-out infinite; }
         .airdrop-pulse-glow { animation: pulse-glow 2s ease-in-out infinite; }
-        .airdrop-shine {
-            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
-            background-size: 200% 100%;
-            animation: shine 3s infinite;
-        }
         .airdrop-bounce { animation: bounce-gentle 2s ease-in-out infinite; }
         .airdrop-spin { animation: spin-slow 20s linear infinite; }
         .airdrop-fade-up { animation: fade-up 0.5s ease-out forwards; }
-        .airdrop-coin-drop { animation: coin-drop 0.6s ease-out forwards; }
+        
+        .airdrop-shimmer {
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.1), transparent);
+            background-size: 200% 100%;
+            animation: shimmer 2s infinite;
+        }
         
         .airdrop-card {
             transition: all 0.3s ease;
         }
         .airdrop-card:hover {
             transform: translateY(-2px);
-            box-shadow: 0 10px 40px rgba(245, 158, 11, 0.15);
         }
         
         .airdrop-tab-active {
@@ -142,9 +134,23 @@ function injectAirdropStyles() {
             background-clip: text;
         }
         
-        .task-card-hover:hover {
-            border-color: rgba(245, 158, 11, 0.5);
-            background: rgba(245, 158, 11, 0.05);
+        .social-btn {
+            transition: all 0.2s ease;
+        }
+        .social-btn:hover {
+            transform: scale(1.05);
+        }
+        .social-btn:active {
+            transform: scale(0.98);
+        }
+        
+        .cta-mega {
+            background: linear-gradient(135deg, #f59e0b 0%, #d97706 50%, #b45309 100%);
+            box-shadow: 0 10px 40px rgba(245, 158, 11, 0.3);
+        }
+        .cta-mega:hover {
+            box-shadow: 0 15px 50px rgba(245, 158, 11, 0.4);
+            transform: translateY(-2px);
         }
     `;
     document.head.appendChild(style);
@@ -195,14 +201,12 @@ async function loadAirdropData() {
     } catch (error) {
         console.error("Airdrop Data Load Error:", error);
         
-        // Handle permission errors gracefully - don't show toast for expected errors
         if (error.code === 'permission-denied' || error.message?.includes('permission')) {
             console.warn('Firebase permissions issue - user may need to connect wallet or sign in');
-            // Set empty defaults so UI can still render
             airdropState.systemConfig = airdropState.systemConfig || {};
             airdropState.leaderboards = airdropState.leaderboards || { top100ByPoints: [], top100ByPosts: [] };
             airdropState.dailyTasks = airdropState.dailyTasks || [];
-            return; // Don't throw, let UI render with empty state
+            return;
         }
         
         showToast("Error loading data. Please refresh.", "error");
@@ -219,53 +223,52 @@ function renderHeader() {
         <div class="md:hidden px-4 pt-4 pb-2">
             <div class="flex items-center justify-between mb-4">
                 <div class="flex items-center gap-3">
-                    <div class="w-12 h-12 airdrop-float-slow">
+                    <div class="w-10 h-10 airdrop-float-slow">
                         <img src="./assets/airdrop.png" alt="Airdrop" class="w-full h-full object-contain drop-shadow-lg">
                     </div>
                     <div>
-                        <h1 class="text-xl font-black airdrop-gradient-text">Airdrop</h1>
-                        <p class="text-[10px] text-zinc-500">Earn rewards</p>
+                        <h1 class="text-lg font-black text-white">Share <span class="airdrop-gradient-text">& Earn</span></h1>
                     </div>
                 </div>
                 <a href="https://t.me/BackCoinorg" target="_blank" 
-                   class="w-10 h-10 rounded-full bg-sky-500/10 border border-sky-500/30 flex items-center justify-center text-sky-400 hover:bg-sky-500/20 transition-all">
-                    <i class="fa-brands fa-telegram text-lg"></i>
+                   class="w-9 h-9 rounded-full bg-sky-500/10 border border-sky-500/30 flex items-center justify-center text-sky-400">
+                    <i class="fa-brands fa-telegram"></i>
                 </a>
             </div>
             
-            <!-- Mobile Navigation -->
+            <!-- Mobile Navigation - Post first -->
             <div class="flex gap-1 bg-zinc-900/80 p-1 rounded-2xl border border-zinc-800">
-                ${renderMobileNavPill('dashboard', 'fa-home', 'Home')}
-                ${renderMobileNavPill('earn', 'fa-coins', 'Earn')}
-                ${renderMobileNavPill('leaderboard', 'fa-trophy', 'Rank')}
+                ${renderMobileNavPill('post', 'fa-share-nodes', 'Post')}
+                ${renderMobileNavPill('history', 'fa-clock-rotate-left', 'My Posts')}
+                ${renderMobileNavPill('leaderboard', 'fa-trophy', 'Ranking')}
             </div>
         </div>
 
         <!-- Desktop Header -->
         <div class="hidden md:block px-4 pt-6 pb-4">
-            <div class="flex items-center justify-between mb-8">
+            <div class="flex items-center justify-between mb-6">
                 <div class="flex items-center gap-4">
-                    <div class="w-16 h-16 airdrop-float">
+                    <div class="w-14 h-14 airdrop-float">
                         <img src="./assets/airdrop.png" alt="Airdrop" class="w-full h-full object-contain drop-shadow-lg">
                     </div>
                     <div>
-                        <h1 class="text-3xl font-black airdrop-gradient-text tracking-tight">Airdrop Zone</h1>
-                        <p class="text-zinc-400 text-sm">Complete tasks, go viral, earn rewards</p>
+                        <h1 class="text-2xl font-black text-white">Share <span class="airdrop-gradient-text">& Earn</span></h1>
+                        <p class="text-zinc-500 text-sm">Post on social media, earn NFT rewards</p>
                     </div>
                 </div>
                 
                 <a href="https://t.me/BackCoinorg" target="_blank" 
-                   class="flex items-center gap-2 bg-sky-500/10 hover:bg-sky-500/20 border border-sky-500/30 text-sky-400 px-5 py-2.5 rounded-full transition-all hover:scale-105">
-                    <i class="fa-brands fa-telegram text-xl"></i>
-                    <span class="text-sm font-bold">Join Community</span>
+                   class="flex items-center gap-2 bg-sky-500/10 hover:bg-sky-500/20 border border-sky-500/30 text-sky-400 px-4 py-2 rounded-full transition-all hover:scale-105">
+                    <i class="fa-brands fa-telegram"></i>
+                    <span class="text-sm font-bold">Community</span>
                 </a>
             </div>
 
             <!-- Desktop Navigation -->
             <div class="flex justify-center">
-                <div class="bg-zinc-900/80 p-1.5 rounded-full border border-zinc-800 inline-flex gap-1 shadow-xl">
-                    ${renderNavPill('dashboard', 'fa-chart-pie', 'Dashboard')}
-                    ${renderNavPill('earn', 'fa-rocket', 'Earn Zone')}
+                <div class="bg-zinc-900/80 p-1.5 rounded-full border border-zinc-800 inline-flex gap-1">
+                    ${renderNavPill('post', 'fa-share-nodes', 'Create Post')}
+                    ${renderNavPill('history', 'fa-clock-rotate-left', 'My Posts')}
                     ${renderNavPill('leaderboard', 'fa-trophy', 'Ranking')}
                 </div>
             </div>
@@ -289,16 +292,20 @@ function renderNavPill(target, icon, label) {
     const isActive = airdropState.activeTab === target;
     return `
         <button data-target="${target}" 
-                class="nav-pill-btn px-6 py-2.5 rounded-full text-sm transition-all flex items-center gap-2 cursor-pointer
-                       ${isActive ? 'airdrop-tab-active shadow-lg shadow-amber-500/20' : 'text-zinc-400 hover:text-white hover:bg-zinc-800 font-medium'}">
+                class="nav-pill-btn px-5 py-2.5 rounded-full text-sm transition-all flex items-center gap-2 cursor-pointer
+                       ${isActive ? 'airdrop-tab-active shadow-lg shadow-amber-500/20' : 'text-zinc-400 hover:text-white hover:bg-zinc-800'}">
             <i class="fa-solid ${icon}"></i> ${label}
         </button>
     `;
 }
 
-// --- DASHBOARD ---
-function renderDashboard() {
-    const { user, userSubmissions } = airdropState;
+// --- POST TAB (Main Focus) ---
+function renderPostTab() {
+    const { user } = airdropState;
+    const refCode = user?.referralCode || 'CODE';
+    const shortLink = `http://backcoin.org/${refCode}`;
+    const approvedCount = user?.approvedSubmissionsCount || 0;
+    const totalPoints = user?.totalPoints || 0;
     
     if (!airdropState.isConnected) {
         return `
@@ -307,23 +314,153 @@ function renderDashboard() {
                     <img src="./assets/airdrop.png" alt="Connect" class="w-full h-full object-contain opacity-50">
                 </div>
                 <h3 class="text-lg font-bold text-white mb-2">Connect Your Wallet</h3>
-                <p class="text-zinc-500 text-sm max-w-xs mx-auto">Connect your wallet to view your dashboard and start earning rewards.</p>
-            </div>
-        `;
-    }
-    
-    if (!user) {
-        return `
-            <div class="text-center px-4 py-12">
-                <div class="w-20 h-20 mx-auto mb-4 airdrop-spin">
-                    <img src="./assets/airdrop.png" alt="Loading" class="w-full h-full object-contain opacity-60">
-                </div>
-                <p class="text-zinc-400 text-sm">Loading profile...</p>
+                <p class="text-zinc-500 text-sm max-w-xs mx-auto">Connect to start earning rewards by posting on social media.</p>
             </div>
         `;
     }
 
-    const multiplier = getMultiplierByTier(user.approvedSubmissionsCount || 0);
+    return `
+        <div class="px-4 space-y-5 airdrop-fade-up">
+            
+            <!-- Quick Stats Bar -->
+            <div class="flex gap-3">
+                <div class="flex-1 bg-zinc-900/80 border border-zinc-800 rounded-xl p-3 text-center">
+                    <span class="text-xl font-black text-amber-400">${approvedCount}</span>
+                    <p class="text-[10px] text-zinc-500">Posts</p>
+                </div>
+                <div class="flex-1 bg-zinc-900/80 border border-zinc-800 rounded-xl p-3 text-center">
+                    <span class="text-xl font-black text-green-400">${totalPoints.toLocaleString()}</span>
+                    <p class="text-[10px] text-zinc-500">Points</p>
+                </div>
+                <div class="flex-1 bg-zinc-900/80 border border-zinc-800 rounded-xl p-3 text-center">
+                    <span class="text-xl font-black text-purple-400">${getMultiplierByTier(approvedCount).toFixed(1)}x</span>
+                    <p class="text-[10px] text-zinc-500">Boost</p>
+                </div>
+            </div>
+
+            <!-- MAIN CTA: How It Works -->
+            <div class="bg-gradient-to-br from-zinc-800/50 to-zinc-900 border border-zinc-700 rounded-2xl p-5 relative overflow-hidden">
+                <div class="absolute top-3 right-3 w-16 h-16 opacity-20 airdrop-float">
+                    <img src="./assets/airdrop.png" alt="" class="w-full h-full object-contain">
+                </div>
+                
+                <h2 class="text-lg font-bold text-white mb-4 flex items-center gap-2">
+                    <i class="fa-solid fa-rocket text-amber-400"></i> 3 Simple Steps
+                </h2>
+                
+                <div class="space-y-4">
+                    <!-- Step 1: Copy -->
+                    <div class="flex gap-3 items-start">
+                        <div class="w-8 h-8 rounded-full bg-amber-500 flex items-center justify-center shrink-0 text-black font-bold text-sm">1</div>
+                        <div class="flex-1">
+                            <p class="text-white text-sm font-medium mb-2">Copy this text</p>
+                            <div class="bg-black/40 p-3 rounded-lg border border-zinc-700 mb-2">
+                                <p class="text-xs font-mono text-amber-400 break-all">${shortLink}</p>
+                                <p class="text-xs font-mono text-zinc-500 mt-1">${DEFAULT_HASHTAGS}</p>
+                            </div>
+                            <button id="copy-viral-btn" class="w-full cta-mega text-black font-bold py-3 px-4 rounded-xl text-sm flex items-center justify-center gap-2 transition-all">
+                                <i class="fa-solid fa-copy"></i> Copy Text & Link
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <!-- Step 2: Post -->
+                    <div class="flex gap-3 items-start">
+                        <div class="w-8 h-8 rounded-full bg-zinc-700 flex items-center justify-center shrink-0 text-white font-bold text-sm">2</div>
+                        <div class="flex-1">
+                            <p class="text-white text-sm font-medium mb-2">Post on any social network</p>
+                            <div class="flex flex-wrap gap-2">
+                                <a href="https://twitter.com/intent/tweet?text=${encodeURIComponent(shortLink + ' ' + DEFAULT_HASHTAGS)}" target="_blank" 
+                                   class="social-btn flex items-center gap-2 bg-black border border-zinc-700 hover:border-zinc-500 text-white px-4 py-2 rounded-lg text-sm">
+                                    <i class="fa-brands fa-x-twitter"></i> X / Twitter
+                                </a>
+                                <a href="https://www.tiktok.com" target="_blank" 
+                                   class="social-btn flex items-center gap-2 bg-black border border-zinc-700 hover:border-zinc-500 text-white px-4 py-2 rounded-lg text-sm">
+                                    <i class="fa-brands fa-tiktok"></i> TikTok
+                                </a>
+                                <a href="https://www.instagram.com" target="_blank" 
+                                   class="social-btn flex items-center gap-2 bg-black border border-zinc-700 hover:border-zinc-500 text-white px-4 py-2 rounded-lg text-sm">
+                                    <i class="fa-brands fa-instagram"></i> Instagram
+                                </a>
+                                <a href="https://www.youtube.com" target="_blank" 
+                                   class="social-btn flex items-center gap-2 bg-black border border-zinc-700 hover:border-zinc-500 text-white px-4 py-2 rounded-lg text-sm">
+                                    <i class="fa-brands fa-youtube"></i> YouTube
+                                </a>
+                            </div>
+                            <p class="text-amber-400 text-xs mt-2 flex items-center gap-1">
+                                <i class="fa-solid fa-exclamation-circle"></i> Post must be PUBLIC
+                            </p>
+                        </div>
+                    </div>
+                    
+                    <!-- Step 3: Submit -->
+                    <div class="flex gap-3 items-start">
+                        <div class="w-8 h-8 rounded-full bg-zinc-700 flex items-center justify-center shrink-0 text-white font-bold text-sm">3</div>
+                        <div class="flex-1">
+                            <p class="text-white text-sm font-medium mb-2">Submit your post link</p>
+                            <div class="relative">
+                                <input type="url" id="content-url-input" 
+                                       placeholder="Paste your post URL here..."
+                                       class="w-full bg-black/50 border border-zinc-600 rounded-xl pl-4 pr-24 py-3.5 text-white text-sm focus:border-amber-500 focus:ring-1 focus:ring-amber-500 outline-none transition-all placeholder:text-zinc-600">
+                                <button id="submit-content-btn" 
+                                        class="absolute right-2 top-2 bottom-2 bg-green-600 hover:bg-green-500 text-white font-bold px-4 rounded-lg transition-all text-sm">
+                                    Submit
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Daily Tasks (Secondary) -->
+            ${renderDailyTasksCompact()}
+            
+        </div>
+    `;
+}
+
+function renderDailyTasksCompact() {
+    const eligibleTasks = airdropState.dailyTasks.filter(t => !t.error && t.eligible);
+    
+    if (eligibleTasks.length === 0) return '';
+    
+    return `
+        <div class="bg-zinc-900/50 border border-zinc-800 rounded-xl p-4">
+            <h3 class="text-sm font-bold text-white mb-3 flex items-center gap-2">
+                <i class="fa-solid fa-bolt text-yellow-400"></i> Quick Tasks
+            </h3>
+            <div class="space-y-2">
+                ${eligibleTasks.slice(0, 3).map(task => `
+                    <div class="task-card flex items-center justify-between p-3 bg-zinc-800/50 rounded-lg cursor-pointer hover:bg-zinc-800 transition-colors"
+                         data-id="${task.id}" data-url="${task.url || ''}">
+                        <div class="flex items-center gap-3">
+                            <i class="fa-solid fa-star text-yellow-400"></i>
+                            <span class="text-sm text-white">${task.title}</span>
+                        </div>
+                        <span class="text-green-400 text-xs font-bold">+${Math.round(task.points)}</span>
+                    </div>
+                `).join('')}
+            </div>
+        </div>
+    `;
+}
+
+// --- HISTORY TAB ---
+function renderHistoryTab() {
+    const { user, userSubmissions } = airdropState;
+    
+    if (!airdropState.isConnected) {
+        return `
+            <div class="text-center px-4 py-12 airdrop-fade-up">
+                <div class="w-20 h-20 mx-auto mb-4 opacity-50">
+                    <img src="./assets/airdrop.png" alt="" class="w-full h-full object-contain">
+                </div>
+                <h3 class="text-lg font-bold text-white mb-2">Connect Your Wallet</h3>
+                <p class="text-zinc-500 text-sm">Connect to view your submission history.</p>
+            </div>
+        `;
+    }
+    
     const now = Date.now();
     const twoHoursMs = AUTO_APPROVE_HOURS * 60 * 60 * 1000;
     
@@ -333,55 +470,44 @@ function renderDashboard() {
         (now - sub.submittedAt.getTime() >= twoHoursMs)
     );
 
-    const pendingAuditCount = userSubmissions.filter(s => ['pending', 'auditing'].includes(s.status)).length;
+    const approvedCount = user?.approvedSubmissionsCount || 0;
+    const pendingCount = userSubmissions.filter(s => ['pending', 'auditing'].includes(s.status)).length;
+    const rejectedCount = userSubmissions.filter(s => s.status === 'rejected').length;
 
     return `
         <div class="px-4 space-y-4 airdrop-fade-up">
-            <!-- Stats Cards -->
+            
+            <!-- Stats -->
             <div class="grid grid-cols-3 gap-3">
-                <!-- Points -->
-                <div class="airdrop-card bg-gradient-to-br from-amber-900/30 to-zinc-900 border border-amber-500/20 rounded-2xl p-4 text-center airdrop-pulse-glow">
-                    <div class="w-10 h-10 mx-auto mb-2 airdrop-bounce">
-                        <img src="./assets/airdrop.png" alt="Points" class="w-full h-full object-contain">
-                    </div>
-                    <span class="text-2xl md:text-3xl font-black text-amber-400">${(user.totalPoints || 0).toLocaleString()}</span>
-                    <p class="text-[10px] text-zinc-500 mt-1 uppercase tracking-wider">Points</p>
+                <div class="bg-zinc-900/80 border border-zinc-800 rounded-xl p-3 text-center">
+                    <span class="text-2xl font-black text-green-400">${approvedCount}</span>
+                    <p class="text-[10px] text-zinc-500">Approved</p>
                 </div>
-                
-                <!-- Multiplier -->
-                <div class="airdrop-card bg-zinc-900/80 border border-zinc-800 rounded-2xl p-4 text-center">
-                    <div class="w-10 h-10 mx-auto mb-2 rounded-full bg-green-500/10 flex items-center justify-center">
-                        <i class="fa-solid fa-fire text-green-400 text-lg"></i>
-                    </div>
-                    <span class="text-2xl md:text-3xl font-black text-green-400">${multiplier.toFixed(1)}x</span>
-                    <p class="text-[10px] text-zinc-500 mt-1 uppercase tracking-wider">Boost</p>
+                <div class="bg-zinc-900/80 border border-zinc-800 rounded-xl p-3 text-center">
+                    <span class="text-2xl font-black text-amber-400">${pendingCount}</span>
+                    <p class="text-[10px] text-zinc-500">Pending</p>
                 </div>
-                
-                <!-- Pending -->
-                <div class="airdrop-card bg-zinc-900/80 border border-zinc-800 rounded-2xl p-4 text-center">
-                    <div class="w-10 h-10 mx-auto mb-2 rounded-full bg-blue-500/10 flex items-center justify-center">
-                        <i class="fa-solid fa-clock text-blue-400 text-lg"></i>
-                    </div>
-                    <span class="text-2xl md:text-3xl font-black text-blue-400">${pendingAuditCount}</span>
-                    <p class="text-[10px] text-zinc-500 mt-1 uppercase tracking-wider">Pending</p>
+                <div class="bg-zinc-900/80 border border-zinc-800 rounded-xl p-3 text-center">
+                    <span class="text-2xl font-black text-red-400">${rejectedCount}</span>
+                    <p class="text-[10px] text-zinc-500">Rejected</p>
                 </div>
             </div>
 
-            <!-- Action Center -->
+            <!-- Action Required -->
             ${actionRequiredItems.length > 0 ? `
                 <div class="space-y-3">
-                    <h3 class="text-sm font-bold text-white flex items-center gap-2 px-1">
-                        <i class="fa-solid fa-bell text-amber-500 airdrop-bounce"></i> Action Required
+                    <h3 class="text-sm font-bold text-white flex items-center gap-2">
+                        <i class="fa-solid fa-bell text-amber-500 airdrop-bounce"></i> Ready to Verify (${actionRequiredItems.length})
                     </h3>
                     ${actionRequiredItems.map(sub => `
-                        <div class="bg-gradient-to-r from-amber-900/20 to-zinc-900 border border-amber-500/30 rounded-xl p-4 relative overflow-hidden">
-                            <div class="absolute left-0 top-0 bottom-0 w-1 bg-amber-500"></div>
+                        <div class="bg-gradient-to-r from-green-900/20 to-zinc-900 border border-green-500/30 rounded-xl p-4 relative overflow-hidden">
+                            <div class="absolute left-0 top-0 bottom-0 w-1 bg-green-500"></div>
                             <div class="flex items-start gap-3 mb-3">
-                                <div class="bg-amber-500/20 w-10 h-10 rounded-full flex items-center justify-center shrink-0">
-                                    <i class="fa-solid fa-check-circle text-amber-400"></i>
+                                <div class="bg-green-500/20 w-10 h-10 rounded-full flex items-center justify-center shrink-0">
+                                    <i class="fa-solid fa-check-circle text-green-400"></i>
                                 </div>
                                 <div class="min-w-0 flex-1">
-                                    <p class="text-white font-bold text-sm">Ready for Verification</p>
+                                    <p class="text-white font-bold text-sm">Ready for Verification!</p>
                                     <a href="${sub.url}" target="_blank" class="text-blue-400 text-xs truncate block hover:underline mt-1">${sub.url}</a>
                                 </div>
                             </div>
@@ -392,40 +518,39 @@ function renderDashboard() {
                                 </button>
                                 <button data-action="confirm" data-id="${sub.submissionId}" 
                                         class="action-btn flex-1 bg-green-600 hover:bg-green-500 text-white text-xs font-bold py-2 rounded-lg transition-colors">
-                                    Confirm ✓
+                                    Confirm & Earn ✓
                                 </button>
                             </div>
                         </div>
                     `).join('')}
                 </div>
-            ` : `
-                <div class="bg-zinc-900/50 border border-zinc-800 rounded-xl p-6 text-center">
-                    <i class="fa-solid fa-check-circle text-zinc-600 text-2xl mb-2"></i>
-                    <p class="text-zinc-500 text-sm">No pending actions</p>
-                </div>
-            `}
+            ` : ''}
 
-            <!-- Recent Activity -->
+            <!-- Recent Submissions -->
             <div>
-                <h3 class="text-sm font-bold text-white mb-3 px-1">Recent Activity</h3>
+                <h3 class="text-sm font-bold text-white mb-3">Submission History</h3>
                 <div class="bg-zinc-900/80 border border-zinc-800 rounded-xl overflow-hidden">
                     ${userSubmissions.length === 0 ? 
-                        '<p class="text-zinc-500 text-sm italic p-6 text-center">No submissions yet</p>' : 
-                        userSubmissions.slice(0, 5).map((sub, idx) => {
+                        `<div class="p-8 text-center">
+                            <i class="fa-solid fa-inbox text-zinc-600 text-3xl mb-3"></i>
+                            <p class="text-zinc-500 text-sm">No submissions yet</p>
+                            <p class="text-zinc-600 text-xs mt-1">Create your first post to get started!</p>
+                        </div>` : 
+                        userSubmissions.slice(0, 10).map((sub, idx) => {
                             const statusIcon = sub.status === 'approved' ? 
                                 '<i class="fa-solid fa-check-circle text-green-400"></i>' : 
                                 sub.status === 'rejected' ? 
                                 '<i class="fa-solid fa-times-circle text-red-400"></i>' : 
                                 '<i class="fa-solid fa-clock text-amber-400"></i>';
                             const pts = sub.pointsAwarded ? `+${sub.pointsAwarded}` : '-';
-                            const isLast = idx === Math.min(userSubmissions.length, 5) - 1;
+                            const isLast = idx === Math.min(userSubmissions.length, 10) - 1;
                             return `
                                 <div class="flex items-center justify-between p-3 ${isLast ? '' : 'border-b border-zinc-800'}">
                                     <div class="flex items-center gap-3 overflow-hidden">
                                         ${statusIcon}
                                         <a href="${sub.url}" target="_blank" class="text-zinc-400 text-xs truncate hover:text-blue-400 max-w-[180px] md:max-w-[300px]">${sub.url}</a>
                                     </div>
-                                    <span class="font-mono font-bold text-white text-sm shrink-0">${pts}</span>
+                                    <span class="font-mono font-bold ${sub.pointsAwarded ? 'text-green-400' : 'text-zinc-600'} text-sm shrink-0">${pts}</span>
                                 </div>
                             `;
                         }).join('')
@@ -436,286 +561,100 @@ function renderDashboard() {
     `;
 }
 
-// --- EARN ZONE ---
-function renderEarnZone() {
-    const isTasks = airdropState.activeEarnSubTab === 'tasks';
-
-    return `
-        <div class="px-4 airdrop-fade-up">
-            <!-- Sub Tabs -->
-            <div class="flex gap-2 mb-6 bg-zinc-900/80 p-1 rounded-xl border border-zinc-800">
-                <button class="earn-subtab-btn flex-1 py-2.5 text-sm font-bold rounded-lg transition-all
-                               ${isTasks ? 'bg-amber-500 text-black' : 'text-zinc-400 hover:text-white'}" data-target="tasks">
-                    <i class="fa-solid fa-tasks mr-2"></i>Tasks
-                </button>
-                <button class="earn-subtab-btn flex-1 py-2.5 text-sm font-bold rounded-lg transition-all
-                               ${!isTasks ? 'bg-amber-500 text-black' : 'text-zinc-400 hover:text-white'}" data-target="content">
-                    <i class="fa-solid fa-share-nodes mr-2"></i>Viral Post
-                </button>
-            </div>
-
-            <div class="earn-content">
-                ${isTasks ? renderDailyTasks() : renderContentCreation()}
-            </div>
-        </div>
-    `;
-}
-
-function renderDailyTasks() {
-    const eligibleTasks = airdropState.dailyTasks.filter(t => !t.error);
-    
-    if(eligibleTasks.length === 0) {
-        return `
-            <div class="text-center py-12">
-                <div class="w-20 h-20 mx-auto mb-4 opacity-50">
-                    <img src="./assets/airdrop.png" alt="No tasks" class="w-full h-full object-contain">
-                </div>
-                <p class="text-zinc-400 text-sm">No active tasks right now</p>
-                <p class="text-zinc-600 text-xs mt-1">Check back later!</p>
-            </div>
-        `;
-    }
-
-    return `
-        <div class="space-y-3">
-            ${eligibleTasks.map(task => {
-                const isCooldown = !task.eligible && task.timeLeftMs > 0;
-                return `
-                    <div class="task-card task-card-hover bg-zinc-900/80 border border-zinc-800 rounded-xl p-4 transition-all cursor-pointer
-                                ${isCooldown ? 'opacity-50' : ''}"
-                         data-id="${task.id}" data-url="${task.url || ''}">
-                        <div class="flex items-center gap-4">
-                            <div class="w-12 h-12 rounded-xl bg-amber-500/10 flex items-center justify-center shrink-0">
-                                <i class="fa-solid ${isCooldown ? 'fa-hourglass-half' : 'fa-star'} text-xl ${isCooldown ? 'text-zinc-500' : 'text-amber-400'}"></i>
-                            </div>
-                            <div class="flex-1 min-w-0">
-                                <h4 class="font-bold text-white text-sm truncate">${task.title}</h4>
-                                <div class="flex items-center gap-3 mt-1">
-                                    <span class="text-green-400 text-xs font-bold">+${Math.round(task.points)} pts</span>
-                                    <span class="text-zinc-500 text-xs">${task.cooldownHours}h cooldown</span>
-                                </div>
-                            </div>
-                            <div class="shrink-0">
-                                ${isCooldown ? 
-                                    '<span class="text-zinc-500 text-xs font-medium">Wait</span>' : 
-                                    '<i class="fa-solid fa-chevron-right text-amber-400"></i>'
-                                }
-                            </div>
-                        </div>
-                    </div>
-                `;
-            }).join('')}
-        </div>
-    `;
-}
-
-function renderContentCreation() {
-    const guideOpen = airdropState.isGuideOpen;
-    const user = airdropState.user;
-    const refCode = user?.referralCode || 'CODE';
-    const shortLink = `http://backcoin.org/${refCode}`;
-    
-    return `
-        <!-- Guide Card -->
-        <div class="bg-zinc-900/80 border border-zinc-800 rounded-xl overflow-hidden mb-4">
-            <div class="flex justify-between items-center p-4 cursor-pointer hover:bg-zinc-800/50 transition-colors" id="guide-toggle-btn">
-                <div class="flex items-center gap-3">
-                    <div class="w-10 h-10 rounded-lg bg-blue-500/10 flex items-center justify-center">
-                        <i class="fa-solid fa-book text-blue-400"></i>
-                    </div>
-                    <span class="font-bold text-white text-sm">How it Works</span>
-                </div>
-                <i class="fa-solid fa-chevron-down text-zinc-400 transition-transform duration-300 ${guideOpen ? 'rotate-180' : ''}"></i>
-            </div>
-            
-            <div class="${guideOpen ? 'block' : 'hidden'} border-t border-zinc-800 p-4 bg-zinc-900/50">
-                <div class="space-y-4">
-                    <!-- Step 1 -->
-                    <div class="flex gap-3">
-                        <div class="w-8 h-8 rounded-full bg-amber-500 flex items-center justify-center shrink-0 text-black font-bold text-sm">1</div>
-                        <div class="flex-1">
-                            <p class="text-white text-sm font-medium mb-2">Copy & Post</p>
-                            <div class="bg-black/40 p-3 rounded-lg mb-2 border border-zinc-700">
-                                <p class="text-xs font-mono text-zinc-400 break-all">${shortLink} ${DEFAULT_HASHTAGS}</p>
-                            </div>
-                            <button id="copy-viral-btn" class="w-full bg-amber-500 hover:bg-amber-600 text-black font-bold py-2.5 px-4 rounded-lg transition-colors text-sm flex items-center justify-center gap-2">
-                                <i class="fa-solid fa-copy"></i> Copy Text
-                            </button>
-                        </div>
-                    </div>
-                    
-                    <!-- Step 2 -->
-                    <div class="flex gap-3">
-                        <div class="w-8 h-8 rounded-full bg-zinc-700 flex items-center justify-center shrink-0 text-white font-bold text-sm">2</div>
-                        <div>
-                            <p class="text-white text-sm font-medium">Post Publicly</p>
-                            <p class="text-zinc-500 text-xs mt-1">Share on TikTok, X, YouTube or Instagram. <span class="text-amber-400 font-medium">Must be Public!</span></p>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Submit Card -->
-        <div class="bg-gradient-to-br from-zinc-800/50 to-zinc-900 border border-zinc-700 rounded-2xl p-5 text-center">
-            <div class="w-16 h-16 mx-auto mb-4 airdrop-float-slow">
-                <img src="./assets/airdrop.png" alt="Submit" class="w-full h-full object-contain">
-            </div>
-            <h3 class="text-lg font-bold text-white mb-2">Submit Your Post</h3>
-            <p class="text-zinc-400 text-xs mb-4">Paste the URL of your published post</p>
-            
-            <div class="relative">
-                <input type="url" id="content-url-input" 
-                       placeholder="https://..."
-                       class="w-full bg-black/50 border border-zinc-600 rounded-xl pl-4 pr-24 py-3.5 text-white text-sm focus:border-amber-500 focus:ring-1 focus:ring-amber-500 outline-none transition-all placeholder:text-zinc-600">
-                <button id="submit-content-btn" 
-                        class="absolute right-2 top-2 bottom-2 bg-amber-500 hover:bg-amber-600 text-black font-bold px-4 rounded-lg transition-all text-sm">
-                    Submit
-                </button>
-            </div>
-        </div>
-    `;
-}
-
-// --- LEADERBOARD ---
+// --- LEADERBOARD TAB ---
 function renderLeaderboard() {
-    const pointsList = airdropState.leaderboards?.top100ByPoints || [];
     const postsList = airdropState.leaderboards?.top100ByPosts || []; 
     
-    const lastUpdatedTimestamp = airdropState.leaderboards?.lastUpdated;
-    let lastUpdated = 'Just now';
-    if(lastUpdatedTimestamp) {
-        const date = lastUpdatedTimestamp.toDate ? lastUpdatedTimestamp.toDate() : new Date(lastUpdatedTimestamp);
-        lastUpdated = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    }
-
     return `
         <div class="px-4 airdrop-fade-up">
-            <p class="text-xs text-zinc-500 mb-4 text-center">
-                <i class="fa-solid fa-sync mr-1"></i> Updated: ${lastUpdated}
-            </p>
 
-            <!-- Prizes Banner -->
-            <div class="bg-gradient-to-r from-amber-900/20 to-zinc-900 border border-amber-500/20 rounded-xl p-4 mb-6 relative overflow-hidden">
-                <div class="absolute top-2 right-2 w-16 h-16 airdrop-float opacity-30">
+            <!-- Prizes Banner - Detailed -->
+            <div class="bg-gradient-to-br from-amber-900/20 to-zinc-900 border border-amber-500/20 rounded-xl p-4 mb-5 relative overflow-hidden">
+                <div class="absolute top-2 right-2 w-14 h-14 airdrop-float opacity-30">
                     <img src="./assets/airdrop.png" alt="Prize" class="w-full h-full object-contain">
                 </div>
-                <h3 class="font-bold text-white text-sm mb-4 flex items-center gap-2">
-                    <i class="fa-solid fa-trophy text-amber-400"></i> Content Creator Rewards
+                <h3 class="font-bold text-white text-sm mb-3 flex items-center gap-2">
+                    <i class="fa-solid fa-trophy text-amber-400"></i> NFT Rewards by Rank
                 </h3>
-                <p class="text-zinc-400 text-xs mb-4">Top content creators will receive exclusive NFT Boosters based on their ranking:</p>
                 
-                <div class="space-y-2 text-xs">
-                    <!-- Diamond -->
+                <div class="space-y-1.5 text-xs">
                     <div class="flex items-center justify-between p-2 rounded-lg bg-gradient-to-r from-cyan-500/10 to-transparent border border-cyan-500/20">
-                        <div class="flex items-center gap-2">
-                            <span class="text-cyan-300 text-lg">💎</span>
-                            <span class="text-cyan-300 font-bold">Diamond</span>
-                        </div>
-                        <span class="text-zinc-400">Rank <span class="text-white font-bold">1-2</span></span>
+                        <div class="flex items-center gap-2"><span class="text-lg">💎</span><span class="text-cyan-300 font-bold">Diamond</span></div>
+                        <span class="text-white font-bold">#1-2</span>
                     </div>
-                    
-                    <!-- Platinum -->
                     <div class="flex items-center justify-between p-2 rounded-lg bg-gradient-to-r from-slate-400/10 to-transparent border border-slate-400/20">
-                        <div class="flex items-center gap-2">
-                            <span class="text-slate-300 text-lg">🏆</span>
-                            <span class="text-slate-300 font-bold">Platinum</span>
-                        </div>
-                        <span class="text-zinc-400">Rank <span class="text-white font-bold">3-10</span></span>
+                        <div class="flex items-center gap-2"><span class="text-lg">🏆</span><span class="text-slate-300 font-bold">Platinum</span></div>
+                        <span class="text-white font-bold">#3-10</span>
                     </div>
-                    
-                    <!-- Gold -->
                     <div class="flex items-center justify-between p-2 rounded-lg bg-gradient-to-r from-yellow-500/10 to-transparent border border-yellow-500/20">
-                        <div class="flex items-center gap-2">
-                            <span class="text-yellow-400 text-lg">🥇</span>
-                            <span class="text-yellow-400 font-bold">Gold</span>
-                        </div>
-                        <span class="text-zinc-400">Rank <span class="text-white font-bold">11-20</span></span>
+                        <div class="flex items-center gap-2"><span class="text-lg">🥇</span><span class="text-yellow-400 font-bold">Gold</span></div>
+                        <span class="text-white font-bold">#11-20</span>
                     </div>
-                    
-                    <!-- Silver -->
-                    <div class="flex items-center justify-between p-2 rounded-lg bg-gradient-to-r from-gray-400/10 to-transparent border border-gray-500/20">
-                        <div class="flex items-center gap-2">
-                            <span class="text-gray-300 text-lg">🥈</span>
-                            <span class="text-gray-300 font-bold">Silver</span>
-                        </div>
-                        <span class="text-zinc-400">Rank <span class="text-white font-bold">21-50</span></span>
+                    <div class="flex items-center justify-between p-2 rounded-lg bg-gradient-to-r from-gray-400/10 to-transparent border border-gray-400/20">
+                        <div class="flex items-center gap-2"><span class="text-lg">🥈</span><span class="text-gray-300 font-bold">Silver</span></div>
+                        <span class="text-white font-bold">#21-50</span>
                     </div>
-                    
-                    <!-- Bronze -->
                     <div class="flex items-center justify-between p-2 rounded-lg bg-gradient-to-r from-amber-700/10 to-transparent border border-amber-700/20">
-                        <div class="flex items-center gap-2">
-                            <span class="text-amber-600 text-lg">🥉</span>
-                            <span class="text-amber-600 font-bold">Bronze</span>
-                        </div>
-                        <span class="text-zinc-400">Rank <span class="text-white font-bold">51-150</span></span>
+                        <div class="flex items-center gap-2"><span class="text-lg">🥉</span><span class="text-amber-600 font-bold">Bronze</span></div>
+                        <span class="text-white font-bold">#51-150</span>
                     </div>
-                    
-                    <!-- Iron -->
                     <div class="flex items-center justify-between p-2 rounded-lg bg-gradient-to-r from-zinc-600/10 to-transparent border border-zinc-600/20">
-                        <div class="flex items-center gap-2">
-                            <span class="text-zinc-400 text-lg">⚔️</span>
-                            <span class="text-zinc-400 font-bold">Iron</span>
-                        </div>
-                        <span class="text-zinc-400">Rank <span class="text-white font-bold">151-300</span></span>
+                        <div class="flex items-center gap-2"><span class="text-lg">⚔️</span><span class="text-zinc-400 font-bold">Iron</span></div>
+                        <span class="text-white font-bold">#151-300</span>
                     </div>
-                    
-                    <!-- Crystal -->
                     <div class="flex items-center justify-between p-2 rounded-lg bg-gradient-to-r from-purple-500/10 to-transparent border border-purple-500/20">
-                        <div class="flex items-center gap-2">
-                            <span class="text-purple-400 text-lg">🔮</span>
-                            <span class="text-purple-400 font-bold">Crystal</span>
-                        </div>
-                        <span class="text-zinc-400">Rank <span class="text-white font-bold">301-500</span></span>
+                        <div class="flex items-center gap-2"><span class="text-lg">🔮</span><span class="text-purple-400 font-bold">Crystal</span></div>
+                        <span class="text-white font-bold">#301-500</span>
                     </div>
                 </div>
                 
-                <p class="text-amber-400/80 text-[10px] mt-4 flex items-center gap-1">
+                <p class="text-amber-400/80 text-[10px] mt-3 flex items-center gap-1">
                     <i class="fa-solid fa-info-circle"></i>
-                    Crystal tier requires minimum 200 approved posts
+                    Crystal requires minimum 200 approved posts
                 </p>
             </div>
 
-            <!-- Rankings -->
-            <div class="space-y-6">
-                ${renderRankingTable('Points Leaders', 'fa-crown', 'text-yellow-500', pointsList, 'pts')}
-                ${renderRankingTable('Content Creators', 'fa-video', 'text-red-500', postsList, 'posts')}
+            <!-- Top Creators Ranking -->
+            <div class="bg-zinc-900/80 border border-zinc-800 rounded-xl overflow-hidden">
+                <div class="p-4 border-b border-zinc-800 flex items-center justify-between">
+                    <h3 class="font-bold text-white text-sm flex items-center gap-2">
+                        <i class="fa-solid fa-crown text-yellow-500"></i> Top Content Creators
+                    </h3>
+                    <span class="text-zinc-500 text-xs">${postsList.length} creators</span>
+                </div>
+                <div class="divide-y divide-zinc-800/50 max-h-[400px] overflow-y-auto">
+                    ${postsList.length === 0 ? 
+                        '<p class="p-6 text-center text-zinc-500 text-sm">No data yet - be the first!</p>' : 
+                        postsList.slice(0, 20).map((item, i) => {
+                            const isMe = airdropState.user && item.walletAddress.toLowerCase() === airdropState.user.walletAddress.toLowerCase();
+                            const tierInfo = getTierInfo(i + 1);
+                            return `
+                                <div class="flex items-center justify-between p-3 ${isMe ? 'bg-amber-500/10' : 'hover:bg-zinc-800/50'} transition-colors">
+                                    <div class="flex items-center gap-3">
+                                        <span class="w-8 h-8 rounded-full ${tierInfo.bg} flex items-center justify-center text-xs font-bold">${tierInfo.icon || (i+1)}</span>
+                                        <span class="font-mono text-xs ${isMe ? 'text-amber-400 font-bold' : 'text-zinc-400'}">
+                                            ${formatAddress(item.walletAddress)}${isMe ? ' (You)' : ''}
+                                        </span>
+                                    </div>
+                                    <span class="font-bold text-white text-sm">${(item.value || 0).toLocaleString()} <span class="text-zinc-500 text-xs">posts</span></span>
+                                </div>
+                            `;
+                        }).join('')
+                    }
+                </div>
             </div>
         </div>
     `;
 }
 
-function renderRankingTable(title, icon, iconColor, list, unit) {
-    return `
-        <div class="bg-zinc-900/80 border border-zinc-800 rounded-xl overflow-hidden">
-            <div class="p-4 border-b border-zinc-800 flex items-center gap-2">
-                <i class="fa-solid ${icon} ${iconColor}"></i>
-                <h3 class="font-bold text-white text-sm">${title}</h3>
-            </div>
-            <div class="divide-y divide-zinc-800/50">
-                ${list.length === 0 ? 
-                    '<p class="p-6 text-center text-zinc-500 text-sm">No data yet</p>' : 
-                    list.slice(0, 10).map((item, i) => {
-                        const isMe = airdropState.user && item.walletAddress.toLowerCase() === airdropState.user.walletAddress.toLowerCase();
-                        const rankBg = i === 0 ? 'bg-yellow-500 text-black' : 
-                                       i === 1 ? 'bg-zinc-400 text-black' : 
-                                       i === 2 ? 'bg-amber-700 text-white' : 'bg-zinc-800 text-zinc-400';
-                        return `
-                            <div class="flex items-center justify-between p-3 ${isMe ? 'bg-amber-500/10' : 'hover:bg-zinc-800/50'} transition-colors">
-                                <div class="flex items-center gap-3">
-                                    <span class="w-6 h-6 rounded-full ${rankBg} flex items-center justify-center text-xs font-bold">${i+1}</span>
-                                    <span class="font-mono text-xs ${isMe ? 'text-amber-400 font-bold' : 'text-zinc-400'}">
-                                        ${formatAddress(item.walletAddress)}${isMe ? ' (You)' : ''}
-                                    </span>
-                                </div>
-                                <span class="font-bold text-white text-sm">${(item.value || 0).toLocaleString()} <span class="text-zinc-500 text-xs">${unit}</span></span>
-                            </div>
-                        `;
-                    }).join('')
-                }
-            </div>
-        </div>
-    `;
+function getTierInfo(rank) {
+    if (rank <= 2) return { icon: '💎', bg: 'bg-cyan-500/20 text-cyan-300' };
+    if (rank <= 10) return { icon: '🏆', bg: 'bg-slate-400/20 text-slate-300' };
+    if (rank <= 20) return { icon: '🥇', bg: 'bg-yellow-500/20 text-yellow-400' };
+    if (rank <= 50) return { icon: '🥈', bg: 'bg-gray-400/20 text-gray-300' };
+    if (rank <= 150) return { icon: '🥉', bg: 'bg-amber-700/20 text-amber-600' };
+    if (rank <= 300) return { icon: '⚔️', bg: 'bg-zinc-600/20 text-zinc-400' };
+    return { icon: null, bg: 'bg-zinc-800 text-zinc-400' };
 }
 
 // =======================================================
@@ -752,26 +691,26 @@ function updateContent() {
             }
         } else {
             if (target === airdropState.activeTab) {
-                btn.classList.remove('text-zinc-400', 'hover:text-white', 'hover:bg-zinc-800', 'font-medium');
+                btn.classList.remove('text-zinc-400', 'hover:text-white', 'hover:bg-zinc-800');
                 btn.classList.add('airdrop-tab-active', 'shadow-lg', 'shadow-amber-500/20');
             } else {
-                btn.classList.add('text-zinc-400', 'hover:text-white', 'hover:bg-zinc-800', 'font-medium');
+                btn.classList.add('text-zinc-400', 'hover:text-white', 'hover:bg-zinc-800');
                 btn.classList.remove('airdrop-tab-active', 'shadow-lg', 'shadow-amber-500/20');
             }
         }
     });
 
     switch(airdropState.activeTab) {
-        case 'dashboard': contentEl.innerHTML = renderDashboard(); break;
-        case 'earn': contentEl.innerHTML = renderEarnZone(); break;
+        case 'post': contentEl.innerHTML = renderPostTab(); break;
+        case 'history': contentEl.innerHTML = renderHistoryTab(); break;
         case 'leaderboard': contentEl.innerHTML = renderLeaderboard(); break;
-        default: contentEl.innerHTML = renderDashboard();
+        default: contentEl.innerHTML = renderPostTab();
     }
 }
 
 function handleCopySmartLink() {
     const refCode = airdropState.user?.referralCode || 'CODE';
-    const textToCopy = `http://backcoin.org/${refCode} ${DEFAULT_HASHTAGS}`;
+    const textToCopy = `${refCode !== 'CODE' ? `http://backcoin.org/${refCode}` : 'http://backcoin.org'} ${DEFAULT_HASHTAGS}`;
     
     navigator.clipboard.writeText(textToCopy).then(() => {
         showToast("Copied! Now paste it in your post.", "success");
@@ -779,11 +718,11 @@ function handleCopySmartLink() {
         if (btn) {
             const original = btn.innerHTML;
             btn.innerHTML = '<i class="fa-solid fa-check"></i> Copied!';
-            btn.classList.remove('bg-amber-500', 'hover:bg-amber-600');
+            btn.classList.remove('cta-mega');
             btn.classList.add('bg-green-600');
             setTimeout(() => {
                 btn.innerHTML = original;
-                btn.classList.add('bg-amber-500', 'hover:bg-amber-600');
+                btn.classList.add('cta-mega');
                 btn.classList.remove('bg-green-600');
             }, 2000);
         }
@@ -795,11 +734,6 @@ function handleTabSwitch(e) {
     if (btn) { airdropState.activeTab = btn.dataset.target; updateContent(); }
 }
 
-function handleEarnSubTabSwitch(e) {
-    const btn = e.target.closest('.earn-subtab-btn');
-    if (btn) { airdropState.activeEarnSubTab = btn.dataset.target; updateContent(); }
-}
-
 function handleToggleGuide() {
     airdropState.isGuideOpen = !airdropState.isGuideOpen;
     updateContent();
@@ -808,14 +742,14 @@ function handleToggleGuide() {
 function openConfirmationModal(submission) {
     const modalContent = `
         <div class="flex justify-between items-start mb-4 border-b border-zinc-700 pb-4">
-            <h3 class="text-xl font-bold text-white">Verify Submission</h3>
+            <h3 class="text-xl font-bold text-white">Verify Your Post</h3>
             <button class="closeModalBtn text-zinc-400 hover:text-white text-2xl leading-none">&times;</button>
         </div>
-        <p class="text-zinc-400 text-sm mb-4 text-center">Confirm your post link is authentic</p>
+        <p class="text-zinc-400 text-sm mb-4 text-center">Confirm this is your authentic public post</p>
         <a href="${submission.url}" target="_blank" class="block bg-zinc-800 border border-zinc-600 text-blue-400 hover:text-blue-300 py-3 px-4 rounded-lg w-full text-center mb-6 text-sm truncate">${submission.url}</a>
         <div class="flex gap-3">
             <button id="cancelConfirmBtn" class="flex-1 bg-zinc-700 hover:bg-zinc-600 text-white py-3 rounded-xl font-medium text-sm">Cancel</button>
-            <button id="finalConfirmBtn" data-submission-id="${submission.submissionId}" class="flex-1 bg-green-600 hover:bg-green-500 text-white py-3 rounded-xl font-bold text-sm">Confirm ✓</button>
+            <button id="finalConfirmBtn" data-submission-id="${submission.submissionId}" class="flex-1 bg-green-600 hover:bg-green-500 text-white py-3 rounded-xl font-bold text-sm">Confirm & Earn ✓</button>
         </div>
     `;
     openModal(modalContent, 'max-w-sm'); 
@@ -871,10 +805,10 @@ async function handleSubmitUgc(e) {
     
     try {
         await db.addSubmission(url);
-        showToast("Submitted! Check Dashboard.", "success");
+        showToast("Submitted! Check 'My Posts' tab.", "success");
         input.value = '';
         await loadAirdropData();
-        airdropState.activeTab = 'dashboard'; 
+        airdropState.activeTab = 'history'; 
         updateContent();
     } catch (err) {
         showToast(err.message, "error");
@@ -975,7 +909,7 @@ export const AirdropPage = {
                             <div class="w-2 h-2 rounded-full bg-amber-500 animate-bounce" style="animation-delay: 0.1s;"></div>
                             <div class="w-2 h-2 rounded-full bg-amber-500 animate-bounce" style="animation-delay: 0.2s;"></div>
                         </div>
-                        <p class="text-zinc-600 text-xs mt-3">Loading your rewards...</p>
+                        <p class="text-zinc-600 text-xs mt-3">Loading...</p>
                     </div>
                 </div>
                 
@@ -1025,7 +959,6 @@ export const AirdropPage = {
         header?.addEventListener('click', handleTabSwitch);
         body?.addEventListener('click', (e) => {
             if(e.target.closest('#guide-toggle-btn')) handleToggleGuide();
-            if(e.target.closest('.earn-subtab-btn')) handleEarnSubTabSwitch(e);
             if(e.target.closest('#submit-content-btn')) handleSubmitUgc(e);
             if(e.target.closest('.task-card')) handleTaskClick(e);
             if(e.target.closest('.action-btn')) handleSubmissionAction(e);
