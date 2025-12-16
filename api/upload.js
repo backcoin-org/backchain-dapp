@@ -1,5 +1,5 @@
 // api/upload.js
-// ✅ VERSION V2.0: Fixed file size limit (4MB for Vercel serverless)
+// ✅ VERSION V2.1: 20MB limit, any file type support
 
 import pinataSDK from '@pinata/sdk';
 import { Formidable } from 'formidable';
@@ -49,12 +49,13 @@ export default async function handler(req, res) {
     let file = null;
 
     try {
-        // 2. Parse form with 4MB limit (Vercel serverless limit is 4.5MB)
+        // 2. Parse form with 20MB limit (any file type allowed)
         const form = new Formidable({
-            maxFileSize: 4 * 1024 * 1024, // 4MB
+            maxFileSize: 20 * 1024 * 1024, // 20MB - any file type
             uploadDir: '/tmp',
             keepExtensions: true,
             multiples: false,
+            filter: () => true, // Accept ALL file types
         });
 
         const [fields, files] = await new Promise((resolve, reject) => {
@@ -76,7 +77,11 @@ export default async function handler(req, res) {
             return res.status(400).json({ error: 'No file received.' });
         }
 
-        console.log(`📄 File received: ${file.originalFilename} (${(file.size / 1024).toFixed(1)} KB)`);
+        const fileName = file.originalFilename || 'unknown';
+        const fileSize = file.size;
+        const fileMime = file.mimetype || 'application/octet-stream';
+        
+        console.log(`📄 File: ${fileName} | Size: ${(fileSize / 1024).toFixed(1)} KB | Type: ${fileMime}`);
 
         // 3. Validate signature
         const signature = (Array.isArray(fields.signature)) ? fields.signature[0] : fields.signature;
@@ -119,10 +124,12 @@ export default async function handler(req, res) {
         const stream = fs.createReadStream(file.filepath);
         const fileOptions = {
             pinataMetadata: {
-                name: `Notary_${file.originalFilename || 'document'}`,
+                name: `Notary_${fileName}`,
                 keyvalues: {
                     owner: address,
-                    timestamp: new Date().toISOString()
+                    timestamp: new Date().toISOString(),
+                    originalName: fileName,
+                    mimeType: fileMime
                 }
             },
             pinataOptions: { cidVersion: 1 }
@@ -133,13 +140,15 @@ export default async function handler(req, res) {
         
         console.log('✅ Uploaded:', ipfsUri);
 
-        // 6. Return success
+        // 6. Return success with all data
         return res.status(200).json({ 
             success: true,
             ipfsUri: ipfsUri,
             contentHash: contentHash,
-            fileName: file.originalFilename,
-            fileSize: file.size
+            fileName: fileName,
+            fileSize: fileSize,
+            mimeType: fileMime,
+            ipfsHash: fileResult.IpfsHash
         });
 
     } catch (error) {
@@ -148,7 +157,7 @@ export default async function handler(req, res) {
         if (error.message === 'FILE_TOO_LARGE') {
             return res.status(413).json({
                 error: 'File too large',
-                details: 'Maximum file size is 4MB.'
+                details: 'Maximum file size is 20MB.'
             });
         }
         

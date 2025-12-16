@@ -1,5 +1,5 @@
 // js/pages/NotaryPage.js
-// ✅ VERSION V8.2: Fixed file size limit (4MB for Vercel), better error handling
+// ✅ VERSION V8.3: Decentralized Notary - 20MB limit, any file type, smart icons
 
 import { State } from '../state.js';
 import { formatBigNumber } from '../utils.js';
@@ -12,9 +12,22 @@ const ethers = window.ethers;
 // ============================================================================
 // CONSTANTS
 // ============================================================================
-const MAX_FILE_SIZE = 4 * 1024 * 1024; // 4MB (Vercel serverless limit)
+const MAX_FILE_SIZE = 20 * 1024 * 1024; // 20MB - Any file type allowed
 const EXPLORER_TX = "https://sepolia.arbiscan.io/tx/";
 const IPFS_GATEWAY = "https://ipfs.io/ipfs/";
+
+// File type configurations
+const FILE_TYPES = {
+    image: { icon: 'fa-regular fa-image', color: 'text-green-400', bg: 'bg-green-500/10' },
+    pdf: { icon: 'fa-regular fa-file-pdf', color: 'text-red-400', bg: 'bg-red-500/10' },
+    audio: { icon: 'fa-solid fa-music', color: 'text-purple-400', bg: 'bg-purple-500/10' },
+    video: { icon: 'fa-regular fa-file-video', color: 'text-blue-400', bg: 'bg-blue-500/10' },
+    document: { icon: 'fa-regular fa-file-word', color: 'text-blue-400', bg: 'bg-blue-500/10' },
+    spreadsheet: { icon: 'fa-regular fa-file-excel', color: 'text-green-400', bg: 'bg-green-500/10' },
+    code: { icon: 'fa-solid fa-code', color: 'text-cyan-400', bg: 'bg-cyan-500/10' },
+    archive: { icon: 'fa-regular fa-file-zipper', color: 'text-yellow-400', bg: 'bg-yellow-500/10' },
+    default: { icon: 'fa-regular fa-file', color: 'text-amber-400', bg: 'bg-amber-500/10' }
+};
 
 // ============================================================================
 // STATE
@@ -126,12 +139,12 @@ function render() {
             <header class="sticky top-0 z-40 bg-zinc-950/95 backdrop-blur-lg border-b border-zinc-800/50 -mx-4 px-4 py-3 md:hidden">
                 <div class="flex items-center justify-between">
                     <div class="flex items-center gap-3">
-                        <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-500 to-yellow-600 flex items-center justify-center overflow-hidden p-0.5">
-                            <img src="./assets/notary.png" alt="Notary" class="w-full h-full object-contain">
+                        <div class="w-10 h-10 flex items-center justify-center">
+                            <img src="./assets/notary.png" alt="Notary" class="w-full h-full object-contain drop-shadow-lg">
                         </div>
                         <div>
-                            <h1 class="text-lg font-bold text-white">Notary</h1>
-                            <p id="mobile-status" class="text-[10px] text-zinc-500">Document Certification</p>
+                            <h1 class="text-lg font-bold text-white">Decentralized Notary</h1>
+                            <p id="mobile-status" class="text-[10px] text-zinc-500">Blockchain Certification</p>
                         </div>
                     </div>
                     <div id="mobile-badge" class="text-[10px] px-2 py-1 rounded-full bg-zinc-800 text-zinc-500">
@@ -143,12 +156,12 @@ function render() {
             <!-- DESKTOP HEADER -->
             <div class="hidden md:flex items-center justify-between mb-6">
                 <div class="flex items-center gap-4">
-                    <div class="w-14 h-14 rounded-2xl bg-gradient-to-br from-amber-500 to-yellow-600 flex items-center justify-center shadow-lg shadow-amber-500/30 overflow-hidden p-1">
-                        <img src="./assets/notary.png" alt="Notary" class="w-full h-full object-contain">
+                    <div class="w-14 h-14 flex items-center justify-center">
+                        <img src="./assets/notary.png" alt="Notary" class="w-full h-full object-contain drop-shadow-lg">
                     </div>
                     <div>
-                        <h1 class="text-2xl font-bold text-white">Document Notary</h1>
-                        <p class="text-sm text-zinc-500">Permanent on-chain certification</p>
+                        <h1 class="text-2xl font-bold text-white">Decentralized Notary</h1>
+                        <p class="text-sm text-zinc-500">Permanent blockchain certification</p>
                     </div>
                 </div>
                 <div id="desktop-badge" class="flex items-center gap-2 px-3 py-1.5 rounded-full bg-zinc-800/50 text-sm">
@@ -220,7 +233,7 @@ function render() {
                                 <div class="w-6 h-6 rounded-full bg-amber-500/20 flex items-center justify-center flex-shrink-0">
                                     <span class="text-amber-400 text-[10px] font-bold">1</span>
                                 </div>
-                                <p class="text-xs text-zinc-400">Upload any document (max 4MB)</p>
+                                <p class="text-xs text-zinc-400">Upload any document (max 20MB)</p>
                             </div>
                             <div class="flex items-start gap-3">
                                 <div class="w-6 h-6 rounded-full bg-amber-500/20 flex items-center justify-center flex-shrink-0">
@@ -475,7 +488,7 @@ function renderStep1(panel) {
                     <i class="fa-solid fa-cloud-arrow-up text-2xl text-amber-400"></i>
                 </div>
                 <p class="text-white font-medium mb-1">Click or drag file here</p>
-                <p class="text-[10px] text-zinc-600">Max 4MB • Any format</p>
+                <p class="text-[10px] text-zinc-600">Max 20MB • Any format</p>
             </div>
 
             <div class="flex items-center gap-4 mt-6 text-[10px] text-zinc-600">
@@ -517,7 +530,7 @@ function handleFileSelect(file) {
     if (!file) return;
 
     if (file.size > MAX_FILE_SIZE) {
-        showToast('File too large (max 4MB)', 'error');
+        showToast('File too large (max 20MB)', 'error');
         return;
     }
 
@@ -597,15 +610,50 @@ function renderStep2(panel) {
     });
 }
 
+// Get file type info (icon, color, bg) based on mime type or filename
+function getFileTypeInfo(mimeType = '', fileName = '') {
+    const mime = mimeType.toLowerCase();
+    const name = fileName.toLowerCase();
+    
+    // Images
+    if (mime.includes('image') || /\.(jpg|jpeg|png|gif|webp|svg|bmp|ico)$/.test(name)) {
+        return FILE_TYPES.image;
+    }
+    // PDF
+    if (mime.includes('pdf') || name.endsWith('.pdf')) {
+        return FILE_TYPES.pdf;
+    }
+    // Audio
+    if (mime.includes('audio') || /\.(mp3|wav|ogg|flac|aac|m4a)$/.test(name)) {
+        return FILE_TYPES.audio;
+    }
+    // Video
+    if (mime.includes('video') || /\.(mp4|avi|mov|mkv|webm|wmv)$/.test(name)) {
+        return FILE_TYPES.video;
+    }
+    // Documents
+    if (mime.includes('word') || mime.includes('document') || /\.(doc|docx|odt|rtf)$/.test(name)) {
+        return FILE_TYPES.document;
+    }
+    // Spreadsheets
+    if (mime.includes('sheet') || mime.includes('excel') || /\.(xls|xlsx|csv|ods)$/.test(name)) {
+        return FILE_TYPES.spreadsheet;
+    }
+    // Code/Programming
+    if (/\.(js|ts|py|java|cpp|c|h|html|css|json|xml|sol|rs|go|php|rb)$/.test(name)) {
+        return FILE_TYPES.code;
+    }
+    // Archives
+    if (mime.includes('zip') || mime.includes('archive') || /\.(zip|rar|7z|tar|gz)$/.test(name)) {
+        return FILE_TYPES.archive;
+    }
+    
+    return FILE_TYPES.default;
+}
+
+// Legacy function for backwards compatibility
 function getFileIcon(mimeType) {
-    if (mimeType.includes('image')) return 'fa-regular fa-image';
-    if (mimeType.includes('pdf')) return 'fa-regular fa-file-pdf';
-    if (mimeType.includes('word') || mimeType.includes('document')) return 'fa-regular fa-file-word';
-    if (mimeType.includes('sheet') || mimeType.includes('excel')) return 'fa-regular fa-file-excel';
-    if (mimeType.includes('video')) return 'fa-regular fa-file-video';
-    if (mimeType.includes('audio')) return 'fa-regular fa-file-audio';
-    if (mimeType.includes('zip') || mimeType.includes('archive')) return 'fa-regular fa-file-zipper';
-    return 'fa-regular fa-file';
+    return getFileTypeInfo(mimeType).icon;
 }
 
 // ============================================================================
@@ -716,7 +764,7 @@ async function handleMint() {
         if (!res.ok) {
             // Handle specific error codes
             if (res.status === 413) {
-                throw new Error('File too large. Maximum size is 4MB.');
+                throw new Error('File too large. Maximum size is 20MB.');
             } else if (res.status === 401) {
                 throw new Error('Signature verification failed. Please try again.');
             } else if (res.status === 500) {
@@ -957,19 +1005,49 @@ async function loadCertificates() {
         const sorted = certs.sort((a, b) => parseInt(b.id) - parseInt(a.id));
 
         grid.innerHTML = sorted.map(cert => {
-            const ipfsUrl = cert.ipfs.startsWith('ipfs://') 
-                ? `${IPFS_GATEWAY}${cert.ipfs.replace('ipfs://', '')}`
-                : cert.ipfs;
+            // Build IPFS URL with fallback gateways
+            let ipfsUrl = '';
+            const ipfsData = cert.ipfs || '';
+            
+            if (ipfsData.startsWith('ipfs://')) {
+                const cid = ipfsData.replace('ipfs://', '');
+                ipfsUrl = `https://gateway.pinata.cloud/ipfs/${cid}`;
+            } else if (ipfsData.startsWith('https://')) {
+                ipfsUrl = ipfsData;
+            } else if (ipfsData.length > 0) {
+                // Assume it's just the CID
+                ipfsUrl = `https://gateway.pinata.cloud/ipfs/${ipfsData}`;
+            }
+            
+            // Alternative gateway for image loading
+            const altIpfsUrl = ipfsUrl.replace('gateway.pinata.cloud', 'ipfs.io');
+            
+            // Detect file type from description or filename
+            const desc = cert.description || '';
+            const fileInfo = getFileTypeInfo('', desc);
+            const isImage = desc.match(/\.(jpg|jpeg|png|gif|webp|svg|bmp)$/i);
 
             return `
                 <div class="cert-card bg-zinc-900/50 border border-zinc-800/50 rounded-xl overflow-hidden">
                     <!-- Preview -->
-                    <div class="h-24 bg-gradient-to-br from-amber-900/20 to-yellow-900/20 flex items-center justify-center relative">
-                        <img src="${ipfsUrl}" 
-                             class="absolute inset-0 w-full h-full object-cover opacity-30"
-                             onerror="this.style.display='none'">
-                        <i class="fa-solid fa-certificate text-3xl text-amber-400/50 relative z-10"></i>
-                        <span class="absolute top-2 right-2 text-[9px] font-mono text-zinc-500 bg-black/50 px-1.5 py-0.5 rounded">#${cert.id}</span>
+                    <div class="h-28 bg-gradient-to-br from-zinc-800/50 to-zinc-900/50 flex items-center justify-center relative">
+                        ${isImage && ipfsUrl ? `
+                            <img src="${ipfsUrl}" 
+                                 class="absolute inset-0 w-full h-full object-cover"
+                                 onerror="if(!this.dataset.retry){this.dataset.retry='1';this.src='${altIpfsUrl}';}else{this.style.display='none';this.nextElementSibling.style.display='flex';}">
+                            <div class="hidden flex-col items-center justify-center h-full absolute inset-0 bg-zinc-900">
+                                <i class="${fileInfo.icon} text-4xl ${fileInfo.color} mb-2"></i>
+                                <span class="text-[9px] text-zinc-600">Preview unavailable</span>
+                            </div>
+                        ` : `
+                            <div class="flex flex-col items-center justify-center">
+                                <div class="w-14 h-14 rounded-xl ${fileInfo.bg} flex items-center justify-center mb-2">
+                                    <i class="${fileInfo.icon} text-2xl ${fileInfo.color}"></i>
+                                </div>
+                                <span class="text-[9px] text-zinc-600 uppercase tracking-wider">${desc.split('.').pop() || 'FILE'}</span>
+                            </div>
+                        `}
+                        <span class="absolute top-2 right-2 text-[9px] font-mono text-zinc-400 bg-black/70 px-2 py-0.5 rounded-full">#${cert.id}</span>
                     </div>
                     
                     <!-- Info -->
@@ -978,25 +1056,29 @@ async function loadCertificates() {
                             ${cert.description || 'No description'}
                         </p>
                         <p class="text-[9px] font-mono text-zinc-600 truncate mb-3" title="${cert.hash}">
-                            ${cert.hash?.slice(0, 24) || '...'}
+                            SHA-256: ${cert.hash?.slice(0, 16) || '...'}...
                         </p>
                         
                         <!-- Actions -->
                         <div class="flex items-center justify-between pt-2 border-t border-zinc-800/50">
-                            <div class="flex gap-2">
-                                <a href="${ipfsUrl}" target="_blank" 
-                                   class="text-[10px] text-amber-400 hover:text-white font-bold transition-colors">
-                                    <i class="fa-solid fa-eye mr-1"></i> View
-                                </a>
+                            <div class="flex gap-3">
+                                ${ipfsUrl ? `
+                                    <a href="${ipfsUrl}" target="_blank" 
+                                       class="text-[10px] text-amber-400 hover:text-amber-300 font-bold transition-colors flex items-center gap-1">
+                                        <i class="fa-solid fa-download"></i> Download
+                                    </a>
+                                ` : `
+                                    <span class="text-[10px] text-zinc-600">No file</span>
+                                `}
                                 <button onclick="NotaryPage.addToWallet('${cert.id}')" 
-                                    class="text-[10px] text-zinc-500 hover:text-amber-400 transition-colors">
-                                    <i class="fa-solid fa-wallet"></i>
+                                    class="text-[10px] text-zinc-500 hover:text-amber-400 transition-colors flex items-center gap-1">
+                                    <i class="fa-solid fa-wallet"></i> Wallet
                                 </button>
                             </div>
                             ${cert.txHash ? `
                                 <a href="${EXPLORER_TX}${cert.txHash}" target="_blank" 
-                                   class="text-zinc-600 hover:text-white transition-colors">
-                                    <i class="fa-solid fa-external-link text-[10px]"></i>
+                                   class="text-zinc-600 hover:text-white transition-colors" title="View on Explorer">
+                                    <i class="fa-solid fa-arrow-up-right-from-square text-[10px]"></i>
                                 </a>
                             ` : ''}
                         </div>
