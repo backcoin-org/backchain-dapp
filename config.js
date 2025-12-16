@@ -1,5 +1,5 @@
 // js/config.js
-// ✅ PRODUCTION V23: Fixed nftPoolABI - buyNFT() no args, sellNFT(tokenId, minPayout)
+// ✅ PRODUCTION V24: Fixed rentalManagerABI to match contract + added rentNFTSimple
 
 // ============================================================================
 // 1. ENVIRONMENT & ALCHEMY CONFIG
@@ -135,18 +135,34 @@ export const rewardBoosterABI = [
 ];
 
 // V21: Added listNFTSimple + NFTWithdrawn event
+// 🔥 V24: Updated RentalManager ABI to match contract V2
 export const rentalManagerABI = [
-    "function listNFT(uint256 tokenId, uint256 pricePerHour, uint256 maxDurationHours) external",
-    "function listNFTSimple(uint256 tokenId, uint256 pricePerHour) external",
-    "function withdrawNFT(uint256 tokenId) external",
-    "function rentNFT(uint256 tokenId, uint256 hoursToRent) external",
-    "function getListing(uint256 tokenId) view returns (tuple(address owner, uint256 pricePerHour, uint256 maxDuration, bool isActive))",
-    "function getRental(uint256 tokenId) view returns (tuple(address tenant, uint256 startTime, uint256 endTime))",
-    "function isRented(uint256 tokenId) view returns (bool)",
+    // Listing functions
+    "function listNFT(uint256 _tokenId, uint256 _pricePerHour, uint256 _minHours, uint256 _maxHours) external",
+    "function listNFTSimple(uint256 _tokenId, uint256 _price) external",
+    "function updateListing(uint256 _tokenId, uint256 _newPricePerHour, uint256 _newMinHours, uint256 _newMaxHours) external",
+    "function withdrawNFT(uint256 _tokenId) external",
+    
+    // Rental functions
+    "function rentNFT(uint256 _tokenId, uint256 _hours) external",
+    "function rentNFTSimple(uint256 _tokenId) external",
+    
+    // View functions
+    "function getListing(uint256 _tokenId) view returns (tuple(address owner, uint256 pricePerHour, uint256 minHours, uint256 maxHours, bool isActive, uint256 totalEarnings, uint256 rentalCount))",
+    "function getRental(uint256 _tokenId) view returns (tuple(address tenant, uint256 startTime, uint256 endTime, uint256 paidAmount))",
+    "function isRented(uint256 _tokenId) view returns (bool)",
+    "function hasRentalRights(uint256 _tokenId, address _user) view returns (bool)",
+    "function getRemainingRentalTime(uint256 _tokenId) view returns (uint256)",
     "function getAllListedTokenIds() view returns (uint256[])",
-    "event NFTListed(uint256 indexed tokenId, address indexed owner, uint256 pricePerHour, uint256 maxDurationHours)",
-    "event NFTRented(uint256 indexed tokenId, address indexed tenant, address indexed owner, uint256 hoursRented, uint256 totalCost, uint256 feePaid)",
-    "event NFTWithdrawn(uint256 indexed tokenId, address indexed owner)"
+    "function getListingCount() view returns (uint256)",
+    "function getRentalCost(uint256 _tokenId, uint256 _hours) view returns (uint256 totalCost, uint256 protocolFee, uint256 ownerPayout)",
+    "function getMarketplaceStats() view returns (uint256 activeListings, uint256 totalVol, uint256 totalFees, uint256 rentals)",
+    
+    // Events
+    "event NFTListed(uint256 indexed tokenId, address indexed owner, uint256 pricePerHour, uint256 minHours, uint256 maxHours)",
+    "event NFTRented(uint256 indexed tokenId, address indexed tenant, address indexed owner, uint256 hours_, uint256 totalCost, uint256 protocolFee, uint256 ownerPayout, uint256 endTime)",
+    "event NFTWithdrawn(uint256 indexed tokenId, address indexed owner)",
+    "event RentalExpired(uint256 indexed tokenId, address indexed tenant)"
 ];
 
 export const nftPoolABI = [

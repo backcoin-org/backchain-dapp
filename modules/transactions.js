@@ -1,5 +1,5 @@
 // js/modules/transactions.js
-// ✅ VERSÃO V7.6 - FIX: Multi-layer protection against duplicate transactions
+// ✅ VERSÃO V7.7 - FIX: RentalManager ABI + rentNFTSimple for 1-hour rentals
 
 const ethers = window.ethers;
 
@@ -584,7 +584,71 @@ export async function executeWithdrawNFT(tokenId, btnElement) {
     }
 }
 
-export async function executeRentNFT(tokenId, hoursToRent, totalCost, btnElement) {
+// 🔥 V7.6: Simplified rental for 1-hour fixed rentals (matches contract rentNFTSimple)
+export async function executeRentNFT(tokenId, totalCost, btnElement) {
+    const signer = await getConnectedSigner();
+    if (!signer || !addresses.rentalManager) return false;
+    
+    const tokenIdBigInt = BigInt(tokenId);
+    const costBigInt = BigInt(totalCost);
+
+    // Check balance
+    if (costBigInt > State.currentUserBalance) {
+        const needed = formatBigNumber(costBigInt);
+        showToast(`Insufficient balance. Need ${needed.toFixed(2)} BKC.`, "error");
+        return false;
+    }
+
+    const originalText = btnElement ? btnElement.innerHTML : 'Rent';
+    if (btnElement) {
+        btnElement.disabled = true;
+        btnElement.innerHTML = '<div class="loader inline-block"></div>';
+    }
+
+    try {
+        const approved = await ensureApproval(
+            State.bkcTokenContract, 
+            addresses.rentalManager, 
+            costBigInt, 
+            btnElement, 
+            "NFT Rental"
+        );
+        if (!approved) return false;
+
+        if (btnElement) btnElement.innerHTML = '<div class="loader inline-block"></div> Renting...';
+
+        const rentalContract = new ethers.Contract(addresses.rentalManager, rentalManagerABI, signer);
+        
+        // 🔥 V7.6: Use rentNFTSimple for 1-hour fixed rentals
+        const args = [tokenIdBigInt];
+        const gasOpts = await estimateGasWithFallback(rentalContract, 'rentNFTSimple', args, 400000n);
+        const rentTxPromise = rentalContract.rentNFTSimple(...args, gasOpts);
+
+        return await executeTransaction(
+            rentTxPromise, 
+            'NFT rented for 1 hour!', 
+            'Rental failed', 
+            btnElement
+        );
+
+    } catch (e) {
+        console.error("Rent NFT Error:", e);
+        const userMessage = formatErrorForUser(e, 'Rental failed');
+        showToast(userMessage, "error");
+        return false;
+        
+    } finally {
+        if (btnElement) {
+            setTimeout(() => {
+                btnElement.disabled = false;
+                btnElement.innerHTML = originalText;
+            }, 1500);
+        }
+    }
+}
+
+// Full rental function for variable hours (future use)
+export async function executeRentNFTHours(tokenId, hoursToRent, totalCost, btnElement) {
     const signer = await getConnectedSigner();
     if (!signer || !addresses.rentalManager) return false;
     
@@ -592,13 +656,11 @@ export async function executeRentNFT(tokenId, hoursToRent, totalCost, btnElement
     const hoursBigInt = BigInt(hoursToRent);
     const costBigInt = BigInt(totalCost);
 
-    // Pre-validation
     if (hoursBigInt === 0n) {
         showToast("Rental duration must be at least 1 hour.", "error");
         return false;
     }
 
-    // Check balance
     if (costBigInt > State.currentUserBalance) {
         const needed = formatBigNumber(costBigInt);
         showToast(`Insufficient balance. Need ${needed.toFixed(2)} BKC.`, "error");
@@ -631,7 +693,7 @@ export async function executeRentNFT(tokenId, hoursToRent, totalCost, btnElement
 
         return await executeTransaction(
             rentTxPromise, 
-            'NFT rented successfully!', 
+            `NFT rented for ${hoursToRent} hour(s)!`, 
             'Rental failed', 
             btnElement
         );

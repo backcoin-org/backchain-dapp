@@ -1,12 +1,12 @@
 // js/pages/RentalPage.js
-// ✅ VERSION V6.0: Clean UI, Mobile-First, V2.1 Compatible
+// ✅ VERSION V6.1: Enhanced UX with animated loading + contract ABI fix
 
 const ethers = window.ethers;
 
 import { State } from '../state.js';
 import { loadRentalListings, loadUserRentals, loadMyBoostersFromAPI, API_ENDPOINTS } from '../modules/data.js';
 import { executeListNFT, executeRentNFT, executeWithdrawNFT } from '../modules/transactions.js';
-import { formatBigNumber, renderLoading, renderNoData } from '../utils.js';
+import { formatBigNumber, renderNoData } from '../utils.js';
 import { showToast } from '../ui-feedback.js';
 import { boosterTiers } from '../config.js';
 
@@ -17,6 +17,25 @@ const RentalState = {
     selectedRentalId: null,
     isLoading: false
 };
+
+// 🔥 V6.1: Custom animated loading with BKC logo for rental page
+function renderRentalLoading(message = 'Loading rentals...') {
+    return `
+        <div class="col-span-full flex flex-col items-center justify-center py-12 gap-4">
+            <div class="relative">
+                <div class="absolute inset-0 w-16 h-16 rounded-full bg-cyan-500/20 animate-ping"></div>
+                <div class="absolute inset-0 w-16 h-16 rounded-full border-2 border-transparent border-t-cyan-500 border-r-cyan-500/50 animate-spin"></div>
+                <div class="relative w-16 h-16 rounded-full bg-gradient-to-br from-zinc-800 to-zinc-900 flex items-center justify-center shadow-lg shadow-cyan-500/10 animate-pulse">
+                    <img src="./assets/bkc_logo_3d.png" alt="BKC" class="w-10 h-10 drop-shadow-lg" onerror="this.src='./assets/favicon.png'">
+                </div>
+            </div>
+            <div class="text-center">
+                <p class="text-zinc-400 text-sm font-medium animate-pulse">${message}</p>
+                <p class="text-zinc-600 text-xs mt-1">Please wait...</p>
+            </div>
+        </div>
+    `;
+}
 
 // --- STYLES ---
 const style = document.createElement('style');
@@ -31,6 +50,7 @@ style.innerHTML = `
     .rental-card:hover {
         border-color: rgba(34, 211, 238, 0.3);
         transform: translateY(-2px);
+        box-shadow: 0 8px 24px rgba(34, 211, 238, 0.1);
     }
     .rental-card .image-area {
         aspect-ratio: 1;
@@ -46,6 +66,10 @@ style.innerHTML = `
         height: 65%;
         object-fit: contain;
         filter: drop-shadow(0 8px 16px rgba(0,0,0,0.4));
+        transition: transform 0.3s ease;
+    }
+    .rental-card:hover .image-area img {
+        transform: scale(1.1);
     }
     .boost-tag {
         position: absolute;
@@ -70,8 +94,9 @@ style.innerHTML = `
         cursor: pointer;
     }
     .filter-pill.active {
-        background: white;
+        background: linear-gradient(135deg, #22d3ee, #06b6d4);
         color: black;
+        box-shadow: 0 4px 12px rgba(34, 211, 238, 0.3);
     }
     .filter-pill:not(.active) {
         background: #27272a;
@@ -81,6 +106,27 @@ style.innerHTML = `
     .filter-pill:not(.active):hover {
         color: white;
         border-color: #52525b;
+        transform: scale(1.05);
+    }
+    
+    @keyframes fadeIn {
+        from { opacity: 0; transform: translateY(10px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+    
+    .animate-fadeIn {
+        animation: fadeIn 0.3s ease-out forwards;
+    }
+    
+    .rent-btn {
+        transition: all 0.2s ease;
+    }
+    .rent-btn:hover:not(:disabled) {
+        transform: scale(1.02);
+        box-shadow: 0 4px 12px rgba(34, 211, 238, 0.4);
+    }
+    .rent-btn:active:not(:disabled) {
+        transform: scale(0.98);
     }
 `;
 document.head.appendChild(style);
@@ -145,7 +191,7 @@ export const RentalPage = {
 
                             <!-- GRID -->
                             <div id="marketplace-grid" class="grid grid-cols-2 sm:grid-cols-3 gap-3 min-h-[300px]">
-                                ${renderLoading()}
+                                ${renderRentalLoading('Loading marketplace...')}
                             </div>
                         </div>
 
@@ -304,7 +350,7 @@ function renderUI() {
     // MARKETPLACE GRID
     if (marketGrid) {
         if (RentalState.isLoading) {
-            marketGrid.innerHTML = renderLoading();
+            marketGrid.innerHTML = renderRentalLoading('Loading rentals...');
         } else if (listings.length === 0) {
             marketGrid.innerHTML = `
                 <div class="col-span-full text-center py-12">
