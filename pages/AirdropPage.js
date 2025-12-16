@@ -1,5 +1,5 @@
 // pages/AirdropPage.js
-// ✅ VERSION V2.1: Fullscreen loading with motivational messages, transparent icon backgrounds
+// ✅ VERSION V2.2: Extended loading with NFT tier rewards info (7 tiers: Diamond to Crystal)
 
 import { State } from '../state.js';
 import * as db from '../modules/firebase-auth-service.js';
@@ -15,14 +15,14 @@ const AUTO_APPROVE_HOURS = 2;
 
 // Motivational messages for loading screen
 const LOADING_MESSAGES = [
-    { title: "🚀 The More You Share, The More You Earn!", subtitle: "Every post brings you closer to amazing rewards" },
-    { title: "💰 Your Voice Has Value!", subtitle: "Help spread the word and get rewarded for it" },
+    { title: "🚀 The More You Share, The More You Earn!", subtitle: "Every post brings you closer to amazing NFT rewards" },
+    { title: "💎 Diamond NFT Awaits Top Creators!", subtitle: "Rank #1-2 and receive the most exclusive booster" },
     { title: "🔥 Join the Movement!", subtitle: "Be part of something bigger and earn while doing it" },
-    { title: "⭐ Early Supporters Win Big!", subtitle: "The more you contribute now, the more you'll gain later" },
-    { title: "🎯 Complete Tasks, Earn Points!", subtitle: "Simple actions, real rewards" },
-    { title: "📈 Climb the Leaderboard!", subtitle: "Top contributors receive exclusive NFT Boosters" },
-    { title: "🎁 Rewards Await You!", subtitle: "Every share, every post, every action counts" },
-    { title: "💎 Your Effort = Your Reward!", subtitle: "The community grows together" }
+    { title: "⭐ Early Supporters Win Big!", subtitle: "Top 500 creators will receive exclusive NFT Boosters" },
+    { title: "🎯 Complete Tasks, Earn Points!", subtitle: "Simple actions, real rewards - climb the leaderboard!" },
+    { title: "🏆 7 Tiers of NFT Rewards!", subtitle: "Diamond, Platinum, Gold, Silver, Bronze, Iron & Crystal" },
+    { title: "🎁 Your Effort = Your Reward!", subtitle: "The more you contribute, the better your NFT tier" },
+    { title: "📈 Climb the Leaderboard!", subtitle: "From Crystal to Diamond - every post counts!" }
 ];
 
 function getRandomLoadingMessage() {
@@ -596,31 +596,84 @@ function renderLeaderboard() {
             </p>
 
             <!-- Prizes Banner -->
-            <div class="bg-gradient-to-r from-amber-900/30 to-yellow-900/30 border border-amber-500/20 rounded-xl p-4 mb-6 relative overflow-hidden">
-                <div class="absolute top-2 right-2 w-12 h-12 airdrop-float opacity-50">
+            <div class="bg-gradient-to-r from-amber-900/20 to-zinc-900 border border-amber-500/20 rounded-xl p-4 mb-6 relative overflow-hidden">
+                <div class="absolute top-2 right-2 w-16 h-16 airdrop-float opacity-30">
                     <img src="./assets/airdrop.png" alt="Prize" class="w-full h-full object-contain">
                 </div>
-                <h3 class="font-bold text-white text-sm mb-3 flex items-center gap-2">
-                    <i class="fa-solid fa-gift text-amber-400"></i> Rewards
+                <h3 class="font-bold text-white text-sm mb-4 flex items-center gap-2">
+                    <i class="fa-solid fa-trophy text-amber-400"></i> Content Creator Rewards
                 </h3>
-                <div class="grid grid-cols-2 gap-2 text-xs">
-                    <div class="flex items-center gap-2">
-                        <span class="bg-yellow-500/20 text-yellow-400 font-bold px-1.5 py-0.5 rounded text-[10px]">🥇</span>
-                        <span class="text-zinc-300">Diamond Booster</span>
+                <p class="text-zinc-400 text-xs mb-4">Top content creators will receive exclusive NFT Boosters based on their ranking:</p>
+                
+                <div class="space-y-2 text-xs">
+                    <!-- Diamond -->
+                    <div class="flex items-center justify-between p-2 rounded-lg bg-gradient-to-r from-cyan-500/10 to-transparent border border-cyan-500/20">
+                        <div class="flex items-center gap-2">
+                            <span class="text-cyan-300 text-lg">💎</span>
+                            <span class="text-cyan-300 font-bold">Diamond</span>
+                        </div>
+                        <span class="text-zinc-400">Rank <span class="text-white font-bold">1-2</span></span>
                     </div>
-                    <div class="flex items-center gap-2">
-                        <span class="bg-zinc-500/20 text-zinc-300 font-bold px-1.5 py-0.5 rounded text-[10px]">🥈</span>
-                        <span class="text-zinc-300">Platinum Booster</span>
+                    
+                    <!-- Platinum -->
+                    <div class="flex items-center justify-between p-2 rounded-lg bg-gradient-to-r from-slate-400/10 to-transparent border border-slate-400/20">
+                        <div class="flex items-center gap-2">
+                            <span class="text-slate-300 text-lg">🏆</span>
+                            <span class="text-slate-300 font-bold">Platinum</span>
+                        </div>
+                        <span class="text-zinc-400">Rank <span class="text-white font-bold">3-10</span></span>
                     </div>
-                    <div class="flex items-center gap-2">
-                        <span class="bg-amber-700/20 text-amber-600 font-bold px-1.5 py-0.5 rounded text-[10px]">🥉</span>
-                        <span class="text-zinc-300">Gold Booster</span>
+                    
+                    <!-- Gold -->
+                    <div class="flex items-center justify-between p-2 rounded-lg bg-gradient-to-r from-yellow-500/10 to-transparent border border-yellow-500/20">
+                        <div class="flex items-center gap-2">
+                            <span class="text-yellow-400 text-lg">🥇</span>
+                            <span class="text-yellow-400 font-bold">Gold</span>
+                        </div>
+                        <span class="text-zinc-400">Rank <span class="text-white font-bold">11-20</span></span>
                     </div>
-                    <div class="flex items-center gap-2">
-                        <span class="bg-green-900/20 text-green-400 font-bold px-1.5 py-0.5 rounded text-[10px]">4+</span>
-                        <span class="text-zinc-300">Silver/Bronze</span>
+                    
+                    <!-- Silver -->
+                    <div class="flex items-center justify-between p-2 rounded-lg bg-gradient-to-r from-gray-400/10 to-transparent border border-gray-500/20">
+                        <div class="flex items-center gap-2">
+                            <span class="text-gray-300 text-lg">🥈</span>
+                            <span class="text-gray-300 font-bold">Silver</span>
+                        </div>
+                        <span class="text-zinc-400">Rank <span class="text-white font-bold">21-50</span></span>
+                    </div>
+                    
+                    <!-- Bronze -->
+                    <div class="flex items-center justify-between p-2 rounded-lg bg-gradient-to-r from-amber-700/10 to-transparent border border-amber-700/20">
+                        <div class="flex items-center gap-2">
+                            <span class="text-amber-600 text-lg">🥉</span>
+                            <span class="text-amber-600 font-bold">Bronze</span>
+                        </div>
+                        <span class="text-zinc-400">Rank <span class="text-white font-bold">51-150</span></span>
+                    </div>
+                    
+                    <!-- Iron -->
+                    <div class="flex items-center justify-between p-2 rounded-lg bg-gradient-to-r from-zinc-600/10 to-transparent border border-zinc-600/20">
+                        <div class="flex items-center gap-2">
+                            <span class="text-zinc-400 text-lg">⚔️</span>
+                            <span class="text-zinc-400 font-bold">Iron</span>
+                        </div>
+                        <span class="text-zinc-400">Rank <span class="text-white font-bold">151-300</span></span>
+                    </div>
+                    
+                    <!-- Crystal -->
+                    <div class="flex items-center justify-between p-2 rounded-lg bg-gradient-to-r from-purple-500/10 to-transparent border border-purple-500/20">
+                        <div class="flex items-center gap-2">
+                            <span class="text-purple-400 text-lg">🔮</span>
+                            <span class="text-purple-400 font-bold">Crystal</span>
+                        </div>
+                        <span class="text-zinc-400">Rank <span class="text-white font-bold">301-500</span></span>
                     </div>
                 </div>
+                
+                <p class="text-amber-400/80 text-[10px] mt-4 flex items-center gap-1">
+                    <i class="fa-solid fa-info-circle"></i>
+                    Crystal tier requires minimum 200 approved posts
+                </p>
             </div>
 
             <!-- Rankings -->
@@ -860,7 +913,7 @@ export const AirdropPage = {
 
         if (container.innerHTML.trim() === '' || isNewPage) {
             container.innerHTML = `
-                <div id="loading-state" class="fixed inset-0 z-50 bg-gradient-to-b from-zinc-900 via-zinc-900 to-black flex flex-col items-center justify-center px-6">
+                <div id="loading-state" class="fixed inset-0 z-50 bg-gradient-to-b from-zinc-900 via-zinc-900 to-black flex flex-col items-center justify-center px-6 overflow-y-auto py-8">
                     <!-- Floating coins effect -->
                     <div class="absolute inset-0 overflow-hidden pointer-events-none">
                         <div class="absolute top-[10%] left-[10%] w-6 h-6 opacity-20 airdrop-float" style="animation-delay: 0s;">
@@ -878,15 +931,43 @@ export const AirdropPage = {
                     </div>
                     
                     <!-- Main content -->
-                    <div class="relative z-10 text-center max-w-sm">
+                    <div class="relative z-10 text-center max-w-sm w-full">
                         <!-- Large airdrop icon -->
-                        <div class="w-40 h-40 mx-auto mb-8 airdrop-float-slow">
+                        <div class="w-32 h-32 md:w-40 md:h-40 mx-auto mb-6 airdrop-float-slow">
                             <img src="./assets/airdrop.png" alt="Airdrop" class="w-full h-full object-contain drop-shadow-2xl">
                         </div>
                         
                         <!-- Motivational message -->
-                        <h2 class="text-2xl font-black text-white mb-3 leading-tight">${loadingMsg.title}</h2>
-                        <p class="text-zinc-400 text-sm mb-8">${loadingMsg.subtitle}</p>
+                        <h2 class="text-xl md:text-2xl font-black text-white mb-2 leading-tight">${loadingMsg.title}</h2>
+                        <p class="text-zinc-400 text-sm mb-6">${loadingMsg.subtitle}</p>
+                        
+                        <!-- NFT Tiers Preview -->
+                        <div class="bg-zinc-900/50 border border-zinc-800 rounded-xl p-4 mb-6 text-left">
+                            <p class="text-zinc-500 text-[10px] uppercase tracking-wider mb-3 text-center">NFT Booster Rewards</p>
+                            <div class="grid grid-cols-2 gap-2 text-[10px]">
+                                <div class="flex items-center gap-2">
+                                    <span>💎</span><span class="text-cyan-300">Diamond</span><span class="text-zinc-600">#1-2</span>
+                                </div>
+                                <div class="flex items-center gap-2">
+                                    <span>🏆</span><span class="text-slate-300">Platinum</span><span class="text-zinc-600">#3-10</span>
+                                </div>
+                                <div class="flex items-center gap-2">
+                                    <span>🥇</span><span class="text-yellow-400">Gold</span><span class="text-zinc-600">#11-20</span>
+                                </div>
+                                <div class="flex items-center gap-2">
+                                    <span>🥈</span><span class="text-gray-300">Silver</span><span class="text-zinc-600">#21-50</span>
+                                </div>
+                                <div class="flex items-center gap-2">
+                                    <span>🥉</span><span class="text-amber-600">Bronze</span><span class="text-zinc-600">#51-150</span>
+                                </div>
+                                <div class="flex items-center gap-2">
+                                    <span>⚔️</span><span class="text-zinc-400">Iron</span><span class="text-zinc-600">#151-300</span>
+                                </div>
+                                <div class="flex items-center gap-2 col-span-2 justify-center pt-1 border-t border-zinc-800 mt-1">
+                                    <span>🔮</span><span class="text-purple-400">Crystal</span><span class="text-zinc-600">#301-500 (min 200 posts)</span>
+                                </div>
+                            </div>
+                        </div>
                         
                         <!-- Loading indicator -->
                         <div class="flex items-center justify-center gap-2 text-amber-500">
@@ -909,12 +990,24 @@ export const AirdropPage = {
         }
 
         try {
-            await loadAirdropData();
+            // Minimum loading time to let user read motivational message
+            const minLoadingTime = new Promise(resolve => setTimeout(resolve, 4000));
+            
+            // Load data in parallel with minimum time
+            await Promise.all([loadAirdropData(), minLoadingTime]);
+            
             const loader = document.getElementById('loading-state');
             const mainArea = document.getElementById('airdrop-main');
             const content = document.getElementById('main-content');
             
-            if(loader) loader.classList.add('hidden');
+            // Smooth fade out
+            if(loader) {
+                loader.style.transition = 'opacity 0.5s ease-out';
+                loader.style.opacity = '0';
+                await new Promise(resolve => setTimeout(resolve, 500));
+                loader.classList.add('hidden');
+            }
+            
             if(mainArea) mainArea.classList.remove('hidden');
             if(content) {
                 content.classList.remove('hidden');
