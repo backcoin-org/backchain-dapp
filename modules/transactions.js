@@ -1,5 +1,5 @@
 // js/modules/transactions.js
-// ✅ VERSÃO V7.4 - FIX: NFT Pool buyNFT() and sellNFT() with correct signatures
+// ✅ VERSÃO V7.5 - FIX: Prevent multiple approvals with global lock
 
 const ethers = window.ethers;
 
@@ -13,6 +13,10 @@ import { loadUserData, getHighestBoosterBoostFromAPI, loadRentalListings } from 
 const APPROVAL_BUFFER_PERCENT = 5n; // 5% extra buffer for approvals
 const MAX_GAS_LIMIT = 3000000n; // Safe max for Arbitrum
 const MIN_GAS_LIMIT = 100000n; // Minimum gas for simple txs
+
+// 🔥 V7.5: Global lock to prevent multiple simultaneous approvals
+let approvalInProgress = false;
+let transactionInProgress = false;
 
 // --- Custom Error Signatures (for decoding) ---
 const CUSTOM_ERRORS = {
@@ -302,25 +306,41 @@ async function executeTransaction(txPromise, successMessage, failContext, btnEle
 // ====================================================================
 
 async function ensureApproval(tokenContract, spenderAddress, amountOrTokenId, btnElement, purpose) {
-    const signer = await getConnectedSigner(); 
-    if (!signer) return false;
-    
-    // Validate spender address
-    if (!spenderAddress || !ethers.isAddress(spenderAddress)) {
-        showToast(`Invalid contract address for ${purpose}.`, "error");
-        return false;
-    }
-
-    const approvedTokenContract = tokenContract.connect(signer);
-
-    const setButtonState = (text) => {
-        if (btnElement) {
-            btnElement.innerHTML = `<div class="loader inline-block mr-2"></div> ${text}...`;
-            btnElement.disabled = true;
+    // 🔥 V7.5: Prevent multiple simultaneous approvals
+    if (approvalInProgress) {
+        console.log('Approval already in progress, waiting...');
+        // Wait for current approval to complete
+        let waitTime = 0;
+        while (approvalInProgress && waitTime < 30000) {
+            await new Promise(r => setTimeout(r, 500));
+            waitTime += 500;
         }
-    };
-
+        if (approvalInProgress) {
+            showToast("Previous approval still pending. Please wait.", "warning");
+            return false;
+        }
+    }
+    
+    approvalInProgress = true;
+    
     try {
+        const signer = await getConnectedSigner(); 
+        if (!signer) return false;
+        
+        // Validate spender address
+        if (!spenderAddress || !ethers.isAddress(spenderAddress)) {
+            showToast(`Invalid contract address for ${purpose}.`, "error");
+            return false;
+        }
+
+        const approvedTokenContract = tokenContract.connect(signer);
+
+        const setButtonState = (text) => {
+            if (btnElement) {
+                btnElement.innerHTML = `<div class="loader inline-block mr-2"></div> ${text}...`;
+                btnElement.disabled = true;
+            }
+        };
         // Detect if ERC721 or ERC20
         let isERC721 = false;
         try {
@@ -440,6 +460,9 @@ async function ensureApproval(tokenContract, spenderAddress, amountOrTokenId, bt
         showToast(userMessage, "error");
         
         return false;
+    } finally {
+        // 🔥 V7.5: Always release the lock
+        approvalInProgress = false;
     }
 }
 

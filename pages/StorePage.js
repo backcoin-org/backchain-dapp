@@ -1,5 +1,5 @@
 // pages/StorePage.js
-// ✅ VERSION V6.4: CRITICAL FIX - Use getAvailableNFTs() instead of getAvailableTokenIds()
+// ✅ VERSION V6.5: CRITICAL FIX - Prevent multiple clicks and approvals
 
 const ethers = window.ethers;
 
@@ -8,29 +8,19 @@ import { loadUserData, loadMyBoostersFromAPI, safeContractCall, getHighestBooste
 import { executeBuyBooster, executeSellBooster } from '../modules/transactions.js';
 import { formatBigNumber, renderLoading, renderNoData } from '../utils.js';
 import { showToast } from '../ui-feedback.js';
-import { boosterTiers, addresses, ipfsGateway } from '../config.js';
+import { boosterTiers, addresses, nftPoolABI, ipfsGateway } from '../config.js';
 
-// 🔥 V6.3: Factory ABI to get pool addresses dynamically
+// 🔥 V6.4: Factory ABI to get pool addresses dynamically
 const factoryABI = [
     "function getPoolAddress(uint256 boostBips) view returns (address)",
     "function isPool(address) view returns (bool)"
 ];
 
-// 🔥 V6.3: Correct Pool ABI - function is getAvailableNFTs, NOT getAvailableTokenIds
-const poolABIFixed = [
-    "function getBuyPrice() view returns (uint256)",
-    "function getSellPrice() view returns (uint256)",
-    "function buyNFT(uint256 _tokenId, uint256 _boosterTokenId)",
-    "function buyNextAvailableNFT(uint256 _boosterTokenId)",
-    "function sellNFT(uint256 _tokenId, uint256 _boosterTokenId, uint256 _minBkcExpected)",
-    "function getPoolInfo() view returns (uint256 tokenBalance, uint256 nftCount, uint256 k, bool isInitialized)",
-    "function getAvailableNFTs() view returns (uint256[] memory)",  // ✅ CORRECT NAME
-    "event NFTBought(address indexed buyer, uint256 indexed boostBips, uint256 tokenId, uint256 price, uint256 taxPaid)",
-    "event NFTSold(address indexed seller, uint256 indexed boostBips, uint256 tokenId, uint256 payout, uint256 taxPaid)"
-];
-
 // Cache for pool addresses (they don't change)
 const poolAddressCache = new Map();
+
+// 🔥 V6.5: Global flag to prevent multiple transactions
+let isTransactionInProgress = false;
 
 // --- LOCAL STATE ---
 const TradeState = {
@@ -587,7 +577,7 @@ async function loadDataForSelectedPool() {
             poolAddressCache.set(boostBips, poolAddress);
         }
 
-        const poolContract = new ethers.Contract(poolAddress, poolABIFixed, State.publicProvider);
+        const poolContract = new ethers.Contract(poolAddress, nftPoolABI, State.publicProvider);
         const boosterContract = State.rewardBoosterContract || State.rewardBoosterContractPublic;
 
         // Load user data
@@ -775,6 +765,12 @@ function setupEventListeners() {
         // Execute trade
         const executeBtn = e.target.closest('#execute-trade-btn');
         if (executeBtn && !executeBtn.disabled) {
+            // 🔥 V6.5: Prevent multiple clicks
+            if (isTransactionInProgress) {
+                console.log('Transaction already in progress, ignoring click');
+                return;
+            }
+            
             const action = executeBtn.dataset.action;
 
             if (action === "connect") {
@@ -788,18 +784,31 @@ function setupEventListeners() {
             const poolKey = `pool_${tier.name.toLowerCase()}`;
             const poolAddress = addresses[poolKey];
 
-            if (TradeState.tradeDirection === 'buy') {
-                const success = await executeBuyBooster(poolAddress, TradeState.buyPrice, TradeState.bestBoosterTokenId, executeBtn);
-                if (success) {
-                    showToast("NFT Purchased!", "success");
-                    await loadDataForSelectedPool();
+            // 🔥 V6.5: Set flag and disable button immediately
+            isTransactionInProgress = true;
+            executeBtn.disabled = true;
+            const originalText = executeBtn.innerHTML;
+            executeBtn.innerHTML = '<div class="loader inline-block"></div> Processing...';
+
+            try {
+                if (TradeState.tradeDirection === 'buy') {
+                    const success = await executeBuyBooster(poolAddress, TradeState.buyPrice, TradeState.bestBoosterTokenId, executeBtn);
+                    if (success) {
+                        showToast("NFT Purchased!", "success");
+                        await loadDataForSelectedPool();
+                    }
+                } else {
+                    const success = await executeSellBooster(poolAddress, TradeState.firstAvailableTokenId, TradeState.bestBoosterTokenId, executeBtn);
+                    if (success) {
+                        showToast("NFT Sold!", "success");
+                        await loadDataForSelectedPool();
+                    }
                 }
-            } else {
-                const success = await executeSellBooster(poolAddress, TradeState.firstAvailableTokenId, TradeState.bestBoosterTokenId, executeBtn);
-                if (success) {
-                    showToast("NFT Sold!", "success");
-                    await loadDataForSelectedPool();
-                }
+            } finally {
+                // 🔥 V6.5: Reset flag after transaction completes
+                isTransactionInProgress = false;
+                executeBtn.disabled = false;
+                executeBtn.innerHTML = originalText;
             }
         }
     });
