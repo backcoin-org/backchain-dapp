@@ -1,5 +1,5 @@
 // js/modules/data.js
-// ✅ VERSÃO V6.3: Fetch boostBips from chain if API doesn't provide it
+// ✅ VERSÃO V6.4: Fixed loadRentalListings to return all NFTs (including rented) + added paidAmount to rentals
 
 const ethers = window.ethers;
 
@@ -422,26 +422,36 @@ export async function loadRentalListings(forceRefresh = false) {
                 );
                 
                 if (listing && listing.isActive) {
-                    const isRented = await safeContractCall(
+                    // 🔥 V6.4: Get rental info for each listing
+                    const rentalInfo = await safeContractCall(
                         rentalContract,
-                        'isRented',
+                        'getRental',
                         [tokenId],
-                        false,
+                        null,
                         1,
                         forceRefresh
                     );
                     
-                    if (!isRented) {
-                        const boostInfo = await getBoosterInfo(tokenId);
-                        return {
-                            tokenId: tokenId.toString(),
-                            owner: listing.owner,
-                            price: listing.price?.toString() || '0',
-                            boostBips: boostInfo.boostBips,
-                            img: boostInfo.img,
-                            name: boostInfo.name
-                        };
-                    }
+                    const boostInfo = await getBoosterInfo(tokenId);
+                    const nowSec = Math.floor(Date.now() / 1000);
+                    const isCurrentlyRented = rentalInfo && BigInt(rentalInfo.endTime || 0) > BigInt(nowSec);
+                    
+                    return {
+                        tokenId: tokenId.toString(),
+                        owner: listing.owner,
+                        pricePerHour: listing.pricePerHour?.toString() || listing.price?.toString() || '0',
+                        minHours: listing.minHours?.toString() || '1',
+                        maxHours: listing.maxHours?.toString() || '1',
+                        totalEarnings: listing.totalEarnings?.toString() || '0',
+                        rentalCount: Number(listing.rentalCount || 0),
+                        boostBips: boostInfo.boostBips,
+                        img: boostInfo.img,
+                        name: boostInfo.name,
+                        // 🔥 V6.4: Include rental info
+                        isRented: isCurrentlyRented,
+                        currentTenant: isCurrentlyRented ? rentalInfo.tenant : null,
+                        rentalEndTime: isCurrentlyRented ? rentalInfo.endTime?.toString() : null
+                    };
                 }
             } catch (e) {
                 // Skip this listing on error
@@ -535,8 +545,10 @@ export async function loadUserRentals(forceRefresh = false) {
                     const boostInfo = await getBoosterInfo(tokenId);
                     myRentals.push({
                         tokenId: tokenId.toString(),
+                        tenant: rental.tenant,
                         startTime: rental.startTime?.toString() || '0',
                         endTime: rental.endTime?.toString() || '0',
+                        paidAmount: rental.paidAmount?.toString() || '0',
                         boostBips: boostInfo.boostBips,
                         img: boostInfo.img,
                         name: boostInfo.name
