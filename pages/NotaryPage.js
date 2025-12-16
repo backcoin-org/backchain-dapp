@@ -1,11 +1,11 @@
 // js/pages/NotaryPage.js
-// ✅ VERSION V8.4: Fixed image preview - always try to load from IPFS, multiple gateway fallback
+// ✅ VERSION V8.5: Fixed addToWallet - passes IPFS image URL to MetaMask
 
 import { State } from '../state.js';
 import { formatBigNumber } from '../utils.js';
 import { safeContractCall, API_ENDPOINTS, loadPublicData, loadUserData } from '../modules/data.js';
 import { executeNotarizeDocument } from '../modules/transactions.js';
-import { showToast, addNftToWallet } from '../ui-feedback.js';
+import { showToast } from '../ui-feedback.js';
 
 const ethers = window.ethers;
 
@@ -1096,7 +1096,7 @@ async function loadCertificates() {
                                 ` : `
                                     <span class="text-[10px] text-zinc-600">No file</span>
                                 `}
-                                <button onclick="NotaryPage.addToWallet('${cert.id}')" 
+                                <button onclick="NotaryPage.addToWallet('${cert.id}', '${ipfsUrl}')" 
                                     class="text-[10px] text-zinc-500 hover:text-amber-400 transition-colors flex items-center gap-1">
                                     <i class="fa-solid fa-wallet"></i> Wallet
                                 </button>
@@ -1189,11 +1189,51 @@ export const NotaryPage = {
         loadCertificates();
     },
 
-    addToWallet(tokenId) {
-        if (State.decentralizedNotaryContract) {
-            addNftToWallet(State.decentralizedNotaryContract.target, tokenId);
-        } else {
-            showToast('Contract not loaded', 'error');
+    async addToWallet(tokenId, imageUrl) {
+        try {
+            // If no imageUrl provided, try to fetch from tokenURI
+            let finalImageUrl = imageUrl;
+            
+            if (!finalImageUrl && State.decentralizedNotaryContract) {
+                try {
+                    const uri = await State.decentralizedNotaryContract.tokenURI(tokenId);
+                    if (uri && uri.startsWith('data:application/json;base64,')) {
+                        const base64Data = uri.replace('data:application/json;base64,', '');
+                        const metadata = JSON.parse(atob(base64Data));
+                        if (metadata.image) {
+                            const cid = metadata.image.replace('ipfs://', '');
+                            finalImageUrl = `https://gateway.pinata.cloud/ipfs/${cid}`;
+                        }
+                    }
+                } catch (e) {
+                    console.warn('Could not fetch tokenURI for image:', e);
+                }
+            }
+            
+            showToast('Requesting wallet to track NFT #' + tokenId + '...', 'info');
+            
+            const contractAddress = State.decentralizedNotaryContract?.target || 
+                                   await State.decentralizedNotaryContract?.getAddress();
+            
+            await window.ethereum.request({
+                method: 'wallet_watchAsset',
+                params: {
+                    type: 'ERC721',
+                    options: {
+                        address: contractAddress,
+                        tokenId: tokenId.toString(),
+                        symbol: 'NOTARY',
+                        image: finalImageUrl || ''
+                    },
+                },
+            });
+            
+            showToast('NFT added to wallet!', 'success');
+        } catch (error) {
+            console.error('Add NFT Error:', error);
+            if (error.code !== 4001) { // Not user rejection
+                showToast('Could not add NFT to wallet', 'error');
+            }
         }
     }
 };
