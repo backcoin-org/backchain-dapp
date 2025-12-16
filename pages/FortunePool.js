@@ -1,5 +1,5 @@
 // js/pages/FortunePool.js
-// ✅ VERSION V9.8: Unified number picker (slider+grid for all), aligned history icons with Dashboard
+// ✅ VERSION V10.0: Prize display, social sharing (Twitter/Telegram/WhatsApp), confetti, viral incentive 1000 BKC
 
 import { State } from '../state.js';
 import { loadUserData, safeContractCall, API_ENDPOINTS } from '../modules/data.js';
@@ -130,6 +130,44 @@ function injectStyles() {
         .slot-miss { 
             opacity: 0.5; 
             border-color: #3f3f46 !important; 
+        }
+        
+        /* Confetti Animation for Wins */
+        .confetti-container {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            overflow: hidden;
+            z-index: 1000;
+        }
+        .confetti {
+            position: absolute;
+            width: 10px;
+            height: 10px;
+            opacity: 0;
+            animation: confettiFall 3s ease-out forwards;
+        }
+        @keyframes confettiFall {
+            0% { 
+                opacity: 1; 
+                transform: translateY(-100px) rotate(0deg); 
+            }
+            100% { 
+                opacity: 0; 
+                transform: translateY(100vh) rotate(720deg); 
+            }
+        }
+        
+        /* Prize glow effect */
+        .prize-glow {
+            animation: prizeGlow 1.5s ease-in-out infinite alternate;
+        }
+        @keyframes prizeGlow {
+            0% { box-shadow: 0 0 10px rgba(74, 222, 128, 0.3); }
+            100% { box-shadow: 0 0 30px rgba(74, 222, 128, 0.6); }
         }
         
         /* Buttons */
@@ -965,6 +1003,7 @@ function renderResult(container) {
     const rolls = r.rolls || [];
     const prize = r.prizeWon || 0n;
     const prizeNum = formatBigNumber(prize);
+    const wagerNum = Game.wager || 0;
     
     // Count matches
     const matches = picks.map((pick, i) => {
@@ -974,12 +1013,11 @@ function renderResult(container) {
     const matchCount = matches.filter(m => m).length;
     
     // Determine win state
-    // Win = has prize OR has at least one match (fallback for display)
     const hasMatches = matchCount > 0;
     const hasPrize = prize > 0n;
     const isWin = hasPrize || hasMatches;
     
-    // Calculate expected multiplier for display
+    // Calculate multiplier for display
     let expectedMulti = 0;
     if (!isJackpot) {
         matches.forEach((hit, i) => {
@@ -989,57 +1027,113 @@ function renderResult(container) {
         expectedMulti = 100;
     }
 
+    // Se ganhou, dispara confetti
+    if (isWin) {
+        triggerConfetti();
+    }
+
+    // Mensagem para compartilhamento
+    const modeName = isJackpot ? 'Jackpot' : 'Combo';
+    const prizeText = hasPrize ? prizeNum.toFixed(2) : (wagerNum * expectedMulti).toFixed(2);
+    const shareMessage = isWin 
+        ? `🎉 I just won ${prizeText} BKC playing Fortune Pool ${modeName} mode! 🐯\n\n🔮 The Oracle revealed: [${rolls.join(', ')}]\n🎯 My picks: [${picks.join(', ')}]\n💰 ${expectedMulti}x multiplier!\n\nTry your luck at BKC Fortune Pool! 🚀`
+        : `🐯 Just played Fortune Pool! The Oracle said [${rolls.join(', ')}], I picked [${picks.join(', ')}]. So close! Next time I'll win big! 🎰`;
+    
+    const shareUrl = window.location.origin || 'https://bkc.app';
+    const encodedMessage = encodeURIComponent(shareMessage);
+    const encodedUrl = encodeURIComponent(shareUrl);
+
     container.innerHTML = `
-        <div class="text-center py-6">
+        <div class="text-center py-4">
             <!-- Result Header -->
-            <div class="mb-6 win-pulse">
+            <div class="mb-4 win-pulse">
                 ${isWin ? `
-                    <div class="text-6xl mb-3">🎉</div>
-                    <h2 class="text-2xl font-bold text-green-400">${matchCount === picks.length ? 'JACKPOT!' : 'YOU WON!'}</h2>
-                    ${hasPrize ? `
-                        <p class="text-3xl font-black text-white mt-2">+${prizeNum.toFixed(2)} BKC</p>
-                    ` : `
-                        <p class="text-lg text-green-400 mt-2">${matchCount}/${picks.length} matches!</p>
-                    `}
-                    ${!isJackpot && matchCount > 0 ? `
-                        <p class="text-sm text-zinc-400 mt-1">${expectedMulti}x multiplier</p>
-                    ` : ''}
+                    <div class="text-6xl mb-2">🎉</div>
+                    <h2 class="text-2xl font-bold text-green-400">${matchCount === picks.length ? '🏆 JACKPOT!' : 'YOU WON!'}</h2>
+                    
+                    <!-- Prize Display - Destacado -->
+                    <div class="mt-3 p-4 bg-gradient-to-r from-green-900/30 to-emerald-900/30 rounded-xl border border-green-500/30 prize-glow">
+                        <p class="text-xs text-green-400/80 uppercase mb-1">Your Prize</p>
+                        <p class="text-4xl font-black text-green-400">+${prizeText} BKC</p>
+                        <p class="text-sm text-zinc-400 mt-1">${expectedMulti}x multiplier on ${wagerNum} BKC wager</p>
+                    </div>
                 ` : `
-                    <div class="text-5xl mb-3">😔</div>
+                    <div class="text-5xl mb-2">🐯</div>
                     <h2 class="text-2xl font-bold text-zinc-400">No Match</h2>
-                    <p class="text-zinc-500 mt-2">Better luck next time!</p>
+                    <p class="text-zinc-500 mt-1">The Tiger wasn't lucky this time!</p>
                 `}
             </div>
 
-            <!-- Slots Result -->
-            <div class="flex justify-center gap-3 mb-6">
-                ${picks.map((pick, i) => {
-                    const roll = rolls[i] !== undefined ? Number(rolls[i]) : '?';
-                    const hit = matches[i];
-                    const tierInfo = isJackpot ? { name: 'Jackpot', multiplier: 100, color: 'amber' } : TIERS[i];
-                    return `
-                        <div class="text-center">
-                            <p class="text-xs text-${tierInfo.color}-400 mb-1 font-bold">${tierInfo.name}</p>
-                            <div class="w-16 h-16 rounded-xl bg-zinc-900 border-2 ${hit ? 'slot-hit' : 'slot-miss'} flex items-center justify-center">
-                                <span class="text-2xl font-black ${hit ? 'text-green-400' : 'text-zinc-500'}">${roll}</span>
+            <!-- Oracle Result Display -->
+            <div class="mb-4">
+                <p class="text-xs text-purple-400 uppercase mb-2">
+                    <i class="fa-solid fa-eye mr-1"></i> Fortune Oracle Revealed
+                </p>
+                <div class="flex justify-center gap-3">
+                    ${picks.map((pick, i) => {
+                        const roll = rolls[i] !== undefined ? Number(rolls[i]) : '?';
+                        const hit = matches[i];
+                        const tierInfo = isJackpot ? { name: 'Jackpot', multiplier: 100, color: 'amber' } : TIERS[i];
+                        return `
+                            <div class="text-center">
+                                <p class="text-[10px] text-${tierInfo.color}-400 mb-1 font-bold uppercase">${tierInfo.name}</p>
+                                <div class="w-14 h-14 rounded-xl bg-zinc-900 border-2 ${hit ? 'slot-hit' : 'slot-miss'} flex items-center justify-center relative">
+                                    <span class="text-xl font-black ${hit ? 'text-green-400' : 'text-zinc-500'}">${roll}</span>
+                                    ${hit ? '<div class="absolute -top-1 -right-1 w-5 h-5 bg-green-500 rounded-full flex items-center justify-center"><i class="fa-solid fa-check text-white text-[8px]"></i></div>' : ''}
+                                </div>
+                                <p class="text-[10px] mt-1 ${hit ? 'text-green-400 font-bold' : 'text-zinc-600'}">
+                                    You: ${pick}
+                                </p>
                             </div>
-                            <p class="text-xs mt-1 ${hit ? 'text-green-400 font-bold' : 'text-zinc-600'}">
-                                ${hit ? `✓ +${tierInfo.multiplier}x` : `You: ${pick}`}
-                            </p>
-                        </div>
-                    `;
-                }).join('')}
+                        `;
+                    }).join('')}
+                </div>
             </div>
 
-            <!-- Match Summary for Combo -->
-            ${!isJackpot && matchCount > 0 && matchCount < 3 ? `
-                <div class="mb-6 p-3 bg-green-900/20 rounded-xl border border-green-500/20">
-                    <p class="text-sm text-green-400">
-                        <i class="fa-solid fa-check mr-1"></i>
-                        Hit ${matchCount} of 3 tiers!
+            ${isWin ? `
+                <!-- Share Section - Incentivo de Viralização -->
+                <div class="mb-4 p-4 bg-gradient-to-r from-purple-900/30 to-pink-900/30 rounded-xl border border-purple-500/30">
+                    <div class="flex items-center justify-center gap-2 mb-3">
+                        <i class="fa-solid fa-bullhorn text-purple-400"></i>
+                        <p class="text-sm font-bold text-white">Share & Earn 1000 BKC!</p>
+                    </div>
+                    <p class="text-xs text-zinc-400 mb-3">Post your win on social media and claim 1000 BKC test tokens!</p>
+                    
+                    <!-- Social Buttons -->
+                    <div class="flex justify-center gap-2">
+                        <a href="https://twitter.com/intent/tweet?text=${encodedMessage}&url=${encodedUrl}" 
+                           target="_blank" 
+                           class="flex items-center gap-2 px-4 py-2 bg-black hover:bg-zinc-800 text-white text-sm font-bold rounded-lg transition-all border border-zinc-700">
+                            <i class="fa-brands fa-x-twitter"></i>
+                            <span>Post</span>
+                        </a>
+                        <a href="https://t.me/share/url?url=${encodedUrl}&text=${encodedMessage}" 
+                           target="_blank" 
+                           class="flex items-center gap-2 px-4 py-2 bg-[#0088cc] hover:bg-[#0077b5] text-white text-sm font-bold rounded-lg transition-all">
+                            <i class="fa-brands fa-telegram"></i>
+                            <span>Share</span>
+                        </a>
+                        <a href="https://wa.me/?text=${encodedMessage}%20${encodedUrl}" 
+                           target="_blank" 
+                           class="flex items-center gap-2 px-4 py-2 bg-[#25D366] hover:bg-[#20bd5a] text-white text-sm font-bold rounded-lg transition-all">
+                            <i class="fa-brands fa-whatsapp"></i>
+                        </a>
+                    </div>
+                    
+                    <p class="text-[10px] text-zinc-500 mt-2">
+                        <i class="fa-solid fa-gift mr-1"></i>
+                        After posting, use the Faucet to claim your bonus!
                     </p>
                 </div>
-            ` : ''}
+            ` : `
+                <!-- Encouragement for losers -->
+                <div class="mb-4 p-3 bg-zinc-800/50 rounded-xl border border-zinc-700/50">
+                    <p class="text-sm text-zinc-400">
+                        <i class="fa-solid fa-lightbulb text-amber-400 mr-1"></i>
+                        Try <span class="text-purple-400 font-bold">Combo Mode</span> for better odds!
+                    </p>
+                </div>
+            `}
 
             <!-- Actions -->
             <div class="flex gap-3">
@@ -1057,6 +1151,39 @@ function renderResult(container) {
         renderPhase();
         loadPoolData();
     });
+}
+
+// ============================================================================
+// CONFETTI CELEBRATION
+// ============================================================================
+function triggerConfetti() {
+    // Remove container antigo se existir
+    const existing = document.querySelector('.confetti-container');
+    if (existing) existing.remove();
+    
+    const container = document.createElement('div');
+    container.className = 'confetti-container';
+    document.body.appendChild(container);
+    
+    const colors = ['#f59e0b', '#10b981', '#8b5cf6', '#ec4899', '#06b6d4', '#fbbf24'];
+    const shapes = ['●', '■', '▲', '★'];
+    
+    // Criar 50 confettis
+    for (let i = 0; i < 50; i++) {
+        const confetti = document.createElement('div');
+        confetti.className = 'confetti';
+        confetti.style.left = Math.random() * 100 + '%';
+        confetti.style.top = '-10px';
+        confetti.style.color = colors[Math.floor(Math.random() * colors.length)];
+        confetti.style.fontSize = (Math.random() * 10 + 8) + 'px';
+        confetti.style.animationDelay = Math.random() * 2 + 's';
+        confetti.style.animationDuration = (Math.random() * 2 + 2) + 's';
+        confetti.textContent = shapes[Math.floor(Math.random() * shapes.length)];
+        container.appendChild(confetti);
+    }
+    
+    // Remover após animação
+    setTimeout(() => container.remove(), 5000);
 }
 
 // ============================================================================
