@@ -1479,8 +1479,44 @@ export async function executeNotarizeDocument(documentURI, description, contentH
         return false;
     }
     
-    // 4. Execute with gas estimation
+    // 4. Check ETH balance for gas
+    try {
+        const provider = notaryContract.runner?.provider || State.provider;
+        const ethBalance = await provider.getBalance(State.userAddress);
+        console.log('⛽ ETH Balance for gas:', ethers.formatEther(ethBalance), 'ETH');
+        
+        if (ethBalance < ethers.parseEther("0.0001")) {
+            showToast('Insufficient ETH for gas. Get some Arbitrum Sepolia ETH.', 'error');
+            return false;
+        }
+    } catch (balErr) {
+        console.warn('ETH balance check failed:', balErr);
+    }
+    
+    // 5. Double-check allowance before executing
+    if (feeToPay > 0n) {
+        try {
+            const tokenWithSigner = State.bkcTokenContract.connect(signer);
+            const currentAllowance = await tokenWithSigner.allowance(State.userAddress, notaryAddress);
+            console.log('💰 Current allowance:', ethers.formatEther(currentAllowance), 'BKC');
+            console.log('💰 Fee to pay:', ethers.formatEther(feeToPay), 'BKC');
+            
+            if (currentAllowance < feeToPay) {
+                console.warn('⚠️ Allowance insufficient, requesting new approval...');
+                const approveTx = await tokenWithSigner.approve(notaryAddress, feeToPay * 2n);
+                console.log('📝 Approval tx sent:', approveTx.hash);
+                await approveTx.wait();
+                console.log('✅ Approval confirmed');
+            }
+        } catch (allowErr) {
+            console.error('Allowance check/fix failed:', allowErr);
+        }
+    }
+    
+    // 6. Execute with gas estimation
     const gasOpts = await estimateGasWithFallback(notaryContract, 'notarize', args, 500000n);
+    console.log('⛽ Gas options:', gasOpts);
+    
     const notarizeTxPromise = notaryContract.notarize(...args, gasOpts);
 
     return await executeTransaction(
