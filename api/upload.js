@@ -1,5 +1,5 @@
 // api/upload.js
-// ✅ VERSION V2.1: 20MB limit, any file type support
+// ✅ VERSION V2.1: 4MB limit, any file type support
 
 import pinataSDK from '@pinata/sdk';
 import { Formidable } from 'formidable';
@@ -49,9 +49,9 @@ export default async function handler(req, res) {
     let file = null;
 
     try {
-        // 2. Parse form with 20MB limit (any file type allowed)
+        // 2. Parse form with 4MB limit (any file type allowed)
         const form = new Formidable({
-            maxFileSize: 20 * 1024 * 1024, // 20MB - any file type
+            maxFileSize: 4 * 1024 * 1024, // 4MB - any file type
             uploadDir: '/tmp',
             keepExtensions: true,
             multiples: false,
@@ -157,7 +157,7 @@ export default async function handler(req, res) {
         if (error.message === 'FILE_TOO_LARGE') {
             return res.status(413).json({
                 error: 'File too large',
-                details: 'Maximum file size is 20MB.'
+                details: 'Maximum file size is 4MB.'
             });
         }
         

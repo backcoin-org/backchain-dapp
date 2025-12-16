@@ -1,5 +1,5 @@
 // js/pages/NotaryPage.js
-// ✅ VERSION V8.3: Decentralized Notary - 20MB limit, any file type, smart icons
+// ✅ VERSION V8.3: Decentralized Notary - 4MB limit, any file type, smart icons
 
 import { State } from '../state.js';
 import { formatBigNumber } from '../utils.js';
@@ -12,7 +12,7 @@ const ethers = window.ethers;
 // ============================================================================
 // CONSTANTS
 // ============================================================================
-const MAX_FILE_SIZE = 20 * 1024 * 1024; // 20MB - Any file type allowed
+const MAX_FILE_SIZE = 4 * 1024 * 1024; // 4MB - Any file type allowed
 const EXPLORER_TX = "https://sepolia.arbiscan.io/tx/";
 const IPFS_GATEWAY = "https://ipfs.io/ipfs/";
 
@@ -233,7 +233,7 @@ function render() {
                                 <div class="w-6 h-6 rounded-full bg-amber-500/20 flex items-center justify-center flex-shrink-0">
                                     <span class="text-amber-400 text-[10px] font-bold">1</span>
                                 </div>
-                                <p class="text-xs text-zinc-400">Upload any document (max 20MB)</p>
+                                <p class="text-xs text-zinc-400">Upload any document (max 4MB)</p>
                             </div>
                             <div class="flex items-start gap-3">
                                 <div class="w-6 h-6 rounded-full bg-amber-500/20 flex items-center justify-center flex-shrink-0">
@@ -488,7 +488,7 @@ function renderStep1(panel) {
                     <i class="fa-solid fa-cloud-arrow-up text-2xl text-amber-400"></i>
                 </div>
                 <p class="text-white font-medium mb-1">Click or drag file here</p>
-                <p class="text-[10px] text-zinc-600">Max 20MB • Any format</p>
+                <p class="text-[10px] text-zinc-600">Max 4MB • Any format</p>
             </div>
 
             <div class="flex items-center gap-4 mt-6 text-[10px] text-zinc-600">
@@ -530,7 +530,7 @@ function handleFileSelect(file) {
     if (!file) return;
 
     if (file.size > MAX_FILE_SIZE) {
-        showToast('File too large (max 20MB)', 'error');
+        showToast('File too large (max 4MB)', 'error');
         return;
     }
 
@@ -764,7 +764,7 @@ async function handleMint() {
         if (!res.ok) {
             // Handle specific error codes
             if (res.status === 413) {
-                throw new Error('File too large. Maximum size is 20MB.');
+                throw new Error('File too large. Maximum size is 4MB.');
             } else if (res.status === 401) {
                 throw new Error('Signature verification failed. Please try again.');
             } else if (res.status === 500) {
