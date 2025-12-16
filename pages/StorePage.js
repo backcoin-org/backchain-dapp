@@ -1,5 +1,5 @@
 // pages/StorePage.js
-// ✅ VERSION V6.1: Resilient to contract errors (getAvailableTokenIds may fail)
+// ✅ VERSION V6.3: Fetch pool address from Factory dynamically
 
 const ethers = window.ethers;
 
@@ -9,6 +9,15 @@ import { executeBuyBooster, executeSellBooster } from '../modules/transactions.j
 import { formatBigNumber, renderLoading, renderNoData } from '../utils.js';
 import { showToast } from '../ui-feedback.js';
 import { boosterTiers, addresses, nftPoolABI, ipfsGateway } from '../config.js';
+
+// 🔥 V6.3: Factory ABI to get pool addresses dynamically
+const factoryABI = [
+    "function getPoolAddress(uint256 boostBips) view returns (address)",
+    "function isPool(address) view returns (bool)"
+];
+
+// Cache for pool addresses (they don't change)
+const poolAddressCache = new Map();
 
 // --- LOCAL STATE ---
 const TradeState = {
@@ -407,18 +416,42 @@ function renderInventory() {
         return;
     }
 
+    // 🔥 V6.2: Debug log to see booster data structure
+    console.log('My Boosters:', boosters);
+
     grid.innerHTML = boosters.map(nft => {
-        const tier = boosterTiers.find(t => t.boostBips === nft.boostBips) || { name: 'Unknown', img: null };
-        const imgUrl = buildImageUrl(tier.img);
+        // 🔥 V6.2: Try multiple ways to find the tier
+        const boostBips = nft.boostBips || nft.boost || nft.boostBIPS || 0;
+        let tier = boosterTiers.find(t => t.boostBips === boostBips);
+        
+        // Try by name if boostBips didn't work
+        if (!tier && nft.name) {
+            const nameLower = nft.name.toLowerCase();
+            tier = boosterTiers.find(t => nameLower.includes(t.name.toLowerCase()));
+        }
+        
+        // Try by tier name
+        if (!tier && nft.tier) {
+            tier = boosterTiers.find(t => t.name.toLowerCase() === nft.tier.toLowerCase());
+        }
+        
+        // Default fallback
+        if (!tier) {
+            tier = { name: 'Booster', img: null, boostBips: boostBips };
+        }
+
+        const imgUrl = nft.imageUrl || nft.image || buildImageUrl(tier.img);
+        const tierName = tier.name || 'Booster';
+        const boostPercent = boostBips ? `+${boostBips / 100}%` : '';
 
         return `
-            <div class="inv-item relative bg-zinc-800/50 border border-zinc-700/50 rounded-lg p-2 cursor-pointer hover:border-amber-500/50 hover:bg-zinc-800 transition-all group" data-boost="${nft.boostBips}" data-id="${nft.tokenId}">
+            <div class="inv-item relative bg-zinc-800/50 border border-zinc-700/50 rounded-lg p-2 cursor-pointer hover:border-amber-500/50 hover:bg-zinc-800 transition-all group" data-boost="${boostBips}" data-id="${nft.tokenId}">
                 <button class="wallet-btn absolute -top-1 -right-1 w-5 h-5 bg-amber-500 rounded-full flex items-center justify-center text-black text-[9px] opacity-0 group-hover:opacity-100 transition-opacity z-10" data-id="${nft.tokenId}" data-img="${imgUrl}">
                     <i class="fa-solid fa-wallet"></i>
                 </button>
                 <img src="${imgUrl}" class="w-full aspect-square object-contain mb-1" onerror="this.src='./assets/bkc_logo_3d.png'">
-                <p class="text-[9px] text-zinc-400 text-center font-bold truncate">${tier.name}</p>
-                <p class="text-[8px] text-zinc-600 text-center">#${nft.tokenId}</p>
+                <p class="text-[9px] text-zinc-400 text-center font-bold truncate">${tierName}</p>
+                <p class="text-[8px] text-zinc-600 text-center">#${nft.tokenId}${boostPercent ? ` ${boostPercent}` : ''}</p>
             </div>
         `;
     }).join('');
@@ -504,11 +537,41 @@ async function loadDataForSelectedPool() {
     try {
         const boostBips = TradeState.selectedPoolBoostBips;
         const tier = boosterTiers.find(t => t.boostBips === boostBips);
-        const poolKey = `pool_${tier.name.toLowerCase()}`;
-        const poolAddress = addresses[poolKey];
-
-        if (!poolAddress || !poolAddress.startsWith('0x')) {
-            throw new Error("Pool not deployed.");
+        
+        // 🔥 V6.2: Validate tier exists
+        if (!tier) {
+            throw new Error("Invalid tier selected.");
+        }
+        
+        // 🔥 V6.3: Get pool address from Factory (cached)
+        let poolAddress = poolAddressCache.get(boostBips);
+        
+        if (!poolAddress) {
+            // Try to get from addresses first (for backwards compatibility)
+            const poolKey = `pool_${tier.name.toLowerCase()}`;
+            poolAddress = addresses[poolKey];
+            
+            // If not in addresses, fetch from Factory
+            if (!poolAddress || !poolAddress.startsWith('0x')) {
+                const factoryAddress = addresses.nftPoolFactory || addresses.nftLiquidityPoolFactory;
+                
+                if (!factoryAddress) {
+                    throw new Error("Factory address not configured.");
+                }
+                
+                console.log(`Fetching pool address for ${tier.name} (${boostBips} bips) from factory...`);
+                const factoryContract = new ethers.Contract(factoryAddress, factoryABI, State.publicProvider);
+                poolAddress = await factoryContract.getPoolAddress(boostBips);
+                
+                if (!poolAddress || poolAddress === ethers.ZeroAddress) {
+                    throw new Error(`Pool for ${tier.name} not deployed.`);
+                }
+                
+                console.log(`Pool address for ${tier.name}: ${poolAddress}`);
+            }
+            
+            // Cache the address
+            poolAddressCache.set(boostBips, poolAddress);
         }
 
         const poolContract = new ethers.Contract(poolAddress, nftPoolABI, State.publicProvider);
@@ -521,7 +584,12 @@ async function loadDataForSelectedPool() {
             TradeState.bestBoosterTokenId = tokenId ? BigInt(tokenId) : 0n;
             TradeState.bestBoosterBips = Number(highestBoost);
 
-            const myTierBoosters = State.myBoosters.filter(b => b.boostBips === Number(boostBips));
+            // 🔥 V6.2: More flexible booster filtering
+            const myTierBoosters = (State.myBoosters || []).filter(b => {
+                const bBoost = b.boostBips || b.boost || b.boostBIPS || 0;
+                return bBoost === Number(boostBips);
+            });
+            
             TradeState.firstAvailableTokenId = null;
             TradeState.userBalanceOfSelectedNFT = myTierBoosters.length;
 
@@ -540,32 +608,54 @@ async function loadDataForSelectedPool() {
             }
         }
 
-        // Load pool data - 🔥 V6.1: More resilient to contract errors
+        // Load pool data - 🔥 V6.3: Better pool status detection
         let buyPrice = ethers.MaxUint256;
         let sellPrice = 0n;
         let availableTokenIds = [];
         let baseTaxBips = State.systemFees?.["NFT_POOL_SELL_TAX_BIPS"] || 1000n;
         let discountBips = BigInt(State.boosterDiscounts?.[TradeState.bestBoosterBips] || 0);
 
-        // Try to get prices (critical)
+        // 🔥 V6.3: First check pool info to see if initialized
+        try {
+            const poolInfo = await safeContractCall(poolContract, 'getPoolInfo', [], null);
+            if (poolInfo) {
+                console.log(`Pool ${tier.name} info:`, {
+                    tokenBalance: poolInfo.tokenBalance?.toString(),
+                    nftCount: poolInfo.nftCount?.toString(),
+                    k: poolInfo.k?.toString(),
+                    isInitialized: poolInfo.isInitialized
+                });
+                
+                if (!poolInfo.isInitialized) {
+                    console.warn(`Pool ${tier.name} is not initialized`);
+                }
+            }
+        } catch (e) {
+            console.warn('getPoolInfo failed:', e.message);
+        }
+
+        // Try to get prices
         try {
             buyPrice = await safeContractCall(poolContract, 'getBuyPrice', [], ethers.MaxUint256);
+            console.log(`${tier.name} Buy Price:`, buyPrice.toString());
         } catch (e) {
             console.warn('getBuyPrice failed:', e.message);
         }
 
         try {
             sellPrice = await safeContractCall(poolContract, 'getSellPrice', [], 0n);
+            console.log(`${tier.name} Sell Price:`, sellPrice.toString());
         } catch (e) {
             console.warn('getSellPrice failed:', e.message);
         }
 
-        // Try to get available tokens (non-critical - may fail if pool empty)
+        // Try to get available tokens
         try {
-            const result = await safeContractCall(poolContract, 'getAvailableTokenIds', [], []);
-            availableTokenIds = Array.isArray(result) ? result : [];
+            const result = await poolContract.getAvailableTokenIds();
+            availableTokenIds = Array.isArray(result) ? [...result] : [];
+            console.log(`${tier.name} Available NFTs:`, availableTokenIds.length, availableTokenIds.map(id => id.toString()));
         } catch (e) {
-            console.warn('getAvailableTokenIds failed (pool may be empty):', e.message);
+            console.warn(`getAvailableTokenIds failed for ${tier.name}:`, e.message);
             availableTokenIds = [];
         }
 
