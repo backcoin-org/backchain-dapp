@@ -1,5 +1,5 @@
 // pages/RewardsPage.js
-// ✅ VERSION V9.3: Render-first approach - shows UI immediately, loads data in background
+// ✅ VERSION V9.4: Added claim history section
 
 const ethers = window.ethers;
 
@@ -8,7 +8,8 @@ import {
     calculateUserTotalRewards,
     calculateClaimDetails,
     getHighestBoosterBoostFromAPI,
-    loadUserData
+    loadUserData,
+    API_ENDPOINTS
 } from '../modules/data.js';
 import { executeUniversalClaim } from '../modules/transactions.js';
 import { formatBigNumber } from '../utils.js';
@@ -18,6 +19,10 @@ import { showToast } from '../ui-feedback.js';
 let lastFetch = 0;
 let isLoading = false;
 let isProcessing = false;
+let claimHistory = [];
+
+// --- CONSTANTS ---
+const EXPLORER_TX = 'https://sepolia.arbiscan.io/tx/';
 
 // ============================================================================
 // MAIN EXPORT
@@ -28,15 +33,12 @@ export const RewardsPage = {
         const container = document.getElementById('rewards');
         if (!container) return;
 
-        // Always render page structure first
         if (container.innerHTML.trim() === '' || isNewPage) {
             container.innerHTML = getPageHTML();
         }
 
         if (State.isConnected) {
-            // Show initial UI immediately with zeros
             renderContentImmediate();
-            // Then load real data in background
             this.update(isNewPage);
         } else {
             renderNotConnected();
@@ -56,7 +58,6 @@ export const RewardsPage = {
         isLoading = true;
 
         try {
-            // Load data with individual error handling
             let boosterData = { highestBoost: 0, boostName: 'None', tokenId: null, source: 'none' };
             let claimDetails = { netClaimAmount: 0n, feeAmount: 0n, totalRewards: 0n };
             let grossRewards = { stakingRewards: 0n, minerRewards: 0n };
@@ -65,6 +66,9 @@ export const RewardsPage = {
             try { boosterData = await getHighestBoosterBoostFromAPI() || boosterData; } catch (e) { console.warn('booster failed:', e.message); }
             try { claimDetails = await calculateClaimDetails() || claimDetails; } catch (e) { console.warn('claimDetails failed:', e.message); }
             try { grossRewards = await calculateUserTotalRewards() || grossRewards; } catch (e) { console.warn('rewards failed:', e.message); }
+            
+            // Load claim history
+            try { await loadClaimHistory(); } catch (e) { console.warn('history failed:', e.message); }
 
             renderContent(claimDetails, grossRewards, boosterData);
             lastFetch = now;
@@ -76,6 +80,92 @@ export const RewardsPage = {
         }
     }
 };
+
+// ============================================================================
+// CLAIM HISTORY
+// ============================================================================
+
+async function loadClaimHistory() {
+    if (!State.userAddress) return;
+    
+    try {
+        const response = await fetch(`${API_ENDPOINTS.getHistory}/${State.userAddress}`);
+        if (response.ok) {
+            const allHistory = await response.json();
+            // Filter only claim/reward events
+            claimHistory = allHistory.filter(item => {
+                const type = (item.type || '').toUpperCase();
+                return type.includes('REWARD') || type.includes('CLAIM');
+            }).slice(0, 10); // Last 10 claims
+        }
+    } catch (e) {
+        console.warn('Failed to load claim history:', e.message);
+        claimHistory = [];
+    }
+}
+
+function renderClaimHistory() {
+    if (claimHistory.length === 0) {
+        return `
+            <div class="text-center py-6">
+                <div class="w-10 h-10 bg-zinc-800 rounded-full flex items-center justify-center mx-auto mb-2">
+                    <i class="fa-solid fa-clock-rotate-left text-zinc-600"></i>
+                </div>
+                <p class="text-zinc-500 text-xs">No claims yet</p>
+            </div>
+        `;
+    }
+
+    return claimHistory.map(item => {
+        const date = formatDate(item.timestamp || item.createdAt);
+        const amount = formatHistoryAmount(item.amount || item.details?.amount || 0);
+        const txHash = item.txHash || '';
+        const txLink = txHash ? `${EXPLORER_TX}${txHash}` : '#';
+
+        return `
+            <a href="${txLink}" target="_blank" rel="noopener" 
+               class="flex items-center justify-between p-2.5 bg-zinc-800/30 hover:bg-zinc-800/50 rounded-lg transition-colors group">
+                <div class="flex items-center gap-2.5">
+                    <div class="w-8 h-8 rounded-lg bg-green-500/15 flex items-center justify-center">
+                        <i class="fa-solid fa-gift text-green-400 text-xs"></i>
+                    </div>
+                    <div>
+                        <p class="text-sm text-white font-medium">Claimed</p>
+                        <p class="text-[10px] text-zinc-500">${date}</p>
+                    </div>
+                </div>
+                <div class="flex items-center gap-2">
+                    <span class="text-sm font-mono font-bold text-green-400">+${amount} <span class="text-zinc-500 text-xs">BKC</span></span>
+                    ${txHash ? '<i class="fa-solid fa-arrow-up-right-from-square text-zinc-600 group-hover:text-green-400 text-[10px]"></i>' : ''}
+                </div>
+            </a>
+        `;
+    }).join('');
+}
+
+function formatDate(timestamp) {
+    if (!timestamp) return '';
+    const date = new Date(typeof timestamp === 'number' ? timestamp : timestamp);
+    const now = new Date();
+    const diff = now - date;
+    
+    if (diff < 60000) return 'Just now';
+    if (diff < 3600000) return `${Math.floor(diff / 60000)}m ago`;
+    if (diff < 86400000) return `${Math.floor(diff / 3600000)}h ago`;
+    if (diff < 604800000) return `${Math.floor(diff / 86400000)}d ago`;
+    
+    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
+
+function formatHistoryAmount(amount) {
+    if (!amount) return '0.00';
+    try {
+        const num = typeof amount === 'string' ? parseFloat(amount) : Number(amount) / 1e18;
+        return num.toFixed(2);
+    } catch {
+        return '0.00';
+    }
+}
 
 // ============================================================================
 // PAGE STRUCTURE
@@ -263,6 +353,17 @@ function renderContent(claimDetails, grossRewards, boosterData) {
                     `}
                 </div>
             </div>
+
+            <!-- CLAIM HISTORY -->
+            <div class="bg-zinc-900/50 border border-zinc-800 rounded-xl overflow-hidden">
+                <div class="p-3 border-b border-zinc-800/50 flex items-center justify-between">
+                    <p class="text-[10px] text-zinc-500 uppercase"><i class="fa-solid fa-clock-rotate-left mr-1"></i> Claim History</p>
+                    <span class="text-[10px] text-zinc-600">${claimHistory.length} claims</span>
+                </div>
+                <div class="p-3 space-y-2 max-h-[250px] overflow-y-auto custom-scrollbar">
+                    ${renderClaimHistory()}
+                </div>
+            </div>
         </div>
     `;
 
@@ -296,7 +397,13 @@ async function handleClaim(stakingRewards, minerRewards, boosterTokenId) {
             btnText.textContent = '✓ Claimed!';
             btnIcon.className = 'fa-solid fa-check';
             showToast('🎉 Rewards claimed!', 'success');
-            setTimeout(() => { lastFetch = 0; RewardsPage.update(true); }, 1500);
+            
+            // Refresh after short delay
+            setTimeout(() => { 
+                lastFetch = 0; 
+                claimHistory = []; // Clear cache to force reload
+                RewardsPage.update(true); 
+            }, 2000);
         }
     } catch (e) {
         console.error('Claim error:', e);
