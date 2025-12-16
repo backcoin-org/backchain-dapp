@@ -1,5 +1,5 @@
 // pages/RewardsPage.js
-// ✅ VERSION V9.0: Complete redesign - Mobile-first, modern UI, improved UX
+// ✅ VERSION V9.2: Super defensive - always renders after 8s timeout
 
 const ethers = window.ethers;
 
@@ -127,24 +127,62 @@ export const RewardsPage = {
         isLoading = true;
         showLoadingState();
 
-        try {
-            await loadUserData();
+        // 🔥 V9.2: Super defensive - sempre renderiza após timeout
+        const RENDER_TIMEOUT_MS = 8000;
+        let rendered = false;
+        
+        const forceRenderTimeout = setTimeout(() => {
+            if (!rendered) {
+                console.warn('RewardsPage: Timeout - forcing render with defaults');
+                rendered = true;
+                renderContent(
+                    { netClaimAmount: 0n, feeAmount: 0n, totalRewards: 0n },
+                    { stakingRewards: 0n, minerRewards: 0n },
+                    { highestBoost: 0, boostName: 'None', tokenId: null, source: 'none' }
+                );
+                isLoading = false;
+            }
+        }, RENDER_TIMEOUT_MS);
 
-            const boosterData = await getHighestBoosterBoostFromAPI();
-            
-            const [claimDetails, grossRewards] = await Promise.all([
-                calculateClaimDetails(),
-                calculateUserTotalRewards()
+        try {
+            // 🔥 V9.1: Parallel fetch com timeout individual
+            const [userDataResult, boosterResult, claimResult, rewardsResult] = await Promise.allSettled([
+                loadUserData().catch(() => null),
+                getHighestBoosterBoostFromAPI().catch(() => ({ highestBoost: 0, boostName: 'None', tokenId: null, source: 'none' })),
+                calculateClaimDetails().catch(() => ({ netClaimAmount: 0n, feeAmount: 0n, totalRewards: 0n })),
+                calculateUserTotalRewards().catch(() => ({ stakingRewards: 0n, minerRewards: 0n }))
             ]);
 
-            renderContent(claimDetails, grossRewards, boosterData);
+            // Extract values with defaults
+            const boosterData = boosterResult.status === 'fulfilled' && boosterResult.value ? boosterResult.value : 
+                { highestBoost: 0, boostName: 'None', tokenId: null, source: 'none' };
+            const claimDetails = claimResult.status === 'fulfilled' && claimResult.value ? claimResult.value : 
+                { netClaimAmount: 0n, feeAmount: 0n, totalRewards: 0n };
+            const grossRewards = rewardsResult.status === 'fulfilled' && rewardsResult.value ? rewardsResult.value : 
+                { stakingRewards: 0n, minerRewards: 0n };
+
+            if (!rendered) {
+                rendered = true;
+                clearTimeout(forceRenderTimeout);
+                renderContent(claimDetails, grossRewards, boosterData);
+            }
             lastFetch = now;
 
         } catch (e) {
             console.error("Rewards Error:", e);
-            renderError();
+            if (!rendered) {
+                rendered = true;
+                clearTimeout(forceRenderTimeout);
+                // 🔥 V9.1: Renderiza com dados vazios ao invés de erro
+                renderContent(
+                    { netClaimAmount: 0n, feeAmount: 0n, totalRewards: 0n },
+                    { stakingRewards: 0n, minerRewards: 0n },
+                    { highestBoost: 0, boostName: 'None', tokenId: null, source: 'none' }
+                );
+            }
         } finally {
             isLoading = false;
+            clearTimeout(forceRenderTimeout);
         }
     }
 };
@@ -257,21 +295,26 @@ function renderContent(claimDetails, grossRewards, boosterData) {
     const container = document.getElementById('rewards-content');
     if (!container) return;
 
-    // Process data
+    // Process data with defensive defaults
     const details = claimDetails || {};
-    const gross = grossRewards || { stakingRewards: 0n, minerRewards: 0n };
-    const booster = boosterData || { highestBoost: 0, boostName: 'None', tokenId: 0 };
+    const gross = grossRewards || {};
+    const booster = boosterData || {};
 
-    const netReward = details.netClaimAmount || 0n;
-    const totalGross = details.totalRewards || 0n;
-    const feeAmount = details.feeAmount || 0n;
+    // 🔥 V9.1: Fallbacks defensivos para todos os valores
+    const netReward = details.netClaimAmount ?? 0n;
+    const totalGross = details.totalRewards ?? 0n;
+    const feeAmount = details.feeAmount ?? 0n;
+    const stakingRewards = gross.stakingRewards ?? 0n;
+    const minerRewards = gross.minerRewards ?? 0n;
+    const highestBoost = booster.highestBoost ?? 0;
+    const boostName = booster.boostName || 'None';
 
     // Fee calculations
     const feeBips = details.baseFeeBips || Number(State.systemFees?.["CLAIM_REWARD_FEE_BIPS"] || 5000n);
     const feePercent = feeBips / 100;
-    const boostPercent = booster.highestBoost / 100;
+    const boostPercent = highestBoost / 100;
     
-    const effectiveFeeBips = details.finalFeeBips || (feeBips - (feeBips * booster.highestBoost / 10000));
+    const effectiveFeeBips = details.finalFeeBips || (feeBips - (feeBips * highestBoost / 10000));
     const keepPercent = 100 - (effectiveFeeBips / 100);
     
     // Potential with Diamond
@@ -281,15 +324,20 @@ function renderContent(claimDetails, grossRewards, boosterData) {
     const extraGain = potentialReward > netReward ? potentialReward - netReward : 0n;
 
     const hasRewards = netReward > 0n;
-    const hasBooster = booster.highestBoost > 0;
+    const hasBooster = highestBoost > 0;
     const boosterTokenId = BigInt(booster.tokenId || 0);
     
-    // Format numbers
-    const netRewardNum = formatBigNumber(netReward);
-    const totalGrossNum = formatBigNumber(totalGross);
-    const feeAmountNum = formatBigNumber(feeAmount);
-    const stakingNum = formatBigNumber(gross.stakingRewards);
-    const miningNum = formatBigNumber(gross.minerRewards);
+    // Format numbers - with try/catch for safety
+    let netRewardNum = 0, totalGrossNum = 0, feeAmountNum = 0, stakingNum = 0, miningNum = 0;
+    try {
+        netRewardNum = formatBigNumber(netReward);
+        totalGrossNum = formatBigNumber(totalGross);
+        feeAmountNum = formatBigNumber(feeAmount);
+        stakingNum = formatBigNumber(stakingRewards);
+        miningNum = formatBigNumber(minerRewards);
+    } catch (e) {
+        console.warn('Format error:', e);
+    }
 
     // Progress ring percentage (how much you keep)
     const ringPercent = keepPercent;
@@ -437,10 +485,14 @@ function renderContent(claimDetails, grossRewards, boosterData) {
 // ============================================================================
 
 function renderActiveBooster(booster, boostPercent, keepPercent) {
+    const imageUrl = booster?.imageUrl || './assets/bkc_logo_3d.png';
+    const name = booster?.boostName || 'Booster';
+    const source = booster?.source || 'owned';
+    
     return `
         <div class="flex items-center gap-3">
             <div class="relative w-14 h-14 bg-black/50 rounded-xl border-2 border-green-500/30 overflow-hidden flex-shrink-0">
-                <img src="${booster.imageUrl || './assets/bkc_logo_3d.png'}" 
+                <img src="${imageUrl}" 
                      class="w-full h-full object-cover"
                      onerror="this.src='./assets/bkc_logo_3d.png'">
                 <div class="absolute -top-1 -right-1 w-5 h-5 bg-green-500 rounded-full flex items-center justify-center">
@@ -448,13 +500,13 @@ function renderActiveBooster(booster, boostPercent, keepPercent) {
                 </div>
             </div>
             <div class="flex-1 min-w-0">
-                <p class="text-white font-bold truncate">${booster.boostName}</p>
+                <p class="text-white font-bold truncate">${name}</p>
                 <p class="text-[11px] text-zinc-500">
-                    ${booster.source === 'rented' ? '🔗 Rented' : '✓ Owned'}
+                    ${source === 'rented' ? '🔗 Rented' : '✓ Owned'}
                 </p>
             </div>
             <div class="text-right">
-                <p class="text-xl font-bold text-green-400">+${boostPercent}%</p>
+                <p class="text-xl font-bold text-green-400">+${boostPercent || 0}%</p>
                 <p class="text-[10px] text-zinc-500">Fee Discount</p>
             </div>
         </div>
@@ -463,7 +515,7 @@ function renderActiveBooster(booster, boostPercent, keepPercent) {
             <div class="flex items-center justify-between text-xs">
                 <span class="text-green-400">
                     <i class="fa-solid fa-shield-check mr-1"></i>
-                    You keep ${keepPercent.toFixed(1)}% of rewards
+                    You keep ${(keepPercent || 50).toFixed(1)}% of rewards
                 </span>
                 <span class="text-green-400 font-bold">Active</span>
             </div>
@@ -472,7 +524,13 @@ function renderActiveBooster(booster, boostPercent, keepPercent) {
 }
 
 function renderNoBooster(hasRewards, extraGain, potentialKeepPercent) {
-    const extraGainNum = formatBigNumber(extraGain);
+    let extraGainNum = 0;
+    try {
+        extraGainNum = formatBigNumber(extraGain || 0n);
+    } catch (e) {
+        extraGainNum = 0;
+    }
+    const keepPct = potentialKeepPercent || 85;
     
     return `
         <div class="text-center">
@@ -488,7 +546,7 @@ function renderNoBooster(hasRewards, extraGain, potentialKeepPercent) {
             ` : ''}
             
             <p class="text-sm text-zinc-400 mb-3">
-                Get a Booster to keep up to <span class="text-green-400 font-bold">${potentialKeepPercent.toFixed(0)}%</span> of your rewards
+                Get a Booster to keep up to <span class="text-green-400 font-bold">${keepPct.toFixed(0)}%</span> of your rewards
             </p>
             
             <!-- Tier Preview -->
