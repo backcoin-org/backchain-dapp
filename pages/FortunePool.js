@@ -1,5 +1,5 @@
 // js/pages/FortunePool.js
-// ✅ VERSION V10.0: Prize display, social sharing (Twitter/Telegram/WhatsApp), confetti, viral incentive 1000 BKC
+// ✅ VERSION V10.1: Fixed games counter, aligned Recent Games with Dashboard style
 
 import { State } from '../state.js';
 import { loadUserData, safeContractCall, API_ENDPOINTS } from '../modules/data.js';
@@ -251,7 +251,7 @@ export function render() {
                     <span class="text-sm font-bold text-white">Recent Games</span>
                     <span id="win-rate" class="text-xs text-zinc-500">--</span>
                 </div>
-                <div id="history-list" class="max-h-[200px] overflow-y-auto">
+                <div id="history-list" class="max-h-[280px] overflow-y-auto p-2 space-y-0">
                     <div class="p-6 text-center text-zinc-600 text-sm">Loading...</div>
                 </div>
             </div>
@@ -1199,8 +1199,9 @@ async function loadPoolData() {
             Game.poolStatus = status.value;
             document.getElementById('prize-pool').textContent = 
                 formatBigNumber(status.value.prizePool || 0n).toFixed(2) + ' BKC';
+            // Use gameCounter instead of totalGames
             document.getElementById('total-games').textContent = 
-                (status.value.totalGames || 0).toLocaleString();
+                (status.value.gameCounter || status.value.totalGames || 0).toLocaleString();
         }
 
         // User balance
@@ -1230,14 +1231,34 @@ async function loadHistory() {
             // Win rate
             const wins = data.games.filter(g => g.isWin || (g.prizeWon && BigInt(g.prizeWon) > 0n)).length;
             document.getElementById('win-rate').textContent = `${wins}/${data.games.length} wins`;
+            
+            // Update games counter from history if not set
+            const gamesEl = document.getElementById('total-games');
+            if (gamesEl && (gamesEl.textContent === '--' || gamesEl.textContent === '0')) {
+                // Use total from API response if available
+                if (data.total) {
+                    gamesEl.textContent = data.total.toLocaleString();
+                } else if (data.games.length > 0) {
+                    gamesEl.textContent = data.games.length.toString();
+                }
+            }
         } else {
             document.getElementById('history-list').innerHTML = `
-                <div class="p-6 text-center text-zinc-600 text-sm">No games yet</div>
+                <div class="flex flex-col items-center justify-center py-6 px-4">
+                    <div class="w-12 h-12 rounded-full bg-zinc-800/50 flex items-center justify-center mb-3">
+                        <i class="fa-solid fa-dice text-zinc-600 text-xl"></i>
+                    </div>
+                    <p class="text-zinc-500 text-sm font-medium">No games yet</p>
+                    <p class="text-zinc-600 text-xs">Play to see your history here</p>
+                </div>
             `;
             document.getElementById('win-rate').textContent = '';
         }
     } catch (e) {
         console.log('History load error:', e);
+        document.getElementById('history-list').innerHTML = `
+            <div class="p-6 text-center text-zinc-600 text-sm">Could not load history</div>
+        `;
     }
 }
 
@@ -1251,27 +1272,31 @@ function renderHistory(games) {
         const wager = g.wagerAmount ? formatBigNumber(BigInt(g.wagerAmount)) : 0;
         const time = g.timestamp ? new Date(g.timestamp._seconds * 1000).toLocaleString() : '';
         
-        // Ícones alinhados com Dashboard
+        // Ícones alinhados com Dashboard - mesma lógica
         const icon = isWin ? 'fa-crown' : 'fa-paw';
-        const iconColor = isWin ? '#facc15' : '#71717a';
-        const bgColor = isWin ? 'rgba(234,179,8,0.2)' : 'rgba(39,39,42,0.5)';
-        const label = isWin ? '🏆 Winner!' : '🐯 No Luck';
+        const iconColor = isWin ? '#facc15' : '#f97316';
+        const bgColor = isWin ? 'rgba(234,179,8,0.2)' : 'rgba(249,115,22,0.2)';
+        const label = isWin ? '🏆 Fortune Winner!' : '🐯 Fortune Bet';
+        const amountDisplay = isWin ? `+${prize.toFixed(2)}` : `-${wager.toFixed(2)}`;
+        const amountColor = isWin ? '#4ade80' : '#a1a1aa';
 
         return `
             <a href="${g.txHash ? EXPLORER_TX + g.txHash : '#'}" target="_blank" 
-               class="flex items-center justify-between p-2.5 hover:bg-zinc-800/60 border-b border-zinc-800/30 last:border-0 transition-colors group">
+               class="flex items-center justify-between p-2.5 hover:bg-zinc-800/60 border border-zinc-700/30 rounded-lg transition-all hover:border-zinc-600/50 group mb-1.5" 
+               style="background: rgba(39,39,42,0.3)">
                 <div class="flex items-center gap-2.5">
                     <div class="w-8 h-8 rounded-lg flex items-center justify-center border border-zinc-700/30" style="background: ${bgColor}">
-                        <i class="fa-solid ${icon}" style="color: ${iconColor}; font-size: 12px"></i>
+                        <i class="fa-solid ${icon} text-xs" style="color: ${iconColor}"></i>
                     </div>
                     <div>
-                        <p class="text-xs font-medium" style="color: ${isWin ? '#4ade80' : '#a1a1aa'}">
-                            ${isWin ? `+${prize.toFixed(2)} BKC` : `-${wager.toFixed(2)} BKC`}
-                        </p>
+                        <p class="text-white text-xs font-medium">${label}</p>
                         <p class="text-zinc-600" style="font-size: 10px">${time}</p>
                     </div>
                 </div>
-                <i class="fa-solid fa-arrow-up-right-from-square text-zinc-600 group-hover:text-blue-400 transition-colors" style="font-size: 9px"></i>
+                <div class="text-right flex items-center gap-2">
+                    <p class="text-xs font-mono" style="color: ${amountColor}">${amountDisplay} <span class="text-zinc-500">BKC</span></p>
+                    <i class="fa-solid fa-arrow-up-right-from-square text-zinc-600 group-hover:text-blue-400 transition-colors" style="font-size: 9px"></i>
+                </div>
             </a>
         `;
     }).join('');
