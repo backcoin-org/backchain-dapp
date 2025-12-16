@@ -1,5 +1,5 @@
 // pages/StorePage.js
-// ✅ VERSION V6.0: Clean UI, Mobile-First, V2.1 Compatible
+// ✅ VERSION V6.1: Resilient to contract errors (getAvailableTokenIds may fail)
 
 const ethers = window.ethers;
 
@@ -540,21 +540,43 @@ async function loadDataForSelectedPool() {
             }
         }
 
-        // Load pool data
-        const [buyPrice, sellPrice, availableTokenIds, baseTaxBips, discountBips] = await Promise.all([
-            safeContractCall(poolContract, 'getBuyPrice', [], ethers.MaxUint256),
-            safeContractCall(poolContract, 'getSellPrice', [], 0n),
-            safeContractCall(poolContract, 'getAvailableTokenIds', [], []),
-            Promise.resolve(State.systemFees?.["NFT_POOL_SELL_TAX_BIPS"] || 1000n),
-            Promise.resolve(BigInt(State.boosterDiscounts?.[TradeState.bestBoosterBips] || 0)),
-        ]);
+        // Load pool data - 🔥 V6.1: More resilient to contract errors
+        let buyPrice = ethers.MaxUint256;
+        let sellPrice = 0n;
+        let availableTokenIds = [];
+        let baseTaxBips = State.systemFees?.["NFT_POOL_SELL_TAX_BIPS"] || 1000n;
+        let discountBips = BigInt(State.boosterDiscounts?.[TradeState.bestBoosterBips] || 0);
+
+        // Try to get prices (critical)
+        try {
+            buyPrice = await safeContractCall(poolContract, 'getBuyPrice', [], ethers.MaxUint256);
+        } catch (e) {
+            console.warn('getBuyPrice failed:', e.message);
+        }
+
+        try {
+            sellPrice = await safeContractCall(poolContract, 'getSellPrice', [], 0n);
+        } catch (e) {
+            console.warn('getSellPrice failed:', e.message);
+        }
+
+        // Try to get available tokens (non-critical - may fail if pool empty)
+        try {
+            const result = await safeContractCall(poolContract, 'getAvailableTokenIds', [], []);
+            availableTokenIds = Array.isArray(result) ? result : [];
+        } catch (e) {
+            console.warn('getAvailableTokenIds failed (pool may be empty):', e.message);
+            availableTokenIds = [];
+        }
 
         TradeState.firstAvailableTokenIdForBuy = (availableTokenIds.length > 0) ? BigInt(availableTokenIds[availableTokenIds.length - 1]) : null;
         TradeState.buyPrice = (buyPrice === ethers.MaxUint256) ? 0n : buyPrice;
         TradeState.sellPrice = sellPrice;
 
         // Calculate sell fee
-        const finalTaxBips = (baseTaxBips > discountBips) ? (baseTaxBips - discountBips) : 0n;
+        const baseTaxBipsBigInt = typeof baseTaxBips === 'bigint' ? baseTaxBips : BigInt(baseTaxBips);
+        const discountBipsBigInt = typeof discountBips === 'bigint' ? discountBips : BigInt(discountBips);
+        const finalTaxBips = (baseTaxBipsBigInt > discountBipsBigInt) ? (baseTaxBipsBigInt - discountBipsBigInt) : 0n;
         const taxAmount = (sellPrice * finalTaxBips) / 10000n;
         TradeState.netSellPrice = sellPrice - taxAmount;
 
@@ -562,6 +584,19 @@ async function loadDataForSelectedPool() {
 
     } catch (err) {
         console.warn("Store Data Warning:", err.message);
+        // 🔥 V6.1: Show user-friendly message when pool fails
+        const content = document.getElementById('swap-content');
+        if (content && err.message?.includes('Pool not deployed')) {
+            content.innerHTML = `
+                <div class="text-center py-8">
+                    <div class="w-12 h-12 bg-zinc-800 rounded-full flex items-center justify-center mx-auto mb-3">
+                        <i class="fa-solid fa-lock text-zinc-600"></i>
+                    </div>
+                    <p class="text-zinc-400 text-sm font-medium">Pool Not Available</p>
+                    <p class="text-zinc-600 text-xs mt-1">This tier is not deployed yet</p>
+                </div>
+            `;
+        }
     } finally {
         TradeState.isDataLoading = false;
         renderSwapInterface();
