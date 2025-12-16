@@ -1,14 +1,64 @@
 // pages/StorePage.js
-// ✅ VERSION V6.6: Robust multi-layer click protection
+// ✅ VERSION V6.7: Enhanced UX with animated logo loading
 
 const ethers = window.ethers;
 
 import { State } from '../state.js';
 import { loadUserData, loadMyBoostersFromAPI, safeContractCall, getHighestBoosterBoostFromAPI, loadSystemDataFromAPI, API_ENDPOINTS } from '../modules/data.js';
 import { executeBuyBooster, executeSellBooster } from '../modules/transactions.js';
-import { formatBigNumber, renderLoading, renderNoData } from '../utils.js';
+import { formatBigNumber, renderNoData } from '../utils.js';
 import { showToast } from '../ui-feedback.js';
 import { boosterTiers, addresses, nftPoolABI, ipfsGateway } from '../config.js';
+
+// 🔥 V6.7: Custom animated loading with BKC logo
+function renderStoreLoading(message = 'Loading pool data...') {
+    return `
+        <div class="flex flex-col items-center justify-center py-8 gap-4">
+            <div class="relative">
+                <!-- Outer glow ring -->
+                <div class="absolute inset-0 w-16 h-16 rounded-full bg-amber-500/20 animate-ping"></div>
+                <!-- Spinning border -->
+                <div class="absolute inset-0 w-16 h-16 rounded-full border-2 border-transparent border-t-amber-500 border-r-amber-500/50 animate-spin"></div>
+                <!-- Logo container with pulse -->
+                <div class="relative w-16 h-16 rounded-full bg-gradient-to-br from-zinc-800 to-zinc-900 flex items-center justify-center shadow-lg shadow-amber-500/10 animate-pulse">
+                    <img src="./assets/bkc_logo_3d.png" alt="BKC" class="w-10 h-10 drop-shadow-lg" onerror="this.src='./assets/favicon.png'">
+                </div>
+            </div>
+            <div class="text-center">
+                <p class="text-zinc-400 text-sm font-medium animate-pulse">${message}</p>
+                <p class="text-zinc-600 text-xs mt-1">Please wait...</p>
+            </div>
+        </div>
+    `;
+}
+
+// 🔥 V6.7: Skeleton loading for swap interface
+function renderSwapSkeleton() {
+    return `
+        <div class="animate-pulse space-y-4">
+            <!-- Direction Toggle Skeleton -->
+            <div class="flex bg-zinc-800/50 rounded-lg p-1 mb-4">
+                <div class="flex-1 h-10 bg-zinc-700/50 rounded-md"></div>
+                <div class="flex-1 h-10 bg-zinc-700/30 rounded-md ml-1"></div>
+            </div>
+            
+            <!-- Swap Card Skeleton -->
+            <div class="bg-zinc-800/30 rounded-xl p-4 border border-zinc-700/50">
+                <div class="flex justify-between items-center mb-4">
+                    <div class="h-8 w-24 bg-zinc-700/50 rounded"></div>
+                    <div class="h-10 w-28 bg-zinc-700/50 rounded-lg"></div>
+                </div>
+                <div class="flex justify-center my-4">
+                    <div class="w-8 h-8 bg-zinc-700/50 rounded-full"></div>
+                </div>
+                <div class="flex justify-between items-center">
+                    <div class="h-8 w-16 bg-zinc-700/50 rounded"></div>
+                    <div class="h-10 w-28 bg-zinc-700/50 rounded-lg"></div>
+                </div>
+            </div>
+        </div>
+    `;
+}
 
 // 🔥 V6.4: Factory ABI to get pool addresses dynamically
 const factoryABI = [
@@ -89,12 +139,89 @@ async function addToWallet(tokenId, imageUrl) {
     }
 }
 
+// 🔥 V6.7: Inject custom CSS for animations
+function injectStoreStyles() {
+    if (document.getElementById('store-custom-styles')) return;
+    
+    const style = document.createElement('style');
+    style.id = 'store-custom-styles';
+    style.textContent = `
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        @keyframes slideUp {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        @keyframes pulseGlow {
+            0%, 100% { box-shadow: 0 0 5px rgba(245, 158, 11, 0.3); }
+            50% { box-shadow: 0 0 20px rgba(245, 158, 11, 0.6); }
+        }
+        
+        .animate-fadeIn {
+            animation: fadeIn 0.3s ease-out forwards;
+        }
+        
+        .animate-slideUp {
+            animation: slideUp 0.4s ease-out forwards;
+        }
+        
+        .store-glow {
+            animation: pulseGlow 2s ease-in-out infinite;
+        }
+        
+        .tier-btn {
+            backdrop-filter: blur(4px);
+        }
+        
+        .tier-btn:hover img {
+            transform: scale(1.1);
+            transition: transform 0.2s ease;
+        }
+        
+        #swap-content .swap-arrow:hover i {
+            transform: rotate(180deg);
+            transition: transform 0.3s ease;
+        }
+        
+        /* Smooth scrollbar for inventory */
+        #inventory-grid::-webkit-scrollbar,
+        #store-history::-webkit-scrollbar {
+            width: 4px;
+        }
+        
+        #inventory-grid::-webkit-scrollbar-track,
+        #store-history::-webkit-scrollbar-track {
+            background: rgba(39, 39, 42, 0.5);
+            border-radius: 2px;
+        }
+        
+        #inventory-grid::-webkit-scrollbar-thumb,
+        #store-history::-webkit-scrollbar-thumb {
+            background: rgba(113, 113, 122, 0.5);
+            border-radius: 2px;
+        }
+        
+        #inventory-grid::-webkit-scrollbar-thumb:hover,
+        #store-history::-webkit-scrollbar-thumb:hover {
+            background: rgba(161, 161, 170, 0.5);
+        }
+    `;
+    document.head.appendChild(style);
+}
+
 // ============================================================================
 // 1. MAIN RENDER
 // ============================================================================
 
 export const StorePage = {
     async render(isNewPage) {
+        // 🔥 V6.7: Inject custom animations CSS
+        injectStoreStyles();
+        
         await loadSystemDataFromAPI();
         const container = document.getElementById('store');
         if (!container) return;
@@ -133,7 +260,7 @@ export const StorePage = {
 
                                 <!-- SWAP INTERFACE -->
                                 <div id="swap-content">
-                                    ${renderLoading()}
+                                    ${renderStoreLoading('Fetching pool data...')}
                                 </div>
 
                                 <!-- EXECUTE BUTTON -->
@@ -254,23 +381,52 @@ export const StorePage = {
 // ============================================================================
 
 function renderTierButtons() {
-    return boosterTiers.map((tier, idx) => `
-        <button class="tier-btn flex-shrink-0 flex items-center gap-2 px-3 py-2 rounded-lg border transition-all ${idx === 0 ? 'bg-amber-500/20 border-amber-500/50 text-amber-400' : 'bg-zinc-800/50 border-zinc-700 text-zinc-400 hover:border-zinc-600'}" data-boost="${tier.boostBips}">
-            <img src="${buildImageUrl(tier.img)}" class="w-6 h-6 rounded" onerror="this.src='./assets/bkc_logo_3d.png'">
-            <span class="text-xs font-bold">${tier.name}</span>
-        </button>
-    `).join('');
+    // Tier-specific colors for better visual feedback
+    const tierStyles = {
+        'Diamond': { bg: 'from-cyan-500/20 to-blue-500/20', border: 'border-cyan-500/50', text: 'text-cyan-400', glow: 'shadow-cyan-500/20' },
+        'Platinum': { bg: 'from-slate-300/20 to-gray-400/20', border: 'border-slate-400/50', text: 'text-slate-300', glow: 'shadow-slate-400/20' },
+        'Gold': { bg: 'from-yellow-500/20 to-amber-500/20', border: 'border-yellow-500/50', text: 'text-yellow-400', glow: 'shadow-yellow-500/20' },
+        'Silver': { bg: 'from-gray-400/20 to-slate-400/20', border: 'border-gray-400/50', text: 'text-gray-300', glow: 'shadow-gray-400/20' },
+        'Bronze': { bg: 'from-orange-600/20 to-amber-700/20', border: 'border-orange-600/50', text: 'text-orange-400', glow: 'shadow-orange-500/20' }
+    };
+    
+    return boosterTiers.map((tier, idx) => {
+        const style = tierStyles[tier.name] || tierStyles['Bronze'];
+        const isFirst = idx === 0;
+        return `
+            <button class="tier-btn flex-shrink-0 flex items-center gap-2 px-3 py-2.5 rounded-lg border transition-all duration-200 hover:scale-105 active:scale-95 ${isFirst ? `bg-gradient-to-r ${style.bg} ${style.border} ${style.text} shadow-lg ${style.glow}` : 'bg-zinc-800/50 border-zinc-700 text-zinc-400 hover:border-zinc-600 hover:bg-zinc-700/50'}" data-boost="${tier.boostBips}" data-tier="${tier.name}">
+                <img src="${buildImageUrl(tier.img)}" class="w-6 h-6 rounded ring-1 ${isFirst ? 'ring-white/30' : 'ring-zinc-600/50'}" onerror="this.src='./assets/bkc_logo_3d.png'">
+                <span class="text-xs font-bold">${tier.name}</span>
+            </button>
+        `;
+    }).join('');
 }
 
 function updateTierSelection(boostBips) {
+    const tierStyles = {
+        'Diamond': { bg: 'from-cyan-500/20 to-blue-500/20', border: 'border-cyan-500/50', text: 'text-cyan-400', glow: 'shadow-cyan-500/20' },
+        'Platinum': { bg: 'from-slate-300/20 to-gray-400/20', border: 'border-slate-400/50', text: 'text-slate-300', glow: 'shadow-slate-400/20' },
+        'Gold': { bg: 'from-yellow-500/20 to-amber-500/20', border: 'border-yellow-500/50', text: 'text-yellow-400', glow: 'shadow-yellow-500/20' },
+        'Silver': { bg: 'from-gray-400/20 to-slate-400/20', border: 'border-gray-400/50', text: 'text-gray-300', glow: 'shadow-gray-400/20' },
+        'Bronze': { bg: 'from-orange-600/20 to-amber-700/20', border: 'border-orange-600/50', text: 'text-orange-400', glow: 'shadow-orange-500/20' }
+    };
+
     document.querySelectorAll('.tier-btn').forEach(btn => {
         const isSelected = Number(btn.dataset.boost) === boostBips;
-        btn.classList.toggle('bg-amber-500/20', isSelected);
-        btn.classList.toggle('border-amber-500/50', isSelected);
-        btn.classList.toggle('text-amber-400', isSelected);
-        btn.classList.toggle('bg-zinc-800/50', !isSelected);
-        btn.classList.toggle('border-zinc-700', !isSelected);
-        btn.classList.toggle('text-zinc-400', !isSelected);
+        const tierName = btn.dataset.tier;
+        const style = tierStyles[tierName] || tierStyles['Bronze'];
+        const img = btn.querySelector('img');
+        
+        // Reset all classes first
+        btn.className = 'tier-btn flex-shrink-0 flex items-center gap-2 px-3 py-2.5 rounded-lg border transition-all duration-200 hover:scale-105 active:scale-95';
+        
+        if (isSelected) {
+            btn.classList.add('bg-gradient-to-r', ...style.bg.split(' '), style.border, style.text, 'shadow-lg', style.glow);
+            if (img) img.className = 'w-6 h-6 rounded ring-1 ring-white/30';
+        } else {
+            btn.classList.add('bg-zinc-800/50', 'border-zinc-700', 'text-zinc-400', 'hover:border-zinc-600', 'hover:bg-zinc-700/50');
+            if (img) img.className = 'w-6 h-6 rounded ring-1 ring-zinc-600/50';
+        }
     });
 }
 
@@ -290,65 +446,84 @@ function renderSwapInterface() {
     const balance = formatBigNumber(State.currentUserBalance || 0n).toFixed(2);
 
     const soldOut = isBuy && TradeState.firstAvailableTokenIdForBuy === null;
+    const insufficientBalance = isBuy && TradeState.buyPrice > (State.currentUserBalance || 0n);
+    
+    // Get tier color for glow effect
+    const tierColors = {
+        'Diamond': 'from-cyan-500/20 to-blue-500/20 border-cyan-500/30',
+        'Platinum': 'from-slate-300/20 to-gray-400/20 border-slate-400/30',
+        'Gold': 'from-yellow-500/20 to-amber-500/20 border-yellow-500/30',
+        'Silver': 'from-gray-400/20 to-slate-400/20 border-gray-400/30',
+        'Bronze': 'from-orange-600/20 to-amber-700/20 border-orange-600/30'
+    };
+    const tierGlow = tierColors[selectedTier?.name] || 'from-zinc-600/20 to-zinc-700/20 border-zinc-600/30';
 
     content.innerHTML = `
-        <!-- Direction Toggle -->
-        <div class="flex bg-zinc-800/50 rounded-lg p-1 mb-4">
-            <button class="direction-btn flex-1 py-2 rounded-md text-sm font-bold transition-all ${isBuy ? 'bg-green-500/20 text-green-400' : 'text-zinc-500 hover:text-zinc-300'}" data-direction="buy">
-                <i class="fa-solid fa-cart-plus mr-1"></i> Buy
-            </button>
-            <button class="direction-btn flex-1 py-2 rounded-md text-sm font-bold transition-all ${!isBuy ? 'bg-red-500/20 text-red-400' : 'text-zinc-500 hover:text-zinc-300'}" data-direction="sell">
-                <i class="fa-solid fa-money-bill-transfer mr-1"></i> Sell
-            </button>
-        </div>
-
-        <!-- Swap Card -->
-        <div class="bg-zinc-800/30 rounded-xl p-4 border border-zinc-700/50">
-            
-            <!-- Top Row -->
-            <div class="flex justify-between items-center mb-1">
-                <span class="text-[10px] text-zinc-500 uppercase">${isBuy ? 'You Pay' : 'You Sell'}</span>
-                <span class="text-[10px] text-zinc-600">${isBuy ? `Balance: ${balance} BKC` : `Owned: ${TradeState.userBalanceOfSelectedNFT}`}</span>
+        <div class="animate-fadeIn">
+            <!-- Direction Toggle -->
+            <div class="flex bg-zinc-800/50 rounded-lg p-1 mb-4 border border-zinc-700/30">
+                <button class="direction-btn flex-1 py-2.5 rounded-md text-sm font-bold transition-all duration-200 ${isBuy ? 'bg-gradient-to-r from-green-500/20 to-emerald-500/20 text-green-400 shadow-inner' : 'text-zinc-500 hover:text-zinc-300 hover:bg-zinc-700/30'}" data-direction="buy">
+                    <i class="fa-solid fa-cart-plus mr-1.5"></i> Buy
+                </button>
+                <button class="direction-btn flex-1 py-2.5 rounded-md text-sm font-bold transition-all duration-200 ${!isBuy ? 'bg-gradient-to-r from-red-500/20 to-rose-500/20 text-red-400 shadow-inner' : 'text-zinc-500 hover:text-zinc-300 hover:bg-zinc-700/30'}" data-direction="sell">
+                    <i class="fa-solid fa-money-bill-transfer mr-1.5"></i> Sell
+                </button>
             </div>
-            <div class="flex justify-between items-center mb-4">
-                <span class="text-2xl font-bold text-white">${isBuy ? priceFormatted : '1'}</span>
-                <div class="flex items-center gap-2 bg-zinc-700/50 px-3 py-1.5 rounded-lg">
-                    <img src="${isBuy ? './assets/bkc_logo_3d.png' : buildImageUrl(selectedTier?.img)}" class="w-6 h-6 rounded">
-                    <span class="text-white text-sm font-bold">${isBuy ? 'BKC' : (selectedTier?.name || 'NFT')}</span>
+
+            <!-- Swap Card -->
+            <div class="bg-gradient-to-br from-zinc-800/40 to-zinc-900/40 rounded-xl p-4 border border-zinc-700/50 backdrop-blur-sm">
+                
+                <!-- Top Row - What you give -->
+                <div class="flex justify-between items-center mb-1">
+                    <span class="text-[10px] text-zinc-500 uppercase tracking-wider font-medium">${isBuy ? 'You Pay' : 'You Sell'}</span>
+                    <span class="text-[10px] ${insufficientBalance ? 'text-red-400' : 'text-zinc-600'}">${isBuy ? `Balance: ${balance} BKC` : `Owned: ${TradeState.userBalanceOfSelectedNFT}`}</span>
+                </div>
+                <div class="flex justify-between items-center mb-4">
+                    <span class="text-2xl font-bold ${insufficientBalance ? 'text-red-400' : 'text-white'} tabular-nums">${isBuy ? priceFormatted : '1'}</span>
+                    <div class="flex items-center gap-2 bg-zinc-700/50 px-3 py-2 rounded-lg border border-zinc-600/30 ${isBuy ? '' : `bg-gradient-to-r ${tierGlow}`}">
+                        <img src="${isBuy ? './assets/bkc_logo_3d.png' : buildImageUrl(selectedTier?.img)}" class="w-6 h-6 rounded ${!isBuy ? 'ring-1 ring-white/20' : ''}" onerror="this.src='./assets/bkc_logo_3d.png'">
+                        <span class="text-white text-sm font-bold">${isBuy ? 'BKC' : (selectedTier?.name || 'NFT')}</span>
+                    </div>
+                </div>
+
+                <!-- Animated Swap Arrow -->
+                <div class="flex justify-center my-2 relative">
+                    <div class="absolute inset-0 flex items-center">
+                        <div class="w-full border-t border-zinc-700/50"></div>
+                    </div>
+                    <div class="relative w-10 h-10 bg-gradient-to-br from-zinc-700 to-zinc-800 rounded-full flex items-center justify-center border border-zinc-600/50 shadow-lg hover:scale-110 transition-transform cursor-pointer swap-arrow">
+                        <i class="fa-solid fa-arrow-down text-zinc-300 text-sm"></i>
+                    </div>
+                </div>
+
+                <!-- Bottom Row - What you receive -->
+                <div class="flex justify-between items-center mb-1 mt-4">
+                    <span class="text-[10px] text-zinc-500 uppercase tracking-wider font-medium">${isBuy ? 'You Receive' : 'You Get'}</span>
+                    <div class="flex gap-2">
+                        ${soldOut ? '<span class="text-[10px] bg-red-500/20 text-red-400 px-2 py-0.5 rounded-full font-medium">Sold Out</span>' : ''}
+                        ${!isBuy ? '<span class="text-[10px] bg-amber-500/20 text-amber-400 px-2 py-0.5 rounded-full font-medium">-10% Fee</span>' : ''}
+                    </div>
+                </div>
+                <div class="flex justify-between items-center">
+                    <span class="text-2xl font-bold text-white tabular-nums">${isBuy ? '1' : priceFormatted}</span>
+                    <div class="flex items-center gap-2 bg-zinc-700/50 px-3 py-2 rounded-lg border border-zinc-600/30 ${isBuy ? `bg-gradient-to-r ${tierGlow}` : ''}">
+                        <img src="${isBuy ? buildImageUrl(selectedTier?.img) : './assets/bkc_logo_3d.png'}" class="w-6 h-6 rounded ${isBuy ? 'ring-1 ring-white/20' : ''}" onerror="this.src='./assets/bkc_logo_3d.png'">
+                        <span class="text-white text-sm font-bold">${isBuy ? (selectedTier?.name || 'NFT') : 'BKC'}</span>
+                    </div>
                 </div>
             </div>
 
-            <!-- Arrow -->
-            <div class="flex justify-center my-2">
-                <div class="w-8 h-8 bg-zinc-700 rounded-full flex items-center justify-center">
-                    <i class="fa-solid fa-arrow-down text-zinc-400 text-sm"></i>
-                </div>
+            <!-- Info Row -->
+            <div class="flex justify-between items-center mt-3 text-xs px-1">
+                <span class="text-zinc-500 flex items-center gap-1.5">
+                    <i class="fa-solid fa-chart-line text-zinc-600"></i>
+                    ${isBuy ? 'Bonding curve pricing' : 'Net after 10% sell fee'}
+                </span>
+                <span class="text-amber-500/80 font-medium flex items-center gap-1">
+                    <i class="fa-solid fa-bolt text-amber-400/60"></i>
+                    +${(selectedTier?.boostBips || 0) / 100}% boost
+                </span>
             </div>
-
-            <!-- Bottom Row -->
-            <div class="flex justify-between items-center mb-1 mt-4">
-                <span class="text-[10px] text-zinc-500 uppercase">${isBuy ? 'You Receive' : 'You Get'}</span>
-                ${soldOut ? '<span class="text-[10px] text-red-400">Sold Out</span>' : ''}
-                ${!isBuy && price < TradeState.sellPrice ? '<span class="text-[10px] text-red-400">-10% Fee</span>' : ''}
-            </div>
-            <div class="flex justify-between items-center">
-                <span class="text-2xl font-bold text-white">${isBuy ? '1' : priceFormatted}</span>
-                <div class="flex items-center gap-2 bg-zinc-700/50 px-3 py-1.5 rounded-lg">
-                    <img src="${isBuy ? buildImageUrl(selectedTier?.img) : './assets/bkc_logo_3d.png'}" class="w-6 h-6 rounded">
-                    <span class="text-white text-sm font-bold">${isBuy ? (selectedTier?.name || 'NFT') : 'BKC'}</span>
-                </div>
-            </div>
-        </div>
-
-        <!-- Info Row -->
-        <div class="flex justify-between items-center mt-3 text-xs">
-            <span class="text-zinc-500">
-                <i class="fa-solid fa-info-circle mr-1"></i>
-                ${isBuy ? 'Bonding curve pricing' : 'Net after 10% sell fee'}
-            </span>
-            <span class="text-zinc-600">
-                +${(selectedTier?.boostBips || 0) / 100}% boost
-            </span>
         </div>
     `;
 
@@ -357,6 +532,16 @@ function renderSwapInterface() {
     const sellPriceEl = document.getElementById('stat-sell-price');
     if (buyPriceEl) buyPriceEl.textContent = `${formatBigNumber(TradeState.buyPrice).toFixed(2)} BKC`;
     if (sellPriceEl) sellPriceEl.textContent = `${formatBigNumber(TradeState.netSellPrice).toFixed(2)} BKC`;
+    
+    // Add click handler for swap arrow to toggle direction
+    const swapArrow = content.querySelector('.swap-arrow');
+    if (swapArrow) {
+        swapArrow.addEventListener('click', () => {
+            TradeState.tradeDirection = TradeState.tradeDirection === 'buy' ? 'sell' : 'buy';
+            renderSwapInterface();
+            renderExecuteButton();
+        });
+    }
 }
 
 function renderExecuteButton() {
@@ -364,34 +549,42 @@ function renderExecuteButton() {
     if (!container) return;
 
     let text = "Select a Tier";
+    let icon = "fa-question";
     let active = false;
     let actionType = "trade";
 
     if (!State.isConnected) {
         text = "Connect Wallet";
+        icon = "fa-wallet";
         actionType = "connect";
         active = true;
     } else if (TradeState.selectedPoolBoostBips !== null) {
         if (TradeState.tradeDirection === 'buy') {
-            if (TradeState.buyPrice === 0n) text = "Price Unavailable";
-            else if (TradeState.buyPrice > (State.currentUserBalance || 0n)) text = "Insufficient Balance";
-            else if (TradeState.firstAvailableTokenIdForBuy === null) text = "Sold Out";
-            else { text = "Buy NFT"; active = true; }
+            if (TradeState.buyPrice === 0n) { text = "Price Unavailable"; icon = "fa-ban"; }
+            else if (TradeState.buyPrice > (State.currentUserBalance || 0n)) { text = "Insufficient Balance"; icon = "fa-coins"; }
+            else if (TradeState.firstAvailableTokenIdForBuy === null) { text = "Sold Out"; icon = "fa-box-open"; }
+            else { text = "Buy NFT"; icon = "fa-cart-plus"; active = true; }
         } else {
-            if (TradeState.userBalanceOfSelectedNFT === 0) text = "No NFT to Sell";
-            else if (TradeState.netSellPrice === 0n) text = "Pool Empty";
-            else if (TradeState.firstAvailableTokenId === null) text = "Loading...";
-            else { text = "Sell NFT"; active = true; }
+            if (TradeState.userBalanceOfSelectedNFT === 0) { text = "No NFT to Sell"; icon = "fa-box-open"; }
+            else if (TradeState.netSellPrice === 0n) { text = "Pool Empty"; icon = "fa-droplet-slash"; }
+            else if (TradeState.firstAvailableTokenId === null) { text = "Loading..."; icon = "fa-spinner fa-spin"; }
+            else { text = "Sell NFT"; icon = "fa-money-bill-transfer"; active = true; }
         }
     }
 
-    const bgClass = TradeState.tradeDirection === 'buy'
-        ? (active ? 'bg-green-500 hover:bg-green-400 text-black' : 'bg-zinc-700 text-zinc-500')
-        : (active ? 'bg-red-500 hover:bg-red-400 text-white' : 'bg-zinc-700 text-zinc-500');
+    const isBuy = TradeState.tradeDirection === 'buy';
+    const bgClass = isBuy
+        ? (active ? 'bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-400 hover:to-emerald-500 text-black shadow-lg shadow-green-500/20' : 'bg-zinc-700/80 text-zinc-500 cursor-not-allowed')
+        : (active ? 'bg-gradient-to-r from-red-500 to-rose-600 hover:from-red-400 hover:to-rose-500 text-white shadow-lg shadow-red-500/20' : 'bg-zinc-700/80 text-zinc-500 cursor-not-allowed');
 
     container.innerHTML = `
-        <button id="execute-trade-btn" class="w-full py-3 rounded-xl font-bold text-sm transition-all ${bgClass}" ${!active ? 'disabled' : ''} data-action="${actionType}">
-            ${text}
+        <button id="execute-trade-btn" 
+                class="w-full py-3.5 rounded-xl font-bold text-sm transition-all duration-200 transform ${active ? 'hover:scale-[1.02] active:scale-[0.98]' : ''} ${bgClass} flex items-center justify-center gap-2" 
+                ${!active ? 'disabled' : ''} 
+                data-action="${actionType}"
+                data-processing="false">
+            <i class="fa-solid ${icon}"></i>
+            <span>${text}</span>
         </button>
     `;
 }
@@ -535,7 +728,9 @@ async function loadDataForSelectedPool() {
     TradeState.lastFetchTimestamp = now;
 
     const content = document.getElementById('swap-content');
-    if (content) content.innerHTML = renderLoading();
+    const selectedTier = boosterTiers.find(t => t.boostBips === TradeState.selectedPoolBoostBips);
+    const tierName = selectedTier?.name || 'Pool';
+    if (content) content.innerHTML = renderStoreLoading(`Loading ${tierName} pool...`);
 
     try {
         const boostBips = TradeState.selectedPoolBoostBips;
