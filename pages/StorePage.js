@@ -1,5 +1,5 @@
 // pages/StorePage.js
-// ✅ VERSION V6.5: CRITICAL FIX - Prevent multiple clicks and approvals
+// ✅ VERSION V6.6: Robust multi-layer click protection
 
 const ethers = window.ethers;
 
@@ -764,9 +764,13 @@ function setupEventListeners() {
 
         // Execute trade
         const executeBtn = e.target.closest('#execute-trade-btn');
-        if (executeBtn && !executeBtn.disabled) {
-            // 🔥 V6.5: Prevent multiple clicks
-            if (isTransactionInProgress) {
+        if (executeBtn) {
+            // 🔥 V6.6: Robust click prevention
+            e.preventDefault();
+            e.stopPropagation();
+            
+            // Check BOTH the flag AND button state
+            if (isTransactionInProgress || executeBtn.disabled || executeBtn.dataset.processing === 'true') {
                 console.log('Transaction already in progress, ignoring click');
                 return;
             }
@@ -784,9 +788,10 @@ function setupEventListeners() {
             const poolKey = `pool_${tier.name.toLowerCase()}`;
             const poolAddress = addresses[poolKey];
 
-            // 🔥 V6.5: Set flag and disable button immediately
+            // 🔥 V6.6: Set ALL flags immediately and synchronously
             isTransactionInProgress = true;
             executeBtn.disabled = true;
+            executeBtn.dataset.processing = 'true';
             const originalText = executeBtn.innerHTML;
             executeBtn.innerHTML = '<div class="loader inline-block"></div> Processing...';
 
@@ -805,9 +810,10 @@ function setupEventListeners() {
                     }
                 }
             } finally {
-                // 🔥 V6.5: Reset flag after transaction completes
+                // 🔥 V6.6: Reset ALL flags after transaction completes
                 isTransactionInProgress = false;
                 executeBtn.disabled = false;
+                executeBtn.dataset.processing = 'false';
                 executeBtn.innerHTML = originalText;
             }
         }

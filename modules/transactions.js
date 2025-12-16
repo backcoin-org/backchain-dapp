@@ -1,5 +1,5 @@
 // js/modules/transactions.js
-// ✅ VERSÃO V7.5 - FIX: Prevent multiple approvals with global lock
+// ✅ VERSÃO V7.6 - FIX: Multi-layer protection against duplicate transactions
 
 const ethers = window.ethers;
 
@@ -828,9 +828,23 @@ export async function executeUniversalClaim(stakingRewards, minerRewards, booste
 // 3. NFT POOL (BOOSTER STORE) TRANSACTIONS
 // ====================================================================
 
+// 🔥 V7.5: Flag to prevent duplicate buy/sell transactions
+let buyTransactionInProgress = false;
+let sellTransactionInProgress = false;
+
 export async function executeBuyBooster(poolAddress, price, boosterTokenIdForDiscount, btnElement) {
+    // 🔥 V7.5: Prevent duplicate transactions
+    if (buyTransactionInProgress) {
+        console.log('Buy transaction already in progress');
+        return false;
+    }
+    buyTransactionInProgress = true;
+    
     const signer = await getConnectedSigner();
-    if (!signer || !poolAddress) return false;
+    if (!signer || !poolAddress) {
+        buyTransactionInProgress = false;
+        return false;
+    }
     
     const originalText = btnElement ? btnElement.innerHTML : 'Buy';
     const priceBigInt = BigInt(price);
@@ -838,6 +852,7 @@ export async function executeBuyBooster(poolAddress, price, boosterTokenIdForDis
     // Pre-validations
     if (priceBigInt === 0n) {
         showToast("Price is zero - pool may be empty.", "error");
+        buyTransactionInProgress = false;
         return false;
     }
     
@@ -845,6 +860,7 @@ export async function executeBuyBooster(poolAddress, price, boosterTokenIdForDis
     const MAX_UINT = 2n ** 256n - 1n;
     if (priceBigInt === MAX_UINT) {
         showToast("Pool is depleted. No NFTs available.", "error");
+        buyTransactionInProgress = false;
         return false;
     }
     
@@ -852,6 +868,7 @@ export async function executeBuyBooster(poolAddress, price, boosterTokenIdForDis
         const needed = formatBigNumber(priceBigInt);
         const have = formatBigNumber(State.currentUserBalance);
         showToast(`Insufficient balance. Need ${needed.toFixed(2)} BKC, have ${have.toFixed(2)}.`, "error");
+        buyTransactionInProgress = false;
         return false;
     }
 
@@ -899,6 +916,9 @@ export async function executeBuyBooster(poolAddress, price, boosterTokenIdForDis
         return false;
         
     } finally {
+        // 🔥 V7.5: Always reset the flag
+        buyTransactionInProgress = false;
+        
         if (btnElement) {
             setTimeout(() => { 
                 btnElement.disabled = false; 
@@ -909,14 +929,25 @@ export async function executeBuyBooster(poolAddress, price, boosterTokenIdForDis
 }
 
 export async function executeSellBooster(poolAddress, tokenIdToSell, boosterTokenIdForDiscount, btnElement) {
+    // 🔥 V7.5: Prevent duplicate transactions
+    if (sellTransactionInProgress) {
+        console.log('Sell transaction already in progress');
+        return false;
+    }
+    sellTransactionInProgress = true;
+    
     const signer = await getConnectedSigner();
-    if (!signer || !poolAddress) return false;
+    if (!signer || !poolAddress) {
+        sellTransactionInProgress = false;
+        return false;
+    }
     
     const originalText = btnElement ? btnElement.innerHTML : 'Sell NFT';
     const tokenIdBigInt = BigInt(tokenIdToSell);
     
     if (tokenIdBigInt === 0n) { 
         showToast("No NFT selected.", "error"); 
+        sellTransactionInProgress = false;
         return false; 
     }
 
@@ -925,10 +956,12 @@ export async function executeSellBooster(poolAddress, tokenIdToSell, boosterToke
         const owner = await State.rewardBoosterContract.ownerOf(tokenIdBigInt);
         if (owner.toLowerCase() !== State.userAddress.toLowerCase()) {
             showToast("You don't own this NFT.", "error");
+            sellTransactionInProgress = false;
             return false;
         }
     } catch (e) {
         showToast("Failed to verify NFT ownership.", "error");
+        sellTransactionInProgress = false;
         return false;
     }
 
@@ -972,6 +1005,9 @@ export async function executeSellBooster(poolAddress, tokenIdToSell, boosterToke
         return false;
         
     } finally {
+        // 🔥 V7.5: Always reset the flag
+        sellTransactionInProgress = false;
+        
         if (btnElement) {
             setTimeout(() => { 
                 btnElement.disabled = false; 
