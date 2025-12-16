@@ -1,5 +1,5 @@
 // pages/AirdropPage.js
-// ✅ VERSION V2.0: Mobile-first redesign with airdrop.png animations
+// ✅ VERSION V2.1: Fullscreen loading with motivational messages, transparent icon backgrounds
 
 import { State } from '../state.js';
 import * as db from '../modules/firebase-auth-service.js';
@@ -12,6 +12,22 @@ import { formatAddress, renderNoData, formatBigNumber, renderLoading, renderErro
 
 const DEFAULT_HASHTAGS = "#BKC #Backcoin #Airdrop";
 const AUTO_APPROVE_HOURS = 2;
+
+// Motivational messages for loading screen
+const LOADING_MESSAGES = [
+    { title: "🚀 The More You Share, The More You Earn!", subtitle: "Every post brings you closer to amazing rewards" },
+    { title: "💰 Your Voice Has Value!", subtitle: "Help spread the word and get rewarded for it" },
+    { title: "🔥 Join the Movement!", subtitle: "Be part of something bigger and earn while doing it" },
+    { title: "⭐ Early Supporters Win Big!", subtitle: "The more you contribute now, the more you'll gain later" },
+    { title: "🎯 Complete Tasks, Earn Points!", subtitle: "Simple actions, real rewards" },
+    { title: "📈 Climb the Leaderboard!", subtitle: "Top contributors receive exclusive NFT Boosters" },
+    { title: "🎁 Rewards Await You!", subtitle: "Every share, every post, every action counts" },
+    { title: "💎 Your Effort = Your Reward!", subtitle: "The community grows together" }
+];
+
+function getRandomLoadingMessage() {
+    return LOADING_MESSAGES[Math.floor(Math.random() * LOADING_MESSAGES.length)];
+}
 
 function getMultiplierByTier(approvedCount) {
     if (approvedCount >= 100) return 10.0;
@@ -203,7 +219,7 @@ function renderHeader() {
         <div class="md:hidden px-4 pt-4 pb-2">
             <div class="flex items-center justify-between mb-4">
                 <div class="flex items-center gap-3">
-                    <div class="w-12 h-12 rounded-2xl bg-gradient-to-br from-amber-500/20 to-yellow-600/20 p-1.5 airdrop-float-slow">
+                    <div class="w-12 h-12 airdrop-float-slow">
                         <img src="./assets/airdrop.png" alt="Airdrop" class="w-full h-full object-contain drop-shadow-lg">
                     </div>
                     <div>
@@ -229,7 +245,7 @@ function renderHeader() {
         <div class="hidden md:block px-4 pt-6 pb-4">
             <div class="flex items-center justify-between mb-8">
                 <div class="flex items-center gap-4">
-                    <div class="w-16 h-16 rounded-2xl bg-gradient-to-br from-amber-500/20 to-yellow-600/20 p-2 airdrop-float shadow-lg shadow-amber-500/10">
+                    <div class="w-16 h-16 airdrop-float">
                         <img src="./assets/airdrop.png" alt="Airdrop" class="w-full h-full object-contain drop-shadow-lg">
                     </div>
                     <div>
@@ -839,18 +855,54 @@ export const AirdropPage = {
         if (!container) return;
 
         injectAirdropStyles();
+        
+        const loadingMsg = getRandomLoadingMessage();
 
         if (container.innerHTML.trim() === '' || isNewPage) {
             container.innerHTML = `
-                <div id="airdrop-header">${renderHeader()}</div>
-                <div id="airdrop-body" class="max-w-2xl mx-auto pb-24">
-                    <div id="loading-state" class="text-center py-16">
-                        <div class="w-20 h-20 mx-auto mb-4 airdrop-spin">
-                            <img src="./assets/airdrop.png" alt="Loading" class="w-full h-full object-contain opacity-60">
+                <div id="loading-state" class="fixed inset-0 z-50 bg-gradient-to-b from-zinc-900 via-zinc-900 to-black flex flex-col items-center justify-center px-6">
+                    <!-- Floating coins effect -->
+                    <div class="absolute inset-0 overflow-hidden pointer-events-none">
+                        <div class="absolute top-[10%] left-[10%] w-6 h-6 opacity-20 airdrop-float" style="animation-delay: 0s;">
+                            <img src="./assets/airdrop.png" alt="" class="w-full h-full object-contain">
                         </div>
-                        <p class="text-zinc-400 text-sm">Loading...</p>
+                        <div class="absolute top-[20%] right-[15%] w-8 h-8 opacity-15 airdrop-float" style="animation-delay: 0.5s;">
+                            <img src="./assets/airdrop.png" alt="" class="w-full h-full object-contain">
+                        </div>
+                        <div class="absolute bottom-[30%] left-[5%] w-5 h-5 opacity-10 airdrop-float" style="animation-delay: 1s;">
+                            <img src="./assets/airdrop.png" alt="" class="w-full h-full object-contain">
+                        </div>
+                        <div class="absolute bottom-[20%] right-[10%] w-7 h-7 opacity-15 airdrop-float" style="animation-delay: 1.5s;">
+                            <img src="./assets/airdrop.png" alt="" class="w-full h-full object-contain">
+                        </div>
                     </div>
-                    <div id="main-content" class="hidden"></div>
+                    
+                    <!-- Main content -->
+                    <div class="relative z-10 text-center max-w-sm">
+                        <!-- Large airdrop icon -->
+                        <div class="w-40 h-40 mx-auto mb-8 airdrop-float-slow">
+                            <img src="./assets/airdrop.png" alt="Airdrop" class="w-full h-full object-contain drop-shadow-2xl">
+                        </div>
+                        
+                        <!-- Motivational message -->
+                        <h2 class="text-2xl font-black text-white mb-3 leading-tight">${loadingMsg.title}</h2>
+                        <p class="text-zinc-400 text-sm mb-8">${loadingMsg.subtitle}</p>
+                        
+                        <!-- Loading indicator -->
+                        <div class="flex items-center justify-center gap-2 text-amber-500">
+                            <div class="w-2 h-2 rounded-full bg-amber-500 animate-bounce" style="animation-delay: 0s;"></div>
+                            <div class="w-2 h-2 rounded-full bg-amber-500 animate-bounce" style="animation-delay: 0.1s;"></div>
+                            <div class="w-2 h-2 rounded-full bg-amber-500 animate-bounce" style="animation-delay: 0.2s;"></div>
+                        </div>
+                        <p class="text-zinc-600 text-xs mt-3">Loading your rewards...</p>
+                    </div>
+                </div>
+                
+                <div id="airdrop-main" class="hidden">
+                    <div id="airdrop-header">${renderHeader()}</div>
+                    <div id="airdrop-body" class="max-w-2xl mx-auto pb-24">
+                        <div id="main-content"></div>
+                    </div>
                 </div>
             `;
             this.attachListeners();
@@ -859,8 +911,11 @@ export const AirdropPage = {
         try {
             await loadAirdropData();
             const loader = document.getElementById('loading-state');
+            const mainArea = document.getElementById('airdrop-main');
             const content = document.getElementById('main-content');
+            
             if(loader) loader.classList.add('hidden');
+            if(mainArea) mainArea.classList.remove('hidden');
             if(content) {
                 content.classList.remove('hidden');
                 updateContent();
