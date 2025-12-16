@@ -1,5 +1,5 @@
 // js/modules/transactions.js
-// ✅ VERSÃO V7.3 - FIX: Skip gas estimation for claim when no booster (tokenId=0)
+// ✅ VERSÃO V7.4 - FIX: NFT Pool buyNFT() and sellNFT() with correct signatures
 
 const ethers = window.ethers;
 
@@ -747,7 +747,7 @@ export async function executeUniversalClaim(stakingRewards, minerRewards, booste
     
     const stakingRewardsBigInt = BigInt(stakingRewards);
     const minerRewardsBigInt = BigInt(minerRewards);
-    const boosterIdBigInt = BigInt(boosterIdToSend || 0);
+    const boosterIdBigInt = BigInt(boosterIdToSend);
     
     if (stakingRewardsBigInt === 0n && minerRewardsBigInt === 0n) {
         showToast("No rewards to claim.", "info");
@@ -766,10 +766,10 @@ export async function executeUniversalClaim(stakingRewards, minerRewards, booste
             const delegationContract = State.delegationManagerContract.connect(signer);
             const args = [boosterIdBigInt];
 
-            // 🔥 V6.3: Skip gas estimation if no booster (0) - may fail estimation but work in tx
+            // 🔥 V7.4: Skip gas estimation if no booster (avoids revert)
             let gasOpts;
             if (boosterIdBigInt === 0n) {
-                // Use fixed gas when no booster - estimation may fail but tx can still work
+                // Use fixed gas - estimation may fail but tx can work
                 gasOpts = { gasLimit: 300000n };
                 console.log('Claim: Using fixed gas (no booster)');
             } else {
@@ -855,12 +855,12 @@ export async function executeBuyBooster(poolAddress, price, boosterTokenIdForDis
 
         if (btnElement) btnElement.innerHTML = '<div class="loader inline-block"></div> Buying...';
 
-        const boosterIdToSend = BigInt(boosterTokenIdForDiscount);
-        const args = [boosterIdToSend];
-
+        // 🔥 V7.4: Contract uses buyNFT() with NO arguments
         const poolContract = new ethers.Contract(poolAddress, nftPoolABI, signer);
-        const gasOpts = await estimateGasWithFallback(poolContract, 'buyNextAvailableNFT', args, 500000n);
-        const buyTxPromise = poolContract.buyNextAvailableNFT(...args, gasOpts);
+        
+        // No arguments needed - contract automatically picks last NFT in array
+        const gasOpts = await estimateGasWithFallback(poolContract, 'buyNFT', [], 500000n);
+        const buyTxPromise = poolContract.buyNFT(gasOpts);
         
         return await executeTransaction(
             buyTxPromise, 
@@ -926,11 +926,11 @@ export async function executeSellBooster(poolAddress, tokenIdToSell, boosterToke
 
         if (btnElement) btnElement.innerHTML = '<div class="loader inline-block"></div> Selling...';
 
-        const boosterIdToSend = BigInt(boosterTokenIdForDiscount);
-        const minPrice = 0n; // Accept any price (slippage protection disabled)
+        // 🔥 V7.4: Contract uses sellNFT(tokenId, minPayout) - only 2 arguments
+        const minPayout = 0n; // Accept any price (slippage protection disabled)
         
         const poolContract = new ethers.Contract(poolAddress, nftPoolABI, signer);
-        const args = [tokenIdBigInt, boosterIdToSend, minPrice];
+        const args = [tokenIdBigInt, minPayout];
 
         const gasOpts = await estimateGasWithFallback(poolContract, 'sellNFT', args, 500000n);
         const sellTxPromise = poolContract.sellNFT(...args, gasOpts);

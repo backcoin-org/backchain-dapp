@@ -1,5 +1,5 @@
 // js/config.js
-// ✅ PRODUCTION V22: Fixed nftPoolABI - getAvailableNFTs() instead of getAvailableTokenIds()
+// ✅ PRODUCTION V23: Fixed nftPoolABI - buyNFT() no args, sellNFT(tokenId, minPayout)
 
 // ============================================================================
 // 1. ENVIRONMENT & ALCHEMY CONFIG
@@ -152,10 +152,12 @@ export const rentalManagerABI = [
 export const nftPoolABI = [
     "function getBuyPrice() view returns (uint256)",
     "function getSellPrice() view returns (uint256)",
-    "function buyNFT(uint256 _tokenId, uint256 _boosterTokenId)",
-    "function buyNextAvailableNFT(uint256 _boosterTokenId)",
-    "function sellNFT(uint256 _tokenId, uint256 _boosterTokenId, uint256 _minBkcExpected)",
-    "function PSTAKE_SERVICE_KEY() view returns (bytes32)",
+    "function getBuyPriceWithTax() view returns (uint256)",
+    "function getSellPriceAfterTax() view returns (uint256)",
+    "function buyNFT() returns (uint256)",
+    "function buySpecificNFT(uint256 _tokenId)",
+    "function buyNFTWithSlippage(uint256 _maxPrice) returns (uint256)",
+    "function sellNFT(uint256 _tokenId, uint256 _minPayout)",
     "function getPoolInfo() view returns (uint256 tokenBalance, uint256 nftCount, uint256 k, bool isInitialized)",
     "function getAvailableNFTs() view returns (uint256[] memory)",
     "event NFTBought(address indexed buyer, uint256 indexed boostBips, uint256 tokenId, uint256 price, uint256 taxPaid)",
