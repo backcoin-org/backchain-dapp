@@ -1,5 +1,5 @@
 // pages/RewardsPage.js
-// ✅ VERSION V9.2: Super defensive - always renders after 8s timeout
+// ✅ VERSION V9.3: Render-first approach - shows UI immediately, loads data in background
 
 const ethers = window.ethers;
 
@@ -19,79 +19,6 @@ let lastFetch = 0;
 let isLoading = false;
 let isProcessing = false;
 
-// --- TIER DATA (matching contract) ---
-const BOOSTER_TIERS = [
-    { name: 'Crystal',  boostBips: 1000, discount: 10, color: '#22d3ee', icon: '💎' },
-    { name: 'Iron',     boostBips: 2000, discount: 20, color: '#71717a', icon: '⚙️' },
-    { name: 'Bronze',   boostBips: 3000, discount: 30, color: '#f97316', icon: '🥉' },
-    { name: 'Silver',   boostBips: 4000, discount: 40, color: '#94a3b8', icon: '🥈' },
-    { name: 'Gold',     boostBips: 5000, discount: 50, color: '#fbbf24', icon: '🥇' },
-    { name: 'Platinum', boostBips: 6000, discount: 60, color: '#a855f7', icon: '💜' },
-    { name: 'Diamond',  boostBips: 7000, discount: 70, color: '#60a5fa', icon: '💠' }
-];
-
-// ============================================================================
-// STYLES
-// ============================================================================
-
-function injectStyles() {
-    if (document.getElementById('rewards-styles')) return;
-    
-    const style = document.createElement('style');
-    style.id = 'rewards-styles';
-    style.textContent = `
-        /* Glow effects */
-        .rewards-glow {
-            box-shadow: 0 0 40px rgba(245,158,11,0.2);
-        }
-        .claim-ready {
-            animation: claimPulse 2s ease-in-out infinite;
-        }
-        @keyframes claimPulse {
-            0%, 100% { box-shadow: 0 0 20px rgba(245,158,11,0.3); }
-            50% { box-shadow: 0 0 40px rgba(245,158,11,0.5); }
-        }
-        
-        /* Progress ring */
-        .progress-ring {
-            transform: rotate(-90deg);
-        }
-        .progress-ring-circle {
-            transition: stroke-dashoffset 0.5s ease;
-        }
-        
-        /* Shimmer effect for loading */
-        .shimmer {
-            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.1), transparent);
-            background-size: 200% 100%;
-            animation: shimmer 1.5s infinite;
-        }
-        @keyframes shimmer {
-            0% { background-position: -200% 0; }
-            100% { background-position: 200% 0; }
-        }
-        
-        /* Booster card hover */
-        .booster-tier {
-            transition: all 0.2s ease;
-        }
-        .booster-tier:hover {
-            transform: translateY(-2px);
-        }
-        
-        /* Claim success animation */
-        @keyframes claimSuccess {
-            0% { transform: scale(1); }
-            50% { transform: scale(1.05); }
-            100% { transform: scale(1); }
-        }
-        .claim-success {
-            animation: claimSuccess 0.5s ease;
-        }
-    `;
-    document.head.appendChild(style);
-}
-
 // ============================================================================
 // MAIN EXPORT
 // ============================================================================
@@ -101,14 +28,16 @@ export const RewardsPage = {
         const container = document.getElementById('rewards');
         if (!container) return;
 
-        injectStyles();
-
+        // Always render page structure first
         if (container.innerHTML.trim() === '' || isNewPage) {
             container.innerHTML = getPageHTML();
         }
 
         if (State.isConnected) {
-            await this.update(isNewPage);
+            // Show initial UI immediately with zeros
+            renderContentImmediate();
+            // Then load real data in background
+            this.update(isNewPage);
         } else {
             renderNotConnected();
         }
@@ -125,76 +54,36 @@ export const RewardsPage = {
         if (!force && (now - lastFetch < 60000)) return;
 
         isLoading = true;
-        showLoadingState();
-
-        // 🔥 V9.2: Super defensive - sempre renderiza após timeout
-        const RENDER_TIMEOUT_MS = 8000;
-        let rendered = false;
-        
-        const forceRenderTimeout = setTimeout(() => {
-            if (!rendered) {
-                console.warn('RewardsPage: Timeout - forcing render with defaults');
-                rendered = true;
-                renderContent(
-                    { netClaimAmount: 0n, feeAmount: 0n, totalRewards: 0n },
-                    { stakingRewards: 0n, minerRewards: 0n },
-                    { highestBoost: 0, boostName: 'None', tokenId: null, source: 'none' }
-                );
-                isLoading = false;
-            }
-        }, RENDER_TIMEOUT_MS);
 
         try {
-            // 🔥 V9.1: Parallel fetch com timeout individual
-            const [userDataResult, boosterResult, claimResult, rewardsResult] = await Promise.allSettled([
-                loadUserData().catch(() => null),
-                getHighestBoosterBoostFromAPI().catch(() => ({ highestBoost: 0, boostName: 'None', tokenId: null, source: 'none' })),
-                calculateClaimDetails().catch(() => ({ netClaimAmount: 0n, feeAmount: 0n, totalRewards: 0n })),
-                calculateUserTotalRewards().catch(() => ({ stakingRewards: 0n, minerRewards: 0n }))
-            ]);
+            // Load data with individual error handling
+            let boosterData = { highestBoost: 0, boostName: 'None', tokenId: null, source: 'none' };
+            let claimDetails = { netClaimAmount: 0n, feeAmount: 0n, totalRewards: 0n };
+            let grossRewards = { stakingRewards: 0n, minerRewards: 0n };
 
-            // Extract values with defaults
-            const boosterData = boosterResult.status === 'fulfilled' && boosterResult.value ? boosterResult.value : 
-                { highestBoost: 0, boostName: 'None', tokenId: null, source: 'none' };
-            const claimDetails = claimResult.status === 'fulfilled' && claimResult.value ? claimResult.value : 
-                { netClaimAmount: 0n, feeAmount: 0n, totalRewards: 0n };
-            const grossRewards = rewardsResult.status === 'fulfilled' && rewardsResult.value ? rewardsResult.value : 
-                { stakingRewards: 0n, minerRewards: 0n };
+            try { await loadUserData(); } catch (e) { console.warn('loadUserData failed:', e.message); }
+            try { boosterData = await getHighestBoosterBoostFromAPI() || boosterData; } catch (e) { console.warn('booster failed:', e.message); }
+            try { claimDetails = await calculateClaimDetails() || claimDetails; } catch (e) { console.warn('claimDetails failed:', e.message); }
+            try { grossRewards = await calculateUserTotalRewards() || grossRewards; } catch (e) { console.warn('rewards failed:', e.message); }
 
-            if (!rendered) {
-                rendered = true;
-                clearTimeout(forceRenderTimeout);
-                renderContent(claimDetails, grossRewards, boosterData);
-            }
+            renderContent(claimDetails, grossRewards, boosterData);
             lastFetch = now;
 
         } catch (e) {
             console.error("Rewards Error:", e);
-            if (!rendered) {
-                rendered = true;
-                clearTimeout(forceRenderTimeout);
-                // 🔥 V9.1: Renderiza com dados vazios ao invés de erro
-                renderContent(
-                    { netClaimAmount: 0n, feeAmount: 0n, totalRewards: 0n },
-                    { stakingRewards: 0n, minerRewards: 0n },
-                    { highestBoost: 0, boostName: 'None', tokenId: null, source: 'none' }
-                );
-            }
         } finally {
             isLoading = false;
-            clearTimeout(forceRenderTimeout);
         }
     }
 };
 
 // ============================================================================
-// PAGE STRUCTURE - MOBILE FIRST
+// PAGE STRUCTURE
 // ============================================================================
 
 function getPageHTML() {
     return `
         <div class="max-w-lg mx-auto px-4 py-4 pb-24">
-            <!-- Header Compacto -->
             <div class="flex items-center justify-between mb-4">
                 <div class="flex items-center gap-3">
                     <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-500/20 to-orange-500/10 flex items-center justify-center">
@@ -205,49 +94,14 @@ function getPageHTML() {
                         <p class="text-[10px] text-zinc-500">Claim your earnings</p>
                     </div>
                 </div>
-                <button id="rewards-refresh" class="w-8 h-8 rounded-lg bg-zinc-800/50 flex items-center justify-center text-zinc-500 hover:text-white transition-colors">
+                <button id="rewards-refresh" onclick="window.RewardsPage.update(true)" class="w-8 h-8 rounded-lg bg-zinc-800/50 flex items-center justify-center text-zinc-500 hover:text-white transition-colors">
                     <i class="fa-solid fa-arrows-rotate text-xs"></i>
                 </button>
             </div>
-
-            <!-- Content -->
-            <div id="rewards-content">
-                <div class="flex items-center justify-center py-16">
-                    <div class="w-10 h-10 border-2 border-amber-500/30 border-t-amber-500 rounded-full animate-spin"></div>
-                </div>
-            </div>
+            <div id="rewards-content"></div>
         </div>
     `;
 }
-
-function showLoadingState() {
-    const container = document.getElementById('rewards-content');
-    if (!container) return;
-    
-    container.innerHTML = `
-        <div class="space-y-4">
-            <!-- Skeleton Card Principal -->
-            <div class="bg-zinc-900/50 border border-zinc-800 rounded-2xl p-5">
-                <div class="flex flex-col items-center">
-                    <div class="w-20 h-20 rounded-full bg-zinc-800 shimmer mb-4"></div>
-                    <div class="w-32 h-8 bg-zinc-800 rounded-lg shimmer mb-2"></div>
-                    <div class="w-24 h-4 bg-zinc-800 rounded shimmer"></div>
-                </div>
-                <div class="mt-6 h-12 bg-zinc-800 rounded-xl shimmer"></div>
-            </div>
-            
-            <!-- Skeleton Cards -->
-            <div class="grid grid-cols-2 gap-3">
-                <div class="bg-zinc-900/50 border border-zinc-800 rounded-xl p-4 h-24 shimmer"></div>
-                <div class="bg-zinc-900/50 border border-zinc-800 rounded-xl p-4 h-24 shimmer"></div>
-            </div>
-        </div>
-    `;
-}
-
-// ============================================================================
-// RENDER STATES
-// ============================================================================
 
 function renderNotConnected() {
     const container = document.getElementById('rewards-content');
@@ -261,160 +115,101 @@ function renderNotConnected() {
             <p class="text-zinc-400 font-medium mb-1">Wallet not connected</p>
             <p class="text-zinc-600 text-sm mb-4">Connect to view your rewards</p>
             <button onclick="window.openConnectModal()" 
-                class="px-6 py-2.5 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-black font-bold text-sm rounded-xl transition-all">
+                class="px-6 py-2.5 bg-gradient-to-r from-amber-500 to-orange-500 text-black font-bold text-sm rounded-xl">
                 <i class="fa-solid fa-plug mr-2"></i>Connect Wallet
             </button>
         </div>
     `;
 }
 
-function renderError() {
-    const container = document.getElementById('rewards-content');
-    if (!container) return;
-
-    container.innerHTML = `
-        <div class="flex flex-col items-center justify-center py-12 bg-zinc-900/50 border border-red-500/20 rounded-2xl">
-            <div class="w-16 h-16 bg-red-500/10 rounded-full flex items-center justify-center mb-4">
-                <i class="fa-solid fa-triangle-exclamation text-2xl text-red-400"></i>
-            </div>
-            <p class="text-zinc-400 font-medium mb-1">Failed to load</p>
-            <p class="text-zinc-600 text-sm mb-4">Please try again</p>
-            <button onclick="window.RewardsPage.update(true)" 
-                class="px-6 py-2.5 bg-zinc-800 hover:bg-zinc-700 text-white font-bold text-sm rounded-xl transition-all">
-                <i class="fa-solid fa-rotate-right mr-2"></i>Retry
-            </button>
-        </div>
-    `;
+function renderContentImmediate() {
+    renderContent(
+        { netClaimAmount: 0n, feeAmount: 0n, totalRewards: 0n },
+        { stakingRewards: 0n, minerRewards: 0n },
+        { highestBoost: 0, boostName: 'None', tokenId: null, source: 'none' }
+    );
 }
 
 // ============================================================================
-// MAIN CONTENT - MOBILE FIRST DESIGN
+// MAIN CONTENT
 // ============================================================================
 
 function renderContent(claimDetails, grossRewards, boosterData) {
     const container = document.getElementById('rewards-content');
     if (!container) return;
 
-    // Process data with defensive defaults
     const details = claimDetails || {};
     const gross = grossRewards || {};
     const booster = boosterData || {};
 
-    // 🔥 V9.1: Fallbacks defensivos para todos os valores
-    const netReward = details.netClaimAmount ?? 0n;
-    const totalGross = details.totalRewards ?? 0n;
-    const feeAmount = details.feeAmount ?? 0n;
-    const stakingRewards = gross.stakingRewards ?? 0n;
-    const minerRewards = gross.minerRewards ?? 0n;
-    const highestBoost = booster.highestBoost ?? 0;
-    const boostName = booster.boostName || 'None';
+    const netReward = details.netClaimAmount || 0n;
+    const totalGross = details.totalRewards || 0n;
+    const feeAmount = details.feeAmount || 0n;
+    const stakingRewards = gross.stakingRewards || 0n;
+    const minerRewards = gross.minerRewards || 0n;
+    const highestBoost = booster.highestBoost || 0;
 
-    // Fee calculations
-    const feeBips = details.baseFeeBips || Number(State.systemFees?.["CLAIM_REWARD_FEE_BIPS"] || 5000n);
-    const feePercent = feeBips / 100;
+    const feeBips = details.baseFeeBips || 5000;
     const boostPercent = highestBoost / 100;
-    
     const effectiveFeeBips = details.finalFeeBips || (feeBips - (feeBips * highestBoost / 10000));
     const keepPercent = 100 - (effectiveFeeBips / 100);
     
-    // Potential with Diamond
-    const bestDiscount = 70;
-    const potentialKeepPercent = 100 - (feePercent * (1 - bestDiscount / 100));
-    const potentialReward = totalGross > 0n ? (totalGross * BigInt(Math.round(potentialKeepPercent * 100))) / 10000n : 0n;
-    const extraGain = potentialReward > netReward ? potentialReward - netReward : 0n;
-
     const hasRewards = netReward > 0n;
     const hasBooster = highestBoost > 0;
     const boosterTokenId = BigInt(booster.tokenId || 0);
     
-    // Format numbers - with try/catch for safety
     let netRewardNum = 0, totalGrossNum = 0, feeAmountNum = 0, stakingNum = 0, miningNum = 0;
     try {
-        netRewardNum = formatBigNumber(netReward);
-        totalGrossNum = formatBigNumber(totalGross);
-        feeAmountNum = formatBigNumber(feeAmount);
-        stakingNum = formatBigNumber(stakingRewards);
-        miningNum = formatBigNumber(minerRewards);
-    } catch (e) {
-        console.warn('Format error:', e);
-    }
+        netRewardNum = formatBigNumber ? formatBigNumber(netReward) : Number(netReward) / 1e18;
+        totalGrossNum = formatBigNumber ? formatBigNumber(totalGross) : Number(totalGross) / 1e18;
+        feeAmountNum = formatBigNumber ? formatBigNumber(feeAmount) : Number(feeAmount) / 1e18;
+        stakingNum = formatBigNumber ? formatBigNumber(stakingRewards) : Number(stakingRewards) / 1e18;
+        miningNum = formatBigNumber ? formatBigNumber(minerRewards) : Number(minerRewards) / 1e18;
+    } catch (e) { console.warn('Format error:', e); }
 
-    // Progress ring percentage (how much you keep)
-    const ringPercent = keepPercent;
     const circumference = 2 * Math.PI * 45;
-    const strokeDashoffset = circumference - (ringPercent / 100) * circumference;
+    const strokeDashoffset = circumference - (keepPercent / 100) * circumference;
 
     container.innerHTML = `
         <div class="space-y-4">
-            
             <!-- MAIN CLAIM CARD -->
-            <div class="bg-gradient-to-br from-zinc-900 via-zinc-900 to-zinc-800/50 border border-zinc-700/50 rounded-2xl p-5 ${hasRewards ? 'claim-ready' : ''}">
-                
-                <!-- Circular Progress with Amount -->
+            <div class="bg-gradient-to-br from-zinc-900 via-zinc-900 to-zinc-800/50 border border-zinc-700/50 rounded-2xl p-5">
                 <div class="flex flex-col items-center mb-5">
                     <div class="relative w-32 h-32 mb-3">
-                        <!-- Background circle -->
-                        <svg class="w-full h-full progress-ring" viewBox="0 0 100 100">
+                        <svg class="w-full h-full" style="transform: rotate(-90deg)" viewBox="0 0 100 100">
                             <circle cx="50" cy="50" r="45" fill="none" stroke="#27272a" stroke-width="6"/>
-                            <circle cx="50" cy="50" r="45" fill="none" 
-                                stroke="${hasBooster ? '#4ade80' : '#f59e0b'}" 
-                                stroke-width="6"
-                                stroke-linecap="round"
-                                stroke-dasharray="${circumference}"
-                                stroke-dashoffset="${strokeDashoffset}"
-                                class="progress-ring-circle"/>
+                            <circle cx="50" cy="50" r="45" fill="none" stroke="${hasBooster ? '#4ade80' : '#f59e0b'}" stroke-width="6" stroke-linecap="round" stroke-dasharray="${circumference}" stroke-dashoffset="${strokeDashoffset}"/>
                         </svg>
-                        <!-- Center content -->
                         <div class="absolute inset-0 flex flex-col items-center justify-center">
                             <span class="text-2xl font-black text-white">${netRewardNum.toFixed(2)}</span>
                             <span class="text-xs text-amber-400 font-bold">BKC</span>
                         </div>
                     </div>
-                    
-                    <p class="text-xs text-zinc-500">
-                        You keep <span class="text-${hasBooster ? 'green' : 'amber'}-400 font-bold">${keepPercent.toFixed(1)}%</span> of earnings
-                    </p>
+                    <p class="text-xs text-zinc-500">You keep <span class="${hasBooster ? 'text-green-400' : 'text-amber-400'} font-bold">${keepPercent.toFixed(1)}%</span> of earnings</p>
                 </div>
 
-                <!-- Claim Button -->
-                <button id="claim-btn" 
-                    class="w-full py-4 rounded-xl font-bold text-base flex items-center justify-center gap-2 transition-all ${hasRewards
-                        ? 'bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-black shadow-lg shadow-amber-500/25 active:scale-[0.98]'
-                        : 'bg-zinc-800 text-zinc-500 cursor-not-allowed'
-                    }" ${!hasRewards ? 'disabled' : ''}>
+                <button id="claim-btn" class="w-full py-4 rounded-xl font-bold text-base flex items-center justify-center gap-2 transition-all ${hasRewards ? 'bg-gradient-to-r from-amber-500 to-orange-500 text-black shadow-lg shadow-amber-500/25' : 'bg-zinc-800 text-zinc-500 cursor-not-allowed'}" ${!hasRewards ? 'disabled' : ''}>
                     <i id="claim-btn-icon" class="fa-solid ${hasRewards ? 'fa-coins' : 'fa-clock'}"></i>
-                    <span id="claim-btn-text">${hasRewards ? `Claim ${netRewardNum.toFixed(2)} BKC` : 'No Rewards Yet'}</span>
+                    <span id="claim-btn-text">${hasRewards ? 'Claim ' + netRewardNum.toFixed(2) + ' BKC' : 'No Rewards Yet'}</span>
                 </button>
                 
-                ${!hasRewards ? `
-                    <p class="text-center text-xs text-zinc-600 mt-3">
-                        <i class="fa-solid fa-info-circle mr-1"></i>
-                        <a href="#mine" onclick="window.navigateTo('mine')" class="text-amber-500 hover:text-amber-400">Stake BKC</a> to start earning rewards
-                    </p>
-                ` : ''}
+                ${!hasRewards ? '<p class="text-center text-xs text-zinc-600 mt-3"><i class="fa-solid fa-info-circle mr-1"></i><a href="#mine" onclick="window.navigateTo(\'mine\')" class="text-amber-500 hover:text-amber-400">Stake BKC</a> to start earning</p>' : ''}
             </div>
 
-            <!-- STATS GRID - 2 columns mobile -->
+            <!-- STATS GRID -->
             <div class="grid grid-cols-2 gap-3">
-                <!-- Total Earned -->
                 <div class="bg-zinc-900/50 border border-zinc-800 rounded-xl p-3">
                     <div class="flex items-center gap-2 mb-2">
-                        <div class="w-7 h-7 rounded-lg bg-purple-500/15 flex items-center justify-center">
-                            <i class="fa-solid fa-chart-line text-purple-400 text-xs"></i>
-                        </div>
+                        <div class="w-7 h-7 rounded-lg bg-purple-500/15 flex items-center justify-center"><i class="fa-solid fa-chart-line text-purple-400 text-xs"></i></div>
                         <span class="text-[10px] text-zinc-500 uppercase">Earned</span>
                     </div>
                     <p class="text-lg font-bold text-white font-mono">${totalGrossNum.toFixed(2)}</p>
                     <p class="text-[10px] text-zinc-600">Total BKC</p>
                 </div>
-                
-                <!-- Fee -->
                 <div class="bg-zinc-900/50 border border-zinc-800 rounded-xl p-3">
                     <div class="flex items-center gap-2 mb-2">
-                        <div class="w-7 h-7 rounded-lg bg-red-500/15 flex items-center justify-center">
-                            <i class="fa-solid fa-percent text-red-400 text-xs"></i>
-                        </div>
-                        <span class="text-[10px] text-zinc-500 uppercase">Protocol Fee</span>
+                        <div class="w-7 h-7 rounded-lg bg-red-500/15 flex items-center justify-center"><i class="fa-solid fa-percent text-red-400 text-xs"></i></div>
+                        <span class="text-[10px] text-zinc-500 uppercase">Fee</span>
                     </div>
                     <p class="text-lg font-bold text-zinc-400 font-mono">${feeAmountNum.toFixed(2)}</p>
                     <p class="text-[10px] text-zinc-600">${(100 - keepPercent).toFixed(1)}% fee</p>
@@ -423,27 +218,18 @@ function renderContent(claimDetails, grossRewards, boosterData) {
 
             <!-- REWARD SOURCES -->
             <div class="bg-zinc-900/50 border border-zinc-800 rounded-xl p-4">
-                <p class="text-[10px] text-zinc-500 uppercase mb-3">
-                    <i class="fa-solid fa-layer-group mr-1"></i> Reward Sources
-                </p>
+                <p class="text-[10px] text-zinc-500 uppercase mb-3"><i class="fa-solid fa-layer-group mr-1"></i> Sources</p>
                 <div class="space-y-2">
-                    <!-- Staking -->
                     <div class="flex items-center justify-between p-2.5 bg-zinc-800/30 rounded-lg">
                         <div class="flex items-center gap-2.5">
-                            <div class="w-8 h-8 rounded-lg bg-purple-500/15 flex items-center justify-center">
-                                <i class="fa-solid fa-lock text-purple-400 text-xs"></i>
-                            </div>
+                            <div class="w-8 h-8 rounded-lg bg-purple-500/15 flex items-center justify-center"><i class="fa-solid fa-lock text-purple-400 text-xs"></i></div>
                             <span class="text-sm text-zinc-300">Staking</span>
                         </div>
                         <span class="text-sm font-mono font-bold text-white">${stakingNum.toFixed(2)} <span class="text-zinc-500 text-xs">BKC</span></span>
                     </div>
-                    
-                    <!-- Mining -->
                     <div class="flex items-center justify-between p-2.5 bg-zinc-800/30 rounded-lg">
                         <div class="flex items-center gap-2.5">
-                            <div class="w-8 h-8 rounded-lg bg-orange-500/15 flex items-center justify-center">
-                                <i class="fa-solid fa-hammer text-orange-400 text-xs"></i>
-                            </div>
+                            <div class="w-8 h-8 rounded-lg bg-orange-500/15 flex items-center justify-center"><i class="fa-solid fa-hammer text-orange-400 text-xs"></i></div>
                             <span class="text-sm text-zinc-300">Mining</span>
                         </div>
                         <span class="text-sm font-mono font-bold text-white">${miningNum.toFixed(2)} <span class="text-zinc-500 text-xs">BKC</span></span>
@@ -451,149 +237,38 @@ function renderContent(claimDetails, grossRewards, boosterData) {
                 </div>
             </div>
 
-            <!-- BOOSTER SECTION -->
+            <!-- BOOSTER -->
             <div class="bg-zinc-900/50 border border-zinc-800 rounded-xl overflow-hidden">
                 <div class="p-3 border-b border-zinc-800/50 flex items-center justify-between">
-                    <p class="text-[10px] text-zinc-500 uppercase">
-                        <i class="fa-solid fa-rocket mr-1"></i> Booster Status
-                    </p>
+                    <p class="text-[10px] text-zinc-500 uppercase"><i class="fa-solid fa-rocket mr-1"></i> Booster</p>
+                    ${hasBooster ? '<span class="px-2 py-0.5 bg-green-500/20 text-green-400 text-[10px] font-bold rounded-full">ACTIVE</span>' : '<span class="px-2 py-0.5 bg-zinc-700 text-zinc-400 text-[10px] font-bold rounded-full">NONE</span>'}
+                </div>
+                <div class="p-4">
                     ${hasBooster ? `
-                        <span class="px-2 py-0.5 bg-green-500/20 text-green-400 text-[10px] font-bold rounded-full">
-                            ACTIVE
-                        </span>
+                        <div class="flex items-center gap-3">
+                            <div class="w-14 h-14 bg-black/50 rounded-xl border-2 border-green-500/30 overflow-hidden">
+                                <img src="${booster.imageUrl || './assets/bkc_logo_3d.png'}" class="w-full h-full object-cover" onerror="this.src='./assets/bkc_logo_3d.png'">
+                            </div>
+                            <div class="flex-1"><p class="text-white font-bold">${booster.boostName || 'Booster'}</p><p class="text-[11px] text-zinc-500">${booster.source === 'rented' ? '🔗 Rented' : '✓ Owned'}</p></div>
+                            <div class="text-right"><p class="text-xl font-bold text-green-400">+${boostPercent}%</p><p class="text-[10px] text-zinc-500">Discount</p></div>
+                        </div>
                     ` : `
-                        <span class="px-2 py-0.5 bg-zinc-700 text-zinc-400 text-[10px] font-bold rounded-full">
-                            NONE
-                        </span>
+                        <div class="text-center">
+                            <p class="text-sm text-zinc-400 mb-3">Get a Booster to keep up to <span class="text-green-400 font-bold">85%</span></p>
+                            <div class="flex gap-2">
+                                <button onclick="window.navigateTo('store')" class="flex-1 py-2.5 text-xs font-bold bg-gradient-to-r from-amber-500 to-orange-500 text-black rounded-lg"><i class="fa-solid fa-gem mr-1"></i> Buy</button>
+                                <button onclick="window.navigateTo('rental')" class="flex-1 py-2.5 text-xs font-bold bg-zinc-800 text-white rounded-lg"><i class="fa-solid fa-handshake mr-1"></i> Rent</button>
+                            </div>
+                        </div>
                     `}
                 </div>
-                
-                <div class="p-4">
-                    ${hasBooster ? renderActiveBooster(booster, boostPercent, keepPercent) : renderNoBooster(hasRewards, extraGain, potentialKeepPercent)}
-                </div>
-            </div>
-
-        </div>
-    `;
-
-    // Bind events
-    bindEvents(gross.stakingRewards, gross.minerRewards, boosterTokenId, hasRewards);
-}
-
-// ============================================================================
-// BOOSTER COMPONENTS
-// ============================================================================
-
-function renderActiveBooster(booster, boostPercent, keepPercent) {
-    const imageUrl = booster?.imageUrl || './assets/bkc_logo_3d.png';
-    const name = booster?.boostName || 'Booster';
-    const source = booster?.source || 'owned';
-    
-    return `
-        <div class="flex items-center gap-3">
-            <div class="relative w-14 h-14 bg-black/50 rounded-xl border-2 border-green-500/30 overflow-hidden flex-shrink-0">
-                <img src="${imageUrl}" 
-                     class="w-full h-full object-cover"
-                     onerror="this.src='./assets/bkc_logo_3d.png'">
-                <div class="absolute -top-1 -right-1 w-5 h-5 bg-green-500 rounded-full flex items-center justify-center">
-                    <i class="fa-solid fa-check text-white text-[8px]"></i>
-                </div>
-            </div>
-            <div class="flex-1 min-w-0">
-                <p class="text-white font-bold truncate">${name}</p>
-                <p class="text-[11px] text-zinc-500">
-                    ${source === 'rented' ? '🔗 Rented' : '✓ Owned'}
-                </p>
-            </div>
-            <div class="text-right">
-                <p class="text-xl font-bold text-green-400">+${boostPercent || 0}%</p>
-                <p class="text-[10px] text-zinc-500">Fee Discount</p>
-            </div>
-        </div>
-        
-        <div class="mt-3 p-2.5 bg-green-500/10 border border-green-500/20 rounded-lg">
-            <div class="flex items-center justify-between text-xs">
-                <span class="text-green-400">
-                    <i class="fa-solid fa-shield-check mr-1"></i>
-                    You keep ${(keepPercent || 50).toFixed(1)}% of rewards
-                </span>
-                <span class="text-green-400 font-bold">Active</span>
             </div>
         </div>
     `;
-}
 
-function renderNoBooster(hasRewards, extraGain, potentialKeepPercent) {
-    let extraGainNum = 0;
-    try {
-        extraGainNum = formatBigNumber(extraGain || 0n);
-    } catch (e) {
-        extraGainNum = 0;
-    }
-    const keepPct = potentialKeepPercent || 85;
-    
-    return `
-        <div class="text-center">
-            ${hasRewards && extraGain > 0n ? `
-                <!-- Potential Gain Alert -->
-                <div class="mb-4 p-3 bg-gradient-to-r from-amber-500/10 to-orange-500/10 border border-amber-500/30 rounded-xl">
-                    <p class="text-xs text-amber-400 font-bold mb-1">
-                        <i class="fa-solid fa-bolt mr-1"></i> You're Missing Out!
-                    </p>
-                    <p class="text-lg font-bold text-white">+${extraGainNum.toFixed(2)} BKC</p>
-                    <p class="text-[10px] text-zinc-400">Extra with a Diamond Booster</p>
-                </div>
-            ` : ''}
-            
-            <p class="text-sm text-zinc-400 mb-3">
-                Get a Booster to keep up to <span class="text-green-400 font-bold">${keepPct.toFixed(0)}%</span> of your rewards
-            </p>
-            
-            <!-- Tier Preview -->
-            <div class="flex justify-center gap-1.5 mb-4">
-                ${BOOSTER_TIERS.map(tier => `
-                    <div class="booster-tier w-9 h-9 rounded-lg border border-zinc-700 flex items-center justify-center cursor-pointer hover:border-amber-500/50" 
-                         style="background: ${tier.color}15"
-                         title="${tier.name}: ${tier.discount}% discount">
-                        <span class="text-[10px] font-bold" style="color: ${tier.color}">${tier.discount}%</span>
-                    </div>
-                `).join('')}
-            </div>
-            
-            <!-- CTA Buttons -->
-            <div class="flex gap-2">
-                <button onclick="window.navigateTo('store')" 
-                    class="flex-1 py-2.5 text-xs font-bold bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-black rounded-lg transition-all active:scale-[0.98]">
-                    <i class="fa-solid fa-gem mr-1"></i> Buy
-                </button>
-                <button onclick="window.navigateTo('rental')" 
-                    class="flex-1 py-2.5 text-xs font-bold bg-zinc-800 hover:bg-zinc-700 text-white rounded-lg transition-all active:scale-[0.98]">
-                    <i class="fa-solid fa-handshake mr-1"></i> Rent
-                </button>
-            </div>
-        </div>
-    `;
-}
-
-// ============================================================================
-// EVENT BINDINGS
-// ============================================================================
-
-function bindEvents(stakingRewards, minerRewards, boosterTokenId, hasRewards) {
-    // Claim button
     const claimBtn = document.getElementById('claim-btn');
     if (claimBtn && hasRewards) {
         claimBtn.onclick = () => handleClaim(stakingRewards, minerRewards, boosterTokenId);
-    }
-    
-    // Refresh button
-    const refreshBtn = document.getElementById('rewards-refresh');
-    if (refreshBtn) {
-        refreshBtn.onclick = async () => {
-            refreshBtn.classList.add('animate-spin');
-            await RewardsPage.update(true);
-            setTimeout(() => refreshBtn.classList.remove('animate-spin'), 500);
-        };
     }
 }
 
@@ -603,66 +278,36 @@ function bindEvents(stakingRewards, minerRewards, boosterTokenId, hasRewards) {
 
 async function handleClaim(stakingRewards, minerRewards, boosterTokenId) {
     if (isProcessing) return;
-
     const btn = document.getElementById('claim-btn');
     const btnText = document.getElementById('claim-btn-text');
     const btnIcon = document.getElementById('claim-btn-icon');
-
     if (!btn) return;
 
     isProcessing = true;
-    
-    // Update button state
     btn.disabled = true;
-    btn.classList.remove('bg-gradient-to-r', 'from-amber-500', 'to-orange-500', 'shadow-lg', 'shadow-amber-500/25');
-    btn.classList.add('bg-zinc-700');
+    btn.className = 'w-full py-4 rounded-xl font-bold text-base flex items-center justify-center gap-2 bg-zinc-700 text-zinc-400';
     btnText.textContent = 'Processing...';
     btnIcon.className = 'fa-solid fa-spinner fa-spin';
 
     try {
         const success = await executeUniversalClaim(stakingRewards, minerRewards, boosterTokenId, null);
-
         if (success) {
-            // Success animation
-            btn.classList.add('claim-success', 'bg-green-500');
-            btn.classList.remove('bg-zinc-700');
+            btn.className = 'w-full py-4 rounded-xl font-bold text-base flex items-center justify-center gap-2 bg-green-500 text-white';
             btnText.textContent = '✓ Claimed!';
             btnIcon.className = 'fa-solid fa-check';
-            
-            showToast('🎉 Rewards claimed successfully!', 'success');
-            
-            // Wait then refresh
-            setTimeout(async () => {
-                lastFetch = 0;
-                await RewardsPage.update(true);
-            }, 1500);
+            showToast('🎉 Rewards claimed!', 'success');
+            setTimeout(() => { lastFetch = 0; RewardsPage.update(true); }, 1500);
         }
     } catch (e) {
         console.error('Claim error:', e);
-        showToast('Claim failed: ' + (e.reason || e.message || 'Unknown error'), 'error');
-        
-        // Reset button
-        resetClaimButton();
+        showToast('Claim failed: ' + (e.reason || e.message || 'Error'), 'error');
+        btn.disabled = false;
+        btn.className = 'w-full py-4 rounded-xl font-bold text-base flex items-center justify-center gap-2 bg-gradient-to-r from-amber-500 to-orange-500 text-black shadow-lg shadow-amber-500/25';
+        btnText.textContent = 'Claim Rewards';
+        btnIcon.className = 'fa-solid fa-coins';
     } finally {
         isProcessing = false;
     }
 }
 
-function resetClaimButton() {
-    const btn = document.getElementById('claim-btn');
-    const btnText = document.getElementById('claim-btn-text');
-    const btnIcon = document.getElementById('claim-btn-icon');
-    
-    if (btn && btnText && btnIcon) {
-        btn.disabled = false;
-        btn.classList.remove('bg-zinc-700', 'bg-green-500', 'claim-success');
-        btn.classList.add('bg-gradient-to-r', 'from-amber-500', 'to-orange-500', 'shadow-lg', 'shadow-amber-500/25');
-        btnText.textContent = 'Claim Rewards';
-        btnIcon.className = 'fa-solid fa-coins';
-    }
-}
-
-// ============================================================================
-// GLOBAL REFERENCE
-// ============================================================================
 window.RewardsPage = RewardsPage;
