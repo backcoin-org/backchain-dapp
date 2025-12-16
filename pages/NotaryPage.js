@@ -1,5 +1,5 @@
 // js/pages/NotaryPage.js
-// ✅ VERSION V8.3: Decentralized Notary - 4MB limit, any file type, smart icons
+// ✅ VERSION V8.4: Fixed image preview - always try to load from IPFS, multiple gateway fallback
 
 import { State } from '../state.js';
 import { formatBigNumber } from '../utils.js';
@@ -965,10 +965,16 @@ async function loadCertificates() {
                             ipfsCid = metadata.image || '';
                             description = metadata.description || '';
                             
+                            // Debug: log the full metadata
+                            console.log(`📜 Certificate #${tokenId} metadata:`, {
+                                image: ipfsCid?.slice(0, 50),
+                                description: description?.slice(0, 50)
+                            });
+                            
                             // Extract content hash from attributes if available
                             if (metadata.attributes) {
-                                const hashAttr = metadata.attributes.find(a => a.trait_type === 'Algorithm');
-                                if (hashAttr) contentHash = 'SHA-256';
+                                const hashAttr = metadata.attributes.find(a => a.trait_type === 'Content Hash');
+                                if (hashAttr) contentHash = hashAttr.value || 'SHA-256';
                             }
                             
                             console.log(`📜 Certificate #${tokenId} from tokenURI: ${description?.slice(0,30)}...`);
@@ -1019,32 +1025,52 @@ async function loadCertificates() {
                 ipfsUrl = `https://gateway.pinata.cloud/ipfs/${ipfsData}`;
             }
             
-            // Alternative gateway for image loading
+            // Alternative gateways for fallback
             const altIpfsUrl = ipfsUrl.replace('gateway.pinata.cloud', 'ipfs.io');
+            const alt2IpfsUrl = ipfsUrl.replace('gateway.pinata.cloud', 'cloudflare-ipfs.com');
             
-            // Detect file type from description or filename
-            const desc = cert.description || '';
-            const fileInfo = getFileTypeInfo('', desc);
-            const isImage = desc.match(/\.(jpg|jpeg|png|gif|webp|svg|bmp)$/i);
+            // Clean description (remove "--- Verified by Backchain Protocol..." suffix)
+            let cleanDesc = cert.description || '';
+            cleanDesc = cleanDesc.split('---')[0].trim() || cleanDesc;
+            cleanDesc = cleanDesc.split('\n')[0].trim() || 'Notarized Document';
+            
+            // Detect file type from ipfs data or description
+            const fileInfo = getFileTypeInfo('', cleanDesc);
+            
+            // Always try to show image if we have ipfsUrl (use onerror fallback)
+            const hasValidUrl = ipfsUrl && ipfsUrl.length > 10;
 
             return `
                 <div class="cert-card bg-zinc-900/50 border border-zinc-800/50 rounded-xl overflow-hidden">
                     <!-- Preview -->
-                    <div class="h-28 bg-gradient-to-br from-zinc-800/50 to-zinc-900/50 flex items-center justify-center relative">
-                        ${isImage && ipfsUrl ? `
+                    <div class="h-28 bg-gradient-to-br from-zinc-800/50 to-zinc-900/50 flex items-center justify-center relative overflow-hidden">
+                        ${hasValidUrl ? `
                             <img src="${ipfsUrl}" 
                                  class="absolute inset-0 w-full h-full object-cover"
-                                 onerror="if(!this.dataset.retry){this.dataset.retry='1';this.src='${altIpfsUrl}';}else{this.style.display='none';this.nextElementSibling.style.display='flex';}">
+                                 onerror="
+                                    if(!this.dataset.retry){
+                                        this.dataset.retry='1';
+                                        this.src='${altIpfsUrl}';
+                                    } else if(this.dataset.retry==='1'){
+                                        this.dataset.retry='2';
+                                        this.src='${alt2IpfsUrl}';
+                                    } else {
+                                        this.style.display='none';
+                                        this.nextElementSibling.style.display='flex';
+                                    }
+                                 ">
                             <div class="hidden flex-col items-center justify-center h-full absolute inset-0 bg-zinc-900">
-                                <i class="${fileInfo.icon} text-4xl ${fileInfo.color} mb-2"></i>
-                                <span class="text-[9px] text-zinc-600">Preview unavailable</span>
+                                <div class="w-12 h-12 rounded-xl ${fileInfo.bg} flex items-center justify-center mb-1">
+                                    <i class="${fileInfo.icon} text-2xl ${fileInfo.color}"></i>
+                                </div>
+                                <span class="text-[9px] text-zinc-600">File stored on IPFS</span>
                             </div>
                         ` : `
                             <div class="flex flex-col items-center justify-center">
                                 <div class="w-14 h-14 rounded-xl ${fileInfo.bg} flex items-center justify-center mb-2">
                                     <i class="${fileInfo.icon} text-2xl ${fileInfo.color}"></i>
                                 </div>
-                                <span class="text-[9px] text-zinc-600 uppercase tracking-wider">${desc.split('.').pop() || 'FILE'}</span>
+                                <span class="text-[9px] text-zinc-600 uppercase tracking-wider">CERTIFIED</span>
                             </div>
                         `}
                         <span class="absolute top-2 right-2 text-[9px] font-mono text-zinc-400 bg-black/70 px-2 py-0.5 rounded-full">#${cert.id}</span>
@@ -1052,8 +1078,8 @@ async function loadCertificates() {
                     
                     <!-- Info -->
                     <div class="p-3">
-                        <p class="text-xs text-white font-medium truncate mb-1" title="${cert.description}">
-                            ${cert.description || 'No description'}
+                        <p class="text-xs text-white font-medium truncate mb-1" title="${cleanDesc}">
+                            ${cleanDesc || 'Notarized Document'}
                         </p>
                         <p class="text-[9px] font-mono text-zinc-600 truncate mb-3" title="${cert.hash}">
                             SHA-256: ${cert.hash?.slice(0, 16) || '...'}...
