@@ -1,5 +1,5 @@
 // js/modules/data.js
-// ✅ VERSÃO V6.2: CRITICAL FIX - Proteção contra loop infinito em chamadas de boosters
+// ✅ VERSÃO V6.3: Fetch boostBips from chain if API doesn't provide it
 
 const ethers = window.ethers;
 
@@ -759,9 +759,15 @@ export async function loadMyBoostersFromAPI(forceRefresh = false) {
         if (!response.ok) throw new Error(`API Error: ${response.status}`);
 
         let ownedTokensAPI = await response.json();
+        
+        // 🔥 V6.3: Debug log to see what API returns
+        console.log('Boosters API response:', ownedTokensAPI);
 
         // 2. Ghost Buster: Verify ownership on-chain
-        const minABI = ["function ownerOf(uint256) view returns (address)"];
+        const minABI = [
+            "function ownerOf(uint256) view returns (address)",
+            "function boostBips(uint256) view returns (uint256)"
+        ];
         const contract = getContractInstance(
             addresses.rewardBoosterNFT,
             minABI,
@@ -773,16 +779,30 @@ export async function loadMyBoostersFromAPI(forceRefresh = false) {
                 ownedTokensAPI.slice(0, 50).map(async (token) => { // Limit to 50
                     const id = BigInt(token.tokenId);
                     const cacheKey = `ownerOf-${id}`;
-                    const now = Date.now();
+                    const nowTs = Date.now();
+
+                    // 🔥 V6.3: Get boostBips from API or chain
+                    let tokenBoostBips = Number(token.boostBips || token.boost || 0);
+                    
+                    // If API didn't provide boostBips, try to get from chain
+                    if (tokenBoostBips === 0) {
+                        try {
+                            const chainBoostBips = await contract.boostBips(id);
+                            tokenBoostBips = Number(chainBoostBips);
+                        } catch (e) {
+                            console.warn(`Failed to get boostBips for token ${id}:`, e.message);
+                        }
+                    }
 
                     // Check local cache first
                     if (!forceRefresh && ownershipCache.has(cacheKey)) {
                         const cachedData = ownershipCache.get(cacheKey);
-                        if (now - cachedData.timestamp < OWNERSHIP_CACHE_MS) {
+                        if (nowTs - cachedData.timestamp < OWNERSHIP_CACHE_MS) {
                             if (cachedData.owner.toLowerCase() === State.userAddress.toLowerCase()) {
                                 return {
                                     tokenId: id,
-                                    boostBips: Number(token.boostBips || 0)
+                                    boostBips: tokenBoostBips,
+                                    imageUrl: token.imageUrl || token.image || null
                                 };
                             }
                             return null; // Sold
@@ -791,12 +811,13 @@ export async function loadMyBoostersFromAPI(forceRefresh = false) {
 
                     try {
                         const owner = await contract.ownerOf(id);
-                        ownershipCache.set(cacheKey, { owner, timestamp: now });
+                        ownershipCache.set(cacheKey, { owner, timestamp: nowTs });
 
                         if (owner.toLowerCase() === State.userAddress.toLowerCase()) {
                             return {
                                 tokenId: id,
-                                boostBips: Number(token.boostBips || 0)
+                                boostBips: tokenBoostBips,
+                                imageUrl: token.imageUrl || token.image || null
                             };
                         }
                         return null; // Recently sold
@@ -806,7 +827,8 @@ export async function loadMyBoostersFromAPI(forceRefresh = false) {
                         if (isRateLimitError(e) || isRpcError(e)) {
                             return {
                                 tokenId: id,
-                                boostBips: Number(token.boostBips || 0)
+                                boostBips: tokenBoostBips,
+                                imageUrl: token.imageUrl || token.image || null
                             };
                         }
                         return null;
@@ -819,9 +841,13 @@ export async function loadMyBoostersFromAPI(forceRefresh = false) {
         } else {
             State.myBoosters = ownedTokensAPI.map(tokenData => ({
                 tokenId: BigInt(tokenData.tokenId),
-                boostBips: Number(tokenData.boostBips || 0)
+                boostBips: Number(tokenData.boostBips || tokenData.boost || 0),
+                imageUrl: tokenData.imageUrl || tokenData.image || null
             }));
         }
+        
+        // 🔥 V6.3: Debug log final result
+        console.log('Processed myBoosters:', State.myBoosters);
         
         // 🔥 Sucesso - reset error counter
         boosterErrorCount = 0;
