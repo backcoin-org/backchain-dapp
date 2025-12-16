@@ -1,5 +1,5 @@
 // js/modules/transactions.js
-// ✅ VERSÃO V7.2 - FIX: contentHash bytes32 conversion for Notary
+// ✅ VERSÃO V7.3 - FIX: Skip gas estimation for claim when no booster (tokenId=0)
 
 const ethers = window.ethers;
 
@@ -747,7 +747,7 @@ export async function executeUniversalClaim(stakingRewards, minerRewards, booste
     
     const stakingRewardsBigInt = BigInt(stakingRewards);
     const minerRewardsBigInt = BigInt(minerRewards);
-    const boosterIdBigInt = BigInt(boosterIdToSend);
+    const boosterIdBigInt = BigInt(boosterIdToSend || 0);
     
     if (stakingRewardsBigInt === 0n && minerRewardsBigInt === 0n) {
         showToast("No rewards to claim.", "info");
@@ -766,7 +766,16 @@ export async function executeUniversalClaim(stakingRewards, minerRewards, booste
             const delegationContract = State.delegationManagerContract.connect(signer);
             const args = [boosterIdBigInt];
 
-            const gasOpts = await estimateGasWithFallback(delegationContract, 'claimReward', args, 300000n);
+            // 🔥 V6.3: Skip gas estimation if no booster (0) - may fail estimation but work in tx
+            let gasOpts;
+            if (boosterIdBigInt === 0n) {
+                // Use fixed gas when no booster - estimation may fail but tx can still work
+                gasOpts = { gasLimit: 300000n };
+                console.log('Claim: Using fixed gas (no booster)');
+            } else {
+                gasOpts = await estimateGasWithFallback(delegationContract, 'claimReward', args, 300000n);
+            }
+            
             const tx = await delegationContract.claimReward(...args, gasOpts);
             
             await tx.wait();
