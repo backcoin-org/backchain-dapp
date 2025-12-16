@@ -1,5 +1,5 @@
 // js/pages/NotaryPage.js
-// ✅ VERSION V8.0: Complete Redesign - Mobile-First, Fixed V2.1 Event Name Bug
+// ✅ VERSION V8.1: Added notary.png for loading, processing overlay, and success animation
 
 import { State } from '../state.js';
 import { formatBigNumber } from '../utils.js';
@@ -100,6 +100,13 @@ const injectStyles = () => {
             transform: translateY(-2px);
             box-shadow: 0 4px 20px rgba(0,0,0,0.3);
         }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: scale(0.9); }
+            to { opacity: 1; transform: scale(1); }
+        }
+        .animate-fade-in {
+            animation: fadeIn 0.5s ease-out;
+        }
     `;
     document.head.appendChild(style);
 };
@@ -119,8 +126,8 @@ function render() {
             <header class="sticky top-0 z-40 bg-zinc-950/95 backdrop-blur-lg border-b border-zinc-800/50 -mx-4 px-4 py-3 md:hidden">
                 <div class="flex items-center justify-between">
                     <div class="flex items-center gap-3">
-                        <div class="w-8 h-8 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center">
-                            <i class="fa-solid fa-stamp text-white text-sm"></i>
+                        <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-500 to-yellow-600 flex items-center justify-center overflow-hidden p-0.5">
+                            <img src="./assets/notary.png" alt="Notary" class="w-full h-full object-contain">
                         </div>
                         <div>
                             <h1 class="text-lg font-bold text-white">Notary</h1>
@@ -136,8 +143,8 @@ function render() {
             <!-- DESKTOP HEADER -->
             <div class="hidden md:flex items-center justify-between mb-6">
                 <div class="flex items-center gap-4">
-                    <div class="w-12 h-12 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center">
-                        <i class="fa-solid fa-stamp text-white text-xl"></i>
+                    <div class="w-14 h-14 rounded-2xl bg-gradient-to-br from-amber-500 to-yellow-600 flex items-center justify-center shadow-lg shadow-amber-500/30 overflow-hidden p-1">
+                        <img src="./assets/notary.png" alt="Notary" class="w-full h-full object-contain">
                     </div>
                     <div>
                         <h1 class="text-2xl font-bold text-white">Document Notary</h1>
@@ -186,7 +193,7 @@ function render() {
                 <div class="space-y-4">
                     
                     <!-- Cost Card -->
-                    <div class="bg-gradient-to-br from-indigo-900/30 to-purple-900/20 border border-indigo-500/20 rounded-xl p-4">
+                    <div class="bg-gradient-to-br from-amber-900/30 to-yellow-900/20 border border-amber-500/20 rounded-xl p-4">
                         <div class="flex items-center gap-2 mb-3">
                             <i class="fa-solid fa-coins text-amber-400"></i>
                             <span class="text-xs font-bold text-zinc-300">Service Cost</span>
@@ -243,7 +250,7 @@ function render() {
                             <p class="text-[10px] text-zinc-500">Tamper-Proof</p>
                         </div>
                         <div class="bg-zinc-900/50 border border-zinc-800/50 rounded-xl p-3 text-center">
-                            <i class="fa-solid fa-infinity text-purple-400 text-lg mb-1"></i>
+                            <i class="fa-solid fa-infinity text-yellow-400 text-lg mb-1"></i>
                             <p class="text-[10px] text-zinc-500">Permanent</p>
                         </div>
                     </div>
@@ -254,17 +261,22 @@ function render() {
             <div class="mt-8">
                 <div class="flex items-center justify-between mb-4">
                     <h2 class="text-sm font-bold text-white flex items-center gap-2">
-                        <i class="fa-solid fa-certificate text-indigo-400"></i>
+                        <i class="fa-solid fa-certificate text-amber-400"></i>
                         Your Certificates
                     </h2>
-                    <button id="btn-refresh" class="text-xs text-indigo-400 hover:text-white transition-colors flex items-center gap-1">
+                    <button id="btn-refresh" class="text-xs text-amber-400 hover:text-white transition-colors flex items-center gap-1">
                         <i class="fa-solid fa-rotate"></i> Refresh
                     </button>
                 </div>
                 <div id="certificates-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                     <div class="col-span-full text-center py-8 text-zinc-600">
-                        <div class="w-8 h-8 border-2 border-zinc-700 border-t-indigo-500 rounded-full animate-spin mx-auto mb-2"></div>
-                        Loading...
+                        <div class="w-16 h-16 mx-auto mb-3 relative">
+                            <div class="absolute inset-0 rounded-full bg-amber-500/20 animate-ping"></div>
+                            <div class="relative w-full h-full rounded-full bg-zinc-800 flex items-center justify-center p-2">
+                                <img src="./assets/notary.png" alt="Loading" class="w-full h-full object-contain opacity-60 animate-pulse">
+                            </div>
+                        </div>
+                        <p class="text-zinc-500 text-sm">Loading certificates...</p>
                     </div>
                 </div>
             </div>
@@ -273,17 +285,20 @@ function render() {
         <!-- Processing Overlay -->
         <div id="processing-overlay" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/95 backdrop-blur-sm">
             <div class="text-center p-6 max-w-sm">
-                <div class="w-20 h-20 mx-auto mb-4 relative">
-                    <div class="absolute inset-0 rounded-full bg-gradient-to-br from-indigo-500/20 to-purple-500/20"></div>
-                    <div class="absolute inset-2 rounded-full bg-zinc-900 flex items-center justify-center">
-                        <i class="fa-solid fa-stamp text-3xl text-indigo-400"></i>
+                <div class="w-28 h-28 mx-auto mb-6 relative">
+                    <!-- Outer spinning ring -->
+                    <div class="absolute inset-[-4px] rounded-full border-4 border-transparent border-t-amber-400 border-r-amber-500/50 animate-spin"></div>
+                    <!-- Pulse glow -->
+                    <div class="absolute inset-0 rounded-full bg-amber-500/20 animate-ping"></div>
+                    <!-- Notary Image container -->
+                    <div class="relative w-full h-full rounded-full bg-gradient-to-br from-zinc-800 to-zinc-900 flex items-center justify-center shadow-xl shadow-amber-500/20 overflow-hidden border-2 border-amber-500/30 p-3">
+                        <img src="./assets/notary.png" alt="Notarizing" class="w-full h-full object-contain drop-shadow-lg">
                     </div>
-                    <div class="absolute inset-0 rounded-full border-2 border-indigo-500 border-t-transparent animate-spin"></div>
                 </div>
-                <h3 class="text-xl font-bold text-white mb-1">Notarizing</h3>
-                <p id="process-status" class="text-indigo-400 text-sm font-mono mb-4">PREPARING...</p>
+                <h3 class="text-xl font-bold text-white mb-1">Notarizing Document</h3>
+                <p id="process-status" class="text-amber-400 text-sm font-mono mb-4">PREPARING...</p>
                 <div class="w-full h-2 bg-zinc-800 rounded-full overflow-hidden">
-                    <div id="process-bar" class="h-full bg-gradient-to-r from-indigo-500 to-purple-500 rounded-full transition-all duration-500" style="width: 0%"></div>
+                    <div id="process-bar" class="h-full bg-gradient-to-r from-amber-500 to-yellow-500 rounded-full transition-all duration-500" style="width: 0%"></div>
                 </div>
                 <p class="text-[10px] text-zinc-600 mt-3">Do not close this window</p>
             </div>
@@ -406,7 +421,7 @@ function renderStepContent() {
                 <h3 class="text-lg font-bold text-white mb-2">Connect Wallet</h3>
                 <p class="text-zinc-500 text-sm mb-4 text-center">Connect your wallet to start notarizing documents</p>
                 <button onclick="window.openConnectModal && window.openConnectModal()" 
-                    class="bg-indigo-500 hover:bg-indigo-400 text-white font-bold py-2.5 px-6 rounded-xl transition-colors">
+                    class="bg-amber-500 hover:bg-amber-400 text-white font-bold py-2.5 px-6 rounded-xl transition-colors">
                     Connect Wallet
                 </button>
             </div>
@@ -456,8 +471,8 @@ function renderStep1(panel) {
             
             <div id="dropzone" class="notary-dropzone w-full max-w-md rounded-xl p-8 cursor-pointer text-center">
                 <input type="file" id="file-input" class="hidden">
-                <div class="w-16 h-16 mx-auto mb-4 rounded-full bg-indigo-500/10 flex items-center justify-center">
-                    <i class="fa-solid fa-cloud-arrow-up text-2xl text-indigo-400"></i>
+                <div class="w-16 h-16 mx-auto mb-4 rounded-full bg-amber-500/10 flex items-center justify-center">
+                    <i class="fa-solid fa-cloud-arrow-up text-2xl text-amber-400"></i>
                 </div>
                 <p class="text-white font-medium mb-1">Click or drag file here</p>
                 <p class="text-[10px] text-zinc-600">Max 10MB • Any format</p>
@@ -527,8 +542,8 @@ function renderStep2(panel) {
             <!-- File Preview -->
             <div class="bg-zinc-800/50 border border-zinc-700 rounded-xl p-4 mb-4">
                 <div class="flex items-center gap-3">
-                    <div class="w-12 h-12 rounded-lg bg-indigo-500/10 flex items-center justify-center">
-                        <i class="${fileIcon} text-xl text-indigo-400"></i>
+                    <div class="w-12 h-12 rounded-lg bg-amber-500/10 flex items-center justify-center">
+                        <i class="${fileIcon} text-xl text-amber-400"></i>
                     </div>
                     <div class="flex-1 min-w-0">
                         <p class="text-white font-medium truncate">${file?.name || 'Unknown'}</p>
@@ -546,7 +561,7 @@ function renderStep2(panel) {
                     Description <span class="text-zinc-600 font-normal">(optional)</span>
                 </label>
                 <textarea id="desc-input" rows="3" 
-                    class="w-full bg-black/40 border border-zinc-700 rounded-xl p-4 text-sm text-white focus:border-indigo-500 focus:outline-none placeholder-zinc-600 resize-none"
+                    class="w-full bg-black/40 border border-zinc-700 rounded-xl p-4 text-sm text-white focus:border-amber-500 focus:outline-none placeholder-zinc-600 resize-none"
                     placeholder="E.g., Property deed signed on Jan 2025...">${Notary.description}</textarea>
             </div>
 
@@ -555,7 +570,7 @@ function renderStep2(panel) {
                 <button id="btn-back" class="flex-1 py-3 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-bold rounded-xl transition-colors">
                     <i class="fa-solid fa-arrow-left mr-2"></i> Back
                 </button>
-                <button id="btn-next" class="flex-[2] py-3 bg-indigo-500 hover:bg-indigo-400 text-white font-bold rounded-xl transition-colors">
+                <button id="btn-next" class="flex-[2] py-3 bg-amber-500 hover:bg-amber-400 text-white font-bold rounded-xl transition-colors">
                     Continue <i class="fa-solid fa-arrow-right ml-2"></i>
                 </button>
             </div>
@@ -609,8 +624,8 @@ function renderStep3(panel) {
             <!-- Summary Card -->
             <div class="bg-zinc-800/50 border border-zinc-700 rounded-xl p-4 mb-4 text-left">
                 <div class="flex items-center gap-3 pb-3 border-b border-zinc-700/50 mb-3">
-                    <div class="w-10 h-10 rounded-lg bg-indigo-500/10 flex items-center justify-center">
-                        <i class="${getFileIcon(file?.type || '')} text-indigo-400"></i>
+                    <div class="w-10 h-10 rounded-lg bg-amber-500/10 flex items-center justify-center">
+                        <i class="${getFileIcon(file?.type || '')} text-amber-400"></i>
                     </div>
                     <div class="flex-1 min-w-0">
                         <p class="text-white font-medium truncate text-sm">${file?.name}</p>
@@ -633,7 +648,7 @@ function renderStep3(panel) {
                 <button id="btn-back" class="flex-1 py-3 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-bold rounded-xl transition-colors">
                     <i class="fa-solid fa-arrow-left mr-2"></i> Back
                 </button>
-                <button id="btn-mint" class="flex-[2] py-3 bg-gradient-to-r from-indigo-500 to-purple-500 hover:from-indigo-400 hover:to-purple-400 text-white font-bold rounded-xl transition-all">
+                <button id="btn-mint" class="flex-[2] py-3 bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-400 hover:to-yellow-400 text-white font-bold rounded-xl transition-all">
                     <i class="fa-solid fa-stamp mr-2"></i> Sign & Mint
                 </button>
             </div>
@@ -725,6 +740,34 @@ async function handleMint() {
         if (success) {
             setProgress(100, 'SUCCESS!');
             
+            // Show success animation in overlay
+            if (overlay) {
+                overlay.innerHTML = `
+                    <div class="text-center p-6 max-w-sm animate-fade-in">
+                        <div class="w-32 h-32 mx-auto mb-6 relative">
+                            <!-- Success glow -->
+                            <div class="absolute inset-0 rounded-full bg-green-500/30 animate-pulse"></div>
+                            <!-- Confetti effect -->
+                            <div class="absolute inset-0 rounded-full border-4 border-green-400/50"></div>
+                            <!-- Image container -->
+                            <div class="relative w-full h-full rounded-full bg-gradient-to-br from-green-900/50 to-emerald-900/50 flex items-center justify-center shadow-2xl shadow-green-500/30 overflow-hidden p-3 border-2 border-green-400">
+                                <img src="./assets/notary.png" alt="Success" class="w-full h-full object-contain drop-shadow-lg">
+                            </div>
+                            <!-- Checkmark badge -->
+                            <div class="absolute -bottom-1 -right-1 w-10 h-10 bg-green-500 rounded-full flex items-center justify-center shadow-lg">
+                                <i class="fa-solid fa-check text-white text-lg"></i>
+                            </div>
+                        </div>
+                        <h3 class="text-2xl font-bold text-white mb-2">🎉 Notarized!</h3>
+                        <p class="text-green-400 text-sm mb-4">Your document is now permanently certified on the blockchain</p>
+                        <div class="flex items-center justify-center gap-2 text-zinc-500 text-xs">
+                            <i class="fa-solid fa-shield-check text-green-400"></i>
+                            <span>Immutable • Verifiable • Permanent</span>
+                        </div>
+                    </div>
+                `;
+            }
+            
             setTimeout(() => {
                 if (overlay) {
                     overlay.classList.add('hidden');
@@ -742,7 +785,7 @@ async function handleMint() {
                 loadUserData(true);
                 
                 showToast('🎉 Document notarized successfully!', 'success');
-            }, 2000);
+            }, 3000); // Extended to 3s to show success animation
         } else {
             throw new Error('Minting failed');
         }
@@ -910,11 +953,11 @@ async function loadCertificates() {
             return `
                 <div class="cert-card bg-zinc-900/50 border border-zinc-800/50 rounded-xl overflow-hidden">
                     <!-- Preview -->
-                    <div class="h-24 bg-gradient-to-br from-indigo-900/20 to-purple-900/20 flex items-center justify-center relative">
+                    <div class="h-24 bg-gradient-to-br from-amber-900/20 to-yellow-900/20 flex items-center justify-center relative">
                         <img src="${ipfsUrl}" 
                              class="absolute inset-0 w-full h-full object-cover opacity-30"
                              onerror="this.style.display='none'">
-                        <i class="fa-solid fa-certificate text-3xl text-indigo-400/50 relative z-10"></i>
+                        <i class="fa-solid fa-certificate text-3xl text-amber-400/50 relative z-10"></i>
                         <span class="absolute top-2 right-2 text-[9px] font-mono text-zinc-500 bg-black/50 px-1.5 py-0.5 rounded">#${cert.id}</span>
                     </div>
                     
@@ -931,7 +974,7 @@ async function loadCertificates() {
                         <div class="flex items-center justify-between pt-2 border-t border-zinc-800/50">
                             <div class="flex gap-2">
                                 <a href="${ipfsUrl}" target="_blank" 
-                                   class="text-[10px] text-indigo-400 hover:text-white font-bold transition-colors">
+                                   class="text-[10px] text-amber-400 hover:text-white font-bold transition-colors">
                                     <i class="fa-solid fa-eye mr-1"></i> View
                                 </a>
                                 <button onclick="NotaryPage.addToWallet('${cert.id}')" 

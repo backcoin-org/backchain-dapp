@@ -1,5 +1,5 @@
 // js/pages/RentalPage.js
-// ✅ VERSION V7.1: Fixed data loading + nft.png for loading animations
+// ✅ VERSION V7.2: Renamed to "Boost Rentals" + nft.png header image
 
 const ethers = window.ethers;
 
@@ -291,11 +291,11 @@ export const RentalPage = {
                     <!-- HEADER -->
                     <div class="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 mb-8">
                         <div class="flex items-center gap-4">
-                            <div class="w-14 h-14 rounded-2xl bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center shadow-lg shadow-cyan-500/30">
-                                <i class="fa-solid fa-building text-white text-2xl"></i>
+                            <div class="w-14 h-14 rounded-2xl bg-gradient-to-br from-amber-500 to-orange-600 flex items-center justify-center shadow-lg shadow-amber-500/30 overflow-hidden p-1">
+                                <img src="./assets/nft.png" alt="NFT" class="w-full h-full object-contain">
                             </div>
                             <div>
-                                <h1 class="text-2xl font-bold text-white">AirBNFT</h1>
+                                <h1 class="text-2xl font-bold text-white">Boost Rentals</h1>
                                 <p class="text-sm text-zinc-500">Rent boosters • Earn passive income</p>
                             </div>
                         </div>
