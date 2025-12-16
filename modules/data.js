@@ -1,5 +1,5 @@
 // js/modules/data.js
-// ✅ VERSÃO V6.1 PRODUCTION-READY: Enhanced Cache + Error Resilience + State Sync
+// ✅ VERSÃO V6.2: CRITICAL FIX - Proteção contra loop infinito em chamadas de boosters
 
 const ethers = window.ethers;
 
@@ -560,10 +560,22 @@ export async function loadUserRentals(forceRefresh = false) {
 // 5. BOOSTER HELPERS
 // ====================================================================
 
+// 🔥 V6.2: Cache para getHighestBoosterBoostFromAPI
+let cachedBoosterResult = null;
+let lastBoosterResultTime = 0;
+const BOOSTER_RESULT_CACHE_MS = 30000; // 30 segundos
+
 // Gets the best booster (owned or rented) for discount calculation
-export async function getHighestBoosterBoostFromAPI() {
-    // Ensure fresh data
-    await loadMyBoostersFromAPI();
+export async function getHighestBoosterBoostFromAPI(forceRefresh = false) {
+    const now = Date.now();
+    
+    // 🔥 Retorna cache se disponível e recente
+    if (!forceRefresh && cachedBoosterResult && (now - lastBoosterResultTime < BOOSTER_RESULT_CACHE_MS)) {
+        return cachedBoosterResult;
+    }
+    
+    // Load boosters (com throttle interno)
+    await loadMyBoostersFromAPI(forceRefresh);
 
     let maxBoost = 0;
     let bestTokenId = null;
@@ -599,13 +611,17 @@ export async function getHighestBoosterBoostFromAPI() {
     const imageUrl = tier?.realImg || tier?.img || 'assets/bkc_logo_3d.png';
     const nftName = tier?.name ? `${tier.name} Booster` : (source !== 'none' ? 'Booster NFT' : 'None');
 
-    return {
+    // 🔥 Cachear resultado
+    cachedBoosterResult = {
         highestBoost: maxBoost,
         boostName: nftName,
         imageUrl,
         tokenId: bestTokenId ? bestTokenId.toString() : null,
         source: source
     };
+    lastBoosterResultTime = Date.now();
+    
+    return cachedBoosterResult;
 }
 
 // Internal helper to get booster info
@@ -698,8 +714,40 @@ export async function calculateClaimDetails() {
 // 7. BOOSTER LOADING WITH GHOST BUSTER
 // ====================================================================
 
+// 🔥 V6.2: Proteção contra loop infinito
+let isLoadingBoosters = false;
+let lastBoosterFetch = 0;
+let boosterErrorCount = 0;
+const BOOSTER_FETCH_THROTTLE_MS = 30000; // Mínimo 30s entre chamadas
+const MAX_BOOSTER_ERRORS = 3; // Para após 3 erros consecutivos
+const BOOSTER_ERROR_COOLDOWN_MS = 120000; // 2 min de cooldown após muitos erros
+
 export async function loadMyBoostersFromAPI(forceRefresh = false) {
     if (!State.userAddress) return [];
+
+    const now = Date.now();
+    
+    // 🔥 Proteção 1: Já está carregando
+    if (isLoadingBoosters) {
+        return State.myBoosters || [];
+    }
+    
+    // 🔥 Proteção 2: Throttle - evita chamadas muito frequentes
+    if (!forceRefresh && (now - lastBoosterFetch < BOOSTER_FETCH_THROTTLE_MS)) {
+        return State.myBoosters || [];
+    }
+    
+    // 🔥 Proteção 3: Muitos erros - cooldown mais longo
+    if (boosterErrorCount >= MAX_BOOSTER_ERRORS) {
+        if (now - lastBoosterFetch < BOOSTER_ERROR_COOLDOWN_MS) {
+            return State.myBoosters || [];
+        }
+        // Reset após cooldown
+        boosterErrorCount = 0;
+    }
+
+    isLoadingBoosters = true;
+    lastBoosterFetch = now;
 
     try {
         // 1. Get list from API
@@ -774,14 +822,26 @@ export async function loadMyBoostersFromAPI(forceRefresh = false) {
                 boostBips: Number(tokenData.boostBips || 0)
             }));
         }
+        
+        // 🔥 Sucesso - reset error counter
+        boosterErrorCount = 0;
 
         return State.myBoosters;
 
     } catch (e) {
-        console.warn("Error fetching boosters:", e.message);
+        // 🔥 Incrementa contador de erros
+        boosterErrorCount++;
+        
+        // Log apenas nos primeiros erros
+        if (boosterErrorCount <= MAX_BOOSTER_ERRORS) {
+            console.warn(`Error fetching boosters (${boosterErrorCount}/${MAX_BOOSTER_ERRORS}):`, e.message);
+        }
+        
         // Keep existing data on error
         if (!State.myBoosters) State.myBoosters = [];
         return State.myBoosters;
+    } finally {
+        isLoadingBoosters = false;
     }
 }
 
@@ -796,6 +856,12 @@ export function clearAllCaches() {
     balanceCache.clear();
     systemDataCache = null;
     systemDataCacheTime = 0;
+    
+    // 🔥 V6.2: Reset booster caches
+    cachedBoosterResult = null;
+    lastBoosterResultTime = 0;
+    lastBoosterFetch = 0;
+    boosterErrorCount = 0;
 }
 
 // Force refresh all user data
