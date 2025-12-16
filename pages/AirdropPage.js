@@ -178,9 +178,18 @@ async function loadAirdropData() {
         }
     } catch (error) {
         console.error("Airdrop Data Load Error:", error);
-        if (error.code !== 'permission-denied') {
-            showToast("Error loading data. Please refresh.", "error");
+        
+        // Handle permission errors gracefully - don't show toast for expected errors
+        if (error.code === 'permission-denied' || error.message?.includes('permission')) {
+            console.warn('Firebase permissions issue - user may need to connect wallet or sign in');
+            // Set empty defaults so UI can still render
+            airdropState.systemConfig = airdropState.systemConfig || {};
+            airdropState.leaderboards = airdropState.leaderboards || { top100ByPoints: [], top100ByPosts: [] };
+            airdropState.dailyTasks = airdropState.dailyTasks || [];
+            return; // Don't throw, let UI render with empty state
         }
+        
+        showToast("Error loading data. Please refresh.", "error");
     }
 }
 
