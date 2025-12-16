@@ -1,5 +1,5 @@
 // js/modules/data.js
-// ✅ VERSÃO V6.4: Fixed loadRentalListings to return all NFTs (including rented) + added paidAmount to rentals
+// ✅ VERSÃO V6.5: Enhanced blockchain fallback with detailed logs + nft.png as default image
 
 const ethers = window.ethers;
 
@@ -357,30 +357,44 @@ export async function loadUserDelegations(forceRefresh = false) {
 // ====================================================================
 
 export async function loadRentalListings(forceRefresh = false) {
+    console.log("🔄 Loading rental listings... forceRefresh:", forceRefresh);
+    
+    let listingsFromApi = [];
+    
     // 1. Try API First (Fast)
     try {
         const response = await fetchWithTimeout(API_ENDPOINTS.getRentalListings, 4000);
         if (response.ok) {
-            const listingsFromApi = await response.json();
-
-            // Enrich with local tier images
-            const enrichedListings = listingsFromApi.map(item => {
-                const tier = boosterTiers.find(t => t.boostBips === Number(item.boostBips || 0));
-                return {
-                    ...item,
-                    img: tier?.img || 'assets/bkc_logo_3d.png',
-                    name: tier?.name || 'Booster NFT'
-                };
-            });
-
-            State.rentalListings = enrichedListings;
-            return enrichedListings;
+            listingsFromApi = await response.json();
+            console.log("📦 Rental API response:", listingsFromApi);
         }
     } catch (e) {
-        console.warn("API Rental unavailable. Using blockchain fallback...");
+        console.warn("⚠️ API Rental unavailable:", e.message);
+    }
+    
+    // 2. If API returned data, use it
+    if (listingsFromApi && listingsFromApi.length > 0) {
+        const enrichedListings = listingsFromApi.map(item => {
+            const tier = boosterTiers.find(t => t.boostBips === Number(item.boostBips || 0));
+            return {
+                ...item,
+                tokenId: item.tokenId?.toString() || item.id?.toString(),
+                pricePerHour: item.pricePerHour?.toString() || item.price?.toString() || '0',
+                totalEarnings: item.totalEarnings?.toString() || '0',
+                rentalCount: Number(item.rentalCount || 0),
+                img: tier?.img || './assets/nft.png',
+                name: tier?.name || 'Booster NFT'
+            };
+        });
+
+        console.log("✅ Enriched listings from API:", enrichedListings.length);
+        State.rentalListings = enrichedListings;
+        return enrichedListings;
     }
 
-    // 2. Fallback: Blockchain (Slower but reliable)
+    // 3. Fallback: Blockchain (Always try if API returns empty or fails)
+    console.log("📡 Using blockchain fallback for rental listings...");
+    
     const rentalContract = getContractInstance(
         addresses.rentalManager,
         rentalManagerABI,
@@ -388,27 +402,34 @@ export async function loadRentalListings(forceRefresh = false) {
     );
     
     if (!rentalContract) {
+        console.warn("❌ No rental contract available");
         State.rentalListings = [];
         return [];
     }
 
     try {
+        console.log("🔍 Calling getAllListedTokenIds on contract:", addresses.rentalManager);
+        
         const listedIds = await safeContractCall(
             rentalContract,
             'getAllListedTokenIds',
             [],
             [],
             2,
-            forceRefresh
+            true // Always force refresh from blockchain
         );
         
+        console.log("📋 Listed token IDs from blockchain:", listedIds?.length || 0, listedIds);
+        
         if (!listedIds || listedIds.length === 0) {
+            console.log("ℹ️ No listings found on blockchain");
             State.rentalListings = [];
             return [];
         }
 
         // Limit to prevent hanging
         const listingsToFetch = listedIds.slice(0, 30);
+        console.log("🔄 Fetching details for", listingsToFetch.length, "listings...");
 
         const listingsPromises = listingsToFetch.map(async (tokenId) => {
             try {
@@ -418,18 +439,20 @@ export async function loadRentalListings(forceRefresh = false) {
                     [tokenId],
                     null,
                     1,
-                    forceRefresh
+                    true
                 );
                 
+                console.log(`📄 Listing #${tokenId}:`, listing);
+                
                 if (listing && listing.isActive) {
-                    // 🔥 V6.4: Get rental info for each listing
+                    // Get rental info for each listing
                     const rentalInfo = await safeContractCall(
                         rentalContract,
                         'getRental',
                         [tokenId],
                         null,
                         1,
-                        forceRefresh
+                        true
                     );
                     
                     const boostInfo = await getBoosterInfo(tokenId);
@@ -445,16 +468,17 @@ export async function loadRentalListings(forceRefresh = false) {
                         totalEarnings: listing.totalEarnings?.toString() || '0',
                         rentalCount: Number(listing.rentalCount || 0),
                         boostBips: boostInfo.boostBips,
-                        img: boostInfo.img,
+                        img: boostInfo.img || './assets/nft.png',
                         name: boostInfo.name,
-                        // 🔥 V6.4: Include rental info
                         isRented: isCurrentlyRented,
                         currentTenant: isCurrentlyRented ? rentalInfo.tenant : null,
                         rentalEndTime: isCurrentlyRented ? rentalInfo.endTime?.toString() : null
                     };
+                } else {
+                    console.log(`⏭️ Listing #${tokenId} is not active`);
                 }
             } catch (e) {
-                // Skip this listing on error
+                console.error(`❌ Error fetching listing #${tokenId}:`, e);
             }
             return null;
         });
@@ -462,11 +486,12 @@ export async function loadRentalListings(forceRefresh = false) {
         const results = await Promise.all(listingsPromises);
         const validListings = results.filter(l => l !== null);
 
+        console.log("✅ Valid listings from blockchain:", validListings.length);
         State.rentalListings = validListings;
         return validListings;
 
     } catch (e) {
-        console.error("Rental fallback error:", e);
+        console.error("❌ Rental blockchain fallback error:", e);
         State.rentalListings = [];
         return [];
     }
@@ -491,7 +516,7 @@ export async function loadUserRentals(forceRefresh = false) {
                 const tier = boosterTiers.find(t => t.boostBips === Number(item.boostBips || 0));
                 return {
                     ...item,
-                    img: tier?.img || 'assets/bkc_logo_3d.png',
+                    img: tier?.img || './assets/nft.png',
                     name: tier?.name || 'Booster NFT'
                 };
             });
@@ -662,7 +687,7 @@ async function getBoosterInfo(tokenId) {
         
         return {
             boostBips: bipsNum,
-            img: tier?.img || 'assets/bkc_logo_3d.png',
+            img: tier?.img || './assets/nft.png',
             name: tier?.name || `Booster #${tokenId}`
         };
         

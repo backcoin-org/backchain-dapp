@@ -1,5 +1,5 @@
 // js/modules/transactions.js
-// ✅ VERSÃO V7.7 - FIX: RentalManager ABI + rentNFTSimple for 1-hour rentals
+// ✅ VERSÃO V7.8: Enhanced executeListNFT with detailed logs
 
 const ethers = window.ethers;
 
@@ -471,11 +471,18 @@ async function ensureApproval(tokenContract, spenderAddress, amountOrTokenId, bt
 // ====================================================================
 
 export async function executeListNFT(tokenId, pricePerHourWei, btnElement) {
+    console.log("🏷️ executeListNFT called with:", { tokenId, pricePerHourWei: pricePerHourWei.toString() });
+    
     const signer = await getConnectedSigner();
-    if (!signer || !addresses.rentalManager) return false;
+    if (!signer || !addresses.rentalManager) {
+        console.error("❌ No signer or rental manager address");
+        return false;
+    }
 
     const tokenIdBigInt = BigInt(tokenId);
     const priceBigInt = BigInt(pricePerHourWei);
+    
+    console.log("📝 Listing NFT #" + tokenId + " for " + ethers.formatEther(priceBigInt) + " BKC/hour");
     
     // Pre-validation
     if (priceBigInt === 0n) {
@@ -486,11 +493,13 @@ export async function executeListNFT(tokenId, pricePerHourWei, btnElement) {
     // Verify ownership
     try {
         const owner = await State.rewardBoosterContract.ownerOf(tokenIdBigInt);
+        console.log("👤 NFT owner:", owner, "User:", State.userAddress);
         if (owner.toLowerCase() !== State.userAddress.toLowerCase()) {
             showToast("You don't own this NFT.", "error");
             return false;
         }
     } catch (e) {
+        console.error("❌ Failed to verify ownership:", e);
         showToast("Failed to verify NFT ownership.", "error");
         return false;
     }
@@ -502,6 +511,7 @@ export async function executeListNFT(tokenId, pricePerHourWei, btnElement) {
     }
 
     try {
+        console.log("🔐 Checking approval for rental manager:", addresses.rentalManager);
         const approved = await ensureApproval(
             State.rewardBoosterContract, 
             addresses.rentalManager, 
@@ -509,22 +519,31 @@ export async function executeListNFT(tokenId, pricePerHourWei, btnElement) {
             btnElement, 
             "Rental Listing"
         );
-        if (!approved) return false;
+        if (!approved) {
+            console.error("❌ Approval failed or rejected");
+            return false;
+        }
+        console.log("✅ NFT approved for rental manager");
 
         if (btnElement) btnElement.innerHTML = '<div class="loader inline-block"></div> Listing...';
         
         const rentalContract = new ethers.Contract(addresses.rentalManager, rentalManagerABI, signer);
         const args = [tokenIdBigInt, priceBigInt];
         
+        console.log("📤 Calling listNFTSimple with args:", args.map(a => a.toString()));
+        
         const gasOpts = await estimateGasWithFallback(rentalContract, 'listNFTSimple', args, 300000n);
         const listTxPromise = rentalContract.listNFTSimple(...args, gasOpts);
         
-        return await executeTransaction(
+        const result = await executeTransaction(
             listTxPromise, 
             'NFT listed for rental!', 
             'Listing failed', 
             btnElement
         );
+        
+        console.log("📋 List transaction result:", result);
+        return result;
 
     } catch (e) {
         console.error("List NFT Error:", e);

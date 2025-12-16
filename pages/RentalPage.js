@@ -1,5 +1,5 @@
 // js/pages/RentalPage.js
-// ✅ VERSION V7.0: Complete Redesign - Dashboard, Earnings Tracker, Better UX
+// ✅ VERSION V7.1: Fixed data loading + nft.png for loading animations
 
 const ethers = window.ethers;
 
@@ -27,7 +27,7 @@ const RentalState = {
 // ============================================================================
 
 function buildImageUrl(ipfsIoUrl) {
-    if (!ipfsIoUrl) return './assets/bkc_logo_3d.png';
+    if (!ipfsIoUrl) return './assets/nft.png';
     if (ipfsIoUrl.startsWith('https://') || ipfsIoUrl.startsWith('http://')) return ipfsIoUrl;
     if (ipfsIoUrl.includes('ipfs.io/ipfs/')) return `${ipfsGateway}${ipfsIoUrl.split('ipfs.io/ipfs/')[1]}`;
     if (ipfsIoUrl.startsWith('ipfs://')) return `${ipfsGateway}${ipfsIoUrl.substring(7)}`;
@@ -64,20 +64,42 @@ function getTierClass(tierName) {
 }
 
 // ============================================================================
-// LOADING COMPONENT
+// LOADING COMPONENT - Using nft.png
 // ============================================================================
 
 function renderLoading(message = 'Loading...') {
     return `
-        <div class="flex flex-col items-center justify-center py-16 gap-4">
+        <div class="flex flex-col items-center justify-center py-16 gap-5">
             <div class="relative">
-                <div class="absolute inset-0 w-16 h-16 rounded-full bg-cyan-500/20 animate-ping"></div>
-                <div class="absolute inset-0 w-16 h-16 rounded-full border-2 border-transparent border-t-cyan-500 border-r-cyan-500/50 animate-spin"></div>
-                <div class="relative w-16 h-16 rounded-full bg-gradient-to-br from-zinc-800 to-zinc-900 flex items-center justify-center shadow-lg shadow-cyan-500/10 animate-pulse">
-                    <img src="./assets/bkc_logo_3d.png" alt="BKC" class="w-10 h-10 drop-shadow-lg" onerror="this.src='./assets/favicon.png'">
+                <!-- Outer spinning ring -->
+                <div class="absolute inset-[-8px] w-24 h-24 rounded-full border-4 border-transparent border-t-amber-400 border-r-amber-500/50 animate-spin"></div>
+                <!-- Pulse glow -->
+                <div class="absolute inset-0 w-20 h-20 rounded-full bg-amber-500/20 animate-ping"></div>
+                <!-- NFT Image container -->
+                <div class="relative w-20 h-20 rounded-full bg-gradient-to-br from-zinc-800 to-zinc-900 flex items-center justify-center shadow-xl shadow-amber-500/20 overflow-hidden border-2 border-amber-500/30">
+                    <img src="./assets/nft.png" alt="Loading" class="w-16 h-16 object-contain animate-pulse drop-shadow-lg" onerror="this.src='./assets/nft.png'">
                 </div>
             </div>
-            <p class="text-zinc-400 text-sm font-medium animate-pulse">${message}</p>
+            <div class="text-center">
+                <p class="text-amber-400 text-sm font-medium animate-pulse">${message}</p>
+                <p class="text-zinc-600 text-xs mt-1">Please wait...</p>
+            </div>
+        </div>
+    `;
+}
+
+// Loading for cards/grid
+function renderCardLoading() {
+    return `
+        <div class="nft-card animate-pulse">
+            <div class="nft-image bg-zinc-800/50">
+                <img src="./assets/nft.png" alt="Loading" class="w-1/2 h-1/2 opacity-30">
+            </div>
+            <div class="p-5 space-y-3">
+                <div class="h-4 bg-zinc-700/50 rounded w-2/3"></div>
+                <div class="h-3 bg-zinc-700/50 rounded w-1/2"></div>
+                <div class="h-8 bg-zinc-700/50 rounded w-full mt-4"></div>
+            </div>
         </div>
     `;
 }
@@ -348,13 +370,12 @@ function renderStatsDashboard() {
         return sum + Number(ethers.formatEther(BigInt(l.totalEarnings || 0)));
     }, 0);
     
-    // Floor price (excluding my own and currently rented)
+    // 🔥 V7.1: Floor price - use isRented from listing data
     const availableListings = listings.filter(l => {
         if (State.isConnected && l.owner?.toLowerCase() === State.userAddress?.toLowerCase()) return false;
-        const isRented = (State.myRentals || []).some(r => 
-            r.tokenId === l.tokenId && Number(r.endTime) > now
-        );
-        return !isRented;
+        if (l.isRented) return false;
+        if (l.rentalEndTime && Number(l.rentalEndTime) > now) return false;
+        return true;
     });
     
     const floorPrice = availableListings.length > 0
@@ -471,17 +492,23 @@ function renderMarketplace() {
     const listings = State.rentalListings || [];
     const now = Math.floor(Date.now() / 1000);
     
+    console.log("📊 Rendering marketplace. Total listings:", listings.length);
+    
     // Filter: exclude my own, exclude currently rented, apply tier filter
     const availableListings = listings.filter(l => {
         // Exclude my own listings
         if (State.isConnected && l.owner?.toLowerCase() === State.userAddress?.toLowerCase()) {
             return false;
         }
-        // Check if currently rented
-        const rental = (State.myRentals || []).find(r => r.tokenId === l.tokenId);
-        if (rental && Number(rental.endTime) > now) {
+        
+        // 🔥 V7.1: Use isRented from listing data or check rentalEndTime
+        if (l.isRented) {
             return false;
         }
+        if (l.rentalEndTime && Number(l.rentalEndTime) > now) {
+            return false;
+        }
+        
         // Apply tier filter
         if (RentalState.filterTier !== 'ALL') {
             const tier = getTierInfo(l.boostBips);
@@ -491,6 +518,8 @@ function renderMarketplace() {
         }
         return true;
     });
+    
+    console.log("✅ Available for rent:", availableListings.length);
 
     // Sort by price
     availableListings.sort((a, b) => {
@@ -552,6 +581,9 @@ function renderMarketplaceCard(listing) {
     const tierClass = `tier-${tier.name.toLowerCase()}`;
     const gradientClass = getTierClass(tier.name);
     
+    // 🔥 V7.1: Use nft.png as fallback
+    const imgSrc = listing.img || tier.img || './assets/nft.png';
+    
     return `
         <div class="nft-card">
             <div class="nft-image">
@@ -563,7 +595,7 @@ function renderMarketplaceCard(listing) {
                         +${(listing.boostBips || 0) / 100}%
                     </span>
                 </div>
-                <img src="${buildImageUrl(listing.img || tier.img)}" alt="${tier.name}" onerror="this.src='./assets/bkc_logo_3d.png'">
+                <img src="${buildImageUrl(imgSrc)}" alt="${tier.name}" onerror="this.src='./assets/nft.png'">
             </div>
             <div class="p-5">
                 <div class="flex justify-between items-start mb-4">
@@ -668,11 +700,10 @@ function renderMyListingCard(listing) {
     const rentalCount = listing.rentalCount || 0;
     const tierClass = `tier-${tier.name.toLowerCase()}`;
     
-    // Check if currently being rented
+    // 🔥 V7.1: Use isRented from listing data
     const now = Math.floor(Date.now() / 1000);
-    const rental = (State.myRentals || []).find(r => r.tokenId === listing.tokenId);
-    const isRented = rental && Number(rental.endTime) > now;
-    const timeRemaining = isRented ? formatTimeRemaining(Number(rental.endTime)) : null;
+    const isRented = listing.isRented || (listing.rentalEndTime && Number(listing.rentalEndTime) > now);
+    const timeRemaining = isRented && listing.rentalEndTime ? formatTimeRemaining(Number(listing.rentalEndTime)) : null;
 
     return `
         <div class="nft-card">
@@ -683,13 +714,13 @@ function renderMyListingCard(listing) {
                 <div class="absolute top-4 right-4">
                     ${isRented ? `
                         <span class="status-badge status-rented">
-                            <i class="fa-solid fa-clock mr-1"></i>${timeRemaining.text}
+                            <i class="fa-solid fa-clock mr-1"></i>${timeRemaining?.text || 'Rented'}
                         </span>
                     ` : `
                         <span class="status-badge status-available">Available</span>
                     `}
                 </div>
-                <img src="${buildImageUrl(listing.img || tier.img)}" alt="${tier.name}" onerror="this.src='./assets/bkc_logo_3d.png'">
+                <img src="${buildImageUrl(listing.img || tier.img)}" alt="${tier.name}" onerror="this.src='./assets/nft.png'">
             </div>
             <div class="p-5">
                 <div class="flex justify-between items-start mb-3">
@@ -806,7 +837,7 @@ function renderActiveRentalCard(rental) {
                         <i class="fa-solid fa-bolt mr-1"></i>${timeRemaining.text}
                     </span>
                 </div>
-                <img src="${buildImageUrl(listing?.img || tier.img)}" alt="${tier.name}" onerror="this.src='./assets/bkc_logo_3d.png'">
+                <img src="${buildImageUrl(listing?.img || tier.img)}" alt="${tier.name}" onerror="this.src='./assets/nft.png'">
             </div>
             <div class="p-5">
                 <div class="flex justify-between items-start mb-3">
@@ -838,7 +869,7 @@ function renderExpiredRentalRow(rental) {
 
     return `
         <div class="flex items-center gap-4 glass-card p-4">
-            <img src="${buildImageUrl(listing?.img || tier.img)}" class="w-12 h-12 rounded-xl object-contain bg-black/30" onerror="this.src='./assets/bkc_logo_3d.png'">
+            <img src="${buildImageUrl(listing?.img || tier.img)}" class="w-12 h-12 rounded-xl object-contain bg-black/30" onerror="this.src='./assets/nft.png'">
             <div class="flex-1 min-w-0">
                 <div class="flex items-center gap-2 mb-1">
                     <span class="tier-badge ${tierClass} text-[9px] py-0.5 px-2">${tier.name}</span>
@@ -958,25 +989,30 @@ function renderListModal() {
 // ============================================================================
 
 async function refreshData() {
+    console.log("🔄 RentalPage: Refreshing data...");
     RentalState.isLoading = true;
     
     const container = document.getElementById('tab-content');
     if (container) {
-        container.innerHTML = renderLoading('Loading data...');
+        container.innerHTML = renderLoading('Loading rentals...');
     }
 
     try {
         if (State.isConnected) {
+            console.log("👤 User connected, loading all data...");
             await Promise.all([
                 loadRentalListings(true),
                 loadUserRentals(true),
                 loadMyBoostersFromAPI(true)
             ]);
         } else {
+            console.log("👻 User not connected, loading listings only...");
             await loadRentalListings(true);
         }
+        
+        console.log("✅ Data loaded. Listings:", State.rentalListings?.length || 0, "Rentals:", State.myRentals?.length || 0);
     } catch (e) {
-        console.error('Failed to load rental data:', e);
+        console.error('❌ Failed to load rental data:', e);
         showToast('Failed to load data. Please refresh.', 'error');
     }
 
@@ -1094,7 +1130,7 @@ function openRentModal(tokenId) {
 
     content.innerHTML = `
         <div class="flex items-center gap-4 bg-zinc-800/50 p-4 rounded-xl border border-zinc-700/50">
-            <img src="${buildImageUrl(listing.img || tier.img)}" class="w-20 h-20 object-contain bg-black/30 rounded-xl" onerror="this.src='./assets/bkc_logo_3d.png'">
+            <img src="${buildImageUrl(listing.img || tier.img)}" class="w-20 h-20 object-contain bg-black/30 rounded-xl" onerror="this.src='./assets/nft.png'">
             <div class="flex-1 min-w-0">
                 <div class="flex items-center gap-2 mb-2">
                     <span class="tier-badge ${tierClass}">${tier.name}</span>
