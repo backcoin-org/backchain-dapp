@@ -1447,21 +1447,39 @@ export async function executeNotarizeDocument(documentURI, description, contentH
     // 2. Prepare Parameters - FIX: Convert contentHash to valid bytes32
     const bId = boosterId ? BigInt(boosterId) : 0n;
     
+    // Sanitize description (remove problematic characters, limit length)
+    let safeDescription = description || 'No description';
+    safeDescription = safeDescription.slice(0, 200); // Max 200 chars
+    safeDescription = safeDescription.replace(/[^\x20-\x7E]/g, ''); // Only ASCII printable
+    if (!safeDescription) safeDescription = 'Notarized Document';
+    
     // Convert contentHash to proper bytes32 format
     const formattedHash = formatContentHashToBytes32(contentHash);
     
     // Debug log to help troubleshoot
     console.log('📝 Notary Parameters:', {
         documentURI,
-        description: description?.slice(0, 50) + '...',
+        description: safeDescription?.slice(0, 50) + '...',
         originalHash: contentHash,
         formattedHash,
         boosterId: bId.toString()
     });
     
-    const args = [documentURI, description, formattedHash, bId];
+    const args = [documentURI, safeDescription, formattedHash, bId];
     
-    // 3. Execute with gas estimation
+    // 3. Try static call first to catch revert reasons
+    try {
+        console.log('🔍 Testing notarize call...');
+        await notaryContract.notarize.staticCall(...args);
+        console.log('✅ Static call passed');
+    } catch (staticErr) {
+        console.error('❌ Static call failed:', staticErr);
+        const reason = staticErr.reason || staticErr.message || 'Unknown error';
+        showToast(`Contract error: ${reason.slice(0, 50)}`, 'error');
+        return false;
+    }
+    
+    // 4. Execute with gas estimation
     const gasOpts = await estimateGasWithFallback(notaryContract, 'notarize', args, 500000n);
     const notarizeTxPromise = notaryContract.notarize(...args, gasOpts);
 
