@@ -1,5 +1,5 @@
 // js/config.js
-// ✅ PRODUCTION V21: Fixed FortunePool ABI V2.1 + Notary Event + RentalManager
+// ✅ PRODUCTION V22: Fixed nftPoolABI - getAvailableNFTs() instead of getAvailableTokenIds()
 
 // ============================================================================
 // 1. ENVIRONMENT & ALCHEMY CONFIG
@@ -157,7 +157,7 @@ export const nftPoolABI = [
     "function sellNFT(uint256 _tokenId, uint256 _boosterTokenId, uint256 _minBkcExpected)",
     "function PSTAKE_SERVICE_KEY() view returns (bytes32)",
     "function getPoolInfo() view returns (uint256 tokenBalance, uint256 nftCount, uint256 k, bool isInitialized)",
-    "function getAvailableTokenIds() view returns (uint256[] memory)",
+    "function getAvailableNFTs() view returns (uint256[] memory)",
     "event NFTBought(address indexed buyer, uint256 indexed boostBips, uint256 tokenId, uint256 price, uint256 taxPaid)",
     "event NFTSold(address indexed seller, uint256 indexed boostBips, uint256 tokenId, uint256 payout, uint256 taxPaid)"
 ];

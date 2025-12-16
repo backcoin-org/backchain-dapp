@@ -1,5 +1,5 @@
 // pages/StorePage.js
-// ✅ VERSION V6.3: Fetch pool address from Factory dynamically
+// ✅ VERSION V6.4: CRITICAL FIX - Use getAvailableNFTs() instead of getAvailableTokenIds()
 
 const ethers = window.ethers;
 
@@ -8,12 +8,25 @@ import { loadUserData, loadMyBoostersFromAPI, safeContractCall, getHighestBooste
 import { executeBuyBooster, executeSellBooster } from '../modules/transactions.js';
 import { formatBigNumber, renderLoading, renderNoData } from '../utils.js';
 import { showToast } from '../ui-feedback.js';
-import { boosterTiers, addresses, nftPoolABI, ipfsGateway } from '../config.js';
+import { boosterTiers, addresses, ipfsGateway } from '../config.js';
 
 // 🔥 V6.3: Factory ABI to get pool addresses dynamically
 const factoryABI = [
     "function getPoolAddress(uint256 boostBips) view returns (address)",
     "function isPool(address) view returns (bool)"
+];
+
+// 🔥 V6.3: Correct Pool ABI - function is getAvailableNFTs, NOT getAvailableTokenIds
+const poolABIFixed = [
+    "function getBuyPrice() view returns (uint256)",
+    "function getSellPrice() view returns (uint256)",
+    "function buyNFT(uint256 _tokenId, uint256 _boosterTokenId)",
+    "function buyNextAvailableNFT(uint256 _boosterTokenId)",
+    "function sellNFT(uint256 _tokenId, uint256 _boosterTokenId, uint256 _minBkcExpected)",
+    "function getPoolInfo() view returns (uint256 tokenBalance, uint256 nftCount, uint256 k, bool isInitialized)",
+    "function getAvailableNFTs() view returns (uint256[] memory)",  // ✅ CORRECT NAME
+    "event NFTBought(address indexed buyer, uint256 indexed boostBips, uint256 tokenId, uint256 price, uint256 taxPaid)",
+    "event NFTSold(address indexed seller, uint256 indexed boostBips, uint256 tokenId, uint256 payout, uint256 taxPaid)"
 ];
 
 // Cache for pool addresses (they don't change)
@@ -574,7 +587,7 @@ async function loadDataForSelectedPool() {
             poolAddressCache.set(boostBips, poolAddress);
         }
 
-        const poolContract = new ethers.Contract(poolAddress, nftPoolABI, State.publicProvider);
+        const poolContract = new ethers.Contract(poolAddress, poolABIFixed, State.publicProvider);
         const boosterContract = State.rewardBoosterContract || State.rewardBoosterContractPublic;
 
         // Load user data
@@ -649,13 +662,14 @@ async function loadDataForSelectedPool() {
             console.warn('getSellPrice failed:', e.message);
         }
 
-        // Try to get available tokens
+        // Try to get available tokens - 🔥 V6.3: Use correct function name!
         try {
-            const result = await poolContract.getAvailableTokenIds();
+            // Contract function is getAvailableNFTs(), NOT getAvailableTokenIds()
+            const result = await poolContract.getAvailableNFTs();
             availableTokenIds = Array.isArray(result) ? [...result] : [];
             console.log(`${tier.name} Available NFTs:`, availableTokenIds.length, availableTokenIds.map(id => id.toString()));
         } catch (e) {
-            console.warn(`getAvailableTokenIds failed for ${tier.name}:`, e.message);
+            console.warn(`getAvailableNFTs failed for ${tier.name}:`, e.message);
             availableTokenIds = [];
         }
 
