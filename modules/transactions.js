@@ -41,21 +41,6 @@ function safeFormatEther(value) {
     }
 }
 
-// 🔥 V7.9: Safe formatter to avoid overflow with MaxUint256
-function safeFormatEther(value) {
-    try {
-        const bigValue = BigInt(value);
-        const MAX_SAFE = BigInt("1000000000000000000000000000"); // 1 billion tokens
-        
-        if (bigValue > MAX_SAFE) {
-            return "∞ (unlimited)";
-        }
-        return ethers.formatEther(bigValue);
-    } catch (e) {
-        return "N/A";
-    }
-}
-
 // --- Custom Error Signatures (for decoding) ---
 const CUSTOM_ERRORS = {
     '0x7939f424': 'InvalidAmount',
