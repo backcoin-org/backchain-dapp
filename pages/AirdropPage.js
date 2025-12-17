@@ -1,5 +1,5 @@
 // pages/AirdropPage.js
-// ✅ VERSION V3.0: Social Posting Focus - Share & Earn redesign
+// ✅ VERSION V3.1: Fixed dual rankings - By Posts and By Points tabs
 
 import { State } from '../state.js';
 import * as db from '../modules/firebase-auth-service.js';
@@ -53,6 +53,7 @@ let airdropState = {
     userSubmissions: [],
     isBanned: false,
     activeTab: 'post',
+    activeRanking: 'posts',
     isGuideOpen: false 
 };
 
@@ -564,6 +565,48 @@ function renderHistoryTab() {
 // --- LEADERBOARD TAB ---
 function renderLeaderboard() {
     const postsList = airdropState.leaderboards?.top100ByPosts || []; 
+    const pointsList = airdropState.leaderboards?.top100ByPoints || [];
+    const activeRanking = airdropState.activeRanking || 'posts';
+    
+    // Helper to render a single ranking item
+    function renderRankingItem(item, i, type) {
+        const isMe = airdropState.user && item.walletAddress?.toLowerCase() === airdropState.user.walletAddress?.toLowerCase();
+        const tierInfo = getTierInfo(i + 1);
+        const bgClass = type === 'posts' ? 'bg-amber-500/10' : 'bg-green-500/10';
+        const textClass = type === 'posts' ? 'text-amber-400' : 'text-green-400';
+        const valueColor = type === 'posts' ? 'text-white' : 'text-green-400';
+        const valueLabel = type === 'posts' ? 'posts' : 'pts';
+        
+        return `
+            <div class="flex items-center justify-between p-3 ${isMe ? bgClass : 'hover:bg-zinc-800/50'} transition-colors">
+                <div class="flex items-center gap-3">
+                    <span class="w-8 h-8 rounded-full ${tierInfo.bg} flex items-center justify-center text-xs font-bold">${tierInfo.icon || (i+1)}</span>
+                    <span class="font-mono text-xs ${isMe ? textClass + ' font-bold' : 'text-zinc-400'}">
+                        ${formatAddress(item.walletAddress)}${isMe ? ' (You)' : ''}
+                    </span>
+                </div>
+                <span class="font-bold ${valueColor} text-sm">${(item.value || 0).toLocaleString()} <span class="text-zinc-500 text-xs">${valueLabel}</span></span>
+            </div>
+        `;
+    }
+    
+    const postsTabClass = activeRanking === 'posts' 
+        ? 'bg-gradient-to-r from-amber-500 to-orange-500 text-black shadow-lg shadow-amber-500/20' 
+        : 'bg-zinc-800 text-zinc-400 hover:text-white hover:bg-zinc-700';
+    const pointsTabClass = activeRanking === 'points' 
+        ? 'bg-gradient-to-r from-green-500 to-emerald-500 text-black shadow-lg shadow-green-500/20' 
+        : 'bg-zinc-800 text-zinc-400 hover:text-white hover:bg-zinc-700';
+    
+    const postsHidden = activeRanking === 'posts' ? '' : 'hidden';
+    const pointsHidden = activeRanking === 'points' ? '' : 'hidden';
+    
+    const postsContent = postsList.length === 0 
+        ? '<p class="p-6 text-center text-zinc-500 text-sm">No data yet - be the first!</p>'
+        : postsList.slice(0, 50).map((item, i) => renderRankingItem(item, i, 'posts')).join('');
+    
+    const pointsContent = pointsList.length === 0 
+        ? '<p class="p-6 text-center text-zinc-500 text-sm">No data yet - be the first!</p>'
+        : pointsList.slice(0, 50).map((item, i) => renderRankingItem(item, i, 'points')).join('');
     
     return `
         <div class="px-4 airdrop-fade-up">
@@ -614,38 +657,49 @@ function renderLeaderboard() {
                 </p>
             </div>
 
-            <!-- Top Creators Ranking -->
-            <div class="bg-zinc-900/80 border border-zinc-800 rounded-xl overflow-hidden">
-                <div class="p-4 border-b border-zinc-800 flex items-center justify-between">
-                    <h3 class="font-bold text-white text-sm flex items-center gap-2">
-                        <i class="fa-solid fa-crown text-yellow-500"></i> Top Content Creators
-                    </h3>
-                    <span class="text-zinc-500 text-xs">${postsList.length} creators</span>
+            <!-- Ranking Toggle Tabs -->
+            <div class="flex gap-2 mb-4">
+                <button data-ranking="posts" class="ranking-tab-btn flex-1 py-2.5 px-4 rounded-xl text-sm font-bold transition-all flex items-center justify-center gap-2 ${postsTabClass}">
+                    <i class="fa-solid fa-share-nodes"></i> By Posts
+                </button>
+                <button data-ranking="points" class="ranking-tab-btn flex-1 py-2.5 px-4 rounded-xl text-sm font-bold transition-all flex items-center justify-center gap-2 ${pointsTabClass}">
+                    <i class="fa-solid fa-star"></i> By Points
+                </button>
+            </div>
+
+            <!-- Posts Ranking -->
+            <div id="ranking-posts" class="${postsHidden}">
+                <div class="bg-zinc-900/80 border border-zinc-800 rounded-xl overflow-hidden">
+                    <div class="p-4 border-b border-zinc-800 flex items-center justify-between">
+                        <h3 class="font-bold text-white text-sm flex items-center gap-2">
+                            <i class="fa-solid fa-crown text-yellow-500"></i> Top Content Creators
+                        </h3>
+                        <span class="text-zinc-500 text-xs">${postsList.length} creators</span>
+                    </div>
+                    <div class="divide-y divide-zinc-800/50 max-h-[400px] overflow-y-auto">
+                        ${postsContent}
+                    </div>
                 </div>
-                <div class="divide-y divide-zinc-800/50 max-h-[400px] overflow-y-auto">
-                    ${postsList.length === 0 ? 
-                        '<p class="p-6 text-center text-zinc-500 text-sm">No data yet - be the first!</p>' : 
-                        postsList.slice(0, 20).map((item, i) => {
-                            const isMe = airdropState.user && item.walletAddress.toLowerCase() === airdropState.user.walletAddress.toLowerCase();
-                            const tierInfo = getTierInfo(i + 1);
-                            return `
-                                <div class="flex items-center justify-between p-3 ${isMe ? 'bg-amber-500/10' : 'hover:bg-zinc-800/50'} transition-colors">
-                                    <div class="flex items-center gap-3">
-                                        <span class="w-8 h-8 rounded-full ${tierInfo.bg} flex items-center justify-center text-xs font-bold">${tierInfo.icon || (i+1)}</span>
-                                        <span class="font-mono text-xs ${isMe ? 'text-amber-400 font-bold' : 'text-zinc-400'}">
-                                            ${formatAddress(item.walletAddress)}${isMe ? ' (You)' : ''}
-                                        </span>
-                                    </div>
-                                    <span class="font-bold text-white text-sm">${(item.value || 0).toLocaleString()} <span class="text-zinc-500 text-xs">posts</span></span>
-                                </div>
-                            `;
-                        }).join('')
-                    }
+            </div>
+
+            <!-- Points Ranking -->
+            <div id="ranking-points" class="${pointsHidden}">
+                <div class="bg-zinc-900/80 border border-zinc-800 rounded-xl overflow-hidden">
+                    <div class="p-4 border-b border-zinc-800 flex items-center justify-between">
+                        <h3 class="font-bold text-white text-sm flex items-center gap-2">
+                            <i class="fa-solid fa-star text-green-500"></i> Top Points Earners
+                        </h3>
+                        <span class="text-zinc-500 text-xs">${pointsList.length} earners</span>
+                    </div>
+                    <div class="divide-y divide-zinc-800/50 max-h-[400px] overflow-y-auto">
+                        ${pointsContent}
+                    </div>
                 </div>
             </div>
         </div>
     `;
 }
+
 
 function getTierInfo(rank) {
     if (rank <= 2) return { icon: '💎', bg: 'bg-cyan-500/20 text-cyan-300' };
@@ -732,6 +786,14 @@ function handleCopySmartLink() {
 function handleTabSwitch(e) {
     const btn = e.target.closest('.nav-pill-btn');
     if (btn) { airdropState.activeTab = btn.dataset.target; updateContent(); }
+}
+
+function handleRankingSwitch(e) {
+    const btn = e.target.closest('.ranking-tab-btn');
+    if (btn && btn.dataset.ranking) {
+        airdropState.activeRanking = btn.dataset.ranking;
+        updateContent();
+    }
 }
 
 function handleToggleGuide() {
@@ -963,6 +1025,7 @@ export const AirdropPage = {
             if(e.target.closest('.task-card')) handleTaskClick(e);
             if(e.target.closest('.action-btn')) handleSubmissionAction(e);
             if(e.target.closest('#copy-viral-btn')) handleCopySmartLink();
+            if(e.target.closest('.ranking-tab-btn')) handleRankingSwitch(e);
         });
     },
 
