@@ -1,5 +1,5 @@
 // js/modules/transactions.js
-// ✅ VERSÃO V7.9: Fixed gas, fresh signer instances, no MAX_UINT256 overflow
+// ✅ VERSÃO V7.10: Fixed overflow, large approval value, staticCall pre-check
 
 const ethers = window.ethers;
 
@@ -205,7 +205,13 @@ function formatErrorForUser(error, context = '') {
     // Handle RPC errors
     const errCode = error?.error?.code || error?.code;
     if (errCode === -32603) {
-        return 'Internal RPC error - try resetting MetaMask or check contract state';
+        // Try to extract more info from the error
+        const errData = error?.error?.data?.message || error?.data?.message || error?.message || '';
+        if (errData.includes('gas')) return 'Gas estimation failed - try increasing gas limit';
+        if (errData.includes('revert')) return 'Transaction would revert - check contract state';
+        if (errData.includes('allowance')) return 'Insufficient token allowance';
+        if (errData.includes('balance')) return 'Insufficient balance';
+        return 'RPC error - try again or check MetaMask connection';
     }
     if (errCode === -32000) {
         return 'RPC rejected - check gas and parameters';
@@ -423,9 +429,9 @@ async function ensureApproval(tokenContract, spenderAddress, amountOrTokenId, bt
                 return false;
             }
 
-            // Use MAX_UINT256 for infinite approval (standard DeFi pattern)
-            // This avoids repeated approval transactions
-            const MAX_UINT256 = ethers.MaxUint256;
+            // Use a large approval amount (but not MAX to avoid RPC issues)
+            // 10^30 is more than enough for any practical use
+            const LARGE_APPROVAL = ethers.parseEther("1000000000000"); // 1 trillion BKC
 
             if (allowance < requiredAmount) {
                 console.log(`💰 Current allowance: ${safeFormatEther(allowance)} BKC`);
@@ -439,9 +445,39 @@ async function ensureApproval(tokenContract, spenderAddress, amountOrTokenId, bt
                 const gasOpts = { gasLimit: FIXED_GAS.APPROVE };
                 console.log(`⛽ Using fixed gas for approve: ${FIXED_GAS.APPROVE.toString()}`);
                 
+                // 🔥 V7.10: Determine best approval amount
+                let approvalAmount = LARGE_APPROVAL;
+                
+                try {
+                    await approvedTokenContract.approve.staticCall(spenderAddress, LARGE_APPROVAL);
+                    console.log('✅ Approval staticCall passed with large amount');
+                } catch (staticErr) {
+                    console.warn('⚠️ Large approval staticCall failed, trying smaller amount...');
+                    // Try with exact amount * 10 as fallback
+                    const saferAmount = requiredAmount * 10n;
+                    try {
+                        await approvedTokenContract.approve.staticCall(spenderAddress, saferAmount);
+                        console.log('✅ Approval staticCall passed with safer amount');
+                        approvalAmount = saferAmount;
+                    } catch (retryErr) {
+                        // Last try with exact amount
+                        const exactAmount = requiredAmount * 2n;
+                        try {
+                            await approvedTokenContract.approve.staticCall(spenderAddress, exactAmount);
+                            console.log('✅ Approval staticCall passed with exact amount');
+                            approvalAmount = exactAmount;
+                        } catch (finalErr) {
+                            console.error('❌ All approval attempts failed:', finalErr);
+                            throw new Error(`Token approval blocked: ${finalErr.reason || finalErr.shortMessage || 'Check token contract'}`);
+                        }
+                    }
+                }
+                
+                console.log(`📝 Approving amount: ${safeFormatEther(approvalAmount)} BKC`);
+                
                 const approveTx = await approvedTokenContract.approve(
                     spenderAddress, 
-                    MAX_UINT256, 
+                    approvalAmount, 
                     gasOpts
                 );
                 
@@ -470,7 +506,7 @@ async function ensureApproval(tokenContract, spenderAddress, amountOrTokenId, bt
                 // Small delay to ensure blockchain state is updated
                 await new Promise(resolve => setTimeout(resolve, 1500));
             } else {
-                console.log(`✅ Already approved: ${ethers.formatEther(allowance)} BKC`);
+                console.log(`✅ Already approved: ${safeFormatEther(allowance)} BKC`);
             }
             
             return true;
@@ -1664,8 +1700,9 @@ export async function executeNotarizeDocument(documentURI, description, contentH
             
             if (currentAllowance < feeToPay) {
                 console.warn('⚠️ Allowance insufficient, requesting new approval...');
-                // 🔥 V7.9: Use fixed gas for approval
-                const approveTx = await tokenWithSigner.approve(notaryAddress, ethers.MaxUint256, { gasLimit: FIXED_GAS.APPROVE });
+                // 🔥 V7.9: Use large but safe approval value
+                const LARGE_APPROVAL = ethers.parseEther("1000000000000"); // 1 trillion BKC
+                const approveTx = await tokenWithSigner.approve(notaryAddress, LARGE_APPROVAL, { gasLimit: FIXED_GAS.APPROVE });
                 console.log('📝 Approval tx sent:', approveTx.hash);
                 await approveTx.wait();
                 console.log('✅ Approval confirmed');
