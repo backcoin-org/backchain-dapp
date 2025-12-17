@@ -1,5 +1,5 @@
 // js/modules/transactions.js
-// ✅ VERSÃO V7.8: Enhanced executeListNFT with detailed logs
+// ✅ VERSÃO V7.9: Fixed gas, fresh signer instances, no MAX_UINT256 overflow
 
 const ethers = window.ethers;
 
@@ -11,12 +11,50 @@ import { loadUserData, getHighestBoosterBoostFromAPI, loadRentalListings } from 
 
 // --- Constants ---
 const APPROVAL_BUFFER_PERCENT = 5n; // 5% extra buffer for approvals
-const MAX_GAS_LIMIT = 3000000n; // Safe max for Arbitrum
-const MIN_GAS_LIMIT = 100000n; // Minimum gas for simple txs
+const MAX_GAS_LIMIT = 5000000n; // Safe max for Arbitrum (increased)
+const MIN_GAS_LIMIT = 200000n; // Minimum gas for simple txs (increased)
+
+// 🔥 V7.9: Fixed gas limits for reliable transactions (bypass estimation issues)
+const FIXED_GAS = {
+    APPROVE: 150000n,
+    SIMPLE_TX: 300000n,
+    COMPLEX_TX: 600000n,
+    DELEGATION: 800000n,
+    NFT_TRANSFER: 400000n
+};
 
 // 🔥 V7.5: Global lock to prevent multiple simultaneous approvals
 let approvalInProgress = false;
 let transactionInProgress = false;
+
+// 🔥 V7.9: Safe formatter that handles MAX_UINT256 without overflow
+function safeFormatEther(value) {
+    try {
+        const bigValue = BigInt(value);
+        const MAX_SAFE = ethers.parseEther("1000000000"); // 1 billion
+        if (bigValue > MAX_SAFE) {
+            return "UNLIMITED";
+        }
+        return ethers.formatEther(bigValue);
+    } catch (e) {
+        return "N/A";
+    }
+}
+
+// 🔥 V7.9: Safe formatter to avoid overflow with MaxUint256
+function safeFormatEther(value) {
+    try {
+        const bigValue = BigInt(value);
+        const MAX_SAFE = BigInt("1000000000000000000000000000"); // 1 billion tokens
+        
+        if (bigValue > MAX_SAFE) {
+            return "∞ (unlimited)";
+        }
+        return ethers.formatEther(bigValue);
+    } catch (e) {
+        return "N/A";
+    }
+}
 
 // --- Custom Error Signatures (for decoding) ---
 const CUSTOM_ERRORS = {
@@ -53,8 +91,10 @@ async function estimateGasWithFallback(contract, method, args, defaultGas = 5000
     try {
         // First attempt: Normal estimation
         const estimated = await contract[method].estimateGas(...args);
-        // Add 30% margin for Arbitrum's L2 gas dynamics
-        const withMargin = (estimated * 130n) / 100n;
+        // Add 50% margin for Arbitrum's L2 gas dynamics (increased from 30%)
+        const withMargin = (estimated * 150n) / 100n;
+        
+        console.log(`⛽ Gas estimated for ${method}: ${estimated.toString()} + 50% = ${withMargin.toString()}`);
         
         // Clamp between min and max
         if (withMargin < MIN_GAS_LIMIT) return { gasLimit: MIN_GAS_LIMIT };
@@ -62,17 +102,13 @@ async function estimateGasWithFallback(contract, method, args, defaultGas = 5000
         
         return { gasLimit: withMargin };
     } catch (error) {
-        // Gas estimation failed - likely will revert
-        console.warn(`⚠️ Gas estimation failed for ${method}:`, error.message?.slice(0, 100));
+        // 🔥 V7.9: Don't throw on estimation failure - use generous fallback
+        console.warn(`⚠️ Gas estimation failed for ${method}, using fallback:`, defaultGas.toString());
+        console.warn(`   Reason:`, error.message?.slice(0, 100));
         
-        // Try to decode the error
-        const decodedError = decodeRevertReason(error);
-        if (decodedError && decodedError !== 'Unknown error') {
-            throw new Error(`Pre-flight check failed: ${decodedError}`);
-        }
-        
-        // Return safe fallback (but transaction may still fail)
-        return { gasLimit: defaultGas };
+        // Return generous fallback - let the transaction try anyway
+        // Many times estimation fails but tx succeeds with fixed gas
+        return { gasLimit: defaultGas > MIN_GAS_LIMIT ? defaultGas : FIXED_GAS.COMPLEX_TX };
     }
 }
 
@@ -201,18 +237,27 @@ function formatErrorForUser(error, context = '') {
 // ====================================================================
 
 async function getConnectedSigner() {
+    // 🔥 V7.9: More robust signer acquisition
     if (!State.isConnected) {
         showToast("Please connect your wallet first.", "error");
         return null;
     }
     
-    if (!State.web3Provider) {
+    // Try multiple sources for the provider
+    const web3Provider = State.web3Provider || window.ethereum;
+    
+    if (!web3Provider) {
         showToast("Wallet provider not found. Please refresh.", "error");
         return null;
     }
     
     try {
-        const provider = new ethers.BrowserProvider(State.web3Provider);
+        // 🔥 V7.9: Always create fresh provider and signer
+        const provider = new ethers.BrowserProvider(web3Provider);
+        
+        // Request accounts to ensure we have permission
+        await provider.send("eth_requestAccounts", []);
+        
         const signer = await provider.getSigner();
         
         // Verify signer is still connected
@@ -221,9 +266,33 @@ async function getConnectedSigner() {
             throw new Error("Signer address unavailable");
         }
         
+        // Verify address matches State (detect account change)
+        if (State.userAddress && address.toLowerCase() !== State.userAddress.toLowerCase()) {
+            console.warn("⚠️ Account changed! Updating State...");
+            State.userAddress = address;
+        }
+        
+        console.log("✅ Signer ready:", address);
         return signer;
+        
     } catch (e) {
         console.error("Signer acquisition failed:", e);
+        
+        // 🔥 V7.9: Try fallback with window.ethereum directly
+        if (window.ethereum && window.ethereum !== web3Provider) {
+            try {
+                console.log("🔄 Trying fallback with window.ethereum...");
+                const fallbackProvider = new ethers.BrowserProvider(window.ethereum);
+                await fallbackProvider.send("eth_requestAccounts", []);
+                const fallbackSigner = await fallbackProvider.getSigner();
+                const addr = await fallbackSigner.getAddress();
+                console.log("✅ Fallback signer ready:", addr);
+                return fallbackSigner;
+            } catch (fallbackErr) {
+                console.error("Fallback also failed:", fallbackErr);
+            }
+        }
+        
         showToast("Failed to connect to wallet. Please reconnect.", "error");
         return null;
     }
@@ -374,16 +443,16 @@ async function ensureApproval(tokenContract, spenderAddress, amountOrTokenId, bt
             const MAX_UINT256 = ethers.MaxUint256;
 
             if (allowance < requiredAmount) {
+                console.log(`💰 Current allowance: ${safeFormatEther(allowance)} BKC`);
+                console.log(`💰 Required amount: ${safeFormatEther(requiredAmount)} BKC`);
+                console.log(`🎯 Spender address: ${spenderAddress}`);
+                
                 showToast(`Approving BKC for ${purpose}...`, "info");
                 setButtonState("Approving tokens");
 
-                // Estimate gas for approval
-                const gasOpts = await estimateGasWithFallback(
-                    approvedTokenContract, 
-                    'approve', 
-                    [spenderAddress, MAX_UINT256],
-                    100000n
-                );
+                // 🔥 V7.9: Use fixed gas for approvals - more reliable
+                const gasOpts = { gasLimit: FIXED_GAS.APPROVE };
+                console.log(`⛽ Using fixed gas for approve: ${FIXED_GAS.APPROVE.toString()}`);
                 
                 const approveTx = await approvedTokenContract.approve(
                     spenderAddress, 
@@ -391,16 +460,32 @@ async function ensureApproval(tokenContract, spenderAddress, amountOrTokenId, bt
                     gasOpts
                 );
                 
+                console.log(`📝 Approval TX sent: ${approveTx.hash}`);
+                showToast('Approval sent, waiting for confirmation...', 'info');
+                
                 const receipt = await approveTx.wait();
                 
                 if (receipt.status === 0) {
                     throw new Error('Approval transaction reverted');
                 }
                 
+                console.log(`✅ Approval confirmed in block ${receipt.blockNumber}`);
                 showToast('Approval successful!', "success");
                 
+                // 🔥 V7.9: Verify approval actually worked (use safe formatter)
+                const newAllowance = await tokenContract.allowance(State.userAddress, spenderAddress);
+                console.log(`💰 New allowance: ${safeFormatEther(newAllowance)} BKC`);
+                
+                if (newAllowance < requiredAmount) {
+                    console.error("❌ Approval confirmed but allowance still insufficient!");
+                    showToast("Approval issue - please try again", "error");
+                    return false;
+                }
+                
                 // Small delay to ensure blockchain state is updated
-                await new Promise(resolve => setTimeout(resolve, 1000));
+                await new Promise(resolve => setTimeout(resolve, 1500));
+            } else {
+                console.log(`✅ Already approved: ${ethers.formatEther(allowance)} BKC`);
             }
             
             return true;
@@ -410,29 +495,30 @@ async function ensureApproval(tokenContract, spenderAddress, amountOrTokenId, bt
             const tokenId = BigInt(amountOrTokenId);
             setButtonState("Checking NFT approval");
             
+            console.log(`🎨 Checking NFT #${tokenId} approval for ${spenderAddress}`);
+            
             // Check current approval state
             let approvedAddr = ethers.ZeroAddress;
             try { 
                 approvedAddr = await tokenContract.getApproved(tokenId); 
+                console.log(`🎨 Current approved address: ${approvedAddr}`);
             } catch(e) {
-                // Token might not exist or other error
+                console.warn("getApproved failed:", e.message?.slice(0, 50));
             }
             
             const isApprovedAll = await tokenContract.isApprovedForAll(
                 State.userAddress, 
                 spenderAddress
             );
+            console.log(`🎨 isApprovedForAll: ${isApprovedAll}`);
             
             if (approvedAddr.toLowerCase() !== spenderAddress.toLowerCase() && !isApprovedAll) {
                 showToast(`Approving NFT #${tokenId} for ${purpose}...`, "info");
                 setButtonState("Approving NFT");
                 
-                const gasOpts = await estimateGasWithFallback(
-                    approvedTokenContract,
-                    'approve',
-                    [spenderAddress, tokenId],
-                    150000n
-                );
+                // 🔥 V7.9: Use fixed gas for NFT approvals
+                const gasOpts = { gasLimit: FIXED_GAS.NFT_TRANSFER };
+                console.log(`⛽ Using fixed gas for NFT approve: ${FIXED_GAS.NFT_TRANSFER.toString()}`);
 
                 const approveTx = await approvedTokenContract.approve(
                     spenderAddress, 
@@ -440,13 +526,20 @@ async function ensureApproval(tokenContract, spenderAddress, amountOrTokenId, bt
                     gasOpts
                 );
                 
+                console.log(`📝 NFT Approval TX sent: ${approveTx.hash}`);
                 const receipt = await approveTx.wait();
                 
                 if (receipt.status === 0) {
                     throw new Error('NFT approval reverted');
                 }
                 
+                console.log(`✅ NFT Approval confirmed in block ${receipt.blockNumber}`);
                 showToast("NFT Approval successful!", "success");
+                
+                // Small delay
+                await new Promise(resolve => setTimeout(resolve, 1500));
+            } else {
+                console.log(`✅ NFT #${tokenId} already approved`);
             }
             
             return true;
@@ -527,12 +620,16 @@ export async function executeListNFT(tokenId, pricePerHourWei, btnElement) {
 
         if (btnElement) btnElement.innerHTML = '<div class="loader inline-block"></div> Listing...';
         
+        // 🔥 V7.9: Create fresh contract instance with signer
         const rentalContract = new ethers.Contract(addresses.rentalManager, rentalManagerABI, signer);
         const args = [tokenIdBigInt, priceBigInt];
         
         console.log("📤 Calling listNFTSimple with args:", args.map(a => a.toString()));
         
-        const gasOpts = await estimateGasWithFallback(rentalContract, 'listNFTSimple', args, 300000n);
+        // 🔥 V7.9: Use fixed gas - more reliable than estimation
+        const gasOpts = { gasLimit: FIXED_GAS.NFT_TRANSFER };
+        console.log(`⛽ Using fixed gas: ${FIXED_GAS.NFT_TRANSFER.toString()}`);
+        
         const listTxPromise = rentalContract.listNFTSimple(...args, gasOpts);
         
         const result = await executeTransaction(
@@ -605,8 +702,13 @@ export async function executeWithdrawNFT(tokenId, btnElement) {
 
 // 🔥 V7.6: Simplified rental for 1-hour fixed rentals (matches contract rentNFTSimple)
 export async function executeRentNFT(tokenId, totalCost, btnElement) {
+    console.log("🎮 executeRentNFT called:", { tokenId, totalCost: totalCost.toString() });
+    
     const signer = await getConnectedSigner();
-    if (!signer || !addresses.rentalManager) return false;
+    if (!signer || !addresses.rentalManager) {
+        console.error("❌ No signer or rental manager address");
+        return false;
+    }
     
     const tokenIdBigInt = BigInt(tokenId);
     const costBigInt = BigInt(totalCost);
@@ -625,10 +727,13 @@ export async function executeRentNFT(tokenId, totalCost, btnElement) {
     }
 
     try {
+        // Add buffer for potential fees
+        const costWithBuffer = (costBigInt * 120n) / 100n;
+        
         const approved = await ensureApproval(
             State.bkcTokenContract, 
             addresses.rentalManager, 
-            costBigInt, 
+            costWithBuffer, 
             btnElement, 
             "NFT Rental"
         );
@@ -636,11 +741,14 @@ export async function executeRentNFT(tokenId, totalCost, btnElement) {
 
         if (btnElement) btnElement.innerHTML = '<div class="loader inline-block"></div> Renting...';
 
+        // 🔥 V7.9: Create fresh contract instance
         const rentalContract = new ethers.Contract(addresses.rentalManager, rentalManagerABI, signer);
         
-        // 🔥 V7.6: Use rentNFTSimple for 1-hour fixed rentals
+        // 🔥 V7.9: Use fixed gas
         const args = [tokenIdBigInt];
-        const gasOpts = await estimateGasWithFallback(rentalContract, 'rentNFTSimple', args, 400000n);
+        const gasOpts = { gasLimit: FIXED_GAS.NFT_TRANSFER };
+        console.log(`⛽ Using fixed gas: ${FIXED_GAS.NFT_TRANSFER.toString()}`);
+        
         const rentTxPromise = rentalContract.rentNFTSimple(...args, gasOpts);
 
         return await executeTransaction(
@@ -738,8 +846,13 @@ export async function executeRentNFTHours(tokenId, hoursToRent, totalCost, btnEl
 // ====================================================================
 
 export async function executeDelegation(totalAmount, durationSeconds, boosterIdToSend, btnElement) {
+    console.log("🔐 executeDelegation called:", { totalAmount: totalAmount.toString(), durationSeconds, boosterIdToSend });
+    
     const signer = await getConnectedSigner();
-    if (!signer || !addresses.delegationManager) return false;
+    if (!signer || !addresses.delegationManager) {
+        console.error("❌ No signer or delegation manager address");
+        return false;
+    }
     
     const totalAmountBigInt = BigInt(totalAmount);
     const durationBigInt = BigInt(durationSeconds);
@@ -762,6 +875,7 @@ export async function executeDelegation(totalAmount, durationSeconds, boosterIdT
     // Check balance
     try {
         const balance = await State.bkcTokenContract.balanceOf(State.userAddress);
+        console.log(`💰 User balance: ${ethers.formatEther(balance)} BKC`);
         if (balance < totalAmountBigInt) {
             const needed = formatBigNumber(totalAmountBigInt);
             showToast(`Insufficient balance. Need ${needed.toFixed(2)} BKC.`, "error");
@@ -780,10 +894,20 @@ export async function executeDelegation(totalAmount, durationSeconds, boosterIdT
     );
     if (!approved) return false;
     
-    const delegationContract = State.delegationManagerContract.connect(signer);
+    // 🔥 V7.9: Create fresh contract instance with signer
+    const delegationContract = new ethers.Contract(
+        addresses.delegationManager,
+        State.delegationManagerContract.interface,
+        signer
+    );
+    
     const args = [totalAmountBigInt, durationBigInt, boosterIdBigInt];
+    console.log("📤 Calling delegate with args:", args.map(a => a.toString()));
 
-    const gasOpts = await estimateGasWithFallback(delegationContract, 'delegate', args, 500000n);
+    // 🔥 V7.9: Use fixed gas for delegation - it's a complex operation
+    const gasOpts = { gasLimit: FIXED_GAS.DELEGATION };
+    console.log(`⛽ Using fixed gas for delegation: ${FIXED_GAS.DELEGATION.toString()}`);
+    
     const delegateTxPromise = delegationContract.delegate(...args, gasOpts);
     
     const success = await executeTransaction(
@@ -798,17 +922,31 @@ export async function executeDelegation(totalAmount, durationSeconds, boosterIdT
 }
 
 export async function executeUnstake(index, boosterIdToSend) {
+    console.log("🔓 executeUnstake called:", { index, boosterIdToSend });
+    
     const signer = await getConnectedSigner();
-    if (!signer || !addresses.delegationManager) return false;
+    if (!signer || !addresses.delegationManager) {
+        console.error("❌ No signer or delegation manager address");
+        return false;
+    }
 
     const indexBigInt = BigInt(index);
     const boosterIdBigInt = BigInt(boosterIdToSend);
     
     const btnElement = document.querySelector(`.unstake-btn[data-index='${index}']`);
-    const delegationContract = State.delegationManagerContract.connect(signer);
+    
+    // 🔥 V7.9: Create fresh contract instance with signer
+    const delegationContract = new ethers.Contract(
+        addresses.delegationManager,
+        State.delegationManagerContract.interface,
+        signer
+    );
+    
     const args = [indexBigInt, boosterIdBigInt];
+    console.log("📤 Calling unstake with args:", args.map(a => a.toString()));
 
-    const gasOpts = await estimateGasWithFallback(delegationContract, 'unstake', args, 400000n);
+    // 🔥 V7.9: Use fixed gas
+    const gasOpts = { gasLimit: FIXED_GAS.COMPLEX_TX };
     const unstakeTxPromise = delegationContract.unstake(...args, gasOpts);
     
     return await executeTransaction(
@@ -820,8 +958,13 @@ export async function executeUnstake(index, boosterIdToSend) {
 }
 
 export async function executeForceUnstake(index, boosterIdToSend) {
+    console.log("⚠️ executeForceUnstake called:", { index, boosterIdToSend });
+    
     const signer = await getConnectedSigner();
-    if (!signer || !addresses.delegationManager) return false;
+    if (!signer || !addresses.delegationManager) {
+        console.error("❌ No signer or delegation manager address");
+        return false;
+    }
 
     const indexBigInt = BigInt(index);
     const boosterIdBigInt = BigInt(boosterIdToSend);
@@ -831,10 +974,19 @@ export async function executeForceUnstake(index, boosterIdToSend) {
     }
     
     const btnElement = document.querySelector(`.force-unstake-btn[data-index='${index}']`);
-    const delegationContract = State.delegationManagerContract.connect(signer);
+    
+    // 🔥 V7.9: Create fresh contract instance with signer
+    const delegationContract = new ethers.Contract(
+        addresses.delegationManager,
+        State.delegationManagerContract.interface,
+        signer
+    );
+    
     const args = [indexBigInt, boosterIdBigInt];
+    console.log("📤 Calling forceUnstake with args:", args.map(a => a.toString()));
 
-    const gasOpts = await estimateGasWithFallback(delegationContract, 'forceUnstake', args, 400000n);
+    // 🔥 V7.9: Use fixed gas
+    const gasOpts = { gasLimit: FIXED_GAS.COMPLEX_TX };
     const forceUnstakeTxPromise = delegationContract.forceUnstake(...args, gasOpts);
     
     return await executeTransaction(
@@ -846,8 +998,13 @@ export async function executeForceUnstake(index, boosterIdToSend) {
 }
 
 export async function executeUniversalClaim(stakingRewards, minerRewards, boosterIdToSend, btnElement) {
+    console.log("💰 executeUniversalClaim called:", { stakingRewards: stakingRewards.toString(), boosterIdToSend });
+    
     const signer = await getConnectedSigner();
-    if (!signer || !addresses.delegationManager) return false;
+    if (!signer || !addresses.delegationManager) {
+        console.error("❌ No signer or delegation manager address");
+        return false;
+    }
     
     const stakingRewardsBigInt = BigInt(stakingRewards);
     const minerRewardsBigInt = BigInt(minerRewards);
@@ -867,20 +1024,23 @@ export async function executeUniversalClaim(stakingRewards, minerRewards, booste
     try {
         if (stakingRewardsBigInt > 0n) {
             showToast("Claiming staking rewards...", "info");
-            const delegationContract = State.delegationManagerContract.connect(signer);
+            
+            // 🔥 V7.9: Create fresh contract instance with signer
+            const delegationContract = new ethers.Contract(
+                addresses.delegationManager,
+                State.delegationManagerContract.interface,
+                signer
+            );
+            
             const args = [boosterIdBigInt];
+            console.log("📤 Calling claimReward with boosterId:", boosterIdBigInt.toString());
 
-            // 🔥 V7.4: Skip gas estimation if no booster (avoids revert)
-            let gasOpts;
-            if (boosterIdBigInt === 0n) {
-                // Use fixed gas - estimation may fail but tx can work
-                gasOpts = { gasLimit: 300000n };
-                console.log('Claim: Using fixed gas (no booster)');
-            } else {
-                gasOpts = await estimateGasWithFallback(delegationContract, 'claimReward', args, 300000n);
-            }
+            // 🔥 V7.9: Always use fixed gas - more reliable
+            const gasOpts = { gasLimit: FIXED_GAS.SIMPLE_TX };
+            console.log(`⛽ Using fixed gas: ${FIXED_GAS.SIMPLE_TX.toString()}`);
             
             const tx = await delegationContract.claimReward(...args, gasOpts);
+            console.log(`📝 Claim TX sent: ${tx.hash}`);
             
             await tx.wait();
             showToast('Rewards claimed successfully!', "success");
@@ -914,6 +1074,8 @@ let buyTransactionInProgress = false;
 let sellTransactionInProgress = false;
 
 export async function executeBuyBooster(poolAddress, price, boosterTokenIdForDiscount, btnElement) {
+    console.log("🛒 executeBuyBooster called:", { poolAddress, price: price.toString() });
+    
     // 🔥 V7.5: Prevent duplicate transactions
     if (buyTransactionInProgress) {
         console.log('Buy transaction already in progress');
@@ -959,8 +1121,10 @@ export async function executeBuyBooster(poolAddress, price, boosterTokenIdForDis
     }
     
     try {
-        // Calculate total with tax buffer (assume ~10% tax)
-        const totalWithBuffer = (priceBigInt * 115n) / 100n;
+        // Calculate total with tax buffer (assume ~15% tax)
+        const totalWithBuffer = (priceBigInt * 120n) / 100n;
+        console.log(`💰 Price: ${safeFormatEther(priceBigInt)} BKC`);
+        console.log(`💰 With buffer: ${safeFormatEther(totalWithBuffer)} BKC`);
         
         const approved = await ensureApproval(
             State.bkcTokenContract, 
@@ -976,11 +1140,13 @@ export async function executeBuyBooster(poolAddress, price, boosterTokenIdForDis
 
         if (btnElement) btnElement.innerHTML = '<div class="loader inline-block"></div> Buying...';
 
-        // 🔥 V7.4: Contract uses buyNFT() with NO arguments
+        // 🔥 V7.9: Create fresh contract instance with signer
         const poolContract = new ethers.Contract(poolAddress, nftPoolABI, signer);
         
-        // No arguments needed - contract automatically picks last NFT in array
-        const gasOpts = await estimateGasWithFallback(poolContract, 'buyNFT', [], 500000n);
+        // 🔥 V7.9: Use fixed gas - don't rely on estimation
+        const gasOpts = { gasLimit: FIXED_GAS.COMPLEX_TX };
+        console.log(`⛽ Using fixed gas for buyNFT: ${FIXED_GAS.COMPLEX_TX.toString()}`);
+        
         const buyTxPromise = poolContract.buyNFT(gasOpts);
         
         return await executeTransaction(
@@ -1010,6 +1176,8 @@ export async function executeBuyBooster(poolAddress, price, boosterTokenIdForDis
 }
 
 export async function executeSellBooster(poolAddress, tokenIdToSell, boosterTokenIdForDiscount, btnElement) {
+    console.log("💸 executeSellBooster called:", { poolAddress, tokenIdToSell });
+    
     // 🔥 V7.5: Prevent duplicate transactions
     if (sellTransactionInProgress) {
         console.log('Sell transaction already in progress');
@@ -1035,6 +1203,7 @@ export async function executeSellBooster(poolAddress, tokenIdToSell, boosterToke
     // Verify ownership
     try {
         const owner = await State.rewardBoosterContract.ownerOf(tokenIdBigInt);
+        console.log(`👤 NFT #${tokenIdToSell} owner: ${owner}`);
         if (owner.toLowerCase() !== State.userAddress.toLowerCase()) {
             showToast("You don't own this NFT.", "error");
             sellTransactionInProgress = false;
@@ -1063,13 +1232,19 @@ export async function executeSellBooster(poolAddress, tokenIdToSell, boosterToke
 
         if (btnElement) btnElement.innerHTML = '<div class="loader inline-block"></div> Selling...';
 
-        // 🔥 V7.4: Contract uses sellNFT(tokenId, minPayout) - only 2 arguments
-        const minPayout = 0n; // Accept any price (slippage protection disabled)
-        
+        // 🔥 V7.9: Create fresh contract instance with signer
         const poolContract = new ethers.Contract(poolAddress, nftPoolABI, signer);
+        
+        // Contract uses sellNFT(tokenId, minPayout) - only 2 arguments
+        const minPayout = 0n; // Accept any price (slippage protection disabled)
         const args = [tokenIdBigInt, minPayout];
+        
+        console.log("📤 Calling sellNFT with args:", args.map(a => a.toString()));
 
-        const gasOpts = await estimateGasWithFallback(poolContract, 'sellNFT', args, 500000n);
+        // 🔥 V7.9: Use fixed gas
+        const gasOpts = { gasLimit: FIXED_GAS.COMPLEX_TX };
+        console.log(`⛽ Using fixed gas: ${FIXED_GAS.COMPLEX_TX.toString()}`);
+        
         const sellTxPromise = poolContract.sellNFT(...args, gasOpts);
 
         return await executeTransaction(
@@ -1498,23 +1673,29 @@ export async function executeNotarizeDocument(documentURI, description, contentH
         try {
             const tokenWithSigner = State.bkcTokenContract.connect(signer);
             const currentAllowance = await tokenWithSigner.allowance(State.userAddress, notaryAddress);
-            console.log('💰 Current allowance:', ethers.formatEther(currentAllowance), 'BKC');
-            console.log('💰 Fee to pay:', ethers.formatEther(feeToPay), 'BKC');
+            // 🔥 V7.9: Use safe formatter to avoid overflow
+            console.log('💰 Current allowance:', safeFormatEther(currentAllowance), 'BKC');
+            console.log('💰 Fee to pay:', safeFormatEther(feeToPay), 'BKC');
             
             if (currentAllowance < feeToPay) {
                 console.warn('⚠️ Allowance insufficient, requesting new approval...');
-                const approveTx = await tokenWithSigner.approve(notaryAddress, feeToPay * 2n);
+                // 🔥 V7.9: Use fixed gas for approval
+                const approveTx = await tokenWithSigner.approve(notaryAddress, ethers.MaxUint256, { gasLimit: FIXED_GAS.APPROVE });
                 console.log('📝 Approval tx sent:', approveTx.hash);
                 await approveTx.wait();
                 console.log('✅ Approval confirmed');
+                // Wait for state update
+                await new Promise(r => setTimeout(r, 2000));
             }
         } catch (allowErr) {
             console.error('Allowance check/fix failed:', allowErr);
+            // Continue anyway - the main approval should have worked
         }
     }
     
-    // 6. Execute with gas estimation
-    const gasOpts = await estimateGasWithFallback(notaryContract, 'notarize', args, 500000n);
+    // 6. Execute with FIXED gas (not estimation - more reliable)
+    // 🔥 V7.9: Use fixed gas to avoid RPC errors
+    const gasOpts = { gasLimit: FIXED_GAS.COMPLEX_TX };
     console.log('⛽ Gas options:', gasOpts);
     
     const notarizeTxPromise = notaryContract.notarize(...args, gasOpts);
@@ -1625,18 +1806,20 @@ export async function executeFortuneParticipate(wagerAmount, guesses, isCumulati
         // 3. Execute participation
         if (btnElement) btnElement.innerHTML = '<div class="loader inline-block"></div> Submitting...';
         
-        const fortuneContract = State.actionsManagerContract.connect(signer);
-        const args = [wagerBigInt, guessesArray, isCumulative];
+        // 🔥 V7.9: Create fresh contract instance with signer
+        const fortuneContract = new ethers.Contract(
+            await State.actionsManagerContract.getAddress(),
+            State.actionsManagerContract.interface,
+            signer
+        );
         
-        // Estimate gas with value
-        let gasOpts;
-        try {
-            const estimated = await fortuneContract.participate.estimateGas(...args, { value: oracleFee });
-            gasOpts = { gasLimit: (estimated * 130n) / 100n };
-        } catch (e) {
-            console.warn("Gas estimation for Fortune failed:", e.message?.slice(0, 80));
-            gasOpts = { gasLimit: 500000n };
-        }
+        const args = [wagerBigInt, guessesArray, isCumulative];
+        console.log("📤 Calling participate with args:", args.map(a => a.toString()));
+        console.log("💎 Oracle fee:", ethers.formatEther(oracleFee), "ETH");
+        
+        // 🔥 V7.9: Use fixed gas - estimation often fails with value
+        const gasOpts = { gasLimit: FIXED_GAS.COMPLEX_TX };
+        console.log(`⛽ Using fixed gas: ${FIXED_GAS.COMPLEX_TX.toString()}`);
         
         const tx = await fortuneContract.participate(...args, { 
             value: oracleFee,
