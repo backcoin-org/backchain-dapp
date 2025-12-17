@@ -1,5 +1,5 @@
 // js/modules/transactions.js
-// ✅ VERSÃO V7.11: Smaller approval amounts, retry logic for RPC errors
+// ✅ VERSÃO V7.12: NO gasLimit - let MetaMask estimate everything
 
 const ethers = window.ethers;
 
@@ -12,16 +12,41 @@ import { loadUserData, getHighestBoosterBoostFromAPI, loadRentalListings } from 
 // --- Constants ---
 const APPROVAL_BUFFER_PERCENT = 5n; // 5% extra buffer for approvals
 const MAX_GAS_LIMIT = 5000000n; // Safe max for Arbitrum (increased)
-const MIN_GAS_LIMIT = 200000n; // Minimum gas for simple txs (increased)
+const MIN_GAS_LIMIT = 100000n; // Minimum gas for simple txs
 
-// 🔥 V7.9: Fixed gas limits for reliable transactions (bypass estimation issues)
-const FIXED_GAS = {
-    APPROVE: 150000n,
-    SIMPLE_TX: 300000n,
-    COMPLEX_TX: 600000n,
-    DELEGATION: 800000n,
-    NFT_TRANSFER: 400000n
+// 🔥 V7.12: Only use fixed gas as FALLBACK when estimation fails
+// Let MetaMask/RPC estimate gas by default - more reliable
+const FALLBACK_GAS = {
+    APPROVE: 100000n,
+    SIMPLE_TX: 200000n,
+    COMPLEX_TX: 400000n,
+    DELEGATION: 500000n,
+    NFT_TRANSFER: 250000n
 };
+
+// 🔥 V7.12: Helper to get gas options - prefer estimation, fallback to fixed
+async function getGasOptions(contract, methodName, args, fallbackType = 'COMPLEX_TX') {
+    try {
+        // Try to estimate gas
+        const method = contract[methodName];
+        if (method && method.estimateGas) {
+            const estimated = await method.estimateGas(...args);
+            const withBuffer = (estimated * 150n) / 100n; // 50% buffer
+            console.log(`⛽ Estimated gas for ${methodName}: ${estimated.toString()} (with buffer: ${withBuffer.toString()})`);
+            return { gasLimit: withBuffer };
+        }
+    } catch (e) {
+        console.warn(`⚠️ Gas estimation failed for ${methodName}:`, e.message?.slice(0, 80));
+    }
+    
+    // Fallback to fixed gas
+    const fallback = FALLBACK_GAS[fallbackType] || FALLBACK_GAS.COMPLEX_TX;
+    console.log(`⛽ Using fallback gas for ${methodName}: ${fallback.toString()}`);
+    return { gasLimit: fallback };
+}
+
+// 🔥 V7.12: Alias for backwards compatibility
+const FIXED_GAS = FALLBACK_GAS;
 
 // 🔥 V7.5: Global lock to prevent multiple simultaneous approvals
 let approvalInProgress = false;
@@ -692,11 +717,10 @@ export async function executeListNFT(tokenId, pricePerHourWei, btnElement) {
         
         console.log("📤 Calling listNFTSimple with args:", args.map(a => a.toString()));
         
-        // 🔥 V7.9: Use fixed gas - more reliable than estimation
-        const gasOpts = { gasLimit: FIXED_GAS.NFT_TRANSFER };
-        console.log(`⛽ Using fixed gas: ${FIXED_GAS.NFT_TRANSFER.toString()}`);
+        // 🔥 V7.12: Let MetaMask estimate gas
+        console.log(`⛽ Letting MetaMask estimate gas for listNFTSimple`);
         
-        const listTxPromise = rentalContract.listNFTSimple(...args, gasOpts);
+        const listTxPromise = rentalContract.listNFTSimple(...args);
         
         const result = await executeTransaction(
             listTxPromise, 
@@ -810,12 +834,11 @@ export async function executeRentNFT(tokenId, totalCost, btnElement) {
         // 🔥 V7.9: Create fresh contract instance
         const rentalContract = new ethers.Contract(addresses.rentalManager, rentalManagerABI, signer);
         
-        // 🔥 V7.9: Use fixed gas
+        // 🔥 V7.12: Let MetaMask estimate gas
         const args = [tokenIdBigInt];
-        const gasOpts = { gasLimit: FIXED_GAS.NFT_TRANSFER };
-        console.log(`⛽ Using fixed gas: ${FIXED_GAS.NFT_TRANSFER.toString()}`);
+        console.log(`⛽ Letting MetaMask estimate gas for rentNFTSimple`);
         
-        const rentTxPromise = rentalContract.rentNFTSimple(...args, gasOpts);
+        const rentTxPromise = rentalContract.rentNFTSimple(...args);
 
         return await executeTransaction(
             rentTxPromise, 
@@ -970,11 +993,10 @@ export async function executeDelegation(totalAmount, durationSeconds, boosterIdT
     const args = [totalAmountBigInt, durationBigInt, boosterIdBigInt];
     console.log("📤 Calling delegate with args:", args.map(a => a.toString()));
 
-    // 🔥 V7.9: Use fixed gas for delegation - it's a complex operation
-    const gasOpts = { gasLimit: FIXED_GAS.DELEGATION };
-    console.log(`⛽ Using fixed gas for delegation: ${FIXED_GAS.DELEGATION.toString()}`);
+    // 🔥 V7.12: Let MetaMask estimate gas - don't pass gasLimit
+    console.log(`⛽ Letting MetaMask estimate gas for delegation`);
     
-    const delegateTxPromise = delegationContract.delegate(...args, gasOpts);
+    const delegateTxPromise = delegationContract.delegate(...args);
     
     const success = await executeTransaction(
         delegateTxPromise, 
@@ -1011,9 +1033,9 @@ export async function executeUnstake(index, boosterIdToSend) {
     const args = [indexBigInt, boosterIdBigInt];
     console.log("📤 Calling unstake with args:", args.map(a => a.toString()));
 
-    // 🔥 V7.9: Use fixed gas
-    const gasOpts = { gasLimit: FIXED_GAS.COMPLEX_TX };
-    const unstakeTxPromise = delegationContract.unstake(...args, gasOpts);
+    // 🔥 V7.12: Let MetaMask estimate gas
+    console.log(`⛽ Letting MetaMask estimate gas for unstake`);
+    const unstakeTxPromise = delegationContract.unstake(...args);
     
     return await executeTransaction(
         unstakeTxPromise, 
@@ -1051,9 +1073,9 @@ export async function executeForceUnstake(index, boosterIdToSend) {
     const args = [indexBigInt, boosterIdBigInt];
     console.log("📤 Calling forceUnstake with args:", args.map(a => a.toString()));
 
-    // 🔥 V7.9: Use fixed gas
-    const gasOpts = { gasLimit: FIXED_GAS.COMPLEX_TX };
-    const forceUnstakeTxPromise = delegationContract.forceUnstake(...args, gasOpts);
+    // 🔥 V7.12: Let MetaMask estimate gas
+    console.log(`⛽ Letting MetaMask estimate gas for forceUnstake`);
+    const forceUnstakeTxPromise = delegationContract.forceUnstake(...args);
     
     return await executeTransaction(
         forceUnstakeTxPromise, 
@@ -1101,11 +1123,10 @@ export async function executeUniversalClaim(stakingRewards, minerRewards, booste
             const args = [boosterIdBigInt];
             console.log("📤 Calling claimReward with boosterId:", boosterIdBigInt.toString());
 
-            // 🔥 V7.9: Always use fixed gas - more reliable
-            const gasOpts = { gasLimit: FIXED_GAS.SIMPLE_TX };
-            console.log(`⛽ Using fixed gas: ${FIXED_GAS.SIMPLE_TX.toString()}`);
+            // 🔥 V7.12: Let MetaMask estimate gas
+            console.log(`⛽ Letting MetaMask estimate gas for claimReward`);
             
-            const tx = await delegationContract.claimReward(...args, gasOpts);
+            const tx = await delegationContract.claimReward(...args);
             console.log(`📝 Claim TX sent: ${tx.hash}`);
             
             await tx.wait();
@@ -1209,11 +1230,10 @@ export async function executeBuyBooster(poolAddress, price, boosterTokenIdForDis
         // 🔥 V7.9: Create fresh contract instance with signer
         const poolContract = new ethers.Contract(poolAddress, nftPoolABI, signer);
         
-        // 🔥 V7.9: Use fixed gas - don't rely on estimation
-        const gasOpts = { gasLimit: FIXED_GAS.COMPLEX_TX };
-        console.log(`⛽ Using fixed gas for buyNFT: ${FIXED_GAS.COMPLEX_TX.toString()}`);
+        // 🔥 V7.12: Let MetaMask estimate gas
+        console.log(`⛽ Letting MetaMask estimate gas for buyNFT`);
         
-        const buyTxPromise = poolContract.buyNFT(gasOpts);
+        const buyTxPromise = poolContract.buyNFT();
         
         return await executeTransaction(
             buyTxPromise, 
@@ -1307,11 +1327,10 @@ export async function executeSellBooster(poolAddress, tokenIdToSell, boosterToke
         
         console.log("📤 Calling sellNFT with args:", args.map(a => a.toString()));
 
-        // 🔥 V7.9: Use fixed gas
-        const gasOpts = { gasLimit: FIXED_GAS.COMPLEX_TX };
-        console.log(`⛽ Using fixed gas: ${FIXED_GAS.COMPLEX_TX.toString()}`);
+        // 🔥 V7.12: Let MetaMask estimate gas
+        console.log(`⛽ Letting MetaMask estimate gas for sellNFT`);
         
-        const sellTxPromise = poolContract.sellNFT(...args, gasOpts);
+        const sellTxPromise = poolContract.sellNFT(...args);
 
         return await executeTransaction(
             sellTxPromise, 
@@ -1760,12 +1779,11 @@ export async function executeNotarizeDocument(documentURI, description, contentH
         }
     }
     
-    // 6. Execute with FIXED gas (not estimation - more reliable)
-    // 🔥 V7.9: Use fixed gas to avoid RPC errors
-    const gasOpts = { gasLimit: FIXED_GAS.COMPLEX_TX };
-    console.log('⛽ Gas options:', gasOpts);
+    // 6. Execute - let MetaMask estimate gas
+    // 🔥 V7.12: Don't pass gasLimit - let wallet estimate
+    console.log('⛽ Letting MetaMask estimate gas for notarize');
     
-    const notarizeTxPromise = notaryContract.notarize(...args, gasOpts);
+    const notarizeTxPromise = notaryContract.notarize(...args);
 
     return await executeTransaction(
         notarizeTxPromise, 
@@ -1884,13 +1902,11 @@ export async function executeFortuneParticipate(wagerAmount, guesses, isCumulati
         console.log("📤 Calling participate with args:", args.map(a => a.toString()));
         console.log("💎 Oracle fee:", ethers.formatEther(oracleFee), "ETH");
         
-        // 🔥 V7.9: Use fixed gas - estimation often fails with value
-        const gasOpts = { gasLimit: FIXED_GAS.COMPLEX_TX };
-        console.log(`⛽ Using fixed gas: ${FIXED_GAS.COMPLEX_TX.toString()}`);
+        // 🔥 V7.12: Let MetaMask estimate gas - only pass value
+        console.log(`⛽ Letting MetaMask estimate gas for participate`);
         
         const tx = await fortuneContract.participate(...args, { 
-            value: oracleFee,
-            ...gasOpts 
+            value: oracleFee
         });
 
         if (btnElement) btnElement.innerHTML = '<div class="loader inline-block"></div> Confirming...';
