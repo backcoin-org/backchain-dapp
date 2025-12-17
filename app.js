@@ -14,7 +14,7 @@ import { initPublicProvider, initWalletSubscriptions, disconnectWallet, openConn
 import { showToast, showShareModal, showWelcomeModal } from './ui-feedback.js';
 import { formatBigNumber } from './utils.js'; 
 import { loadAddresses } from './config.js'; 
-import { executeInternalFaucet } from './modules/transactions.js'; 
+import { executeFaucetClaim } from './modules/transactions.js'; 
 
 // Page Imports (Mantidos)
 import { DashboardPage } from './pages/DashboardPage.js';
@@ -303,7 +303,7 @@ function setupGlobalListeners() {
                 
                 if (pageId === 'faucet') {
                     showToast("Accessing Testnet Faucet...", "info");
-                    const success = await executeInternalFaucet(null);
+                    const success = await executeFaucetClaim('BKC', null);
                     if (success) updateUIState(true);
                     return; 
                 }

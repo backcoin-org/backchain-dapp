@@ -276,7 +276,7 @@ export function showWelcomeModal() {
                     <i class="fa-solid fa-rocket text-2xl animate-pulse"></i> 
                     <div class="flex flex-col items-start leading-none z-10">
                         <span class="text-[10px] font-bold opacity-80 uppercase tracking-wider mb-0.5">Arbitrum One Event</span>
-                        <span class="text-lg">GO TO PRESALE (SOON)</span>
+                        <span class="text-lg">GO TO PRESALE</span>
                     </div>
                     <i class="fa-solid fa-chevron-right ml-auto text-white/50 text-base group-hover:translate-x-1 transition-transform"></i>
                 </button>
