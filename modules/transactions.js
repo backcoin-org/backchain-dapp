@@ -1,5 +1,5 @@
 // js/modules/transactions.js
-// ✅ VERSÃO V7.10: Fixed overflow, large approval value, staticCall pre-check
+// ✅ VERSÃO V7.11: Smaller approval amounts, retry logic for RPC errors
 
 const ethers = window.ethers;
 
@@ -321,7 +321,25 @@ async function executeTransaction(txPromise, successMessage, failContext, btnEle
         ]);
         
         if (receipt.status === 0) {
-            throw new Error('Transaction reverted on-chain');
+            // 🔥 V7.11: Try to get revert reason for better error messages
+            let revertReason = 'Unknown reason';
+            try {
+                const provider = tx.provider || State.provider || State.publicProvider;
+                if (provider && tx.data) {
+                    const txData = {
+                        to: receipt.to,
+                        from: receipt.from,
+                        data: tx.data,
+                        value: tx.value || 0n,
+                        blockTag: receipt.blockNumber - 1
+                    };
+                    await provider.call(txData);
+                }
+            } catch (simErr) {
+                revertReason = simErr.reason || simErr.shortMessage || simErr.message?.slice(0, 100) || 'Check contract state';
+                console.error('❌ Revert reason:', revertReason);
+            }
+            throw new Error(`Transaction reverted: ${revertReason}`);
         }
         
         showToast(successMessage, 'success', receipt.hash);
@@ -429,9 +447,9 @@ async function ensureApproval(tokenContract, spenderAddress, amountOrTokenId, bt
                 return false;
             }
 
-            // Use a large approval amount (but not MAX to avoid RPC issues)
-            // 10^30 is more than enough for any practical use
-            const LARGE_APPROVAL = ethers.parseEther("1000000000000"); // 1 trillion BKC
+            // Use a reasonable large approval amount
+            // Some RPCs have issues with very large numbers
+            const LARGE_APPROVAL = ethers.parseEther("10000000"); // 10 million BKC
 
             if (allowance < requiredAmount) {
                 console.log(`💰 Current allowance: ${safeFormatEther(allowance)} BKC`);
@@ -441,33 +459,31 @@ async function ensureApproval(tokenContract, spenderAddress, amountOrTokenId, bt
                 showToast(`Approving BKC for ${purpose}...`, "info");
                 setButtonState("Approving tokens");
 
-                // 🔥 V7.9: Use fixed gas for approvals - more reliable
+                // 🔥 V7.10: Use fixed gas for approvals - more reliable
                 const gasOpts = { gasLimit: FIXED_GAS.APPROVE };
                 console.log(`⛽ Using fixed gas for approve: ${FIXED_GAS.APPROVE.toString()}`);
                 
-                // 🔥 V7.10: Determine best approval amount
-                let approvalAmount = LARGE_APPROVAL;
+                // 🔥 V7.11: Determine best approval amount - try progressively smaller values
+                let approvalAmount = requiredAmount * 100n; // Start with 100x required
                 
+                // Try staticCall to validate
                 try {
-                    await approvedTokenContract.approve.staticCall(spenderAddress, LARGE_APPROVAL);
-                    console.log('✅ Approval staticCall passed with large amount');
+                    await approvedTokenContract.approve.staticCall(spenderAddress, approvalAmount);
+                    console.log('✅ Approval staticCall passed with 100x amount');
                 } catch (staticErr) {
-                    console.warn('⚠️ Large approval staticCall failed, trying smaller amount...');
-                    // Try with exact amount * 10 as fallback
-                    const saferAmount = requiredAmount * 10n;
+                    console.warn('⚠️ 100x approval failed, trying 10x...');
+                    approvalAmount = requiredAmount * 10n;
                     try {
-                        await approvedTokenContract.approve.staticCall(spenderAddress, saferAmount);
-                        console.log('✅ Approval staticCall passed with safer amount');
-                        approvalAmount = saferAmount;
+                        await approvedTokenContract.approve.staticCall(spenderAddress, approvalAmount);
+                        console.log('✅ Approval staticCall passed with 10x amount');
                     } catch (retryErr) {
-                        // Last try with exact amount
-                        const exactAmount = requiredAmount * 2n;
+                        // Last try with 2x amount
+                        approvalAmount = requiredAmount * 2n;
                         try {
-                            await approvedTokenContract.approve.staticCall(spenderAddress, exactAmount);
-                            console.log('✅ Approval staticCall passed with exact amount');
-                            approvalAmount = exactAmount;
+                            await approvedTokenContract.approve.staticCall(spenderAddress, approvalAmount);
+                            console.log('✅ Approval staticCall passed with 2x amount');
                         } catch (finalErr) {
-                            console.error('❌ All approval attempts failed:', finalErr);
+                            console.error('❌ All approval amounts failed:', finalErr);
                             throw new Error(`Token approval blocked: ${finalErr.reason || finalErr.shortMessage || 'Check token contract'}`);
                         }
                     }
@@ -475,13 +491,42 @@ async function ensureApproval(tokenContract, spenderAddress, amountOrTokenId, bt
                 
                 console.log(`📝 Approving amount: ${safeFormatEther(approvalAmount)} BKC`);
                 
-                const approveTx = await approvedTokenContract.approve(
-                    spenderAddress, 
-                    approvalAmount, 
-                    gasOpts
-                );
+                // 🔥 V7.11: Retry logic for RPC errors
+                let approveTx;
+                let retryCount = 0;
+                const maxRetries = 3;
                 
-                console.log(`📝 Approval TX sent: ${approveTx.hash}`);
+                while (retryCount < maxRetries) {
+                    try {
+                        approveTx = await approvedTokenContract.approve(
+                            spenderAddress, 
+                            approvalAmount, 
+                            gasOpts
+                        );
+                        console.log(`📝 Approval TX sent: ${approveTx.hash}`);
+                        break; // Success, exit retry loop
+                    } catch (txErr) {
+                        retryCount++;
+                        const errCode = txErr?.error?.code || txErr?.code;
+                        
+                        // User rejected - don't retry
+                        if (txErr?.code === 'ACTION_REJECTED' || txErr?.code === 4001) {
+                            throw txErr;
+                        }
+                        
+                        console.warn(`⚠️ Approval attempt ${retryCount}/${maxRetries} failed:`, errCode, txErr.message?.slice(0, 100));
+                        
+                        if (retryCount >= maxRetries) {
+                            throw txErr;
+                        }
+                        
+                        // Wait before retry (exponential backoff)
+                        const waitTime = 1000 * retryCount;
+                        console.log(`⏳ Waiting ${waitTime}ms before retry...`);
+                        await new Promise(r => setTimeout(r, waitTime));
+                    }
+                }
+                
                 showToast('Approval sent, waiting for confirmation...', 'info');
                 
                 const receipt = await approveTx.wait();
@@ -1700,9 +1745,9 @@ export async function executeNotarizeDocument(documentURI, description, contentH
             
             if (currentAllowance < feeToPay) {
                 console.warn('⚠️ Allowance insufficient, requesting new approval...');
-                // 🔥 V7.9: Use large but safe approval value
-                const LARGE_APPROVAL = ethers.parseEther("1000000000000"); // 1 trillion BKC
-                const approveTx = await tokenWithSigner.approve(notaryAddress, LARGE_APPROVAL, { gasLimit: FIXED_GAS.APPROVE });
+                // 🔥 V7.11: Use specific approval amount (100x fee)
+                const approvalAmount = feeToPay * 100n;
+                const approveTx = await tokenWithSigner.approve(notaryAddress, approvalAmount, { gasLimit: FIXED_GAS.APPROVE });
                 console.log('📝 Approval tx sent:', approveTx.hash);
                 await approveTx.wait();
                 console.log('✅ Approval confirmed');
@@ -1854,7 +1899,21 @@ export async function executeFortuneParticipate(wagerAmount, guesses, isCumulati
         const receipt = await tx.wait();
         
         if (receipt.status === 0) {
-            throw new Error('Transaction reverted on-chain');
+            // 🔥 V7.11: Get revert reason for Fortune
+            let reason = 'Game rejected by contract';
+            try {
+                const provider = tx.provider || State.provider;
+                await provider.call({
+                    to: receipt.to,
+                    from: receipt.from,
+                    data: tx.data,
+                    value: oracleFee,
+                    blockTag: receipt.blockNumber - 1
+                });
+            } catch (e) {
+                reason = e.reason || e.shortMessage || 'Check wager amount and guesses';
+            }
+            throw new Error(`Fortune game failed: ${reason}`);
         }
 
         // Parse GameRequested event
