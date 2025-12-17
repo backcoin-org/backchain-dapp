@@ -635,7 +635,18 @@ export async function executeNotarizeDocument(params, submitButton) {
         const { ipfsUri, contentHash, title, description, docType, tags } = params;
         const tagsArray = typeof tags === 'string' ? tags.split(',').map(t => t.trim()).filter(Boolean) : (tags || []);
         
-        const notaryAddress = addresses.notary;
+        // Get notary address - try multiple sources (decentralizedNotary is the correct key)
+        const notaryAddress = addresses.decentralizedNotary || 
+                              addresses.notary || 
+                              State.decentralizedNotaryContract?.target || 
+                              State.decentralizedNotaryContract?.address;
+        
+        if (!notaryAddress) {
+            throw new Error("Notary contract address not configured");
+        }
+        
+        console.log("📍 Notary address:", notaryAddress);
+        
         const feeToPay = ethers.parseEther("1"); // 1 BKC fee
         
         // Approve
@@ -645,9 +656,14 @@ export async function executeNotarizeDocument(params, submitButton) {
         // Notarize
         if (submitButton) submitButton.innerHTML = '<div class="loader inline-block"></div> Notarizing...';
         
+        // Get ABI from State contract or use minimal ABI
+        const notaryABI = State.decentralizedNotaryContract?.interface || [
+            "function notarize(string ipfsUri, bytes32 contentHash, string title, string description, string docType, string[] tags) external"
+        ];
+        
         const notaryContract = new ethers.Contract(
             notaryAddress,
-            State.notaryContract.interface,
+            notaryABI,
             signer
         );
         
