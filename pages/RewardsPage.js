@@ -1,5 +1,5 @@
 // pages/RewardsPage.js
-// ✅ VERSION V9.4: Added claim history section
+// ✅ VERSION V9.5: Fixed claim button onclick
 
 const ethers = window.ethers;
 
@@ -20,6 +20,16 @@ let lastFetch = 0;
 let isLoading = false;
 let isProcessing = false;
 let claimHistory = [];
+
+// 🔥 V9.5: Store claim params globally for onclick
+let _claimParams = { stakingRewards: 0n, minerRewards: 0n, boosterTokenId: 0n };
+
+// 🔥 V9.5: Global claim handler for inline onclick
+window.handleRewardsClaim = async function() {
+    if (isProcessing) return;
+    console.log('🎁 Claim clicked with params:', _claimParams);
+    await handleClaim(_claimParams.stakingRewards, _claimParams.minerRewards, _claimParams.boosterTokenId);
+};
 
 // --- CONSTANTS ---
 const EXPLORER_TX = 'https://sepolia.arbiscan.io/tx/';
@@ -248,6 +258,10 @@ function renderContent(claimDetails, grossRewards, boosterData) {
     const hasBooster = highestBoost > 0;
     const boosterTokenId = BigInt(booster.tokenId || 0);
     
+    // 🔥 V9.5: Update global claim params for onclick
+    _claimParams = { stakingRewards, minerRewards, boosterTokenId };
+    console.log('📊 Claim params updated:', { hasRewards, stakingRewards: stakingRewards.toString(), minerRewards: minerRewards.toString(), boosterTokenId: boosterTokenId.toString() });
+    
     let netRewardNum = 0, totalGrossNum = 0, feeAmountNum = 0, stakingNum = 0, miningNum = 0;
     try {
         netRewardNum = formatBigNumber ? formatBigNumber(netReward) : Number(netReward) / 1e18;
@@ -278,7 +292,7 @@ function renderContent(claimDetails, grossRewards, boosterData) {
                     <p class="text-xs text-zinc-500">You keep <span class="${hasBooster ? 'text-green-400' : 'text-amber-400'} font-bold">${keepPercent.toFixed(1)}%</span> of earnings</p>
                 </div>
 
-                <button id="claim-btn" class="w-full py-4 rounded-xl font-bold text-base flex items-center justify-center gap-2 transition-all ${hasRewards ? 'bg-gradient-to-r from-amber-500 to-orange-500 text-black shadow-lg shadow-amber-500/25' : 'bg-zinc-800 text-zinc-500 cursor-not-allowed'}" ${!hasRewards ? 'disabled' : ''}>
+                <button id="claim-btn" onclick="${hasRewards ? 'window.handleRewardsClaim()' : ''}" class="w-full py-4 rounded-xl font-bold text-base flex items-center justify-center gap-2 transition-all ${hasRewards ? 'bg-gradient-to-r from-amber-500 to-orange-500 text-black shadow-lg shadow-amber-500/25 hover:shadow-amber-500/40 active:scale-[0.98] cursor-pointer' : 'bg-zinc-800 text-zinc-500 cursor-not-allowed'}" ${!hasRewards ? 'disabled' : ''}>
                     <i id="claim-btn-icon" class="fa-solid ${hasRewards ? 'fa-coins' : 'fa-clock'}"></i>
                     <span id="claim-btn-text">${hasRewards ? 'Claim ' + netRewardNum.toFixed(2) + ' BKC' : 'No Rewards Yet'}</span>
                 </button>
@@ -366,11 +380,8 @@ function renderContent(claimDetails, grossRewards, boosterData) {
             </div>
         </div>
     `;
-
-    const claimBtn = document.getElementById('claim-btn');
-    if (claimBtn && hasRewards) {
-        claimBtn.onclick = () => handleClaim(stakingRewards, minerRewards, boosterTokenId);
-    }
+    
+    // 🔥 V9.5: onclick is now inline in HTML, no need for manual assignment
 }
 
 // ============================================================================
