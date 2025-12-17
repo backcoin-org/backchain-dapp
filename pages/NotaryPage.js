@@ -656,6 +656,19 @@ function getFileIcon(mimeType) {
     return getFileTypeInfo(mimeType).icon;
 }
 
+// Get category name from mime type
+function getFileCategory(mimeType = '') {
+    const mime = mimeType.toLowerCase();
+    if (mime.includes('image')) return 'image';
+    if (mime.includes('pdf')) return 'pdf';
+    if (mime.includes('audio')) return 'audio';
+    if (mime.includes('video')) return 'video';
+    if (mime.includes('word') || mime.includes('document')) return 'document';
+    if (mime.includes('sheet') || mime.includes('excel')) return 'spreadsheet';
+    if (mime.includes('zip') || mime.includes('archive')) return 'archive';
+    return 'document';
+}
+
 // ============================================================================
 // STEP 3: CONFIRM & MINT
 // ============================================================================
@@ -787,14 +800,15 @@ async function handleMint() {
 
         setProgress(50, 'MINTING ON BLOCKCHAIN...');
 
-        // Execute mint - pass the image IPFS URI and content hash
-        const success = await executeNotarizeDocument(
-            ipfsCid,
-            Notary.description || 'No description',
-            contentHash,
-            0n,
-            btn
-        );
+        // Execute mint - pass params object as expected by transactions.js
+        const success = await executeNotarizeDocument({
+            ipfsUri: ipfsCid,
+            contentHash: contentHash,
+            title: Notary.file?.name || 'Untitled Document',
+            description: Notary.description || 'No description',
+            docType: getFileCategory(Notary.file?.type) || 'document',
+            tags: []
+        }, btn);
 
         if (success) {
             setProgress(100, 'SUCCESS!');
