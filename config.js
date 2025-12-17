@@ -1,5 +1,5 @@
 // js/config.js
-// ✅ PRODUCTION V24: Fixed rentalManagerABI to match contract + added rentNFTSimple
+// ✅ PRODUCTION V25: Fixed all issues - Notary ABI, FortunePool, rentalManager null
 
 // ============================================================================
 // 1. ENVIRONMENT & ALCHEMY CONFIG
@@ -58,12 +58,28 @@ export async function loadAddresses() {
 
         addresses.actionsManager = jsonAddresses.fortunePool; 
         addresses.fortunePool = jsonAddresses.fortunePool;
-        addresses.rentalManager = jsonAddresses.rentalManager || null;
+        
+        // 🔧 V25 FIX: Try multiple keys for rentalManager
+        addresses.rentalManager = jsonAddresses.rentalManager || 
+                                   jsonAddresses.RentalManager ||
+                                   jsonAddresses.rental_manager ||
+                                   null;
+        
+        // 🔧 V25: Also alias for notary
+        addresses.decentralizedNotary = jsonAddresses.decentralizedNotary ||
+                                         jsonAddresses.notary ||
+                                         jsonAddresses.Notary ||
+                                         null;
+        
         addresses.bkcDexPoolAddress = jsonAddresses.bkcDexPoolAddress || "#";
 
         if (!addresses.faucet) console.warn("Faucet address missing in JSON, check deployment.");
+        if (!addresses.rentalManager) console.warn("⚠️ RentalManager address missing in JSON");
+        if (!addresses.decentralizedNotary) console.warn("⚠️ Notary address missing in JSON");
 
         console.log("✅ Contract addresses loaded successfully.");
+        console.log("   rentalManager:", addresses.rentalManager);
+        console.log("   decentralizedNotary:", addresses.decentralizedNotary);
         return true;
 
     } catch (error) {
@@ -134,8 +150,7 @@ export const rewardBoosterABI = [
     "function getApproved(uint256 tokenId) view returns (address)"
 ];
 
-// V21: Added listNFTSimple + NFTWithdrawn event
-// 🔥 V24: Updated RentalManager ABI to match contract V2
+// 🔧 V25: Updated RentalManager ABI
 export const rentalManagerABI = [
     // Listing functions
     "function listNFT(uint256 _tokenId, uint256 _pricePerHour, uint256 _minHours, uint256 _maxHours) external",
@@ -180,22 +195,29 @@ export const nftPoolABI = [
     "event NFTSold(address indexed seller, uint256 indexed boostBips, uint256 tokenId, uint256 payout, uint256 taxPaid)"
 ];
 
-// V21 CRITICAL: FortunePool V2.1 ABI - Updated function names
+// 🔧 V25: FortunePool ABI - Fixed to include prizePoolBalance
 export const actionsManagerABI = [
     // Core functions
     "function participate(uint256 _wagerAmount, uint256[] calldata _guesses, bool _isCumulative) external payable",
     "function oracleFee() view returns (uint256)",
-    "function gameFee() view returns (uint256)",
+    "function gameFeeBips() view returns (uint256)",
     "function activeTierCount() view returns (uint256)",
     "function gameCounter() view returns (uint256)",
     "function prizePoolBalance() view returns (uint256)",
+    
     // View functions V2.1
     "function getRequiredOracleFee(bool _isCumulative) view returns (uint256)",
     "function getExpectedGuessCount(bool _isCumulative) view returns (uint256)",
     "function isGameFulfilled(uint256 _gameId) view returns (bool)",
     "function getGameResults(uint256 _gameId) view returns (uint256[])",
+    "function getJackpotTierId() view returns (uint256)",
+    "function getJackpotTier() view returns (uint256 tierId, uint128 maxRange, uint64 multiplierBips, bool active)",
+    "function getAllTiers() view returns (uint128[] ranges, uint64[] multipliers)",
+    "function calculatePotentialWinnings(uint256 _wagerAmount, bool _isCumulative) view returns (uint256 maxPrize, uint256 netWager)",
+    
     // Tier info
     "function prizeTiers(uint256 tierId) view returns (uint128 maxRange, uint64 multiplierBips, bool active)",
+    
     // Events V2.1
     "event GameRequested(uint256 indexed gameId, address indexed player, uint256 wagerAmount, uint256[] guesses, bool isCumulative, uint256 targetTier)",
     "event GameFulfilled(uint256 indexed gameId, address indexed player, uint256 prizeWon, uint256[] rolls, uint256[] guesses, bool isCumulative)"
@@ -208,13 +230,19 @@ export const publicSaleABI = [
     "event NFTSold(address indexed buyer, uint256 indexed tierId, uint256 indexed tokenId, uint256 price)"
 ];
 
-// V21 CRITICAL: Notary V2.1 - Event name is DocumentNotarized (NOT NotarizationEvent)
+// 🔧 V25 CRITICAL FIX: Notary ABI matches contract signature exactly
+// Contract: notarize(string _ipfsCid, string _description, bytes32 _contentHash, uint256 _boosterTokenId)
 export const decentralizedNotaryABI = [
     "event DocumentNotarized(uint256 indexed tokenId, address indexed owner, string ipfsCid, bytes32 indexed contentHash, uint256 feePaid)",
     "function balanceOf(address owner) view returns (uint256)",
     "function tokenURI(uint256 tokenId) view returns (string)",
-    "function getDocumentInfo(uint256 tokenId) view returns (tuple(string ipfsCid, string description, bytes32 contentHash, uint256 timestamp))",
-    "function notarize(string calldata _ipfsCid, string calldata _description, bytes32 _contentHash, uint256 _boosterTokenId)"
+    "function ownerOf(uint256 tokenId) view returns (address)",
+    "function getDocument(uint256 tokenId) view returns (tuple(string ipfsCid, string description, bytes32 contentHash, uint256 timestamp))",
+    "function documents(uint256 tokenId) view returns (string ipfsCid, string description, bytes32 contentHash, uint256 timestamp)",
+    "function getBaseFee() view returns (uint256)",
+    "function calculateFee(uint256 _boosterTokenId) view returns (uint256)",
+    // 🔧 CORRECT SIGNATURE - 4 parameters only
+    "function notarize(string _ipfsCid, string _description, bytes32 _contentHash, uint256 _boosterTokenId) returns (uint256)"
 ];
 
 // V21: Faucet with correct event

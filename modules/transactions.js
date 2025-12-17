@@ -1,11 +1,11 @@
 // js/modules/transactions.js
-// ✅ VERSÃO V8.0 SIMPLIFICADA - Código limpo sem complexidade desnecessária
+// ✅ VERSÃO V9.0 - Fixed: Notary ABI, FortunePool oracle fee, rentalManager null check
 
 const ethers = window.ethers;
 
 import { State } from '../state.js';
 import { showToast, closeModal } from '../ui-feedback.js';
-import { addresses, nftPoolABI, rentalManagerABI } from '../config.js'; 
+import { addresses, nftPoolABI, rentalManagerABI, decentralizedNotaryABI, actionsManagerABI } from '../config.js'; 
 import { formatBigNumber } from '../utils.js';
 import { loadUserData, getHighestBoosterBoostFromAPI, loadRentalListings } from './data.js';
 
@@ -43,6 +43,10 @@ function formatError(error) {
     if (msg.includes('user rejected')) return 'Transaction cancelled';
     if (msg.includes('insufficient funds')) return 'Insufficient ETH for gas';
     if (msg.includes('exceeds balance')) return 'Insufficient token balance';
+    // 🔧 V9.0: Better error messages for FortunePool
+    if (msg.includes('0xfb550858') || msg.includes('InsufficientOracleFee')) return 'Insufficient oracle fee (ETH)';
+    if (msg.includes('0xbcfa8e99') || msg.includes('InvalidGuessCount')) return 'Wrong number of guesses';
+    if (msg.includes('0x5c844fb4') || msg.includes('InvalidGuessRange')) return 'Guess out of range';
     return msg.slice(0, 100);
 }
 
@@ -151,11 +155,11 @@ export async function executeDelegation(totalAmount, durationSeconds, boosterIdT
 }
 
 // ====================================================================
-// BUY BOOSTER
+// BUY NFT FROM POOL
 // ====================================================================
 
-export async function executeBuyBooster(poolAddress, price, btnElement) {
-    console.log("🛒 executeBuyBooster:", { poolAddress, price });
+export async function executeBuyNFT(poolAddress, price, btnElement) {
+    console.log("🛒 executeBuyNFT:", { poolAddress, price });
     
     const signer = await getConnectedSigner();
     if (!signer) return false;
@@ -165,10 +169,7 @@ export async function executeBuyBooster(poolAddress, price, btnElement) {
     
     try {
         const priceBigInt = BigInt(price);
-        const priceWithBuffer = (priceBigInt * 120n) / 100n; // 20% buffer
-        
-        console.log(`💰 Price: ${ethers.formatEther(priceBigInt)} BKC`);
-        console.log(`💰 With buffer: ${ethers.formatEther(priceWithBuffer)} BKC`);
+        const priceWithBuffer = (priceBigInt * 120n) / 100n;
         
         // Approve
         const approved = await simpleApprove(addresses.bkcToken, poolAddress, priceWithBuffer, signer);
@@ -180,7 +181,7 @@ export async function executeBuyBooster(poolAddress, price, btnElement) {
         const poolContract = new ethers.Contract(poolAddress, nftPoolABI, signer);
         
         showToast("Confirm purchase in wallet...", "info");
-        const tx = await poolContract.buyNFT();
+        const tx = await poolContract.buyNFTWithSlippage(priceWithBuffer);
         console.log(`📝 TX: ${tx.hash}`);
         
         showToast("Waiting confirmation...", "info");
@@ -202,11 +203,11 @@ export async function executeBuyBooster(poolAddress, price, btnElement) {
 }
 
 // ====================================================================
-// SELL BOOSTER
+// SELL NFT TO POOL
 // ====================================================================
 
-export async function executeSellBooster(poolAddress, tokenId, btnElement) {
-    console.log("💰 executeSellBooster:", { poolAddress, tokenId });
+export async function executeSellNFT(poolAddress, tokenId, btnElement) {
+    console.log("💰 executeSellNFT:", { poolAddress, tokenId });
     
     const signer = await getConnectedSigner();
     if (!signer) return false;
@@ -219,7 +220,7 @@ export async function executeSellBooster(poolAddress, tokenId, btnElement) {
         
         // Approve NFT
         const nftContract = new ethers.Contract(
-            addresses.boosterNFT,
+            addresses.rewardBoosterNFT || addresses.boosterNFT,
             ["function approve(address,uint256)", "function getApproved(uint256) view returns (address)"],
             signer
         );
@@ -268,6 +269,13 @@ export async function executeListNFT(tokenId, pricePerHour, btnElement) {
     const signer = await getConnectedSigner();
     if (!signer) return false;
     
+    // 🔧 V9.0 FIX: Check if rentalManager is configured
+    if (!addresses.rentalManager) {
+        showToast("Rental marketplace not available", "error");
+        console.error("❌ addresses.rentalManager is null/undefined");
+        return false;
+    }
+    
     const originalText = btnElement?.innerHTML || 'List';
     if (btnElement) btnElement.innerHTML = '<div class="loader inline-block"></div> Processing...';
     
@@ -275,9 +283,15 @@ export async function executeListNFT(tokenId, pricePerHour, btnElement) {
         const tokenIdBigInt = BigInt(tokenId);
         const priceBigInt = ethers.parseEther(pricePerHour.toString());
         
+        // 🔧 V9.0 FIX: Use correct NFT address
+        const nftAddress = addresses.rewardBoosterNFT || addresses.boosterNFT;
+        if (!nftAddress) {
+            throw new Error("NFT contract address not configured");
+        }
+        
         // Approve NFT for rental manager
         const nftContract = new ethers.Contract(
-            addresses.boosterNFT,
+            nftAddress,
             ["function approve(address,uint256)", "function getApproved(uint256) view returns (address)", "function setApprovalForAll(address,bool)", "function isApprovedForAll(address,address) view returns (bool)"],
             signer
         );
@@ -321,7 +335,7 @@ export async function executeListNFT(tokenId, pricePerHour, btnElement) {
 }
 
 // ====================================================================
-// RENT NFT
+// RENT NFT (Simple)
 // ====================================================================
 
 export async function executeRentNFT(tokenId, totalCost, btnElement) {
@@ -329,6 +343,12 @@ export async function executeRentNFT(tokenId, totalCost, btnElement) {
     
     const signer = await getConnectedSigner();
     if (!signer) return false;
+    
+    // 🔧 V9.0 FIX: Check if rentalManager is configured
+    if (!addresses.rentalManager) {
+        showToast("Rental marketplace not available", "error");
+        return false;
+    }
     
     const originalText = btnElement?.innerHTML || 'Rent';
     if (btnElement) btnElement.innerHTML = '<div class="loader inline-block"></div> Processing...';
@@ -379,6 +399,11 @@ export async function executeWithdrawNFT(tokenId, btnElement) {
     
     const signer = await getConnectedSigner();
     if (!signer) return false;
+    
+    if (!addresses.rentalManager) {
+        showToast("Rental marketplace not available", "error");
+        return false;
+    }
     
     const originalText = btnElement?.innerHTML || 'Withdraw';
     if (btnElement) btnElement.innerHTML = '<div class="loader inline-block"></div> Processing...';
@@ -545,7 +570,7 @@ export async function executeUniversalClaim(stakingRewards, minerRewards, booste
 }
 
 // ====================================================================
-// FORTUNE GAME
+// FORTUNE GAME - 🔧 V9.0 FIX: Correct oracle fee handling
 // ====================================================================
 
 export async function executeFortuneParticipate(wager, guesses, isCumulative, btnElement) {
@@ -561,29 +586,55 @@ export async function executeFortuneParticipate(wager, guesses, isCumulative, bt
         const wagerBigInt = ethers.parseEther(wager.toString());
         const guessesArray = Array.isArray(guesses) ? guesses.map(g => BigInt(g)) : [BigInt(guesses)];
         
-        // Approve
+        // Get Fortune contract address
+        const fortuneAddress = addresses.fortunePool || addresses.actionsManager;
+        if (!fortuneAddress) {
+            throw new Error("Fortune Pool not configured");
+        }
+        
+        // Approve BKC
         const approved = await simpleApprove(
             addresses.bkcToken, 
-            await State.actionsManagerContract.getAddress(), 
+            fortuneAddress, 
             wagerBigInt, 
             signer
         );
         if (!approved) return false;
         
-        // Get oracle fee
-        const oracleFee = await State.actionsManagerContract.oracleFee();
-        console.log("💎 Oracle fee:", ethers.formatEther(oracleFee), "ETH");
+        // 🔧 V9.0 FIX: Get correct oracle fee using getRequiredOracleFee
+        const fortuneContract = new ethers.Contract(fortuneAddress, actionsManagerABI, signer);
+        
+        let oracleFee;
+        try {
+            // Try getRequiredOracleFee first (more accurate)
+            oracleFee = await fortuneContract.getRequiredOracleFee(isCumulative);
+            console.log(`💎 Oracle fee (getRequiredOracleFee): ${ethers.formatEther(oracleFee)} ETH`);
+        } catch (e) {
+            // Fallback to oracleFee() * multiplier
+            const baseFee = await fortuneContract.oracleFee();
+            oracleFee = isCumulative ? baseFee * 5n : baseFee;
+            console.log(`💎 Oracle fee (calculated): ${ethers.formatEther(oracleFee)} ETH`);
+        }
+        
+        // Check ETH balance
+        const provider = new ethers.BrowserProvider(window.ethereum);
+        const ethBalance = await provider.getBalance(State.userAddress);
+        if (ethBalance < oracleFee) {
+            showToast(`Insufficient ETH for oracle fee (need ${ethers.formatEther(oracleFee)} ETH)`, "error");
+            return { success: false };
+        }
         
         // Participate
         if (btnElement) btnElement.innerHTML = '<div class="loader inline-block"></div> Submitting...';
         
-        const fortuneContract = new ethers.Contract(
-            await State.actionsManagerContract.getAddress(),
-            State.actionsManagerContract.interface,
-            signer
-        );
-        
         showToast("Confirm game in wallet...", "info");
+        console.log("📤 Sending participate tx:", { 
+            wager: ethers.formatEther(wagerBigInt), 
+            guesses: guessesArray.map(g => g.toString()), 
+            isCumulative, 
+            oracleFee: ethers.formatEther(oracleFee) 
+        });
+        
         const tx = await fortuneContract.participate(wagerBigInt, guessesArray, isCumulative, { value: oracleFee });
         console.log(`📝 TX: ${tx.hash}`);
         
@@ -619,7 +670,7 @@ export async function executeFortuneParticipate(wager, guesses, isCumulative, bt
 }
 
 // ====================================================================
-// NOTARIZE DOCUMENT
+// NOTARIZE DOCUMENT - 🔧 V9.0 FIX: Correct function signature
 // ====================================================================
 
 export async function executeNotarizeDocument(params, submitButton) {
@@ -632,14 +683,12 @@ export async function executeNotarizeDocument(params, submitButton) {
     if (submitButton) submitButton.innerHTML = '<div class="loader inline-block"></div> Processing...';
     
     try {
-        const { ipfsUri, contentHash, title, description, docType, tags } = params;
-        const tagsArray = typeof tags === 'string' ? tags.split(',').map(t => t.trim()).filter(Boolean) : (tags || []);
+        // 🔧 V9.0 FIX: Extract correct parameters
+        // Contract expects: notarize(string _ipfsCid, string _description, bytes32 _contentHash, uint256 _boosterTokenId)
+        const { ipfsUri, contentHash, description } = params;
         
-        // Get notary address - try multiple sources (decentralizedNotary is the correct key)
-        const notaryAddress = addresses.decentralizedNotary || 
-                              addresses.notary || 
-                              State.decentralizedNotaryContract?.target || 
-                              State.decentralizedNotaryContract?.address;
+        // Get notary address
+        const notaryAddress = addresses.decentralizedNotary || addresses.notary;
         
         if (!notaryAddress) {
             throw new Error("Notary contract address not configured");
@@ -647,7 +696,15 @@ export async function executeNotarizeDocument(params, submitButton) {
         
         console.log("📍 Notary address:", notaryAddress);
         
-        const feeToPay = ethers.parseEther("1"); // 1 BKC fee
+        // 🔧 V9.0 FIX: Get fee from contract or use default
+        let feeToPay = ethers.parseEther("1"); // Default 1 BKC
+        try {
+            const notaryRead = new ethers.Contract(notaryAddress, decentralizedNotaryABI, signer.provider);
+            feeToPay = await notaryRead.calculateFee(0); // 0 = no booster
+            console.log("💰 Fee from contract:", ethers.formatEther(feeToPay), "BKC");
+        } catch (e) {
+            console.log("⚠️ Using default fee: 1 BKC");
+        }
         
         // Approve
         const approved = await simpleApprove(addresses.bkcToken, notaryAddress, feeToPay, signer);
@@ -656,19 +713,36 @@ export async function executeNotarizeDocument(params, submitButton) {
         // Notarize
         if (submitButton) submitButton.innerHTML = '<div class="loader inline-block"></div> Notarizing...';
         
-        // Get ABI from State contract or use minimal ABI
-        const notaryABI = State.decentralizedNotaryContract?.interface || [
-            "function notarize(string ipfsUri, bytes32 contentHash, string title, string description, string docType, string[] tags) external"
-        ];
+        // 🔧 V9.0 FIX: Use correct ABI with 4 parameters
+        const notaryContract = new ethers.Contract(notaryAddress, decentralizedNotaryABI, signer);
         
-        const notaryContract = new ethers.Contract(
-            notaryAddress,
-            notaryABI,
-            signer
-        );
+        // Get user's best booster for discount (optional)
+        let boosterTokenId = 0n;
+        try {
+            const boosterInfo = await getHighestBoosterBoostFromAPI();
+            if (boosterInfo?.tokenId) {
+                boosterTokenId = BigInt(boosterInfo.tokenId);
+                console.log("🎯 Using booster #" + boosterTokenId + " for discount");
+            }
+        } catch (e) {}
         
         showToast("Confirm notarization in wallet...", "info");
-        const tx = await notaryContract.notarize(ipfsUri, contentHash, title, description, docType, tagsArray);
+        
+        // 🔧 V9.0 FIX: Call with correct 4 parameters in correct order
+        // notarize(string _ipfsCid, string _description, bytes32 _contentHash, uint256 _boosterTokenId)
+        console.log("📤 Calling notarize with:", {
+            ipfsCid: ipfsUri,
+            description: description || '',
+            contentHash: contentHash,
+            boosterTokenId: boosterTokenId.toString()
+        });
+        
+        const tx = await notaryContract.notarize(
+            ipfsUri,                    // _ipfsCid
+            description || '',          // _description
+            contentHash,                // _contentHash
+            boosterTokenId              // _boosterTokenId
+        );
         console.log(`📝 TX: ${tx.hash}`);
         
         showToast("Waiting confirmation...", "info");
@@ -676,8 +750,20 @@ export async function executeNotarizeDocument(params, submitButton) {
         
         if (receipt.status === 0) throw new Error("Transaction reverted");
         
-        showToast("Document notarized!", "success");
-        return true;
+        // Get tokenId from event
+        let tokenId = null;
+        for (const log of receipt.logs) {
+            try {
+                const parsed = notaryContract.interface.parseLog(log);
+                if (parsed?.name === "DocumentNotarized") {
+                    tokenId = parsed.args.tokenId?.toString();
+                    break;
+                }
+            } catch {}
+        }
+        
+        showToast(`Document notarized! ${tokenId ? `Token #${tokenId}` : ''}`, "success");
+        return { success: true, tokenId, txHash: receipt.hash };
         
     } catch (e) {
         console.error("Notarize error:", e);
@@ -744,6 +830,11 @@ export async function executeRentNFTWithHours(tokenId, totalCost, hours, btnElem
     const signer = await getConnectedSigner();
     if (!signer) return false;
     
+    if (!addresses.rentalManager) {
+        showToast("Rental marketplace not available", "error");
+        return false;
+    }
+    
     const originalText = btnElement?.innerHTML || 'Rent';
     if (btnElement) btnElement.innerHTML = '<div class="loader inline-block"></div> Processing...';
     
@@ -785,4 +876,4 @@ export async function executeRentNFTWithHours(tokenId, totalCost, hours, btnElem
     }
 }
 
-console.log("✅ Transactions module V8.0 loaded (simplified)");
+console.log("✅ Transactions module V9.0 loaded (with fixes)");
