@@ -306,8 +306,10 @@ const handleResolveAppeal = async (e) => {
     });
 
     try {
-        // ASSUMINDO: Nova função de DB 'resolveBanAppeal'
-        await db.resolveBanAppeal(userId, isApproved); 
+        // Use setBanStatus to unban if approved
+        if (isApproved) {
+            await db.setBanStatus(userId, false); // Unban user
+        }
         showToast(`Appeal ${isApproved ? 'APPROVED' : 'DENIED'}.`, 'success');
 
         // Atualiza o estado local
