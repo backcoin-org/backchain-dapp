@@ -3,7 +3,7 @@
 
 import { State } from '../state.js';
 import { loadUserData, safeContractCall, API_ENDPOINTS } from '../modules/data.js';
-import { executeFortuneParticipate, getFortunePoolStatus, getGameResult } from '../modules/transactions.js';
+import { executeFortuneParticipate, getFortunePoolStatus } from '../modules/transactions.js';
 import { formatBigNumber } from '../utils.js';
 import { showToast } from '../ui-feedback.js';
 import { addresses } from '../config.js';
@@ -703,16 +703,32 @@ function renderResult(container) {
     const result = Game.result;
     if (!result) return renderPhase();
     const isJackpot = Game.mode === 'jackpot';
-    const isWin = result.isWin || (result.prizeWon && BigInt(result.prizeWon) > 0n);
-    const prize = result.prizeWon ? formatBigNumber(BigInt(result.prizeWon)) : 0;
     const picks = isJackpot ? [Game.guess] : Game.guesses;
-    const results = result.results || result.randomNumbers || [];
+    const results = result.results || result.randomNumbers || result.rolls || [];
+    
+    // Calculate win based on matches
+    const matches = picks.map((pick, i) => {
+        const roll = results[i] !== undefined ? Number(results[i]) : null;
+        return roll !== null && roll === pick;
+    });
+    const matchCount = matches.filter(m => m).length;
+    const isWin = matchCount > 0;
+    
+    // Calculate prize estimate
+    let multiplier = 0;
+    if (isJackpot && matches[0]) {
+        multiplier = 100;
+    } else if (!isJackpot) {
+        matches.forEach((hit, i) => { if (hit) multiplier += TIERS[i].multiplier; });
+    }
+    const estimatedPrize = Game.wager * multiplier;
+    
     if (isWin) triggerConfetti();
 
     container.innerHTML = `
         <div class="bg-gradient-to-br ${isWin ? 'from-emerald-900/30 to-green-900/10 border-emerald-500/30' : 'from-zinc-900 to-zinc-800/50 border-zinc-700/50'} border rounded-2xl p-6 text-center">
             <div class="mb-5">
-                ${isWin ? `<div class="inline-flex items-center justify-center w-20 h-20 rounded-full bg-emerald-500/20 mb-4 pop"><span class="text-5xl">🎉</span></div><h2 class="text-3xl font-black text-emerald-400 mb-2">YOU WON!</h2><p class="text-4xl font-black text-white">${prize.toFixed(2)} BKC</p>`
+                ${isWin ? `<div class="inline-flex items-center justify-center w-20 h-20 rounded-full bg-emerald-500/20 mb-4 pop"><span class="text-5xl">🎉</span></div><h2 class="text-3xl font-black text-emerald-400 mb-2">YOU WON!</h2><p class="text-4xl font-black text-white">${estimatedPrize.toFixed(2)} BKC</p>`
                        : `<div class="inline-flex items-center justify-center w-20 h-20 rounded-full bg-zinc-800 mb-4"><span class="text-5xl">😔</span></div><h2 class="text-2xl font-bold text-zinc-400 mb-2">Not this time</h2><p class="text-zinc-500">Better luck next round!</p>`}
             </div>
             <div class="mb-6">
@@ -736,6 +752,36 @@ function renderResult(container) {
 // ============================================================================
 // HELPERS
 // ============================================================================
+
+// Local getGameResult since it may not be exported from transactions.js
+async function getGameResult(gameId) {
+    const contract = State.actionsManagerContractPublic || State.actionsManagerContract;
+    if (!contract) return null;
+
+    try {
+        const isFulfilled = await contract.isGameFulfilled(gameId);
+        
+        if (!isFulfilled) {
+            return { fulfilled: false, pending: true };
+        }
+
+        const results = await contract.getGameResults(gameId);
+        
+        return {
+            fulfilled: true,
+            isComplete: true,
+            pending: false,
+            rolls: results.map(r => Number(r)),
+            results: results.map(r => Number(r)),
+            randomNumbers: results.map(r => Number(r))
+        };
+
+    } catch (e) {
+        console.warn("Game result check failed:", e);
+        return null;
+    }
+}
+
 async function pollResult(gameId, attempts = 0) {
     if (attempts > 20) { showToast('Check history later', 'warning'); Game.phase = 'select'; return renderPhase(); }
     try {
