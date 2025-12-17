@@ -876,4 +876,13 @@ export async function executeRentNFTWithHours(tokenId, totalCost, hours, btnElem
     }
 }
 
-console.log("✅ Transactions module V9.0 loaded (with fixes)");
+// ====================================================================
+// ALIASES - For backward compatibility with StorePage.js
+// ====================================================================
+
+// StorePage.js imports executeBuyBooster/executeSellBooster
+// These are aliases to executeBuyNFT/executeSellNFT
+export const executeBuyBooster = executeBuyNFT;
+export const executeSellBooster = executeSellNFT;
+
+console.log("✅ Transactions module V9.0 loaded (with fixes)"); 
