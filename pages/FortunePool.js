@@ -2,13 +2,10 @@
 // ✅ VERSION V11.0: Completely redesigned UX - Better game & number selection
 
 import { State } from '../state.js';
-import { loadUserData, safeContractCall, API_ENDPOINTS } from '../modules/data.js';
-import { executeFortuneParticipate, getFortunePoolStatus } from '../modules/transactions.js';
+import { loadUserData, API_ENDPOINTS } from '../modules/data.js';
+import { executeFortuneParticipate } from '../modules/transactions.js';
 import { formatBigNumber } from '../utils.js';
 import { showToast } from '../ui-feedback.js';
-import { addresses } from '../config.js';
-
-const ethers = window.ethers;
 
 // ============================================================================
 // CONSTANTS
@@ -753,7 +750,29 @@ function renderResult(container) {
 // HELPERS
 // ============================================================================
 
-// Local getGameResult since it may not be exported from transactions.js
+// Local getFortunePoolStatus since it's not exported from transactions.js
+async function getFortunePoolStatus() {
+    const contract = State.actionsManagerContractPublic || State.actionsManagerContract;
+    if (!contract) return null;
+
+    try {
+        // Try to get pool status from contract
+        const [prizePool, gameCounter] = await Promise.all([
+            contract.fortunePrizePool ? contract.fortunePrizePool() : Promise.resolve(0n),
+            contract.fortuneGameCounter ? contract.fortuneGameCounter() : Promise.resolve(0)
+        ]).catch(() => [0n, 0]);
+        
+        return {
+            prizePool: prizePool || 0n,
+            gameCounter: Number(gameCounter) || 0
+        };
+    } catch (e) {
+        console.warn("Pool status check failed:", e);
+        return { prizePool: 0n, gameCounter: 0 };
+    }
+}
+
+// Local getGameResult since it's not exported from transactions.js
 async function getGameResult(gameId) {
     const contract = State.actionsManagerContractPublic || State.actionsManagerContract;
     if (!contract) return null;
