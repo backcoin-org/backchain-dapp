@@ -422,7 +422,7 @@ export const StorePage = {
         }
 
         await loadDataForSelectedPool();
-        loadTradeHistory();
+        await loadTradeHistory();
     },
 
     async update() {
@@ -439,43 +439,57 @@ export const StorePage = {
 // TRADE HISTORY - IMPROVED
 // ============================================================================
 async function loadTradeHistory() {
-    if (!State.userAddress) return;
+    const container = document.getElementById('history-list');
+    
+    if (!State.userAddress) {
+        if (container) {
+            container.innerHTML = `<div class="text-center py-4 text-xs text-zinc-600">Connect wallet to view history</div>`;
+        }
+        return;
+    }
     
     try {
         const endpoint = API_ENDPOINTS.getHistory || 'https://gethistory-4wvdcuoouq-uc.a.run.app';
         const response = await fetch(`${endpoint}/${State.userAddress}`);
-        if (response.ok) {
-            const data = await response.json();
-            
-            // Debug: mostrar todos os tipos de transação
-            console.log("All history types:", [...new Set((data || []).map(item => item.type))]);
-            
-            // Filtro RESTRITO - APENAS compra e venda de NFT
-            TradeState.tradeHistory = (data || []).filter(item => {
-                const t = (item.type || '').toUpperCase();
-                
-                // APENAS estes tipos específicos de trade de NFT
-                return t === 'NFTBOUGHT' || 
-                       t === 'NFTSOLD' ||
-                       t === 'NFT_BOUGHT' ||
-                       t === 'NFT_SOLD' ||
-                       t === 'NFTPURCHASED' ||
-                       t === 'NFT_PURCHASED' ||
-                       t.includes('NFTBOUGHT') ||
-                       t.includes('NFTSOLD') ||
-                       t.includes('NFTPURCHASED');
-            });
-            
-            console.log("NFT trade history:", TradeState.tradeHistory.length, "items");
-            
-            // Update count badge
-            const countEl = document.getElementById('history-count');
-            if (countEl) countEl.textContent = TradeState.tradeHistory.length;
-            
-            renderTradeHistory();
+        
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
         }
+        
+        const data = await response.json();
+        
+        // Debug: mostrar todos os tipos de transação
+        console.log("All history types:", [...new Set((data || []).map(item => item.type))]);
+        
+        // Filtro RESTRITO - APENAS compra e venda de NFT
+        TradeState.tradeHistory = (data || []).filter(item => {
+            const t = (item.type || '').toUpperCase();
+            
+            // APENAS estes tipos específicos de trade de NFT
+            return t === 'NFTBOUGHT' || 
+                   t === 'NFTSOLD' ||
+                   t === 'NFT_BOUGHT' ||
+                   t === 'NFT_SOLD' ||
+                   t === 'NFTPURCHASED' ||
+                   t === 'NFT_PURCHASED' ||
+                   t.includes('NFTBOUGHT') ||
+                   t.includes('NFTSOLD') ||
+                   t.includes('NFTPURCHASED');
+        });
+        
+        console.log("NFT trade history:", TradeState.tradeHistory.length, "items");
+        
+        // Update count badge
+        const countEl = document.getElementById('history-count');
+        if (countEl) countEl.textContent = TradeState.tradeHistory.length;
+        
+        renderTradeHistory();
+        
     } catch (e) {
         console.error('History load error:', e);
+        // Mesmo com erro, renderizar estado vazio
+        TradeState.tradeHistory = [];
+        renderTradeHistory();
     }
 }
 
