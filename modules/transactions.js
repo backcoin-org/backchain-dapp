@@ -1,5 +1,5 @@
 // js/modules/transactions.js
-// ✅ PRODUCTION V10.0
+// ✅ PRODUCTION V11.0 - Fixed Force Unstake + Better Error Handling
 
 const ethers = window.ethers;
 
@@ -7,7 +7,7 @@ import { State } from '../state.js';
 import { showToast, closeModal } from '../ui-feedback.js';
 import { addresses, nftPoolABI, rentalManagerABI, decentralizedNotaryABI, actionsManagerABI, delegationManagerABI } from '../config.js'; 
 import { formatBigNumber } from '../utils.js';
-import { loadUserData, getHighestBoosterBoostFromAPI, loadRentalListings } from './data.js';
+import { loadUserData, getHighestBoosterBoostFromAPI, loadRentalListings, loadUserDelegations } from './data.js';
 
 // ====================================================================
 // UTILITIES
@@ -47,12 +47,22 @@ async function getConnectedSigner() {
 
 function formatError(error) {
     const msg = error?.reason || error?.shortMessage || error?.message || 'Unknown error';
+    
+    // Erros específicos do contrato
     if (msg.includes('user rejected')) return 'Transaction cancelled';
     if (msg.includes('insufficient funds')) return 'Insufficient ETH for gas';
     if (msg.includes('exceeds balance')) return 'Insufficient token balance';
     if (msg.includes('0xfb550858') || msg.includes('InsufficientOracleFee')) return 'Insufficient oracle fee (ETH)';
     if (msg.includes('0xbcfa8e99') || msg.includes('InvalidGuessCount')) return 'Wrong number of guesses';
     if (msg.includes('0x5c844fb4') || msg.includes('InvalidGuessRange')) return 'Guess out of range';
+    
+    // Erros de delegação
+    if (msg.includes('DelegationNotFound') || msg.includes('not found')) return 'Delegation not found';
+    if (msg.includes('DelegationLocked') || msg.includes('still locked')) return 'Delegation is still locked';
+    if (msg.includes('InvalidIndex') || msg.includes('invalid index')) return 'Invalid delegation index';
+    if (msg.includes('NotOwner') || msg.includes('not owner')) return 'Not the delegation owner';
+    if (msg.includes('require(false)')) return 'Transaction rejected by contract';
+    
     return msg.slice(0, 100);
 }
 
@@ -147,7 +157,7 @@ export async function executeDelegation(totalAmount, durationSeconds, boosterIdT
 }
 
 // ====================================================================
-// UNDELEGATE (era unstake)
+// UNDELEGATE (Normal - quando unlocked)
 // ====================================================================
 
 export async function executeUnstake(index, boosterIdToSend, btnElement) {
@@ -158,8 +168,20 @@ export async function executeUnstake(index, boosterIdToSend, btnElement) {
     if (btnElement) btnElement.innerHTML = '<div class="loader inline-block"></div> Processing...';
     
     try {
-        const indexBigInt = BigInt(index);
+        // Garante que o índice é um número válido
+        const indexNum = Number(index);
+        if (isNaN(indexNum) || indexNum < 0) {
+            showToast("Invalid delegation index", "error");
+            return false;
+        }
+        
+        const indexBigInt = BigInt(indexNum);
         const boosterIdBigInt = BigInt(boosterIdToSend || 0);
+        
+        console.log("Unstake params:", { 
+            index: indexBigInt.toString(), 
+            boosterId: boosterIdBigInt.toString() 
+        });
         
         const delegationContract = new ethers.Contract(
             addresses.delegationManager,
@@ -168,7 +190,6 @@ export async function executeUnstake(index, boosterIdToSend, btnElement) {
         );
         
         showToast("Confirm unstake in wallet...", "info");
-        // Função correta: undelegate (não unstake)
         const tx = await delegationContract.undelegate(indexBigInt, boosterIdBigInt);
         
         showToast("Waiting confirmation...", "info");
@@ -177,7 +198,11 @@ export async function executeUnstake(index, boosterIdToSend, btnElement) {
         if (receipt.status === 0) throw new Error("Transaction reverted");
         
         showToast("Unstaked!", "success");
-        loadUserData();
+        
+        // Recarrega dados
+        await loadUserData(true);
+        await loadUserDelegations(true);
+        
         return true;
         
     } catch (e) {
@@ -190,7 +215,7 @@ export async function executeUnstake(index, boosterIdToSend, btnElement) {
 }
 
 // ====================================================================
-// FORCE UNDELEGATE (era forceUnstake)
+// FORCE UNDELEGATE (Quando ainda locked - 50% penalty)
 // ====================================================================
 
 export async function executeForceUnstake(index, boosterIdToSend, btnElement) {
@@ -201,8 +226,39 @@ export async function executeForceUnstake(index, boosterIdToSend, btnElement) {
     if (btnElement) btnElement.innerHTML = '<div class="loader inline-block"></div> Processing...';
     
     try {
-        const indexBigInt = BigInt(index);
-        const boosterIdBigInt = BigInt(boosterIdToSend || 0);
+        // Garante que o índice é um número válido
+        const indexNum = Number(index);
+        if (isNaN(indexNum) || indexNum < 0) {
+            showToast("Invalid delegation index", "error");
+            return false;
+        }
+        
+        const indexBigInt = BigInt(indexNum);
+        
+        // CORREÇÃO: Se boosterId for muito grande ou inválido, usa 0
+        let boosterIdBigInt = 0n;
+        try {
+            const boosterNum = Number(boosterIdToSend || 0);
+            // Verifica se o booster realmente pertence ao usuário
+            if (boosterNum > 0 && State.myBoosters && State.myBoosters.length > 0) {
+                const ownsBooster = State.myBoosters.some(b => 
+                    Number(b.tokenId) === boosterNum
+                );
+                if (ownsBooster) {
+                    boosterIdBigInt = BigInt(boosterNum);
+                } else {
+                    console.warn("User doesn't own booster", boosterNum, "- using 0");
+                }
+            }
+        } catch (e) {
+            console.warn("Invalid booster ID, using 0:", e);
+        }
+        
+        console.log("Force unstake params:", { 
+            index: indexBigInt.toString(), 
+            boosterId: boosterIdBigInt.toString(),
+            userAddress: State.userAddress
+        });
         
         const delegationContract = new ethers.Contract(
             addresses.delegationManager,
@@ -210,8 +266,29 @@ export async function executeForceUnstake(index, boosterIdToSend, btnElement) {
             signer
         );
         
+        // Verifica se a delegação existe antes de tentar
+        try {
+            const delegations = await delegationContract.getDelegationsOf(State.userAddress);
+            console.log("User delegations count:", delegations.length);
+            
+            if (indexNum >= delegations.length) {
+                showToast(`Delegation index ${indexNum} not found. You have ${delegations.length} delegations.`, "error");
+                return false;
+            }
+            
+            const delegation = delegations[indexNum];
+            console.log("Target delegation:", {
+                amount: delegation.amount?.toString() || delegation[0]?.toString(),
+                unlockTime: delegation.unlockTime?.toString() || delegation[1]?.toString(),
+                lockDuration: delegation.lockDuration?.toString() || delegation[2]?.toString()
+            });
+        } catch (checkErr) {
+            console.warn("Could not verify delegation:", checkErr);
+        }
+        
         showToast("Confirm force unstake in wallet...", "info");
-        // Função correta: forceUndelegate (não forceUnstake)
+        
+        // Tenta a transação
         const tx = await delegationContract.forceUndelegate(indexBigInt, boosterIdBigInt);
         
         showToast("Waiting confirmation...", "info");
@@ -219,13 +296,27 @@ export async function executeForceUnstake(index, boosterIdToSend, btnElement) {
         
         if (receipt.status === 0) throw new Error("Transaction reverted");
         
-        showToast("Force unstaked!", "success");
-        loadUserData();
+        showToast("Force unstaked! (50% penalty applied)", "warning");
+        
+        // Recarrega dados
+        await loadUserData(true);
+        await loadUserDelegations(true);
+        
         return true;
         
     } catch (e) {
         console.error("Force unstake error:", e);
-        showToast(formatError(e), "error");
+        
+        // Melhor tratamento de erros específicos
+        const errorMsg = e?.message || '';
+        
+        if (errorMsg.includes('execution reverted') || errorMsg.includes('require(false)')) {
+            // Tenta dar mais contexto sobre o erro
+            showToast("Force unstake failed. Check if delegation still exists.", "error");
+        } else {
+            showToast(formatError(e), "error");
+        }
+        
         return false;
     } finally {
         if (btnElement) btnElement.innerHTML = originalText;
@@ -244,7 +335,21 @@ export async function executeUniversalClaim(stakingRewards, minerRewards, booste
     if (btnElement) btnElement.innerHTML = '<div class="loader inline-block"></div> Processing...';
     
     try {
-        const boosterIdBigInt = BigInt(boosterIdToSend || 0);
+        // CORREÇÃO: Valida boosterId similar ao force unstake
+        let boosterIdBigInt = 0n;
+        try {
+            const boosterNum = Number(boosterIdToSend || 0);
+            if (boosterNum > 0 && State.myBoosters && State.myBoosters.length > 0) {
+                const ownsBooster = State.myBoosters.some(b => 
+                    Number(b.tokenId) === boosterNum
+                );
+                if (ownsBooster) {
+                    boosterIdBigInt = BigInt(boosterNum);
+                }
+            }
+        } catch (e) {
+            console.warn("Invalid booster ID for claim, using 0:", e);
+        }
         
         const delegationContract = new ethers.Contract(
             addresses.delegationManager,
@@ -261,7 +366,10 @@ export async function executeUniversalClaim(stakingRewards, minerRewards, booste
         if (receipt.status === 0) throw new Error("Transaction reverted");
         
         showToast("Rewards claimed!", "success");
-        loadUserData();
+        
+        // Recarrega dados
+        await loadUserData(true);
+        
         return true;
         
     } catch (e) {
@@ -280,33 +388,46 @@ export async function executeUniversalClaim(stakingRewards, minerRewards, booste
 export async function executeBuyNFT(poolAddress, price, btnElement) {
     const signer = await getConnectedSigner();
     if (!signer) return false;
-    
+
     const originalText = btnElement?.innerHTML || 'Buy';
     if (btnElement) btnElement.innerHTML = '<div class="loader inline-block"></div> Processing...';
-    
+
     try {
-        const priceBigInt = BigInt(price);
-        const priceWithBuffer = (priceBigInt * 120n) / 100n;
-        
-        const approved = await simpleApprove(addresses.bkcToken, poolAddress, priceWithBuffer, signer);
+        const approved = await simpleApprove(
+            addresses.bkcToken,
+            poolAddress,
+            BigInt(price) * 2n,
+            signer
+        );
         if (!approved) return false;
-        
+
         if (btnElement) btnElement.innerHTML = '<div class="loader inline-block"></div> Buying...';
-        
+
         const poolContract = new ethers.Contract(poolAddress, nftPoolABI, signer);
-        
-        showToast("Confirm purchase in wallet...", "info");
-        const tx = await poolContract.buyNFTWithSlippage(priceWithBuffer);
-        
+
+        showToast("Confirm buy in wallet...", "info");
+        const tx = await poolContract.buyNFT();
+
         showToast("Waiting confirmation...", "info");
         const receipt = await tx.wait();
-        
+
         if (receipt.status === 0) throw new Error("Transaction reverted");
-        
-        showToast("NFT purchased!", "success");
+
+        let boughtTokenId = null;
+        for (const log of receipt.logs) {
+            try {
+                const parsed = poolContract.interface.parseLog(log);
+                if (parsed?.name === "NFTBought") {
+                    boughtTokenId = parsed.args.tokenId?.toString();
+                    break;
+                }
+            } catch {}
+        }
+
+        showToast(`NFT Bought! ${boughtTokenId ? `#${boughtTokenId}` : ''}`, "success");
         loadUserData();
-        return true;
-        
+        return { success: true, tokenId: boughtTokenId };
+
     } catch (e) {
         console.error("Buy error:", e);
         showToast(formatError(e), "error");
@@ -323,43 +444,40 @@ export async function executeBuyNFT(poolAddress, price, btnElement) {
 export async function executeSellNFT(poolAddress, tokenId, btnElement) {
     const signer = await getConnectedSigner();
     if (!signer) return false;
-    
+
     const originalText = btnElement?.innerHTML || 'Sell';
     if (btnElement) btnElement.innerHTML = '<div class="loader inline-block"></div> Processing...';
-    
+
     try {
-        const tokenIdBigInt = BigInt(tokenId);
-        
-        const nftContract = new ethers.Contract(
-            addresses.rewardBoosterNFT || addresses.boosterNFT,
-            ["function approve(address,uint256)", "function getApproved(uint256) view returns (address)"],
+        const boosterContract = new ethers.Contract(
+            addresses.rewardBoosterNFT,
+            ["function approve(address to, uint256 tokenId)", "function getApproved(uint256 tokenId) view returns (address)"],
             signer
         );
-        
-        const approved = await nftContract.getApproved(tokenIdBigInt);
+
+        const approved = await boosterContract.getApproved(tokenId);
         if (approved.toLowerCase() !== poolAddress.toLowerCase()) {
-            showToast("Approving NFT...", "info");
-            const approveTx = await nftContract.approve(poolAddress, tokenIdBigInt);
+            showToast("Approve NFT transfer...", "info");
+            const approveTx = await boosterContract.approve(poolAddress, tokenId);
             await approveTx.wait();
         }
-        
+
         if (btnElement) btnElement.innerHTML = '<div class="loader inline-block"></div> Selling...';
-        
+
         const poolContract = new ethers.Contract(poolAddress, nftPoolABI, signer);
-        
-        showToast("Confirm sale in wallet...", "info");
-        // sellNFT com 1 parâmetro (conforme ABI corrigida)
-        const tx = await poolContract.sellNFT(tokenIdBigInt);
-        
+
+        showToast("Confirm sell in wallet...", "info");
+        const tx = await poolContract.sellNFT(tokenId);
+
         showToast("Waiting confirmation...", "info");
         const receipt = await tx.wait();
-        
+
         if (receipt.status === 0) throw new Error("Transaction reverted");
-        
-        showToast("NFT sold!", "success");
+
+        showToast(`NFT #${tokenId} Sold!`, "success");
         loadUserData();
         return true;
-        
+
     } catch (e) {
         console.error("Sell error:", e);
         showToast(formatError(e), "error");
@@ -370,65 +488,55 @@ export async function executeSellNFT(poolAddress, tokenId, btnElement) {
 }
 
 // ====================================================================
-// LIST NFT FOR RENTAL
+// RENTAL - LIST NFT
 // ====================================================================
 
-export async function executeListNFT(tokenId, pricePerHour, btnElement) {
+export async function executeListNFT(params, btnElement) {
     const signer = await getConnectedSigner();
     if (!signer) return false;
-    
-    if (!addresses.rentalManager) {
-        showToast("Rental marketplace not available", "error");
-        return false;
-    }
     
     const originalText = btnElement?.innerHTML || 'List';
     if (btnElement) btnElement.innerHTML = '<div class="loader inline-block"></div> Processing...';
     
     try {
-        const tokenIdBigInt = BigInt(tokenId);
-        // pricePerHour já vem como BigInt do RentalPage
-        const priceBigInt = typeof pricePerHour === 'bigint' ? pricePerHour : BigInt(pricePerHour);
-        
-        const nftAddress = addresses.rewardBoosterNFT || addresses.boosterNFT;
-        if (!nftAddress) {
-            throw new Error("NFT contract address not configured");
-        }
-        
-        const nftContract = new ethers.Contract(
-            nftAddress,
-            ["function approve(address,uint256)", "function getApproved(uint256) view returns (address)", "function setApprovalForAll(address,bool)", "function isApprovedForAll(address,address) view returns (bool)"],
+        const { tokenId, pricePerHour, minHours, maxHours } = params;
+
+        const boosterContract = new ethers.Contract(
+            addresses.rewardBoosterNFT,
+            ["function approve(address to, uint256 tokenId)", "function getApproved(uint256 tokenId) view returns (address)", "function setApprovalForAll(address operator, bool approved)", "function isApprovedForAll(address owner, address operator) view returns (bool)"],
             signer
         );
+
+        const isApprovedForAll = await boosterContract.isApprovedForAll(State.userAddress, addresses.rentalManager);
         
-        const isApprovedForAll = await nftContract.isApprovedForAll(State.userAddress, addresses.rentalManager);
         if (!isApprovedForAll) {
-            const approved = await nftContract.getApproved(tokenIdBigInt);
-            if (approved.toLowerCase() !== addresses.rentalManager.toLowerCase()) {
-                showToast("Approving NFT...", "info");
-                const approveTx = await nftContract.approve(addresses.rentalManager, tokenIdBigInt);
-                await approveTx.wait();
-            }
+            showToast("Approve NFT access...", "info");
+            const approveTx = await boosterContract.setApprovalForAll(addresses.rentalManager, true);
+            await approveTx.wait();
+            showToast("Approved!", "success");
         }
-        
+
         if (btnElement) btnElement.innerHTML = '<div class="loader inline-block"></div> Listing...';
-        
+
         const rentalContract = new ethers.Contract(addresses.rentalManager, rentalManagerABI, signer);
-        
+
         showToast("Confirm listing in wallet...", "info");
-        // Usar listNFT com parâmetros padrão (minHours=1, maxHours=168)
-        const tx = await rentalContract.listNFT(tokenIdBigInt, priceBigInt, 1n, 168n);
-        
+        const tx = await rentalContract.listNFT(
+            BigInt(tokenId),
+            BigInt(pricePerHour),
+            BigInt(minHours),
+            BigInt(maxHours)
+        );
+
         showToast("Waiting confirmation...", "info");
         const receipt = await tx.wait();
-        
+
         if (receipt.status === 0) throw new Error("Transaction reverted");
-        
-        showToast("NFT listed!", "success");
-        loadUserData();
-        if (typeof loadRentalListings === 'function') loadRentalListings(true);
+
+        showToast(`NFT #${tokenId} listed!`, "success");
+        loadRentalListings(true);
         return true;
-        
+
     } catch (e) {
         console.error("List error:", e);
         showToast(formatError(e), "error");
@@ -439,47 +547,44 @@ export async function executeListNFT(tokenId, pricePerHour, btnElement) {
 }
 
 // ====================================================================
-// RENT NFT
+// RENTAL - RENT NFT
 // ====================================================================
 
-export async function executeRentNFT(tokenId, totalCost, btnElement) {
+export async function executeRentNFT(params, btnElement) {
     const signer = await getConnectedSigner();
     if (!signer) return false;
-    
-    if (!addresses.rentalManager) {
-        showToast("Rental marketplace not available", "error");
-        return false;
-    }
     
     const originalText = btnElement?.innerHTML || 'Rent';
     if (btnElement) btnElement.innerHTML = '<div class="loader inline-block"></div> Processing...';
     
     try {
-        const tokenIdBigInt = BigInt(tokenId);
-        const costBigInt = BigInt(totalCost);
-        const costWithBuffer = (costBigInt * 120n) / 100n;
+        const { tokenId, hours, totalCost } = params;
         
-        const approved = await simpleApprove(addresses.bkcToken, addresses.rentalManager, costWithBuffer, signer);
+        const approved = await simpleApprove(
+            addresses.bkcToken,
+            addresses.rentalManager,
+            BigInt(totalCost),
+            signer
+        );
         if (!approved) return false;
-        
+
         if (btnElement) btnElement.innerHTML = '<div class="loader inline-block"></div> Renting...';
-        
+
         const rentalContract = new ethers.Contract(addresses.rentalManager, rentalManagerABI, signer);
-        
+
         showToast("Confirm rental in wallet...", "info");
-        // rentNFT com 1 hora por padrão
-        const tx = await rentalContract.rentNFT(tokenIdBigInt, 1n);
-        
+        const tx = await rentalContract.rentNFT(BigInt(tokenId), BigInt(hours));
+
         showToast("Waiting confirmation...", "info");
         const receipt = await tx.wait();
-        
+
         if (receipt.status === 0) throw new Error("Transaction reverted");
-        
-        showToast("NFT rented!", "success");
+
+        showToast(`NFT #${tokenId} rented for ${hours}h!`, "success");
+        loadRentalListings(true);
         loadUserData();
-        if (typeof loadRentalListings === 'function') loadRentalListings(true);
         return true;
-        
+
     } catch (e) {
         console.error("Rent error:", e);
         showToast(formatError(e), "error");
@@ -490,89 +595,32 @@ export async function executeRentNFT(tokenId, totalCost, btnElement) {
 }
 
 // ====================================================================
-// RENT NFT WITH HOURS
-// ====================================================================
-
-export async function executeRentNFTWithHours(tokenId, totalCost, hours, btnElement) {
-    const signer = await getConnectedSigner();
-    if (!signer) return false;
-    
-    if (!addresses.rentalManager) {
-        showToast("Rental marketplace not available", "error");
-        return false;
-    }
-    
-    const originalText = btnElement?.innerHTML || 'Rent';
-    if (btnElement) btnElement.innerHTML = '<div class="loader inline-block"></div> Processing...';
-    
-    try {
-        const tokenIdBigInt = BigInt(tokenId);
-        const costBigInt = BigInt(totalCost);
-        const hoursBigInt = BigInt(hours || 1);
-        const costWithBuffer = (costBigInt * 120n) / 100n;
-        
-        const approved = await simpleApprove(addresses.bkcToken, addresses.rentalManager, costWithBuffer, signer);
-        if (!approved) return false;
-        
-        if (btnElement) btnElement.innerHTML = '<div class="loader inline-block"></div> Renting...';
-        
-        const rentalContract = new ethers.Contract(addresses.rentalManager, rentalManagerABI, signer);
-        
-        showToast("Confirm rental in wallet...", "info");
-        const tx = await rentalContract.rentNFT(tokenIdBigInt, hoursBigInt);
-        
-        showToast("Waiting confirmation...", "info");
-        const receipt = await tx.wait();
-        
-        if (receipt.status === 0) throw new Error("Transaction reverted");
-        
-        showToast("NFT rented!", "success");
-        loadUserData();
-        if (typeof loadRentalListings === 'function') loadRentalListings(true);
-        return true;
-        
-    } catch (e) {
-        console.error("Rent error:", e);
-        showToast(formatError(e), "error");
-        return false;
-    } finally {
-        if (btnElement) btnElement.innerHTML = originalText;
-    }
-}
-
-// ====================================================================
-// WITHDRAW LISTED NFT
+// RENTAL - WITHDRAW NFT
 // ====================================================================
 
 export async function executeWithdrawNFT(tokenId, btnElement) {
     const signer = await getConnectedSigner();
     if (!signer) return false;
     
-    if (!addresses.rentalManager) {
-        showToast("Rental marketplace not available", "error");
-        return false;
-    }
-    
     const originalText = btnElement?.innerHTML || 'Withdraw';
     if (btnElement) btnElement.innerHTML = '<div class="loader inline-block"></div> Processing...';
     
     try {
-        const tokenIdBigInt = BigInt(tokenId);
         const rentalContract = new ethers.Contract(addresses.rentalManager, rentalManagerABI, signer);
-        
+
         showToast("Confirm withdrawal in wallet...", "info");
-        const tx = await rentalContract.withdrawNFT(tokenIdBigInt);
-        
+        const tx = await rentalContract.withdrawNFT(BigInt(tokenId));
+
         showToast("Waiting confirmation...", "info");
         const receipt = await tx.wait();
-        
+
         if (receipt.status === 0) throw new Error("Transaction reverted");
-        
-        showToast("NFT withdrawn!", "success");
+
+        showToast(`NFT #${tokenId} withdrawn!`, "success");
+        loadRentalListings(true);
         loadUserData();
-        if (typeof loadRentalListings === 'function') loadRentalListings(true);
         return true;
-        
+
     } catch (e) {
         console.error("Withdraw error:", e);
         showToast(formatError(e), "error");
@@ -583,12 +631,12 @@ export async function executeWithdrawNFT(tokenId, btnElement) {
 }
 
 // ====================================================================
-// FORTUNE GAME
+// FORTUNE POOL - PARTICIPATE
 // ====================================================================
 
-export async function executeFortuneParticipate(wager, guesses, isCumulative, btnElement) {
+export async function executeFortuneGame(wager, guesses, isCumulative, btnElement) {
     const signer = await getConnectedSigner();
-    if (!signer) return false;
+    if (!signer) return { success: false };
     
     const originalText = btnElement?.innerHTML || 'Play';
     if (btnElement) btnElement.innerHTML = '<div class="loader inline-block"></div> Processing...';

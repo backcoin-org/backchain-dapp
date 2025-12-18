@@ -1,5 +1,5 @@
 // pages/NetworkStakingPage.js
-// ✅ PRODUCTION V3.0 - Animated Stake Image + Detailed History + Consistent Icons
+// ✅ PRODUCTION V4.0 - Fixed Layout, Complete History, Force Unstake Fix
 
 const ethers = window.ethers;
 
@@ -15,7 +15,8 @@ import {
     calculateUserTotalRewards,
     loadUserDelegations,
     getHighestBoosterBoostFromAPI,
-    API_ENDPOINTS
+    API_ENDPOINTS,
+    safeContractCall
 } from '../modules/data.js';
 import { 
     executeDelegation, 
@@ -41,6 +42,7 @@ let lockDays = 3650; // Default: 10 Years
 let highestBoosterTokenId = 0n;
 let isProcessing = false;
 let stakingHistory = [];
+let totalNetworkPStake = 0n;
 
 // ============================================================================
 // HELPERS
@@ -92,10 +94,10 @@ function formatDate(timestamp) {
 // STYLES
 // ============================================================================
 function injectStyles() {
-    if (document.getElementById('staking-styles-v3')) return;
+    if (document.getElementById('staking-styles-v4')) return;
     
     const style = document.createElement('style');
-    style.id = 'staking-styles-v3';
+    style.id = 'staking-styles-v4';
     style.textContent = `
         /* Stake Image Animations */
         @keyframes stake-pulse {
@@ -133,12 +135,28 @@ function injectStyles() {
         
         .duration-chip {
             transition: all 0.2s ease;
+            position: relative;
         }
         .duration-chip:hover { transform: scale(1.02); }
         .duration-chip.selected {
             background: linear-gradient(135deg, #7c3aed, #6d28d9) !important;
             border-color: #8b5cf6 !important;
             color: white !important;
+        }
+        .duration-chip.recommended::after {
+            content: '★';
+            position: absolute;
+            top: -6px;
+            right: -6px;
+            background: #f59e0b;
+            color: black;
+            font-size: 8px;
+            width: 14px;
+            height: 14px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }
         
         .stake-btn {
@@ -156,10 +174,41 @@ function injectStyles() {
         }
         .delegation-item:hover { background: rgba(63,63,70,0.3); transform: translateX(4px); }
         
+        .history-item { transition: all 0.2s ease; }
         .history-item:hover { background: rgba(63,63,70,0.5) !important; transform: translateX(4px); }
         
         .stat-glow-purple { box-shadow: 0 0 20px rgba(139,92,246,0.1); }
         .stat-glow-amber { box-shadow: 0 0 20px rgba(245,158,11,0.1); }
+        
+        /* Input Group Fix */
+        .input-with-button {
+            position: relative;
+            display: flex;
+            align-items: center;
+        }
+        .input-with-button input {
+            width: 100%;
+            padding-right: 70px;
+        }
+        .input-with-button .max-btn-inside {
+            position: absolute;
+            right: 12px;
+            top: 50%;
+            transform: translateY(-50%);
+            z-index: 10;
+        }
+        
+        /* History Tabs */
+        .history-tab {
+            transition: all 0.2s ease;
+            cursor: pointer;
+        }
+        .history-tab:hover { background: rgba(63,63,70,0.5); }
+        .history-tab.active {
+            background: rgba(139,92,246,0.2);
+            border-color: rgba(139,92,246,0.5);
+            color: #a78bfa;
+        }
     `;
     document.head.appendChild(style);
 }
@@ -198,10 +247,11 @@ export function render() {
             <div class="grid grid-cols-3 gap-2 sm:gap-4 mb-4 sm:mb-6">
                 <div class="staking-card rounded-xl p-3 sm:p-4 stat-glow-purple">
                     <div class="flex items-center gap-1.5 mb-1">
-                        <i class="fa-solid fa-globe text-purple-400 text-xs"></i>
-                        <span class="text-[9px] sm:text-[10px] text-zinc-500 uppercase">Network</span>
+                        <i class="fa-solid fa-layer-group text-purple-400 text-xs"></i>
+                        <span class="text-[9px] sm:text-[10px] text-zinc-500 uppercase">Net pStake</span>
                     </div>
                     <p id="stat-network" class="text-sm sm:text-lg font-bold text-white font-mono">--</p>
+                    <p class="text-[9px] text-zinc-600 mt-0.5">Total Network Power</p>
                 </div>
                 
                 <div class="staking-card rounded-xl p-3 sm:p-4">
@@ -210,6 +260,7 @@ export function render() {
                         <span class="text-[9px] sm:text-[10px] text-zinc-500 uppercase">Your pStake</span>
                     </div>
                     <p id="stat-pstake" class="text-sm sm:text-lg font-bold text-white font-mono">--</p>
+                    <p id="stat-pstake-percent" class="text-[9px] text-zinc-600 mt-0.5">--% of network</p>
                 </div>
                 
                 <div class="staking-card rounded-xl p-3 sm:p-4 stat-glow-amber">
@@ -238,7 +289,7 @@ export function render() {
                         <h2 class="text-lg font-bold text-white">Delegate</h2>
                     </div>
 
-                    <!-- Amount Input -->
+                    <!-- Amount Input - FIXED LAYOUT -->
                     <div class="mb-4">
                         <div class="flex justify-between items-center mb-1.5">
                             <label class="text-xs text-zinc-400">Amount</label>
@@ -246,24 +297,42 @@ export function render() {
                                 Balance: <span id="balance-display" class="text-white font-mono">0.00</span> BKC
                             </span>
                         </div>
-                        <div class="relative">
+                        <div class="input-with-button">
                             <input type="number" id="amount-input" placeholder="0.00" 
-                                class="w-full bg-black/50 border border-zinc-700 rounded-xl p-3 sm:p-4 text-xl sm:text-2xl text-white font-mono outline-none focus:border-purple-500 transition-colors pr-16">
-                            <button id="max-btn" class="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-bold bg-purple-500/20 hover:bg-purple-500/30 text-purple-400 px-3 py-1.5 rounded-lg transition-colors">
+                                class="w-full bg-black/50 border border-zinc-700 rounded-xl p-3 sm:p-4 text-xl sm:text-2xl text-white font-mono outline-none focus:border-purple-500 transition-colors">
+                            <button id="max-btn" class="max-btn-inside text-[10px] font-bold bg-purple-500/20 hover:bg-purple-500/30 text-purple-400 px-3 py-1.5 rounded-lg transition-colors">
                                 MAX
                             </button>
                         </div>
                     </div>
 
-                    <!-- Lock Duration -->
+                    <!-- Lock Duration - IMPROVED -->
                     <div class="mb-4">
-                        <label class="text-xs text-zinc-400 mb-2 block">Lock Duration</label>
-                        <div class="grid grid-cols-4 gap-2">
-                            <button class="duration-chip py-2 sm:py-2.5 bg-zinc-800 border border-zinc-700 rounded-lg text-xs sm:text-sm font-bold text-zinc-400" data-days="30">1M</button>
-                            <button class="duration-chip py-2 sm:py-2.5 bg-zinc-800 border border-zinc-700 rounded-lg text-xs sm:text-sm font-bold text-zinc-400" data-days="365">1Y</button>
-                            <button class="duration-chip py-2 sm:py-2.5 bg-zinc-800 border border-zinc-700 rounded-lg text-xs sm:text-sm font-bold text-zinc-400" data-days="1825">5Y</button>
-                            <button class="duration-chip py-2 sm:py-2.5 bg-zinc-800 border border-zinc-700 rounded-lg text-xs sm:text-sm font-bold text-zinc-400 selected" data-days="3650">10Y</button>
+                        <div class="flex justify-between items-center mb-2">
+                            <label class="text-xs text-zinc-400">Lock Duration</label>
+                            <span class="text-[9px] text-amber-400/80">
+                                <i class="fa-solid fa-star text-[8px] mr-1"></i>
+                                10Y = Max Rewards
+                            </span>
                         </div>
+                        <div class="grid grid-cols-4 gap-2">
+                            <button class="duration-chip py-2 sm:py-2.5 bg-zinc-800 border border-zinc-700 rounded-lg text-xs sm:text-sm font-bold text-zinc-400 hover:border-zinc-500" data-days="30">
+                                1M
+                            </button>
+                            <button class="duration-chip py-2 sm:py-2.5 bg-zinc-800 border border-zinc-700 rounded-lg text-xs sm:text-sm font-bold text-zinc-400 hover:border-zinc-500" data-days="365">
+                                1Y
+                            </button>
+                            <button class="duration-chip py-2 sm:py-2.5 bg-zinc-800 border border-zinc-700 rounded-lg text-xs sm:text-sm font-bold text-zinc-400 hover:border-zinc-500" data-days="1825">
+                                5Y
+                            </button>
+                            <button class="duration-chip recommended py-2 sm:py-2.5 bg-zinc-800 border border-zinc-700 rounded-lg text-xs sm:text-sm font-bold text-zinc-400 selected" data-days="3650">
+                                10Y
+                            </button>
+                        </div>
+                        <p class="text-[9px] text-zinc-600 mt-2 text-center">
+                            <i class="fa-solid fa-info-circle mr-1"></i>
+                            Longer locks generate more pStake power
+                        </p>
                     </div>
 
                     <!-- Preview -->
@@ -291,8 +360,8 @@ export function render() {
                     <!-- Info Tips -->
                     <div class="mt-4 pt-4 border-t border-zinc-800">
                         <p class="text-[10px] text-zinc-600 flex items-center gap-1.5">
-                            <i class="fa-solid fa-info-circle"></i>
-                            Longer lock = more pStake = bigger share of rewards
+                            <i class="fa-solid fa-lightbulb text-amber-500/50"></i>
+                            Pro tip: 10-year lock maximizes your rewards share
                         </p>
                     </div>
                 </div>
@@ -315,7 +384,7 @@ export function render() {
                 </div>
             </div>
 
-            <!-- Staking History -->
+            <!-- Complete Staking History -->
             <div class="staking-card rounded-2xl p-4 sm:p-5 mt-4 sm:mt-6">
                 <div class="flex items-center justify-between mb-4">
                     <div class="flex items-center gap-2">
@@ -324,8 +393,14 @@ export function render() {
                         </div>
                         <h2 class="text-lg font-bold text-white">Staking History</h2>
                     </div>
+                    <div class="flex gap-1">
+                        <button class="history-tab active text-[9px] px-2 py-1 rounded border border-zinc-700 bg-zinc-800" data-filter="ALL">All</button>
+                        <button class="history-tab text-[9px] px-2 py-1 rounded border border-zinc-700 bg-zinc-800 text-zinc-400" data-filter="STAKE">Stakes</button>
+                        <button class="history-tab text-[9px] px-2 py-1 rounded border border-zinc-700 bg-zinc-800 text-zinc-400" data-filter="UNSTAKE">Unstakes</button>
+                        <button class="history-tab text-[9px] px-2 py-1 rounded border border-zinc-700 bg-zinc-800 text-zinc-400" data-filter="CLAIM">Claims</button>
+                    </div>
                 </div>
-                <div id="staking-history-list" class="space-y-2 max-h-[300px] overflow-y-auto">
+                <div id="staking-history-list" class="space-y-2 max-h-[400px] overflow-y-auto">
                     <div class="text-center py-6">
                         <img src="${STAKE_IMAGE}" class="w-12 h-12 mx-auto opacity-30 animate-pulse mb-2" onerror="this.style.display='none'">
                         <p class="text-zinc-600 text-sm">Loading history...</p>
@@ -364,6 +439,12 @@ async function loadData(force = false) {
         const boosterData = await getHighestBoosterBoostFromAPI();
         highestBoosterTokenId = boosterData?.tokenId ? BigInt(boosterData.tokenId) : 0n;
 
+        // Load Network pStake (igual ao Dashboard)
+        if (State.delegationManagerContractPublic || State.delegationManagerContract) {
+            const contract = State.delegationManagerContractPublic || State.delegationManagerContract;
+            totalNetworkPStake = await safeContractCall(contract, 'totalNetworkPStake', [], 0n);
+        }
+
         await Promise.all([
             loadUserData(true),
             loadUserDelegations(true),
@@ -382,6 +463,8 @@ async function loadData(force = false) {
     }
 }
 
+let currentHistoryFilter = 'ALL';
+
 async function loadStakingHistory() {
     if (!State.userAddress) return;
     
@@ -390,10 +473,15 @@ async function loadStakingHistory() {
         const response = await fetch(`${endpoint}/${State.userAddress}`);
         if (response.ok) {
             const data = await response.json();
-            // Filter only staking-related activities
+            // Filtra atividades relacionadas a staking (incluindo force unstake)
             stakingHistory = (data || []).filter(item => {
                 const t = (item.type || '').toUpperCase();
-                return t.includes('DELEGAT') || t.includes('STAKE') || t.includes('CLAIM') || t.includes('REWARD');
+                return t.includes('DELEGAT') || 
+                       t.includes('STAKE') || 
+                       t.includes('UNDELEGAT') ||
+                       t.includes('CLAIM') || 
+                       t.includes('REWARD') ||
+                       t.includes('FORCE');
             });
             renderStakingHistory();
         }
@@ -406,30 +494,61 @@ function renderStakingHistory() {
     const container = document.getElementById('staking-history-list');
     if (!container) return;
 
-    if (stakingHistory.length === 0) {
+    // Aplica filtro
+    let filteredHistory = stakingHistory;
+    if (currentHistoryFilter !== 'ALL') {
+        filteredHistory = stakingHistory.filter(item => {
+            const t = (item.type || '').toUpperCase();
+            switch(currentHistoryFilter) {
+                case 'STAKE':
+                    return (t.includes('DELEGAT') || t.includes('STAKE')) && 
+                           !t.includes('UNSTAKE') && !t.includes('UNDELEGAT') && !t.includes('FORCE');
+                case 'UNSTAKE':
+                    return t.includes('UNSTAKE') || t.includes('UNDELEGAT') || t.includes('FORCE');
+                case 'CLAIM':
+                    return t.includes('CLAIM') || t.includes('REWARD');
+                default:
+                    return true;
+            }
+        });
+    }
+
+    if (filteredHistory.length === 0) {
         container.innerHTML = `
             <div class="text-center py-8">
                 <img src="${STAKE_IMAGE}" class="w-14 h-14 mx-auto opacity-20 mb-3" onerror="this.style.display='none'">
-                <p class="text-zinc-500 text-sm">No staking history yet</p>
-                <p class="text-zinc-600 text-xs mt-1">Your staking activity will appear here</p>
+                <p class="text-zinc-500 text-sm">No ${currentHistoryFilter === 'ALL' ? 'staking' : currentHistoryFilter.toLowerCase()} history yet</p>
+                <p class="text-zinc-600 text-xs mt-1">Your activity will appear here</p>
             </div>
         `;
         return;
     }
 
-    container.innerHTML = stakingHistory.slice(0, 15).map(item => {
+    container.innerHTML = filteredHistory.slice(0, 20).map(item => {
         const t = (item.type || '').toUpperCase();
         const details = item.details || {};
         const dateStr = formatDate(item.timestamp || item.createdAt);
         
-        // Determine icon and style
+        // Determine icon and style based on type
         let icon, iconColor, bgColor, label, extraInfo = '';
         
-        if (t.includes('DELEGAT') || (t.includes('STAKE') && !t.includes('UNSTAKE'))) {
+        if (t.includes('FORCE') || (t.includes('UNDELEGAT') && details.feePaid && BigInt(details.feePaid || 0) > 0n)) {
+            // Force Unstake
+            icon = 'fa-bolt';
+            iconColor = '#ef4444';
+            bgColor = 'rgba(239,68,68,0.15)';
+            label = '⚡ Force Unstaked';
+            const feePaid = details.feePaid;
+            if (feePaid && BigInt(feePaid) > 0n) {
+                const feeNum = formatBigNumber(BigInt(feePaid)).toFixed(2);
+                extraInfo = `<span class="ml-2 text-[9px] text-red-400">(penalty: ${feeNum} BKC)</span>`;
+            }
+        } else if (t.includes('DELEGAT') || (t.includes('STAKE') && !t.includes('UNSTAKE'))) {
+            // Stake/Delegate
             icon = 'fa-lock';
             iconColor = '#4ade80';
             bgColor = 'rgba(34,197,94,0.15)';
-            label = '🔒 Staked';
+            label = '🔒 Delegated';
             const pStake = details.pStakeGenerated;
             if (pStake) {
                 const pStakeNum = formatBigNumber(BigInt(pStake)).toFixed(0);
@@ -441,33 +560,34 @@ function renderStakingHistory() {
                 extraInfo += `<span class="ml-1 text-[9px] text-zinc-500">(${formatDuration(days)})</span>`;
             }
         } else if (t.includes('UNSTAKE') || t.includes('UNDELEGAT')) {
-            if (t.includes('FORCE')) {
-                icon = 'fa-bolt';
-                iconColor = '#ef4444';
-                bgColor = 'rgba(239,68,68,0.15)';
-                label = '⚡ Force Unstaked';
-                const feePaid = details.feePaid;
-                if (feePaid && BigInt(feePaid) > 0n) {
-                    const feeNum = formatBigNumber(BigInt(feePaid)).toFixed(2);
-                    extraInfo = `<span class="ml-2 text-[9px] text-red-400">(penalty: ${feeNum} BKC)</span>`;
-                }
-            } else {
-                icon = 'fa-unlock';
-                iconColor = '#fb923c';
-                bgColor = 'rgba(249,115,22,0.15)';
-                label = '🔓 Unstaked';
+            // Normal Unstake
+            icon = 'fa-unlock';
+            iconColor = '#fb923c';
+            bgColor = 'rgba(249,115,22,0.15)';
+            label = '🔓 Unstaked';
+            const amountReceived = details.amountReceived;
+            if (amountReceived && BigInt(amountReceived) > 0n) {
+                const amtNum = formatBigNumber(BigInt(amountReceived)).toFixed(2);
+                extraInfo = `<span class="ml-2 text-[9px] text-green-400">+${amtNum} BKC</span>`;
             }
         } else if (t.includes('CLAIM') || t.includes('REWARD')) {
+            // Claim Rewards
             icon = 'fa-coins';
             iconColor = '#fbbf24';
             bgColor = 'rgba(245,158,11,0.15)';
             label = '🪙 Rewards Claimed';
+            const amountReceived = details.amountReceived;
             const feePaid = details.feePaid;
+            if (amountReceived && BigInt(amountReceived) > 0n) {
+                const amtNum = formatBigNumber(BigInt(amountReceived)).toFixed(2);
+                extraInfo = `<span class="ml-2 text-[9px] text-green-400">+${amtNum} BKC</span>`;
+            }
             if (feePaid && BigInt(feePaid) > 0n) {
                 const feeNum = formatBigNumber(BigInt(feePaid)).toFixed(2);
-                extraInfo = `<span class="ml-2 text-[9px] text-zinc-500">(fee: ${feeNum})</span>`;
+                extraInfo += `<span class="ml-1 text-[9px] text-zinc-500">(fee: ${feeNum})</span>`;
             }
         } else {
+            // Default
             icon = 'fa-circle';
             iconColor = '#71717a';
             bgColor = 'rgba(39,39,42,0.5)';
@@ -505,9 +625,22 @@ function updateStats() {
         if (el) el.textContent = val;
     };
 
-    setTxt('stat-network', formatPStake(State.totalNetworkPStake || 0n));
+    // Network pStake (igual ao Dashboard)
+    setTxt('stat-network', formatPStake(totalNetworkPStake || State.totalNetworkPStake || 0n));
     setTxt('stat-pstake', formatPStake(State.userTotalPStake || 0n));
     setTxt('balance-display', formatBigNumber(State.currentUserBalance || 0n).toFixed(2));
+
+    // Calcula percentual do usuário na rede
+    const userPStake = State.userTotalPStake || 0n;
+    const networkPStake = totalNetworkPStake || State.totalNetworkPStake || 0n;
+    let userPercent = 0;
+    if (networkPStake > 0n && userPStake > 0n) {
+        userPercent = Number((userPStake * 10000n) / networkPStake) / 100;
+    }
+    const percentEl = document.getElementById('stat-pstake-percent');
+    if (percentEl) {
+        percentEl.textContent = userPercent > 0 ? `${userPercent.toFixed(2)}% of network` : '0% of network';
+    }
 
     const feeBips = State.systemFees?.["DELEGATION_FEE_BIPS"] || 50n;
     const feePercent = Number(feeBips) / 100;
@@ -539,6 +672,9 @@ function resetUI() {
     setTxt('stat-rewards', '--');
     setTxt('balance-display', '0.00');
     setTxt('delegation-count', '0');
+    
+    const percentEl = document.getElementById('stat-pstake-percent');
+    if (percentEl) percentEl.textContent = '--% of network';
 
     const list = document.getElementById('delegations-list');
     if (list) {
@@ -604,7 +740,13 @@ function renderDelegations() {
         btn.addEventListener('click', () => handleUnstake(btn.dataset.index, false));
     });
     container.querySelectorAll('.force-unstake-btn').forEach(btn => {
-        btn.addEventListener('click', () => handleUnstake(btn.dataset.index, true));
+        btn.addEventListener('click', () => {
+            // Confirma antes de force unstake
+            const confirmed = confirm('⚠️ Force Unstake will apply a 50% penalty!\n\nAre you sure you want to continue?');
+            if (confirmed) {
+                handleUnstake(btn.dataset.index, true);
+            }
+        });
     });
 }
 
@@ -819,12 +961,24 @@ async function handleUnstake(index, isForce) {
     isProcessing = true;
 
     try {
+        // CORREÇÃO: Passa o índice correto como BigInt
+        const delegationIndex = BigInt(index);
+        const boosterId = highestBoosterTokenId || 0n;
+        
+        console.log(`Attempting ${isForce ? 'force ' : ''}unstake:`, {
+            delegationIndex: delegationIndex.toString(),
+            boosterId: boosterId.toString()
+        });
+        
         const success = isForce 
-            ? await executeForceUnstake(Number(index), highestBoosterTokenId)
-            : await executeUnstake(Number(index), highestBoosterTokenId);
+            ? await executeForceUnstake(delegationIndex, boosterId)
+            : await executeUnstake(delegationIndex, boosterId);
 
         if (success) {
-            showToast(isForce ? '⚡ Force unstaked (50% penalty)' : '🔓 Unstaked successfully!', isForce ? 'warning' : 'success');
+            showToast(isForce ? '⚡ Force unstaked (50% penalty applied)' : '🔓 Unstaked successfully!', isForce ? 'warning' : 'success');
+            // Força recarregamento completo
+            isLoading = false;
+            lastFetch = 0;
             await loadData(true);
         }
     } catch (e) {
@@ -849,6 +1003,8 @@ async function handleClaim(stakingRewards, minerRewards, btn) {
 
         if (success) {
             showToast('🪙 Rewards claimed!', 'success');
+            isLoading = false;
+            lastFetch = 0;
             await loadData(true);
         }
     } catch (e) {
@@ -870,6 +1026,7 @@ function setupListeners() {
     const stakeBtn = document.getElementById('stake-btn');
     const refreshBtn = document.getElementById('refresh-btn');
     const durationChips = document.querySelectorAll('.duration-chip');
+    const historyTabs = document.querySelectorAll('.history-tab');
 
     amountInput?.addEventListener('input', updatePreview);
 
@@ -887,6 +1044,20 @@ function setupListeners() {
             chip.classList.add('selected');
             lockDays = parseInt(chip.dataset.days);
             updatePreview();
+        });
+    });
+
+    // History filter tabs
+    historyTabs.forEach(tab => {
+        tab.addEventListener('click', () => {
+            historyTabs.forEach(t => {
+                t.classList.remove('active');
+                t.classList.add('text-zinc-400');
+            });
+            tab.classList.add('active');
+            tab.classList.remove('text-zinc-400');
+            currentHistoryFilter = tab.dataset.filter;
+            renderStakingHistory();
         });
     });
 
