@@ -1053,7 +1053,15 @@ function renderRentModal() {
                     </button>
                 </div>
                 
-                <div id="rent-modal-content" class="mb-6"></div>
+                <div id="rent-modal-content" class="mb-4"></div>
+                
+                <!-- Fixed duration info -->
+                <div class="bg-zinc-800/30 rounded-xl p-3 mb-4 border border-zinc-700/50">
+                    <div class="flex items-center justify-center gap-2 text-zinc-400">
+                        <i class="fa-solid fa-hourglass-half text-amber-400"></i>
+                        <span class="text-sm">Duration: <span class="text-white font-bold">1 hour</span></span>
+                    </div>
+                </div>
                 
                 <div class="bg-zinc-800/50 rounded-xl p-4 mb-6">
                     <div class="flex justify-between items-center">
@@ -1214,7 +1222,8 @@ function openRentModal(tokenId) {
     RentalState.selectedRentalId = tokenId;
 
     const tier = getTierInfo(listing.boostBips);
-    const price = formatBigNumber(BigInt(listing.pricePerHour || 0)).toFixed(2);
+    const pricePerHour = BigInt(listing.pricePerHour || 0);
+    const priceFormatted = formatBigNumber(pricePerHour).toFixed(2);
     const tierClass = `tier-${tier.name.toLowerCase()}`;
 
     const content = document.getElementById('rent-modal-content');
@@ -1229,12 +1238,13 @@ function openRentModal(tokenId) {
                     <span class="text-green-400 text-xs font-mono">#${listing.tokenId}</span>
                 </div>
                 <p class="text-white font-bold text-lg">${tier.name} Booster</p>
-                <p class="text-xs text-zinc-500">+${(listing.boostBips || 0) / 100}% boost for 1 hour</p>
+                <p class="text-xs text-zinc-500">+${(listing.boostBips || 0) / 100}% mining boost</p>
             </div>
         </div>
     `;
 
-    totalEl.innerHTML = `${price} <span class="text-sm text-zinc-500 font-normal">BKC</span>`;
+    // Total = preço por 1 hora
+    totalEl.innerHTML = `${priceFormatted} <span class="text-sm text-zinc-500 font-normal">BKC</span>`;
 
     const modal = document.getElementById('rent-modal');
     modal.classList.remove('hidden');
@@ -1289,6 +1299,11 @@ async function handleConfirmRent() {
     const mascot = document.getElementById('airbnft-mascot');
     const originalText = btn.innerHTML;
     
+    // Duração fixa de 1 hora
+    const hours = 1;
+    const pricePerHour = BigInt(listing.pricePerHour || 0);
+    const totalCost = pricePerHour * BigInt(hours);
+    
     RentalState.isTransactionPending = true;
     btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-2"></i>Processing...';
     btn.disabled = true;
@@ -1296,13 +1311,20 @@ async function handleConfirmRent() {
     if (mascot) mascot.className = 'w-16 h-16 object-contain airbnft-spin';
 
     try {
-        const cost = BigInt(listing.pricePerHour);
-        const success = await executeRentNFT(tokenId, cost, btn);
+        const success = await executeRentNFT({
+            tokenId,
+            hours,
+            totalCost: totalCost.toString()
+        }, btn);
 
         if (success) {
             if (mascot) mascot.className = 'w-16 h-16 object-contain airbnft-success';
             closeRentModal();
-            showToast('⏰ NFT rented successfully! Boost is now active.', 'success');
+            showToast('⏰ NFT rented successfully! Boost is now active for 1 hour.', 'success');
+            
+            // Cooldown - desabilitar botão por 5 segundos
+            startRentCooldown(5);
+            
             await refreshData();
         }
     } finally {
@@ -1315,6 +1337,30 @@ async function handleConfirmRent() {
             }, 800);
         }
     }
+}
+
+// Cooldown após alugar
+function startRentCooldown(seconds) {
+    const rentButtons = document.querySelectorAll('.rent-btn');
+    rentButtons.forEach(btn => {
+        btn.disabled = true;
+        btn.classList.add('opacity-50', 'cursor-not-allowed');
+        
+        let remaining = seconds;
+        const originalText = btn.innerHTML;
+        
+        const interval = setInterval(() => {
+            btn.innerHTML = `<i class="fa-solid fa-clock mr-1"></i>${remaining}s`;
+            remaining--;
+            
+            if (remaining < 0) {
+                clearInterval(interval);
+                btn.innerHTML = originalText;
+                btn.disabled = false;
+                btn.classList.remove('opacity-50', 'cursor-not-allowed');
+            }
+        }, 1000);
+    });
 }
 
 async function handleConfirmList() {
