@@ -521,7 +521,7 @@ function renderStep1(panel) {
                     <i class="fa-solid fa-cloud-arrow-up text-2xl text-amber-400"></i>
                 </div>
                 <p class="text-white font-medium mb-1">Click or drag file here</p>
-                <p class="text-[10px] text-zinc-600">Max 4MB • Any format</p>
+                <p class="text-[10px] text-zinc-600">Max 10MB • Any format</p>
             </div>
 
             <div class="flex items-center gap-4 mt-6 text-[10px] text-zinc-600">
@@ -1195,8 +1195,6 @@ export const NotaryPage = {
 
     async addToWallet(tokenId, imageUrl) {
         try {
-            let finalImageUrl = imageUrl || '';
-            
             // Função helper para converter IPFS URL
             const toHttpsUrl = (url) => {
                 if (!url) return '';
@@ -1205,27 +1203,38 @@ export const NotaryPage = {
                     return `https://ipfs.io/ipfs/${cid}`;
                 }
                 if (url.startsWith('https://') || url.startsWith('http://')) {
+                    // Converter gateway pinata para ipfs.io (mais confiável)
+                    if (url.includes('gateway.pinata.cloud')) {
+                        const cid = url.split('/ipfs/')[1];
+                        if (cid) return `https://ipfs.io/ipfs/${cid}`;
+                    }
                     return url;
                 }
                 // Assume it's just a CID
-                return `https://ipfs.io/ipfs/${url}`;
+                if (url && url.length > 10) {
+                    return `https://ipfs.io/ipfs/${url}`;
+                }
+                return '';
             };
             
-            finalImageUrl = toHttpsUrl(finalImageUrl);
+            let finalImageUrl = toHttpsUrl(imageUrl || '');
+            console.log('📜 Input imageUrl:', imageUrl);
+            console.log('📜 Converted to:', finalImageUrl);
             
-            // Try to get image from tokenURI if not provided
-            if (!finalImageUrl && State.decentralizedNotaryContract) {
+            // Always try to get from tokenURI for accurate metadata
+            if (State.decentralizedNotaryContract) {
                 try {
                     const uri = await State.decentralizedNotaryContract.tokenURI(tokenId);
-                    console.log('📜 TokenURI for', tokenId, ':', uri?.slice(0, 100));
+                    console.log('📜 TokenURI response:', uri?.slice(0, 150) + '...');
                     
                     if (uri && uri.startsWith('data:application/json;base64,')) {
                         const base64Data = uri.replace('data:application/json;base64,', '');
                         const metadata = JSON.parse(atob(base64Data));
-                        console.log('📜 Metadata:', metadata);
+                        console.log('📜 Parsed metadata:', metadata);
                         
                         if (metadata.image) {
                             finalImageUrl = toHttpsUrl(metadata.image);
+                            console.log('📜 Image from metadata:', finalImageUrl);
                         }
                     }
                 } catch (e) {
@@ -1242,6 +1251,9 @@ export const NotaryPage = {
                 showToast('Contract address not found', 'error');
                 return;
             }
+            
+            console.log('📜 Contract address:', contractAddress);
+            console.log('📜 Token ID:', tokenId);
             
             showToast('Adding NFT #' + tokenId + ' to wallet...', 'info');
             
@@ -1261,10 +1273,18 @@ export const NotaryPage = {
             
             if (result) {
                 showToast('📜 NFT #' + tokenId + ' added to wallet!', 'success');
+            } else {
+                showToast('NFT not added (cancelled or not supported)', 'warning');
             }
         } catch (error) {
             console.error('Add to wallet error:', error);
-            if (error.code !== 4001) { // User rejected
+            
+            if (error.code === 4001) {
+                // User rejected - don't show error
+                return;
+            } else if (error.code === 4100 || error.message?.includes('spam')) {
+                showToast('MetaMask blocked request. Wait a few seconds and try again.', 'warning');
+            } else {
                 showToast('Could not add NFT: ' + (error.message || 'Unknown error'), 'error');
             }
         }
