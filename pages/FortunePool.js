@@ -1361,11 +1361,12 @@ function renderHistoryList(games) {
         const prize = g.prizeWon ? formatBigNumber(BigInt(g.prizeWon)) : 0;
         const wager = g.wagerAmount ? formatBigNumber(BigInt(g.wagerAmount)) : 0;
         
-        // Formatar data
+        // Formatar data - usar requestedAt
         let time = '';
-        if (g.timestamp) {
+        const timestamp = g.requestedAt || g.timestamp;
+        if (timestamp) {
             try {
-                const ts = g.timestamp._seconds || g.timestamp.seconds || g.timestamp;
+                const ts = timestamp._seconds || timestamp.seconds || timestamp;
                 const date = new Date(typeof ts === 'number' ? ts * 1000 : ts);
                 if (!isNaN(date.getTime())) {
                     time = date.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
@@ -1373,45 +1374,36 @@ function renderHistoryList(games) {
             } catch (e) { }
         }
         
-        // Números apostados - verificar diferentes formatos
+        // Números apostados - garantir que são números
         let guesses = [];
         if (Array.isArray(g.guesses) && g.guesses.length > 0) {
-            guesses = g.guesses;
-        } else if (g.details?.guesses && Array.isArray(g.details.guesses)) {
-            guesses = g.details.guesses;
+            guesses = g.guesses.map(n => Number(n));
         }
         
-        // Números do oráculo
+        // Números do oráculo (resultado)
         let rolls = [];
         if (Array.isArray(g.rolls) && g.rolls.length > 0) {
-            rolls = g.rolls;
-        } else if (g.details?.rolls && Array.isArray(g.details.rolls)) {
-            rolls = g.details.rolls;
-        } else if (g.randomNumbers && Array.isArray(g.randomNumbers)) {
-            rolls = g.randomNumbers;
+            rolls = g.rolls.map(n => Number(n));
         }
         
-        // Formatar para exibição (garantir que são números, não strings "1")
-        const guessesStr = guesses.length > 0 
-            ? guesses.map(n => Number(n)).join(' • ') 
-            : '';
-        const rollsStr = rolls.length > 0 
-            ? rolls.map(n => Number(n)).join(' • ') 
-            : '';
+        // Status do jogo
+        const isPending = g.status === 'PENDING' || !g.rolls;
+        const statusLabel = isPending ? '⏳ Pending' : (isWin ? '🏆 Winner!' : 'Played');
+        const statusClass = isPending ? 'text-amber-400' : (isWin ? 'text-emerald-400' : 'text-white');
         
-        // Determinar se é modo combo ou jackpot
-        const isCombo = guesses.length > 1;
-        const modeLabel = isCombo ? '🎰 Combo' : '👑 Jackpot';
+        // Formatar para exibição
+        const guessesStr = guesses.length > 0 ? guesses.join(' • ') : '';
+        const rollsStr = rolls.length > 0 ? rolls.join(' • ') : '';
         
         return `
             <a href="${g.txHash ? EXPLORER_TX + g.txHash : '#'}" target="_blank" class="history-item flex items-center justify-between p-3 hover:bg-zinc-800/60 border border-zinc-700/30 rounded-lg transition-all group mb-1.5 bg-zinc-800/20">
                 <div class="flex items-center gap-3">
-                    <div class="w-10 h-10 rounded-lg flex items-center justify-center ${isWin ? 'bg-emerald-500/20' : 'bg-zinc-700/50'}">
-                        <span class="text-lg">${isWin ? '🏆' : '🐯'}</span>
+                    <div class="w-10 h-10 rounded-lg flex items-center justify-center ${isWin ? 'bg-emerald-500/20' : isPending ? 'bg-amber-500/20' : 'bg-zinc-700/50'}">
+                        <span class="text-lg">${isPending ? '⏳' : (isWin ? '🏆' : '🐯')}</span>
                     </div>
                     <div>
-                        <p class="text-white text-xs font-medium flex items-center gap-2">
-                            ${isWin ? '<span class="text-emerald-400">Winner!</span>' : 'Played'}
+                        <p class="text-xs font-medium flex items-center gap-2">
+                            <span class="${statusClass}">${statusLabel}</span>
                             ${guessesStr ? `<span class="px-1.5 py-0.5 rounded text-[10px] font-bold" style="background: rgba(249,115,22,0.2); color: #f97316">🎯 ${guessesStr}</span>` : ''}
                         </p>
                         <div class="flex items-center gap-2 mt-0.5">
