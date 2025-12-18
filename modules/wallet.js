@@ -1,5 +1,5 @@
 // js/modules/wallet.js
-// ✅ VERSÃO V7.2: Desabilita Social Login (não funciona com Arbitrum Sepolia)
+// ✅ VERSÃO V7.3: Força desabilitar Social Login via features config
 
 import { createWeb3Modal, defaultConfig } from 'https://esm.sh/@web3modal/ethers@5.1.11?bundle';
 
@@ -73,11 +73,21 @@ const web3modal = createWeb3Modal({
     ethersConfig,
     chains: [arbitrumSepoliaConfig],
     projectId: WALLETCONNECT_PROJECT_ID,
-    enableAnalytics: true,    
+    enableAnalytics: false,    
     themeMode: 'dark',
-    // 🔥 V7.2: Desabilita funcionalidades que não funcionam
+    // 🔥 V7.3: Força desabilitar TODAS as opções de social/email
     featuredWalletIds: [],
     enableOnramp: false,
+    enableSwaps: false,
+    // 🔥 Desabilita auth features explicitamente
+    features: {
+        email: false,
+        socials: false,
+        emailShowWallets: false,
+        analytics: false,
+        onramp: false,
+        swaps: false
+    },
     themeVariables: {
         '--w3m-accent': '#f59e0b', 
         '--w3m-border-radius-master': '1px',
