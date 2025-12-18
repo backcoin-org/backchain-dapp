@@ -769,33 +769,67 @@ export async function executeFortuneGame(wager, guesses, isCumulative, btnElemen
         const wagerBigInt = ethers.parseEther(wager.toString());
         const guessesArray = Array.isArray(guesses) ? guesses.map(g => BigInt(g)) : [BigInt(guesses)];
         
+        console.log("Fortune Game params:", {
+            wager: wager.toString(),
+            wagerWei: wagerBigInt.toString(),
+            guesses: guessesArray.map(g => g.toString()),
+            isCumulative
+        });
+        
         const fortuneAddress = addresses.fortunePool || addresses.actionsManager;
         if (!fortuneAddress) {
             throw new Error("Fortune Pool not configured");
         }
         
+        const fortuneContract = new ethers.Contract(fortuneAddress, actionsManagerABI, signer);
+        
+        // Verificar se há tiers ativos
+        try {
+            const tierCount = await fortuneContract.activeTierCount();
+            console.log("Active tier count:", tierCount.toString());
+            
+            if (tierCount === 0n) {
+                showToast("No active game tiers available", "error");
+                return { success: false };
+            }
+            
+            // Verificar número esperado de guesses
+            const expectedGuessCount = isCumulative ? Number(tierCount) : 1;
+            if (guessesArray.length !== expectedGuessCount) {
+                showToast(`Expected ${expectedGuessCount} guess(es), got ${guessesArray.length}`, "error");
+                return { success: false };
+            }
+        } catch (e) {
+            console.warn("Could not verify tier count:", e.message);
+        }
+        
+        // Aprovar BKC
         const approved = await simpleApprove(
             addresses.bkcToken, 
             fortuneAddress, 
             wagerBigInt, 
             signer
         );
-        if (!approved) return false;
+        if (!approved) return { success: false };
         
-        const fortuneContract = new ethers.Contract(fortuneAddress, actionsManagerABI, signer);
-        
+        // Obter oracle fee
         let oracleFee;
         try {
             oracleFee = await fortuneContract.getRequiredOracleFee(isCumulative);
+            console.log("Oracle fee:", ethers.formatEther(oracleFee), "ETH");
         } catch (e) {
+            console.warn("getRequiredOracleFee failed, trying oracleFee:", e.message);
             const baseFee = await fortuneContract.oracleFee();
             oracleFee = isCumulative ? baseFee * 5n : baseFee;
+            console.log("Calculated oracle fee:", ethers.formatEther(oracleFee), "ETH");
         }
         
-        // Prioriza Web3Modal provider
+        // Verificar saldo ETH
         let rawProvider = State.web3Provider || State.provider || window.ethereum;
         const provider = new ethers.BrowserProvider(rawProvider);
         const ethBalance = await provider.getBalance(State.userAddress);
+        
+        console.log("ETH balance:", ethers.formatEther(ethBalance), "ETH");
         
         if (ethBalance < oracleFee) {
             showToast(`Insufficient ETH for oracle fee (need ${ethers.formatEther(oracleFee)} ETH)`, "error");
@@ -805,6 +839,13 @@ export async function executeFortuneGame(wager, guesses, isCumulative, btnElemen
         if (btnElement) btnElement.innerHTML = '<div class="loader inline-block"></div> Submitting...';
         
         showToast("Confirm game in wallet...", "info");
+        
+        console.log("Calling participate with:", {
+            wagerAmount: wagerBigInt.toString(),
+            guesses: guessesArray.map(g => g.toString()),
+            isCumulative,
+            value: oracleFee.toString()
+        });
         
         const tx = await fortuneContract.participate(wagerBigInt, guessesArray, isCumulative, { value: oracleFee });
         
@@ -831,7 +872,24 @@ export async function executeFortuneGame(wager, guesses, isCumulative, btnElemen
         
     } catch (e) {
         console.error("Fortune error:", e);
-        showToast(formatError(e), "error");
+        
+        // Tentar decodificar o erro
+        const errorMsg = e?.message || '';
+        if (errorMsg.includes('ZeroAmount')) {
+            showToast("Wager amount cannot be zero", "error");
+        } else if (errorMsg.includes('NoActiveTiers')) {
+            showToast("No active game tiers available", "error");
+        } else if (errorMsg.includes('InvalidGuessCount')) {
+            showToast("Wrong number of guesses for this mode", "error");
+        } else if (errorMsg.includes('InvalidGuessRange')) {
+            showToast("Guess is out of valid range", "error");
+        } else if (errorMsg.includes('InsufficientOracleFee')) {
+            showToast("Incorrect oracle fee", "error");
+        } else if (errorMsg.includes('InsufficientBalance') || errorMsg.includes('insufficient')) {
+            showToast("Insufficient BKC balance", "error");
+        } else {
+            showToast(formatError(e), "error");
+        }
         return { success: false };
     } finally {
         if (btnElement) btnElement.innerHTML = originalText;
