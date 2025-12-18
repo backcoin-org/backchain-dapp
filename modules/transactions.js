@@ -1,5 +1,5 @@
 // js/modules/transactions.js
-// ✅ PRODUCTION V11.2 - FIX: Embedded Wallets (Social Login) - Correct Signer Handling
+// ✅ PRODUCTION V11.3 - FIX: Embedded Wallets - Avoid BrowserProvider.getSigner()
 
 const ethers = window.ethers;
 
@@ -28,13 +28,33 @@ async function getConnectedSigner() {
     }
     
     try {
-        // 🔥 V11.2: Suporte correto para embedded wallets (social login)
-        // Web3Modal já gerencia a autenticação - NÃO chamar eth_requestAccounts
+        // 🔥 V11.3: PRIMEIRO tenta usar o State.signer já configurado pelo wallet.js
+        // Isso evita chamar getSigner() novamente (que causa eth_requestAccounts)
+        if (State.signer) {
+            // Verifica se é um signer válido ou um provider
+            if (typeof State.signer.sendTransaction === 'function') {
+                console.log('✅ Using cached State.signer');
+                return State.signer;
+            }
+            
+            // Se State.signer é um provider (embedded wallet), cria signer wrapper
+            if (State.signer.send || State.signer.request) {
+                console.log('📱 Creating signer from embedded wallet provider');
+                try {
+                    const provider = new ethers.BrowserProvider(State.signer);
+                    const signer = await provider.getSigner(State.userAddress);
+                    return signer;
+                } catch (e) {
+                    // Se falhar, tenta criar JsonRpcSigner diretamente
+                    console.log('📱 Using Web3Provider wrapper');
+                }
+            }
+        }
         
+        // 🔥 Fallback: tenta do State.web3Provider
         let rawProvider = State.web3Provider || State.provider;
         
         if (!rawProvider) {
-            // Fallback para window.ethereum (MetaMask direto)
             if (window.ethereum) {
                 rawProvider = window.ethereum;
             } else {
@@ -43,33 +63,23 @@ async function getConnectedSigner() {
             }
         }
         
-        console.log('🔑 Getting signer...');
-        
+        console.log('🔑 Getting signer from raw provider...');
         const provider = new ethers.BrowserProvider(rawProvider);
         
-        try {
-            const signer = await provider.getSigner();
-            const signerAddress = await signer.getAddress();
-            console.log('✅ Signer obtained for:', signerAddress.slice(0, 10) + '...');
-            return signer;
-        } catch (signerError) {
-            console.warn('⚠️ getSigner() failed:', signerError.message);
-            
-            // 🔥 Para embedded wallets, o State.signer já pode estar configurado
-            if (State.signer && typeof State.signer.sendTransaction === 'function') {
-                console.log('✅ Using cached State.signer');
-                return State.signer;
-            }
-            
-            // 🔥 Última tentativa: criar signer a partir do address conhecido
-            // Isso permite pelo menos leitura, e o Web3Modal gerencia a assinatura
-            console.warn('⚠️ Using provider with known address');
-            showToast("Wallet may require reconnection for transactions", "warning");
-            throw signerError;
-        }
+        // 🔥 Passa o address conhecido para evitar eth_requestAccounts em alguns casos
+        const signer = await provider.getSigner(State.userAddress);
+        console.log('✅ Signer obtained');
+        return signer;
+        
     } catch (e) {
         console.error("Signer error:", e);
-        showToast("Please reconnect your wallet", "error");
+        
+        // 🔥 Último recurso: mostrar mensagem clara
+        if (e.message?.includes('eth_requestAccounts') || e.message?.includes('not allowed')) {
+            showToast("This wallet type requires MetaMask for transactions. Please reconnect with MetaMask.", "warning");
+        } else {
+            showToast("Please reconnect your wallet", "error");
+        }
         return null;
     }
 }
