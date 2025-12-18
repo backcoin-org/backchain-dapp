@@ -12,7 +12,7 @@ const ethers = window.ethers;
 // ============================================================================
 // CONSTANTS
 // ============================================================================
-const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
+const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB (Pinata Free limit)
 const EXPLORER_TX = "https://sepolia.arbiscan.io/tx/";
 const IPFS_GATEWAY = "https://ipfs.io/ipfs/";
 const NOTARY_IMAGE = "./assets/notary.png";
@@ -265,7 +265,7 @@ function render() {
                                 <div class="w-6 h-6 rounded-full bg-amber-500/20 flex items-center justify-center flex-shrink-0">
                                     <span class="text-amber-400 text-[10px] font-bold">1</span>
                                 </div>
-                                <p class="text-xs text-zinc-400">Upload any document (max 10MB)</p>
+                                <p class="text-xs text-zinc-400">Upload any document (max 5MB)</p>
                             </div>
                             <div class="flex items-start gap-3">
                                 <div class="w-6 h-6 rounded-full bg-amber-500/20 flex items-center justify-center flex-shrink-0">
@@ -521,7 +521,7 @@ function renderStep1(panel) {
                     <i class="fa-solid fa-cloud-arrow-up text-2xl text-amber-400"></i>
                 </div>
                 <p class="text-white font-medium mb-1">Click or drag file here</p>
-                <p class="text-[10px] text-zinc-600">Max 10MB • Any format</p>
+                <p class="text-[10px] text-zinc-600">Max 5MB • Any format</p>
             </div>
 
             <div class="flex items-center gap-4 mt-6 text-[10px] text-zinc-600">
@@ -563,7 +563,7 @@ function handleFileSelect(file) {
     if (!file) return;
 
     if (file.size > MAX_FILE_SIZE) {
-        showToast('File too large (max 10MB)', 'error');
+        showToast('File too large (max 5MB)', 'error');
         return;
     }
 
@@ -773,7 +773,7 @@ async function handleMint() {
         });
 
         if (!res.ok) {
-            if (res.status === 413) throw new Error('File too large. Maximum size is 10MB.');
+            if (res.status === 413) throw new Error('File too large. Maximum size is 5MB.');
             if (res.status === 401) throw new Error('Signature verification failed. Please try again.');
             if (res.status === 500) {
                 const errorData = await res.json().catch(() => ({}));
