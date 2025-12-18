@@ -1,1178 +1,1387 @@
-// js/pages/NotaryPage.js
-// ✅ PRODUCTION V9.0 - Enhanced Animations + Consistent Icons + Detailed History
+// js/pages/FortunePool.js
+// ✅ PRODUCTION V13.0 - Tiger Theme + Spinning Roulette + Epic Win Animation
 
 import { State } from '../state.js';
+import { loadUserData, API_ENDPOINTS } from '../modules/data.js';
+import { executeFortuneParticipate } from '../modules/transactions.js';
 import { formatBigNumber } from '../utils.js';
-import { safeContractCall, API_ENDPOINTS, loadPublicData, loadUserData } from '../modules/data.js';
-import { executeNotarizeDocument } from '../modules/transactions.js';
 import { showToast } from '../ui-feedback.js';
-
-const ethers = window.ethers;
 
 // ============================================================================
 // CONSTANTS
 // ============================================================================
-const MAX_FILE_SIZE = 4 * 1024 * 1024; // 4MB
 const EXPLORER_TX = "https://sepolia.arbiscan.io/tx/";
-const IPFS_GATEWAY = "https://ipfs.io/ipfs/";
-const NOTARY_IMAGE = "./assets/notary.png";
+const TIGER_IMAGE = "./assets/fortune.png";
 
-// File type configurations
-const FILE_TYPES = {
-    image: { icon: 'fa-regular fa-image', color: 'text-green-400', bg: 'bg-green-500/10' },
-    pdf: { icon: 'fa-regular fa-file-pdf', color: 'text-red-400', bg: 'bg-red-500/10' },
-    audio: { icon: 'fa-solid fa-music', color: 'text-purple-400', bg: 'bg-purple-500/10' },
-    video: { icon: 'fa-regular fa-file-video', color: 'text-blue-400', bg: 'bg-blue-500/10' },
-    document: { icon: 'fa-regular fa-file-word', color: 'text-blue-400', bg: 'bg-blue-500/10' },
-    spreadsheet: { icon: 'fa-regular fa-file-excel', color: 'text-green-400', bg: 'bg-green-500/10' },
-    code: { icon: 'fa-solid fa-code', color: 'text-cyan-400', bg: 'bg-cyan-500/10' },
-    archive: { icon: 'fa-regular fa-file-zipper', color: 'text-yellow-400', bg: 'bg-yellow-500/10' },
-    default: { icon: 'fa-regular fa-file', color: 'text-amber-400', bg: 'bg-amber-500/10' }
+const TIERS = [
+    { 
+        id: 1, name: "Easy", emoji: "🍀", range: 3, multiplier: 2, chance: "33%",
+        color: "emerald", hex: "#10b981",
+        bgFrom: "from-emerald-500/20", bgTo: "to-green-600/10",
+        borderColor: "border-emerald-500/50", textColor: "text-emerald-400"
+    },
+    { 
+        id: 2, name: "Medium", emoji: "⚡", range: 10, multiplier: 5, chance: "10%",
+        color: "violet", hex: "#8b5cf6",
+        bgFrom: "from-violet-500/20", bgTo: "to-purple-600/10",
+        borderColor: "border-violet-500/50", textColor: "text-violet-400"
+    },
+    { 
+        id: 3, name: "Hard", emoji: "👑", range: 100, multiplier: 100, chance: "1%",
+        color: "amber", hex: "#f59e0b",
+        bgFrom: "from-amber-500/20", bgTo: "to-orange-600/10",
+        borderColor: "border-amber-500/50", textColor: "text-amber-400"
+    }
+];
+
+const MAX_COMBO_MULTIPLIER = 107;
+
+// ============================================================================
+// GAME STATE
+// ============================================================================
+const Game = {
+    mode: null,
+    phase: 'select',
+    guess: 50,
+    guesses: [2, 5, 50],
+    comboStep: 0,
+    wager: 10,
+    gameId: null,
+    result: null,
+    poolStatus: null,
+    history: [],
+    spinIntervals: []
 };
 
 // ============================================================================
-// STATE
+// STYLES - V13 com animações da roleta
 // ============================================================================
-const Notary = {
-    step: 1,
-    file: null,
-    description: '',
-    hash: null,
-    isProcessing: false,
-    certificates: [],
-    lastFetch: 0
-};
-
-// ============================================================================
-// STYLES
-// ============================================================================
-const injectStyles = () => {
-    if (document.getElementById('notary-styles-v9')) return;
+function injectStyles() {
+    if (document.getElementById('fortune-styles-v13')) return;
     
     const style = document.createElement('style');
-    style.id = 'notary-styles-v9';
+    style.id = 'fortune-styles-v13';
     style.textContent = `
-        /* Notary Image Animations */
-        @keyframes notary-float {
-            0%, 100% { transform: translateY(0) rotate(-1deg); }
-            50% { transform: translateY(-8px) rotate(1deg); }
+        /* Tiger Mascot Animations */
+        @keyframes tiger-float {
+            0%, 100% { transform: translateY(0) rotate(-2deg); }
+            50% { transform: translateY(-12px) rotate(2deg); }
         }
-        @keyframes notary-pulse {
-            0%, 100% { filter: drop-shadow(0 0 15px rgba(245,158,11,0.3)); }
-            50% { filter: drop-shadow(0 0 30px rgba(245,158,11,0.6)); }
+        @keyframes tiger-pulse {
+            0%, 100% { filter: drop-shadow(0 0 20px rgba(249,115,22,0.3)); }
+            50% { filter: drop-shadow(0 0 40px rgba(249,115,22,0.6)); }
         }
-        @keyframes notary-stamp {
-            0% { transform: scale(1) rotate(0deg); }
-            25% { transform: scale(1.2) rotate(-5deg); }
-            50% { transform: scale(0.9) rotate(5deg); }
-            75% { transform: scale(1.1) rotate(-2deg); }
-            100% { transform: scale(1) rotate(0deg); }
-        }
-        @keyframes notary-success {
-            0% { transform: scale(1); filter: drop-shadow(0 0 20px rgba(16,185,129,0.5)); }
-            50% { transform: scale(1.2); filter: drop-shadow(0 0 50px rgba(16,185,129,0.9)); }
-            100% { transform: scale(1); filter: drop-shadow(0 0 20px rgba(16,185,129,0.5)); }
-        }
-        @keyframes notary-spin {
+        @keyframes tiger-spin {
             0% { transform: rotateY(0deg); }
             100% { transform: rotateY(360deg); }
         }
-        .notary-float { animation: notary-float 4s ease-in-out infinite; }
-        .notary-pulse { animation: notary-pulse 2s ease-in-out infinite; }
-        .notary-stamp { animation: notary-stamp 0.6s ease-out; }
-        .notary-success { animation: notary-success 1s ease-out; }
-        .notary-spin { animation: notary-spin 1.5s ease-in-out; }
+        @keyframes tiger-bounce {
+            0%, 100% { transform: scale(1) translateY(0); }
+            25% { transform: scale(1.05) translateY(-8px); }
+            50% { transform: scale(0.95) translateY(0); }
+            75% { transform: scale(1.02) translateY(-4px); }
+        }
+        @keyframes tiger-celebrate {
+            0%, 100% { transform: scale(1) rotate(0deg); }
+            25% { transform: scale(1.2) rotate(-10deg); }
+            50% { transform: scale(1.1) rotate(10deg); }
+            75% { transform: scale(1.15) rotate(-5deg); }
+        }
+        .tiger-float { animation: tiger-float 4s ease-in-out infinite; }
+        .tiger-pulse { animation: tiger-pulse 2s ease-in-out infinite; }
+        .tiger-spin { animation: tiger-spin 1s ease-in-out infinite; }
+        .tiger-bounce { animation: tiger-bounce 0.6s ease-out; }
+        .tiger-celebrate { animation: tiger-celebrate 0.8s ease-out infinite; }
         
-        .notary-dropzone {
-            border: 2px dashed #3f3f46;
-            transition: all 0.2s ease;
+        /* ============================================ */
+        /* SPINNING ROULETTE ANIMATIONS - V13 NEW */
+        /* ============================================ */
+        
+        /* Número girando rápido */
+        @keyframes number-spin-fast {
+            0% { transform: translateY(-100%); opacity: 0; }
+            10% { opacity: 1; }
+            90% { opacity: 1; }
+            100% { transform: translateY(100%); opacity: 0; }
         }
-        .notary-dropzone.drag-over {
-            border-color: #f59e0b;
-            background: rgba(245, 158, 11, 0.05);
+        
+        /* Container da roleta */
+        .roulette-container {
+            position: relative;
+            overflow: hidden;
+            height: 80px;
         }
-        .notary-dropzone:hover {
-            border-color: #52525b;
+        
+        .roulette-number {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            animation: number-spin-fast 0.15s linear infinite;
         }
-        .step-dot {
+        
+        /* Glow pulsante na roleta */
+        @keyframes roulette-glow {
+            0%, 100% { box-shadow: 0 0 20px var(--glow-color), inset 0 0 20px rgba(0,0,0,0.5); }
+            50% { box-shadow: 0 0 40px var(--glow-color), 0 0 60px var(--glow-color), inset 0 0 20px rgba(0,0,0,0.3); }
+        }
+        .roulette-glow { animation: roulette-glow 0.5s ease-in-out infinite; }
+        
+        /* Animação de desaceleração */
+        @keyframes slow-down {
+            0% { animation-duration: 0.1s; }
+            100% { animation-duration: 0.8s; }
+        }
+        
+        /* Número revelado com bounce */
+        @keyframes number-reveal {
+            0% { transform: scale(0) rotate(-180deg); opacity: 0; }
+            50% { transform: scale(1.3) rotate(10deg); }
+            70% { transform: scale(0.9) rotate(-5deg); }
+            100% { transform: scale(1) rotate(0deg); opacity: 1; }
+        }
+        .number-reveal { animation: number-reveal 0.6s cubic-bezier(0.68, -0.55, 0.265, 1.55) forwards; }
+        
+        /* Match animation */
+        @keyframes match-pulse {
+            0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7); }
+            50% { transform: scale(1.1); box-shadow: 0 0 0 20px rgba(16, 185, 129, 0); }
+            100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
+        }
+        .match-pulse { animation: match-pulse 0.8s ease-out 3; }
+        
+        /* Shake para miss */
+        @keyframes miss-shake {
+            0%, 100% { transform: translateX(0); }
+            20% { transform: translateX(-8px); }
+            40% { transform: translateX(8px); }
+            60% { transform: translateX(-5px); }
+            80% { transform: translateX(5px); }
+        }
+        .miss-shake { animation: miss-shake 0.5s ease-out; }
+        
+        /* Epic Win Overlay */
+        @keyframes epic-win-bg {
+            0% { opacity: 0; }
+            100% { opacity: 1; }
+        }
+        @keyframes epic-win-text {
+            0% { transform: scale(0) rotate(-20deg); opacity: 0; }
+            50% { transform: scale(1.2) rotate(5deg); }
+            100% { transform: scale(1) rotate(0deg); opacity: 1; }
+        }
+        @keyframes epic-win-shine {
+            0% { transform: translateX(-100%) rotate(45deg); }
+            100% { transform: translateX(200%) rotate(45deg); }
+        }
+        @keyframes coin-rain {
+            0% { transform: translateY(-100vh) rotate(0deg); opacity: 1; }
+            100% { transform: translateY(100vh) rotate(720deg); opacity: 0; }
+        }
+        .epic-win-overlay {
+            animation: epic-win-bg 0.3s ease-out forwards;
+        }
+        .epic-win-text {
+            animation: epic-win-text 0.8s cubic-bezier(0.68, -0.55, 0.265, 1.55) forwards;
+        }
+        .epic-win-shine {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 200%;
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent);
+            animation: epic-win-shine 1.5s ease-out infinite;
+        }
+        .coin {
+            position: fixed;
+            font-size: 24px;
+            animation: coin-rain 3s linear forwards;
+            pointer-events: none;
+            z-index: 10000;
+        }
+        
+        /* Fireworks */
+        @keyframes firework {
+            0% { transform: scale(0); opacity: 1; }
+            50% { opacity: 1; }
+            100% { transform: scale(1); opacity: 0; }
+        }
+        .firework {
+            position: absolute;
+            width: 100px;
+            height: 100px;
+            border-radius: 50%;
+            animation: firework 1s ease-out forwards;
+        }
+        
+        /* Game Mode Cards */
+        .game-mode-card {
+            position: relative;
+            overflow: hidden;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .game-mode-card::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: radial-gradient(circle at 30% 30%, rgba(255,255,255,0.05), transparent 70%);
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+        .game-mode-card:hover::before { opacity: 1; }
+        .game-mode-card:hover {
+            transform: translateY(-4px) scale(1.01);
+            box-shadow: 0 20px 40px -15px rgba(0,0,0,0.5);
+        }
+        .game-mode-card:active { transform: translateY(-2px) scale(0.99); }
+        
+        /* Easy Picker (1-3) */
+        .easy-pick-btn {
+            transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .easy-pick-btn:hover { transform: translateY(-6px) scale(1.05); }
+        .easy-pick-btn.selected {
+            transform: scale(1.08);
+            box-shadow: 0 0 40px var(--glow-color);
+        }
+        
+        /* Medium Picker (1-10) */
+        .medium-pick-btn {
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .medium-pick-btn:hover:not(.selected) { transform: scale(1.1); z-index: 10; }
+        .medium-pick-btn.selected {
+            transform: scale(1.15);
+            box-shadow: 0 0 25px var(--glow-color);
+            z-index: 20;
+        }
+        
+        /* Hard Picker Slider */
+        .fortune-slider {
+            -webkit-appearance: none;
+            appearance: none;
+            height: 14px;
+            border-radius: 7px;
+            cursor: pointer;
+        }
+        .fortune-slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
             width: 32px;
             height: 32px;
             border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 12px;
-            font-weight: bold;
-            transition: all 0.3s ease;
+            background: linear-gradient(135deg, #fbbf24, #f59e0b);
+            border: 4px solid #000;
+            box-shadow: 0 4px 20px rgba(245,158,11,0.6);
+            cursor: grab;
+            transition: all 0.2s;
         }
-        .step-dot.pending {
-            background: #27272a;
-            color: #71717a;
-            border: 2px solid #3f3f46;
+        .fortune-slider::-webkit-slider-thumb:hover { transform: scale(1.15); }
+        .fortune-slider::-webkit-slider-thumb:active { cursor: grabbing; transform: scale(1.2); }
+        .fortune-slider::-moz-range-thumb {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #fbbf24, #f59e0b);
+            border: 4px solid #000;
+            cursor: grab;
         }
-        .step-dot.active {
-            background: linear-gradient(135deg, #f59e0b, #d97706);
-            color: #000;
-            box-shadow: 0 0 15px rgba(245, 158, 11, 0.4);
+        
+        /* Grid Numbers */
+        .grid-num {
+            font-size: 10px;
+            transition: all 0.15s ease;
         }
-        .step-dot.done {
-            background: #10b981;
-            color: #fff;
+        .grid-num:hover { transform: scale(1.2); z-index: 10; background: #52525b !important; }
+        .grid-num.selected { transform: scale(1.25); z-index: 20; }
+        
+        /* Tier Pills */
+        .tier-pill {
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
         }
-        .step-line {
-            height: 2px;
-            flex: 1;
-            background: #3f3f46;
-            transition: background 0.3s ease;
+        .tier-pill.active { transform: scale(1.1); box-shadow: 0 0 15px var(--pill-glow); }
+        .tier-pill.done { background: rgba(16, 185, 129, 0.2) !important; border-color: #10b981 !important; }
+        
+        /* Animations */
+        @keyframes float {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-8px); }
         }
-        .step-line.active {
-            background: linear-gradient(90deg, #10b981, #f59e0b);
+        .float { animation: float 3s ease-in-out infinite; }
+        
+        @keyframes pulse-glow {
+            0%, 100% { box-shadow: 0 0 20px var(--glow-color, rgba(245,158,11,0.3)); }
+            50% { box-shadow: 0 0 40px var(--glow-color, rgba(245,158,11,0.6)); }
         }
-        .step-line.done {
-            background: #10b981;
+        .pulse-glow { animation: pulse-glow 2s ease-in-out infinite; }
+        
+        @keyframes pop {
+            0% { transform: scale(0.8); opacity: 0; }
+            50% { transform: scale(1.1); }
+            100% { transform: scale(1); opacity: 1; }
         }
-        @keyframes scanPulse {
-            0%, 100% { opacity: 0.5; transform: scaleY(1); }
-            50% { opacity: 1; transform: scaleY(1.5); }
+        .pop { animation: pop 0.3s ease-out; }
+        
+        /* Wager Buttons */
+        .wager-btn { transition: all 0.2s ease; }
+        .wager-btn:hover:not(.selected) { transform: scale(1.05); background: #3f3f46; }
+        .wager-btn.selected {
+            background: linear-gradient(135deg, #f59e0b, #d97706) !important;
+            color: #000 !important;
+            transform: scale(1.05);
+            box-shadow: 0 0 20px rgba(245,158,11,0.4);
         }
-        .scan-line {
-            animation: scanPulse 1.5s ease-in-out infinite;
+        
+        /* Results */
+        .result-hit {
+            border-color: #10b981 !important;
+            background: linear-gradient(135deg, rgba(16,185,129,0.2), rgba(16,185,129,0.05)) !important;
+            box-shadow: 0 0 30px rgba(16,185,129,0.4);
+            animation: pop 0.5s ease-out;
         }
-        .cert-card {
-            transition: all 0.2s ease;
+        .result-miss { opacity: 0.4; filter: grayscale(0.3); }
+        
+        /* Confetti */
+        .confetti-container { position: fixed; inset: 0; pointer-events: none; overflow: hidden; z-index: 9999; }
+        .confetti { position: absolute; opacity: 0; animation: confetti-fall 3s ease-out forwards; }
+        @keyframes confetti-fall {
+            0% { opacity: 1; transform: translateY(-50px) rotate(0deg); }
+            100% { opacity: 0; transform: translateY(100vh) rotate(720deg); }
         }
-        .cert-card:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+        
+        /* History Item Hover */
+        .history-item:hover { 
+            background: rgba(63,63,70,0.5) !important; 
+            transform: translateX(4px);
         }
-        @keyframes fadeIn {
-            from { opacity: 0; transform: scale(0.9); }
-            to { opacity: 1; transform: scale(1); }
+        
+        /* Waiting dots animation */
+        @keyframes waiting-dots {
+            0%, 20% { content: '.'; }
+            40% { content: '..'; }
+            60%, 100% { content: '...'; }
         }
-        .animate-fade-in {
-            animation: fadeIn 0.5s ease-out;
+        .waiting-dots::after {
+            content: '';
+            animation: waiting-dots 1.5s infinite;
         }
     `;
     document.head.appendChild(style);
-};
+}
 
 // ============================================================================
 // MAIN RENDER
 // ============================================================================
-function render() {
-    const container = document.getElementById('notary');
+export function render() {
+    const container = document.getElementById('actions');
     if (!container) return;
-    
+
     injectStyles();
     
     container.innerHTML = `
-        <div class="min-h-screen pb-24 md:pb-10">
-            <!-- MOBILE HEADER -->
-            <header class="sticky top-0 z-40 bg-zinc-950/95 backdrop-blur-lg border-b border-zinc-800/50 -mx-4 px-4 py-3 md:hidden">
-                <div class="flex items-center justify-between">
-                    <div class="flex items-center gap-3">
-                        <div class="w-10 h-10 flex items-center justify-center">
-                            <img src="${NOTARY_IMAGE}" alt="Notary" class="w-full h-full object-contain notary-float notary-pulse" id="notary-mascot-mobile">
-                        </div>
-                        <div>
-                            <h1 class="text-lg font-bold text-white">📜 Decentralized Notary</h1>
-                            <p id="mobile-status" class="text-[10px] text-zinc-500">Blockchain Certification</p>
-                        </div>
-                    </div>
-                    <div id="mobile-badge" class="text-[10px] px-2 py-1 rounded-full bg-zinc-800 text-zinc-500">
-                        --
+        <div class="max-w-lg mx-auto px-4 py-6 pb-24">
+            <!-- Header with Tiger Mascot -->
+            <div class="text-center mb-6 relative">
+                <div class="inline-block relative">
+                    <img src="${TIGER_IMAGE}" 
+                         alt="Fortune Tiger" 
+                         class="w-28 h-28 object-contain tiger-float tiger-pulse mx-auto"
+                         id="tiger-mascot"
+                         onerror="this.style.display='none'; document.getElementById('tiger-fallback').style.display='flex';">
+                    <div id="tiger-fallback" class="hidden items-center justify-center w-20 h-20 rounded-2xl bg-gradient-to-br from-orange-500/20 to-amber-600/10 border border-orange-500/30 mx-auto">
+                        <span class="text-5xl">🐯</span>
                     </div>
                 </div>
-            </header>
+                <h1 class="text-2xl font-bold text-white mt-2">Fortune Pool</h1>
+                <p class="text-zinc-500 text-sm mt-1">🐯 Pick your lucky numbers</p>
+            </div>
 
-            <!-- DESKTOP HEADER -->
-            <div class="hidden md:flex items-center justify-between mb-6">
-                <div class="flex items-center gap-4">
-                    <div class="w-14 h-14 flex items-center justify-center">
-                        <img src="${NOTARY_IMAGE}" alt="Notary" class="w-full h-full object-contain notary-float notary-pulse" id="notary-mascot">
-                    </div>
-                    <div>
-                        <h1 class="text-2xl font-bold text-white">📜 Decentralized Notary</h1>
-                        <p class="text-sm text-zinc-500">Permanent blockchain certification</p>
-                    </div>
+            <!-- Stats -->
+            <div class="grid grid-cols-3 gap-2 mb-6">
+                <div class="bg-zinc-900/60 backdrop-blur border border-zinc-800/50 rounded-xl p-3 text-center">
+                    <p class="text-[10px] text-zinc-500 uppercase mb-0.5">🏆 Prize Pool</p>
+                    <p id="prize-pool" class="text-orange-400 font-bold">--</p>
                 </div>
-                <div id="desktop-badge" class="flex items-center gap-2 px-3 py-1.5 rounded-full bg-zinc-800/50 text-sm">
-                    <span class="w-2 h-2 rounded-full bg-zinc-600"></span>
-                    <span class="text-zinc-400">Checking...</span>
+                <div class="bg-zinc-900/60 backdrop-blur border border-zinc-800/50 rounded-xl p-3 text-center">
+                    <p class="text-[10px] text-zinc-500 uppercase mb-0.5">💰 Balance</p>
+                    <p id="user-balance" class="text-white font-bold">--</p>
+                </div>
+                <div class="bg-zinc-900/60 backdrop-blur border border-zinc-800/50 rounded-xl p-3 text-center">
+                    <p class="text-[10px] text-zinc-500 uppercase mb-0.5">🎮 Games</p>
+                    <p id="total-games" class="text-zinc-300 font-bold">--</p>
                 </div>
             </div>
 
-            <!-- MAIN CONTENT -->
-            <div class="mt-4 md:mt-0 grid grid-cols-1 lg:grid-cols-3 gap-6">
-                
-                <!-- LEFT: Action Panel -->
-                <div class="lg:col-span-2 space-y-4">
-                    
-                    <!-- Progress Steps -->
-                    <div class="bg-zinc-900/50 border border-zinc-800/50 rounded-xl p-4">
-                        <div class="flex items-center justify-between">
-                            <div class="flex flex-col items-center">
-                                <div id="step-1" class="step-dot active">1</div>
-                                <span class="text-[10px] text-zinc-500 mt-1">Upload</span>
-                            </div>
-                            <div id="line-1" class="step-line mx-2"></div>
-                            <div class="flex flex-col items-center">
-                                <div id="step-2" class="step-dot pending">2</div>
-                                <span class="text-[10px] text-zinc-500 mt-1">Details</span>
-                            </div>
-                            <div id="line-2" class="step-line mx-2"></div>
-                            <div class="flex flex-col items-center">
-                                <div id="step-3" class="step-dot pending">3</div>
-                                <span class="text-[10px] text-zinc-500 mt-1">Mint</span>
-                            </div>
-                        </div>
-                    </div>
+            <!-- Game Area -->
+            <div id="game-area" class="mb-6"></div>
 
-                    <!-- Dynamic Content -->
-                    <div id="action-panel" class="bg-zinc-900/50 border border-zinc-800/50 rounded-xl p-6 min-h-[320px]">
-                        <!-- Step content renders here -->
+            <!-- History -->
+            <div class="bg-zinc-900/50 border border-zinc-800/50 rounded-2xl overflow-hidden">
+                <div class="flex items-center justify-between p-3 border-b border-zinc-800/50">
+                    <span class="text-sm font-bold text-white flex items-center gap-2">
+                        <i class="fa-solid fa-paw text-orange-500 text-xs"></i>
+                        Recent Games
+                    </span>
+                    <span id="win-rate" class="text-xs text-zinc-500"></span>
+                </div>
+                <div id="history-list" class="max-h-[300px] overflow-y-auto p-2">
+                    <div class="p-6 text-center text-zinc-600 text-sm">
+                        <img src="${TIGER_IMAGE}" class="w-12 h-12 mx-auto opacity-30 animate-pulse mb-2" onerror="this.style.display='none'">
+                        Loading...
                     </div>
                 </div>
-
-                <!-- RIGHT: Info Sidebar -->
-                <div class="space-y-4">
-                    
-                    <!-- Cost Card -->
-                    <div class="bg-gradient-to-br from-amber-900/30 to-yellow-900/20 border border-amber-500/20 rounded-xl p-4">
-                        <div class="flex items-center gap-2 mb-3">
-                            <i class="fa-solid fa-coins text-amber-400"></i>
-                            <span class="text-xs font-bold text-zinc-300">Service Cost</span>
-                        </div>
-                        <div id="cost-display" class="space-y-2">
-                            <div class="flex justify-between">
-                                <span class="text-zinc-500 text-sm">Fee</span>
-                                <span id="fee-amount" class="text-white font-mono font-bold">-- BKC</span>
-                            </div>
-                            <div class="flex justify-between pt-2 border-t border-zinc-700/50">
-                                <span class="text-zinc-500 text-sm">Your Balance</span>
-                                <span id="user-balance" class="font-mono font-bold">-- BKC</span>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- How It Works -->
-                    <div class="bg-zinc-900/50 border border-zinc-800/50 rounded-xl p-4">
-                        <h3 class="text-xs font-bold text-zinc-400 uppercase tracking-wider mb-3 flex items-center gap-2">
-                            <i class="fa-solid fa-circle-info text-blue-400"></i> How It Works
-                        </h3>
-                        <div class="space-y-3">
-                            <div class="flex items-start gap-3">
-                                <div class="w-6 h-6 rounded-full bg-amber-500/20 flex items-center justify-center flex-shrink-0">
-                                    <span class="text-amber-400 text-[10px] font-bold">1</span>
-                                </div>
-                                <p class="text-xs text-zinc-400">Upload any document (max 4MB)</p>
-                            </div>
-                            <div class="flex items-start gap-3">
-                                <div class="w-6 h-6 rounded-full bg-amber-500/20 flex items-center justify-center flex-shrink-0">
-                                    <span class="text-amber-400 text-[10px] font-bold">2</span>
-                                </div>
-                                <p class="text-xs text-zinc-400">Add description for your records</p>
-                            </div>
-                            <div class="flex items-start gap-3">
-                                <div class="w-6 h-6 rounded-full bg-amber-500/20 flex items-center justify-center flex-shrink-0">
-                                    <span class="text-amber-400 text-[10px] font-bold">3</span>
-                                </div>
-                                <p class="text-xs text-zinc-400">Sign & mint NFT certificate</p>
-                            </div>
-                            <div class="flex items-start gap-3 pt-2 border-t border-zinc-800/50">
-                                <div class="w-6 h-6 rounded-full bg-green-500/20 flex items-center justify-center flex-shrink-0">
-                                    <i class="fa-solid fa-check text-green-400 text-[10px]"></i>
-                                </div>
-                                <p class="text-xs text-zinc-400">Hash stored permanently on-chain</p>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Features -->
-                    <div class="grid grid-cols-2 gap-3">
-                        <div class="bg-zinc-900/50 border border-zinc-800/50 rounded-xl p-3 text-center">
-                            <i class="fa-solid fa-shield-halved text-green-400 text-lg mb-1"></i>
-                            <p class="text-[10px] text-zinc-500">Tamper-Proof</p>
-                        </div>
-                        <div class="bg-zinc-900/50 border border-zinc-800/50 rounded-xl p-3 text-center">
-                            <i class="fa-solid fa-infinity text-yellow-400 text-lg mb-1"></i>
-                            <p class="text-[10px] text-zinc-500">Permanent</p>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- CERTIFICATES HISTORY -->
-            <div class="mt-8">
-                <div class="flex items-center justify-between mb-4">
-                    <h2 class="text-sm font-bold text-white flex items-center gap-2">
-                        <i class="fa-solid fa-certificate text-amber-400"></i>
-                        Your Certificates
-                    </h2>
-                    <button id="btn-refresh" class="text-xs text-amber-400 hover:text-white transition-colors flex items-center gap-1">
-                        <i class="fa-solid fa-rotate"></i> Refresh
-                    </button>
-                </div>
-                <div id="certificates-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                    <div class="col-span-full text-center py-8 text-zinc-600">
-                        <div class="w-16 h-16 mx-auto mb-3 relative">
-                            <div class="absolute inset-0 rounded-full bg-amber-500/20 animate-ping"></div>
-                            <div class="relative w-full h-full rounded-full bg-zinc-800 flex items-center justify-center p-2">
-                                <img src="${NOTARY_IMAGE}" alt="Loading" class="w-full h-full object-contain opacity-60 animate-pulse">
-                            </div>
-                        </div>
-                        <p class="text-zinc-500 text-sm">Loading certificates...</p>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Processing Overlay -->
-        <div id="processing-overlay" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/95 backdrop-blur-sm">
-            <div class="text-center p-6 max-w-sm">
-                <div class="w-28 h-28 mx-auto mb-6 relative">
-                    <div class="absolute inset-[-4px] rounded-full border-4 border-transparent border-t-amber-400 border-r-amber-500/50 animate-spin"></div>
-                    <div class="absolute inset-0 rounded-full bg-amber-500/20 animate-ping"></div>
-                    <div class="relative w-full h-full rounded-full bg-gradient-to-br from-zinc-800 to-zinc-900 flex items-center justify-center shadow-xl shadow-amber-500/20 overflow-hidden border-2 border-amber-500/30 p-3">
-                        <img src="${NOTARY_IMAGE}" alt="Notarizing" class="w-full h-full object-contain notary-spin" id="notary-overlay-img">
-                    </div>
-                </div>
-                <h3 class="text-xl font-bold text-white mb-1">Notarizing Document</h3>
-                <p id="process-status" class="text-amber-400 text-sm font-mono mb-4">PREPARING...</p>
-                <div class="w-full h-2 bg-zinc-800 rounded-full overflow-hidden">
-                    <div id="process-bar" class="h-full bg-gradient-to-r from-amber-500 to-yellow-500 rounded-full transition-all duration-500" style="width: 0%"></div>
-                </div>
-                <p class="text-[10px] text-zinc-600 mt-3">Do not close this window</p>
             </div>
         </div>
     `;
 
-    updateStatusBadges();
-    renderStepContent();
-    loadCertificates();
-    attachGlobalListeners();
+    loadPoolData();
+    renderPhase();
 }
 
 // ============================================================================
-// STATUS BADGES
+// PHASE ROUTER
 // ============================================================================
-function updateStatusBadges() {
-    const mobileBadge = document.getElementById('mobile-badge');
-    const desktopBadge = document.getElementById('desktop-badge');
-    const feeEl = document.getElementById('fee-amount');
-    const balEl = document.getElementById('user-balance');
+function renderPhase() {
+    const area = document.getElementById('game-area');
+    if (!area) return;
 
-    const fee = State.notaryFee || 0n;
-    const balance = State.currentUserBalance || 0n;
+    // Clear any running spin intervals
+    Game.spinIntervals.forEach(id => clearInterval(id));
+    Game.spinIntervals = [];
 
-    if (feeEl) feeEl.textContent = `${formatBigNumber(fee)} BKC`;
-    if (balEl) {
-        balEl.textContent = `${formatBigNumber(balance)} BKC`;
-        balEl.className = `font-mono font-bold ${balance >= fee ? 'text-green-400' : 'text-red-400'}`;
+    // Update tiger animation based on phase
+    updateTigerAnimation(Game.phase);
+
+    switch (Game.phase) {
+        case 'select': renderModeSelect(area); break;
+        case 'pick': renderPicker(area); break;
+        case 'wager': renderWager(area); break;
+        case 'spin': renderSpin(area); break;
+        case 'result': renderResult(area); break;
+        default: renderModeSelect(area);
     }
+}
 
-    if (State.isConnected) {
-        if (balance >= fee) {
-            if (mobileBadge) {
-                mobileBadge.className = 'text-[10px] px-2 py-1 rounded-full bg-green-500/20 text-green-400';
-                mobileBadge.textContent = 'Ready';
+function updateTigerAnimation(phase) {
+    const tiger = document.getElementById('tiger-mascot');
+    if (!tiger) return;
+    
+    tiger.className = 'w-28 h-28 object-contain mx-auto';
+    tiger.style.filter = '';
+    
+    switch (phase) {
+        case 'select':
+            tiger.classList.add('tiger-float', 'tiger-pulse');
+            break;
+        case 'pick':
+            tiger.classList.add('tiger-bounce');
+            break;
+        case 'wager':
+            tiger.classList.add('tiger-float');
+            break;
+        case 'spin':
+            tiger.classList.add('tiger-spin');
+            break;
+        case 'result':
+            if (Game.result?.isWin || (Game.result?.results && Game.result.results.some((r, i) => {
+                const picks = Game.mode === 'jackpot' ? [Game.guess] : Game.guesses;
+                return Number(r) === picks[i];
+            }))) {
+                tiger.classList.add('tiger-celebrate');
+            } else {
+                tiger.style.filter = 'grayscale(0.5)';
+                tiger.classList.add('tiger-float');
             }
-            if (desktopBadge) {
-                desktopBadge.innerHTML = `
-                    <span class="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
-                    <span class="text-green-400">Ready to Notarize</span>
-                `;
-                desktopBadge.className = 'flex items-center gap-2 px-3 py-1.5 rounded-full bg-green-500/10 border border-green-500/20 text-sm';
-            }
-        } else {
-            if (mobileBadge) {
-                mobileBadge.className = 'text-[10px] px-2 py-1 rounded-full bg-red-500/20 text-red-400';
-                mobileBadge.textContent = 'Low Balance';
-            }
-            if (desktopBadge) {
-                desktopBadge.innerHTML = `
-                    <span class="w-2 h-2 rounded-full bg-red-500"></span>
-                    <span class="text-red-400">Insufficient Balance</span>
-                `;
-                desktopBadge.className = 'flex items-center gap-2 px-3 py-1.5 rounded-full bg-red-500/10 border border-red-500/20 text-sm';
-            }
-        }
+            break;
+    }
+}
+
+// ============================================================================
+// PHASE 1: MODE SELECT
+// ============================================================================
+function renderModeSelect(container) {
+    container.innerHTML = `
+        <div class="space-y-4">
+            <!-- JACKPOT -->
+            <button id="btn-jackpot" class="game-mode-card w-full text-left p-5 bg-gradient-to-br from-zinc-900 via-zinc-900 to-amber-950/20 border-2 border-zinc-700/50 rounded-2xl hover:border-amber-500/50">
+                <div class="flex items-start gap-4">
+                    <div class="w-16 h-16 rounded-2xl bg-gradient-to-br from-amber-500/30 to-orange-600/20 border border-amber-500/30 flex items-center justify-center flex-shrink-0">
+                        <span class="text-4xl">👑</span>
+                    </div>
+                    <div class="flex-1">
+                        <div class="flex items-center gap-3 mb-1">
+                            <h3 class="text-xl font-bold text-white">Jackpot</h3>
+                            <span class="px-2.5 py-1 rounded-full bg-amber-500/20 border border-amber-500/40 text-amber-400 text-sm font-black">100x</span>
+                        </div>
+                        <p class="text-zinc-400 text-sm mb-3">Pick 1 number from 1-100</p>
+                        <div class="flex items-center gap-2">
+                            <div class="flex items-center gap-1.5 px-2.5 py-1 bg-zinc-800/80 rounded-lg">
+                                <div class="w-2 h-2 rounded-full bg-amber-500"></div>
+                                <span class="text-xs text-zinc-400">1% chance</span>
+                            </div>
+                            <div class="flex items-center gap-1.5 px-2.5 py-1 bg-zinc-800/80 rounded-lg">
+                                <i class="fa-solid fa-bolt text-amber-400 text-[10px]"></i>
+                                <span class="text-xs text-amber-400">Big Win</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </button>
+
+            <!-- COMBO -->
+            <button id="btn-combo" class="game-mode-card w-full text-left p-5 bg-gradient-to-br from-zinc-900 via-zinc-900 to-violet-950/20 border-2 border-zinc-700/50 rounded-2xl hover:border-violet-500/50">
+                <div class="flex items-start gap-4">
+                    <div class="w-16 h-16 rounded-2xl bg-gradient-to-br from-violet-500/30 to-purple-600/20 border border-violet-500/30 flex items-center justify-center flex-shrink-0">
+                        <span class="text-4xl">🚀</span>
+                    </div>
+                    <div class="flex-1">
+                        <div class="flex items-center gap-3 mb-1">
+                            <h3 class="text-xl font-bold text-white">Combo</h3>
+                            <span class="px-2.5 py-1 rounded-full bg-violet-500/20 border border-violet-500/40 text-violet-400 text-sm font-black">up to ${MAX_COMBO_MULTIPLIER}x</span>
+                        </div>
+                        <p class="text-zinc-400 text-sm mb-3">Pick 3 numbers, stack your wins!</p>
+                        <div class="flex items-center gap-2 flex-wrap">
+                            ${TIERS.map(t => `
+                                <div class="flex items-center gap-1.5 px-2.5 py-1 bg-zinc-800/80 rounded-lg">
+                                    <span>${t.emoji}</span>
+                                    <span class="text-xs ${t.textColor} font-bold">${t.multiplier}x</span>
+                                    <span class="text-xs text-zinc-500">${t.chance}</span>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+                </div>
+            </button>
+
+            ${!State.isConnected ? `
+                <div class="p-4 bg-zinc-800/30 rounded-xl border border-zinc-700/50 text-center">
+                    <i class="fa-solid fa-wallet text-zinc-600 text-xl mb-2"></i>
+                    <p class="text-zinc-500 text-sm">Connect wallet to play</p>
+                </div>
+            ` : ''}
+        </div>
+    `;
+
+    document.getElementById('btn-jackpot')?.addEventListener('click', () => {
+        if (!State.isConnected) return showToast('Connect wallet first', 'warning');
+        Game.mode = 'jackpot';
+        Game.guess = 50;
+        Game.phase = 'pick';
+        renderPhase();
+    });
+
+    document.getElementById('btn-combo')?.addEventListener('click', () => {
+        if (!State.isConnected) return showToast('Connect wallet first', 'warning');
+        Game.mode = 'combo';
+        Game.guesses = [2, 5, 50];
+        Game.comboStep = 0;
+        Game.phase = 'pick';
+        renderPhase();
+    });
+}
+
+// ============================================================================
+// PHASE 2: NUMBER PICKER
+// ============================================================================
+function renderPicker(container) {
+    if (Game.mode === 'jackpot') {
+        renderJackpotPicker(container);
     } else {
-        if (mobileBadge) {
-            mobileBadge.className = 'text-[10px] px-2 py-1 rounded-full bg-zinc-800 text-zinc-500';
-            mobileBadge.textContent = 'Disconnected';
-        }
-        if (desktopBadge) {
-            desktopBadge.innerHTML = `
-                <span class="w-2 h-2 rounded-full bg-zinc-600"></span>
-                <span class="text-zinc-400">Connect Wallet</span>
-            `;
-            desktopBadge.className = 'flex items-center gap-2 px-3 py-1.5 rounded-full bg-zinc-800/50 text-sm';
-        }
+        renderComboPicker(container);
     }
 }
 
-// ============================================================================
-// STEP INDICATOR UPDATE
-// ============================================================================
-function updateStepIndicators() {
-    [1, 2, 3].forEach(i => {
-        const dot = document.getElementById(`step-${i}`);
-        if (!dot) return;
-        
-        if (i < Notary.step) {
-            dot.className = 'step-dot done';
-            dot.innerHTML = '<i class="fa-solid fa-check text-xs"></i>';
-        } else if (i === Notary.step) {
-            dot.className = 'step-dot active';
-            dot.textContent = i;
-        } else {
-            dot.className = 'step-dot pending';
-            dot.textContent = i;
-        }
-    });
-
-    const line1 = document.getElementById('line-1');
-    const line2 = document.getElementById('line-2');
+function renderJackpotPicker(container) {
+    const tier = TIERS[2];
+    const current = Game.guess;
     
-    if (line1) line1.className = `step-line mx-2 ${Notary.step > 1 ? 'done' : ''}`;
-    if (line2) line2.className = `step-line mx-2 ${Notary.step > 2 ? 'done' : ''}`;
-}
-
-// ============================================================================
-// STEP CONTENT RENDER
-// ============================================================================
-function renderStepContent() {
-    const panel = document.getElementById('action-panel');
-    if (!panel) return;
-
-    updateStepIndicators();
-    updateMascotAnimation(Notary.step);
-
-    if (!State.isConnected) {
-        panel.innerHTML = `
-            <div class="flex flex-col items-center justify-center h-full py-8">
-                <div class="w-16 h-16 rounded-full bg-zinc-800 flex items-center justify-center mb-4">
-                    <i class="fa-solid fa-wallet text-2xl text-zinc-500"></i>
+    container.innerHTML = `
+        <div class="bg-gradient-to-br from-zinc-900 to-zinc-800/50 border border-zinc-700/50 rounded-2xl p-5">
+            <div class="text-center mb-4">
+                <div class="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r ${tier.bgFrom} ${tier.bgTo} border ${tier.borderColor} rounded-full mb-2">
+                    <span class="text-2xl">${tier.emoji}</span>
+                    <span class="${tier.textColor} font-bold">Jackpot Mode</span>
                 </div>
-                <h3 class="text-lg font-bold text-white mb-2">Connect Wallet</h3>
-                <p class="text-zinc-500 text-sm mb-4 text-center">Connect your wallet to start notarizing documents</p>
-                <button onclick="window.openConnectModal && window.openConnectModal()" 
-                    class="bg-amber-500 hover:bg-amber-400 text-white font-bold py-2.5 px-6 rounded-xl transition-colors">
-                    Connect Wallet
-                </button>
-            </div>
-        `;
-        return;
-    }
-
-    const fee = State.notaryFee || ethers.parseEther("1");
-    const balance = State.currentUserBalance || 0n;
-    
-    if (balance < fee) {
-        panel.innerHTML = `
-            <div class="flex flex-col items-center justify-center h-full py-8">
-                <div class="w-16 h-16 rounded-full bg-red-500/10 flex items-center justify-center mb-4">
-                    <i class="fa-solid fa-coins text-2xl text-red-400"></i>
-                </div>
-                <h3 class="text-lg font-bold text-white mb-2">Insufficient Balance</h3>
-                <p class="text-zinc-500 text-sm text-center">You need at least <span class="text-amber-400 font-bold">${formatBigNumber(fee)} BKC</span> to notarize</p>
-                <p class="text-zinc-600 text-xs mt-2">Current: ${formatBigNumber(balance)} BKC</p>
-            </div>
-        `;
-        return;
-    }
-
-    switch (Notary.step) {
-        case 1: renderStep1(panel); break;
-        case 2: renderStep2(panel); break;
-        case 3: renderStep3(panel); break;
-    }
-}
-
-function updateMascotAnimation(step) {
-    const mascot = document.getElementById('notary-mascot');
-    const mascotMobile = document.getElementById('notary-mascot-mobile');
-    
-    [mascot, mascotMobile].forEach(m => {
-        if (!m) return;
-        m.className = 'w-full h-full object-contain';
-        
-        switch (step) {
-            case 1: m.classList.add('notary-float', 'notary-pulse'); break;
-            case 2: m.classList.add('notary-float'); break;
-            case 3: m.classList.add('notary-pulse'); break;
-        }
-    });
-}
-
-// ============================================================================
-// STEP 1: FILE UPLOAD
-// ============================================================================
-function renderStep1(panel) {
-    panel.innerHTML = `
-        <div class="flex flex-col items-center justify-center h-full">
-            <h3 class="text-lg font-bold text-white mb-2">Upload Document</h3>
-            <p class="text-zinc-500 text-sm mb-6 text-center">Select any file to certify on the blockchain</p>
-            
-            <div id="dropzone" class="notary-dropzone w-full max-w-md rounded-xl p-8 cursor-pointer text-center">
-                <input type="file" id="file-input" class="hidden">
-                <div class="w-16 h-16 mx-auto mb-4 rounded-full bg-amber-500/10 flex items-center justify-center">
-                    <i class="fa-solid fa-cloud-arrow-up text-2xl text-amber-400"></i>
-                </div>
-                <p class="text-white font-medium mb-1">Click or drag file here</p>
-                <p class="text-[10px] text-zinc-600">Max 4MB • Any format</p>
+                <p class="text-zinc-400 text-sm">Pick <span class="text-white font-bold">1-100</span> • <span class="text-emerald-400">1%</span> • <span class="${tier.textColor} font-bold">100x</span></p>
             </div>
 
-            <div class="flex items-center gap-4 mt-6 text-[10px] text-zinc-600">
-                <span><i class="fa-solid fa-lock mr-1"></i> Encrypted upload</span>
-                <span><i class="fa-solid fa-shield mr-1"></i> IPFS storage</span>
+            <div class="text-center mb-4">
+                <div class="inline-flex items-center justify-center w-28 h-28 rounded-2xl bg-gradient-to-br ${tier.bgFrom} ${tier.bgTo} border-2 ${tier.borderColor} pulse-glow" style="--glow-color: ${tier.hex}40">
+                    <span id="display-number" class="text-5xl font-black ${tier.textColor}">${current}</span>
+                </div>
+            </div>
+
+            <div class="mb-4 px-2">
+                <input type="range" id="number-slider" min="1" max="100" value="${current}" 
+                    class="fortune-slider w-full"
+                    style="background: linear-gradient(to right, ${tier.hex} 0%, ${tier.hex} ${current}%, #27272a ${current}%, #27272a 100%)">
+                <div class="flex justify-between text-xs text-zinc-500 mt-2 px-1">
+                    <span>1</span><span>25</span><span>50</span><span>75</span><span>100</span>
+                </div>
+            </div>
+
+            <details class="group">
+                <summary class="flex items-center justify-center gap-2 text-xs text-zinc-500 cursor-pointer hover:text-zinc-400 py-2">
+                    <i class="fa-solid fa-grip text-[10px]"></i>
+                    <span class="group-open:hidden">Show grid</span>
+                    <span class="hidden group-open:inline">Hide grid</span>
+                </summary>
+                <div class="grid gap-1 mt-2" style="grid-template-columns: repeat(10, 1fr)">
+                    ${Array.from({length: 100}, (_, i) => i + 1).map(n => `
+                        <button class="grid-num aspect-square rounded font-bold ${n === current ? 'bg-amber-500 text-black selected' : 'bg-zinc-800/60 text-zinc-500'}" data-num="${n}">${n}</button>
+                    `).join('')}
+                </div>
+            </details>
+
+            <div class="flex gap-3 mt-5">
+                <button id="btn-back" class="flex-1 py-3.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-bold rounded-xl"><i class="fa-solid fa-arrow-left mr-2"></i>Back</button>
+                <button id="btn-next" class="flex-1 py-3.5 bg-gradient-to-r from-amber-500 to-orange-500 text-black font-bold rounded-xl">Continue<i class="fa-solid fa-arrow-right ml-2"></i></button>
             </div>
         </div>
     `;
 
-    initDropzone();
+    setupHardPickerEvents(tier, (n) => { Game.guess = n; }, current);
+    document.getElementById('btn-back')?.addEventListener('click', () => { Game.phase = 'select'; renderPhase(); });
+    document.getElementById('btn-next')?.addEventListener('click', () => { Game.phase = 'wager'; renderPhase(); });
 }
 
-function initDropzone() {
-    const dropzone = document.getElementById('dropzone');
-    const fileInput = document.getElementById('file-input');
-    if (!dropzone || !fileInput) return;
+function renderComboPicker(container) {
+    const tier = TIERS[Game.comboStep];
+    const current = Game.guesses[Game.comboStep];
+    
+    container.innerHTML = `
+        <div class="bg-gradient-to-br from-zinc-900 to-zinc-800/50 border border-zinc-700/50 rounded-2xl p-5">
+            <div class="flex justify-center gap-3 mb-5">
+                ${TIERS.map((t, i) => {
+                    const isActive = i === Game.comboStep;
+                    const isDone = i < Game.comboStep;
+                    return `
+                        <div class="tier-pill flex items-center gap-2 px-3 py-2 rounded-xl border ${isActive ? `bg-gradient-to-br ${t.bgFrom} ${t.bgTo} ${t.borderColor} active` : isDone ? 'done bg-emerald-500/10 border-emerald-500/50' : 'bg-zinc-800/50 border-zinc-700/50'}" style="--pill-glow: ${t.hex}40">
+                            <span class="text-xl">${isDone ? '✓' : t.emoji}</span>
+                            <div class="text-left">
+                                <p class="text-xs font-bold ${isActive ? t.textColor : isDone ? 'text-emerald-400' : 'text-zinc-500'}">${t.name}</p>
+                                <p class="text-[10px] ${isDone ? 'text-emerald-400 font-bold' : 'text-zinc-600'}">${isDone ? Game.guesses[i] : t.multiplier + 'x'}</p>
+                            </div>
+                        </div>
+                    `;
+                }).join('')}
+            </div>
 
-    dropzone.onclick = () => fileInput.click();
+            <div class="text-center mb-4">
+                <div class="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r ${tier.bgFrom} ${tier.bgTo} border ${tier.borderColor} rounded-full mb-2">
+                    <span class="text-2xl">${tier.emoji}</span>
+                    <span class="${tier.textColor} font-bold">${tier.name} Tier</span>
+                </div>
+                <p class="text-zinc-400 text-sm">Pick <span class="text-white font-bold">1-${tier.range}</span> • <span class="text-emerald-400">${tier.chance}</span> • <span class="${tier.textColor} font-bold">${tier.multiplier}x</span></p>
+            </div>
 
-    ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(e => {
-        dropzone.addEventListener(e, ev => {
-            ev.preventDefault();
-            ev.stopPropagation();
+            <div id="picker-area" class="mb-5">
+                ${tier.range <= 3 ? renderEasyPicker(tier, current) : tier.range <= 10 ? renderMediumPicker(tier, current) : renderHardPickerHTML(tier, current)}
+            </div>
+
+            <div class="flex gap-3">
+                <button id="btn-back" class="flex-1 py-3.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-bold rounded-xl"><i class="fa-solid fa-arrow-left mr-2"></i>${Game.comboStep > 0 ? 'Previous' : 'Back'}</button>
+                <button id="btn-next" class="flex-1 py-3.5 bg-gradient-to-r from-${tier.color}-500 to-${tier.color}-600 text-black font-bold rounded-xl">${Game.comboStep < 2 ? 'Next' : 'Continue'}<i class="fa-solid fa-arrow-right ml-2"></i></button>
+            </div>
+        </div>
+    `;
+
+    setupComboEvents(tier);
+}
+
+function renderEasyPicker(tier, current) {
+    return `
+        <div class="flex justify-center gap-4 py-4">
+            ${Array.from({length: tier.range}, (_, i) => i + 1).map(n => `
+                <button class="easy-pick-btn w-28 h-32 rounded-2xl flex flex-col items-center justify-center gap-2 border-2 ${n === current ? `bg-gradient-to-br ${tier.bgFrom} ${tier.bgTo} ${tier.borderColor} selected` : 'bg-zinc-800/60 border-zinc-700/50 hover:border-zinc-600'}" data-num="${n}" style="--glow-color: ${tier.hex}">
+                    <span class="text-5xl font-black ${n === current ? tier.textColor : 'text-white'}">${n}</span>
+                    <span class="text-xs ${n === current ? tier.textColor : 'text-zinc-500'} font-medium">Pick ${n}</span>
+                </button>
+            `).join('')}
+        </div>
+    `;
+}
+
+function renderMediumPicker(tier, current) {
+    return `
+        <div class="grid grid-cols-5 gap-3 max-w-sm mx-auto py-2">
+            ${Array.from({length: tier.range}, (_, i) => i + 1).map(n => `
+                <button class="medium-pick-btn aspect-square rounded-xl flex items-center justify-center border-2 ${n === current ? `bg-gradient-to-br ${tier.bgFrom} ${tier.bgTo} ${tier.borderColor} selected` : 'bg-zinc-800/60 border-zinc-700/50 hover:border-zinc-600'}" data-num="${n}" style="--glow-color: ${tier.hex}">
+                    <span class="text-2xl font-black ${n === current ? tier.textColor : 'text-white'}">${n}</span>
+                </button>
+            `).join('')}
+        </div>
+    `;
+}
+
+function renderHardPickerHTML(tier, current) {
+    return `
+        <div class="text-center mb-4">
+            <div class="inline-flex items-center justify-center w-28 h-28 rounded-2xl bg-gradient-to-br ${tier.bgFrom} ${tier.bgTo} border-2 ${tier.borderColor} pulse-glow" style="--glow-color: ${tier.hex}40">
+                <span id="display-number" class="text-5xl font-black ${tier.textColor}">${current}</span>
+            </div>
+        </div>
+        <div class="mb-4 px-2">
+            <input type="range" id="number-slider" min="1" max="100" value="${current}" class="fortune-slider w-full" style="background: linear-gradient(to right, ${tier.hex} 0%, ${tier.hex} ${current}%, #27272a ${current}%, #27272a 100%)">
+            <div class="flex justify-between text-xs text-zinc-500 mt-2 px-1"><span>1</span><span>25</span><span>50</span><span>75</span><span>100</span></div>
+        </div>
+        <details class="group">
+            <summary class="flex items-center justify-center gap-2 text-xs text-zinc-500 cursor-pointer hover:text-zinc-400 py-2"><i class="fa-solid fa-grip text-[10px]"></i><span class="group-open:hidden">Show grid</span><span class="hidden group-open:inline">Hide grid</span></summary>
+            <div class="grid gap-1 mt-2" style="grid-template-columns: repeat(10, 1fr)">
+                ${Array.from({length: 100}, (_, i) => i + 1).map(n => `<button class="grid-num aspect-square rounded font-bold ${n === current ? 'bg-amber-500 text-black selected' : 'bg-zinc-800/60 text-zinc-500'}" data-num="${n}">${n}</button>`).join('')}
+            </div>
+        </details>
+    `;
+}
+
+function setupComboEvents(tier) {
+    const updateNumber = (num) => {
+        Game.guesses[Game.comboStep] = num;
+        const display = document.getElementById('display-number');
+        const slider = document.getElementById('number-slider');
+        if (display) display.textContent = num;
+        if (slider) {
+            slider.value = num;
+            slider.style.background = `linear-gradient(to right, ${tier.hex} 0%, ${tier.hex} ${num}%, #27272a ${num}%, #27272a 100%)`;
+        }
+        document.querySelectorAll('[data-num]').forEach(btn => {
+            const n = parseInt(btn.dataset.num);
+            const isSel = n === num;
+            btn.classList.toggle('selected', isSel);
+            if (btn.classList.contains('grid-num')) {
+                btn.classList.toggle('bg-amber-500', isSel);
+                btn.classList.toggle('text-black', isSel);
+                btn.classList.toggle('bg-zinc-800/60', !isSel);
+                btn.classList.toggle('text-zinc-500', !isSel);
+            }
         });
-    });
-
-    dropzone.addEventListener('dragenter', () => dropzone.classList.add('drag-over'));
-    dropzone.addEventListener('dragover', () => dropzone.classList.add('drag-over'));
-    dropzone.addEventListener('dragleave', () => dropzone.classList.remove('drag-over'));
-    dropzone.addEventListener('drop', e => {
-        dropzone.classList.remove('drag-over');
-        handleFileSelect(e.dataTransfer?.files?.[0]);
-    });
-
-    fileInput.addEventListener('change', e => handleFileSelect(e.target.files?.[0]));
-}
-
-function handleFileSelect(file) {
-    if (!file) return;
-
-    if (file.size > MAX_FILE_SIZE) {
-        showToast('File too large (max 4MB)', 'error');
-        return;
-    }
-
-    Notary.file = file;
-    Notary.step = 2;
-    renderStepContent();
-}
-
-// ============================================================================
-// STEP 2: DETAILS
-// ============================================================================
-function renderStep2(panel) {
-    const file = Notary.file;
-    const fileSize = file ? (file.size / 1024).toFixed(1) : '0';
-    const fileIcon = getFileIcon(file?.type || '');
-
-    panel.innerHTML = `
-        <div class="max-w-md mx-auto">
-            <h3 class="text-lg font-bold text-white mb-2 text-center">Add Details</h3>
-            <p class="text-zinc-500 text-sm mb-6 text-center">Describe your document for easy reference</p>
-
-            <div class="bg-zinc-800/50 border border-zinc-700 rounded-xl p-4 mb-4">
-                <div class="flex items-center gap-3">
-                    <div class="w-12 h-12 rounded-lg bg-amber-500/10 flex items-center justify-center">
-                        <i class="${fileIcon} text-xl text-amber-400"></i>
-                    </div>
-                    <div class="flex-1 min-w-0">
-                        <p class="text-white font-medium truncate">${file?.name || 'Unknown'}</p>
-                        <p class="text-[10px] text-zinc-500">${fileSize} KB</p>
-                    </div>
-                    <button id="btn-remove" class="w-8 h-8 rounded-lg bg-red-500/10 hover:bg-red-500/20 flex items-center justify-center transition-colors">
-                        <i class="fa-solid fa-trash text-red-400 text-sm"></i>
-                    </button>
-                </div>
-            </div>
-
-            <div class="mb-6">
-                <label class="text-xs font-bold text-zinc-400 uppercase tracking-wider block mb-2">
-                    Description <span class="text-zinc-600 font-normal">(optional)</span>
-                </label>
-                <textarea id="desc-input" rows="3" 
-                    class="w-full bg-black/40 border border-zinc-700 rounded-xl p-4 text-sm text-white focus:border-amber-500 focus:outline-none placeholder-zinc-600 resize-none"
-                    placeholder="E.g., Property deed signed on Jan 2025...">${Notary.description}</textarea>
-            </div>
-
-            <div class="flex gap-3">
-                <button id="btn-back" class="flex-1 py-3 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-bold rounded-xl transition-colors">
-                    <i class="fa-solid fa-arrow-left mr-2"></i> Back
-                </button>
-                <button id="btn-next" class="flex-[2] py-3 bg-amber-500 hover:bg-amber-400 text-white font-bold rounded-xl transition-colors">
-                    Continue <i class="fa-solid fa-arrow-right ml-2"></i>
-                </button>
-            </div>
-        </div>
-    `;
-
-    document.getElementById('btn-remove')?.addEventListener('click', () => {
-        Notary.file = null;
-        Notary.description = '';
-        Notary.step = 1;
-        renderStepContent();
-    });
-
-    document.getElementById('btn-back')?.addEventListener('click', () => {
-        Notary.step = 1;
-        renderStepContent();
-    });
-
-    document.getElementById('btn-next')?.addEventListener('click', () => {
-        const input = document.getElementById('desc-input');
-        Notary.description = input?.value || '';
-        Notary.step = 3;
-        renderStepContent();
-    });
-}
-
-function getFileTypeInfo(mimeType = '', fileName = '') {
-    const mime = mimeType.toLowerCase();
-    const name = fileName.toLowerCase();
-    
-    if (mime.includes('image') || /\.(jpg|jpeg|png|gif|webp|svg|bmp|ico)$/.test(name)) return FILE_TYPES.image;
-    if (mime.includes('pdf') || name.endsWith('.pdf')) return FILE_TYPES.pdf;
-    if (mime.includes('audio') || /\.(mp3|wav|ogg|flac|aac|m4a)$/.test(name)) return FILE_TYPES.audio;
-    if (mime.includes('video') || /\.(mp4|avi|mov|mkv|webm|wmv)$/.test(name)) return FILE_TYPES.video;
-    if (mime.includes('word') || mime.includes('document') || /\.(doc|docx|odt|rtf)$/.test(name)) return FILE_TYPES.document;
-    if (mime.includes('sheet') || mime.includes('excel') || /\.(xls|xlsx|csv|ods)$/.test(name)) return FILE_TYPES.spreadsheet;
-    if (/\.(js|ts|py|java|cpp|c|h|html|css|json|xml|sol|rs|go|php|rb)$/.test(name)) return FILE_TYPES.code;
-    if (mime.includes('zip') || mime.includes('archive') || /\.(zip|rar|7z|tar|gz)$/.test(name)) return FILE_TYPES.archive;
-    
-    return FILE_TYPES.default;
-}
-
-function getFileIcon(mimeType) {
-    return getFileTypeInfo(mimeType).icon;
-}
-
-function getFileCategory(mimeType = '') {
-    const mime = mimeType.toLowerCase();
-    if (mime.includes('image')) return 'image';
-    if (mime.includes('pdf')) return 'pdf';
-    if (mime.includes('audio')) return 'audio';
-    if (mime.includes('video')) return 'video';
-    if (mime.includes('word') || mime.includes('document')) return 'document';
-    if (mime.includes('sheet') || mime.includes('excel')) return 'spreadsheet';
-    if (mime.includes('zip') || mime.includes('archive')) return 'archive';
-    return 'document';
-}
-
-// ============================================================================
-// STEP 3: CONFIRM & MINT
-// ============================================================================
-function renderStep3(panel) {
-    const file = Notary.file;
-    const desc = Notary.description || 'No description';
-    const fee = State.notaryFee || ethers.parseEther("1");
-
-    panel.innerHTML = `
-        <div class="max-w-md mx-auto text-center">
-            <h3 class="text-lg font-bold text-white mb-2">Confirm & Mint</h3>
-            <p class="text-zinc-500 text-sm mb-6">Review and sign to create your certificate</p>
-
-            <div class="bg-zinc-800/50 border border-zinc-700 rounded-xl p-4 mb-4 text-left">
-                <div class="flex items-center gap-3 pb-3 border-b border-zinc-700/50 mb-3">
-                    <div class="w-10 h-10 rounded-lg bg-amber-500/10 flex items-center justify-center">
-                        <i class="${getFileIcon(file?.type || '')} text-amber-400"></i>
-                    </div>
-                    <div class="flex-1 min-w-0">
-                        <p class="text-white font-medium truncate text-sm">${file?.name}</p>
-                        <p class="text-[10px] text-zinc-500">${(file?.size / 1024).toFixed(1)} KB</p>
-                    </div>
-                </div>
-                <p class="text-xs text-zinc-400 italic">"${desc}"</p>
-            </div>
-
-            <div class="bg-amber-500/10 border border-amber-500/20 rounded-xl p-3 mb-6">
-                <div class="flex justify-between items-center">
-                    <span class="text-zinc-400 text-sm">Total Cost</span>
-                    <span class="text-amber-400 font-bold">${formatBigNumber(fee)} BKC</span>
-                </div>
-            </div>
-
-            <div class="flex gap-3">
-                <button id="btn-back" class="flex-1 py-3 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-bold rounded-xl transition-colors">
-                    <i class="fa-solid fa-arrow-left mr-2"></i> Back
-                </button>
-                <button id="btn-mint" class="flex-[2] py-3 bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-400 hover:to-yellow-400 text-white font-bold rounded-xl transition-all">
-                    <i class="fa-solid fa-stamp mr-2"></i> Sign & Mint
-                </button>
-            </div>
-        </div>
-    `;
-
-    document.getElementById('btn-back')?.addEventListener('click', () => {
-        Notary.step = 2;
-        renderStepContent();
-    });
-
-    document.getElementById('btn-mint')?.addEventListener('click', handleMint);
-}
-
-// ============================================================================
-// MINT PROCESS
-// ============================================================================
-async function handleMint() {
-    if (Notary.isProcessing) return;
-    Notary.isProcessing = true;
-
-    const btn = document.getElementById('btn-mint');
-    if (btn) {
-        btn.disabled = true;
-        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-2"></i> Signing...';
-    }
-
-    const overlay = document.getElementById('processing-overlay');
-    const statusEl = document.getElementById('process-status');
-    const barEl = document.getElementById('process-bar');
-    const overlayImg = document.getElementById('notary-overlay-img');
-
-    const setProgress = (percent, text) => {
-        if (barEl) barEl.style.width = `${percent}%`;
-        if (statusEl) statusEl.textContent = text;
     };
 
-    try {
-        const signer = await State.provider.getSigner();
-        const message = "I am signing to authenticate my file for notarization on Backchain.";
-        const signature = await signer.signMessage(message);
+    document.getElementById('number-slider')?.addEventListener('input', (e) => updateNumber(parseInt(e.target.value)));
+    document.querySelectorAll('[data-num]').forEach(btn => btn.addEventListener('click', () => updateNumber(parseInt(btn.dataset.num))));
+    document.getElementById('btn-back')?.addEventListener('click', () => { if (Game.comboStep > 0) Game.comboStep--; else Game.phase = 'select'; renderPhase(); });
+    document.getElementById('btn-next')?.addEventListener('click', () => { if (Game.comboStep < 2) Game.comboStep++; else Game.phase = 'wager'; renderPhase(); });
+}
 
-        if (overlay) {
-            overlay.classList.remove('hidden');
-            overlay.classList.add('flex');
+function setupHardPickerEvents(tier, updateFn, current) {
+    const updateNumber = (num) => {
+        updateFn(num);
+        const display = document.getElementById('display-number');
+        const slider = document.getElementById('number-slider');
+        if (display) display.textContent = num;
+        if (slider) {
+            slider.value = num;
+            slider.style.background = `linear-gradient(to right, ${tier.hex} 0%, ${tier.hex} ${num}%, #27272a ${num}%, #27272a 100%)`;
         }
-
-        setProgress(10, 'UPLOADING TO IPFS...');
-
-        const formData = new FormData();
-        formData.append('file', Notary.file);
-        formData.append('signature', signature);
-        formData.append('address', State.userAddress);
-        formData.append('description', Notary.description || 'No description');
-
-        const uploadUrl = API_ENDPOINTS.uploadFileToIPFS || "/api/upload";
-        const res = await fetch(uploadUrl, {
-            method: 'POST',
-            body: formData,
-            signal: AbortSignal.timeout(180000)
+        document.querySelectorAll('.grid-num').forEach(btn => {
+            const n = parseInt(btn.dataset.num);
+            btn.classList.toggle('selected', n === num);
+            btn.classList.toggle('bg-amber-500', n === num);
+            btn.classList.toggle('text-black', n === num);
+            btn.classList.toggle('bg-zinc-800/60', n !== num);
+            btn.classList.toggle('text-zinc-500', n !== num);
         });
+    };
 
-        if (!res.ok) {
-            if (res.status === 413) throw new Error('File too large. Maximum size is 4MB.');
-            if (res.status === 401) throw new Error('Signature verification failed. Please try again.');
-            if (res.status === 500) {
-                const errorData = await res.json().catch(() => ({}));
-                throw new Error(errorData.details || 'Server error during upload.');
-            }
-            throw new Error(`Upload failed (${res.status})`);
-        }
-        const data = await res.json();
-
-        const ipfsCid = data.ipfsUri || data.metadataUri;
-        const contentHash = data.contentHash;
-        
-        if (!ipfsCid) throw new Error('No IPFS URI returned');
-        if (!contentHash) throw new Error('No content hash returned');
-
-        setProgress(50, 'MINTING ON BLOCKCHAIN...');
-
-        // Stamp animation
-        if (overlayImg) overlayImg.className = 'w-full h-full object-contain notary-stamp';
-
-        const success = await executeNotarizeDocument({
-            ipfsUri: ipfsCid,
-            contentHash: contentHash,
-            title: Notary.file?.name || 'Untitled Document',
-            description: Notary.description || 'No description',
-            docType: getFileCategory(Notary.file?.type) || 'document',
-            tags: []
-        }, btn);
-
-        if (success) {
-            setProgress(100, 'SUCCESS!');
-            
-            // Success animation
-            if (overlayImg) overlayImg.className = 'w-full h-full object-contain notary-success';
-            
-            if (overlay) {
-                overlay.innerHTML = `
-                    <div class="text-center p-6 max-w-sm animate-fade-in">
-                        <div class="w-32 h-32 mx-auto mb-6 relative">
-                            <div class="absolute inset-0 rounded-full bg-green-500/30 animate-pulse"></div>
-                            <div class="absolute inset-0 rounded-full border-4 border-green-400/50"></div>
-                            <div class="relative w-full h-full rounded-full bg-gradient-to-br from-green-900/50 to-emerald-900/50 flex items-center justify-center shadow-2xl shadow-green-500/30 overflow-hidden p-3 border-2 border-green-400">
-                                <img src="${NOTARY_IMAGE}" alt="Success" class="w-full h-full object-contain notary-success">
-                            </div>
-                            <div class="absolute -bottom-1 -right-1 w-10 h-10 bg-green-500 rounded-full flex items-center justify-center shadow-lg">
-                                <i class="fa-solid fa-check text-white text-lg"></i>
-                            </div>
-                        </div>
-                        <h3 class="text-2xl font-bold text-white mb-2">🎉 Notarized!</h3>
-                        <p class="text-green-400 text-sm mb-4">Your document is now permanently certified on the blockchain</p>
-                        <div class="flex items-center justify-center gap-2 text-zinc-500 text-xs">
-                            <i class="fa-solid fa-shield-check text-green-400"></i>
-                            <span>Immutable • Verifiable • Permanent</span>
-                        </div>
-                    </div>
-                `;
-            }
-            
-            setTimeout(() => {
-                if (overlay) {
-                    overlay.classList.add('hidden');
-                    overlay.classList.remove('flex');
-                }
-                
-                Notary.file = null;
-                Notary.description = '';
-                Notary.step = 1;
-                Notary.isProcessing = false;
-                
-                renderStepContent();
-                loadCertificates();
-                loadUserData(true);
-                
-                showToast('📜 Document notarized successfully!', 'success');
-            }, 3000);
-        } else {
-            throw new Error('Minting failed');
-        }
-
-    } catch (e) {
-        console.error('Notary Error:', e);
-        
-        if (overlay) {
-            overlay.classList.add('hidden');
-            overlay.classList.remove('flex');
-        }
-        
-        if (btn) {
-            btn.disabled = false;
-            btn.innerHTML = '<i class="fa-solid fa-stamp mr-2"></i> Sign & Mint';
-        }
-        
-        Notary.isProcessing = false;
-        showToast(e.message || 'Notarization failed', 'error');
-    }
+    document.getElementById('number-slider')?.addEventListener('input', (e) => updateNumber(parseInt(e.target.value)));
+    document.querySelectorAll('.grid-num').forEach(btn => btn.addEventListener('click', () => updateNumber(parseInt(btn.dataset.num))));
 }
 
 // ============================================================================
-// CERTIFICATES HISTORY
+// PHASE 3: WAGER
 // ============================================================================
-async function loadCertificates() {
-    const grid = document.getElementById('certificates-grid');
-    if (!grid) return;
-
-    if (!State.isConnected) {
-        grid.innerHTML = `
-            <div class="col-span-full text-center py-8">
-                <p class="text-zinc-500 text-sm">Connect wallet to view certificates</p>
+function renderWager(container) {
+    const isJackpot = Game.mode === 'jackpot';
+    const picks = isJackpot ? [Game.guess] : Game.guesses;
+    const maxMulti = isJackpot ? 100 : MAX_COMBO_MULTIPLIER;
+    const balanceNum = formatBigNumber(State.currentUserBalance || 0n);
+    const hasBalance = balanceNum >= 1;
+    const wagerOptions = [10, 50, 100];
+    
+    container.innerHTML = `
+        <div class="bg-gradient-to-br from-zinc-900 to-zinc-800/50 border border-zinc-700/50 rounded-2xl p-5">
+            <div class="text-center mb-5">
+                <h2 class="text-lg font-bold text-white mb-3">Your Picks</h2>
+                <div class="flex justify-center gap-3">
+                    ${(isJackpot ? [{ tier: TIERS[2], pick: picks[0] }] : picks.map((p, i) => ({ tier: TIERS[i], pick: p }))).map(({ tier, pick }) => `
+                        <div class="relative">
+                            <div class="w-16 h-16 rounded-xl bg-gradient-to-br ${tier.bgFrom} ${tier.bgTo} border-2 ${tier.borderColor} flex items-center justify-center">
+                                <span class="text-2xl font-black ${tier.textColor}">${pick}</span>
+                            </div>
+                            <div class="absolute -bottom-2 left-1/2 -translate-x-1/2 px-2 py-0.5 bg-${tier.color}-500 text-black text-xs font-bold rounded-full">${tier.multiplier}x</div>
+                        </div>
+                    `).join('')}
+                </div>
             </div>
-        `;
-        return;
-    }
 
-    try {
-        let certs = [];
-        
+            ${!hasBalance ? `
+                <div class="mb-5 p-4 bg-gradient-to-r from-red-900/30 to-orange-900/20 rounded-xl border border-red-500/30">
+                    <div class="flex items-center gap-3 mb-3">
+                        <div class="w-10 h-10 rounded-full bg-red-500/20 flex items-center justify-center"><i class="fa-solid fa-exclamation-triangle text-red-400"></i></div>
+                        <div><p class="text-white font-bold">No BKC Balance</p><p class="text-xs text-zinc-400">Get free tokens</p></div>
+                    </div>
+                    <button id="btn-faucet" class="w-full py-3 bg-gradient-to-r from-cyan-500 to-blue-500 text-white font-bold rounded-xl"><i class="fa-solid fa-faucet mr-2"></i>Get Free 1000 BKC</button>
+                </div>
+            ` : `
+                <div class="mb-5">
+                    <div class="flex items-center justify-between mb-3">
+                        <p class="text-xs text-zinc-500 uppercase">Wager</p>
+                        <p class="text-xs text-zinc-400">Balance: <span class="text-white font-bold">${balanceNum.toFixed(2)}</span> BKC</p>
+                    </div>
+                    <div class="grid grid-cols-3 gap-2 mb-3">
+                        ${wagerOptions.map(w => `<button class="wager-btn py-2.5 rounded-xl font-bold text-sm border-2 border-zinc-700/50 bg-zinc-800/60 text-zinc-300 ${Game.wager === w ? 'selected' : ''}" data-wager="${w}">${w} BKC</button>`).join('')}
+                    </div>
+                    <div class="flex gap-2">
+                        <input type="number" id="custom-wager" value="${Game.wager}" class="flex-1 bg-zinc-800/60 border-2 border-zinc-700/50 rounded-xl px-4 py-2.5 text-white text-center font-bold focus:border-amber-500/50 focus:outline-none">
+                        <button id="btn-max" class="px-4 py-2.5 bg-zinc-800/60 border-2 border-zinc-700/50 rounded-xl text-amber-400 font-bold hover:bg-zinc-700">MAX</button>
+                    </div>
+                </div>
+                <div class="p-4 bg-gradient-to-r from-emerald-900/20 to-green-900/10 border border-emerald-500/30 rounded-xl mb-5">
+                    <div class="flex items-center justify-between">
+                        <div><p class="text-xs text-zinc-400 mb-1">Potential Win</p><p class="text-2xl font-black text-emerald-400" id="potential-win">${(Game.wager * maxMulti).toLocaleString()} BKC</p></div>
+                        <div class="text-right"><p class="text-xs text-zinc-400 mb-1">Multiplier</p><p class="text-xl font-bold text-white">${maxMulti}x</p></div>
+                    </div>
+                </div>
+            `}
+
+            <div class="flex gap-3">
+                <button id="btn-back" class="flex-1 py-3.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-bold rounded-xl"><i class="fa-solid fa-arrow-left mr-2"></i>Back</button>
+                <button id="btn-play" class="flex-1 py-3.5 bg-gradient-to-r from-amber-500 to-orange-500 text-black font-bold rounded-xl ${!hasBalance ? 'opacity-50 cursor-not-allowed' : ''}" ${!hasBalance ? 'disabled' : ''}><i class="fa-solid fa-paw mr-2"></i>Play Now</button>
+            </div>
+        </div>
+    `;
+
+    setupWagerEvents(maxMulti, balanceNum);
+}
+
+function setupWagerEvents(maxMulti, balanceNum) {
+    const updateWager = (amount) => {
+        Game.wager = Math.max(1, Math.min(amount, Math.floor(balanceNum)));
+        const customInput = document.getElementById('custom-wager');
+        const potentialWin = document.getElementById('potential-win');
+        if (customInput) customInput.value = Game.wager;
+        if (potentialWin) potentialWin.textContent = (Game.wager * maxMulti).toLocaleString() + ' BKC';
+        document.querySelectorAll('.wager-btn').forEach(btn => btn.classList.toggle('selected', parseInt(btn.dataset.wager) === Game.wager));
+    };
+
+    document.querySelectorAll('.wager-btn').forEach(btn => btn.addEventListener('click', () => updateWager(parseInt(btn.dataset.wager))));
+    document.getElementById('custom-wager')?.addEventListener('input', (e) => updateWager(parseInt(e.target.value) || 10));
+    document.getElementById('btn-max')?.addEventListener('click', () => updateWager(Math.floor(balanceNum)));
+    document.getElementById('btn-faucet')?.addEventListener('click', async () => {
+        showToast('Requesting tokens...', 'info');
         try {
-            const apiUrl = API_ENDPOINTS.getNotarizedDocuments || 
-                `https://us-central1-backchain-415921.cloudfunctions.net/getNotarizedDocuments/${State.userAddress}`;
-            
-            const response = await fetch(apiUrl);
-            if (response.ok) {
-                const data = await response.json();
-                if (Array.isArray(data) && data.length > 0) {
-                    certs = data.map(doc => ({
-                        id: doc.tokenId || '?',
-                        ipfs: doc.ipfsCid || '',
-                        description: doc.description || '',
-                        hash: doc.contentHash || '',
-                        timestamp: doc.timestamp || '',
-                        txHash: doc.txHash || ''
-                    }));
-                }
-            }
-        } catch (apiErr) {
-            console.warn('API fetch failed:', apiErr.message?.slice(0, 50));
-        }
-        
-        if (certs.length === 0) {
-            if (!State.decentralizedNotaryContract) await loadPublicData();
-            const contract = State.decentralizedNotaryContract;
-            
-            if (!contract) {
-                grid.innerHTML = `<div class="col-span-full text-center py-8 text-zinc-500 text-sm">Contract not available</div>`;
-                return;
-            }
-
-            let events = [];
-            try {
-                const filter = contract.filters.DocumentNotarized 
-                    ? contract.filters.DocumentNotarized(null, State.userAddress)
-                    : contract.filters.NotarizationEvent?.(null, State.userAddress);
-                
-                if (filter) events = await contract.queryFilter(filter, -50000);
-            } catch (filterErr) {
-                try {
-                    const balance = await contract.balanceOf(State.userAddress);
-                    if (balance > 0n) {
-                        for (let i = 0n; i < balance; i++) {
-                            try {
-                                const tokenId = await contract.tokenOfOwnerByIndex(State.userAddress, i);
-                                events.push({ args: [tokenId], transactionHash: null });
-                            } catch (e) { break; }
-                        }
-                    }
-                } catch (balErr) {}
-            }
-
-            certs = await Promise.all(events.map(async (e) => {
-                const tokenId = e.args[0];
-                let ipfsCid = '', description = '', contentHash = '';
-                
-                try {
-                    if (typeof contract.tokenURI === 'function') {
-                        const uri = await contract.tokenURI(tokenId);
-                        if (uri && uri.startsWith('data:application/json;base64,')) {
-                            const base64Data = uri.replace('data:application/json;base64,', '');
-                            const metadata = JSON.parse(atob(base64Data));
-                            
-                            ipfsCid = metadata.image || '';
-                            description = metadata.description || '';
-                            
-                            if (metadata.attributes) {
-                                const hashAttr = metadata.attributes.find(a => a.trait_type === 'Content Hash');
-                                if (hashAttr) contentHash = hashAttr.value || 'SHA-256';
-                            }
-                        }
-                    }
-                } catch (err) {}
-
-                return { id: tokenId?.toString() || '?', ipfs: ipfsCid, description, hash: contentHash, txHash: e.transactionHash || '' };
-            }));
-        }
-
-        if (certs.length === 0) {
-            grid.innerHTML = `
-                <div class="col-span-full text-center py-8">
-                    <img src="${NOTARY_IMAGE}" class="w-14 h-14 mx-auto opacity-20 mb-3">
-                    <p class="text-zinc-500 text-sm mb-1">No certificates yet</p>
-                    <p class="text-zinc-600 text-xs">Upload a document to get started</p>
-                </div>
-            `;
-            return;
-        }
-
-        const sorted = certs.sort((a, b) => parseInt(b.id) - parseInt(a.id));
-
-        grid.innerHTML = sorted.map(cert => {
-            let ipfsUrl = '';
-            const ipfsData = cert.ipfs || '';
-            
-            if (ipfsData.startsWith('ipfs://')) {
-                ipfsUrl = `https://gateway.pinata.cloud/ipfs/${ipfsData.replace('ipfs://', '')}`;
-            } else if (ipfsData.startsWith('https://')) {
-                ipfsUrl = ipfsData;
-            } else if (ipfsData.length > 0) {
-                ipfsUrl = `https://gateway.pinata.cloud/ipfs/${ipfsData}`;
-            }
-            
-            let cleanDesc = cert.description || '';
-            cleanDesc = cleanDesc.split('---')[0].trim() || cleanDesc;
-            cleanDesc = cleanDesc.split('\n')[0].trim() || 'Notarized Document';
-            
-            const fileInfo = getFileTypeInfo('', cleanDesc);
-            const hasValidUrl = ipfsUrl && ipfsUrl.length > 10;
-
-            return `
-                <div class="cert-card bg-zinc-900/50 border border-zinc-800/50 rounded-xl overflow-hidden">
-                    <div class="h-28 bg-gradient-to-br from-zinc-800/50 to-zinc-900/50 flex items-center justify-center relative overflow-hidden">
-                        ${hasValidUrl ? `
-                            <img src="${ipfsUrl}" 
-                                 class="absolute inset-0 w-full h-full object-cover"
-                                 onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
-                            <div class="hidden flex-col items-center justify-center h-full absolute inset-0 bg-zinc-900">
-                                <div class="w-12 h-12 rounded-xl ${fileInfo.bg} flex items-center justify-center mb-1">
-                                    <i class="${fileInfo.icon} text-2xl ${fileInfo.color}"></i>
-                                </div>
-                            </div>
-                        ` : `
-                            <div class="flex flex-col items-center justify-center">
-                                <div class="w-14 h-14 rounded-xl ${fileInfo.bg} flex items-center justify-center mb-2">
-                                    <i class="${fileInfo.icon} text-2xl ${fileInfo.color}"></i>
-                                </div>
-                                <span class="text-[9px] text-zinc-600 uppercase tracking-wider">CERTIFIED</span>
-                            </div>
-                        `}
-                        <span class="absolute top-2 right-2 text-[9px] font-mono text-zinc-400 bg-black/70 px-2 py-0.5 rounded-full">#${cert.id}</span>
-                    </div>
-                    
-                    <div class="p-3">
-                        <p class="text-xs text-white font-medium truncate mb-1" title="${cleanDesc}">
-                            ${cleanDesc || 'Notarized Document'}
-                        </p>
-                        <p class="text-[9px] font-mono text-zinc-600 truncate mb-3" title="${cert.hash}">
-                            SHA-256: ${cert.hash?.slice(0, 16) || '...'}...
-                        </p>
-                        
-                        <div class="flex items-center justify-between pt-2 border-t border-zinc-800/50">
-                            <div class="flex gap-3">
-                                ${ipfsUrl ? `
-                                    <a href="${ipfsUrl}" target="_blank" 
-                                       class="text-[10px] text-amber-400 hover:text-amber-300 font-bold transition-colors flex items-center gap-1">
-                                        <i class="fa-solid fa-download"></i> Download
-                                    </a>
-                                ` : `<span class="text-[10px] text-zinc-600">No file</span>`}
-                                <button onclick="NotaryPage.addToWallet('${cert.id}', '${ipfsUrl}')" 
-                                    class="text-[10px] text-zinc-500 hover:text-amber-400 transition-colors flex items-center gap-1">
-                                    <i class="fa-solid fa-wallet"></i> Wallet
-                                </button>
-                            </div>
-                            ${cert.txHash ? `
-                                <a href="${EXPLORER_TX}${cert.txHash}" target="_blank" 
-                                   class="text-zinc-600 hover:text-white transition-colors" title="View on Explorer">
-                                    <i class="fa-solid fa-arrow-up-right-from-square text-[10px]"></i>
-                                </a>
-                            ` : ''}
-                        </div>
-                    </div>
-                </div>
-            `;
-        }).join('');
-
-    } catch (e) {
-        console.error('History Error:', e);
-        grid.innerHTML = `
-            <div class="col-span-full text-center py-8">
-                <p class="text-red-400 text-sm"><i class="fa-solid fa-exclamation-circle mr-2"></i> Failed to load</p>
-            </div>
-        `;
-    }
-}
-
-// ============================================================================
-// GLOBAL LISTENERS
-// ============================================================================
-function attachGlobalListeners() {
-    document.getElementById('btn-refresh')?.addEventListener('click', async () => {
-        const btn = document.getElementById('btn-refresh');
-        if (btn) btn.innerHTML = '<i class="fa-solid fa-rotate fa-spin"></i> Loading...';
-        await loadCertificates();
-        if (btn) btn.innerHTML = '<i class="fa-solid fa-rotate"></i> Refresh';
+            const res = await fetch(`https://faucet-4wvdcuoouq-uc.a.run.app?address=${State.userAddress}`);
+            const data = await res.json();
+            if (data.success) { showToast('🎉 Tokens received!', 'success'); await loadUserData(); renderPhase(); }
+            else showToast(data.error || 'Error', 'error');
+        } catch { showToast('Faucet error', 'error'); }
+    });
+    document.getElementById('btn-back')?.addEventListener('click', () => { Game.phase = 'pick'; if (Game.mode === 'combo') Game.comboStep = 2; renderPhase(); });
+    document.getElementById('btn-play')?.addEventListener('click', async () => {
+        if (Game.wager < 1) return showToast('Min: 1 BKC', 'warning');
+        Game.phase = 'spin';
+        renderPhase();
+        try {
+            const result = await executeFortuneParticipate(Game.wager, Game.mode === 'jackpot' ? [Game.guess] : Game.guesses, Game.mode === 'combo', null);
+            if (result?.success) { Game.gameId = result.gameId; setTimeout(() => pollResult(result.gameId), 3000); }
+            else { Game.phase = 'wager'; renderPhase(); }
+        } catch (e) { showToast('Error: ' + e.message, 'error'); Game.phase = 'wager'; renderPhase(); }
     });
 }
 
 // ============================================================================
-// DATA LOADING
+// PHASE 4: SPIN - ROULETTE ANIMATION 🎰
 // ============================================================================
-async function loadNotaryData() {
-    const now = Date.now();
-    if (now - Notary.lastFetch < 30000 && State.notaryFee > 0n) return;
+function renderSpin(container) {
+    const isJackpot = Game.mode === 'jackpot';
+    const picks = isJackpot ? [Game.guess] : Game.guesses;
+    const tiersToShow = isJackpot ? [TIERS[2]] : TIERS;
+    
+    container.innerHTML = `
+        <div class="bg-gradient-to-br from-zinc-900 to-zinc-800/50 border border-zinc-700/50 rounded-2xl p-6">
+            <!-- Title -->
+            <div class="text-center mb-6">
+                <h2 class="text-2xl font-bold text-white mb-1">🎰 Rolling<span class="waiting-dots"></span></h2>
+                <p class="text-zinc-400 text-sm">Oracle is choosing the numbers</p>
+            </div>
+            
+            <!-- Spinning Roulettes -->
+            <div class="flex justify-center gap-4 mb-6">
+                ${tiersToShow.map((tier, idx) => `
+                    <div class="text-center">
+                        <p class="text-xs text-zinc-500 mb-2">${tier.emoji} ${tier.name}</p>
+                        <div class="roulette-box relative w-20 h-24 rounded-2xl bg-gradient-to-br ${tier.bgFrom} ${tier.bgTo} border-2 ${tier.borderColor} overflow-hidden roulette-glow" 
+                             style="--glow-color: ${tier.hex}50" 
+                             id="roulette-${idx}">
+                            <!-- Spinning number -->
+                            <div class="absolute inset-0 flex items-center justify-center">
+                                <span class="roulette-num text-4xl font-black ${tier.textColor}" id="spin-num-${idx}">?</span>
+                            </div>
+                            <!-- Top/Bottom fade gradient -->
+                            <div class="absolute inset-0 pointer-events-none bg-gradient-to-b from-black/60 via-transparent to-black/60"></div>
+                        </div>
+                    </div>
+                `).join('')}
+            </div>
+            
+            <!-- Your picks (fixed below) -->
+            <div class="border-t border-zinc-700/50 pt-5">
+                <p class="text-center text-xs text-zinc-500 uppercase mb-3">🎯 Your Numbers</p>
+                <div class="flex justify-center gap-4">
+                    ${(isJackpot ? [{ tier: TIERS[2], pick: picks[0] }] : picks.map((p, i) => ({ tier: TIERS[i], pick: p }))).map(({ tier, pick }) => `
+                        <div class="text-center">
+                            <div class="w-16 h-16 rounded-xl bg-gradient-to-br ${tier.bgFrom} ${tier.bgTo} border-2 ${tier.borderColor} flex items-center justify-center">
+                                <span class="text-2xl font-black ${tier.textColor}">${pick}</span>
+                            </div>
+                            <p class="text-xs ${tier.textColor} mt-1 font-medium">${tier.name}</p>
+                        </div>
+                    `).join('')}
+                </div>
+            </div>
+            
+            <p class="text-xs text-zinc-500 mt-6 text-center"><i class="fa-solid fa-clock mr-1"></i>May take up to 30s</p>
+        </div>
+    `;
+    
+    // Start spinning animations
+    startSpinningAnimations(tiersToShow);
+}
 
-    try {
-        const hub = State.ecosystemManagerContractPublic || State.ecosystemManagerContract;
-        if (!hub) await loadPublicData();
-
-        const key = ethers.id("NOTARY_SERVICE");
-        const fee = await safeContractCall(hub || State.ecosystemManagerContractPublic, 'getFee', [key], 0n);
-
-        if (fee > 0n) {
-            State.notaryFee = fee;
-            Notary.lastFetch = now;
-        }
-    } catch (e) {
-        console.warn('Notary data error:', e);
-    }
+function startSpinningAnimations(tiers) {
+    // Clear any existing intervals
+    Game.spinIntervals.forEach(id => clearInterval(id));
+    Game.spinIntervals = [];
+    
+    tiers.forEach((tier, idx) => {
+        const numEl = document.getElementById(`spin-num-${idx}`);
+        if (!numEl) return;
+        
+        let speed = 50; // Initial speed in ms
+        
+        const spin = () => {
+            const randomNum = Math.floor(Math.random() * tier.range) + 1;
+            numEl.textContent = randomNum;
+            numEl.style.transform = `scale(${0.8 + Math.random() * 0.4})`;
+        };
+        
+        // Start fast spinning
+        const intervalId = setInterval(spin, speed);
+        Game.spinIntervals.push(intervalId);
+    });
 }
 
 // ============================================================================
-// EXPORT
+// PHASE 5: RESULT - EPIC REVEAL & WIN ANIMATION 🏆
 // ============================================================================
-export const NotaryPage = {
-    async render(isActive) {
-        if (!isActive) return;
-        render();
-        await loadNotaryData();
-        if (State.isConnected) await loadUserData();
-        updateStatusBadges();
-        renderStepContent();
-    },
-
-    reset() {
-        Notary.file = null;
-        Notary.description = '';
-        Notary.step = 1;
-        renderStepContent();
-    },
-
-    update() {
-        updateStatusBadges();
-        if (!Notary.isProcessing) renderStepContent();
-    },
-
-    refreshHistory() {
-        loadCertificates();
-    },
-
-    async addToWallet(tokenId, imageUrl) {
-        try {
-            let finalImageUrl = imageUrl;
+function renderResult(container) {
+    const result = Game.result;
+    if (!result) return renderPhase();
+    
+    const isJackpot = Game.mode === 'jackpot';
+    const picks = isJackpot ? [Game.guess] : Game.guesses;
+    const results = result.results || result.randomNumbers || result.rolls || [];
+    const tiersToShow = isJackpot ? [TIERS[2]] : TIERS;
+    
+    const matches = picks.map((pick, i) => {
+        const roll = results[i] !== undefined ? Number(results[i]) : null;
+        return roll !== null && roll === pick;
+    });
+    const matchCount = matches.filter(m => m).length;
+    const isWin = matchCount > 0;
+    
+    let multiplier = 0;
+    if (isJackpot && matches[0]) {
+        multiplier = 100;
+    } else if (!isJackpot) {
+        matches.forEach((hit, i) => { if (hit) multiplier += TIERS[i].multiplier; });
+    }
+    const estimatedPrize = Game.wager * multiplier;
+    
+    // First render the spinning state, then animate to reveal
+    container.innerHTML = `
+        <div class="bg-gradient-to-br ${isWin ? 'from-emerald-900/30 to-green-900/10 border-emerald-500/30' : 'from-zinc-900 to-zinc-800/50 border-zinc-700/50'} border rounded-2xl p-6 relative overflow-hidden" id="result-container">
             
-            if (!finalImageUrl && State.decentralizedNotaryContract) {
-                try {
-                    const uri = await State.decentralizedNotaryContract.tokenURI(tokenId);
-                    if (uri && uri.startsWith('data:application/json;base64,')) {
-                        const base64Data = uri.replace('data:application/json;base64,', '');
-                        const metadata = JSON.parse(atob(base64Data));
-                        if (metadata.image) {
-                            const cid = metadata.image.replace('ipfs://', '');
-                            finalImageUrl = `https://gateway.pinata.cloud/ipfs/${cid}`;
-                        }
+            <!-- Reveal Area -->
+            <div class="text-center mb-6">
+                <h2 class="text-xl font-bold text-white mb-4" id="result-title">🔮 Revealing<span class="waiting-dots"></span></h2>
+            </div>
+            
+            <!-- Oracle Numbers with reveal animation -->
+            <div class="flex justify-center gap-4 mb-6" id="oracle-numbers">
+                ${tiersToShow.map((tier, idx) => `
+                    <div class="text-center">
+                        <p class="text-xs text-zinc-500 mb-2">${tier.emoji} ${tier.name}</p>
+                        <div class="oracle-box relative w-20 h-24 rounded-2xl bg-gradient-to-br ${tier.bgFrom} ${tier.bgTo} border-2 ${tier.borderColor} flex items-center justify-center overflow-hidden" 
+                             id="oracle-${idx}"
+                             style="--glow-color: ${tier.hex}50">
+                            <span class="oracle-num text-4xl font-black ${tier.textColor}" id="oracle-num-${idx}">?</span>
+                        </div>
+                    </div>
+                `).join('')}
+            </div>
+            
+            <!-- Your picks -->
+            <div class="border-t border-zinc-700/50 pt-5 mb-6">
+                <p class="text-center text-xs text-zinc-500 uppercase mb-3">🎯 Your Numbers</p>
+                <div class="flex justify-center gap-4" id="your-picks">
+                    ${tiersToShow.map((tier, idx) => {
+                        const pick = isJackpot ? picks[0] : picks[idx];
+                        return `
+                            <div class="text-center" id="pick-container-${idx}">
+                                <div class="pick-box w-16 h-16 rounded-xl bg-gradient-to-br ${tier.bgFrom} ${tier.bgTo} border-2 ${tier.borderColor} flex items-center justify-center" id="pick-${idx}">
+                                    <span class="text-2xl font-black ${tier.textColor}">${pick}</span>
+                                </div>
+                                <p class="text-xs text-zinc-500 mt-1" id="pick-label-${idx}">${tier.name}</p>
+                            </div>
+                        `;
+                    }).join('')}
+                </div>
+            </div>
+            
+            <!-- Result message (hidden initially) -->
+            <div id="result-message" class="hidden text-center mb-5"></div>
+            
+            <button id="btn-new-game" class="w-full py-4 bg-gradient-to-r from-amber-500 to-orange-500 text-black font-bold rounded-xl opacity-0 transition-opacity duration-500"><i class="fa-solid fa-paw mr-2"></i>Play Again</button>
+        </div>
+    `;
+    
+    // Start the reveal animation sequence
+    animateReveal(tiersToShow, results, picks, matches, isWin, estimatedPrize, isJackpot);
+    
+    document.getElementById('btn-new-game')?.addEventListener('click', () => { 
+        Game.phase = 'select'; 
+        Game.result = null; 
+        renderPhase(); 
+        loadPoolData(); 
+    });
+}
+
+function animateReveal(tiers, results, picks, matches, isWin, prize, isJackpot) {
+    const delays = tiers.map((_, i) => 800 + i * 1000); // Stagger reveals
+    
+    // Start with spinning numbers
+    tiers.forEach((tier, idx) => {
+        const numEl = document.getElementById(`oracle-num-${idx}`);
+        if (!numEl) return;
+        
+        // Spin for a while then reveal
+        let spinSpeed = 50;
+        const spinInterval = setInterval(() => {
+            const randomNum = Math.floor(Math.random() * tier.range) + 1;
+            numEl.textContent = randomNum;
+        }, spinSpeed);
+        
+        // After delay, slow down and reveal
+        setTimeout(() => {
+            // Slow down phase
+            let currentSpeed = 50;
+            clearInterval(spinInterval);
+            
+            const slowDown = setInterval(() => {
+                currentSpeed += 30;
+                const randomNum = Math.floor(Math.random() * tier.range) + 1;
+                numEl.textContent = randomNum;
+                
+                if (currentSpeed > 300) {
+                    clearInterval(slowDown);
+                    // Final reveal
+                    const actualResult = Number(results[idx]);
+                    const pick = isJackpot ? picks[0] : picks[idx];
+                    const isMatch = actualResult === pick;
+                    
+                    // Reveal animation
+                    numEl.textContent = actualResult;
+                    numEl.classList.add('number-reveal');
+                    
+                    const box = document.getElementById(`oracle-${idx}`);
+                    const pickBox = document.getElementById(`pick-${idx}`);
+                    const pickLabel = document.getElementById(`pick-label-${idx}`);
+                    
+                    if (isMatch) {
+                        // Match! Green glow and pulse
+                        box.classList.add('match-pulse');
+                        box.style.borderColor = '#10b981';
+                        box.style.boxShadow = '0 0 30px rgba(16, 185, 129, 0.6)';
+                        numEl.classList.remove(tiers[idx].textColor.replace('text-', ''));
+                        numEl.classList.add('text-emerald-400');
+                        
+                        pickBox.classList.add('match-pulse');
+                        pickBox.style.borderColor = '#10b981';
+                        pickBox.style.background = 'linear-gradient(135deg, rgba(16,185,129,0.3), rgba(16,185,129,0.1))';
+                        pickLabel.textContent = '✓ MATCH!';
+                        pickLabel.className = 'text-xs text-emerald-400 mt-1 font-bold';
+                    } else {
+                        // Miss - shake and gray
+                        box.classList.add('miss-shake');
+                        box.style.opacity = '0.5';
+                        box.style.filter = 'grayscale(0.5)';
+                        
+                        pickBox.style.opacity = '0.5';
+                        pickLabel.textContent = '✗ Miss';
+                        pickLabel.className = 'text-xs text-red-400 mt-1';
                     }
-                } catch (e) {}
-            }
-            
-            showToast('Requesting wallet to track NFT #' + tokenId + '...', 'info');
-            
-            const contractAddress = State.decentralizedNotaryContract?.target || 
-                                   await State.decentralizedNotaryContract?.getAddress();
-            
-            await window.ethereum.request({
-                method: 'wallet_watchAsset',
-                params: {
-                    type: 'ERC721',
-                    options: {
-                        address: contractAddress,
-                        tokenId: tokenId.toString(),
-                        symbol: 'NOTARY',
-                        image: finalImageUrl || ''
-                    },
-                },
-            });
-            
-            showToast('📜 NFT added to wallet!', 'success');
-        } catch (error) {
-            if (error.code !== 4001) {
-                showToast('Could not add NFT to wallet', 'error');
-            }
+                }
+            }, currentSpeed);
+        }, delays[idx]);
+    });
+    
+    // After all reveals, show final result
+    const totalDelay = delays[delays.length - 1] + 1500;
+    setTimeout(() => {
+        showFinalResult(isWin, prize);
+    }, totalDelay);
+}
+
+function showFinalResult(isWin, prize) {
+    const titleEl = document.getElementById('result-title');
+    const messageEl = document.getElementById('result-message');
+    const btnEl = document.getElementById('btn-new-game');
+    const containerEl = document.getElementById('result-container');
+    
+    if (isWin) {
+        // EPIC WIN!
+        triggerEpicWinAnimation();
+        triggerCoinRain();
+        triggerConfetti();
+        
+        if (titleEl) {
+            titleEl.innerHTML = '🏆 YOU WON!';
+            titleEl.className = 'text-3xl font-black text-emerald-400 mb-4 epic-win-text';
+        }
+        
+        if (messageEl) {
+            messageEl.innerHTML = `
+                <div class="relative overflow-hidden p-4 bg-gradient-to-r from-emerald-500/30 to-green-500/20 rounded-xl border border-emerald-500/50">
+                    <div class="epic-win-shine"></div>
+                    <p class="text-5xl font-black text-white mb-2">+${prize.toFixed(2)}</p>
+                    <p class="text-lg text-emerald-400 font-bold">BKC Won!</p>
+                </div>
+            `;
+            messageEl.classList.remove('hidden');
+        }
+        
+        if (containerEl) {
+            containerEl.style.background = 'linear-gradient(135deg, rgba(16,185,129,0.2), rgba(16,185,129,0.05))';
+            containerEl.style.borderColor = 'rgba(16,185,129,0.5)';
+        }
+    } else {
+        // Not a win
+        if (titleEl) {
+            titleEl.innerHTML = '😿 Not this time';
+            titleEl.className = 'text-2xl font-bold text-zinc-400 mb-4';
+        }
+        
+        if (messageEl) {
+            messageEl.innerHTML = `
+                <p class="text-zinc-500 mb-2">Better luck next round!</p>
+                <p class="text-sm text-zinc-600">The tiger will smile on you soon 🐯</p>
+            `;
+            messageEl.classList.remove('hidden');
         }
     }
-};
+    
+    // Show play again button
+    if (btnEl) {
+        btnEl.style.opacity = '1';
+    }
+}
 
-window.NotaryPage = NotaryPage;
+function triggerEpicWinAnimation() {
+    // Create fireworks
+    const container = document.getElementById('result-container');
+    if (!container) return;
+    
+    const colors = ['#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#06b6d4'];
+    
+    for (let i = 0; i < 5; i++) {
+        setTimeout(() => {
+            const firework = document.createElement('div');
+            firework.className = 'firework';
+            firework.style.left = `${20 + Math.random() * 60}%`;
+            firework.style.top = `${20 + Math.random() * 40}%`;
+            firework.style.background = `radial-gradient(circle, ${colors[i % colors.length]} 0%, transparent 70%)`;
+            container.appendChild(firework);
+            setTimeout(() => firework.remove(), 1000);
+        }, i * 200);
+    }
+}
+
+function triggerCoinRain() {
+    const coins = ['🪙', '💰', '✨', '⭐', '🎉'];
+    
+    for (let i = 0; i < 30; i++) {
+        setTimeout(() => {
+            const coin = document.createElement('div');
+            coin.className = 'coin';
+            coin.textContent = coins[Math.floor(Math.random() * coins.length)];
+            coin.style.left = `${Math.random() * 100}%`;
+            coin.style.animationDelay = `${Math.random() * 0.5}s`;
+            coin.style.animationDuration = `${2 + Math.random() * 2}s`;
+            document.body.appendChild(coin);
+            setTimeout(() => coin.remove(), 4000);
+        }, i * 100);
+    }
+}
+
+function triggerConfetti() {
+    document.querySelector('.confetti-container')?.remove();
+    const container = document.createElement('div');
+    container.className = 'confetti-container';
+    document.body.appendChild(container);
+    const colors = ['#f59e0b', '#10b981', '#8b5cf6', '#ec4899', '#06b6d4'];
+    for (let i = 0; i < 60; i++) {
+        const c = document.createElement('div');
+        c.className = 'confetti';
+        c.style.cssText = `left:${Math.random()*100}%;color:${colors[i%colors.length]};font-size:${8+Math.random()*12}px;animation-delay:${Math.random()*2}s;animation-duration:${2+Math.random()*2}s`;
+        c.textContent = ['●','■','★','🐯'][i%4];
+        container.appendChild(c);
+    }
+    setTimeout(() => container.remove(), 5000);
+}
+
+// ============================================================================
+// HELPERS
+// ============================================================================
+async function getFortunePoolStatus() {
+    const contract = State.actionsManagerContractPublic || State.actionsManagerContract;
+    if (!contract) return null;
+
+    try {
+        const [prizePool, gameCounter] = await Promise.all([
+            contract.fortunePrizePool ? contract.fortunePrizePool() : Promise.resolve(0n),
+            contract.fortuneGameCounter ? contract.fortuneGameCounter() : Promise.resolve(0)
+        ]).catch(() => [0n, 0]);
+        
+        return {
+            prizePool: prizePool || 0n,
+            gameCounter: Number(gameCounter) || 0
+        };
+    } catch (e) {
+        return { prizePool: 0n, gameCounter: 0 };
+    }
+}
+
+async function getGameResult(gameId) {
+    const contract = State.actionsManagerContractPublic || State.actionsManagerContract;
+    if (!contract) return null;
+
+    try {
+        const isFulfilled = await contract.isGameFulfilled(gameId);
+        
+        if (!isFulfilled) {
+            return { fulfilled: false, pending: true };
+        }
+
+        const results = await contract.getGameResults(gameId);
+        
+        return {
+            fulfilled: true,
+            isComplete: true,
+            pending: false,
+            rolls: results.map(r => Number(r)),
+            results: results.map(r => Number(r)),
+            randomNumbers: results.map(r => Number(r))
+        };
+
+    } catch (e) {
+        return null;
+    }
+}
+
+async function pollResult(gameId, attempts = 0) {
+    if (attempts > 20) { showToast('Check history later', 'warning'); Game.phase = 'select'; return renderPhase(); }
+    try {
+        const result = await getGameResult(gameId);
+        if (result?.isComplete) { Game.result = result; Game.phase = 'result'; renderPhase(); loadPoolData(); }
+        else setTimeout(() => pollResult(gameId, attempts + 1), 3000);
+    } catch { setTimeout(() => pollResult(gameId, attempts + 1), 3000); }
+}
+
+async function loadPoolData() {
+    try {
+        const status = await getFortunePoolStatus();
+        if (status) {
+            const poolEl = document.getElementById('prize-pool');
+            const gamesEl = document.getElementById('total-games');
+            if (poolEl) poolEl.textContent = formatBigNumber(status.prizePool || 0n).toFixed(2) + ' BKC';
+            if (gamesEl) gamesEl.textContent = (status.gameCounter || 0).toLocaleString();
+        }
+        const balanceEl = document.getElementById('user-balance');
+        if (balanceEl) balanceEl.textContent = formatBigNumber(State.currentUserBalance || 0n).toFixed(2) + ' BKC';
+        loadHistory();
+    } catch (e) { console.error('Pool error:', e); }
+}
+
+async function loadHistory() {
+    try {
+        const endpoint = API_ENDPOINTS.fortuneGames || 'https://getfortunegames-4wvdcuoouq-uc.a.run.app';
+        const url = State.userAddress ? `${endpoint}?player=${State.userAddress}&limit=15` : `${endpoint}?limit=15`;
+        const res = await fetch(url);
+        const data = await res.json();
+        if (data.games?.length > 0) {
+            renderHistoryList(data.games);
+            const wins = data.games.filter(g => g.isWin || (g.prizeWon && BigInt(g.prizeWon) > 0n)).length;
+            const el = document.getElementById('win-rate');
+            if (el) el.textContent = `🏆 ${wins}/${data.games.length} wins`;
+        } else {
+            const list = document.getElementById('history-list');
+            if (list) list.innerHTML = `
+                <div class="p-8 text-center">
+                    <img src="${TIGER_IMAGE}" class="w-16 h-16 mx-auto opacity-20 mb-3" onerror="this.style.display='none'">
+                    <p class="text-zinc-500 text-sm">No games yet</p>
+                    <p class="text-zinc-600 text-xs mt-1">Be the first to play!</p>
+                </div>
+            `;
+        }
+    } catch { }
+}
+
+function renderHistoryList(games) {
+    const list = document.getElementById('history-list');
+    if (!list) return;
+    
+    list.innerHTML = games.map(g => {
+        const isWin = g.isWin || (g.prizeWon && BigInt(g.prizeWon) > 0n);
+        const prize = g.prizeWon ? formatBigNumber(BigInt(g.prizeWon)) : 0;
+        const wager = g.wagerAmount ? formatBigNumber(BigInt(g.wagerAmount)) : 0;
+        const time = g.timestamp ? new Date(g.timestamp._seconds * 1000).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
+        
+        // Números apostados e do oráculo
+        const guesses = g.guesses || g.details?.guesses || [];
+        const rolls = g.rolls || g.details?.rolls || [];
+        const guessesStr = guesses.length > 0 ? guesses.join(' • ') : '';
+        const rollsStr = rolls.length > 0 ? rolls.join(' • ') : '';
+        
+        return `
+            <a href="${g.txHash ? EXPLORER_TX + g.txHash : '#'}" target="_blank" class="history-item flex items-center justify-between p-3 hover:bg-zinc-800/60 border border-zinc-700/30 rounded-lg transition-all group mb-1.5 bg-zinc-800/20">
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 rounded-lg flex items-center justify-center ${isWin ? 'bg-emerald-500/20' : 'bg-zinc-700/50'}">
+                        <span class="text-lg">${isWin ? '🏆' : '🐯'}</span>
+                    </div>
+                    <div>
+                        <p class="text-white text-xs font-medium flex items-center gap-2">
+                            ${isWin ? '<span class="text-emerald-400">Winner!</span>' : 'Played'}
+                            ${guessesStr ? `<span class="px-1.5 py-0.5 rounded text-[10px] font-bold" style="background: rgba(249,115,22,0.2); color: #f97316">🎯 ${guessesStr}</span>` : ''}
+                        </p>
+                        <div class="flex items-center gap-2 mt-0.5">
+                            <p class="text-zinc-600 text-[10px]">${time}</p>
+                            ${rollsStr ? `<span class="text-[10px] text-fuchsia-400">🔮 ${rollsStr}</span>` : ''}
+                        </div>
+                    </div>
+                </div>
+                <div class="flex items-center gap-2">
+                    <span class="text-xs font-mono font-bold ${isWin ? 'text-emerald-400' : 'text-zinc-400'}">${isWin ? '+' + prize.toFixed(2) : '-' + wager.toFixed(2)} BKC</span>
+                    <i class="fa-solid fa-arrow-up-right-from-square text-zinc-600 group-hover:text-blue-400 text-[9px]"></i>
+                </div>
+            </a>
+        `;
+    }).join('');
+}
+
+export function cleanup() {
+    // Clear any running spin intervals
+    Game.spinIntervals.forEach(id => clearInterval(id));
+    Game.spinIntervals = [];
+}
+export const FortunePoolPage = { render, cleanup };
+export default { render, cleanup };
