@@ -1,5 +1,5 @@
 // js/modules/transactions.js
-// ✅ PRODUCTION V11.4 - FIX: Embedded Wallets - Custom Signer without eth_requestAccounts
+// ✅ PRODUCTION V11.5 - Simplified (Social Login disabled)
 
 const ethers = window.ethers;
 
@@ -21,107 +21,26 @@ function safeFormatEther(value) {
     } catch { return "N/A"; }
 }
 
-// 🔥 V11.4: Cria um signer wrapper para embedded wallets
-function createEmbeddedWalletSigner(provider, address) {
-    const jsonRpcProvider = new ethers.JsonRpcProvider(undefined, undefined, { 
-        staticNetwork: true 
-    });
-    
-    // Wrapper que usa o provider do Web3Modal para assinar
-    return {
-        provider: jsonRpcProvider,
-        address: address,
-        
-        getAddress: async () => address,
-        
-        sendTransaction: async (tx) => {
-            console.log('📱 Embedded wallet sending tx:', tx);
-            const rawProvider = State.web3Provider || provider;
-            
-            // Prepara a transação
-            const txRequest = {
-                from: address,
-                to: tx.to,
-                data: tx.data,
-                value: tx.value ? ethers.toBeHex(tx.value) : '0x0',
-                gas: tx.gasLimit ? ethers.toBeHex(tx.gasLimit) : undefined,
-            };
-            
-            // Envia via provider do Web3Modal
-            const txHash = await rawProvider.request({
-                method: 'eth_sendTransaction',
-                params: [txRequest]
-            });
-            
-            console.log('✅ TX sent:', txHash);
-            
-            // Retorna objeto compatível com ethers
-            const publicProvider = State.publicProvider || new ethers.JsonRpcProvider();
-            return {
-                hash: txHash,
-                wait: async () => {
-                    return await publicProvider.waitForTransaction(txHash);
-                }
-            };
-        },
-        
-        signMessage: async (message) => {
-            const rawProvider = State.web3Provider || provider;
-            return await rawProvider.request({
-                method: 'personal_sign',
-                params: [ethers.hexlify(ethers.toUtf8Bytes(message)), address]
-            });
-        }
-    };
-}
-
 async function getConnectedSigner() {
     if (!State.isConnected || !State.userAddress) {
         showToast("Please connect wallet first", "error");
         return null;
     }
-    
     try {
-        console.log('🔑 Getting signer for:', State.userAddress.slice(0, 10) + '...');
+        // V11.5: Simplified - Social login disabled, only real wallets
+        let rawProvider = State.web3Provider || State.provider || window.ethereum;
         
-        // 🔥 V11.4: Detecta se é embedded wallet checando se tem window.ethereum
-        const isEmbeddedWallet = !window.ethereum || 
-            (State.web3Provider && State.web3Provider !== window.ethereum);
-        
-        // 🔥 Se temos State.signer válido do wallet.js, usa ele
-        if (State.signer) {
-            // Testa se pode fazer getAddress (signer real)
-            try {
-                if (typeof State.signer.getAddress === 'function') {
-                    const addr = await State.signer.getAddress();
-                    console.log('✅ Using State.signer for:', addr.slice(0, 10) + '...');
-                    return State.signer;
-                }
-            } catch (e) {
-                console.log('⚠️ State.signer.getAddress failed, trying alternatives');
-            }
+        if (!rawProvider) {
+            showToast("No wallet provider found", "error");
+            return null;
         }
         
-        // 🔥 Para embedded wallets, cria signer customizado
-        if (isEmbeddedWallet && State.web3Provider) {
-            console.log('📱 Creating embedded wallet signer');
-            return createEmbeddedWalletSigner(State.web3Provider, State.userAddress);
-        }
-        
-        // 🔥 Fallback: MetaMask ou carteira injetada
-        if (window.ethereum) {
-            console.log('🦊 Using MetaMask/injected wallet');
-            const provider = new ethers.BrowserProvider(window.ethereum);
-            const signer = await provider.getSigner();
-            return signer;
-        }
-        
-        showToast("No wallet provider found", "error");
-        return null;
-        
+        const provider = new ethers.BrowserProvider(rawProvider);
+        const signer = await provider.getSigner();
+        return signer;
     } catch (e) {
         console.error("Signer error:", e);
-        showToast("Wallet error. Please try reconnecting.", "error");
+        showToast("Wallet connection error. Please reconnect.", "error");
         return null;
     }
 }

@@ -1,5 +1,5 @@
 // js/modules/wallet.js
-// ✅ VERSÃO V7.1: FIX - Suporte completo para Embedded Wallets (Social Login)
+// ✅ VERSÃO V7.2: Desabilita Social Login (não funciona com Arbitrum Sepolia)
 
 import { createWeb3Modal, defaultConfig } from 'https://esm.sh/@web3modal/ethers@5.1.11?bundle';
 
@@ -60,16 +60,13 @@ const ethersConfig = defaultConfig({
     metadata,
     enableEIP6963: true,      
     enableInjected: true,     
-    enableCoinbase: false,    
+    enableCoinbase: true,     // 🔥 V7.2: Coinbase Wallet funciona
     rpcUrl: sepoliaRpcUrl,
     defaultChainId: ARBITRUM_SEPOLIA_ID_DECIMAL,
-    enableEmail: true,
-    enableEns: false,
-    auth: {
-        email: true,
-        showWallets: true,
-        walletFeatures: true
-    }
+    // 🔥 V7.2: Desabilitado - Social Login não funciona com Arbitrum Sepolia
+    enableEmail: false,
+    enableEns: false
+    // auth removido completamente
 });
 
 const web3modal = createWeb3Modal({
@@ -78,6 +75,9 @@ const web3modal = createWeb3Modal({
     projectId: WALLETCONNECT_PROJECT_ID,
     enableAnalytics: true,    
     themeMode: 'dark',
+    // 🔥 V7.2: Desabilita funcionalidades que não funcionam
+    featuredWalletIds: [],
+    enableOnramp: false,
     themeVariables: {
         '--w3m-accent': '#f59e0b', 
         '--w3m-border-radius-master': '1px',
@@ -250,20 +250,13 @@ async function setupSignerAndLoadData(provider, address) {
 
         State.provider = provider;
         
-        // 🔥 V7.1: Melhor handling para embedded wallets (social login)
-        // Embedded wallets do Web3Modal já vêm com signer configurado
+        // V7.2: Simplified - only real wallets, no embedded wallet handling
         try {
-            const signer = await provider.getSigner();
-            const signerAddr = await signer.getAddress();
-            State.signer = signer;
-            console.log('✅ Signer obtained for:', signerAddr.slice(0, 10) + '...');
+            State.signer = await provider.getSigner();
+            console.log('✅ Signer obtained');
         } catch(signerError) {
-            console.warn(`⚠️ getSigner() failed: ${signerError.message}`);
-            
-            // 🔥 Para embedded wallets, o provider PODE assinar diretamente
-            // Salvamos o provider como "signer" - Web3Modal gerencia internamente
-            State.signer = provider;
-            console.log('📱 Embedded wallet mode - provider will handle signing');
+            console.warn(`⚠️ getSigner failed: ${signerError.message}`);
+            State.signer = null;
         }
         
         State.userAddress = address;
@@ -271,20 +264,15 @@ async function setupSignerAndLoadData(provider, address) {
 
         // Cache + Contratos
         loadCachedBalance(address);
-        
-        // 🔥 V7.1: Instancia contratos com signer (ou provider para embedded)
         instantiateContracts(State.signer || State.publicProvider);
         
         // Login Firebase
         try { signIn(State.userAddress); } catch (e) { }
 
-        // 🔥 V7.1: Força carregamento de dados com refresh
+        // Carregamento de dados
         loadUserData(true).then(() => {
-            console.log('📊 User data loaded. Balance:', State.currentUserBalance?.toString() || '0');
             if (window.updateUIState) window.updateUIState(false);
-        }).catch((e) => {
-            console.warn('⚠️ User data load warning:', e.message);
-        });
+        }).catch(() => {});
 
         startBalancePolling();
         
