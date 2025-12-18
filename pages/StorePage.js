@@ -447,19 +447,35 @@ async function loadTradeHistory() {
         const response = await fetch(`${endpoint}/${State.userAddress}`);
         if (response.ok) {
             const data = await response.json();
-            // Filtrar todas atividades relacionadas a NFT
+            
+            // Debug: mostrar todos os tipos de transação
+            console.log("All history types:", [...new Set((data || []).map(item => item.type))]);
+            
+            // Filtro mais abrangente - incluir TUDO relacionado a NFT
             TradeState.tradeHistory = (data || []).filter(item => {
                 const t = (item.type || '').toUpperCase();
-                return t.includes('NFTBOUGHT') || 
-                       t.includes('NFTSOLD') || 
-                       t.includes('NFT_BOUGHT') || 
-                       t.includes('NFT_SOLD') ||
+                const details = item.details || {};
+                
+                // Incluir se tem tokenId nos details (indica transação de NFT)
+                if (details.tokenId) return true;
+                
+                // Incluir se tem boostBips nos details
+                if (details.boostBips || details.boost) return true;
+                
+                // Incluir por tipo
+                return t.includes('NFT') || 
+                       t.includes('BOUGHT') || 
+                       t.includes('SOLD') ||
                        t.includes('BOOSTER') ||
+                       t.includes('POOL') ||
                        t.includes('PRESALE') ||
+                       t.includes('MINT') ||
                        t.includes('TRANSFER') ||
                        (t.includes('BUY') && !t.includes('FAUCET')) || 
                        (t.includes('SELL') && !t.includes('FAUCET'));
             });
+            
+            console.log("Filtered trade history:", TradeState.tradeHistory.length, "items");
             
             // Update count badge
             const countEl = document.getElementById('history-count');

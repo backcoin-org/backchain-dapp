@@ -449,38 +449,97 @@ export async function executeSellNFT(poolAddress, tokenId, btnElement) {
     if (btnElement) btnElement.innerHTML = '<div class="loader inline-block"></div> Processing...';
 
     try {
+        // Validar tokenId
+        if (!tokenId && tokenId !== 0n) {
+            showToast("No NFT selected to sell", "error");
+            return false;
+        }
+        
+        const tokenIdBigInt = BigInt(tokenId);
+        
+        console.log("Sell NFT params:", {
+            poolAddress,
+            tokenId: tokenIdBigInt.toString(),
+            userAddress: State.userAddress
+        });
+
         const boosterContract = new ethers.Contract(
             addresses.rewardBoosterNFT,
-            ["function approve(address to, uint256 tokenId)", "function getApproved(uint256 tokenId) view returns (address)"],
+            [
+                "function approve(address to, uint256 tokenId)", 
+                "function getApproved(uint256 tokenId) view returns (address)",
+                "function ownerOf(uint256 tokenId) view returns (address)",
+                "function boostBips(uint256 tokenId) view returns (uint256)"
+            ],
             signer
         );
 
-        const approved = await boosterContract.getApproved(tokenId);
+        // Verificar se o usuário é dono do NFT
+        try {
+            const owner = await boosterContract.ownerOf(tokenIdBigInt);
+            console.log("NFT owner:", owner);
+            if (owner.toLowerCase() !== State.userAddress.toLowerCase()) {
+                showToast("You don't own this NFT", "error");
+                return false;
+            }
+        } catch (e) {
+            console.error("Error checking NFT ownership:", e);
+            showToast("Error verifying NFT ownership", "error");
+            return false;
+        }
+
+        // Verificar boostBips do NFT vs pool
+        const poolContract = new ethers.Contract(poolAddress, nftPoolABI, signer);
+        try {
+            const nftBoostBips = await boosterContract.boostBips(tokenIdBigInt);
+            const poolBoostBips = await poolContract.boostBips();
+            console.log("NFT boostBips:", nftBoostBips.toString(), "Pool boostBips:", poolBoostBips.toString());
+            
+            if (nftBoostBips.toString() !== poolBoostBips.toString()) {
+                showToast(`NFT tier mismatch! NFT: ${Number(nftBoostBips)/100}%, Pool: ${Number(poolBoostBips)/100}%`, "error");
+                return false;
+            }
+        } catch (e) {
+            console.warn("Could not verify boostBips match:", e.message);
+        }
+
+        // Verificar e fazer approve se necessário
+        const approved = await boosterContract.getApproved(tokenIdBigInt);
+        console.log("Currently approved:", approved);
+        
         if (approved.toLowerCase() !== poolAddress.toLowerCase()) {
             showToast("Approve NFT transfer...", "info");
-            const approveTx = await boosterContract.approve(poolAddress, tokenId);
+            const approveTx = await boosterContract.approve(poolAddress, tokenIdBigInt);
             await approveTx.wait();
+            console.log("NFT approved for pool");
         }
 
         if (btnElement) btnElement.innerHTML = '<div class="loader inline-block"></div> Selling...';
 
-        const poolContract = new ethers.Contract(poolAddress, nftPoolABI, signer);
-
         showToast("Confirm sell in wallet...", "info");
-        const tx = await poolContract.sellNFT(tokenId);
+        const tx = await poolContract.sellNFT(tokenIdBigInt);
 
         showToast("Waiting confirmation...", "info");
         const receipt = await tx.wait();
 
         if (receipt.status === 0) throw new Error("Transaction reverted");
 
-        showToast(`NFT #${tokenId} Sold!`, "success");
-        loadUserData();
+        showToast(`NFT #${tokenIdBigInt} Sold!`, "success");
+        loadUserData(true);
         return true;
 
     } catch (e) {
         console.error("Sell error:", e);
-        showToast(formatError(e), "error");
+        
+        // Mensagens de erro mais específicas
+        const errorMsg = e?.message || '';
+        if (errorMsg.includes('require(false)') || errorMsg.includes('execution reverted')) {
+            showToast("Pool rejected the sale. Check if NFT tier matches the pool.", "error");
+        } else if (errorMsg.includes('user rejected')) {
+            showToast("Transaction cancelled", "info");
+        } else {
+            showToast(formatError(e), "error");
+        }
         return false;
     } finally {
         if (btnElement) btnElement.innerHTML = originalText;
