@@ -1,11 +1,11 @@
 // pages/StorePage.js
-// ✅ PRODUCTION V8.0 - Animated Trade Image + Enhanced UI + Consistent Icons
+// ✅ PRODUCTION V9.0 - Fixed Grid Tiers + Trade History + Correct Function Calls
 
 const ethers = window.ethers;
 
 import { State } from '../state.js';
 import { loadUserData, loadMyBoostersFromAPI, safeContractCall, getHighestBoosterBoostFromAPI, loadSystemDataFromAPI, API_ENDPOINTS } from '../modules/data.js';
-import { executeBuyBooster, executeSellBooster } from '../modules/transactions.js';
+import { executeBuyNFT, executeSellNFT } from '../modules/transactions.js';
 import { formatBigNumber, renderNoData } from '../utils.js';
 import { showToast } from '../ui-feedback.js';
 import { boosterTiers, addresses, nftPoolABI, ipfsGateway } from '../config.js';
@@ -134,10 +134,10 @@ function formatDate(timestamp) {
 // INJECT STYLES
 // ============================================================================
 function injectStyles() {
-    if (document.getElementById('swap-styles-v8')) return;
+    if (document.getElementById('swap-styles-v9')) return;
     
     const style = document.createElement('style');
-    style.id = 'swap-styles-v8';
+    style.id = 'swap-styles-v9';
     style.textContent = `
         /* Trade Image Animations */
         @keyframes trade-float {
@@ -191,7 +191,8 @@ function injectStyles() {
         }
         
         .tier-chip.active {
-            transform: scale(1.05);
+            transform: scale(1.02);
+            box-shadow: 0 0 20px rgba(139,92,246,0.3);
         }
         
         .swap-input-box {
@@ -251,6 +252,10 @@ function injectStyles() {
             border-color: rgba(245,158,11,0.5);
         }
         
+        .history-item {
+            transition: all 0.2s ease;
+        }
+        
         .history-item:hover {
             background: rgba(63,63,70,0.5) !important;
             transform: translateX(4px);
@@ -286,6 +291,19 @@ function injectStyles() {
         .custom-scroll::-webkit-scrollbar-thumb {
             background: rgba(113,113,122,0.5);
             border-radius: 2px;
+        }
+        
+        /* Tier Grid - Responsive */
+        .tier-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 0.5rem;
+        }
+        
+        @media (max-width: 400px) {
+            .tier-grid {
+                grid-template-columns: repeat(3, 1fr);
+            }
         }
     `;
     document.head.appendChild(style);
@@ -345,9 +363,10 @@ export const StorePage = {
                     <!-- Main Swap Card -->
                     <div class="swap-card rounded-2xl p-4 mb-4">
                         
-                        <!-- Tier Selector -->
+                        <!-- Tier Selector - GRID Layout -->
                         <div class="mb-4">
-                            <div id="tier-selector" class="flex gap-2 overflow-x-auto pb-2 custom-scroll">
+                            <p class="text-xs text-zinc-500 mb-2">Select NFT Tier</p>
+                            <div id="tier-selector" class="tier-grid">
                                 ${renderTierChips()}
                             </div>
                         </div>
@@ -376,17 +395,18 @@ export const StorePage = {
                         </div>
                     </div>
                     
-                    <!-- Trade History (Collapsible) -->
+                    <!-- Trade History (Collapsible) - OPEN by default -->
                     <div class="swap-card rounded-2xl overflow-hidden">
                         <button id="history-toggle" class="w-full flex justify-between items-center p-4 hover:bg-zinc-800/30 transition-colors">
                             <div class="flex items-center gap-2">
                                 <i class="fa-solid fa-clock-rotate-left text-green-500 text-sm"></i>
                                 <span class="text-sm font-medium text-white">Trade History</span>
+                                <span id="history-count" class="text-xs bg-zinc-700 px-2 py-0.5 rounded-full text-zinc-300">0</span>
                             </div>
-                            <i id="history-chevron" class="fa-solid fa-chevron-down text-zinc-500 text-xs transition-transform"></i>
+                            <i id="history-chevron" class="fa-solid fa-chevron-down text-zinc-500 text-xs transition-transform" style="transform: rotate(180deg)"></i>
                         </button>
-                        <div id="history-panel" class="hidden border-t border-zinc-800">
-                            <div id="history-list" class="p-4 space-y-2 max-h-[250px] overflow-y-auto custom-scroll">
+                        <div id="history-panel" class="border-t border-zinc-800">
+                            <div id="history-list" class="p-4 space-y-2 max-h-[300px] overflow-y-auto custom-scroll">
                                 <div class="text-center py-4 text-xs text-zinc-600">Loading history...</div>
                             </div>
                         </div>
@@ -417,7 +437,7 @@ export const StorePage = {
 };
 
 // ============================================================================
-// TRADE HISTORY
+// TRADE HISTORY - IMPROVED
 // ============================================================================
 async function loadTradeHistory() {
     if (!State.userAddress) return;
@@ -427,10 +447,24 @@ async function loadTradeHistory() {
         const response = await fetch(`${endpoint}/${State.userAddress}`);
         if (response.ok) {
             const data = await response.json();
+            // Filtrar todas atividades relacionadas a NFT
             TradeState.tradeHistory = (data || []).filter(item => {
                 const t = (item.type || '').toUpperCase();
-                return t.includes('BUY') || t.includes('SELL') || t.includes('SWAP') || t.includes('NFT_POOL');
+                return t.includes('NFTBOUGHT') || 
+                       t.includes('NFTSOLD') || 
+                       t.includes('NFT_BOUGHT') || 
+                       t.includes('NFT_SOLD') ||
+                       t.includes('BOOSTER') ||
+                       t.includes('PRESALE') ||
+                       t.includes('TRANSFER') ||
+                       (t.includes('BUY') && !t.includes('FAUCET')) || 
+                       (t.includes('SELL') && !t.includes('FAUCET'));
             });
+            
+            // Update count badge
+            const countEl = document.getElementById('history-count');
+            if (countEl) countEl.textContent = TradeState.tradeHistory.length;
+            
             renderTradeHistory();
         }
     } catch (e) {
@@ -452,57 +486,87 @@ function renderTradeHistory() {
             <div class="text-center py-6">
                 <img src="${TRADE_IMAGE}" class="w-12 h-12 mx-auto opacity-20 mb-2" onerror="this.style.display='none'">
                 <p class="text-zinc-600 text-xs">No trade history yet</p>
+                <p class="text-zinc-700 text-[10px] mt-1">Buy or sell NFTs to see activity here</p>
             </div>
         `;
         return;
     }
 
-    container.innerHTML = TradeState.tradeHistory.slice(0, 15).map(item => {
+    container.innerHTML = TradeState.tradeHistory.slice(0, 20).map(item => {
         const t = (item.type || '').toUpperCase();
         const details = item.details || {};
         const dateStr = formatDate(item.timestamp || item.createdAt);
         
-        let icon, iconColor, bgColor, label;
+        let icon, iconColor, bgColor, label, amountPrefix;
         
-        if (t.includes('BUY')) {
-            icon = 'fa-arrow-down';
+        if (t.includes('BOUGHT') || t.includes('BUY') || t.includes('PRESALE')) {
+            icon = 'fa-bag-shopping';
             iconColor = '#22c55e';
             bgColor = 'rgba(34,197,94,0.15)';
-            label = '🟢 Bought NFT';
-        } else if (t.includes('SELL')) {
-            icon = 'fa-arrow-up';
+            label = '🛍️ Bought NFT';
+            amountPrefix = '-';
+        } else if (t.includes('SOLD') || t.includes('SELL')) {
+            icon = 'fa-hand-holding-dollar';
             iconColor = '#ef4444';
             bgColor = 'rgba(239,68,68,0.15)';
-            label = '🔴 Sold NFT';
+            label = '💰 Sold NFT';
+            amountPrefix = '+';
+        } else if (t.includes('TRANSFER')) {
+            icon = 'fa-arrow-right-arrow-left';
+            iconColor = '#60a5fa';
+            bgColor = 'rgba(59,130,246,0.15)';
+            label = '↔️ Transfer';
+            amountPrefix = '';
+        } else if (t.includes('BOOSTER')) {
+            icon = 'fa-gem';
+            iconColor = '#fde047';
+            bgColor = 'rgba(234,179,8,0.15)';
+            label = '💎 Minted Booster';
+            amountPrefix = '-';
         } else {
             icon = 'fa-exchange-alt';
             iconColor = '#f59e0b';
             bgColor = 'rgba(245,158,11,0.15)';
             label = '🔄 Trade';
+            amountPrefix = '';
         }
 
         const txLink = item.txHash ? `${EXPLORER_TX}${item.txHash}` : '#';
-        let rawAmount = item.amount || details.amount || details.price || "0";
-        const amountNum = formatBigNumber(BigInt(rawAmount));
-        const amountDisplay = amountNum > 0.001 ? amountNum.toFixed(2) : '';
+        
+        // Handle amount safely
+        let amountDisplay = '';
+        try {
+            let rawAmount = item.amount || details.amount || details.price || details.payout || "0";
+            if (typeof rawAmount === 'string' && rawAmount !== "0") {
+                const amountNum = formatBigNumber(BigInt(rawAmount));
+                if (amountNum > 0.001) {
+                    amountDisplay = amountNum.toFixed(2);
+                }
+            }
+        } catch (e) {
+            console.warn('Amount parse error:', e);
+        }
+        
         const tokenId = details.tokenId || '';
+        const boostBips = details.boostBips || details.boost || '';
 
         return `
             <a href="${txLink}" target="_blank" class="history-item flex items-center justify-between p-3 hover:bg-zinc-800/60 border border-zinc-700/30 rounded-lg transition-all group bg-zinc-800/20">
                 <div class="flex items-center gap-3">
-                    <div class="w-8 h-8 rounded-lg flex items-center justify-center border border-zinc-700/30" style="background: ${bgColor}">
+                    <div class="w-9 h-9 rounded-lg flex items-center justify-center border border-zinc-700/30" style="background: ${bgColor}">
                         <i class="fa-solid ${icon} text-sm" style="color: ${iconColor}"></i>
                     </div>
                     <div>
                         <p class="text-white text-xs font-medium">
                             ${label}
                             ${tokenId ? `<span class="ml-1 text-[10px] text-amber-400 font-mono">#${tokenId}</span>` : ''}
+                            ${boostBips ? `<span class="ml-1 text-[9px] text-purple-400">+${Number(boostBips)/100}%</span>` : ''}
                         </p>
                         <p class="text-zinc-600 text-[10px]">${dateStr}</p>
                     </div>
                 </div>
                 <div class="flex items-center gap-2">
-                    ${amountDisplay ? `<span class="text-xs font-mono font-bold ${t.includes('BUY') ? 'text-red-400' : 'text-green-400'}">${t.includes('BUY') ? '-' : '+'}${amountDisplay} <span class="text-zinc-500">BKC</span></span>` : ''}
+                    ${amountDisplay ? `<span class="text-xs font-mono font-bold ${amountPrefix === '+' ? 'text-green-400' : 'text-white'}">${amountPrefix}${amountDisplay} <span class="text-zinc-500">BKC</span></span>` : ''}
                     <i class="fa-solid fa-arrow-up-right-from-square text-zinc-600 group-hover:text-blue-400 text-[9px]"></i>
                 </div>
             </a>
@@ -511,7 +575,7 @@ function renderTradeHistory() {
 }
 
 // ============================================================================
-// TIER CHIPS
+// TIER CHIPS - GRID Layout
 // ============================================================================
 function renderTierChips() {
     return boosterTiers.map((tier, idx) => {
@@ -519,16 +583,16 @@ function renderTierChips() {
         const isFirst = idx === 0;
         
         return `
-            <button class="tier-chip flex-shrink-0 flex items-center gap-1.5 px-3 py-2 rounded-xl border transition-all
+            <button class="tier-chip flex flex-col items-center gap-1 p-2 rounded-xl border transition-all
                 ${isFirst 
-                    ? `bg-gradient-to-r ${style.gradient} ${style.border} ${style.text}` 
+                    ? `bg-gradient-to-br ${style.gradient} ${style.border} ${style.text} active` 
                     : 'bg-zinc-800/50 border-zinc-700/50 text-zinc-400 hover:border-zinc-600'
                 }" 
                 data-boost="${tier.boostBips}" 
                 data-tier="${tier.name}">
-                <img src="${buildImageUrl(tier.img)}" class="w-5 h-5 rounded" onerror="this.src='./assets/bkc_logo_3d.png'">
-                <span class="text-xs font-medium">${tier.name}</span>
-                <span class="text-[10px] opacity-60">+${tier.boostBips/100}%</span>
+                <img src="${buildImageUrl(tier.img)}" class="w-8 h-8 rounded-lg" onerror="this.src='./assets/bkc_logo_3d.png'">
+                <span class="text-[10px] font-medium truncate w-full text-center">${tier.name}</span>
+                <span class="text-[9px] opacity-60">+${tier.boostBips/100}%</span>
             </button>
         `;
     }).join('');
@@ -540,9 +604,9 @@ function updateTierSelection(boostBips) {
         const tierName = btn.dataset.tier;
         const style = getTierStyle(tierName);
         
-        btn.className = `tier-chip flex-shrink-0 flex items-center gap-1.5 px-3 py-2 rounded-xl border transition-all ${
+        btn.className = `tier-chip flex flex-col items-center gap-1 p-2 rounded-xl border transition-all ${
             isSelected 
-                ? `bg-gradient-to-r ${style.gradient} ${style.border} ${style.text} active` 
+                ? `bg-gradient-to-br ${style.gradient} ${style.border} ${style.text} active` 
                 : 'bg-zinc-800/50 border-zinc-700/50 text-zinc-400 hover:border-zinc-600'
         }`;
     });
@@ -601,159 +665,128 @@ function renderSwapInterface() {
             </div>
             
             <!-- To Section -->
-            <div class="swap-input-box rounded-2xl p-4 mt-1">
+            <div class="swap-input-box rounded-2xl p-4 mt-1 mb-4">
                 <div class="flex justify-between items-center mb-2">
-                    <span class="text-xs text-zinc-500">${isBuy ? 'You receive' : 'You get'}</span>
-                    <div class="flex gap-2">
-                        ${soldOut ? '<span class="text-[10px] bg-red-500/20 text-red-400 px-2 py-0.5 rounded-full">Sold Out</span>' : ''}
-                        ${!isBuy ? '<span class="text-[10px] bg-amber-500/20 text-amber-400 px-2 py-0.5 rounded-full">10% fee</span>' : ''}
-                        <span class="text-[10px] bg-zinc-700/50 ${style.text} px-2 py-0.5 rounded-full">+${(tier?.boostBips || 0)/100}% boost</span>
-                    </div>
+                    <span class="text-xs text-zinc-500">${isBuy ? 'You receive' : 'You receive'}</span>
+                    <span class="text-xs text-zinc-600">
+                        ${isBuy 
+                            ? `In pool: <span class="${soldOut ? 'text-red-400' : 'text-green-400'}">${TradeState.poolNFTCount}</span>` 
+                            : `Net after tax`
+                        }
+                    </span>
                 </div>
                 <div class="flex justify-between items-center">
-                    <span class="text-2xl font-semibold text-white">${isBuy ? '1' : priceFormatted}</span>
-                    <div class="token-selector flex items-center gap-2 px-3 py-2 rounded-xl cursor-default ${isBuy ? `bg-gradient-to-r ${style.gradient}` : ''}">
+                    <span class="text-2xl font-semibold text-white">${isBuy ? '1' : formatBigNumber(TradeState.netSellPrice).toFixed(2)}</span>
+                    <div class="token-selector flex items-center gap-2 px-3 py-2 rounded-xl cursor-default">
                         <img src="${isBuy ? buildImageUrl(tier?.img) : './assets/bkc_logo_3d.png'}" class="w-6 h-6 rounded" onerror="this.src='./assets/bkc_logo_3d.png'">
                         <span class="text-white text-sm font-medium">${isBuy ? tier?.name || 'NFT' : 'BKC'}</span>
                     </div>
                 </div>
             </div>
             
-            <!-- Price Info -->
-            <div class="flex justify-between items-center mt-3 px-1 text-xs">
-                <span class="text-zinc-600">
-                    <i class="fa-solid fa-chart-line mr-1"></i>
-                    ${isBuy ? 'Bonding curve' : 'Net after fee'}
-                </span>
-                <span class="text-zinc-500">
-                    Pool: <span class="text-zinc-400">${TradeState.poolNFTCount} NFTs</span>
-                </span>
+            <!-- Pool Info -->
+            <div class="flex justify-between items-center text-[10px] text-zinc-600 mb-4 px-1">
+                <span>Pool: ${tier?.name || 'Unknown'}</span>
+                <span>Fee Discount: ${TradeState.bestBoosterBips > 0 ? `${State.boosterDiscounts?.[TradeState.bestBoosterBips] || 0}%` : 'None'}</span>
             </div>
             
             <!-- Execute Button -->
-            <div class="mt-4">
-                ${renderExecuteButton()}
-            </div>
-            
+            ${renderExecuteButton(isBuy, soldOut, noNFTtoSell, insufficientBalance)}
         </div>
     `;
 }
 
-function updateMascotAnimation(isBuy) {
-    const mascot = document.getElementById('trade-mascot');
-    if (!mascot) return;
-    
-    mascot.className = 'w-14 h-14 object-contain';
-    
+function renderExecuteButton(isBuy, soldOut, noNFTtoSell, insufficientBalance) {
+    if (!State.isConnected) {
+        return `
+            <button id="execute-btn" data-action="connect" class="swap-btn w-full py-4 rounded-2xl font-semibold text-white bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-500 hover:to-cyan-500">
+                Connect Wallet
+            </button>
+        `;
+    }
+
     if (isBuy) {
-        mascot.classList.add('trade-buy');
+        if (soldOut) {
+            return `
+                <button disabled class="w-full py-4 rounded-2xl font-semibold text-zinc-500 bg-zinc-800 cursor-not-allowed">
+                    <i class="fa-solid fa-box-open mr-2"></i> Sold Out
+                </button>
+            `;
+        }
+        if (insufficientBalance) {
+            return `
+                <button disabled class="w-full py-4 rounded-2xl font-semibold text-red-400 bg-red-950/30 cursor-not-allowed border border-red-500/30">
+                    <i class="fa-solid fa-exclamation-circle mr-2"></i> Insufficient BKC
+                </button>
+            `;
+        }
+        return `
+            <button id="execute-btn" data-action="buy" class="swap-btn w-full py-4 rounded-2xl font-semibold text-white bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-500 hover:to-emerald-500">
+                <i class="fa-solid fa-bag-shopping mr-2"></i> Buy NFT
+            </button>
+        `;
     } else {
-        mascot.classList.add('trade-sell');
+        if (noNFTtoSell) {
+            return `
+                <button disabled class="w-full py-4 rounded-2xl font-semibold text-zinc-500 bg-zinc-800 cursor-not-allowed">
+                    <i class="fa-solid fa-wallet mr-2"></i> No NFT to Sell
+                </button>
+            `;
+        }
+        return `
+            <button id="execute-btn" data-action="sell" class="swap-btn w-full py-4 rounded-2xl font-semibold text-white bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500">
+                <i class="fa-solid fa-hand-holding-dollar mr-2"></i> Sell NFT
+            </button>
+        `;
     }
 }
 
-function renderExecuteButton() {
-    let text = "Select a Tier";
-    let icon = "fa-question";
-    let enabled = false;
-    let actionType = "trade";
-    let btnClass = "bg-zinc-700 text-zinc-500";
-
-    if (!State.isConnected) {
-        text = "Connect Wallet";
-        icon = "fa-wallet";
-        actionType = "connect";
-        enabled = true;
-        btnClass = "bg-amber-500 hover:bg-amber-400 text-black";
-    } else if (TradeState.selectedPoolBoostBips !== null) {
-        const isBuy = TradeState.tradeDirection === 'buy';
-        
-        if (isBuy) {
-            if (TradeState.buyPrice === 0n) { 
-                text = "Price Unavailable"; icon = "fa-ban"; 
-            } else if (TradeState.buyPrice > (State.currentUserBalance || 0n)) { 
-                text = "Insufficient Balance"; icon = "fa-coins"; 
-            } else if (TradeState.firstAvailableTokenIdForBuy === null) { 
-                text = "Sold Out"; icon = "fa-box-open"; 
-            } else { 
-                text = "Buy NFT"; 
-                icon = "fa-arrow-down"; 
-                enabled = true; 
-                btnClass = "bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-400 hover:to-emerald-500 text-white";
-            }
-        } else {
-            if (TradeState.userBalanceOfSelectedNFT === 0) { 
-                text = "No NFT to Sell"; icon = "fa-box-open"; 
-            } else if (TradeState.netSellPrice === 0n) { 
-                text = "Pool Empty"; icon = "fa-droplet-slash"; 
-            } else if (TradeState.firstAvailableTokenId === null) { 
-                text = "Loading..."; icon = "fa-spinner fa-spin"; 
-            } else { 
-                text = "Sell NFT"; 
-                icon = "fa-arrow-up"; 
-                enabled = true; 
-                btnClass = "bg-gradient-to-r from-rose-500 to-red-600 hover:from-rose-400 hover:to-red-500 text-white";
-            }
-        }
+function updateMascotAnimation(isBuy) {
+    const mascot = document.getElementById('trade-mascot');
+    if (mascot) {
+        mascot.className = `w-14 h-14 object-contain ${isBuy ? 'trade-buy' : 'trade-sell'}`;
     }
-
-    return `
-        <button id="execute-btn" 
-                class="swap-btn w-full py-4 rounded-2xl font-semibold text-sm flex items-center justify-center gap-2 ${btnClass}"
-                ${!enabled ? 'disabled' : ''} 
-                data-action="${actionType}">
-            <i class="fa-solid ${icon}"></i>
-            <span>${text}</span>
-        </button>
-    `;
 }
 
 // ============================================================================
 // INVENTORY
 // ============================================================================
 function renderInventory() {
-    const grid = document.getElementById('inventory-grid');
+    const container = document.getElementById('inventory-grid');
     const countEl = document.getElementById('nft-count');
-    if (!grid) return;
-
-    if (!State.isConnected) {
-        grid.innerHTML = `<div class="col-span-4 text-center py-8 text-xs text-zinc-600">Connect wallet to view</div>`;
-        if (countEl) countEl.textContent = '0';
-        return;
-    }
+    
+    if (!container) return;
 
     const boosters = State.myBoosters || [];
     if (countEl) countEl.textContent = boosters.length;
 
-    if (boosters.length === 0) {
-        grid.innerHTML = `<div class="col-span-4 text-center py-8 text-xs text-zinc-600">No NFTs yet</div>`;
+    if (!State.isConnected) {
+        container.innerHTML = `<div class="col-span-4 text-center py-4 text-xs text-zinc-600">Connect wallet</div>`;
         return;
     }
 
-    grid.innerHTML = boosters.map(nft => {
-        const boostBips = nft.boostBips || nft.boost || nft.boostBIPS || 0;
-        let tier = boosterTiers.find(t => t.boostBips === boostBips);
+    if (boosters.length === 0) {
+        container.innerHTML = `
+            <div class="col-span-4 text-center py-4">
+                <p class="text-zinc-600 text-xs">No NFTs owned</p>
+                <p class="text-zinc-700 text-[10px] mt-1">Buy from pool to get started</p>
+            </div>
+        `;
+        return;
+    }
+
+    container.innerHTML = boosters.map(nft => {
+        const tier = boosterTiers.find(t => t.boostBips === Number(nft.boostBips));
+        const style = getTierStyle(tier?.name);
+        const imgUrl = buildImageUrl(nft.image || tier?.img);
         
-        if (!tier && nft.name) {
-            const nameLower = nft.name.toLowerCase();
-            tier = boosterTiers.find(t => nameLower.includes(t.name.toLowerCase()));
-        }
-        if (!tier && nft.tier) {
-            tier = boosterTiers.find(t => t.name.toLowerCase() === nft.tier.toLowerCase());
-        }
-        if (!tier) {
-            tier = { name: 'Booster', img: null, boostBips: boostBips };
-        }
-
-        const imgUrl = nft.imageUrl || nft.image || buildImageUrl(tier.img);
-        const style = getTierStyle(tier.name);
-
         return `
-            <div class="inventory-item relative bg-zinc-800/50 border border-zinc-700/50 rounded-xl p-2 cursor-pointer hover:bg-zinc-800" 
-                 data-boost="${boostBips}" data-id="${nft.tokenId}">
-                <img src="${imgUrl}" class="w-full aspect-square object-contain rounded-lg" onerror="this.src='./assets/bkc_logo_3d.png'">
-                <p class="text-[9px] ${style.text} text-center font-medium mt-1 truncate">${tier.name}</p>
-                <p class="text-[8px] text-zinc-600 text-center">#${nft.tokenId}</p>
+            <div class="inventory-item cursor-pointer rounded-xl p-2 border border-zinc-700/50 bg-zinc-800/30 hover:bg-zinc-800/50"
+                 data-boost="${nft.boostBips}" 
+                 data-tokenid="${nft.tokenId}">
+                <img src="${imgUrl}" class="w-full aspect-square rounded-lg object-cover" onerror="this.src='./assets/bkc_logo_3d.png'">
+                <p class="text-[9px] text-center mt-1 ${style.text} truncate">${tier?.name || 'NFT'}</p>
+                <p class="text-[8px] text-center text-zinc-600">#${nft.tokenId}</p>
             </div>
         `;
     }).join('');
@@ -763,73 +796,70 @@ function renderInventory() {
 // DATA LOADING
 // ============================================================================
 async function loadDataForSelectedPool() {
-    const now = Date.now();
-    if (now - TradeState.lastFetchTimestamp < 2000 && TradeState.isDataLoading) return;
+    if (TradeState.isDataLoading) return;
     if (TradeState.selectedPoolBoostBips === null) return;
+
+    const now = Date.now();
+    if (now - TradeState.lastFetchTimestamp < 2000) return;
 
     TradeState.isDataLoading = true;
     TradeState.lastFetchTimestamp = now;
 
-    const el = document.getElementById('swap-interface');
-    if (el) el.innerHTML = renderLoading();
+    const boostBips = TradeState.selectedPoolBoostBips;
 
     try {
-        const boostBips = TradeState.selectedPoolBoostBips;
+        const boosterData = await getHighestBoosterBoostFromAPI();
+        TradeState.bestBoosterTokenId = boosterData?.tokenId ? BigInt(boosterData.tokenId) : 0n;
+        TradeState.bestBoosterBips = boosterData?.boostBips || 0;
+
+        await loadMyBoostersFromAPI(true);
+
+        const userNFTs = State.myBoosters || [];
+        const userNFTsOfTier = userNFTs.filter(nft => Number(nft.boostBips) === boostBips);
+        TradeState.userBalanceOfSelectedNFT = userNFTsOfTier.length;
+        TradeState.firstAvailableTokenId = (userNFTsOfTier.length > 0) ? BigInt(userNFTsOfTier[0].tokenId) : null;
+
         const tier = boosterTiers.find(t => t.boostBips === boostBips);
-        
-        if (!tier) throw new Error("Invalid tier selected.");
-        
-        let poolAddress = poolAddressCache.get(boostBips);
-        
+        if (!tier) {
+            console.warn("Tier not found for boostBips:", boostBips);
+            return;
+        }
+
+        const poolKey = `pool_${tier.name.toLowerCase()}`;
+        let poolAddress = addresses[poolKey];
+
         if (!poolAddress) {
-            const poolKey = `pool_${tier.name.toLowerCase()}`;
-            poolAddress = addresses[poolKey];
-            
-            if (!poolAddress || !poolAddress.startsWith('0x')) {
-                const factoryAddress = addresses.nftPoolFactory || addresses.nftLiquidityPoolFactory;
-                if (!factoryAddress) throw new Error("Factory not configured.");
-                
-                const factoryContract = new ethers.Contract(factoryAddress, factoryABI, State.publicProvider);
-                poolAddress = await factoryContract.getPoolAddress(boostBips);
-                
-                if (!poolAddress || poolAddress === ethers.ZeroAddress) {
-                    throw new Error(`Pool for ${tier.name} not deployed.`);
+            const factoryAddress = addresses.nftLiquidityPoolFactory;
+            if (factoryAddress && State.publicProvider) {
+                try {
+                    const factory = new ethers.Contract(factoryAddress, factoryABI, State.publicProvider);
+                    poolAddress = await factory.getPoolAddress(boostBips);
+                    if (poolAddress && poolAddress !== ethers.ZeroAddress) {
+                        poolAddressCache.set(boostBips, poolAddress);
+                    }
+                } catch (e) {
+                    console.warn('Factory lookup failed:', e.message);
                 }
             }
-            poolAddressCache.set(boostBips, poolAddress);
+        }
+
+        if (!poolAddress || poolAddress === ethers.ZeroAddress) {
+            const el = document.getElementById('swap-interface');
+            if (el) {
+                el.innerHTML = `
+                    <div class="text-center py-12">
+                        <div class="w-12 h-12 bg-zinc-800 rounded-full flex items-center justify-center mx-auto mb-3">
+                            <i class="fa-solid fa-store-slash text-zinc-600"></i>
+                        </div>
+                        <p class="text-zinc-400 text-sm">Pool not available</p>
+                        <p class="text-zinc-600 text-xs mt-1">${tier.name} pool coming soon</p>
+                    </div>
+                `;
+            }
+            return;
         }
 
         const poolContract = new ethers.Contract(poolAddress, nftPoolABI, State.publicProvider);
-        const boosterContract = State.rewardBoosterContract || State.rewardBoosterContractPublic;
-
-        if (State.isConnected) {
-            await Promise.all([loadUserData(), loadMyBoostersFromAPI()]);
-            const { highestBoost, tokenId } = await getHighestBoosterBoostFromAPI();
-            TradeState.bestBoosterTokenId = tokenId ? BigInt(tokenId) : 0n;
-            TradeState.bestBoosterBips = Number(highestBoost);
-
-            const myTierBoosters = (State.myBoosters || []).filter(b => {
-                const bBoost = b.boostBips || b.boost || b.boostBIPS || 0;
-                return bBoost === Number(boostBips);
-            });
-            
-            TradeState.firstAvailableTokenId = null;
-            TradeState.userBalanceOfSelectedNFT = myTierBoosters.length;
-
-            if (myTierBoosters.length > 0 && boosterContract) {
-                for (const booster of myTierBoosters) {
-                    try {
-                        const owner = await safeContractCall(boosterContract, 'ownerOf', [booster.tokenId], ethers.ZeroAddress);
-                        if (owner.toLowerCase() === State.userAddress.toLowerCase()) {
-                            TradeState.firstAvailableTokenId = BigInt(booster.tokenId);
-                            break;
-                        }
-                    } catch (e) {
-                        if (!TradeState.firstAvailableTokenId) TradeState.firstAvailableTokenId = BigInt(booster.tokenId);
-                    }
-                }
-            }
-        }
 
         let buyPrice = ethers.MaxUint256;
         let sellPrice = 0n;
@@ -998,15 +1028,17 @@ function setupEventListeners() {
 
             try {
                 if (TradeState.tradeDirection === 'buy') {
-                    const success = await executeBuyBooster(poolAddress, TradeState.buyPrice, TradeState.bestBoosterTokenId, executeBtn);
-                    if (success) {
+                    // CORREÇÃO: executeBuyNFT espera (poolAddress, price, btnElement)
+                    const result = await executeBuyNFT(poolAddress, TradeState.buyPrice, executeBtn);
+                    if (result) {
                         if (mascot) mascot.className = 'w-14 h-14 object-contain trade-success';
                         showToast("🟢 NFT Purchased!", "success");
                         await loadDataForSelectedPool();
                         loadTradeHistory();
                     }
                 } else {
-                    const success = await executeSellBooster(poolAddress, TradeState.firstAvailableTokenId, TradeState.bestBoosterTokenId, executeBtn);
+                    // CORREÇÃO: executeSellNFT espera (poolAddress, tokenId, btnElement)
+                    const success = await executeSellNFT(poolAddress, TradeState.firstAvailableTokenId, executeBtn);
                     if (success) {
                         if (mascot) mascot.className = 'w-14 h-14 object-contain trade-success';
                         showToast("🔴 NFT Sold!", "success");
