@@ -4,7 +4,7 @@
 const ethers = window.ethers;
 
 import { State } from '../state.js';
-import { loadUserData, loadMyBoostersFromAPI, safeContractCall, getHighestBoosterBoostFromAPI, loadSystemDataFromAPI, API_ENDPOINTS } from '../modules/data.js';
+import { loadUserData, loadMyBoostersFromAPI, loadRentalListings, safeContractCall, getHighestBoosterBoostFromAPI, loadSystemDataFromAPI, API_ENDPOINTS } from '../modules/data.js';
 import { executeBuyNFT, executeSellNFT } from '../modules/transactions.js';
 import { formatBigNumber, renderNoData } from '../utils.js';
 import { showToast } from '../ui-feedback.js';
@@ -92,6 +92,7 @@ const TradeState = {
     netSellPrice: 0n,
     poolNFTCount: 0,
     userBalanceOfSelectedNFT: 0,
+    availableToSellCount: 0,  // NFTs disponíveis para venda (não listados/alugados)
     firstAvailableTokenId: null,
     firstAvailableTokenIdForBuy: null,
     bestBoosterTokenId: 0n,
@@ -614,8 +615,16 @@ function renderSwapInterface() {
     const balance = formatBigNumber(State.currentUserBalance || 0n).toFixed(2);
     
     const soldOut = isBuy && TradeState.firstAvailableTokenIdForBuy === null;
-    const noNFTtoSell = !isBuy && TradeState.userBalanceOfSelectedNFT === 0;
+    const noNFTtoSell = !isBuy && TradeState.availableToSellCount === 0;
+    const hasListedNFTs = !isBuy && TradeState.userBalanceOfSelectedNFT > TradeState.availableToSellCount;
     const insufficientBalance = isBuy && TradeState.buyPrice > (State.currentUserBalance || 0n);
+
+    // Texto de owned que mostra quantos estão disponíveis vs total
+    const ownedText = !isBuy 
+        ? (hasListedNFTs 
+            ? `<span class="${noNFTtoSell ? 'text-red-400' : 'text-zinc-400'}">${TradeState.availableToSellCount}</span>/<span class="text-zinc-500">${TradeState.userBalanceOfSelectedNFT}</span> <span class="text-[9px] text-blue-400">(${TradeState.userBalanceOfSelectedNFT - TradeState.availableToSellCount} rented)</span>`
+            : `<span class="${noNFTtoSell ? 'text-red-400' : 'text-zinc-400'}">${TradeState.userBalanceOfSelectedNFT}</span>`)
+        : '';
 
     el.innerHTML = `
         <div class="fade-in">
@@ -627,7 +636,7 @@ function renderSwapInterface() {
                     <span class="text-xs text-zinc-600">
                         ${isBuy 
                             ? `Balance: <span class="${insufficientBalance ? 'text-red-400' : 'text-zinc-400'}">${balance}</span>` 
-                            : `Owned: <span class="${noNFTtoSell ? 'text-red-400' : 'text-zinc-400'}">${TradeState.userBalanceOfSelectedNFT}</span>`
+                            : `Available: ${ownedText}`
                         }
                     </span>
                 </div>
@@ -677,12 +686,12 @@ function renderSwapInterface() {
             </div>
             
             <!-- Execute Button -->
-            ${renderExecuteButton(isBuy, soldOut, noNFTtoSell, insufficientBalance)}
+            ${renderExecuteButton(isBuy, soldOut, noNFTtoSell, insufficientBalance, hasListedNFTs)}
         </div>
     `;
 }
 
-function renderExecuteButton(isBuy, soldOut, noNFTtoSell, insufficientBalance) {
+function renderExecuteButton(isBuy, soldOut, noNFTtoSell, insufficientBalance, hasListedNFTs = false) {
     if (!State.isConnected) {
         return `
             <button id="execute-btn" data-action="connect" class="swap-btn w-full py-4 rounded-2xl font-semibold text-white bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-500 hover:to-cyan-500">
@@ -712,6 +721,14 @@ function renderExecuteButton(isBuy, soldOut, noNFTtoSell, insufficientBalance) {
             </button>
         `;
     } else {
+        if (noNFTtoSell && hasListedNFTs) {
+            // Tem NFTs mas todos estão alugados
+            return `
+                <button disabled class="w-full py-4 rounded-2xl font-semibold text-blue-400 bg-blue-950/30 cursor-not-allowed border border-blue-500/30">
+                    <i class="fa-solid fa-key mr-2"></i> All NFTs Rented
+                </button>
+            `;
+        }
         if (noNFTtoSell) {
             return `
                 <button disabled class="w-full py-4 rounded-2xl font-semibold text-zinc-500 bg-zinc-800 cursor-not-allowed">
@@ -761,19 +778,41 @@ function renderInventory() {
         return;
     }
 
+    // Verificar quais NFTs estão listados para aluguel
+    const rentalListings = State.rentalListings || [];
+    const listedTokenIds = new Set(rentalListings.map(l => l.tokenId?.toString()));
+    const now = Math.floor(Date.now() / 1000);
+
     container.innerHTML = boosters.map(nft => {
         const tier = boosterTiers.find(t => t.boostBips === Number(nft.boostBips));
         const style = getTierStyle(tier?.name);
         const imgUrl = buildImageUrl(nft.image || tier?.img);
         const isSelected = TradeState.firstAvailableTokenId && BigInt(nft.tokenId) === TradeState.firstAvailableTokenId;
         
+        // Verificar status de aluguel
+        const tokenIdStr = nft.tokenId?.toString();
+        const isListed = listedTokenIds.has(tokenIdStr);
+        const listing = rentalListings.find(l => l.tokenId?.toString() === tokenIdStr);
+        const isRented = listing && listing.rentalEndTime && Number(listing.rentalEndTime) > now;
+        const isUnavailable = isListed || isRented;
+        
+        // Status badge
+        let statusBadge = '';
+        if (isRented) {
+            statusBadge = `<span class="absolute top-1 right-1 bg-blue-500 text-white text-[7px] px-1.5 py-0.5 rounded-full font-bold">🔑 RENTED</span>`;
+        } else if (isListed) {
+            statusBadge = `<span class="absolute top-1 right-1 bg-green-500 text-white text-[7px] px-1.5 py-0.5 rounded-full font-bold">📋 LISTED</span>`;
+        }
+        
         return `
-            <div class="inventory-item cursor-pointer rounded-xl p-2 border ${isSelected ? 'border-amber-500 ring-2 ring-amber-500/50 bg-amber-500/10' : 'border-zinc-700/50 bg-zinc-800/30'} hover:bg-zinc-800/50 transition-all"
+            <div class="inventory-item ${isUnavailable ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'} rounded-xl p-2 border ${isSelected && !isUnavailable ? 'border-amber-500 ring-2 ring-amber-500/50 bg-amber-500/10' : 'border-zinc-700/50 bg-zinc-800/30'} hover:bg-zinc-800/50 transition-all relative"
                  data-boost="${nft.boostBips}" 
-                 data-tokenid="${nft.tokenId}">
-                <img src="${imgUrl}" class="w-full aspect-square rounded-lg object-cover" onerror="this.src='./assets/bkc_logo_3d.png'">
+                 data-tokenid="${nft.tokenId}"
+                 data-unavailable="${isUnavailable}">
+                ${statusBadge}
+                <img src="${imgUrl}" class="w-full aspect-square rounded-lg object-cover ${isUnavailable ? 'grayscale' : ''}" onerror="this.src='./assets/bkc_logo_3d.png'">
                 <p class="text-[9px] text-center mt-1 ${style.text} truncate">${tier?.name || 'NFT'}</p>
-                <p class="text-[8px] text-center ${isSelected ? 'text-amber-400 font-bold' : 'text-zinc-600'}">#${nft.tokenId}</p>
+                <p class="text-[8px] text-center ${isSelected && !isUnavailable ? 'text-amber-400 font-bold' : 'text-zinc-600'}">#${nft.tokenId}</p>
             </div>
         `;
     }).join('');
@@ -799,19 +838,39 @@ async function loadDataForSelectedPool() {
         TradeState.bestBoosterTokenId = boosterData?.tokenId ? BigInt(boosterData.tokenId) : 0n;
         TradeState.bestBoosterBips = boosterData?.boostBips || 0;
 
-        await loadMyBoostersFromAPI(true);
+        // Carregar boosters e rental listings em paralelo
+        await Promise.all([
+            loadMyBoostersFromAPI(true),
+            loadRentalListings()
+        ]);
+
+        // Filtrar NFTs que estão listados para aluguel
+        const rentalListings = State.rentalListings || [];
+        const listedTokenIds = new Set(rentalListings.map(l => l.tokenId?.toString()));
+        const nowSec = Math.floor(Date.now() / 1000);
 
         const userNFTs = State.myBoosters || [];
         const userNFTsOfTier = userNFTs.filter(nft => Number(nft.boostBips) === boostBips);
+        
+        // NFTs disponíveis para venda (não listados/alugados)
+        const availableNFTsOfTier = userNFTsOfTier.filter(nft => {
+            const tokenIdStr = nft.tokenId?.toString();
+            const listing = rentalListings.find(l => l.tokenId?.toString() === tokenIdStr);
+            const isListed = listedTokenIds.has(tokenIdStr);
+            const isRented = listing && listing.rentalEndTime && Number(listing.rentalEndTime) > nowSec;
+            return !isListed && !isRented;
+        });
+        
         TradeState.userBalanceOfSelectedNFT = userNFTsOfTier.length;
+        TradeState.availableToSellCount = availableNFTsOfTier.length;
         
         // Só define firstAvailableTokenId se não foi selecionado manualmente pelo usuário
-        // ou se o tokenId selecionado não pertence a este tier
+        // ou se o tokenId selecionado não está disponível
         const currentSelection = TradeState.firstAvailableTokenId;
-        const selectionBelongsToTier = currentSelection && userNFTsOfTier.some(nft => BigInt(nft.tokenId) === currentSelection);
+        const selectionIsAvailable = currentSelection && availableNFTsOfTier.some(nft => BigInt(nft.tokenId) === currentSelection);
         
-        if (!selectionBelongsToTier) {
-            TradeState.firstAvailableTokenId = (userNFTsOfTier.length > 0) ? BigInt(userNFTsOfTier[0].tokenId) : null;
+        if (!selectionIsAvailable) {
+            TradeState.firstAvailableTokenId = (availableNFTsOfTier.length > 0) ? BigInt(availableNFTsOfTier[0].tokenId) : null;
         }
 
         const tier = boosterTiers.find(t => t.boostBips === boostBips);
@@ -978,6 +1037,13 @@ function setupEventListeners() {
         // Inventory item click - user selected a specific NFT to sell
         const invItem = e.target.closest('.inventory-item');
         if (invItem) {
+            // Verificar se o NFT está disponível para venda
+            const isUnavailable = invItem.dataset.unavailable === 'true';
+            if (isUnavailable) {
+                showToast("This NFT is listed for rental and cannot be sold", "warning");
+                return;
+            }
+            
             const boost = Number(invItem.dataset.boost);
             const tokenId = invItem.dataset.tokenid;
             
