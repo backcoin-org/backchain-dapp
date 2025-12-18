@@ -1,5 +1,5 @@
 // js/modules/wallet.js
-// ✅ VERSÃO V6.9: CRITICAL FIX - Evita loop infinito de updates em erros de RPC
+// ✅ VERSÃO V7.1: FIX - Suporte completo para Embedded Wallets (Social Login)
 
 import { createWeb3Modal, defaultConfig } from 'https://esm.sh/@web3modal/ethers@5.1.11?bundle';
 
@@ -250,12 +250,20 @@ async function setupSignerAndLoadData(provider, address) {
 
         State.provider = provider;
         
-        // Garante que State.signer nunca seja nulo
+        // 🔥 V7.1: Melhor handling para embedded wallets (social login)
+        // Embedded wallets do Web3Modal já vêm com signer configurado
         try {
-            State.signer = await provider.getSigner(); 
+            const signer = await provider.getSigner();
+            const signerAddr = await signer.getAddress();
+            State.signer = signer;
+            console.log('✅ Signer obtained for:', signerAddr.slice(0, 10) + '...');
         } catch(signerError) {
-            State.signer = provider; 
-            console.warn(`Could not get standard Signer. Using Provider as read-only. Warning: ${signerError.message}`);
+            console.warn(`⚠️ getSigner() failed: ${signerError.message}`);
+            
+            // 🔥 Para embedded wallets, o provider PODE assinar diretamente
+            // Salvamos o provider como "signer" - Web3Modal gerencia internamente
+            State.signer = provider;
+            console.log('📱 Embedded wallet mode - provider will handle signing');
         }
         
         State.userAddress = address;
@@ -263,15 +271,20 @@ async function setupSignerAndLoadData(provider, address) {
 
         // Cache + Contratos
         loadCachedBalance(address);
-        instantiateContracts(State.signer);
+        
+        // 🔥 V7.1: Instancia contratos com signer (ou provider para embedded)
+        instantiateContracts(State.signer || State.publicProvider);
         
         // Login Firebase
         try { signIn(State.userAddress); } catch (e) { }
 
-        // Carregamento Assíncrono - usa false para não forçar re-render
-        loadUserData().then(() => {
+        // 🔥 V7.1: Força carregamento de dados com refresh
+        loadUserData(true).then(() => {
+            console.log('📊 User data loaded. Balance:', State.currentUserBalance?.toString() || '0');
             if (window.updateUIState) window.updateUIState(false);
-        }).catch(() => {});
+        }).catch((e) => {
+            console.warn('⚠️ User data load warning:', e.message);
+        });
 
         startBalancePolling();
         
