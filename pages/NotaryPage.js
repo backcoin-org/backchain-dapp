@@ -1195,24 +1195,25 @@ export const NotaryPage = {
 
     async addToWallet(tokenId, imageUrl) {
         try {
-            // Função helper para converter IPFS URL
+            // Função helper para converter IPFS URL - usar nftstorage que funciona melhor com MetaMask
             const toHttpsUrl = (url) => {
                 if (!url) return '';
+                
+                let cid = '';
+                
                 if (url.startsWith('ipfs://')) {
-                    const cid = url.replace('ipfs://', '');
-                    return `https://ipfs.io/ipfs/${cid}`;
-                }
-                if (url.startsWith('https://') || url.startsWith('http://')) {
-                    // Converter gateway pinata para ipfs.io (mais confiável)
-                    if (url.includes('gateway.pinata.cloud')) {
-                        const cid = url.split('/ipfs/')[1];
-                        if (cid) return `https://ipfs.io/ipfs/${cid}`;
-                    }
+                    cid = url.replace('ipfs://', '');
+                } else if (url.includes('/ipfs/')) {
+                    cid = url.split('/ipfs/')[1];
+                } else if (url.startsWith('https://') || url.startsWith('http://')) {
                     return url;
+                } else if (url && url.length > 10) {
+                    cid = url;
                 }
-                // Assume it's just a CID
-                if (url && url.length > 10) {
-                    return `https://ipfs.io/ipfs/${url}`;
+                
+                if (cid) {
+                    // Usar cloudflare-ipfs que funciona melhor com MetaMask
+                    return `https://cloudflare-ipfs.com/ipfs/${cid}`;
                 }
                 return '';
             };
@@ -1221,16 +1222,16 @@ export const NotaryPage = {
             console.log('📜 Input imageUrl:', imageUrl);
             console.log('📜 Converted to:', finalImageUrl);
             
-            // Always try to get from tokenURI for accurate metadata
+            // Buscar do tokenURI para garantir imagem correta
             if (State.decentralizedNotaryContract) {
                 try {
                     const uri = await State.decentralizedNotaryContract.tokenURI(tokenId);
-                    console.log('📜 TokenURI response:', uri?.slice(0, 150) + '...');
+                    console.log('📜 TokenURI response:', uri?.slice(0, 200));
                     
                     if (uri && uri.startsWith('data:application/json;base64,')) {
                         const base64Data = uri.replace('data:application/json;base64,', '');
                         const metadata = JSON.parse(atob(base64Data));
-                        console.log('📜 Parsed metadata:', metadata);
+                        console.log('📜 Parsed metadata:', JSON.stringify(metadata).slice(0, 300));
                         
                         if (metadata.image) {
                             finalImageUrl = toHttpsUrl(metadata.image);
@@ -1257,24 +1258,22 @@ export const NotaryPage = {
             
             showToast('Adding NFT #' + tokenId + ' to wallet...', 'info');
             
-            // Use correct format for MetaMask ERC721
-            const result = await window.ethereum.request({
+            // Formato que funciona com MetaMask para ERC721
+            const wasAdded = await window.ethereum.request({
                 method: 'wallet_watchAsset',
                 params: {
                     type: 'ERC721',
                     options: {
                         address: contractAddress,
-                        tokenId: String(tokenId),
-                        symbol: 'NOTARY',
-                        image: finalImageUrl
+                        tokenId: String(tokenId)
                     },
                 },
             });
             
-            if (result) {
+            if (wasAdded) {
                 showToast('📜 NFT #' + tokenId + ' added to wallet!', 'success');
             } else {
-                showToast('NFT not added (cancelled or not supported)', 'warning');
+                showToast('NFT not added (cancelled)', 'warning');
             }
         } catch (error) {
             console.error('Add to wallet error:', error);
