@@ -12,7 +12,7 @@ const ethers = window.ethers;
 // ============================================================================
 // CONSTANTS
 // ============================================================================
-const MAX_FILE_SIZE = 4 * 1024 * 1024; // 4MB
+const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 const EXPLORER_TX = "https://sepolia.arbiscan.io/tx/";
 const IPFS_GATEWAY = "https://ipfs.io/ipfs/";
 const NOTARY_IMAGE = "./assets/notary.png";
@@ -265,7 +265,7 @@ function render() {
                                 <div class="w-6 h-6 rounded-full bg-amber-500/20 flex items-center justify-center flex-shrink-0">
                                     <span class="text-amber-400 text-[10px] font-bold">1</span>
                                 </div>
-                                <p class="text-xs text-zinc-400">Upload any document (max 4MB)</p>
+                                <p class="text-xs text-zinc-400">Upload any document (max 10MB)</p>
                             </div>
                             <div class="flex items-start gap-3">
                                 <div class="w-6 h-6 rounded-full bg-amber-500/20 flex items-center justify-center flex-shrink-0">
@@ -563,7 +563,7 @@ function handleFileSelect(file) {
     if (!file) return;
 
     if (file.size > MAX_FILE_SIZE) {
-        showToast('File too large (max 4MB)', 'error');
+        showToast('File too large (max 10MB)', 'error');
         return;
     }
 
@@ -773,7 +773,7 @@ async function handleMint() {
         });
 
         if (!res.ok) {
-            if (res.status === 413) throw new Error('File too large. Maximum size is 4MB.');
+            if (res.status === 413) throw new Error('File too large. Maximum size is 10MB.');
             if (res.status === 401) throw new Error('Signature verification failed. Please try again.');
             if (res.status === 500) {
                 const errorData = await res.json().catch(() => ({}));
@@ -891,8 +891,12 @@ async function loadCertificates() {
         let certs = [];
         
         try {
-            const apiUrl = API_ENDPOINTS.getNotarizedDocuments || 
-                `https://us-central1-backchain-415921.cloudfunctions.net/getNotarizedDocuments/${State.userAddress}`;
+            // Construir URL corretamente com o endereço do usuário
+            const baseUrl = API_ENDPOINTS.getNotarizedDocuments || 
+                'https://getnotarizeddocuments-4wvdcuoouq-uc.a.run.app';
+            const apiUrl = `${baseUrl}/${State.userAddress}`;
+            
+            console.log('📜 Fetching certificates from:', apiUrl);
             
             const response = await fetch(apiUrl);
             if (response.ok) {
@@ -1193,18 +1197,23 @@ export const NotaryPage = {
         try {
             let finalImageUrl = imageUrl || '';
             
-            // V10.1: Build proper HTTPS URL from IPFS
-            if (finalImageUrl) {
-                if (finalImageUrl.startsWith('ipfs://')) {
-                    const cid = finalImageUrl.replace('ipfs://', '');
-                    finalImageUrl = `https://gateway.pinata.cloud/ipfs/${cid}`;
-                } else if (!finalImageUrl.startsWith('http')) {
-                    // Assume it's just a CID
-                    finalImageUrl = `https://gateway.pinata.cloud/ipfs/${finalImageUrl}`;
+            // Função helper para converter IPFS URL
+            const toHttpsUrl = (url) => {
+                if (!url) return '';
+                if (url.startsWith('ipfs://')) {
+                    const cid = url.replace('ipfs://', '');
+                    return `https://ipfs.io/ipfs/${cid}`;
                 }
-            }
+                if (url.startsWith('https://') || url.startsWith('http://')) {
+                    return url;
+                }
+                // Assume it's just a CID
+                return `https://ipfs.io/ipfs/${url}`;
+            };
             
-            // V10.1: Try to get image from tokenURI if not provided
+            finalImageUrl = toHttpsUrl(finalImageUrl);
+            
+            // Try to get image from tokenURI if not provided
             if (!finalImageUrl && State.decentralizedNotaryContract) {
                 try {
                     const uri = await State.decentralizedNotaryContract.tokenURI(tokenId);
@@ -1216,14 +1225,7 @@ export const NotaryPage = {
                         console.log('📜 Metadata:', metadata);
                         
                         if (metadata.image) {
-                            if (metadata.image.startsWith('ipfs://')) {
-                                const cid = metadata.image.replace('ipfs://', '');
-                                finalImageUrl = `https://gateway.pinata.cloud/ipfs/${cid}`;
-                            } else if (metadata.image.startsWith('http')) {
-                                finalImageUrl = metadata.image;
-                            } else {
-                                finalImageUrl = `https://gateway.pinata.cloud/ipfs/${metadata.image}`;
-                            }
+                            finalImageUrl = toHttpsUrl(metadata.image);
                         }
                     }
                 } catch (e) {
@@ -1243,7 +1245,7 @@ export const NotaryPage = {
             
             showToast('Adding NFT #' + tokenId + ' to wallet...', 'info');
             
-            // V10.1: Use correct format for MetaMask
+            // Use correct format for MetaMask ERC721
             const result = await window.ethereum.request({
                 method: 'wallet_watchAsset',
                 params: {
@@ -1258,11 +1260,11 @@ export const NotaryPage = {
             });
             
             if (result) {
-                showToast('📜 NFT added to wallet!', 'success');
+                showToast('📜 NFT #' + tokenId + ' added to wallet!', 'success');
             }
         } catch (error) {
             console.error('Add to wallet error:', error);
-            if (error.code !== 4001) {
+            if (error.code !== 4001) { // User rejected
                 showToast('Could not add NFT: ' + (error.message || 'Unknown error'), 'error');
             }
         }
