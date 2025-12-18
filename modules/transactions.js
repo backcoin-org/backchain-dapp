@@ -1,5 +1,5 @@
 // js/modules/transactions.js
-// ✅ PRODUCTION V11.5 - Simplified (Social Login disabled)
+// ✅ PRODUCTION V11.0 - Fixed Force Unstake + Better Error Handling
 
 const ethers = window.ethers;
 
@@ -27,7 +27,7 @@ async function getConnectedSigner() {
         return null;
     }
     try {
-        // V11.5: Simplified - Social login disabled, only real wallets
+        // Prioriza Web3Modal provider, depois State.provider, depois window.ethereum
         let rawProvider = State.web3Provider || State.provider || window.ethereum;
         
         if (!rawProvider) {
@@ -40,7 +40,7 @@ async function getConnectedSigner() {
         return signer;
     } catch (e) {
         console.error("Signer error:", e);
-        showToast("Wallet connection error. Please reconnect.", "error");
+        showToast("Wallet connection error", "error");
         return null;
     }
 }
@@ -910,36 +910,17 @@ export async function executeNotarize(params, submitButton) {
     try {
         const { ipfsUri, contentHash, description } = params;
         
-        console.log("Notarize params:", { ipfsUri, contentHash, description });
-        
         const notaryAddress = addresses.decentralizedNotary || addresses.notary;
         
         if (!notaryAddress) {
             throw new Error("Notary contract address not configured");
         }
         
-        console.log("Notary address:", notaryAddress);
-        
-        // Garantir que contentHash é bytes32
-        let hashBytes32 = contentHash;
-        if (typeof contentHash === 'string' && !contentHash.startsWith('0x')) {
-            hashBytes32 = '0x' + contentHash;
-        }
-        // Garantir 66 caracteres (0x + 64 hex)
-        if (hashBytes32.length < 66) {
-            hashBytes32 = hashBytes32.padEnd(66, '0');
-        }
-        
-        console.log("Content hash (bytes32):", hashBytes32);
-        
         let feeToPay = ethers.parseEther("1");
         try {
             const notaryRead = new ethers.Contract(notaryAddress, decentralizedNotaryABI, signer.provider);
             feeToPay = await notaryRead.calculateFee(0);
-            console.log("Fee to pay:", ethers.formatEther(feeToPay), "BKC");
-        } catch (e) {
-            console.warn("Could not get fee, using default 1 BKC");
-        }
+        } catch (e) {}
         
         const approved = await simpleApprove(addresses.bkcToken, notaryAddress, feeToPay, signer);
         if (!approved) return false;
@@ -956,21 +937,13 @@ export async function executeNotarize(params, submitButton) {
             }
         } catch (e) {}
         
-        console.log("Booster token ID:", boosterTokenId.toString());
-        console.log("Calling notarize with:", {
-            ipfsCid: ipfsUri,
-            description: description || '',
-            contentHash: hashBytes32,
-            boosterTokenId: boosterTokenId.toString()
-        });
-        
         showToast("Confirm notarization in wallet...", "info");
         
         // notarize(string _ipfsCid, string _description, bytes32 _contentHash, uint256 _boosterTokenId)
         const tx = await notaryContract.notarize(
             ipfsUri,
             description || '',
-            hashBytes32,
+            contentHash,
             boosterTokenId
         );
         
@@ -995,15 +968,7 @@ export async function executeNotarize(params, submitButton) {
         
     } catch (e) {
         console.error("Notarize error:", e);
-        
-        const errorMsg = e?.message || '';
-        if (errorMsg.includes('EmptyMetadata')) {
-            showToast("IPFS CID is required", "error");
-        } else if (errorMsg.includes('insufficient') || errorMsg.includes('allowance')) {
-            showToast("Insufficient BKC balance or approval", "error");
-        } else {
-            showToast(formatError(e), "error");
-        }
+        showToast(formatError(e), "error");
         return false;
     } finally {
         if (submitButton) submitButton.innerHTML = originalText;

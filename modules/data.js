@@ -1,5 +1,5 @@
 // js/modules/data.js
-// ✅ PRODUCTION V7.1 - FIX: Suporte para Embedded Wallets (Social Login)
+// ✅ PRODUCTION V7.0
 
 const ethers = window.ethers;
 
@@ -269,20 +269,13 @@ export async function loadUserData(forceRefresh = false) {
     if (!State.isConnected || !State.userAddress) return;
 
     try {
-        // 🔥 V7.1: Usar contrato PÚBLICO para leitura de saldo (funciona com embedded wallets)
-        const balanceContract = State.bkcTokenContractPublic || State.bkcTokenContract;
-        const providerForBalance = State.publicProvider || State.provider;
-        
         const [balance, nativeBalance] = await Promise.allSettled([
-            safeBalanceOf(balanceContract, State.userAddress, forceRefresh),
-            providerForBalance?.getBalance(State.userAddress)
+            safeBalanceOf(State.bkcTokenContract, State.userAddress, forceRefresh),
+            State.provider?.getBalance(State.userAddress)
         ]);
 
         if (balance.status === 'fulfilled') {
             State.currentUserBalance = balance.value;
-            console.log('📊 Balance loaded:', ethers.formatEther(balance.value), 'BKC');
-        } else {
-            console.warn('⚠️ Balance load failed:', balance.reason?.message || 'Unknown');
         }
         
         if (nativeBalance.status === 'fulfilled') {
@@ -291,11 +284,9 @@ export async function loadUserData(forceRefresh = false) {
 
         await loadMyBoostersFromAPI(forceRefresh);
 
-        // 🔥 V7.1: Usar contrato PÚBLICO para leitura de delegações
-        const delegationContract = State.delegationManagerContractPublic || State.delegationManagerContract;
-        if (delegationContract) {
+        if (State.delegationManagerContract) {
             const totalUserPStake = await safeContractCall(
-                delegationContract,
+                State.delegationManagerContract,
                 'userTotalPStake',
                 [State.userAddress],
                 0n,

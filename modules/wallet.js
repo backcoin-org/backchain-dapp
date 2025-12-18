@@ -1,5 +1,5 @@
 // js/modules/wallet.js
-// ✅ VERSÃO V7.3: Força desabilitar Social Login via features config
+// ✅ VERSÃO V6.9: CRITICAL FIX - Evita loop infinito de updates em erros de RPC
 
 import { createWeb3Modal, defaultConfig } from 'https://esm.sh/@web3modal/ethers@5.1.11?bundle';
 
@@ -60,34 +60,24 @@ const ethersConfig = defaultConfig({
     metadata,
     enableEIP6963: true,      
     enableInjected: true,     
-    enableCoinbase: true,     // 🔥 V7.2: Coinbase Wallet funciona
+    enableCoinbase: false,    
     rpcUrl: sepoliaRpcUrl,
     defaultChainId: ARBITRUM_SEPOLIA_ID_DECIMAL,
-    // 🔥 V7.2: Desabilitado - Social Login não funciona com Arbitrum Sepolia
-    enableEmail: false,
-    enableEns: false
-    // auth removido completamente
+    enableEmail: true,
+    enableEns: false,
+    auth: {
+        email: true,
+        showWallets: true,
+        walletFeatures: true
+    }
 });
 
 const web3modal = createWeb3Modal({
     ethersConfig,
     chains: [arbitrumSepoliaConfig],
     projectId: WALLETCONNECT_PROJECT_ID,
-    enableAnalytics: false,    
+    enableAnalytics: true,    
     themeMode: 'dark',
-    // 🔥 V7.3: Força desabilitar TODAS as opções de social/email
-    featuredWalletIds: [],
-    enableOnramp: false,
-    enableSwaps: false,
-    // 🔥 Desabilita auth features explicitamente
-    features: {
-        email: false,
-        socials: false,
-        emailShowWallets: false,
-        analytics: false,
-        onramp: false,
-        swaps: false
-    },
     themeVariables: {
         '--w3m-accent': '#f59e0b', 
         '--w3m-border-radius-master': '1px',
@@ -260,13 +250,12 @@ async function setupSignerAndLoadData(provider, address) {
 
         State.provider = provider;
         
-        // V7.2: Simplified - only real wallets, no embedded wallet handling
+        // Garante que State.signer nunca seja nulo
         try {
-            State.signer = await provider.getSigner();
-            console.log('✅ Signer obtained');
+            State.signer = await provider.getSigner(); 
         } catch(signerError) {
-            console.warn(`⚠️ getSigner failed: ${signerError.message}`);
-            State.signer = null;
+            State.signer = provider; 
+            console.warn(`Could not get standard Signer. Using Provider as read-only. Warning: ${signerError.message}`);
         }
         
         State.userAddress = address;
@@ -274,13 +263,13 @@ async function setupSignerAndLoadData(provider, address) {
 
         // Cache + Contratos
         loadCachedBalance(address);
-        instantiateContracts(State.signer || State.publicProvider);
+        instantiateContracts(State.signer);
         
         // Login Firebase
         try { signIn(State.userAddress); } catch (e) { }
 
-        // Carregamento de dados
-        loadUserData(true).then(() => {
+        // Carregamento Assíncrono - usa false para não forçar re-render
+        loadUserData().then(() => {
             if (window.updateUIState) window.updateUIState(false);
         }).catch(() => {});
 
