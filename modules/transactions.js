@@ -691,6 +691,34 @@ export async function executeWithdrawNFT(tokenId, btnElement) {
     if (btnElement) btnElement.innerHTML = '<div class="loader inline-block"></div> Processing...';
     
     try {
+        // Verificar se o NFT ainda pertence ao usuário ou ao RentalManager
+        const boosterContract = new ethers.Contract(
+            addresses.rewardBoosterNFT,
+            ["function ownerOf(uint256 tokenId) view returns (address)"],
+            signer
+        );
+        
+        try {
+            const currentOwner = await boosterContract.ownerOf(BigInt(tokenId));
+            console.log("NFT #" + tokenId + " current owner:", currentOwner);
+            
+            // Se o owner não é o RentalManager, o NFT já foi vendido/transferido
+            if (currentOwner.toLowerCase() !== addresses.rentalManager?.toLowerCase()) {
+                // Verificar se é o próprio usuário (não listado)
+                if (currentOwner.toLowerCase() === State.userAddress?.toLowerCase()) {
+                    showToast("This NFT is not listed for rental", "warning");
+                } else {
+                    showToast("This NFT was transferred to another wallet", "error");
+                }
+                return false;
+            }
+        } catch (ownerError) {
+            console.error("Error checking NFT owner:", ownerError);
+            // NFT pode não existir mais
+            showToast("Error: NFT not found or already transferred", "error");
+            return false;
+        }
+
         const rentalContract = new ethers.Contract(addresses.rentalManager, rentalManagerABI, signer);
 
         showToast("Confirm withdrawal in wallet...", "info");
@@ -708,7 +736,18 @@ export async function executeWithdrawNFT(tokenId, btnElement) {
 
     } catch (e) {
         console.error("Withdraw error:", e);
-        showToast(formatError(e), "error");
+        
+        // Mensagens de erro mais específicas
+        const errorMsg = e?.message || '';
+        if (errorMsg.includes('NotOwner') || errorMsg.includes('not owner')) {
+            showToast("You are not the owner of this listing", "error");
+        } else if (errorMsg.includes('NotListed') || errorMsg.includes('not listed')) {
+            showToast("This NFT is not listed for rental", "error");
+        } else if (errorMsg.includes('ActiveRental') || errorMsg.includes('rented')) {
+            showToast("Cannot withdraw while NFT is being rented", "error");
+        } else {
+            showToast(formatError(e), "error");
+        }
         return false;
     } finally {
         if (btnElement) btnElement.innerHTML = originalText;

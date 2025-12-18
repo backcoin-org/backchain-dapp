@@ -1338,7 +1338,13 @@ async function handleConfirmList() {
 
     try {
         const priceWei = ethers.parseUnits(price, 18);
-        const success = await executeListNFT(tokenId, priceWei, btn);
+        
+        // Pegar minHours e maxHours dos inputs (ou usar defaults)
+        const minHoursInput = document.getElementById('list-min-hours');
+        const maxHoursInput = document.getElementById('list-max-hours');
+        const minHours = minHoursInput ? parseInt(minHoursInput.value) || 1 : 1;
+        const maxHours = maxHoursInput ? parseInt(maxHoursInput.value) || 168 : 168;
+        const success = await executeListNFT({ tokenId, pricePerHour: priceWei, minHours, maxHours }, btn);
 
         if (success) {
             if (mascot) mascot.className = 'w-16 h-16 object-contain airbnft-success';
