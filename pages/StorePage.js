@@ -449,31 +449,23 @@ async function loadTradeHistory() {
             // Debug: mostrar todos os tipos de transação
             console.log("All history types:", [...new Set((data || []).map(item => item.type))]);
             
-            // Filtro mais abrangente - incluir TUDO relacionado a NFT
+            // Filtro RESTRITO - APENAS compra e venda de NFT
             TradeState.tradeHistory = (data || []).filter(item => {
                 const t = (item.type || '').toUpperCase();
-                const details = item.details || {};
                 
-                // Incluir se tem tokenId nos details (indica transação de NFT)
-                if (details.tokenId) return true;
-                
-                // Incluir se tem boostBips nos details
-                if (details.boostBips || details.boost) return true;
-                
-                // Incluir por tipo
-                return t.includes('NFT') || 
-                       t.includes('BOUGHT') || 
-                       t.includes('SOLD') ||
-                       t.includes('BOOSTER') ||
-                       t.includes('POOL') ||
-                       t.includes('PRESALE') ||
-                       t.includes('MINT') ||
-                       t.includes('TRANSFER') ||
-                       (t.includes('BUY') && !t.includes('FAUCET')) || 
-                       (t.includes('SELL') && !t.includes('FAUCET'));
+                // APENAS estes tipos específicos de trade de NFT
+                return t === 'NFTBOUGHT' || 
+                       t === 'NFTSOLD' ||
+                       t === 'NFT_BOUGHT' ||
+                       t === 'NFT_SOLD' ||
+                       t === 'NFTPURCHASED' ||
+                       t === 'NFT_PURCHASED' ||
+                       t.includes('NFTBOUGHT') ||
+                       t.includes('NFTSOLD') ||
+                       t.includes('NFTPURCHASED');
             });
             
-            console.log("Filtered trade history:", TradeState.tradeHistory.length, "items");
+            console.log("NFT trade history:", TradeState.tradeHistory.length, "items");
             
             // Update count badge
             const countEl = document.getElementById('history-count');
@@ -499,10 +491,10 @@ function renderTradeHistory() {
         container.innerHTML = `
             <div class="text-center py-6">
                 <div class="w-12 h-12 mx-auto rounded-full bg-zinc-800/50 flex items-center justify-center mb-2">
-                    <i class="fa-solid fa-clock-rotate-left text-zinc-600 text-lg"></i>
+                    <i class="fa-solid fa-receipt text-zinc-600 text-lg"></i>
                 </div>
-                <p class="text-zinc-600 text-xs">No activity history found</p>
-                <p class="text-zinc-700 text-[10px] mt-1">Transactions may take time to index</p>
+                <p class="text-zinc-600 text-xs">No NFT trades yet</p>
+                <p class="text-zinc-700 text-[10px] mt-1">Buy or sell NFTs to see history</p>
             </div>
         `;
         return;
@@ -513,65 +505,21 @@ function renderTradeHistory() {
         const details = item.details || {};
         const dateStr = formatDate(item.timestamp || item.createdAt);
         
-        let icon, iconColor, bgColor, label, amountPrefix;
+        // Determinar se é Buy ou Sell
+        const isBuy = t.includes('BOUGHT') || t.includes('PURCHASED');
         
-        // Mapear todos os tipos conhecidos
-        if (t.includes('NFTBOUGHT') || t.includes('NFT_BOUGHT')) {
-            icon = 'fa-bag-shopping';
-            iconColor = '#22c55e';
-            bgColor = 'rgba(34,197,94,0.15)';
-            label = '🛍️ Bought NFT';
-            amountPrefix = '-';
-        } else if (t.includes('NFTSOLD') || t.includes('NFT_SOLD')) {
-            icon = 'fa-hand-holding-dollar';
-            iconColor = '#ef4444';
-            bgColor = 'rgba(239,68,68,0.15)';
-            label = '💰 Sold NFT';
-            amountPrefix = '+';
-        } else if (t.includes('RENTAL')) {
-            icon = 'fa-key';
-            iconColor = '#60a5fa';
-            bgColor = 'rgba(59,130,246,0.15)';
-            label = t.includes('LISTED') ? '📋 Listed Rental' : '🔓 Withdrew Rental';
-            amountPrefix = '';
-        } else if (t.includes('STAKING') || t.includes('DELEGAT')) {
-            icon = 'fa-lock';
-            iconColor = '#8b5cf6';
-            bgColor = 'rgba(139,92,246,0.15)';
-            label = '🔒 Staking';
-            amountPrefix = '';
-        } else if (t.includes('CLAIM')) {
-            icon = 'fa-gift';
-            iconColor = '#22c55e';
-            bgColor = 'rgba(34,197,94,0.15)';
-            label = '🎁 Claimed Reward';
-            amountPrefix = '+';
-        } else if (t.includes('GAME')) {
-            icon = 'fa-dice';
-            iconColor = '#f59e0b';
-            bgColor = 'rgba(245,158,11,0.15)';
-            label = t.includes('RESULT') ? '🎲 Game Result' : '🎯 Game Request';
-            amountPrefix = '';
-        } else if (t.includes('NOTARY')) {
-            icon = 'fa-file-signature';
-            iconColor = '#06b6d4';
-            bgColor = 'rgba(6,182,212,0.15)';
-            label = '📜 Notarized Doc';
-            amountPrefix = '-';
-        } else {
-            icon = 'fa-exchange-alt';
-            iconColor = '#9ca3af';
-            bgColor = 'rgba(156,163,175,0.15)';
-            label = `📝 ${item.type || 'Activity'}`;
-            amountPrefix = '';
-        }
+        const icon = isBuy ? 'fa-cart-plus' : 'fa-money-bill-transfer';
+        const iconColor = isBuy ? '#22c55e' : '#f59e0b';
+        const bgColor = isBuy ? 'rgba(34,197,94,0.15)' : 'rgba(245,158,11,0.15)';
+        const label = isBuy ? '🛒 Bought NFT' : '💰 Sold NFT';
+        const amountPrefix = isBuy ? '-' : '+';
 
         const txLink = item.txHash ? `${EXPLORER_TX}${item.txHash}` : '#';
         
         // Handle amount safely
         let amountDisplay = '';
         try {
-            let rawAmount = item.amount || details.amount || details.price || details.payout || details.amountReceived || "0";
+            let rawAmount = item.amount || details.amount || details.price || details.payout || "0";
             if (typeof rawAmount === 'string' && rawAmount !== "0") {
                 const amountNum = formatBigNumber(BigInt(rawAmount));
                 if (amountNum > 0.001) {
@@ -601,7 +549,7 @@ function renderTradeHistory() {
                     </div>
                 </div>
                 <div class="flex items-center gap-2">
-                    ${amountDisplay ? `<span class="text-xs font-mono font-bold ${amountPrefix === '+' ? 'text-green-400' : 'text-white'}">${amountPrefix}${amountDisplay} <span class="text-zinc-500">BKC</span></span>` : ''}
+                    ${amountDisplay ? `<span class="text-xs font-mono font-bold ${isBuy ? 'text-white' : 'text-green-400'}">${amountPrefix}${amountDisplay} <span class="text-zinc-500">BKC</span></span>` : ''}
                     <i class="fa-solid fa-arrow-up-right-from-square text-zinc-600 group-hover:text-blue-400 text-[9px]"></i>
                 </div>
             </a>
