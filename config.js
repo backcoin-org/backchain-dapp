@@ -179,7 +179,7 @@ export const nftPoolABI = [
     "function buyNFT() external payable returns (uint256)",
     "function buySpecificNFT(uint256 _tokenId) external payable",
     "function buyNFTWithSlippage(uint256 _maxPrice) external payable returns (uint256)",
-    "function sellNFT(uint256 _tokenId) external",
+    "function sellNFT(uint256 _tokenId, uint256 _minPayout) external",
     "function getPoolInfo() view returns (uint256 tokenBalance, uint256 nftCount, uint256 k, bool isInitialized)",
     "function getAvailableNFTs() view returns (uint256[])",
     "function boostBips() view returns (uint256)",

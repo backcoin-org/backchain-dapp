@@ -13,7 +13,6 @@ import { boosterTiers, addresses, nftPoolABI, ipfsGateway } from '../config.js';
 // ============================================================================
 // CONSTANTS
 // ============================================================================
-const TRADE_IMAGE = "./assets/trade.png";
 const EXPLORER_TX = "https://sepolia.arbiscan.io/tx/";
 
 // ============================================================================
@@ -317,9 +316,9 @@ function renderLoading() {
         <div class="flex flex-col items-center justify-center py-12">
             <div class="relative w-16 h-16">
                 <div class="absolute inset-0 rounded-full border-2 border-zinc-700"></div>
-                <div class="absolute inset-0 rounded-full border-2 border-transparent border-t-green-500 animate-spin"></div>
-                <div class="absolute inset-2 rounded-full bg-zinc-800 flex items-center justify-center overflow-hidden">
-                    <img src="${TRADE_IMAGE}" class="w-10 h-10 object-contain" alt="" onerror="this.src='./assets/bkc_logo_3d.png'">
+                <div class="absolute inset-0 rounded-full border-2 border-transparent border-t-purple-500 animate-spin"></div>
+                <div class="absolute inset-2 rounded-full bg-zinc-800 flex items-center justify-center">
+                    <i class="fa-solid fa-gem text-xl text-purple-400"></i>
                 </div>
             </div>
             <p class="text-zinc-500 text-xs mt-4">Loading pool...</p>
@@ -342,17 +341,16 @@ export const StorePage = {
             container.innerHTML = `
                 <div class="swap-container max-w-lg mx-auto py-6 px-4">
                     
-                    <!-- Header with Animated Trade Image -->
+                    <!-- Header with NFT Icon -->
                     <div class="flex justify-between items-center mb-6">
                         <div class="flex items-center gap-3">
-                            <img src="${TRADE_IMAGE}" 
-                                 alt="Trade" 
-                                 class="w-14 h-14 object-contain trade-float trade-pulse"
-                                 id="trade-mascot"
-                                 onerror="this.style.display='none'">
+                            <div class="w-14 h-14 rounded-2xl bg-gradient-to-br from-purple-500/20 to-pink-500/20 border border-purple-500/30 flex items-center justify-center"
+                                 id="trade-mascot">
+                                <i class="fa-solid fa-gem text-2xl text-purple-400"></i>
+                            </div>
                             <div>
-                                <h1 class="text-lg font-semibold text-white">📈 NFT Swap</h1>
-                                <p class="text-xs text-zinc-500">Trade Booster NFTs</p>
+                                <h1 class="text-lg font-semibold text-white">💎 NFT Market</h1>
+                                <p class="text-xs text-zinc-500">Buy & Sell Booster NFTs</p>
                             </div>
                         </div>
                         <button id="refresh-btn" class="w-8 h-8 rounded-lg bg-zinc-800/50 hover:bg-zinc-700 flex items-center justify-center text-zinc-400 hover:text-white transition-colors">
@@ -500,9 +498,11 @@ function renderTradeHistory() {
     if (TradeState.tradeHistory.length === 0) {
         container.innerHTML = `
             <div class="text-center py-6">
-                <img src="${TRADE_IMAGE}" class="w-12 h-12 mx-auto opacity-20 mb-2" onerror="this.style.display='none'">
-                <p class="text-zinc-600 text-xs">No trade history yet</p>
-                <p class="text-zinc-700 text-[10px] mt-1">Buy or sell NFTs to see activity here</p>
+                <div class="w-12 h-12 mx-auto rounded-full bg-zinc-800/50 flex items-center justify-center mb-2">
+                    <i class="fa-solid fa-clock-rotate-left text-zinc-600 text-lg"></i>
+                </div>
+                <p class="text-zinc-600 text-xs">No activity history found</p>
+                <p class="text-zinc-700 text-[10px] mt-1">Transactions may take time to index</p>
             </div>
         `;
         return;
@@ -515,35 +515,54 @@ function renderTradeHistory() {
         
         let icon, iconColor, bgColor, label, amountPrefix;
         
-        if (t.includes('BOUGHT') || t.includes('BUY') || t.includes('PRESALE')) {
+        // Mapear todos os tipos conhecidos
+        if (t.includes('NFTBOUGHT') || t.includes('NFT_BOUGHT')) {
             icon = 'fa-bag-shopping';
             iconColor = '#22c55e';
             bgColor = 'rgba(34,197,94,0.15)';
             label = '🛍️ Bought NFT';
             amountPrefix = '-';
-        } else if (t.includes('SOLD') || t.includes('SELL')) {
+        } else if (t.includes('NFTSOLD') || t.includes('NFT_SOLD')) {
             icon = 'fa-hand-holding-dollar';
             iconColor = '#ef4444';
             bgColor = 'rgba(239,68,68,0.15)';
             label = '💰 Sold NFT';
             amountPrefix = '+';
-        } else if (t.includes('TRANSFER')) {
-            icon = 'fa-arrow-right-arrow-left';
+        } else if (t.includes('RENTAL')) {
+            icon = 'fa-key';
             iconColor = '#60a5fa';
             bgColor = 'rgba(59,130,246,0.15)';
-            label = '↔️ Transfer';
+            label = t.includes('LISTED') ? '📋 Listed Rental' : '🔓 Withdrew Rental';
             amountPrefix = '';
-        } else if (t.includes('BOOSTER')) {
-            icon = 'fa-gem';
-            iconColor = '#fde047';
-            bgColor = 'rgba(234,179,8,0.15)';
-            label = '💎 Minted Booster';
+        } else if (t.includes('STAKING') || t.includes('DELEGAT')) {
+            icon = 'fa-lock';
+            iconColor = '#8b5cf6';
+            bgColor = 'rgba(139,92,246,0.15)';
+            label = '🔒 Staking';
+            amountPrefix = '';
+        } else if (t.includes('CLAIM')) {
+            icon = 'fa-gift';
+            iconColor = '#22c55e';
+            bgColor = 'rgba(34,197,94,0.15)';
+            label = '🎁 Claimed Reward';
+            amountPrefix = '+';
+        } else if (t.includes('GAME')) {
+            icon = 'fa-dice';
+            iconColor = '#f59e0b';
+            bgColor = 'rgba(245,158,11,0.15)';
+            label = t.includes('RESULT') ? '🎲 Game Result' : '🎯 Game Request';
+            amountPrefix = '';
+        } else if (t.includes('NOTARY')) {
+            icon = 'fa-file-signature';
+            iconColor = '#06b6d4';
+            bgColor = 'rgba(6,182,212,0.15)';
+            label = '📜 Notarized Doc';
             amountPrefix = '-';
         } else {
             icon = 'fa-exchange-alt';
-            iconColor = '#f59e0b';
-            bgColor = 'rgba(245,158,11,0.15)';
-            label = '🔄 Trade';
+            iconColor = '#9ca3af';
+            bgColor = 'rgba(156,163,175,0.15)';
+            label = `📝 ${item.type || 'Activity'}`;
             amountPrefix = '';
         }
 
@@ -552,7 +571,7 @@ function renderTradeHistory() {
         // Handle amount safely
         let amountDisplay = '';
         try {
-            let rawAmount = item.amount || details.amount || details.price || details.payout || "0";
+            let rawAmount = item.amount || details.amount || details.price || details.payout || details.amountReceived || "0";
             if (typeof rawAmount === 'string' && rawAmount !== "0") {
                 const amountNum = formatBigNumber(BigInt(rawAmount));
                 if (amountNum > 0.001) {
@@ -560,7 +579,7 @@ function renderTradeHistory() {
                 }
             }
         } catch (e) {
-            console.warn('Amount parse error:', e);
+            // Ignore parse errors
         }
         
         const tokenId = details.tokenId || '';
@@ -716,7 +735,7 @@ function renderExecuteButton(isBuy, soldOut, noNFTtoSell, insufficientBalance) {
     if (!State.isConnected) {
         return `
             <button id="execute-btn" data-action="connect" class="swap-btn w-full py-4 rounded-2xl font-semibold text-white bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-500 hover:to-cyan-500">
-                Connect Wallet
+                <i class="fa-solid fa-wallet mr-2"></i> Connect Wallet
             </button>
         `;
     }
@@ -732,26 +751,26 @@ function renderExecuteButton(isBuy, soldOut, noNFTtoSell, insufficientBalance) {
         if (insufficientBalance) {
             return `
                 <button disabled class="w-full py-4 rounded-2xl font-semibold text-red-400 bg-red-950/30 cursor-not-allowed border border-red-500/30">
-                    <i class="fa-solid fa-exclamation-circle mr-2"></i> Insufficient BKC
+                    <i class="fa-solid fa-coins mr-2"></i> Insufficient BKC
                 </button>
             `;
         }
         return `
             <button id="execute-btn" data-action="buy" class="swap-btn w-full py-4 rounded-2xl font-semibold text-white bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-500 hover:to-emerald-500">
-                <i class="fa-solid fa-bag-shopping mr-2"></i> Buy NFT
+                <i class="fa-solid fa-cart-plus mr-2"></i> Buy NFT
             </button>
         `;
     } else {
         if (noNFTtoSell) {
             return `
                 <button disabled class="w-full py-4 rounded-2xl font-semibold text-zinc-500 bg-zinc-800 cursor-not-allowed">
-                    <i class="fa-solid fa-wallet mr-2"></i> No NFT to Sell
+                    <i class="fa-solid fa-gem mr-2"></i> No NFT to Sell
                 </button>
             `;
         }
         return `
-            <button id="execute-btn" data-action="sell" class="swap-btn w-full py-4 rounded-2xl font-semibold text-white bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500">
-                <i class="fa-solid fa-hand-holding-dollar mr-2"></i> Sell NFT
+            <button id="execute-btn" data-action="sell" class="swap-btn w-full py-4 rounded-2xl font-semibold text-white bg-gradient-to-r from-orange-600 to-amber-600 hover:from-orange-500 hover:to-amber-500">
+                <i class="fa-solid fa-money-bill-transfer mr-2"></i> Sell NFT
             </button>
         `;
     }

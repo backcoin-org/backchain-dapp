@@ -488,8 +488,9 @@ export async function executeSellNFT(poolAddress, tokenId, btnElement) {
             return false;
         }
 
-        // Verificar boostBips do NFT vs pool
         const poolContract = new ethers.Contract(poolAddress, nftPoolABI, signer);
+
+        // Verificar boostBips do NFT vs pool
         try {
             const nftBoostBips = await boosterContract.boostBips(tokenIdBigInt);
             const poolBoostBips = await poolContract.boostBips();
@@ -501,6 +502,24 @@ export async function executeSellNFT(poolAddress, tokenId, btnElement) {
             }
         } catch (e) {
             console.warn("Could not verify boostBips match:", e.message);
+        }
+
+        // NOVO: Verificar liquidez do pool
+        try {
+            const poolInfo = await poolContract.getPoolInfo();
+            const tokenBalance = poolInfo[0] || poolInfo.tokenBalance;
+            const nftCount = poolInfo[1] || poolInfo.nftCount;
+            console.log("Pool info - Token Balance:", tokenBalance?.toString(), "NFT Count:", nftCount?.toString());
+            
+            const sellPrice = await poolContract.getSellPrice();
+            console.log("Sell price:", sellPrice.toString());
+            
+            if (tokenBalance < sellPrice) {
+                showToast("Pool has insufficient BKC liquidity", "error");
+                return false;
+            }
+        } catch (e) {
+            console.warn("Could not check pool liquidity:", e.message);
         }
 
         // Verificar e fazer approve se necessário
@@ -517,7 +536,14 @@ export async function executeSellNFT(poolAddress, tokenId, btnElement) {
         if (btnElement) btnElement.innerHTML = '<div class="loader inline-block"></div> Selling...';
 
         showToast("Confirm sell in wallet...", "info");
-        const tx = await poolContract.sellNFT(tokenIdBigInt);
+        
+        // Calcular minPayout com 5% de slippage
+        const sellPriceAfterTax = await poolContract.getSellPriceAfterTax();
+        const minPayout = (sellPriceAfterTax * 95n) / 100n; // 5% slippage
+        console.log("Sell price after tax:", sellPriceAfterTax.toString(), "Min payout (5% slippage):", minPayout.toString());
+        
+        // CORREÇÃO: sellNFT exige 2 parâmetros (tokenId, minPayout)
+        const tx = await poolContract.sellNFT(tokenIdBigInt, minPayout);
 
         showToast("Waiting confirmation...", "info");
         const receipt = await tx.wait();
@@ -534,7 +560,7 @@ export async function executeSellNFT(poolAddress, tokenId, btnElement) {
         // Mensagens de erro mais específicas
         const errorMsg = e?.message || '';
         if (errorMsg.includes('require(false)') || errorMsg.includes('execution reverted')) {
-            showToast("Pool rejected the sale. Check if NFT tier matches the pool.", "error");
+            showToast("Pool rejected the sale. Pool may be paused or have restrictions.", "error");
         } else if (errorMsg.includes('user rejected')) {
             showToast("Transaction cancelled", "info");
         } else {
