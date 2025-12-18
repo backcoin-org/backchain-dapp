@@ -1,5 +1,5 @@
 // js/pages/FortunePool.js
-// ✅ PRODUCTION V12.0 - Tiger Theme + Animated Mascot + Detailed History
+// ✅ PRODUCTION V13.0 - Tiger Theme + Spinning Roulette + Epic Win Animation
 
 import { State } from '../state.js';
 import { loadUserData, API_ENDPOINTS } from '../modules/data.js';
@@ -49,17 +49,18 @@ const Game = {
     gameId: null,
     result: null,
     poolStatus: null,
-    history: []
+    history: [],
+    spinIntervals: []
 };
 
 // ============================================================================
-// STYLES - V12 com animações do tigre
+// STYLES - V13 com animações da roleta
 // ============================================================================
 function injectStyles() {
-    if (document.getElementById('fortune-styles-v12')) return;
+    if (document.getElementById('fortune-styles-v13')) return;
     
     const style = document.createElement('style');
-    style.id = 'fortune-styles-v12';
+    style.id = 'fortune-styles-v13';
     style.textContent = `
         /* Tiger Mascot Animations */
         @keyframes tiger-float {
@@ -88,9 +89,131 @@ function injectStyles() {
         }
         .tiger-float { animation: tiger-float 4s ease-in-out infinite; }
         .tiger-pulse { animation: tiger-pulse 2s ease-in-out infinite; }
-        .tiger-spin { animation: tiger-spin 1s ease-in-out; }
+        .tiger-spin { animation: tiger-spin 1s ease-in-out infinite; }
         .tiger-bounce { animation: tiger-bounce 0.6s ease-out; }
         .tiger-celebrate { animation: tiger-celebrate 0.8s ease-out infinite; }
+        
+        /* ============================================ */
+        /* SPINNING ROULETTE ANIMATIONS - V13 NEW */
+        /* ============================================ */
+        
+        /* Número girando rápido */
+        @keyframes number-spin-fast {
+            0% { transform: translateY(-100%); opacity: 0; }
+            10% { opacity: 1; }
+            90% { opacity: 1; }
+            100% { transform: translateY(100%); opacity: 0; }
+        }
+        
+        /* Container da roleta */
+        .roulette-container {
+            position: relative;
+            overflow: hidden;
+            height: 80px;
+        }
+        
+        .roulette-number {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            animation: number-spin-fast 0.15s linear infinite;
+        }
+        
+        /* Glow pulsante na roleta */
+        @keyframes roulette-glow {
+            0%, 100% { box-shadow: 0 0 20px var(--glow-color), inset 0 0 20px rgba(0,0,0,0.5); }
+            50% { box-shadow: 0 0 40px var(--glow-color), 0 0 60px var(--glow-color), inset 0 0 20px rgba(0,0,0,0.3); }
+        }
+        .roulette-glow { animation: roulette-glow 0.5s ease-in-out infinite; }
+        
+        /* Animação de desaceleração */
+        @keyframes slow-down {
+            0% { animation-duration: 0.1s; }
+            100% { animation-duration: 0.8s; }
+        }
+        
+        /* Número revelado com bounce */
+        @keyframes number-reveal {
+            0% { transform: scale(0) rotate(-180deg); opacity: 0; }
+            50% { transform: scale(1.3) rotate(10deg); }
+            70% { transform: scale(0.9) rotate(-5deg); }
+            100% { transform: scale(1) rotate(0deg); opacity: 1; }
+        }
+        .number-reveal { animation: number-reveal 0.6s cubic-bezier(0.68, -0.55, 0.265, 1.55) forwards; }
+        
+        /* Match animation */
+        @keyframes match-pulse {
+            0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7); }
+            50% { transform: scale(1.1); box-shadow: 0 0 0 20px rgba(16, 185, 129, 0); }
+            100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
+        }
+        .match-pulse { animation: match-pulse 0.8s ease-out 3; }
+        
+        /* Shake para miss */
+        @keyframes miss-shake {
+            0%, 100% { transform: translateX(0); }
+            20% { transform: translateX(-8px); }
+            40% { transform: translateX(8px); }
+            60% { transform: translateX(-5px); }
+            80% { transform: translateX(5px); }
+        }
+        .miss-shake { animation: miss-shake 0.5s ease-out; }
+        
+        /* Epic Win Overlay */
+        @keyframes epic-win-bg {
+            0% { opacity: 0; }
+            100% { opacity: 1; }
+        }
+        @keyframes epic-win-text {
+            0% { transform: scale(0) rotate(-20deg); opacity: 0; }
+            50% { transform: scale(1.2) rotate(5deg); }
+            100% { transform: scale(1) rotate(0deg); opacity: 1; }
+        }
+        @keyframes epic-win-shine {
+            0% { transform: translateX(-100%) rotate(45deg); }
+            100% { transform: translateX(200%) rotate(45deg); }
+        }
+        @keyframes coin-rain {
+            0% { transform: translateY(-100vh) rotate(0deg); opacity: 1; }
+            100% { transform: translateY(100vh) rotate(720deg); opacity: 0; }
+        }
+        .epic-win-overlay {
+            animation: epic-win-bg 0.3s ease-out forwards;
+        }
+        .epic-win-text {
+            animation: epic-win-text 0.8s cubic-bezier(0.68, -0.55, 0.265, 1.55) forwards;
+        }
+        .epic-win-shine {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 200%;
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent);
+            animation: epic-win-shine 1.5s ease-out infinite;
+        }
+        .coin {
+            position: fixed;
+            font-size: 24px;
+            animation: coin-rain 3s linear forwards;
+            pointer-events: none;
+            z-index: 10000;
+        }
+        
+        /* Fireworks */
+        @keyframes firework {
+            0% { transform: scale(0); opacity: 1; }
+            50% { opacity: 1; }
+            100% { transform: scale(1); opacity: 0; }
+        }
+        .firework {
+            position: absolute;
+            width: 100px;
+            height: 100px;
+            border-radius: 50%;
+            animation: firework 1s ease-out forwards;
+        }
         
         /* Game Mode Cards */
         .game-mode-card {
@@ -231,6 +354,17 @@ function injectStyles() {
             background: rgba(63,63,70,0.5) !important; 
             transform: translateX(4px);
         }
+        
+        /* Waiting dots animation */
+        @keyframes waiting-dots {
+            0%, 20% { content: '.'; }
+            40% { content: '..'; }
+            60%, 100% { content: '...'; }
+        }
+        .waiting-dots::after {
+            content: '';
+            animation: waiting-dots 1.5s infinite;
+        }
     `;
     document.head.appendChild(style);
 }
@@ -311,6 +445,10 @@ function renderPhase() {
     const area = document.getElementById('game-area');
     if (!area) return;
 
+    // Clear any running spin intervals
+    Game.spinIntervals.forEach(id => clearInterval(id));
+    Game.spinIntervals = [];
+
     // Update tiger animation based on phase
     updateTigerAnimation(Game.phase);
 
@@ -329,6 +467,7 @@ function updateTigerAnimation(phase) {
     if (!tiger) return;
     
     tiger.className = 'w-28 h-28 object-contain mx-auto';
+    tiger.style.filter = '';
     
     switch (phase) {
         case 'select':
@@ -751,34 +890,97 @@ function setupWagerEvents(maxMulti, balanceNum) {
 }
 
 // ============================================================================
-// PHASE 4 & 5: SPIN & RESULT
+// PHASE 4: SPIN - ROULETTE ANIMATION 🎰
 // ============================================================================
 function renderSpin(container) {
     const isJackpot = Game.mode === 'jackpot';
     const picks = isJackpot ? [Game.guess] : Game.guesses;
+    const tiersToShow = isJackpot ? [TIERS[2]] : TIERS;
+    
     container.innerHTML = `
-        <div class="bg-gradient-to-br from-zinc-900 to-zinc-800/50 border border-zinc-700/50 rounded-2xl p-8 text-center">
-            <div class="mb-6">
-                <img src="${TIGER_IMAGE}" class="w-24 h-24 mx-auto tiger-spin" alt="Rolling..." onerror="this.outerHTML='<div class=\\'inline-flex items-center justify-center w-24 h-24 rounded-full bg-amber-500/20 animate-pulse\\'><i class=\\'fa-solid fa-paw text-5xl text-amber-400 animate-spin\\'></i></div>'">
+        <div class="bg-gradient-to-br from-zinc-900 to-zinc-800/50 border border-zinc-700/50 rounded-2xl p-6">
+            <!-- Title -->
+            <div class="text-center mb-6">
+                <h2 class="text-2xl font-bold text-white mb-1">🎰 Rolling<span class="waiting-dots"></span></h2>
+                <p class="text-zinc-400 text-sm">Oracle is choosing the numbers</p>
             </div>
-            <h2 class="text-2xl font-bold text-white mb-2">🐯 Rolling...</h2>
-            <p class="text-zinc-400 mb-6">Waiting for oracle</p>
-            <div class="flex justify-center gap-3">
-                ${(isJackpot ? [{ tier: TIERS[2], pick: picks[0] }] : picks.map((p, i) => ({ tier: TIERS[i], pick: p }))).map(({ tier, pick }) => `
-                    <div class="w-14 h-14 rounded-xl bg-gradient-to-br ${tier.bgFrom} ${tier.bgTo} border-2 ${tier.borderColor} flex items-center justify-center animate-pulse"><span class="text-xl font-bold ${tier.textColor}">${pick}</span></div>
+            
+            <!-- Spinning Roulettes -->
+            <div class="flex justify-center gap-4 mb-6">
+                ${tiersToShow.map((tier, idx) => `
+                    <div class="text-center">
+                        <p class="text-xs text-zinc-500 mb-2">${tier.emoji} ${tier.name}</p>
+                        <div class="roulette-box relative w-20 h-24 rounded-2xl bg-gradient-to-br ${tier.bgFrom} ${tier.bgTo} border-2 ${tier.borderColor} overflow-hidden roulette-glow" 
+                             style="--glow-color: ${tier.hex}50" 
+                             id="roulette-${idx}">
+                            <!-- Spinning number -->
+                            <div class="absolute inset-0 flex items-center justify-center">
+                                <span class="roulette-num text-4xl font-black ${tier.textColor}" id="spin-num-${idx}">?</span>
+                            </div>
+                            <!-- Top/Bottom fade gradient -->
+                            <div class="absolute inset-0 pointer-events-none bg-gradient-to-b from-black/60 via-transparent to-black/60"></div>
+                        </div>
+                    </div>
                 `).join('')}
             </div>
-            <p class="text-xs text-zinc-500 mt-6"><i class="fa-solid fa-clock mr-1"></i>May take up to 30s</p>
+            
+            <!-- Your picks (fixed below) -->
+            <div class="border-t border-zinc-700/50 pt-5">
+                <p class="text-center text-xs text-zinc-500 uppercase mb-3">🎯 Your Numbers</p>
+                <div class="flex justify-center gap-4">
+                    ${(isJackpot ? [{ tier: TIERS[2], pick: picks[0] }] : picks.map((p, i) => ({ tier: TIERS[i], pick: p }))).map(({ tier, pick }) => `
+                        <div class="text-center">
+                            <div class="w-16 h-16 rounded-xl bg-gradient-to-br ${tier.bgFrom} ${tier.bgTo} border-2 ${tier.borderColor} flex items-center justify-center">
+                                <span class="text-2xl font-black ${tier.textColor}">${pick}</span>
+                            </div>
+                            <p class="text-xs ${tier.textColor} mt-1 font-medium">${tier.name}</p>
+                        </div>
+                    `).join('')}
+                </div>
+            </div>
+            
+            <p class="text-xs text-zinc-500 mt-6 text-center"><i class="fa-solid fa-clock mr-1"></i>May take up to 30s</p>
         </div>
     `;
+    
+    // Start spinning animations
+    startSpinningAnimations(tiersToShow);
 }
 
+function startSpinningAnimations(tiers) {
+    // Clear any existing intervals
+    Game.spinIntervals.forEach(id => clearInterval(id));
+    Game.spinIntervals = [];
+    
+    tiers.forEach((tier, idx) => {
+        const numEl = document.getElementById(`spin-num-${idx}`);
+        if (!numEl) return;
+        
+        let speed = 50; // Initial speed in ms
+        
+        const spin = () => {
+            const randomNum = Math.floor(Math.random() * tier.range) + 1;
+            numEl.textContent = randomNum;
+            numEl.style.transform = `scale(${0.8 + Math.random() * 0.4})`;
+        };
+        
+        // Start fast spinning
+        const intervalId = setInterval(spin, speed);
+        Game.spinIntervals.push(intervalId);
+    });
+}
+
+// ============================================================================
+// PHASE 5: RESULT - EPIC REVEAL & WIN ANIMATION 🏆
+// ============================================================================
 function renderResult(container) {
     const result = Game.result;
     if (!result) return renderPhase();
+    
     const isJackpot = Game.mode === 'jackpot';
     const picks = isJackpot ? [Game.guess] : Game.guesses;
     const results = result.results || result.randomNumbers || result.rolls || [];
+    const tiersToShow = isJackpot ? [TIERS[2]] : TIERS;
     
     const matches = picks.map((pick, i) => {
         const roll = results[i] !== undefined ? Number(results[i]) : null;
@@ -795,36 +997,246 @@ function renderResult(container) {
     }
     const estimatedPrize = Game.wager * multiplier;
     
-    if (isWin) triggerConfetti();
-
+    // First render the spinning state, then animate to reveal
     container.innerHTML = `
-        <div class="bg-gradient-to-br ${isWin ? 'from-emerald-900/30 to-green-900/10 border-emerald-500/30' : 'from-zinc-900 to-zinc-800/50 border-zinc-700/50'} border rounded-2xl p-6 text-center">
-            <div class="mb-5">
-                ${isWin 
-                    ? `<img src="${TIGER_IMAGE}" class="w-24 h-24 mx-auto tiger-celebrate mb-4" alt="Winner!" onerror="this.outerHTML='<div class=\\'inline-flex items-center justify-center w-20 h-20 rounded-full bg-emerald-500/20 mb-4 pop\\'><span class=\\'text-5xl\\'>🎉</span></div>'">
-                       <h2 class="text-3xl font-black text-emerald-400 mb-2">🏆 YOU WON!</h2>
-                       <p class="text-4xl font-black text-white">${estimatedPrize.toFixed(2)} BKC</p>`
-                    : `<img src="${TIGER_IMAGE}" class="w-20 h-20 mx-auto opacity-50 mb-4" style="filter: grayscale(0.7)" alt="No luck" onerror="this.outerHTML='<div class=\\'inline-flex items-center justify-center w-20 h-20 rounded-full bg-zinc-800 mb-4\\'><span class=\\'text-5xl\\'>😿</span></div>'">
-                       <h2 class="text-2xl font-bold text-zinc-400 mb-2">Not this time</h2>
-                       <p class="text-zinc-500">Better luck next round!</p>`
-                }
+        <div class="bg-gradient-to-br ${isWin ? 'from-emerald-900/30 to-green-900/10 border-emerald-500/30' : 'from-zinc-900 to-zinc-800/50 border-zinc-700/50'} border rounded-2xl p-6 relative overflow-hidden" id="result-container">
+            
+            <!-- Reveal Area -->
+            <div class="text-center mb-6">
+                <h2 class="text-xl font-bold text-white mb-4" id="result-title">🔮 Revealing<span class="waiting-dots"></span></h2>
             </div>
-            <div class="mb-6">
-                <p class="text-xs text-zinc-500 uppercase mb-3">🔮 Oracle Numbers</p>
-                <div class="flex justify-center gap-4">
-                    ${(isJackpot ? [0] : [0, 1, 2]).map(i => {
-                        const tier = isJackpot ? TIERS[2] : TIERS[i];
-                        const pick = picks[isJackpot ? 0 : i];
-                        const drawn = results[i] !== undefined ? Number(results[i]) : '?';
-                        const hit = pick === drawn;
-                        return `<div class="text-center"><p class="text-xs text-zinc-500 mb-2">${tier.emoji} ${tier.name}</p><div class="w-16 h-16 rounded-xl border-2 flex items-center justify-center mb-1 ${hit ? 'result-hit' : 'result-miss'} ${tier.borderColor}"><span class="text-2xl font-black ${hit ? 'text-emerald-400' : 'text-zinc-500'}">${drawn}</span></div><p class="text-xs ${hit ? 'text-emerald-400 font-bold' : 'text-zinc-600'}">🎯 You: ${pick} ${hit ? '✓' : '✗'}</p></div>`;
+            
+            <!-- Oracle Numbers with reveal animation -->
+            <div class="flex justify-center gap-4 mb-6" id="oracle-numbers">
+                ${tiersToShow.map((tier, idx) => `
+                    <div class="text-center">
+                        <p class="text-xs text-zinc-500 mb-2">${tier.emoji} ${tier.name}</p>
+                        <div class="oracle-box relative w-20 h-24 rounded-2xl bg-gradient-to-br ${tier.bgFrom} ${tier.bgTo} border-2 ${tier.borderColor} flex items-center justify-center overflow-hidden" 
+                             id="oracle-${idx}"
+                             style="--glow-color: ${tier.hex}50">
+                            <span class="oracle-num text-4xl font-black ${tier.textColor}" id="oracle-num-${idx}">?</span>
+                        </div>
+                    </div>
+                `).join('')}
+            </div>
+            
+            <!-- Your picks -->
+            <div class="border-t border-zinc-700/50 pt-5 mb-6">
+                <p class="text-center text-xs text-zinc-500 uppercase mb-3">🎯 Your Numbers</p>
+                <div class="flex justify-center gap-4" id="your-picks">
+                    ${tiersToShow.map((tier, idx) => {
+                        const pick = isJackpot ? picks[0] : picks[idx];
+                        return `
+                            <div class="text-center" id="pick-container-${idx}">
+                                <div class="pick-box w-16 h-16 rounded-xl bg-gradient-to-br ${tier.bgFrom} ${tier.bgTo} border-2 ${tier.borderColor} flex items-center justify-center" id="pick-${idx}">
+                                    <span class="text-2xl font-black ${tier.textColor}">${pick}</span>
+                                </div>
+                                <p class="text-xs text-zinc-500 mt-1" id="pick-label-${idx}">${tier.name}</p>
+                            </div>
+                        `;
                     }).join('')}
                 </div>
             </div>
-            <button id="btn-new-game" class="w-full py-4 bg-gradient-to-r from-amber-500 to-orange-500 text-black font-bold rounded-xl"><i class="fa-solid fa-paw mr-2"></i>Play Again</button>
+            
+            <!-- Result message (hidden initially) -->
+            <div id="result-message" class="hidden text-center mb-5"></div>
+            
+            <button id="btn-new-game" class="w-full py-4 bg-gradient-to-r from-amber-500 to-orange-500 text-black font-bold rounded-xl opacity-0 transition-opacity duration-500"><i class="fa-solid fa-paw mr-2"></i>Play Again</button>
         </div>
     `;
-    document.getElementById('btn-new-game')?.addEventListener('click', () => { Game.phase = 'select'; Game.result = null; renderPhase(); loadPoolData(); });
+    
+    // Start the reveal animation sequence
+    animateReveal(tiersToShow, results, picks, matches, isWin, estimatedPrize, isJackpot);
+    
+    document.getElementById('btn-new-game')?.addEventListener('click', () => { 
+        Game.phase = 'select'; 
+        Game.result = null; 
+        renderPhase(); 
+        loadPoolData(); 
+    });
+}
+
+function animateReveal(tiers, results, picks, matches, isWin, prize, isJackpot) {
+    const delays = tiers.map((_, i) => 800 + i * 1000); // Stagger reveals
+    
+    // Start with spinning numbers
+    tiers.forEach((tier, idx) => {
+        const numEl = document.getElementById(`oracle-num-${idx}`);
+        if (!numEl) return;
+        
+        // Spin for a while then reveal
+        let spinSpeed = 50;
+        const spinInterval = setInterval(() => {
+            const randomNum = Math.floor(Math.random() * tier.range) + 1;
+            numEl.textContent = randomNum;
+        }, spinSpeed);
+        
+        // After delay, slow down and reveal
+        setTimeout(() => {
+            // Slow down phase
+            let currentSpeed = 50;
+            clearInterval(spinInterval);
+            
+            const slowDown = setInterval(() => {
+                currentSpeed += 30;
+                const randomNum = Math.floor(Math.random() * tier.range) + 1;
+                numEl.textContent = randomNum;
+                
+                if (currentSpeed > 300) {
+                    clearInterval(slowDown);
+                    // Final reveal
+                    const actualResult = Number(results[idx]);
+                    const pick = isJackpot ? picks[0] : picks[idx];
+                    const isMatch = actualResult === pick;
+                    
+                    // Reveal animation
+                    numEl.textContent = actualResult;
+                    numEl.classList.add('number-reveal');
+                    
+                    const box = document.getElementById(`oracle-${idx}`);
+                    const pickBox = document.getElementById(`pick-${idx}`);
+                    const pickLabel = document.getElementById(`pick-label-${idx}`);
+                    
+                    if (isMatch) {
+                        // Match! Green glow and pulse
+                        box.classList.add('match-pulse');
+                        box.style.borderColor = '#10b981';
+                        box.style.boxShadow = '0 0 30px rgba(16, 185, 129, 0.6)';
+                        numEl.classList.remove(tiers[idx].textColor.replace('text-', ''));
+                        numEl.classList.add('text-emerald-400');
+                        
+                        pickBox.classList.add('match-pulse');
+                        pickBox.style.borderColor = '#10b981';
+                        pickBox.style.background = 'linear-gradient(135deg, rgba(16,185,129,0.3), rgba(16,185,129,0.1))';
+                        pickLabel.textContent = '✓ MATCH!';
+                        pickLabel.className = 'text-xs text-emerald-400 mt-1 font-bold';
+                    } else {
+                        // Miss - shake and gray
+                        box.classList.add('miss-shake');
+                        box.style.opacity = '0.5';
+                        box.style.filter = 'grayscale(0.5)';
+                        
+                        pickBox.style.opacity = '0.5';
+                        pickLabel.textContent = '✗ Miss';
+                        pickLabel.className = 'text-xs text-red-400 mt-1';
+                    }
+                }
+            }, currentSpeed);
+        }, delays[idx]);
+    });
+    
+    // After all reveals, show final result
+    const totalDelay = delays[delays.length - 1] + 1500;
+    setTimeout(() => {
+        showFinalResult(isWin, prize);
+    }, totalDelay);
+}
+
+function showFinalResult(isWin, prize) {
+    const titleEl = document.getElementById('result-title');
+    const messageEl = document.getElementById('result-message');
+    const btnEl = document.getElementById('btn-new-game');
+    const containerEl = document.getElementById('result-container');
+    
+    if (isWin) {
+        // EPIC WIN!
+        triggerEpicWinAnimation();
+        triggerCoinRain();
+        triggerConfetti();
+        
+        if (titleEl) {
+            titleEl.innerHTML = '🏆 YOU WON!';
+            titleEl.className = 'text-3xl font-black text-emerald-400 mb-4 epic-win-text';
+        }
+        
+        if (messageEl) {
+            messageEl.innerHTML = `
+                <div class="relative overflow-hidden p-4 bg-gradient-to-r from-emerald-500/30 to-green-500/20 rounded-xl border border-emerald-500/50">
+                    <div class="epic-win-shine"></div>
+                    <p class="text-5xl font-black text-white mb-2">+${prize.toFixed(2)}</p>
+                    <p class="text-lg text-emerald-400 font-bold">BKC Won!</p>
+                </div>
+            `;
+            messageEl.classList.remove('hidden');
+        }
+        
+        if (containerEl) {
+            containerEl.style.background = 'linear-gradient(135deg, rgba(16,185,129,0.2), rgba(16,185,129,0.05))';
+            containerEl.style.borderColor = 'rgba(16,185,129,0.5)';
+        }
+    } else {
+        // Not a win
+        if (titleEl) {
+            titleEl.innerHTML = '😿 Not this time';
+            titleEl.className = 'text-2xl font-bold text-zinc-400 mb-4';
+        }
+        
+        if (messageEl) {
+            messageEl.innerHTML = `
+                <p class="text-zinc-500 mb-2">Better luck next round!</p>
+                <p class="text-sm text-zinc-600">The tiger will smile on you soon 🐯</p>
+            `;
+            messageEl.classList.remove('hidden');
+        }
+    }
+    
+    // Show play again button
+    if (btnEl) {
+        btnEl.style.opacity = '1';
+    }
+}
+
+function triggerEpicWinAnimation() {
+    // Create fireworks
+    const container = document.getElementById('result-container');
+    if (!container) return;
+    
+    const colors = ['#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#06b6d4'];
+    
+    for (let i = 0; i < 5; i++) {
+        setTimeout(() => {
+            const firework = document.createElement('div');
+            firework.className = 'firework';
+            firework.style.left = `${20 + Math.random() * 60}%`;
+            firework.style.top = `${20 + Math.random() * 40}%`;
+            firework.style.background = `radial-gradient(circle, ${colors[i % colors.length]} 0%, transparent 70%)`;
+            container.appendChild(firework);
+            setTimeout(() => firework.remove(), 1000);
+        }, i * 200);
+    }
+}
+
+function triggerCoinRain() {
+    const coins = ['🪙', '💰', '✨', '⭐', '🎉'];
+    
+    for (let i = 0; i < 30; i++) {
+        setTimeout(() => {
+            const coin = document.createElement('div');
+            coin.className = 'coin';
+            coin.textContent = coins[Math.floor(Math.random() * coins.length)];
+            coin.style.left = `${Math.random() * 100}%`;
+            coin.style.animationDelay = `${Math.random() * 0.5}s`;
+            coin.style.animationDuration = `${2 + Math.random() * 2}s`;
+            document.body.appendChild(coin);
+            setTimeout(() => coin.remove(), 4000);
+        }, i * 100);
+    }
+}
+
+function triggerConfetti() {
+    document.querySelector('.confetti-container')?.remove();
+    const container = document.createElement('div');
+    container.className = 'confetti-container';
+    document.body.appendChild(container);
+    const colors = ['#f59e0b', '#10b981', '#8b5cf6', '#ec4899', '#06b6d4'];
+    for (let i = 0; i < 60; i++) {
+        const c = document.createElement('div');
+        c.className = 'confetti';
+        c.style.cssText = `left:${Math.random()*100}%;color:${colors[i%colors.length]};font-size:${8+Math.random()*12}px;animation-delay:${Math.random()*2}s;animation-duration:${2+Math.random()*2}s`;
+        c.textContent = ['●','■','★','🐯'][i%4];
+        container.appendChild(c);
+    }
+    setTimeout(() => container.remove(), 5000);
 }
 
 // ============================================================================
@@ -883,22 +1295,6 @@ async function pollResult(gameId, attempts = 0) {
         if (result?.isComplete) { Game.result = result; Game.phase = 'result'; renderPhase(); loadPoolData(); }
         else setTimeout(() => pollResult(gameId, attempts + 1), 3000);
     } catch { setTimeout(() => pollResult(gameId, attempts + 1), 3000); }
-}
-
-function triggerConfetti() {
-    document.querySelector('.confetti-container')?.remove();
-    const container = document.createElement('div');
-    container.className = 'confetti-container';
-    document.body.appendChild(container);
-    const colors = ['#f59e0b', '#10b981', '#8b5cf6', '#ec4899', '#06b6d4'];
-    for (let i = 0; i < 60; i++) {
-        const c = document.createElement('div');
-        c.className = 'confetti';
-        c.style.cssText = `left:${Math.random()*100}%;color:${colors[i%colors.length]};font-size:${8+Math.random()*12}px;animation-delay:${Math.random()*2}s;animation-duration:${2+Math.random()*2}s`;
-        c.textContent = ['●','■','★','🐯'][i%4];
-        container.appendChild(c);
-    }
-    setTimeout(() => container.remove(), 5000);
 }
 
 async function loadPoolData() {
@@ -982,6 +1378,10 @@ function renderHistoryList(games) {
     }).join('');
 }
 
-export function cleanup() {}
+export function cleanup() {
+    // Clear any running spin intervals
+    Game.spinIntervals.forEach(id => clearInterval(id));
+    Game.spinIntervals = [];
+}
 export const FortunePoolPage = { render, cleanup };
 export default { render, cleanup };
