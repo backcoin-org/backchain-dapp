@@ -190,7 +190,7 @@ export async function executeUnstake(index, boosterIdToSend, btnElement) {
         );
         
         showToast("Confirm unstake in wallet...", "info");
-        const tx = await delegationContract.undelegate(indexBigInt, boosterIdBigInt);
+        const tx = await delegationContract.unstake(indexBigInt, boosterIdBigInt);
         
         showToast("Waiting confirmation...", "info");
         const receipt = await tx.wait();
@@ -288,8 +288,8 @@ export async function executeForceUnstake(index, boosterIdToSend, btnElement) {
         
         showToast("Confirm force unstake in wallet...", "info");
         
-        // Tenta a transação
-        const tx = await delegationContract.forceUndelegate(indexBigInt, boosterIdBigInt);
+        // Tenta a transação - NOTA: função no contrato é forceUnstake, não forceUndelegate
+        const tx = await delegationContract.forceUnstake(indexBigInt, boosterIdBigInt);
         
         showToast("Waiting confirmation...", "info");
         const receipt = await tx.wait();

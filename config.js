@@ -122,11 +122,11 @@ export const delegationManagerABI = [
     "function MAX_LOCK_DURATION() view returns (uint256)",
     "function getDelegationsOf(address _user) view returns (tuple(uint256 amount, uint64 unlockTime, uint64 lockDuration)[])",
     "function delegate(uint256 _amount, uint256 _lockDuration, uint256 _boosterTokenId) external",
-    "function undelegate(uint256 _delegationIndex, uint256 _boosterTokenId) external",
-    "function forceUndelegate(uint256 _delegationIndex, uint256 _boosterTokenId) external",
+    "function unstake(uint256 _delegationIndex, uint256 _boosterTokenId) external",
+    "function forceUnstake(uint256 _delegationIndex, uint256 _boosterTokenId) external",
     "function claimReward(uint256 _boosterTokenId) external",
     "event Delegated(address indexed user, uint256 delegationIndex, uint256 amount, uint256 pStakeGenerated, uint256 feeAmount)",
-    "event Undelegated(address indexed user, uint256 delegationIndex, uint256 amountReceived, uint256 feePaid)",
+    "event Unstaked(address indexed user, uint256 delegationIndex, uint256 amountReceived, uint256 feePaid)",
     "event RewardClaimed(address indexed user, uint256 amountReceived, uint256 feePaid)"
 ];
 
