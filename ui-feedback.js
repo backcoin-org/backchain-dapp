@@ -243,7 +243,8 @@ export function showWelcomeModal() {
     if (hasShownWelcomeModal) return;
     hasShownWelcomeModal = true;
 
-    const PRESALE_URL = "https://backcoin.org/presale"; 
+    const PRESALE_URL = "https://backcoin.org/presale";
+    const TELEGRAM_URL = "https://t.me/BackCoinorg";
 
     const content = `
         <div class="text-center pt-2 pb-4">
@@ -271,6 +272,7 @@ export function showWelcomeModal() {
             </p>
 
             <div class="flex flex-col gap-3">
+                <!-- Presale Button -->
                 <button id="btnPresale" class="group relative w-full bg-gradient-to-r from-amber-600 via-orange-500 to-amber-600 bg-[length:200%_auto] hover:bg-right transition-all duration-500 text-white font-black py-4 px-5 rounded-xl text-lg shadow-xl shadow-amber-500/20 pulse-gold border border-amber-400/50 flex items-center justify-center gap-3 overflow-hidden transform hover:scale-[1.02]">
                     <div class="absolute inset-0 bg-white/10 group-hover:bg-transparent transition-colors"></div>
                     <i class="fa-solid fa-rocket text-2xl animate-pulse"></i> 
@@ -281,15 +283,26 @@ export function showWelcomeModal() {
                     <i class="fa-solid fa-chevron-right ml-auto text-white/50 text-base group-hover:translate-x-1 transition-transform"></i>
                 </button>
 
+                <!-- Airdrop Button -->
                 <button id="btnAirdrop" class="w-full bg-zinc-800 hover:bg-zinc-700 border border-zinc-600 hover:border-amber-500 text-white font-bold py-3.5 px-5 rounded-xl text-base transition-all duration-300 transform hover:translate-y-[-1px] shadow-lg flex items-center justify-center gap-3 group">
                     <i class="fa-solid fa-parachute-box text-amber-500 text-lg group-hover:rotate-12 transition-transform"></i>
-                    <span>Join Community & Airdrop</span>
+                    <span>Join Airdrop</span>
                 </button>
 
-                <button id="btnSocials" class="w-full bg-transparent hover:bg-zinc-800 border border-zinc-700 hover:border-blue-500 text-zinc-400 hover:text-white font-semibold py-3 px-5 rounded-xl text-sm transition-all duration-300 flex items-center justify-center gap-2 group">
-                    <i class="fa-brands fa-telegram text-lg group-hover:text-blue-400 transition-colors"></i>
-                    <span>Social Networks & Telegram</span>
-                </button>
+                <!-- Two columns: Community & Telegram -->
+                <div class="grid grid-cols-2 gap-3">
+                    <!-- Community Button -->
+                    <button id="btnSocials" class="bg-zinc-800/70 hover:bg-zinc-700 border border-zinc-700 hover:border-purple-500 text-white font-semibold py-3 px-4 rounded-xl text-sm transition-all duration-300 flex items-center justify-center gap-2 group">
+                        <i class="fa-solid fa-users text-purple-400 group-hover:scale-110 transition-transform"></i>
+                        <span>Community</span>
+                    </button>
+
+                    <!-- Telegram Button -->
+                    <button id="btnTelegram" class="bg-zinc-800/70 hover:bg-zinc-700 border border-zinc-700 hover:border-blue-500 text-white font-semibold py-3 px-4 rounded-xl text-sm transition-all duration-300 flex items-center justify-center gap-2 group">
+                        <i class="fa-brands fa-telegram text-blue-400 group-hover:scale-110 transition-transform"></i>
+                        <span>Telegram</span>
+                    </button>
+                </div>
             </div>
             
             <div class="mt-6 text-[10px] text-zinc-600 uppercase tracking-widest">
@@ -314,5 +327,9 @@ export function showWelcomeModal() {
 
     modalContent.querySelector('#btnSocials')?.addEventListener('click', () => {
         navigateAndClose('socials'); 
+    });
+
+    modalContent.querySelector('#btnTelegram')?.addEventListener('click', () => {
+        window.open(TELEGRAM_URL, '_blank');
     });
 }
