@@ -244,99 +244,75 @@ export function showWelcomeModal() {
     hasShownWelcomeModal = true;
 
     const PRESALE_URL = "https://backcoin.org/presale"; 
-    const TELEGRAM_URL = "https://t.me/backcoinprotocol";
 
     const content = `
-        <div class="relative overflow-hidden">
-            <!-- Background gradient effect -->
-            <div class="absolute inset-0 bg-gradient-to-br from-amber-500/5 via-transparent to-blue-500/5 pointer-events-none"></div>
+        <div class="text-center pt-2 pb-4">
             
-            <!-- Content -->
-            <div class="relative text-center py-6 px-2">
-                
-                <!-- Network Badge -->
-                <div class="inline-flex items-center gap-2 bg-gradient-to-r from-zinc-800/80 to-zinc-900/80 border border-zinc-700/50 rounded-full px-4 py-2 mb-8 backdrop-blur-sm">
-                    <span class="relative flex h-2 w-2">
-                        <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                        <span class="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-                    </span>
-                    <span class="text-[11px] font-medium text-zinc-400">Testnet: <span class="text-emerald-400 font-semibold">Arbitrum Sepolia</span></span>
-                </div>
+            <div class="inline-flex items-center gap-2 bg-zinc-800 border border-zinc-700 rounded-full px-4 py-1.5 mb-6 shadow-sm">
+                <span class="relative flex h-3 w-3">
+                  <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                  <span class="relative inline-flex rounded-full h-3 w-3 bg-emerald-500"></span>
+                </span>
+                <span class="text-xs font-mono text-zinc-400 uppercase tracking-wider">NETWORK: <span class="text-emerald-400 font-bold">ARBITRUM SEPOLIA</span></span>
+            </div>
 
-                <!-- Logo with glow -->
-                <div class="relative inline-block mb-6">
-                    <div class="absolute inset-0 bg-gradient-to-r from-amber-500/30 to-orange-500/30 rounded-full blur-2xl scale-150 animate-pulse"></div>
-                    <img src="/assets/bkc_logo_3d.png" alt="Backcoin" class="h-28 w-28 mx-auto relative z-10 drop-shadow-2xl">
-                </div>
-                
-                <!-- Title -->
-                <h2 class="text-2xl font-bold text-white mb-2">
-                    Welcome to <span class="bg-gradient-to-r from-amber-400 to-orange-500 bg-clip-text text-transparent">Backcoin</span>
-                </h2>
-                
-                <p class="text-zinc-400 text-sm mb-8 max-w-xs mx-auto leading-relaxed">
-                    The decentralized protocol for mining, staking, and digital notarization on Arbitrum.
-                </p>
+            <div class="mb-4 relative inline-block">
+                <div class="absolute inset-0 bg-amber-500/20 rounded-full blur-xl"></div>
+                <img src="/assets/bkc_logo_3d.png" alt="Backcoin Logo" class="h-24 w-24 mx-auto rounded-full relative z-10 shadow-2xl">
+            </div>
+            
+            <h2 class="text-3xl font-black text-white mb-2 uppercase tracking-wide">
+                Welcome to Backcoin
+            </h2> 
+            
+            <p class="text-zinc-300 mb-8 text-sm leading-relaxed px-4">
+                This dApp is running on the <strong>Arbitrum Sepolia Testnet</strong>. 
+                However, the <strong class="text-amber-400">Exclusive Presale</strong> is live on <strong>Arbitrum One (Mainnet)</strong>.
+            </p>
 
-                <!-- Presale CTA -->
-                <a href="${PRESALE_URL}" target="_blank" 
-                   class="group relative block w-full bg-gradient-to-r from-amber-500 via-orange-500 to-amber-500 bg-[length:200%_100%] hover:bg-right text-white font-bold py-4 px-6 rounded-xl text-base shadow-lg shadow-amber-500/25 hover:shadow-amber-500/40 transition-all duration-500 mb-4 overflow-hidden">
-                    <div class="absolute inset-0 bg-white/0 group-hover:bg-white/10 transition-colors duration-300"></div>
-                    <div class="relative flex items-center justify-center gap-3">
-                        <div class="flex flex-col items-start">
-                            <span class="text-[10px] font-medium text-amber-100/80 uppercase tracking-wider">Arbitrum One Mainnet</span>
-                            <span class="text-lg font-black tracking-wide">Join Presale</span>
-                        </div>
-                        <i class="fa-solid fa-arrow-right text-lg group-hover:translate-x-1 transition-transform"></i>
+            <div class="flex flex-col gap-3">
+                <button id="btnPresale" class="group relative w-full bg-gradient-to-r from-amber-600 via-orange-500 to-amber-600 bg-[length:200%_auto] hover:bg-right transition-all duration-500 text-white font-black py-4 px-5 rounded-xl text-lg shadow-xl shadow-amber-500/20 pulse-gold border border-amber-400/50 flex items-center justify-center gap-3 overflow-hidden transform hover:scale-[1.02]">
+                    <div class="absolute inset-0 bg-white/10 group-hover:bg-transparent transition-colors"></div>
+                    <i class="fa-solid fa-rocket text-2xl animate-pulse"></i> 
+                    <div class="flex flex-col items-start leading-none z-10">
+                        <span class="text-[10px] font-bold opacity-80 uppercase tracking-wider mb-0.5">Arbitrum One Mainnet</span>
+                        <span class="text-lg">GO TO PRESALE</span>
                     </div>
-                </a>
-
-                <!-- Secondary buttons -->
-                <div class="grid grid-cols-2 gap-3 mb-6">
-                    <button id="btnAirdrop" 
-                            class="group bg-zinc-800/80 hover:bg-zinc-700 border border-zinc-700/50 hover:border-amber-500/50 text-white font-semibold py-3 px-4 rounded-xl text-sm transition-all duration-300 flex items-center justify-center gap-2">
-                        <i class="fa-solid fa-gift text-amber-500 group-hover:scale-110 transition-transform"></i>
-                        <span>Airdrop</span>
-                    </button>
-                    
-                    <a href="${TELEGRAM_URL}" target="_blank"
-                       class="group bg-zinc-800/80 hover:bg-zinc-700 border border-zinc-700/50 hover:border-blue-500/50 text-white font-semibold py-3 px-4 rounded-xl text-sm transition-all duration-300 flex items-center justify-center gap-2">
-                        <i class="fa-brands fa-telegram text-blue-400 group-hover:scale-110 transition-transform"></i>
-                        <span>Telegram</span>
-                    </a>
-                </div>
-
-                <!-- Explore button -->
-                <button id="btnExplore" 
-                        class="w-full bg-transparent hover:bg-zinc-800/50 border border-zinc-700/50 text-zinc-400 hover:text-white font-medium py-3 px-4 rounded-xl text-sm transition-all duration-300 flex items-center justify-center gap-2">
-                    <i class="fa-solid fa-compass"></i>
-                    <span>Explore Testnet dApp</span>
+                    <i class="fa-solid fa-chevron-right ml-auto text-white/50 text-base group-hover:translate-x-1 transition-transform"></i>
                 </button>
-                
-                <!-- Footer -->
-                <div class="mt-6 pt-4 border-t border-zinc-800/50">
-                    <div class="flex items-center justify-center gap-4 text-zinc-600 text-xs">
-                        <a href="https://docs.backcoin.org" target="_blank" class="hover:text-zinc-400 transition-colors">Docs</a>
-                        <span>•</span>
-                        <a href="https://twitter.com/backcoinorg" target="_blank" class="hover:text-zinc-400 transition-colors">Twitter</a>
-                        <span>•</span>
-                        <a href="https://github.com/backcoin" target="_blank" class="hover:text-zinc-400 transition-colors">GitHub</a>
-                    </div>
-                </div>
+
+                <button id="btnAirdrop" class="w-full bg-zinc-800 hover:bg-zinc-700 border border-zinc-600 hover:border-amber-500 text-white font-bold py-3.5 px-5 rounded-xl text-base transition-all duration-300 transform hover:translate-y-[-1px] shadow-lg flex items-center justify-center gap-3 group">
+                    <i class="fa-solid fa-parachute-box text-amber-500 text-lg group-hover:rotate-12 transition-transform"></i>
+                    <span>Join Community & Airdrop</span>
+                </button>
+
+                <button id="btnSocials" class="w-full bg-transparent hover:bg-zinc-800 border border-zinc-700 hover:border-blue-500 text-zinc-400 hover:text-white font-semibold py-3 px-5 rounded-xl text-sm transition-all duration-300 flex items-center justify-center gap-2 group">
+                    <i class="fa-brands fa-telegram text-lg group-hover:text-blue-400 transition-colors"></i>
+                    <span>Social Networks & Telegram</span>
+                </button>
+            </div>
+            
+            <div class="mt-6 text-[10px] text-zinc-600 uppercase tracking-widest">
+                Backcoin Protocol on Arbitrum
             </div>
         </div>
     `;
 
-    openModal(content, 'max-w-sm', true); 
+    openModal(content, 'max-w-sm', false); 
     
     const modalContent = document.getElementById('modal-content');
     if (!modalContent) return;
+
+    modalContent.querySelector('#btnPresale')?.addEventListener('click', () => {
+        window.open(PRESALE_URL, '_blank');
+        closeModal();
+    });
 
     modalContent.querySelector('#btnAirdrop')?.addEventListener('click', () => {
         navigateAndClose('airdrop');
     });
 
-    modalContent.querySelector('#btnExplore')?.addEventListener('click', () => {
-        closeModal();
+    modalContent.querySelector('#btnSocials')?.addEventListener('click', () => {
+        navigateAndClose('socials'); 
     });
 }
