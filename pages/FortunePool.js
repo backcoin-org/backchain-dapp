@@ -1244,19 +1244,29 @@ function triggerConfetti() {
 // ============================================================================
 async function getFortunePoolStatus() {
     const contract = State.actionsManagerContractPublic || State.actionsManagerContract;
-    if (!contract) return null;
+    if (!contract) {
+        console.log("No fortune contract available");
+        return null;
+    }
 
     try {
-        const [prizePool, gameCounter] = await Promise.all([
-            contract.fortunePrizePool ? contract.fortunePrizePool() : Promise.resolve(0n),
-            contract.fortuneGameCounter ? contract.fortuneGameCounter() : Promise.resolve(0)
-        ]).catch(() => [0n, 0]);
+        // Nomes corretos do contrato: prizePoolBalance e gameCounter
+        const [prizePool, gameCount] = await Promise.all([
+            contract.prizePoolBalance().catch(() => 0n),
+            contract.gameCounter().catch(() => 0)
+        ]);
+        
+        console.log("Fortune Pool Status:", {
+            prizePool: prizePool?.toString(),
+            gameCount: gameCount?.toString()
+        });
         
         return {
             prizePool: prizePool || 0n,
-            gameCounter: Number(gameCounter) || 0
+            gameCounter: Number(gameCount) || 0
         };
     } catch (e) {
+        console.error("getFortunePoolStatus error:", e);
         return { prizePool: 0n, gameCounter: 0 };
     }
 }
@@ -1318,7 +1328,11 @@ async function loadHistory() {
         const url = State.userAddress ? `${endpoint}?player=${State.userAddress}&limit=15` : `${endpoint}?limit=15`;
         const res = await fetch(url);
         const data = await res.json();
+        
+        console.log("Fortune History API response:", data);
+        
         if (data.games?.length > 0) {
+            console.log("First game data:", JSON.stringify(data.games[0], null, 2));
             renderHistoryList(data.games);
             const wins = data.games.filter(g => g.isWin || (g.prizeWon && BigInt(g.prizeWon) > 0n)).length;
             const el = document.getElementById('win-rate');
@@ -1333,7 +1347,9 @@ async function loadHistory() {
                 </div>
             `;
         }
-    } catch { }
+    } catch (e) { 
+        console.error("loadHistory error:", e);
+    }
 }
 
 function renderHistoryList(games) {
@@ -1344,13 +1360,48 @@ function renderHistoryList(games) {
         const isWin = g.isWin || (g.prizeWon && BigInt(g.prizeWon) > 0n);
         const prize = g.prizeWon ? formatBigNumber(BigInt(g.prizeWon)) : 0;
         const wager = g.wagerAmount ? formatBigNumber(BigInt(g.wagerAmount)) : 0;
-        const time = g.timestamp ? new Date(g.timestamp._seconds * 1000).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
         
-        // Números apostados e do oráculo
-        const guesses = g.guesses || g.details?.guesses || [];
-        const rolls = g.rolls || g.details?.rolls || [];
-        const guessesStr = guesses.length > 0 ? guesses.join(' • ') : '';
-        const rollsStr = rolls.length > 0 ? rolls.join(' • ') : '';
+        // Formatar data
+        let time = '';
+        if (g.timestamp) {
+            try {
+                const ts = g.timestamp._seconds || g.timestamp.seconds || g.timestamp;
+                const date = new Date(typeof ts === 'number' ? ts * 1000 : ts);
+                if (!isNaN(date.getTime())) {
+                    time = date.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+                }
+            } catch (e) { }
+        }
+        
+        // Números apostados - verificar diferentes formatos
+        let guesses = [];
+        if (Array.isArray(g.guesses) && g.guesses.length > 0) {
+            guesses = g.guesses;
+        } else if (g.details?.guesses && Array.isArray(g.details.guesses)) {
+            guesses = g.details.guesses;
+        }
+        
+        // Números do oráculo
+        let rolls = [];
+        if (Array.isArray(g.rolls) && g.rolls.length > 0) {
+            rolls = g.rolls;
+        } else if (g.details?.rolls && Array.isArray(g.details.rolls)) {
+            rolls = g.details.rolls;
+        } else if (g.randomNumbers && Array.isArray(g.randomNumbers)) {
+            rolls = g.randomNumbers;
+        }
+        
+        // Formatar para exibição (garantir que são números, não strings "1")
+        const guessesStr = guesses.length > 0 
+            ? guesses.map(n => Number(n)).join(' • ') 
+            : '';
+        const rollsStr = rolls.length > 0 
+            ? rolls.map(n => Number(n)).join(' • ') 
+            : '';
+        
+        // Determinar se é modo combo ou jackpot
+        const isCombo = guesses.length > 1;
+        const modeLabel = isCombo ? '🎰 Combo' : '👑 Jackpot';
         
         return `
             <a href="${g.txHash ? EXPLORER_TX + g.txHash : '#'}" target="_blank" class="history-item flex items-center justify-between p-3 hover:bg-zinc-800/60 border border-zinc-700/30 rounded-lg transition-all group mb-1.5 bg-zinc-800/20">
@@ -1364,7 +1415,7 @@ function renderHistoryList(games) {
                             ${guessesStr ? `<span class="px-1.5 py-0.5 rounded text-[10px] font-bold" style="background: rgba(249,115,22,0.2); color: #f97316">🎯 ${guessesStr}</span>` : ''}
                         </p>
                         <div class="flex items-center gap-2 mt-0.5">
-                            <p class="text-zinc-600 text-[10px]">${time}</p>
+                            <p class="text-zinc-600 text-[10px]">${time || 'Recent'}</p>
                             ${rollsStr ? `<span class="text-[10px] text-fuchsia-400">🔮 ${rollsStr}</span>` : ''}
                         </div>
                     </div>
