@@ -1,5 +1,5 @@
 // pages/StorePage.js
-// ✅ VERSION V7.0: Uniswap-style simplified NFT swap interface
+// ✅ PRODUCTION V8.0 - Animated Trade Image + Enhanced UI + Consistent Icons
 
 const ethers = window.ethers;
 
@@ -11,12 +11,17 @@ import { showToast } from '../ui-feedback.js';
 import { boosterTiers, addresses, nftPoolABI, ipfsGateway } from '../config.js';
 
 // ============================================================================
-// TIER CONFIGURATION - All tiers with colors
+// CONSTANTS
 // ============================================================================
+const TRADE_IMAGE = "./assets/trade.png";
+const EXPLORER_TX = "https://sepolia.arbiscan.io/tx/";
 
+// ============================================================================
+// TIER CONFIGURATION
+// ============================================================================
 const TIER_CONFIG = {
     'Crystal': { 
-        color: '#a855f7', // purple
+        color: '#a855f7',
         gradient: 'from-purple-500/20 to-violet-600/20',
         border: 'border-purple-500/40',
         text: 'text-purple-400',
@@ -24,7 +29,7 @@ const TIER_CONFIG = {
         icon: '💎'
     },
     'Diamond': { 
-        color: '#22d3ee', // cyan
+        color: '#22d3ee',
         gradient: 'from-cyan-500/20 to-blue-500/20',
         border: 'border-cyan-500/40',
         text: 'text-cyan-400',
@@ -32,7 +37,7 @@ const TIER_CONFIG = {
         icon: '💠'
     },
     'Platinum': { 
-        color: '#e2e8f0', // slate
+        color: '#e2e8f0',
         gradient: 'from-slate-300/20 to-gray-400/20',
         border: 'border-slate-400/40',
         text: 'text-slate-300',
@@ -40,7 +45,7 @@ const TIER_CONFIG = {
         icon: '⚪'
     },
     'Gold': { 
-        color: '#fbbf24', // amber
+        color: '#fbbf24',
         gradient: 'from-yellow-500/20 to-amber-500/20',
         border: 'border-yellow-500/40',
         text: 'text-yellow-400',
@@ -48,7 +53,7 @@ const TIER_CONFIG = {
         icon: '🥇'
     },
     'Silver': { 
-        color: '#9ca3af', // gray
+        color: '#9ca3af',
         gradient: 'from-gray-400/20 to-slate-400/20',
         border: 'border-gray-400/40',
         text: 'text-gray-300',
@@ -56,7 +61,7 @@ const TIER_CONFIG = {
         icon: '🥈'
     },
     'Bronze': { 
-        color: '#f97316', // orange
+        color: '#f97316',
         gradient: 'from-orange-600/20 to-amber-700/20',
         border: 'border-orange-600/40',
         text: 'text-orange-400',
@@ -64,7 +69,7 @@ const TIER_CONFIG = {
         icon: '🥉'
     },
     'Iron': { 
-        color: '#6b7280', // gray-500
+        color: '#6b7280',
         gradient: 'from-gray-500/20 to-zinc-600/20',
         border: 'border-gray-500/40',
         text: 'text-gray-400',
@@ -73,7 +78,6 @@ const TIER_CONFIG = {
     }
 };
 
-// Get tier style (with fallback)
 function getTierStyle(tierName) {
     return TIER_CONFIG[tierName] || TIER_CONFIG['Iron'];
 }
@@ -81,7 +85,6 @@ function getTierStyle(tierName) {
 // ============================================================================
 // LOCAL STATE
 // ============================================================================
-
 const TradeState = {
     tradeDirection: 'buy',
     selectedPoolBoostBips: null,
@@ -95,16 +98,13 @@ const TradeState = {
     bestBoosterTokenId: 0n,
     bestBoosterBips: 0,
     isDataLoading: false,
-    lastFetchTimestamp: 0
+    lastFetchTimestamp: 0,
+    tradeHistory: []
 };
 
-// Pool address cache
 const poolAddressCache = new Map();
-
-// Transaction lock
 let isTransactionInProgress = false;
 
-// Factory ABI
 const factoryABI = [
     "function getPoolAddress(uint256 boostBips) view returns (address)",
     "function isPool(address) view returns (bool)"
@@ -113,7 +113,6 @@ const factoryABI = [
 // ============================================================================
 // HELPERS
 // ============================================================================
-
 function buildImageUrl(ipfsIoUrl) {
     if (!ipfsIoUrl) return './assets/bkc_logo_3d.png';
     if (ipfsIoUrl.startsWith('https://') || ipfsIoUrl.startsWith('http://')) return ipfsIoUrl;
@@ -122,16 +121,57 @@ function buildImageUrl(ipfsIoUrl) {
     return ipfsIoUrl;
 }
 
+function formatDate(timestamp) {
+    if (!timestamp) return '';
+    try {
+        const secs = timestamp.seconds || timestamp._seconds || (new Date(timestamp).getTime() / 1000);
+        const date = new Date(secs * 1000);
+        return date.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+    } catch (e) { return ''; }
+}
+
 // ============================================================================
 // INJECT STYLES
 // ============================================================================
-
 function injectStyles() {
-    if (document.getElementById('swap-styles')) return;
+    if (document.getElementById('swap-styles-v8')) return;
     
     const style = document.createElement('style');
-    style.id = 'swap-styles';
+    style.id = 'swap-styles-v8';
     style.textContent = `
+        /* Trade Image Animations */
+        @keyframes trade-float {
+            0%, 100% { transform: translateY(0) rotate(-1deg); }
+            50% { transform: translateY(-8px) rotate(1deg); }
+        }
+        @keyframes trade-pulse {
+            0%, 100% { filter: drop-shadow(0 0 15px rgba(34,197,94,0.3)); }
+            50% { filter: drop-shadow(0 0 30px rgba(34,197,94,0.6)); }
+        }
+        @keyframes trade-buy {
+            0%, 100% { filter: drop-shadow(0 0 20px rgba(34,197,94,0.4)); transform: scale(1); }
+            50% { filter: drop-shadow(0 0 40px rgba(34,197,94,0.7)); transform: scale(1.05); }
+        }
+        @keyframes trade-sell {
+            0%, 100% { filter: drop-shadow(0 0 20px rgba(239,68,68,0.4)); transform: scale(1); }
+            50% { filter: drop-shadow(0 0 40px rgba(239,68,68,0.7)); transform: scale(1.05); }
+        }
+        @keyframes trade-spin {
+            0% { transform: rotateY(0deg); }
+            100% { transform: rotateY(360deg); }
+        }
+        @keyframes trade-success {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.2); filter: drop-shadow(0 0 50px rgba(34,197,94,0.9)); }
+            100% { transform: scale(1); }
+        }
+        .trade-float { animation: trade-float 4s ease-in-out infinite; }
+        .trade-pulse { animation: trade-pulse 2s ease-in-out infinite; }
+        .trade-buy { animation: trade-buy 2s ease-in-out infinite; }
+        .trade-sell { animation: trade-sell 2s ease-in-out infinite; }
+        .trade-spin { animation: trade-spin 1.5s ease-in-out; }
+        .trade-success { animation: trade-success 0.8s ease-out; }
+        
         .swap-container {
             font-family: 'Inter', -apple-system, sans-serif;
         }
@@ -211,6 +251,11 @@ function injectStyles() {
             border-color: rgba(245,158,11,0.5);
         }
         
+        .history-item:hover {
+            background: rgba(63,63,70,0.5) !important;
+            transform: translateX(4px);
+        }
+        
         @keyframes shimmer {
             0% { background-position: -200% 0; }
             100% { background-position: 200% 0; }
@@ -231,7 +276,6 @@ function injectStyles() {
             to { opacity: 1; transform: translateY(0); }
         }
         
-        /* Custom scrollbar */
         .custom-scroll::-webkit-scrollbar {
             width: 4px;
             height: 4px;
@@ -250,15 +294,14 @@ function injectStyles() {
 // ============================================================================
 // LOADING STATES
 // ============================================================================
-
 function renderLoading() {
     return `
         <div class="flex flex-col items-center justify-center py-12">
-            <div class="relative w-12 h-12">
+            <div class="relative w-16 h-16">
                 <div class="absolute inset-0 rounded-full border-2 border-zinc-700"></div>
-                <div class="absolute inset-0 rounded-full border-2 border-transparent border-t-amber-500 animate-spin"></div>
-                <div class="absolute inset-2 rounded-full bg-zinc-800 flex items-center justify-center">
-                    <img src="./assets/bkc_logo_3d.png" class="w-5 h-5" alt="">
+                <div class="absolute inset-0 rounded-full border-2 border-transparent border-t-green-500 animate-spin"></div>
+                <div class="absolute inset-2 rounded-full bg-zinc-800 flex items-center justify-center overflow-hidden">
+                    <img src="${TRADE_IMAGE}" class="w-10 h-10 object-contain" alt="" onerror="this.src='./assets/bkc_logo_3d.png'">
                 </div>
             </div>
             <p class="text-zinc-500 text-xs mt-4">Loading pool...</p>
@@ -269,7 +312,6 @@ function renderLoading() {
 // ============================================================================
 // MAIN RENDER
 // ============================================================================
-
 export const StorePage = {
     async render(isNewPage) {
         injectStyles();
@@ -282,11 +324,18 @@ export const StorePage = {
             container.innerHTML = `
                 <div class="swap-container max-w-lg mx-auto py-6 px-4">
                     
-                    <!-- Header -->
+                    <!-- Header with Animated Trade Image -->
                     <div class="flex justify-between items-center mb-6">
-                        <div>
-                            <h1 class="text-lg font-semibold text-white">Swap</h1>
-                            <p class="text-xs text-zinc-500">Trade Booster NFTs</p>
+                        <div class="flex items-center gap-3">
+                            <img src="${TRADE_IMAGE}" 
+                                 alt="Trade" 
+                                 class="w-14 h-14 object-contain trade-float trade-pulse"
+                                 id="trade-mascot"
+                                 onerror="this.style.display='none'">
+                            <div>
+                                <h1 class="text-lg font-semibold text-white">📈 NFT Swap</h1>
+                                <p class="text-xs text-zinc-500">Trade Booster NFTs</p>
+                            </div>
                         </div>
                         <button id="refresh-btn" class="w-8 h-8 rounded-lg bg-zinc-800/50 hover:bg-zinc-700 flex items-center justify-center text-zinc-400 hover:text-white transition-colors">
                             <i class="fa-solid fa-rotate text-xs"></i>
@@ -311,7 +360,7 @@ export const StorePage = {
                     </div>
                     
                     <!-- My NFTs (Collapsible) -->
-                    <div class="swap-card rounded-2xl overflow-hidden">
+                    <div class="swap-card rounded-2xl overflow-hidden mb-4">
                         <button id="inventory-toggle" class="w-full flex justify-between items-center p-4 hover:bg-zinc-800/30 transition-colors">
                             <div class="flex items-center gap-2">
                                 <i class="fa-solid fa-wallet text-amber-500 text-sm"></i>
@@ -327,18 +376,34 @@ export const StorePage = {
                         </div>
                     </div>
                     
+                    <!-- Trade History (Collapsible) -->
+                    <div class="swap-card rounded-2xl overflow-hidden">
+                        <button id="history-toggle" class="w-full flex justify-between items-center p-4 hover:bg-zinc-800/30 transition-colors">
+                            <div class="flex items-center gap-2">
+                                <i class="fa-solid fa-clock-rotate-left text-green-500 text-sm"></i>
+                                <span class="text-sm font-medium text-white">Trade History</span>
+                            </div>
+                            <i id="history-chevron" class="fa-solid fa-chevron-down text-zinc-500 text-xs transition-transform"></i>
+                        </button>
+                        <div id="history-panel" class="hidden border-t border-zinc-800">
+                            <div id="history-list" class="p-4 space-y-2 max-h-[250px] overflow-y-auto custom-scroll">
+                                <div class="text-center py-4 text-xs text-zinc-600">Loading history...</div>
+                            </div>
+                        </div>
+                    </div>
+                    
                 </div>
             `;
 
             setupEventListeners();
         }
 
-        // Initialize with first tier if none selected
         if (TradeState.selectedPoolBoostBips === null && boosterTiers.length > 0) {
             TradeState.selectedPoolBoostBips = boosterTiers[0].boostBips;
         }
 
         await loadDataForSelectedPool();
+        loadTradeHistory();
     },
 
     async update() {
@@ -352,9 +417,102 @@ export const StorePage = {
 };
 
 // ============================================================================
+// TRADE HISTORY
+// ============================================================================
+async function loadTradeHistory() {
+    if (!State.userAddress) return;
+    
+    try {
+        const endpoint = API_ENDPOINTS.getHistory || 'https://gethistory-4wvdcuoouq-uc.a.run.app';
+        const response = await fetch(`${endpoint}/${State.userAddress}`);
+        if (response.ok) {
+            const data = await response.json();
+            TradeState.tradeHistory = (data || []).filter(item => {
+                const t = (item.type || '').toUpperCase();
+                return t.includes('BUY') || t.includes('SELL') || t.includes('SWAP') || t.includes('NFT_POOL');
+            });
+            renderTradeHistory();
+        }
+    } catch (e) {
+        console.error('History load error:', e);
+    }
+}
+
+function renderTradeHistory() {
+    const container = document.getElementById('history-list');
+    if (!container) return;
+
+    if (!State.isConnected) {
+        container.innerHTML = `<div class="text-center py-4 text-xs text-zinc-600">Connect wallet to view history</div>`;
+        return;
+    }
+
+    if (TradeState.tradeHistory.length === 0) {
+        container.innerHTML = `
+            <div class="text-center py-6">
+                <img src="${TRADE_IMAGE}" class="w-12 h-12 mx-auto opacity-20 mb-2" onerror="this.style.display='none'">
+                <p class="text-zinc-600 text-xs">No trade history yet</p>
+            </div>
+        `;
+        return;
+    }
+
+    container.innerHTML = TradeState.tradeHistory.slice(0, 15).map(item => {
+        const t = (item.type || '').toUpperCase();
+        const details = item.details || {};
+        const dateStr = formatDate(item.timestamp || item.createdAt);
+        
+        let icon, iconColor, bgColor, label;
+        
+        if (t.includes('BUY')) {
+            icon = 'fa-arrow-down';
+            iconColor = '#22c55e';
+            bgColor = 'rgba(34,197,94,0.15)';
+            label = '🟢 Bought NFT';
+        } else if (t.includes('SELL')) {
+            icon = 'fa-arrow-up';
+            iconColor = '#ef4444';
+            bgColor = 'rgba(239,68,68,0.15)';
+            label = '🔴 Sold NFT';
+        } else {
+            icon = 'fa-exchange-alt';
+            iconColor = '#f59e0b';
+            bgColor = 'rgba(245,158,11,0.15)';
+            label = '🔄 Trade';
+        }
+
+        const txLink = item.txHash ? `${EXPLORER_TX}${item.txHash}` : '#';
+        let rawAmount = item.amount || details.amount || details.price || "0";
+        const amountNum = formatBigNumber(BigInt(rawAmount));
+        const amountDisplay = amountNum > 0.001 ? amountNum.toFixed(2) : '';
+        const tokenId = details.tokenId || '';
+
+        return `
+            <a href="${txLink}" target="_blank" class="history-item flex items-center justify-between p-3 hover:bg-zinc-800/60 border border-zinc-700/30 rounded-lg transition-all group bg-zinc-800/20">
+                <div class="flex items-center gap-3">
+                    <div class="w-8 h-8 rounded-lg flex items-center justify-center border border-zinc-700/30" style="background: ${bgColor}">
+                        <i class="fa-solid ${icon} text-sm" style="color: ${iconColor}"></i>
+                    </div>
+                    <div>
+                        <p class="text-white text-xs font-medium">
+                            ${label}
+                            ${tokenId ? `<span class="ml-1 text-[10px] text-amber-400 font-mono">#${tokenId}</span>` : ''}
+                        </p>
+                        <p class="text-zinc-600 text-[10px]">${dateStr}</p>
+                    </div>
+                </div>
+                <div class="flex items-center gap-2">
+                    ${amountDisplay ? `<span class="text-xs font-mono font-bold ${t.includes('BUY') ? 'text-red-400' : 'text-green-400'}">${t.includes('BUY') ? '-' : '+'}${amountDisplay} <span class="text-zinc-500">BKC</span></span>` : ''}
+                    <i class="fa-solid fa-arrow-up-right-from-square text-zinc-600 group-hover:text-blue-400 text-[9px]"></i>
+                </div>
+            </a>
+        `;
+    }).join('');
+}
+
+// ============================================================================
 // TIER CHIPS
 // ============================================================================
-
 function renderTierChips() {
     return boosterTiers.map((tier, idx) => {
         const style = getTierStyle(tier.name);
@@ -393,7 +551,6 @@ function updateTierSelection(boostBips) {
 // ============================================================================
 // SWAP INTERFACE
 // ============================================================================
-
 function renderSwapInterface() {
     const el = document.getElementById('swap-interface');
     if (!el) return;
@@ -401,6 +558,9 @@ function renderSwapInterface() {
     const tier = boosterTiers.find(t => t.boostBips === TradeState.selectedPoolBoostBips);
     const style = getTierStyle(tier?.name);
     const isBuy = TradeState.tradeDirection === 'buy';
+    
+    // Update mascot animation based on trade direction
+    updateMascotAnimation(isBuy);
     
     const price = isBuy ? TradeState.buyPrice : TradeState.netSellPrice;
     const priceFormatted = formatBigNumber(price).toFixed(2);
@@ -479,6 +639,19 @@ function renderSwapInterface() {
     `;
 }
 
+function updateMascotAnimation(isBuy) {
+    const mascot = document.getElementById('trade-mascot');
+    if (!mascot) return;
+    
+    mascot.className = 'w-14 h-14 object-contain';
+    
+    if (isBuy) {
+        mascot.classList.add('trade-buy');
+    } else {
+        mascot.classList.add('trade-sell');
+    }
+}
+
 function renderExecuteButton() {
     let text = "Select a Tier";
     let icon = "fa-question";
@@ -504,7 +677,7 @@ function renderExecuteButton() {
                 text = "Sold Out"; icon = "fa-box-open"; 
             } else { 
                 text = "Buy NFT"; 
-                icon = "fa-arrow-right"; 
+                icon = "fa-arrow-down"; 
                 enabled = true; 
                 btnClass = "bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-400 hover:to-emerald-500 text-white";
             }
@@ -517,7 +690,7 @@ function renderExecuteButton() {
                 text = "Loading..."; icon = "fa-spinner fa-spin"; 
             } else { 
                 text = "Sell NFT"; 
-                icon = "fa-arrow-right"; 
+                icon = "fa-arrow-up"; 
                 enabled = true; 
                 btnClass = "bg-gradient-to-r from-rose-500 to-red-600 hover:from-rose-400 hover:to-red-500 text-white";
             }
@@ -538,7 +711,6 @@ function renderExecuteButton() {
 // ============================================================================
 // INVENTORY
 // ============================================================================
-
 function renderInventory() {
     const grid = document.getElementById('inventory-grid');
     const countEl = document.getElementById('nft-count');
@@ -590,7 +762,6 @@ function renderInventory() {
 // ============================================================================
 // DATA LOADING
 // ============================================================================
-
 async function loadDataForSelectedPool() {
     const now = Date.now();
     if (now - TradeState.lastFetchTimestamp < 2000 && TradeState.isDataLoading) return;
@@ -608,7 +779,6 @@ async function loadDataForSelectedPool() {
         
         if (!tier) throw new Error("Invalid tier selected.");
         
-        // Get pool address
         let poolAddress = poolAddressCache.get(boostBips);
         
         if (!poolAddress) {
@@ -632,7 +802,6 @@ async function loadDataForSelectedPool() {
         const poolContract = new ethers.Contract(poolAddress, nftPoolABI, State.publicProvider);
         const boosterContract = State.rewardBoosterContract || State.rewardBoosterContractPublic;
 
-        // Load user data
         if (State.isConnected) {
             await Promise.all([loadUserData(), loadMyBoostersFromAPI()]);
             const { highestBoost, tokenId } = await getHighestBoosterBoostFromAPI();
@@ -662,7 +831,6 @@ async function loadDataForSelectedPool() {
             }
         }
 
-        // Load pool data
         let buyPrice = ethers.MaxUint256;
         let sellPrice = 0n;
         let availableTokenIds = [];
@@ -725,7 +893,6 @@ async function loadDataForSelectedPool() {
 // ============================================================================
 // EVENT LISTENERS
 // ============================================================================
-
 function setupEventListeners() {
     const container = document.getElementById('store');
     if (!container) return;
@@ -737,6 +904,7 @@ function setupEventListeners() {
             const icon = btn.querySelector('i');
             icon.classList.add('fa-spin');
             await loadDataForSelectedPool();
+            loadTradeHistory();
             icon.classList.remove('fa-spin');
             return;
         }
@@ -771,6 +939,17 @@ function setupEventListeners() {
             return;
         }
 
+        // History toggle
+        if (e.target.closest('#history-toggle')) {
+            const panel = document.getElementById('history-panel');
+            const chevron = document.getElementById('history-chevron');
+            if (panel && chevron) {
+                panel.classList.toggle('hidden');
+                chevron.style.transform = panel.classList.contains('hidden') ? '' : 'rotate(180deg)';
+            }
+            return;
+        }
+
         // Inventory item click
         const invItem = e.target.closest('.inventory-item');
         if (invItem) {
@@ -788,11 +967,10 @@ function setupEventListeners() {
             e.preventDefault();
             e.stopPropagation();
             
-            if (isTransactionInProgress || executeBtn.disabled) {
-                return;
-            }
+            if (isTransactionInProgress || executeBtn.disabled) return;
             
             const action = executeBtn.dataset.action;
+            const mascot = document.getElementById('trade-mascot');
 
             if (action === "connect") {
                 window.openConnectModal();
@@ -814,25 +992,40 @@ function setupEventListeners() {
             executeBtn.disabled = true;
             const originalHTML = executeBtn.innerHTML;
             executeBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Processing...';
+            
+            // Animate mascot
+            if (mascot) mascot.className = 'w-14 h-14 object-contain trade-spin';
 
             try {
                 if (TradeState.tradeDirection === 'buy') {
                     const success = await executeBuyBooster(poolAddress, TradeState.buyPrice, TradeState.bestBoosterTokenId, executeBtn);
                     if (success) {
-                        showToast("NFT Purchased!", "success");
+                        if (mascot) mascot.className = 'w-14 h-14 object-contain trade-success';
+                        showToast("🟢 NFT Purchased!", "success");
                         await loadDataForSelectedPool();
+                        loadTradeHistory();
                     }
                 } else {
                     const success = await executeSellBooster(poolAddress, TradeState.firstAvailableTokenId, TradeState.bestBoosterTokenId, executeBtn);
                     if (success) {
-                        showToast("NFT Sold!", "success");
+                        if (mascot) mascot.className = 'w-14 h-14 object-contain trade-success';
+                        showToast("🔴 NFT Sold!", "success");
                         await loadDataForSelectedPool();
+                        loadTradeHistory();
                     }
                 }
             } finally {
                 isTransactionInProgress = false;
                 executeBtn.disabled = false;
                 executeBtn.innerHTML = originalHTML;
+                
+                // Reset mascot animation
+                if (mascot) {
+                    setTimeout(() => {
+                        const isBuy = TradeState.tradeDirection === 'buy';
+                        mascot.className = `w-14 h-14 object-contain ${isBuy ? 'trade-buy' : 'trade-sell'}`;
+                    }, 800);
+                }
             }
         }
     });

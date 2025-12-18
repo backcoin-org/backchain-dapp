@@ -1,5 +1,5 @@
 // pages/RewardsPage.js
-// ✅ VERSION V9.5: Fixed claim button onclick
+// ✅ PRODUCTION V10.0 - Animated Reward Image + Detailed History + Consistent Icons
 
 const ethers = window.ethers;
 
@@ -15,31 +15,95 @@ import { executeUniversalClaim } from '../modules/transactions.js';
 import { formatBigNumber } from '../utils.js';
 import { showToast } from '../ui-feedback.js';
 
-// --- LOCAL STATE ---
+// ============================================================================
+// CONSTANTS
+// ============================================================================
+const REWARD_IMAGE = './assets/reward.png';
+const EXPLORER_TX = 'https://sepolia.arbiscan.io/tx/';
+
+// ============================================================================
+// LOCAL STATE
+// ============================================================================
 let lastFetch = 0;
 let isLoading = false;
 let isProcessing = false;
 let claimHistory = [];
-
-// 🔥 V9.5: Store claim params globally for onclick
 let _claimParams = { stakingRewards: 0n, minerRewards: 0n, boosterTokenId: 0n };
 
-// 🔥 V9.5: Global claim handler for inline onclick
+// Global claim handler
 window.handleRewardsClaim = async function() {
     if (isProcessing) return;
-    console.log('🎁 Claim clicked with params:', _claimParams);
     await handleClaim(_claimParams.stakingRewards, _claimParams.minerRewards, _claimParams.boosterTokenId);
 };
 
-// --- CONSTANTS ---
-const EXPLORER_TX = 'https://sepolia.arbiscan.io/tx/';
+// ============================================================================
+// STYLES INJECTION
+// ============================================================================
+function injectStyles() {
+    if (document.getElementById('reward-styles-v10')) return;
+    
+    const style = document.createElement('style');
+    style.id = 'reward-styles-v10';
+    style.textContent = `
+        /* Reward Image Animations */
+        @keyframes reward-float {
+            0%, 100% { transform: translateY(0) rotate(-2deg); }
+            50% { transform: translateY(-10px) rotate(2deg); }
+        }
+        @keyframes reward-pulse {
+            0%, 100% { filter: drop-shadow(0 0 15px rgba(245,158,11,0.4)); }
+            50% { filter: drop-shadow(0 0 35px rgba(245,158,11,0.8)); }
+        }
+        @keyframes reward-spin {
+            0% { transform: rotateY(0deg); }
+            100% { transform: rotateY(360deg); }
+        }
+        @keyframes reward-bounce {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.1); }
+        }
+        @keyframes reward-success {
+            0% { transform: scale(1) rotate(0deg); }
+            25% { transform: scale(1.2) rotate(-10deg); }
+            50% { transform: scale(1.3) rotate(10deg); filter: drop-shadow(0 0 50px rgba(34,197,94,1)); }
+            75% { transform: scale(1.1) rotate(-5deg); }
+            100% { transform: scale(1) rotate(0deg); }
+        }
+        @keyframes reward-coins {
+            0% { transform: translateY(0) rotate(0deg); opacity: 1; }
+            100% { transform: translateY(-30px) rotate(360deg); opacity: 0; }
+        }
+        .reward-float { animation: reward-float 3s ease-in-out infinite; }
+        .reward-pulse { animation: reward-pulse 2s ease-in-out infinite; }
+        .reward-spin { animation: reward-spin 1.5s ease-in-out; }
+        .reward-bounce { animation: reward-bounce 1s ease-in-out infinite; }
+        .reward-success { animation: reward-success 1s ease-out; }
+        
+        .history-item:hover {
+            background: rgba(63,63,70,0.5) !important;
+            transform: translateX(4px);
+        }
+        
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 4px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: rgba(39,39,42,0.3);
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: rgba(113,113,122,0.5);
+            border-radius: 2px;
+        }
+    `;
+    document.head.appendChild(style);
+}
 
 // ============================================================================
 // MAIN EXPORT
 // ============================================================================
-
 export const RewardsPage = {
     async render(isNewPage) {
+        injectStyles();
         const container = document.getElementById('rewards');
         if (!container) return;
 
@@ -66,22 +130,22 @@ export const RewardsPage = {
         if (!force && (now - lastFetch < 60000)) return;
 
         isLoading = true;
+        updateMascotAnimation('loading');
 
         try {
             let boosterData = { highestBoost: 0, boostName: 'None', tokenId: null, source: 'none' };
             let claimDetails = { netClaimAmount: 0n, feeAmount: 0n, totalRewards: 0n };
             let grossRewards = { stakingRewards: 0n, minerRewards: 0n };
 
-            try { await loadUserData(); } catch (e) { console.warn('loadUserData failed:', e.message); }
-            try { boosterData = await getHighestBoosterBoostFromAPI() || boosterData; } catch (e) { console.warn('booster failed:', e.message); }
-            try { claimDetails = await calculateClaimDetails() || claimDetails; } catch (e) { console.warn('claimDetails failed:', e.message); }
-            try { grossRewards = await calculateUserTotalRewards() || grossRewards; } catch (e) { console.warn('rewards failed:', e.message); }
-            
-            // Load claim history
-            try { await loadClaimHistory(); } catch (e) { console.warn('history failed:', e.message); }
+            try { await loadUserData(); } catch (e) {}
+            try { boosterData = await getHighestBoosterBoostFromAPI() || boosterData; } catch (e) {}
+            try { claimDetails = await calculateClaimDetails() || claimDetails; } catch (e) {}
+            try { grossRewards = await calculateUserTotalRewards() || grossRewards; } catch (e) {}
+            try { await loadClaimHistory(); } catch (e) {}
 
             renderContent(claimDetails, grossRewards, boosterData);
             lastFetch = now;
+            updateMascotAnimation('idle');
 
         } catch (e) {
             console.error("Rewards Error:", e);
@@ -92,9 +156,32 @@ export const RewardsPage = {
 };
 
 // ============================================================================
+// MASCOT ANIMATION
+// ============================================================================
+function updateMascotAnimation(state) {
+    const mascot = document.getElementById('reward-mascot');
+    if (!mascot) return;
+    
+    mascot.className = 'w-12 h-12 object-contain';
+    
+    switch (state) {
+        case 'loading':
+            mascot.classList.add('reward-spin');
+            break;
+        case 'claiming':
+            mascot.classList.add('reward-bounce');
+            break;
+        case 'success':
+            mascot.classList.add('reward-success');
+            break;
+        default:
+            mascot.classList.add('reward-float', 'reward-pulse');
+    }
+}
+
+// ============================================================================
 // CLAIM HISTORY
 // ============================================================================
-
 async function loadClaimHistory() {
     if (!State.userAddress) return;
     
@@ -102,14 +189,12 @@ async function loadClaimHistory() {
         const response = await fetch(`${API_ENDPOINTS.getHistory}/${State.userAddress}`);
         if (response.ok) {
             const allHistory = await response.json();
-            // Filter only claim/reward events
             claimHistory = allHistory.filter(item => {
                 const type = (item.type || '').toUpperCase();
                 return type.includes('REWARD') || type.includes('CLAIM');
-            }).slice(0, 10); // Last 10 claims
+            }).slice(0, 15);
         }
     } catch (e) {
-        console.warn('Failed to load claim history:', e.message);
         claimHistory = [];
     }
 }
@@ -118,10 +203,9 @@ function renderClaimHistory() {
     if (claimHistory.length === 0) {
         return `
             <div class="text-center py-6">
-                <div class="w-10 h-10 bg-zinc-800 rounded-full flex items-center justify-center mx-auto mb-2">
-                    <i class="fa-solid fa-clock-rotate-left text-zinc-600"></i>
-                </div>
+                <img src="${REWARD_IMAGE}" class="w-12 h-12 mx-auto opacity-20 mb-2" onerror="this.style.display='none'">
                 <p class="text-zinc-500 text-xs">No claims yet</p>
+                <p class="text-zinc-600 text-[10px] mt-1">Your claim history will appear here</p>
             </div>
         `;
     }
@@ -131,16 +215,44 @@ function renderClaimHistory() {
         const amount = formatHistoryAmount(item.amount || item.details?.amount || 0);
         const txHash = item.txHash || '';
         const txLink = txHash ? `${EXPLORER_TX}${txHash}` : '#';
+        const details = item.details || {};
+        
+        // Determine claim type
+        let icon, iconColor, bgColor, label, extraInfo = '';
+        const type = (item.type || '').toUpperCase();
+        
+        if (type.includes('STAKING') || details.stakingAmount) {
+            icon = 'fa-lock';
+            iconColor = '#a855f7';
+            bgColor = 'rgba(168,85,247,0.15)';
+            label = '🔒 Staking Reward';
+        } else if (type.includes('MINING') || type.includes('MINER') || details.minerAmount) {
+            icon = 'fa-hammer';
+            iconColor = '#f97316';
+            bgColor = 'rgba(249,115,22,0.15)';
+            label = '⛏️ Mining Reward';
+        } else {
+            icon = 'fa-coins';
+            iconColor = '#22c55e';
+            bgColor = 'rgba(34,197,94,0.15)';
+            label = '🎁 Claimed';
+        }
+        
+        // Show fee info if available
+        if (details.feeAmount || details.feePaid) {
+            const feeNum = formatHistoryAmount(details.feeAmount || details.feePaid);
+            extraInfo = `<span class="ml-2 text-[10px] text-zinc-500">Fee: ${feeNum}</span>`;
+        }
 
         return `
             <a href="${txLink}" target="_blank" rel="noopener" 
-               class="flex items-center justify-between p-2.5 bg-zinc-800/30 hover:bg-zinc-800/50 rounded-lg transition-colors group">
+               class="history-item flex items-center justify-between p-2.5 bg-zinc-800/30 hover:bg-zinc-800/50 rounded-lg transition-all group">
                 <div class="flex items-center gap-2.5">
-                    <div class="w-8 h-8 rounded-lg bg-green-500/15 flex items-center justify-center">
-                        <i class="fa-solid fa-gift text-green-400 text-xs"></i>
+                    <div class="w-8 h-8 rounded-lg flex items-center justify-center" style="background: ${bgColor}">
+                        <i class="fa-solid ${icon} text-xs" style="color: ${iconColor}"></i>
                     </div>
                     <div>
-                        <p class="text-sm text-white font-medium">Claimed</p>
+                        <p class="text-sm text-white font-medium">${label}${extraInfo}</p>
                         <p class="text-[10px] text-zinc-500">${date}</p>
                     </div>
                 </div>
@@ -180,22 +292,26 @@ function formatHistoryAmount(amount) {
 // ============================================================================
 // PAGE STRUCTURE
 // ============================================================================
-
 function getPageHTML() {
     return `
         <div class="max-w-lg mx-auto px-4 py-4 pb-24">
             <div class="flex items-center justify-between mb-4">
                 <div class="flex items-center gap-3">
-                    <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-500/20 to-orange-500/10 flex items-center justify-center">
+                    <img src="${REWARD_IMAGE}" 
+                         alt="Rewards" 
+                         class="w-12 h-12 object-contain reward-float reward-pulse"
+                         id="reward-mascot"
+                         onerror="this.style.display='none'; document.getElementById('reward-fallback').style.display='flex';">
+                    <div id="reward-fallback" class="hidden w-10 h-10 rounded-xl bg-gradient-to-br from-amber-500/20 to-orange-500/10 items-center justify-center">
                         <i class="fa-solid fa-coins text-amber-400"></i>
                     </div>
                     <div>
-                        <h1 class="text-lg font-bold text-white">Rewards</h1>
+                        <h1 class="text-lg font-bold text-white">🎁 Rewards</h1>
                         <p class="text-[10px] text-zinc-500">Claim your earnings</p>
                     </div>
                 </div>
                 <button id="rewards-refresh" onclick="window.RewardsPage.update(true)" class="w-8 h-8 rounded-lg bg-zinc-800/50 flex items-center justify-center text-zinc-500 hover:text-white transition-colors">
-                    <i class="fa-solid fa-arrows-rotate text-xs"></i>
+                    <i class="fa-solid fa-rotate text-xs"></i>
                 </button>
             </div>
             <div id="rewards-content"></div>
@@ -209,14 +325,12 @@ function renderNotConnected() {
 
     container.innerHTML = `
         <div class="flex flex-col items-center justify-center py-12 bg-zinc-900/50 border border-zinc-800 rounded-2xl">
-            <div class="w-16 h-16 bg-zinc-800 rounded-full flex items-center justify-center mb-4">
-                <i class="fa-solid fa-wallet text-2xl text-zinc-600"></i>
-            </div>
+            <img src="${REWARD_IMAGE}" class="w-16 h-16 opacity-30 mb-4" onerror="this.style.display='none'">
             <p class="text-zinc-400 font-medium mb-1">Wallet not connected</p>
             <p class="text-zinc-600 text-sm mb-4">Connect to view your rewards</p>
             <button onclick="window.openConnectModal()" 
                 class="px-6 py-2.5 bg-gradient-to-r from-amber-500 to-orange-500 text-black font-bold text-sm rounded-xl">
-                <i class="fa-solid fa-plug mr-2"></i>Connect Wallet
+                <i class="fa-solid fa-wallet mr-2"></i>Connect Wallet
             </button>
         </div>
     `;
@@ -233,7 +347,6 @@ function renderContentImmediate() {
 // ============================================================================
 // MAIN CONTENT
 // ============================================================================
-
 function renderContent(claimDetails, grossRewards, boosterData) {
     const container = document.getElementById('rewards-content');
     if (!container) return;
@@ -258,9 +371,7 @@ function renderContent(claimDetails, grossRewards, boosterData) {
     const hasBooster = highestBoost > 0;
     const boosterTokenId = BigInt(booster.tokenId || 0);
     
-    // 🔥 V9.5: Update global claim params for onclick
     _claimParams = { stakingRewards, minerRewards, boosterTokenId };
-    console.log('📊 Claim params updated:', { hasRewards, stakingRewards: stakingRewards.toString(), minerRewards: minerRewards.toString(), boosterTokenId: boosterTokenId.toString() });
     
     let netRewardNum = 0, totalGrossNum = 0, feeAmountNum = 0, stakingNum = 0, miningNum = 0;
     try {
@@ -269,7 +380,7 @@ function renderContent(claimDetails, grossRewards, boosterData) {
         feeAmountNum = formatBigNumber ? formatBigNumber(feeAmount) : Number(feeAmount) / 1e18;
         stakingNum = formatBigNumber ? formatBigNumber(stakingRewards) : Number(stakingRewards) / 1e18;
         miningNum = formatBigNumber ? formatBigNumber(minerRewards) : Number(minerRewards) / 1e18;
-    } catch (e) { console.warn('Format error:', e); }
+    } catch (e) {}
 
     const circumference = 2 * Math.PI * 45;
     const strokeDashoffset = circumference - (keepPercent / 100) * circumference;
@@ -361,7 +472,7 @@ function renderContent(claimDetails, grossRewards, boosterData) {
                             <p class="text-sm text-zinc-400 mb-3">Get a Booster to keep up to <span class="text-green-400 font-bold">85%</span></p>
                             <div class="flex gap-2">
                                 <button onclick="window.navigateTo('store')" class="flex-1 py-2.5 text-xs font-bold bg-gradient-to-r from-amber-500 to-orange-500 text-black rounded-lg"><i class="fa-solid fa-gem mr-1"></i> Buy</button>
-                                <button onclick="window.navigateTo('rental')" class="flex-1 py-2.5 text-xs font-bold bg-zinc-800 text-white rounded-lg"><i class="fa-solid fa-handshake mr-1"></i> Rent</button>
+                                <button onclick="window.navigateTo('rental')" class="flex-1 py-2.5 text-xs font-bold bg-zinc-800 text-white rounded-lg"><i class="fa-solid fa-clock mr-1"></i> Rent</button>
                             </div>
                         </div>
                     `}
@@ -374,20 +485,17 @@ function renderContent(claimDetails, grossRewards, boosterData) {
                     <p class="text-[10px] text-zinc-500 uppercase"><i class="fa-solid fa-clock-rotate-left mr-1"></i> Claim History</p>
                     <span class="text-[10px] text-zinc-600">${claimHistory.length} claims</span>
                 </div>
-                <div class="p-3 space-y-2 max-h-[250px] overflow-y-auto custom-scrollbar">
+                <div class="p-3 space-y-2 max-h-[300px] overflow-y-auto custom-scrollbar">
                     ${renderClaimHistory()}
                 </div>
             </div>
         </div>
     `;
-    
-    // 🔥 V9.5: onclick is now inline in HTML, no need for manual assignment
 }
 
 // ============================================================================
 // CLAIM HANDLER
 // ============================================================================
-
 async function handleClaim(stakingRewards, minerRewards, boosterTokenId) {
     if (isProcessing) return;
     const btn = document.getElementById('claim-btn');
@@ -400,21 +508,23 @@ async function handleClaim(stakingRewards, minerRewards, boosterTokenId) {
     btn.className = 'w-full py-4 rounded-xl font-bold text-base flex items-center justify-center gap-2 bg-zinc-700 text-zinc-400';
     btnText.textContent = 'Processing...';
     btnIcon.className = 'fa-solid fa-spinner fa-spin';
+    
+    updateMascotAnimation('claiming');
 
     try {
         const success = await executeUniversalClaim(stakingRewards, minerRewards, boosterTokenId, null);
         if (success) {
+            updateMascotAnimation('success');
             btn.className = 'w-full py-4 rounded-xl font-bold text-base flex items-center justify-center gap-2 bg-green-500 text-white';
-            btnText.textContent = '✓ Claimed!';
+            btnText.textContent = '🎉 Claimed!';
             btnIcon.className = 'fa-solid fa-check';
-            showToast('🎉 Rewards claimed!', 'success');
+            showToast('🎁 Rewards claimed successfully!', 'success');
             
-            // Refresh after short delay
             setTimeout(() => { 
                 lastFetch = 0; 
-                claimHistory = []; // Clear cache to force reload
+                claimHistory = [];
                 RewardsPage.update(true); 
-            }, 2000);
+            }, 2500);
         }
     } catch (e) {
         console.error('Claim error:', e);
@@ -423,6 +533,7 @@ async function handleClaim(stakingRewards, minerRewards, boosterTokenId) {
         btn.className = 'w-full py-4 rounded-xl font-bold text-base flex items-center justify-center gap-2 bg-gradient-to-r from-amber-500 to-orange-500 text-black shadow-lg shadow-amber-500/25';
         btnText.textContent = 'Claim Rewards';
         btnIcon.className = 'fa-solid fa-coins';
+        updateMascotAnimation('idle');
     } finally {
         isProcessing = false;
     }

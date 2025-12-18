@@ -1,5 +1,5 @@
 // pages/NetworkStakingPage.js
-// ✅ VERSION V2.2: Fixed timer flicker (update every minute), removed pulse animation
+// ✅ PRODUCTION V3.0 - Animated Stake Image + Detailed History + Consistent Icons
 
 const ethers = window.ethers;
 
@@ -14,7 +14,8 @@ import {
     loadUserData, 
     calculateUserTotalRewards,
     loadUserDelegations,
-    getHighestBoosterBoostFromAPI
+    getHighestBoosterBoostFromAPI,
+    API_ENDPOINTS
 } from '../modules/data.js';
 import { 
     executeDelegation, 
@@ -25,6 +26,12 @@ import {
 import { showToast } from '../ui-feedback.js';
 
 // ============================================================================
+// CONSTANTS
+// ============================================================================
+const STAKE_IMAGE = "./assets/stake.png";
+const EXPLORER_TX = "https://sepolia.arbiscan.io/tx/";
+
+// ============================================================================
 // LOCAL STATE
 // ============================================================================
 let isLoading = false;
@@ -32,7 +39,8 @@ let lastFetch = 0;
 let currentPage = 1;
 let lockDays = 3650; // Default: 10 Years
 let highestBoosterTokenId = 0n;
-let isProcessing = false; // Track if a transaction is in progress
+let isProcessing = false;
+let stakingHistory = [];
 
 // ============================================================================
 // HELPERS
@@ -43,17 +51,13 @@ function formatTimeRemaining(seconds) {
     const h = Math.floor((seconds % 86400) / 3600);
     const m = Math.floor((seconds % 3600) / 60);
     
-    // Years format for very long durations
     if (d > 365) {
         const years = Math.floor(d / 365);
         const remainingDays = d % 365;
         return `${years}y : ${remainingDays}d`;
     }
-    // Days format
     if (d > 0) return `${d}d : ${h}h : ${m}m`;
-    // Hours format
     if (h > 0) return `${h}h : ${m}m`;
-    // Minutes only
     return `${m}m`;
 }
 
@@ -75,15 +79,52 @@ function calculatePStake(amount, durationSec) {
     } catch { return 0n; }
 }
 
+function formatDate(timestamp) {
+    if (!timestamp) return '';
+    try {
+        const secs = timestamp.seconds || timestamp._seconds || (new Date(timestamp).getTime() / 1000);
+        const date = new Date(secs * 1000);
+        return date.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+    } catch (e) { return ''; }
+}
+
 // ============================================================================
 // STYLES
 // ============================================================================
 function injectStyles() {
-    if (document.getElementById('staking-styles')) return;
+    if (document.getElementById('staking-styles-v3')) return;
     
     const style = document.createElement('style');
-    style.id = 'staking-styles';
+    style.id = 'staking-styles-v3';
     style.textContent = `
+        /* Stake Image Animations */
+        @keyframes stake-pulse {
+            0%, 100% { filter: drop-shadow(0 0 15px rgba(139,92,246,0.3)); transform: scale(1); }
+            50% { filter: drop-shadow(0 0 30px rgba(139,92,246,0.6)); transform: scale(1.02); }
+        }
+        @keyframes stake-glow {
+            0%, 100% { filter: drop-shadow(0 0 20px rgba(6,182,212,0.4)); }
+            50% { filter: drop-shadow(0 0 40px rgba(6,182,212,0.7)); }
+        }
+        @keyframes stake-rotate {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        @keyframes stake-float {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-8px); }
+        }
+        @keyframes stake-success {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.15); filter: drop-shadow(0 0 40px rgba(16,185,129,0.8)); }
+            100% { transform: scale(1); }
+        }
+        .stake-pulse { animation: stake-pulse 3s ease-in-out infinite; }
+        .stake-glow { animation: stake-glow 2s ease-in-out infinite; }
+        .stake-rotate { animation: stake-rotate 2s linear infinite; }
+        .stake-float { animation: stake-float 4s ease-in-out infinite; }
+        .stake-success { animation: stake-success 0.8s ease-out; }
+        
         .staking-card {
             background: linear-gradient(180deg, rgba(39,39,42,0.8) 0%, rgba(24,24,27,0.9) 100%);
             border: 1px solid rgba(63,63,70,0.5);
@@ -113,7 +154,9 @@ function injectStyles() {
         .delegation-item {
             transition: all 0.2s ease;
         }
-        .delegation-item:hover { background: rgba(63,63,70,0.3); }
+        .delegation-item:hover { background: rgba(63,63,70,0.3); transform: translateX(4px); }
+        
+        .history-item:hover { background: rgba(63,63,70,0.5) !important; transform: translateX(4px); }
         
         .stat-glow-purple { box-shadow: 0 0 20px rgba(139,92,246,0.1); }
         .stat-glow-amber { box-shadow: 0 0 20px rgba(245,158,11,0.1); }
@@ -133,18 +176,25 @@ export function render() {
     container.innerHTML = `
         <div class="max-w-4xl mx-auto px-4 py-4 sm:py-6">
             
-            <!-- Header -->
+            <!-- Header with Animated Stake Image -->
             <div class="flex items-center justify-between mb-4 sm:mb-6">
-                <div>
-                    <h1 class="text-xl sm:text-2xl font-bold text-white">Stake & Earn</h1>
-                    <p class="text-xs text-zinc-500 mt-0.5">Lock BKC to earn network rewards</p>
+                <div class="flex items-center gap-3">
+                    <img src="${STAKE_IMAGE}" 
+                         alt="Stake" 
+                         class="w-14 h-14 object-contain stake-pulse stake-float"
+                         id="stake-mascot"
+                         onerror="this.style.display='none'">
+                    <div>
+                        <h1 class="text-xl sm:text-2xl font-bold text-white">🔒 Stake & Earn</h1>
+                        <p class="text-xs text-zinc-500 mt-0.5">Lock BKC to earn network rewards</p>
+                    </div>
                 </div>
                 <button id="refresh-btn" class="p-2 bg-zinc-800/50 hover:bg-zinc-700 rounded-lg transition-colors">
                     <i class="fa-solid fa-rotate text-zinc-400 hover:text-white"></i>
                 </button>
             </div>
 
-            <!-- Stats Row - Mobile Optimized -->
+            <!-- Stats Row -->
             <div class="grid grid-cols-3 gap-2 sm:gap-4 mb-4 sm:mb-6">
                 <div class="staking-card rounded-xl p-3 sm:p-4 stat-glow-purple">
                     <div class="flex items-center gap-1.5 mb-1">
@@ -156,7 +206,7 @@ export function render() {
                 
                 <div class="staking-card rounded-xl p-3 sm:p-4">
                     <div class="flex items-center gap-1.5 mb-1">
-                        <i class="fa-solid fa-user text-blue-400 text-xs"></i>
+                        <i class="fa-solid fa-lock text-blue-400 text-xs"></i>
                         <span class="text-[9px] sm:text-[10px] text-zinc-500 uppercase">Your pStake</span>
                     </div>
                     <p id="stat-pstake" class="text-sm sm:text-lg font-bold text-white font-mono">--</p>
@@ -176,7 +226,7 @@ export function render() {
                 </div>
             </div>
 
-            <!-- Main Content - Stack on Mobile -->
+            <!-- Main Content Grid -->
             <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
                 
                 <!-- Delegate Card -->
@@ -235,7 +285,7 @@ export function render() {
                     <!-- Stake Button -->
                     <button id="stake-btn" disabled class="stake-btn w-full py-3 sm:py-4 rounded-xl text-white font-bold text-sm sm:text-base flex items-center justify-center gap-2">
                         <span id="stake-btn-text">Delegate BKC</span>
-                        <i id="stake-btn-icon" class="fa-solid fa-arrow-right"></i>
+                        <i id="stake-btn-icon" class="fa-solid fa-lock"></i>
                     </button>
 
                     <!-- Info Tips -->
@@ -259,11 +309,28 @@ export function render() {
                         <span id="delegation-count" class="text-[10px] text-zinc-600 bg-zinc-800 px-2 py-1 rounded">0</span>
                     </div>
 
-                    <div id="delegations-list" class="space-y-2 max-h-[400px] overflow-y-auto">
+                    <div id="delegations-list" class="space-y-2 max-h-[300px] overflow-y-auto">
                         ${renderLoading()}
                     </div>
                 </div>
+            </div>
 
+            <!-- Staking History -->
+            <div class="staking-card rounded-2xl p-4 sm:p-5 mt-4 sm:mt-6">
+                <div class="flex items-center justify-between mb-4">
+                    <div class="flex items-center gap-2">
+                        <div class="w-8 h-8 rounded-lg bg-purple-500/10 flex items-center justify-center">
+                            <i class="fa-solid fa-clock-rotate-left text-purple-400"></i>
+                        </div>
+                        <h2 class="text-lg font-bold text-white">Staking History</h2>
+                    </div>
+                </div>
+                <div id="staking-history-list" class="space-y-2 max-h-[300px] overflow-y-auto">
+                    <div class="text-center py-6">
+                        <img src="${STAKE_IMAGE}" class="w-12 h-12 mx-auto opacity-30 animate-pulse mb-2" onerror="this.style.display='none'">
+                        <p class="text-zinc-600 text-sm">Loading history...</p>
+                    </div>
+                </div>
             </div>
         </div>
     `;
@@ -287,7 +354,6 @@ async function loadData(force = false) {
     }
 
     const now = Date.now();
-    // Skip if recently loaded (unless force)
     if (!force && isLoading) return;
     if (!force && (now - lastFetch < 10000)) return;
     
@@ -295,27 +361,142 @@ async function loadData(force = false) {
     lastFetch = now;
 
     try {
-        // Get booster NFT
         const boosterData = await getHighestBoosterBoostFromAPI();
         highestBoosterTokenId = boosterData?.tokenId ? BigInt(boosterData.tokenId) : 0n;
 
-        // Load data in parallel - always force refresh user data
         await Promise.all([
-            loadUserData(true), // Always force refresh user data
-            loadUserDelegations(true), // Always force refresh delegations
+            loadUserData(true),
+            loadUserDelegations(true),
             loadPublicData()
         ]);
 
-        // Update stats
         updateStats();
         renderDelegations();
         updatePreview();
+        loadStakingHistory();
 
     } catch (e) {
         console.error("Staking load error:", e);
     } finally {
         isLoading = false;
     }
+}
+
+async function loadStakingHistory() {
+    if (!State.userAddress) return;
+    
+    try {
+        const endpoint = API_ENDPOINTS.getHistory || 'https://gethistory-4wvdcuoouq-uc.a.run.app';
+        const response = await fetch(`${endpoint}/${State.userAddress}`);
+        if (response.ok) {
+            const data = await response.json();
+            // Filter only staking-related activities
+            stakingHistory = (data || []).filter(item => {
+                const t = (item.type || '').toUpperCase();
+                return t.includes('DELEGAT') || t.includes('STAKE') || t.includes('CLAIM') || t.includes('REWARD');
+            });
+            renderStakingHistory();
+        }
+    } catch (e) {
+        console.error('History load error:', e);
+    }
+}
+
+function renderStakingHistory() {
+    const container = document.getElementById('staking-history-list');
+    if (!container) return;
+
+    if (stakingHistory.length === 0) {
+        container.innerHTML = `
+            <div class="text-center py-8">
+                <img src="${STAKE_IMAGE}" class="w-14 h-14 mx-auto opacity-20 mb-3" onerror="this.style.display='none'">
+                <p class="text-zinc-500 text-sm">No staking history yet</p>
+                <p class="text-zinc-600 text-xs mt-1">Your staking activity will appear here</p>
+            </div>
+        `;
+        return;
+    }
+
+    container.innerHTML = stakingHistory.slice(0, 15).map(item => {
+        const t = (item.type || '').toUpperCase();
+        const details = item.details || {};
+        const dateStr = formatDate(item.timestamp || item.createdAt);
+        
+        // Determine icon and style
+        let icon, iconColor, bgColor, label, extraInfo = '';
+        
+        if (t.includes('DELEGAT') || (t.includes('STAKE') && !t.includes('UNSTAKE'))) {
+            icon = 'fa-lock';
+            iconColor = '#4ade80';
+            bgColor = 'rgba(34,197,94,0.15)';
+            label = '🔒 Staked';
+            const pStake = details.pStakeGenerated;
+            if (pStake) {
+                const pStakeNum = formatBigNumber(BigInt(pStake)).toFixed(0);
+                extraInfo = `<span class="ml-2 text-[10px] text-purple-400 font-bold">+${pStakeNum} pStake</span>`;
+            }
+            const lockDuration = details.lockDuration;
+            if (lockDuration) {
+                const days = Number(lockDuration) / 86400;
+                extraInfo += `<span class="ml-1 text-[9px] text-zinc-500">(${formatDuration(days)})</span>`;
+            }
+        } else if (t.includes('UNSTAKE') || t.includes('UNDELEGAT')) {
+            if (t.includes('FORCE')) {
+                icon = 'fa-bolt';
+                iconColor = '#ef4444';
+                bgColor = 'rgba(239,68,68,0.15)';
+                label = '⚡ Force Unstaked';
+                const feePaid = details.feePaid;
+                if (feePaid && BigInt(feePaid) > 0n) {
+                    const feeNum = formatBigNumber(BigInt(feePaid)).toFixed(2);
+                    extraInfo = `<span class="ml-2 text-[9px] text-red-400">(penalty: ${feeNum} BKC)</span>`;
+                }
+            } else {
+                icon = 'fa-unlock';
+                iconColor = '#fb923c';
+                bgColor = 'rgba(249,115,22,0.15)';
+                label = '🔓 Unstaked';
+            }
+        } else if (t.includes('CLAIM') || t.includes('REWARD')) {
+            icon = 'fa-coins';
+            iconColor = '#fbbf24';
+            bgColor = 'rgba(245,158,11,0.15)';
+            label = '🪙 Rewards Claimed';
+            const feePaid = details.feePaid;
+            if (feePaid && BigInt(feePaid) > 0n) {
+                const feeNum = formatBigNumber(BigInt(feePaid)).toFixed(2);
+                extraInfo = `<span class="ml-2 text-[9px] text-zinc-500">(fee: ${feeNum})</span>`;
+            }
+        } else {
+            icon = 'fa-circle';
+            iconColor = '#71717a';
+            bgColor = 'rgba(39,39,42,0.5)';
+            label = item.type || 'Activity';
+        }
+
+        const txLink = item.txHash ? `${EXPLORER_TX}${item.txHash}` : '#';
+        let rawAmount = item.amount || details.amount || details.amountReceived || "0";
+        const amountNum = formatBigNumber(BigInt(rawAmount));
+        const amountDisplay = amountNum > 0.001 ? amountNum.toFixed(2) : '';
+
+        return `
+            <a href="${txLink}" target="_blank" class="history-item flex items-center justify-between p-3 hover:bg-zinc-800/60 border border-zinc-700/30 rounded-lg transition-all group bg-zinc-800/20" title="${dateStr}">
+                <div class="flex items-center gap-3">
+                    <div class="w-9 h-9 rounded-lg flex items-center justify-center border border-zinc-700/30" style="background: ${bgColor}">
+                        <i class="fa-solid ${icon} text-sm" style="color: ${iconColor}"></i>
+                    </div>
+                    <div>
+                        <p class="text-white text-xs font-medium">${label}${extraInfo}</p>
+                        <p class="text-zinc-600 text-[10px]">${dateStr}</p>
+                    </div>
+                </div>
+                <div class="flex items-center gap-2">
+                    ${amountDisplay ? `<span class="text-xs font-mono font-bold text-white">${amountDisplay} <span class="text-zinc-500">BKC</span></span>` : ''}
+                    <i class="fa-solid fa-arrow-up-right-from-square text-zinc-600 group-hover:text-blue-400 text-[9px]"></i>
+                </div>
+            </a>
+        `;
+    }).join('');
 }
 
 function updateStats() {
@@ -328,13 +509,11 @@ function updateStats() {
     setTxt('stat-pstake', formatPStake(State.userTotalPStake || 0n));
     setTxt('balance-display', formatBigNumber(State.currentUserBalance || 0n).toFixed(2));
 
-    // Fee info
     const feeBips = State.systemFees?.["DELEGATION_FEE_BIPS"] || 50n;
     const feePercent = Number(feeBips) / 100;
     const feeEl = document.getElementById('fee-info');
     if (feeEl) feeEl.textContent = `${feePercent}% fee`;
 
-    // Rewards
     calculateUserTotalRewards().then(({ stakingRewards, minerRewards }) => {
         const total = stakingRewards + minerRewards;
         setTxt('stat-rewards', formatBigNumber(total).toFixed(4));
@@ -372,6 +551,16 @@ function resetUI() {
             </div>
         `;
     }
+
+    const historyList = document.getElementById('staking-history-list');
+    if (historyList) {
+        historyList.innerHTML = `
+            <div class="text-center py-8">
+                <img src="${STAKE_IMAGE}" class="w-14 h-14 mx-auto opacity-20 mb-3" onerror="this.style.display='none'">
+                <p class="text-zinc-500 text-sm">Connect wallet to view history</p>
+            </div>
+        `;
+    }
 }
 
 // ============================================================================
@@ -383,7 +572,6 @@ function renderDelegations() {
     const container = document.getElementById('delegations-list');
     if (!container) return;
 
-    // Clear previous interval
     if (countdownInterval) {
         clearInterval(countdownInterval);
         countdownInterval = null;
@@ -391,16 +579,13 @@ function renderDelegations() {
 
     const delegations = State.userDelegations || [];
     
-    // Update count
     const countEl = document.getElementById('delegation-count');
     if (countEl) countEl.textContent = `${delegations.length} active`;
 
     if (delegations.length === 0) {
         container.innerHTML = `
             <div class="text-center py-10">
-                <div class="w-14 h-14 bg-zinc-800 rounded-full flex items-center justify-center mx-auto mb-3">
-                    <i class="fa-solid fa-layer-group text-xl text-zinc-600"></i>
-                </div>
+                <img src="${STAKE_IMAGE}" class="w-14 h-14 mx-auto opacity-20 mb-3" onerror="this.outerHTML='<div class=\\'w-14 h-14 bg-zinc-800 rounded-full flex items-center justify-center mx-auto mb-3\\'><i class=\\'fa-solid fa-layer-group text-xl text-zinc-600\\'></i></div>'">
                 <p class="text-zinc-500 text-sm mb-1">No active delegations</p>
                 <p class="text-zinc-600 text-xs">Delegate BKC to start earning</p>
             </div>
@@ -408,16 +593,13 @@ function renderDelegations() {
         return;
     }
 
-    // Sort by unlock time
     const sorted = [...delegations].sort((a, b) => Number(a.unlockTime) - Number(b.unlockTime));
     
     container.innerHTML = sorted.map(d => renderDelegationItem(d)).join('');
 
-    // Start countdown update every minute (not every second)
     updateCountdowns();
-    countdownInterval = setInterval(updateCountdowns, 60000); // Update every minute
+    countdownInterval = setInterval(updateCountdowns, 60000);
 
-    // Attach event listeners
     container.querySelectorAll('.unstake-btn').forEach(btn => {
         btn.addEventListener('click', () => handleUnstake(btn.dataset.index, false));
     });
@@ -448,7 +630,6 @@ function renderDelegationItem(d) {
     return `
         <div class="delegation-item bg-zinc-800/30 rounded-xl p-3 border border-zinc-700/50">
             <div class="flex items-center justify-between gap-3">
-                <!-- Left: Info -->
                 <div class="flex items-center gap-3 min-w-0">
                     <div class="w-10 h-10 rounded-xl ${isLocked ? 'bg-amber-500/10' : 'bg-green-500/10'} flex items-center justify-center flex-shrink-0">
                         <i class="fa-solid ${isLocked ? 'fa-lock text-amber-400' : 'fa-lock-open text-green-400'} text-sm"></i>
@@ -459,7 +640,6 @@ function renderDelegationItem(d) {
                     </div>
                 </div>
 
-                <!-- Right: Timer & Action -->
                 <div class="flex items-center gap-2 flex-shrink-0">
                     ${isLocked ? `
                         <div class="countdown-timer text-[10px] font-mono bg-amber-500/10 text-amber-400 px-2 py-1 rounded-lg border border-amber-500/20" 
@@ -515,7 +695,6 @@ function updatePreview() {
         document.getElementById('preview-pstake').textContent = formatPStake(pStake);
         document.getElementById('preview-net').textContent = `${formatBigNumber(netWei).toFixed(4)} BKC`;
 
-        // Validate balance
         const balance = State.currentUserBalance || 0n;
         if (amountWei > balance) {
             amountInput.classList.add('border-red-500');
@@ -539,6 +718,7 @@ async function handleStake() {
     const stakeBtn = document.getElementById('stake-btn');
     const btnText = document.getElementById('stake-btn-text');
     const btnIcon = document.getElementById('stake-btn-icon');
+    const stakeMascot = document.getElementById('stake-mascot');
     
     if (!amountInput || !stakeBtn) return;
     
@@ -548,7 +728,6 @@ async function handleStake() {
         return;
     }
 
-    // Validate balance
     const balance = State.currentUserBalance || 0n;
     let amountWei;
     try {
@@ -562,12 +741,10 @@ async function handleStake() {
         return;
     }
 
-    // Check ETH balance for gas
     try {
         const provider = new ethers.BrowserProvider(window.ethereum);
-        const signer = await provider.getSigner();
         const ethBalance = await provider.getBalance(State.userAddress);
-        const minEth = ethers.parseEther("0.001"); // Minimum ~0.001 ETH for gas
+        const minEth = ethers.parseEther("0.001");
         
         if (ethBalance < minEth) {
             showToast('Insufficient ETH for gas. Need at least 0.001 ETH.', 'error');
@@ -580,22 +757,32 @@ async function handleStake() {
     isProcessing = true;
     const durationSec = BigInt(lockDays) * 86400n;
 
-    // Update button state
     stakeBtn.disabled = true;
     btnText.textContent = 'Processing...';
     btnIcon.className = 'fa-solid fa-spinner fa-spin';
+    
+    // Animate stake image
+    if (stakeMascot) {
+        stakeMascot.className = 'w-14 h-14 object-contain stake-rotate stake-glow';
+    }
 
     try {
-        // Pass null for btnElement to prevent double-handling
         const success = await executeDelegation(amountWei, durationSec, highestBoosterTokenId, null);
 
         if (success) {
             amountInput.value = '';
-            showToast('Delegation successful!', 'success');
+            showToast('🔒 Delegation successful!', 'success');
             
-            // Force refresh all data to update allowance cache
-            isLoading = false; // Reset loading flag
-            lastFetch = 0; // Force refresh
+            // Success animation
+            if (stakeMascot) {
+                stakeMascot.className = 'w-14 h-14 object-contain stake-success';
+                setTimeout(() => {
+                    stakeMascot.className = 'w-14 h-14 object-contain stake-pulse stake-float';
+                }, 800);
+            }
+            
+            isLoading = false;
+            lastFetch = 0;
             await loadData(true);
         }
 
@@ -603,11 +790,15 @@ async function handleStake() {
         console.error('Stake error:', e);
         showToast('Delegation failed: ' + (e.reason || e.message || 'Unknown error'), 'error');
     } finally {
-        // ALWAYS reset button state
         isProcessing = false;
         stakeBtn.disabled = false;
         btnText.textContent = 'Delegate BKC';
-        btnIcon.className = 'fa-solid fa-arrow-right';
+        btnIcon.className = 'fa-solid fa-lock';
+        
+        // Reset animation
+        if (stakeMascot) {
+            stakeMascot.className = 'w-14 h-14 object-contain stake-pulse stake-float';
+        }
         updatePreview();
     }
 }
@@ -615,7 +806,6 @@ async function handleStake() {
 async function handleUnstake(index, isForce) {
     if (isProcessing) return;
     
-    // Find the button and update its state
     const btn = document.querySelector(isForce 
         ? `.force-unstake-btn[data-index='${index}']`
         : `.unstake-btn[data-index='${index}']`
@@ -634,7 +824,7 @@ async function handleUnstake(index, isForce) {
             : await executeUnstake(Number(index), highestBoosterTokenId);
 
         if (success) {
-            showToast(isForce ? 'Force unstaked (50% penalty)' : 'Unstaked successfully!', isForce ? 'warning' : 'success');
+            showToast(isForce ? '⚡ Force unstaked (50% penalty)' : '🔓 Unstaked successfully!', isForce ? 'warning' : 'success');
             await loadData(true);
         }
     } catch (e) {
@@ -642,7 +832,6 @@ async function handleUnstake(index, isForce) {
         showToast('Unstake failed: ' + (e.reason || e.message || 'Unknown error'), 'error');
     } finally {
         isProcessing = false;
-        // Re-render delegations to reset button state
         renderDelegations();
     }
 }
@@ -659,7 +848,7 @@ async function handleClaim(stakingRewards, minerRewards, btn) {
         const success = await executeUniversalClaim(stakingRewards, minerRewards, highestBoosterTokenId, null);
 
         if (success) {
-            showToast('Rewards claimed!', 'success');
+            showToast('🪙 Rewards claimed!', 'success');
             await loadData(true);
         }
     } catch (e) {
@@ -682,10 +871,8 @@ function setupListeners() {
     const refreshBtn = document.getElementById('refresh-btn');
     const durationChips = document.querySelectorAll('.duration-chip');
 
-    // Amount input
     amountInput?.addEventListener('input', updatePreview);
 
-    // Max button
     maxBtn?.addEventListener('click', () => {
         const balance = State.currentUserBalance || 0n;
         if (amountInput) {
@@ -694,7 +881,6 @@ function setupListeners() {
         }
     });
 
-    // Duration selection
     durationChips.forEach(chip => {
         chip.addEventListener('click', () => {
             durationChips.forEach(c => c.classList.remove('selected'));
@@ -704,10 +890,8 @@ function setupListeners() {
         });
     });
 
-    // Stake button
     stakeBtn?.addEventListener('click', handleStake);
 
-    // Refresh button
     refreshBtn?.addEventListener('click', () => {
         const icon = refreshBtn.querySelector('i');
         icon?.classList.add('fa-spin');

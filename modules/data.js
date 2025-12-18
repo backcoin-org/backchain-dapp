@@ -1,5 +1,5 @@
 // js/modules/data.js
-// ✅ VERSÃO V6.5: Enhanced blockchain fallback with detailed logs + nft.png as default image
+// ✅ PRODUCTION V7.0
 
 const ethers = window.ethers;
 
@@ -9,16 +9,15 @@ import { addresses, boosterTiers, rentalManagerABI, rewardBoosterABI } from '../
 // ====================================================================
 // CONSTANTS & CONFIGURATION
 // ====================================================================
-const API_TIMEOUT_MS = 5000; // 5 seconds max for API
-const CACHE_DURATION_MS = 60000; // System data cache (1 min)
-const CONTRACT_READ_CACHE_MS = 15000; // RPC read cache (15s)
-const OWNERSHIP_CACHE_MS = 30000; // NFT ownership cache (30s)
-const BALANCE_CACHE_MS = 10000; // Balance cache (10s)
+const API_TIMEOUT_MS = 5000;
+const CACHE_DURATION_MS = 60000;
+const CONTRACT_READ_CACHE_MS = 15000;
+const OWNERSHIP_CACHE_MS = 30000;
+const BALANCE_CACHE_MS = 10000;
 
 let systemDataCache = null;
 let systemDataCacheTime = 0;
 
-// Cache Maps
 const contractReadCache = new Map();
 const ownershipCache = new Map();
 const balanceCache = new Map();
@@ -56,6 +55,7 @@ export const API_ENDPOINTS = {
     getNotaryHistory: 'https://getnotaryhistory-4wvdcuoouq-uc.a.run.app',
     getRentalListings: 'https://getrentallistings-4wvdcuoouq-uc.a.run.app',
     getUserRentals: 'https://getuserrentals-4wvdcuoouq-uc.a.run.app',
+    fortuneGames: 'https://getfortunegames-4wvdcuoouq-uc.a.run.app',
     uploadFileToIPFS: '/api/upload',
     claimAirdrop: 'https://us-central1-airdropbackchainnew.cloudfunctions.net/claimAirdrop'
 };
@@ -75,20 +75,18 @@ function isRateLimitError(e) {
 function isRpcError(e) {
     const errorCode = e?.error?.code || e?.code;
     return (
-        errorCode === -32603 || // Internal JSON-RPC error
-        errorCode === -32000 || // Server error
+        errorCode === -32603 ||
+        errorCode === -32000 ||
         e.message?.includes("Internal JSON-RPC")
     );
 }
 
-// Lazy contract instance creator
 function getContractInstance(address, abi, fallbackStateContract) {
     if (fallbackStateContract) return fallbackStateContract;
     if (!address || !State.publicProvider) return null;
     try {
         return new ethers.Contract(address, abi, State.publicProvider);
     } catch (e) {
-        console.warn("Failed to create contract instance:", e.message);
         return null;
     }
 }
@@ -109,23 +107,20 @@ export const safeContractCall = async (
 
     const contractAddr = contract.target || contract.address;
 
-    // Safe BigInt serialization for cache key
     const serializedArgs = JSON.stringify(args, (key, value) =>
         typeof value === 'bigint' ? value.toString() : value
     );
     const cacheKey = `${contractAddr}-${method}-${serializedArgs}`;
     const now = Date.now();
 
-    // Methods that benefit from caching
     const cacheableMethods = [
         'getPoolInfo', 'getBuyPrice', 'getSellPrice', 'getAvailableTokenIds',
         'getAllListedTokenIds', 'tokenURI', 'boostBips', 'getListing',
         'balanceOf', 'totalSupply', 'totalNetworkPStake', 'MAX_SUPPLY', 'TGE_SUPPLY',
         'userTotalPStake', 'pendingRewards', 'isRented', 'getRental', 'ownerOf',
-        'getDelegationsOf', 'allowance'
+        'getDelegationsOf', 'allowance', 'prizeTiers', 'activeTierCount', 'prizePoolBalance'
     ];
 
-    // Check cache first
     if (!forceRefresh && cacheableMethods.includes(method)) {
         const cached = contractReadCache.get(cacheKey);
         if (cached && (now - cached.timestamp < CONTRACT_READ_CACHE_MS)) {
@@ -138,7 +133,6 @@ export const safeContractCall = async (
         try {
             const result = await contract[method](...args);
             
-            // Update cache on success
             if (cacheableMethods.includes(method)) {
                 contractReadCache.set(cacheKey, { value: result, timestamp: now });
             }
@@ -148,32 +142,25 @@ export const safeContractCall = async (
         } catch (e) {
             lastError = e;
             
-            // Rate limit - exponential backoff
             if (isRateLimitError(e) && attempt < retries) {
                 const jitter = Math.floor(Math.random() * 1000);
                 const delay = 1000 * Math.pow(2, attempt) + jitter;
-                console.warn(`Rate limited on ${method}. Retry in ${delay}ms...`);
                 await wait(delay);
                 continue;
             }
             
-            // RPC error - try once more after short delay
             if (isRpcError(e) && attempt < retries) {
                 await wait(500);
                 continue;
             }
             
-            // Other errors - don't retry
             break;
         }
     }
     
-    // Return fallback value instead of throwing
-    console.warn(`Contract call failed: ${method}`, lastError?.message?.slice(0, 80));
     return fallbackValue;
 };
 
-// Specialized safe balance fetcher with dedicated cache
 export const safeBalanceOf = async (contract, address, forceRefresh = false) => {
     const cacheKey = `balance-${contract?.target || contract?.address}-${address}`;
     const now = Date.now();
@@ -191,7 +178,7 @@ export const safeBalanceOf = async (contract, address, forceRefresh = false) => 
 };
 
 // ====================================================================
-// 1. GLOBAL SYSTEM DATA (Fees, Configs)
+// 1. GLOBAL SYSTEM DATA
 // ====================================================================
 
 export async function loadSystemDataFromAPI() {
@@ -201,7 +188,6 @@ export async function loadSystemDataFromAPI() {
 
     const now = Date.now();
     
-    // Use cache if fresh
     if (systemDataCache && (now - systemDataCacheTime < CACHE_DURATION_MS)) {
         applySystemDataToState(systemDataCache);
         return true;
@@ -219,8 +205,6 @@ export async function loadSystemDataFromAPI() {
         return true;
         
     } catch (e) {
-        console.warn("System Data API Failed. Using defaults.");
-        // Set safe defaults
         if (!State.systemFees['NOTARY_SERVICE']) State.systemFees['NOTARY_SERVICE'] = 100n;
         if (!State.systemFees['CLAIM_REWARD_FEE_BIPS']) State.systemFees['CLAIM_REWARD_FEE_BIPS'] = 500n;
         return false;
@@ -278,14 +262,13 @@ export async function loadPublicData() {
 }
 
 // ====================================================================
-// 2. USER DATA (Balance, Boosters, pStake)
+// 2. USER DATA
 // ====================================================================
 
 export async function loadUserData(forceRefresh = false) {
     if (!State.isConnected || !State.userAddress) return;
 
     try {
-        // Parallel fetch for speed
         const [balance, nativeBalance] = await Promise.allSettled([
             safeBalanceOf(State.bkcTokenContract, State.userAddress, forceRefresh),
             State.provider?.getBalance(State.userAddress)
@@ -299,10 +282,8 @@ export async function loadUserData(forceRefresh = false) {
             State.currentUserNativeBalance = nativeBalance.value;
         }
 
-        // Load boosters (API First, then verify)
         await loadMyBoostersFromAPI(forceRefresh);
 
-        // Load pStake from chain
         if (State.delegationManagerContract) {
             const totalUserPStake = await safeContractCall(
                 State.delegationManagerContract,
@@ -321,7 +302,7 @@ export async function loadUserData(forceRefresh = false) {
 }
 
 // ====================================================================
-// 3. STAKING PAGE
+// 3. DELEGATIONS
 // ====================================================================
 
 export async function loadUserDelegations(forceRefresh = false) {
@@ -339,8 +320,8 @@ export async function loadUserDelegations(forceRefresh = false) {
         
         State.userDelegations = delegationsRaw.map((d, index) => ({
             amount: d[0] || d.amount || 0n,
-            unlockTime: d[1] || d.unlockTime || 0n,
-            lockDuration: d[2] || d.lockDuration || 0n,
+            unlockTime: BigInt(d[1] || d.unlockTime || 0),
+            lockDuration: BigInt(d[2] || d.lockDuration || 0),
             index
         }));
         
@@ -353,26 +334,19 @@ export async function loadUserDelegations(forceRefresh = false) {
 }
 
 // ====================================================================
-// 4. RENTAL MARKET (API FIRST STRATEGY)
+// 4. RENTAL MARKET
 // ====================================================================
 
 export async function loadRentalListings(forceRefresh = false) {
-    console.log("🔄 Loading rental listings... forceRefresh:", forceRefresh);
-    
     let listingsFromApi = [];
     
-    // 1. Try API First (Fast)
     try {
         const response = await fetchWithTimeout(API_ENDPOINTS.getRentalListings, 4000);
         if (response.ok) {
             listingsFromApi = await response.json();
-            console.log("📦 Rental API response:", listingsFromApi);
         }
-    } catch (e) {
-        console.warn("⚠️ API Rental unavailable:", e.message);
-    }
+    } catch (e) {}
     
-    // 2. If API returned data, use it
     if (listingsFromApi && listingsFromApi.length > 0) {
         const enrichedListings = listingsFromApi.map(item => {
             const tier = boosterTiers.find(t => t.boostBips === Number(item.boostBips || 0));
@@ -387,14 +361,10 @@ export async function loadRentalListings(forceRefresh = false) {
             };
         });
 
-        console.log("✅ Enriched listings from API:", enrichedListings.length);
         State.rentalListings = enrichedListings;
         return enrichedListings;
     }
 
-    // 3. Fallback: Blockchain (Always try if API returns empty or fails)
-    console.log("📡 Using blockchain fallback for rental listings...");
-    
     const rentalContract = getContractInstance(
         addresses.rentalManager,
         rentalManagerABI,
@@ -402,34 +372,26 @@ export async function loadRentalListings(forceRefresh = false) {
     );
     
     if (!rentalContract) {
-        console.warn("❌ No rental contract available");
         State.rentalListings = [];
         return [];
     }
 
     try {
-        console.log("🔍 Calling getAllListedTokenIds on contract:", addresses.rentalManager);
-        
         const listedIds = await safeContractCall(
             rentalContract,
             'getAllListedTokenIds',
             [],
             [],
             2,
-            true // Always force refresh from blockchain
+            true
         );
         
-        console.log("📋 Listed token IDs from blockchain:", listedIds?.length || 0, listedIds);
-        
         if (!listedIds || listedIds.length === 0) {
-            console.log("ℹ️ No listings found on blockchain");
             State.rentalListings = [];
             return [];
         }
 
-        // Limit to prevent hanging
         const listingsToFetch = listedIds.slice(0, 30);
-        console.log("🔄 Fetching details for", listingsToFetch.length, "listings...");
 
         const listingsPromises = listingsToFetch.map(async (tokenId) => {
             try {
@@ -442,10 +404,7 @@ export async function loadRentalListings(forceRefresh = false) {
                     true
                 );
                 
-                console.log(`📄 Listing #${tokenId}:`, listing);
-                
                 if (listing && listing.isActive) {
-                    // Get rental info for each listing
                     const rentalInfo = await safeContractCall(
                         rentalContract,
                         'getRental',
@@ -474,24 +433,18 @@ export async function loadRentalListings(forceRefresh = false) {
                         currentTenant: isCurrentlyRented ? rentalInfo.tenant : null,
                         rentalEndTime: isCurrentlyRented ? rentalInfo.endTime?.toString() : null
                     };
-                } else {
-                    console.log(`⏭️ Listing #${tokenId} is not active`);
                 }
-            } catch (e) {
-                console.error(`❌ Error fetching listing #${tokenId}:`, e);
-            }
+            } catch (e) {}
             return null;
         });
 
         const results = await Promise.all(listingsPromises);
         const validListings = results.filter(l => l !== null);
 
-        console.log("✅ Valid listings from blockchain:", validListings.length);
         State.rentalListings = validListings;
         return validListings;
 
     } catch (e) {
-        console.error("❌ Rental blockchain fallback error:", e);
         State.rentalListings = [];
         return [];
     }
@@ -503,7 +456,6 @@ export async function loadUserRentals(forceRefresh = false) {
         return [];
     }
 
-    // 1. Try API First
     try {
         const response = await fetchWithTimeout(
             `${API_ENDPOINTS.getUserRentals}/${State.userAddress}`,
@@ -523,11 +475,8 @@ export async function loadUserRentals(forceRefresh = false) {
             State.myRentals = enrichedRentals;
             return enrichedRentals;
         }
-    } catch (e) {
-        // Silent fallback
-    }
+    } catch (e) {}
 
-    // 2. Fallback: Blockchain
     const rentalContract = getContractInstance(
         addresses.rentalManager,
         rentalManagerABI,
@@ -579,9 +528,7 @@ export async function loadUserRentals(forceRefresh = false) {
                         name: boostInfo.name
                     });
                 }
-            } catch (e) {
-                // Skip on error
-            }
+            } catch (e) {}
         }
 
         State.myRentals = myRentals;
@@ -597,28 +544,23 @@ export async function loadUserRentals(forceRefresh = false) {
 // 5. BOOSTER HELPERS
 // ====================================================================
 
-// 🔥 V6.2: Cache para getHighestBoosterBoostFromAPI
 let cachedBoosterResult = null;
 let lastBoosterResultTime = 0;
-const BOOSTER_RESULT_CACHE_MS = 30000; // 30 segundos
+const BOOSTER_RESULT_CACHE_MS = 30000;
 
-// Gets the best booster (owned or rented) for discount calculation
 export async function getHighestBoosterBoostFromAPI(forceRefresh = false) {
     const now = Date.now();
     
-    // 🔥 Retorna cache se disponível e recente
     if (!forceRefresh && cachedBoosterResult && (now - lastBoosterResultTime < BOOSTER_RESULT_CACHE_MS)) {
         return cachedBoosterResult;
     }
     
-    // Load boosters (com throttle interno)
     await loadMyBoostersFromAPI(forceRefresh);
 
     let maxBoost = 0;
     let bestTokenId = null;
     let source = 'none';
 
-    // Check owned boosters
     if (State.myBoosters && State.myBoosters.length > 0) {
         const highestOwned = State.myBoosters.reduce(
             (max, b) => (b.boostBips > max.boostBips ? b : max),
@@ -631,7 +573,6 @@ export async function getHighestBoosterBoostFromAPI(forceRefresh = false) {
         }
     }
 
-    // Check rented boosters (rentals count for discount!)
     if (State.myRentals && State.myRentals.length > 0) {
         const highestRented = State.myRentals.reduce(
             (max, r) => (r.boostBips > max.boostBips ? r : max),
@@ -648,7 +589,6 @@ export async function getHighestBoosterBoostFromAPI(forceRefresh = false) {
     const imageUrl = tier?.realImg || tier?.img || 'assets/bkc_logo_3d.png';
     const nftName = tier?.name ? `${tier.name} Booster` : (source !== 'none' ? 'Booster NFT' : 'None');
 
-    // 🔥 Cachear resultado
     cachedBoosterResult = {
         highestBoost: maxBoost,
         boostName: nftName,
@@ -661,7 +601,6 @@ export async function getHighestBoosterBoostFromAPI(forceRefresh = false) {
     return cachedBoosterResult;
 }
 
-// Internal helper to get booster info
 async function getBoosterInfo(tokenId) {
     const minABI = ["function boostBips(uint256) view returns (uint256)"];
     const contractToUse = getContractInstance(
@@ -729,10 +668,8 @@ export async function calculateClaimDetails() {
         return { netClaimAmount: 0n, feeAmount: 0n, discountPercent: 0, totalRewards: 0n };
     }
 
-    // Get fee from system data (default 5%)
     let baseFeeBips = State.systemFees?.CLAIM_REWARD_FEE_BIPS || 500n;
     
-    // Get booster discount
     const boosterData = await getHighestBoosterBoostFromAPI();
     let discountBips = State.boosterDiscounts?.[boosterData.highestBoost] || 0n;
 
@@ -748,38 +685,33 @@ export async function calculateClaimDetails() {
 }
 
 // ====================================================================
-// 7. BOOSTER LOADING WITH GHOST BUSTER
+// 7. BOOSTER LOADING
 // ====================================================================
 
-// 🔥 V6.2: Proteção contra loop infinito
 let isLoadingBoosters = false;
 let lastBoosterFetch = 0;
 let boosterErrorCount = 0;
-const BOOSTER_FETCH_THROTTLE_MS = 30000; // Mínimo 30s entre chamadas
-const MAX_BOOSTER_ERRORS = 3; // Para após 3 erros consecutivos
-const BOOSTER_ERROR_COOLDOWN_MS = 120000; // 2 min de cooldown após muitos erros
+const BOOSTER_FETCH_THROTTLE_MS = 30000;
+const MAX_BOOSTER_ERRORS = 3;
+const BOOSTER_ERROR_COOLDOWN_MS = 120000;
 
 export async function loadMyBoostersFromAPI(forceRefresh = false) {
     if (!State.userAddress) return [];
 
     const now = Date.now();
     
-    // 🔥 Proteção 1: Já está carregando
     if (isLoadingBoosters) {
         return State.myBoosters || [];
     }
     
-    // 🔥 Proteção 2: Throttle - evita chamadas muito frequentes
     if (!forceRefresh && (now - lastBoosterFetch < BOOSTER_FETCH_THROTTLE_MS)) {
         return State.myBoosters || [];
     }
     
-    // 🔥 Proteção 3: Muitos erros - cooldown mais longo
     if (boosterErrorCount >= MAX_BOOSTER_ERRORS) {
         if (now - lastBoosterFetch < BOOSTER_ERROR_COOLDOWN_MS) {
             return State.myBoosters || [];
         }
-        // Reset após cooldown
         boosterErrorCount = 0;
     }
 
@@ -787,7 +719,6 @@ export async function loadMyBoostersFromAPI(forceRefresh = false) {
     lastBoosterFetch = now;
 
     try {
-        // 1. Get list from API
         const response = await fetchWithTimeout(
             `${API_ENDPOINTS.getBoosters}/${State.userAddress}`,
             5000
@@ -796,11 +727,7 @@ export async function loadMyBoostersFromAPI(forceRefresh = false) {
         if (!response.ok) throw new Error(`API Error: ${response.status}`);
 
         let ownedTokensAPI = await response.json();
-        
-        // 🔥 V6.3: Debug log to see what API returns
-        console.log('Boosters API response:', ownedTokensAPI);
 
-        // 2. Ghost Buster: Verify ownership on-chain
         const minABI = [
             "function ownerOf(uint256) view returns (address)",
             "function boostBips(uint256) view returns (uint256)"
@@ -813,25 +740,20 @@ export async function loadMyBoostersFromAPI(forceRefresh = false) {
 
         if (contract && ownedTokensAPI.length > 0) {
             const checks = await Promise.all(
-                ownedTokensAPI.slice(0, 50).map(async (token) => { // Limit to 50
+                ownedTokensAPI.slice(0, 50).map(async (token) => {
                     const id = BigInt(token.tokenId);
                     const cacheKey = `ownerOf-${id}`;
                     const nowTs = Date.now();
 
-                    // 🔥 V6.3: Get boostBips from API or chain
                     let tokenBoostBips = Number(token.boostBips || token.boost || 0);
                     
-                    // If API didn't provide boostBips, try to get from chain
                     if (tokenBoostBips === 0) {
                         try {
                             const chainBoostBips = await contract.boostBips(id);
                             tokenBoostBips = Number(chainBoostBips);
-                        } catch (e) {
-                            console.warn(`Failed to get boostBips for token ${id}:`, e.message);
-                        }
+                        } catch (e) {}
                     }
 
-                    // Check local cache first
                     if (!forceRefresh && ownershipCache.has(cacheKey)) {
                         const cachedData = ownershipCache.get(cacheKey);
                         if (nowTs - cachedData.timestamp < OWNERSHIP_CACHE_MS) {
@@ -842,7 +764,7 @@ export async function loadMyBoostersFromAPI(forceRefresh = false) {
                                     imageUrl: token.imageUrl || token.image || null
                                 };
                             }
-                            return null; // Sold
+                            return null;
                         }
                     }
 
@@ -857,10 +779,9 @@ export async function loadMyBoostersFromAPI(forceRefresh = false) {
                                 imageUrl: token.imageUrl || token.image || null
                             };
                         }
-                        return null; // Recently sold
+                        return null;
                         
                     } catch (e) {
-                        // On RPC error, trust API optimistically
                         if (isRateLimitError(e) || isRpcError(e)) {
                             return {
                                 tokenId: id,
@@ -883,24 +804,13 @@ export async function loadMyBoostersFromAPI(forceRefresh = false) {
             }));
         }
         
-        // 🔥 V6.3: Debug log final result
-        console.log('Processed myBoosters:', State.myBoosters);
-        
-        // 🔥 Sucesso - reset error counter
         boosterErrorCount = 0;
 
         return State.myBoosters;
 
     } catch (e) {
-        // 🔥 Incrementa contador de erros
         boosterErrorCount++;
         
-        // Log apenas nos primeiros erros
-        if (boosterErrorCount <= MAX_BOOSTER_ERRORS) {
-            console.warn(`Error fetching boosters (${boosterErrorCount}/${MAX_BOOSTER_ERRORS}):`, e.message);
-        }
-        
-        // Keep existing data on error
         if (!State.myBoosters) State.myBoosters = [];
         return State.myBoosters;
     } finally {
@@ -912,35 +822,29 @@ export async function loadMyBoostersFromAPI(forceRefresh = false) {
 // 8. UTILITY EXPORTS
 // ====================================================================
 
-// Clear all caches (useful after transactions)
 export function clearAllCaches() {
     contractReadCache.clear();
     ownershipCache.clear();
     balanceCache.clear();
     systemDataCache = null;
     systemDataCacheTime = 0;
-    
-    // 🔥 V6.2: Reset booster caches
     cachedBoosterResult = null;
     lastBoosterResultTime = 0;
     lastBoosterFetch = 0;
     boosterErrorCount = 0;
 }
 
-// Force refresh all user data
 export async function forceRefreshUserData() {
     clearAllCaches();
     await loadUserData(true);
     await loadUserDelegations(true);
     await loadUserRentals(true);
 }
+
 // ====================================================================
-// FORTUNE POOL DATA FUNCTIONS - ADICIONAR AO data.js
+// 9. FORTUNE POOL DATA
 // ====================================================================
 
-/**
- * Load Fortune Pool configuration and status
- */
 export async function loadFortunePoolData(forceRefresh = false) {
     const contract = State.actionsManagerContractPublic || State.actionsManagerContract;
     
@@ -968,7 +872,6 @@ export async function loadFortunePoolData(forceRefresh = false) {
     }
 
     try {
-        // Parallel fetch core data
         const [activeTierCount, prizePool, gameCounter] = await Promise.allSettled([
             safeContractCall(contract, 'activeTierCount', [], 0n),
             safeContractCall(contract, 'prizePoolBalance', [], 0n),
@@ -979,7 +882,6 @@ export async function loadFortunePoolData(forceRefresh = false) {
         const pool = prizePool.status === 'fulfilled' ? BigInt(prizePool.value.toString()) : 0n;
         const games = Number(gameCounter.status === 'fulfilled' ? gameCounter.value : 0n);
 
-        // Get oracle fees
         let oracleFee1x = ethers.parseEther("0.001");
         let oracleFee5x = ethers.parseEther("0.005");
         
@@ -991,7 +893,6 @@ export async function loadFortunePoolData(forceRefresh = false) {
             oracleFee1x = BigInt(fee1x.toString());
             oracleFee5x = BigInt(fee5x.toString());
         } catch (e) {
-            // Use defaults
             try {
                 const baseFee = await contract.oracleFee();
                 oracleFee1x = BigInt(baseFee.toString());
@@ -999,18 +900,18 @@ export async function loadFortunePoolData(forceRefresh = false) {
             } catch {}
         }
 
-        // Load tier details
+        // CORREÇÃO: prizeTiers começa em índice 1, não 0
         const tiers = [];
-        for (let i = 0; i < Math.min(tierCount, 10); i++) {
+        for (let i = 1; i <= Math.min(tierCount, 10); i++) {
             try {
                 const tier = await safeContractCall(contract, 'prizeTiers', [i], null);
-                if (tier && tier.active) {
+                if (tier && tier.active !== false) {
                     tiers.push({
                         tierId: i,
                         maxRange: Number(tier.maxRange || tier[0]),
                         multiplierBips: Number(tier.multiplierBips || tier[1]),
                         multiplier: Number(tier.multiplierBips || tier[1]) / 10000,
-                        active: tier.active || tier[2]
+                        active: tier.active ?? tier[2] ?? true
                     });
                 }
             } catch {}
@@ -1026,14 +927,12 @@ export async function loadFortunePoolData(forceRefresh = false) {
             tiers
         };
 
-        // Cache result
         contractReadCache.set(cacheKey, { value: fortuneData, timestamp: now });
         State.fortunePool = fortuneData;
 
         return fortuneData;
 
     } catch (e) {
-        console.warn("Fortune Pool data load failed:", e.message);
         State.fortunePool = { 
             active: false, 
             activeTiers: 0, 
@@ -1046,11 +945,6 @@ export async function loadFortunePoolData(forceRefresh = false) {
     }
 }
 
-/**
- * Get user's Fortune Pool game history
- * @param {string} userAddress - User wallet address
- * @param {number} limit - Max games to fetch (default 20)
- */
 export async function loadUserFortuneHistory(userAddress, limit = 20) {
     if (!userAddress) return [];
 
@@ -1058,9 +952,8 @@ export async function loadUserFortuneHistory(userAddress, limit = 20) {
     if (!contract) return [];
 
     try {
-        // Get game events for user
         const filter = contract.filters.GameFulfilled(null, userAddress);
-        const events = await contract.queryFilter(filter, -10000); // Last 10k blocks
+        const events = await contract.queryFilter(filter, -10000);
 
         const games = events.slice(-limit).reverse().map(event => {
             const args = event.args;
@@ -1081,14 +974,10 @@ export async function loadUserFortuneHistory(userAddress, limit = 20) {
         return games;
 
     } catch (e) {
-        console.warn("Fortune history load failed:", e.message);
         return [];
     }
 }
 
-/**
- * Calculate expected payout based on tier and multiplier
- */
 export function calculateExpectedPayout(wagerAmount, tierIndex, isWin) {
     if (!State.fortunePool?.tiers || !isWin) return 0n;
     
@@ -1101,21 +990,17 @@ export function calculateExpectedPayout(wagerAmount, tierIndex, isWin) {
     return (wager * multiplierBips) / 10000n;
 }
 
-/**
- * Get recommended guess count based on mode
- */
 export async function getExpectedGuessCount(isCumulative) {
     const contract = State.actionsManagerContractPublic || State.actionsManagerContract;
     
     if (!contract) {
-        return isCumulative ? 3 : 1; // Default values
+        return isCumulative ? 3 : 1;
     }
 
     try {
         const count = await contract.getExpectedGuessCount(isCumulative);
         return Number(count);
     } catch (e) {
-        // Fallback: 1 for jackpot, activeTierCount for cumulative
         if (isCumulative) {
             return State.fortunePool?.activeTiers || 3;
         }

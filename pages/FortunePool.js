@@ -1,5 +1,5 @@
 // js/pages/FortunePool.js
-// ✅ VERSION V11.0: Completely redesigned UX - Better game & number selection
+// ✅ PRODUCTION V12.0 - Tiger Theme + Animated Mascot + Detailed History
 
 import { State } from '../state.js';
 import { loadUserData, API_ENDPOINTS } from '../modules/data.js';
@@ -11,8 +11,8 @@ import { showToast } from '../ui-feedback.js';
 // CONSTANTS
 // ============================================================================
 const EXPLORER_TX = "https://sepolia.arbiscan.io/tx/";
+const TIGER_IMAGE = "./assets/fortune.png";
 
-// TIERS CONFIG - Enhanced with visual properties
 const TIERS = [
     { 
         id: 1, name: "Easy", emoji: "🍀", range: 3, multiplier: 2, chance: "33%",
@@ -53,14 +53,45 @@ const Game = {
 };
 
 // ============================================================================
-// STYLES
+// STYLES - V12 com animações do tigre
 // ============================================================================
 function injectStyles() {
-    if (document.getElementById('fortune-styles-v11')) return;
+    if (document.getElementById('fortune-styles-v12')) return;
     
     const style = document.createElement('style');
-    style.id = 'fortune-styles-v11';
+    style.id = 'fortune-styles-v12';
     style.textContent = `
+        /* Tiger Mascot Animations */
+        @keyframes tiger-float {
+            0%, 100% { transform: translateY(0) rotate(-2deg); }
+            50% { transform: translateY(-12px) rotate(2deg); }
+        }
+        @keyframes tiger-pulse {
+            0%, 100% { filter: drop-shadow(0 0 20px rgba(249,115,22,0.3)); }
+            50% { filter: drop-shadow(0 0 40px rgba(249,115,22,0.6)); }
+        }
+        @keyframes tiger-spin {
+            0% { transform: rotateY(0deg); }
+            100% { transform: rotateY(360deg); }
+        }
+        @keyframes tiger-bounce {
+            0%, 100% { transform: scale(1) translateY(0); }
+            25% { transform: scale(1.05) translateY(-8px); }
+            50% { transform: scale(0.95) translateY(0); }
+            75% { transform: scale(1.02) translateY(-4px); }
+        }
+        @keyframes tiger-celebrate {
+            0%, 100% { transform: scale(1) rotate(0deg); }
+            25% { transform: scale(1.2) rotate(-10deg); }
+            50% { transform: scale(1.1) rotate(10deg); }
+            75% { transform: scale(1.15) rotate(-5deg); }
+        }
+        .tiger-float { animation: tiger-float 4s ease-in-out infinite; }
+        .tiger-pulse { animation: tiger-pulse 2s ease-in-out infinite; }
+        .tiger-spin { animation: tiger-spin 1s ease-in-out; }
+        .tiger-bounce { animation: tiger-bounce 0.6s ease-out; }
+        .tiger-celebrate { animation: tiger-celebrate 0.8s ease-out infinite; }
+        
         /* Game Mode Cards */
         .game-mode-card {
             position: relative;
@@ -82,7 +113,7 @@ function injectStyles() {
         }
         .game-mode-card:active { transform: translateY(-2px) scale(0.99); }
         
-        /* Easy Picker (1-3) - Large Cards */
+        /* Easy Picker (1-3) */
         .easy-pick-btn {
             transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
         }
@@ -194,6 +225,12 @@ function injectStyles() {
             0% { opacity: 1; transform: translateY(-50px) rotate(0deg); }
             100% { opacity: 0; transform: translateY(100vh) rotate(720deg); }
         }
+        
+        /* History Item Hover */
+        .history-item:hover { 
+            background: rgba(63,63,70,0.5) !important; 
+            transform: translateX(4px);
+        }
     `;
     document.head.appendChild(style);
 }
@@ -209,27 +246,34 @@ export function render() {
     
     container.innerHTML = `
         <div class="max-w-lg mx-auto px-4 py-6 pb-24">
-            <!-- Header -->
-            <div class="text-center mb-6">
-                <div class="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br from-amber-500/20 to-orange-600/10 border border-amber-500/30 mb-3 float">
-                    <span class="text-4xl">🎰</span>
+            <!-- Header with Tiger Mascot -->
+            <div class="text-center mb-6 relative">
+                <div class="inline-block relative">
+                    <img src="${TIGER_IMAGE}" 
+                         alt="Fortune Tiger" 
+                         class="w-28 h-28 object-contain tiger-float tiger-pulse mx-auto"
+                         id="tiger-mascot"
+                         onerror="this.style.display='none'; document.getElementById('tiger-fallback').style.display='flex';">
+                    <div id="tiger-fallback" class="hidden items-center justify-center w-20 h-20 rounded-2xl bg-gradient-to-br from-orange-500/20 to-amber-600/10 border border-orange-500/30 mx-auto">
+                        <span class="text-5xl">🐯</span>
+                    </div>
                 </div>
-                <h1 class="text-2xl font-bold text-white">Fortune Pool</h1>
-                <p class="text-zinc-500 text-sm mt-1">Pick your lucky numbers</p>
+                <h1 class="text-2xl font-bold text-white mt-2">Fortune Pool</h1>
+                <p class="text-zinc-500 text-sm mt-1">🐯 Pick your lucky numbers</p>
             </div>
 
             <!-- Stats -->
             <div class="grid grid-cols-3 gap-2 mb-6">
                 <div class="bg-zinc-900/60 backdrop-blur border border-zinc-800/50 rounded-xl p-3 text-center">
-                    <p class="text-[10px] text-zinc-500 uppercase mb-0.5">Prize Pool</p>
-                    <p id="prize-pool" class="text-amber-400 font-bold">--</p>
+                    <p class="text-[10px] text-zinc-500 uppercase mb-0.5">🏆 Prize Pool</p>
+                    <p id="prize-pool" class="text-orange-400 font-bold">--</p>
                 </div>
                 <div class="bg-zinc-900/60 backdrop-blur border border-zinc-800/50 rounded-xl p-3 text-center">
-                    <p class="text-[10px] text-zinc-500 uppercase mb-0.5">Balance</p>
+                    <p class="text-[10px] text-zinc-500 uppercase mb-0.5">💰 Balance</p>
                     <p id="user-balance" class="text-white font-bold">--</p>
                 </div>
                 <div class="bg-zinc-900/60 backdrop-blur border border-zinc-800/50 rounded-xl p-3 text-center">
-                    <p class="text-[10px] text-zinc-500 uppercase mb-0.5">Games</p>
+                    <p class="text-[10px] text-zinc-500 uppercase mb-0.5">🎮 Games</p>
                     <p id="total-games" class="text-zinc-300 font-bold">--</p>
                 </div>
             </div>
@@ -241,13 +285,16 @@ export function render() {
             <div class="bg-zinc-900/50 border border-zinc-800/50 rounded-2xl overflow-hidden">
                 <div class="flex items-center justify-between p-3 border-b border-zinc-800/50">
                     <span class="text-sm font-bold text-white flex items-center gap-2">
-                        <i class="fa-solid fa-clock-rotate-left text-zinc-500 text-xs"></i>
+                        <i class="fa-solid fa-paw text-orange-500 text-xs"></i>
                         Recent Games
                     </span>
                     <span id="win-rate" class="text-xs text-zinc-500"></span>
                 </div>
-                <div id="history-list" class="max-h-[240px] overflow-y-auto p-2">
-                    <div class="p-6 text-center text-zinc-600 text-sm">Loading...</div>
+                <div id="history-list" class="max-h-[300px] overflow-y-auto p-2">
+                    <div class="p-6 text-center text-zinc-600 text-sm">
+                        <img src="${TIGER_IMAGE}" class="w-12 h-12 mx-auto opacity-30 animate-pulse mb-2" onerror="this.style.display='none'">
+                        Loading...
+                    </div>
                 </div>
             </div>
         </div>
@@ -264,6 +311,9 @@ function renderPhase() {
     const area = document.getElementById('game-area');
     if (!area) return;
 
+    // Update tiger animation based on phase
+    updateTigerAnimation(Game.phase);
+
     switch (Game.phase) {
         case 'select': renderModeSelect(area); break;
         case 'pick': renderPicker(area); break;
@@ -271,6 +321,39 @@ function renderPhase() {
         case 'spin': renderSpin(area); break;
         case 'result': renderResult(area); break;
         default: renderModeSelect(area);
+    }
+}
+
+function updateTigerAnimation(phase) {
+    const tiger = document.getElementById('tiger-mascot');
+    if (!tiger) return;
+    
+    tiger.className = 'w-28 h-28 object-contain mx-auto';
+    
+    switch (phase) {
+        case 'select':
+            tiger.classList.add('tiger-float', 'tiger-pulse');
+            break;
+        case 'pick':
+            tiger.classList.add('tiger-bounce');
+            break;
+        case 'wager':
+            tiger.classList.add('tiger-float');
+            break;
+        case 'spin':
+            tiger.classList.add('tiger-spin');
+            break;
+        case 'result':
+            if (Game.result?.isWin || (Game.result?.results && Game.result.results.some((r, i) => {
+                const picks = Game.mode === 'jackpot' ? [Game.guess] : Game.guesses;
+                return Number(r) === picks[i];
+            }))) {
+                tiger.classList.add('tiger-celebrate');
+            } else {
+                tiger.style.filter = 'grayscale(0.5)';
+                tiger.classList.add('tiger-float');
+            }
+            break;
     }
 }
 
@@ -383,14 +466,12 @@ function renderJackpotPicker(container) {
                 <p class="text-zinc-400 text-sm">Pick <span class="text-white font-bold">1-100</span> • <span class="text-emerald-400">1%</span> • <span class="${tier.textColor} font-bold">100x</span></p>
             </div>
 
-            <!-- Display -->
             <div class="text-center mb-4">
                 <div class="inline-flex items-center justify-center w-28 h-28 rounded-2xl bg-gradient-to-br ${tier.bgFrom} ${tier.bgTo} border-2 ${tier.borderColor} pulse-glow" style="--glow-color: ${tier.hex}40">
                     <span id="display-number" class="text-5xl font-black ${tier.textColor}">${current}</span>
                 </div>
             </div>
 
-            <!-- Slider -->
             <div class="mb-4 px-2">
                 <input type="range" id="number-slider" min="1" max="100" value="${current}" 
                     class="fortune-slider w-full"
@@ -400,7 +481,6 @@ function renderJackpotPicker(container) {
                 </div>
             </div>
 
-            <!-- Grid -->
             <details class="group">
                 <summary class="flex items-center justify-center gap-2 text-xs text-zinc-500 cursor-pointer hover:text-zinc-400 py-2">
                     <i class="fa-solid fa-grip text-[10px]"></i>
@@ -414,7 +494,6 @@ function renderJackpotPicker(container) {
                 </div>
             </details>
 
-            <!-- Actions -->
             <div class="flex gap-3 mt-5">
                 <button id="btn-back" class="flex-1 py-3.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-bold rounded-xl"><i class="fa-solid fa-arrow-left mr-2"></i>Back</button>
                 <button id="btn-next" class="flex-1 py-3.5 bg-gradient-to-r from-amber-500 to-orange-500 text-black font-bold rounded-xl">Continue<i class="fa-solid fa-arrow-right ml-2"></i></button>
@@ -433,7 +512,6 @@ function renderComboPicker(container) {
     
     container.innerHTML = `
         <div class="bg-gradient-to-br from-zinc-900 to-zinc-800/50 border border-zinc-700/50 rounded-2xl p-5">
-            <!-- Progress -->
             <div class="flex justify-center gap-3 mb-5">
                 ${TIERS.map((t, i) => {
                     const isActive = i === Game.comboStep;
@@ -450,7 +528,6 @@ function renderComboPicker(container) {
                 }).join('')}
             </div>
 
-            <!-- Header -->
             <div class="text-center mb-4">
                 <div class="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r ${tier.bgFrom} ${tier.bgTo} border ${tier.borderColor} rounded-full mb-2">
                     <span class="text-2xl">${tier.emoji}</span>
@@ -459,12 +536,10 @@ function renderComboPicker(container) {
                 <p class="text-zinc-400 text-sm">Pick <span class="text-white font-bold">1-${tier.range}</span> • <span class="text-emerald-400">${tier.chance}</span> • <span class="${tier.textColor} font-bold">${tier.multiplier}x</span></p>
             </div>
 
-            <!-- Picker -->
             <div id="picker-area" class="mb-5">
                 ${tier.range <= 3 ? renderEasyPicker(tier, current) : tier.range <= 10 ? renderMediumPicker(tier, current) : renderHardPickerHTML(tier, current)}
             </div>
 
-            <!-- Actions -->
             <div class="flex gap-3">
                 <button id="btn-back" class="flex-1 py-3.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-bold rounded-xl"><i class="fa-solid fa-arrow-left mr-2"></i>${Game.comboStep > 0 ? 'Previous' : 'Back'}</button>
                 <button id="btn-next" class="flex-1 py-3.5 bg-gradient-to-r from-${tier.color}-500 to-${tier.color}-600 text-black font-bold rounded-xl">${Game.comboStep < 2 ? 'Next' : 'Continue'}<i class="fa-solid fa-arrow-right ml-2"></i></button>
@@ -568,6 +643,7 @@ function setupHardPickerEvents(tier, updateFn, current) {
             btn.classList.toggle('text-zinc-500', n !== num);
         });
     };
+
     document.getElementById('number-slider')?.addEventListener('input', (e) => updateNumber(parseInt(e.target.value)));
     document.querySelectorAll('.grid-num').forEach(btn => btn.addEventListener('click', () => updateNumber(parseInt(btn.dataset.num))));
 }
@@ -581,13 +657,12 @@ function renderWager(container) {
     const maxMulti = isJackpot ? 100 : MAX_COMBO_MULTIPLIER;
     const balanceNum = formatBigNumber(State.currentUserBalance || 0n);
     const hasBalance = balanceNum >= 1;
-    const wagerOptions = [10, 25, 50, 100, 250, 500];
-
+    const wagerOptions = [10, 50, 100];
+    
     container.innerHTML = `
         <div class="bg-gradient-to-br from-zinc-900 to-zinc-800/50 border border-zinc-700/50 rounded-2xl p-5">
-            <!-- Picks -->
             <div class="text-center mb-5">
-                <p class="text-xs text-zinc-500 uppercase mb-3">Your ${isJackpot ? 'Pick' : 'Picks'}</p>
+                <h2 class="text-lg font-bold text-white mb-3">Your Picks</h2>
                 <div class="flex justify-center gap-3">
                     ${(isJackpot ? [{ tier: TIERS[2], pick: picks[0] }] : picks.map((p, i) => ({ tier: TIERS[i], pick: p }))).map(({ tier, pick }) => `
                         <div class="relative">
@@ -632,7 +707,7 @@ function renderWager(container) {
 
             <div class="flex gap-3">
                 <button id="btn-back" class="flex-1 py-3.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-bold rounded-xl"><i class="fa-solid fa-arrow-left mr-2"></i>Back</button>
-                <button id="btn-play" class="flex-1 py-3.5 bg-gradient-to-r from-amber-500 to-orange-500 text-black font-bold rounded-xl ${!hasBalance ? 'opacity-50 cursor-not-allowed' : ''}" ${!hasBalance ? 'disabled' : ''}><i class="fa-solid fa-dice mr-2"></i>Play Now</button>
+                <button id="btn-play" class="flex-1 py-3.5 bg-gradient-to-r from-amber-500 to-orange-500 text-black font-bold rounded-xl ${!hasBalance ? 'opacity-50 cursor-not-allowed' : ''}" ${!hasBalance ? 'disabled' : ''}><i class="fa-solid fa-paw mr-2"></i>Play Now</button>
             </div>
         </div>
     `;
@@ -656,7 +731,7 @@ function setupWagerEvents(maxMulti, balanceNum) {
     document.getElementById('btn-faucet')?.addEventListener('click', async () => {
         showToast('Requesting tokens...', 'info');
         try {
-            const res = await fetch(`https://faucet-4wvdcuoouq-uc.a.run.app/claim/${State.userAddress}`);
+            const res = await fetch(`https://faucet-4wvdcuoouq-uc.a.run.app?address=${State.userAddress}`);
             const data = await res.json();
             if (data.success) { showToast('🎉 Tokens received!', 'success'); await loadUserData(); renderPhase(); }
             else showToast(data.error || 'Error', 'error');
@@ -683,9 +758,11 @@ function renderSpin(container) {
     const picks = isJackpot ? [Game.guess] : Game.guesses;
     container.innerHTML = `
         <div class="bg-gradient-to-br from-zinc-900 to-zinc-800/50 border border-zinc-700/50 rounded-2xl p-8 text-center">
-            <div class="mb-6"><div class="inline-flex items-center justify-center w-24 h-24 rounded-full bg-amber-500/20 animate-pulse"><i class="fa-solid fa-dice text-5xl text-amber-400 animate-spin"></i></div></div>
-            <h2 class="text-2xl font-bold text-white mb-2">Rolling...</h2>
-            <p class="text-zinc-400 mb-6">Waiting for blockchain</p>
+            <div class="mb-6">
+                <img src="${TIGER_IMAGE}" class="w-24 h-24 mx-auto tiger-spin" alt="Rolling..." onerror="this.outerHTML='<div class=\\'inline-flex items-center justify-center w-24 h-24 rounded-full bg-amber-500/20 animate-pulse\\'><i class=\\'fa-solid fa-paw text-5xl text-amber-400 animate-spin\\'></i></div>'">
+            </div>
+            <h2 class="text-2xl font-bold text-white mb-2">🐯 Rolling...</h2>
+            <p class="text-zinc-400 mb-6">Waiting for oracle</p>
             <div class="flex justify-center gap-3">
                 ${(isJackpot ? [{ tier: TIERS[2], pick: picks[0] }] : picks.map((p, i) => ({ tier: TIERS[i], pick: p }))).map(({ tier, pick }) => `
                     <div class="w-14 h-14 rounded-xl bg-gradient-to-br ${tier.bgFrom} ${tier.bgTo} border-2 ${tier.borderColor} flex items-center justify-center animate-pulse"><span class="text-xl font-bold ${tier.textColor}">${pick}</span></div>
@@ -703,7 +780,6 @@ function renderResult(container) {
     const picks = isJackpot ? [Game.guess] : Game.guesses;
     const results = result.results || result.randomNumbers || result.rolls || [];
     
-    // Calculate win based on matches
     const matches = picks.map((pick, i) => {
         const roll = results[i] !== undefined ? Number(results[i]) : null;
         return roll !== null && roll === pick;
@@ -711,7 +787,6 @@ function renderResult(container) {
     const matchCount = matches.filter(m => m).length;
     const isWin = matchCount > 0;
     
-    // Calculate prize estimate
     let multiplier = 0;
     if (isJackpot && matches[0]) {
         multiplier = 100;
@@ -725,22 +800,28 @@ function renderResult(container) {
     container.innerHTML = `
         <div class="bg-gradient-to-br ${isWin ? 'from-emerald-900/30 to-green-900/10 border-emerald-500/30' : 'from-zinc-900 to-zinc-800/50 border-zinc-700/50'} border rounded-2xl p-6 text-center">
             <div class="mb-5">
-                ${isWin ? `<div class="inline-flex items-center justify-center w-20 h-20 rounded-full bg-emerald-500/20 mb-4 pop"><span class="text-5xl">🎉</span></div><h2 class="text-3xl font-black text-emerald-400 mb-2">YOU WON!</h2><p class="text-4xl font-black text-white">${estimatedPrize.toFixed(2)} BKC</p>`
-                       : `<div class="inline-flex items-center justify-center w-20 h-20 rounded-full bg-zinc-800 mb-4"><span class="text-5xl">😔</span></div><h2 class="text-2xl font-bold text-zinc-400 mb-2">Not this time</h2><p class="text-zinc-500">Better luck next round!</p>`}
+                ${isWin 
+                    ? `<img src="${TIGER_IMAGE}" class="w-24 h-24 mx-auto tiger-celebrate mb-4" alt="Winner!" onerror="this.outerHTML='<div class=\\'inline-flex items-center justify-center w-20 h-20 rounded-full bg-emerald-500/20 mb-4 pop\\'><span class=\\'text-5xl\\'>🎉</span></div>'">
+                       <h2 class="text-3xl font-black text-emerald-400 mb-2">🏆 YOU WON!</h2>
+                       <p class="text-4xl font-black text-white">${estimatedPrize.toFixed(2)} BKC</p>`
+                    : `<img src="${TIGER_IMAGE}" class="w-20 h-20 mx-auto opacity-50 mb-4" style="filter: grayscale(0.7)" alt="No luck" onerror="this.outerHTML='<div class=\\'inline-flex items-center justify-center w-20 h-20 rounded-full bg-zinc-800 mb-4\\'><span class=\\'text-5xl\\'>😿</span></div>'">
+                       <h2 class="text-2xl font-bold text-zinc-400 mb-2">Not this time</h2>
+                       <p class="text-zinc-500">Better luck next round!</p>`
+                }
             </div>
             <div class="mb-6">
-                <p class="text-xs text-zinc-500 uppercase mb-3">Results</p>
+                <p class="text-xs text-zinc-500 uppercase mb-3">🔮 Oracle Numbers</p>
                 <div class="flex justify-center gap-4">
                     ${(isJackpot ? [0] : [0, 1, 2]).map(i => {
                         const tier = isJackpot ? TIERS[2] : TIERS[i];
                         const pick = picks[isJackpot ? 0 : i];
                         const drawn = results[i] !== undefined ? Number(results[i]) : '?';
                         const hit = pick === drawn;
-                        return `<div class="text-center"><p class="text-xs text-zinc-500 mb-2">${tier.emoji} ${tier.name}</p><div class="w-16 h-16 rounded-xl border-2 flex items-center justify-center mb-1 ${hit ? 'result-hit' : 'result-miss'} ${tier.borderColor}"><span class="text-2xl font-black ${hit ? 'text-emerald-400' : 'text-zinc-500'}">${drawn}</span></div><p class="text-xs ${hit ? 'text-emerald-400 font-bold' : 'text-zinc-600'}">You: ${pick} ${hit ? '✓' : '✗'}</p></div>`;
+                        return `<div class="text-center"><p class="text-xs text-zinc-500 mb-2">${tier.emoji} ${tier.name}</p><div class="w-16 h-16 rounded-xl border-2 flex items-center justify-center mb-1 ${hit ? 'result-hit' : 'result-miss'} ${tier.borderColor}"><span class="text-2xl font-black ${hit ? 'text-emerald-400' : 'text-zinc-500'}">${drawn}</span></div><p class="text-xs ${hit ? 'text-emerald-400 font-bold' : 'text-zinc-600'}">🎯 You: ${pick} ${hit ? '✓' : '✗'}</p></div>`;
                     }).join('')}
                 </div>
             </div>
-            <button id="btn-new-game" class="w-full py-4 bg-gradient-to-r from-amber-500 to-orange-500 text-black font-bold rounded-xl"><i class="fa-solid fa-dice mr-2"></i>Play Again</button>
+            <button id="btn-new-game" class="w-full py-4 bg-gradient-to-r from-amber-500 to-orange-500 text-black font-bold rounded-xl"><i class="fa-solid fa-paw mr-2"></i>Play Again</button>
         </div>
     `;
     document.getElementById('btn-new-game')?.addEventListener('click', () => { Game.phase = 'select'; Game.result = null; renderPhase(); loadPoolData(); });
@@ -749,14 +830,11 @@ function renderResult(container) {
 // ============================================================================
 // HELPERS
 // ============================================================================
-
-// Local getFortunePoolStatus since it's not exported from transactions.js
 async function getFortunePoolStatus() {
     const contract = State.actionsManagerContractPublic || State.actionsManagerContract;
     if (!contract) return null;
 
     try {
-        // Try to get pool status from contract
         const [prizePool, gameCounter] = await Promise.all([
             contract.fortunePrizePool ? contract.fortunePrizePool() : Promise.resolve(0n),
             contract.fortuneGameCounter ? contract.fortuneGameCounter() : Promise.resolve(0)
@@ -767,12 +845,10 @@ async function getFortunePoolStatus() {
             gameCounter: Number(gameCounter) || 0
         };
     } catch (e) {
-        console.warn("Pool status check failed:", e);
         return { prizePool: 0n, gameCounter: 0 };
     }
 }
 
-// Local getGameResult since it's not exported from transactions.js
 async function getGameResult(gameId) {
     const contract = State.actionsManagerContractPublic || State.actionsManagerContract;
     if (!contract) return null;
@@ -796,7 +872,6 @@ async function getGameResult(gameId) {
         };
 
     } catch (e) {
-        console.warn("Game result check failed:", e);
         return null;
     }
 }
@@ -820,7 +895,7 @@ function triggerConfetti() {
         const c = document.createElement('div');
         c.className = 'confetti';
         c.style.cssText = `left:${Math.random()*100}%;color:${colors[i%colors.length]};font-size:${8+Math.random()*12}px;animation-delay:${Math.random()*2}s;animation-duration:${2+Math.random()*2}s`;
-        c.textContent = ['●','■','★','♦'][i%4];
+        c.textContent = ['●','■','★','🐯'][i%4];
         container.appendChild(c);
     }
     setTimeout(() => container.remove(), 5000);
@@ -844,17 +919,23 @@ async function loadPoolData() {
 async function loadHistory() {
     try {
         const endpoint = API_ENDPOINTS.fortuneGames || 'https://getfortunegames-4wvdcuoouq-uc.a.run.app';
-        const url = State.userAddress ? `${endpoint}?player=${State.userAddress}&limit=10` : `${endpoint}?limit=10`;
+        const url = State.userAddress ? `${endpoint}?player=${State.userAddress}&limit=15` : `${endpoint}?limit=15`;
         const res = await fetch(url);
         const data = await res.json();
         if (data.games?.length > 0) {
             renderHistoryList(data.games);
             const wins = data.games.filter(g => g.isWin || (g.prizeWon && BigInt(g.prizeWon) > 0n)).length;
             const el = document.getElementById('win-rate');
-            if (el) el.textContent = `${wins}/${data.games.length} wins`;
+            if (el) el.textContent = `🏆 ${wins}/${data.games.length} wins`;
         } else {
             const list = document.getElementById('history-list');
-            if (list) list.innerHTML = `<div class="p-8 text-center"><div class="w-12 h-12 rounded-full bg-zinc-800/50 flex items-center justify-center mx-auto mb-3"><i class="fa-solid fa-dice text-zinc-600 text-xl"></i></div><p class="text-zinc-500 text-sm">No games yet</p></div>`;
+            if (list) list.innerHTML = `
+                <div class="p-8 text-center">
+                    <img src="${TIGER_IMAGE}" class="w-16 h-16 mx-auto opacity-20 mb-3" onerror="this.style.display='none'">
+                    <p class="text-zinc-500 text-sm">No games yet</p>
+                    <p class="text-zinc-600 text-xs mt-1">Be the first to play!</p>
+                </div>
+            `;
         }
     } catch { }
 }
@@ -862,12 +943,42 @@ async function loadHistory() {
 function renderHistoryList(games) {
     const list = document.getElementById('history-list');
     if (!list) return;
+    
     list.innerHTML = games.map(g => {
         const isWin = g.isWin || (g.prizeWon && BigInt(g.prizeWon) > 0n);
         const prize = g.prizeWon ? formatBigNumber(BigInt(g.prizeWon)) : 0;
         const wager = g.wagerAmount ? formatBigNumber(BigInt(g.wagerAmount)) : 0;
-        const time = g.timestamp ? new Date(g.timestamp._seconds * 1000).toLocaleString() : '';
-        return `<a href="${g.txHash ? EXPLORER_TX + g.txHash : '#'}" target="_blank" class="flex items-center justify-between p-2.5 hover:bg-zinc-800/60 border border-zinc-700/30 rounded-lg transition-all group mb-1.5 bg-zinc-800/20"><div class="flex items-center gap-2.5"><div class="w-8 h-8 rounded-lg flex items-center justify-center ${isWin ? 'bg-emerald-500/20' : 'bg-zinc-700/50'}"><span class="text-sm">${isWin ? '🏆' : '🎲'}</span></div><div><p class="text-white text-xs font-medium">${isWin ? 'Winner!' : 'Played'}</p><p class="text-zinc-600 text-[10px]">${time}</p></div></div><div class="flex items-center gap-2"><span class="text-xs font-mono font-bold ${isWin ? 'text-emerald-400' : 'text-zinc-400'}">${isWin ? '+' + prize.toFixed(2) : '-' + wager.toFixed(2)} BKC</span><i class="fa-solid fa-arrow-up-right-from-square text-zinc-600 group-hover:text-blue-400 text-[9px]"></i></div></a>`;
+        const time = g.timestamp ? new Date(g.timestamp._seconds * 1000).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
+        
+        // Números apostados e do oráculo
+        const guesses = g.guesses || g.details?.guesses || [];
+        const rolls = g.rolls || g.details?.rolls || [];
+        const guessesStr = guesses.length > 0 ? guesses.join(' • ') : '';
+        const rollsStr = rolls.length > 0 ? rolls.join(' • ') : '';
+        
+        return `
+            <a href="${g.txHash ? EXPLORER_TX + g.txHash : '#'}" target="_blank" class="history-item flex items-center justify-between p-3 hover:bg-zinc-800/60 border border-zinc-700/30 rounded-lg transition-all group mb-1.5 bg-zinc-800/20">
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 rounded-lg flex items-center justify-center ${isWin ? 'bg-emerald-500/20' : 'bg-zinc-700/50'}">
+                        <span class="text-lg">${isWin ? '🏆' : '🐯'}</span>
+                    </div>
+                    <div>
+                        <p class="text-white text-xs font-medium flex items-center gap-2">
+                            ${isWin ? '<span class="text-emerald-400">Winner!</span>' : 'Played'}
+                            ${guessesStr ? `<span class="px-1.5 py-0.5 rounded text-[10px] font-bold" style="background: rgba(249,115,22,0.2); color: #f97316">🎯 ${guessesStr}</span>` : ''}
+                        </p>
+                        <div class="flex items-center gap-2 mt-0.5">
+                            <p class="text-zinc-600 text-[10px]">${time}</p>
+                            ${rollsStr ? `<span class="text-[10px] text-fuchsia-400">🔮 ${rollsStr}</span>` : ''}
+                        </div>
+                    </div>
+                </div>
+                <div class="flex items-center gap-2">
+                    <span class="text-xs font-mono font-bold ${isWin ? 'text-emerald-400' : 'text-zinc-400'}">${isWin ? '+' + prize.toFixed(2) : '-' + wager.toFixed(2)} BKC</span>
+                    <i class="fa-solid fa-arrow-up-right-from-square text-zinc-600 group-hover:text-blue-400 text-[9px]"></i>
+                </div>
+            </a>
+        `;
     }).join('');
 }
 

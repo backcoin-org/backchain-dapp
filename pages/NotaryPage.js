@@ -1,5 +1,5 @@
 // js/pages/NotaryPage.js
-// ✅ VERSION V8.5: Fixed addToWallet - passes IPFS image URL to MetaMask
+// ✅ PRODUCTION V9.0 - Enhanced Animations + Consistent Icons + Detailed History
 
 import { State } from '../state.js';
 import { formatBigNumber } from '../utils.js';
@@ -12,9 +12,10 @@ const ethers = window.ethers;
 // ============================================================================
 // CONSTANTS
 // ============================================================================
-const MAX_FILE_SIZE = 4 * 1024 * 1024; // 4MB - Any file type allowed
+const MAX_FILE_SIZE = 4 * 1024 * 1024; // 4MB
 const EXPLORER_TX = "https://sepolia.arbiscan.io/tx/";
 const IPFS_GATEWAY = "https://ipfs.io/ipfs/";
+const NOTARY_IMAGE = "./assets/notary.png";
 
 // File type configurations
 const FILE_TYPES = {
@@ -46,11 +47,42 @@ const Notary = {
 // STYLES
 // ============================================================================
 const injectStyles = () => {
-    if (document.getElementById('notary-styles')) return;
+    if (document.getElementById('notary-styles-v9')) return;
     
     const style = document.createElement('style');
-    style.id = 'notary-styles';
+    style.id = 'notary-styles-v9';
     style.textContent = `
+        /* Notary Image Animations */
+        @keyframes notary-float {
+            0%, 100% { transform: translateY(0) rotate(-1deg); }
+            50% { transform: translateY(-8px) rotate(1deg); }
+        }
+        @keyframes notary-pulse {
+            0%, 100% { filter: drop-shadow(0 0 15px rgba(245,158,11,0.3)); }
+            50% { filter: drop-shadow(0 0 30px rgba(245,158,11,0.6)); }
+        }
+        @keyframes notary-stamp {
+            0% { transform: scale(1) rotate(0deg); }
+            25% { transform: scale(1.2) rotate(-5deg); }
+            50% { transform: scale(0.9) rotate(5deg); }
+            75% { transform: scale(1.1) rotate(-2deg); }
+            100% { transform: scale(1) rotate(0deg); }
+        }
+        @keyframes notary-success {
+            0% { transform: scale(1); filter: drop-shadow(0 0 20px rgba(16,185,129,0.5)); }
+            50% { transform: scale(1.2); filter: drop-shadow(0 0 50px rgba(16,185,129,0.9)); }
+            100% { transform: scale(1); filter: drop-shadow(0 0 20px rgba(16,185,129,0.5)); }
+        }
+        @keyframes notary-spin {
+            0% { transform: rotateY(0deg); }
+            100% { transform: rotateY(360deg); }
+        }
+        .notary-float { animation: notary-float 4s ease-in-out infinite; }
+        .notary-pulse { animation: notary-pulse 2s ease-in-out infinite; }
+        .notary-stamp { animation: notary-stamp 0.6s ease-out; }
+        .notary-success { animation: notary-success 1s ease-out; }
+        .notary-spin { animation: notary-spin 1.5s ease-in-out; }
+        
         .notary-dropzone {
             border: 2px dashed #3f3f46;
             transition: all 0.2s ease;
@@ -140,10 +172,10 @@ function render() {
                 <div class="flex items-center justify-between">
                     <div class="flex items-center gap-3">
                         <div class="w-10 h-10 flex items-center justify-center">
-                            <img src="./assets/notary.png" alt="Notary" class="w-full h-full object-contain drop-shadow-lg">
+                            <img src="${NOTARY_IMAGE}" alt="Notary" class="w-full h-full object-contain notary-float notary-pulse" id="notary-mascot-mobile">
                         </div>
                         <div>
-                            <h1 class="text-lg font-bold text-white">Decentralized Notary</h1>
+                            <h1 class="text-lg font-bold text-white">📜 Decentralized Notary</h1>
                             <p id="mobile-status" class="text-[10px] text-zinc-500">Blockchain Certification</p>
                         </div>
                     </div>
@@ -157,10 +189,10 @@ function render() {
             <div class="hidden md:flex items-center justify-between mb-6">
                 <div class="flex items-center gap-4">
                     <div class="w-14 h-14 flex items-center justify-center">
-                        <img src="./assets/notary.png" alt="Notary" class="w-full h-full object-contain drop-shadow-lg">
+                        <img src="${NOTARY_IMAGE}" alt="Notary" class="w-full h-full object-contain notary-float notary-pulse" id="notary-mascot">
                     </div>
                     <div>
-                        <h1 class="text-2xl font-bold text-white">Decentralized Notary</h1>
+                        <h1 class="text-2xl font-bold text-white">📜 Decentralized Notary</h1>
                         <p class="text-sm text-zinc-500">Permanent blockchain certification</p>
                     </div>
                 </div>
@@ -286,7 +318,7 @@ function render() {
                         <div class="w-16 h-16 mx-auto mb-3 relative">
                             <div class="absolute inset-0 rounded-full bg-amber-500/20 animate-ping"></div>
                             <div class="relative w-full h-full rounded-full bg-zinc-800 flex items-center justify-center p-2">
-                                <img src="./assets/notary.png" alt="Loading" class="w-full h-full object-contain opacity-60 animate-pulse">
+                                <img src="${NOTARY_IMAGE}" alt="Loading" class="w-full h-full object-contain opacity-60 animate-pulse">
                             </div>
                         </div>
                         <p class="text-zinc-500 text-sm">Loading certificates...</p>
@@ -299,13 +331,10 @@ function render() {
         <div id="processing-overlay" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/95 backdrop-blur-sm">
             <div class="text-center p-6 max-w-sm">
                 <div class="w-28 h-28 mx-auto mb-6 relative">
-                    <!-- Outer spinning ring -->
                     <div class="absolute inset-[-4px] rounded-full border-4 border-transparent border-t-amber-400 border-r-amber-500/50 animate-spin"></div>
-                    <!-- Pulse glow -->
                     <div class="absolute inset-0 rounded-full bg-amber-500/20 animate-ping"></div>
-                    <!-- Notary Image container -->
                     <div class="relative w-full h-full rounded-full bg-gradient-to-br from-zinc-800 to-zinc-900 flex items-center justify-center shadow-xl shadow-amber-500/20 overflow-hidden border-2 border-amber-500/30 p-3">
-                        <img src="./assets/notary.png" alt="Notarizing" class="w-full h-full object-contain drop-shadow-lg">
+                        <img src="${NOTARY_IMAGE}" alt="Notarizing" class="w-full h-full object-contain notary-spin" id="notary-overlay-img">
                     </div>
                 </div>
                 <h3 class="text-xl font-bold text-white mb-1">Notarizing Document</h3>
@@ -318,7 +347,6 @@ function render() {
         </div>
     `;
 
-    // Initial render
     updateStatusBadges();
     renderStepContent();
     loadCertificates();
@@ -332,23 +360,19 @@ function updateStatusBadges() {
     const mobileBadge = document.getElementById('mobile-badge');
     const desktopBadge = document.getElementById('desktop-badge');
     const feeEl = document.getElementById('fee-amount');
-    const balanceEl = document.getElementById('user-balance');
-    
-    const fee = State.notaryFee || ethers.parseEther("1");
-    const balance = State.currentUserBalance || 0n;
-    const hasBalance = balance >= fee;
-    const isOnline = State.isConnected;
+    const balEl = document.getElementById('user-balance');
 
-    // Fee display
+    const fee = State.notaryFee || 0n;
+    const balance = State.currentUserBalance || 0n;
+
     if (feeEl) feeEl.textContent = `${formatBigNumber(fee)} BKC`;
-    if (balanceEl) {
-        balanceEl.textContent = `${formatBigNumber(balance)} BKC`;
-        balanceEl.className = `font-mono font-bold ${hasBalance ? 'text-green-400' : 'text-red-400'}`;
+    if (balEl) {
+        balEl.textContent = `${formatBigNumber(balance)} BKC`;
+        balEl.className = `font-mono font-bold ${balance >= fee ? 'text-green-400' : 'text-red-400'}`;
     }
 
-    // Badges
-    if (isOnline) {
-        if (hasBalance) {
+    if (State.isConnected) {
+        if (balance >= fee) {
             if (mobileBadge) {
                 mobileBadge.className = 'text-[10px] px-2 py-1 rounded-full bg-green-500/20 text-green-400';
                 mobileBadge.textContent = 'Ready';
@@ -423,8 +447,8 @@ function renderStepContent() {
     if (!panel) return;
 
     updateStepIndicators();
+    updateMascotAnimation(Notary.step);
 
-    // Check requirements first
     if (!State.isConnected) {
         panel.innerHTML = `
             <div class="flex flex-col items-center justify-center h-full py-8">
@@ -459,18 +483,27 @@ function renderStepContent() {
         return;
     }
 
-    // Render current step
     switch (Notary.step) {
-        case 1:
-            renderStep1(panel);
-            break;
-        case 2:
-            renderStep2(panel);
-            break;
-        case 3:
-            renderStep3(panel);
-            break;
+        case 1: renderStep1(panel); break;
+        case 2: renderStep2(panel); break;
+        case 3: renderStep3(panel); break;
     }
+}
+
+function updateMascotAnimation(step) {
+    const mascot = document.getElementById('notary-mascot');
+    const mascotMobile = document.getElementById('notary-mascot-mobile');
+    
+    [mascot, mascotMobile].forEach(m => {
+        if (!m) return;
+        m.className = 'w-full h-full object-contain';
+        
+        switch (step) {
+            case 1: m.classList.add('notary-float', 'notary-pulse'); break;
+            case 2: m.classList.add('notary-float'); break;
+            case 3: m.classList.add('notary-pulse'); break;
+        }
+    });
 }
 
 // ============================================================================
@@ -552,7 +585,6 @@ function renderStep2(panel) {
             <h3 class="text-lg font-bold text-white mb-2 text-center">Add Details</h3>
             <p class="text-zinc-500 text-sm mb-6 text-center">Describe your document for easy reference</p>
 
-            <!-- File Preview -->
             <div class="bg-zinc-800/50 border border-zinc-700 rounded-xl p-4 mb-4">
                 <div class="flex items-center gap-3">
                     <div class="w-12 h-12 rounded-lg bg-amber-500/10 flex items-center justify-center">
@@ -568,7 +600,6 @@ function renderStep2(panel) {
                 </div>
             </div>
 
-            <!-- Description Input -->
             <div class="mb-6">
                 <label class="text-xs font-bold text-zinc-400 uppercase tracking-wider block mb-2">
                     Description <span class="text-zinc-600 font-normal">(optional)</span>
@@ -578,7 +609,6 @@ function renderStep2(panel) {
                     placeholder="E.g., Property deed signed on Jan 2025...">${Notary.description}</textarea>
             </div>
 
-            <!-- Actions -->
             <div class="flex gap-3">
                 <button id="btn-back" class="flex-1 py-3 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-bold rounded-xl transition-colors">
                     <i class="fa-solid fa-arrow-left mr-2"></i> Back
@@ -610,53 +640,26 @@ function renderStep2(panel) {
     });
 }
 
-// Get file type info (icon, color, bg) based on mime type or filename
 function getFileTypeInfo(mimeType = '', fileName = '') {
     const mime = mimeType.toLowerCase();
     const name = fileName.toLowerCase();
     
-    // Images
-    if (mime.includes('image') || /\.(jpg|jpeg|png|gif|webp|svg|bmp|ico)$/.test(name)) {
-        return FILE_TYPES.image;
-    }
-    // PDF
-    if (mime.includes('pdf') || name.endsWith('.pdf')) {
-        return FILE_TYPES.pdf;
-    }
-    // Audio
-    if (mime.includes('audio') || /\.(mp3|wav|ogg|flac|aac|m4a)$/.test(name)) {
-        return FILE_TYPES.audio;
-    }
-    // Video
-    if (mime.includes('video') || /\.(mp4|avi|mov|mkv|webm|wmv)$/.test(name)) {
-        return FILE_TYPES.video;
-    }
-    // Documents
-    if (mime.includes('word') || mime.includes('document') || /\.(doc|docx|odt|rtf)$/.test(name)) {
-        return FILE_TYPES.document;
-    }
-    // Spreadsheets
-    if (mime.includes('sheet') || mime.includes('excel') || /\.(xls|xlsx|csv|ods)$/.test(name)) {
-        return FILE_TYPES.spreadsheet;
-    }
-    // Code/Programming
-    if (/\.(js|ts|py|java|cpp|c|h|html|css|json|xml|sol|rs|go|php|rb)$/.test(name)) {
-        return FILE_TYPES.code;
-    }
-    // Archives
-    if (mime.includes('zip') || mime.includes('archive') || /\.(zip|rar|7z|tar|gz)$/.test(name)) {
-        return FILE_TYPES.archive;
-    }
+    if (mime.includes('image') || /\.(jpg|jpeg|png|gif|webp|svg|bmp|ico)$/.test(name)) return FILE_TYPES.image;
+    if (mime.includes('pdf') || name.endsWith('.pdf')) return FILE_TYPES.pdf;
+    if (mime.includes('audio') || /\.(mp3|wav|ogg|flac|aac|m4a)$/.test(name)) return FILE_TYPES.audio;
+    if (mime.includes('video') || /\.(mp4|avi|mov|mkv|webm|wmv)$/.test(name)) return FILE_TYPES.video;
+    if (mime.includes('word') || mime.includes('document') || /\.(doc|docx|odt|rtf)$/.test(name)) return FILE_TYPES.document;
+    if (mime.includes('sheet') || mime.includes('excel') || /\.(xls|xlsx|csv|ods)$/.test(name)) return FILE_TYPES.spreadsheet;
+    if (/\.(js|ts|py|java|cpp|c|h|html|css|json|xml|sol|rs|go|php|rb)$/.test(name)) return FILE_TYPES.code;
+    if (mime.includes('zip') || mime.includes('archive') || /\.(zip|rar|7z|tar|gz)$/.test(name)) return FILE_TYPES.archive;
     
     return FILE_TYPES.default;
 }
 
-// Legacy function for backwards compatibility
 function getFileIcon(mimeType) {
     return getFileTypeInfo(mimeType).icon;
 }
 
-// Get category name from mime type
 function getFileCategory(mimeType = '') {
     const mime = mimeType.toLowerCase();
     if (mime.includes('image')) return 'image';
@@ -682,7 +685,6 @@ function renderStep3(panel) {
             <h3 class="text-lg font-bold text-white mb-2">Confirm & Mint</h3>
             <p class="text-zinc-500 text-sm mb-6">Review and sign to create your certificate</p>
 
-            <!-- Summary Card -->
             <div class="bg-zinc-800/50 border border-zinc-700 rounded-xl p-4 mb-4 text-left">
                 <div class="flex items-center gap-3 pb-3 border-b border-zinc-700/50 mb-3">
                     <div class="w-10 h-10 rounded-lg bg-amber-500/10 flex items-center justify-center">
@@ -696,7 +698,6 @@ function renderStep3(panel) {
                 <p class="text-xs text-zinc-400 italic">"${desc}"</p>
             </div>
 
-            <!-- Cost Summary -->
             <div class="bg-amber-500/10 border border-amber-500/20 rounded-xl p-3 mb-6">
                 <div class="flex justify-between items-center">
                     <span class="text-zinc-400 text-sm">Total Cost</span>
@@ -704,7 +705,6 @@ function renderStep3(panel) {
                 </div>
             </div>
 
-            <!-- Actions -->
             <div class="flex gap-3">
                 <button id="btn-back" class="flex-1 py-3 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-bold rounded-xl transition-colors">
                     <i class="fa-solid fa-arrow-left mr-2"></i> Back
@@ -740,6 +740,7 @@ async function handleMint() {
     const overlay = document.getElementById('processing-overlay');
     const statusEl = document.getElementById('process-status');
     const barEl = document.getElementById('process-bar');
+    const overlayImg = document.getElementById('notary-overlay-img');
 
     const setProgress = (percent, text) => {
         if (barEl) barEl.style.width = `${percent}%`;
@@ -747,12 +748,10 @@ async function handleMint() {
     };
 
     try {
-        // Sign authentication message
         const signer = await State.provider.getSigner();
         const message = "I am signing to authenticate my file for notarization on Backchain.";
         const signature = await signer.signMessage(message);
 
-        // Show overlay
         if (overlay) {
             overlay.classList.remove('hidden');
             overlay.classList.add('flex');
@@ -760,7 +759,6 @@ async function handleMint() {
 
         setProgress(10, 'UPLOADING TO IPFS...');
 
-        // V7.4: Upload to IPFS with description
         const formData = new FormData();
         formData.append('file', Notary.file);
         formData.append('signature', signature);
@@ -775,23 +773,16 @@ async function handleMint() {
         });
 
         if (!res.ok) {
-            // Handle specific error codes
-            if (res.status === 413) {
-                throw new Error('File too large. Maximum size is 4MB.');
-            } else if (res.status === 401) {
-                throw new Error('Signature verification failed. Please try again.');
-            } else if (res.status === 500) {
+            if (res.status === 413) throw new Error('File too large. Maximum size is 4MB.');
+            if (res.status === 401) throw new Error('Signature verification failed. Please try again.');
+            if (res.status === 500) {
                 const errorData = await res.json().catch(() => ({}));
                 throw new Error(errorData.details || 'Server error during upload.');
             }
             throw new Error(`Upload failed (${res.status})`);
         }
         const data = await res.json();
-        
-        console.log('📤 Upload response:', data);
 
-        // V7.4: Use ipfsUri for the image CID (what goes to contract)
-        // contentHash is the SHA-256 of the file
         const ipfsCid = data.ipfsUri || data.metadataUri;
         const contentHash = data.contentHash;
         
@@ -800,7 +791,9 @@ async function handleMint() {
 
         setProgress(50, 'MINTING ON BLOCKCHAIN...');
 
-        // Execute mint - pass params object as expected by transactions.js
+        // Stamp animation
+        if (overlayImg) overlayImg.className = 'w-full h-full object-contain notary-stamp';
+
         const success = await executeNotarizeDocument({
             ipfsUri: ipfsCid,
             contentHash: contentHash,
@@ -813,20 +806,18 @@ async function handleMint() {
         if (success) {
             setProgress(100, 'SUCCESS!');
             
-            // Show success animation in overlay
+            // Success animation
+            if (overlayImg) overlayImg.className = 'w-full h-full object-contain notary-success';
+            
             if (overlay) {
                 overlay.innerHTML = `
                     <div class="text-center p-6 max-w-sm animate-fade-in">
                         <div class="w-32 h-32 mx-auto mb-6 relative">
-                            <!-- Success glow -->
                             <div class="absolute inset-0 rounded-full bg-green-500/30 animate-pulse"></div>
-                            <!-- Confetti effect -->
                             <div class="absolute inset-0 rounded-full border-4 border-green-400/50"></div>
-                            <!-- Image container -->
                             <div class="relative w-full h-full rounded-full bg-gradient-to-br from-green-900/50 to-emerald-900/50 flex items-center justify-center shadow-2xl shadow-green-500/30 overflow-hidden p-3 border-2 border-green-400">
-                                <img src="./assets/notary.png" alt="Success" class="w-full h-full object-contain drop-shadow-lg">
+                                <img src="${NOTARY_IMAGE}" alt="Success" class="w-full h-full object-contain notary-success">
                             </div>
-                            <!-- Checkmark badge -->
                             <div class="absolute -bottom-1 -right-1 w-10 h-10 bg-green-500 rounded-full flex items-center justify-center shadow-lg">
                                 <i class="fa-solid fa-check text-white text-lg"></i>
                             </div>
@@ -847,7 +838,6 @@ async function handleMint() {
                     overlay.classList.remove('flex');
                 }
                 
-                // Reset state
                 Notary.file = null;
                 Notary.description = '';
                 Notary.step = 1;
@@ -857,8 +847,8 @@ async function handleMint() {
                 loadCertificates();
                 loadUserData(true);
                 
-                showToast('🎉 Document notarized successfully!', 'success');
-            }, 3000); // Extended to 3s to show success animation
+                showToast('📜 Document notarized successfully!', 'success');
+            }, 3000);
         } else {
             throw new Error('Minting failed');
         }
@@ -898,7 +888,6 @@ async function loadCertificates() {
     }
 
     try {
-        // V7.4: First try to fetch from API (Firebase)
         let certs = [];
         
         try {
@@ -917,14 +906,12 @@ async function loadCertificates() {
                         timestamp: doc.timestamp || '',
                         txHash: doc.txHash || ''
                     }));
-                    console.log(`📜 Loaded ${certs.length} certificates from API`);
                 }
             }
         } catch (apiErr) {
-            console.warn('API fetch failed, falling back to contract:', apiErr.message?.slice(0, 50));
+            console.warn('API fetch failed:', apiErr.message?.slice(0, 50));
         }
         
-        // Fallback: Query contract events if API returned nothing
         if (certs.length === 0) {
             if (!State.decentralizedNotaryContract) await loadPublicData();
             const contract = State.decentralizedNotaryContract;
@@ -940,11 +927,8 @@ async function loadCertificates() {
                     ? contract.filters.DocumentNotarized(null, State.userAddress)
                     : contract.filters.NotarizationEvent?.(null, State.userAddress);
                 
-                if (filter) {
-                    events = await contract.queryFilter(filter, -50000);
-                }
+                if (filter) events = await contract.queryFilter(filter, -50000);
             } catch (filterErr) {
-                console.warn('Event filter error:', filterErr.message?.slice(0, 100));
                 try {
                     const balance = await contract.balanceOf(State.userAddress);
                     if (balance > 0n) {
@@ -955,65 +939,39 @@ async function loadCertificates() {
                             } catch (e) { break; }
                         }
                     }
-                } catch (balErr) {
-                    console.warn('Balance fallback failed:', balErr);
-                }
+                } catch (balErr) {}
             }
 
-            // Fetch certificate details from tokenURI (always works)
             certs = await Promise.all(events.map(async (e) => {
                 const tokenId = e.args[0];
-                let ipfsCid = '';
-                let description = '';
-                let contentHash = '';
+                let ipfsCid = '', description = '', contentHash = '';
                 
                 try {
-                    // Use tokenURI which is always available in ERC721
                     if (typeof contract.tokenURI === 'function') {
                         const uri = await contract.tokenURI(tokenId);
                         if (uri && uri.startsWith('data:application/json;base64,')) {
                             const base64Data = uri.replace('data:application/json;base64,', '');
-                            const jsonStr = atob(base64Data);
-                            const metadata = JSON.parse(jsonStr);
+                            const metadata = JSON.parse(atob(base64Data));
                             
                             ipfsCid = metadata.image || '';
                             description = metadata.description || '';
                             
-                            // Debug: log the full metadata
-                            console.log(`📜 Certificate #${tokenId} metadata:`, {
-                                image: ipfsCid?.slice(0, 50),
-                                description: description?.slice(0, 50)
-                            });
-                            
-                            // Extract content hash from attributes if available
                             if (metadata.attributes) {
                                 const hashAttr = metadata.attributes.find(a => a.trait_type === 'Content Hash');
                                 if (hashAttr) contentHash = hashAttr.value || 'SHA-256';
                             }
-                            
-                            console.log(`📜 Certificate #${tokenId} from tokenURI: ${description?.slice(0,30)}...`);
                         }
                     }
-                } catch (err) {
-                    console.warn('tokenURI error for token', tokenId?.toString(), err.message?.slice(0, 50));
-                }
+                } catch (err) {}
 
-                return {
-                    id: tokenId?.toString() || '?',
-                    ipfs: ipfsCid,
-                    description: description,
-                    hash: contentHash,
-                    txHash: e.transactionHash || ''
-                };
+                return { id: tokenId?.toString() || '?', ipfs: ipfsCid, description, hash: contentHash, txHash: e.transactionHash || '' };
             }));
         }
 
         if (certs.length === 0) {
             grid.innerHTML = `
                 <div class="col-span-full text-center py-8">
-                    <div class="w-14 h-14 rounded-full bg-zinc-800 flex items-center justify-center mx-auto mb-3">
-                        <i class="fa-solid fa-certificate text-xl text-zinc-600"></i>
-                    </div>
+                    <img src="${NOTARY_IMAGE}" class="w-14 h-14 mx-auto opacity-20 mb-3">
                     <p class="text-zinc-500 text-sm mb-1">No certificates yet</p>
                     <p class="text-zinc-600 text-xs">Upload a document to get started</p>
                 </div>
@@ -1021,63 +979,38 @@ async function loadCertificates() {
             return;
         }
 
-        // Sort by ID descending (newest first)
         const sorted = certs.sort((a, b) => parseInt(b.id) - parseInt(a.id));
 
         grid.innerHTML = sorted.map(cert => {
-            // Build IPFS URL with fallback gateways
             let ipfsUrl = '';
             const ipfsData = cert.ipfs || '';
             
             if (ipfsData.startsWith('ipfs://')) {
-                const cid = ipfsData.replace('ipfs://', '');
-                ipfsUrl = `https://gateway.pinata.cloud/ipfs/${cid}`;
+                ipfsUrl = `https://gateway.pinata.cloud/ipfs/${ipfsData.replace('ipfs://', '')}`;
             } else if (ipfsData.startsWith('https://')) {
                 ipfsUrl = ipfsData;
             } else if (ipfsData.length > 0) {
-                // Assume it's just the CID
                 ipfsUrl = `https://gateway.pinata.cloud/ipfs/${ipfsData}`;
             }
             
-            // Alternative gateways for fallback
-            const altIpfsUrl = ipfsUrl.replace('gateway.pinata.cloud', 'ipfs.io');
-            const alt2IpfsUrl = ipfsUrl.replace('gateway.pinata.cloud', 'cloudflare-ipfs.com');
-            
-            // Clean description (remove "--- Verified by Backchain Protocol..." suffix)
             let cleanDesc = cert.description || '';
             cleanDesc = cleanDesc.split('---')[0].trim() || cleanDesc;
             cleanDesc = cleanDesc.split('\n')[0].trim() || 'Notarized Document';
             
-            // Detect file type from ipfs data or description
             const fileInfo = getFileTypeInfo('', cleanDesc);
-            
-            // Always try to show image if we have ipfsUrl (use onerror fallback)
             const hasValidUrl = ipfsUrl && ipfsUrl.length > 10;
 
             return `
                 <div class="cert-card bg-zinc-900/50 border border-zinc-800/50 rounded-xl overflow-hidden">
-                    <!-- Preview -->
                     <div class="h-28 bg-gradient-to-br from-zinc-800/50 to-zinc-900/50 flex items-center justify-center relative overflow-hidden">
                         ${hasValidUrl ? `
                             <img src="${ipfsUrl}" 
                                  class="absolute inset-0 w-full h-full object-cover"
-                                 onerror="
-                                    if(!this.dataset.retry){
-                                        this.dataset.retry='1';
-                                        this.src='${altIpfsUrl}';
-                                    } else if(this.dataset.retry==='1'){
-                                        this.dataset.retry='2';
-                                        this.src='${alt2IpfsUrl}';
-                                    } else {
-                                        this.style.display='none';
-                                        this.nextElementSibling.style.display='flex';
-                                    }
-                                 ">
+                                 onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
                             <div class="hidden flex-col items-center justify-center h-full absolute inset-0 bg-zinc-900">
                                 <div class="w-12 h-12 rounded-xl ${fileInfo.bg} flex items-center justify-center mb-1">
                                     <i class="${fileInfo.icon} text-2xl ${fileInfo.color}"></i>
                                 </div>
-                                <span class="text-[9px] text-zinc-600">File stored on IPFS</span>
                             </div>
                         ` : `
                             <div class="flex flex-col items-center justify-center">
@@ -1090,7 +1023,6 @@ async function loadCertificates() {
                         <span class="absolute top-2 right-2 text-[9px] font-mono text-zinc-400 bg-black/70 px-2 py-0.5 rounded-full">#${cert.id}</span>
                     </div>
                     
-                    <!-- Info -->
                     <div class="p-3">
                         <p class="text-xs text-white font-medium truncate mb-1" title="${cleanDesc}">
                             ${cleanDesc || 'Notarized Document'}
@@ -1099,7 +1031,6 @@ async function loadCertificates() {
                             SHA-256: ${cert.hash?.slice(0, 16) || '...'}...
                         </p>
                         
-                        <!-- Actions -->
                         <div class="flex items-center justify-between pt-2 border-t border-zinc-800/50">
                             <div class="flex gap-3">
                                 ${ipfsUrl ? `
@@ -1107,9 +1038,7 @@ async function loadCertificates() {
                                        class="text-[10px] text-amber-400 hover:text-amber-300 font-bold transition-colors flex items-center gap-1">
                                         <i class="fa-solid fa-download"></i> Download
                                     </a>
-                                ` : `
-                                    <span class="text-[10px] text-zinc-600">No file</span>
-                                `}
+                                ` : `<span class="text-[10px] text-zinc-600">No file</span>`}
                                 <button onclick="NotaryPage.addToWallet('${cert.id}', '${ipfsUrl}')" 
                                     class="text-[10px] text-zinc-500 hover:text-amber-400 transition-colors flex items-center gap-1">
                                     <i class="fa-solid fa-wallet"></i> Wallet
@@ -1132,7 +1061,6 @@ async function loadCertificates() {
         grid.innerHTML = `
             <div class="col-span-full text-center py-8">
                 <p class="text-red-400 text-sm"><i class="fa-solid fa-exclamation-circle mr-2"></i> Failed to load</p>
-                <p class="text-zinc-600 text-xs mt-1">${e.message?.slice(0, 50) || 'Unknown error'}</p>
             </div>
         `;
     }
@@ -1161,7 +1089,6 @@ async function loadNotaryData() {
         const hub = State.ecosystemManagerContractPublic || State.ecosystemManagerContract;
         if (!hub) await loadPublicData();
 
-        // V2.1: Use getFee
         const key = ethers.id("NOTARY_SERVICE");
         const fee = await safeContractCall(hub || State.ecosystemManagerContractPublic, 'getFee', [key], 0n);
 
@@ -1205,7 +1132,6 @@ export const NotaryPage = {
 
     async addToWallet(tokenId, imageUrl) {
         try {
-            // If no imageUrl provided, try to fetch from tokenURI
             let finalImageUrl = imageUrl;
             
             if (!finalImageUrl && State.decentralizedNotaryContract) {
@@ -1219,9 +1145,7 @@ export const NotaryPage = {
                             finalImageUrl = `https://gateway.pinata.cloud/ipfs/${cid}`;
                         }
                     }
-                } catch (e) {
-                    console.warn('Could not fetch tokenURI for image:', e);
-                }
+                } catch (e) {}
             }
             
             showToast('Requesting wallet to track NFT #' + tokenId + '...', 'info');
@@ -1242,10 +1166,9 @@ export const NotaryPage = {
                 },
             });
             
-            showToast('NFT added to wallet!', 'success');
+            showToast('📜 NFT added to wallet!', 'success');
         } catch (error) {
-            console.error('Add NFT Error:', error);
-            if (error.code !== 4001) { // Not user rejection
+            if (error.code !== 4001) {
                 showToast('Could not add NFT to wallet', 'error');
             }
         }
