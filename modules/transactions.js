@@ -844,8 +844,9 @@ export async function executeFaucetClaim(btnElement) {
 }
 
 // ====================================================================
-// ALIASES para compatibilidade com StorePage.js
+// ALIASES para compatibilidade
 // ====================================================================
 
 export const executeBuyBooster = executeBuyNFT;
 export const executeSellBooster = executeSellNFT;
+export const executeFortuneParticipate = executeFortuneGame;
