@@ -632,7 +632,10 @@ function renderSwapInterface() {
                     </span>
                 </div>
                 <div class="flex justify-between items-center">
-                    <span class="text-2xl font-semibold ${insufficientBalance && isBuy ? 'text-red-400' : 'text-white'}">${isBuy ? priceFormatted : '1'}</span>
+                    <span class="text-2xl font-semibold ${insufficientBalance && isBuy ? 'text-red-400' : 'text-white'}">
+                        ${isBuy ? priceFormatted : '1'}
+                        ${!isBuy && TradeState.firstAvailableTokenId ? `<span class="text-sm text-amber-400 ml-2">#${TradeState.firstAvailableTokenId.toString()}</span>` : ''}
+                    </span>
                     <div class="token-selector flex items-center gap-2 px-3 py-2 rounded-xl cursor-default">
                         <img src="${isBuy ? './assets/bkc_logo_3d.png' : buildImageUrl(tier?.img)}" class="w-6 h-6 rounded" onerror="this.src='./assets/bkc_logo_3d.png'">
                         <span class="text-white text-sm font-medium">${isBuy ? 'BKC' : tier?.name || 'NFT'}</span>
@@ -762,14 +765,15 @@ function renderInventory() {
         const tier = boosterTiers.find(t => t.boostBips === Number(nft.boostBips));
         const style = getTierStyle(tier?.name);
         const imgUrl = buildImageUrl(nft.image || tier?.img);
+        const isSelected = TradeState.firstAvailableTokenId && BigInt(nft.tokenId) === TradeState.firstAvailableTokenId;
         
         return `
-            <div class="inventory-item cursor-pointer rounded-xl p-2 border border-zinc-700/50 bg-zinc-800/30 hover:bg-zinc-800/50"
+            <div class="inventory-item cursor-pointer rounded-xl p-2 border ${isSelected ? 'border-amber-500 ring-2 ring-amber-500/50 bg-amber-500/10' : 'border-zinc-700/50 bg-zinc-800/30'} hover:bg-zinc-800/50 transition-all"
                  data-boost="${nft.boostBips}" 
                  data-tokenid="${nft.tokenId}">
                 <img src="${imgUrl}" class="w-full aspect-square rounded-lg object-cover" onerror="this.src='./assets/bkc_logo_3d.png'">
                 <p class="text-[9px] text-center mt-1 ${style.text} truncate">${tier?.name || 'NFT'}</p>
-                <p class="text-[8px] text-center text-zinc-600">#${nft.tokenId}</p>
+                <p class="text-[8px] text-center ${isSelected ? 'text-amber-400 font-bold' : 'text-zinc-600'}">#${nft.tokenId}</p>
             </div>
         `;
     }).join('');
@@ -800,7 +804,15 @@ async function loadDataForSelectedPool() {
         const userNFTs = State.myBoosters || [];
         const userNFTsOfTier = userNFTs.filter(nft => Number(nft.boostBips) === boostBips);
         TradeState.userBalanceOfSelectedNFT = userNFTsOfTier.length;
-        TradeState.firstAvailableTokenId = (userNFTsOfTier.length > 0) ? BigInt(userNFTsOfTier[0].tokenId) : null;
+        
+        // Só define firstAvailableTokenId se não foi selecionado manualmente pelo usuário
+        // ou se o tokenId selecionado não pertence a este tier
+        const currentSelection = TradeState.firstAvailableTokenId;
+        const selectionBelongsToTier = currentSelection && userNFTsOfTier.some(nft => BigInt(nft.tokenId) === currentSelection);
+        
+        if (!selectionBelongsToTier) {
+            TradeState.firstAvailableTokenId = (userNFTsOfTier.length > 0) ? BigInt(userNFTsOfTier[0].tokenId) : null;
+        }
 
         const tier = boosterTiers.find(t => t.boostBips === boostBips);
         if (!tier) {
@@ -963,12 +975,21 @@ function setupEventListeners() {
             return;
         }
 
-        // Inventory item click
+        // Inventory item click - user selected a specific NFT to sell
         const invItem = e.target.closest('.inventory-item');
         if (invItem) {
             const boost = Number(invItem.dataset.boost);
+            const tokenId = invItem.dataset.tokenid;
+            
             TradeState.selectedPoolBoostBips = boost;
             TradeState.tradeDirection = 'sell';
+            
+            // CORREÇÃO: Salvar o tokenId específico que o usuário clicou
+            if (tokenId) {
+                TradeState.firstAvailableTokenId = BigInt(tokenId);
+                console.log("User selected NFT #" + tokenId + " for sale");
+            }
+            
             updateTierSelection(boost);
             await loadDataForSelectedPool();
             return;
