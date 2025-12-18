@@ -203,7 +203,9 @@ function renderClaimHistory() {
     if (claimHistory.length === 0) {
         return `
             <div class="text-center py-6">
-                <img src="${REWARD_IMAGE}" class="w-12 h-12 mx-auto opacity-20 mb-2" onerror="this.style.display='none'">
+                <div class="w-12 h-12 mx-auto rounded-full bg-zinc-800/50 flex items-center justify-center mb-2">
+                    <i class="fa-solid fa-clock-rotate-left text-zinc-600 text-lg"></i>
+                </div>
                 <p class="text-zinc-500 text-xs">No claims yet</p>
                 <p class="text-zinc-600 text-[10px] mt-1">Your claim history will appear here</p>
             </div>
@@ -212,53 +214,76 @@ function renderClaimHistory() {
 
     return claimHistory.map(item => {
         const date = formatDate(item.timestamp || item.createdAt);
-        const amount = formatHistoryAmount(item.amount || item.details?.amount || 0);
+        const details = item.details || {};
         const txHash = item.txHash || '';
         const txLink = txHash ? `${EXPLORER_TX}${txHash}` : '#';
-        const details = item.details || {};
+        
+        // Calcular o valor total recebido (amountReceived ou amount - fee)
+        let amountReceived = '0';
+        let feeAmount = '0';
+        
+        if (details.amountReceived) {
+            amountReceived = details.amountReceived;
+        } else if (item.amount) {
+            amountReceived = item.amount;
+        } else if (details.amount) {
+            amountReceived = details.amount;
+        }
+        
+        if (details.feePaid) {
+            feeAmount = details.feePaid;
+        } else if (details.feeAmount) {
+            feeAmount = details.feeAmount;
+        }
+        
+        const formattedAmount = formatHistoryAmount(amountReceived);
+        const formattedFee = formatHistoryAmount(feeAmount);
         
         // Determine claim type
-        let icon, iconColor, bgColor, label, extraInfo = '';
+        let icon, iconColor, bgColor, label;
         const type = (item.type || '').toUpperCase();
         
-        if (type.includes('STAKING') || details.stakingAmount) {
+        if (type.includes('STAKING') || type.includes('DELEGAT')) {
             icon = 'fa-lock';
             iconColor = '#a855f7';
             bgColor = 'rgba(168,85,247,0.15)';
             label = '🔒 Staking Reward';
-        } else if (type.includes('MINING') || type.includes('MINER') || details.minerAmount) {
+        } else if (type.includes('MINING') || type.includes('MINER')) {
             icon = 'fa-hammer';
             iconColor = '#f97316';
             bgColor = 'rgba(249,115,22,0.15)';
             label = '⛏️ Mining Reward';
-        } else {
-            icon = 'fa-coins';
+        } else if (type.includes('CLAIM') || type.includes('REWARD')) {
+            icon = 'fa-gift';
             iconColor = '#22c55e';
             bgColor = 'rgba(34,197,94,0.15)';
             label = '🎁 Claimed';
-        }
-        
-        // Show fee info if available
-        if (details.feeAmount || details.feePaid) {
-            const feeNum = formatHistoryAmount(details.feeAmount || details.feePaid);
-            extraInfo = `<span class="ml-2 text-[10px] text-zinc-500">Fee: ${feeNum}</span>`;
+        } else {
+            icon = 'fa-coins';
+            iconColor = '#eab308';
+            bgColor = 'rgba(234,179,8,0.15)';
+            label = '💰 Reward';
         }
 
         return `
             <a href="${txLink}" target="_blank" rel="noopener" 
-               class="history-item flex items-center justify-between p-2.5 bg-zinc-800/30 hover:bg-zinc-800/50 rounded-lg transition-all group">
-                <div class="flex items-center gap-2.5">
-                    <div class="w-8 h-8 rounded-lg flex items-center justify-center" style="background: ${bgColor}">
-                        <i class="fa-solid ${icon} text-xs" style="color: ${iconColor}"></i>
+               class="history-item flex items-center justify-between p-3 bg-zinc-800/30 hover:bg-zinc-800/50 rounded-xl transition-all group border border-zinc-700/30">
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 rounded-xl flex items-center justify-center" style="background: ${bgColor}">
+                        <i class="fa-solid ${icon} text-sm" style="color: ${iconColor}"></i>
                     </div>
                     <div>
-                        <p class="text-sm text-white font-medium">${label}${extraInfo}</p>
+                        <p class="text-sm text-white font-medium">${label}</p>
                         <p class="text-[10px] text-zinc-500">${date}</p>
+                        ${parseFloat(formattedFee) > 0 ? `<p class="text-[9px] text-zinc-600">Fee: ${formattedFee} BKC</p>` : ''}
                     </div>
                 </div>
                 <div class="flex items-center gap-2">
-                    <span class="text-sm font-mono font-bold text-green-400">+${amount} <span class="text-zinc-500 text-xs">BKC</span></span>
-                    ${txHash ? '<i class="fa-solid fa-arrow-up-right-from-square text-zinc-600 group-hover:text-green-400 text-[10px]"></i>' : ''}
+                    <div class="text-right">
+                        <span class="text-sm font-mono font-bold text-green-400">+${formattedAmount}</span>
+                        <span class="text-zinc-500 text-[10px] ml-1">BKC</span>
+                    </div>
+                    ${txHash ? '<i class="fa-solid fa-arrow-up-right-from-square text-zinc-600 group-hover:text-green-400 text-[10px] ml-2"></i>' : ''}
                 </div>
             </a>
         `;
@@ -266,25 +291,78 @@ function renderClaimHistory() {
 }
 
 function formatDate(timestamp) {
-    if (!timestamp) return '';
-    const date = new Date(typeof timestamp === 'number' ? timestamp : timestamp);
-    const now = new Date();
-    const diff = now - date;
+    if (!timestamp) return 'Unknown date';
     
-    if (diff < 60000) return 'Just now';
-    if (diff < 3600000) return `${Math.floor(diff / 60000)}m ago`;
-    if (diff < 86400000) return `${Math.floor(diff / 3600000)}h ago`;
-    if (diff < 604800000) return `${Math.floor(diff / 86400000)}d ago`;
-    
-    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    try {
+        let date;
+        
+        // Handle Firebase Timestamp format
+        if (timestamp.seconds || timestamp._seconds) {
+            const secs = timestamp.seconds || timestamp._seconds;
+            date = new Date(secs * 1000);
+        }
+        // Handle ISO string
+        else if (typeof timestamp === 'string') {
+            date = new Date(timestamp);
+        }
+        // Handle milliseconds timestamp
+        else if (typeof timestamp === 'number') {
+            // If it's in seconds (Unix), convert to ms
+            date = new Date(timestamp < 10000000000 ? timestamp * 1000 : timestamp);
+        }
+        // Handle Date object
+        else if (timestamp instanceof Date) {
+            date = timestamp;
+        }
+        else {
+            return 'Unknown date';
+        }
+        
+        // Validate date
+        if (isNaN(date.getTime())) return 'Unknown date';
+        
+        const now = new Date();
+        const diff = now - date;
+        
+        if (diff < 60000) return 'Just now';
+        if (diff < 3600000) return `${Math.floor(diff / 60000)}m ago`;
+        if (diff < 86400000) return `${Math.floor(diff / 3600000)}h ago`;
+        if (diff < 604800000) return `${Math.floor(diff / 86400000)}d ago`;
+        
+        return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    } catch (e) {
+        console.warn('Date parse error:', e);
+        return 'Unknown date';
+    }
 }
 
 function formatHistoryAmount(amount) {
     if (!amount) return '0.00';
     try {
-        const num = typeof amount === 'string' ? parseFloat(amount) : Number(amount) / 1e18;
-        return num.toFixed(2);
-    } catch {
+        // Se for string que parece ser wei (muito longa), usar formatEther
+        if (typeof amount === 'string') {
+            // Se tem mais de 10 dígitos, provavelmente é wei
+            if (amount.length > 10 && !amount.includes('.')) {
+                const formatted = ethers.formatEther(BigInt(amount));
+                return parseFloat(formatted).toFixed(4);
+            }
+            // Senão, já está formatado
+            return parseFloat(amount).toFixed(4);
+        }
+        // Se for BigInt
+        if (typeof amount === 'bigint') {
+            const formatted = ethers.formatEther(amount);
+            return parseFloat(formatted).toFixed(4);
+        }
+        // Se for número muito grande, provavelmente é wei
+        if (typeof amount === 'number' && amount > 1e10) {
+            const formatted = ethers.formatEther(BigInt(Math.floor(amount)));
+            return parseFloat(formatted).toFixed(4);
+        }
+        // Senão, usar como está
+        return parseFloat(amount).toFixed(4);
+    } catch (e) {
+        console.warn('Amount format error:', e);
         return '0.00';
     }
 }
