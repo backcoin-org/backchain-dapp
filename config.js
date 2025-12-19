@@ -1,8 +1,8 @@
 // js/config.js
-// ✅ PRODUCTION V26
+// ✅ PRODUCTION V27 - Multi-RPC with Arbitrum Official as Primary
 
 // ============================================================================
-// 1. ENVIRONMENT & ALCHEMY CONFIG
+// 1. ENVIRONMENT & API KEYS
 // ============================================================================
 const isDevelopment = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
 console.log(`Environment: ${isDevelopment ? 'DEVELOPMENT' : 'PRODUCTION'}`);
@@ -11,7 +11,7 @@ const ALCHEMY_KEY = import.meta.env.VITE_ALCHEMY_API_KEY;
 const GAS_POLICY_ID = import.meta.env.VITE_GAS_POLICY_ID;
 
 if (!ALCHEMY_KEY) {
-    console.error("❌ CRITICAL: VITE_ALCHEMY_API_KEY not found");
+    console.warn("⚠️ VITE_ALCHEMY_API_KEY not found - Using public RPCs only");
 }
 
 export const CONFIG = {
@@ -22,16 +22,156 @@ export const CONFIG = {
 };
 
 // ============================================================================
-// 2. NETWORK CONFIGURATION
+// 2. NETWORK CONFIGURATION - MULTI-RPC SYSTEM
 // ============================================================================
-export const sepoliaRpcUrl = `https://arb-sepolia.g.alchemy.com/v2/${CONFIG.alchemy.apiKey}`;
-export const sepoliaWssUrl = `wss://arb-sepolia.g.alchemy.com/v2/${CONFIG.alchemy.apiKey}`;
+
+// 🔥 Lista de RPCs em ordem de prioridade
+// 1. Arbitrum Official (gratuito, ilimitado)
+// 2. Alchemy (fallback pago, mais confiável)
+// 3. Outros públicos como backup final
+export const RPC_ENDPOINTS = [
+    {
+        name: "Arbitrum Official",
+        url: "https://sepolia-rollup.arbitrum.io/rpc",
+        priority: 1,
+        isPublic: true
+    },
+    {
+        name: "Alchemy",
+        url: ALCHEMY_KEY ? `https://arb-sepolia.g.alchemy.com/v2/${ALCHEMY_KEY}` : null,
+        priority: 2,
+        isPublic: false
+    },
+    {
+        name: "BlockPI",
+        url: "https://arbitrum-sepolia.blockpi.network/v1/rpc/public",
+        priority: 3,
+        isPublic: true
+    },
+    {
+        name: "PublicNode",
+        url: "https://arbitrum-sepolia-rpc.publicnode.com",
+        priority: 4,
+        isPublic: true
+    }
+].filter(rpc => rpc.url !== null); // Remove RPCs sem URL (ex: Alchemy sem key)
+
+// 🔥 RPC Principal - Arbitrum Official (GRATUITO!)
+export const sepoliaRpcUrl = "https://sepolia-rollup.arbitrum.io/rpc";
+
+// WebSocket - Alchemy (para eventos em tempo real, se disponível)
+export const sepoliaWssUrl = ALCHEMY_KEY 
+    ? `wss://arb-sepolia.g.alchemy.com/v2/${ALCHEMY_KEY}`
+    : null;
+
 export const sepoliaChainId = 421614n;
 
-export const ipfsGateway = "https://white-defensive-eel-240.mypinata.cloud/ipfs/";
+// ============================================================================
+// 3. RPC FALLBACK SYSTEM
+// ============================================================================
+
+let currentRpcIndex = 0;
+let rpcHealthStatus = new Map(); // Track health of each RPC
+
+/**
+ * Obtém a URL do RPC atual
+ */
+export function getCurrentRpcUrl() {
+    return RPC_ENDPOINTS[currentRpcIndex]?.url || sepoliaRpcUrl;
+}
+
+/**
+ * Obtém o nome do RPC atual
+ */
+export function getCurrentRpcName() {
+    return RPC_ENDPOINTS[currentRpcIndex]?.name || "Unknown";
+}
+
+/**
+ * Alterna para o próximo RPC disponível
+ * @returns {string|null} URL do próximo RPC ou null se todos falharam
+ */
+export function switchToNextRpc() {
+    const startIndex = currentRpcIndex;
+    
+    do {
+        currentRpcIndex = (currentRpcIndex + 1) % RPC_ENDPOINTS.length;
+        
+        // Se voltou ao início, todos foram tentados
+        if (currentRpcIndex === startIndex) {
+            console.warn("⚠️ All RPCs have been tried. Resetting to primary.");
+            currentRpcIndex = 0;
+            return RPC_ENDPOINTS[0].url;
+        }
+        
+    } while (rpcHealthStatus.get(RPC_ENDPOINTS[currentRpcIndex].url) === 'unhealthy');
+    
+    const newRpc = RPC_ENDPOINTS[currentRpcIndex];
+    console.log(`🔄 Switched to RPC: ${newRpc.name}`);
+    
+    return newRpc.url;
+}
+
+/**
+ * Marca um RPC como não saudável
+ * @param {string} rpcUrl URL do RPC com problema
+ */
+export function markRpcUnhealthy(rpcUrl) {
+    rpcHealthStatus.set(rpcUrl, 'unhealthy');
+    console.warn(`❌ RPC marked unhealthy: ${rpcUrl}`);
+    
+    // Limpa o status após 60 segundos para tentar novamente
+    setTimeout(() => {
+        rpcHealthStatus.delete(rpcUrl);
+        console.log(`♻️ RPC health reset: ${rpcUrl}`);
+    }, 60000);
+}
+
+/**
+ * Marca um RPC como saudável
+ * @param {string} rpcUrl URL do RPC funcionando
+ */
+export function markRpcHealthy(rpcUrl) {
+    rpcHealthStatus.set(rpcUrl, 'healthy');
+}
+
+/**
+ * Reseta para o RPC primário (Arbitrum Official)
+ */
+export function resetToPrimaryRpc() {
+    currentRpcIndex = 0;
+    rpcHealthStatus.clear();
+    console.log(`✅ Reset to primary RPC: ${RPC_ENDPOINTS[0].name}`);
+}
+
+/**
+ * Obtém estatísticas dos RPCs
+ */
+export function getRpcStats() {
+    return {
+        current: getCurrentRpcName(),
+        currentUrl: getCurrentRpcUrl(),
+        totalEndpoints: RPC_ENDPOINTS.length,
+        healthStatus: Object.fromEntries(rpcHealthStatus)
+    };
+}
 
 // ============================================================================
-// 3. CONTRACT ADDRESSES
+// 4. IPFS GATEWAY
+// ============================================================================
+export const ipfsGateway = "https://white-defensive-eel-240.mypinata.cloud/ipfs/";
+
+// 🔥 Gateways IPFS alternativos (para imagens NFT)
+export const IPFS_GATEWAYS = [
+    "https://dweb.link/ipfs/",
+    "https://w3s.link/ipfs/",
+    "https://nftstorage.link/ipfs/",
+    "https://cloudflare-ipfs.com/ipfs/",
+    "https://ipfs.io/ipfs/"
+];
+
+// ============================================================================
+// 5. CONTRACT ADDRESSES
 // ============================================================================
 export const addresses = {};
 
@@ -79,7 +219,7 @@ export async function loadAddresses() {
 }
 
 // ============================================================================
-// 4. APPLICATION CONSTANTS
+// 6. APPLICATION CONSTANTS
 // ============================================================================
 export const FAUCET_AMOUNT_WEI = 20n * 10n**18n;
 
@@ -94,7 +234,7 @@ export const boosterTiers = [
 ];
 
 // ============================================================================
-// 5. CONTRACT ABIs
+// 7. CONTRACT ABIs
 // ============================================================================
 
 export const bkcTokenABI = [
@@ -125,27 +265,21 @@ export const delegationManagerABI = [
     "function unstake(uint256 _delegationIndex, uint256 _boosterTokenId) external",
     "function forceUnstake(uint256 _delegationIndex, uint256 _boosterTokenId) external",
     "function claimReward(uint256 _boosterTokenId) external",
-    "event Delegated(address indexed user, uint256 delegationIndex, uint256 amount, uint256 pStakeGenerated, uint256 feeAmount)",
-    "event Unstaked(address indexed user, uint256 delegationIndex, uint256 amountReceived, uint256 feePaid)",
-    "event RewardClaimed(address indexed user, uint256 amountReceived, uint256 feePaid)"
+    "function getUnstakePenaltyBips() view returns (uint256)",
+    "event Delegated(address indexed user, uint256 amount, uint256 lockDuration, uint256 pStake)",
+    "event Unstaked(address indexed user, uint256 amount, uint256 pStakeReduced)",
+    "event RewardClaimed(address indexed user, uint256 amount)"
 ];
 
 export const rewardBoosterABI = [
-    "function name() view returns (string)",
-    "function symbol() view returns (string)",
     "function balanceOf(address owner) view returns (uint256)",
+    "function tokenOfOwnerByIndex(address owner, uint256 index) view returns (uint256)",
     "function ownerOf(uint256 tokenId) view returns (address)",
-    "function tokenURI(uint256 tokenId) view returns (string)",
     "function approve(address to, uint256 tokenId)",
     "function setApprovalForAll(address operator, bool approved)",
-    "function isApprovedForAll(address owner, address operator) view returns (bool)",
-    "function getApproved(uint256 tokenId) view returns (address)",
     "function safeTransferFrom(address from, address to, uint256 tokenId)",
-    "function transferFrom(address from, address to, uint256 tokenId)",
-    "function boostBips(uint256 tokenId) view returns (uint256)",
-    "function tokensOfOwner(address owner) view returns (uint256[])",
-    "function getHighestBoostOf(address owner) view returns (uint256 tokenId, uint256 boostBips)",
-    "function hasBooster(address owner) view returns (bool)",
+    "function boostBips(uint256 _tokenId) view returns (uint256)",
+    "function tokenURI(uint256 tokenId) view returns (string)",
     "function totalSupply() view returns (uint256)",
     "event Transfer(address indexed from, address indexed to, uint256 indexed tokenId)",
     "event Approval(address indexed owner, address indexed approved, uint256 indexed tokenId)"
