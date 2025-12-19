@@ -173,11 +173,14 @@ export function getRpcStats() {
 // 4. IPFS GATEWAY
 // ============================================================================
 
+export const ipfsGateway = "https://white-defensive-eel-240.mypinata.cloud/ipfs/";
+
 export const IPFS_GATEWAYS = [
     "https://dweb.link/ipfs/",
+    "https://w3s.link/ipfs/",
+    "https://nftstorage.link/ipfs/",
     "https://cloudflare-ipfs.com/ipfs/",
-    "https://ipfs.io/ipfs/",
-    "https://gateway.pinata.cloud/ipfs/"
+    "https://ipfs.io/ipfs/"
 ];
 
 export function getIpfsUrl(cid) {
@@ -201,6 +204,8 @@ export function getIpfsUrl(cid) {
 // 5. CONTRACT ADDRESSES
 // ============================================================================
 
+export const addresses = {};
+
 export const contractAddresses = {
     bkcToken: null,
     ecosystemManager: null,
@@ -215,35 +220,73 @@ export const contractAddresses = {
     miningManager: null
 };
 
-export async function loadContractAddresses() {
+export async function loadAddresses() {
     try {
-        const response = await fetch('/deployment-addresses.json');
-        if (!response.ok) throw new Error('Failed to load addresses');
+        const response = await fetch(`./deployment-addresses.json?t=${Date.now()}`);
         
-        const addresses = await response.json();
+        if (!response.ok) {
+            throw new Error(`Failed to fetch deployment-addresses.json: ${response.status}`);
+        }
         
-        contractAddresses.bkcToken = addresses.bkcToken;
-        contractAddresses.ecosystemManager = addresses.ecosystemManager;
-        contractAddresses.delegationManager = addresses.delegationManager;
-        contractAddresses.rewardBoosterNFT = addresses.rewardBoosterNFT;
-        contractAddresses.rentalManager = addresses.rentalManager;
-        contractAddresses.nftLiquidityPoolFactory = addresses.nftLiquidityPoolFactory;
-        contractAddresses.fortunePool = addresses.fortunePool;
-        contractAddresses.publicSale = addresses.publicSale;
-        contractAddresses.decentralizedNotary = addresses.decentralizedNotary;
-        contractAddresses.faucet = addresses.faucet;
-        contractAddresses.miningManager = addresses.miningManager;
+        const jsonAddresses = await response.json();
+
+        const requiredAddresses = ['bkcToken', 'delegationManager', 'ecosystemManager', 'miningManager'];
+        const missingAddresses = requiredAddresses.filter(key => !jsonAddresses[key]);
         
+        if (missingAddresses.length > 0) {
+            throw new Error(`Missing required addresses: ${missingAddresses.join(', ')}`);
+        }
+
+        Object.assign(addresses, jsonAddresses);
+
+        addresses.actionsManager = jsonAddresses.fortunePool; 
+        addresses.fortunePool = jsonAddresses.fortunePool;
+        
+        addresses.rentalManager = jsonAddresses.rentalManager || 
+                                   jsonAddresses.RentalManager ||
+                                   jsonAddresses.rental_manager ||
+                                   null;
+        
+        addresses.decentralizedNotary = jsonAddresses.decentralizedNotary ||
+                                         jsonAddresses.notary ||
+                                         jsonAddresses.Notary ||
+                                         null;
+        
+        addresses.bkcDexPoolAddress = jsonAddresses.bkcDexPoolAddress || "#";
+
+        // Also update contractAddresses for compatibility
+        Object.assign(contractAddresses, jsonAddresses);
+
         console.log("✅ Contract addresses loaded");
-        return addresses;
+        return true;
+
     } catch (error) {
         console.error("❌ Failed to load contract addresses:", error);
-        throw error;
+        return false;
     }
 }
 
+// Alias for compatibility
+export const loadContractAddresses = loadAddresses;
+
 // ============================================================================
-// 6. ABIs (CONTRATOS)
+// 6. APPLICATION CONSTANTS
+// ============================================================================
+
+export const FAUCET_AMOUNT_WEI = 20n * 10n**18n;
+
+export const boosterTiers = [
+    { name: "Diamond", boostBips: 7000, color: "text-cyan-400", img: `${ipfsGateway}bafybeicgip72jcqgsirlrhn3tq5cc226vmko6etnndzl6nlhqrktfikafq/diamond_booster.json`, realImg: `${ipfsGateway}bafybeicgip72jcqgsirlrhn3tq5cc226vmko6etnndzl6nlhqrktfikafq`, borderColor: "border-cyan-400/50", glowColor: "bg-cyan-500/10" },
+    { name: "Platinum", boostBips: 6000, color: "text-gray-300", img: `${ipfsGateway}bafybeigc2wgkccckhnjotejve7qyxa2o2z4fsgswfmsxyrbp5ncpc7plei/platinum_booster.json`, realImg: `${ipfsGateway}bafybeigc2wgkccckhnjotejve7qyxa2o2z4fsgswfmsxyrbp5ncpc7plei`, borderColor: "border-gray-300/50", glowColor: "bg-gray-400/10" },
+    { name: "Gold", boostBips: 5000, color: "text-amber-400", img: `${ipfsGateway}bafybeifponccrbicg2pcjrn2hrfoqgc77xhm2r4ld7hdpw6cxxkbsckf44/gold_booster.json`, realImg: `${ipfsGateway}bafybeifponccrbicg2pcjrn2hrfoqgc77xhm2r4ld7hdpw6cxxkbsckf44`, borderColor: "border-amber-400/50", glowColor: "bg-amber-500/10" },
+    { name: "Silver", boostBips: 4000, color: "text-gray-400", img: `${ipfsGateway}bafybeihvi2inujm5zpi7tl667g4srq273536pjkglwyrtbwmgnskmu7jg4/silver_booster.json`, realImg: `${ipfsGateway}bafybeihvi2inujm5zpi7tl667g4srq273536pjkglwyrtbwmgnskmu7jg4`, borderColor: "border-gray-400/50", glowColor: "bg-gray-500/10" },
+    { name: "Bronze", boostBips: 3000, color: "text-yellow-600", img: `${ipfsGateway}bafybeiclqidb67rt3tchhjpsib62s624li7j2bpxnr6b5w5mfp4tomhu7m/bronze_booster.json`, realImg: `${ipfsGateway}bafybeiclqidb67rt3tchhjpsib62s624li7j2bpxnr6b5w5mfp4tomhu7m`, borderColor: "border-yellow-600/50", glowColor: "bg-yellow-600/10" },
+    { name: "Iron", boostBips: 2000, color: "text-slate-500", img: `${ipfsGateway}bafybeiaxhv3ere2hyto4dlb5xqn46ehfglxqf3yzehpy4tvdnifyzpp4wu/iron_booster.json`, realImg: `${ipfsGateway}bafybeiaxhv3ere2hyto4dlb5xqn46ehfglxqf3yzehpy4tvdnifyzpp4wu`, borderColor: "border-slate-500/50", glowColor: "bg-slate-600/10" },
+    { name: "Crystal", boostBips: 1000, color: "text-indigo-300", img: `${ipfsGateway}bafybeib6nacggrhgcp72xksbhsqcofg3lzhfb576kuebj5ioxpk2id5m7u/crystal_booster.json`, realImg: `${ipfsGateway}bafybeib6nacggrhgcp72xksbhsqcofg3lzhfb576kuebj5ioxpk2id5m7u`, borderColor: "border-indigo-300/50", glowColor: "bg-indigo-300/10" }
+];
+
+// ============================================================================
+// 7. CONTRACT ABIs
 // ============================================================================
 
 export const bkcTokenABI = [
