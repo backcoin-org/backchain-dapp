@@ -1,5 +1,5 @@
 // js/config.js
-// ✅ PRODUCTION V27 - Multi-RPC with Arbitrum Official as Primary
+// ✅ PRODUCTION V28 - Alchemy Primary (CORS-friendly for browsers)
 
 // ============================================================================
 // 1. ENVIRONMENT & API KEYS
@@ -26,38 +26,43 @@ export const CONFIG = {
 // ============================================================================
 
 // 🔥 Lista de RPCs em ordem de prioridade
-// 1. Arbitrum Official (gratuito, ilimitado)
-// 2. Alchemy (fallback pago, mais confiável)
-// 3. Outros públicos como backup final
+// ⚠️ IMPORTANTE: Alchemy como primário porque Arbitrum Official tem problemas de CORS
+// O header "Access-Control-Allow-Origin: *,*" (duplicado) é rejeitado pelos browsers
 export const RPC_ENDPOINTS = [
-    {
-        name: "Arbitrum Official",
-        url: "https://sepolia-rollup.arbitrum.io/rpc",
-        priority: 1,
-        isPublic: true
-    },
     {
         name: "Alchemy",
         url: ALCHEMY_KEY ? `https://arb-sepolia.g.alchemy.com/v2/${ALCHEMY_KEY}` : null,
-        priority: 2,
-        isPublic: false
+        priority: 1,
+        isPublic: false,
+        corsCompatible: true  // ✅ Funciona em browsers
     },
     {
         name: "BlockPI",
         url: "https://arbitrum-sepolia.blockpi.network/v1/rpc/public",
-        priority: 3,
-        isPublic: true
+        priority: 2,
+        isPublic: true,
+        corsCompatible: true  // ✅ Funciona em browsers
     },
     {
         name: "PublicNode",
         url: "https://arbitrum-sepolia-rpc.publicnode.com",
+        priority: 3,
+        isPublic: true,
+        corsCompatible: true  // ✅ Funciona em browsers
+    },
+    {
+        name: "Arbitrum Official",
+        url: "https://sepolia-rollup.arbitrum.io/rpc",
         priority: 4,
-        isPublic: true
+        isPublic: true,
+        corsCompatible: false  // ❌ CORS header duplicado (*,*)
     }
 ].filter(rpc => rpc.url !== null); // Remove RPCs sem URL (ex: Alchemy sem key)
 
-// 🔥 RPC Principal - Arbitrum Official (GRATUITO!)
-export const sepoliaRpcUrl = "https://sepolia-rollup.arbitrum.io/rpc";
+// 🔥 RPC Principal - Alchemy (compatível com CORS)
+export const sepoliaRpcUrl = ALCHEMY_KEY 
+    ? `https://arb-sepolia.g.alchemy.com/v2/${ALCHEMY_KEY}`
+    : "https://arbitrum-sepolia.blockpi.network/v1/rpc/public";
 
 // WebSocket - Alchemy (para eventos em tempo real, se disponível)
 export const sepoliaWssUrl = ALCHEMY_KEY 
@@ -88,7 +93,7 @@ export function getCurrentRpcName() {
 }
 
 /**
- * Alterna para o próximo RPC disponível
+ * Alterna para o próximo RPC disponível (apenas CORS-compatible)
  * @returns {string|null} URL do próximo RPC ou null se todos falharam
  */
 export function switchToNextRpc() {
@@ -96,6 +101,14 @@ export function switchToNextRpc() {
     
     do {
         currentRpcIndex = (currentRpcIndex + 1) % RPC_ENDPOINTS.length;
+        
+        const candidate = RPC_ENDPOINTS[currentRpcIndex];
+        
+        // Pular RPCs com CORS incompatível
+        if (!candidate.corsCompatible) {
+            console.warn(`⏭️ Skipping ${candidate.name} (CORS incompatible)`);
+            continue;
+        }
         
         // Se voltou ao início, todos foram tentados
         if (currentRpcIndex === startIndex) {
@@ -136,7 +149,7 @@ export function markRpcHealthy(rpcUrl) {
 }
 
 /**
- * Reseta para o RPC primário (Arbitrum Official)
+ * Reseta para o RPC primário (Alchemy)
  */
 export function resetToPrimaryRpc() {
     currentRpcIndex = 0;
@@ -159,94 +172,90 @@ export function getRpcStats() {
 // ============================================================================
 // 4. IPFS GATEWAY
 // ============================================================================
-export const ipfsGateway = "https://white-defensive-eel-240.mypinata.cloud/ipfs/";
 
-// 🔥 Gateways IPFS alternativos (para imagens NFT)
 export const IPFS_GATEWAYS = [
     "https://dweb.link/ipfs/",
-    "https://w3s.link/ipfs/",
-    "https://nftstorage.link/ipfs/",
     "https://cloudflare-ipfs.com/ipfs/",
-    "https://ipfs.io/ipfs/"
+    "https://ipfs.io/ipfs/",
+    "https://gateway.pinata.cloud/ipfs/"
 ];
+
+export function getIpfsUrl(cid) {
+    if (!cid) return null;
+    
+    // Se já é uma URL completa, converter para gateway preferido
+    if (cid.startsWith('http')) {
+        const cidMatch = cid.match(/ipfs\/([a-zA-Z0-9]+)/);
+        if (cidMatch) {
+            return `${IPFS_GATEWAYS[0]}${cidMatch[1]}`;
+        }
+        return cid;
+    }
+    
+    // Remover prefixo ipfs:// se existir
+    const cleanCid = cid.replace('ipfs://', '');
+    return `${IPFS_GATEWAYS[0]}${cleanCid}`;
+}
 
 // ============================================================================
 // 5. CONTRACT ADDRESSES
 // ============================================================================
-export const addresses = {};
 
-export async function loadAddresses() {
+export const contractAddresses = {
+    bkcToken: null,
+    ecosystemManager: null,
+    delegationManager: null,
+    rewardBoosterNFT: null,
+    rentalManager: null,
+    nftLiquidityPoolFactory: null,
+    fortunePool: null,
+    publicSale: null,
+    decentralizedNotary: null,
+    faucet: null,
+    miningManager: null
+};
+
+export async function loadContractAddresses() {
     try {
-        const response = await fetch(`./deployment-addresses.json?t=${Date.now()}`);
+        const response = await fetch('/deployment-addresses.json');
+        if (!response.ok) throw new Error('Failed to load addresses');
         
-        if (!response.ok) {
-            throw new Error(`Failed to fetch deployment-addresses.json: ${response.status}`);
-        }
+        const addresses = await response.json();
         
-        const jsonAddresses = await response.json();
-
-        const requiredAddresses = ['bkcToken', 'delegationManager', 'ecosystemManager', 'miningManager'];
-        const missingAddresses = requiredAddresses.filter(key => !jsonAddresses[key]);
+        contractAddresses.bkcToken = addresses.bkcToken;
+        contractAddresses.ecosystemManager = addresses.ecosystemManager;
+        contractAddresses.delegationManager = addresses.delegationManager;
+        contractAddresses.rewardBoosterNFT = addresses.rewardBoosterNFT;
+        contractAddresses.rentalManager = addresses.rentalManager;
+        contractAddresses.nftLiquidityPoolFactory = addresses.nftLiquidityPoolFactory;
+        contractAddresses.fortunePool = addresses.fortunePool;
+        contractAddresses.publicSale = addresses.publicSale;
+        contractAddresses.decentralizedNotary = addresses.decentralizedNotary;
+        contractAddresses.faucet = addresses.faucet;
+        contractAddresses.miningManager = addresses.miningManager;
         
-        if (missingAddresses.length > 0) {
-            throw new Error(`Missing required addresses: ${missingAddresses.join(', ')}`);
-        }
-
-        Object.assign(addresses, jsonAddresses);
-
-        addresses.actionsManager = jsonAddresses.fortunePool; 
-        addresses.fortunePool = jsonAddresses.fortunePool;
-        
-        addresses.rentalManager = jsonAddresses.rentalManager || 
-                                   jsonAddresses.RentalManager ||
-                                   jsonAddresses.rental_manager ||
-                                   null;
-        
-        addresses.decentralizedNotary = jsonAddresses.decentralizedNotary ||
-                                         jsonAddresses.notary ||
-                                         jsonAddresses.Notary ||
-                                         null;
-        
-        addresses.bkcDexPoolAddress = jsonAddresses.bkcDexPoolAddress || "#";
-
         console.log("✅ Contract addresses loaded");
-        return true;
-
+        return addresses;
     } catch (error) {
         console.error("❌ Failed to load contract addresses:", error);
-        return false;
+        throw error;
     }
 }
 
 // ============================================================================
-// 6. APPLICATION CONSTANTS
-// ============================================================================
-export const FAUCET_AMOUNT_WEI = 20n * 10n**18n;
-
-export const boosterTiers = [
-    { name: "Diamond", boostBips: 7000, color: "text-cyan-400", img: `${ipfsGateway}bafybeicgip72jcqgsirlrhn3tq5cc226vmko6etnndzl6nlhqrktfikafq/diamond_booster.json`, realImg: `${ipfsGateway}bafybeicgip72jcqgsirlrhn3tq5cc226vmko6etnndzl6nlhqrktfikafq`, borderColor: "border-cyan-400/50", glowColor: "bg-cyan-500/10" },
-    { name: "Platinum", boostBips: 6000, color: "text-gray-300", img: `${ipfsGateway}bafybeigc2wgkccckhnjotejve7qyxa2o2z4fsgswfmsxyrbp5ncpc7plei/platinum_booster.json`, realImg: `${ipfsGateway}bafybeigc2wgkccckhnjotejve7qyxa2o2z4fsgswfmsxyrbp5ncpc7plei`, borderColor: "border-gray-300/50", glowColor: "bg-gray-400/10" },
-    { name: "Gold", boostBips: 5000, color: "text-amber-400", img: `${ipfsGateway}bafybeifponccrbicg2pcjrn2hrfoqgc77xhm2r4ld7hdpw6cxxkbsckf44/gold_booster.json`, realImg: `${ipfsGateway}bafybeifponccrbicg2pcjrn2hrfoqgc77xhm2r4ld7hdpw6cxxkbsckf44`, borderColor: "border-amber-400/50", glowColor: "bg-amber-500/10" },
-    { name: "Silver", boostBips: 4000, color: "text-gray-400", img: `${ipfsGateway}bafybeihvi2inujm5zpi7tl667g4srq273536pjkglwyrtbwmgnskmu7jg4/silver_booster.json`, realImg: `${ipfsGateway}bafybeihvi2inujm5zpi7tl667g4srq273536pjkglwyrtbwmgnskmu7jg4`, borderColor: "border-gray-400/50", glowColor: "bg-gray-500/10" },
-    { name: "Bronze", boostBips: 3000, color: "text-yellow-600", img: `${ipfsGateway}bafybeiclqidb67rt3tchhjpsib62s624li7j2bpxnr6b5w5mfp4tomhu7m/bronze_booster.json`, realImg: `${ipfsGateway}bafybeiclqidb67rt3tchhjpsib62s624li7j2bpxnr6b5w5mfp4tomhu7m`, borderColor: "border-yellow-600/50", glowColor: "bg-yellow-600/10" },
-    { name: "Iron", boostBips: 2000, color: "text-slate-500", img: `${ipfsGateway}bafybeiaxhv3ere2hyto4dlb5xqn46ehfglxqf3yzehpy4tvdnifyzpp4wu/iron_booster.json`, realImg: `${ipfsGateway}bafybeiaxhv3ere2hyto4dlb5xqn46ehfglxqf3yzehpy4tvdnifyzpp4wu`, borderColor: "border-slate-500/50", glowColor: "bg-slate-600/10" },
-    { name: "Crystal", boostBips: 1000, color: "text-indigo-300", img: `${ipfsGateway}bafybeib6nacggrhgcp72xksbhsqcofg3lzhfb576kuebj5ioxpk2id5m7u/crystal_booster.json`, realImg: `${ipfsGateway}bafybeib6nacggrhgcp72xksbhsqcofg3lzhfb576kuebj5ioxpk2id5m7u`, borderColor: "border-indigo-300/50", glowColor: "bg-indigo-300/10" }
-];
-
-// ============================================================================
-// 7. CONTRACT ABIs
+// 6. ABIs (CONTRATOS)
 // ============================================================================
 
 export const bkcTokenABI = [
-    "function totalSupply() view returns (uint256)",
-    "function balanceOf(address account) view returns (uint256)",
-    "function approve(address spender, uint256 value) returns (bool)",
-    "function transfer(address to, uint256 amount) returns (bool)",
-    "function transferFrom(address from, address to, uint256 value) returns (bool)",
-    "function allowance(address owner, address spender) view returns (uint256)",
     "function name() view returns (string)",
     "function symbol() view returns (string)",
     "function decimals() view returns (uint8)",
+    "function totalSupply() view returns (uint256)",
+    "function balanceOf(address owner) view returns (uint256)",
+    "function transfer(address to, uint256 amount) returns (bool)",
+    "function approve(address spender, uint256 amount) returns (bool)",
+    "function allowance(address owner, address spender) view returns (uint256)",
+    "function transferFrom(address from, address to, uint256 amount) returns (bool)",
     "function MAX_SUPPLY() view returns (uint256)",
     "function TGE_SUPPLY() view returns (uint256)",
     "function remainingMintableSupply() view returns (uint256)",
