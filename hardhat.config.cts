@@ -1,5 +1,5 @@
 // hardhat.config.ts
-// ✅ VERSÃO CORRIGIDA: Usa API V1 do Arbiscan (ainda suportada)
+// ✅ VERSÃO V3.0: RPC Arbitrum Official como primária
 
 import { HardhatUserConfig } from "hardhat/config";
 import "@nomicfoundation/hardhat-toolbox";
@@ -8,7 +8,7 @@ import "@nomicfoundation/hardhat-verify";
 import "dotenv/config";
 
 // ========================================
-// 🔐 CONFIGURAÇÃO DE CHAVES (Backend)
+// 🔐 CONFIGURAÇÃO DE CHAVES
 // ========================================
 
 const ALCHEMY_API_KEY = process.env.ALCHEMY_API_KEY || "";
@@ -16,8 +16,26 @@ const PRIVATE_KEY = process.env.PRIVATE_KEY || "";
 const ETHERSCAN_API_KEY = process.env.ETHERSCAN_API_KEY || "";
 
 // ========================================
+// 🌐 RPCs - ARBITRUM OFFICIAL COMO PRIMÁRIA
+// ========================================
+
+const RPC_URLS = {
+  // Testnet - Arbitrum Sepolia
+  arbitrumSepolia: {
+    primary: "https://sepolia-rollup.arbitrum.io/rpc",  // Arbitrum Official (FREE)
+    fallback: ALCHEMY_API_KEY ? `https://arb-sepolia.g.alchemy.com/v2/${ALCHEMY_API_KEY}` : null,
+  },
+  // Mainnet - Arbitrum One
+  arbitrumOne: {
+    primary: "https://arb1.arbitrum.io/rpc",  // Arbitrum Official (FREE)
+    fallback: ALCHEMY_API_KEY ? `https://arb-mainnet.g.alchemy.com/v2/${ALCHEMY_API_KEY}` : null,
+  },
+};
+
+// ========================================
 // ⚠️ VALIDAÇÕES DE SEGURANÇA
 // ========================================
+
 if (!PRIVATE_KEY) {
   console.warn("⚠️ AVISO: PRIVATE_KEY não encontrada no .env. Deploys irão falhar.");
 }
@@ -25,8 +43,11 @@ if (!ETHERSCAN_API_KEY) {
   console.warn("⚠️ AVISO: ETHERSCAN_API_KEY não encontrada. Verificação impossível.");
 }
 if (!ALCHEMY_API_KEY) {
-  console.warn("⚠️ AVISO: ALCHEMY_API_KEY não encontrada. Usando RPC público (lento/instável).");
+  console.warn("ℹ️ INFO: ALCHEMY_API_KEY não encontrada. Usando apenas RPC oficial do Arbitrum.");
 }
+
+// Log da RPC sendo usada
+console.log(`🌐 Arbitrum Sepolia RPC: ${RPC_URLS.arbitrumSepolia.primary}`);
 
 // ========================================
 // ⚙️ CONFIGURAÇÃO DO HARDHAT
@@ -40,11 +61,12 @@ const config: HardhatUserConfig = {
         enabled: true,
         runs: 200,
       },
-      viaIR: true, 
+      viaIR: true,
     },
   },
 
   networks: {
+    // Local
     hardhat: {
       chainId: 31337,
     },
@@ -52,21 +74,31 @@ const config: HardhatUserConfig = {
       url: "http://127.0.0.1:8545",
       chainId: 31337,
     },
+
     // 🟢 TESTNET: Arbitrum Sepolia
+    // RPC Oficial do Arbitrum (gratuita e estável)
     arbitrumSepolia: {
-      url: ALCHEMY_API_KEY 
-        ? `https://arb-sepolia.g.alchemy.com/v2/${ALCHEMY_API_KEY}` 
-        : "https://sepolia-rollup.arbitrum.io/rpc",
+      url: RPC_URLS.arbitrumSepolia.primary,
       accounts: PRIVATE_KEY ? [PRIVATE_KEY] : [],
       chainId: 421614,
+      // Configurações de timeout para RPC pública
+      timeout: 60000,  // 60 segundos
     },
+
     // 🔴 MAINNET: Arbitrum One
+    // RPC Oficial do Arbitrum (gratuita e estável)
     arbitrumOne: {
-      url: ALCHEMY_API_KEY 
-        ? `https://arb-mainnet.g.alchemy.com/v2/${ALCHEMY_API_KEY}` 
-        : "https://arb1.arbitrum.io/rpc",
+      url: RPC_URLS.arbitrumOne.primary,
       accounts: PRIVATE_KEY ? [PRIVATE_KEY] : [],
       chainId: 42161,
+      timeout: 60000,
+    },
+
+    // 🔵 ALTERNATIVA: Arbitrum Sepolia via Alchemy (se configurado)
+    arbitrumSepoliaAlchemy: {
+      url: RPC_URLS.arbitrumSepolia.fallback || RPC_URLS.arbitrumSepolia.primary,
+      accounts: PRIVATE_KEY ? [PRIVATE_KEY] : [],
+      chainId: 421614,
     },
   },
 
@@ -74,17 +106,12 @@ const config: HardhatUserConfig = {
   // 🔍 VERIFICAÇÃO - USA API V1 DO ARBISCAN
   // ========================================
   etherscan: {
-    // IMPORTANTE: Usar uma única chave API (não objeto)
-    // O warning sobre V2 pode ser ignorado - V1 ainda funciona
     apiKey: ETHERSCAN_API_KEY,
-    
-    // Configuração customizada para Arbitrum
     customChains: [
       {
         network: "arbitrumSepolia",
         chainId: 421614,
         urls: {
-          // USA API V1 DO ARBISCAN - SEM "?" NA URL
           apiURL: "https://api-sepolia.arbiscan.io/api",
           browserURL: "https://sepolia.arbiscan.io",
         },
