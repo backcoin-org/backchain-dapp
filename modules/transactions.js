@@ -487,6 +487,71 @@ export async function executeClaimRewards(boosterIdToSend, btnElement) {
 }
 
 // ====================================================================
+// UNIVERSAL CLAIM (Staking + Mining Rewards)
+// ====================================================================
+
+export async function executeUniversalClaim(stakingRewards, minerRewards, boosterIdToSend, btnElement) {
+    const signer = await getConnectedSigner();
+    if (!signer) return false;
+    
+    const originalText = btnElement?.innerHTML || 'Claim';
+    if (btnElement) {
+        btnElement.innerHTML = '<div class="loader inline-block"></div> Processing...';
+        btnElement.disabled = true;
+    }
+    
+    try {
+        // Validate boosterId
+        let boosterIdBigInt = 0n;
+        try {
+            const boosterNum = Number(boosterIdToSend || 0);
+            if (boosterNum > 0 && State.myBoosters && State.myBoosters.length > 0) {
+                const ownsBooster = State.myBoosters.some(b => 
+                    Number(b.tokenId) === boosterNum
+                );
+                if (ownsBooster) {
+                    boosterIdBigInt = BigInt(boosterNum);
+                }
+            }
+        } catch (e) {
+            console.warn("Invalid booster ID for claim, using 0:", e);
+        }
+        
+        const delegationContract = new ethers.Contract(
+            addresses.delegationManager,
+            delegationManagerABI,
+            signer
+        );
+        
+        const result = await executeWithRetry(
+            () => delegationContract.claimReward(boosterIdBigInt),
+            {
+                description: 'Claim Rewards',
+                onAttempt: (attempt) => {
+                    if (attempt === 1) showToast("Confirm claim in wallet...", "info");
+                },
+                onSuccess: async () => {
+                    showToast("✅ Rewards claimed!", "success");
+                    await loadUserData(true);
+                }
+            }
+        );
+        
+        return result.success;
+        
+    } catch (e) {
+        console.error("Claim error:", e);
+        showToast(formatError(e), "error");
+        return false;
+    } finally {
+        if (btnElement) {
+            btnElement.innerHTML = originalText;
+            btnElement.disabled = false;
+        }
+    }
+}
+
+// ====================================================================
 // NFT POOL - BUY
 // ====================================================================
 
@@ -621,7 +686,7 @@ export async function executeSellNFT(poolAddress, tokenId, minPayout, btnElement
 // RENTAL - LIST NFT
 // ====================================================================
 
-export async function executeListNFT(tokenId, pricePerHour, minHours, maxHours, btnElement) {
+export async function executeListNFT(params, btnElement) {
     const signer = await getConnectedSigner();
     if (!signer) return { success: false };
     
@@ -632,6 +697,22 @@ export async function executeListNFT(tokenId, pricePerHour, minHours, maxHours, 
     }
     
     try {
+        // Support both object params and individual params
+        let tokenId, pricePerHour, minHours, maxHours;
+        if (typeof params === 'object' && params !== null) {
+            tokenId = params.tokenId;
+            pricePerHour = params.pricePerHour;
+            minHours = params.minHours;
+            maxHours = params.maxHours;
+        } else {
+            // Legacy support: params is tokenId
+            tokenId = params;
+            pricePerHour = arguments[1];
+            minHours = arguments[2];
+            maxHours = arguments[3];
+            btnElement = arguments[4];
+        }
+        
         const rentalAddress = addresses.rentalManager;
         if (!rentalAddress) {
             showToast("Rental Manager not configured", "error");
@@ -639,7 +720,10 @@ export async function executeListNFT(tokenId, pricePerHour, minHours, maxHours, 
         }
         
         // Approve NFT for rental manager
-        const nftABI = ["function setApprovalForAll(address,bool)", "function isApprovedForAll(address,address) view returns (bool)"];
+        const nftABI = [
+            "function setApprovalForAll(address,bool)", 
+            "function isApprovedForAll(address,address) view returns (bool)"
+        ];
         const nftContract = new ethers.Contract(addresses.rewardBoosterNFT, nftABI, signer);
         
         const isApproved = await nftContract.isApprovedForAll(State.userAddress, rentalAddress);
@@ -655,7 +739,12 @@ export async function executeListNFT(tokenId, pricePerHour, minHours, maxHours, 
         const rentalContract = new ethers.Contract(rentalAddress, rentalManagerABI, signer);
         
         const result = await executeWithRetry(
-            () => rentalContract.listNFT(tokenId, pricePerHour, minHours, maxHours),
+            () => rentalContract.listNFT(
+                BigInt(tokenId), 
+                BigInt(pricePerHour), 
+                BigInt(minHours), 
+                BigInt(maxHours)
+            ),
             {
                 description: 'List NFT',
                 onAttempt: (attempt) => {
@@ -665,8 +754,8 @@ export async function executeListNFT(tokenId, pricePerHour, minHours, maxHours, 
         );
         
         if (result.success) {
-            showToast("✅ NFT listed for rent!", "success");
-            loadRentalListings();
+            showToast(`✅ NFT #${tokenId} listed for rent!`, "success");
+            loadRentalListings(true);
             return { success: true, txHash: result.txHash };
         }
         
@@ -688,7 +777,7 @@ export async function executeListNFT(tokenId, pricePerHour, minHours, maxHours, 
 // RENTAL - RENT NFT
 // ====================================================================
 
-export async function executeRentNFT(tokenId, hours, totalCost, btnElement) {
+export async function executeRentNFT(params, btnElement) {
     const signer = await getConnectedSigner();
     if (!signer) return { success: false };
     
@@ -699,6 +788,19 @@ export async function executeRentNFT(tokenId, hours, totalCost, btnElement) {
     }
     
     try {
+        // Support both object params and individual params
+        let tokenId, hours, totalCost;
+        if (typeof params === 'object' && params !== null) {
+            tokenId = params.tokenId;
+            hours = params.hours;
+            totalCost = params.totalCost;
+        } else {
+            tokenId = params;
+            hours = arguments[1];
+            totalCost = arguments[2];
+            btnElement = arguments[3];
+        }
+        
         const rentalAddress = addresses.rentalManager;
         if (!rentalAddress) {
             showToast("Rental Manager not configured", "error");
@@ -720,7 +822,7 @@ export async function executeRentNFT(tokenId, hours, totalCost, btnElement) {
         const rentalContract = new ethers.Contract(rentalAddress, rentalManagerABI, signer);
         
         const result = await executeWithRetry(
-            () => rentalContract.rentNFT(tokenId, hours),
+            () => rentalContract.rentNFT(BigInt(tokenId), BigInt(hours)),
             {
                 description: 'Rent NFT',
                 onAttempt: (attempt) => {
@@ -730,9 +832,9 @@ export async function executeRentNFT(tokenId, hours, totalCost, btnElement) {
         );
         
         if (result.success) {
-            showToast(`✅ NFT rented for ${hours} hours!`, "success");
+            showToast(`✅ NFT #${tokenId} rented for ${hours} hours!`, "success");
             loadUserData();
-            loadRentalListings();
+            loadRentalListings(true);
             return { success: true, txHash: result.txHash };
         }
         
