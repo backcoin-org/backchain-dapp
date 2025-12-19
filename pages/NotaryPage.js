@@ -1195,27 +1195,44 @@ export const NotaryPage = {
 
     async addToWallet(tokenId, imageUrl) {
         try {
-            // Função helper para converter IPFS URL - usar nftstorage que funciona melhor com MetaMask
-            const toHttpsUrl = (url) => {
+            // 🔥 V9.1: Lista de gateways IPFS em ordem de preferência
+            // dweb.link e w3s.link são gerenciados pelo Protocol Labs (criadores do IPFS)
+            const IPFS_GATEWAYS = [
+                'https://dweb.link/ipfs/',
+                'https://w3s.link/ipfs/',
+                'https://nftstorage.link/ipfs/',
+                'https://cloudflare-ipfs.com/ipfs/',
+                'https://ipfs.io/ipfs/'
+            ];
+            
+            // Função helper para extrair CID de qualquer URL IPFS
+            const extractCid = (url) => {
                 if (!url) return '';
                 
-                let cid = '';
-                
                 if (url.startsWith('ipfs://')) {
-                    cid = url.replace('ipfs://', '');
+                    return url.replace('ipfs://', '').split('?')[0];
                 } else if (url.includes('/ipfs/')) {
-                    cid = url.split('/ipfs/')[1];
-                } else if (url.startsWith('https://') || url.startsWith('http://')) {
+                    return url.split('/ipfs/')[1].split('?')[0];
+                } else if (url.match(/^Qm[a-zA-Z0-9]{44}/) || url.match(/^bafy[a-zA-Z0-9]+/)) {
                     return url;
-                } else if (url && url.length > 10) {
-                    cid = url;
-                }
-                
-                if (cid) {
-                    // Usar cloudflare-ipfs que funciona melhor com MetaMask
-                    return `https://cloudflare-ipfs.com/ipfs/${cid}`;
                 }
                 return '';
+            };
+            
+            // Converter para HTTPS usando o gateway preferido
+            const toHttpsUrl = (url, gatewayIndex = 0) => {
+                if (!url) return '';
+                
+                // Se já é HTTPS de um servidor não-IPFS, retorna como está
+                if (url.startsWith('https://') && !url.includes('/ipfs/') && !url.includes('ipfs.io')) {
+                    return url;
+                }
+                
+                const cid = extractCid(url);
+                if (cid) {
+                    return `${IPFS_GATEWAYS[gatewayIndex]}${cid}`;
+                }
+                return url;
             };
             
             let finalImageUrl = toHttpsUrl(imageUrl || '');
@@ -1258,22 +1275,55 @@ export const NotaryPage = {
             
             showToast('Adding NFT #' + tokenId + ' to wallet...', 'info');
             
-            // Formato que funciona com MetaMask para ERC721
-            const wasAdded = await window.ethereum.request({
-                method: 'wallet_watchAsset',
-                params: {
-                    type: 'ERC721',
-                    options: {
-                        address: contractAddress,
-                        tokenId: String(tokenId)
+            // 🔥 V9.1: Tentar com imagem explícita (funciona em versões recentes da MetaMask)
+            try {
+                const wasAdded = await window.ethereum.request({
+                    method: 'wallet_watchAsset',
+                    params: {
+                        type: 'ERC721',
+                        options: {
+                            address: contractAddress,
+                            tokenId: String(tokenId),
+                            // MetaMask experimental: passar imagem diretamente
+                            image: finalImageUrl
+                        },
                     },
-                },
-            });
-            
-            if (wasAdded) {
-                showToast('📜 NFT #' + tokenId + ' added to wallet!', 'success');
-            } else {
-                showToast('NFT not added (cancelled)', 'warning');
+                });
+                
+                if (wasAdded) {
+                    showToast('📜 NFT #' + tokenId + ' added to wallet!', 'success');
+                } else {
+                    showToast('NFT not added (cancelled)', 'warning');
+                }
+                return;
+            } catch (firstError) {
+                console.warn('First attempt with image failed:', firstError.message?.slice(0, 100));
+                
+                // Se falhou e não foi cancelamento do usuário, tentar sem a imagem
+                if (firstError.code !== 4001) {
+                    try {
+                        const wasAdded = await window.ethereum.request({
+                            method: 'wallet_watchAsset',
+                            params: {
+                                type: 'ERC721',
+                                options: {
+                                    address: contractAddress,
+                                    tokenId: String(tokenId)
+                                },
+                            },
+                        });
+                        
+                        if (wasAdded) {
+                            showToast('📜 NFT #' + tokenId + ' added to wallet!', 'success');
+                        } else {
+                            showToast('NFT not added (cancelled)', 'warning');
+                        }
+                        return;
+                    } catch (secondError) {
+                        throw secondError;
+                    }
+                }
+                throw firstError;
             }
         } catch (error) {
             console.error('Add to wallet error:', error);
