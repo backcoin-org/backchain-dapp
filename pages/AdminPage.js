@@ -1,4 +1,5 @@
 // pages/AdminPage.js
+// ✅ VERSION V2.0: Platform Usage Config Panel Added
 // --- NOVO ---
 // Importa o ethers e os endereços dos contratos
 const ethers = window.ethers;
@@ -18,11 +19,26 @@ const statusUI = {
     flagged_suspicious: { text: 'Flagged', color: 'text-red-300', bgColor: 'bg-red-800/60', icon: 'fa-flag' },
 };
 
+// Default Platform Usage Config
+const DEFAULT_PLATFORM_USAGE_CONFIG = {
+    faucet:      { icon: '🚰', label: 'Claim Faucet',    points: 1000,  maxCount: 1,  cooldownHours: 0,  enabled: true },
+    delegation:  { icon: '📊', label: 'Delegate BKC',   points: 2000,  maxCount: 10, cooldownHours: 24, enabled: true },
+    fortune:     { icon: '🎰', label: 'Play Fortune',   points: 1500,  maxCount: 10, cooldownHours: 1,  enabled: true },
+    buyNFT:      { icon: '🛒', label: 'Buy NFT',        points: 2500,  maxCount: 10, cooldownHours: 0,  enabled: true },
+    sellNFT:     { icon: '💰', label: 'Sell NFT',       points: 1500,  maxCount: 10, cooldownHours: 0,  enabled: true },
+    listRental:  { icon: '🏷️', label: 'List for Rent',  points: 1000,  maxCount: 10, cooldownHours: 0,  enabled: true },
+    rentNFT:     { icon: '⏰', label: 'Rent NFT',       points: 2000,  maxCount: 10, cooldownHours: 0,  enabled: true },
+    notarize:    { icon: '📜', label: 'Notarize Doc',   points: 2000,  maxCount: 10, cooldownHours: 0,  enabled: true },
+    claimReward: { icon: '💸', label: 'Claim Rewards',  points: 1000,  maxCount: 10, cooldownHours: 24, enabled: true },
+    unstake:     { icon: '↩️', label: 'Unstake',        points: 500,   maxCount: 10, cooldownHours: 0,  enabled: true },
+};
+
 
 let adminState = {
     allSubmissions: [], // Submissões pendentes/auditing
     dailyTasks: [],     // Todas as tarefas (ativas e inativas)
     ugcBasePoints: null, // Para salvar os pontos base do UGC
+    platformUsageConfig: null, // Platform Usage Config
     editingTask: null, // Tarefa sendo editada no formulário
     activeTab: 'review-submissions', 
     
@@ -83,6 +99,9 @@ const loadAdminData = async () => {
             'LinkedIn': 2200,
             'Other': 1000
         };
+
+        // Carrega Platform Usage Config
+        adminState.platformUsageConfig = publicData.platformUsageConfig || DEFAULT_PLATFORM_USAGE_CONFIG;
 
 
         // Se estava editando, atualiza os dados da tarefa sendo editada
@@ -1322,6 +1341,198 @@ const renderSubmissionsPanel = () => {
 };
 
 
+// --- PLATFORM USAGE CONFIG PANEL ---
+const renderPlatformUsagePanel = () => {
+    const container = document.getElementById('platform-usage-content');
+    if (!container) return;
+
+    const config = adminState.platformUsageConfig || DEFAULT_PLATFORM_USAGE_CONFIG;
+    
+    // Calcular pontos totais possíveis
+    let totalMaxPoints = 0;
+    Object.values(config).forEach(action => {
+        if (action.enabled !== false) {
+            totalMaxPoints += (action.points || 0) * (action.maxCount || 1);
+        }
+    });
+
+    const actionsHtml = Object.entries(config).map(([key, action]) => `
+        <tr class="border-b border-zinc-700/50 hover:bg-zinc-800/50" data-action-key="${key}">
+            <td class="p-3">
+                <div class="flex items-center gap-2">
+                    <span class="text-xl">${action.icon || '⚡'}</span>
+                    <span class="text-white font-medium">${action.label || key}</span>
+                </div>
+            </td>
+            <td class="p-3">
+                <input type="number" class="platform-input bg-zinc-900 border border-zinc-700 rounded px-2 py-1 w-20 text-amber-400 font-bold text-center" 
+                       data-field="points" value="${action.points || 0}" min="0" step="100">
+            </td>
+            <td class="p-3">
+                <input type="number" class="platform-input bg-zinc-900 border border-zinc-700 rounded px-2 py-1 w-16 text-white text-center" 
+                       data-field="maxCount" value="${action.maxCount || 1}" min="1" max="100">
+            </td>
+            <td class="p-3">
+                <input type="number" class="platform-input bg-zinc-900 border border-zinc-700 rounded px-2 py-1 w-16 text-white text-center" 
+                       data-field="cooldownHours" value="${action.cooldownHours || 0}" min="0" max="168">
+            </td>
+            <td class="p-3 text-center">
+                <label class="relative inline-flex items-center cursor-pointer">
+                    <input type="checkbox" class="sr-only peer platform-toggle" data-field="enabled" ${action.enabled !== false ? 'checked' : ''}>
+                    <div class="w-9 h-5 bg-zinc-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-green-600"></div>
+                </label>
+            </td>
+            <td class="p-3 text-right text-xs text-zinc-400">
+                ${((action.points || 0) * (action.maxCount || 1)).toLocaleString()}
+            </td>
+        </tr>
+    `).join('');
+
+    container.innerHTML = `
+        <div class="mb-6">
+            <h2 class="text-2xl font-bold text-white mb-2">Platform Usage Points Configuration</h2>
+            <p class="text-zinc-400 text-sm">Configure points awarded for using platform features. Changes are saved immediately.</p>
+        </div>
+
+        <!-- Stats Summary -->
+        <div class="grid grid-cols-3 gap-4 mb-6">
+            <div class="bg-zinc-800 border border-zinc-700 rounded-xl p-4 text-center">
+                <span class="text-2xl font-bold text-amber-400">${Object.keys(config).length}</span>
+                <p class="text-xs text-zinc-500 mt-1">Total Actions</p>
+            </div>
+            <div class="bg-zinc-800 border border-zinc-700 rounded-xl p-4 text-center">
+                <span class="text-2xl font-bold text-green-400">${Object.values(config).filter(a => a.enabled !== false).length}</span>
+                <p class="text-xs text-zinc-500 mt-1">Enabled</p>
+            </div>
+            <div class="bg-zinc-800 border border-zinc-700 rounded-xl p-4 text-center">
+                <span class="text-2xl font-bold text-purple-400">${totalMaxPoints.toLocaleString()}</span>
+                <p class="text-xs text-zinc-500 mt-1">Max Points Possible</p>
+            </div>
+        </div>
+
+        <!-- Actions Table -->
+        <div class="bg-zinc-800 rounded-xl border border-zinc-700 overflow-hidden">
+            <table class="w-full text-left">
+                <thead>
+                    <tr class="bg-zinc-900 border-b border-zinc-700 text-xs text-zinc-400 uppercase">
+                        <th class="p-3 font-semibold">Action</th>
+                        <th class="p-3 font-semibold">Points</th>
+                        <th class="p-3 font-semibold">Max Count</th>
+                        <th class="p-3 font-semibold">Cooldown (h)</th>
+                        <th class="p-3 font-semibold text-center">Enabled</th>
+                        <th class="p-3 font-semibold text-right">Max Total</th>
+                    </tr>
+                </thead>
+                <tbody id="platform-usage-tbody">
+                    ${actionsHtml}
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Save Button -->
+        <div class="mt-6 flex justify-end gap-3">
+            <button id="reset-platform-config-btn" class="px-4 py-2 bg-zinc-700 hover:bg-zinc-600 text-white rounded-lg transition-colors">
+                <i class="fa-solid fa-rotate-left mr-2"></i>Reset to Default
+            </button>
+            <button id="save-platform-config-btn" class="px-6 py-2 bg-amber-600 hover:bg-amber-500 text-white font-bold rounded-lg transition-colors">
+                <i class="fa-solid fa-save mr-2"></i>Save Configuration
+            </button>
+        </div>
+
+        <!-- Info Box -->
+        <div class="mt-6 p-4 bg-blue-900/20 border border-blue-500/30 rounded-xl">
+            <h4 class="text-blue-400 font-bold mb-2"><i class="fa-solid fa-info-circle mr-2"></i>How It Works</h4>
+            <ul class="text-zinc-400 text-sm space-y-1">
+                <li>• <strong>Points:</strong> Amount awarded per action</li>
+                <li>• <strong>Max Count:</strong> Maximum times a user can earn points for this action</li>
+                <li>• <strong>Cooldown:</strong> Hours between earning points (0 = no cooldown)</li>
+                <li>• <strong>Enabled:</strong> Toggle to enable/disable this action</li>
+                <li>• Points are tracked with transaction hashes to prevent fraud</li>
+            </ul>
+        </div>
+    `;
+
+    // Attach event listeners
+    const tbody = document.getElementById('platform-usage-tbody');
+    tbody?.addEventListener('input', handlePlatformConfigChange);
+    tbody?.addEventListener('change', handlePlatformConfigChange);
+    
+    document.getElementById('save-platform-config-btn')?.addEventListener('click', handleSavePlatformConfig);
+    document.getElementById('reset-platform-config-btn')?.addEventListener('click', handleResetPlatformConfig);
+};
+
+// Handle changes to platform config inputs
+const handlePlatformConfigChange = (e) => {
+    const input = e.target;
+    if (!input.classList.contains('platform-input') && !input.classList.contains('platform-toggle')) return;
+    
+    const row = input.closest('tr');
+    const actionKey = row?.dataset.actionKey;
+    const field = input.dataset.field;
+    
+    if (!actionKey || !field) return;
+    
+    // Update local state
+    if (!adminState.platformUsageConfig[actionKey]) {
+        adminState.platformUsageConfig[actionKey] = { ...DEFAULT_PLATFORM_USAGE_CONFIG[actionKey] };
+    }
+    
+    if (field === 'enabled') {
+        adminState.platformUsageConfig[actionKey].enabled = input.checked;
+    } else {
+        adminState.platformUsageConfig[actionKey][field] = parseInt(input.value) || 0;
+    }
+    
+    // Update max total display
+    const action = adminState.platformUsageConfig[actionKey];
+    const maxTotalCell = row.querySelector('td:last-child');
+    if (maxTotalCell) {
+        maxTotalCell.textContent = ((action.points || 0) * (action.maxCount || 1)).toLocaleString();
+    }
+};
+
+// Save platform config to Firebase
+const handleSavePlatformConfig = async (e) => {
+    const btn = e.target.closest('button');
+    if (!btn) return;
+    
+    const originalHtml = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-2"></i>Saving...';
+    
+    try {
+        await db.savePlatformUsageConfig(adminState.platformUsageConfig);
+        showToast("✅ Platform Usage config saved!", "success");
+        
+        // Re-render to update stats
+        renderPlatformUsagePanel();
+    } catch (error) {
+        console.error("Error saving platform config:", error);
+        showToast("Failed to save config: " + error.message, "error");
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = originalHtml;
+    }
+};
+
+// Reset platform config to defaults
+const handleResetPlatformConfig = async () => {
+    if (!confirm("Are you sure you want to reset to default values? This will save immediately.")) {
+        return;
+    }
+    
+    try {
+        adminState.platformUsageConfig = { ...DEFAULT_PLATFORM_USAGE_CONFIG };
+        await db.savePlatformUsageConfig(adminState.platformUsageConfig);
+        showToast("✅ Config reset to defaults!", "success");
+        renderPlatformUsagePanel();
+    } catch (error) {
+        console.error("Error resetting platform config:", error);
+        showToast("Failed to reset config: " + error.message, "error");
+    }
+};
+
+
 // --- (AJUSTADO) RENDERIZA O PAINEL PRINCIPAL COM A NOVA ABA ---
 const renderAdminPanel = () => {
     const adminContent = document.getElementById('admin-content-wrapper');
@@ -1358,6 +1569,7 @@ const renderAdminPanel = () => {
                 <button class="tab-btn ${adminState.activeTab === 'manage-users' ? 'active' : ''}" data-target="manage-users">Manage Users</button>
                 <button class="tab-btn ${adminState.activeTab === 'manage-ugc-points' ? 'active' : ''}" data-target="manage-ugc-points">Manage UGC Points</button>
                 <button class="tab-btn ${adminState.activeTab === 'manage-tasks' ? 'active' : ''}" data-target="manage-tasks">Manage Daily Tasks</button>
+                <button class="tab-btn ${adminState.activeTab === 'platform-usage' ? 'active' : ''}" data-target="platform-usage">Platform Usage</button>
             </nav>
         </div>
 
@@ -1375,6 +1587,10 @@ const renderAdminPanel = () => {
 
         <div id="manage_tasks_tab" class="tab-content ${adminState.activeTab === 'manage-tasks' ? 'active' : ''}">
             <div id="manage-tasks-content" class="max-w-4xl mx-auto"></div>
+        </div>
+
+        <div id="platform_usage_tab" class="tab-content ${adminState.activeTab === 'platform-usage' ? 'active' : ''}">
+            <div id="platform-usage-content" class="max-w-4xl mx-auto"></div>
         </div>
     `;
     // ==========================================================
@@ -1401,6 +1617,8 @@ const renderAdminPanel = () => {
         renderSubmissionsPanel();
     } else if (adminState.activeTab === 'manage-users') {
         renderManageUsersPanel(); 
+    } else if (adminState.activeTab === 'platform-usage') {
+        renderPlatformUsagePanel();
     }
 
 
@@ -1442,7 +1660,8 @@ const renderAdminPanel = () => {
                  if (targetId === 'manage-ugc-points') renderUgcPointsPanel();
                  if (targetId === 'manage-tasks') renderManageTasksPanel();
                  if (targetId === 'review-submissions') renderSubmissionsPanel();
-                 if (targetId === 'manage-users') renderManageUsersPanel(); 
+                 if (targetId === 'manage-users') renderManageUsersPanel();
+                 if (targetId === 'platform-usage') renderPlatformUsagePanel(); 
             } else {
                  console.warn(`Tab content container not found for target: ${targetId}`);
             }
