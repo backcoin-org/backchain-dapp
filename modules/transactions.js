@@ -1,5 +1,5 @@
 // js/modules/transactions.js
-// ✅ PRODUCTION V13.0 - Complete + Aggressive Retry (5 attempts, 1s delay)
+// ✅ PRODUCTION V12.0 - Robust Retry + Better Error Handling + Stability Fixes
 
 const ethers = window.ethers;
 
@@ -14,17 +14,18 @@ import { loadUserData, getHighestBoosterBoostFromAPI, loadRentalListings, loadUs
 // ====================================================================
 
 const TX_CONFIG = {
-    MAX_RETRIES: 5,
-    RETRY_DELAY_MS: 1000,
-    APPROVAL_WAIT_MS: 500,
-    GAS_BUFFER_PERCENT: 130
+    MAX_RETRIES: 3,
+    RETRY_DELAY_MS: 3000,      // Aumentado para 3s
+    APPROVAL_WAIT_MS: 2000,    // Aumentado para 2s
+    SIMULATION_TIMEOUT_MS: 10000,
+    // Gas settings para evitar simulação problemática
+    DEFAULT_GAS_LIMIT: 500000n,
+    GAS_LIMIT_MULTIPLIER: 1.3   // 30% extra para segurança
 };
 
 // ====================================================================
 // UTILITIES
 // ====================================================================
-
-const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
 function safeFormatEther(value) {
     try {
@@ -34,6 +35,8 @@ function safeFormatEther(value) {
     } catch { return "N/A"; }
 }
 
+const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
 async function getConnectedSigner() {
     if (!State.isConnected || !State.userAddress) {
         showToast("Please connect wallet first", "error");
@@ -41,12 +44,15 @@ async function getConnectedSigner() {
     }
     try {
         let rawProvider = State.web3Provider || State.provider || window.ethereum;
+        
         if (!rawProvider) {
             showToast("No wallet provider found", "error");
             return null;
         }
+        
         const provider = new ethers.BrowserProvider(rawProvider);
-        return await provider.getSigner();
+        const signer = await provider.getSigner();
+        return signer;
     } catch (e) {
         console.error("Signer error:", e);
         showToast("Wallet connection error", "error");
@@ -57,113 +63,190 @@ async function getConnectedSigner() {
 function formatError(error) {
     const msg = error?.reason || error?.shortMessage || error?.message || 'Unknown error';
     
-    if (msg.includes('user rejected') || msg.includes('User denied')) return 'Transaction cancelled';
+    // User cancelled
+    if (msg.includes('user rejected') || msg.includes('User denied')) return 'Transaction cancelled by user';
+    
+    // Gas/ETH errors
     if (msg.includes('insufficient funds')) return 'Insufficient ETH for gas';
     if (msg.includes('exceeds balance')) return 'Insufficient token balance';
+    
+    // Contract specific errors
     if (msg.includes('0xfb550858') || msg.includes('InsufficientOracleFee')) return 'Insufficient oracle fee (ETH)';
     if (msg.includes('0xbcfa8e99') || msg.includes('InvalidGuessCount')) return 'Wrong number of guesses';
     if (msg.includes('0x5c844fb4') || msg.includes('InvalidGuessRange')) return 'Guess out of range';
+    if (msg.includes('ZeroAmount')) return 'Amount cannot be zero';
+    if (msg.includes('NoActiveTiers')) return 'No active game tiers';
+    if (msg.includes('InsufficientAllowance')) return 'Please approve tokens first';
+    if (msg.includes('InsufficientBalance')) return 'Insufficient BKC balance';
+    
+    // Delegation errors
     if (msg.includes('DelegationNotFound') || msg.includes('not found')) return 'Delegation not found';
     if (msg.includes('DelegationLocked') || msg.includes('still locked')) return 'Delegation is still locked';
     if (msg.includes('InvalidIndex') || msg.includes('invalid index')) return 'Invalid delegation index';
     if (msg.includes('NotOwner') || msg.includes('not owner')) return 'Not the delegation owner';
     if (msg.includes('require(false)')) return 'Transaction rejected by contract';
-    if (msg.includes('Internal JSON-RPC')) return 'Network busy, please wait...';
+    
+    // RPC/Network errors (these should trigger retry)
+    if (msg.includes('Internal JSON-RPC')) return 'Network error - please try again';
+    if (msg.includes('network') || msg.includes('timeout')) return 'Network timeout - please try again';
     
     return msg.slice(0, 100);
 }
 
 function isRetryableError(error) {
-    const msg = (error?.message || error?.reason || '').toLowerCase();
-    return msg.includes('internal json-rpc') || 
-           msg.includes('network') || 
-           msg.includes('timeout') ||
-           msg.includes('nonce') ||
-           msg.includes('already known') ||
-           msg.includes('replacement') ||
-           msg.includes('could not coalesce');
+    const msg = error?.message || error?.reason || '';
+    const retryablePatterns = [
+        'Internal JSON-RPC',
+        'network',
+        'timeout',
+        'ETIMEDOUT',
+        'ECONNRESET',
+        'rate limit',
+        'Too Many Requests',
+        'nonce',
+        'replacement transaction',
+        'already known'
+    ];
+    return retryablePatterns.some(pattern => msg.toLowerCase().includes(pattern.toLowerCase()));
 }
 
 function isUserRejection(error) {
-    const msg = (error?.message || error?.reason || '').toLowerCase();
+    const msg = error?.message || error?.reason || '';
     return msg.includes('user rejected') || 
-           msg.includes('user denied') || 
+           msg.includes('User denied') || 
            msg.includes('cancelled') ||
            msg.includes('canceled');
 }
 
 // ====================================================================
-// CORE: EXECUTE WITH RETRY
+// ROBUST APPROVAL WITH RETRY
 // ====================================================================
 
-async function executeWithRetry(fn, description = 'Transaction') {
-    let lastError;
-    
-    for (let attempt = 1; attempt <= TX_CONFIG.MAX_RETRIES; attempt++) {
-        try {
-            if (attempt > 1) {
-                console.log(`${description} attempt ${attempt}/${TX_CONFIG.MAX_RETRIES}...`);
-            }
-            return await fn();
-        } catch (error) {
-            lastError = error;
-            console.error(`${description} attempt ${attempt} failed:`, error.message?.slice(0, 80));
-            
-            if (isUserRejection(error)) {
-                throw error;
-            }
-            
-            if (attempt < TX_CONFIG.MAX_RETRIES && isRetryableError(error)) {
-                showToast(`Retrying... (${attempt}/${TX_CONFIG.MAX_RETRIES})`, "warning");
-                await sleep(TX_CONFIG.RETRY_DELAY_MS * attempt);
-                continue;
-            }
-            
-            throw error;
-        }
-    }
-    
-    throw lastError;
-}
-
-// ====================================================================
-// SIMPLE APPROVAL WITH RETRY
-// ====================================================================
-
-async function simpleApprove(tokenAddress, spenderAddress, amount, signer) {
+async function robustApprove(tokenAddress, spenderAddress, amount, signer, retries = TX_CONFIG.MAX_RETRIES) {
     const tokenABI = [
         "function approve(address,uint256) returns (bool)", 
         "function allowance(address,address) view returns (uint256)"
     ];
     const token = new ethers.Contract(tokenAddress, tokenABI, signer);
     
-    let currentAllowance = 0n;
+    // Check current allowance
+    let currentAllowance;
     try {
         currentAllowance = await token.allowance(State.userAddress, spenderAddress);
         console.log("Current allowance:", ethers.formatEther(currentAllowance), "BKC");
     } catch (e) {
-        console.warn("Could not check allowance");
+        console.warn("Could not check allowance:", e.message);
+        currentAllowance = 0n;
     }
     
+    // If already approved, return immediately
     if (currentAllowance >= amount) {
         console.log("✅ Already approved");
         return true;
     }
     
+    // Request approval with 10x amount to avoid future approvals
     const approveAmount = amount * 10n;
     
-    return executeWithRetry(async () => {
-        showToast("Approve tokens...", "info");
-        const tx = await token.approve(spenderAddress, approveAmount, { gasLimit: 100000n });
-        await tx.wait();
-        await sleep(TX_CONFIG.APPROVAL_WAIT_MS);
-        showToast("✅ Approved!", "success");
-        return true;
-    }, 'Approval');
+    for (let attempt = 1; attempt <= retries; attempt++) {
+        try {
+            showToast(`Approve tokens... ${attempt > 1 ? `(attempt ${attempt})` : ''}`, "info");
+            
+            const tx = await token.approve(spenderAddress, approveAmount);
+            showToast("Waiting for approval confirmation...", "info");
+            
+            const receipt = await tx.wait();
+            
+            if (receipt.status === 0) {
+                throw new Error("Approval transaction reverted");
+            }
+            
+            // Wait a bit for the approval to propagate
+            await sleep(TX_CONFIG.APPROVAL_WAIT_MS);
+            
+            // Verify the approval went through
+            const newAllowance = await token.allowance(State.userAddress, spenderAddress);
+            if (newAllowance >= amount) {
+                showToast("✅ Approved!", "success");
+                return true;
+            } else {
+                throw new Error("Approval not reflected yet");
+            }
+            
+        } catch (e) {
+            console.error(`Approval attempt ${attempt} failed:`, e);
+            
+            if (isUserRejection(e)) {
+                showToast("Approval cancelled", "error");
+                return false;
+            }
+            
+            if (attempt < retries && isRetryableError(e)) {
+                showToast(`Retrying approval... (${attempt}/${retries})`, "warning");
+                await sleep(TX_CONFIG.RETRY_DELAY_MS * attempt);
+                continue;
+            }
+            
+            showToast(formatError(e), "error");
+            return false;
+        }
+    }
+    
+    return false;
 }
 
 // ====================================================================
-// DELEGATION
+// ROBUST TRANSACTION EXECUTOR WITH RETRY
+// ====================================================================
+
+async function executeWithRetry(txFunction, options = {}) {
+    const {
+        retries = TX_CONFIG.MAX_RETRIES,
+        onAttempt = () => {},
+        onSuccess = () => {},
+        description = 'Transaction'
+    } = options;
+    
+    for (let attempt = 1; attempt <= retries; attempt++) {
+        try {
+            onAttempt(attempt);
+            
+            const tx = await txFunction();
+            showToast("Waiting for confirmation...", "info");
+            
+            const receipt = await tx.wait();
+            
+            if (receipt.status === 0) {
+                throw new Error("Transaction reverted");
+            }
+            
+            onSuccess(receipt);
+            return { success: true, receipt, txHash: receipt.hash };
+            
+        } catch (e) {
+            console.error(`${description} attempt ${attempt} failed:`, e);
+            
+            if (isUserRejection(e)) {
+                showToast("Transaction cancelled", "error");
+                return { success: false, cancelled: true };
+            }
+            
+            if (attempt < retries && isRetryableError(e)) {
+                showToast(`Network issue, retrying... (${attempt}/${retries})`, "warning");
+                await sleep(TX_CONFIG.RETRY_DELAY_MS * attempt);
+                continue;
+            }
+            
+            showToast(formatError(e), "error");
+            return { success: false, error: e };
+        }
+    }
+    
+    return { success: false };
+}
+
+// ====================================================================
+// DELEGATION (WITH SIMULATION BYPASS)
 // ====================================================================
 
 export async function executeDelegation(totalAmount, durationSeconds, boosterIdToSend, btnElement) {
@@ -182,43 +265,97 @@ export async function executeDelegation(totalAmount, durationSeconds, boosterIdT
         const boosterIdBigInt = BigInt(boosterIdToSend || 0);
         
         const balance = await State.bkcTokenContract.balanceOf(State.userAddress);
+        
         if (balance < totalAmountBigInt) {
             showToast("Insufficient BKC balance", "error");
             return false;
         }
         
-        const approved = await simpleApprove(addresses.bkcToken, addresses.delegationManager, totalAmountBigInt, signer);
+        const approved = await robustApprove(
+            addresses.bkcToken,
+            addresses.delegationManager,
+            totalAmountBigInt,
+            signer
+        );
         if (!approved) return false;
         
         if (btnElement) btnElement.innerHTML = '<div class="loader inline-block"></div> Delegating...';
         
-        const contract = new ethers.Contract(addresses.delegationManager, delegationManagerABI, signer);
+        const delegationContract = new ethers.Contract(
+            addresses.delegationManager,
+            delegationManagerABI,
+            signer
+        );
         
-        return await executeWithRetry(async () => {
-            showToast("Confirm delegation...", "info");
-            
-            let gasLimit;
+        // Pre-estimate gas
+        let gasLimit = 350000n;
+        try {
+            const estimatedGas = await delegationContract.delegate.estimateGas(
+                totalAmountBigInt, 
+                durationBigInt, 
+                boosterIdBigInt
+            );
+            gasLimit = (estimatedGas * 150n) / 100n;
+            console.log("Delegation gas estimated:", estimatedGas.toString(), "→ Using:", gasLimit.toString());
+        } catch (e) {
+            console.warn("Gas estimation failed, using default:", e.message);
+        }
+        
+        // Execute with explicit gasLimit
+        for (let attempt = 1; attempt <= TX_CONFIG.MAX_RETRIES; attempt++) {
             try {
-                const gasEstimate = await contract.delegate.estimateGas(totalAmountBigInt, durationBigInt, boosterIdBigInt);
-                gasLimit = (gasEstimate * BigInt(TX_CONFIG.GAS_BUFFER_PERCENT)) / 100n;
-                console.log("Delegation gas estimated:", gasEstimate.toString(), "→ Using:", gasLimit.toString());
-            } catch {
-                gasLimit = 400000n;
+                if (attempt === 1) {
+                    showToast("Confirm delegation in wallet...", "info");
+                } else {
+                    await sleep(TX_CONFIG.RETRY_DELAY_MS);
+                    showToast(`Retrying... (${attempt}/${TX_CONFIG.MAX_RETRIES})`, "warning");
+                }
+                
+                const tx = await delegationContract.delegate(
+                    totalAmountBigInt, 
+                    durationBigInt, 
+                    boosterIdBigInt, 
+                    { gasLimit: gasLimit }
+                );
+                
+                showToast("Waiting for confirmation...", "info");
+                const receipt = await tx.wait();
+                
+                if (receipt.status === 0) {
+                    throw new Error("Transaction reverted");
+                }
+                
+                showToast("✅ Delegation successful!", "success");
+                loadUserData();
+                return true;
+                
+            } catch (e) {
+                console.error(`Delegation attempt ${attempt} failed:`, e);
+                
+                if (isUserRejection(e)) {
+                    showToast("Transaction cancelled", "error");
+                    return false;
+                }
+                
+                if (attempt < TX_CONFIG.MAX_RETRIES && isRetryableError(e)) {
+                    await sleep(TX_CONFIG.RETRY_DELAY_MS * attempt);
+                    continue;
+                }
+                
+                if (e.message?.includes('Internal JSON-RPC')) {
+                    showToast("Network busy - please try again", "error");
+                } else {
+                    showToast(formatError(e), "error");
+                }
+                return false;
             }
-            
-            const tx = await contract.delegate(totalAmountBigInt, durationBigInt, boosterIdBigInt, { gasLimit });
-            const receipt = await tx.wait();
-            
-            if (receipt.status === 0) throw new Error("Transaction reverted");
-            
-            showToast("✅ Delegation successful!", "success");
-            loadUserData();
-            return true;
-        }, 'Delegation');
+        }
+        
+        return false;
         
     } catch (e) {
         console.error("Delegation error:", e);
-        if (!isUserRejection(e)) showToast(formatError(e), "error");
+        showToast(formatError(e), "error");
         return false;
     } finally {
         if (btnElement) {
@@ -229,7 +366,7 @@ export async function executeDelegation(totalAmount, durationSeconds, boosterIdT
 }
 
 // ====================================================================
-// UNSTAKE (Normal - quando unlocked)
+// UNDELEGATE (Normal - quando unlocked)
 // ====================================================================
 
 export async function executeUnstake(index, boosterIdToSend, btnElement) {
@@ -252,26 +389,37 @@ export async function executeUnstake(index, boosterIdToSend, btnElement) {
         const indexBigInt = BigInt(indexNum);
         const boosterIdBigInt = BigInt(boosterIdToSend || 0);
         
-        console.log("Unstake params:", { index: indexBigInt.toString(), boosterId: boosterIdBigInt.toString() });
+        console.log("Unstake params:", { 
+            index: indexBigInt.toString(), 
+            boosterId: boosterIdBigInt.toString() 
+        });
         
-        const contract = new ethers.Contract(addresses.delegationManager, delegationManagerABI, signer);
+        const delegationContract = new ethers.Contract(
+            addresses.delegationManager,
+            delegationManagerABI,
+            signer
+        );
         
-        return await executeWithRetry(async () => {
-            showToast("Confirm unstake...", "info");
-            const tx = await contract.unstake(indexBigInt, boosterIdBigInt, { gasLimit: 300000n });
-            const receipt = await tx.wait();
-            
-            if (receipt.status === 0) throw new Error("Transaction reverted");
-            
-            showToast("✅ Unstaked!", "success");
-            await loadUserData(true);
-            await loadUserDelegations(true);
-            return true;
-        }, 'Unstake');
+        const result = await executeWithRetry(
+            () => delegationContract.unstake(indexBigInt, boosterIdBigInt),
+            {
+                description: 'Unstake',
+                onAttempt: (attempt) => {
+                    if (attempt === 1) showToast("Confirm unstake in wallet...", "info");
+                },
+                onSuccess: async () => {
+                    showToast("✅ Unstaked!", "success");
+                    await loadUserData(true);
+                    await loadUserDelegations(true);
+                }
+            }
+        );
+        
+        return result.success;
         
     } catch (e) {
         console.error("Unstake error:", e);
-        if (!isUserRejection(e)) showToast(formatError(e), "error");
+        showToast(formatError(e), "error");
         return false;
     } finally {
         if (btnElement) {
@@ -282,7 +430,7 @@ export async function executeUnstake(index, boosterIdToSend, btnElement) {
 }
 
 // ====================================================================
-// FORCE UNSTAKE (50% penalty)
+// FORCE UNSTAKE (quando locked - com penalidade)
 // ====================================================================
 
 export async function executeForceUnstake(index, boosterIdToSend, btnElement) {
@@ -303,45 +451,34 @@ export async function executeForceUnstake(index, boosterIdToSend, btnElement) {
         }
         
         const indexBigInt = BigInt(indexNum);
+        const boosterIdBigInt = BigInt(boosterIdToSend || 0);
         
-        let boosterIdBigInt = 0n;
-        try {
-            const boosterNum = Number(boosterIdToSend || 0);
-            if (boosterNum > 0 && State.myBoosters && State.myBoosters.length > 0) {
-                const ownsBooster = State.myBoosters.some(b => Number(b.tokenId) === boosterNum);
-                if (ownsBooster) boosterIdBigInt = BigInt(boosterNum);
+        const delegationContract = new ethers.Contract(
+            addresses.delegationManager,
+            delegationManagerABI,
+            signer
+        );
+        
+        const result = await executeWithRetry(
+            () => delegationContract.forceUnstake(indexBigInt, boosterIdBigInt),
+            {
+                description: 'Force Unstake',
+                onAttempt: (attempt) => {
+                    if (attempt === 1) showToast("Confirm force unstake in wallet...", "info");
+                },
+                onSuccess: async () => {
+                    showToast("✅ Force unstaked (penalty applied)", "success");
+                    await loadUserData(true);
+                    await loadUserDelegations(true);
+                }
             }
-        } catch {}
+        );
         
-        console.log("Force unstake params:", { index: indexBigInt.toString(), boosterId: boosterIdBigInt.toString() });
-        
-        const contract = new ethers.Contract(addresses.delegationManager, delegationManagerABI, signer);
-        
-        // Verify delegation exists
-        try {
-            const delegations = await contract.getDelegationsOf(State.userAddress);
-            if (indexNum >= delegations.length) {
-                showToast(`Delegation ${indexNum} not found`, "error");
-                return false;
-            }
-        } catch {}
-        
-        return await executeWithRetry(async () => {
-            showToast("Confirm force unstake...", "info");
-            const tx = await contract.forceUnstake(indexBigInt, boosterIdBigInt, { gasLimit: 350000n });
-            const receipt = await tx.wait();
-            
-            if (receipt.status === 0) throw new Error("Transaction reverted");
-            
-            showToast("⚠️ Force unstaked (50% penalty)", "warning");
-            await loadUserData(true);
-            await loadUserDelegations(true);
-            return true;
-        }, 'Force Unstake');
+        return result.success;
         
     } catch (e) {
         console.error("Force unstake error:", e);
-        if (!isUserRejection(e)) showToast(formatError(e), "error");
+        showToast(formatError(e), "error");
         return false;
     } finally {
         if (btnElement) {
@@ -366,32 +503,33 @@ export async function executeClaimRewards(boosterIdToSend, btnElement) {
     }
     
     try {
-        let boosterIdBigInt = 0n;
-        try {
-            const boosterNum = Number(boosterIdToSend || 0);
-            if (boosterNum > 0 && State.myBoosters && State.myBoosters.length > 0) {
-                const ownsBooster = State.myBoosters.some(b => Number(b.tokenId) === boosterNum);
-                if (ownsBooster) boosterIdBigInt = BigInt(boosterNum);
+        const boosterIdBigInt = BigInt(boosterIdToSend || 0);
+        
+        const delegationContract = new ethers.Contract(
+            addresses.delegationManager,
+            delegationManagerABI,
+            signer
+        );
+        
+        const result = await executeWithRetry(
+            () => delegationContract.claimReward(boosterIdBigInt),
+            {
+                description: 'Claim Rewards',
+                onAttempt: (attempt) => {
+                    if (attempt === 1) showToast("Confirm claim in wallet...", "info");
+                },
+                onSuccess: () => {
+                    showToast("✅ Rewards claimed!", "success");
+                    loadUserData();
+                }
             }
-        } catch {}
+        );
         
-        const contract = new ethers.Contract(addresses.delegationManager, delegationManagerABI, signer);
-        
-        return await executeWithRetry(async () => {
-            showToast("Confirm claim...", "info");
-            const tx = await contract.claimReward(boosterIdBigInt, { gasLimit: 250000n });
-            const receipt = await tx.wait();
-            
-            if (receipt.status === 0) throw new Error("Transaction reverted");
-            
-            showToast("✅ Rewards claimed!", "success");
-            await loadUserData(true);
-            return true;
-        }, 'Claim Rewards');
+        return result.success;
         
     } catch (e) {
-        console.error("Claim error:", e);
-        if (!isUserRejection(e)) showToast(formatError(e), "error");
+        console.error("Claim rewards error:", e);
+        showToast(formatError(e), "error");
         return false;
     } finally {
         if (btnElement) {
@@ -402,63 +540,131 @@ export async function executeClaimRewards(boosterIdToSend, btnElement) {
 }
 
 // ====================================================================
-// UNIVERSAL CLAIM (Alias with same signature as V11)
+// UNIVERSAL CLAIM (Staking + Mining Rewards)
 // ====================================================================
 
 export async function executeUniversalClaim(stakingRewards, minerRewards, boosterIdToSend, btnElement) {
-    return executeClaimRewards(boosterIdToSend, btnElement);
+    const signer = await getConnectedSigner();
+    if (!signer) return false;
+    
+    const originalText = btnElement?.innerHTML || 'Claim';
+    if (btnElement) {
+        btnElement.innerHTML = '<div class="loader inline-block"></div> Processing...';
+        btnElement.disabled = true;
+    }
+    
+    try {
+        // Validate boosterId
+        let boosterIdBigInt = 0n;
+        try {
+            const boosterNum = Number(boosterIdToSend || 0);
+            if (boosterNum > 0 && State.myBoosters && State.myBoosters.length > 0) {
+                const ownsBooster = State.myBoosters.some(b => 
+                    Number(b.tokenId) === boosterNum
+                );
+                if (ownsBooster) {
+                    boosterIdBigInt = BigInt(boosterNum);
+                }
+            }
+        } catch (e) {
+            console.warn("Invalid booster ID for claim, using 0:", e);
+        }
+        
+        const delegationContract = new ethers.Contract(
+            addresses.delegationManager,
+            delegationManagerABI,
+            signer
+        );
+        
+        const result = await executeWithRetry(
+            () => delegationContract.claimReward(boosterIdBigInt),
+            {
+                description: 'Claim Rewards',
+                onAttempt: (attempt) => {
+                    if (attempt === 1) showToast("Confirm claim in wallet...", "info");
+                },
+                onSuccess: async () => {
+                    showToast("✅ Rewards claimed!", "success");
+                    await loadUserData(true);
+                }
+            }
+        );
+        
+        return result.success;
+        
+    } catch (e) {
+        console.error("Claim error:", e);
+        showToast(formatError(e), "error");
+        return false;
+    } finally {
+        if (btnElement) {
+            btnElement.innerHTML = originalText;
+            btnElement.disabled = false;
+        }
+    }
 }
 
 // ====================================================================
-// BUY NFT FROM POOL
+// NFT POOL - BUY
 // ====================================================================
 
-export async function executeBuyNFT(poolAddress, price, btnElement) {
+export async function executeBuyNFT(poolAddress, priceWithTax, btnElement) {
     const signer = await getConnectedSigner();
     if (!signer) return { success: false };
-
+    
     const originalText = btnElement?.innerHTML || 'Buy';
     if (btnElement) {
         btnElement.innerHTML = '<div class="loader inline-block"></div> Processing...';
         btnElement.disabled = true;
     }
-
+    
     try {
-        const approved = await simpleApprove(addresses.bkcToken, poolAddress, BigInt(price) * 2n, signer);
+        const priceBigInt = BigInt(priceWithTax);
+        
+        const approved = await robustApprove(
+            addresses.bkcToken,
+            poolAddress,
+            priceBigInt,
+            signer
+        );
         if (!approved) return { success: false };
-
+        
         if (btnElement) btnElement.innerHTML = '<div class="loader inline-block"></div> Buying...';
-
-        const contract = new ethers.Contract(poolAddress, nftPoolABI, signer);
-
-        const result = await executeWithRetry(async () => {
-            showToast("Confirm purchase...", "info");
-            const tx = await contract.buyNFT({ gasLimit: 400000n });
-            const receipt = await tx.wait();
-
-            if (receipt.status === 0) throw new Error("Transaction reverted");
-
+        
+        const poolContract = new ethers.Contract(poolAddress, nftPoolABI, signer);
+        
+        const result = await executeWithRetry(
+            () => poolContract.buyNFT(),
+            {
+                description: 'Buy NFT',
+                onAttempt: (attempt) => {
+                    if (attempt === 1) showToast("Confirm purchase in wallet...", "info");
+                }
+            }
+        );
+        
+        if (result.success) {
             let tokenId = null;
-            for (const log of receipt.logs) {
+            for (const log of result.receipt.logs) {
                 try {
-                    const parsed = contract.interface.parseLog(log);
-                    if (parsed?.name === "NFTBought") {
+                    const parsed = poolContract.interface.parseLog(log);
+                    if (parsed?.name === "NFTPurchased") {
                         tokenId = parsed.args.tokenId?.toString();
                         break;
                     }
                 } catch {}
             }
-
+            
             showToast(`✅ NFT purchased! ${tokenId ? `#${tokenId}` : ''}`, "success");
             loadUserData();
-            return { success: true, tokenId, txHash: receipt.hash };
-        }, 'Buy NFT');
-
-        return result;
-
+            return { success: true, tokenId, txHash: result.txHash };
+        }
+        
+        return { success: false };
+        
     } catch (e) {
-        console.error("Buy error:", e);
-        if (!isUserRejection(e)) showToast(formatError(e), "error");
+        console.error("Buy NFT error:", e);
+        showToast(formatError(e), "error");
         return { success: false };
     } finally {
         if (btnElement) {
@@ -469,99 +675,57 @@ export async function executeBuyNFT(poolAddress, price, btnElement) {
 }
 
 // ====================================================================
-// SELL NFT TO POOL
+// NFT POOL - SELL
 // ====================================================================
 
-export async function executeSellNFT(poolAddress, tokenId, btnElement) {
+export async function executeSellNFT(poolAddress, tokenId, minPayout, btnElement) {
     const signer = await getConnectedSigner();
     if (!signer) return { success: false };
-
+    
     const originalText = btnElement?.innerHTML || 'Sell';
     if (btnElement) {
         btnElement.innerHTML = '<div class="loader inline-block"></div> Processing...';
         btnElement.disabled = true;
     }
-
+    
     try {
-        if (!tokenId && tokenId !== 0n) {
-            showToast("No NFT selected", "error");
-            return { success: false };
-        }
+        // Approve NFT for pool
+        const nftABI = ["function approve(address,uint256)", "function getApproved(uint256) view returns (address)"];
+        const nftContract = new ethers.Contract(addresses.rewardBoosterNFT, nftABI, signer);
         
-        const tokenIdBigInt = BigInt(tokenId);
-        
-        const boosterContract = new ethers.Contract(
-            addresses.rewardBoosterNFT,
-            ["function approve(address,uint256)", "function getApproved(uint256) view returns (address)", "function ownerOf(uint256) view returns (address)", "function boostBips(uint256) view returns (uint256)"],
-            signer
-        );
-
-        // Verify ownership
-        try {
-            const owner = await boosterContract.ownerOf(tokenIdBigInt);
-            if (owner.toLowerCase() !== State.userAddress.toLowerCase()) {
-                showToast("You don't own this NFT", "error");
-                return { success: false };
-            }
-        } catch {
-            showToast("Error verifying ownership", "error");
-            return { success: false };
-        }
-
-        const poolContract = new ethers.Contract(poolAddress, nftPoolABI, signer);
-
-        // Check pool tier match
-        try {
-            const nftBoostBips = await boosterContract.boostBips(tokenIdBigInt);
-            const poolBoostBips = await poolContract.boostBips();
-            if (nftBoostBips.toString() !== poolBoostBips.toString()) {
-                showToast("NFT tier doesn't match pool", "error");
-                return { success: false };
-            }
-        } catch {}
-
-        // Check pool liquidity
-        try {
-            const poolInfo = await poolContract.getPoolInfo();
-            const tokenBalance = poolInfo[0];
-            const sellPrice = await poolContract.getSellPrice();
-            if (tokenBalance < sellPrice) {
-                showToast("Pool has insufficient liquidity", "error");
-                return { success: false };
-            }
-        } catch {}
-
-        // Approve NFT
-        const approved = await boosterContract.getApproved(tokenIdBigInt);
+        const approved = await nftContract.getApproved(tokenId);
         if (approved.toLowerCase() !== poolAddress.toLowerCase()) {
             showToast("Approving NFT...", "info");
-            const approveTx = await boosterContract.approve(poolAddress, tokenIdBigInt, { gasLimit: 100000n });
+            const approveTx = await nftContract.approve(poolAddress, tokenId);
             await approveTx.wait();
+            await sleep(TX_CONFIG.APPROVAL_WAIT_MS);
         }
-
+        
         if (btnElement) btnElement.innerHTML = '<div class="loader inline-block"></div> Selling...';
-
-        const result = await executeWithRetry(async () => {
-            showToast("Confirm sale...", "info");
-            
-            const sellPriceAfterTax = await poolContract.getSellPriceAfterTax();
-            const minPayout = (sellPriceAfterTax * 95n) / 100n;
-            
-            const tx = await poolContract.sellNFT(tokenIdBigInt, minPayout, { gasLimit: 400000n });
-            const receipt = await tx.wait();
-
-            if (receipt.status === 0) throw new Error("Transaction reverted");
-
-            showToast(`✅ NFT #${tokenIdBigInt} sold!`, "success");
-            loadUserData(true);
-            return { success: true, txHash: receipt.hash };
-        }, 'Sell NFT');
-
-        return result;
-
+        
+        const poolContract = new ethers.Contract(poolAddress, nftPoolABI, signer);
+        
+        const result = await executeWithRetry(
+            () => poolContract.sellNFT(tokenId, minPayout || 0),
+            {
+                description: 'Sell NFT',
+                onAttempt: (attempt) => {
+                    if (attempt === 1) showToast("Confirm sale in wallet...", "info");
+                }
+            }
+        );
+        
+        if (result.success) {
+            showToast("✅ NFT sold!", "success");
+            loadUserData();
+            return { success: true, txHash: result.txHash };
+        }
+        
+        return { success: false };
+        
     } catch (e) {
-        console.error("Sell error:", e);
-        if (!isUserRejection(e)) showToast(formatError(e), "error");
+        console.error("Sell NFT error:", e);
+        showToast(formatError(e), "error");
         return { success: false };
     } finally {
         if (btnElement) {
@@ -586,42 +750,73 @@ export async function executeListNFT(params, btnElement) {
     }
     
     try {
-        const { tokenId, pricePerHour, minHours, maxHours } = params;
-
-        const nftContract = new ethers.Contract(
-            addresses.rewardBoosterNFT,
-            ["function setApprovalForAll(address,bool)", "function isApprovedForAll(address,address) view returns (bool)"],
-            signer
-        );
-
-        const isApproved = await nftContract.isApprovedForAll(State.userAddress, addresses.rentalManager);
-        if (!isApproved) {
-            showToast("Approving NFTs...", "info");
-            const approveTx = await nftContract.setApprovalForAll(addresses.rentalManager, true, { gasLimit: 100000n });
-            await approveTx.wait();
+        // Support both object params and individual params
+        let tokenId, pricePerHour, minHours, maxHours;
+        if (typeof params === 'object' && params !== null) {
+            tokenId = params.tokenId;
+            pricePerHour = params.pricePerHour;
+            minHours = params.minHours;
+            maxHours = params.maxHours;
+        } else {
+            // Legacy support: params is tokenId
+            tokenId = params;
+            pricePerHour = arguments[1];
+            minHours = arguments[2];
+            maxHours = arguments[3];
+            btnElement = arguments[4];
         }
-
+        
+        const rentalAddress = addresses.rentalManager;
+        if (!rentalAddress) {
+            showToast("Rental Manager not configured", "error");
+            return { success: false };
+        }
+        
+        // Approve NFT for rental manager
+        const nftABI = [
+            "function setApprovalForAll(address,bool)", 
+            "function isApprovedForAll(address,address) view returns (bool)"
+        ];
+        const nftContract = new ethers.Contract(addresses.rewardBoosterNFT, nftABI, signer);
+        
+        const isApproved = await nftContract.isApprovedForAll(State.userAddress, rentalAddress);
+        if (!isApproved) {
+            showToast("Approving NFTs for rental...", "info");
+            const approveTx = await nftContract.setApprovalForAll(rentalAddress, true);
+            await approveTx.wait();
+            await sleep(TX_CONFIG.APPROVAL_WAIT_MS);
+        }
+        
         if (btnElement) btnElement.innerHTML = '<div class="loader inline-block"></div> Listing...';
-
-        const contract = new ethers.Contract(addresses.rentalManager, rentalManagerABI, signer);
-
-        const result = await executeWithRetry(async () => {
-            showToast("Confirm listing...", "info");
-            const tx = await contract.listNFT(BigInt(tokenId), BigInt(pricePerHour), BigInt(minHours), BigInt(maxHours), { gasLimit: 300000n });
-            const receipt = await tx.wait();
-
-            if (receipt.status === 0) throw new Error("Transaction reverted");
-
-            showToast(`✅ NFT #${tokenId} listed!`, "success");
+        
+        const rentalContract = new ethers.Contract(rentalAddress, rentalManagerABI, signer);
+        
+        const result = await executeWithRetry(
+            () => rentalContract.listNFT(
+                BigInt(tokenId), 
+                BigInt(pricePerHour), 
+                BigInt(minHours), 
+                BigInt(maxHours)
+            ),
+            {
+                description: 'List NFT',
+                onAttempt: (attempt) => {
+                    if (attempt === 1) showToast("Confirm listing in wallet...", "info");
+                }
+            }
+        );
+        
+        if (result.success) {
+            showToast(`✅ NFT #${tokenId} listed for rent!`, "success");
             loadRentalListings(true);
-            return { success: true, txHash: receipt.hash };
-        }, 'List NFT');
-
-        return result;
-
+            return { success: true, txHash: result.txHash };
+        }
+        
+        return { success: false };
+        
     } catch (e) {
-        console.error("List error:", e);
-        if (!isUserRejection(e)) showToast(formatError(e), "error");
+        console.error("List NFT error:", e);
+        showToast(formatError(e), "error");
         return { success: false };
     } finally {
         if (btnElement) {
@@ -646,33 +841,61 @@ export async function executeRentNFT(params, btnElement) {
     }
     
     try {
-        const { tokenId, hours, totalCost } = params;
+        // Support both object params and individual params
+        let tokenId, hours, totalCost;
+        if (typeof params === 'object' && params !== null) {
+            tokenId = params.tokenId;
+            hours = params.hours;
+            totalCost = params.totalCost;
+        } else {
+            tokenId = params;
+            hours = arguments[1];
+            totalCost = arguments[2];
+            btnElement = arguments[3];
+        }
         
-        const approved = await simpleApprove(addresses.bkcToken, addresses.rentalManager, BigInt(totalCost), signer);
+        const rentalAddress = addresses.rentalManager;
+        if (!rentalAddress) {
+            showToast("Rental Manager not configured", "error");
+            return { success: false };
+        }
+        
+        const costBigInt = BigInt(totalCost);
+        
+        const approved = await robustApprove(
+            addresses.bkcToken,
+            rentalAddress,
+            costBigInt,
+            signer
+        );
         if (!approved) return { success: false };
-
+        
         if (btnElement) btnElement.innerHTML = '<div class="loader inline-block"></div> Renting...';
-
-        const contract = new ethers.Contract(addresses.rentalManager, rentalManagerABI, signer);
-
-        const result = await executeWithRetry(async () => {
-            showToast("Confirm rental...", "info");
-            const tx = await contract.rentNFT(BigInt(tokenId), BigInt(hours), { gasLimit: 350000n });
-            const receipt = await tx.wait();
-
-            if (receipt.status === 0) throw new Error("Transaction reverted");
-
-            showToast(`✅ NFT rented for ${hours}h!`, "success");
-            loadRentalListings(true);
+        
+        const rentalContract = new ethers.Contract(rentalAddress, rentalManagerABI, signer);
+        
+        const result = await executeWithRetry(
+            () => rentalContract.rentNFT(BigInt(tokenId), BigInt(hours)),
+            {
+                description: 'Rent NFT',
+                onAttempt: (attempt) => {
+                    if (attempt === 1) showToast("Confirm rental in wallet...", "info");
+                }
+            }
+        );
+        
+        if (result.success) {
+            showToast(`✅ NFT #${tokenId} rented for ${hours} hours!`, "success");
             loadUserData();
-            return { success: true, txHash: receipt.hash };
-        }, 'Rent NFT');
-
-        return result;
-
+            loadRentalListings(true);
+            return { success: true, txHash: result.txHash };
+        }
+        
+        return { success: false };
+        
     } catch (e) {
-        console.error("Rent error:", e);
-        if (!isUserRejection(e)) showToast(formatError(e), "error");
+        console.error("Rent NFT error:", e);
+        showToast(formatError(e), "error");
         return { success: false };
     } finally {
         if (btnElement) {
@@ -697,47 +920,31 @@ export async function executeWithdrawNFT(tokenId, btnElement) {
     }
     
     try {
-        const boosterContract = new ethers.Contract(
-            addresses.rewardBoosterNFT,
-            ["function ownerOf(uint256) view returns (address)"],
-            signer
+        const rentalAddress = addresses.rentalManager;
+        const rentalContract = new ethers.Contract(rentalAddress, rentalManagerABI, signer);
+        
+        const result = await executeWithRetry(
+            () => rentalContract.withdrawNFT(tokenId),
+            {
+                description: 'Withdraw NFT',
+                onAttempt: (attempt) => {
+                    if (attempt === 1) showToast("Confirm withdrawal in wallet...", "info");
+                }
+            }
         );
         
-        try {
-            const owner = await boosterContract.ownerOf(BigInt(tokenId));
-            if (owner.toLowerCase() !== addresses.rentalManager?.toLowerCase()) {
-                if (owner.toLowerCase() === State.userAddress?.toLowerCase()) {
-                    showToast("NFT not listed for rental", "warning");
-                } else {
-                    showToast("NFT transferred", "error");
-                }
-                return { success: false };
-            }
-        } catch {
-            showToast("NFT not found", "error");
-            return { success: false };
-        }
-
-        const contract = new ethers.Contract(addresses.rentalManager, rentalManagerABI, signer);
-
-        const result = await executeWithRetry(async () => {
-            showToast("Confirm withdrawal...", "info");
-            const tx = await contract.withdrawNFT(BigInt(tokenId), { gasLimit: 250000n });
-            const receipt = await tx.wait();
-
-            if (receipt.status === 0) throw new Error("Transaction reverted");
-
-            showToast(`✅ NFT #${tokenId} withdrawn!`, "success");
-            loadRentalListings(true);
+        if (result.success) {
+            showToast("✅ NFT withdrawn!", "success");
             loadUserData();
-            return { success: true, txHash: receipt.hash };
-        }, 'Withdraw NFT');
-
-        return result;
-
+            loadRentalListings();
+            return { success: true, txHash: result.txHash };
+        }
+        
+        return { success: false };
+        
     } catch (e) {
-        console.error("Withdraw error:", e);
-        if (!isUserRejection(e)) showToast(formatError(e), "error");
+        console.error("Withdraw NFT error:", e);
+        showToast(formatError(e), "error");
         return { success: false };
     } finally {
         if (btnElement) {
@@ -748,7 +955,7 @@ export async function executeWithdrawNFT(tokenId, btnElement) {
 }
 
 // ====================================================================
-// FORTUNE POOL - PARTICIPATE
+// FORTUNE POOL - PLAY GAME (ROBUST VERSION WITH SIMULATION BYPASS)
 // ====================================================================
 
 export async function executeFortuneGame(wager, guesses, isCumulative, btnElement) {
@@ -756,6 +963,8 @@ export async function executeFortuneGame(wager, guesses, isCumulative, btnElemen
     if (!signer) return { success: false };
     
     const originalText = btnElement?.innerHTML || 'Play';
+    
+    // CRITICAL: Disable button immediately to prevent double-clicks
     if (btnElement) {
         btnElement.innerHTML = '<div class="loader inline-block"></div> Processing...';
         btnElement.disabled = true;
@@ -765,7 +974,12 @@ export async function executeFortuneGame(wager, guesses, isCumulative, btnElemen
         const wagerBigInt = ethers.parseEther(wager.toString());
         const guessesArray = Array.isArray(guesses) ? guesses.map(g => BigInt(g)) : [BigInt(guesses)];
         
-        console.log("Fortune Game params:", { wager, wagerWei: wagerBigInt.toString(), guesses: guessesArray.map(g => g.toString()), isCumulative });
+        console.log("Fortune Game params:", {
+            wager: wager.toString(),
+            wagerWei: wagerBigInt.toString(),
+            guesses: guessesArray.map(g => g.toString()),
+            isCumulative
+        });
         
         const fortuneAddress = addresses.fortunePool || addresses.actionsManager;
         if (!fortuneAddress) {
@@ -773,115 +987,187 @@ export async function executeFortuneGame(wager, guesses, isCumulative, btnElemen
             return { success: false };
         }
         
-        const contract = new ethers.Contract(fortuneAddress, actionsManagerABI, signer);
+        const fortuneContract = new ethers.Contract(fortuneAddress, actionsManagerABI, signer);
         
-        // Verify tiers
-        const tierCount = await contract.activeTierCount();
-        console.log("Active tier count:", tierCount.toString());
-        
-        if (tierCount === 0n) {
-            showToast("No active game tiers", "error");
-            return { success: false };
+        // 1. Verify active tiers
+        let tierCount;
+        try {
+            tierCount = await fortuneContract.activeTierCount();
+            console.log("Active tier count:", tierCount.toString());
+            
+            if (tierCount === 0n) {
+                showToast("No active game tiers", "error");
+                return { success: false };
+            }
+            
+            const expectedGuessCount = isCumulative ? Number(tierCount) : 1;
+            if (guessesArray.length !== expectedGuessCount) {
+                showToast(`Need ${expectedGuessCount} guess(es), got ${guessesArray.length}`, "error");
+                return { success: false };
+            }
+        } catch (e) {
+            console.warn("Could not verify tier count:", e.message);
         }
         
-        const expectedGuessCount = isCumulative ? Number(tierCount) : 1;
-        if (guessesArray.length !== expectedGuessCount) {
-            showToast(`Need ${expectedGuessCount} guess(es)`, "error");
-            return { success: false };
-        }
-        
-        // Check BKC balance
+        // 2. Check BKC balance
         const bkcBalance = await State.bkcTokenContract.balanceOf(State.userAddress);
         if (bkcBalance < wagerBigInt) {
             showToast("Insufficient BKC balance", "error");
             return { success: false };
         }
         
-        // Approve
-        const approved = await simpleApprove(addresses.bkcToken, fortuneAddress, wagerBigInt, signer);
+        // 3. Approve BKC with retry
+        const approved = await robustApprove(
+            addresses.bkcToken, 
+            fortuneAddress, 
+            wagerBigInt, 
+            signer
+        );
         if (!approved) return { success: false };
         
-        // Get oracle fee
+        // 4. Get oracle fee
         let oracleFee = 0n;
         try {
-            oracleFee = await contract.getRequiredOracleFee(isCumulative);
+            oracleFee = await fortuneContract.getRequiredOracleFee(isCumulative);
             console.log("Oracle fee:", ethers.formatEther(oracleFee), "ETH");
-        } catch {
+        } catch (e) {
+            console.warn("getRequiredOracleFee failed, trying oracleFee:", e.message);
             try {
-                const baseFee = await contract.oracleFee();
+                const baseFee = await fortuneContract.oracleFee();
                 oracleFee = isCumulative ? baseFee * 5n : baseFee;
             } catch {
                 oracleFee = 0n;
             }
         }
         
-        // Check ETH balance
-        const provider = signer.provider;
+        // 5. Check ETH balance
+        let rawProvider = State.web3Provider || State.provider || window.ethereum;
+        const provider = new ethers.BrowserProvider(rawProvider);
         const ethBalance = await provider.getBalance(State.userAddress);
+        
         console.log("ETH balance:", ethers.formatEther(ethBalance), "ETH");
         
         if (oracleFee > 0n && ethBalance < oracleFee) {
-            showToast(`Need ${ethers.formatEther(oracleFee)} ETH`, "error");
+            showToast(`Need ${ethers.formatEther(oracleFee)} ETH for oracle fee`, "error");
             return { success: false };
         }
         
-        if (btnElement) btnElement.innerHTML = '<div class="loader inline-block"></div> Playing...';
+        // 6. Estimate gas first, then execute with explicit gasLimit
+        if (btnElement) btnElement.innerHTML = '<div class="loader inline-block"></div> Preparing...';
         
-        // Estimate gas first
-        let gasLimit;
+        // Pre-estimate gas to avoid MetaMask simulation issues
+        let gasLimit = 500000n; // Safe default
         try {
-            const gasEstimate = await contract.participate.estimateGas(wagerBigInt, guessesArray, isCumulative, { value: oracleFee });
-            gasLimit = (gasEstimate * BigInt(TX_CONFIG.GAS_BUFFER_PERCENT)) / 100n;
-            console.log("Gas estimated successfully:", gasEstimate.toString(), "→ Using:", gasLimit.toString());
-        } catch {
-            gasLimit = 500000n;
-            console.log("Gas estimation failed, using default:", gasLimit.toString());
+            const estimatedGas = await fortuneContract.participate.estimateGas(
+                wagerBigInt, 
+                guessesArray, 
+                isCumulative, 
+                { value: oracleFee }
+            );
+            // Add 50% buffer for safety
+            gasLimit = (estimatedGas * 150n) / 100n;
+            console.log("Gas estimated successfully:", estimatedGas.toString(), "→ Using:", gasLimit.toString());
+        } catch (estimateError) {
+            console.warn("Gas estimation failed (this is often normal):", estimateError.message);
+            // Keep default gasLimit
         }
         
-        console.log("Calling participate with:", { wagerAmount: wagerBigInt.toString(), guesses: guessesArray.map(g => g.toString()), isCumulative, value: oracleFee.toString(), gasLimit: gasLimit.toString() });
+        if (btnElement) btnElement.innerHTML = '<div class="loader inline-block"></div> Submitting...';
         
-        const result = await executeWithRetry(async () => {
-            showToast("Confirm game...", "info");
-            const tx = await contract.participate(wagerBigInt, guessesArray, isCumulative, { value: oracleFee, gasLimit });
-            const receipt = await tx.wait();
-            
-            if (receipt.status === 0) throw new Error("Transaction reverted");
-            
-            let gameId = null;
-            for (const log of receipt.logs) {
-                try {
-                    const parsed = contract.interface.parseLog(log);
-                    if (parsed?.name === "GameRequested") {
-                        gameId = parsed.args.gameId?.toString();
-                        break;
-                    }
-                } catch {}
+        console.log("Calling participate with:", {
+            wagerAmount: wagerBigInt.toString(),
+            guesses: guessesArray.map(g => g.toString()),
+            isCumulative,
+            value: oracleFee.toString(),
+            gasLimit: gasLimit.toString()
+        });
+        
+        // Execute with explicit gasLimit to bypass MetaMask simulation issues
+        for (let attempt = 1; attempt <= TX_CONFIG.MAX_RETRIES; attempt++) {
+            try {
+                if (attempt === 1) {
+                    showToast("Confirm game in wallet...", "info");
+                } else {
+                    // Wait before retry
+                    await sleep(TX_CONFIG.RETRY_DELAY_MS);
+                    showToast(`Retrying... (${attempt}/${TX_CONFIG.MAX_RETRIES})`, "warning");
+                }
+                
+                // Always use explicit gasLimit to prevent simulation issues
+                const tx = await fortuneContract.participate(wagerBigInt, guessesArray, isCumulative, { 
+                    value: oracleFee,
+                    gasLimit: gasLimit
+                });
+                
+                showToast("Waiting for confirmation...", "info");
+                const receipt = await tx.wait();
+                
+                if (receipt.status === 0) {
+                    throw new Error("Transaction reverted");
+                }
+                
+                // Extract gameId from event
+                let gameId = null;
+                for (const log of receipt.logs) {
+                    try {
+                        const parsed = fortuneContract.interface.parseLog(log);
+                        if (parsed?.name === "GameRequested") {
+                            gameId = parsed.args.gameId?.toString();
+                            break;
+                        }
+                    } catch {}
+                }
+                
+                showToast("🎰 Game submitted! Waiting for result...", "success");
+                loadUserData();
+                
+                return { success: true, gameId, txHash: receipt.hash };
+                
+            } catch (e) {
+                console.error(`Fortune attempt ${attempt} failed:`, e);
+                
+                if (isUserRejection(e)) {
+                    showToast("Transaction cancelled", "error");
+                    return { success: false, cancelled: true };
+                }
+                
+                if (attempt < TX_CONFIG.MAX_RETRIES && isRetryableError(e)) {
+                    await sleep(TX_CONFIG.RETRY_DELAY_MS * attempt);
+                    continue;
+                }
+                
+                // Final attempt failed
+                const errorMsg = e?.message || '';
+                if (errorMsg.includes('ZeroAmount')) {
+                    showToast("Wager cannot be zero", "error");
+                } else if (errorMsg.includes('NoActiveTiers')) {
+                    showToast("No active game tiers", "error");
+                } else if (errorMsg.includes('InvalidGuessCount')) {
+                    showToast("Wrong number of guesses", "error");
+                } else if (errorMsg.includes('InvalidGuessRange')) {
+                    showToast("Guess out of range", "error");
+                } else if (errorMsg.includes('InsufficientOracleFee')) {
+                    showToast("Incorrect oracle fee", "error");
+                } else if (errorMsg.includes('InsufficientBalance') || errorMsg.includes('insufficient')) {
+                    showToast("Insufficient BKC balance", "error");
+                } else if (errorMsg.includes('Internal JSON-RPC')) {
+                    showToast("Network busy - please try again", "error");
+                } else {
+                    showToast(formatError(e), "error");
+                }
+                return { success: false };
             }
-            
-            showToast("🎰 Game submitted! Waiting for result...", "success");
-            loadUserData();
-            return { success: true, gameId, txHash: receipt.hash };
-        }, 'Fortune Game');
+        }
         
-        return result;
+        return { success: false };
         
     } catch (e) {
         console.error("Fortune error:", e);
-        
-        const errorMsg = e?.message || '';
-        if (errorMsg.includes('ZeroAmount')) {
-            showToast("Wager cannot be zero", "error");
-        } else if (errorMsg.includes('NoActiveTiers')) {
-            showToast("No active tiers", "error");
-        } else if (errorMsg.includes('InvalidGuessCount')) {
-            showToast("Wrong number of guesses", "error");
-        } else if (errorMsg.includes('InvalidGuessRange')) {
-            showToast("Guess out of range", "error");
-        } else if (!isUserRejection(e)) {
-            showToast(formatError(e), "error");
-        }
+        showToast(formatError(e), "error");
         return { success: false };
+        
     } finally {
+        // ALWAYS re-enable button
         if (btnElement) {
             btnElement.innerHTML = originalText;
             btnElement.disabled = false;
@@ -890,7 +1176,7 @@ export async function executeFortuneGame(wager, guesses, isCumulative, btnElemen
 }
 
 // ====================================================================
-// NOTARIZE DOCUMENT
+// NOTARIZE DOCUMENT (WITH SIMULATION BYPASS)
 // ====================================================================
 
 export async function executeNotarize(params, submitButton) {
@@ -907,8 +1193,9 @@ export async function executeNotarize(params, submitButton) {
         const { ipfsUri, contentHash, description } = params;
         
         const notaryAddress = addresses.decentralizedNotary || addresses.notary;
+        
         if (!notaryAddress) {
-            showToast("Notary not configured", "error");
+            showToast("Notary contract not configured", "error");
             return false;
         }
         
@@ -917,58 +1204,106 @@ export async function executeNotarize(params, submitButton) {
         try {
             const notaryRead = new ethers.Contract(notaryAddress, decentralizedNotaryABI, signer.provider);
             feeToPay = await notaryRead.calculateFee(0);
-        } catch {}
+        } catch (e) {}
         
-        const approved = await simpleApprove(addresses.bkcToken, notaryAddress, feeToPay, signer);
+        // Approve BKC
+        const approved = await robustApprove(addresses.bkcToken, notaryAddress, feeToPay, signer);
         if (!approved) return false;
         
         if (submitButton) submitButton.innerHTML = '<div class="loader inline-block"></div> Notarizing...';
         
+        const notaryContract = new ethers.Contract(notaryAddress, decentralizedNotaryABI, signer);
+        
+        // Get booster for discount
         let boosterTokenId = 0n;
         try {
             const boosterInfo = await getHighestBoosterBoostFromAPI();
-            if (boosterInfo?.tokenId) boosterTokenId = BigInt(boosterInfo.tokenId);
-        } catch {}
+            if (boosterInfo?.tokenId) {
+                boosterTokenId = BigInt(boosterInfo.tokenId);
+            }
+        } catch (e) {}
         
-        const contract = new ethers.Contract(notaryAddress, decentralizedNotaryABI, signer);
-        
-        // Estimate gas
-        let gasLimit;
+        // Pre-estimate gas to avoid simulation issues
+        let gasLimit = 400000n;
         try {
-            const gasEstimate = await contract.notarize.estimateGas(ipfsUri, description || '', contentHash, boosterTokenId);
-            gasLimit = (gasEstimate * BigInt(TX_CONFIG.GAS_BUFFER_PERCENT)) / 100n;
-            console.log("Notarize gas estimated:", gasEstimate.toString(), "→ Using:", gasLimit.toString());
-        } catch {
-            gasLimit = 500000n;
+            const estimatedGas = await notaryContract.notarize.estimateGas(
+                ipfsUri, 
+                description || '', 
+                contentHash, 
+                boosterTokenId
+            );
+            gasLimit = (estimatedGas * 150n) / 100n;
+            console.log("Notarize gas estimated:", estimatedGas.toString(), "→ Using:", gasLimit.toString());
+        } catch (e) {
+            console.warn("Gas estimation failed, using default:", e.message);
         }
         
-        const result = await executeWithRetry(async () => {
-            showToast("Confirm notarization...", "info");
-            const tx = await contract.notarize(ipfsUri, description || '', contentHash, boosterTokenId, { gasLimit });
-            const receipt = await tx.wait();
-            
-            if (receipt.status === 0) throw new Error("Transaction reverted");
-            
-            let tokenId = null;
-            for (const log of receipt.logs) {
-                try {
-                    const parsed = contract.interface.parseLog(log);
-                    if (parsed?.name === "DocumentNotarized") {
-                        tokenId = parsed.args.tokenId?.toString();
-                        break;
-                    }
-                } catch {}
+        // Execute with explicit gasLimit
+        for (let attempt = 1; attempt <= TX_CONFIG.MAX_RETRIES; attempt++) {
+            try {
+                if (attempt === 1) {
+                    showToast("Confirm notarization in wallet...", "info");
+                } else {
+                    await sleep(TX_CONFIG.RETRY_DELAY_MS);
+                    showToast(`Retrying... (${attempt}/${TX_CONFIG.MAX_RETRIES})`, "warning");
+                }
+                
+                const tx = await notaryContract.notarize(
+                    ipfsUri, 
+                    description || '', 
+                    contentHash, 
+                    boosterTokenId, 
+                    { gasLimit: gasLimit }
+                );
+                
+                showToast("Waiting for confirmation...", "info");
+                const receipt = await tx.wait();
+                
+                if (receipt.status === 0) {
+                    throw new Error("Transaction reverted");
+                }
+                
+                let tokenId = null;
+                for (const log of receipt.logs) {
+                    try {
+                        const parsed = notaryContract.interface.parseLog(log);
+                        if (parsed?.name === "DocumentNotarized") {
+                            tokenId = parsed.args.tokenId?.toString();
+                            break;
+                        }
+                    } catch {}
+                }
+                
+                showToast(`✅ Document notarized! ${tokenId ? `#${tokenId}` : ''}`, "success");
+                return { success: true, tokenId, txHash: receipt.hash };
+                
+            } catch (e) {
+                console.error(`Notarize attempt ${attempt} failed:`, e);
+                
+                if (isUserRejection(e)) {
+                    showToast("Transaction cancelled", "error");
+                    return false;
+                }
+                
+                if (attempt < TX_CONFIG.MAX_RETRIES && isRetryableError(e)) {
+                    await sleep(TX_CONFIG.RETRY_DELAY_MS * attempt);
+                    continue;
+                }
+                
+                if (e.message?.includes('Internal JSON-RPC')) {
+                    showToast("Network busy - please try again", "error");
+                } else {
+                    showToast(formatError(e), "error");
+                }
+                return false;
             }
-            
-            showToast(`✅ Notarized! ${tokenId ? `#${tokenId}` : ''}`, "success");
-            return { success: true, tokenId, txHash: receipt.hash };
-        }, 'Notarize');
+        }
         
-        return result;
+        return false;
         
     } catch (e) {
         console.error("Notarize error:", e);
-        if (!isUserRejection(e)) showToast(formatError(e), "error");
+        showToast(formatError(e), "error");
         return false;
     } finally {
         if (submitButton) {
@@ -978,6 +1313,7 @@ export async function executeNotarize(params, submitButton) {
     }
 }
 
+// Alias
 export const executeNotarizeDocument = executeNotarize;
 
 // ====================================================================
@@ -1009,10 +1345,16 @@ export async function executeFaucetClaim(btnElement) {
         if (response.ok && data.success) {
             showToast("✅ Tokens received!", "success");
             loadUserData();
-            return { success: true, txHash: data.txHash, bkcAmount: data.bkcAmount, ethAmount: data.ethAmount };
+            return { 
+                success: true, 
+                txHash: data.txHash,
+                bkcAmount: data.bkcAmount,
+                ethAmount: data.ethAmount
+            };
         } else {
-            showToast(data.error || "Faucet unavailable", "error");
-            return { success: false, error: data.error };
+            const msg = data.error || data.message || "Faucet unavailable";
+            showToast(msg, "error");
+            return { success: false, error: msg };
         }
         
     } catch (e) {
@@ -1028,7 +1370,7 @@ export async function executeFaucetClaim(btnElement) {
 }
 
 // ====================================================================
-// ALIASES for backward compatibility
+// ALIASES
 // ====================================================================
 
 export const executeBuyBooster = executeBuyNFT;
