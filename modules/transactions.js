@@ -1,5 +1,5 @@
 // js/modules/transactions.js
-// ✅ PRODUCTION V13.0 - Platform Usage Points Integration
+// ✅ PRODUCTION V13.1 - Platform Usage Points + Improved Tracking with Retry
 
 const ethers = window.ethers;
 
@@ -35,16 +35,76 @@ function safeFormatEther(value) {
 
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
-// Helper para registrar pontos de uso da plataforma (não bloqueia fluxo principal)
+// ====================================================================
+// PLATFORM USAGE TRACKING (com retry e notificação destacada)
+// ====================================================================
+
+const TRACKING_CONFIG = {
+    MAX_RETRIES: 3,
+    RETRY_DELAY_MS: 1500,
+    TOAST_DURATION_MS: 4000
+};
+
+/**
+ * Registra pontos de uso da plataforma para o Airdrop.
+ * Executa em background com retry, não bloqueia o fluxo principal.
+ * Mostra notificação destacada de sucesso.
+ */
 async function trackPlatformUsage(actionType, txHash) {
-    try {
-        const result = await recordPlatformUsage(actionType, txHash);
-        if (result.success) {
-            showToast(`🎯 +${result.pointsAwarded} Airdrop Points! (${result.newCount}/${result.maxCount})`, "info");
-        }
-    } catch (e) {
-        console.warn("Platform usage tracking failed (non-critical):", e);
+    if (!txHash) {
+        console.warn("trackPlatformUsage: No txHash provided, skipping");
+        return;
     }
+
+    // Executa tracking com retry em background
+    (async () => {
+        for (let attempt = 1; attempt <= TRACKING_CONFIG.MAX_RETRIES; attempt++) {
+            try {
+                const result = await recordPlatformUsage(actionType, txHash);
+                
+                if (result.success) {
+                    // Notificação destacada de pontos ganhos
+                    showAirdropPointsToast(result.pointsAwarded, result.newCount, result.maxCount);
+                    console.log(`✅ Airdrop tracking: ${actionType} +${result.pointsAwarded} pts (${result.newCount}/${result.maxCount})`);
+                    return; // Sucesso, sai do loop
+                } else if (result.reason === 'max_reached') {
+                    console.log(`Airdrop tracking: ${actionType} max reached (${result.reason})`);
+                    return; // Não é erro, apenas atingiu o limite
+                } else if (result.reason === 'cooldown') {
+                    console.log(`Airdrop tracking: ${actionType} on cooldown`);
+                    return; // Não é erro, está em cooldown
+                } else if (result.reason === 'duplicate_tx') {
+                    console.log(`Airdrop tracking: ${actionType} duplicate tx`);
+                    return; // Transação já processada
+                } else {
+                    throw new Error(result.reason || 'Unknown error');
+                }
+                
+            } catch (e) {
+                console.warn(`Airdrop tracking attempt ${attempt}/${TRACKING_CONFIG.MAX_RETRIES} failed:`, e.message);
+                
+                if (attempt < TRACKING_CONFIG.MAX_RETRIES) {
+                    await sleep(TRACKING_CONFIG.RETRY_DELAY_MS * attempt);
+                    continue;
+                }
+                
+                // Falhou todas as tentativas - não mostra erro ao usuário (não crítico)
+                console.error(`Airdrop tracking failed for ${actionType} after ${TRACKING_CONFIG.MAX_RETRIES} attempts`);
+            }
+        }
+    })();
+}
+
+/**
+ * Mostra toast especial para pontos do Airdrop (mais visível)
+ */
+function showAirdropPointsToast(points, current, max) {
+    // Usa o showToast existente com estilo "success" para destaque
+    const message = `🎯 +${points.toLocaleString()} Airdrop Points! (${current}/${max})`;
+    showToast(message, "success");
+    
+    // Log para debug
+    console.log(`🎯 AIRDROP POINTS AWARDED: +${points} (${current}/${max})`);
 }
 
 async function getConnectedSigner() {
