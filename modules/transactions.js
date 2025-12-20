@@ -1,5 +1,5 @@
 // js/modules/transactions.js
-// ✅ PRODUCTION V12.0 - Robust Retry + Better Error Handling + Stability Fixes
+// ✅ PRODUCTION V13.0 - Platform Usage Points Integration
 
 const ethers = window.ethers;
 
@@ -8,6 +8,7 @@ import { showToast, closeModal } from '../ui-feedback.js';
 import { addresses, nftPoolABI, rentalManagerABI, decentralizedNotaryABI, actionsManagerABI, delegationManagerABI } from '../config.js'; 
 import { formatBigNumber } from '../utils.js';
 import { loadUserData, getHighestBoosterBoostFromAPI, loadRentalListings, loadUserDelegations } from './data.js';
+import { recordPlatformUsage } from './firebase-auth-service.js';
 
 // ====================================================================
 // CONFIGURATION
@@ -33,6 +34,18 @@ function safeFormatEther(value) {
 }
 
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
+// Helper para registrar pontos de uso da plataforma (não bloqueia fluxo principal)
+async function trackPlatformUsage(actionType, txHash) {
+    try {
+        const result = await recordPlatformUsage(actionType, txHash);
+        if (result.success) {
+            showToast(`🎯 +${result.pointsAwarded} Airdrop Points! (${result.newCount}/${result.maxCount})`, "info");
+        }
+    } catch (e) {
+        console.warn("Platform usage tracking failed (non-critical):", e);
+    }
+}
 
 async function getConnectedSigner() {
     if (!State.isConnected || !State.userAddress) {
@@ -298,6 +311,11 @@ export async function executeDelegation(totalAmount, durationSeconds, boosterIdT
             }
         );
         
+        // Track platform usage for airdrop points
+        if (result.success && result.txHash) {
+            trackPlatformUsage('delegation', result.txHash);
+        }
+        
         return result.success;
         
     } catch (e) {
@@ -362,6 +380,11 @@ export async function executeUnstake(index, boosterIdToSend, btnElement) {
             }
         );
         
+        // Track platform usage for airdrop points
+        if (result.success && result.txHash) {
+            trackPlatformUsage('unstake', result.txHash);
+        }
+        
         return result.success;
         
     } catch (e) {
@@ -421,6 +444,11 @@ export async function executeForceUnstake(index, boosterIdToSend, btnElement) {
             }
         );
         
+        // Track platform usage for airdrop points
+        if (result.success && result.txHash) {
+            trackPlatformUsage('unstake', result.txHash);
+        }
+        
         return result.success;
         
     } catch (e) {
@@ -471,6 +499,11 @@ export async function executeClaimRewards(boosterIdToSend, btnElement) {
                 }
             }
         );
+        
+        // Track platform usage for airdrop points
+        if (result.success && result.txHash) {
+            trackPlatformUsage('claimReward', result.txHash);
+        }
         
         return result.success;
         
@@ -536,6 +569,11 @@ export async function executeUniversalClaim(stakingRewards, minerRewards, booste
                 }
             }
         );
+        
+        // Track platform usage for airdrop points
+        if (result.success && result.txHash) {
+            trackPlatformUsage('claimReward', result.txHash);
+        }
         
         return result.success;
         
@@ -604,6 +642,10 @@ export async function executeBuyNFT(poolAddress, priceWithTax, btnElement) {
             
             showToast(`✅ NFT purchased! ${tokenId ? `#${tokenId}` : ''}`, "success");
             loadUserData();
+            
+            // Track platform usage for airdrop points
+            trackPlatformUsage('buyNFT', result.txHash);
+            
             return { success: true, tokenId, txHash: result.txHash };
         }
         
@@ -699,6 +741,10 @@ export async function executeSellNFT(poolAddress, tokenId, minPayout, btnElement
         if (result.success) {
             showToast("✅ NFT sold!", "success");
             loadUserData();
+            
+            // Track platform usage for airdrop points
+            trackPlatformUsage('sellNFT', result.txHash);
+            
             return { success: true, txHash: result.txHash };
         }
         
@@ -790,6 +836,10 @@ export async function executeListNFT(params, btnElement) {
         if (result.success) {
             showToast(`✅ NFT #${tokenId} listed for rent!`, "success");
             loadRentalListings(true);
+            
+            // Track platform usage for airdrop points
+            trackPlatformUsage('listRental', result.txHash);
+            
             return { success: true, txHash: result.txHash };
         }
         
@@ -869,6 +919,10 @@ export async function executeRentNFT(params, btnElement) {
             showToast(`✅ NFT #${tokenId} rented for ${hours} hours!`, "success");
             loadUserData();
             loadRentalListings(true);
+            
+            // Track platform usage for airdrop points
+            trackPlatformUsage('rentNFT', result.txHash);
+            
             return { success: true, txHash: result.txHash };
         }
         
@@ -1073,6 +1127,9 @@ export async function executeFortuneGame(wager, guesses, isCumulative, btnElemen
             showToast("🎰 Game submitted! Waiting for result...", "success");
             loadUserData();
             
+            // Track platform usage for airdrop points
+            trackPlatformUsage('fortune', result.txHash);
+            
             return { success: true, gameId, txHash: result.txHash };
         }
         
@@ -1179,6 +1236,10 @@ export async function executeNotarize(params, submitButton) {
             }
             
             showToast(`✅ Document notarized! ${tokenId ? `#${tokenId}` : ''}`, "success");
+            
+            // Track platform usage for airdrop points
+            trackPlatformUsage('notarize', result.txHash);
+            
             return { success: true, tokenId, txHash: result.txHash };
         }
         
@@ -1228,6 +1289,12 @@ export async function executeFaucetClaim(btnElement) {
         if (response.ok && data.success) {
             showToast("✅ Tokens received!", "success");
             loadUserData();
+            
+            // Track platform usage for airdrop points
+            if (data.txHash) {
+                trackPlatformUsage('faucet', data.txHash);
+            }
+            
             return { 
                 success: true, 
                 txHash: data.txHash,
