@@ -1,5 +1,5 @@
 // modules/firebase-auth-service.js
-// ✅ VERSION V2.0: Platform Usage Points System Added
+// ✅ VERSION V2.1: Fixed getPublicAirdropData to return platformUsageConfig
 
 import { initializeApp } from "https://www.gstatic.com/firebasejs/9.15.0/firebase-app.js";
 import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/9.15.0/firebase-auth.js";
@@ -193,7 +193,8 @@ export async function getPublicAirdropData() {
         return {
             config: data.config || { ugcBasePoints: {} }, // Garante config e ugcBasePoints
             leaderboards: data.leaderboards || { top100ByPoints: [], top100ByPosts: [], lastUpdated: null },
-            dailyTasks: activeTasks // Lista de tarefas ativas e validadas
+            dailyTasks: activeTasks, // Lista de tarefas ativas e validadas
+            platformUsageConfig: data.platformUsageConfig || null // Config de Platform Usage
         };
     } else {
         // Se o documento não existe, retorna valores padrão
@@ -201,7 +202,8 @@ export async function getPublicAirdropData() {
         return {
             config: { isActive: false, roundName: "Loading...", ugcBasePoints: {} },
             leaderboards: { top100ByPoints: [], top100ByPosts: [], lastUpdated: null },
-            dailyTasks: []
+            dailyTasks: [],
+            platformUsageConfig: null
         };
     }
 }
