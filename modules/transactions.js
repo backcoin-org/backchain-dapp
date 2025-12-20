@@ -15,12 +15,9 @@ import { loadUserData, getHighestBoosterBoostFromAPI, loadRentalListings, loadUs
 
 const TX_CONFIG = {
     MAX_RETRIES: 3,
-    RETRY_DELAY_MS: 3000,      // Aumentado para 3s
-    APPROVAL_WAIT_MS: 2000,    // Aumentado para 2s
-    SIMULATION_TIMEOUT_MS: 10000,
-    // Gas settings para evitar simulação problemática
-    DEFAULT_GAS_LIMIT: 500000n,
-    GAS_LIMIT_MULTIPLIER: 1.3   // 30% extra para segurança
+    RETRY_DELAY_MS: 2000,
+    APPROVAL_WAIT_MS: 1500,  // Esperar após aprovação
+    SIMULATION_TIMEOUT_MS: 10000
 };
 
 // ====================================================================
@@ -246,7 +243,7 @@ async function executeWithRetry(txFunction, options = {}) {
 }
 
 // ====================================================================
-// DELEGATION (WITH SIMULATION BYPASS)
+// DELEGATION
 // ====================================================================
 
 export async function executeDelegation(totalAmount, durationSeconds, boosterIdToSend, btnElement) {
@@ -287,71 +284,21 @@ export async function executeDelegation(totalAmount, durationSeconds, boosterIdT
             signer
         );
         
-        // Pre-estimate gas
-        let gasLimit = 350000n;
-        try {
-            const estimatedGas = await delegationContract.delegate.estimateGas(
-                totalAmountBigInt, 
-                durationBigInt, 
-                boosterIdBigInt
-            );
-            gasLimit = (estimatedGas * 150n) / 100n;
-            console.log("Delegation gas estimated:", estimatedGas.toString(), "→ Using:", gasLimit.toString());
-        } catch (e) {
-            console.warn("Gas estimation failed, using default:", e.message);
-        }
-        
-        // Execute with explicit gasLimit
-        for (let attempt = 1; attempt <= TX_CONFIG.MAX_RETRIES; attempt++) {
-            try {
-                if (attempt === 1) {
-                    showToast("Confirm delegation in wallet...", "info");
-                } else {
-                    await sleep(TX_CONFIG.RETRY_DELAY_MS);
-                    showToast(`Retrying... (${attempt}/${TX_CONFIG.MAX_RETRIES})`, "warning");
+        const result = await executeWithRetry(
+            () => delegationContract.delegate(totalAmountBigInt, durationBigInt, boosterIdBigInt),
+            {
+                description: 'Delegation',
+                onAttempt: (attempt) => {
+                    if (attempt === 1) showToast("Confirm delegation in wallet...", "info");
+                },
+                onSuccess: () => {
+                    showToast("✅ Delegation successful!", "success");
+                    loadUserData();
                 }
-                
-                const tx = await delegationContract.delegate(
-                    totalAmountBigInt, 
-                    durationBigInt, 
-                    boosterIdBigInt, 
-                    { gasLimit: gasLimit }
-                );
-                
-                showToast("Waiting for confirmation...", "info");
-                const receipt = await tx.wait();
-                
-                if (receipt.status === 0) {
-                    throw new Error("Transaction reverted");
-                }
-                
-                showToast("✅ Delegation successful!", "success");
-                loadUserData();
-                return true;
-                
-            } catch (e) {
-                console.error(`Delegation attempt ${attempt} failed:`, e);
-                
-                if (isUserRejection(e)) {
-                    showToast("Transaction cancelled", "error");
-                    return false;
-                }
-                
-                if (attempt < TX_CONFIG.MAX_RETRIES && isRetryableError(e)) {
-                    await sleep(TX_CONFIG.RETRY_DELAY_MS * attempt);
-                    continue;
-                }
-                
-                if (e.message?.includes('Internal JSON-RPC')) {
-                    showToast("Network busy - please try again", "error");
-                } else {
-                    showToast(formatError(e), "error");
-                }
-                return false;
             }
-        }
+        );
         
-        return false;
+        return result.success;
         
     } catch (e) {
         console.error("Delegation error:", e);
@@ -955,7 +902,7 @@ export async function executeWithdrawNFT(tokenId, btnElement) {
 }
 
 // ====================================================================
-// FORTUNE POOL - PLAY GAME (ROBUST VERSION WITH SIMULATION BYPASS)
+// FORTUNE POOL - PLAY GAME (ROBUST VERSION)
 // ====================================================================
 
 export async function executeFortuneGame(wager, guesses, isCumulative, btnElement) {
@@ -1052,118 +999,70 @@ export async function executeFortuneGame(wager, guesses, isCumulative, btnElemen
             return { success: false };
         }
         
-        // 6. Estimate gas first, then execute with explicit gasLimit
-        if (btnElement) btnElement.innerHTML = '<div class="loader inline-block"></div> Preparing...';
-        
-        // Pre-estimate gas to avoid MetaMask simulation issues
-        let gasLimit = 500000n; // Safe default
-        try {
-            const estimatedGas = await fortuneContract.participate.estimateGas(
-                wagerBigInt, 
-                guessesArray, 
-                isCumulative, 
-                { value: oracleFee }
-            );
-            // Add 50% buffer for safety
-            gasLimit = (estimatedGas * 150n) / 100n;
-            console.log("Gas estimated successfully:", estimatedGas.toString(), "→ Using:", gasLimit.toString());
-        } catch (estimateError) {
-            console.warn("Gas estimation failed (this is often normal):", estimateError.message);
-            // Keep default gasLimit
-        }
-        
+        // 6. Execute participate with retry
         if (btnElement) btnElement.innerHTML = '<div class="loader inline-block"></div> Submitting...';
         
         console.log("Calling participate with:", {
             wagerAmount: wagerBigInt.toString(),
             guesses: guessesArray.map(g => g.toString()),
             isCumulative,
-            value: oracleFee.toString(),
-            gasLimit: gasLimit.toString()
+            value: oracleFee.toString()
         });
         
-        // Execute with explicit gasLimit to bypass MetaMask simulation issues
-        for (let attempt = 1; attempt <= TX_CONFIG.MAX_RETRIES; attempt++) {
-            try {
-                if (attempt === 1) {
-                    showToast("Confirm game in wallet...", "info");
-                } else {
-                    // Wait before retry
-                    await sleep(TX_CONFIG.RETRY_DELAY_MS);
-                    showToast(`Retrying... (${attempt}/${TX_CONFIG.MAX_RETRIES})`, "warning");
+        const result = await executeWithRetry(
+            () => fortuneContract.participate(wagerBigInt, guessesArray, isCumulative, { value: oracleFee }),
+            {
+                description: 'Fortune Game',
+                retries: TX_CONFIG.MAX_RETRIES,
+                onAttempt: (attempt) => {
+                    if (attempt === 1) {
+                        showToast("Confirm game in wallet...", "info");
+                    } else {
+                        showToast(`Retrying... (${attempt}/${TX_CONFIG.MAX_RETRIES})`, "warning");
+                    }
                 }
-                
-                // Always use explicit gasLimit to prevent simulation issues
-                const tx = await fortuneContract.participate(wagerBigInt, guessesArray, isCumulative, { 
-                    value: oracleFee,
-                    gasLimit: gasLimit
-                });
-                
-                showToast("Waiting for confirmation...", "info");
-                const receipt = await tx.wait();
-                
-                if (receipt.status === 0) {
-                    throw new Error("Transaction reverted");
-                }
-                
-                // Extract gameId from event
-                let gameId = null;
-                for (const log of receipt.logs) {
-                    try {
-                        const parsed = fortuneContract.interface.parseLog(log);
-                        if (parsed?.name === "GameRequested") {
-                            gameId = parsed.args.gameId?.toString();
-                            break;
-                        }
-                    } catch {}
-                }
-                
-                showToast("🎰 Game submitted! Waiting for result...", "success");
-                loadUserData();
-                
-                return { success: true, gameId, txHash: receipt.hash };
-                
-            } catch (e) {
-                console.error(`Fortune attempt ${attempt} failed:`, e);
-                
-                if (isUserRejection(e)) {
-                    showToast("Transaction cancelled", "error");
-                    return { success: false, cancelled: true };
-                }
-                
-                if (attempt < TX_CONFIG.MAX_RETRIES && isRetryableError(e)) {
-                    await sleep(TX_CONFIG.RETRY_DELAY_MS * attempt);
-                    continue;
-                }
-                
-                // Final attempt failed
-                const errorMsg = e?.message || '';
-                if (errorMsg.includes('ZeroAmount')) {
-                    showToast("Wager cannot be zero", "error");
-                } else if (errorMsg.includes('NoActiveTiers')) {
-                    showToast("No active game tiers", "error");
-                } else if (errorMsg.includes('InvalidGuessCount')) {
-                    showToast("Wrong number of guesses", "error");
-                } else if (errorMsg.includes('InvalidGuessRange')) {
-                    showToast("Guess out of range", "error");
-                } else if (errorMsg.includes('InsufficientOracleFee')) {
-                    showToast("Incorrect oracle fee", "error");
-                } else if (errorMsg.includes('InsufficientBalance') || errorMsg.includes('insufficient')) {
-                    showToast("Insufficient BKC balance", "error");
-                } else if (errorMsg.includes('Internal JSON-RPC')) {
-                    showToast("Network busy - please try again", "error");
-                } else {
-                    showToast(formatError(e), "error");
-                }
-                return { success: false };
             }
+        );
+        
+        if (result.success) {
+            let gameId = null;
+            for (const log of result.receipt.logs) {
+                try {
+                    const parsed = fortuneContract.interface.parseLog(log);
+                    if (parsed?.name === "GameRequested") {
+                        gameId = parsed.args.gameId?.toString();
+                        break;
+                    }
+                } catch {}
+            }
+            
+            showToast("🎰 Game submitted! Waiting for result...", "success");
+            loadUserData();
+            
+            return { success: true, gameId, txHash: result.txHash };
         }
         
         return { success: false };
         
     } catch (e) {
         console.error("Fortune error:", e);
-        showToast(formatError(e), "error");
+        
+        const errorMsg = e?.message || '';
+        if (errorMsg.includes('ZeroAmount')) {
+            showToast("Wager cannot be zero", "error");
+        } else if (errorMsg.includes('NoActiveTiers')) {
+            showToast("No active game tiers", "error");
+        } else if (errorMsg.includes('InvalidGuessCount')) {
+            showToast("Wrong number of guesses", "error");
+        } else if (errorMsg.includes('InvalidGuessRange')) {
+            showToast("Guess out of range", "error");
+        } else if (errorMsg.includes('InsufficientOracleFee')) {
+            showToast("Incorrect oracle fee", "error");
+        } else if (errorMsg.includes('InsufficientBalance') || errorMsg.includes('insufficient')) {
+            showToast("Insufficient BKC balance", "error");
+        } else {
+            showToast(formatError(e), "error");
+        }
         return { success: false };
         
     } finally {
@@ -1176,7 +1075,7 @@ export async function executeFortuneGame(wager, guesses, isCumulative, btnElemen
 }
 
 // ====================================================================
-// NOTARIZE DOCUMENT (WITH SIMULATION BYPASS)
+// NOTARIZE DOCUMENT
 // ====================================================================
 
 export async function executeNotarize(params, submitButton) {
@@ -1223,80 +1122,30 @@ export async function executeNotarize(params, submitButton) {
             }
         } catch (e) {}
         
-        // Pre-estimate gas to avoid simulation issues
-        let gasLimit = 400000n;
-        try {
-            const estimatedGas = await notaryContract.notarize.estimateGas(
-                ipfsUri, 
-                description || '', 
-                contentHash, 
-                boosterTokenId
-            );
-            gasLimit = (estimatedGas * 150n) / 100n;
-            console.log("Notarize gas estimated:", estimatedGas.toString(), "→ Using:", gasLimit.toString());
-        } catch (e) {
-            console.warn("Gas estimation failed, using default:", e.message);
-        }
-        
-        // Execute with explicit gasLimit
-        for (let attempt = 1; attempt <= TX_CONFIG.MAX_RETRIES; attempt++) {
-            try {
-                if (attempt === 1) {
-                    showToast("Confirm notarization in wallet...", "info");
-                } else {
-                    await sleep(TX_CONFIG.RETRY_DELAY_MS);
-                    showToast(`Retrying... (${attempt}/${TX_CONFIG.MAX_RETRIES})`, "warning");
+        const result = await executeWithRetry(
+            () => notaryContract.notarize(ipfsUri, description || '', contentHash, boosterTokenId),
+            {
+                description: 'Notarize',
+                onAttempt: (attempt) => {
+                    if (attempt === 1) showToast("Confirm notarization in wallet...", "info");
                 }
-                
-                const tx = await notaryContract.notarize(
-                    ipfsUri, 
-                    description || '', 
-                    contentHash, 
-                    boosterTokenId, 
-                    { gasLimit: gasLimit }
-                );
-                
-                showToast("Waiting for confirmation...", "info");
-                const receipt = await tx.wait();
-                
-                if (receipt.status === 0) {
-                    throw new Error("Transaction reverted");
-                }
-                
-                let tokenId = null;
-                for (const log of receipt.logs) {
-                    try {
-                        const parsed = notaryContract.interface.parseLog(log);
-                        if (parsed?.name === "DocumentNotarized") {
-                            tokenId = parsed.args.tokenId?.toString();
-                            break;
-                        }
-                    } catch {}
-                }
-                
-                showToast(`✅ Document notarized! ${tokenId ? `#${tokenId}` : ''}`, "success");
-                return { success: true, tokenId, txHash: receipt.hash };
-                
-            } catch (e) {
-                console.error(`Notarize attempt ${attempt} failed:`, e);
-                
-                if (isUserRejection(e)) {
-                    showToast("Transaction cancelled", "error");
-                    return false;
-                }
-                
-                if (attempt < TX_CONFIG.MAX_RETRIES && isRetryableError(e)) {
-                    await sleep(TX_CONFIG.RETRY_DELAY_MS * attempt);
-                    continue;
-                }
-                
-                if (e.message?.includes('Internal JSON-RPC')) {
-                    showToast("Network busy - please try again", "error");
-                } else {
-                    showToast(formatError(e), "error");
-                }
-                return false;
             }
+        );
+        
+        if (result.success) {
+            let tokenId = null;
+            for (const log of result.receipt.logs) {
+                try {
+                    const parsed = notaryContract.interface.parseLog(log);
+                    if (parsed?.name === "DocumentNotarized") {
+                        tokenId = parsed.args.tokenId?.toString();
+                        break;
+                    }
+                } catch {}
+            }
+            
+            showToast(`✅ Document notarized! ${tokenId ? `#${tokenId}` : ''}`, "success");
+            return { success: true, tokenId, txHash: result.txHash };
         }
         
         return false;
