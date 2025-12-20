@@ -1,4 +1,5 @@
 // modules/firebase-auth-service.js
+// ✅ VERSION V2.0: Platform Usage Points System Added
 
 import { initializeApp } from "https://www.gstatic.com/firebasejs/9.15.0/firebase-app.js";
 import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/9.15.0/firebase-auth.js";
@@ -1350,4 +1351,253 @@ export async function setBanStatus(userId, isBanned) {
         updates.rejectedCount = 0; // Zera a contagem de rejeição ao desbanir
     }
     await updateDoc(userRef, updates);
+}
+
+
+// ==========================================================
+//  PLATFORM USAGE POINTS SYSTEM
+//  Versão: 2.0
+//  Registra pontos por uso das funcionalidades da plataforma
+// ==========================================================
+
+// Configuração padrão (sobrescrita pelo Firebase se existir)
+const DEFAULT_PLATFORM_USAGE_CONFIG = {
+    faucet:      { points: 1000,  maxCount: 1,  cooldownHours: 0,  enabled: true },
+    delegation:  { points: 2000,  maxCount: 10, cooldownHours: 24, enabled: true },
+    fortune:     { points: 1500,  maxCount: 10, cooldownHours: 1,  enabled: true },
+    buyNFT:      { points: 2500,  maxCount: 10, cooldownHours: 0,  enabled: true },
+    sellNFT:     { points: 1500,  maxCount: 10, cooldownHours: 0,  enabled: true },
+    listRental:  { points: 1000,  maxCount: 10, cooldownHours: 0,  enabled: true },
+    rentNFT:     { points: 2000,  maxCount: 10, cooldownHours: 0,  enabled: true },
+    notarize:    { points: 2000,  maxCount: 10, cooldownHours: 0,  enabled: true },
+    claimReward: { points: 1000,  maxCount: 10, cooldownHours: 24, enabled: true },
+    unstake:     { points: 500,   maxCount: 10, cooldownHours: 0,  enabled: true },
+};
+
+/**
+ * Busca a configuração de Platform Usage do Firebase.
+ * Se não existir, retorna o config padrão.
+ * @returns {Promise<object>} Configuração de platform usage
+ */
+export async function getPlatformUsageConfig() {
+    try {
+        const dataRef = doc(db, "airdrop_public_data", "data_v1");
+        const dataSnap = await getDoc(dataRef);
+        
+        if (dataSnap.exists() && dataSnap.data().platformUsageConfig) {
+            return dataSnap.data().platformUsageConfig;
+        }
+        return DEFAULT_PLATFORM_USAGE_CONFIG;
+    } catch (error) {
+        console.error("Error fetching platform usage config:", error);
+        return DEFAULT_PLATFORM_USAGE_CONFIG;
+    }
+}
+
+/**
+ * Busca o uso de plataforma do usuário atual.
+ * @returns {Promise<object>} Objeto com dados de uso por ação
+ */
+export async function getPlatformUsage() {
+    ensureAuthenticated();
+    
+    try {
+        const usageCol = collection(db, "airdrop_users", currentWalletAddress, "platform_usage");
+        const snapshot = await getDocs(usageCol);
+        
+        const usage = {};
+        snapshot.forEach(docSnap => {
+            usage[docSnap.id] = docSnap.data();
+        });
+        
+        return usage;
+    } catch (error) {
+        console.error("Error fetching platform usage:", error);
+        return {};
+    }
+}
+
+/**
+ * Registra uma ação de uso da plataforma e concede pontos.
+ * Chamada pelo frontend após uma transação bem-sucedida.
+ * 
+ * @param {string} actionType - Tipo da ação (delegation, fortune, buyNFT, etc.)
+ * @param {string} txHash - Hash da transação on-chain (para verificação anti-fraude)
+ * @returns {Promise<{success: boolean, pointsAwarded?: number, newCount?: number, maxCount?: number, reason?: string}>}
+ */
+export async function recordPlatformUsage(actionType, txHash) {
+    ensureAuthenticated();
+    
+    // Buscar configuração
+    const config = await getPlatformUsageConfig();
+    const actionConfig = config[actionType];
+    
+    if (!actionConfig) {
+        console.error(`Invalid action type: ${actionType}`);
+        return { success: false, reason: 'invalid_action' };
+    }
+    
+    // Verificar se a ação está habilitada
+    if (actionConfig.enabled === false) {
+        return { success: false, reason: 'action_disabled' };
+    }
+    
+    try {
+        const usageRef = doc(db, "airdrop_users", currentWalletAddress, "platform_usage", actionType);
+        const usageSnap = await getDoc(usageRef);
+        
+        const currentData = usageSnap.exists() 
+            ? usageSnap.data() 
+            : { count: 0, totalPoints: 0, txHashes: [], lastClaimed: null };
+        
+        // Verificar limite máximo
+        if (currentData.count >= actionConfig.maxCount) {
+            console.log(`Max usage reached for ${actionType}: ${currentData.count}/${actionConfig.maxCount}`);
+            return { success: false, reason: 'max_reached' };
+        }
+        
+        // Verificar cooldown
+        if (actionConfig.cooldownHours > 0 && currentData.lastClaimed) {
+            const lastClaimed = new Date(currentData.lastClaimed);
+            const hoursSince = (Date.now() - lastClaimed.getTime()) / (1000 * 60 * 60);
+            
+            if (hoursSince < actionConfig.cooldownHours) {
+                const hoursLeft = actionConfig.cooldownHours - hoursSince;
+                console.log(`Cooldown active for ${actionType}: ${hoursLeft.toFixed(1)}h remaining`);
+                return { 
+                    success: false, 
+                    reason: 'cooldown', 
+                    hoursLeft: Math.ceil(hoursLeft) 
+                };
+            }
+        }
+        
+        // Verificar se txHash já foi usado (anti-fraude)
+        if (txHash && currentData.txHashes?.includes(txHash)) {
+            console.log(`Duplicate txHash for ${actionType}: ${txHash}`);
+            return { success: false, reason: 'duplicate_tx' };
+        }
+        
+        // Calcular novos valores
+        const pointsToAward = actionConfig.points;
+        const newCount = currentData.count + 1;
+        const newTotalPoints = currentData.totalPoints + pointsToAward;
+        const newTxHashes = txHash 
+            ? [...(currentData.txHashes || []), txHash].slice(-20) // Manter últimos 20
+            : currentData.txHashes || [];
+        
+        // Usar batch para atualizar atomicamente
+        const batch = writeBatch(db);
+        
+        // Atualizar subcoleção platform_usage
+        batch.set(usageRef, {
+            count: newCount,
+            totalPoints: newTotalPoints,
+            lastClaimed: new Date().toISOString(),
+            txHashes: newTxHashes
+        });
+        
+        // Atualizar totais no perfil do usuário
+        const userRef = doc(db, "airdrop_users", currentWalletAddress);
+        batch.update(userRef, {
+            platformUsagePoints: increment(pointsToAward),
+            totalPoints: increment(pointsToAward)
+        });
+        
+        await batch.commit();
+        
+        console.log(`✅ Platform usage recorded: ${actionType} +${pointsToAward} pts (${newCount}/${actionConfig.maxCount})`);
+        
+        return { 
+            success: true, 
+            pointsAwarded: pointsToAward,
+            newCount: newCount,
+            maxCount: actionConfig.maxCount
+        };
+        
+    } catch (error) {
+        console.error(`Error recording platform usage for ${actionType}:`, error);
+        return { success: false, reason: 'error', message: error.message };
+    }
+}
+
+/**
+ * Verifica se o usuário pode realizar uma ação de plataforma.
+ * Útil para mostrar na UI se a ação está disponível.
+ * 
+ * @param {string} actionType - Tipo da ação
+ * @returns {Promise<{canDo: boolean, count: number, maxCount: number, points?: number, cooldownLeft?: number, reason?: string}>}
+ */
+export async function canDoPlatformAction(actionType) {
+    ensureAuthenticated();
+    
+    const config = await getPlatformUsageConfig();
+    const actionConfig = config[actionType];
+    
+    if (!actionConfig || actionConfig.enabled === false) {
+        return { canDo: false, count: 0, maxCount: 0, reason: 'disabled' };
+    }
+    
+    try {
+        const usageRef = doc(db, "airdrop_users", currentWalletAddress, "platform_usage", actionType);
+        const usageSnap = await getDoc(usageRef);
+        
+        const currentData = usageSnap.exists() 
+            ? usageSnap.data() 
+            : { count: 0, lastClaimed: null };
+        
+        // Verificar limite
+        if (currentData.count >= actionConfig.maxCount) {
+            return { 
+                canDo: false, 
+                count: currentData.count, 
+                maxCount: actionConfig.maxCount,
+                reason: 'max_reached'
+            };
+        }
+        
+        // Verificar cooldown
+        if (actionConfig.cooldownHours > 0 && currentData.lastClaimed) {
+            const lastClaimed = new Date(currentData.lastClaimed);
+            const hoursSince = (Date.now() - lastClaimed.getTime()) / (1000 * 60 * 60);
+            
+            if (hoursSince < actionConfig.cooldownHours) {
+                const hoursLeft = actionConfig.cooldownHours - hoursSince;
+                return { 
+                    canDo: false, 
+                    count: currentData.count, 
+                    maxCount: actionConfig.maxCount,
+                    cooldownLeft: Math.ceil(hoursLeft * 60), // em minutos
+                    reason: 'cooldown'
+                };
+            }
+        }
+        
+        return { 
+            canDo: true, 
+            count: currentData.count, 
+            maxCount: actionConfig.maxCount,
+            points: actionConfig.points
+        };
+        
+    } catch (error) {
+        console.error(`Error checking platform action ${actionType}:`, error);
+        return { canDo: false, count: 0, maxCount: 0, reason: 'error' };
+    }
+}
+
+/**
+ * Salva a configuração de Platform Usage (somente admin).
+ * @param {object} config - Objeto de configuração
+ * @returns {Promise<void>}
+ */
+export async function savePlatformUsageConfig(config) {
+    ensureAuthenticated();
+    
+    const dataRef = doc(db, "airdrop_public_data", "data_v1");
+    await updateDoc(dataRef, {
+        platformUsageConfig: config
+    });
+    
+    console.log("✅ Platform usage config saved:", config);
 }
