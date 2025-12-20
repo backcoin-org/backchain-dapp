@@ -636,14 +636,48 @@ export async function executeSellNFT(poolAddress, tokenId, minPayout, btnElement
     }
     
     try {
+        // 🔧 FIX: Validate and extract tokenId if object was passed
+        let validTokenId = tokenId;
+        if (typeof tokenId === 'object' && tokenId !== null) {
+            // If an NFT object was passed instead of just tokenId
+            validTokenId = tokenId.tokenId || tokenId.id || tokenId.token_id;
+            console.warn('executeSellNFT: Object passed instead of tokenId, extracted:', validTokenId);
+        }
+        
+        if (validTokenId === undefined || validTokenId === null || validTokenId === '') {
+            console.error('executeSellNFT: Invalid tokenId:', tokenId);
+            showToast("Invalid NFT token ID", "error");
+            return { success: false };
+        }
+        
+        // Convert to BigInt safely
+        try {
+            validTokenId = BigInt(validTokenId);
+        } catch (e) {
+            console.error('executeSellNFT: Cannot convert tokenId to BigInt:', validTokenId);
+            showToast("Invalid NFT token ID format", "error");
+            return { success: false };
+        }
+        
+        // Validate minPayout
+        let validMinPayout = 0n;
+        if (minPayout !== undefined && minPayout !== null && minPayout !== '') {
+            try {
+                validMinPayout = BigInt(minPayout);
+            } catch (e) {
+                console.warn('executeSellNFT: Invalid minPayout, using 0');
+                validMinPayout = 0n;
+            }
+        }
+        
         // Approve NFT for pool
         const nftABI = ["function approve(address,uint256)", "function getApproved(uint256) view returns (address)"];
         const nftContract = new ethers.Contract(addresses.rewardBoosterNFT, nftABI, signer);
         
-        const approved = await nftContract.getApproved(tokenId);
+        const approved = await nftContract.getApproved(validTokenId);
         if (approved.toLowerCase() !== poolAddress.toLowerCase()) {
             showToast("Approving NFT...", "info");
-            const approveTx = await nftContract.approve(poolAddress, tokenId);
+            const approveTx = await nftContract.approve(poolAddress, validTokenId);
             await approveTx.wait();
             await sleep(TX_CONFIG.APPROVAL_WAIT_MS);
         }
@@ -653,7 +687,7 @@ export async function executeSellNFT(poolAddress, tokenId, minPayout, btnElement
         const poolContract = new ethers.Contract(poolAddress, nftPoolABI, signer);
         
         const result = await executeWithRetry(
-            () => poolContract.sellNFT(tokenId, minPayout || 0),
+            () => poolContract.sellNFT(validTokenId, validMinPayout),
             {
                 description: 'Sell NFT',
                 onAttempt: (attempt) => {
