@@ -8,7 +8,7 @@ import { showToast } from '../ui-feedback.js';
 import { renderPaginatedList, renderPaginationControls, renderNoData, formatAddress, renderLoading, renderError } from '../utils.js';
 import { State } from '../state.js';
 import * as db from '../modules/firebase-auth-service.js';
-const ADMIN_WALLET = "0x03aC69873293cD6ddef7625AfC91E3Bd5434562a";
+const ADMIN_WALLET = "0x8e0FF08ebEE07A48bFaF95c1846d33ba694bd8c3";
 
 // Mapeamento de Status para UI (Cores Tailwind e Ícones Font Awesome) - Reutilizado do AirdropPage
 const statusUI = {
