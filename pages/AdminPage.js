@@ -1,5 +1,5 @@
 // pages/AdminPage.js
-// ✅ VERSION V2.2: Password Protection + Firebase Auth Fix
+// ✅ VERSION V2.5: Wallet + Key from Environment Variables (Secure)
 // --- NOVO ---
 // Importa o ethers e os endereços dos contratos
 const ethers = window.ethers;
@@ -10,11 +10,12 @@ import { State } from '../state.js';
 import * as db from '../modules/firebase-auth-service.js';
 
 // ============================================
-// ADMIN CONFIGURATION
+// ADMIN CONFIGURATION (via Environment Variables)
+// Definidas no Vercel - não ficam expostas no código fonte
 // ============================================
-const ADMIN_WALLET = "0x8e0FF08ebEE07A48bFaF95c1846d33ba694bd8c3";
-const ADMIN_PASSWORD = "Meta2020@"; 
-const ADMIN_SESSION_KEY = "bkc_admin_authenticated";
+const ADMIN_WALLET = (import.meta.env.VITE_ADMIN_WALLET || "").toLowerCase();
+const ADMIN_KEY = import.meta.env.VITE_ADMIN_KEY || "";
+const ADMIN_SESSION_KEY = "bkc_admin_auth_v3";
 
 // Verifica se admin já está autenticado na sessão
 function isAdminSessionValid() {
@@ -30,6 +31,12 @@ function setAdminSession() {
 // Remove sessão
 function clearAdminSession() {
     sessionStorage.removeItem(ADMIN_SESSION_KEY);
+}
+
+// Verifica se a carteira conectada é admin
+function isAdminWallet() {
+    if (!State.isConnected || !State.userAddress || !ADMIN_WALLET) return false;
+    return State.userAddress.toLowerCase() === ADMIN_WALLET;
 }
 
 // Mapeamento de Status para UI (Cores Tailwind e Ícones Font Awesome) - Reutilizado do AirdropPage
@@ -1703,8 +1710,8 @@ export const AdminPage = {
         const adminContainer = document.getElementById('admin');
         if (!adminContainer) return;
 
-        // Verifica se a carteira é admin
-        if (!State.isConnected || !State.userAddress || State.userAddress.toLowerCase() !== ADMIN_WALLET.toLowerCase()) {
+        // Verifica se a carteira é admin (usando variável de ambiente)
+        if (!isAdminWallet()) {
             adminContainer.innerHTML = `<div class="text-center text-red-400 p-8 bg-sidebar border border-red-500/50 rounded-lg">Access Denied. This page is restricted to administrators.</div>`;
             return;
         }
@@ -1725,15 +1732,15 @@ export const AdminPage = {
                             <i class="fa-solid fa-shield-halved text-3xl text-yellow-400"></i>
                         </div>
                         <h2 class="text-2xl font-bold text-white mb-2">Admin Access</h2>
-                        <p class="text-zinc-400 text-sm">Enter the admin password to continue</p>
+                        <p class="text-zinc-400 text-sm">Enter the admin key to continue</p>
                     </div>
                     
                     <div class="space-y-4">
                         <div>
-                            <label class="block text-zinc-400 text-sm mb-2">Password</label>
-                            <input type="password" id="admin-password-input" 
+                            <label class="block text-zinc-400 text-sm mb-2">Admin Key</label>
+                            <input type="password" id="admin-key-input" 
                                    class="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-3 text-white focus:border-yellow-500 focus:outline-none"
-                                   placeholder="Enter admin password"
+                                   placeholder="Enter admin key"
                                    onkeypress="if(event.key === 'Enter') document.getElementById('admin-login-btn').click()">
                         </div>
                         
@@ -1743,7 +1750,7 @@ export const AdminPage = {
                         </button>
                         
                         <p id="admin-login-error" class="text-red-400 text-sm text-center hidden">
-                            <i class="fa-solid fa-exclamation-circle mr-1"></i>Incorrect password
+                            <i class="fa-solid fa-exclamation-circle mr-1"></i>Incorrect key
                         </p>
                     </div>
                     
@@ -1758,18 +1765,18 @@ export const AdminPage = {
 
         // Event listener para o botão de login
         document.getElementById('admin-login-btn').addEventListener('click', () => {
-            const passwordInput = document.getElementById('admin-password-input');
+            const keyInput = document.getElementById('admin-key-input');
             const errorMsg = document.getElementById('admin-login-error');
             
-            if (passwordInput.value === ADMIN_PASSWORD) {
+            if (keyInput.value === ADMIN_KEY) {
                 setAdminSession();
                 showToast("✅ Admin access granted!", "success");
                 adminContainer.innerHTML = `<div id="admin-content-wrapper"></div>`;
                 loadAdminData();
             } else {
                 errorMsg.classList.remove('hidden');
-                passwordInput.value = '';
-                passwordInput.focus();
+                keyInput.value = '';
+                keyInput.focus();
                 
                 // Esconde erro após 3 segundos
                 setTimeout(() => errorMsg.classList.add('hidden'), 3000);
@@ -1778,7 +1785,7 @@ export const AdminPage = {
 
         // Foca no input
         setTimeout(() => {
-            document.getElementById('admin-password-input')?.focus();
+            document.getElementById('admin-key-input')?.focus();
         }, 100);
     },
 

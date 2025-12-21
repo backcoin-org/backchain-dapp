@@ -461,11 +461,12 @@
     </div>
     <div id="modal-container"></div>
     <script type="module" src="./app.js"></script>
-    <script>
+    <script type="module">
         // Admin link visibility - executado após conexão da carteira
-        const ADMIN_WALLETS = [
-            '0x8e0ff08ebee07a48bfaf95c1846d33ba694bd8c3'  // Admin principal
-        ];
+        // Carteira admin vem da variável de ambiente (definida no build do Vite)
+        const ADMIN_WALLET = (import.meta.env?.VITE_ADMIN_WALLET || "").toLowerCase();
+        
+        let lastCheckedAddress = null;
         
         function checkAdminVisibility() {
             const adminContainer = document.getElementById('admin-link-container');
@@ -476,9 +477,13 @@
                                     window.ethereum?.selectedAddress ||
                                     localStorage.getItem('connectedAddress');
             
-            if (connectedAddress && ADMIN_WALLETS.includes(connectedAddress.toLowerCase())) {
+            // Evita logs repetidos
+            if (connectedAddress === lastCheckedAddress) return;
+            lastCheckedAddress = connectedAddress;
+            
+            if (connectedAddress && ADMIN_WALLET && connectedAddress.toLowerCase() === ADMIN_WALLET) {
                 adminContainer.style.display = 'block';
-                console.log('✅ Admin access granted for:', connectedAddress);
+                console.log('✅ Admin access granted');
             } else {
                 adminContainer.style.display = 'none';
             }
@@ -493,7 +498,10 @@
         
         // Escuta mudanças na carteira
         if (window.ethereum) {
-            window.ethereum.on('accountsChanged', checkAdminVisibility);
+            window.ethereum.on('accountsChanged', () => {
+                lastCheckedAddress = null;
+                checkAdminVisibility();
+            });
         }
     </script>
 </body>
