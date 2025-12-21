@@ -809,10 +809,3 @@ export const TokenomicsPage = {
     init: () => {},
     update: () => {}
 };
-
-// Legacy export for compatibility with app.js
-export const TokenomicsPage = {
-    render,
-    init: () => {},
-    update: () => {}
-};
