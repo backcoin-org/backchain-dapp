@@ -1,5 +1,5 @@
 // pages/NetworkStakingPage.js
-// ✅ PRODUCTION V4.0 - Fixed Layout, Complete History, Force Unstake Fix
+// ✅ PRODUCTION V4.1 - Firebase-first for Network pStake + History via API
 
 const ethers = window.ethers;
 
@@ -439,10 +439,25 @@ async function loadData(force = false) {
         const boosterData = await getHighestBoosterBoostFromAPI();
         highestBoosterTokenId = boosterData?.tokenId ? BigInt(boosterData.tokenId) : 0n;
 
-        // Load Network pStake (igual ao Dashboard)
-        if (State.delegationManagerContractPublic || State.delegationManagerContract) {
+        // ✅ V4.1: Buscar totalNetworkPStake do Firebase primeiro
+        try {
+            const systemResponse = await fetch('https://getsystemdata-4wvdcuoouq-uc.a.run.app');
+            if (systemResponse.ok) {
+                const systemData = await systemResponse.json();
+                if (systemData?.economy?.totalPStake) {
+                    totalNetworkPStake = BigInt(systemData.economy.totalPStake);
+                    console.log('📊 Network pStake from Firebase:', formatPStake(totalNetworkPStake));
+                }
+            }
+        } catch (e) {
+            console.log('Firebase system data not available, using blockchain fallback');
+        }
+        
+        // Fallback: blockchain se Firebase não tiver
+        if (totalNetworkPStake === 0n && (State.delegationManagerContractPublic || State.delegationManagerContract)) {
             const contract = State.delegationManagerContractPublic || State.delegationManagerContract;
             totalNetworkPStake = await safeContractCall(contract, 'totalNetworkPStake', [], 0n);
+            console.log('📊 Network pStake from blockchain (fallback)');
         }
 
         await Promise.all([

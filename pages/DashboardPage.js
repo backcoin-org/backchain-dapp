@@ -1,5 +1,5 @@
 // js/pages/DashboardPage.js
-// ✅ PRODUCTION V8.1 - Firebase-first + Blockchain Fallback
+// ✅ PRODUCTION V8.2 - Individual Fallbacks for pStake/TVL + Firebase-first
 
 const ethers = window.ethers;
 
@@ -742,7 +742,7 @@ async function fetchEconomicData() {
 
 async function updateGlobalMetrics() {
     try {
-        // ✅ V8.1: Buscar dados econômicos do Firebase PRIMEIRO
+        // ✅ V8.2: Buscar dados econômicos do Firebase PRIMEIRO
         const ecoData = await fetchEconomicData();
         
         let totalSupply = 0n;
@@ -755,6 +755,7 @@ async function updateGlobalMetrics() {
 
         // Usar dados do Firebase se disponíveis
         if (ecoData) {
+            console.log('📊 Firebase economic data:', ecoData.economy);
             if (ecoData.economy?.totalSupply) totalSupply = BigInt(ecoData.economy.totalSupply);
             if (ecoData.economy?.totalPStake) totalPStake = BigInt(ecoData.economy.totalPStake);
             if (ecoData.economy?.totalTVL) totalTVL = BigInt(ecoData.economy.totalTVL);
@@ -764,18 +765,23 @@ async function updateGlobalMetrics() {
             if (ecoData.stats?.notarizedDocuments) notaryCount = ecoData.stats.notarizedDocuments;
         }
 
-        // ✅ Fallback: Se Firebase não tiver os dados, buscar da blockchain
-        if (totalSupply === 0n && State.bkcTokenContractPublic) {
-            console.log('📊 Fetching metrics from blockchain (Firebase fallback)...');
-            const [supply, pStake] = await Promise.all([
-                safeContractCall(State.bkcTokenContractPublic, 'totalSupply', [], 0n),
-                safeContractCall(State.delegationManagerContractPublic, 'totalNetworkPStake', [], 0n)
-            ]);
-            totalSupply = supply;
-            totalPStake = pStake;
+        // ✅ V8.2: Fallbacks INDIVIDUAIS para dados que não vieram do Firebase
+        if (State.bkcTokenContractPublic) {
+            // Fallback: totalSupply
+            if (totalSupply === 0n) {
+                console.log('📊 Fetching totalSupply from blockchain (fallback)...');
+                totalSupply = await safeContractCall(State.bkcTokenContractPublic, 'totalSupply', [], 0n);
+            }
+            
+            // Fallback: totalPStake
+            if (totalPStake === 0n && State.delegationManagerContractPublic) {
+                console.log('📊 Fetching totalPStake from blockchain (fallback)...');
+                totalPStake = await safeContractCall(State.delegationManagerContractPublic, 'totalNetworkPStake', [], 0n);
+            }
 
-            // Calcular TVL apenas se não veio do Firebase
+            // Fallback: TVL (calcular se não veio do Firebase)
             if (totalTVL === 0n) {
+                console.log('📊 Calculating TVL from blockchain (fallback)...');
                 const contractAddresses = [
                     addresses.delegationManager,
                     addresses.fortunePool,
@@ -800,7 +806,7 @@ async function updateGlobalMetrics() {
                 balances.forEach(bal => { totalTVL += bal; });
 
                 // Fortune Pool balance
-                if (addresses.fortunePool) {
+                if (addresses.fortunePool && fortunePoolBalance === 0n) {
                     const fortuneIdx = contractAddresses.indexOf(addresses.fortunePool);
                     if (fortuneIdx >= 0) fortunePoolBalance = balances[fortuneIdx];
                 }
