@@ -1,5 +1,5 @@
 // js/pages/FortunePool.js
-// ✅ PRODUCTION V13.1 - Firebase History + Share to Earn + Auto Reset
+// ✅ PRODUCTION V13.3 - Improved Share Modal + Multi-language + Better Wager UX
 
 import { State } from '../state.js';
 import { loadUserData, API_ENDPOINTS } from '../modules/data.js';
@@ -14,60 +14,6 @@ import * as db from '../modules/firebase-auth-service.js';
 const EXPLORER_TX = "https://sepolia.arbiscan.io/tx/";
 const TIGER_IMAGE = "./assets/fortune.png";
 const SHARE_POINTS = 1000; // Pontos por compartilhar
-
-// ✅ V13.2: Copy viral melhorada para compartilhamento
-const SHARE_COPY = {
-    win: (prize, multiplier) => `🐯🔥 Acabei de GANHAR ${prize.toFixed(2)} BKC (${multiplier}x) no Fortune Pool!
-
-Já ouviu falar na Backcoin? 🚀
-
-Um projeto feito PARA a comunidade, PELA comunidade!
-
-✨ 35% dos tokens distribuídos via Airdrop
-🌍 Utilidades reais com impacto imediato
-🎰 Games on-chain que realmente pagam
-
-Venha fazer parte da revolução! 💎
-
-👉 https://backcoin.org
-
-#Backcoin #BKC #Web3 #Airdrop #CryptoGaming`,
-
-    lose: () => `🐯 Acabei de jogar no Fortune Pool da @BackcoinBKC!
-
-Não foi dessa vez, mas a próxima rodada pode ser ÉPICA! 🎰
-
-Já ouviu falar na Backcoin? 🚀
-
-Um projeto feito PARA a comunidade, PELA comunidade!
-
-✨ 35% dos tokens distribuídos via Airdrop
-🌍 Utilidades reais com impacto imediato
-🎰 Games on-chain que realmente pagam
-
-Venha fazer parte da revolução! 💎
-
-👉 https://backcoin.org
-
-#Backcoin #BKC #Web3 #Airdrop`,
-
-    generic: () => `🐯 Já ouviu falar na Backcoin? 🚀
-
-Um projeto criado PARA a comunidade, PELA comunidade!
-
-🎁 35% dos tokens distribuídos via Airdrop
-🌍 Utilidades reais com impacto imediato no mundo
-🎰 Fortune Pool - Games on-chain que pagam de verdade
-📜 Notarização descentralizada de documentos
-💎 NFTs com utilidade real
-
-Não é mais um projeto de promessas vazias.
-É a revolução acontecendo AGORA! 🔥
-
-Venha fazer parte! 👉 https://backcoin.org
-
-#Backcoin #BKC #Web3 #Airdrop #CryptoGaming #DeFi`
-};
 
 const TIERS = [
     { 
@@ -1641,113 +1587,243 @@ export function cleanup() {
     Game.guesses = [2, 5, 50];
 }
 
-// ✅ V13.1: Função para compartilhar resultado
+// ✅ V13.3: Função para compartilhar resultado - Modal redesenhado
 async function showShareModal(isWin, prize, multiplier) {
-    const shareText = isWin 
-        ? SHARE_COPY.win(prize, multiplier)
-        : SHARE_COPY.lose();
+    // Textos em 3 idiomas
+    const SHARE_TEXTS = {
+        pt: {
+            win: (p, m) => `🐯🔥 Acabei de GANHAR ${p.toFixed(2)} BKC (${m}x) no Fortune Pool!
+
+Já ouviu falar na @BackcoinOrg? 🚀
+
+Um projeto feito PARA a comunidade, PELA comunidade!
+
+✨ 35% dos tokens via Airdrop
+🌍 Utilidades reais com impacto imediato
+🎰 Games on-chain que pagam de verdade
+
+Venha fazer parte da revolução! 💎
+
+👉 https://backcoin.org
+
+#Backcoin #BKC #Web3 #Airdrop`,
+            lose: () => `🐯 Joguei no Fortune Pool da @BackcoinOrg!
+
+Não foi dessa vez, mas a próxima pode ser ÉPICA! 🎰
+
+Já conhece a Backcoin? 🚀
+
+✨ 35% dos tokens via Airdrop
+🌍 Projeto feito pela comunidade
+🎰 Games on-chain que pagam
+
+Faça parte! 👉 https://backcoin.org
+
+#Backcoin #BKC #Web3 #Airdrop`
+        },
+        en: {
+            win: (p, m) => `🐯🔥 Just WON ${p.toFixed(2)} BKC (${m}x) on Fortune Pool!
+
+Have you heard of @BackcoinOrg? 🚀
+
+A project made FOR the community, BY the community!
+
+✨ 35% of tokens via Airdrop
+🌍 Real utilities with immediate impact
+🎰 On-chain games that actually pay
+
+Join the revolution! 💎
+
+👉 https://backcoin.org
+
+#Backcoin #BKC #Web3 #Airdrop`,
+            lose: () => `🐯 Just played Fortune Pool on @BackcoinOrg!
+
+Not this time, but the next spin could be HUGE! 🎰
+
+Have you heard of Backcoin? 🚀
+
+✨ 35% of tokens via Airdrop
+🌍 Community-driven project
+🎰 On-chain games that pay
+
+Join us! 👉 https://backcoin.org
+
+#Backcoin #BKC #Web3 #Airdrop`
+        },
+        es: {
+            win: (p, m) => `🐯🔥 ¡Acabo de GANAR ${p.toFixed(2)} BKC (${m}x) en Fortune Pool!
+
+¿Conoces @BackcoinOrg? 🚀
+
+¡Un proyecto hecho PARA la comunidad, POR la comunidad!
+
+✨ 35% de tokens vía Airdrop
+🌍 Utilidades reales con impacto inmediato
+🎰 Juegos on-chain que realmente pagan
+
+¡Únete a la revolución! 💎
+
+👉 https://backcoin.org
+
+#Backcoin #BKC #Web3 #Airdrop`,
+            lose: () => `🐯 ¡Jugué en Fortune Pool de @BackcoinOrg!
+
+No fue esta vez, ¡pero la próxima puede ser ÉPICA! 🎰
+
+¿Conoces Backcoin? 🚀
+
+✨ 35% de tokens vía Airdrop
+🌍 Proyecto de la comunidad
+🎰 Juegos on-chain que pagan
+
+¡Únete! 👉 https://backcoin.org
+
+#Backcoin #BKC #Web3 #Airdrop`
+        }
+    };
     
-    const encodedText = encodeURIComponent(shareText);
+    let currentLang = 'pt';
+    
+    const getShareText = () => {
+        return isWin 
+            ? SHARE_TEXTS[currentLang].win(prize, multiplier)
+            : SHARE_TEXTS[currentLang].lose();
+    };
+    
+    const updateModalText = () => {
+        const textEl = document.getElementById('share-text-preview');
+        if (textEl) textEl.textContent = getShareText();
+        
+        // Update button states
+        document.querySelectorAll('.lang-btn').forEach(btn => {
+            const isActive = btn.dataset.lang === currentLang;
+            btn.classList.toggle('bg-amber-500', isActive);
+            btn.classList.toggle('text-black', isActive);
+            btn.classList.toggle('bg-zinc-700', !isActive);
+            btn.classList.toggle('text-zinc-300', !isActive);
+        });
+    };
+    
     const shareUrl = 'https://backcoin.org';
-    const encodedUrl = encodeURIComponent(shareUrl);
     
     const modalContent = `
         <div class="text-center">
-            <!-- Header -->
-            <div class="mb-4">
-                <span class="text-4xl">${isWin ? '🏆🐯' : '🐯'}</span>
-                <h3 class="text-xl font-bold text-white mt-2">Share & Earn ${SHARE_POINTS} Points!</h3>
-                <p class="text-zinc-400 text-sm mt-1">Share your ${isWin ? 'WIN' : 'game'} on social media</p>
+            <!-- Header com imagem do Fortune -->
+            <img src="./assets/fortune.png" class="w-20 h-20 mx-auto mb-3" alt="Fortune Tiger" onerror="this.innerHTML='🐯'">
+            <h3 class="text-lg font-bold text-white mb-1">Share & Earn!</h3>
+            <p class="text-amber-400 text-sm font-medium mb-4">+${SHARE_POINTS} Airdrop Points</p>
+            
+            <!-- Language Selector -->
+            <div class="flex justify-center gap-2 mb-4">
+                <button class="lang-btn px-4 py-2 rounded-lg text-sm font-bold transition-all bg-amber-500 text-black" data-lang="pt">🇧🇷 PT</button>
+                <button class="lang-btn px-4 py-2 rounded-lg text-sm font-bold transition-all bg-zinc-700 text-zinc-300" data-lang="en">🇺🇸 EN</button>
+                <button class="lang-btn px-4 py-2 rounded-lg text-sm font-bold transition-all bg-zinc-700 text-zinc-300" data-lang="es">🇪🇸 ES</button>
             </div>
             
-            <!-- Points Badge -->
-            <div class="bg-gradient-to-r from-amber-500/20 to-orange-500/20 border border-amber-500/50 rounded-xl p-3 mb-4">
-                <p class="text-amber-400 text-sm font-bold">
-                    <i class="fa-solid fa-gift mr-1"></i>
-                    Earn +${SHARE_POINTS} Airdrop Points
-                </p>
-                <p class="text-zinc-500 text-[10px] mt-1">for sharing on any platform</p>
+            <!-- Text Preview -->
+            <div class="bg-zinc-800/80 border border-zinc-700 rounded-xl p-3 mb-4 text-left max-h-40 overflow-y-auto">
+                <p id="share-text-preview" class="text-zinc-300 text-xs whitespace-pre-wrap">${getShareText()}</p>
             </div>
             
-            <!-- Share Text Preview -->
-            <div class="bg-zinc-800/80 border border-zinc-700 rounded-xl p-3 mb-4 text-left max-h-32 overflow-y-auto">
-                <p class="text-zinc-300 text-xs whitespace-pre-wrap">${shareText}</p>
+            <!-- Social Buttons - Clica e já abre -->
+            <div class="grid grid-cols-4 gap-2 mb-3">
+                <button id="share-twitter" class="share-btn flex flex-col items-center justify-center p-3 bg-zinc-800 hover:bg-[#1DA1F2]/30 border border-zinc-700 hover:border-[#1DA1F2]/50 rounded-xl transition-all">
+                    <i class="fa-brands fa-x-twitter text-xl text-white"></i>
+                    <span class="text-[9px] text-zinc-500 mt-1">Twitter</span>
+                </button>
+                <button id="share-telegram" class="share-btn flex flex-col items-center justify-center p-3 bg-zinc-800 hover:bg-[#0088cc]/30 border border-zinc-700 hover:border-[#0088cc]/50 rounded-xl transition-all">
+                    <i class="fa-brands fa-telegram text-xl text-[#0088cc]"></i>
+                    <span class="text-[9px] text-zinc-500 mt-1">Telegram</span>
+                </button>
+                <button id="share-instagram" class="share-btn flex flex-col items-center justify-center p-3 bg-zinc-800 hover:bg-[#E4405F]/30 border border-zinc-700 hover:border-[#E4405F]/50 rounded-xl transition-all">
+                    <i class="fa-brands fa-instagram text-xl text-[#E4405F]"></i>
+                    <span class="text-[9px] text-zinc-500 mt-1">Instagram</span>
+                </button>
+                <button id="share-whatsapp" class="share-btn flex flex-col items-center justify-center p-3 bg-zinc-800 hover:bg-[#25D366]/30 border border-zinc-700 hover:border-[#25D366]/50 rounded-xl transition-all">
+                    <i class="fa-brands fa-whatsapp text-xl text-[#25D366]"></i>
+                    <span class="text-[9px] text-zinc-500 mt-1">WhatsApp</span>
+                </button>
             </div>
             
             <!-- Copy Button -->
-            <button id="btn-copy-share" class="w-full py-3 bg-zinc-700 hover:bg-zinc-600 text-white rounded-xl font-medium text-sm mb-4 transition-colors">
+            <button id="btn-copy-share" class="w-full py-2.5 bg-zinc-700 hover:bg-zinc-600 text-white rounded-xl text-sm transition-colors mb-2">
                 <i class="fa-regular fa-copy mr-2"></i>Copy Text
             </button>
             
-            <!-- Social Buttons -->
-            <div class="grid grid-cols-4 gap-2 mb-4">
-                <a href="https://twitter.com/intent/tweet?text=${encodedText}" target="_blank" 
-                   id="share-twitter"
-                   class="share-btn flex flex-col items-center justify-center p-3 bg-[#1DA1F2]/20 hover:bg-[#1DA1F2]/30 border border-[#1DA1F2]/50 rounded-xl transition-colors">
-                    <i class="fa-brands fa-x-twitter text-xl text-white"></i>
-                    <span class="text-[10px] text-zinc-400 mt-1">Twitter</span>
-                </a>
-                <a href="https://t.me/share/url?url=${encodedUrl}&text=${encodedText}" target="_blank"
-                   id="share-telegram"
-                   class="share-btn flex flex-col items-center justify-center p-3 bg-[#0088cc]/20 hover:bg-[#0088cc]/30 border border-[#0088cc]/50 rounded-xl transition-colors">
-                    <i class="fa-brands fa-telegram text-xl text-[#0088cc]"></i>
-                    <span class="text-[10px] text-zinc-400 mt-1">Telegram</span>
-                </a>
-                <a href="https://www.facebook.com/sharer/sharer.php?quote=${encodedText}" target="_blank"
-                   id="share-facebook"
-                   class="share-btn flex flex-col items-center justify-center p-3 bg-[#1877F2]/20 hover:bg-[#1877F2]/30 border border-[#1877F2]/50 rounded-xl transition-colors">
-                    <i class="fa-brands fa-facebook text-xl text-[#1877F2]"></i>
-                    <span class="text-[10px] text-zinc-400 mt-1">Facebook</span>
-                </a>
-                <a href="https://wa.me/?text=${encodedText}" target="_blank"
-                   id="share-whatsapp"
-                   class="share-btn flex flex-col items-center justify-center p-3 bg-[#25D366]/20 hover:bg-[#25D366]/30 border border-[#25D366]/50 rounded-xl transition-colors">
-                    <i class="fa-brands fa-whatsapp text-xl text-[#25D366]"></i>
-                    <span class="text-[10px] text-zinc-400 mt-1">WhatsApp</span>
-                </a>
-            </div>
-            
-            <!-- Close Button -->
-            <button id="btn-close-share" class="w-full py-3 bg-zinc-800 hover:bg-zinc-700 text-zinc-400 rounded-xl text-sm transition-colors">
+            <!-- Close -->
+            <button id="btn-close-share" class="w-full py-2 text-zinc-500 hover:text-zinc-300 text-xs transition-colors">
                 Maybe Later
             </button>
         </div>
     `;
     
-    openModal(modalContent, 'max-w-sm');
+    openModal(modalContent, 'max-w-xs');
     
-    // Event Listeners
+    // Language buttons
+    document.querySelectorAll('.lang-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            currentLang = btn.dataset.lang;
+            updateModalText();
+        });
+    });
+    
+    // Copy button
     document.getElementById('btn-copy-share')?.addEventListener('click', async () => {
         try {
-            await navigator.clipboard.writeText(shareText);
-            showToast('📋 Copied to clipboard!', 'success');
+            await navigator.clipboard.writeText(getShareText());
+            showToast('📋 Copied!', 'success');
             const btn = document.getElementById('btn-copy-share');
-            if (btn) {
-                btn.innerHTML = '<i class="fa-solid fa-check mr-2"></i>Copied!';
-                btn.classList.add('bg-green-600', 'hover:bg-green-500');
-            }
+            if (btn) btn.innerHTML = '<i class="fa-solid fa-check mr-2"></i>Copied!';
         } catch (e) {
             showToast('Failed to copy', 'error');
         }
     });
     
+    // Close button
     document.getElementById('btn-close-share')?.addEventListener('click', closeModal);
     
-    // Track share clicks for airdrop points
-    const shareButtons = document.querySelectorAll('.share-btn');
-    shareButtons.forEach(btn => {
-        btn.addEventListener('click', async () => {
-            try {
-                // Registrar pontos de compartilhamento
-                if (typeof db.trackPlatformUsage === 'function') {
-                    await db.trackPlatformUsage('shareFortuneResult', null);
-                }
-                showToast(`🎉 +${SHARE_POINTS} Airdrop Points!`, 'success');
-                closeModal();
-            } catch (e) {
-                console.log('Share tracking error:', e);
+    // Social share handlers - clica e abre direto
+    const trackAndShare = async (platform, url) => {
+        try {
+            if (typeof db.trackPlatformUsage === 'function') {
+                await db.trackPlatformUsage('shareFortuneResult', null);
             }
-        });
+            showToast(`🎉 +${SHARE_POINTS} Points!`, 'success');
+        } catch (e) {
+            console.log('Share tracking:', e);
+        }
+        window.open(url, '_blank');
+        closeModal();
+    };
+    
+    document.getElementById('share-twitter')?.addEventListener('click', () => {
+        const text = getShareText();
+        trackAndShare('twitter', `https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}`);
+    });
+    
+    document.getElementById('share-telegram')?.addEventListener('click', () => {
+        const text = getShareText();
+        trackAndShare('telegram', `https://t.me/share/url?url=${encodeURIComponent(shareUrl)}&text=${encodeURIComponent(text)}`);
+    });
+    
+    document.getElementById('share-instagram')?.addEventListener('click', async () => {
+        // Instagram não tem share direto, copia o texto e abre o perfil
+        await navigator.clipboard.writeText(getShareText());
+        showToast('📋 Text copied! Opening Instagram...', 'success');
+        try {
+            if (typeof db.trackPlatformUsage === 'function') {
+                await db.trackPlatformUsage('shareFortuneResult', null);
+            }
+            showToast(`🎉 +${SHARE_POINTS} Points!`, 'success');
+        } catch (e) {}
+        window.open('https://instagram.com/backcoin.bkc', '_blank');
+        closeModal();
+    });
+    
+    document.getElementById('share-whatsapp')?.addEventListener('click', () => {
+        const text = getShareText();
+        trackAndShare('whatsapp', `https://wa.me/?text=${encodeURIComponent(text)}`);
     });
 }
 
