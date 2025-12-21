@@ -1,5 +1,5 @@
 // js/modules/transactions.js
-// ✅ PRODUCTION V13.1 - Platform Usage Points + Improved Tracking with Retry
+// ✅ PRODUCTION V13.2 - Improved Gas Error Messages + Faucet Link
 
 const ethers = window.ethers;
 
@@ -9,6 +9,16 @@ import { addresses, nftPoolABI, rentalManagerABI, decentralizedNotaryABI, action
 import { formatBigNumber } from '../utils.js';
 import { loadUserData, getHighestBoosterBoostFromAPI, loadRentalListings, loadUserDelegations } from './data.js';
 import { recordPlatformUsage } from './firebase-auth-service.js';
+
+// ====================================================================
+// CONFIGURATION
+// ====================================================================
+
+// Arbitrum Sepolia Faucet Links
+const FAUCET_LINKS = {
+    arbitrumSepolia: 'https://www.alchemy.com/faucets/arbitrum-sepolia',
+    alternativeFaucet: 'https://faucet.quicknode.com/arbitrum/sepolia'
+};
 
 // ====================================================================
 // CONFIGURATION
@@ -136,9 +146,11 @@ function formatError(error) {
     // User cancelled
     if (msg.includes('user rejected') || msg.includes('User denied')) return 'Transaction cancelled by user';
     
-    // Gas/ETH errors
-    if (msg.includes('insufficient funds')) return 'Insufficient ETH for gas';
-    if (msg.includes('exceeds balance')) return 'Insufficient token balance';
+    // Gas/ETH errors - MENSAGENS MAIS CLARAS
+    if (msg.includes('insufficient funds') || msg.includes('exceeds the balance')) {
+        return 'INSUFFICIENT_GAS'; // Código especial para tratamento
+    }
+    if (msg.includes('exceeds balance') && !msg.includes('gas')) return 'Insufficient token balance';
     
     // Contract specific errors
     if (msg.includes('0xfb550858') || msg.includes('InsufficientOracleFee')) return 'Insufficient oracle fee (ETH)';
@@ -161,6 +173,90 @@ function formatError(error) {
     if (msg.includes('network') || msg.includes('timeout')) return 'Network timeout - please try again';
     
     return msg.slice(0, 100);
+}
+
+/**
+ * Mostra erro de falta de gas com link para faucet
+ */
+function showInsufficientGasError() {
+    // Mostra toast com mensagem clara
+    showToast("⛽ You're out of ETH for gas fees!", "error");
+    
+    // Mostra modal com instruções e link
+    setTimeout(() => {
+        showGasFaucetModal();
+    }, 500);
+}
+
+/**
+ * Modal com instruções para obter gas
+ */
+function showGasFaucetModal() {
+    const existingModal = document.getElementById('gas-faucet-modal');
+    if (existingModal) existingModal.remove();
+    
+    const modal = document.createElement('div');
+    modal.id = 'gas-faucet-modal';
+    modal.className = 'fixed inset-0 z-[9999] flex items-center justify-center p-4';
+    modal.innerHTML = `
+        <div class="absolute inset-0 bg-black/80 backdrop-blur-sm" onclick="this.parentElement.remove()"></div>
+        <div class="relative bg-zinc-900 border border-red-500/50 rounded-2xl p-6 max-w-md w-full shadow-2xl animate-fade-in">
+            <button onclick="this.closest('#gas-faucet-modal').remove()" class="absolute top-4 right-4 text-zinc-400 hover:text-white">
+                <i class="fa-solid fa-times text-xl"></i>
+            </button>
+            
+            <div class="text-center mb-6">
+                <div class="w-16 h-16 bg-red-500/20 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <i class="fa-solid fa-gas-pump text-3xl text-red-400"></i>
+                </div>
+                <h3 class="text-xl font-bold text-white mb-2">Out of Gas!</h3>
+                <p class="text-zinc-400 text-sm">You need ETH on Arbitrum Sepolia to pay for transaction fees (gas).</p>
+            </div>
+            
+            <div class="space-y-3 mb-6">
+                <a href="${FAUCET_LINKS.arbitrumSepolia}" target="_blank" rel="noopener noreferrer"
+                   class="flex items-center justify-between w-full bg-blue-600 hover:bg-blue-500 text-white font-semibold py-3 px-4 rounded-xl transition-colors">
+                    <span><i class="fa-solid fa-faucet mr-2"></i>Alchemy Faucet</span>
+                    <i class="fa-solid fa-external-link"></i>
+                </a>
+                
+                <a href="${FAUCET_LINKS.alternativeFaucet}" target="_blank" rel="noopener noreferrer"
+                   class="flex items-center justify-between w-full bg-zinc-700 hover:bg-zinc-600 text-white font-semibold py-3 px-4 rounded-xl transition-colors">
+                    <span><i class="fa-solid fa-faucet mr-2"></i>QuickNode Faucet</span>
+                    <i class="fa-solid fa-external-link"></i>
+                </a>
+            </div>
+            
+            <div class="bg-amber-500/10 border border-amber-500/30 rounded-xl p-4">
+                <p class="text-amber-400 text-xs">
+                    <i class="fa-solid fa-lightbulb mr-1"></i>
+                    <strong>Tip:</strong> Request testnet ETH from any faucet above. It usually takes 1-2 minutes to arrive.
+                </p>
+            </div>
+            
+            <button onclick="this.closest('#gas-faucet-modal').remove()" 
+                    class="w-full mt-4 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-medium py-2.5 rounded-xl transition-colors">
+                Close
+            </button>
+        </div>
+    `;
+    
+    document.body.appendChild(modal);
+}
+
+/**
+ * Processa erro e mostra mensagem apropriada
+ */
+function handleTransactionError(error) {
+    const formattedError = formatError(error);
+    
+    if (formattedError === 'INSUFFICIENT_GAS') {
+        showInsufficientGasError();
+        return 'Insufficient ETH for gas';
+    }
+    
+    showToast(formattedError, "error");
+    return formattedError;
 }
 
 function isRetryableError(error) {
@@ -257,7 +353,7 @@ async function robustApprove(tokenAddress, spenderAddress, amount, signer, retri
                 continue;
             }
             
-            showToast(formatError(e), "error");
+            handleTransactionError(e);
             return false;
         }
     }
@@ -307,7 +403,7 @@ async function executeWithRetry(txFunction, options = {}) {
                 continue;
             }
             
-            showToast(formatError(e), "error");
+            handleTransactionError(e);
             return { success: false, error: e };
         }
     }
@@ -380,7 +476,7 @@ export async function executeDelegation(totalAmount, durationSeconds, boosterIdT
         
     } catch (e) {
         console.error("Delegation error:", e);
-        showToast(formatError(e), "error");
+        handleTransactionError(e);
         return false;
     } finally {
         if (btnElement) {
@@ -449,7 +545,7 @@ export async function executeUnstake(index, boosterIdToSend, btnElement) {
         
     } catch (e) {
         console.error("Unstake error:", e);
-        showToast(formatError(e), "error");
+        handleTransactionError(e);
         return false;
     } finally {
         if (btnElement) {
@@ -513,7 +609,7 @@ export async function executeForceUnstake(index, boosterIdToSend, btnElement) {
         
     } catch (e) {
         console.error("Force unstake error:", e);
-        showToast(formatError(e), "error");
+        handleTransactionError(e);
         return false;
     } finally {
         if (btnElement) {
@@ -569,7 +665,7 @@ export async function executeClaimRewards(boosterIdToSend, btnElement) {
         
     } catch (e) {
         console.error("Claim rewards error:", e);
-        showToast(formatError(e), "error");
+        handleTransactionError(e);
         return false;
     } finally {
         if (btnElement) {
@@ -639,7 +735,7 @@ export async function executeUniversalClaim(stakingRewards, minerRewards, booste
         
     } catch (e) {
         console.error("Claim error:", e);
-        showToast(formatError(e), "error");
+        handleTransactionError(e);
         return false;
     } finally {
         if (btnElement) {
@@ -713,7 +809,7 @@ export async function executeBuyNFT(poolAddress, priceWithTax, btnElement) {
         
     } catch (e) {
         console.error("Buy NFT error:", e);
-        showToast(formatError(e), "error");
+        handleTransactionError(e);
         return { success: false };
     } finally {
         if (btnElement) {
@@ -812,7 +908,7 @@ export async function executeSellNFT(poolAddress, tokenId, minPayout, btnElement
         
     } catch (e) {
         console.error("Sell NFT error:", e);
-        showToast(formatError(e), "error");
+        handleTransactionError(e);
         return { success: false };
     } finally {
         if (btnElement) {
@@ -907,7 +1003,7 @@ export async function executeListNFT(params, btnElement) {
         
     } catch (e) {
         console.error("List NFT error:", e);
-        showToast(formatError(e), "error");
+        handleTransactionError(e);
         return { success: false };
     } finally {
         if (btnElement) {
@@ -990,7 +1086,7 @@ export async function executeRentNFT(params, btnElement) {
         
     } catch (e) {
         console.error("Rent NFT error:", e);
-        showToast(formatError(e), "error");
+        handleTransactionError(e);
         return { success: false };
     } finally {
         if (btnElement) {
@@ -1039,7 +1135,7 @@ export async function executeWithdrawNFT(tokenId, btnElement) {
         
     } catch (e) {
         console.error("Withdraw NFT error:", e);
-        showToast(formatError(e), "error");
+        handleTransactionError(e);
         return { success: false };
     } finally {
         if (btnElement) {
@@ -1212,7 +1308,7 @@ export async function executeFortuneGame(wager, guesses, isCumulative, btnElemen
         } else if (errorMsg.includes('InsufficientBalance') || errorMsg.includes('insufficient')) {
             showToast("Insufficient BKC balance", "error");
         } else {
-            showToast(formatError(e), "error");
+            handleTransactionError(e);
         }
         return { success: false };
         
@@ -1307,7 +1403,7 @@ export async function executeNotarize(params, submitButton) {
         
     } catch (e) {
         console.error("Notarize error:", e);
-        showToast(formatError(e), "error");
+        handleTransactionError(e);
         return false;
     } finally {
         if (submitButton) {
