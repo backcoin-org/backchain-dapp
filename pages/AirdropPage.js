@@ -1213,8 +1213,9 @@ function openConfirmationModal(submission) {
             
             <!-- Botões -->
             <div class="flex gap-3">
-                <button id="cancelConfirmBtn" class="flex-1 bg-zinc-700 hover:bg-zinc-600 text-white py-3 rounded-xl font-medium text-sm transition-colors">
-                    <i class="fa-solid fa-arrow-left mr-1"></i> Go Back
+                <button id="deletePostBtn" data-submission-id="${submission.submissionId}" 
+                        class="flex-1 bg-red-900/50 hover:bg-red-800 text-red-300 hover:text-white py-3 rounded-xl font-medium text-sm transition-colors border border-red-500/30">
+                    <i class="fa-solid fa-trash mr-1"></i> Delete Post
                 </button>
                 <button id="finalConfirmBtn" data-submission-id="${submission.submissionId}" 
                         class="flex-1 bg-green-600/50 text-green-200 py-3 rounded-xl font-bold text-sm cursor-not-allowed transition-colors" 
@@ -1232,8 +1233,26 @@ function openConfirmationModal(submission) {
     `;
     openModal(modalContent, 'max-w-md'); 
     
-    // Event listeners
-    document.getElementById('cancelConfirmBtn')?.addEventListener('click', closeModal);
+    // Event listener para deletar post
+    document.getElementById('deletePostBtn')?.addEventListener('click', async (e) => {
+        const btn = e.currentTarget;
+        const submissionId = btn.dataset.submissionId;
+        
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin mr-1"></i> Deleting...';
+        
+        try {
+            await db.deleteSubmission(submissionId);
+            showToast("Post deleted. No penalty applied.", "info");
+            closeModal();
+            await loadAirdropData();
+            updateContent();
+        } catch (err) {
+            showToast(err.message, "error");
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fa-solid fa-trash mr-1"></i> Delete Post';
+        }
+    });
     
     const checkbox = document.getElementById('confirmCheckbox');
     const confirmBtn = document.getElementById('finalConfirmBtn');
