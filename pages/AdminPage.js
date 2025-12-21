@@ -13,7 +13,7 @@ import * as db from '../modules/firebase-auth-service.js';
 // ADMIN CONFIGURATION
 // ============================================
 const ADMIN_WALLET = "0x8e0FF08ebEE07A48bFaF95c1846d33ba694bd8c3";
-const ADMIN_PASSWORD = "BKC@dmin2025!"; // Senha do admin - MUDE ISSO!
+const ADMIN_PASSWORD = "Meta2020@"; // Senha do admin - MUDE ISSO!
 const ADMIN_SESSION_KEY = "bkc_admin_authenticated";
 
 // Verifica se admin já está autenticado na sessão
