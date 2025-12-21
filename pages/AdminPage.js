@@ -1,5 +1,5 @@
 // pages/AdminPage.js
-// ✅ VERSION V2.1: Fixed Firebase Auth before loading data
+// ✅ VERSION V2.2: Password Protection + Firebase Auth Fix
 // --- NOVO ---
 // Importa o ethers e os endereços dos contratos
 const ethers = window.ethers;
@@ -8,7 +8,29 @@ import { showToast } from '../ui-feedback.js';
 import { renderPaginatedList, renderPaginationControls, renderNoData, formatAddress, renderLoading, renderError } from '../utils.js';
 import { State } from '../state.js';
 import * as db from '../modules/firebase-auth-service.js';
+
+// ============================================
+// ADMIN CONFIGURATION
+// ============================================
 const ADMIN_WALLET = "0x8e0FF08ebEE07A48bFaF95c1846d33ba694bd8c3";
+const ADMIN_PASSWORD = "BKC@dmin2025!"; // Senha do admin - MUDE ISSO!
+const ADMIN_SESSION_KEY = "bkc_admin_authenticated";
+
+// Verifica se admin já está autenticado na sessão
+function isAdminSessionValid() {
+    const session = sessionStorage.getItem(ADMIN_SESSION_KEY);
+    return session === "true";
+}
+
+// Marca sessão como autenticada
+function setAdminSession() {
+    sessionStorage.setItem(ADMIN_SESSION_KEY, "true");
+}
+
+// Remove sessão
+function clearAdminSession() {
+    sessionStorage.removeItem(ADMIN_SESSION_KEY);
+}
 
 // Mapeamento de Status para UI (Cores Tailwind e Ícones Font Awesome) - Reutilizado do AirdropPage
 const statusUI = {
@@ -75,12 +97,10 @@ const loadAdminData = async () => {
 
 
     try {
-        // ✅ CORREÇÃO: Garante autenticação Firebase ANTES de carregar dados
+        // ✅ Garante autenticação Firebase ANTES de carregar dados
         if (State.userAddress) {
             await db.signIn(State.userAddress);
             console.log("✅ Firebase Auth: Admin authenticated");
-        } else {
-            throw new Error("No wallet connected");
         }
         
         const [submissions, tasks, publicData, users] = await Promise.all([
@@ -1683,18 +1703,88 @@ export const AdminPage = {
         const adminContainer = document.getElementById('admin');
         if (!adminContainer) return;
 
+        // Verifica se a carteira é admin
         if (!State.isConnected || !State.userAddress || State.userAddress.toLowerCase() !== ADMIN_WALLET.toLowerCase()) {
             adminContainer.innerHTML = `<div class="text-center text-red-400 p-8 bg-sidebar border border-red-500/50 rounded-lg">Access Denied. This page is restricted to administrators.</div>`;
             return;
         }
 
-        adminContainer.innerHTML = `<div id="admin-content-wrapper"></div>`;
-        loadAdminData(); // Esta função agora carrega os usuários também
+        // Verifica se já está autenticado na sessão
+        if (isAdminSessionValid()) {
+            adminContainer.innerHTML = `<div id="admin-content-wrapper"></div>`;
+            loadAdminData();
+            return;
+        }
+
+        // Mostra tela de login com senha
+        adminContainer.innerHTML = `
+            <div class="flex items-center justify-center min-h-[60vh]">
+                <div class="bg-sidebar border border-yellow-500/30 rounded-2xl p-8 max-w-md w-full shadow-xl">
+                    <div class="text-center mb-6">
+                        <div class="w-16 h-16 bg-yellow-500/20 rounded-full flex items-center justify-center mx-auto mb-4">
+                            <i class="fa-solid fa-shield-halved text-3xl text-yellow-400"></i>
+                        </div>
+                        <h2 class="text-2xl font-bold text-white mb-2">Admin Access</h2>
+                        <p class="text-zinc-400 text-sm">Enter the admin password to continue</p>
+                    </div>
+                    
+                    <div class="space-y-4">
+                        <div>
+                            <label class="block text-zinc-400 text-sm mb-2">Password</label>
+                            <input type="password" id="admin-password-input" 
+                                   class="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-3 text-white focus:border-yellow-500 focus:outline-none"
+                                   placeholder="Enter admin password"
+                                   onkeypress="if(event.key === 'Enter') document.getElementById('admin-login-btn').click()">
+                        </div>
+                        
+                        <button id="admin-login-btn"
+                                class="w-full bg-yellow-500 hover:bg-yellow-400 text-black font-bold py-3 px-4 rounded-xl transition-colors">
+                            <i class="fa-solid fa-unlock mr-2"></i>Access Admin Panel
+                        </button>
+                        
+                        <p id="admin-login-error" class="text-red-400 text-sm text-center hidden">
+                            <i class="fa-solid fa-exclamation-circle mr-1"></i>Incorrect password
+                        </p>
+                    </div>
+                    
+                    <div class="mt-6 pt-4 border-t border-zinc-800">
+                        <p class="text-zinc-500 text-xs text-center">
+                            <i class="fa-solid fa-wallet mr-1"></i>Connected: ${formatAddress(State.userAddress)}
+                        </p>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        // Event listener para o botão de login
+        document.getElementById('admin-login-btn').addEventListener('click', () => {
+            const passwordInput = document.getElementById('admin-password-input');
+            const errorMsg = document.getElementById('admin-login-error');
+            
+            if (passwordInput.value === ADMIN_PASSWORD) {
+                setAdminSession();
+                showToast("✅ Admin access granted!", "success");
+                adminContainer.innerHTML = `<div id="admin-content-wrapper"></div>`;
+                loadAdminData();
+            } else {
+                errorMsg.classList.remove('hidden');
+                passwordInput.value = '';
+                passwordInput.focus();
+                
+                // Esconde erro após 3 segundos
+                setTimeout(() => errorMsg.classList.add('hidden'), 3000);
+            }
+        });
+
+        // Foca no input
+        setTimeout(() => {
+            document.getElementById('admin-password-input')?.focus();
+        }, 100);
     },
 
      refreshData() {
          const adminContainer = document.getElementById('admin');
-         if (adminContainer && !adminContainer.classList.contains('hidden')) {
+         if (adminContainer && !adminContainer.classList.contains('hidden') && isAdminSessionValid()) {
              console.log("Refreshing Admin Page data...");
              loadAdminData();
              
