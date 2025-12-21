@@ -1,5 +1,5 @@
 // pages/AirdropPage.js
-// ✅ VERSION V4.0: Platform Usage Points + Redesigned UI
+// ✅ VERSION V4.1: Platform Usage Cards Clickable + Post Submit Fix
 
 import { State } from '../state.js';
 import * as db from '../modules/firebase-auth-service.js';
@@ -25,6 +25,20 @@ const DEFAULT_PLATFORM_USAGE_CONFIG = {
     notarize:    { icon: '📜', label: 'Notarize Doc',   points: 2000,  maxCount: 10, cooldownHours: 0,  enabled: true },
     claimReward: { icon: '💸', label: 'Claim Rewards',  points: 1000,  maxCount: 10, cooldownHours: 24, enabled: true },
     unstake:     { icon: '↩️', label: 'Unstake',        points: 500,   maxCount: 10, cooldownHours: 0,  enabled: true },
+};
+
+// ✅ NOVO: Mapeamento de ações para páginas do DApp
+const PLATFORM_ACTION_PAGES = {
+    faucet:      'faucet',       // Página do Faucet
+    delegation:  'tokenomics',   // Página de Tokenomics (tem delegação)
+    fortune:     'fortune',      // Página do Fortune Game
+    buyNFT:      'marketplace',  // Página do Marketplace
+    sellNFT:     'marketplace',  // Página do Marketplace
+    listRental:  'rentals',      // Página de Rentals
+    rentNFT:     'rentals',      // Página de Rentals
+    notarize:    'notary',       // Página do Notary
+    claimReward: 'tokenomics',   // Página de Tokenomics (claim rewards)
+    unstake:     'tokenomics',   // Página de Tokenomics (unstake)
 };
 
 function formatTimeLeft(ms) {
@@ -602,9 +616,13 @@ function renderPlatformSection() {
                     const isCompleted = userUsage.count >= action.maxCount;
                     const remaining = Math.max(0, action.maxCount - userUsage.count);
                     const progressPct = (userUsage.count / action.maxCount) * 100;
+                    const targetPage = PLATFORM_ACTION_PAGES[key] || '';
                     
                     return `
-                        <div class="platform-action-card bg-zinc-900/80 border border-zinc-800 rounded-xl p-3 ${isCompleted ? 'completed' : ''}" data-platform-action="${key}">
+                        <div class="platform-action-card bg-zinc-900/80 border border-zinc-800 rounded-xl p-3 ${isCompleted ? 'completed' : 'cursor-pointer hover:border-amber-500/50'} transition-all" 
+                             data-platform-action="${key}"
+                             data-target-page="${targetPage}"
+                             ${!isCompleted && targetPage ? `onclick="window.navigateToPage && window.navigateToPage('${targetPage}')"` : ''}>
                             <div class="flex items-start justify-between mb-1.5">
                                 <span class="text-lg">${action.icon}</span>
                                 ${isCompleted ? 
@@ -622,6 +640,11 @@ function renderPlatformSection() {
                             <div class="progress-bar-bg h-1 rounded-full">
                                 <div class="progress-bar-fill h-full rounded-full" style="width: ${progressPct}%"></div>
                             </div>
+                            ${!isCompleted && targetPage ? `
+                                <div class="mt-2 text-center">
+                                    <span class="text-amber-400/70 text-[9px]"><i class="fa-solid fa-arrow-right mr-1"></i>Tap to go</span>
+                                </div>
+                            ` : ''}
                         </div>
                     `;
                 }).join('')}
@@ -1168,24 +1191,33 @@ async function handleSubmissionAction(e) {
 }
 
 async function handleSubmitUgc(e) {
-    const btn = e.currentTarget;
+    const btn = e.target.closest('#submit-content-btn');
+    if (!btn) return;
+    
     const input = document.getElementById('content-url-input');
     const url = input?.value.trim();
     if (!url || !url.startsWith('http')) return showToast("Enter a valid URL.", "warning");
     
     const originalText = btn.innerHTML;
-    btn.disabled = true; btn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i>';
+    btn.disabled = true; 
+    btn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i>';
     
     try {
         await db.addSubmission(url);
-        showToast("Submitted! Check 'My Posts' tab.", "success");
+        showToast("Submitted! Check 'My History' tab.", "success");
         input.value = '';
+        
+        // Recarrega dados e muda para aba de histórico
         await loadAirdropData();
         airdropState.activeTab = 'history'; 
         updateContent();
+        
     } catch (err) {
         showToast(err.message, "error");
-        btn.disabled = false; btn.innerHTML = originalText;
+    } finally {
+        // ✅ CORREÇÃO: Sempre restaura o botão
+        btn.disabled = false; 
+        btn.innerHTML = originalText;
     }
 }
 
@@ -1339,7 +1371,31 @@ export const AirdropPage = {
             if(e.target.closest('.ranking-tab-btn')) handleRankingSwitch(e);
             if(e.target.closest('.earn-tab-btn')) handleEarnTabSwitch(e);
             if(e.target.closest('.nav-pill-btn')) handleTabSwitch(e);
+            
+            // ✅ NOVO: Handler para cards de Platform Usage
+            const platformCard = e.target.closest('.platform-action-card[data-target-page]');
+            if (platformCard && !platformCard.classList.contains('completed')) {
+                const targetPage = platformCard.dataset.targetPage;
+                if (targetPage && window.navigateToPage) {
+                    window.navigateToPage(targetPage);
+                }
+            }
         });
+        
+        // ✅ NOVO: Expõe função de navegação global para os cards
+        if (!window.navigateToPage) {
+            window.navigateToPage = (pageName) => {
+                // Dispara evento customizado para o app.js tratar
+                const event = new CustomEvent('navigateToPage', { detail: { page: pageName } });
+                document.dispatchEvent(event);
+                
+                // Fallback: clica no link do menu se existir
+                const menuLink = document.querySelector(`[data-page="${pageName}"]`);
+                if (menuLink) {
+                    menuLink.click();
+                }
+            };
+        }
     },
 
     update(isConnected) {
