@@ -15,11 +15,58 @@ const EXPLORER_TX = "https://sepolia.arbiscan.io/tx/";
 const TIGER_IMAGE = "./assets/fortune.png";
 const SHARE_POINTS = 1000; // Pontos por compartilhar
 
-// ✅ Copy viral para compartilhamento
+// ✅ V13.2: Copy viral melhorada para compartilhamento
 const SHARE_COPY = {
-    win: (prize, multiplier) => `🐯🔥 I just WON ${prize.toFixed(2)} BKC (${multiplier}x) on Fortune Pool!\n\n🎰 Test your luck on @BackcoinBKC - the Web3 game that actually pays!\n\n🚀 Play now: https://backcoin.org\n\n#Backcoin #BKC #Web3Gaming #CryptoGames #FortunePool`,
-    lose: () => `🐯 Just played Fortune Pool on @BackcoinBKC!\n\nThe tiger didn't smile on me this time, but the next spin could be HUGE! 🎰\n\n🚀 Try your luck: https://backcoin.org\n\n#Backcoin #BKC #Web3Gaming`,
-    generic: () => `🐯🎰 Fortune Pool is LIVE on @BackcoinBKC!\n\nChoose your numbers, bet BKC, and win up to 107x!\n\n✨ Easy Mode: 33% chance (2x)\n⚡ Medium Mode: 10% chance (5x)  \n👑 Hard Mode: 1% chance (100x)\n\n🚀 Play now: https://backcoin.org\n\n#Backcoin #BKC #Web3Gaming #CryptoGames`
+    win: (prize, multiplier) => `🐯🔥 Acabei de GANHAR ${prize.toFixed(2)} BKC (${multiplier}x) no Fortune Pool!
+
+Já ouviu falar na Backcoin? 🚀
+
+Um projeto feito PARA a comunidade, PELA comunidade!
+
+✨ 35% dos tokens distribuídos via Airdrop
+🌍 Utilidades reais com impacto imediato
+🎰 Games on-chain que realmente pagam
+
+Venha fazer parte da revolução! 💎
+
+👉 https://backcoin.org
+
+#Backcoin #BKC #Web3 #Airdrop #CryptoGaming`,
+
+    lose: () => `🐯 Acabei de jogar no Fortune Pool da @BackcoinBKC!
+
+Não foi dessa vez, mas a próxima rodada pode ser ÉPICA! 🎰
+
+Já ouviu falar na Backcoin? 🚀
+
+Um projeto feito PARA a comunidade, PELA comunidade!
+
+✨ 35% dos tokens distribuídos via Airdrop
+🌍 Utilidades reais com impacto imediato
+🎰 Games on-chain que realmente pagam
+
+Venha fazer parte da revolução! 💎
+
+👉 https://backcoin.org
+
+#Backcoin #BKC #Web3 #Airdrop`,
+
+    generic: () => `🐯 Já ouviu falar na Backcoin? 🚀
+
+Um projeto criado PARA a comunidade, PELA comunidade!
+
+🎁 35% dos tokens distribuídos via Airdrop
+🌍 Utilidades reais com impacto imediato no mundo
+🎰 Fortune Pool - Games on-chain que pagam de verdade
+📜 Notarização descentralizada de documentos
+💎 NFTs com utilidade real
+
+Não é mais um projeto de promessas vazias.
+É a revolução acontecendo AGORA! 🔥
+
+Venha fazer parte! 👉 https://backcoin.org
+
+#Backcoin #BKC #Web3 #Airdrop #CryptoGaming #DeFi`
 };
 
 const TIERS = [
@@ -814,10 +861,18 @@ function renderWager(container) {
     const maxMulti = isJackpot ? 100 : MAX_COMBO_MULTIPLIER;
     const balanceNum = formatBigNumber(State.currentUserBalance || 0n);
     const hasBalance = balanceNum >= 1;
-    const wagerOptions = [10, 50, 100];
+    
+    // ✅ V13.2: Opções de porcentagem do saldo
+    const percentOptions = [
+        { label: '10%', percent: 0.10, color: 'emerald' },
+        { label: '25%', percent: 0.25, color: 'blue' },
+        { label: '50%', percent: 0.50, color: 'violet' },
+        { label: 'MAX', percent: 1.00, color: 'amber' }
+    ];
     
     container.innerHTML = `
         <div class="bg-gradient-to-br from-zinc-900 to-zinc-800/50 border border-zinc-700/50 rounded-2xl p-5">
+            <!-- Your Picks Summary -->
             <div class="text-center mb-5">
                 <h2 class="text-lg font-bold text-white mb-3">Your Picks</h2>
                 <div class="flex justify-center gap-3">
@@ -833,6 +888,7 @@ function renderWager(container) {
             </div>
 
             ${!hasBalance ? `
+                <!-- No Balance Warning -->
                 <div class="mb-5 p-4 bg-gradient-to-r from-red-900/30 to-orange-900/20 rounded-xl border border-red-500/30">
                     <div class="flex items-center gap-3 mb-3">
                         <div class="w-10 h-10 rounded-full bg-red-500/20 flex items-center justify-center"><i class="fa-solid fa-exclamation-triangle text-red-400"></i></div>
@@ -841,30 +897,87 @@ function renderWager(container) {
                     <button id="btn-faucet" class="w-full py-3 bg-gradient-to-r from-cyan-500 to-blue-500 text-white font-bold rounded-xl"><i class="fa-solid fa-faucet mr-2"></i>Get Free 1000 BKC</button>
                 </div>
             ` : `
+                <!-- ✅ V13.2: Improved Wager Selection -->
                 <div class="mb-5">
+                    <!-- Header with Balance -->
                     <div class="flex items-center justify-between mb-3">
-                        <p class="text-xs text-zinc-500 uppercase">Wager</p>
-                        <p class="text-xs text-zinc-400">Balance: <span class="text-white font-bold">${balanceNum.toFixed(2)}</span> BKC</p>
+                        <div>
+                            <p class="text-sm font-bold text-white">How much to bet?</p>
+                            <p class="text-[10px] text-zinc-500">Choose wisely, tiger! 🐯</p>
+                        </div>
+                        <div class="text-right">
+                            <p class="text-[10px] text-zinc-500">Available</p>
+                            <p class="text-sm font-bold text-amber-400">${balanceNum.toFixed(2)} BKC</p>
+                        </div>
                     </div>
-                    <div class="grid grid-cols-3 gap-2 mb-3">
-                        ${wagerOptions.map(w => `<button class="wager-btn py-2.5 rounded-xl font-bold text-sm border-2 border-zinc-700/50 bg-zinc-800/60 text-zinc-300 ${Game.wager === w ? 'selected' : ''}" data-wager="${w}">${w} BKC</button>`).join('')}
+                    
+                    <!-- Percentage Buttons -->
+                    <div class="grid grid-cols-4 gap-2 mb-4">
+                        ${percentOptions.map(opt => {
+                            const value = Math.floor(balanceNum * opt.percent);
+                            return `
+                                <button class="percent-btn py-3 rounded-xl font-bold text-sm border-2 transition-all
+                                    ${Game.wager === value ? `bg-${opt.color}-500/20 border-${opt.color}-500/50 text-${opt.color}-400` : 'border-zinc-700/50 bg-zinc-800/60 text-zinc-400 hover:border-zinc-600'}
+                                " data-percent="${opt.percent}" data-value="${value}">
+                                    <span class="block text-base">${opt.label}</span>
+                                    <span class="block text-[10px] mt-0.5 opacity-70">${value > 0 ? value.toLocaleString() : '0'}</span>
+                                </button>
+                            `;
+                        }).join('')}
                     </div>
-                    <div class="flex gap-2">
-                        <input type="number" id="custom-wager" value="${Game.wager}" class="flex-1 bg-zinc-800/60 border-2 border-zinc-700/50 rounded-xl px-4 py-2.5 text-white text-center font-bold focus:border-amber-500/50 focus:outline-none">
-                        <button id="btn-max" class="px-4 py-2.5 bg-zinc-800/60 border-2 border-zinc-700/50 rounded-xl text-amber-400 font-bold hover:bg-zinc-700">MAX</button>
+                    
+                    <!-- Custom Input -->
+                    <div class="relative">
+                        <div class="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-500 text-sm">BKC</div>
+                        <input type="number" 
+                               id="custom-wager" 
+                               value="${Game.wager}" 
+                               min="1"
+                               max="${Math.floor(balanceNum)}"
+                               class="w-full bg-zinc-800/80 border-2 border-zinc-700/50 rounded-xl pl-14 pr-4 py-4 text-white text-2xl font-black text-center focus:border-amber-500/50 focus:outline-none transition-colors"
+                               placeholder="Enter amount">
+                    </div>
+                    
+                    <!-- Slider -->
+                    <div class="mt-3 px-1">
+                        <input type="range" 
+                               id="wager-slider"
+                               min="1" 
+                               max="${Math.floor(balanceNum)}" 
+                               value="${Game.wager}"
+                               class="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer accent-amber-500">
+                        <div class="flex justify-between text-[10px] text-zinc-600 mt-1">
+                            <span>1 BKC</span>
+                            <span>${Math.floor(balanceNum).toLocaleString()} BKC</span>
+                        </div>
                     </div>
                 </div>
+                
+                <!-- Potential Win Display -->
                 <div class="p-4 bg-gradient-to-r from-emerald-900/20 to-green-900/10 border border-emerald-500/30 rounded-xl mb-5">
                     <div class="flex items-center justify-between">
-                        <div><p class="text-xs text-zinc-400 mb-1">Potential Win</p><p class="text-2xl font-black text-emerald-400" id="potential-win">${(Game.wager * maxMulti).toLocaleString()} BKC</p></div>
-                        <div class="text-right"><p class="text-xs text-zinc-400 mb-1">Multiplier</p><p class="text-xl font-bold text-white">${maxMulti}x</p></div>
+                        <div>
+                            <p class="text-xs text-zinc-400 mb-1">🏆 Potential Win</p>
+                            <p class="text-3xl font-black text-emerald-400" id="potential-win">${(Game.wager * maxMulti).toLocaleString()}</p>
+                            <p class="text-xs text-emerald-400/60">BKC</p>
+                        </div>
+                        <div class="text-right">
+                            <p class="text-xs text-zinc-400 mb-1">Multiplier</p>
+                            <p class="text-2xl font-bold text-white">${maxMulti}x</p>
+                            <p class="text-[10px] text-zinc-500">if all match!</p>
+                        </div>
                     </div>
                 </div>
             `}
 
+            <!-- Action Buttons -->
             <div class="flex gap-3">
-                <button id="btn-back" class="flex-1 py-3.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-bold rounded-xl"><i class="fa-solid fa-arrow-left mr-2"></i>Back</button>
-                <button id="btn-play" class="flex-1 py-3.5 bg-gradient-to-r from-amber-500 to-orange-500 text-black font-bold rounded-xl ${!hasBalance ? 'opacity-50 cursor-not-allowed' : ''}" ${!hasBalance ? 'disabled' : ''}><i class="fa-solid fa-paw mr-2"></i>Play Now</button>
+                <button id="btn-back" class="flex-1 py-3.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-bold rounded-xl transition-colors">
+                    <i class="fa-solid fa-arrow-left mr-2"></i>Back
+                </button>
+                <button id="btn-play" class="flex-1 py-3.5 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-black font-bold rounded-xl transition-all transform hover:scale-[1.02] ${!hasBalance ? 'opacity-50 cursor-not-allowed' : ''}" ${!hasBalance ? 'disabled' : ''}>
+                    <i class="fa-solid fa-paw mr-2"></i>Play Now
+                </button>
             </div>
         </div>
     `;
@@ -874,17 +987,48 @@ function renderWager(container) {
 
 function setupWagerEvents(maxMulti, balanceNum) {
     const updateWager = (amount) => {
-        Game.wager = Math.max(1, Math.min(amount, Math.floor(balanceNum)));
+        Game.wager = Math.max(1, Math.min(Math.floor(amount), Math.floor(balanceNum)));
+        
         const customInput = document.getElementById('custom-wager');
         const potentialWin = document.getElementById('potential-win');
+        const slider = document.getElementById('wager-slider');
+        
         if (customInput) customInput.value = Game.wager;
-        if (potentialWin) potentialWin.textContent = (Game.wager * maxMulti).toLocaleString() + ' BKC';
-        document.querySelectorAll('.wager-btn').forEach(btn => btn.classList.toggle('selected', parseInt(btn.dataset.wager) === Game.wager));
+        if (potentialWin) potentialWin.textContent = (Game.wager * maxMulti).toLocaleString();
+        if (slider) slider.value = Game.wager;
+        
+        // Update percent button states
+        document.querySelectorAll('.percent-btn').forEach(btn => {
+            const value = parseInt(btn.dataset.value);
+            const isSelected = Math.abs(Game.wager - value) < 1;
+            btn.classList.toggle('bg-amber-500/20', isSelected);
+            btn.classList.toggle('border-amber-500/50', isSelected);
+            btn.classList.toggle('text-amber-400', isSelected);
+            btn.classList.toggle('border-zinc-700/50', !isSelected);
+            btn.classList.toggle('bg-zinc-800/60', !isSelected);
+            btn.classList.toggle('text-zinc-400', !isSelected);
+        });
     };
 
-    document.querySelectorAll('.wager-btn').forEach(btn => btn.addEventListener('click', () => updateWager(parseInt(btn.dataset.wager))));
-    document.getElementById('custom-wager')?.addEventListener('input', (e) => updateWager(parseInt(e.target.value) || 10));
-    document.getElementById('btn-max')?.addEventListener('click', () => updateWager(Math.floor(balanceNum)));
+    // Percent buttons
+    document.querySelectorAll('.percent-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const value = parseInt(btn.dataset.value);
+            updateWager(value > 0 ? value : 1);
+        });
+    });
+    
+    // Custom input
+    document.getElementById('custom-wager')?.addEventListener('input', (e) => {
+        updateWager(parseInt(e.target.value) || 1);
+    });
+    
+    // Slider
+    document.getElementById('wager-slider')?.addEventListener('input', (e) => {
+        updateWager(parseInt(e.target.value) || 1);
+    });
+    
+    // Faucet button
     document.getElementById('btn-faucet')?.addEventListener('click', async () => {
         showToast('Requesting tokens...', 'info');
         try {
@@ -894,7 +1038,14 @@ function setupWagerEvents(maxMulti, balanceNum) {
             else showToast(data.error || 'Error', 'error');
         } catch { showToast('Faucet error', 'error'); }
     });
-    document.getElementById('btn-back')?.addEventListener('click', () => { Game.phase = 'pick'; if (Game.mode === 'combo') Game.comboStep = 2; renderPhase(); });
+    
+    // Navigation
+    document.getElementById('btn-back')?.addEventListener('click', () => { 
+        Game.phase = 'pick'; 
+        if (Game.mode === 'combo') Game.comboStep = 2; 
+        renderPhase(); 
+    });
+    
     document.getElementById('btn-play')?.addEventListener('click', async () => {
         if (Game.wager < 1) return showToast('Min: 1 BKC', 'warning');
         Game.phase = 'spin';
@@ -1177,11 +1328,6 @@ function showFinalResult(isWin, prize) {
                     <p class="text-5xl font-black text-white mb-2">+${prize.toFixed(2)}</p>
                     <p class="text-lg text-emerald-400 font-bold">BKC Won!</p>
                 </div>
-                
-                <!-- ✅ V13.1: Share to Earn Button -->
-                <button id="btn-share-result" class="w-full py-3 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-black font-bold rounded-xl mb-3 transition-all transform hover:scale-[1.02]">
-                    <i class="fa-solid fa-share-nodes mr-2"></i>Share & Earn +${SHARE_POINTS} Points!
-                </button>
             `;
             messageEl.classList.remove('hidden');
         }
@@ -1201,14 +1347,35 @@ function showFinalResult(isWin, prize) {
             messageEl.innerHTML = `
                 <p class="text-zinc-500 mb-2">Better luck next round!</p>
                 <p class="text-sm text-zinc-600 mb-4">The tiger will smile on you soon 🐯</p>
-                
-                <!-- ✅ V13.1: Share anyway button -->
-                <button id="btn-share-result" class="w-full py-2.5 bg-zinc-700 hover:bg-zinc-600 text-white text-sm font-medium rounded-xl transition-colors">
-                    <i class="fa-solid fa-share-nodes mr-2"></i>Share & Earn +${SHARE_POINTS} Points
-                </button>
             `;
             messageEl.classList.remove('hidden');
         }
+    }
+    
+    // ✅ V13.2: Sempre mostrar área de compartilhamento no final
+    const shareArea = document.createElement('div');
+    shareArea.className = 'mt-4 pt-4 border-t border-zinc-700/50';
+    shareArea.innerHTML = `
+        <!-- Share Section - Always Visible -->
+        <div class="bg-gradient-to-r from-amber-500/10 to-orange-500/10 border border-amber-500/30 rounded-xl p-4 mb-4">
+            <div class="flex items-center gap-3 mb-3">
+                <div class="w-10 h-10 rounded-full bg-amber-500/20 flex items-center justify-center">
+                    <i class="fa-solid fa-gift text-amber-400"></i>
+                </div>
+                <div>
+                    <p class="text-white font-bold text-sm">Share & Earn +${SHARE_POINTS} Points!</p>
+                    <p class="text-zinc-500 text-[10px]">Help spread the word about Backcoin</p>
+                </div>
+            </div>
+            <button id="btn-share-result" class="w-full py-3 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-black font-bold rounded-xl transition-all transform hover:scale-[1.02]">
+                <i class="fa-solid fa-share-nodes mr-2"></i>Share Now
+            </button>
+        </div>
+    `;
+    
+    // Insert share area before the play again button
+    if (btnEl && btnEl.parentNode) {
+        btnEl.parentNode.insertBefore(shareArea, btnEl);
     }
     
     // Show play again button
@@ -1216,7 +1383,7 @@ function showFinalResult(isWin, prize) {
         btnEl.style.opacity = '1';
     }
     
-    // ✅ V13.1: Attach share button listener
+    // ✅ V13.2: Attach share button listener
     setTimeout(() => {
         document.getElementById('btn-share-result')?.addEventListener('click', () => {
             showShareModal(isWin, prize, multiplier);
