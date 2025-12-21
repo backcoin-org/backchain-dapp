@@ -1,5 +1,5 @@
 // js/pages/NotaryPage.js
-// ✅ PRODUCTION V9.0 - Enhanced Animations + Consistent Icons + Detailed History
+// ✅ PRODUCTION V9.2 - Firebase-based History + Date/Time Display
 
 import { State } from '../state.js';
 import { formatBigNumber } from '../utils.js';
@@ -16,6 +16,49 @@ const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB (Pinata Free limit)
 const EXPLORER_TX = "https://sepolia.arbiscan.io/tx/";
 const IPFS_GATEWAY = "https://ipfs.io/ipfs/";
 const NOTARY_IMAGE = "./assets/notary.png";
+
+// ✅ Função para formatar data/hora
+function formatTimestamp(timestamp) {
+    if (!timestamp) return '';
+    
+    let date;
+    if (typeof timestamp === 'number') {
+        date = new Date(timestamp > 1e12 ? timestamp : timestamp * 1000);
+    } else if (typeof timestamp === 'string') {
+        date = new Date(timestamp);
+    } else if (timestamp?.toDate) {
+        date = timestamp.toDate();
+    } else if (timestamp?.seconds) {
+        date = new Date(timestamp.seconds * 1000);
+    } else {
+        return '';
+    }
+    
+    if (isNaN(date.getTime())) return '';
+    
+    const now = new Date();
+    const diffMs = now - date;
+    const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+    
+    if (diffHours < 24) {
+        if (diffHours < 1) {
+            const diffMins = Math.floor(diffMs / (1000 * 60));
+            return diffMins < 1 ? 'Just now' : `${diffMins}m ago`;
+        }
+        return `${diffHours}h ago`;
+    }
+    
+    if (diffDays < 7) {
+        return `${diffDays}d ago`;
+    }
+    
+    return date.toLocaleDateString('en-US', { 
+        month: 'short', 
+        day: 'numeric',
+        year: date.getFullYear() !== now.getFullYear() ? 'numeric' : undefined
+    });
+}
 
 // File type configurations
 const FILE_TYPES = {
@@ -887,92 +930,31 @@ async function loadCertificates() {
         return;
     }
 
+    // Mostrar loading
+    grid.innerHTML = `
+        <div class="col-span-full text-center py-8">
+            <i class="fa-solid fa-circle-notch fa-spin text-amber-400 text-2xl mb-3"></i>
+            <p class="text-zinc-500 text-sm">Loading certificates from database...</p>
+        </div>
+    `;
+
     try {
-        let certs = [];
+        // ✅ Buscar APENAS do Firebase via API (escalável para 10+ anos)
+        const baseUrl = API_ENDPOINTS.getNotarizedDocuments || 
+            'https://getnotarizeddocuments-4wvdcuoouq-uc.a.run.app';
+        const apiUrl = `${baseUrl}/${State.userAddress}`;
         
-        try {
-            // Construir URL corretamente com o endereço do usuário
-            const baseUrl = API_ENDPOINTS.getNotarizedDocuments || 
-                'https://getnotarizeddocuments-4wvdcuoouq-uc.a.run.app';
-            const apiUrl = `${baseUrl}/${State.userAddress}`;
-            
-            console.log('📜 Fetching certificates from:', apiUrl);
-            
-            const response = await fetch(apiUrl);
-            if (response.ok) {
-                const data = await response.json();
-                if (Array.isArray(data) && data.length > 0) {
-                    certs = data.map(doc => ({
-                        id: doc.tokenId || '?',
-                        ipfs: doc.ipfsCid || '',
-                        description: doc.description || '',
-                        hash: doc.contentHash || '',
-                        timestamp: doc.timestamp || '',
-                        txHash: doc.txHash || ''
-                    }));
-                }
-            }
-        } catch (apiErr) {
-            console.warn('API fetch failed:', apiErr.message?.slice(0, 50));
+        console.log('📜 Fetching certificates from Firebase:', apiUrl);
+        
+        const response = await fetch(apiUrl);
+        
+        if (!response.ok) {
+            throw new Error(`API returned ${response.status}`);
         }
         
-        if (certs.length === 0) {
-            if (!State.decentralizedNotaryContract) await loadPublicData();
-            const contract = State.decentralizedNotaryContract;
-            
-            if (!contract) {
-                grid.innerHTML = `<div class="col-span-full text-center py-8 text-zinc-500 text-sm">Contract not available</div>`;
-                return;
-            }
-
-            let events = [];
-            try {
-                const filter = contract.filters.DocumentNotarized 
-                    ? contract.filters.DocumentNotarized(null, State.userAddress)
-                    : contract.filters.NotarizationEvent?.(null, State.userAddress);
-                
-                if (filter) events = await contract.queryFilter(filter, -50000);
-            } catch (filterErr) {
-                try {
-                    const balance = await contract.balanceOf(State.userAddress);
-                    if (balance > 0n) {
-                        for (let i = 0n; i < balance; i++) {
-                            try {
-                                const tokenId = await contract.tokenOfOwnerByIndex(State.userAddress, i);
-                                events.push({ args: [tokenId], transactionHash: null });
-                            } catch (e) { break; }
-                        }
-                    }
-                } catch (balErr) {}
-            }
-
-            certs = await Promise.all(events.map(async (e) => {
-                const tokenId = e.args[0];
-                let ipfsCid = '', description = '', contentHash = '';
-                
-                try {
-                    if (typeof contract.tokenURI === 'function') {
-                        const uri = await contract.tokenURI(tokenId);
-                        if (uri && uri.startsWith('data:application/json;base64,')) {
-                            const base64Data = uri.replace('data:application/json;base64,', '');
-                            const metadata = JSON.parse(atob(base64Data));
-                            
-                            ipfsCid = metadata.image || '';
-                            description = metadata.description || '';
-                            
-                            if (metadata.attributes) {
-                                const hashAttr = metadata.attributes.find(a => a.trait_type === 'Content Hash');
-                                if (hashAttr) contentHash = hashAttr.value || 'SHA-256';
-                            }
-                        }
-                    }
-                } catch (err) {}
-
-                return { id: tokenId?.toString() || '?', ipfs: ipfsCid, description, hash: contentHash, txHash: e.transactionHash || '' };
-            }));
-        }
-
-        if (certs.length === 0) {
+        const data = await response.json();
+        
+        if (!Array.isArray(data) || data.length === 0) {
             grid.innerHTML = `
                 <div class="col-span-full text-center py-8">
                     <img src="${NOTARY_IMAGE}" class="w-14 h-14 mx-auto opacity-20 mb-3">
@@ -983,6 +965,20 @@ async function loadCertificates() {
             return;
         }
 
+        // Mapear dados do Firebase
+        const certs = data.map(doc => ({
+            id: doc.tokenId || '?',
+            ipfs: doc.ipfsCid || '',
+            description: doc.description || '',
+            hash: doc.contentHash || '',
+            timestamp: doc.createdAt || doc.timestamp || '',
+            txHash: doc.txHash || '',
+            blockNumber: doc.blockNumber || 0
+        }));
+
+        console.log(`📜 Found ${certs.length} certificates in Firebase`);
+
+        // Já vem ordenado do Firebase, mas garantir ordem por ID decrescente
         const sorted = certs.sort((a, b) => parseInt(b.id) - parseInt(a.id));
 
         grid.innerHTML = sorted.map(cert => {
@@ -1003,9 +999,10 @@ async function loadCertificates() {
             
             const fileInfo = getFileTypeInfo('', cleanDesc);
             const hasValidUrl = ipfsUrl && ipfsUrl.length > 10;
+            const timeAgo = formatTimestamp(cert.timestamp);
 
             return `
-                <div class="cert-card bg-zinc-900/50 border border-zinc-800/50 rounded-xl overflow-hidden">
+                <div class="cert-card bg-zinc-900/50 border border-zinc-800/50 rounded-xl overflow-hidden hover:border-amber-500/30 transition-all">
                     <div class="h-28 bg-gradient-to-br from-zinc-800/50 to-zinc-900/50 flex items-center justify-center relative overflow-hidden">
                         ${hasValidUrl ? `
                             <img src="${ipfsUrl}" 
@@ -1025,6 +1022,11 @@ async function loadCertificates() {
                             </div>
                         `}
                         <span class="absolute top-2 right-2 text-[9px] font-mono text-zinc-400 bg-black/70 px-2 py-0.5 rounded-full">#${cert.id}</span>
+                        ${timeAgo ? `
+                            <span class="absolute top-2 left-2 text-[9px] text-zinc-500 bg-black/70 px-2 py-0.5 rounded-full flex items-center gap-1">
+                                <i class="fa-regular fa-clock"></i> ${timeAgo}
+                            </span>
+                        ` : ''}
                     </div>
                     
                     <div class="p-3">
@@ -1061,10 +1063,14 @@ async function loadCertificates() {
         }).join('');
 
     } catch (e) {
-        console.error('History Error:', e);
+        console.error('❌ Error loading certificates:', e);
         grid.innerHTML = `
             <div class="col-span-full text-center py-8">
-                <p class="text-red-400 text-sm"><i class="fa-solid fa-exclamation-circle mr-2"></i> Failed to load</p>
+                <p class="text-red-400 text-sm"><i class="fa-solid fa-exclamation-circle mr-2"></i> Failed to load certificates</p>
+                <p class="text-zinc-600 text-xs mt-1">${e.message}</p>
+                <button onclick="loadCertificates()" class="mt-3 text-amber-400 text-xs hover:underline">
+                    <i class="fa-solid fa-rotate mr-1"></i> Try Again
+                </button>
             </div>
         `;
     }
