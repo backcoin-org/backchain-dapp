@@ -1584,7 +1584,7 @@ async function showShareModal(isWin, prize, multiplier) {
     // Limites de caracteres por plataforma
     const SHARE_TEXTS = {
         pt: {
-            twitter: `🚀 Conhece a @BackcoinOrg?
+            twitter: `🚀 Conhece a @backcoin?
 
 Cripto com utilidade REAL:
 🎰 Games on-chain
@@ -1611,10 +1611,10 @@ Não é promessa. É realidade acontecendo AGORA!
 
 Faça parte da revolução 👉 https://backcoin.org
 
-@BackcoinOrg`
+@backcoin`
         },
         en: {
-            twitter: `🚀 Have you heard of @BackcoinOrg?
+            twitter: `🚀 Have you heard of @backcoin?
 
 Crypto with REAL utility:
 🎰 On-chain games
@@ -1641,10 +1641,10 @@ Not promises. Reality happening NOW!
 
 Join the revolution 👉 https://backcoin.org
 
-@BackcoinOrg`
+@backcoin`
         },
         es: {
-            twitter: `🚀 ¿Conoces @BackcoinOrg?
+            twitter: `🚀 ¿Conoces @backcoin?
 
 Cripto con utilidad REAL:
 🎰 Juegos on-chain
@@ -1671,7 +1671,7 @@ No son promesas. ¡Es realidad ahora!
 
 Únete 👉 https://backcoin.org
 
-@BackcoinOrg`
+@backcoin`
         }
     };
     
@@ -1746,7 +1746,7 @@ No son promesas. ¡Es realidad ahora!
         if (!State.userAddress) return false;
         
         try {
-            const response = await fetch(`https://trackshare-4wvdcuoouq-uc.a.run.app`, {
+            const response = await fetch(`https://us-central1-backchain-backand.cloudfunctions.net/trackShare`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
