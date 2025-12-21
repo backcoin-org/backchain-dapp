@@ -319,7 +319,7 @@ function renderMiningSection() {
             
             <div class="flex items-center gap-3 mb-6">
                 <div class="ab-icon-box bg-emerald-500/20">
-                    <i class="fa-solid fa-pickaxe text-emerald-400"></i>
+                    <i class="fa-solid fa-hammer text-emerald-400"></i>
                 </div>
                 <div>
                     <h2 class="text-white font-bold text-xl">Mining by Purchase</h2>

@@ -267,7 +267,7 @@ function renderSupplySection() {
                 <div class="tk-progress-fill bg-gradient-to-r from-amber-500 to-emerald-500" style="width: ${supplyPercent}%"></div>
             </div>
             <p class="text-center text-zinc-600 text-[10px]">
-                <i class="fa-solid fa-pickaxe mr-1"></i>
+                <i class="fa-solid fa-hammer mr-1"></i>
                 Remaining ${formatNumber(MAX_SUPPLY - currentSupply)} BKC to be mined through ecosystem activity
             </p>
         </div>
@@ -352,7 +352,7 @@ function renderMiningSection() {
         <div class="tk-section tk-fade-up" style="animation-delay: 0.3s">
             <div class="flex items-center gap-2 mb-4">
                 <div class="tk-icon-box bg-emerald-500/20">
-                    <i class="fa-solid fa-pickaxe text-emerald-400"></i>
+                    <i class="fa-solid fa-hammer text-emerald-400"></i>
                 </div>
                 <div>
                     <h2 class="text-white font-bold">Mining by Purchase</h2>
@@ -732,7 +732,7 @@ function renderContractsSection() {
                     <span class="text-zinc-400">DelegationManager</span>
                 </div>
                 <div class="tk-card p-2 flex items-center gap-2">
-                    <i class="fa-solid fa-pickaxe text-emerald-400"></i>
+                    <i class="fa-solid fa-hammer text-emerald-400"></i>
                     <span class="text-zinc-400">MiningManager</span>
                 </div>
                 <div class="tk-card p-2 flex items-center gap-2">
