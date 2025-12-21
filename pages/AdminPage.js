@@ -1,5 +1,5 @@
 // pages/AdminPage.js
-// ✅ VERSION V2.0: Platform Usage Config Panel Added
+// ✅ VERSION V2.1: Fixed Firebase Auth before loading data
 // --- NOVO ---
 // Importa o ethers e os endereços dos contratos
 const ethers = window.ethers;
@@ -75,6 +75,13 @@ const loadAdminData = async () => {
 
 
     try {
+        // ✅ CORREÇÃO: Garante autenticação Firebase ANTES de carregar dados
+        if (State.userAddress) {
+            await db.signIn(State.userAddress);
+            console.log("✅ Firebase Auth: Admin authenticated");
+        } else {
+            throw new Error("No wallet connected");
+        }
         
         const [submissions, tasks, publicData, users] = await Promise.all([
             db.getAllSubmissionsForAdmin(), // Otimizado
