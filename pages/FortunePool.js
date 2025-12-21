@@ -1,12 +1,11 @@
 // js/pages/FortunePool.js
-// ✅ PRODUCTION V13.4 - Simplified Share Modal + Flag Icons + Ecosystem Focus
+// ✅ PRODUCTION V13.6 - Server-side Share Protection via Firebase API
 
 import { State } from '../state.js';
 import { loadUserData, API_ENDPOINTS } from '../modules/data.js';
 import { executeFortuneParticipate } from '../modules/transactions.js';
 import { formatBigNumber } from '../utils.js';
 import { showToast, openModal, closeModal } from '../ui-feedback.js';
-import * as db from '../modules/firebase-auth-service.js';
 
 // ============================================================================
 // CONSTANTS
@@ -1253,11 +1252,9 @@ function showFinalResult(isWin, prize) {
     const btnEl = document.getElementById('btn-new-game');
     const containerEl = document.getElementById('result-container');
     
-    // Calcular multiplicador para o share
     const multiplier = prize > 0 ? Math.round(prize / Game.wager) : 0;
     
     if (isWin) {
-        // EPIC WIN!
         triggerEpicWinAnimation();
         triggerCoinRain();
         triggerConfetti();
@@ -1283,7 +1280,6 @@ function showFinalResult(isWin, prize) {
             containerEl.style.borderColor = 'rgba(16,185,129,0.5)';
         }
     } else {
-        // Not a win
         if (titleEl) {
             titleEl.innerHTML = '😿 Not this time';
             titleEl.className = 'text-2xl font-bold text-zinc-400 mb-4';
@@ -1298,11 +1294,10 @@ function showFinalResult(isWin, prize) {
         }
     }
     
-    // ✅ V13.2: Sempre mostrar área de compartilhamento no final
+    // ✅ V13.6: Sempre mostrar botão de share (proteção é server-side no Firebase)
     const shareArea = document.createElement('div');
     shareArea.className = 'mt-4 pt-4 border-t border-zinc-700/50';
     shareArea.innerHTML = `
-        <!-- Share Section - Always Visible -->
         <div class="bg-gradient-to-r from-amber-500/10 to-orange-500/10 border border-amber-500/30 rounded-xl p-4 mb-4">
             <div class="flex items-center gap-3 mb-3">
                 <div class="w-10 h-10 rounded-full bg-amber-500/20 flex items-center justify-center">
@@ -1310,7 +1305,7 @@ function showFinalResult(isWin, prize) {
                 </div>
                 <div>
                     <p class="text-white font-bold text-sm">Share & Earn +${SHARE_POINTS} Points!</p>
-                    <p class="text-zinc-500 text-[10px]">Help spread the word about Backcoin</p>
+                    <p class="text-zinc-500 text-[10px]">One reward per game</p>
                 </div>
             </div>
             <button id="btn-share-result" class="w-full py-3 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-black font-bold rounded-xl transition-all transform hover:scale-[1.02]">
@@ -1319,17 +1314,14 @@ function showFinalResult(isWin, prize) {
         </div>
     `;
     
-    // Insert share area before the play again button
     if (btnEl && btnEl.parentNode) {
         btnEl.parentNode.insertBefore(shareArea, btnEl);
     }
     
-    // Show play again button
     if (btnEl) {
         btnEl.style.opacity = '1';
     }
     
-    // ✅ V13.2: Attach share button listener
     setTimeout(() => {
         document.getElementById('btn-share-result')?.addEventListener('click', () => {
             showShareModal(isWin, prize, multiplier);
@@ -1587,14 +1579,11 @@ export function cleanup() {
     Game.guesses = [2, 5, 50];
 }
 
-// ✅ V13.4: Modal simplificado com foco no ecossistema Backcoin
+// ✅ V13.6: Modal simplificado com proteção SERVER-SIDE no Firebase
 async function showShareModal(isWin, prize, multiplier) {
     // Limites de caracteres por plataforma
-    // Twitter: 280 chars | WhatsApp: sem limite | Telegram: 4096 | Instagram: bio copy
-    
     const SHARE_TEXTS = {
         pt: {
-            // Twitter (max 280 chars)
             twitter: `🚀 Conhece a @BackcoinOrg?
 
 Cripto com utilidade REAL:
@@ -1608,7 +1597,6 @@ Cripto com utilidade REAL:
 
 #Backcoin #Web3 #Airdrop`,
             
-            // WhatsApp/Telegram (mais detalhado)
             full: `🚀 Já conhece a Backcoin?
 
 Um ecossistema cripto com utilidade REAL que conecta o mundo digital ao mundo real!
@@ -1688,6 +1676,7 @@ No son promesas. ¡Es realidad ahora!
     };
     
     let currentLang = 'pt';
+    const currentGameId = Game.gameId?.toString() || `game_${Date.now()}`;
     
     const modalContent = `
         <div class="text-center">
@@ -1709,7 +1698,7 @@ No son promesas. ¡Es realidad ahora!
                 </button>
             </div>
             
-            <!-- Social Buttons - Clica e compartilha direto -->
+            <!-- Social Buttons -->
             <div class="grid grid-cols-4 gap-3 mb-4">
                 <button id="share-twitter" class="share-btn flex flex-col items-center justify-center p-4 bg-zinc-800/80 hover:bg-zinc-700 border border-zinc-700 hover:border-zinc-500 rounded-xl transition-all">
                     <i class="fa-brands fa-x-twitter text-2xl text-white mb-1"></i>
@@ -1742,7 +1731,6 @@ No son promesas. ¡Es realidad ahora!
     document.querySelectorAll('.lang-btn').forEach(btn => {
         btn.addEventListener('click', () => {
             currentLang = btn.dataset.lang;
-            // Update visual
             document.querySelectorAll('.lang-btn').forEach(b => {
                 b.classList.toggle('border-amber-500', b.dataset.lang === currentLang);
                 b.classList.toggle('border-transparent', b.dataset.lang !== currentLang);
@@ -1753,49 +1741,70 @@ No son promesas. ¡Es realidad ahora!
     // Close button
     document.getElementById('btn-close-share')?.addEventListener('click', closeModal);
     
-    // Track and share helper
-    const trackAndShare = async (url) => {
+    // ✅ V13.6: Track share via Firebase API (proteção server-side)
+    const trackShareOnServer = async (platform) => {
+        if (!State.userAddress) return false;
+        
         try {
-            if (typeof db.trackPlatformUsage === 'function') {
-                await db.trackPlatformUsage('shareFortuneResult', null);
+            const response = await fetch(`https://trackshare-4wvdcuoouq-uc.a.run.app`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    address: State.userAddress,
+                    gameId: currentGameId,
+                    type: 'fortune',
+                    platform: platform
+                })
+            });
+            
+            const data = await response.json();
+            
+            if (data.success) {
+                showToast(`🎉 +${data.pointsAwarded} Points!`, 'success');
+                return true;
+            } else if (data.reason === 'already_shared') {
+                // Já compartilhou - não mostra erro, apenas não dá pontos
+                console.log('Already shared this game');
+                return false;
             }
-            showToast(`🎉 +${SHARE_POINTS} Points!`, 'success');
-        } catch (e) {}
+            return false;
+        } catch (e) {
+            console.error('Share tracking error:', e);
+            return false;
+        }
+    };
+    
+    // Share handlers
+    const shareAndTrack = async (platform, url) => {
+        await trackShareOnServer(platform);
         window.open(url, '_blank');
         closeModal();
     };
     
-    // Twitter - usa texto curto
     document.getElementById('share-twitter')?.addEventListener('click', () => {
         const text = SHARE_TEXTS[currentLang].twitter;
-        trackAndShare(`https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}`);
+        shareAndTrack('twitter', `https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}`);
     });
     
-    // Telegram - usa texto completo + link do grupo
     document.getElementById('share-telegram')?.addEventListener('click', () => {
         const text = SHARE_TEXTS[currentLang].full;
-        trackAndShare(`https://t.me/share/url?url=https://backcoin.org&text=${encodeURIComponent(text)}`);
+        shareAndTrack('telegram', `https://t.me/share/url?url=https://backcoin.org&text=${encodeURIComponent(text)}`);
     });
     
-    // Instagram - copia texto e abre perfil
     document.getElementById('share-instagram')?.addEventListener('click', async () => {
         const text = SHARE_TEXTS[currentLang].full;
         try {
             await navigator.clipboard.writeText(text);
             showToast('📋 Text copied!', 'success');
-            if (typeof db.trackPlatformUsage === 'function') {
-                await db.trackPlatformUsage('shareFortuneResult', null);
-            }
-            showToast(`🎉 +${SHARE_POINTS} Points!`, 'success');
         } catch (e) {}
+        await trackShareOnServer('instagram');
         window.open('https://instagram.com/backcoin.bkc', '_blank');
         closeModal();
     });
     
-    // WhatsApp - usa texto completo
     document.getElementById('share-whatsapp')?.addEventListener('click', () => {
         const text = SHARE_TEXTS[currentLang].full;
-        trackAndShare(`https://wa.me/?text=${encodeURIComponent(text)}`);
+        shareAndTrack('whatsapp', `https://wa.me/?text=${encodeURIComponent(text)}`);
     });
 }
 
