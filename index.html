@@ -502,26 +502,3 @@
     </script>
 </body>
 </html>
-            } else if (connectedAddress) {
-                // Se não temos variável, mostra o link e deixa o AdminPage validar
-                // Isso é um fallback - o AdminPage vai bloquear acesso de não-admins
-                adminContainer.style.display = 'block';
-            } else {
-                adminContainer.style.display = 'none';
-            }
-        }
-        
-        document.addEventListener('DOMContentLoaded', () => {
-            checkAdminVisibility();
-            setInterval(checkAdminVisibility, 2000);
-        });
-        
-        if (window.ethereum) {
-            window.ethereum.on('accountsChanged', () => {
-                lastCheckedAddress = null;
-                checkAdminVisibility();
-            });
-        }
-    </script>
-</body>
-</html>
