@@ -1,5 +1,5 @@
 // pages/AirdropPage.js
-// ✅ VERSION V4.1: Platform Usage Cards Clickable + Post Submit Fix
+// ✅ VERSION V4.2: Audit System + Psychological Security + Ban Warning
 
 import { State } from '../state.js';
 import * as db from '../modules/firebase-auth-service.js';
@@ -12,6 +12,19 @@ import { formatAddress, renderNoData, formatBigNumber, renderLoading, renderErro
 
 const DEFAULT_HASHTAGS = "#BKC #Backcoin #Airdrop";
 const AUTO_APPROVE_HOURS = 2;
+
+// ✅ NOVO: Mensagens de auditoria para "trava psicológica"
+const AUDIT_MESSAGES = [
+    "🔍 Your post is under security audit...",
+    "🛡️ Verifying post authenticity...",
+    "📋 Checking compliance with guidelines...",
+    "🔐 Security review in progress...",
+    "⏳ Audit team analyzing your submission..."
+];
+
+function getRandomAuditMessage() {
+    return AUDIT_MESSAGES[Math.floor(Math.random() * AUDIT_MESSAGES.length)];
+}
 
 // Platform Usage Config (valores padrão - sobrescritos pelo Firebase)
 const DEFAULT_PLATFORM_USAGE_CONFIG = {
@@ -856,20 +869,45 @@ function renderHistoryTab() {
                             <p class="text-zinc-600 text-xs mt-1">Create your first post to get started!</p>
                         </div>` : 
                         userSubmissions.slice(0, 10).map((sub, idx) => {
-                            const statusIcon = sub.status === 'approved' ? 
-                                '<i class="fa-solid fa-check-circle text-green-400"></i>' : 
-                                sub.status === 'rejected' ? 
-                                '<i class="fa-solid fa-times-circle text-red-400"></i>' : 
-                                '<i class="fa-solid fa-clock text-amber-400"></i>';
-                            const pts = sub.pointsAwarded ? `+${sub.pointsAwarded}` : '-';
                             const isLast = idx === Math.min(userSubmissions.length, 10) - 1;
-                            return `
-                                <div class="flex items-center justify-between p-3 ${isLast ? '' : 'border-b border-zinc-800'}">
-                                    <div class="flex items-center gap-3 overflow-hidden">
-                                        ${statusIcon}
-                                        <a href="${sub.url}" target="_blank" class="text-zinc-400 text-xs truncate hover:text-blue-400 max-w-[180px] md:max-w-[300px]">${sub.url}</a>
+                            const isPending = ['pending', 'auditing'].includes(sub.status);
+                            const isApproved = sub.status === 'approved';
+                            const isRejected = sub.status === 'rejected';
+                            
+                            // Status visual
+                            let statusIcon, statusBg, statusText;
+                            if (isApproved) {
+                                statusIcon = '<i class="fa-solid fa-check-circle text-green-400"></i>';
+                                statusBg = '';
+                                statusText = '';
+                            } else if (isRejected) {
+                                statusIcon = '<i class="fa-solid fa-times-circle text-red-400"></i>';
+                                statusBg = '';
+                                statusText = '';
+                            } else {
+                                // Em auditoria - mostra mensagem de "trava psicológica"
+                                statusIcon = '<i class="fa-solid fa-shield-halved text-amber-400 animate-pulse"></i>';
+                                statusBg = 'bg-amber-900/10';
+                                statusText = `
+                                    <div class="mt-2 flex items-center gap-2 text-amber-400/80">
+                                        <i class="fa-solid fa-magnifying-glass text-[10px] animate-pulse"></i>
+                                        <span class="text-[10px] font-medium">Under security audit...</span>
                                     </div>
-                                    <span class="font-mono font-bold ${sub.pointsAwarded ? 'text-green-400' : 'text-zinc-600'} text-sm shrink-0">${pts}</span>
+                                `;
+                            }
+                            
+                            const pts = sub.pointsAwarded ? `+${sub.pointsAwarded}` : '-';
+                            
+                            return `
+                                <div class="p-3 ${isLast ? '' : 'border-b border-zinc-800'} ${statusBg}">
+                                    <div class="flex items-center justify-between">
+                                        <div class="flex items-center gap-3 overflow-hidden">
+                                            ${statusIcon}
+                                            <a href="${sub.url}" target="_blank" class="text-zinc-400 text-xs truncate hover:text-blue-400 max-w-[180px] md:max-w-[300px]">${sub.url}</a>
+                                        </div>
+                                        <span class="font-mono font-bold ${sub.pointsAwarded ? 'text-green-400' : 'text-zinc-600'} text-sm shrink-0">${pts}</span>
+                                    </div>
+                                    ${statusText}
                                 </div>
                             `;
                         }).join('')
@@ -1136,20 +1174,83 @@ function handleToggleGuide() {
 
 function openConfirmationModal(submission) {
     const modalContent = `
-        <div class="flex justify-between items-start mb-4 border-b border-zinc-700 pb-4">
-            <h3 class="text-xl font-bold text-white">Verify Your Post</h3>
-            <button class="closeModalBtn text-zinc-400 hover:text-white text-2xl leading-none">&times;</button>
-        </div>
-        <p class="text-zinc-400 text-sm mb-4 text-center">Confirm this is your authentic public post</p>
-        <a href="${submission.url}" target="_blank" class="block bg-zinc-800 border border-zinc-600 text-blue-400 hover:text-blue-300 py-3 px-4 rounded-lg w-full text-center mb-6 text-sm truncate">${submission.url}</a>
-        <div class="flex gap-3">
-            <button id="cancelConfirmBtn" class="flex-1 bg-zinc-700 hover:bg-zinc-600 text-white py-3 rounded-xl font-medium text-sm">Cancel</button>
-            <button id="finalConfirmBtn" data-submission-id="${submission.submissionId}" class="flex-1 bg-green-600 hover:bg-green-500 text-white py-3 rounded-xl font-bold text-sm">Confirm & Earn ✓</button>
+        <div class="text-center">
+            <!-- Imagem de CAUTION -->
+            <div class="w-32 h-32 mx-auto mb-4">
+                <img src="./assets/caution.png" alt="Caution" class="w-full h-full object-contain">
+            </div>
+            
+            <!-- Título com alerta -->
+            <h3 class="text-xl font-bold text-red-400 mb-2">⚠️ FINAL VERIFICATION</h3>
+            
+            <!-- Aviso de auditoria -->
+            <div class="bg-red-900/30 border border-red-500/50 rounded-xl p-4 mb-4">
+                <p class="text-red-300 text-sm font-bold mb-2">
+                    <i class="fa-solid fa-shield-halved mr-1"></i>
+                    All posts are AUDITED
+                </p>
+                <p class="text-zinc-400 text-xs leading-relaxed">
+                    Our security team reviews every submission. 
+                    <span class="text-red-400 font-bold">Fake or fraudulent links will result in PERMANENT BAN</span> 
+                    from the airdrop campaign.
+                </p>
+            </div>
+            
+            <!-- URL sendo confirmada -->
+            <div class="bg-zinc-800/80 border border-zinc-700 rounded-xl p-3 mb-4">
+                <p class="text-zinc-500 text-[10px] uppercase mb-1">Post being verified:</p>
+                <a href="${submission.url}" target="_blank" class="text-blue-400 hover:text-blue-300 text-sm truncate block">${submission.url}</a>
+            </div>
+            
+            <!-- Checkbox de confirmação -->
+            <label class="flex items-start gap-3 text-left bg-zinc-900/80 border border-zinc-700 rounded-xl p-3 mb-4 cursor-pointer hover:border-amber-500/50 transition-colors">
+                <input type="checkbox" id="confirmCheckbox" class="mt-1 w-4 h-4 accent-amber-500">
+                <span class="text-xs text-zinc-300">
+                    I confirm this is <span class="text-white font-bold">my authentic public post</span> and I understand that 
+                    <span class="text-red-400 font-bold">submitting fake content will result in permanent ban</span>.
+                </span>
+            </label>
+            
+            <!-- Botões -->
+            <div class="flex gap-3">
+                <button id="cancelConfirmBtn" class="flex-1 bg-zinc-700 hover:bg-zinc-600 text-white py-3 rounded-xl font-medium text-sm transition-colors">
+                    <i class="fa-solid fa-arrow-left mr-1"></i> Go Back
+                </button>
+                <button id="finalConfirmBtn" data-submission-id="${submission.submissionId}" 
+                        class="flex-1 bg-green-600/50 text-green-200 py-3 rounded-xl font-bold text-sm cursor-not-allowed transition-colors" 
+                        disabled>
+                    <i class="fa-solid fa-lock mr-1"></i> Confirm & Earn
+                </button>
+            </div>
+            
+            <!-- Rodapé de aviso -->
+            <p class="text-zinc-600 text-[10px] mt-4">
+                <i class="fa-solid fa-info-circle mr-1"></i>
+                By confirming, you agree to our audit process and anti-fraud policies.
+            </p>
         </div>
     `;
-    openModal(modalContent, 'max-w-sm'); 
+    openModal(modalContent, 'max-w-md'); 
+    
+    // Event listeners
     document.getElementById('cancelConfirmBtn')?.addEventListener('click', closeModal);
-    document.getElementById('finalConfirmBtn')?.addEventListener('click', handleConfirmAuthenticity);
+    
+    const checkbox = document.getElementById('confirmCheckbox');
+    const confirmBtn = document.getElementById('finalConfirmBtn');
+    
+    checkbox?.addEventListener('change', () => {
+        if (checkbox.checked) {
+            confirmBtn.disabled = false;
+            confirmBtn.className = 'flex-1 bg-green-600 hover:bg-green-500 text-white py-3 rounded-xl font-bold text-sm transition-colors cursor-pointer';
+            confirmBtn.innerHTML = '<i class="fa-solid fa-check mr-1"></i> Confirm & Earn ✓';
+        } else {
+            confirmBtn.disabled = true;
+            confirmBtn.className = 'flex-1 bg-green-600/50 text-green-200 py-3 rounded-xl font-bold text-sm cursor-not-allowed transition-colors';
+            confirmBtn.innerHTML = '<i class="fa-solid fa-lock mr-1"></i> Confirm & Earn';
+        }
+    });
+    
+    confirmBtn?.addEventListener('click', handleConfirmAuthenticity);
 }
 
 async function handleConfirmAuthenticity(e) {
@@ -1203,7 +1304,10 @@ async function handleSubmitUgc(e) {
     
     try {
         await db.addSubmission(url);
-        showToast("Submitted! Check 'My History' tab.", "success");
+        
+        // ✅ NOVO: Mostra mensagem de auditoria
+        showToast("📋 Submitted! Your post is now under security audit.", "info");
+        
         input.value = '';
         
         // Recarrega dados e muda para aba de histórico
@@ -1234,6 +1338,31 @@ async function handleTaskClick(e) {
         await loadAirdropData();
         updateContent(); 
     } catch (err) { if(!err.message.includes("Cooldown")) showToast(err.message, "error"); }
+}
+
+// ✅ NOVO: Verifica e abre modal automaticamente se houver posts prontos para verificar
+function checkAndShowVerificationModal() {
+    const now = Date.now();
+    const twoHoursMs = AUTO_APPROVE_HOURS * 60 * 60 * 1000;
+    
+    // Encontra posts prontos para verificação
+    const readyToVerify = airdropState.userSubmissions.filter(sub => 
+        ['pending', 'auditing'].includes(sub.status) && 
+        sub.submittedAt && 
+        (now - sub.submittedAt.getTime() >= twoHoursMs)
+    );
+    
+    // Se houver pelo menos 1 post pronto, abre o modal automaticamente
+    if (readyToVerify.length > 0) {
+        // Muda para aba de histórico para contexto
+        airdropState.activeTab = 'history';
+        updateContent();
+        
+        // Pequeno delay para a UI atualizar, depois abre o modal
+        setTimeout(() => {
+            openConfirmationModal(readyToVerify[0]);
+        }, 500);
+    }
 }
 
 // =======================================================
@@ -1351,6 +1480,10 @@ export const AirdropPage = {
                 content.classList.remove('hidden');
                 updateContent();
             }
+            
+            // ✅ NOVO: Auto-abrir modal se houver posts prontos para verificar
+            checkAndShowVerificationModal();
+            
         } catch (e) {
             console.error(e);
             renderError(container, "Failed to load interface.");
