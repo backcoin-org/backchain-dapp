@@ -1,5 +1,5 @@
 // js/pages/FortunePool.js
-// ✅ PRODUCTION V13.6 - Server-side Share Protection via Firebase API
+// ✅ PRODUCTION V13.7 - Full Multi-language Modal + Server-side Protection
 
 import { State } from '../state.js';
 import { loadUserData, API_ENDPOINTS } from '../modules/data.js';
@@ -1579,9 +1579,42 @@ export function cleanup() {
     Game.guesses = [2, 5, 50];
 }
 
-// ✅ V13.6: Modal simplificado com proteção SERVER-SIDE no Firebase
+// ✅ V13.7: Modal com mudança completa de idioma
 async function showShareModal(isWin, prize, multiplier) {
-    // Limites de caracteres por plataforma
+    const currentGameId = Game.gameId?.toString() || `game_${Date.now()}`;
+    
+    // Textos do modal em cada idioma
+    const MODAL_UI = {
+        pt: {
+            title: 'Compartilhe e Ganhe!',
+            subtitle: '+1000 Pontos no Airdrop',
+            twitter: 'Twitter',
+            telegram: 'Telegram', 
+            instagram: 'Instagram',
+            whatsapp: 'WhatsApp',
+            later: 'Talvez Depois'
+        },
+        en: {
+            title: 'Share & Earn!',
+            subtitle: '+1000 Airdrop Points',
+            twitter: 'Twitter',
+            telegram: 'Telegram',
+            instagram: 'Instagram', 
+            whatsapp: 'WhatsApp',
+            later: 'Maybe Later'
+        },
+        es: {
+            title: '¡Comparte y Gana!',
+            subtitle: '+1000 Puntos de Airdrop',
+            twitter: 'Twitter',
+            telegram: 'Telegram',
+            instagram: 'Instagram',
+            whatsapp: 'WhatsApp',
+            later: 'Quizás Después'
+        }
+    };
+    
+    // Textos de compartilhamento
     const SHARE_TEXTS = {
         pt: {
             twitter: `🚀 Conhece a @backcoin?
@@ -1676,25 +1709,45 @@ No son promesas. ¡Es realidad ahora!
     };
     
     let currentLang = 'pt';
-    const currentGameId = Game.gameId?.toString() || `game_${Date.now()}`;
+    
+    // Função para atualizar todo o modal
+    const updateModalLanguage = (lang) => {
+        currentLang = lang;
+        const ui = MODAL_UI[lang];
+        
+        // Atualizar textos
+        const titleEl = document.getElementById('share-modal-title');
+        const subtitleEl = document.getElementById('share-modal-subtitle');
+        const laterEl = document.getElementById('btn-close-share');
+        
+        if (titleEl) titleEl.textContent = ui.title;
+        if (subtitleEl) subtitleEl.textContent = ui.subtitle;
+        if (laterEl) laterEl.textContent = ui.later;
+        
+        // Atualizar visual das bandeiras
+        document.querySelectorAll('.lang-btn').forEach(b => {
+            b.classList.toggle('border-amber-500', b.dataset.lang === lang);
+            b.classList.toggle('border-transparent', b.dataset.lang !== lang);
+        });
+    };
     
     const modalContent = `
         <div class="text-center">
             <!-- Header -->
-            <img src="./assets/fortune.png" class="w-16 h-16 mx-auto mb-2" alt="Backcoin" onerror="this.innerHTML='🐯'">
-            <h3 class="text-lg font-bold text-white">Share & Earn!</h3>
-            <p class="text-amber-400 text-sm font-medium mb-4">+${SHARE_POINTS} Airdrop Points</p>
+            <img src="./assets/fortune.png" class="w-16 h-16 mx-auto mb-2" alt="Backcoin" onerror="this.style.display='none'">
+            <h3 id="share-modal-title" class="text-lg font-bold text-white">${MODAL_UI.pt.title}</h3>
+            <p id="share-modal-subtitle" class="text-amber-400 text-sm font-medium mb-4">${MODAL_UI.pt.subtitle}</p>
             
-            <!-- Language Selector com bandeiras -->
+            <!-- Language Selector -->
             <div class="flex justify-center gap-3 mb-4">
                 <button class="lang-btn p-1 rounded-full border-2 border-amber-500 transition-all" data-lang="pt" title="Português">
-                    <img src="./assets/pt.png" class="w-8 h-8 rounded-full" alt="PT">
+                    <img src="./assets/pt.png" class="w-8 h-8 rounded-full" alt="PT" onerror="this.parentElement.innerHTML='🇵🇹'">
                 </button>
                 <button class="lang-btn p-1 rounded-full border-2 border-transparent hover:border-zinc-500 transition-all" data-lang="en" title="English">
-                    <img src="./assets/en.png" class="w-8 h-8 rounded-full" alt="EN">
+                    <img src="./assets/en.png" class="w-8 h-8 rounded-full" alt="EN" onerror="this.parentElement.innerHTML='🇺🇸'">
                 </button>
                 <button class="lang-btn p-1 rounded-full border-2 border-transparent hover:border-zinc-500 transition-all" data-lang="es" title="Español">
-                    <img src="./assets/es.png" class="w-8 h-8 rounded-full" alt="ES">
+                    <img src="./assets/es.png" class="w-8 h-8 rounded-full" alt="ES" onerror="this.parentElement.innerHTML='🇪🇸'">
                 </button>
             </div>
             
@@ -1720,28 +1773,24 @@ No son promesas. ¡Es realidad ahora!
             
             <!-- Close -->
             <button id="btn-close-share" class="text-zinc-500 hover:text-zinc-300 text-xs transition-colors">
-                Maybe Later
+                ${MODAL_UI.pt.later}
             </button>
         </div>
     `;
     
     openModal(modalContent, 'max-w-xs');
     
-    // Language buttons
+    // Language buttons - atualiza TODO o modal
     document.querySelectorAll('.lang-btn').forEach(btn => {
         btn.addEventListener('click', () => {
-            currentLang = btn.dataset.lang;
-            document.querySelectorAll('.lang-btn').forEach(b => {
-                b.classList.toggle('border-amber-500', b.dataset.lang === currentLang);
-                b.classList.toggle('border-transparent', b.dataset.lang !== currentLang);
-            });
+            updateModalLanguage(btn.dataset.lang);
         });
     });
     
     // Close button
     document.getElementById('btn-close-share')?.addEventListener('click', closeModal);
     
-    // ✅ V13.6: Track share via Firebase API (proteção server-side)
+    // Track share via Firebase API
     const trackShareOnServer = async (platform) => {
         if (!State.userAddress) return false;
         
@@ -1763,7 +1812,6 @@ No son promesas. ¡Es realidad ahora!
                 showToast(`🎉 +${data.pointsAwarded} Points!`, 'success');
                 return true;
             } else if (data.reason === 'already_shared') {
-                // Já compartilhou - não mostra erro, apenas não dá pontos
                 console.log('Already shared this game');
                 return false;
             }
