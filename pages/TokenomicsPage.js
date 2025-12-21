@@ -1,470 +1,804 @@
 // pages/TokenomicsPage.js
-// ✅ VERSION V4.0: Mobile-first redesign with animations and improved UX
+// ✅ PRODUCTION V5.0 - Complete Redesign with Mining, Fees, Airdrop Details
 
 import { showToast } from '../ui-feedback.js';
+import { State } from '../state.js';
+import { formatBigNumber } from '../utils.js';
 
 // ==========================================================
-//  1. STYLES INJECTION
+//  1. CONSTANTS
 // ==========================================================
+const MAX_SUPPLY = 200_000_000;
+const TGE_DISTRIBUTION = {
+    airdrop: { percent: 35, amount: 70_000_000, color: '#f59e0b', icon: '🪂' },
+    liquidity: { percent: 65, amount: 130_000_000, color: '#10b981', icon: '💧' }
+};
 
+const FEE_DISTRIBUTION = {
+    stakers: 70,
+    treasury: 30
+};
+
+const MINING_DISTRIBUTION = {
+    stakers: 70,
+    treasury: 30
+};
+
+// ==========================================================
+//  2. STYLES INJECTION
+// ==========================================================
 const injectTokenomicsStyles = () => {
-    if (document.getElementById('tokenomics-styles')) return;
+    if (document.getElementById('tokenomics-styles-v5')) return;
     
     const style = document.createElement('style');
-    style.id = 'tokenomics-styles';
+    style.id = 'tokenomics-styles-v5';
     style.innerHTML = `
-        @keyframes float-coin {
-            0%, 100% { transform: translateY(0) rotate(0deg); }
-            50% { transform: translateY(-10px) rotate(5deg); }
+        @keyframes float-gentle {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-8px); }
         }
         
-        @keyframes pulse-ring {
-            0% { transform: scale(0.95); opacity: 1; }
-            100% { transform: scale(1.3); opacity: 0; }
+        @keyframes pulse-glow {
+            0%, 100% { box-shadow: 0 0 20px rgba(245, 158, 11, 0.2); }
+            50% { box-shadow: 0 0 40px rgba(245, 158, 11, 0.4); }
         }
         
-        @keyframes glow-pulse {
-            0%, 100% { box-shadow: 0 0 20px rgba(245, 158, 11, 0.3); }
-            50% { box-shadow: 0 0 40px rgba(245, 158, 11, 0.5); }
-        }
-        
-        @keyframes count-up {
-            from { opacity: 0; transform: translateY(10px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-        
-        @keyframes slide-in-left {
-            from { opacity: 0; transform: translateX(-30px); }
-            to { opacity: 1; transform: translateX(0); }
-        }
-        
-        @keyframes slide-in-right {
-            from { opacity: 0; transform: translateX(30px); }
-            to { opacity: 1; transform: translateX(0); }
-        }
-        
-        @keyframes fade-up {
+        @keyframes fade-in-up {
             from { opacity: 0; transform: translateY(20px); }
             to { opacity: 1; transform: translateY(0); }
         }
         
-        .tk-float { animation: float-coin 4s ease-in-out infinite; }
-        .tk-glow { animation: glow-pulse 2s ease-in-out infinite; }
-        .tk-fade-up { animation: fade-up 0.6s ease-out forwards; }
-        .tk-slide-left { animation: slide-in-left 0.5s ease-out forwards; }
-        .tk-slide-right { animation: slide-in-right 0.5s ease-out forwards; }
-        
-        .tk-pie-chart {
-            width: 180px; height: 180px;
-            border-radius: 50%;
-            background: conic-gradient(
-                #10b981 0% 17.5%,
-                #f59e0b 17.5% 100%
-            );
-            position: relative;
-            box-shadow: 0 0 40px rgba(0,0,0,0.5);
-            transition: transform 0.5s ease;
+        @keyframes spin-slow {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
         }
         
-        .tk-pie-chart:hover { transform: scale(1.05); }
-        
-        .tk-pie-hole {
-            position: absolute; top: 50%; left: 50%;
-            transform: translate(-50%, -50%);
-            width: 130px; height: 130px;
-            background: #09090b;
-            border-radius: 50%;
-            display: flex; flex-direction: column;
-            align-items: center; justify-content: center;
-            border: 3px solid #18181b;
+        @keyframes flow-right {
+            0% { transform: translateX(-100%); opacity: 0; }
+            50% { opacity: 1; }
+            100% { transform: translateX(100%); opacity: 0; }
         }
         
-        .tk-glass {
-            background: rgba(20, 20, 23, 0.7);
-            backdrop-filter: blur(16px);
-            -webkit-backdrop-filter: blur(16px);
-            border: 1px solid rgba(255, 255, 255, 0.05);
+        .tk-float { animation: float-gentle 4s ease-in-out infinite; }
+        .tk-glow { animation: pulse-glow 2s ease-in-out infinite; }
+        .tk-fade-up { animation: fade-in-up 0.6s ease-out forwards; }
+        .tk-spin { animation: spin-slow 20s linear infinite; }
+        
+        .tk-section {
+            background: linear-gradient(180deg, rgba(24,24,27,0.8) 0%, rgba(9,9,11,0.9) 100%);
+            border: 1px solid rgba(63,63,70,0.3);
+            border-radius: 1rem;
+            padding: 1.5rem;
+            margin-bottom: 1rem;
         }
         
-        .tk-bar { 
-            background: rgba(255,255,255,0.08); 
-            border-radius: 99px; 
-            height: 6px; 
-            overflow: hidden; 
-        }
-        
-        .tk-bar-fill { 
-            height: 100%; 
-            border-radius: 99px; 
-            transition: width 1s ease-out;
-        }
-        
-        .tk-stat-card {
+        .tk-card {
+            background: rgba(39,39,42,0.4);
+            border: 1px solid rgba(63,63,70,0.5);
+            border-radius: 0.75rem;
+            padding: 1rem;
             transition: all 0.3s ease;
         }
         
-        .tk-stat-card:hover {
-            transform: translateY(-4px);
-            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
+        .tk-card:hover {
+            border-color: rgba(245,158,11,0.3);
+            transform: translateY(-2px);
         }
         
-        .tk-gradient-text {
-            background: linear-gradient(135deg, #fbbf24, #f59e0b, #d97706);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
+        .tk-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.25rem;
+            padding: 0.25rem 0.5rem;
+            border-radius: 9999px;
+            font-size: 10px;
+            font-weight: 600;
         }
         
-        @media (min-width: 768px) {
-            .tk-pie-chart {
-                width: 220px; height: 220px;
-            }
-            .tk-pie-hole {
-                width: 160px; height: 160px;
-            }
+        .tk-flow-line {
+            position: relative;
+            height: 2px;
+            background: rgba(63,63,70,0.5);
+            overflow: hidden;
+        }
+        
+        .tk-flow-line::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 50%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, #f59e0b, transparent);
+            animation: flow-right 2s linear infinite;
+        }
+        
+        .tk-pie-ring {
+            width: 160px;
+            height: 160px;
+            border-radius: 50%;
+            position: relative;
+        }
+        
+        .tk-pie-center {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 100px;
+            height: 100px;
+            background: #09090b;
+            border-radius: 50%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            border: 2px solid #27272a;
+        }
+        
+        .tk-progress-bar {
+            height: 8px;
+            background: rgba(63,63,70,0.5);
+            border-radius: 999px;
+            overflow: hidden;
+        }
+        
+        .tk-progress-fill {
+            height: 100%;
+            border-radius: 999px;
+            transition: width 1s ease-out;
+        }
+        
+        .tk-icon-box {
+            width: 40px;
+            height: 40px;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+        }
+        
+        .tk-stat-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 0.75rem;
+        }
+        
+        @media (min-width: 640px) {
+            .tk-stat-grid { grid-template-columns: repeat(4, 1fr); }
+        }
+        
+        .tk-timeline {
+            position: relative;
+            padding-left: 2rem;
+        }
+        
+        .tk-timeline::before {
+            content: '';
+            position: absolute;
+            left: 0.5rem;
+            top: 0;
+            bottom: 0;
+            width: 2px;
+            background: linear-gradient(180deg, #f59e0b, #10b981);
+        }
+        
+        .tk-timeline-item {
+            position: relative;
+            padding-bottom: 1.5rem;
+        }
+        
+        .tk-timeline-dot {
+            position: absolute;
+            left: -1.75rem;
+            top: 0.25rem;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            border: 2px solid;
         }
     `;
     document.head.appendChild(style);
 };
 
 // ==========================================================
-//  2. MODAL HANDLERS
+//  3. HELPER FUNCTIONS
 // ==========================================================
-
-const setupTokenomicsListeners = () => {
-    const container = document.getElementById('tokenomics');
-    if (!container) return;
-
-    const modal = container.querySelector('#whitepaperModal');
-    const openBtn = container.querySelector('#openWhitepaperModalBtn');
-    const closeBtn = container.querySelector('#closeModalBtn');
-    
-    if (modal && openBtn && closeBtn) {
-        const newOpenBtn = openBtn.cloneNode(true);
-        openBtn.parentNode.replaceChild(newOpenBtn, openBtn);
-        
-        const open = () => {
-            modal.classList.remove('hidden');
-            setTimeout(() => {
-                modal.classList.remove('opacity-0');
-                modal.querySelector('.modal-content').classList.remove('scale-95');
-                modal.querySelector('.modal-content').classList.add('scale-100');
-            }, 10);
-        };
-
-        const close = () => {
-            modal.classList.add('opacity-0');
-            modal.querySelector('.modal-content').classList.remove('scale-100');
-            modal.querySelector('.modal-content').classList.add('scale-95');
-            setTimeout(() => modal.classList.add('hidden'), 300);
-        };
-
-        newOpenBtn.addEventListener('click', open);
-        closeBtn.addEventListener('click', close);
-        modal.addEventListener('click', (e) => { if (e.target === modal) close(); });
-    }
+const formatNumber = (num) => {
+    if (num >= 1_000_000) return (num / 1_000_000).toFixed(1) + 'M';
+    if (num >= 1_000) return (num / 1_000).toFixed(0) + 'K';
+    return num.toLocaleString();
 };
 
 // ==========================================================
-//  3. RENDER CONTENT
+//  4. RENDER SECTIONS
 // ==========================================================
 
-const renderTokenomicsContent = () => {
-    const container = document.getElementById('tokenomics'); 
-    if (!container) return;
-
-    container.innerHTML = `
-        <div class="min-h-screen pb-24">
-            
-            <!-- Hero Section - Mobile First -->
-            <section class="px-4 pt-8 pb-12 md:pt-16 md:pb-20">
-                <div class="max-w-4xl mx-auto text-center">
-                    <!-- Badge -->
-                    <div class="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-amber-500/10 border border-amber-500/20 mb-6 tk-fade-up">
-                        <span class="w-2 h-2 rounded-full bg-amber-500 animate-pulse"></span>
-                        <span class="text-[10px] md:text-xs font-bold text-amber-400 tracking-widest uppercase">The Blueprint</span>
-                    </div>
-                    
-                    <!-- Title -->
-                    <h1 class="text-3xl md:text-6xl font-black mb-4 md:mb-6 tracking-tight text-white leading-tight tk-fade-up" style="animation-delay: 0.1s;">
-                        A Fair Launch<br>
-                        <span class="tk-gradient-text">Economy</span>
-                    </h1>
-                    
-                    <!-- Subtitle -->
-                    <p class="text-sm md:text-lg text-zinc-400 max-w-2xl mx-auto leading-relaxed mb-8 tk-fade-up" style="animation-delay: 0.2s;">
-                        <span class="text-white font-bold">No team allocation. No private investors.</span><br class="md:hidden">
-                        <span class="hidden md:inline"> </span>100% Ecosystem.
-                    </p>
-
-                    <!-- CTA Button -->
-                    <button id="openWhitepaperModalBtn" class="group bg-white hover:bg-zinc-100 text-black font-bold py-3 px-6 md:py-4 md:px-10 rounded-xl md:rounded-2xl text-sm md:text-lg shadow-lg hover:shadow-xl transition-all hover:scale-105 tk-fade-up" style="animation-delay: 0.3s;">
-                        <i class="fa-solid fa-file-pdf mr-2"></i>
-                        Whitepaper
-                        <i class="fa-solid fa-arrow-right ml-2 group-hover:translate-x-1 transition-transform"></i>
-                    </button>
-                </div>
-            </section>
-
-            <!-- TGE Section -->
-            <section class="px-4 mb-12 md:mb-20">
-                <div class="max-w-4xl mx-auto">
-                    <div class="tk-glass rounded-2xl md:rounded-3xl p-6 md:p-10 border border-zinc-800 relative overflow-hidden">
-                        <!-- Top gradient line -->
-                        <div class="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-green-500 to-amber-500"></div>
-                        
-                        <!-- Section Title -->
-                        <div class="text-center mb-8">
-                            <h2 class="text-xl md:text-3xl font-bold text-white mb-2">Initial Distribution</h2>
-                            <p class="text-zinc-500 text-sm">40M $BKC at Genesis</p>
-                        </div>
-                        
-                        <div class="flex flex-col lg:flex-row items-center gap-8 lg:gap-12">
-                            <!-- Pie Chart -->
-                            <div class="flex-shrink-0 tk-slide-left">
-                                <div class="tk-pie-chart tk-glow">
-                                    <div class="tk-pie-hole">
-                                        <span class="text-2xl md:text-4xl font-black text-white">40M</span>
-                                        <span class="text-[8px] md:text-[10px] text-zinc-500 font-mono uppercase tracking-wider mt-1">Genesis</span>
-                                    </div>
-                                </div>
-                            </div>
-                            
-                            <!-- Distribution Details -->
-                            <div class="flex-1 space-y-4 w-full tk-slide-right">
-                                <!-- Airdrop -->
-                                <div class="p-4 rounded-xl bg-zinc-900/50 border border-zinc-800 hover:border-green-500/30 transition-colors">
-                                    <div class="flex items-center justify-between mb-2">
-                                        <div class="flex items-center gap-2">
-                                            <div class="w-3 h-3 rounded-full bg-green-500 shadow-[0_0_10px_#22c55e]"></div>
-                                            <span class="text-sm md:text-base font-bold text-green-400">17.5% Airdrop</span>
-                                        </div>
-                                        <span class="font-mono text-xs md:text-sm text-white bg-black/40 px-2 py-1 rounded">7M</span>
-                                    </div>
-                                    <p class="text-xs text-zinc-500 pl-5">Free distribution to early adopters</p>
-                                </div>
-                                
-                                <!-- Treasury -->
-                                <div class="p-4 rounded-xl bg-zinc-900/50 border border-zinc-800 hover:border-amber-500/30 transition-colors">
-                                    <div class="flex items-center justify-between mb-2">
-                                        <div class="flex items-center gap-2">
-                                            <div class="w-3 h-3 rounded-full bg-amber-500 shadow-[0_0_10px_#f59e0b]"></div>
-                                            <span class="text-sm md:text-base font-bold text-amber-400">82.5% Treasury</span>
-                                        </div>
-                                        <span class="font-mono text-xs md:text-sm text-white bg-black/40 px-2 py-1 rounded">33M</span>
-                                    </div>
-                                    <p class="text-xs text-zinc-500 pl-5">Liquidity & DAO development fund</p>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </section>
-
-            <!-- PoP Mining Section -->
-            <section class="px-4 mb-12 md:mb-20">
-                <div class="max-w-4xl mx-auto">
-                    <!-- Section Header -->
-                    <div class="text-center mb-8">
-                        <span class="inline-block text-[10px] md:text-xs font-bold text-purple-400 tracking-widest uppercase border border-purple-500/30 px-3 py-1 rounded-full bg-purple-500/10 mb-4">
-                            The Mint Pool
-                        </span>
-                        <h2 class="text-2xl md:text-4xl font-bold text-white mb-3">Proof-of-Purchase</h2>
-                        <p class="text-zinc-400 text-sm md:text-base max-w-lg mx-auto">
-                            <span class="text-white font-bold">160M $BKC</span> locked. Minted only when real activity occurs.
-                        </p>
-                    </div>
-                    
-                    <!-- Mining Cards -->
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <!-- 80% Delegators -->
-                        <div class="tk-stat-card tk-glass p-6 md:p-8 rounded-2xl text-center border-t-4 border-t-purple-500 relative overflow-hidden">
-                            <div class="absolute top-2 right-2 opacity-10">
-                                <i class="fa-solid fa-users text-5xl md:text-7xl"></i>
-                            </div>
-                            <div class="w-12 h-12 md:w-14 md:h-14 rounded-xl bg-purple-500/10 flex items-center justify-center mx-auto mb-4">
-                                <i class="fa-solid fa-layer-group text-purple-400 text-xl md:text-2xl"></i>
-                            </div>
-                            <h3 class="text-4xl md:text-6xl font-black text-white mb-1">80%</h3>
-                            <p class="text-purple-300 font-bold uppercase tracking-widest text-[10px] md:text-xs mb-3">Delegator Reward</p>
-                            <p class="text-zinc-400 text-xs leading-relaxed">
-                                Majority goes to Stakers securing the network
-                            </p>
-                        </div>
-                        
-                        <!-- 20% Treasury -->
-                        <div class="tk-stat-card tk-glass p-6 md:p-8 rounded-2xl text-center border-t-4 border-t-amber-500 relative overflow-hidden">
-                            <div class="absolute top-2 right-2 opacity-10">
-                                <i class="fa-solid fa-landmark text-5xl md:text-7xl"></i>
-                            </div>
-                            <div class="w-12 h-12 md:w-14 md:h-14 rounded-xl bg-amber-500/10 flex items-center justify-center mx-auto mb-4">
-                                <i class="fa-solid fa-building-columns text-amber-400 text-xl md:text-2xl"></i>
-                            </div>
-                            <h3 class="text-4xl md:text-6xl font-black text-white mb-1">20%</h3>
-                            <p class="text-amber-300 font-bold uppercase tracking-widest text-[10px] md:text-xs mb-3">DAO Treasury</p>
-                            <p class="text-zinc-400 text-xs leading-relaxed">
-                                Development, marketing & partnerships
-                            </p>
-                        </div>
-                    </div>
-                </div>
-            </section>
-
-            <!-- Mechanics Section -->
-            <section class="px-4 mb-12">
-                <div class="max-w-4xl mx-auto">
-                    <div class="tk-glass rounded-2xl md:rounded-3xl p-6 md:p-10 border border-zinc-800">
-                        <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 lg:gap-12">
-                            
-                            <!-- Dynamic Scarcity -->
-                            <div>
-                                <h3 class="text-lg md:text-xl font-bold text-white mb-6 flex items-center gap-2">
-                                    <i class="fa-solid fa-chart-line text-cyan-400"></i>
-                                    Dynamic Scarcity
-                                </h3>
-                                
-                                <div class="space-y-4">
-                                    <div>
-                                        <div class="flex justify-between text-xs md:text-sm mb-2">
-                                            <span class="text-zinc-400">Phase 1: Early Adopters</span>
-                                            <span class="text-cyan-400 font-bold">100%</span>
-                                        </div>
-                                        <div class="tk-bar"><div class="tk-bar-fill bg-cyan-500" style="width: 100%"></div></div>
-                                    </div>
-                                    <div>
-                                        <div class="flex justify-between text-xs md:text-sm mb-2">
-                                            <span class="text-zinc-400">Phase 2: &lt; 80M Left</span>
-                                            <span class="text-cyan-400 font-bold">50%</span>
-                                        </div>
-                                        <div class="tk-bar"><div class="tk-bar-fill bg-cyan-600" style="width: 50%"></div></div>
-                                    </div>
-                                    <div>
-                                        <div class="flex justify-between text-xs md:text-sm mb-2">
-                                            <span class="text-zinc-400">Phase 3: &lt; 40M Left</span>
-                                            <span class="text-cyan-400 font-bold">25%</span>
-                                        </div>
-                                        <div class="tk-bar"><div class="tk-bar-fill bg-cyan-700" style="width: 25%"></div></div>
-                                    </div>
-                                    <p class="text-[10px] md:text-xs text-zinc-600 italic pt-2">
-                                        *Auto-halving based on remaining supply
-                                    </p>
-                                </div>
-                            </div>
-                            
-                            <!-- Value Retention -->
-                            <div>
-                                <h3 class="text-lg md:text-xl font-bold text-white mb-6 flex items-center gap-2">
-                                    <i class="fa-solid fa-lock text-red-400"></i>
-                                    Value Retention
-                                </h3>
-                                
-                                <div class="space-y-4">
-                                    <div class="flex items-start gap-3">
-                                        <div class="w-10 h-10 rounded-lg bg-red-500/10 flex items-center justify-center text-red-400 flex-shrink-0">
-                                            <i class="fa-solid fa-anchor"></i>
-                                        </div>
-                                        <div>
-                                            <strong class="text-white text-sm block mb-1">Staking Lock-up</strong>
-                                            <span class="text-xs text-zinc-400">Lock tokens up to 10 years for multiplied pStake power</span>
-                                        </div>
-                                    </div>
-                                    <div class="flex items-start gap-3">
-                                        <div class="w-10 h-10 rounded-lg bg-red-500/10 flex items-center justify-center text-red-400 flex-shrink-0">
-                                            <i class="fa-solid fa-fire"></i>
-                                        </div>
-                                        <div>
-                                            <strong class="text-white text-sm block mb-1">Service Burn</strong>
-                                            <span class="text-xs text-zinc-400">Every interaction removes supply from circulation</span>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </section>
-
-            <!-- Quick Stats Bar -->
-            <section class="px-4 mb-12">
-                <div class="max-w-4xl mx-auto">
-                    <div class="grid grid-cols-3 gap-3">
-                        <div class="tk-glass rounded-xl p-4 text-center border border-zinc-800">
-                            <span class="text-xl md:text-3xl font-black text-white">200M</span>
-                            <p class="text-[9px] md:text-xs text-zinc-500 mt-1">Max Supply</p>
-                        </div>
-                        <div class="tk-glass rounded-xl p-4 text-center border border-zinc-800">
-                            <span class="text-xl md:text-3xl font-black text-green-400">0%</span>
-                            <p class="text-[9px] md:text-xs text-zinc-500 mt-1">Team Alloc</p>
-                        </div>
-                        <div class="tk-glass rounded-xl p-4 text-center border border-zinc-800">
-                            <span class="text-xl md:text-3xl font-black text-amber-400">100%</span>
-                            <p class="text-[9px] md:text-xs text-zinc-500 mt-1">Community</p>
-                        </div>
-                    </div>
-                </div>
-            </section>
-
+function renderHeroSection() {
+    return `
+        <div class="text-center mb-6 tk-fade-up">
+            <div class="relative inline-block mb-4">
+                <img src="./assets/bkc_logo_3d.png" class="w-20 h-20 tk-float tk-glow rounded-full" alt="BKC">
+            </div>
+            <h1 class="text-2xl font-black text-white mb-2">
+                <span class="bg-gradient-to-r from-amber-400 to-orange-500 bg-clip-text text-transparent">BACKCOIN</span>
+                <span class="text-zinc-400 font-normal">Tokenomics</span>
+            </h1>
+            <p class="text-zinc-500 text-sm max-w-md mx-auto">
+                An ecosystem designed for <span class="text-amber-400">sustainable growth</span>, 
+                <span class="text-emerald-400">community rewards</span>, and 
+                <span class="text-purple-400">real utility</span>
+            </p>
         </div>
+    `;
+}
 
-        <!-- Whitepaper Modal -->
-        <div id="whitepaperModal" class="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 z-50 hidden transition-opacity opacity-0">
-            <div class="modal-content tk-glass bg-zinc-900/90 border border-zinc-700 rounded-2xl p-6 md:p-8 w-full max-w-md relative transform scale-95 transition-transform duration-300">
-                <button id="closeModalBtn" class="absolute top-4 right-4 text-zinc-500 hover:text-white transition-colors">
-                    <i class="fa-solid fa-xmark text-xl md:text-2xl"></i>
-                </button>
-                
-                <div class="text-center mb-6">
-                    <div class="w-14 h-14 rounded-2xl bg-amber-500/10 flex items-center justify-center mx-auto mb-4">
-                        <i class="fa-solid fa-file-pdf text-amber-400 text-2xl"></i>
+function renderSupplySection() {
+    const currentSupply = State.totalSupply ? formatBigNumber(State.totalSupply) : 40_000_000;
+    const supplyPercent = (currentSupply / MAX_SUPPLY * 100).toFixed(1);
+    
+    return `
+        <div class="tk-section tk-fade-up" style="animation-delay: 0.1s">
+            <div class="flex items-center gap-2 mb-4">
+                <div class="tk-icon-box bg-amber-500/20">
+                    <i class="fa-solid fa-coins text-amber-400"></i>
+                </div>
+                <div>
+                    <h2 class="text-white font-bold">Token Supply</h2>
+                    <p class="text-zinc-500 text-xs">BKC Token Distribution</p>
+                </div>
+            </div>
+            
+            <div class="grid grid-cols-2 gap-4 mb-4">
+                <div class="tk-card text-center">
+                    <p class="text-zinc-500 text-[10px] uppercase mb-1">Max Supply</p>
+                    <p class="text-xl font-black text-white">${formatNumber(MAX_SUPPLY)}</p>
+                    <p class="text-amber-400 text-xs">BKC</p>
+                </div>
+                <div class="tk-card text-center">
+                    <p class="text-zinc-500 text-[10px] uppercase mb-1">Current Supply</p>
+                    <p class="text-xl font-black text-emerald-400">${formatNumber(currentSupply)}</p>
+                    <p class="text-zinc-500 text-xs">${supplyPercent}% minted</p>
+                </div>
+            </div>
+            
+            <div class="tk-progress-bar mb-2">
+                <div class="tk-progress-fill bg-gradient-to-r from-amber-500 to-emerald-500" style="width: ${supplyPercent}%"></div>
+            </div>
+            <p class="text-center text-zinc-600 text-[10px]">
+                <i class="fa-solid fa-pickaxe mr-1"></i>
+                Remaining ${formatNumber(MAX_SUPPLY - currentSupply)} BKC to be mined through ecosystem activity
+            </p>
+        </div>
+    `;
+}
+
+function renderTGESection() {
+    return `
+        <div class="tk-section tk-fade-up" style="animation-delay: 0.2s">
+            <div class="flex items-center gap-2 mb-4">
+                <div class="tk-icon-box bg-purple-500/20">
+                    <i class="fa-solid fa-rocket text-purple-400"></i>
+                </div>
+                <div>
+                    <h2 class="text-white font-bold">TGE Distribution</h2>
+                    <p class="text-zinc-500 text-xs">Token Generation Event</p>
+                </div>
+            </div>
+            
+            <div class="flex items-center justify-center gap-6 mb-4">
+                <!-- Pie Chart -->
+                <div class="tk-pie-ring" style="background: conic-gradient(#f59e0b 0% 35%, #10b981 35% 100%);">
+                    <div class="tk-pie-center">
+                        <p class="text-2xl font-black text-white">TGE</p>
+                        <p class="text-[10px] text-zinc-500">Initial</p>
                     </div>
-                    <h3 class="text-xl font-bold text-white">Documentation</h3>
-                    <p class="text-zinc-400 text-sm mt-1">Technical papers & architecture</p>
+                </div>
+                
+                <!-- Legend -->
+                <div class="space-y-3">
+                    <div class="flex items-center gap-2">
+                        <div class="w-3 h-3 rounded-full bg-amber-500"></div>
+                        <div>
+                            <p class="text-white font-bold text-sm">35% Airdrop</p>
+                            <p class="text-zinc-500 text-[10px]">${formatNumber(TGE_DISTRIBUTION.airdrop.amount)} BKC</p>
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <div class="w-3 h-3 rounded-full bg-emerald-500"></div>
+                        <div>
+                            <p class="text-white font-bold text-sm">65% Liquidity</p>
+                            <p class="text-zinc-500 text-[10px]">${formatNumber(TGE_DISTRIBUTION.liquidity.amount)} BKC</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Airdrop Details -->
+            <div class="tk-card bg-gradient-to-r from-amber-500/10 to-orange-500/10 border-amber-500/30">
+                <div class="flex items-center gap-2 mb-3">
+                    <span class="text-xl">🪂</span>
+                    <div>
+                        <p class="text-amber-400 font-bold text-sm">Community Airdrop</p>
+                        <p class="text-zinc-500 text-[10px]">35% of TGE = 70M BKC</p>
+                    </div>
+                </div>
+                
+                <div class="grid grid-cols-2 gap-3">
+                    <div class="bg-zinc-900/50 rounded-lg p-3 text-center">
+                        <p class="text-zinc-500 text-[10px] uppercase mb-1">Round 1</p>
+                        <p class="text-white font-bold">Early Supporters</p>
+                        <p class="text-amber-400 text-xs">Points-based</p>
+                    </div>
+                    <div class="bg-zinc-900/50 rounded-lg p-3 text-center">
+                        <p class="text-zinc-500 text-[10px] uppercase mb-1">Round 2</p>
+                        <p class="text-white font-bold">Active Users</p>
+                        <p class="text-amber-400 text-xs">Activity-based</p>
+                    </div>
+                </div>
+                
+                <p class="text-center text-zinc-600 text-[10px] mt-3">
+                    <i class="fa-solid fa-circle-info mr-1"></i>
+                    Earn airdrop points by using the platform: staking, notarizing, playing Fortune Pool, and more!
+                </p>
+            </div>
+        </div>
+    `;
+}
+
+function renderMiningSection() {
+    return `
+        <div class="tk-section tk-fade-up" style="animation-delay: 0.3s">
+            <div class="flex items-center gap-2 mb-4">
+                <div class="tk-icon-box bg-emerald-500/20">
+                    <i class="fa-solid fa-pickaxe text-emerald-400"></i>
+                </div>
+                <div>
+                    <h2 class="text-white font-bold">Mining by Purchase</h2>
+                    <p class="text-zinc-500 text-xs">New tokens minted when you buy NFTs</p>
+                </div>
+            </div>
+            
+            <div class="tk-card mb-4">
+                <div class="flex items-center justify-between mb-3">
+                    <span class="text-zinc-400 text-sm">How it works</span>
+                    <span class="tk-badge bg-emerald-500/20 text-emerald-400">
+                        <i class="fa-solid fa-bolt mr-1"></i>Active
+                    </span>
                 </div>
                 
                 <div class="space-y-3">
-                    <a href="./assets/Backchain ($BKC) en V2.pdf" target="_blank" 
-                       class="flex items-center gap-4 p-4 rounded-xl bg-zinc-800/50 hover:bg-zinc-800 border border-zinc-700 hover:border-amber-500/50 transition-all group">
-                        <div class="w-10 h-10 rounded-lg bg-amber-500/10 flex items-center justify-center text-amber-400">
-                            <i class="fa-solid fa-coins"></i>
+                    <div class="flex items-start gap-3">
+                        <div class="w-6 h-6 rounded-full bg-blue-500/20 flex items-center justify-center flex-shrink-0 mt-0.5">
+                            <span class="text-blue-400 text-xs font-bold">1</span>
                         </div>
-                        <div class="flex-1 text-left">
-                            <div class="text-white font-bold text-sm group-hover:text-amber-400 transition-colors">Tokenomics Paper</div>
-                            <div class="text-zinc-500 text-xs">Distribution Models</div>
+                        <div>
+                            <p class="text-white text-sm font-medium">Buy NFT Booster</p>
+                            <p class="text-zinc-500 text-xs">Purchase from any liquidity pool</p>
                         </div>
-                        <i class="fa-solid fa-download text-zinc-600 group-hover:text-white transition-colors"></i>
-                    </a>
+                    </div>
                     
-                    <a href="./assets/whitepaper_bkc_ecosystem_english.pdf" target="_blank" 
-                       class="flex items-center gap-4 p-4 rounded-xl bg-zinc-800/50 hover:bg-zinc-800 border border-zinc-700 hover:border-cyan-500/50 transition-all group">
-                        <div class="w-10 h-10 rounded-lg bg-cyan-500/10 flex items-center justify-center text-cyan-400">
-                            <i class="fa-solid fa-network-wired"></i>
+                    <div class="tk-flow-line my-2"></div>
+                    
+                    <div class="flex items-start gap-3">
+                        <div class="w-6 h-6 rounded-full bg-emerald-500/20 flex items-center justify-center flex-shrink-0 mt-0.5">
+                            <span class="text-emerald-400 text-xs font-bold">2</span>
                         </div>
-                        <div class="flex-1 text-left">
-                            <div class="text-white font-bold text-sm group-hover:text-cyan-400 transition-colors">Ecosystem Architecture</div>
-                            <div class="text-zinc-500 text-xs">Technical Overview</div>
+                        <div>
+                            <p class="text-white text-sm font-medium">New BKC Minted</p>
+                            <p class="text-zinc-500 text-xs">Fresh tokens created from your purchase</p>
                         </div>
-                        <i class="fa-solid fa-download text-zinc-600 group-hover:text-white transition-colors"></i>
-                    </a>
+                    </div>
+                    
+                    <div class="tk-flow-line my-2"></div>
+                    
+                    <div class="flex items-start gap-3">
+                        <div class="w-6 h-6 rounded-full bg-purple-500/20 flex items-center justify-center flex-shrink-0 mt-0.5">
+                            <span class="text-purple-400 text-xs font-bold">3</span>
+                        </div>
+                        <div>
+                            <p class="text-white text-sm font-medium">Distributed to Stakers</p>
+                            <p class="text-zinc-500 text-xs">70% to delegators, 30% to treasury</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Mining Distribution -->
+            <div class="grid grid-cols-2 gap-3">
+                <div class="tk-card text-center bg-gradient-to-br from-purple-500/10 to-violet-500/10 border-purple-500/30">
+                    <div class="text-3xl font-black text-purple-400 mb-1">70%</div>
+                    <p class="text-white text-sm font-medium">Stakers</p>
+                    <p class="text-zinc-500 text-[10px]">Reward Pool</p>
+                </div>
+                <div class="tk-card text-center bg-gradient-to-br from-blue-500/10 to-cyan-500/10 border-blue-500/30">
+                    <div class="text-3xl font-black text-blue-400 mb-1">30%</div>
+                    <p class="text-white text-sm font-medium">Treasury</p>
+                    <p class="text-zinc-500 text-[10px]">Development</p>
                 </div>
             </div>
         </div>
     `;
-};
+}
+
+function renderFeesSection() {
+    const fees = [
+        { name: 'Delegation Entry', key: 'DELEGATION_FEE', default: '2%', icon: 'fa-lock', color: 'purple' },
+        { name: 'Normal Unstake', key: 'UNSTAKE_FEE', default: '5%', icon: 'fa-unlock', color: 'blue' },
+        { name: 'Force Unstake', key: 'FORCE_UNSTAKE', default: '20%', icon: 'fa-bolt', color: 'red' },
+        { name: 'Claim Rewards', key: 'CLAIM_REWARD_FEE', default: '10%', icon: 'fa-gift', color: 'amber' },
+        { name: 'NFT Buy Tax', key: 'NFT_BUY_TAX', default: '5%', icon: 'fa-cart-shopping', color: 'emerald' },
+        { name: 'NFT Sell Tax', key: 'NFT_SELL_TAX', default: '10%', icon: 'fa-tag', color: 'cyan' },
+        { name: 'Notarization', key: 'NOTARY_FEE', default: '1 BKC', icon: 'fa-stamp', color: 'violet' },
+        { name: 'Fortune Pool', key: 'FORTUNE_FEE', default: '~10%', icon: 'fa-clover', color: 'green' }
+    ];
+    
+    return `
+        <div class="tk-section tk-fade-up" style="animation-delay: 0.4s">
+            <div class="flex items-center gap-2 mb-4">
+                <div class="tk-icon-box bg-cyan-500/20">
+                    <i class="fa-solid fa-percent text-cyan-400"></i>
+                </div>
+                <div>
+                    <h2 class="text-white font-bold">Platform Fees</h2>
+                    <p class="text-zinc-500 text-xs">All fees benefit the ecosystem</p>
+                </div>
+            </div>
+            
+            <!-- Fee Distribution Banner -->
+            <div class="tk-card bg-gradient-to-r from-emerald-500/10 to-cyan-500/10 border-emerald-500/30 mb-4">
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center gap-3">
+                        <i class="fa-solid fa-chart-pie text-emerald-400 text-xl"></i>
+                        <div>
+                            <p class="text-white font-bold text-sm">Fee Distribution</p>
+                            <p class="text-zinc-500 text-[10px]">Where your fees go</p>
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-4">
+                        <div class="text-center">
+                            <p class="text-2xl font-black text-purple-400">70%</p>
+                            <p class="text-[10px] text-zinc-500">Stakers</p>
+                        </div>
+                        <div class="text-center">
+                            <p class="text-2xl font-black text-blue-400">30%</p>
+                            <p class="text-[10px] text-zinc-500">Treasury</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Fee Grid -->
+            <div class="grid grid-cols-2 gap-2">
+                ${fees.map(fee => `
+                    <div class="tk-card flex items-center gap-2 p-2">
+                        <div class="w-8 h-8 rounded-lg bg-${fee.color}-500/20 flex items-center justify-center flex-shrink-0">
+                            <i class="fa-solid ${fee.icon} text-${fee.color}-400 text-xs"></i>
+                        </div>
+                        <div class="min-w-0">
+                            <p class="text-white text-xs font-medium truncate">${fee.name}</p>
+                            <p class="text-${fee.color}-400 text-[10px] font-bold">${fee.default}</p>
+                        </div>
+                    </div>
+                `).join('')}
+            </div>
+            
+            <!-- Booster Discount Note -->
+            <div class="mt-3 p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg">
+                <div class="flex items-center gap-2">
+                    <i class="fa-solid fa-star text-amber-400"></i>
+                    <p class="text-amber-400 text-xs font-medium">NFT Booster holders get fee discounts up to 50%!</p>
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+function renderEarningsSection() {
+    return `
+        <div class="tk-section tk-fade-up" style="animation-delay: 0.5s">
+            <div class="flex items-center gap-2 mb-4">
+                <div class="tk-icon-box bg-amber-500/20">
+                    <i class="fa-solid fa-sack-dollar text-amber-400"></i>
+                </div>
+                <div>
+                    <h2 class="text-white font-bold">How to Earn</h2>
+                    <p class="text-zinc-500 text-xs">Multiple ways to grow your BKC</p>
+                </div>
+            </div>
+            
+            <div class="space-y-3">
+                <!-- Staking Rewards -->
+                <div class="tk-card">
+                    <div class="flex items-center gap-3 mb-2">
+                        <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-purple-500 to-violet-600 flex items-center justify-center">
+                            <i class="fa-solid fa-lock text-white"></i>
+                        </div>
+                        <div class="flex-1">
+                            <p class="text-white font-bold">Staking Rewards</p>
+                            <p class="text-zinc-500 text-xs">Delegate BKC and earn passive income</p>
+                        </div>
+                        <span class="tk-badge bg-purple-500/20 text-purple-400">
+                            <i class="fa-solid fa-fire mr-1"></i>Best APY
+                        </span>
+                    </div>
+                    <div class="grid grid-cols-3 gap-2 text-center text-[10px]">
+                        <div class="bg-zinc-800/50 rounded-lg p-2">
+                            <p class="text-zinc-500">Source</p>
+                            <p class="text-purple-400 font-medium">70% of fees</p>
+                        </div>
+                        <div class="bg-zinc-800/50 rounded-lg p-2">
+                            <p class="text-zinc-500">Mining</p>
+                            <p class="text-emerald-400 font-medium">70% new tokens</p>
+                        </div>
+                        <div class="bg-zinc-800/50 rounded-lg p-2">
+                            <p class="text-zinc-500">Boost</p>
+                            <p class="text-amber-400 font-medium">Up to +50%</p>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- NFT Rental -->
+                <div class="tk-card">
+                    <div class="flex items-center gap-3 mb-2">
+                        <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center">
+                            <i class="fa-solid fa-house text-white"></i>
+                        </div>
+                        <div class="flex-1">
+                            <p class="text-white font-bold">NFT Rental</p>
+                            <p class="text-zinc-500 text-xs">Rent your boosters to other users</p>
+                        </div>
+                        <span class="tk-badge bg-cyan-500/20 text-cyan-400">
+                            <i class="fa-solid fa-clock mr-1"></i>Hourly
+                        </span>
+                    </div>
+                    <p class="text-zinc-600 text-xs">
+                        Set your own price per hour. Earn while your NFT helps others boost their rewards.
+                    </p>
+                </div>
+                
+                <!-- Fortune Pool -->
+                <div class="tk-card">
+                    <div class="flex items-center gap-3 mb-2">
+                        <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-500 to-green-600 flex items-center justify-center">
+                            <i class="fa-solid fa-clover text-white"></i>
+                        </div>
+                        <div class="flex-1">
+                            <p class="text-white font-bold">Fortune Pool</p>
+                            <p class="text-zinc-500 text-xs">On-chain lottery with real prizes</p>
+                        </div>
+                        <span class="tk-badge bg-emerald-500/20 text-emerald-400">
+                            <i class="fa-solid fa-dice mr-1"></i>Up to 125x
+                        </span>
+                    </div>
+                    <p class="text-zinc-600 text-xs">
+                        Match numbers to multiply your wager. Three tiers of difficulty with increasing rewards.
+                    </p>
+                </div>
+                
+                <!-- Airdrop Points -->
+                <div class="tk-card">
+                    <div class="flex items-center gap-3 mb-2">
+                        <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-500 to-orange-600 flex items-center justify-center">
+                            <i class="fa-solid fa-parachute-box text-white"></i>
+                        </div>
+                        <div class="flex-1">
+                            <p class="text-white font-bold">Airdrop Points</p>
+                            <p class="text-zinc-500 text-xs">Earn points for every action</p>
+                        </div>
+                        <span class="tk-badge bg-amber-500/20 text-amber-400">
+                            <i class="fa-solid fa-gift mr-1"></i>35% TGE
+                        </span>
+                    </div>
+                    <div class="grid grid-cols-4 gap-1 text-center text-[10px]">
+                        <div class="bg-zinc-800/50 rounded p-1">
+                            <i class="fa-solid fa-lock text-purple-400"></i>
+                            <p class="text-zinc-500 mt-1">Stake</p>
+                        </div>
+                        <div class="bg-zinc-800/50 rounded p-1">
+                            <i class="fa-solid fa-stamp text-violet-400"></i>
+                            <p class="text-zinc-500 mt-1">Notarize</p>
+                        </div>
+                        <div class="bg-zinc-800/50 rounded p-1">
+                            <i class="fa-solid fa-clover text-emerald-400"></i>
+                            <p class="text-zinc-500 mt-1">Fortune</p>
+                        </div>
+                        <div class="bg-zinc-800/50 rounded p-1">
+                            <i class="fa-solid fa-share text-cyan-400"></i>
+                            <p class="text-zinc-500 mt-1">Share</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+function renderBoostersSection() {
+    const boosters = [
+        { tier: 'Crystal', boost: '+50%', discount: '50%', color: 'purple', price: '~500K' },
+        { tier: 'Diamond', boost: '+40%', discount: '40%', color: 'cyan', price: '~100K' },
+        { tier: 'Platinum', boost: '+30%', discount: '30%', color: 'slate', price: '~50K' },
+        { tier: 'Gold', boost: '+20%', discount: '20%', color: 'yellow', price: '~10K' },
+        { tier: 'Silver', boost: '+10%', discount: '10%', color: 'gray', price: '~5K' },
+        { tier: 'Bronze', boost: '+5%', discount: '5%', color: 'orange', price: '~1K' }
+    ];
+    
+    return `
+        <div class="tk-section tk-fade-up" style="animation-delay: 0.6s">
+            <div class="flex items-center gap-2 mb-4">
+                <div class="tk-icon-box bg-violet-500/20">
+                    <i class="fa-solid fa-gem text-violet-400"></i>
+                </div>
+                <div>
+                    <h2 class="text-white font-bold">NFT Boosters</h2>
+                    <p class="text-zinc-500 text-xs">Enhance your earnings</p>
+                </div>
+            </div>
+            
+            <div class="grid grid-cols-2 gap-2">
+                ${boosters.map(b => `
+                    <div class="tk-card p-2">
+                        <div class="flex items-center gap-2 mb-2">
+                            <div class="w-8 h-8 rounded-lg bg-${b.color}-500/20 flex items-center justify-center">
+                                <i class="fa-solid fa-gem text-${b.color}-400 text-xs"></i>
+                            </div>
+                            <div>
+                                <p class="text-white text-xs font-bold">${b.tier}</p>
+                                <p class="text-zinc-600 text-[10px]">${b.price} BKC</p>
+                            </div>
+                        </div>
+                        <div class="flex justify-between text-[10px]">
+                            <span class="text-emerald-400">⬆ ${b.boost} rewards</span>
+                            <span class="text-cyan-400">⬇ ${b.discount} fees</span>
+                        </div>
+                    </div>
+                `).join('')}
+            </div>
+        </div>
+    `;
+}
+
+function renderRoadmapSection() {
+    const phases = [
+        { phase: 'Phase 1', title: 'Foundation', status: 'done', items: ['Smart Contracts', 'Core Platform', 'Testnet Launch'] },
+        { phase: 'Phase 2', title: 'Growth', status: 'active', items: ['Airdrop Round 1', 'Community Building', 'Partnerships'] },
+        { phase: 'Phase 3', title: 'Expansion', status: 'upcoming', items: ['DEX Listing', 'Mobile App', 'Airdrop Round 2'] },
+        { phase: 'Phase 4', title: 'Ecosystem', status: 'upcoming', items: ['DAO Governance', 'Cross-chain', 'Enterprise'] }
+    ];
+    
+    return `
+        <div class="tk-section tk-fade-up" style="animation-delay: 0.7s">
+            <div class="flex items-center gap-2 mb-4">
+                <div class="tk-icon-box bg-blue-500/20">
+                    <i class="fa-solid fa-road text-blue-400"></i>
+                </div>
+                <div>
+                    <h2 class="text-white font-bold">Roadmap</h2>
+                    <p class="text-zinc-500 text-xs">Our journey ahead</p>
+                </div>
+            </div>
+            
+            <div class="tk-timeline">
+                ${phases.map((p, i) => {
+                    const statusColor = p.status === 'done' ? 'emerald' : p.status === 'active' ? 'amber' : 'zinc';
+                    const statusIcon = p.status === 'done' ? 'check' : p.status === 'active' ? 'spinner fa-spin' : 'circle';
+                    return `
+                        <div class="tk-timeline-item">
+                            <div class="tk-timeline-dot bg-${statusColor}-500 border-${statusColor}-400"></div>
+                            <div class="tk-card">
+                                <div class="flex items-center justify-between mb-2">
+                                    <div>
+                                        <span class="text-${statusColor}-400 text-[10px] font-bold uppercase">${p.phase}</span>
+                                        <p class="text-white font-bold text-sm">${p.title}</p>
+                                    </div>
+                                    <i class="fa-solid fa-${statusIcon} text-${statusColor}-400"></i>
+                                </div>
+                                <div class="flex flex-wrap gap-1">
+                                    ${p.items.map(item => `
+                                        <span class="text-[10px] px-2 py-0.5 bg-zinc-800 rounded-full text-zinc-400">${item}</span>
+                                    `).join('')}
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                }).join('')}
+            </div>
+        </div>
+    `;
+}
+
+function renderContractsSection() {
+    return `
+        <div class="tk-section tk-fade-up" style="animation-delay: 0.8s">
+            <div class="flex items-center gap-2 mb-4">
+                <div class="tk-icon-box bg-zinc-500/20">
+                    <i class="fa-solid fa-file-contract text-zinc-400"></i>
+                </div>
+                <div>
+                    <h2 class="text-white font-bold">Smart Contracts</h2>
+                    <p class="text-zinc-500 text-xs">Verified on Arbitrum Sepolia</p>
+                </div>
+            </div>
+            
+            <div class="grid grid-cols-2 gap-2 text-[10px]">
+                <div class="tk-card p-2 flex items-center gap-2">
+                    <i class="fa-solid fa-coins text-amber-400"></i>
+                    <span class="text-zinc-400">BKC Token</span>
+                </div>
+                <div class="tk-card p-2 flex items-center gap-2">
+                    <i class="fa-solid fa-lock text-purple-400"></i>
+                    <span class="text-zinc-400">DelegationManager</span>
+                </div>
+                <div class="tk-card p-2 flex items-center gap-2">
+                    <i class="fa-solid fa-pickaxe text-emerald-400"></i>
+                    <span class="text-zinc-400">MiningManager</span>
+                </div>
+                <div class="tk-card p-2 flex items-center gap-2">
+                    <i class="fa-solid fa-clover text-green-400"></i>
+                    <span class="text-zinc-400">FortunePool</span>
+                </div>
+                <div class="tk-card p-2 flex items-center gap-2">
+                    <i class="fa-solid fa-stamp text-violet-400"></i>
+                    <span class="text-zinc-400">DecentralizedNotary</span>
+                </div>
+                <div class="tk-card p-2 flex items-center gap-2">
+                    <i class="fa-solid fa-house text-cyan-400"></i>
+                    <span class="text-zinc-400">RentalManager</span>
+                </div>
+                <div class="tk-card p-2 flex items-center gap-2">
+                    <i class="fa-solid fa-gem text-blue-400"></i>
+                    <span class="text-zinc-400">RewardBoosterNFT</span>
+                </div>
+                <div class="tk-card p-2 flex items-center gap-2">
+                    <i class="fa-solid fa-water text-indigo-400"></i>
+                    <span class="text-zinc-400">NFT Liquidity Pools</span>
+                </div>
+            </div>
+            
+            <div class="mt-3 text-center">
+                <a href="https://sepolia.arbiscan.io" target="_blank" class="inline-flex items-center gap-2 text-xs text-zinc-500 hover:text-amber-400 transition-colors">
+                    <i class="fa-solid fa-external-link"></i>
+                    View all contracts on Arbiscan
+                </a>
+            </div>
+        </div>
+    `;
+}
 
 // ==========================================================
-//  4. EXPORT
+//  5. MAIN RENDER
 // ==========================================================
+export function render() {
+    const container = document.getElementById('main-content');
+    if (!container) return;
+    
+    injectTokenomicsStyles();
+    
+    container.innerHTML = `
+        <div class="max-w-2xl mx-auto px-4 py-6 pb-24">
+            ${renderHeroSection()}
+            ${renderSupplySection()}
+            ${renderTGESection()}
+            ${renderMiningSection()}
+            ${renderFeesSection()}
+            ${renderEarningsSection()}
+            ${renderBoostersSection()}
+            ${renderRoadmapSection()}
+            ${renderContractsSection()}
+            
+            <!-- Footer -->
+            <div class="text-center py-6 text-zinc-600 text-xs">
+                <p>Built with ❤️ for the community</p>
+                <p class="mt-1">BACKCOIN © 2024-2025</p>
+            </div>
+        </div>
+    `;
+    
+    container.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
 
-export const TokenomicsPage = {
-    render() {
-        injectTokenomicsStyles();
-        renderTokenomicsContent();
-        setupTokenomicsListeners();
-    },
-    init() { 
-        setupTokenomicsListeners(); 
-    },
-    update(isConnected) { 
-        setupTokenomicsListeners(); 
-    }
-};
+export function cleanup() {
+    // Nothing to cleanup
+}
