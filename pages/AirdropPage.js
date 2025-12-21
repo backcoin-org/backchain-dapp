@@ -610,7 +610,7 @@ function renderPlatformSection() {
             </div>
 
             <!-- Actions Grid -->
-            <div class="grid grid-cols-2 gap-2">
+            <div class="grid grid-cols-2 gap-2" id="platform-actions-grid">
                 ${Object.entries(config).filter(([_, action]) => action.enabled !== false).map(([key, action]) => {
                     const userUsage = usage[key] || { count: 0, totalPoints: 0 };
                     const isCompleted = userUsage.count >= action.maxCount;
@@ -619,10 +619,9 @@ function renderPlatformSection() {
                     const targetPage = PLATFORM_ACTION_PAGES[key] || '';
                     
                     return `
-                        <div class="platform-action-card bg-zinc-900/80 border border-zinc-800 rounded-xl p-3 ${isCompleted ? 'completed' : 'cursor-pointer hover:border-amber-500/50'} transition-all" 
+                        <div class="platform-action-card bg-zinc-900/80 border border-zinc-800 rounded-xl p-3 ${isCompleted ? 'completed opacity-60' : 'cursor-pointer hover:border-amber-500/50 hover:bg-zinc-800/80'} transition-all" 
                              data-platform-action="${key}"
-                             data-target-page="${targetPage}"
-                             ${!isCompleted && targetPage ? `onclick="window.navigateToPage && window.navigateToPage('${targetPage}')"` : ''}>
+                             data-target-page="${targetPage}">
                             <div class="flex items-start justify-between mb-1.5">
                                 <span class="text-lg">${action.icon}</span>
                                 ${isCompleted ? 
@@ -1372,30 +1371,16 @@ export const AirdropPage = {
             if(e.target.closest('.earn-tab-btn')) handleEarnTabSwitch(e);
             if(e.target.closest('.nav-pill-btn')) handleTabSwitch(e);
             
-            // ✅ NOVO: Handler para cards de Platform Usage
-            const platformCard = e.target.closest('.platform-action-card[data-target-page]');
+            // ✅ Handler para cards de Platform Usage - CORRIGIDO
+            const platformCard = e.target.closest('.platform-action-card');
             if (platformCard && !platformCard.classList.contains('completed')) {
                 const targetPage = platformCard.dataset.targetPage;
-                if (targetPage && window.navigateToPage) {
-                    window.navigateToPage(targetPage);
+                if (targetPage) {
+                    console.log('🎯 Navigating to:', targetPage);
+                    handlePlatformCardClick(targetPage);
                 }
             }
         });
-        
-        // ✅ NOVO: Expõe função de navegação global para os cards
-        if (!window.navigateToPage) {
-            window.navigateToPage = (pageName) => {
-                // Dispara evento customizado para o app.js tratar
-                const event = new CustomEvent('navigateToPage', { detail: { page: pageName } });
-                document.dispatchEvent(event);
-                
-                // Fallback: clica no link do menu se existir
-                const menuLink = document.querySelector(`[data-page="${pageName}"]`);
-                if (menuLink) {
-                    menuLink.click();
-                }
-            };
-        }
     },
 
     update(isConnected) {
@@ -1404,3 +1389,49 @@ export const AirdropPage = {
         }
     }
 };
+
+// ✅ NOVO: Função para navegar para outra página do DApp
+function handlePlatformCardClick(pageName) {
+    console.log('🎯 Platform card clicked, navigating to:', pageName);
+    
+    // Método 1: Procura link no menu lateral por data-target (padrão do app)
+    const menuLink = document.querySelector(`a[data-target="${pageName}"]`) ||
+                     document.querySelector(`[data-target="${pageName}"]`);
+    
+    if (menuLink) {
+        console.log('✅ Found menu link, clicking...');
+        menuLink.click();
+        
+        // Fecha o menu mobile se estiver aberto
+        const sidebar = document.getElementById('sidebar');
+        if (sidebar && window.innerWidth < 768) {
+            sidebar.classList.add('hidden');
+        }
+        return;
+    }
+    
+    // Método 2: Tenta mostrar a seção diretamente
+    const sections = document.querySelectorAll('main > section');
+    const targetSection = document.getElementById(pageName);
+    
+    if (targetSection) {
+        console.log('✅ Found section, showing directly...');
+        sections.forEach(s => s.classList.add('hidden'));
+        targetSection.classList.remove('hidden');
+        
+        // Atualiza estado visual do menu
+        document.querySelectorAll('.sidebar-link').forEach(link => {
+            link.classList.remove('active', 'bg-zinc-700', 'text-white');
+            link.classList.add('text-zinc-400');
+        });
+        
+        const activeLink = document.querySelector(`[data-target="${pageName}"]`);
+        if (activeLink) {
+            activeLink.classList.add('active', 'bg-zinc-700', 'text-white');
+            activeLink.classList.remove('text-zinc-400');
+        }
+        return;
+    }
+    
+    console.warn('⚠️ Could not navigate to:', pageName);
+}
