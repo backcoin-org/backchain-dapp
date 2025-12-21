@@ -802,3 +802,17 @@ export function render() {
 export function cleanup() {
     // Nothing to cleanup
 }
+
+// Legacy export for compatibility with app.js
+export const TokenomicsPage = {
+    render,
+    init: () => {},
+    update: () => {}
+};
+
+// Legacy export for compatibility with app.js
+export const TokenomicsPage = {
+    render,
+    init: () => {},
+    update: () => {}
+};
