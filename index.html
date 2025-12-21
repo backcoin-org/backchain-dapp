@@ -461,42 +461,61 @@
     </div>
     <div id="modal-container"></div>
     <script type="module" src="./app.js"></script>
-    <script type="module">
-        // Admin link visibility - executado após conexão da carteira
-        // Carteira admin vem da variável de ambiente (definida no build do Vite)
-        const ADMIN_WALLET = (import.meta.env?.VITE_ADMIN_WALLET || "").toLowerCase();
-        
+    <script>
+        // Admin link visibility - usa variável global definida pelo app.js
         let lastCheckedAddress = null;
         
         function checkAdminVisibility() {
             const adminContainer = document.getElementById('admin-link-container');
             if (!adminContainer) return;
             
-            // Verifica se há carteira conectada no State ou window
             const connectedAddress = window.State?.userAddress || 
                                     window.ethereum?.selectedAddress ||
                                     localStorage.getItem('connectedAddress');
             
-            // Evita logs repetidos
-            if (connectedAddress === lastCheckedAddress) return;
-            lastCheckedAddress = connectedAddress;
+            // Evita verificações repetidas
+            const adminWallet = window.__ADMIN_WALLET__ || "";
+            const checkKey = `${connectedAddress}-${adminWallet}`;
+            if (checkKey === lastCheckedAddress) return;
+            lastCheckedAddress = checkKey;
             
-            if (connectedAddress && ADMIN_WALLET && connectedAddress.toLowerCase() === ADMIN_WALLET) {
+            if (adminWallet && connectedAddress && connectedAddress.toLowerCase() === adminWallet.toLowerCase()) {
                 adminContainer.style.display = 'block';
-                console.log('✅ Admin access granted');
             } else {
                 adminContainer.style.display = 'none';
             }
         }
         
-        // Verifica ao carregar e quando a carteira mudar
+        // Verifica periodicamente (app.js define __ADMIN_WALLET__ ao carregar)
         document.addEventListener('DOMContentLoaded', () => {
-            checkAdminVisibility();
-            // Re-check quando o estado mudar
+            setTimeout(checkAdminVisibility, 1000);
             setInterval(checkAdminVisibility, 2000);
         });
         
         // Escuta mudanças na carteira
+        if (window.ethereum) {
+            window.ethereum.on('accountsChanged', () => {
+                lastCheckedAddress = null;
+                checkAdminVisibility();
+            });
+        }
+    </script>
+</body>
+</html>
+            } else if (connectedAddress) {
+                // Se não temos variável, mostra o link e deixa o AdminPage validar
+                // Isso é um fallback - o AdminPage vai bloquear acesso de não-admins
+                adminContainer.style.display = 'block';
+            } else {
+                adminContainer.style.display = 'none';
+            }
+        }
+        
+        document.addEventListener('DOMContentLoaded', () => {
+            checkAdminVisibility();
+            setInterval(checkAdminVisibility, 2000);
+        });
+        
         if (window.ethereum) {
             window.ethereum.on('accountsChanged', () => {
                 lastCheckedAddress = null;

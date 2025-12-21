@@ -1,5 +1,5 @@
 // pages/AdminPage.js
-// ✅ VERSION V2.5: Wallet + Key from Environment Variables (Secure)
+// ✅ VERSION V2.6: Wallet + Key from Environment Variables + Global Exposure
 // --- NOVO ---
 // Importa o ethers e os endereços dos contratos
 const ethers = window.ethers;
@@ -16,6 +16,15 @@ import * as db from '../modules/firebase-auth-service.js';
 const ADMIN_WALLET = (import.meta.env.VITE_ADMIN_WALLET || "").toLowerCase();
 const ADMIN_KEY = import.meta.env.VITE_ADMIN_KEY || "";
 const ADMIN_SESSION_KEY = "bkc_admin_auth_v3";
+
+// ✅ Expõe globalmente para o script do index.html poder verificar
+window.__ADMIN_WALLET__ = ADMIN_WALLET;
+
+// Dispara evento para notificar que a configuração está pronta
+setTimeout(() => {
+    document.dispatchEvent(new CustomEvent('adminConfigReady'));
+    console.log('✅ Admin config ready, wallet:', ADMIN_WALLET ? 'configured' : 'not set');
+}, 100);
 
 // Verifica se admin já está autenticado na sessão
 function isAdminSessionValid() {

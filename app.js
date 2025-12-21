@@ -1,5 +1,5 @@
 // js/app.js
-// ✅ VERSÃO FINAL V7.4: Renderização Blindada e Simplificada (Final Clean-up)
+// ✅ VERSÃO FINAL V7.5: Admin via Environment Variables
 
 const inject = window.inject || (() => { console.warn("Dev Mode: Analytics disabled."); });
 if (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
@@ -38,7 +38,14 @@ import { DaoPage } from './pages/DaoPage.js';
 // 2. CONFIGURATION & STATE
 // ============================================================================
 
-const ADMIN_WALLET = '0x03aC69873293cD6ddef7625AfC91E3Bd5434562a'; 
+// ✅ Admin wallet via environment variable (Vercel)
+const ADMIN_WALLET = (import.meta.env.VITE_ADMIN_WALLET || "").toLowerCase();
+
+// Expõe globalmente para o index.html poder verificar
+window.__ADMIN_WALLET__ = ADMIN_WALLET;
+if (ADMIN_WALLET) {
+    console.log("✅ Admin access granted");
+} 
 
 let activePageId = null; 
 let currentPageCleanup = null;
