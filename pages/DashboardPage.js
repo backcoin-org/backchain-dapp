@@ -1,5 +1,5 @@
 // js/pages/DashboardPage.js
-// ✅ PRODUCTION V8.0 - Ícones Consistentes + Histórico Detalhado
+// ✅ PRODUCTION V8.1 - Firebase-first + Blockchain Fallback
 
 const ethers = window.ethers;
 
@@ -742,53 +742,69 @@ async function fetchEconomicData() {
 
 async function updateGlobalMetrics() {
     try {
-        if (!State.bkcTokenContractPublic) return;
-
-        const [totalSupply, totalPStake] = await Promise.all([
-            safeContractCall(State.bkcTokenContractPublic, 'totalSupply', [], 0n),
-            safeContractCall(State.delegationManagerContractPublic, 'totalNetworkPStake', [], 0n)
-        ]);
-
-        const contractAddresses = [
-            addresses.delegationManager,
-            addresses.fortunePool,
-            addresses.rentalManager,
-            addresses.miningManager,
-            addresses.decentralizedNotary,
-            addresses.nftLiquidityPoolFactory,
-            addresses.pool_diamond,
-            addresses.pool_platinum,
-            addresses.pool_gold,
-            addresses.pool_silver,
-            addresses.pool_bronze,
-            addresses.pool_iron,
-            addresses.pool_crystal
-        ].filter(addr => addr && addr !== ethers.ZeroAddress);
-
-        const balancePromises = contractAddresses.map(addr => 
-            safeContractCall(State.bkcTokenContractPublic, 'balanceOf', [addr], 0n)
-        );
-        const balances = await Promise.all(balancePromises);
-        
-        let totalTVL = 0n;
-        balances.forEach(bal => { totalTVL += bal; });
-
-        let fortunePoolBalance = 0n;
-        if (addresses.fortunePool) {
-            const fortuneIdx = contractAddresses.indexOf(addresses.fortunePool);
-            if (fortuneIdx >= 0) fortunePoolBalance = balances[fortuneIdx];
-        }
-
+        // ✅ V8.1: Buscar dados econômicos do Firebase PRIMEIRO
         const ecoData = await fetchEconomicData();
         
+        let totalSupply = 0n;
+        let totalPStake = 0n;
+        let totalTVL = 0n;
         let economicOutput = 0n;
         let totalFeesCollected = 0n;
         let notaryCount = 0;
+        let fortunePoolBalance = 0n;
 
+        // Usar dados do Firebase se disponíveis
         if (ecoData) {
+            if (ecoData.economy?.totalSupply) totalSupply = BigInt(ecoData.economy.totalSupply);
+            if (ecoData.economy?.totalPStake) totalPStake = BigInt(ecoData.economy.totalPStake);
+            if (ecoData.economy?.totalTVL) totalTVL = BigInt(ecoData.economy.totalTVL);
             if (ecoData.economy?.economicOutput) economicOutput = BigInt(ecoData.economy.economicOutput);
             if (ecoData.economy?.totalFeesCollected) totalFeesCollected = BigInt(ecoData.economy.totalFeesCollected);
+            if (ecoData.economy?.fortunePoolBalance) fortunePoolBalance = BigInt(ecoData.economy.fortunePoolBalance);
             if (ecoData.stats?.notarizedDocuments) notaryCount = ecoData.stats.notarizedDocuments;
+        }
+
+        // ✅ Fallback: Se Firebase não tiver os dados, buscar da blockchain
+        if (totalSupply === 0n && State.bkcTokenContractPublic) {
+            console.log('📊 Fetching metrics from blockchain (Firebase fallback)...');
+            const [supply, pStake] = await Promise.all([
+                safeContractCall(State.bkcTokenContractPublic, 'totalSupply', [], 0n),
+                safeContractCall(State.delegationManagerContractPublic, 'totalNetworkPStake', [], 0n)
+            ]);
+            totalSupply = supply;
+            totalPStake = pStake;
+
+            // Calcular TVL apenas se não veio do Firebase
+            if (totalTVL === 0n) {
+                const contractAddresses = [
+                    addresses.delegationManager,
+                    addresses.fortunePool,
+                    addresses.rentalManager,
+                    addresses.miningManager,
+                    addresses.decentralizedNotary,
+                    addresses.nftLiquidityPoolFactory,
+                    addresses.pool_diamond,
+                    addresses.pool_platinum,
+                    addresses.pool_gold,
+                    addresses.pool_silver,
+                    addresses.pool_bronze,
+                    addresses.pool_iron,
+                    addresses.pool_crystal
+                ].filter(addr => addr && addr !== ethers.ZeroAddress);
+
+                const balancePromises = contractAddresses.map(addr => 
+                    safeContractCall(State.bkcTokenContractPublic, 'balanceOf', [addr], 0n)
+                );
+                const balances = await Promise.all(balancePromises);
+                
+                balances.forEach(bal => { totalTVL += bal; });
+
+                // Fortune Pool balance
+                if (addresses.fortunePool) {
+                    const fortuneIdx = contractAddresses.indexOf(addresses.fortunePool);
+                    if (fortuneIdx >= 0) fortunePoolBalance = balances[fortuneIdx];
+                }
+            }
         }
 
         const supplyNum = formatBigNumber(totalSupply);

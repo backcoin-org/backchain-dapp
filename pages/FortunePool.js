@@ -1,17 +1,26 @@
 // js/pages/FortunePool.js
-// ✅ PRODUCTION V13.0 - Tiger Theme + Spinning Roulette + Epic Win Animation
+// ✅ PRODUCTION V13.1 - Firebase History + Share to Earn + Auto Reset
 
 import { State } from '../state.js';
 import { loadUserData, API_ENDPOINTS } from '../modules/data.js';
 import { executeFortuneParticipate } from '../modules/transactions.js';
 import { formatBigNumber } from '../utils.js';
-import { showToast } from '../ui-feedback.js';
+import { showToast, openModal, closeModal } from '../ui-feedback.js';
+import * as db from '../modules/firebase-auth-service.js';
 
 // ============================================================================
 // CONSTANTS
 // ============================================================================
 const EXPLORER_TX = "https://sepolia.arbiscan.io/tx/";
 const TIGER_IMAGE = "./assets/fortune.png";
+const SHARE_POINTS = 1000; // Pontos por compartilhar
+
+// ✅ Copy viral para compartilhamento
+const SHARE_COPY = {
+    win: (prize, multiplier) => `🐯🔥 I just WON ${prize.toFixed(2)} BKC (${multiplier}x) on Fortune Pool!\n\n🎰 Test your luck on @BackcoinBKC - the Web3 game that actually pays!\n\n🚀 Play now: https://backcoin.org\n\n#Backcoin #BKC #Web3Gaming #CryptoGames #FortunePool`,
+    lose: () => `🐯 Just played Fortune Pool on @BackcoinBKC!\n\nThe tiger didn't smile on me this time, but the next spin could be HUGE! 🎰\n\n🚀 Try your luck: https://backcoin.org\n\n#Backcoin #BKC #Web3Gaming`,
+    generic: () => `🐯🎰 Fortune Pool is LIVE on @BackcoinBKC!\n\nChoose your numbers, bet BKC, and win up to 107x!\n\n✨ Easy Mode: 33% chance (2x)\n⚡ Medium Mode: 10% chance (5x)  \n👑 Hard Mode: 1% chance (100x)\n\n🚀 Play now: https://backcoin.org\n\n#Backcoin #BKC #Web3Gaming #CryptoGames`
+};
 
 const TIERS = [
     { 
@@ -377,6 +386,15 @@ export function render() {
     if (!container) return;
 
     injectStyles();
+    
+    // ✅ V13.1: Sempre resetar para tela inicial ao entrar na página
+    Game.phase = 'select';
+    Game.result = null;
+    Game.mode = null;
+    Game.comboStep = 0;
+    
+    // Scroll para o topo
+    container.scrollIntoView({ behavior: 'smooth', block: 'start' });
     
     container.innerHTML = `
         <div class="max-w-lg mx-auto px-4 py-6 pb-24">
@@ -1138,6 +1156,9 @@ function showFinalResult(isWin, prize) {
     const btnEl = document.getElementById('btn-new-game');
     const containerEl = document.getElementById('result-container');
     
+    // Calcular multiplicador para o share
+    const multiplier = prize > 0 ? Math.round(prize / Game.wager) : 0;
+    
     if (isWin) {
         // EPIC WIN!
         triggerEpicWinAnimation();
@@ -1151,11 +1172,16 @@ function showFinalResult(isWin, prize) {
         
         if (messageEl) {
             messageEl.innerHTML = `
-                <div class="relative overflow-hidden p-4 bg-gradient-to-r from-emerald-500/30 to-green-500/20 rounded-xl border border-emerald-500/50">
+                <div class="relative overflow-hidden p-4 bg-gradient-to-r from-emerald-500/30 to-green-500/20 rounded-xl border border-emerald-500/50 mb-4">
                     <div class="epic-win-shine"></div>
                     <p class="text-5xl font-black text-white mb-2">+${prize.toFixed(2)}</p>
                     <p class="text-lg text-emerald-400 font-bold">BKC Won!</p>
                 </div>
+                
+                <!-- ✅ V13.1: Share to Earn Button -->
+                <button id="btn-share-result" class="w-full py-3 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-black font-bold rounded-xl mb-3 transition-all transform hover:scale-[1.02]">
+                    <i class="fa-solid fa-share-nodes mr-2"></i>Share & Earn +${SHARE_POINTS} Points!
+                </button>
             `;
             messageEl.classList.remove('hidden');
         }
@@ -1174,7 +1200,12 @@ function showFinalResult(isWin, prize) {
         if (messageEl) {
             messageEl.innerHTML = `
                 <p class="text-zinc-500 mb-2">Better luck next round!</p>
-                <p class="text-sm text-zinc-600">The tiger will smile on you soon 🐯</p>
+                <p class="text-sm text-zinc-600 mb-4">The tiger will smile on you soon 🐯</p>
+                
+                <!-- ✅ V13.1: Share anyway button -->
+                <button id="btn-share-result" class="w-full py-2.5 bg-zinc-700 hover:bg-zinc-600 text-white text-sm font-medium rounded-xl transition-colors">
+                    <i class="fa-solid fa-share-nodes mr-2"></i>Share & Earn +${SHARE_POINTS} Points
+                </button>
             `;
             messageEl.classList.remove('hidden');
         }
@@ -1184,6 +1215,13 @@ function showFinalResult(isWin, prize) {
     if (btnEl) {
         btnEl.style.opacity = '1';
     }
+    
+    // ✅ V13.1: Attach share button listener
+    setTimeout(() => {
+        document.getElementById('btn-share-result')?.addEventListener('click', () => {
+            showShareModal(isWin, prize, multiplier);
+        });
+    }, 100);
 }
 
 function triggerEpicWinAnimation() {
@@ -1425,6 +1463,126 @@ export function cleanup() {
     // Clear any running spin intervals
     Game.spinIntervals.forEach(id => clearInterval(id));
     Game.spinIntervals = [];
+    
+    // ✅ V13.1: Resetar estado ao sair da página
+    Game.phase = 'select';
+    Game.result = null;
+    Game.mode = null;
+    Game.comboStep = 0;
+    Game.wager = 10;
+    Game.guess = 50;
+    Game.guesses = [2, 5, 50];
 }
+
+// ✅ V13.1: Função para compartilhar resultado
+async function showShareModal(isWin, prize, multiplier) {
+    const shareText = isWin 
+        ? SHARE_COPY.win(prize, multiplier)
+        : SHARE_COPY.lose();
+    
+    const encodedText = encodeURIComponent(shareText);
+    const shareUrl = 'https://backcoin.org';
+    const encodedUrl = encodeURIComponent(shareUrl);
+    
+    const modalContent = `
+        <div class="text-center">
+            <!-- Header -->
+            <div class="mb-4">
+                <span class="text-4xl">${isWin ? '🏆🐯' : '🐯'}</span>
+                <h3 class="text-xl font-bold text-white mt-2">Share & Earn ${SHARE_POINTS} Points!</h3>
+                <p class="text-zinc-400 text-sm mt-1">Share your ${isWin ? 'WIN' : 'game'} on social media</p>
+            </div>
+            
+            <!-- Points Badge -->
+            <div class="bg-gradient-to-r from-amber-500/20 to-orange-500/20 border border-amber-500/50 rounded-xl p-3 mb-4">
+                <p class="text-amber-400 text-sm font-bold">
+                    <i class="fa-solid fa-gift mr-1"></i>
+                    Earn +${SHARE_POINTS} Airdrop Points
+                </p>
+                <p class="text-zinc-500 text-[10px] mt-1">for sharing on any platform</p>
+            </div>
+            
+            <!-- Share Text Preview -->
+            <div class="bg-zinc-800/80 border border-zinc-700 rounded-xl p-3 mb-4 text-left max-h-32 overflow-y-auto">
+                <p class="text-zinc-300 text-xs whitespace-pre-wrap">${shareText}</p>
+            </div>
+            
+            <!-- Copy Button -->
+            <button id="btn-copy-share" class="w-full py-3 bg-zinc-700 hover:bg-zinc-600 text-white rounded-xl font-medium text-sm mb-4 transition-colors">
+                <i class="fa-regular fa-copy mr-2"></i>Copy Text
+            </button>
+            
+            <!-- Social Buttons -->
+            <div class="grid grid-cols-4 gap-2 mb-4">
+                <a href="https://twitter.com/intent/tweet?text=${encodedText}" target="_blank" 
+                   id="share-twitter"
+                   class="share-btn flex flex-col items-center justify-center p-3 bg-[#1DA1F2]/20 hover:bg-[#1DA1F2]/30 border border-[#1DA1F2]/50 rounded-xl transition-colors">
+                    <i class="fa-brands fa-x-twitter text-xl text-white"></i>
+                    <span class="text-[10px] text-zinc-400 mt-1">Twitter</span>
+                </a>
+                <a href="https://t.me/share/url?url=${encodedUrl}&text=${encodedText}" target="_blank"
+                   id="share-telegram"
+                   class="share-btn flex flex-col items-center justify-center p-3 bg-[#0088cc]/20 hover:bg-[#0088cc]/30 border border-[#0088cc]/50 rounded-xl transition-colors">
+                    <i class="fa-brands fa-telegram text-xl text-[#0088cc]"></i>
+                    <span class="text-[10px] text-zinc-400 mt-1">Telegram</span>
+                </a>
+                <a href="https://www.facebook.com/sharer/sharer.php?quote=${encodedText}" target="_blank"
+                   id="share-facebook"
+                   class="share-btn flex flex-col items-center justify-center p-3 bg-[#1877F2]/20 hover:bg-[#1877F2]/30 border border-[#1877F2]/50 rounded-xl transition-colors">
+                    <i class="fa-brands fa-facebook text-xl text-[#1877F2]"></i>
+                    <span class="text-[10px] text-zinc-400 mt-1">Facebook</span>
+                </a>
+                <a href="https://wa.me/?text=${encodedText}" target="_blank"
+                   id="share-whatsapp"
+                   class="share-btn flex flex-col items-center justify-center p-3 bg-[#25D366]/20 hover:bg-[#25D366]/30 border border-[#25D366]/50 rounded-xl transition-colors">
+                    <i class="fa-brands fa-whatsapp text-xl text-[#25D366]"></i>
+                    <span class="text-[10px] text-zinc-400 mt-1">WhatsApp</span>
+                </a>
+            </div>
+            
+            <!-- Close Button -->
+            <button id="btn-close-share" class="w-full py-3 bg-zinc-800 hover:bg-zinc-700 text-zinc-400 rounded-xl text-sm transition-colors">
+                Maybe Later
+            </button>
+        </div>
+    `;
+    
+    openModal(modalContent, 'max-w-sm');
+    
+    // Event Listeners
+    document.getElementById('btn-copy-share')?.addEventListener('click', async () => {
+        try {
+            await navigator.clipboard.writeText(shareText);
+            showToast('📋 Copied to clipboard!', 'success');
+            const btn = document.getElementById('btn-copy-share');
+            if (btn) {
+                btn.innerHTML = '<i class="fa-solid fa-check mr-2"></i>Copied!';
+                btn.classList.add('bg-green-600', 'hover:bg-green-500');
+            }
+        } catch (e) {
+            showToast('Failed to copy', 'error');
+        }
+    });
+    
+    document.getElementById('btn-close-share')?.addEventListener('click', closeModal);
+    
+    // Track share clicks for airdrop points
+    const shareButtons = document.querySelectorAll('.share-btn');
+    shareButtons.forEach(btn => {
+        btn.addEventListener('click', async () => {
+            try {
+                // Registrar pontos de compartilhamento
+                if (typeof db.trackPlatformUsage === 'function') {
+                    await db.trackPlatformUsage('shareFortuneResult', null);
+                }
+                showToast(`🎉 +${SHARE_POINTS} Airdrop Points!`, 'success');
+                closeModal();
+            } catch (e) {
+                console.log('Share tracking error:', e);
+            }
+        });
+    });
+}
+
 export const FortunePoolPage = { render, cleanup };
 export default { render, cleanup };
