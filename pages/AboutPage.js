@@ -746,7 +746,7 @@ function setupEventListeners() {
 }
 
 export function render() {
-    const container = document.getElementById('main-content');
+    const container = document.getElementById('about');
     if (!container) return;
     
     injectAboutStyles();

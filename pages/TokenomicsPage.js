@@ -771,7 +771,7 @@ function renderContractsSection() {
 //  5. MAIN RENDER
 // ==========================================================
 export function render() {
-    const container = document.getElementById('main-content');
+    const container = document.getElementById('tokenomics');
     if (!container) return;
     
     injectTokenomicsStyles();
