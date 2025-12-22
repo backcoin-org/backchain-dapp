@@ -486,7 +486,7 @@ function renderEarnTab() {
 function renderPostSection() {
     const { user } = airdropState;
     const refCode = user?.referralCode || 'CODE';
-    const shortLink = `http://backcoin.org/${refCode}`;
+    const shortLink = `https://backcoin.org/?ref=${refCode}`;
 
     return `
         <div class="space-y-4">
@@ -1127,7 +1127,7 @@ function updateContent() {
 
 function handleCopySmartLink() {
     const refCode = airdropState.user?.referralCode || 'CODE';
-    const textToCopy = `${refCode !== 'CODE' ? `http://backcoin.org/${refCode}` : 'http://backcoin.org'} ${DEFAULT_HASHTAGS}`;
+    const textToCopy = `${refCode !== 'CODE' ? `https://backcoin.org/?ref=${refCode}` : 'https://backcoin.org'} ${DEFAULT_HASHTAGS}`;
     
     navigator.clipboard.writeText(textToCopy).then(() => {
         showToast("Copied! Now paste it in your post.", "success");
