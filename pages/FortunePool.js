@@ -1628,7 +1628,7 @@ Cripto com utilidade REAL:
 
 👉 backcoin.org
 
-#Backcoin #Web3 #Airdrop`,
+#Backcoin #Web3 #Airdrop #Arbitrum`,
             
             full: `🚀 Já conhece a Backcoin?
 
@@ -1658,7 +1658,7 @@ Crypto with REAL utility:
 
 👉 backcoin.org
 
-#Backcoin #Web3 #Airdrop`,
+#Backcoin #Web3 #Airdrop #Arbitrum`,
             
             full: `🚀 Have you heard of Backcoin?
 
@@ -1688,7 +1688,7 @@ Cripto con utilidad REAL:
 
 👉 backcoin.org
 
-#Backcoin #Web3 #Airdrop`,
+#Backcoin #Web3 #Airdrop #Arbitrum`,
             
             full: `🚀 ¿Conoces Backcoin?
 
