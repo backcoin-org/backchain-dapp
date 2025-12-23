@@ -228,87 +228,105 @@ export function showShareModal(userAddress) {
         whatsapp: `https://wa.me/?text=${shareTextEncoded}%20${urlEncoded}`,
         facebook: `https://www.facebook.com/sharer/sharer.php?u=${urlEncoded}`,
         linkedin: `https://www.linkedin.com/sharing/share-offsite/?url=${urlEncoded}`,
-        reddit: `https://reddit.com/submit?url=${urlEncoded}&title=${encodeURIComponent("Backcoin - Next Generation Crypto Mining")}`
+        reddit: `https://reddit.com/submit?url=${urlEncoded}&title=${encodeURIComponent("Backcoin - Next Generation Crypto Mining")}`,
+        instagram: `https://www.instagram.com/`,
+        tiktok: `https://www.tiktok.com/`
     };
 
     const content = `
         <div class="text-center">
-            <!-- Header -->
-            <div class="mb-6">
-                <div class="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-amber-500 to-orange-600 rounded-2xl mb-4 shadow-lg shadow-amber-500/30">
-                    <i class="fa-solid fa-share-nodes text-3xl text-white"></i>
-                </div>
+            <!-- Header with Image -->
+            <div class="mb-5">
+                <img src="./assets/share.png" alt="Share Backcoin" class="w-32 h-32 mx-auto mb-4 object-contain">
                 <h3 class="text-2xl font-bold text-white mb-2">Share Backcoin</h3>
                 <p class="text-zinc-400 text-sm">Help us grow! Share with your friends and community</p>
             </div>
 
             <!-- Social Media Buttons -->
-            <div class="grid grid-cols-3 gap-3 mb-6">
+            <div class="grid grid-cols-4 gap-2 mb-5">
                 <!-- Twitter/X -->
                 <button onclick="window.open('${shareLinks.twitter}', '_blank', 'width=600,height=400')" 
-                        class="group flex flex-col items-center gap-2 p-4 bg-zinc-800/50 hover:bg-[#1DA1F2]/20 border border-zinc-700 hover:border-[#1DA1F2] rounded-xl transition-all duration-300 hover:scale-105">
-                    <div class="w-12 h-12 flex items-center justify-center rounded-full bg-zinc-700 group-hover:bg-[#1DA1F2] transition-colors">
-                        <i class="fa-brands fa-x-twitter text-xl text-zinc-300 group-hover:text-white"></i>
+                        class="group flex flex-col items-center gap-1.5 p-3 bg-zinc-800/50 hover:bg-[#000000]/30 border border-zinc-700 hover:border-zinc-500 rounded-xl transition-all duration-300 hover:scale-105">
+                    <div class="w-10 h-10 flex items-center justify-center rounded-full bg-zinc-700 group-hover:bg-[#000000] transition-colors">
+                        <i class="fa-brands fa-x-twitter text-lg text-zinc-300 group-hover:text-white"></i>
                     </div>
-                    <span class="text-xs font-semibold text-zinc-400 group-hover:text-white">Twitter</span>
-                </button>
-
-                <!-- Telegram -->
-                <button onclick="window.open('${shareLinks.telegram}', '_blank', 'width=600,height=400')" 
-                        class="group flex flex-col items-center gap-2 p-4 bg-zinc-800/50 hover:bg-[#0088cc]/20 border border-zinc-700 hover:border-[#0088cc] rounded-xl transition-all duration-300 hover:scale-105">
-                    <div class="w-12 h-12 flex items-center justify-center rounded-full bg-zinc-700 group-hover:bg-[#0088cc] transition-colors">
-                        <i class="fa-brands fa-telegram text-xl text-zinc-300 group-hover:text-white"></i>
-                    </div>
-                    <span class="text-xs font-semibold text-zinc-400 group-hover:text-white">Telegram</span>
-                </button>
-
-                <!-- WhatsApp -->
-                <button onclick="window.open('${shareLinks.whatsapp}', '_blank', 'width=600,height=400')" 
-                        class="group flex flex-col items-center gap-2 p-4 bg-zinc-800/50 hover:bg-[#25D366]/20 border border-zinc-700 hover:border-[#25D366] rounded-xl transition-all duration-300 hover:scale-105">
-                    <div class="w-12 h-12 flex items-center justify-center rounded-full bg-zinc-700 group-hover:bg-[#25D366] transition-colors">
-                        <i class="fa-brands fa-whatsapp text-xl text-zinc-300 group-hover:text-white"></i>
-                    </div>
-                    <span class="text-xs font-semibold text-zinc-400 group-hover:text-white">WhatsApp</span>
+                    <span class="text-[10px] font-semibold text-zinc-500 group-hover:text-white">Twitter</span>
                 </button>
 
                 <!-- Facebook -->
                 <button onclick="window.open('${shareLinks.facebook}', '_blank', 'width=600,height=400')" 
-                        class="group flex flex-col items-center gap-2 p-4 bg-zinc-800/50 hover:bg-[#1877F2]/20 border border-zinc-700 hover:border-[#1877F2] rounded-xl transition-all duration-300 hover:scale-105">
-                    <div class="w-12 h-12 flex items-center justify-center rounded-full bg-zinc-700 group-hover:bg-[#1877F2] transition-colors">
-                        <i class="fa-brands fa-facebook-f text-xl text-zinc-300 group-hover:text-white"></i>
+                        class="group flex flex-col items-center gap-1.5 p-3 bg-zinc-800/50 hover:bg-[#1877F2]/20 border border-zinc-700 hover:border-[#1877F2] rounded-xl transition-all duration-300 hover:scale-105">
+                    <div class="w-10 h-10 flex items-center justify-center rounded-full bg-zinc-700 group-hover:bg-[#1877F2] transition-colors">
+                        <i class="fa-brands fa-facebook-f text-lg text-zinc-300 group-hover:text-white"></i>
                     </div>
-                    <span class="text-xs font-semibold text-zinc-400 group-hover:text-white">Facebook</span>
+                    <span class="text-[10px] font-semibold text-zinc-500 group-hover:text-white">Facebook</span>
+                </button>
+
+                <!-- Instagram -->
+                <button onclick="window.open('${shareLinks.instagram}', '_blank')" 
+                        class="group flex flex-col items-center gap-1.5 p-3 bg-zinc-800/50 hover:bg-gradient-to-br hover:from-[#833AB4]/20 hover:via-[#FD1D1D]/20 hover:to-[#F77737]/20 border border-zinc-700 hover:border-[#E1306C] rounded-xl transition-all duration-300 hover:scale-105">
+                    <div class="w-10 h-10 flex items-center justify-center rounded-full bg-zinc-700 group-hover:bg-gradient-to-br group-hover:from-[#833AB4] group-hover:via-[#FD1D1D] group-hover:to-[#F77737] transition-all">
+                        <i class="fa-brands fa-instagram text-lg text-zinc-300 group-hover:text-white"></i>
+                    </div>
+                    <span class="text-[10px] font-semibold text-zinc-500 group-hover:text-white">Instagram</span>
+                </button>
+
+                <!-- TikTok -->
+                <button onclick="window.open('${shareLinks.tiktok}', '_blank')" 
+                        class="group flex flex-col items-center gap-1.5 p-3 bg-zinc-800/50 hover:bg-[#000000]/30 border border-zinc-700 hover:border-[#69C9D0] rounded-xl transition-all duration-300 hover:scale-105">
+                    <div class="w-10 h-10 flex items-center justify-center rounded-full bg-zinc-700 group-hover:bg-[#000000] transition-colors">
+                        <i class="fa-brands fa-tiktok text-lg text-zinc-300 group-hover:text-white"></i>
+                    </div>
+                    <span class="text-[10px] font-semibold text-zinc-500 group-hover:text-white">TikTok</span>
+                </button>
+
+                <!-- YouTube -->
+                <button onclick="window.open('https://www.youtube.com/@Backcoin', '_blank')" 
+                        class="group flex flex-col items-center gap-1.5 p-3 bg-zinc-800/50 hover:bg-[#FF0000]/20 border border-zinc-700 hover:border-[#FF0000] rounded-xl transition-all duration-300 hover:scale-105">
+                    <div class="w-10 h-10 flex items-center justify-center rounded-full bg-zinc-700 group-hover:bg-[#FF0000] transition-colors">
+                        <i class="fa-brands fa-youtube text-lg text-zinc-300 group-hover:text-white"></i>
+                    </div>
+                    <span class="text-[10px] font-semibold text-zinc-500 group-hover:text-white">YouTube</span>
                 </button>
 
                 <!-- LinkedIn -->
                 <button onclick="window.open('${shareLinks.linkedin}', '_blank', 'width=600,height=400')" 
-                        class="group flex flex-col items-center gap-2 p-4 bg-zinc-800/50 hover:bg-[#0A66C2]/20 border border-zinc-700 hover:border-[#0A66C2] rounded-xl transition-all duration-300 hover:scale-105">
-                    <div class="w-12 h-12 flex items-center justify-center rounded-full bg-zinc-700 group-hover:bg-[#0A66C2] transition-colors">
-                        <i class="fa-brands fa-linkedin-in text-xl text-zinc-300 group-hover:text-white"></i>
+                        class="group flex flex-col items-center gap-1.5 p-3 bg-zinc-800/50 hover:bg-[#0A66C2]/20 border border-zinc-700 hover:border-[#0A66C2] rounded-xl transition-all duration-300 hover:scale-105">
+                    <div class="w-10 h-10 flex items-center justify-center rounded-full bg-zinc-700 group-hover:bg-[#0A66C2] transition-colors">
+                        <i class="fa-brands fa-linkedin-in text-lg text-zinc-300 group-hover:text-white"></i>
                     </div>
-                    <span class="text-xs font-semibold text-zinc-400 group-hover:text-white">LinkedIn</span>
+                    <span class="text-[10px] font-semibold text-zinc-500 group-hover:text-white">LinkedIn</span>
                 </button>
 
-                <!-- Reddit -->
-                <button onclick="window.open('${shareLinks.reddit}', '_blank', 'width=600,height=400')" 
-                        class="group flex flex-col items-center gap-2 p-4 bg-zinc-800/50 hover:bg-[#FF4500]/20 border border-zinc-700 hover:border-[#FF4500] rounded-xl transition-all duration-300 hover:scale-105">
-                    <div class="w-12 h-12 flex items-center justify-center rounded-full bg-zinc-700 group-hover:bg-[#FF4500] transition-colors">
-                        <i class="fa-brands fa-reddit-alien text-xl text-zinc-300 group-hover:text-white"></i>
+                <!-- Telegram -->
+                <button onclick="window.open('${shareLinks.telegram}', '_blank', 'width=600,height=400')" 
+                        class="group flex flex-col items-center gap-1.5 p-3 bg-zinc-800/50 hover:bg-[#0088cc]/20 border border-zinc-700 hover:border-[#0088cc] rounded-xl transition-all duration-300 hover:scale-105">
+                    <div class="w-10 h-10 flex items-center justify-center rounded-full bg-zinc-700 group-hover:bg-[#0088cc] transition-colors">
+                        <i class="fa-brands fa-telegram text-lg text-zinc-300 group-hover:text-white"></i>
                     </div>
-                    <span class="text-xs font-semibold text-zinc-400 group-hover:text-white">Reddit</span>
+                    <span class="text-[10px] font-semibold text-zinc-500 group-hover:text-white">Telegram</span>
+                </button>
+
+                <!-- WhatsApp -->
+                <button onclick="window.open('${shareLinks.whatsapp}', '_blank', 'width=600,height=400')" 
+                        class="group flex flex-col items-center gap-1.5 p-3 bg-zinc-800/50 hover:bg-[#25D366]/20 border border-zinc-700 hover:border-[#25D366] rounded-xl transition-all duration-300 hover:scale-105">
+                    <div class="w-10 h-10 flex items-center justify-center rounded-full bg-zinc-700 group-hover:bg-[#25D366] transition-colors">
+                        <i class="fa-brands fa-whatsapp text-lg text-zinc-300 group-hover:text-white"></i>
+                    </div>
+                    <span class="text-[10px] font-semibold text-zinc-500 group-hover:text-white">WhatsApp</span>
                 </button>
             </div>
 
             <!-- Divider -->
             <div class="flex items-center gap-3 mb-4">
                 <div class="flex-1 h-px bg-zinc-700"></div>
-                <span class="text-xs text-zinc-500 font-medium">OR COPY LINK</span>
+                <span class="text-[10px] text-zinc-500 font-medium uppercase">Or copy link</span>
                 <div class="flex-1 h-px bg-zinc-700"></div>
             </div>
 
             <!-- Copy Link Section -->
             <div class="flex items-center gap-2 bg-zinc-800/70 border border-zinc-700 rounded-xl p-2">
-                <div class="flex-1 px-3 py-2 bg-black/30 rounded-lg">
+                <div class="flex-1 px-3 py-2 bg-black/30 rounded-lg overflow-hidden">
                     <p id="share-url-text" class="text-xs font-mono text-zinc-400 truncate">${projectUrl}</p>
                 </div>
                 <button id="copy-link-btn" onclick="navigator.clipboard.writeText('${projectUrl}').then(() => { 
