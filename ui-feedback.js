@@ -217,15 +217,124 @@ export async function addNftToWallet(contractAddress, tokenId) {
 // --- SHARE MODAL ---
 export function showShareModal(userAddress) {
     const projectUrl = window.location.origin;
-    const content = `<div class="p-6 text-center text-zinc-300">
-                        <i class="fa-solid fa-share-nodes text-4xl mb-4 text-zinc-500"></i>
-                        <h3 class="text-xl font-bold text-white mb-2">Share Project</h3>
-                        <p class="mb-4 text-sm">Spread the word about Backcoin!</p>
-                        <div class="bg-black/50 p-3 rounded-lg break-all font-mono text-xs text-zinc-400 select-all border border-zinc-700">
-                            ${projectUrl}
-                        </div>
-                     </div>`;
-    openModal(content);
+    const shareText = "🚀 Discover Backcoin - The next generation of crypto mining! Proof-of-Purchase, NFT Boosters, Fortune Pool & more. Join the revolution!";
+    const shareTextEncoded = encodeURIComponent(shareText);
+    const urlEncoded = encodeURIComponent(projectUrl);
+    
+    // Share URLs for each platform
+    const shareLinks = {
+        twitter: `https://twitter.com/intent/tweet?text=${shareTextEncoded}&url=${urlEncoded}`,
+        telegram: `https://t.me/share/url?url=${urlEncoded}&text=${shareTextEncoded}`,
+        whatsapp: `https://wa.me/?text=${shareTextEncoded}%20${urlEncoded}`,
+        facebook: `https://www.facebook.com/sharer/sharer.php?u=${urlEncoded}`,
+        linkedin: `https://www.linkedin.com/sharing/share-offsite/?url=${urlEncoded}`,
+        reddit: `https://reddit.com/submit?url=${urlEncoded}&title=${encodeURIComponent("Backcoin - Next Generation Crypto Mining")}`
+    };
+
+    const content = `
+        <div class="text-center">
+            <!-- Header -->
+            <div class="mb-6">
+                <div class="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-amber-500 to-orange-600 rounded-2xl mb-4 shadow-lg shadow-amber-500/30">
+                    <i class="fa-solid fa-share-nodes text-3xl text-white"></i>
+                </div>
+                <h3 class="text-2xl font-bold text-white mb-2">Share Backcoin</h3>
+                <p class="text-zinc-400 text-sm">Help us grow! Share with your friends and community</p>
+            </div>
+
+            <!-- Social Media Buttons -->
+            <div class="grid grid-cols-3 gap-3 mb-6">
+                <!-- Twitter/X -->
+                <button onclick="window.open('${shareLinks.twitter}', '_blank', 'width=600,height=400')" 
+                        class="group flex flex-col items-center gap-2 p-4 bg-zinc-800/50 hover:bg-[#1DA1F2]/20 border border-zinc-700 hover:border-[#1DA1F2] rounded-xl transition-all duration-300 hover:scale-105">
+                    <div class="w-12 h-12 flex items-center justify-center rounded-full bg-zinc-700 group-hover:bg-[#1DA1F2] transition-colors">
+                        <i class="fa-brands fa-x-twitter text-xl text-zinc-300 group-hover:text-white"></i>
+                    </div>
+                    <span class="text-xs font-semibold text-zinc-400 group-hover:text-white">Twitter</span>
+                </button>
+
+                <!-- Telegram -->
+                <button onclick="window.open('${shareLinks.telegram}', '_blank', 'width=600,height=400')" 
+                        class="group flex flex-col items-center gap-2 p-4 bg-zinc-800/50 hover:bg-[#0088cc]/20 border border-zinc-700 hover:border-[#0088cc] rounded-xl transition-all duration-300 hover:scale-105">
+                    <div class="w-12 h-12 flex items-center justify-center rounded-full bg-zinc-700 group-hover:bg-[#0088cc] transition-colors">
+                        <i class="fa-brands fa-telegram text-xl text-zinc-300 group-hover:text-white"></i>
+                    </div>
+                    <span class="text-xs font-semibold text-zinc-400 group-hover:text-white">Telegram</span>
+                </button>
+
+                <!-- WhatsApp -->
+                <button onclick="window.open('${shareLinks.whatsapp}', '_blank', 'width=600,height=400')" 
+                        class="group flex flex-col items-center gap-2 p-4 bg-zinc-800/50 hover:bg-[#25D366]/20 border border-zinc-700 hover:border-[#25D366] rounded-xl transition-all duration-300 hover:scale-105">
+                    <div class="w-12 h-12 flex items-center justify-center rounded-full bg-zinc-700 group-hover:bg-[#25D366] transition-colors">
+                        <i class="fa-brands fa-whatsapp text-xl text-zinc-300 group-hover:text-white"></i>
+                    </div>
+                    <span class="text-xs font-semibold text-zinc-400 group-hover:text-white">WhatsApp</span>
+                </button>
+
+                <!-- Facebook -->
+                <button onclick="window.open('${shareLinks.facebook}', '_blank', 'width=600,height=400')" 
+                        class="group flex flex-col items-center gap-2 p-4 bg-zinc-800/50 hover:bg-[#1877F2]/20 border border-zinc-700 hover:border-[#1877F2] rounded-xl transition-all duration-300 hover:scale-105">
+                    <div class="w-12 h-12 flex items-center justify-center rounded-full bg-zinc-700 group-hover:bg-[#1877F2] transition-colors">
+                        <i class="fa-brands fa-facebook-f text-xl text-zinc-300 group-hover:text-white"></i>
+                    </div>
+                    <span class="text-xs font-semibold text-zinc-400 group-hover:text-white">Facebook</span>
+                </button>
+
+                <!-- LinkedIn -->
+                <button onclick="window.open('${shareLinks.linkedin}', '_blank', 'width=600,height=400')" 
+                        class="group flex flex-col items-center gap-2 p-4 bg-zinc-800/50 hover:bg-[#0A66C2]/20 border border-zinc-700 hover:border-[#0A66C2] rounded-xl transition-all duration-300 hover:scale-105">
+                    <div class="w-12 h-12 flex items-center justify-center rounded-full bg-zinc-700 group-hover:bg-[#0A66C2] transition-colors">
+                        <i class="fa-brands fa-linkedin-in text-xl text-zinc-300 group-hover:text-white"></i>
+                    </div>
+                    <span class="text-xs font-semibold text-zinc-400 group-hover:text-white">LinkedIn</span>
+                </button>
+
+                <!-- Reddit -->
+                <button onclick="window.open('${shareLinks.reddit}', '_blank', 'width=600,height=400')" 
+                        class="group flex flex-col items-center gap-2 p-4 bg-zinc-800/50 hover:bg-[#FF4500]/20 border border-zinc-700 hover:border-[#FF4500] rounded-xl transition-all duration-300 hover:scale-105">
+                    <div class="w-12 h-12 flex items-center justify-center rounded-full bg-zinc-700 group-hover:bg-[#FF4500] transition-colors">
+                        <i class="fa-brands fa-reddit-alien text-xl text-zinc-300 group-hover:text-white"></i>
+                    </div>
+                    <span class="text-xs font-semibold text-zinc-400 group-hover:text-white">Reddit</span>
+                </button>
+            </div>
+
+            <!-- Divider -->
+            <div class="flex items-center gap-3 mb-4">
+                <div class="flex-1 h-px bg-zinc-700"></div>
+                <span class="text-xs text-zinc-500 font-medium">OR COPY LINK</span>
+                <div class="flex-1 h-px bg-zinc-700"></div>
+            </div>
+
+            <!-- Copy Link Section -->
+            <div class="flex items-center gap-2 bg-zinc-800/70 border border-zinc-700 rounded-xl p-2">
+                <div class="flex-1 px-3 py-2 bg-black/30 rounded-lg">
+                    <p id="share-url-text" class="text-xs font-mono text-zinc-400 truncate">${projectUrl}</p>
+                </div>
+                <button id="copy-link-btn" onclick="navigator.clipboard.writeText('${projectUrl}').then(() => { 
+                            document.getElementById('copy-link-btn').innerHTML = '<i class=\\'fa-solid fa-check\\'></i>'; 
+                            document.getElementById('copy-link-btn').classList.add('bg-green-600', 'border-green-500');
+                            document.getElementById('copy-link-btn').classList.remove('bg-amber-600', 'border-amber-500', 'hover:bg-amber-500');
+                            setTimeout(() => { 
+                                document.getElementById('copy-link-btn').innerHTML = '<i class=\\'fa-solid fa-copy\\'></i>'; 
+                                document.getElementById('copy-link-btn').classList.remove('bg-green-600', 'border-green-500');
+                                document.getElementById('copy-link-btn').classList.add('bg-amber-600', 'border-amber-500', 'hover:bg-amber-500');
+                            }, 2000); 
+                        })" 
+                        class="flex-shrink-0 w-10 h-10 flex items-center justify-center bg-amber-600 hover:bg-amber-500 border border-amber-500 rounded-lg text-white transition-all duration-300">
+                    <i class="fa-solid fa-copy"></i>
+                </button>
+            </div>
+
+            <!-- Footer -->
+            <p class="mt-4 text-[11px] text-zinc-600">
+                <i class="fa-solid fa-heart text-red-500 mr-1"></i>
+                Thank you for supporting Backcoin!
+            </p>
+        </div>
+    `;
+
+    openModal(content, 'max-w-md');
 }
 
 // --- WELCOME MODAL ---
