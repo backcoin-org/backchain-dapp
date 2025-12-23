@@ -33,6 +33,7 @@ import { SocialMediaPage } from './pages/SocialMedia.js';
 import { CreditCardPage } from './pages/CreditCardPage.js';
 import { DexPage } from './pages/DexPage.js';
 import { DaoPage } from './pages/DaoPage.js';
+import { TutorialsPage } from './pages/TutorialsPage.js';
 
 // ============================================================================
 // 2. CONFIGURATION & STATE
@@ -67,7 +68,8 @@ const routes = {
     'socials': SocialMediaPage,
     'creditcard': CreditCardPage,
     'dex': DexPage,
-    'dao': DaoPage
+    'dao': DaoPage,
+    'tutorials': TutorialsPage
 };
 
 // ============================================================================
