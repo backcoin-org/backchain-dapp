@@ -1583,3 +1583,64 @@ export const executeFortuneParticipate = executeFortunePlay;
 
 // Legacy support
 export { smartApprove as robustApprove };
+// ====================================================================
+// RENTAL - WITHDRAW NFT (Delist)
+// ====================================================================
+
+export async function executeWithdrawNFT(tokenId, btnElement) {
+    const signer = await getConnectedSigner();
+    if (!signer) return { success: false };
+    
+    const originalText = btnElement?.innerHTML || 'Withdraw';
+    const updateButton = (text) => {
+        if (btnElement) {
+            btnElement.innerHTML = text;
+            btnElement.disabled = text !== originalText;
+        }
+    };
+    
+    updateButton('<div class="loader inline-block"></div> Processing...');
+    
+    try {
+        const rentalAddress = addresses.rentalManager;
+        
+        if (!rentalAddress) {
+            showToast("Rental Manager not configured", "error");
+            return { success: false };
+        }
+        
+        const preflight = await preFlightCheck({ actionName: 'withdraw NFT' });
+        
+        if (!preflight.canProceed) {
+            preflight.issues.forEach(issue => showToast(issue, "error"));
+            return { success: false };
+        }
+        
+        const rentalContract = new ethers.Contract(rentalAddress, rentalManagerABI, signer);
+        
+        const result = await executeWithAutoAdjust(
+            () => rentalContract.withdrawNFT(BigInt(tokenId)),
+            {
+                description: 'Withdraw NFT',
+                onAttempt: () => showToast("Confirm withdrawal...", "info")
+            }
+        );
+        
+        if (result.success) {
+            showToast(`✅ NFT #${tokenId} withdrawn!`, "success");
+            loadRentalListings(true);
+            loadUserData();
+            trackPlatformUsage('withdrawRental', result.txHash);
+            return { success: true, txHash: result.txHash };
+        }
+        
+        return { success: false };
+        
+    } catch (e) {
+        console.error("Withdraw NFT error:", e);
+        handleTransactionError(e);
+        return { success: false };
+    } finally {
+        updateButton(originalText);
+    }
+}
