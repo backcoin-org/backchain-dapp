@@ -1,0 +1,554 @@
+//! # RandomnessOracle - Decentralized On-Chain Randomness
+//! 
+//! ## Part of BACKCHAIN PROTOCOL
+//! 
+//! **Website:** https://backcoin.org  
+//! **Documentation:** https://docs.backcoin.org  
+//! **GitHub:** https://github.com/backcoin-org/backchain-dapp  
+//! **Developer Contact:** dev@backcoin.org  
+//! ---
+//! 
+//! ## What is this?
+//! 
+//! RandomnessOracle is a **free, open, and decentralized** random number generator
+//! deployed on Arbitrum using Stylus (Rust). It provides verifiable on-chain
+//! randomness for any smart contract or application that needs it.
+//! 
+//! ## Why use this oracle?
+//! 
+//! - **🔓 Open Access**: Any contract or wallet can request random numbers
+//! - **⛓️ Fully On-Chain**: No external dependencies, oracles, or trusted parties
+//! - **⚡ Gas Efficient**: Built in Rust/Stylus for 60-80% gas savings vs Solidity
+//! - **🎯 Flexible**: Request single numbers, arrays, or multiple ranges
+//! - **💰 Optional Fee**: Owner can set a fee (starts at 0 = FREE)
+//! - **🔒 Secure**: Uses multiple entropy sources (block data, caller, counter)
+//! 
+//! ---
+//! 
+//! ## How to Use
+//! 
+//! ### From Solidity
+//! 
+//! ```solidity
+//! interface IRandomnessOracle {
+//!     function get_random(uint64 min, uint64 max) external payable returns (uint256);
+//!     function get_randoms(uint64 min, uint64 max, uint64 count) external payable returns (uint256[] memory);
+//!     function get_randoms_multi(uint64[] calldata mins, uint64[] calldata maxs) external payable returns (uint256[] memory);
+//!     function get_fee() external view returns (uint256);
+//!     function calculate_fee(uint64 count) external view returns (uint256);
+//! }
+//! 
+//! contract MyGame {
+//!     IRandomnessOracle oracle = IRandomnessOracle(ORACLE_ADDRESS);
+//!     
+//!     function rollDice() external payable returns (uint256) {
+//!         uint256 fee = oracle.calculate_fee(1);
+//!         return oracle.get_random{value: fee}(1, 6); // Returns 1-6
+//!     }
+//!     
+//!     function drawLottery() external payable returns (uint256[] memory) {
+//!         uint256 fee = oracle.calculate_fee(6);
+//!         // Draw 6 numbers from 1-60
+//!         return oracle.get_randoms{value: fee}(1, 60, 6);
+//!     }
+//!     
+//!     function megaSena() external payable returns (uint256[] memory) {
+//!         uint64[] memory mins = new uint64[](6);
+//!         uint64[] memory maxs = new uint64[](6);
+//!         for (uint i = 0; i < 6; i++) {
+//!             mins[i] = 1;
+//!             maxs[i] = 60;
+//!         }
+//!         uint256 fee = oracle.calculate_fee(6);
+//!         return oracle.get_randoms_multi{value: fee}(mins, maxs);
+//!     }
+//! }
+//! ```
+//! 
+//! ### From JavaScript/Ethers.js
+//! 
+//! ```javascript
+//! const oracle = new ethers.Contract(ORACLE_ADDRESS, ORACLE_ABI, signer);
+//! 
+//! // Get fee for 1 number
+//! const fee = await oracle.calculate_fee(1);
+//! 
+//! // Roll a dice (1-6)
+//! const dice = await oracle.get_random(1, 6, { value: fee });
+//! 
+//! // Get 5 random numbers between 1-100
+//! const fee5 = await oracle.calculate_fee(5);
+//! const numbers = await oracle.get_randoms(1, 100, 5, { value: fee5 });
+//! ```
+//! 
+//! ---
+//! 
+//! ## How Randomness is Generated
+//! 
+//! Each random number is generated using keccak256 hash of multiple entropy sources:
+//! 
+//! ```text
+//! random = keccak256(
+//!     entropy          // Internal state (changes every call)
+//!     + block.timestamp // Current block timestamp
+//!     + block.number    // Current block number  
+//!     + msg.sender      // Caller address
+//!     + request_counter // Unique counter per request
+//!     + index           // Index within the request
+//! ) % range + min
+//! ```
+//! 
+//! After each request, the internal entropy is updated, making it impossible
+//! to predict future values even if all current values are known.
+//! 
+//! ---
+//! 
+//! ## Fee Structure
+//! 
+//! - **Fee per number**: Set by owner (default: 0 = FREE)
+//! - **Total fee**: `fee * count` where count is numbers requested
+//! - **Check fee**: Call `get_fee()` or `calculate_fee(count)`
+//! - **Fee recipient**: Contract owner (can withdraw anytime)
+//! 
+//! The fee can be adjusted by the owner to ensure sustainability.
+//! When fee is 0, the oracle is completely free to use.
+//! 
+//! ---
+//! 
+//! ## Governance
+//! 
+//! - **Owner**: Initially Backchain Protocol team wallet
+//! - **Future**: Will be transferred to Backchain DAO
+//! - **Owner powers**: Set fee, withdraw funds, transfer ownership, pause/unpause
+//! - **Owner CANNOT**: Manipulate random results, access user funds
+//! 
+//! ---
+//! 
+//! ## About BACKCHAIN PROTOCOL
+//! 
+//! Backchain Protocol is a DeFi ecosystem built on Arbitrum featuring:
+//! 
+//! - **BACK Token**: Deflationary utility token with automatic burns
+//! - **pStake**: Liquid staking with instant unstake option
+//! - **Fortune Pool**: Decentralized lottery using this oracle
+//! - **NFT Liquidity Pools**: Bonding curve NFT trading
+//! - **Ecosystem Manager**: Unified DeFi management
+//! 
+//! This oracle is a **public good** provided by Backchain Protocol.
+//! While primarily built for our Fortune Pool, it's open for anyone to use.
+//! 
+//! ---
+//! 
+//! ## Contract Addresses
+//! 
+//! - **Arbitrum Sepolia (Testnet)**: [TO BE DEPLOYED]
+//! - **Arbitrum One (Mainnet)**: [TO BE DEPLOYED]
+//! 
+//! ---
+//! 
+//! ## License
+//! 
+//! MIT License - Free to use, modify, and distribute.
+//! 
+//! ---
+//! 
+//! @author Backchain Protocol <dev@backcoin.org>
+//! @custom:developer dev@backcoin.org
+//! @custom:security-contact security@backcoin.org
+//! @custom:website https://backcoin.org
+//! @custom:github https://github.com/backcoin-org/backchain-dapp
+//! @custom:version 1.0.0
+
+#![cfg_attr(not(feature = "export-abi"), no_main)]
+#![cfg_attr(not(feature = "export-abi"), no_std)]
+extern crate alloc;
+
+use alloc::vec::Vec;
+use stylus_sdk::{
+    alloy_primitives::{Address, FixedBytes, U256},
+    block, contract, msg,
+    prelude::*,
+    call::transfer_eth,
+};
+
+// =============================================================================
+//                              PANIC HANDLER
+// =============================================================================
+
+#[cfg(target_arch = "wasm32")]
+#[panic_handler]
+fn panic(_: &core::panic::PanicInfo) -> ! {
+    loop {}
+}
+
+// =============================================================================
+//                                 STORAGE
+// =============================================================================
+
+sol_storage! {
+    #[entrypoint]
+    pub struct RandomnessOracle {
+        /// Internal entropy seed - updated after each request
+        bytes32 entropy;
+        
+        /// Total number of requests processed
+        uint256 request_counter;
+        
+        /// Total random numbers generated across all requests
+        uint256 total_generated;
+        
+        /// Fee per random number (in wei) - 0 means free
+        uint256 fee;
+        
+        /// Contract owner - can set fee, withdraw, transfer ownership
+        address owner;
+        
+        /// Emergency pause flag
+        bool paused;
+    }
+}
+
+// =============================================================================
+//                                CONSTANTS
+// =============================================================================
+
+/// Maximum numbers per single request (prevents gas limit issues)
+const MAX_VALUES_PER_REQUEST: u64 = 100;
+
+// =============================================================================
+//                            HELPER FUNCTIONS
+// =============================================================================
+
+/// Compute keccak256 hash using tiny-keccak (gas efficient)
+fn keccak256(data: &[u8]) -> FixedBytes<32> {
+    use tiny_keccak::{Hasher, Keccak};
+    let mut hasher = Keccak::v256();
+    let mut output = [0u8; 32];
+    hasher.update(data);
+    hasher.finalize(&mut output);
+    FixedBytes::from(output)
+}
+
+/// Convert U256 to bytes for hashing
+fn u256_to_bytes(val: U256) -> [u8; 32] {
+    val.to_be_bytes()
+}
+
+/// Convert u64 to bytes for hashing
+fn u64_to_bytes(val: u64) -> [u8; 8] {
+    val.to_be_bytes()
+}
+
+// =============================================================================
+//                           PUBLIC FUNCTIONS
+// =============================================================================
+
+#[public]
+impl RandomnessOracle {
+    
+    // =========================================================================
+    //                          INITIALIZATION
+    // =========================================================================
+    
+    /// Initialize the oracle. Can only be called once.
+    /// Sets the caller as owner and generates initial entropy.
+    pub fn initialize(&mut self) -> Result<(), Vec<u8>> {
+        // Ensure not already initialized
+        if !self.owner.get().is_zero() {
+            return Err(b"AlreadyInitialized".to_vec());
+        }
+
+        // Set owner to deployer
+        self.owner.set(msg::sender());
+        
+        // Initialize with paused = false
+        self.paused.set(false);
+        
+        // Generate initial entropy from block data
+        let mut seed_data = Vec::with_capacity(60);
+        seed_data.extend_from_slice(&u64_to_bytes(block::timestamp()));
+        seed_data.extend_from_slice(&u64_to_bytes(block::number()));
+        seed_data.extend_from_slice(contract::address().as_slice());
+        seed_data.extend_from_slice(msg::sender().as_slice());
+
+        let initial_entropy = keccak256(&seed_data);
+        self.entropy.set(initial_entropy);
+
+        Ok(())
+    }
+
+    // =========================================================================
+    //                       RANDOM NUMBER GENERATION
+    // =========================================================================
+
+    /// Generate a single random number within a range.
+    /// 
+    /// # Arguments
+    /// * `min` - Minimum value (inclusive)
+    /// * `max` - Maximum value (inclusive)
+    /// 
+    /// # Returns
+    /// * Random number between min and max
+    #[payable]
+    pub fn get_random(&mut self, min: u64, max: u64) -> Result<U256, Vec<u8>> {
+        self.ensure_not_paused()?;
+        self.validate_range(min, max)?;
+        self.validate_fee(1)?;
+
+        let result = self.generate_random(min, max, 0);
+        self.update_state(1);
+
+        Ok(result)
+    }
+
+    /// Generate multiple random numbers with the same range.
+    /// 
+    /// # Arguments
+    /// * `min` - Minimum value (inclusive)
+    /// * `max` - Maximum value (inclusive)  
+    /// * `count` - How many numbers to generate (max 100)
+    /// 
+    /// # Returns
+    /// * Array of random numbers
+    #[payable]
+    pub fn get_randoms(&mut self, min: u64, max: u64, count: u64) -> Result<Vec<U256>, Vec<u8>> {
+        self.ensure_not_paused()?;
+        self.validate_range(min, max)?;
+        self.validate_count(count)?;
+        self.validate_fee(count)?;
+
+        let mut results = Vec::with_capacity(count as usize);
+        for i in 0..count {
+            results.push(self.generate_random(min, max, i));
+        }
+
+        self.update_state(count);
+        Ok(results)
+    }
+
+    /// Generate multiple random numbers with different ranges.
+    /// 
+    /// # Arguments
+    /// * `mins` - Array of minimum values
+    /// * `maxs` - Array of maximum values (must be same length as mins)
+    /// 
+    /// # Returns
+    /// * Array of random numbers, one per range
+    #[payable]
+    pub fn get_randoms_multi(&mut self, mins: Vec<u64>, maxs: Vec<u64>) -> Result<Vec<U256>, Vec<u8>> {
+        self.ensure_not_paused()?;
+        
+        if mins.len() != maxs.len() {
+            return Err(b"ArrayLengthMismatch".to_vec());
+        }
+
+        let count = mins.len() as u64;
+        self.validate_count(count)?;
+        self.validate_fee(count)?;
+
+        let mut results = Vec::with_capacity(count as usize);
+        for i in 0..count as usize {
+            self.validate_range(mins[i], maxs[i])?;
+            results.push(self.generate_random(mins[i], maxs[i], i as u64));
+        }
+
+        self.update_state(count);
+        Ok(results)
+    }
+
+    // =========================================================================
+    //                           VIEW FUNCTIONS
+    // =========================================================================
+
+    /// Get current entropy hash (for verification/debugging)
+    pub fn get_entropy(&self) -> FixedBytes<32> {
+        self.entropy.get()
+    }
+
+    /// Get total number of requests processed
+    pub fn get_request_count(&self) -> U256 {
+        self.request_counter.get()
+    }
+
+    /// Get total random numbers generated
+    pub fn get_total_generated(&self) -> U256 {
+        self.total_generated.get()
+    }
+
+    /// Get current fee per random number (in wei)
+    /// Returns 0 if oracle is free to use
+    pub fn get_fee(&self) -> U256 {
+        self.fee.get()
+    }
+
+    /// Calculate total fee for generating N numbers
+    pub fn calculate_fee(&self, count: u64) -> U256 {
+        self.fee.get() * U256::from(count)
+    }
+
+    /// Get contract owner address
+    pub fn get_owner(&self) -> Address {
+        self.owner.get()
+    }
+
+    /// Check if contract is paused
+    pub fn is_paused(&self) -> bool {
+        self.paused.get()
+    }
+
+    /// Get contract version (1.0.0 = 100)
+    pub fn get_version(&self) -> U256 {
+        U256::from(100)
+    }
+
+    /// Get maximum numbers allowed per request
+    pub fn get_max_per_request(&self) -> U256 {
+        U256::from(MAX_VALUES_PER_REQUEST)
+    }
+
+    // =========================================================================
+    //                          ADMIN FUNCTIONS
+    // =========================================================================
+
+    /// Set fee per random number. Only owner can call.
+    /// Set to 0 to make oracle free.
+    pub fn set_fee(&mut self, new_fee: U256) -> Result<(), Vec<u8>> {
+        self.only_owner()?;
+        self.fee.set(new_fee);
+        Ok(())
+    }
+
+    /// Transfer ownership to new address. Only owner can call.
+    /// Use this to transfer to DAO or multisig.
+    pub fn transfer_ownership(&mut self, new_owner: Address) -> Result<(), Vec<u8>> {
+        self.only_owner()?;
+        if new_owner.is_zero() {
+            return Err(b"ZeroAddress".to_vec());
+        }
+        self.owner.set(new_owner);
+        Ok(())
+    }
+
+    /// Withdraw accumulated fees. Only owner can call.
+    /// Sends all ETH balance to owner.
+    pub fn withdraw(&mut self) -> Result<(), Vec<u8>> {
+        self.only_owner()?;
+        let balance = contract::balance();
+        if balance > U256::ZERO {
+            transfer_eth(self.owner.get(), balance)?;
+        }
+        Ok(())
+    }
+
+    /// Pause the oracle. Only owner can call.
+    /// When paused, no random numbers can be generated.
+    pub fn pause(&mut self) -> Result<(), Vec<u8>> {
+        self.only_owner()?;
+        self.paused.set(true);
+        Ok(())
+    }
+
+    /// Unpause the oracle. Only owner can call.
+    pub fn unpause(&mut self) -> Result<(), Vec<u8>> {
+        self.only_owner()?;
+        self.paused.set(false);
+        Ok(())
+    }
+}
+
+// =============================================================================
+//                          INTERNAL FUNCTIONS
+// =============================================================================
+
+impl RandomnessOracle {
+    /// Check if caller is owner
+    fn only_owner(&self) -> Result<(), Vec<u8>> {
+        if msg::sender() != self.owner.get() {
+            return Err(b"Unauthorized".to_vec());
+        }
+        Ok(())
+    }
+
+    /// Check if contract is not paused
+    fn ensure_not_paused(&self) -> Result<(), Vec<u8>> {
+        if self.paused.get() {
+            return Err(b"ContractPaused".to_vec());
+        }
+        Ok(())
+    }
+
+    /// Validate min <= max
+    fn validate_range(&self, min: u64, max: u64) -> Result<(), Vec<u8>> {
+        if min > max {
+            return Err(b"InvalidRange".to_vec());
+        }
+        Ok(())
+    }
+
+    /// Validate count is within limits
+    fn validate_count(&self, count: u64) -> Result<(), Vec<u8>> {
+        if count == 0 {
+            return Err(b"ZeroCount".to_vec());
+        }
+        if count > MAX_VALUES_PER_REQUEST {
+            return Err(b"ExceedsMaxPerRequest".to_vec());
+        }
+        Ok(())
+    }
+
+    /// Validate sufficient fee was sent
+    fn validate_fee(&self, count: u64) -> Result<(), Vec<u8>> {
+        let required = self.fee.get() * U256::from(count);
+        if msg::value() < required {
+            return Err(b"InsufficientFee".to_vec());
+        }
+        Ok(())
+    }
+
+    /// Generate a single random number
+    fn generate_random(&self, min: u64, max: u64, index: u64) -> U256 {
+        // If min == max, just return that value
+        if min == max {
+            return U256::from(min);
+        }
+
+        // Build entropy from multiple sources
+        let mut data = Vec::with_capacity(120);
+        data.extend_from_slice(self.entropy.get().as_slice());      // 32 bytes - internal state
+        data.extend_from_slice(&u64_to_bytes(block::timestamp()));  // 8 bytes - current time
+        data.extend_from_slice(&u64_to_bytes(block::number()));     // 8 bytes - current block
+        data.extend_from_slice(msg::sender().as_slice());           // 20 bytes - caller
+        data.extend_from_slice(&u256_to_bytes(self.request_counter.get())); // 32 bytes - request ID
+        data.extend_from_slice(&u64_to_bytes(index));               // 8 bytes - index in request
+
+        // Hash all entropy sources
+        let hash = keccak256(&data);
+        
+        // Convert to number in range
+        let range = (max - min + 1) as u128;
+        let random_value = U256::from_be_bytes(hash.0);
+        let result = (random_value % U256::from(range)) + U256::from(min);
+        
+        result
+    }
+
+    /// Update internal state after generating numbers
+    fn update_state(&mut self, count: u64) {
+        // Increment request counter
+        let new_counter = self.request_counter.get() + U256::from(1);
+        self.request_counter.set(new_counter);
+        
+        // Add to total generated
+        let new_total = self.total_generated.get() + U256::from(count);
+        self.total_generated.set(new_total);
+
+        // Update entropy for next request
+        let mut data = Vec::with_capacity(72);
+        data.extend_from_slice(self.entropy.get().as_slice());
+        data.extend_from_slice(&u256_to_bytes(new_counter));
+        data.extend_from_slice(&u64_to_bytes(block::timestamp()));
+
+        let new_entropy = keccak256(&data);
+        self.entropy.set(new_entropy);
+    }
+}

@@ -1,0 +1,41 @@
+# ═══════════════════════════════════════════════════════════════════════════════
+#                          BACKCHAIN PROTOCOL
+#                  Stylus Entropy - WASM Random Generator
+# ═══════════════════════════════════════════════════════════════════════════════
+#
+# Website: https://backcoin.org
+# Docs: https://docs.backcoin.org
+# License: MIT
+
+[package]
+name = "backchain-entropy"
+version = "1.0.0"
+authors = ["Backchain Protocol <dev@backcoin.org>"]
+description = "Entropy generator for Backchain Randomness Oracle (Arbitrum Stylus)"
+repository = "https://github.com/backcoin-org/backchain-dapp"
+license = "MIT"
+edition = "2021"
+keywords = ["arbitrum", "stylus", "randomness", "entropy", "backchain"]
+
+[dependencies]
+stylus-sdk = "0.6.0"
+
+[features]
+export-abi = ["stylus-sdk/export-abi"]
+
+[lib]
+crate-type = ["cdylib"]
+
+[profile.release]
+codegen-units = 1
+strip = true
+lto = true
+panic = "abort"
+opt-level = "s"
+
+[[bin]]
+name = "main"
+path = "src/bin/main.rs"
+
+[patch.crates-io]
+ruint = { git = "https://github.com/recmo/uint", tag = "v1.12.3" }

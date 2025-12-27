@@ -1,0 +1,297 @@
+//! # RandomnessOracle - Decentralized On-Chain Randomness
+//!
+//! ## Part of BACKCHAIN PROTOCOL
+//!
+//! **Website:** https://backcoin.org
+//! **GitHub:** https://github.com/backcoin-org/backchain-dapp
+//! **Developer Contact:** dev@backcoin.org
+//!
+//! ## Version 1.1.0 - Fixed for Stylus SDK 0.6.1
+//! - Removed #[payable] attribute (causes OpcodeNotFound error)
+//! - Fee validation done internally via msg::value()
+
+#![cfg_attr(not(feature = "export-abi"), no_main)]
+#![cfg_attr(not(feature = "export-abi"), no_std)]
+extern crate alloc;
+
+use alloc::vec::Vec;
+use stylus_sdk::{
+    alloy_primitives::{Address, FixedBytes, U256},
+    block, contract, msg,
+    prelude::*,
+    call::transfer_eth,
+};
+
+#[cfg(target_arch = "wasm32")]
+#[panic_handler]
+fn panic(_: &core::panic::PanicInfo) -> ! {
+    loop {}
+}
+
+sol_storage! {
+    #[entrypoint]
+    pub struct RandomnessOracle {
+        bytes32 entropy;
+        uint256 request_counter;
+        uint256 total_generated;
+        uint256 fee;
+        address owner;
+        bool paused;
+    }
+}
+
+const MAX_VALUES_PER_REQUEST: u64 = 100;
+
+fn keccak256(data: &[u8]) -> FixedBytes<32> {
+    use tiny_keccak::{Hasher, Keccak};
+    let mut hasher = Keccak::v256();
+    let mut output = [0u8; 32];
+    hasher.update(data);
+    hasher.finalize(&mut output);
+    FixedBytes::from(output)
+}
+
+fn u256_to_bytes(val: U256) -> [u8; 32] {
+    val.to_be_bytes()
+}
+
+fn u64_to_bytes(val: u64) -> [u8; 8] {
+    val.to_be_bytes()
+}
+
+#[public]
+impl RandomnessOracle {
+    // =========================================================================
+    //                          INITIALIZATION
+    // =========================================================================
+
+    pub fn initialize(&mut self) -> Result<(), Vec<u8>> {
+        if !self.owner.get().is_zero() {
+            return Err(b"AlreadyInitialized".to_vec());
+        }
+        self.owner.set(msg::sender());
+        self.paused.set(false);
+        
+        let mut seed_data = Vec::with_capacity(60);
+        seed_data.extend_from_slice(&u64_to_bytes(block::timestamp()));
+        seed_data.extend_from_slice(&u64_to_bytes(block::number()));
+        seed_data.extend_from_slice(contract::address().as_slice());
+        seed_data.extend_from_slice(msg::sender().as_slice());
+        
+        let initial_entropy = keccak256(&seed_data);
+        self.entropy.set(initial_entropy);
+        Ok(())
+    }
+
+    // =========================================================================
+    //                       RANDOM NUMBER GENERATION
+    // =========================================================================
+
+    /// Generate a single random number within a range.
+    /// If fee > 0, send ETH with the transaction.
+    pub fn get_random(&mut self, min: u64, max: u64) -> Result<U256, Vec<u8>> {
+        self.ensure_not_paused()?;
+        self.validate_range(min, max)?;
+        self.validate_fee_internal(1)?;
+
+        let result = self.generate_random(min, max, 0);
+        self.update_state(1);
+        Ok(result)
+    }
+
+    /// Generate multiple random numbers with the same range.
+    pub fn get_randoms(&mut self, min: u64, max: u64, count: u64) -> Result<Vec<U256>, Vec<u8>> {
+        self.ensure_not_paused()?;
+        self.validate_range(min, max)?;
+        self.validate_count(count)?;
+        self.validate_fee_internal(count)?;
+
+        let mut results = Vec::with_capacity(count as usize);
+        for i in 0..count {
+            results.push(self.generate_random(min, max, i));
+        }
+        self.update_state(count);
+        Ok(results)
+    }
+
+    /// Generate multiple random numbers with different ranges.
+    pub fn get_randoms_multi(&mut self, mins: Vec<u64>, maxs: Vec<u64>) -> Result<Vec<U256>, Vec<u8>> {
+        self.ensure_not_paused()?;
+        
+        if mins.len() != maxs.len() {
+            return Err(b"ArrayLengthMismatch".to_vec());
+        }
+        
+        let count = mins.len() as u64;
+        self.validate_count(count)?;
+        self.validate_fee_internal(count)?;
+
+        let mut results = Vec::with_capacity(count as usize);
+        for i in 0..count as usize {
+            self.validate_range(mins[i], maxs[i])?;
+            results.push(self.generate_random(mins[i], maxs[i], i as u64));
+        }
+        self.update_state(count);
+        Ok(results)
+    }
+
+    // =========================================================================
+    //                           VIEW FUNCTIONS
+    // =========================================================================
+
+    pub fn get_entropy(&self) -> FixedBytes<32> {
+        self.entropy.get()
+    }
+
+    pub fn get_request_count(&self) -> U256 {
+        self.request_counter.get()
+    }
+
+    pub fn get_total_generated(&self) -> U256 {
+        self.total_generated.get()
+    }
+
+    pub fn get_fee(&self) -> U256 {
+        self.fee.get()
+    }
+
+    pub fn calculate_fee(&self, count: u64) -> U256 {
+        self.fee.get() * U256::from(count)
+    }
+
+    pub fn get_owner(&self) -> Address {
+        self.owner.get()
+    }
+
+    pub fn is_paused(&self) -> bool {
+        self.paused.get()
+    }
+
+    pub fn get_version(&self) -> U256 {
+        U256::from(110) // Version 1.1.0
+    }
+
+    pub fn get_max_per_request(&self) -> U256 {
+        U256::from(MAX_VALUES_PER_REQUEST)
+    }
+
+    // =========================================================================
+    //                          ADMIN FUNCTIONS
+    // =========================================================================
+
+    pub fn set_fee(&mut self, new_fee: U256) -> Result<(), Vec<u8>> {
+        self.only_owner()?;
+        self.fee.set(new_fee);
+        Ok(())
+    }
+
+    pub fn transfer_ownership(&mut self, new_owner: Address) -> Result<(), Vec<u8>> {
+        self.only_owner()?;
+        if new_owner.is_zero() {
+            return Err(b"ZeroAddress".to_vec());
+        }
+        self.owner.set(new_owner);
+        Ok(())
+    }
+
+    pub fn withdraw(&mut self) -> Result<(), Vec<u8>> {
+        self.only_owner()?;
+        let balance = contract::balance();
+        if balance > U256::ZERO {
+            transfer_eth(self.owner.get(), balance)?;
+        }
+        Ok(())
+    }
+
+    pub fn pause(&mut self) -> Result<(), Vec<u8>> {
+        self.only_owner()?;
+        self.paused.set(true);
+        Ok(())
+    }
+
+    pub fn unpause(&mut self) -> Result<(), Vec<u8>> {
+        self.only_owner()?;
+        self.paused.set(false);
+        Ok(())
+    }
+}
+
+// =============================================================================
+//                          INTERNAL FUNCTIONS
+// =============================================================================
+
+impl RandomnessOracle {
+    fn only_owner(&self) -> Result<(), Vec<u8>> {
+        if msg::sender() != self.owner.get() {
+            return Err(b"Unauthorized".to_vec());
+        }
+        Ok(())
+    }
+
+    fn ensure_not_paused(&self) -> Result<(), Vec<u8>> {
+        if self.paused.get() {
+            return Err(b"ContractPaused".to_vec());
+        }
+        Ok(())
+    }
+
+    fn validate_range(&self, min: u64, max: u64) -> Result<(), Vec<u8>> {
+        if min > max {
+            return Err(b"InvalidRange".to_vec());
+        }
+        Ok(())
+    }
+
+    fn validate_count(&self, count: u64) -> Result<(), Vec<u8>> {
+        if count == 0 {
+            return Err(b"ZeroCount".to_vec());
+        }
+        if count > MAX_VALUES_PER_REQUEST {
+            return Err(b"ExceedsMaxPerRequest".to_vec());
+        }
+        Ok(())
+    }
+
+    fn validate_fee_internal(&self, count: u64) -> Result<(), Vec<u8>> {
+        let required = self.fee.get() * U256::from(count);
+        if msg::value() < required {
+            return Err(b"InsufficientFee".to_vec());
+        }
+        Ok(())
+    }
+
+    fn generate_random(&self, min: u64, max: u64, index: u64) -> U256 {
+        if min == max {
+            return U256::from(min);
+        }
+
+        let mut data = Vec::with_capacity(120);
+        data.extend_from_slice(self.entropy.get().as_slice());
+        data.extend_from_slice(&u64_to_bytes(block::timestamp()));
+        data.extend_from_slice(&u64_to_bytes(block::number()));
+        data.extend_from_slice(msg::sender().as_slice());
+        data.extend_from_slice(&u256_to_bytes(self.request_counter.get()));
+        data.extend_from_slice(&u64_to_bytes(index));
+
+        let hash = keccak256(&data);
+        let range = (max - min + 1) as u128;
+        let random_value = U256::from_be_bytes(hash.0);
+        (random_value % U256::from(range)) + U256::from(min)
+    }
+
+    fn update_state(&mut self, count: u64) {
+        let new_counter = self.request_counter.get() + U256::from(1);
+        self.request_counter.set(new_counter);
+
+        let new_total = self.total_generated.get() + U256::from(count);
+        self.total_generated.set(new_total);
+
+        let mut data = Vec::with_capacity(72);
+        data.extend_from_slice(self.entropy.get().as_slice());
+        data.extend_from_slice(&u256_to_bytes(new_counter));
+        data.extend_from_slice(&u64_to_bytes(block::timestamp()));
+
+        let new_entropy = keccak256(&data);
+        self.entropy.set(new_entropy);
+    }
+}

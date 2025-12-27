@@ -1,11 +1,11 @@
 // scripts/3_launch_and_liquidate_ecosystem.ts
-// ✅ VERSÃO V3.1 - Multi-RPC Fallback + TGE + Liquidez
+// ✅ Deploy Completo - Multi-RPC Fallback + TGE + Liquidez
 // ============================================================
-// CHANGELOG V3.1:
-// - Sistema Multi-RPC com fallback automático
-// - Retry inteligente com troca de RPC em caso de falha
-// - Delays aumentados para estabilidade
-// - Timeout handling melhorado
+// Este script:
+// - Configura todas as taxas e distribuições
+// - Executa o TGE (Token Generation Event)
+// - Injeta liquidez em todos os pools
+// - Configura o FortunePool com BackchainRandomness
 // ============================================================
 
 import { ethers, upgrades, network } from "hardhat";
@@ -54,8 +54,7 @@ const MAX_RPC_FAILURES = 3;
 // ============================================================
 
 const SYSTEM_WALLETS = {
-    TREASURY: "0xc93030333E3a235c2605BcB7C7330650B600B6D0",
-    ORACLE: "0x56b05f7E8263164B07c29E26e18994F9adc00Be8"
+    TREASURY: "0xc93030333E3a235c2605BcB7C7330650B600B6D0"
 };
 
 // ============================================================
@@ -63,13 +62,13 @@ const SYSTEM_WALLETS = {
 // ============================================================
 
 const DEPLOY_DELAY_MS = 5000;
-const TX_DELAY_MS = 2000;      // Delay entre transações
-const RETRY_DELAY_MS = 5000;   // Delay antes de retry
+const TX_DELAY_MS = 2000;
+const RETRY_DELAY_MS = 5000;
 const CHUNK_SIZE = 50;
 const CHUNK_SIZE_BIGINT = BigInt(CHUNK_SIZE);
 
 // ============================================================
-//                 💰 TAXAS OFICIAIS V3.0
+//                     💰 TAXAS OFICIAIS
 // ============================================================
 
 const SERVICE_FEES_BIPS = {
@@ -79,7 +78,7 @@ const SERVICE_FEES_BIPS = {
     CLAIM_REWARD_FEE_BIPS: 100n,
     NFT_POOL_BUY_TAX_BIPS: 500n,
     NFT_POOL_SELL_TAX_BIPS: 1000n,
-    FORTUNE_POOL_SERVICE: 2000n,
+    FORTUNE_POOL_GAME_FEE: 1000n,  // 10% do wager
     RENTAL_MARKET_TAX_BIPS: 1000n,
 };
 
@@ -87,8 +86,11 @@ const SERVICE_FEES_BKC = {
     NOTARY_SERVICE: ethers.parseEther("1")
 };
 
+// Fortune Pool - Service Fee em ETH (para funding do projeto)
+const FORTUNE_SERVICE_FEE_ETH = ethers.parseEther("0.001");
+
 // ============================================================
-//               📊 DISTRIBUIÇÃO DE REWARDS V3.0
+//               📊 DISTRIBUIÇÃO DE REWARDS
 // ============================================================
 
 const DISTRIBUTION = {
@@ -103,7 +105,7 @@ const DISTRIBUTION = {
 };
 
 // ============================================================
-//               ⭐ BOOSTER DISCOUNTS V3.0
+//               ⭐ BOOSTER DISCOUNTS
 // ============================================================
 
 const BOOSTER_DISCOUNTS = [
@@ -117,23 +119,17 @@ const BOOSTER_DISCOUNTS = [
 ];
 
 // ============================================================
-//               🎰 FORTUNE POOL CONFIG V3.0
+//               🎰 FORTUNE POOL CONFIG
 // ============================================================
 
-const FORTUNE_POOL_CONFIG = {
-    ORACLE_FEE_1X: 0n,
-    ORACLE_FEE_5X: 0n,
-    GAME_FEE_BIPS: 2000n,
-};
-
 const FORTUNE_POOL_PRIZE_TIERS = [
-    { tierId: 1, range: 3,   multiplierBips: 20000,   name: "Fácil (1/3 - 2x)" },
-    { tierId: 2, range: 10,  multiplierBips: 50000,   name: "Médio (1/10 - 5x)" },
-    { tierId: 3, range: 100, multiplierBips: 1000000, name: "Difícil (1/100 - 100x)" }
+    { tierId: 1, range: 3,   multiplierBips: 20000,   name: "Easy (1/3 - 2x)" },
+    { tierId: 2, range: 10,  multiplierBips: 50000,   name: "Medium (1/10 - 5x)" },
+    { tierId: 3, range: 100, multiplierBips: 500000,  name: "Hard (1/100 - 50x)" }
 ];
 
 // ============================================================
-//               🚰 FAUCET CONFIG V3.0
+//               🚰 FAUCET CONFIG
 // ============================================================
 
 const FAUCET_CONFIG = {
@@ -143,7 +139,7 @@ const FAUCET_CONFIG = {
 };
 
 // ============================================================
-//               💧 LIQUIDEZ INICIAL V3.0
+//               💧 LIQUIDEZ INICIAL
 // ============================================================
 
 const LIQUIDITY_CONFIG = {
@@ -203,14 +199,13 @@ function updateRulesJSON(section: string, key: string, value: string) {
     if (!rules[section]) rules[section] = {};
     rules[section][key] = value;
     rules["LAST_UPDATED"] = new Date().toISOString();
-    rules["VERSION"] = "3.1.0";
     fs.writeFileSync(rulesFilePath, JSON.stringify(rules, null, 2));
 }
 
 function createFullRulesConfig() {
     const rules = {
-        "VERSION": "3.1.0",
-        "DESCRIPTION": "Configuração Oficial Backcoin V3.1 - Multi-RPC",
+        "VERSION": "1.0.0",
+        "DESCRIPTION": "Configuração Oficial Backchain",
         "NETWORK": "arbitrum-sepolia",
         "CREATED_AT": new Date().toISOString(),
         
@@ -221,12 +216,17 @@ function createFullRulesConfig() {
             "CLAIM_REWARD_FEE_BIPS": SERVICE_FEES_BIPS.CLAIM_REWARD_FEE_BIPS.toString(),
             "NFT_POOL_BUY_TAX_BIPS": SERVICE_FEES_BIPS.NFT_POOL_BUY_TAX_BIPS.toString(),
             "NFT_POOL_SELL_TAX_BIPS": SERVICE_FEES_BIPS.NFT_POOL_SELL_TAX_BIPS.toString(),
-            "FORTUNE_POOL_SERVICE": SERVICE_FEES_BIPS.FORTUNE_POOL_SERVICE.toString(),
+            "FORTUNE_POOL_GAME_FEE": SERVICE_FEES_BIPS.FORTUNE_POOL_GAME_FEE.toString(),
             "RENTAL_MARKET_TAX_BIPS": SERVICE_FEES_BIPS.RENTAL_MARKET_TAX_BIPS.toString()
         },
         
         "serviceFeesBKC": {
             "NOTARY_SERVICE": ethers.formatEther(SERVICE_FEES_BKC.NOTARY_SERVICE)
+        },
+
+        "fortunePool": {
+            "serviceFeeETH": ethers.formatEther(FORTUNE_SERVICE_FEE_ETH),
+            "gameFeeBips": SERVICE_FEES_BIPS.FORTUNE_POOL_GAME_FEE.toString()
         },
         
         "miningDistribution": {
@@ -251,13 +251,12 @@ function createFullRulesConfig() {
         },
         
         "wallets": {
-            "ORACLE_ADDRESS": SYSTEM_WALLETS.ORACLE,
             "TREASURY_ADDRESS": SYSTEM_WALLETS.TREASURY
         }
     };
     
     fs.writeFileSync(rulesFilePath, JSON.stringify(rules, null, 2));
-    console.log("   ✅ rules-config.json V3.1 criado");
+    console.log("   ✅ rules-config.json criado");
 }
 
 // ============================================================
@@ -287,35 +286,6 @@ function markRpcSuccess(rpcName: string) {
     rpcFailCounts[rpcName] = 0;
 }
 
-async function getWorkingProvider(): Promise<JsonRpcProvider> {
-    for (const rpc of RPC_ENDPOINTS) {
-        if (rpcFailCounts[rpc.name] >= MAX_RPC_FAILURES) continue;
-        
-        try {
-            const provider = new ethers.JsonRpcProvider(rpc.url, undefined, {
-                staticNetwork: true,
-                batchMaxCount: 1
-            });
-            
-            // Test connection with timeout
-            const timeoutPromise = new Promise((_, reject) => 
-                setTimeout(() => reject(new Error('Timeout')), 15000)
-            );
-            await Promise.race([provider.getBlockNumber(), timeoutPromise]);
-            
-            console.log(`   🌐 Using RPC: ${rpc.name}`);
-            markRpcSuccess(rpc.name);
-            return provider;
-        } catch (e) {
-            markRpcFailed(rpc.name);
-        }
-    }
-    
-    // Fallback to first RPC
-    console.log(`   🔄 Fallback to ${RPC_ENDPOINTS[0].name}`);
-    return new ethers.JsonRpcProvider(RPC_ENDPOINTS[0].url);
-}
-
 // ============================================================
 //              🔄 ROBUST TRANSACTION SENDER
 // ============================================================
@@ -343,13 +313,11 @@ async function sendTxWithRetry(
             lastError = error;
             const msg = error.message || JSON.stringify(error);
             
-            // Already done - not an error
             if (msg.includes("already") || msg.includes("Already")) {
                 console.log(`   ⚠️ Já realizado: ${description}`);
                 return null;
             }
             
-            // Connection errors - try different RPC
             const isConnectionError = 
                 msg.includes("ECONNRESET") ||
                 msg.includes("TIMEOUT") ||
@@ -375,7 +343,6 @@ async function sendTxWithRetry(
                 continue;
             }
             
-            // Nonce errors - retry with delay
             if (msg.includes("nonce") || msg.includes("replacement")) {
                 const waitTime = 3000 * (attempt + 1);
                 console.log(`   ⚠️ Erro de nonce. Tentativa ${attempt + 1}/${maxRetries}. Aguardando ${waitTime/1000}s...`);
@@ -383,7 +350,6 @@ async function sendTxWithRetry(
                 continue;
             }
             
-            // Other errors - throw immediately
             throw error;
         }
     }
@@ -556,17 +522,12 @@ export async function runScript(hre: HardhatRuntimeEnvironment) {
     const networkName = hre.network.name;
 
     console.log("════════════════════════════════════════════════════════════════");
-    console.log("   🚀 BACKCOIN LAUNCH V3.1 - Multi-RPC + TGE + LIQUIDEZ");
+    console.log("   🚀 BACKCHAIN LAUNCH - TGE + LIQUIDEZ");
     console.log("════════════════════════════════════════════════════════════════");
     console.log(`   📡 Rede: ${networkName}`);
     console.log(`   👷 Deployer: ${deployer.address}`);
     console.log(`   🌐 RPCs disponíveis: ${RPC_ENDPOINTS.map(r => r.name).join(', ')}`);
     console.log("────────────────────────────────────────────────────────────────\n");
-
-    // Validação de carteiras
-    if (SYSTEM_WALLETS.TREASURY.includes("INSERIR") || SYSTEM_WALLETS.ORACLE.includes("INSERIR")) {
-        throw new Error("Configure as carteiras SYSTEM_WALLETS antes de executar");
-    }
 
     // Carregar endereços
     if (!fs.existsSync(addressesFilePath)) {
@@ -574,13 +535,10 @@ export async function runScript(hre: HardhatRuntimeEnvironment) {
     }
     const addresses = JSON.parse(fs.readFileSync(addressesFilePath, "utf8"));
 
-    // Atualizar endereços das carteiras
-    addresses.oracleWalletAddress = SYSTEM_WALLETS.ORACLE;
+    // Atualizar endereço da treasury
     addresses.treasuryWallet = SYSTEM_WALLETS.TREASURY;
-    updateAddressJSON("oracleWalletAddress", SYSTEM_WALLETS.ORACLE);
     updateAddressJSON("treasuryWallet", SYSTEM_WALLETS.TREASURY);
     
-    console.log(`   🔐 Oracle: ${SYSTEM_WALLETS.ORACLE}`);
     console.log(`   💰 Treasury: ${SYSTEM_WALLETS.TREASURY}\n`);
 
     createFullRulesConfig();
@@ -661,7 +619,7 @@ export async function runScript(hre: HardhatRuntimeEnvironment) {
     // PARTE 2: TAXAS
     // ═══════════════════════════════════════════════════════════════════
 
-    console.log("\n⚖️ PARTE 2: Configurando Taxas V3.1");
+    console.log("\n⚖️ PARTE 2: Configurando Taxas");
     console.log("────────────────────────────────────────────────────────────────");
 
     console.log("\n   📊 Taxas em BIPS:");
@@ -671,7 +629,6 @@ export async function runScript(hre: HardhatRuntimeEnvironment) {
     await setFeeBipsIfNeeded(hub, "CLAIM_REWARD_FEE_BIPS", SERVICE_FEES_BIPS.CLAIM_REWARD_FEE_BIPS);
     await setFeeBipsIfNeeded(hub, "NFT_POOL_BUY_TAX_BIPS", SERVICE_FEES_BIPS.NFT_POOL_BUY_TAX_BIPS);
     await setFeeBipsIfNeeded(hub, "NFT_POOL_SELL_TAX_BIPS", SERVICE_FEES_BIPS.NFT_POOL_SELL_TAX_BIPS);
-    await setFeeBipsIfNeeded(hub, "FORTUNE_POOL_SERVICE", SERVICE_FEES_BIPS.FORTUNE_POOL_SERVICE);
     await setFeeBipsIfNeeded(hub, "RENTAL_MARKET_TAX_BIPS", SERVICE_FEES_BIPS.RENTAL_MARKET_TAX_BIPS);
 
     console.log("\n   💰 Taxas em BKC:");
@@ -712,28 +669,43 @@ export async function runScript(hre: HardhatRuntimeEnvironment) {
     }
 
     // ═══════════════════════════════════════════════════════════════════
-    // PARTE 4: FORTUNE POOL
+    // PARTE 4: FORTUNE POOL (BackchainRandomness)
     // ═══════════════════════════════════════════════════════════════════
 
     console.log("\n🎰 PARTE 4: Fortune Pool");
     console.log("────────────────────────────────────────────────────────────────");
 
-    const currentOracle = await fortunePool.oracleAddress();
-    if (currentOracle.toLowerCase() !== SYSTEM_WALLETS.ORACLE.toLowerCase()) {
-        await sendTxWithRetry(
-            async () => await fortunePool.setOracle(SYSTEM_WALLETS.ORACLE),
-            `Fortune: Oracle → ${SYSTEM_WALLETS.ORACLE.slice(0,10)}...`
-        );
+    // Configurar Service Fee (ETH)
+    try {
+        const currentServiceFee = await fortunePool.serviceFee();
+        if (currentServiceFee !== FORTUNE_SERVICE_FEE_ETH) {
+            await sendTxWithRetry(
+                async () => await fortunePool.setServiceFee(FORTUNE_SERVICE_FEE_ETH),
+                `Fortune: Service Fee → ${ethers.formatEther(FORTUNE_SERVICE_FEE_ETH)} ETH`
+            );
+        } else {
+            console.log(`   ⏩ Service Fee já configurado (${ethers.formatEther(currentServiceFee)} ETH)`);
+        }
+    } catch (e) {
+        console.log(`   ⚠️ Service Fee: função pode não existir`);
     }
 
-    const currentOracleFee = await fortunePool.oracleFee();
-    if (currentOracleFee !== FORTUNE_POOL_CONFIG.ORACLE_FEE_1X) {
-        await sendTxWithRetry(
-            async () => await fortunePool.setOracleFee(FORTUNE_POOL_CONFIG.ORACLE_FEE_1X),
-            `Fortune: Oracle Fee → 0`
-        );
+    // Configurar Game Fee (BKC %)
+    try {
+        const currentGameFee = await fortunePool.gameFeeBips();
+        if (currentGameFee !== SERVICE_FEES_BIPS.FORTUNE_POOL_GAME_FEE) {
+            await sendTxWithRetry(
+                async () => await fortunePool.setGameFee(SERVICE_FEES_BIPS.FORTUNE_POOL_GAME_FEE),
+                `Fortune: Game Fee → ${Number(SERVICE_FEES_BIPS.FORTUNE_POOL_GAME_FEE) / 100}%`
+            );
+        } else {
+            console.log(`   ⏩ Game Fee já configurado (${Number(currentGameFee) / 100}%)`);
+        }
+    } catch (e) {
+        console.log(`   ⚠️ Game Fee: função pode não existir`);
     }
 
+    // Configurar Prize Tiers
     await configureFortunePoolTiers(fortunePool);
 
     // ═══════════════════════════════════════════════════════════════════
@@ -907,7 +879,7 @@ export async function runScript(hre: HardhatRuntimeEnvironment) {
     // ═══════════════════════════════════════════════════════════════════
 
     console.log("\n════════════════════════════════════════════════════════════════");
-    console.log("                      📊 RESUMO FINAL V3.1");
+    console.log("                      📊 RESUMO FINAL");
     console.log("════════════════════════════════════════════════════════════════");
 
     const finalDeployerBalance = await bkc.balanceOf(deployer.address);
@@ -919,8 +891,14 @@ export async function runScript(hre: HardhatRuntimeEnvironment) {
     console.log(`      Faucet:       ${ethers.formatEther(finalFaucetBalance)} BKC`);
     console.log(`      Fortune Pool: ${ethers.formatEther(finalFortuneBalance)} BKC`);
 
+    console.log("\n   🎰 Fortune Pool:");
+    console.log(`      Contract: ${addresses.fortunePool}`);
+    console.log(`      Oracle: ${addresses.backchainRandomness || 'N/A'}`);
+    console.log(`      Service Fee: ${ethers.formatEther(FORTUNE_SERVICE_FEE_ETH)} ETH`);
+    console.log(`      Game Fee: ${Number(SERVICE_FEES_BIPS.FORTUNE_POOL_GAME_FEE) / 100}%`);
+
     console.log("\n────────────────────────────────────────────────────────────────");
-    console.log("   🎉 ECOSSISTEMA BACKCOIN V3.1 LANÇADO COM SUCESSO! 🎉");
+    console.log("   🎉 ECOSSISTEMA BACKCHAIN LANÇADO COM SUCESSO! 🎉");
     console.log("────────────────────────────────────────────────────────────────\n");
 }
 

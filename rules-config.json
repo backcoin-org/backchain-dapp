@@ -1,10 +1,8 @@
 {
-  "VERSION": "4.0.0",
-  "DESCRIPTION": "Configuração Oficial Backcoin V4.0 - Completa",
+  "VERSION": "1.0.0",
+  "DESCRIPTION": "Configuração Oficial Backchain",
   "NETWORK": "arbitrum-sepolia",
-  "CREATED_AT": "2025-12-19T17:41:43.320Z",
-  "LAST_UPDATED": "2025-12-19T18:00:00.000Z",
-
+  "CREATED_AT": "2025-12-27T16:44:52.876Z",
   "serviceFeesBIPS": {
     "DELEGATION_FEE_BIPS": "50",
     "UNSTAKE_FEE_BIPS": "100",
@@ -12,24 +10,24 @@
     "CLAIM_REWARD_FEE_BIPS": "100",
     "NFT_POOL_BUY_TAX_BIPS": "500",
     "NFT_POOL_SELL_TAX_BIPS": "1000",
-    "FORTUNE_POOL_SERVICE": "2000",
+    "FORTUNE_POOL_GAME_FEE": "1000",
     "RENTAL_MARKET_TAX_BIPS": "1000"
   },
-
   "serviceFeesBKC": {
     "NOTARY_SERVICE": "1.0"
   },
-
+  "fortunePool": {
+    "serviceFeeETH": "0.001",
+    "gameFeeBips": "1000"
+  },
   "miningDistribution": {
     "TREASURY": "3000",
     "DELEGATOR_POOL": "7000"
   },
-
   "feeDistribution": {
     "TREASURY": "3000",
     "DELEGATOR_POOL": "7000"
   },
-
   "boosterDiscounts": {
     "1000": "1000",
     "2000": "2000",
@@ -39,52 +37,12 @@
     "6000": "6000",
     "7000": "7000"
   },
-
-  "fortunePoolConfig": {
-    "ORACLE_ADDRESS": "0x56b05f7E8263164B07c29E26e18994F9adc00Be8",
-    "ORACLE_FEE_WEI": "0",
-    "GAME_FEE_BIPS": "2000"
-  },
-
   "fortunePoolTiers": {
     "1": "3,20000",
     "2": "10,50000",
-    "3": "100,1000000"
+    "3": "100,500000"
   },
-
-  "faucetConfig": {
-    "RELAYER_ADDRESS": "0x56b05f7E8263164B07c29E26e18994F9adc00Be8",
-    "TOKENS_PER_REQUEST_BKC": "20",
-    "ETH_PER_REQUEST_WEI": "1000000000000000",
-    "COOLDOWN_SECONDS": "3600",
-    "PAUSED": "false"
-  },
-
-  "rentalConfig": {
-    "PAUSED": "false",
-    "GLOBAL_DURATION_HOURS": "0"
-  },
-
-  "publicSaleConfig": {
-    "PAUSED": "false",
-    "WHITELIST_ENABLED": "false",
-    "AUTO_WITHDRAW": "true"
-  },
-
-  "authorizedMiners": {
-    "FORTUNE_POOL_SERVICE": "fortunePool",
-    "NOTARY_SERVICE": "decentralizedNotary",
-    "RENTAL_MARKET_TAX_BIPS": "rentalManager",
-    "DELEGATION_FEE_BIPS": "delegationManager",
-    "UNSTAKE_FEE_BIPS": "delegationManager",
-    "FORCE_UNSTAKE_PENALTY_BIPS": "delegationManager",
-    "CLAIM_REWARD_FEE_BIPS": "delegationManager",
-    "NFT_POOL_BUY_TAX_BIPS": "nftLiquidityPoolFactory",
-    "NFT_POOL_SELL_TAX_BIPS": "nftLiquidityPoolFactory"
-  },
-
   "wallets": {
-    "ORACLE_ADDRESS": "0x56b05f7E8263164B07c29E26e18994F9adc00Be8",
     "TREASURY_ADDRESS": "0xc93030333E3a235c2605BcB7C7330650B600B6D0"
   }
 }

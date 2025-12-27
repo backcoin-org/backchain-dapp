@@ -1,11 +1,28 @@
 // scripts/1_deploy_full_initial_setup.ts
-// ✅ VERSÃO V2.1 FINAL - Deploy Completo do Ecossistema Backcoin
+// ✅ Deploy Completo do Ecossistema Backchain
 // ============================================================
-// Este script limpa os arquivos de configuração e faz deploy de todos os contratos
+// Este script faz deploy de todos os contratos incluindo:
+// - Contratos Solidity (UUPS Proxies)
+// - Contrato Stylus (Rust) BackchainEntropy
+// - BackchainRandomness Oracle
+// - FortunePool com resolução instantânea
+//
+// OPÇÕES DE DEPLOY DO ORACLE:
+// 1. Fornecer ORACLE_ADDRESS via env (se já deployado)
+//    ORACLE_ADDRESS=0x... npx hardhat run scripts/1_deploy_full_initial_setup.ts
+//
+// 2. Deploy automático do Stylus (requer cargo-stylus)
+//    O projeto deve estar em: stylus/
+//
+// PRÉ-REQUISITOS para deploy Stylus:
+//   curl -sSL https://raw.githubusercontent.com/OffchainLabs/cargo-stylus/main/scripts/install.sh | bash
+//   rustup target add wasm32-unknown-unknown
+// ============================================================
 
 import { HardhatRuntimeEnvironment } from "hardhat/types";
 import fs from "fs";
 import path from "path";
+import { execSync } from "child_process";
 
 // ============================================================
 //                    CONFIGURAÇÃO GERAL
@@ -13,13 +30,12 @@ import path from "path";
 
 const DEPLOY_DELAY_MS = 5000;
 const IPFS_BASE_URI_BOOSTERS = "ipfs://bafybeibtfnc6zgeiayglticrk2bqqgleybpgageh723grbdtsdddoicwtu/";
-const DEFAULT_ORACLE_ADDRESS = "0xd7e622124b78a28c4c928b271fc9423285804f98";
 
 // ============================================================
-//                 TAXAS OFICIAIS V2.1
+//                     TAXAS OFICIAIS
 // ============================================================
 
-const OFFICIAL_FEES_V2 = {
+const OFFICIAL_FEES = {
     // Staking Fees (BIPS: 100 = 1%)
     DELEGATION_FEE_BIPS: 50,            // 0.5% - Taxa de entrada no staking
     UNSTAKE_FEE_BIPS: 100,              // 1% - Taxa de saída normal
@@ -31,18 +47,29 @@ const OFFICIAL_FEES_V2 = {
     NFT_POOL_SELL_TAX_BIPS: 1000,       // 10% - Taxa de venda de NFT
     
     // Service Fees (BIPS)
-    FORTUNE_POOL_SERVICE: 2000,          // 20% - Game fee do Fortune Pool
-    RENTAL_MARKET_TAX_BIPS: 1000,        // 10% - Taxa do marketplace de aluguel
+    FORTUNE_POOL_GAME_FEE: 1000,        // 10% - Game fee do Fortune Pool
+    RENTAL_MARKET_TAX_BIPS: 1000,       // 10% - Taxa do marketplace de aluguel
     
-    // Fixed Fees (em BKC)
-    NOTARY_SERVICE: "1"                  // 1 BKC - Taxa de notarização
+    // Fixed Fees
+    NOTARY_SERVICE: "1",                // 1 BKC - Taxa de notarização
+    FORTUNE_SERVICE_FEE_ETH: "0.001"    // 0.001 ETH - Service fee por jogo
 };
 
 // ============================================================
-//               DISTRIBUIÇÃO DE REWARDS V2.1
+//              FORTUNE POOL - TIER CONFIGURATION
 // ============================================================
 
-const DISTRIBUTION_V2 = {
+const FORTUNE_TIERS = [
+    { tierId: 1, name: "Easy",   maxRange: 3,   multiplierBips: 20000,   chance: "33%" },   // 2x
+    { tierId: 2, name: "Medium", maxRange: 10,  multiplierBips: 50000,   chance: "10%" },   // 5x  
+    { tierId: 3, name: "Hard",   maxRange: 100, multiplierBips: 500000,  chance: "1%" }     // 50x
+];
+
+// ============================================================
+//                 DISTRIBUIÇÃO DE REWARDS
+// ============================================================
+
+const DISTRIBUTION = {
     // Mining Distribution (tokens NOVOS mintados)
     mining: {
         TREASURY: 3000,          // 30%
@@ -56,7 +83,7 @@ const DISTRIBUTION_V2 = {
 };
 
 // ============================================================
-//                   CONFIGURAÇÃO DE TIERS
+//                   CONFIGURAÇÃO DE TIERS NFT
 // ============================================================
 
 const TIERS_TO_SETUP = [
@@ -75,6 +102,7 @@ const TIERS_TO_SETUP = [
 
 const addressesFilePath = path.join(__dirname, "../deployment-addresses.json");
 const rulesFilePath = path.join(__dirname, "../rules-config.json");
+const stylusProjectPath = path.join(__dirname, "../stylus");
 
 // ============================================================
 //                    FUNÇÕES AUXILIARES
@@ -85,39 +113,38 @@ const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 function clearConfigFiles() {
     console.log("🧹 Limpando arquivos de configuração...");
     
-    // Limpar deployment-addresses.json
     fs.writeFileSync(addressesFilePath, JSON.stringify({}, null, 2));
     console.log("   ✅ deployment-addresses.json limpo");
     
-    // Criar rules-config.json com valores padrão V2.1
     const defaultRules = {
-        "VERSION": "2.1.0",
-        "DESCRIPTION": "Configuração Oficial Backcoin V2.1 - Produção",
+        "VERSION": "1.0.0",
+        "DESCRIPTION": "Configuração Oficial Backchain - Produção",
         "CREATED_AT": new Date().toISOString(),
         
         "serviceFees": {
-            "COMMENT": "💰 Taxas em BIPS (100 = 1%) ou valor fixo em BKC",
-            "DELEGATION_FEE_BIPS": OFFICIAL_FEES_V2.DELEGATION_FEE_BIPS.toString(),
-            "UNSTAKE_FEE_BIPS": OFFICIAL_FEES_V2.UNSTAKE_FEE_BIPS.toString(),
-            "FORCE_UNSTAKE_PENALTY_BIPS": OFFICIAL_FEES_V2.FORCE_UNSTAKE_PENALTY_BIPS.toString(),
-            "CLAIM_REWARD_FEE_BIPS": OFFICIAL_FEES_V2.CLAIM_REWARD_FEE_BIPS.toString(),
-            "NFT_POOL_BUY_TAX_BIPS": OFFICIAL_FEES_V2.NFT_POOL_BUY_TAX_BIPS.toString(),
-            "NFT_POOL_SELL_TAX_BIPS": OFFICIAL_FEES_V2.NFT_POOL_SELL_TAX_BIPS.toString(),
-            "FORTUNE_POOL_SERVICE": OFFICIAL_FEES_V2.FORTUNE_POOL_SERVICE.toString(),
-            "RENTAL_MARKET_TAX_BIPS": OFFICIAL_FEES_V2.RENTAL_MARKET_TAX_BIPS.toString(),
-            "NOTARY_SERVICE": OFFICIAL_FEES_V2.NOTARY_SERVICE
+            "COMMENT": "💰 Taxas em BIPS (100 = 1%) ou valor fixo",
+            "DELEGATION_FEE_BIPS": OFFICIAL_FEES.DELEGATION_FEE_BIPS.toString(),
+            "UNSTAKE_FEE_BIPS": OFFICIAL_FEES.UNSTAKE_FEE_BIPS.toString(),
+            "FORCE_UNSTAKE_PENALTY_BIPS": OFFICIAL_FEES.FORCE_UNSTAKE_PENALTY_BIPS.toString(),
+            "CLAIM_REWARD_FEE_BIPS": OFFICIAL_FEES.CLAIM_REWARD_FEE_BIPS.toString(),
+            "NFT_POOL_BUY_TAX_BIPS": OFFICIAL_FEES.NFT_POOL_BUY_TAX_BIPS.toString(),
+            "NFT_POOL_SELL_TAX_BIPS": OFFICIAL_FEES.NFT_POOL_SELL_TAX_BIPS.toString(),
+            "FORTUNE_POOL_GAME_FEE": OFFICIAL_FEES.FORTUNE_POOL_GAME_FEE.toString(),
+            "RENTAL_MARKET_TAX_BIPS": OFFICIAL_FEES.RENTAL_MARKET_TAX_BIPS.toString(),
+            "NOTARY_SERVICE": OFFICIAL_FEES.NOTARY_SERVICE,
+            "FORTUNE_SERVICE_FEE_ETH": OFFICIAL_FEES.FORTUNE_SERVICE_FEE_ETH
         },
         
         "miningDistribution": {
             "COMMENT": "⛏️ Distribuição de tokens NOVOS (soma = 10000)",
-            "TREASURY": DISTRIBUTION_V2.mining.TREASURY.toString(),
-            "DELEGATOR_POOL": DISTRIBUTION_V2.mining.DELEGATOR_POOL.toString()
+            "TREASURY": DISTRIBUTION.mining.TREASURY.toString(),
+            "DELEGATOR_POOL": DISTRIBUTION.mining.DELEGATOR_POOL.toString()
         },
         
         "feeDistribution": {
             "COMMENT": "💵 Distribuição de taxas EXISTENTES (soma = 10000)",
-            "TREASURY": DISTRIBUTION_V2.fee.TREASURY.toString(),
-            "DELEGATOR_POOL": DISTRIBUTION_V2.fee.DELEGATOR_POOL.toString()
+            "TREASURY": DISTRIBUTION.fee.TREASURY.toString(),
+            "DELEGATOR_POOL": DISTRIBUTION.fee.DELEGATOR_POOL.toString()
         },
         
         "boosterDiscounts": {
@@ -131,16 +158,22 @@ function clearConfigFiles() {
             "1000": "1000"
         },
         
-        "fortunePoolTiers": {
-            "COMMENT": "🎰 Configuração dos Prize Tiers (range,multiplierBips)",
-            "1": "3,20000",
-            "2": "10,50000",
-            "3": "100,1000000"
+        "fortunePool": {
+            "COMMENT": "🎰 FortunePool - Instant Resolution",
+            "serviceFeeETH": OFFICIAL_FEES.FORTUNE_SERVICE_FEE_ETH,
+            "gameFeeBips": OFFICIAL_FEES.FORTUNE_POOL_GAME_FEE.toString(),
+            "tiers": FORTUNE_TIERS.map(t => ({
+                id: t.tierId,
+                name: t.name,
+                maxRange: t.maxRange,
+                multiplierBips: t.multiplierBips,
+                chance: t.chance
+            }))
         }
     };
     
     fs.writeFileSync(rulesFilePath, JSON.stringify(defaultRules, null, 2));
-    console.log("   ✅ rules-config.json criado com valores V2.1");
+    console.log("   ✅ rules-config.json criado");
 }
 
 function updateAddressJSON(key: string, value: string) {
@@ -168,6 +201,83 @@ async function deployProxyWithRetry(upgrades: any, Factory: any, args: any[], na
 }
 
 // ============================================================
+//          ORACLE DEPLOYMENT (Stylus + Solidity)
+// ============================================================
+
+async function deployStylusEntropy(hre: HardhatRuntimeEnvironment, privateKey: string, rpcUrl: string): Promise<string> {
+    console.log("\n🦀 STYLUS: Implantando BackchainEntropy...");
+    console.log("----------------------------------------------------");
+    
+    const cargoTomlPath = path.join(stylusProjectPath, "Cargo.toml");
+    
+    if (!fs.existsSync(cargoTomlPath)) {
+        console.log("   ⚠️ Projeto Stylus não encontrado!");
+        console.log(`   → Esperado em: ${stylusProjectPath}`);
+        throw new Error("Stylus project not found. Provide ENTROPY_ADDRESS env variable if already deployed.");
+    }
+    
+    try {
+        console.log("   → Compilando contrato Stylus (Rust → WASM)...");
+        execSync(`cd "${stylusProjectPath}" && cargo build --release --target wasm32-unknown-unknown`, { 
+            stdio: 'inherit' 
+        });
+        console.log("   ✅ Compilação concluída");
+        
+        console.log("   → Fazendo deploy na rede...");
+        const result = execSync(
+            `cd "${stylusProjectPath}" && cargo stylus deploy --private-key ${privateKey} --endpoint ${rpcUrl}`, 
+            { encoding: 'utf-8' }
+        );
+        
+        console.log(result);
+        
+        const addressMatch = result.match(/deployed[:\s]+at[:\s]*(0x[a-fA-F0-9]{40})/i) || 
+                            result.match(/contract[:\s]+address[:\s]*(0x[a-fA-F0-9]{40})/i) ||
+                            result.match(/Address[:\s]*(0x[a-fA-F0-9]{40})/i) ||
+                            result.match(/(0x[a-fA-F0-9]{40})/);
+        
+        if (addressMatch) {
+            const entropyAddress = addressMatch[1];
+            console.log(`   ✅ BackchainEntropy (Stylus): ${entropyAddress}`);
+            return entropyAddress;
+        }
+        
+        throw new Error("Could not parse deployed address from cargo-stylus output");
+        
+    } catch (error: any) {
+        console.error("   ❌ Erro no deploy Stylus:", error.message);
+        throw error;
+    }
+}
+
+async function deployBackchainRandomness(hre: HardhatRuntimeEnvironment, entropyAddress: string): Promise<string> {
+    const { ethers } = hre;
+    
+    console.log("\n📜 SOLIDITY: Implantando BackchainRandomness...");
+    console.log("----------------------------------------------------");
+    
+    const BackchainRandomness = await ethers.getContractFactory("BackchainRandomness");
+    const randomness = await BackchainRandomness.deploy(entropyAddress);
+    await randomness.waitForDeployment();
+    const address = await randomness.getAddress();
+    
+    console.log(`   ✅ BackchainRandomness: ${address}`);
+    console.log(`   → Usa entropia de: ${entropyAddress}`);
+    
+    // Inicializar o contrato Stylus (se ainda não foi)
+    try {
+        const entropy = await ethers.getContractAt("IStylusEntropy", entropyAddress);
+        const initTx = await (entropy as any).initialize?.();
+        if (initTx) await initTx.wait();
+        console.log("   ✅ BackchainEntropy inicializado");
+    } catch (e) {
+        console.log("   → BackchainEntropy já inicializado ou sem initialize()");
+    }
+    
+    return address;
+}
+
+// ============================================================
 //                    SCRIPT PRINCIPAL
 // ============================================================
 
@@ -177,29 +287,71 @@ export async function runScript(hre: HardhatRuntimeEnvironment) {
     const networkName = hre.network.name;
 
     console.log("════════════════════════════════════════════════════════");
-    console.log("   🚀 BACKCOIN DEPLOY V2.1 - SETUP INICIAL COMPLETO");
+    console.log("   🚀 BACKCHAIN DEPLOY - SETUP INICIAL COMPLETO");
     console.log("════════════════════════════════════════════════════════");
     console.log(`   📡 Rede: ${networkName}`);
     console.log(`   👷 Deployer: ${deployer.address}`);
     console.log(`   💰 Balance: ${ethers.formatEther(await ethers.provider.getBalance(deployer.address))} ETH`);
     console.log("----------------------------------------------------\n");
 
-    // ═══════════════════════════════════════════════════════════════════
-    // FASE 0: LIMPAR ARQUIVOS DE CONFIGURAÇÃO
-    // ═══════════════════════════════════════════════════════════════════
-    
     clearConfigFiles();
     const addresses: { [key: string]: string } = {};
 
     try {
         // ═══════════════════════════════════════════════════════════════════
-        // FASE 1: CORE - HUB & TOKENS
+        // FASE 1: ORACLE DEPLOYMENT (Stylus + Solidity)
         // ═══════════════════════════════════════════════════════════════════
         
-        console.log("\n📡 FASE 1: Core & Assets");
+        console.log("\n🎲 FASE 1: Oracle de Randomness");
+        console.log("----------------------------------------------------");
+        
+        let entropyAddr = "";
+        let oracleAddr = "";
+        
+        if (process.env.ENTROPY_ADDRESS && process.env.ORACLE_ADDRESS) {
+            entropyAddr = process.env.ENTROPY_ADDRESS;
+            oracleAddr = process.env.ORACLE_ADDRESS;
+            console.log(`   → Usando contratos existentes:`);
+            console.log(`     BackchainEntropy: ${entropyAddr}`);
+            console.log(`     BackchainRandomness: ${oracleAddr}`);
+        } else if (process.env.ORACLE_ADDRESS) {
+            oracleAddr = process.env.ORACLE_ADDRESS;
+            console.log(`   → Usando Oracle existente: ${oracleAddr}`);
+        } else {
+            const networkConfig = hre.network.config as any;
+            const privateKey = networkConfig.accounts?.[0] || process.env.PRIVATE_KEY || "";
+            const rpcUrl = networkConfig.url || process.env.RPC_URL || "";
+            
+            if (!privateKey || !rpcUrl) {
+                throw new Error("PRIVATE_KEY e RPC_URL são necessários para deploy. Ou forneça ORACLE_ADDRESS.");
+            }
+            
+            if (process.env.ENTROPY_ADDRESS) {
+                entropyAddr = process.env.ENTROPY_ADDRESS;
+                console.log(`   → Usando Entropy existente: ${entropyAddr}`);
+            } else {
+                entropyAddr = await deployStylusEntropy(hre, privateKey, rpcUrl);
+            }
+            
+            oracleAddr = await deployBackchainRandomness(hre, entropyAddr);
+        }
+        
+        if (!oracleAddr || !oracleAddr.startsWith("0x")) {
+            throw new Error("Falha ao obter endereço do Oracle.");
+        }
+        
+        addresses.backchainEntropy = entropyAddr;
+        addresses.backchainRandomness = oracleAddr;
+        updateAddressJSON("backchainEntropy", entropyAddr);
+        updateAddressJSON("backchainRandomness", oracleAddr);
+
+        // ═══════════════════════════════════════════════════════════════════
+        // FASE 2: CORE - HUB & TOKENS
+        // ═══════════════════════════════════════════════════════════════════
+        
+        console.log("\n📡 FASE 2: Core & Assets");
         console.log("----------------------------------------------------");
 
-        // 1.1 EcosystemManager (Hub Central)
         const EcosystemManager = await ethers.getContractFactory("EcosystemManager");
         const { contract: hub, address: hubAddr } = await deployProxyWithRetry(
             upgrades, EcosystemManager, [deployer.address], "EcosystemManager"
@@ -207,7 +359,6 @@ export async function runScript(hre: HardhatRuntimeEnvironment) {
         addresses.ecosystemManager = hubAddr;
         updateAddressJSON("ecosystemManager", hubAddr);
 
-        // 1.2 BKCToken (Sem Burn!)
         const BKCToken = await ethers.getContractFactory("BKCToken");
         const { contract: bkc, address: bkcAddr } = await deployProxyWithRetry(
             upgrades, BKCToken, [deployer.address], "BKCToken"
@@ -215,7 +366,6 @@ export async function runScript(hre: HardhatRuntimeEnvironment) {
         addresses.bkcToken = bkcAddr;
         updateAddressJSON("bkcToken", bkcAddr);
 
-        // 1.3 RewardBoosterNFT
         const RewardBoosterNFT = await ethers.getContractFactory("RewardBoosterNFT");
         const { contract: nft, address: nftAddr } = await deployProxyWithRetry(
             upgrades, RewardBoosterNFT, [deployer.address], "RewardBoosterNFT"
@@ -223,27 +373,25 @@ export async function runScript(hre: HardhatRuntimeEnvironment) {
         addresses.rewardBoosterNFT = nftAddr;
         updateAddressJSON("rewardBoosterNFT", nftAddr);
 
-        // PRÉ-WIRING 1: Registrar BKC e NFT no Hub
         console.log("\n   ⚙️ Pré-configuração: Registrando BKC e NFT no Hub...");
         await (await hub.setAddresses(
             bkcAddr,
-            deployer.address,    // Treasury (temporário)
-            ethers.ZeroAddress,  // DelegationManager
+            deployer.address,
+            ethers.ZeroAddress,
             nftAddr,
-            ethers.ZeroAddress,  // MiningManager
-            ethers.ZeroAddress,  // Notary
-            ethers.ZeroAddress,  // Fortune
-            ethers.ZeroAddress   // Factory
+            ethers.ZeroAddress,
+            ethers.ZeroAddress,
+            ethers.ZeroAddress,
+            ethers.ZeroAddress
         )).wait();
 
         // ═══════════════════════════════════════════════════════════════════
-        // FASE 2: MANAGERS (SPOKES)
+        // FASE 3: MANAGERS
         // ═══════════════════════════════════════════════════════════════════
         
-        console.log("\n🧠 FASE 2: Managers");
+        console.log("\n🧠 FASE 3: Managers");
         console.log("----------------------------------------------------");
 
-        // 2.1 MiningManager
         const MiningManager = await ethers.getContractFactory("MiningManager");
         const { contract: miningManager, address: mmAddr } = await deployProxyWithRetry(
             upgrades, MiningManager, [hubAddr], "MiningManager"
@@ -251,14 +399,12 @@ export async function runScript(hre: HardhatRuntimeEnvironment) {
         addresses.miningManager = mmAddr;
         updateAddressJSON("miningManager", mmAddr);
 
-        // PRÉ-WIRING 2: Registrar MiningManager no Hub
         console.log("   ⚙️ Pré-configuração: Registrando MiningManager...");
         await (await hub.setAddresses(
             bkcAddr, deployer.address, ethers.ZeroAddress, nftAddr,
             mmAddr, ethers.ZeroAddress, ethers.ZeroAddress, ethers.ZeroAddress
         )).wait();
 
-        // 2.2 DelegationManager
         const DelegationManager = await ethers.getContractFactory("DelegationManager");
         const { contract: delegationManager, address: dmAddr } = await deployProxyWithRetry(
             upgrades, DelegationManager, [deployer.address, hubAddr], "DelegationManager"
@@ -266,14 +412,12 @@ export async function runScript(hre: HardhatRuntimeEnvironment) {
         addresses.delegationManager = dmAddr;
         updateAddressJSON("delegationManager", dmAddr);
 
-        // PRÉ-WIRING 3: Registrar DelegationManager no Hub
         console.log("   ⚙️ Pré-configuração: Registrando DelegationManager...");
         await (await hub.setAddresses(
             bkcAddr, deployer.address, dmAddr, nftAddr,
             mmAddr, ethers.ZeroAddress, ethers.ZeroAddress, ethers.ZeroAddress
         )).wait();
 
-        // 2.3 DecentralizedNotary
         const DecentralizedNotary = await ethers.getContractFactory("DecentralizedNotary");
         const { address: notaryAddr } = await deployProxyWithRetry(
             upgrades, DecentralizedNotary, [deployer.address, hubAddr], "DecentralizedNotary"
@@ -281,15 +425,15 @@ export async function runScript(hre: HardhatRuntimeEnvironment) {
         addresses.decentralizedNotary = notaryAddr;
         updateAddressJSON("decentralizedNotary", notaryAddr);
 
-        // 2.4 FortunePool
+        // FortunePool com BackchainRandomness
+        console.log("\n   🎰 Implantando FortunePool com BackchainRandomness...");
         const FortunePool = await ethers.getContractFactory("FortunePool");
-        const { address: fortuneAddr } = await deployProxyWithRetry(
-            upgrades, FortunePool, [deployer.address, hubAddr], "FortunePool"
+        const { contract: fortune, address: fortuneAddr } = await deployProxyWithRetry(
+            upgrades, FortunePool, [deployer.address, hubAddr, oracleAddr], "FortunePool"
         );
         addresses.fortunePool = fortuneAddr;
         updateAddressJSON("fortunePool", fortuneAddr);
 
-        // 2.5 RentalManager
         const RentalManager = await ethers.getContractFactory("RentalManager");
         const { address: rentalAddr } = await deployProxyWithRetry(
             upgrades, RentalManager, [hubAddr, nftAddr], "RentalManager"
@@ -297,7 +441,6 @@ export async function runScript(hre: HardhatRuntimeEnvironment) {
         addresses.rentalManager = rentalAddr;
         updateAddressJSON("rentalManager", rentalAddr);
 
-        // 2.6 NFT Pools (Implementation + Factory)
         const NFTLiquidityPool = await ethers.getContractFactory("NFTLiquidityPool");
         const poolImpl = await NFTLiquidityPool.deploy();
         await poolImpl.waitForDeployment();
@@ -314,13 +457,12 @@ export async function runScript(hre: HardhatRuntimeEnvironment) {
         updateAddressJSON("nftLiquidityPoolFactory", factoryAddr);
 
         // ═══════════════════════════════════════════════════════════════════
-        // FASE 3: UTILITIES & SALES
+        // FASE 4: UTILITIES
         // ═══════════════════════════════════════════════════════════════════
         
-        console.log("\n🛠️ FASE 3: Utilities");
+        console.log("\n🛠️ FASE 4: Utilities");
         console.log("----------------------------------------------------");
 
-        // 3.1 PublicSale
         const PublicSale = await ethers.getContractFactory("PublicSale");
         const { contract: sale, address: saleAddr } = await deployProxyWithRetry(
             upgrades, PublicSale, [nftAddr, hubAddr, deployer.address], "PublicSale"
@@ -328,37 +470,32 @@ export async function runScript(hre: HardhatRuntimeEnvironment) {
         addresses.publicSale = saleAddr;
         updateAddressJSON("publicSale", saleAddr);
 
-        // 3.2 SimpleBKCFaucet
         const SimpleBKCFaucet = await ethers.getContractFactory("SimpleBKCFaucet");
         const { address: faucetAddr } = await deployProxyWithRetry(
             upgrades, SimpleBKCFaucet, [
                 bkcAddr,
                 deployer.address,
-                ethers.parseEther("20"),    // dripAmount
-                ethers.parseEther("0.001")  // minBalance
+                ethers.parseEther("20"),
+                ethers.parseEther("0.001")
             ], "SimpleBKCFaucet"
         );
         addresses.faucet = faucetAddr;
         updateAddressJSON("faucet", faucetAddr);
 
-        // Metadata
-        addresses.oracleWalletAddress = DEFAULT_ORACLE_ADDRESS;
         addresses.treasuryWallet = deployer.address;
-        updateAddressJSON("oracleWalletAddress", DEFAULT_ORACLE_ADDRESS);
         updateAddressJSON("treasuryWallet", deployer.address);
 
         // ═══════════════════════════════════════════════════════════════════
-        // FASE 4: WIRING FINAL
+        // FASE 5: WIRING
         // ═══════════════════════════════════════════════════════════════════
         
-        console.log("\n🔌 FASE 4: Conectando o Sistema");
+        console.log("\n🔌 FASE 5: Conectando o Sistema");
         console.log("----------------------------------------------------");
 
-        // 4.1 Hub - Todos os endereços finais
         console.log("   → Configurando Hub com endereços finais...");
         await (await hub.setAddresses(
             bkcAddr,
-            deployer.address,  // Treasury
+            deployer.address,
             dmAddr,
             nftAddr,
             mmAddr,
@@ -368,7 +505,6 @@ export async function runScript(hre: HardhatRuntimeEnvironment) {
         )).wait();
         console.log("   ✅ Hub atualizado");
 
-        // 4.2 Autorizar Miners no MiningManager
         console.log("   → Autorizando mineradores...");
         const miners = [
             { key: "FORTUNE_POOL_SERVICE", addr: fortuneAddr },
@@ -386,49 +522,80 @@ export async function runScript(hre: HardhatRuntimeEnvironment) {
             console.log(`      + Autorizado: ${m.key}`);
         }
 
-        // 4.3 Configurar Distribuição (30/70)
         console.log("   → Configurando distribuição de rewards...");
         const POOL_TREASURY = ethers.keccak256(ethers.toUtf8Bytes("TREASURY"));
         const POOL_DELEGATOR = ethers.keccak256(ethers.toUtf8Bytes("DELEGATOR_POOL"));
 
-        // Mining Distribution (tokens novos)
-        await (await hub.setMiningDistributionBips(POOL_TREASURY, DISTRIBUTION_V2.mining.TREASURY)).wait();
-        await (await hub.setMiningDistributionBips(POOL_DELEGATOR, DISTRIBUTION_V2.mining.DELEGATOR_POOL)).wait();
-        
-        // Fee Distribution (tokens existentes)
-        await (await hub.setFeeDistributionBips(POOL_TREASURY, DISTRIBUTION_V2.fee.TREASURY)).wait();
-        await (await hub.setFeeDistributionBips(POOL_DELEGATOR, DISTRIBUTION_V2.fee.DELEGATOR_POOL)).wait();
+        await (await hub.setMiningDistributionBips(POOL_TREASURY, DISTRIBUTION.mining.TREASURY)).wait();
+        await (await hub.setMiningDistributionBips(POOL_DELEGATOR, DISTRIBUTION.mining.DELEGATOR_POOL)).wait();
+        await (await hub.setFeeDistributionBips(POOL_TREASURY, DISTRIBUTION.fee.TREASURY)).wait();
+        await (await hub.setFeeDistributionBips(POOL_DELEGATOR, DISTRIBUTION.fee.DELEGATOR_POOL)).wait();
         console.log("   ✅ Distribuição: 30% Treasury / 70% Delegators");
 
-        // 4.4 Configurar Taxas V2.1
-        console.log("   → Configurando taxas oficiais V2.1...");
+        console.log("   → Configurando taxas...");
+        const feesToSet = [
+            { key: "DELEGATION_FEE_BIPS", val: OFFICIAL_FEES.DELEGATION_FEE_BIPS },
+            { key: "UNSTAKE_FEE_BIPS", val: OFFICIAL_FEES.UNSTAKE_FEE_BIPS },
+            { key: "FORCE_UNSTAKE_PENALTY_BIPS", val: OFFICIAL_FEES.FORCE_UNSTAKE_PENALTY_BIPS },
+            { key: "CLAIM_REWARD_FEE_BIPS", val: OFFICIAL_FEES.CLAIM_REWARD_FEE_BIPS },
+            { key: "NFT_POOL_BUY_TAX_BIPS", val: OFFICIAL_FEES.NFT_POOL_BUY_TAX_BIPS },
+            { key: "NFT_POOL_SELL_TAX_BIPS", val: OFFICIAL_FEES.NFT_POOL_SELL_TAX_BIPS },
+            { key: "RENTAL_MARKET_TAX_BIPS", val: OFFICIAL_FEES.RENTAL_MARKET_TAX_BIPS },
+        ];
         
-        for (const [key, val] of Object.entries(OFFICIAL_FEES_V2)) {
+        for (const { key, val } of feesToSet) {
             const keyHash = ethers.id(key);
-            
-            if (key === "NOTARY_SERVICE") {
-                const notaryFee = ethers.parseEther(val as string);
-                await (await hub.setServiceFee(keyHash, notaryFee)).wait();
-                console.log(`      + ${key}: ${val} BKC`);
-            } else {
-                await (await hub.setServiceFee(keyHash, BigInt(val as number))).wait();
-                console.log(`      + ${key}: ${val} bips (${(val as number) / 100}%)`);
-            }
+            await (await hub.setServiceFee(keyHash, BigInt(val))).wait();
+            console.log(`      + ${key}: ${val} bips (${val / 100}%)`);
+        }
+        
+        const notaryKeyHash = ethers.id("NOTARY_SERVICE");
+        const notaryFee = ethers.parseEther(OFFICIAL_FEES.NOTARY_SERVICE);
+        await (await hub.setServiceFee(notaryKeyHash, notaryFee)).wait();
+        console.log(`      + NOTARY_SERVICE: ${OFFICIAL_FEES.NOTARY_SERVICE} BKC`);
+
+        // ═══════════════════════════════════════════════════════════════════
+        // FASE 6: FORTUNE POOL CONFIGURATION
+        // ═══════════════════════════════════════════════════════════════════
+        
+        console.log("\n🎰 FASE 6: Configurando FortunePool");
+        console.log("----------------------------------------------------");
+
+        const serviceFeeWei = ethers.parseEther(OFFICIAL_FEES.FORTUNE_SERVICE_FEE_ETH);
+        await (await fortune.setServiceFee(serviceFeeWei)).wait();
+        console.log(`   ✅ Service Fee: ${OFFICIAL_FEES.FORTUNE_SERVICE_FEE_ETH} ETH`);
+
+        await (await fortune.setGameFee(BigInt(OFFICIAL_FEES.FORTUNE_POOL_GAME_FEE))).wait();
+        console.log(`   ✅ Game Fee: ${OFFICIAL_FEES.FORTUNE_POOL_GAME_FEE / 100}%`);
+
+        console.log("   → Configurando Prize Tiers...");
+        for (const tier of FORTUNE_TIERS) {
+            await (await fortune.configureTier(
+                BigInt(tier.tierId),
+                BigInt(tier.maxRange),
+                BigInt(tier.multiplierBips)
+            )).wait();
+            console.log(`      + Tier ${tier.tierId} (${tier.name}): 1-${tier.maxRange}, ${tier.multiplierBips / 10000}x, ${tier.chance}`);
         }
 
-        // 4.5 Configurar PublicSale e NFTs
-        console.log("   → Configurando loja (PublicSale) e NFTs...");
+        // ═══════════════════════════════════════════════════════════════════
+        // FASE 7: NFT CONFIGURATION
+        // ═══════════════════════════════════════════════════════════════════
+        
+        console.log("\n🖼️ FASE 7: Configurando NFTs");
+        console.log("----------------------------------------------------");
+
         await (await nft.setSaleContract(saleAddr)).wait();
         await (await nft.setBaseURI(IPFS_BASE_URI_BOOSTERS)).wait();
 
         for (const tier of TIERS_TO_SETUP) {
             await (await sale.setTier(
                 BigInt(tier.tierId),
-                tier.name,                          // Nome do tier
-                ethers.parseEther(tier.priceETH),   // Preço em Wei
-                BigInt(tier.maxSupply),             // Max supply (uint64)
-                BigInt(tier.boostBips),             // Boost bips (uint16)
-                tier.metadata                       // Metadata file
+                tier.name,
+                ethers.parseEther(tier.priceETH),
+                BigInt(tier.maxSupply),
+                BigInt(tier.boostBips),
+                tier.metadata
             )).wait();
 
             if (tier.discountBips > 0) {
@@ -438,10 +605,10 @@ export async function runScript(hre: HardhatRuntimeEnvironment) {
         }
 
         // ═══════════════════════════════════════════════════════════════════
-        // FASE 5: TRANSFERÊNCIA DE CONTROLE
+        // FASE 8: TRANSFERÊNCIA DE CONTROLE
         // ═══════════════════════════════════════════════════════════════════
         
-        console.log("\n🔐 FASE 5: Transferência de Controle");
+        console.log("\n🔐 FASE 8: Transferência de Controle");
         console.log("----------------------------------------------------");
 
         console.log("   → Transferindo ownership do BKC para MiningManager...");
@@ -459,12 +626,28 @@ export async function runScript(hre: HardhatRuntimeEnvironment) {
         console.log("----------------------------------------------------");
         
         for (const [key, addr] of Object.entries(addresses)) {
-            if (addr.startsWith("0x")) {
+            if (addr && addr.startsWith("0x")) {
                 console.log(`   ${key}: ${addr}`);
             }
         }
 
-        console.log("\n💰 TAXAS CONFIGURADAS (V2.1):");
+        console.log("\n🦀 ORACLE:");
+        console.log("----------------------------------------------------");
+        console.log(`   BackchainEntropy (Stylus): ${entropyAddr}`);
+        console.log(`   BackchainRandomness: ${oracleAddr}`);
+
+        console.log("\n🎰 FORTUNE POOL:");
+        console.log("----------------------------------------------------");
+        console.log(`   Contract: ${fortuneAddr}`);
+        console.log(`   Service Fee: ${OFFICIAL_FEES.FORTUNE_SERVICE_FEE_ETH} ETH per game`);
+        console.log(`   Game Fee: ${OFFICIAL_FEES.FORTUNE_POOL_GAME_FEE / 100}% of wager`);
+        console.log("   Resolution: INSTANT (same transaction)");
+        console.log("\n   Prize Tiers:");
+        for (const tier of FORTUNE_TIERS) {
+            console.log(`      ${tier.tierId}. ${tier.name}: 1-${tier.maxRange} (${tier.chance}) → ${tier.multiplierBips / 10000}x`);
+        }
+
+        console.log("\n💰 TAXAS CONFIGURADAS:");
         console.log("----------------------------------------------------");
         console.log("   Staking Entry:      0.5%");
         console.log("   Unstaking:          1%");
@@ -472,7 +655,7 @@ export async function runScript(hre: HardhatRuntimeEnvironment) {
         console.log("   Claim Reward:       1%");
         console.log("   NFT Buy:            5%");
         console.log("   NFT Sell:           10%");
-        console.log("   Fortune Pool:       20%");
+        console.log("   Fortune Game Fee:   10%");
         console.log("   Rental:             10%");
         console.log("   Notary:             1 BKC");
 
@@ -483,8 +666,9 @@ export async function runScript(hre: HardhatRuntimeEnvironment) {
 
         console.log("\n⚠️ PRÓXIMO PASSO:");
         console.log("----------------------------------------------------");
-        console.log("   Execute o script 3_launch_and_liquidate_ecosystem.ts");
-        console.log("   para realizar o TGE e injetar liquidez inicial.");
+        console.log("   Execute o script de TGE e liquidez inicial.");
+        console.log("   Para o FortunePool, execute:");
+        console.log("   - fortune.fundPrizePool(amount) para adicionar BKC ao pool");
 
         console.log("\n🎉 SETUP COMPLETO!\n");
 

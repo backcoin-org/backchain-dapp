@@ -214,6 +214,8 @@ export const contractAddresses = {
     rentalManager: null,
     nftLiquidityPoolFactory: null,
     fortunePool: null,
+    fortunePoolV2: null,
+    backchainRandomness: null,
     publicSale: null,
     decentralizedNotary: null,
     faucet: null,
@@ -239,8 +241,10 @@ export async function loadAddresses() {
 
         Object.assign(addresses, jsonAddresses);
 
-        addresses.actionsManager = jsonAddresses.fortunePool; 
+        // Fortune Pool - V2 takes priority if available
+        addresses.fortunePoolV2 = jsonAddresses.fortunePoolV2 || jsonAddresses.fortunePool;
         addresses.fortunePool = jsonAddresses.fortunePool;
+        addresses.actionsManager = jsonAddresses.fortunePool; // Legacy alias
         
         addresses.rentalManager = jsonAddresses.rentalManager || 
                                    jsonAddresses.RentalManager ||
@@ -253,11 +257,15 @@ export async function loadAddresses() {
                                          null;
         
         addresses.bkcDexPoolAddress = jsonAddresses.bkcDexPoolAddress || "#";
+        
+        // BackchainRandomness Oracle
+        addresses.backchainRandomness = jsonAddresses.backchainRandomness || null;
 
         // Also update contractAddresses for compatibility
         Object.assign(contractAddresses, jsonAddresses);
 
         console.log("✅ Contract addresses loaded");
+        console.log("   FortunePool V2:", addresses.fortunePoolV2);
         return true;
 
     } catch (error) {
@@ -391,6 +399,31 @@ export const actionsManagerABI = [
     "function calculatePotentialWinnings(uint256 _wagerAmount, bool _isCumulative) view returns (uint256 maxPrize, uint256 netWager)",
     "event GameRequested(uint256 indexed gameId, address indexed player, uint256 wagerAmount, uint256[] guesses, bool isCumulative, uint256 targetTier)",
     "event GameFulfilled(uint256 indexed gameId, address indexed player, uint256 prizeWon, uint256[] rolls, uint256[] guesses, bool isCumulative)"
+];
+
+// FortunePool V2 ABI - Instant resolution with BackchainRandomness
+export const fortunePoolV2ABI = [
+    // Main play function - returns results instantly!
+    "function play(uint256 _wagerAmount, uint256[] calldata _guesses, bool _isCumulative) external returns (uint256 gameId, uint256[] memory rolls, uint256 prizeWon)",
+    
+    // View functions
+    "function prizePoolBalance() view returns (uint256)",
+    "function gameCounter() view returns (uint256)",
+    "function activeTierCount() view returns (uint256)",
+    "function gameFeeBips() view returns (uint256)",
+    "function getExpectedGuessCount(bool _isCumulative) view returns (uint256)",
+    "function getTier(uint256 _tierId) view returns (uint128 maxRange, uint64 multiplierBips, bool active)",
+    "function getAllTiers() view returns (uint256[] tierIds, uint128[] maxRanges, uint64[] multipliers, bool[] actives)",
+    "function calculatePotentialWinnings(uint256 _wagerAmount, bool _isCumulative) view returns (uint256 maxPrize, uint256 netWager, uint256 fee)",
+    "function getGameResult(uint256 _gameId) view returns (address player, uint256 wagerAmount, uint256 prizeWon, uint256 timestamp, bool isCumulative, uint256 matchCount)",
+    "function getGameDetails(uint256 _gameId) view returns (address player, uint256 wagerAmount, uint256 prizeWon, uint256[] guesses, uint256[] rolls, bool[] matches, bool isCumulative)",
+    "function getPlayerStats(address _player) view returns (uint256 gamesPlayed, uint256 totalWageredAmount, uint256 totalWonAmount, int256 netProfit)",
+    "function getPoolStats() view returns (uint256 poolBalance, uint256 gamesPlayed, uint256 wageredAllTime, uint256 paidOutAllTime, uint256 winsAllTime, uint256 currentFee)",
+    
+    // Events
+    "event GamePlayed(uint256 indexed gameId, address indexed player, uint256 wagerAmount, uint256 prizeWon, bool isCumulative, uint8 matchCount)",
+    "event GameDetails(uint256 indexed gameId, uint256[] guesses, uint256[] rolls, bool[] matches)",
+    "event JackpotWon(uint256 indexed gameId, address indexed player, uint256 prizeAmount, uint256 tier)"
 ];
 
 export const publicSaleABI = [

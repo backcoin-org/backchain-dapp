@@ -1,9 +1,28 @@
 // js/pages/FortunePool.js
-// ✅ PRODUCTION V13.7 - Full Multi-language Modal + Server-side Protection
+// ✅ PRODUCTION V2.1 - Instant Resolution with Service Fee Display
+// ═══════════════════════════════════════════════════════════════════════════════
+//                          BACKCHAIN PROTOCOL
+//                    Fortune Pool - Decentralized Lottery
+// ═══════════════════════════════════════════════════════════════════════════════
+// 
+// V2.1 Changes:
+// - Service fee (ETH) displayed in mode select and wager screens
+// - Reads tier data and fees from contract
+// - Full BackchainRandomness Oracle integration
+// - Instant game resolution
+//
+// V2.0 Changes:
+// - Integrated with BackchainRandomness Oracle
+// - Games resolve INSTANTLY in the same transaction
+// - No more polling for results
+// - Simplified flow: play() returns results directly
+//
+// Website: https://backcoin.org
+// ═══════════════════════════════════════════════════════════════════════════════
 
 import { State } from '../state.js';
 import { loadUserData, API_ENDPOINTS } from '../modules/data.js';
-import { executeFortuneParticipate } from '../modules/transactions.js';
+import { executeFortunePlay } from '../modules/transactions.js';
 import { formatBigNumber } from '../utils.js';
 import { showToast, openModal, closeModal } from '../ui-feedback.js';
 
@@ -12,7 +31,7 @@ import { showToast, openModal, closeModal } from '../ui-feedback.js';
 // ============================================================================
 const EXPLORER_TX = "https://sepolia.arbiscan.io/tx/";
 const TIGER_IMAGE = "./assets/fortune.png";
-const SHARE_POINTS = 1000; // Pontos por compartilhar
+const SHARE_POINTS = 1000;
 
 const TIERS = [
     { 
@@ -28,40 +47,45 @@ const TIERS = [
         borderColor: "border-violet-500/50", textColor: "text-violet-400"
     },
     { 
-        id: 3, name: "Hard", emoji: "👑", range: 100, multiplier: 100, chance: "1%",
+        id: 3, name: "Hard", emoji: "👑", range: 100, multiplier: 50, chance: "1%",
         color: "amber", hex: "#f59e0b",
         bgFrom: "from-amber-500/20", bgTo: "to-orange-600/10",
         borderColor: "border-amber-500/50", textColor: "text-amber-400"
     }
 ];
 
-const MAX_COMBO_MULTIPLIER = 107;
+const MAX_COMBO_MULTIPLIER = 57; // 2 + 5 + 50
 
 // ============================================================================
 // GAME STATE
 // ============================================================================
 const Game = {
-    mode: null,
-    phase: 'select',
-    guess: 50,
-    guesses: [2, 5, 50],
-    comboStep: 0,
-    wager: 10,
-    gameId: null,
-    result: null,
+    mode: null,           // 'jackpot' or 'combo'
+    phase: 'select',      // 'select' | 'pick' | 'wager' | 'processing' | 'result'
+    guess: 50,            // Single guess for jackpot mode
+    guesses: [2, 5, 50],  // Array of guesses for combo mode
+    comboStep: 0,         // Current step in combo picker (0-2)
+    wager: 10,            // Wager amount
+    gameId: null,         // Game ID from contract
+    result: null,         // Result data: { rolls, prizeWon, matches }
+    txHash: null,         // Transaction hash
     poolStatus: null,
     history: [],
-    spinIntervals: []
+    // V2: Service Fee (ETH) for project funding
+    serviceFee: 0n,       // Base fee in wei
+    serviceFee1x: 0n,     // Fee for 1x mode
+    serviceFee5x: 0n,     // Fee for 5x mode
+    tiersData: null       // Tier data from contract
 };
 
 // ============================================================================
-// STYLES - V13 com animações da roleta
+// STYLES
 // ============================================================================
 function injectStyles() {
-    if (document.getElementById('fortune-styles-v13')) return;
+    if (document.getElementById('fortune-styles-v2')) return;
     
     const style = document.createElement('style');
-    style.id = 'fortune-styles-v13';
+    style.id = 'fortune-styles-v2';
     style.textContent = `
         /* Tiger Mascot Animations */
         @keyframes tiger-float {
@@ -76,12 +100,6 @@ function injectStyles() {
             0% { transform: rotateY(0deg); }
             100% { transform: rotateY(360deg); }
         }
-        @keyframes tiger-bounce {
-            0%, 100% { transform: scale(1) translateY(0); }
-            25% { transform: scale(1.05) translateY(-8px); }
-            50% { transform: scale(0.95) translateY(0); }
-            75% { transform: scale(1.02) translateY(-4px); }
-        }
         @keyframes tiger-celebrate {
             0%, 100% { transform: scale(1) rotate(0deg); }
             25% { transform: scale(1.2) rotate(-10deg); }
@@ -90,51 +108,26 @@ function injectStyles() {
         }
         .tiger-float { animation: tiger-float 4s ease-in-out infinite; }
         .tiger-pulse { animation: tiger-pulse 2s ease-in-out infinite; }
-        .tiger-spin { animation: tiger-spin 1s ease-in-out infinite; }
-        .tiger-bounce { animation: tiger-bounce 0.6s ease-out; }
+        .tiger-spin { animation: tiger-spin 1s linear infinite; }
         .tiger-celebrate { animation: tiger-celebrate 0.8s ease-out infinite; }
         
-        /* ============================================ */
-        /* SPINNING ROULETTE ANIMATIONS - V13 NEW */
-        /* ============================================ */
+        /* Processing Animation */
+        @keyframes processing-pulse {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.7; transform: scale(0.98); }
+        }
+        .processing-pulse { animation: processing-pulse 1.5s ease-in-out infinite; }
         
-        /* Número girando rápido */
-        @keyframes number-spin-fast {
+        /* Slot Machine Numbers */
+        @keyframes slot-spin {
             0% { transform: translateY(-100%); opacity: 0; }
             10% { opacity: 1; }
             90% { opacity: 1; }
             100% { transform: translateY(100%); opacity: 0; }
         }
+        .slot-spin { animation: slot-spin 0.1s linear infinite; }
         
-        /* Container da roleta */
-        .roulette-container {
-            position: relative;
-            overflow: hidden;
-            height: 80px;
-        }
-        
-        .roulette-number {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            animation: number-spin-fast 0.15s linear infinite;
-        }
-        
-        /* Glow pulsante na roleta */
-        @keyframes roulette-glow {
-            0%, 100% { box-shadow: 0 0 20px var(--glow-color), inset 0 0 20px rgba(0,0,0,0.5); }
-            50% { box-shadow: 0 0 40px var(--glow-color), 0 0 60px var(--glow-color), inset 0 0 20px rgba(0,0,0,0.3); }
-        }
-        .roulette-glow { animation: roulette-glow 0.5s ease-in-out infinite; }
-        
-        /* Animação de desaceleração */
-        @keyframes slow-down {
-            0% { animation-duration: 0.1s; }
-            100% { animation-duration: 0.8s; }
-        }
-        
-        /* Número revelado com bounce */
+        /* Number Reveal */
         @keyframes number-reveal {
             0% { transform: scale(0) rotate(-180deg); opacity: 0; }
             50% { transform: scale(1.3) rotate(10deg); }
@@ -143,7 +136,7 @@ function injectStyles() {
         }
         .number-reveal { animation: number-reveal 0.6s cubic-bezier(0.68, -0.55, 0.265, 1.55) forwards; }
         
-        /* Match animation */
+        /* Match/Miss Animations */
         @keyframes match-pulse {
             0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7); }
             50% { transform: scale(1.1); box-shadow: 0 0 0 20px rgba(16, 185, 129, 0); }
@@ -151,7 +144,6 @@ function injectStyles() {
         }
         .match-pulse { animation: match-pulse 0.8s ease-out 3; }
         
-        /* Shake para miss */
         @keyframes miss-shake {
             0%, 100% { transform: translateX(0); }
             20% { transform: translateX(-8px); }
@@ -161,210 +153,90 @@ function injectStyles() {
         }
         .miss-shake { animation: miss-shake 0.5s ease-out; }
         
-        /* Epic Win Overlay */
-        @keyframes epic-win-bg {
-            0% { opacity: 0; }
-            100% { opacity: 1; }
+        /* Glow Effects */
+        @keyframes glow-pulse {
+            0%, 100% { box-shadow: 0 0 20px var(--glow-color, rgba(249,115,22,0.3)); }
+            50% { box-shadow: 0 0 40px var(--glow-color, rgba(249,115,22,0.6)); }
         }
-        @keyframes epic-win-text {
-            0% { transform: scale(0) rotate(-20deg); opacity: 0; }
-            50% { transform: scale(1.2) rotate(5deg); }
-            100% { transform: scale(1) rotate(0deg); opacity: 1; }
-        }
-        @keyframes epic-win-shine {
-            0% { transform: translateX(-100%) rotate(45deg); }
-            100% { transform: translateX(200%) rotate(45deg); }
-        }
-        @keyframes coin-rain {
+        .glow-pulse { animation: glow-pulse 1s ease-in-out infinite; }
+        
+        /* Confetti */
+        @keyframes confetti-fall {
             0% { transform: translateY(-100vh) rotate(0deg); opacity: 1; }
             100% { transform: translateY(100vh) rotate(720deg); opacity: 0; }
         }
-        .epic-win-overlay {
-            animation: epic-win-bg 0.3s ease-out forwards;
+        .confetti { 
+            position: fixed; 
+            pointer-events: none; 
+            animation: confetti-fall 3s ease-out forwards;
+            z-index: 9999;
         }
-        .epic-win-text {
-            animation: epic-win-text 0.8s cubic-bezier(0.68, -0.55, 0.265, 1.55) forwards;
-        }
-        .epic-win-shine {
-            position: absolute;
+        .confetti-container {
+            position: fixed;
             top: 0;
             left: 0;
             width: 100%;
-            height: 200%;
-            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent);
-            animation: epic-win-shine 1.5s ease-out infinite;
+            height: 100%;
+            pointer-events: none;
+            z-index: 9999;
+        }
+        
+        /* Coin Rain */
+        @keyframes coin-fall {
+            0% { transform: translateY(-100px) rotate(0deg); opacity: 1; }
+            100% { transform: translateY(100vh) rotate(720deg); opacity: 0; }
         }
         .coin {
             position: fixed;
             font-size: 24px;
-            animation: coin-rain 3s linear forwards;
             pointer-events: none;
-            z-index: 10000;
+            animation: coin-fall 3s ease-out forwards;
+            z-index: 9999;
         }
         
-        /* Fireworks */
-        @keyframes firework {
-            0% { transform: scale(0); opacity: 1; }
-            50% { opacity: 1; }
-            100% { transform: scale(1); opacity: 0; }
-        }
-        .firework {
-            position: absolute;
-            width: 100px;
-            height: 100px;
-            border-radius: 50%;
-            animation: firework 1s ease-out forwards;
-        }
-        
-        /* Game Mode Cards */
-        .game-mode-card {
-            position: relative;
-            overflow: hidden;
-            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-        }
-        .game-mode-card::before {
-            content: '';
-            position: absolute;
-            inset: 0;
-            background: radial-gradient(circle at 30% 30%, rgba(255,255,255,0.05), transparent 70%);
-            opacity: 0;
-            transition: opacity 0.3s;
-        }
-        .game-mode-card:hover::before { opacity: 1; }
-        .game-mode-card:hover {
-            transform: translateY(-4px) scale(1.01);
-            box-shadow: 0 20px 40px -15px rgba(0,0,0,0.5);
-        }
-        .game-mode-card:active { transform: translateY(-2px) scale(0.99); }
-        
-        /* Easy Picker (1-3) */
-        .easy-pick-btn {
-            transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
-        }
-        .easy-pick-btn:hover { transform: translateY(-6px) scale(1.05); }
-        .easy-pick-btn.selected {
-            transform: scale(1.08);
-            box-shadow: 0 0 40px var(--glow-color);
-        }
-        
-        /* Medium Picker (1-10) */
-        .medium-pick-btn {
-            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-        }
-        .medium-pick-btn:hover:not(.selected) { transform: scale(1.1); z-index: 10; }
-        .medium-pick-btn.selected {
-            transform: scale(1.15);
-            box-shadow: 0 0 25px var(--glow-color);
-            z-index: 20;
-        }
-        
-        /* Hard Picker Slider */
+        /* Slider Styles */
         .fortune-slider {
             -webkit-appearance: none;
-            appearance: none;
-            height: 14px;
-            border-radius: 7px;
-            cursor: pointer;
+            height: 8px;
+            border-radius: 4px;
+            background: #27272a;
         }
         .fortune-slider::-webkit-slider-thumb {
             -webkit-appearance: none;
-            width: 32px;
-            height: 32px;
+            width: 24px;
+            height: 24px;
             border-radius: 50%;
-            background: linear-gradient(135deg, #fbbf24, #f59e0b);
-            border: 4px solid #000;
-            box-shadow: 0 4px 20px rgba(245,158,11,0.6);
-            cursor: grab;
-            transition: all 0.2s;
+            background: linear-gradient(135deg, #f59e0b, #ea580c);
+            cursor: pointer;
+            box-shadow: 0 0 10px rgba(249, 115, 22, 0.5);
         }
-        .fortune-slider::-webkit-slider-thumb:hover { transform: scale(1.15); }
-        .fortune-slider::-webkit-slider-thumb:active { cursor: grabbing; transform: scale(1.2); }
         .fortune-slider::-moz-range-thumb {
-            width: 32px;
-            height: 32px;
+            width: 24px;
+            height: 24px;
             border-radius: 50%;
-            background: linear-gradient(135deg, #fbbf24, #f59e0b);
-            border: 4px solid #000;
-            cursor: grab;
+            background: linear-gradient(135deg, #f59e0b, #ea580c);
+            cursor: pointer;
+            border: none;
         }
         
-        /* Grid Numbers */
-        .grid-num {
-            font-size: 10px;
-            transition: all 0.15s ease;
-        }
-        .grid-num:hover { transform: scale(1.2); z-index: 10; background: #52525b !important; }
-        .grid-num.selected { transform: scale(1.25); z-index: 20; }
-        
-        /* Tier Pills */
-        .tier-pill {
-            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-        }
-        .tier-pill.active { transform: scale(1.1); box-shadow: 0 0 15px var(--pill-glow); }
-        .tier-pill.done { background: rgba(16, 185, 129, 0.2) !important; border-color: #10b981 !important; }
-        
-        /* Animations */
-        @keyframes float {
-            0%, 100% { transform: translateY(0); }
-            50% { transform: translateY(-8px); }
-        }
-        .float { animation: float 3s ease-in-out infinite; }
-        
-        @keyframes pulse-glow {
-            0%, 100% { box-shadow: 0 0 20px var(--glow-color, rgba(245,158,11,0.3)); }
-            50% { box-shadow: 0 0 40px var(--glow-color, rgba(245,158,11,0.6)); }
-        }
-        .pulse-glow { animation: pulse-glow 2s ease-in-out infinite; }
-        
-        @keyframes pop {
-            0% { transform: scale(0.8); opacity: 0; }
-            50% { transform: scale(1.1); }
-            100% { transform: scale(1); opacity: 1; }
-        }
-        .pop { animation: pop 0.3s ease-out; }
-        
-        /* Wager Buttons */
-        .wager-btn { transition: all 0.2s ease; }
-        .wager-btn:hover:not(.selected) { transform: scale(1.05); background: #3f3f46; }
-        .wager-btn.selected {
-            background: linear-gradient(135deg, #f59e0b, #d97706) !important;
-            color: #000 !important;
-            transform: scale(1.05);
-            box-shadow: 0 0 20px rgba(245,158,11,0.4);
-        }
-        
-        /* Results */
-        .result-hit {
-            border-color: #10b981 !important;
-            background: linear-gradient(135deg, rgba(16,185,129,0.2), rgba(16,185,129,0.05)) !important;
-            box-shadow: 0 0 30px rgba(16,185,129,0.4);
-            animation: pop 0.5s ease-out;
-        }
-        .result-miss { opacity: 0.4; filter: grayscale(0.3); }
-        
-        /* Confetti */
-        .confetti-container { position: fixed; inset: 0; pointer-events: none; overflow: hidden; z-index: 9999; }
-        .confetti { position: absolute; opacity: 0; animation: confetti-fall 3s ease-out forwards; }
-        @keyframes confetti-fall {
-            0% { opacity: 1; transform: translateY(-50px) rotate(0deg); }
-            100% { opacity: 0; transform: translateY(100vh) rotate(720deg); }
-        }
-        
-        /* History Item Hover */
-        .history-item:hover { 
-            background: rgba(63,63,70,0.5) !important; 
-            transform: translateX(4px);
-        }
-        
-        /* Waiting dots animation */
-        @keyframes waiting-dots {
+        /* Waiting Dots */
+        @keyframes dots {
             0%, 20% { content: '.'; }
             40% { content: '..'; }
             60%, 100% { content: '...'; }
         }
         .waiting-dots::after {
             content: '';
-            animation: waiting-dots 1.5s infinite;
+            animation: dots 1.5s infinite;
+        }
+        
+        /* V2 Badge */
+        .v2-badge {
+            background: linear-gradient(135deg, #10b981, #059669);
+            font-size: 10px;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-weight: bold;
         }
     `;
     document.head.appendChild(style);
@@ -373,37 +245,30 @@ function injectStyles() {
 // ============================================================================
 // MAIN RENDER
 // ============================================================================
-export function render() {
-    const container = document.getElementById('actions');
-    if (!container) return;
-
+function render() {
     injectStyles();
     
-    // ✅ V13.1: Sempre resetar para tela inicial ao entrar na página
-    Game.phase = 'select';
-    Game.result = null;
-    Game.mode = null;
-    Game.comboStep = 0;
-    
-    // Scroll para o topo
-    container.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    
-    container.innerHTML = `
-        <div class="max-w-lg mx-auto px-4 py-6 pb-24">
-            <!-- Header with Tiger Mascot -->
-            <div class="text-center mb-6 relative">
-                <div class="inline-block relative">
-                    <img src="${TIGER_IMAGE}" 
-                         alt="Fortune Tiger" 
-                         class="w-28 h-28 object-contain tiger-float tiger-pulse mx-auto"
-                         id="tiger-mascot"
+    const app = document.getElementById('app');
+    if (!app) return;
+
+    app.innerHTML = `
+        <div class="max-w-md mx-auto px-4 py-6">
+            <!-- Header -->
+            <div class="text-center mb-6">
+                <div class="relative inline-block">
+                    <img id="tiger-mascot" src="${TIGER_IMAGE}" 
+                         class="w-28 h-28 object-contain mx-auto tiger-float tiger-pulse" 
+                         alt="Fortune Tiger"
                          onerror="this.style.display='none'; document.getElementById('tiger-fallback').style.display='flex';">
                     <div id="tiger-fallback" class="hidden items-center justify-center w-20 h-20 rounded-2xl bg-gradient-to-br from-orange-500/20 to-amber-600/10 border border-orange-500/30 mx-auto">
                         <span class="text-5xl">🐯</span>
                     </div>
                 </div>
-                <h1 class="text-2xl font-bold text-white mt-2">Fortune Pool</h1>
-                <p class="text-zinc-500 text-sm mt-1">🐯 Pick your lucky numbers</p>
+                <div class="flex items-center justify-center gap-2 mt-2">
+                    <h1 class="text-2xl font-bold text-white">Fortune Pool</h1>
+                    <span class="v2-badge text-white">V2</span>
+                </div>
+                <p class="text-zinc-500 text-sm mt-1">🐯 Instant Results • No Waiting</p>
             </div>
 
             <!-- Stats -->
@@ -448,6 +313,10 @@ export function render() {
     renderPhase();
 }
 
+function cleanup() {
+    // Cleanup any intervals or listeners
+}
+
 // ============================================================================
 // PHASE ROUTER
 // ============================================================================
@@ -455,18 +324,13 @@ function renderPhase() {
     const area = document.getElementById('game-area');
     if (!area) return;
 
-    // Clear any running spin intervals
-    Game.spinIntervals.forEach(id => clearInterval(id));
-    Game.spinIntervals = [];
-
-    // Update tiger animation based on phase
     updateTigerAnimation(Game.phase);
 
     switch (Game.phase) {
         case 'select': renderModeSelect(area); break;
         case 'pick': renderPicker(area); break;
         case 'wager': renderWager(area); break;
-        case 'spin': renderSpin(area); break;
+        case 'processing': renderProcessing(area); break;
         case 'result': renderResult(area); break;
         default: renderModeSelect(area);
     }
@@ -484,19 +348,14 @@ function updateTigerAnimation(phase) {
             tiger.classList.add('tiger-float', 'tiger-pulse');
             break;
         case 'pick':
-            tiger.classList.add('tiger-bounce');
-            break;
         case 'wager':
             tiger.classList.add('tiger-float');
             break;
-        case 'spin':
+        case 'processing':
             tiger.classList.add('tiger-spin');
             break;
         case 'result':
-            if (Game.result?.isWin || (Game.result?.results && Game.result.results.some((r, i) => {
-                const picks = Game.mode === 'jackpot' ? [Game.guess] : Game.guesses;
-                return Number(r) === picks[i];
-            }))) {
+            if (Game.result?.prizeWon > 0) {
                 tiger.classList.add('tiger-celebrate');
             } else {
                 tiger.style.filter = 'grayscale(0.5)';
@@ -510,10 +369,15 @@ function updateTigerAnimation(phase) {
 // PHASE 1: MODE SELECT
 // ============================================================================
 function renderModeSelect(container) {
+    // V2: Format service fees
+    const fee1x = Game.serviceFee1x > 0n ? (Number(Game.serviceFee1x) / 1e18).toFixed(6) : '0';
+    const fee5x = Game.serviceFee5x > 0n ? (Number(Game.serviceFee5x) / 1e18).toFixed(6) : '0';
+    const hasFees = Game.serviceFee1x > 0n || Game.serviceFee5x > 0n;
+    
     container.innerHTML = `
         <div class="space-y-4">
-            <!-- JACKPOT -->
-            <button id="btn-jackpot" class="game-mode-card w-full text-left p-5 bg-gradient-to-br from-zinc-900 via-zinc-900 to-amber-950/20 border-2 border-zinc-700/50 rounded-2xl hover:border-amber-500/50">
+            <!-- JACKPOT MODE -->
+            <button id="btn-jackpot" class="game-mode-card w-full text-left p-5 bg-gradient-to-br from-zinc-900 via-zinc-900 to-amber-950/20 border-2 border-zinc-700/50 rounded-2xl hover:border-amber-500/50 transition-all">
                 <div class="flex items-start gap-4">
                     <div class="w-16 h-16 rounded-2xl bg-gradient-to-br from-amber-500/30 to-orange-600/20 border border-amber-500/30 flex items-center justify-center flex-shrink-0">
                         <span class="text-4xl">👑</span>
@@ -521,10 +385,10 @@ function renderModeSelect(container) {
                     <div class="flex-1">
                         <div class="flex items-center gap-3 mb-1">
                             <h3 class="text-xl font-bold text-white">Jackpot</h3>
-                            <span class="px-2.5 py-1 rounded-full bg-amber-500/20 border border-amber-500/40 text-amber-400 text-sm font-black">100x</span>
+                            <span class="px-2.5 py-1 rounded-full bg-amber-500/20 border border-amber-500/40 text-amber-400 text-sm font-black">50x</span>
                         </div>
                         <p class="text-zinc-400 text-sm mb-3">Pick 1 number from 1-100</p>
-                        <div class="flex items-center gap-2">
+                        <div class="flex items-center gap-2 flex-wrap">
                             <div class="flex items-center gap-1.5 px-2.5 py-1 bg-zinc-800/80 rounded-lg">
                                 <div class="w-2 h-2 rounded-full bg-amber-500"></div>
                                 <span class="text-xs text-zinc-400">1% chance</span>
@@ -533,13 +397,19 @@ function renderModeSelect(container) {
                                 <i class="fa-solid fa-bolt text-amber-400 text-[10px]"></i>
                                 <span class="text-xs text-amber-400">Big Win</span>
                             </div>
+                            ${hasFees ? `
+                            <div class="flex items-center gap-1.5 px-2.5 py-1 bg-blue-500/10 border border-blue-500/30 rounded-lg">
+                                <i class="fa-brands fa-ethereum text-blue-400 text-[10px]"></i>
+                                <span class="text-xs text-blue-400">${fee1x} ETH</span>
+                            </div>
+                            ` : ''}
                         </div>
                     </div>
                 </div>
             </button>
 
-            <!-- COMBO -->
-            <button id="btn-combo" class="game-mode-card w-full text-left p-5 bg-gradient-to-br from-zinc-900 via-zinc-900 to-violet-950/20 border-2 border-zinc-700/50 rounded-2xl hover:border-violet-500/50">
+            <!-- COMBO MODE -->
+            <button id="btn-combo" class="game-mode-card w-full text-left p-5 bg-gradient-to-br from-zinc-900 via-zinc-900 to-violet-950/20 border-2 border-zinc-700/50 rounded-2xl hover:border-violet-500/50 transition-all">
                 <div class="flex items-start gap-4">
                     <div class="w-16 h-16 rounded-2xl bg-gradient-to-br from-violet-500/30 to-purple-600/20 border border-violet-500/30 flex items-center justify-center flex-shrink-0">
                         <span class="text-4xl">🚀</span>
@@ -547,9 +417,9 @@ function renderModeSelect(container) {
                     <div class="flex-1">
                         <div class="flex items-center gap-3 mb-1">
                             <h3 class="text-xl font-bold text-white">Combo</h3>
-                            <span class="px-2.5 py-1 rounded-full bg-violet-500/20 border border-violet-500/40 text-violet-400 text-sm font-black">up to ${MAX_COMBO_MULTIPLIER}x</span>
+                            <span class="px-2.5 py-1 rounded-full bg-violet-500/20 border border-violet-500/40 text-violet-400 text-sm font-black">${MAX_COMBO_MULTIPLIER}x</span>
                         </div>
-                        <p class="text-zinc-400 text-sm mb-3">Pick 3 numbers, stack your wins!</p>
+                        <p class="text-zinc-400 text-sm mb-3">Pick 3 numbers, win on each match</p>
                         <div class="flex items-center gap-2 flex-wrap">
                             ${TIERS.map(t => `
                                 <div class="flex items-center gap-1.5 px-2.5 py-1 bg-zinc-800/80 rounded-lg">
@@ -558,6 +428,12 @@ function renderModeSelect(container) {
                                     <span class="text-xs text-zinc-500">${t.chance}</span>
                                 </div>
                             `).join('')}
+                            ${hasFees ? `
+                            <div class="flex items-center gap-1.5 px-2.5 py-1 bg-blue-500/10 border border-blue-500/30 rounded-lg">
+                                <i class="fa-brands fa-ethereum text-blue-400 text-[10px]"></i>
+                                <span class="text-xs text-blue-400">${fee5x} ETH</span>
+                            </div>
+                            ` : ''}
                         </div>
                     </div>
                 </div>
@@ -569,6 +445,15 @@ function renderModeSelect(container) {
                     <p class="text-zinc-500 text-sm">Connect wallet to play</p>
                 </div>
             ` : ''}
+            
+            <!-- V2 Info -->
+            <div class="p-3 bg-emerald-500/10 border border-emerald-500/30 rounded-xl">
+                <div class="flex items-center gap-2">
+                    <i class="fa-solid fa-bolt text-emerald-400"></i>
+                    <span class="text-emerald-400 text-sm font-medium">V2: Instant Results!</span>
+                </div>
+                <p class="text-zinc-400 text-xs mt-1">Games now resolve instantly - no more waiting for oracle!</p>
+            </div>
         </div>
     `;
 
@@ -602,7 +487,7 @@ function renderPicker(container) {
 }
 
 function renderJackpotPicker(container) {
-    const tier = TIERS[2];
+    const tier = TIERS[2]; // Hard tier
     const current = Game.guess;
     
     container.innerHTML = `
@@ -612,11 +497,11 @@ function renderJackpotPicker(container) {
                     <span class="text-2xl">${tier.emoji}</span>
                     <span class="${tier.textColor} font-bold">Jackpot Mode</span>
                 </div>
-                <p class="text-zinc-400 text-sm">Pick <span class="text-white font-bold">1-100</span> • <span class="text-emerald-400">1%</span> • <span class="${tier.textColor} font-bold">100x</span></p>
+                <p class="text-zinc-400 text-sm">Pick <span class="text-white font-bold">1-100</span> • <span class="text-emerald-400">1%</span> • <span class="${tier.textColor} font-bold">50x</span></p>
             </div>
 
             <div class="text-center mb-4">
-                <div class="inline-flex items-center justify-center w-28 h-28 rounded-2xl bg-gradient-to-br ${tier.bgFrom} ${tier.bgTo} border-2 ${tier.borderColor} pulse-glow" style="--glow-color: ${tier.hex}40">
+                <div class="inline-flex items-center justify-center w-28 h-28 rounded-2xl bg-gradient-to-br ${tier.bgFrom} ${tier.bgTo} border-2 ${tier.borderColor} glow-pulse" style="--glow-color: ${tier.hex}40">
                     <span id="display-number" class="text-5xl font-black ${tier.textColor}">${current}</span>
                 </div>
             </div>
@@ -630,29 +515,37 @@ function renderJackpotPicker(container) {
                 </div>
             </div>
 
-            <details class="group">
-                <summary class="flex items-center justify-center gap-2 text-xs text-zinc-500 cursor-pointer hover:text-zinc-400 py-2">
-                    <i class="fa-solid fa-grip text-[10px]"></i>
-                    <span class="group-open:hidden">Show grid</span>
-                    <span class="hidden group-open:inline">Hide grid</span>
-                </summary>
-                <div class="grid gap-1 mt-2" style="grid-template-columns: repeat(10, 1fr)">
-                    ${Array.from({length: 100}, (_, i) => i + 1).map(n => `
-                        <button class="grid-num aspect-square rounded font-bold ${n === current ? 'bg-amber-500 text-black selected' : 'bg-zinc-800/60 text-zinc-500'}" data-num="${n}">${n}</button>
-                    `).join('')}
-                </div>
-            </details>
-
             <div class="flex gap-3 mt-5">
-                <button id="btn-back" class="flex-1 py-3.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-bold rounded-xl"><i class="fa-solid fa-arrow-left mr-2"></i>Back</button>
-                <button id="btn-next" class="flex-1 py-3.5 bg-gradient-to-r from-amber-500 to-orange-500 text-black font-bold rounded-xl">Continue<i class="fa-solid fa-arrow-right ml-2"></i></button>
+                <button id="btn-back" class="flex-1 py-3.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-bold rounded-xl transition-colors">
+                    <i class="fa-solid fa-arrow-left mr-2"></i>Back
+                </button>
+                <button id="btn-next" class="flex-1 py-3.5 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-black font-bold rounded-xl transition-all">
+                    Continue<i class="fa-solid fa-arrow-right ml-2"></i>
+                </button>
             </div>
         </div>
     `;
 
-    setupHardPickerEvents(tier, (n) => { Game.guess = n; }, current);
-    document.getElementById('btn-back')?.addEventListener('click', () => { Game.phase = 'select'; renderPhase(); });
-    document.getElementById('btn-next')?.addEventListener('click', () => { Game.phase = 'wager'; renderPhase(); });
+    const slider = document.getElementById('number-slider');
+    const display = document.getElementById('display-number');
+    const tier3 = TIERS[2];
+    
+    slider?.addEventListener('input', (e) => {
+        const val = parseInt(e.target.value);
+        Game.guess = val;
+        if (display) display.textContent = val;
+        slider.style.background = `linear-gradient(to right, ${tier3.hex} 0%, ${tier3.hex} ${val}%, #27272a ${val}%, #27272a 100%)`;
+    });
+
+    document.getElementById('btn-back')?.addEventListener('click', () => { 
+        Game.phase = 'select'; 
+        renderPhase(); 
+    });
+    
+    document.getElementById('btn-next')?.addEventListener('click', () => { 
+        Game.phase = 'wager'; 
+        renderPhase(); 
+    });
 }
 
 function renderComboPicker(container) {
@@ -661,12 +554,13 @@ function renderComboPicker(container) {
     
     container.innerHTML = `
         <div class="bg-gradient-to-br from-zinc-900 to-zinc-800/50 border border-zinc-700/50 rounded-2xl p-5">
+            <!-- Progress Pills -->
             <div class="flex justify-center gap-3 mb-5">
                 ${TIERS.map((t, i) => {
                     const isActive = i === Game.comboStep;
                     const isDone = i < Game.comboStep;
                     return `
-                        <div class="tier-pill flex items-center gap-2 px-3 py-2 rounded-xl border ${isActive ? `bg-gradient-to-br ${t.bgFrom} ${t.bgTo} ${t.borderColor} active` : isDone ? 'done bg-emerald-500/10 border-emerald-500/50' : 'bg-zinc-800/50 border-zinc-700/50'}" style="--pill-glow: ${t.hex}40">
+                        <div class="flex items-center gap-2 px-3 py-2 rounded-xl border ${isActive ? `bg-gradient-to-br ${t.bgFrom} ${t.bgTo} ${t.borderColor}` : isDone ? 'bg-emerald-500/10 border-emerald-500/50' : 'bg-zinc-800/50 border-zinc-700/50'}">
                             <span class="text-xl">${isDone ? '✓' : t.emoji}</span>
                             <div class="text-left">
                                 <p class="text-xs font-bold ${isActive ? t.textColor : isDone ? 'text-emerald-400' : 'text-zinc-500'}">${t.name}</p>
@@ -685,116 +579,64 @@ function renderComboPicker(container) {
                 <p class="text-zinc-400 text-sm">Pick <span class="text-white font-bold">1-${tier.range}</span> • <span class="text-emerald-400">${tier.chance}</span> • <span class="${tier.textColor} font-bold">${tier.multiplier}x</span></p>
             </div>
 
-            <div id="picker-area" class="mb-5">
-                ${tier.range <= 3 ? renderEasyPicker(tier, current) : tier.range <= 10 ? renderMediumPicker(tier, current) : renderHardPickerHTML(tier, current)}
+            <!-- Number Selection -->
+            <div class="flex justify-center gap-2 mb-5">
+                ${Array.from({length: tier.range}, (_, i) => i + 1).map(n => `
+                    <button class="num-btn w-12 h-12 rounded-xl font-bold text-lg transition-all ${n === current ? `bg-gradient-to-br ${tier.bgFrom} ${tier.bgTo} border-2 ${tier.borderColor} ${tier.textColor}` : 'bg-zinc-800/60 border border-zinc-700/50 text-zinc-400 hover:border-zinc-600'}" data-num="${n}">
+                        ${n}
+                    </button>
+                `).join('')}
             </div>
 
             <div class="flex gap-3">
-                <button id="btn-back" class="flex-1 py-3.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-bold rounded-xl"><i class="fa-solid fa-arrow-left mr-2"></i>${Game.comboStep > 0 ? 'Previous' : 'Back'}</button>
-                <button id="btn-next" class="flex-1 py-3.5 bg-gradient-to-r from-${tier.color}-500 to-${tier.color}-600 text-black font-bold rounded-xl">${Game.comboStep < 2 ? 'Next' : 'Continue'}<i class="fa-solid fa-arrow-right ml-2"></i></button>
-            </div>
-        </div>
-    `;
-
-    setupComboEvents(tier);
-}
-
-function renderEasyPicker(tier, current) {
-    return `
-        <div class="flex justify-center gap-4 py-4">
-            ${Array.from({length: tier.range}, (_, i) => i + 1).map(n => `
-                <button class="easy-pick-btn w-28 h-32 rounded-2xl flex flex-col items-center justify-center gap-2 border-2 ${n === current ? `bg-gradient-to-br ${tier.bgFrom} ${tier.bgTo} ${tier.borderColor} selected` : 'bg-zinc-800/60 border-zinc-700/50 hover:border-zinc-600'}" data-num="${n}" style="--glow-color: ${tier.hex}">
-                    <span class="text-5xl font-black ${n === current ? tier.textColor : 'text-white'}">${n}</span>
-                    <span class="text-xs ${n === current ? tier.textColor : 'text-zinc-500'} font-medium">Pick ${n}</span>
+                <button id="btn-back" class="flex-1 py-3.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-bold rounded-xl transition-colors">
+                    <i class="fa-solid fa-arrow-left mr-2"></i>${Game.comboStep > 0 ? 'Previous' : 'Back'}
                 </button>
-            `).join('')}
-        </div>
-    `;
-}
-
-function renderMediumPicker(tier, current) {
-    return `
-        <div class="grid grid-cols-5 gap-3 max-w-sm mx-auto py-2">
-            ${Array.from({length: tier.range}, (_, i) => i + 1).map(n => `
-                <button class="medium-pick-btn aspect-square rounded-xl flex items-center justify-center border-2 ${n === current ? `bg-gradient-to-br ${tier.bgFrom} ${tier.bgTo} ${tier.borderColor} selected` : 'bg-zinc-800/60 border-zinc-700/50 hover:border-zinc-600'}" data-num="${n}" style="--glow-color: ${tier.hex}">
-                    <span class="text-2xl font-black ${n === current ? tier.textColor : 'text-white'}">${n}</span>
+                <button id="btn-next" class="flex-1 py-3.5 bg-gradient-to-r from-${tier.color}-500 to-${tier.color}-600 text-black font-bold rounded-xl transition-all">
+                    ${Game.comboStep < 2 ? 'Next' : 'Continue'}<i class="fa-solid fa-arrow-right ml-2"></i>
                 </button>
-            `).join('')}
-        </div>
-    `;
-}
-
-function renderHardPickerHTML(tier, current) {
-    return `
-        <div class="text-center mb-4">
-            <div class="inline-flex items-center justify-center w-28 h-28 rounded-2xl bg-gradient-to-br ${tier.bgFrom} ${tier.bgTo} border-2 ${tier.borderColor} pulse-glow" style="--glow-color: ${tier.hex}40">
-                <span id="display-number" class="text-5xl font-black ${tier.textColor}">${current}</span>
             </div>
         </div>
-        <div class="mb-4 px-2">
-            <input type="range" id="number-slider" min="1" max="100" value="${current}" class="fortune-slider w-full" style="background: linear-gradient(to right, ${tier.hex} 0%, ${tier.hex} ${current}%, #27272a ${current}%, #27272a 100%)">
-            <div class="flex justify-between text-xs text-zinc-500 mt-2 px-1"><span>1</span><span>25</span><span>50</span><span>75</span><span>100</span></div>
-        </div>
-        <details class="group">
-            <summary class="flex items-center justify-center gap-2 text-xs text-zinc-500 cursor-pointer hover:text-zinc-400 py-2"><i class="fa-solid fa-grip text-[10px]"></i><span class="group-open:hidden">Show grid</span><span class="hidden group-open:inline">Hide grid</span></summary>
-            <div class="grid gap-1 mt-2" style="grid-template-columns: repeat(10, 1fr)">
-                ${Array.from({length: 100}, (_, i) => i + 1).map(n => `<button class="grid-num aspect-square rounded font-bold ${n === current ? 'bg-amber-500 text-black selected' : 'bg-zinc-800/60 text-zinc-500'}" data-num="${n}">${n}</button>`).join('')}
-            </div>
-        </details>
     `;
-}
 
-function setupComboEvents(tier) {
-    const updateNumber = (num) => {
-        Game.guesses[Game.comboStep] = num;
-        const display = document.getElementById('display-number');
-        const slider = document.getElementById('number-slider');
-        if (display) display.textContent = num;
-        if (slider) {
-            slider.value = num;
-            slider.style.background = `linear-gradient(to right, ${tier.hex} 0%, ${tier.hex} ${num}%, #27272a ${num}%, #27272a 100%)`;
-        }
-        document.querySelectorAll('[data-num]').forEach(btn => {
-            const n = parseInt(btn.dataset.num);
-            const isSel = n === num;
-            btn.classList.toggle('selected', isSel);
-            if (btn.classList.contains('grid-num')) {
-                btn.classList.toggle('bg-amber-500', isSel);
-                btn.classList.toggle('text-black', isSel);
-                btn.classList.toggle('bg-zinc-800/60', !isSel);
-                btn.classList.toggle('text-zinc-500', !isSel);
-            }
+    // Number selection
+    document.querySelectorAll('.num-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const num = parseInt(btn.dataset.num);
+            Game.guesses[Game.comboStep] = num;
+            
+            // Update visual
+            document.querySelectorAll('.num-btn').forEach(b => {
+                const n = parseInt(b.dataset.num);
+                if (n === num) {
+                    b.className = `num-btn w-12 h-12 rounded-xl font-bold text-lg transition-all bg-gradient-to-br ${tier.bgFrom} ${tier.bgTo} border-2 ${tier.borderColor} ${tier.textColor}`;
+                } else {
+                    b.className = 'num-btn w-12 h-12 rounded-xl font-bold text-lg transition-all bg-zinc-800/60 border border-zinc-700/50 text-zinc-400 hover:border-zinc-600';
+                }
+            });
         });
-    };
+    });
 
-    document.getElementById('number-slider')?.addEventListener('input', (e) => updateNumber(parseInt(e.target.value)));
-    document.querySelectorAll('[data-num]').forEach(btn => btn.addEventListener('click', () => updateNumber(parseInt(btn.dataset.num))));
-    document.getElementById('btn-back')?.addEventListener('click', () => { if (Game.comboStep > 0) Game.comboStep--; else Game.phase = 'select'; renderPhase(); });
-    document.getElementById('btn-next')?.addEventListener('click', () => { if (Game.comboStep < 2) Game.comboStep++; else Game.phase = 'wager'; renderPhase(); });
-}
-
-function setupHardPickerEvents(tier, updateFn, current) {
-    const updateNumber = (num) => {
-        updateFn(num);
-        const display = document.getElementById('display-number');
-        const slider = document.getElementById('number-slider');
-        if (display) display.textContent = num;
-        if (slider) {
-            slider.value = num;
-            slider.style.background = `linear-gradient(to right, ${tier.hex} 0%, ${tier.hex} ${num}%, #27272a ${num}%, #27272a 100%)`;
+    // Navigation
+    document.getElementById('btn-back')?.addEventListener('click', () => {
+        if (Game.comboStep > 0) {
+            Game.comboStep--;
+            renderPhase();
+        } else {
+            Game.phase = 'select';
+            renderPhase();
         }
-        document.querySelectorAll('.grid-num').forEach(btn => {
-            const n = parseInt(btn.dataset.num);
-            btn.classList.toggle('selected', n === num);
-            btn.classList.toggle('bg-amber-500', n === num);
-            btn.classList.toggle('text-black', n === num);
-            btn.classList.toggle('bg-zinc-800/60', n !== num);
-            btn.classList.toggle('text-zinc-500', n !== num);
-        });
-    };
+    });
 
-    document.getElementById('number-slider')?.addEventListener('input', (e) => updateNumber(parseInt(e.target.value)));
-    document.querySelectorAll('.grid-num').forEach(btn => btn.addEventListener('click', () => updateNumber(parseInt(btn.dataset.num))));
+    document.getElementById('btn-next')?.addEventListener('click', () => {
+        if (Game.comboStep < 2) {
+            Game.comboStep++;
+            renderPhase();
+        } else {
+            Game.phase = 'wager';
+            renderPhase();
+        }
+    });
 }
 
 // ============================================================================
@@ -803,124 +645,94 @@ function setupHardPickerEvents(tier, updateFn, current) {
 function renderWager(container) {
     const isJackpot = Game.mode === 'jackpot';
     const picks = isJackpot ? [Game.guess] : Game.guesses;
-    const maxMulti = isJackpot ? 100 : MAX_COMBO_MULTIPLIER;
+    const maxMulti = isJackpot ? 50 : MAX_COMBO_MULTIPLIER;
     const balanceNum = formatBigNumber(State.currentUserBalance || 0n);
     const hasBalance = balanceNum >= 1;
     
-    // ✅ V13.2: Opções de porcentagem do saldo
-    const percentOptions = [
-        { label: '10%', percent: 0.10, color: 'emerald' },
-        { label: '25%', percent: 0.25, color: 'blue' },
-        { label: '50%', percent: 0.50, color: 'violet' },
-        { label: 'MAX', percent: 1.00, color: 'amber' }
-    ];
-    
+    // V2: Get service fee for current mode
+    const serviceFeeWei = isJackpot ? Game.serviceFee1x : Game.serviceFee5x;
+    const serviceFeeEth = serviceFeeWei > 0n ? Number(serviceFeeWei) / 1e18 : 0;
+    const hasFee = serviceFeeWei > 0n;
+
     container.innerHTML = `
         <div class="bg-gradient-to-br from-zinc-900 to-zinc-800/50 border border-zinc-700/50 rounded-2xl p-5">
-            <!-- Your Picks Summary -->
             <div class="text-center mb-5">
-                <h2 class="text-lg font-bold text-white mb-3">Your Picks</h2>
+                <h2 class="text-xl font-bold text-white mb-2">🎰 Your Selection</h2>
                 <div class="flex justify-center gap-3">
                     ${(isJackpot ? [{ tier: TIERS[2], pick: picks[0] }] : picks.map((p, i) => ({ tier: TIERS[i], pick: p }))).map(({ tier, pick }) => `
-                        <div class="relative">
-                            <div class="w-16 h-16 rounded-xl bg-gradient-to-br ${tier.bgFrom} ${tier.bgTo} border-2 ${tier.borderColor} flex items-center justify-center">
-                                <span class="text-2xl font-black ${tier.textColor}">${pick}</span>
-                            </div>
-                            <div class="absolute -bottom-2 left-1/2 -translate-x-1/2 px-2 py-0.5 bg-${tier.color}-500 text-black text-xs font-bold rounded-full">${tier.multiplier}x</div>
+                        <div class="flex items-center gap-2 px-4 py-2 bg-gradient-to-r ${tier.bgFrom} ${tier.bgTo} border ${tier.borderColor} rounded-xl">
+                            <span class="text-xl">${tier.emoji}</span>
+                            <span class="text-2xl font-black ${tier.textColor}">${pick}</span>
                         </div>
                     `).join('')}
                 </div>
             </div>
 
-            ${!hasBalance ? `
-                <!-- No Balance Warning -->
-                <div class="mb-5 p-4 bg-gradient-to-r from-red-900/30 to-orange-900/20 rounded-xl border border-red-500/30">
-                    <div class="flex items-center gap-3 mb-3">
-                        <div class="w-10 h-10 rounded-full bg-red-500/20 flex items-center justify-center"><i class="fa-solid fa-exclamation-triangle text-red-400"></i></div>
-                        <div><p class="text-white font-bold">No BKC Balance</p><p class="text-xs text-zinc-400">Get free tokens</p></div>
-                    </div>
-                    <button id="btn-faucet" class="w-full py-3 bg-gradient-to-r from-cyan-500 to-blue-500 text-white font-bold rounded-xl"><i class="fa-solid fa-faucet mr-2"></i>Get Free 1000 BKC</button>
-                </div>
-            ` : `
-                <!-- ✅ V13.2: Improved Wager Selection -->
-                <div class="mb-5">
-                    <!-- Header with Balance -->
-                    <div class="flex items-center justify-between mb-3">
-                        <div>
-                            <p class="text-sm font-bold text-white">How much to bet?</p>
-                            <p class="text-[10px] text-zinc-500">Choose wisely, tiger! 🐯</p>
-                        </div>
-                        <div class="text-right">
-                            <p class="text-[10px] text-zinc-500">Available</p>
-                            <p class="text-sm font-bold text-amber-400">${balanceNum.toFixed(2)} BKC</p>
-                        </div>
-                    </div>
-                    
-                    <!-- Percentage Buttons -->
-                    <div class="grid grid-cols-4 gap-2 mb-4">
-                        ${percentOptions.map(opt => {
-                            const value = Math.floor(balanceNum * opt.percent);
-                            return `
-                                <button class="percent-btn py-3 rounded-xl font-bold text-sm border-2 transition-all
-                                    ${Game.wager === value ? `bg-${opt.color}-500/20 border-${opt.color}-500/50 text-${opt.color}-400` : 'border-zinc-700/50 bg-zinc-800/60 text-zinc-400 hover:border-zinc-600'}
-                                " data-percent="${opt.percent}" data-value="${value}">
-                                    <span class="block text-base">${opt.label}</span>
-                                    <span class="block text-[10px] mt-0.5 opacity-70">${value > 0 ? value.toLocaleString() : '0'}</span>
-                                </button>
-                            `;
-                        }).join('')}
-                    </div>
-                    
-                    <!-- Custom Input -->
-                    <div class="relative">
-                        <div class="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-500 text-sm">BKC</div>
-                        <input type="number" 
-                               id="custom-wager" 
-                               value="${Game.wager}" 
-                               min="1"
-                               max="${Math.floor(balanceNum)}"
-                               class="w-full bg-zinc-800/80 border-2 border-zinc-700/50 rounded-xl pl-14 pr-4 py-4 text-white text-2xl font-black text-center focus:border-amber-500/50 focus:outline-none transition-colors"
-                               placeholder="Enter amount">
-                    </div>
-                    
-                    <!-- Slider -->
-                    <div class="mt-3 px-1">
-                        <input type="range" 
-                               id="wager-slider"
-                               min="1" 
-                               max="${Math.floor(balanceNum)}" 
-                               value="${Game.wager}"
-                               class="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer accent-amber-500">
-                        <div class="flex justify-between text-[10px] text-zinc-600 mt-1">
-                            <span>1 BKC</span>
-                            <span>${Math.floor(balanceNum).toLocaleString()} BKC</span>
-                        </div>
-                    </div>
+            <!-- Wager Input -->
+            <div class="mb-5">
+                <label class="block text-sm text-zinc-400 mb-2">Wager Amount (BKC)</label>
+                <div class="flex items-center gap-3 mb-3">
+                    <input type="number" id="custom-wager" value="${Game.wager}" min="1" max="${Math.floor(balanceNum)}"
+                        class="flex-1 bg-zinc-800/80 border border-zinc-700 rounded-xl px-4 py-3 text-white font-bold text-center text-xl focus:outline-none focus:border-amber-500/50">
+                    <span class="text-zinc-500 text-sm">/ ${balanceNum.toFixed(2)}</span>
                 </div>
                 
-                <!-- Potential Win Display -->
-                <div class="p-4 bg-gradient-to-r from-emerald-900/20 to-green-900/10 border border-emerald-500/30 rounded-xl mb-5">
-                    <div class="flex items-center justify-between">
-                        <div>
-                            <p class="text-xs text-zinc-400 mb-1">🏆 Potential Win</p>
-                            <p class="text-3xl font-black text-emerald-400" id="potential-win">${(Game.wager * maxMulti).toLocaleString()}</p>
-                            <p class="text-xs text-emerald-400/60">BKC</p>
-                        </div>
-                        <div class="text-right">
-                            <p class="text-xs text-zinc-400 mb-1">Multiplier</p>
-                            <p class="text-2xl font-bold text-white">${maxMulti}x</p>
-                            <p class="text-[10px] text-zinc-500">if all match!</p>
-                        </div>
+                <!-- Quick Buttons -->
+                <div class="grid grid-cols-4 gap-2">
+                    ${[10, 50, 100, Math.floor(balanceNum)].map(val => `
+                        <button class="percent-btn py-2 text-sm font-bold rounded-lg transition-all ${Game.wager === val ? 'bg-amber-500/20 border border-amber-500/50 text-amber-400' : 'bg-zinc-800/60 border border-zinc-700/50 text-zinc-400 hover:border-zinc-600'}" data-value="${val}">
+                            ${val === Math.floor(balanceNum) ? 'MAX' : val}
+                        </button>
+                    `).join('')}
+                </div>
+            </div>
+
+            <!-- Potential Win -->
+            <div class="p-4 bg-gradient-to-r from-emerald-900/20 to-green-900/10 border border-emerald-500/30 rounded-xl mb-4">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-xs text-zinc-400 mb-1">🏆 Max Potential Win</p>
+                        <p class="text-3xl font-black text-emerald-400" id="potential-win">${(Game.wager * maxMulti).toLocaleString()}</p>
+                        <p class="text-xs text-emerald-400/60">BKC</p>
+                    </div>
+                    <div class="text-right">
+                        <p class="text-xs text-zinc-400 mb-1">Multiplier</p>
+                        <p class="text-2xl font-bold text-white">${maxMulti}x</p>
+                        <p class="text-[10px] text-zinc-500">${isJackpot ? 'if you match!' : 'if all match!'}</p>
                     </div>
                 </div>
-            `}
+            </div>
 
-            <!-- Action Buttons -->
+            ${hasFee ? `
+            <!-- Service Fee Info -->
+            <div class="p-3 bg-blue-500/10 border border-blue-500/30 rounded-xl mb-4">
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center gap-2">
+                        <i class="fa-brands fa-ethereum text-blue-400"></i>
+                        <span class="text-sm text-zinc-300">Game Fee</span>
+                    </div>
+                    <div class="text-right">
+                        <span class="text-blue-400 font-bold">${serviceFeeEth.toFixed(6)} ETH</span>
+                        <p class="text-[10px] text-zinc-500">${isJackpot ? '1x mode' : '5x mode'}</p>
+                    </div>
+                </div>
+            </div>
+            ` : ''}
+
+            ${!hasBalance ? `
+                <div class="p-3 bg-red-500/10 border border-red-500/30 rounded-xl mb-4 text-center">
+                    <p class="text-red-400 text-sm">Insufficient BKC balance</p>
+                    <button id="btn-faucet" class="mt-2 px-4 py-2 bg-amber-500/20 border border-amber-500/50 rounded-lg text-amber-400 text-sm font-bold hover:bg-amber-500/30 transition-colors">
+                        <i class="fa-solid fa-faucet mr-2"></i>Get Test Tokens
+                    </button>
+                </div>
+            ` : ''}
+
             <div class="flex gap-3">
                 <button id="btn-back" class="flex-1 py-3.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-bold rounded-xl transition-colors">
                     <i class="fa-solid fa-arrow-left mr-2"></i>Back
                 </button>
-                <button id="btn-play" class="flex-1 py-3.5 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-black font-bold rounded-xl transition-all transform hover:scale-[1.02] ${!hasBalance ? 'opacity-50 cursor-not-allowed' : ''}" ${!hasBalance ? 'disabled' : ''}>
+                <button id="btn-play" class="flex-1 py-3.5 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-black font-bold rounded-xl transition-all ${!hasBalance ? 'opacity-50 cursor-not-allowed' : ''}" ${!hasBalance ? 'disabled' : ''}>
                     <i class="fa-solid fa-paw mr-2"></i>Play Now
                 </button>
             </div>
@@ -936,16 +748,13 @@ function setupWagerEvents(maxMulti, balanceNum) {
         
         const customInput = document.getElementById('custom-wager');
         const potentialWin = document.getElementById('potential-win');
-        const slider = document.getElementById('wager-slider');
         
         if (customInput) customInput.value = Game.wager;
         if (potentialWin) potentialWin.textContent = (Game.wager * maxMulti).toLocaleString();
-        if (slider) slider.value = Game.wager;
         
-        // Update percent button states
         document.querySelectorAll('.percent-btn').forEach(btn => {
             const value = parseInt(btn.dataset.value);
-            const isSelected = Math.abs(Game.wager - value) < 1;
+            const isSelected = Game.wager === value;
             btn.classList.toggle('bg-amber-500/20', isSelected);
             btn.classList.toggle('border-amber-500/50', isSelected);
             btn.classList.toggle('text-amber-400', isSelected);
@@ -955,36 +764,33 @@ function setupWagerEvents(maxMulti, balanceNum) {
         });
     };
 
-    // Percent buttons
     document.querySelectorAll('.percent-btn').forEach(btn => {
         btn.addEventListener('click', () => {
-            const value = parseInt(btn.dataset.value);
-            updateWager(value > 0 ? value : 1);
+            updateWager(parseInt(btn.dataset.value) || 1);
         });
     });
     
-    // Custom input
     document.getElementById('custom-wager')?.addEventListener('input', (e) => {
         updateWager(parseInt(e.target.value) || 1);
     });
     
-    // Slider
-    document.getElementById('wager-slider')?.addEventListener('input', (e) => {
-        updateWager(parseInt(e.target.value) || 1);
-    });
-    
-    // Faucet button
     document.getElementById('btn-faucet')?.addEventListener('click', async () => {
         showToast('Requesting tokens...', 'info');
         try {
             const res = await fetch(`https://faucet-4wvdcuoouq-uc.a.run.app?address=${State.userAddress}`);
             const data = await res.json();
-            if (data.success) { showToast('🎉 Tokens received!', 'success'); await loadUserData(); renderPhase(); }
-            else showToast(data.error || 'Error', 'error');
-        } catch { showToast('Faucet error', 'error'); }
+            if (data.success) { 
+                showToast('🎉 Tokens received!', 'success'); 
+                await loadUserData(); 
+                renderPhase(); 
+            } else {
+                showToast(data.error || 'Error', 'error');
+            }
+        } catch { 
+            showToast('Faucet error', 'error'); 
+        }
     });
     
-    // Navigation
     document.getElementById('btn-back')?.addEventListener('click', () => { 
         Game.phase = 'pick'; 
         if (Game.mode === 'combo') Game.comboStep = 2; 
@@ -993,99 +799,117 @@ function setupWagerEvents(maxMulti, balanceNum) {
     
     document.getElementById('btn-play')?.addEventListener('click', async () => {
         if (Game.wager < 1) return showToast('Min: 1 BKC', 'warning');
-        Game.phase = 'spin';
+        
+        // Start processing
+        Game.phase = 'processing';
         renderPhase();
+        
         try {
-            const result = await executeFortuneParticipate(Game.wager, Game.mode === 'jackpot' ? [Game.guess] : Game.guesses, Game.mode === 'combo', null);
-            if (result?.success) { Game.gameId = result.gameId; setTimeout(() => pollResult(result.gameId), 3000); }
-            else { Game.phase = 'wager'; renderPhase(); }
-        } catch (e) { showToast('Error: ' + e.message, 'error'); Game.phase = 'wager'; renderPhase(); }
+            // V2: Call play() which returns results instantly!
+            const guesses = Game.mode === 'jackpot' ? [Game.guess] : Game.guesses;
+            const isCumulative = Game.mode === 'combo';
+            
+            const result = await executeFortunePlay(Game.wager, guesses, isCumulative);
+            
+            if (result?.success) {
+                // V2: Results are returned immediately!
+                Game.gameId = result.gameId;
+                Game.txHash = result.txHash;
+                Game.result = {
+                    rolls: result.rolls,
+                    prizeWon: result.prizeWon,
+                    matches: result.matches || []
+                };
+                
+                // Small delay for dramatic effect, then show result
+                setTimeout(() => {
+                    Game.phase = 'result';
+                    renderPhase();
+                    loadPoolData();
+                }, 1500);
+            } else {
+                showToast(result?.error || 'Transaction failed', 'error');
+                Game.phase = 'wager';
+                renderPhase();
+            }
+        } catch (e) {
+            console.error('Play error:', e);
+            showToast('Error: ' + e.message, 'error');
+            Game.phase = 'wager';
+            renderPhase();
+        }
     });
 }
 
 // ============================================================================
-// PHASE 4: SPIN - ROULETTE ANIMATION 🎰
+// PHASE 4: PROCESSING (V2 - Brief animation while tx confirms)
 // ============================================================================
-function renderSpin(container) {
+function renderProcessing(container) {
     const isJackpot = Game.mode === 'jackpot';
     const picks = isJackpot ? [Game.guess] : Game.guesses;
     const tiersToShow = isJackpot ? [TIERS[2]] : TIERS;
     
     container.innerHTML = `
-        <div class="bg-gradient-to-br from-zinc-900 to-zinc-800/50 border border-zinc-700/50 rounded-2xl p-6">
-            <!-- Title -->
+        <div class="bg-gradient-to-br from-zinc-900 to-zinc-800/50 border border-zinc-700/50 rounded-2xl p-6 processing-pulse">
             <div class="text-center mb-6">
+                <div class="w-16 h-16 mx-auto mb-4 rounded-full bg-gradient-to-br from-amber-500/20 to-orange-600/20 border border-amber-500/30 flex items-center justify-center">
+                    <i class="fa-solid fa-dice text-3xl text-amber-400 animate-bounce"></i>
+                </div>
                 <h2 class="text-2xl font-bold text-white mb-1">🎰 Rolling<span class="waiting-dots"></span></h2>
-                <p class="text-zinc-400 text-sm">Oracle is choosing the numbers</p>
+                <p class="text-zinc-400 text-sm">Transaction processing...</p>
             </div>
             
-            <!-- Spinning Roulettes -->
+            <!-- Animated Numbers -->
             <div class="flex justify-center gap-4 mb-6">
                 ${tiersToShow.map((tier, idx) => `
                     <div class="text-center">
                         <p class="text-xs text-zinc-500 mb-2">${tier.emoji} ${tier.name}</p>
-                        <div class="roulette-box relative w-20 h-24 rounded-2xl bg-gradient-to-br ${tier.bgFrom} ${tier.bgTo} border-2 ${tier.borderColor} overflow-hidden roulette-glow" 
-                             style="--glow-color: ${tier.hex}50" 
-                             id="roulette-${idx}">
-                            <!-- Spinning number -->
-                            <div class="absolute inset-0 flex items-center justify-center">
-                                <span class="roulette-num text-4xl font-black ${tier.textColor}" id="spin-num-${idx}">?</span>
-                            </div>
-                            <!-- Top/Bottom fade gradient -->
-                            <div class="absolute inset-0 pointer-events-none bg-gradient-to-b from-black/60 via-transparent to-black/60"></div>
+                        <div class="w-20 h-24 rounded-2xl bg-gradient-to-br ${tier.bgFrom} ${tier.bgTo} border-2 ${tier.borderColor} flex items-center justify-center overflow-hidden glow-pulse" style="--glow-color: ${tier.hex}50">
+                            <span class="text-4xl font-black ${tier.textColor} slot-spin" id="spin-${idx}">?</span>
                         </div>
                     </div>
                 `).join('')}
             </div>
             
-            <!-- Your picks (fixed below) -->
+            <!-- Your Picks -->
             <div class="border-t border-zinc-700/50 pt-5">
                 <p class="text-center text-xs text-zinc-500 uppercase mb-3">🎯 Your Numbers</p>
                 <div class="flex justify-center gap-4">
-                    ${(isJackpot ? [{ tier: TIERS[2], pick: picks[0] }] : picks.map((p, i) => ({ tier: TIERS[i], pick: p }))).map(({ tier, pick }) => `
-                        <div class="text-center">
-                            <div class="w-16 h-16 rounded-xl bg-gradient-to-br ${tier.bgFrom} ${tier.bgTo} border-2 ${tier.borderColor} flex items-center justify-center">
-                                <span class="text-2xl font-black ${tier.textColor}">${pick}</span>
+                    ${tiersToShow.map((tier, idx) => {
+                        const pick = isJackpot ? picks[0] : picks[idx];
+                        return `
+                            <div class="text-center">
+                                <div class="w-16 h-16 rounded-xl bg-gradient-to-br ${tier.bgFrom} ${tier.bgTo} border-2 ${tier.borderColor} flex items-center justify-center">
+                                    <span class="text-2xl font-black ${tier.textColor}">${pick}</span>
+                                </div>
                             </div>
-                            <p class="text-xs ${tier.textColor} mt-1 font-medium">${tier.name}</p>
-                        </div>
-                    `).join('')}
+                        `;
+                    }).join('')}
                 </div>
             </div>
             
-            <p class="text-xs text-zinc-500 mt-6 text-center"><i class="fa-solid fa-clock mr-1"></i>May take up to 30s</p>
+            <p class="text-xs text-zinc-500 mt-6 text-center">
+                <i class="fa-solid fa-bolt text-emerald-400 mr-1"></i>
+                V2: Instant resolution in progress...
+            </p>
         </div>
     `;
     
-    // Start spinning animations
-    startSpinningAnimations(tiersToShow);
-}
-
-function startSpinningAnimations(tiers) {
-    // Clear any existing intervals
-    Game.spinIntervals.forEach(id => clearInterval(id));
-    Game.spinIntervals = [];
-    
-    tiers.forEach((tier, idx) => {
-        const numEl = document.getElementById(`spin-num-${idx}`);
-        if (!numEl) return;
-        
-        let speed = 50; // Initial speed in ms
+    // Animate spinning numbers
+    tiersToShow.forEach((tier, idx) => {
+        const el = document.getElementById(`spin-${idx}`);
+        if (!el) return;
         
         const spin = () => {
-            const randomNum = Math.floor(Math.random() * tier.range) + 1;
-            numEl.textContent = randomNum;
-            numEl.style.transform = `scale(${0.8 + Math.random() * 0.4})`;
+            el.textContent = Math.floor(Math.random() * tier.range) + 1;
         };
         
-        // Start fast spinning
-        const intervalId = setInterval(spin, speed);
-        Game.spinIntervals.push(intervalId);
+        setInterval(spin, 80);
     });
 }
 
 // ============================================================================
-// PHASE 5: RESULT - EPIC REVEAL & WIN ANIMATION 🏆
+// PHASE 5: RESULT
 // ============================================================================
 function renderResult(container) {
     const result = Game.result;
@@ -1093,260 +917,159 @@ function renderResult(container) {
     
     const isJackpot = Game.mode === 'jackpot';
     const picks = isJackpot ? [Game.guess] : Game.guesses;
-    const results = result.results || result.randomNumbers || result.rolls || [];
+    const rolls = result.rolls || [];
     const tiersToShow = isJackpot ? [TIERS[2]] : TIERS;
     
+    // Calculate matches
     const matches = picks.map((pick, i) => {
-        const roll = results[i] !== undefined ? Number(results[i]) : null;
+        const roll = rolls[i] !== undefined ? Number(rolls[i]) : null;
         return roll !== null && roll === pick;
     });
     const matchCount = matches.filter(m => m).length;
-    const isWin = matchCount > 0;
+    const isWin = result.prizeWon > 0 || matchCount > 0;
     
-    let multiplier = 0;
-    if (isJackpot && matches[0]) {
-        multiplier = 100;
-    } else if (!isJackpot) {
-        matches.forEach((hit, i) => { if (hit) multiplier += TIERS[i].multiplier; });
+    // Calculate display prize
+    let displayPrize = result.prizeWon;
+    if (!displayPrize && matchCount > 0) {
+        displayPrize = 0;
+        matches.forEach((hit, i) => {
+            if (hit) {
+                const tier = isJackpot ? TIERS[2] : TIERS[i];
+                displayPrize += Game.wager * tier.multiplier;
+            }
+        });
     }
-    const estimatedPrize = Game.wager * multiplier;
     
-    // First render the spinning state, then animate to reveal
     container.innerHTML = `
         <div class="bg-gradient-to-br ${isWin ? 'from-emerald-900/30 to-green-900/10 border-emerald-500/30' : 'from-zinc-900 to-zinc-800/50 border-zinc-700/50'} border rounded-2xl p-6 relative overflow-hidden" id="result-container">
             
-            <!-- Reveal Area -->
+            <!-- Result Header -->
             <div class="text-center mb-6">
-                <h2 class="text-xl font-bold text-white mb-4" id="result-title">🔮 Revealing<span class="waiting-dots"></span></h2>
+                ${isWin ? `
+                    <div class="text-6xl mb-3">🎉</div>
+                    <h2 class="text-3xl font-black text-emerald-400 mb-2">YOU WON!</h2>
+                    <p class="text-4xl font-black text-white">${displayPrize.toLocaleString()} BKC</p>
+                ` : `
+                    <div class="text-6xl mb-3">😔</div>
+                    <h2 class="text-2xl font-bold text-zinc-400 mb-2">No Match</h2>
+                    <p class="text-zinc-500">Better luck next time!</p>
+                `}
             </div>
             
-            <!-- Oracle Numbers with reveal animation -->
-            <div class="flex justify-center gap-4 mb-6" id="oracle-numbers">
-                ${tiersToShow.map((tier, idx) => `
-                    <div class="text-center">
-                        <p class="text-xs text-zinc-500 mb-2">${tier.emoji} ${tier.name}</p>
-                        <div class="oracle-box relative w-20 h-24 rounded-2xl bg-gradient-to-br ${tier.bgFrom} ${tier.bgTo} border-2 ${tier.borderColor} flex items-center justify-center overflow-hidden" 
-                             id="oracle-${idx}"
-                             style="--glow-color: ${tier.hex}50">
-                            <span class="oracle-num text-4xl font-black ${tier.textColor}" id="oracle-num-${idx}">?</span>
+            <!-- Results Grid -->
+            <div class="grid ${isJackpot ? 'grid-cols-1' : 'grid-cols-3'} gap-4 mb-6">
+                ${tiersToShow.map((tier, idx) => {
+                    const pick = isJackpot ? picks[0] : picks[idx];
+                    const roll = rolls[idx];
+                    const isMatch = matches[idx];
+                    
+                    return `
+                        <div class="text-center p-4 rounded-xl ${isMatch ? 'bg-emerald-500/20 border border-emerald-500/50' : 'bg-zinc-800/50 border border-zinc-700/50'}">
+                            <p class="text-xs text-zinc-500 mb-2">${tier.emoji} ${tier.name}</p>
+                            <div class="flex items-center justify-center gap-3">
+                                <div class="text-center">
+                                    <p class="text-[10px] text-zinc-600 mb-1">YOU</p>
+                                    <div class="w-12 h-12 rounded-lg bg-gradient-to-br ${tier.bgFrom} ${tier.bgTo} border ${tier.borderColor} flex items-center justify-center">
+                                        <span class="text-xl font-black ${tier.textColor}">${pick}</span>
+                                    </div>
+                                </div>
+                                <span class="text-2xl ${isMatch ? 'text-emerald-400' : 'text-red-400'}">${isMatch ? '=' : '≠'}</span>
+                                <div class="text-center">
+                                    <p class="text-[10px] text-zinc-600 mb-1">ROLL</p>
+                                    <div class="w-12 h-12 rounded-lg ${isMatch ? 'bg-emerald-500/30 border-emerald-500' : 'bg-zinc-700/50 border-zinc-600'} border flex items-center justify-center ${isMatch ? 'match-pulse' : 'miss-shake'}">
+                                        <span class="text-xl font-black ${isMatch ? 'text-emerald-400' : 'text-zinc-300'}">${roll}</span>
+                                    </div>
+                                </div>
+                            </div>
+                            ${isMatch ? `<p class="text-emerald-400 text-sm font-bold mt-2">+${tier.multiplier}x WIN!</p>` : ''}
+                        </div>
+                    `;
+                }).join('')}
+            </div>
+            
+            <!-- TX Link -->
+            ${Game.txHash ? `
+                <div class="text-center mb-4">
+                    <a href="${EXPLORER_TX}${Game.txHash}" target="_blank" class="inline-flex items-center gap-2 text-xs text-zinc-500 hover:text-zinc-400">
+                        <i class="fa-solid fa-external-link"></i>
+                        View Transaction
+                    </a>
+                </div>
+            ` : ''}
+            
+            <!-- Share Section (if win) -->
+            ${isWin ? `
+                <div class="bg-gradient-to-r from-amber-500/10 to-orange-500/10 border border-amber-500/30 rounded-xl p-4 mb-4">
+                    <div class="flex items-center gap-3 mb-3">
+                        <div class="w-10 h-10 rounded-full bg-amber-500/20 flex items-center justify-center">
+                            <i class="fa-solid fa-gift text-amber-400"></i>
+                        </div>
+                        <div>
+                            <p class="text-white font-bold text-sm">Share & Earn +${SHARE_POINTS} Points!</p>
+                            <p class="text-zinc-500 text-[10px]">One reward per game</p>
                         </div>
                     </div>
-                `).join('')}
-            </div>
-            
-            <!-- Your picks -->
-            <div class="border-t border-zinc-700/50 pt-5 mb-6">
-                <p class="text-center text-xs text-zinc-500 uppercase mb-3">🎯 Your Numbers</p>
-                <div class="flex justify-center gap-4" id="your-picks">
-                    ${tiersToShow.map((tier, idx) => {
-                        const pick = isJackpot ? picks[0] : picks[idx];
-                        return `
-                            <div class="text-center" id="pick-container-${idx}">
-                                <div class="pick-box w-16 h-16 rounded-xl bg-gradient-to-br ${tier.bgFrom} ${tier.bgTo} border-2 ${tier.borderColor} flex items-center justify-center" id="pick-${idx}">
-                                    <span class="text-2xl font-black ${tier.textColor}">${pick}</span>
-                                </div>
-                                <p class="text-xs text-zinc-500 mt-1" id="pick-label-${idx}">${tier.name}</p>
-                            </div>
-                        `;
-                    }).join('')}
+                    <button id="btn-share" class="w-full py-3 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-black font-bold rounded-xl transition-all">
+                        <i class="fa-solid fa-share-nodes mr-2"></i>Share Now
+                    </button>
                 </div>
-            </div>
+            ` : ''}
             
-            <!-- Result message (hidden initially) -->
-            <div id="result-message" class="hidden text-center mb-5"></div>
-            
-            <button id="btn-new-game" class="w-full py-4 bg-gradient-to-r from-amber-500 to-orange-500 text-black font-bold rounded-xl opacity-0 transition-opacity duration-500"><i class="fa-solid fa-paw mr-2"></i>Play Again</button>
-        </div>
-    `;
-    
-    // Start the reveal animation sequence
-    animateReveal(tiersToShow, results, picks, matches, isWin, estimatedPrize, isJackpot);
-    
-    document.getElementById('btn-new-game')?.addEventListener('click', () => { 
-        Game.phase = 'select'; 
-        Game.result = null; 
-        renderPhase(); 
-        loadPoolData(); 
-    });
-}
-
-function animateReveal(tiers, results, picks, matches, isWin, prize, isJackpot) {
-    const delays = tiers.map((_, i) => 800 + i * 1000); // Stagger reveals
-    
-    // Start with spinning numbers
-    tiers.forEach((tier, idx) => {
-        const numEl = document.getElementById(`oracle-num-${idx}`);
-        if (!numEl) return;
-        
-        // Spin for a while then reveal
-        let spinSpeed = 50;
-        const spinInterval = setInterval(() => {
-            const randomNum = Math.floor(Math.random() * tier.range) + 1;
-            numEl.textContent = randomNum;
-        }, spinSpeed);
-        
-        // After delay, slow down and reveal
-        setTimeout(() => {
-            // Slow down phase
-            let currentSpeed = 50;
-            clearInterval(spinInterval);
-            
-            const slowDown = setInterval(() => {
-                currentSpeed += 30;
-                const randomNum = Math.floor(Math.random() * tier.range) + 1;
-                numEl.textContent = randomNum;
-                
-                if (currentSpeed > 300) {
-                    clearInterval(slowDown);
-                    // Final reveal
-                    const actualResult = Number(results[idx]);
-                    const pick = isJackpot ? picks[0] : picks[idx];
-                    const isMatch = actualResult === pick;
-                    
-                    // Reveal animation
-                    numEl.textContent = actualResult;
-                    numEl.classList.add('number-reveal');
-                    
-                    const box = document.getElementById(`oracle-${idx}`);
-                    const pickBox = document.getElementById(`pick-${idx}`);
-                    const pickLabel = document.getElementById(`pick-label-${idx}`);
-                    
-                    if (isMatch) {
-                        // Match! Green glow and pulse
-                        box.classList.add('match-pulse');
-                        box.style.borderColor = '#10b981';
-                        box.style.boxShadow = '0 0 30px rgba(16, 185, 129, 0.6)';
-                        numEl.classList.remove(tiers[idx].textColor.replace('text-', ''));
-                        numEl.classList.add('text-emerald-400');
-                        
-                        pickBox.classList.add('match-pulse');
-                        pickBox.style.borderColor = '#10b981';
-                        pickBox.style.background = 'linear-gradient(135deg, rgba(16,185,129,0.3), rgba(16,185,129,0.1))';
-                        pickLabel.textContent = '✓ MATCH!';
-                        pickLabel.className = 'text-xs text-emerald-400 mt-1 font-bold';
-                    } else {
-                        // Miss - shake and gray
-                        box.classList.add('miss-shake');
-                        box.style.opacity = '0.5';
-                        box.style.filter = 'grayscale(0.5)';
-                        
-                        pickBox.style.opacity = '0.5';
-                        pickLabel.textContent = '✗ Miss';
-                        pickLabel.className = 'text-xs text-red-400 mt-1';
-                    }
-                }
-            }, currentSpeed);
-        }, delays[idx]);
-    });
-    
-    // After all reveals, show final result
-    const totalDelay = delays[delays.length - 1] + 1500;
-    setTimeout(() => {
-        showFinalResult(isWin, prize);
-    }, totalDelay);
-}
-
-function showFinalResult(isWin, prize) {
-    const titleEl = document.getElementById('result-title');
-    const messageEl = document.getElementById('result-message');
-    const btnEl = document.getElementById('btn-new-game');
-    const containerEl = document.getElementById('result-container');
-    
-    const multiplier = prize > 0 ? Math.round(prize / Game.wager) : 0;
-    
-    if (isWin) {
-        triggerEpicWinAnimation();
-        triggerCoinRain();
-        triggerConfetti();
-        
-        if (titleEl) {
-            titleEl.innerHTML = '🏆 YOU WON!';
-            titleEl.className = 'text-3xl font-black text-emerald-400 mb-4 epic-win-text';
-        }
-        
-        if (messageEl) {
-            messageEl.innerHTML = `
-                <div class="relative overflow-hidden p-4 bg-gradient-to-r from-emerald-500/30 to-green-500/20 rounded-xl border border-emerald-500/50 mb-4">
-                    <div class="epic-win-shine"></div>
-                    <p class="text-5xl font-black text-white mb-2">+${prize.toFixed(2)}</p>
-                    <p class="text-lg text-emerald-400 font-bold">BKC Won!</p>
-                </div>
-            `;
-            messageEl.classList.remove('hidden');
-        }
-        
-        if (containerEl) {
-            containerEl.style.background = 'linear-gradient(135deg, rgba(16,185,129,0.2), rgba(16,185,129,0.05))';
-            containerEl.style.borderColor = 'rgba(16,185,129,0.5)';
-        }
-    } else {
-        if (titleEl) {
-            titleEl.innerHTML = '😿 Not this time';
-            titleEl.className = 'text-2xl font-bold text-zinc-400 mb-4';
-        }
-        
-        if (messageEl) {
-            messageEl.innerHTML = `
-                <p class="text-zinc-500 mb-2">Better luck next round!</p>
-                <p class="text-sm text-zinc-600 mb-4">The tiger will smile on you soon 🐯</p>
-            `;
-            messageEl.classList.remove('hidden');
-        }
-    }
-    
-    // ✅ V13.6: Sempre mostrar botão de share (proteção é server-side no Firebase)
-    const shareArea = document.createElement('div');
-    shareArea.className = 'mt-4 pt-4 border-t border-zinc-700/50';
-    shareArea.innerHTML = `
-        <div class="bg-gradient-to-r from-amber-500/10 to-orange-500/10 border border-amber-500/30 rounded-xl p-4 mb-4">
-            <div class="flex items-center gap-3 mb-3">
-                <div class="w-10 h-10 rounded-full bg-amber-500/20 flex items-center justify-center">
-                    <i class="fa-solid fa-gift text-amber-400"></i>
-                </div>
-                <div>
-                    <p class="text-white font-bold text-sm">Share & Earn +${SHARE_POINTS} Points!</p>
-                    <p class="text-zinc-500 text-[10px]">One reward per game</p>
-                </div>
-            </div>
-            <button id="btn-share-result" class="w-full py-3 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-black font-bold rounded-xl transition-all transform hover:scale-[1.02]">
-                <i class="fa-solid fa-share-nodes mr-2"></i>Share Now
+            <button id="btn-new-game" class="w-full py-4 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-black font-bold rounded-xl transition-all">
+                <i class="fa-solid fa-paw mr-2"></i>Play Again
             </button>
         </div>
     `;
     
-    if (btnEl && btnEl.parentNode) {
-        btnEl.parentNode.insertBefore(shareArea, btnEl);
+    // Trigger animations
+    if (isWin) {
+        triggerConfetti();
+        if (displayPrize > Game.wager * 10) {
+            triggerCoinRain();
+        }
     }
     
-    if (btnEl) {
-        btnEl.style.opacity = '1';
-    }
+    // Event listeners
+    document.getElementById('btn-new-game')?.addEventListener('click', () => { 
+        Game.phase = 'select'; 
+        Game.result = null;
+        Game.txHash = null;
+        Game.gameId = null;
+        renderPhase(); 
+        loadPoolData(); 
+    });
     
-    setTimeout(() => {
-        document.getElementById('btn-share-result')?.addEventListener('click', () => {
-            showShareModal(isWin, prize, multiplier);
-        });
-    }, 100);
+    document.getElementById('btn-share')?.addEventListener('click', () => {
+        showShareModal(isWin, displayPrize);
+    });
 }
 
-function triggerEpicWinAnimation() {
-    // Create fireworks
-    const container = document.getElementById('result-container');
-    if (!container) return;
+// ============================================================================
+// ANIMATIONS
+// ============================================================================
+function triggerConfetti() {
+    const container = document.createElement('div');
+    container.className = 'confetti-container';
+    document.body.appendChild(container);
     
-    const colors = ['#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#06b6d4'];
+    const colors = ['#f59e0b', '#10b981', '#8b5cf6', '#ec4899', '#06b6d4'];
+    const shapes = ['●', '■', '★', '🐯', '🎉'];
     
-    for (let i = 0; i < 5; i++) {
-        setTimeout(() => {
-            const firework = document.createElement('div');
-            firework.className = 'firework';
-            firework.style.left = `${20 + Math.random() * 60}%`;
-            firework.style.top = `${20 + Math.random() * 40}%`;
-            firework.style.background = `radial-gradient(circle, ${colors[i % colors.length]} 0%, transparent 70%)`;
-            container.appendChild(firework);
-            setTimeout(() => firework.remove(), 1000);
-        }, i * 200);
+    for (let i = 0; i < 60; i++) {
+        const c = document.createElement('div');
+        c.className = 'confetti';
+        c.style.cssText = `
+            left: ${Math.random() * 100}%;
+            color: ${colors[i % colors.length]};
+            font-size: ${8 + Math.random() * 12}px;
+            animation-delay: ${Math.random() * 2}s;
+            animation-duration: ${2 + Math.random() * 2}s;
+        `;
+        c.textContent = shapes[i % shapes.length];
+        container.appendChild(c);
     }
+    
+    setTimeout(() => container.remove(), 5000);
 }
 
 function triggerCoinRain() {
@@ -1366,88 +1089,146 @@ function triggerCoinRain() {
     }
 }
 
-function triggerConfetti() {
-    document.querySelector('.confetti-container')?.remove();
-    const container = document.createElement('div');
-    container.className = 'confetti-container';
-    document.body.appendChild(container);
-    const colors = ['#f59e0b', '#10b981', '#8b5cf6', '#ec4899', '#06b6d4'];
-    for (let i = 0; i < 60; i++) {
-        const c = document.createElement('div');
-        c.className = 'confetti';
-        c.style.cssText = `left:${Math.random()*100}%;color:${colors[i%colors.length]};font-size:${8+Math.random()*12}px;animation-delay:${Math.random()*2}s;animation-duration:${2+Math.random()*2}s`;
-        c.textContent = ['●','■','★','🐯'][i%4];
-        container.appendChild(c);
-    }
-    setTimeout(() => container.remove(), 5000);
+// ============================================================================
+// SHARE MODAL
+// ============================================================================
+function showShareModal(isWin, prize) {
+    const text = isWin 
+        ? `🎉 I just won ${prize.toLocaleString()} BKC on Fortune Pool!\n\n🐯 Try your luck: https://backcoin.org\n\n@backcoin #Backcoin #Web3 #Arbitrum`
+        : `🐯 Playing Fortune Pool on @backcoin!\n\nOn-chain lottery with instant results!\n\n👉 https://backcoin.org\n\n#Backcoin #Web3 #Arbitrum`;
+    
+    const modalContent = `
+        <div class="text-center">
+            <img src="${TIGER_IMAGE}" class="w-16 h-16 mx-auto mb-2" alt="Backcoin" onerror="this.style.display='none'">
+            <h3 class="text-lg font-bold text-white">Share & Earn!</h3>
+            <p class="text-amber-400 text-sm font-medium mb-4">+${SHARE_POINTS} Points</p>
+            
+            <div class="grid grid-cols-4 gap-3 mb-4">
+                <button id="share-twitter" class="flex flex-col items-center justify-center p-4 bg-zinc-800/80 hover:bg-zinc-700 border border-zinc-700 hover:border-zinc-500 rounded-xl transition-all">
+                    <i class="fa-brands fa-x-twitter text-2xl text-white mb-1"></i>
+                    <span class="text-[10px] text-zinc-500">Twitter</span>
+                </button>
+                <button id="share-telegram" class="flex flex-col items-center justify-center p-4 bg-zinc-800/80 hover:bg-[#0088cc]/20 border border-zinc-700 hover:border-[#0088cc]/50 rounded-xl transition-all">
+                    <i class="fa-brands fa-telegram text-2xl text-[#0088cc] mb-1"></i>
+                    <span class="text-[10px] text-zinc-500">Telegram</span>
+                </button>
+                <button id="share-whatsapp" class="flex flex-col items-center justify-center p-4 bg-zinc-800/80 hover:bg-[#25D366]/20 border border-zinc-700 hover:border-[#25D366]/50 rounded-xl transition-all">
+                    <i class="fa-brands fa-whatsapp text-2xl text-[#25D366] mb-1"></i>
+                    <span class="text-[10px] text-zinc-500">WhatsApp</span>
+                </button>
+                <button id="share-copy" class="flex flex-col items-center justify-center p-4 bg-zinc-800/80 hover:bg-zinc-700 border border-zinc-700 hover:border-zinc-500 rounded-xl transition-all">
+                    <i class="fa-solid fa-copy text-2xl text-zinc-400 mb-1"></i>
+                    <span class="text-[10px] text-zinc-500">Copy</span>
+                </button>
+            </div>
+            
+            <button id="btn-close-share" class="text-zinc-500 hover:text-zinc-300 text-xs">Maybe later</button>
+        </div>
+    `;
+    
+    openModal(modalContent, 'max-w-xs');
+    
+    const trackShare = async (platform) => {
+        if (!State.userAddress || !Game.gameId) return;
+        try {
+            await fetch('https://us-central1-backchain-backand.cloudfunctions.net/trackShare', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    address: State.userAddress,
+                    gameId: Game.gameId,
+                    type: 'fortune',
+                    platform
+                })
+            });
+            showToast(`🎉 +${SHARE_POINTS} Points!`, 'success');
+        } catch (e) {
+            console.error('Share tracking error:', e);
+        }
+    };
+    
+    document.getElementById('share-twitter')?.addEventListener('click', () => {
+        trackShare('twitter');
+        window.open(`https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}`, '_blank');
+        closeModal();
+    });
+    
+    document.getElementById('share-telegram')?.addEventListener('click', () => {
+        trackShare('telegram');
+        window.open(`https://t.me/share/url?url=https://backcoin.org&text=${encodeURIComponent(text)}`, '_blank');
+        closeModal();
+    });
+    
+    document.getElementById('share-whatsapp')?.addEventListener('click', () => {
+        trackShare('whatsapp');
+        window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
+        closeModal();
+    });
+    
+    document.getElementById('share-copy')?.addEventListener('click', async () => {
+        try {
+            await navigator.clipboard.writeText(text);
+            showToast('📋 Copied!', 'success');
+            trackShare('copy');
+        } catch {
+            showToast('Copy failed', 'error');
+        }
+        closeModal();
+    });
+    
+    document.getElementById('btn-close-share')?.addEventListener('click', closeModal);
 }
 
 // ============================================================================
-// HELPERS
+// DATA LOADING
 // ============================================================================
 async function getFortunePoolStatus() {
-    const contract = State.actionsManagerContractPublic || State.actionsManagerContract;
+    const contract = State.fortunePoolContract || State.fortunePoolContractPublic;
     if (!contract) {
         console.log("No fortune contract available");
         return null;
     }
 
     try {
-        // Nomes corretos do contrato: prizePoolBalance e gameCounter
-        const [prizePool, gameCount] = await Promise.all([
+        // V2: Get all data including service fees and tiers
+        const [prizePool, gameCount, serviceFee, fee1x, fee5x, tierCount] = await Promise.all([
             contract.prizePoolBalance().catch(() => 0n),
-            contract.gameCounter().catch(() => 0)
+            contract.gameCounter().catch(() => 0),
+            contract.serviceFee().catch(() => 0n),
+            contract.getRequiredServiceFee(false).catch(() => 0n), // 1x mode
+            contract.getRequiredServiceFee(true).catch(() => 0n),  // 5x mode
+            contract.activeTierCount().catch(() => 3)
         ]);
         
-        console.log("Fortune Pool Status:", {
-            prizePool: prizePool?.toString(),
-            gameCount: gameCount?.toString()
-        });
+        // Store service fees in Game state
+        Game.serviceFee = serviceFee || 0n;
+        Game.serviceFee1x = fee1x || 0n;
+        Game.serviceFee5x = fee5x || 0n;
+        
+        // Try to get tier data
+        try {
+            const [ranges, multipliers] = await contract.getAllTiers();
+            Game.tiersData = ranges.map((range, i) => ({
+                range: Number(range),
+                multiplier: Number(multipliers[i]) / 10000 // Convert from bips
+            }));
+            console.log("Tiers from contract:", Game.tiersData);
+        } catch (e) {
+            console.log("Using default tiers");
+        }
         
         return {
             prizePool: prizePool || 0n,
-            gameCounter: Number(gameCount) || 0
+            gameCounter: Number(gameCount) || 0,
+            serviceFee: serviceFee || 0n,
+            serviceFee1x: fee1x || 0n,
+            serviceFee5x: fee5x || 0n,
+            tierCount: Number(tierCount) || 3
         };
     } catch (e) {
         console.error("getFortunePoolStatus error:", e);
-        return { prizePool: 0n, gameCounter: 0 };
+        return { prizePool: 0n, gameCounter: 0, serviceFee: 0n };
     }
-}
-
-async function getGameResult(gameId) {
-    const contract = State.actionsManagerContractPublic || State.actionsManagerContract;
-    if (!contract) return null;
-
-    try {
-        const isFulfilled = await contract.isGameFulfilled(gameId);
-        
-        if (!isFulfilled) {
-            return { fulfilled: false, pending: true };
-        }
-
-        const results = await contract.getGameResults(gameId);
-        
-        return {
-            fulfilled: true,
-            isComplete: true,
-            pending: false,
-            rolls: results.map(r => Number(r)),
-            results: results.map(r => Number(r)),
-            randomNumbers: results.map(r => Number(r))
-        };
-
-    } catch (e) {
-        return null;
-    }
-}
-
-async function pollResult(gameId, attempts = 0) {
-    if (attempts > 20) { showToast('Check history later', 'warning'); Game.phase = 'select'; return renderPhase(); }
-    try {
-        const result = await getGameResult(gameId);
-        if (result?.isComplete) { Game.result = result; Game.phase = 'result'; renderPhase(); loadPoolData(); }
-        else setTimeout(() => pollResult(gameId, attempts + 1), 3000);
-    } catch { setTimeout(() => pollResult(gameId, attempts + 1), 3000); }
 }
 
 async function loadPoolData() {
@@ -1459,10 +1240,14 @@ async function loadPoolData() {
             if (poolEl) poolEl.textContent = formatBigNumber(status.prizePool || 0n).toFixed(2) + ' BKC';
             if (gamesEl) gamesEl.textContent = (status.gameCounter || 0).toLocaleString();
         }
+        
         const balanceEl = document.getElementById('user-balance');
         if (balanceEl) balanceEl.textContent = formatBigNumber(State.currentUserBalance || 0n).toFixed(2) + ' BKC';
+        
         loadHistory();
-    } catch (e) { console.error('Pool error:', e); }
+    } catch (e) { 
+        console.error('Pool error:', e); 
+    }
 }
 
 async function loadHistory() {
@@ -1472,10 +1257,7 @@ async function loadHistory() {
         const res = await fetch(url);
         const data = await res.json();
         
-        console.log("Fortune History API response:", data);
-        
         if (data.games?.length > 0) {
-            console.log("First game data:", JSON.stringify(data.games[0], null, 2));
             renderHistoryList(data.games);
             const wins = data.games.filter(g => g.isWin || (g.prizeWon && BigInt(g.prizeWon) > 0n)).length;
             const el = document.getElementById('win-rate');
@@ -1499,362 +1281,73 @@ function renderHistoryList(games) {
     const list = document.getElementById('history-list');
     if (!list) return;
     
-    list.innerHTML = games.map(g => {
-        const isWin = g.isWin || (g.prizeWon && BigInt(g.prizeWon) > 0n);
-        const prize = g.prizeWon ? formatBigNumber(BigInt(g.prizeWon)) : 0;
-        const wager = g.wagerAmount ? formatBigNumber(BigInt(g.wagerAmount)) : 0;
+    list.innerHTML = games.map(game => {
+        const isWin = game.isWin || (game.prizeWon && BigInt(game.prizeWon) > 0n);
+        const prize = game.prizeWon ? formatBigNumber(BigInt(game.prizeWon)) : 0;
+        const wager = game.wagerAmount ? formatBigNumber(BigInt(game.wagerAmount)) : 0;
+        const isCumulative = game.isCumulative;
+        const rolls = game.rolls || [];
+        const guesses = game.guesses || [];
         
-        // Formatar data - usar requestedAt
-        let time = '';
-        const timestamp = g.requestedAt || g.timestamp;
-        if (timestamp) {
-            try {
-                const ts = timestamp._seconds || timestamp.seconds || timestamp;
-                const date = new Date(typeof ts === 'number' ? ts * 1000 : ts);
-                if (!isNaN(date.getTime())) {
-                    time = date.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
-                }
-            } catch (e) { }
-        }
-        
-        // Números apostados - garantir que são números
-        let guesses = [];
-        if (Array.isArray(g.guesses) && g.guesses.length > 0) {
-            guesses = g.guesses.map(n => Number(n));
-        }
-        
-        // Números do oráculo (resultado)
-        let rolls = [];
-        if (Array.isArray(g.rolls) && g.rolls.length > 0) {
-            rolls = g.rolls.map(n => Number(n));
-        }
-        
-        // Status do jogo
-        const isPending = g.status === 'PENDING' || !g.rolls;
-        const statusLabel = isPending ? '⏳ Pending' : (isWin ? '🏆 Winner!' : 'Played');
-        const statusClass = isPending ? 'text-amber-400' : (isWin ? 'text-emerald-400' : 'text-white');
-        
-        // Formatar para exibição
-        const guessesStr = guesses.length > 0 ? guesses.join(' • ') : '';
-        const rollsStr = rolls.length > 0 ? rolls.join(' • ') : '';
+        const timeAgo = getTimeAgo(game.timestamp);
+        const shortAddr = game.player ? `${game.player.slice(0,6)}...${game.player.slice(-4)}` : '???';
+        const isMe = State.userAddress && game.player?.toLowerCase() === State.userAddress.toLowerCase();
         
         return `
-            <a href="${g.txHash ? EXPLORER_TX + g.txHash : '#'}" target="_blank" class="history-item flex items-center justify-between p-3 hover:bg-zinc-800/60 border border-zinc-700/30 rounded-lg transition-all group mb-1.5 bg-zinc-800/20">
-                <div class="flex items-center gap-3">
-                    <div class="w-10 h-10 rounded-lg flex items-center justify-center ${isWin ? 'bg-emerald-500/20' : isPending ? 'bg-amber-500/20' : 'bg-zinc-700/50'}">
-                        <span class="text-lg">${isPending ? '⏳' : (isWin ? '🏆' : '🐯')}</span>
+            <div class="p-3 rounded-xl mb-2 ${isWin ? 'bg-emerald-500/10 border border-emerald-500/30' : 'bg-zinc-800/30 border border-zinc-700/30'} transition-all hover:scale-[1.01]">
+                <div class="flex items-center justify-between mb-2">
+                    <div class="flex items-center gap-2">
+                        <span class="text-lg">${isWin ? '🏆' : '🎲'}</span>
+                        <span class="text-xs ${isMe ? 'text-amber-400 font-bold' : 'text-zinc-500'}">${isMe ? 'You' : shortAddr}</span>
+                        <span class="text-[10px] px-2 py-0.5 rounded-full ${isCumulative ? 'bg-violet-500/20 text-violet-400' : 'bg-amber-500/20 text-amber-400'}">${isCumulative ? 'Combo' : 'Jackpot'}</span>
                     </div>
-                    <div>
-                        <p class="text-xs font-medium flex items-center gap-2">
-                            <span class="${statusClass}">${statusLabel}</span>
-                            ${guessesStr ? `<span class="px-1.5 py-0.5 rounded text-[10px] font-bold" style="background: rgba(249,115,22,0.2); color: #f97316">🎯 ${guessesStr}</span>` : ''}
-                        </p>
-                        <div class="flex items-center gap-2 mt-0.5">
-                            <p class="text-zinc-600 text-[10px]">${time || 'Recent'}</p>
-                            ${rollsStr ? `<span class="text-[10px] text-fuchsia-400">🔮 ${rollsStr}</span>` : ''}
-                        </div>
+                    <span class="text-[10px] text-zinc-600">${timeAgo}</span>
+                </div>
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center gap-2">
+                        <span class="text-xs text-zinc-500">Bet: ${wager.toFixed(0)}</span>
+                        <span class="text-zinc-700">→</span>
+                        <span class="text-xs ${isWin ? 'text-emerald-400 font-bold' : 'text-zinc-500'}">
+                            ${isWin ? `+${prize.toFixed(0)} BKC` : 'No win'}
+                        </span>
+                    </div>
+                    <div class="flex gap-1">
+                        ${(isCumulative ? TIERS : [TIERS[2]]).map((tier, i) => {
+                            const guess = guesses[i];
+                            const roll = rolls[i];
+                            const match = guess !== undefined && roll !== undefined && Number(guess) === Number(roll);
+                            return `
+                                <div class="w-6 h-6 rounded text-[10px] font-bold flex items-center justify-center ${match ? 'bg-emerald-500/30 text-emerald-400' : 'bg-zinc-700/50 text-zinc-500'}">
+                                    ${roll ?? '?'}
+                                </div>
+                            `;
+                        }).join('')}
                     </div>
                 </div>
-                <div class="flex items-center gap-2">
-                    <span class="text-xs font-mono font-bold ${isWin ? 'text-emerald-400' : 'text-zinc-400'}">${isWin ? '+' + prize.toFixed(2) : '-' + wager.toFixed(2)} BKC</span>
-                    <i class="fa-solid fa-arrow-up-right-from-square text-zinc-600 group-hover:text-blue-400 text-[9px]"></i>
-                </div>
-            </a>
+            </div>
         `;
     }).join('');
 }
 
-export function cleanup() {
-    // Clear any running spin intervals
-    Game.spinIntervals.forEach(id => clearInterval(id));
-    Game.spinIntervals = [];
+function getTimeAgo(timestamp) {
+    if (!timestamp) return '';
     
-    // ✅ V13.1: Resetar estado ao sair da página
-    Game.phase = 'select';
-    Game.result = null;
-    Game.mode = null;
-    Game.comboStep = 0;
-    Game.wager = 10;
-    Game.guess = 50;
-    Game.guesses = [2, 5, 50];
+    const now = Date.now();
+    const time = typeof timestamp === 'number' ? timestamp * 1000 : new Date(timestamp).getTime();
+    const diff = now - time;
+    
+    const minutes = Math.floor(diff / 60000);
+    const hours = Math.floor(diff / 3600000);
+    const days = Math.floor(diff / 86400000);
+    
+    if (minutes < 1) return 'Just now';
+    if (minutes < 60) return `${minutes}m ago`;
+    if (hours < 24) return `${hours}h ago`;
+    return `${days}d ago`;
 }
 
-// ✅ V13.7: Modal com mudança completa de idioma
-async function showShareModal(isWin, prize, multiplier) {
-    const currentGameId = Game.gameId?.toString() || `game_${Date.now()}`;
-    
-    // Textos do modal em cada idioma
-    const MODAL_UI = {
-        pt: {
-            title: 'Compartilhe e Ganhe!',
-            subtitle: '+1000 Pontos no Airdrop',
-            twitter: 'Twitter',
-            telegram: 'Telegram', 
-            instagram: 'Instagram',
-            whatsapp: 'WhatsApp',
-            later: 'Talvez Depois'
-        },
-        en: {
-            title: 'Share & Earn!',
-            subtitle: '+1000 Airdrop Points',
-            twitter: 'Twitter',
-            telegram: 'Telegram',
-            instagram: 'Instagram', 
-            whatsapp: 'WhatsApp',
-            later: 'Maybe Later'
-        },
-        es: {
-            title: '¡Comparte y Gana!',
-            subtitle: '+1000 Puntos de Airdrop',
-            twitter: 'Twitter',
-            telegram: 'Telegram',
-            instagram: 'Instagram',
-            whatsapp: 'WhatsApp',
-            later: 'Quizás Después'
-        }
-    };
-    
-    // Textos de compartilhamento
-    const SHARE_TEXTS = {
-        pt: {
-            twitter: `🚀 Conhece a @backcoin?
-
-Cripto com utilidade REAL:
-🎰 Games on-chain
-📜 Notarização de docs
-🏠 NFTs com função
-
-35% via Airdrop! 💎
-
-👉 backcoin.org
-
-#Backcoin #Web3 #Airdrop #Arbitrum`,
-            
-            full: `🚀 Já conhece a Backcoin?
-
-Um ecossistema cripto com utilidade REAL que conecta o mundo digital ao mundo real!
-
-✨ 35% dos tokens distribuídos via Airdrop
-🎰 Games on-chain que pagam de verdade
-📜 Notarização descentralizada de documentos
-🏠 NFTs com utilidade real
-💎 Feito PARA a comunidade, PELA comunidade
-
-Não é promessa. É realidade acontecendo AGORA!
-
-Faça parte da revolução 👉 https://backcoin.org
-
-@backcoin`
-        },
-        en: {
-            twitter: `🚀 Have you heard of @backcoin?
-
-Crypto with REAL utility:
-🎰 On-chain games
-📜 Document notarization
-🏠 Functional NFTs
-
-35% via Airdrop! 💎
-
-👉 backcoin.org
-
-#Backcoin #Web3 #Airdrop #Arbitrum`,
-            
-            full: `🚀 Have you heard of Backcoin?
-
-A crypto ecosystem with REAL utility connecting digital to real world!
-
-✨ 35% of tokens distributed via Airdrop
-🎰 On-chain games that actually pay
-📜 Decentralized document notarization
-🏠 NFTs with real utility
-💎 Made FOR the community, BY the community
-
-Not promises. Reality happening NOW!
-
-Join the revolution 👉 https://backcoin.org
-
-@backcoin`
-        },
-        es: {
-            twitter: `🚀 ¿Conoces @backcoin?
-
-Cripto con utilidad REAL:
-🎰 Juegos on-chain
-📜 Notarización de docs
-🏠 NFTs funcionales
-
-35% vía Airdrop! 💎
-
-👉 backcoin.org
-
-#Backcoin #Web3 #Airdrop #Arbitrum`,
-            
-            full: `🚀 ¿Conoces Backcoin?
-
-¡Un ecosistema cripto con utilidad REAL que conecta el mundo digital al mundo real!
-
-✨ 35% de tokens distribuidos vía Airdrop
-🎰 Juegos on-chain que pagan de verdad
-📜 Notarización descentralizada de documentos
-🏠 NFTs con utilidad real
-💎 Hecho PARA la comunidad, POR la comunidad
-
-No son promesas. ¡Es realidad ahora!
-
-Únete 👉 https://backcoin.org
-
-@backcoin`
-        }
-    };
-    
-    let currentLang = 'pt';
-    
-    // Função para atualizar todo o modal
-    const updateModalLanguage = (lang) => {
-        currentLang = lang;
-        const ui = MODAL_UI[lang];
-        
-        // Atualizar textos
-        const titleEl = document.getElementById('share-modal-title');
-        const subtitleEl = document.getElementById('share-modal-subtitle');
-        const laterEl = document.getElementById('btn-close-share');
-        
-        if (titleEl) titleEl.textContent = ui.title;
-        if (subtitleEl) subtitleEl.textContent = ui.subtitle;
-        if (laterEl) laterEl.textContent = ui.later;
-        
-        // Atualizar visual das bandeiras
-        document.querySelectorAll('.lang-btn').forEach(b => {
-            b.classList.toggle('border-amber-500', b.dataset.lang === lang);
-            b.classList.toggle('border-transparent', b.dataset.lang !== lang);
-        });
-    };
-    
-    const modalContent = `
-        <div class="text-center">
-            <!-- Header -->
-            <img src="./assets/fortune.png" class="w-16 h-16 mx-auto mb-2" alt="Backcoin" onerror="this.style.display='none'">
-            <h3 id="share-modal-title" class="text-lg font-bold text-white">${MODAL_UI.pt.title}</h3>
-            <p id="share-modal-subtitle" class="text-amber-400 text-sm font-medium mb-4">${MODAL_UI.pt.subtitle}</p>
-            
-            <!-- Language Selector -->
-            <div class="flex justify-center gap-3 mb-4">
-                <button class="lang-btn p-1 rounded-full border-2 border-amber-500 transition-all" data-lang="pt" title="Português">
-                    <img src="./assets/pt.png" class="w-8 h-8 rounded-full" alt="PT" onerror="this.parentElement.innerHTML='🇵🇹'">
-                </button>
-                <button class="lang-btn p-1 rounded-full border-2 border-transparent hover:border-zinc-500 transition-all" data-lang="en" title="English">
-                    <img src="./assets/en.png" class="w-8 h-8 rounded-full" alt="EN" onerror="this.parentElement.innerHTML='🇺🇸'">
-                </button>
-                <button class="lang-btn p-1 rounded-full border-2 border-transparent hover:border-zinc-500 transition-all" data-lang="es" title="Español">
-                    <img src="./assets/es.png" class="w-8 h-8 rounded-full" alt="ES" onerror="this.parentElement.innerHTML='🇪🇸'">
-                </button>
-            </div>
-            
-            <!-- Social Buttons -->
-            <div class="grid grid-cols-4 gap-3 mb-4">
-                <button id="share-twitter" class="share-btn flex flex-col items-center justify-center p-4 bg-zinc-800/80 hover:bg-zinc-700 border border-zinc-700 hover:border-zinc-500 rounded-xl transition-all">
-                    <i class="fa-brands fa-x-twitter text-2xl text-white mb-1"></i>
-                    <span class="text-[10px] text-zinc-500">Twitter</span>
-                </button>
-                <button id="share-telegram" class="share-btn flex flex-col items-center justify-center p-4 bg-zinc-800/80 hover:bg-[#0088cc]/20 border border-zinc-700 hover:border-[#0088cc]/50 rounded-xl transition-all">
-                    <i class="fa-brands fa-telegram text-2xl text-[#0088cc] mb-1"></i>
-                    <span class="text-[10px] text-zinc-500">Telegram</span>
-                </button>
-                <button id="share-instagram" class="share-btn flex flex-col items-center justify-center p-4 bg-zinc-800/80 hover:bg-[#E4405F]/20 border border-zinc-700 hover:border-[#E4405F]/50 rounded-xl transition-all">
-                    <i class="fa-brands fa-instagram text-2xl text-[#E4405F] mb-1"></i>
-                    <span class="text-[10px] text-zinc-500">Instagram</span>
-                </button>
-                <button id="share-whatsapp" class="share-btn flex flex-col items-center justify-center p-4 bg-zinc-800/80 hover:bg-[#25D366]/20 border border-zinc-700 hover:border-[#25D366]/50 rounded-xl transition-all">
-                    <i class="fa-brands fa-whatsapp text-2xl text-[#25D366] mb-1"></i>
-                    <span class="text-[10px] text-zinc-500">WhatsApp</span>
-                </button>
-            </div>
-            
-            <!-- Close -->
-            <button id="btn-close-share" class="text-zinc-500 hover:text-zinc-300 text-xs transition-colors">
-                ${MODAL_UI.pt.later}
-            </button>
-        </div>
-    `;
-    
-    openModal(modalContent, 'max-w-xs');
-    
-    // Language buttons - atualiza TODO o modal
-    document.querySelectorAll('.lang-btn').forEach(btn => {
-        btn.addEventListener('click', () => {
-            updateModalLanguage(btn.dataset.lang);
-        });
-    });
-    
-    // Close button
-    document.getElementById('btn-close-share')?.addEventListener('click', closeModal);
-    
-    // Track share via Firebase API
-    const trackShareOnServer = async (platform) => {
-        if (!State.userAddress) return false;
-        
-        try {
-            const response = await fetch(`https://us-central1-backchain-backand.cloudfunctions.net/trackShare`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    address: State.userAddress,
-                    gameId: currentGameId,
-                    type: 'fortune',
-                    platform: platform
-                })
-            });
-            
-            const data = await response.json();
-            
-            if (data.success) {
-                showToast(`🎉 +${data.pointsAwarded} Points!`, 'success');
-                return true;
-            } else if (data.reason === 'already_shared') {
-                console.log('Already shared this game');
-                return false;
-            }
-            return false;
-        } catch (e) {
-            console.error('Share tracking error:', e);
-            return false;
-        }
-    };
-    
-    // Share handlers
-    const shareAndTrack = async (platform, url) => {
-        await trackShareOnServer(platform);
-        window.open(url, '_blank');
-        closeModal();
-    };
-    
-    document.getElementById('share-twitter')?.addEventListener('click', () => {
-        const text = SHARE_TEXTS[currentLang].twitter;
-        shareAndTrack('twitter', `https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}`);
-    });
-    
-    document.getElementById('share-telegram')?.addEventListener('click', () => {
-        const text = SHARE_TEXTS[currentLang].full;
-        shareAndTrack('telegram', `https://t.me/share/url?url=https://backcoin.org&text=${encodeURIComponent(text)}`);
-    });
-    
-    document.getElementById('share-instagram')?.addEventListener('click', async () => {
-        const text = SHARE_TEXTS[currentLang].full;
-        try {
-            await navigator.clipboard.writeText(text);
-            showToast('📋 Text copied!', 'success');
-        } catch (e) {}
-        await trackShareOnServer('instagram');
-        window.open('https://instagram.com/backcoin.bkc', '_blank');
-        closeModal();
-    });
-    
-    document.getElementById('share-whatsapp')?.addEventListener('click', () => {
-        const text = SHARE_TEXTS[currentLang].full;
-        shareAndTrack('whatsapp', `https://wa.me/?text=${encodeURIComponent(text)}`);
-    });
-}
-
+// ============================================================================
+// EXPORTS
+// ============================================================================
 export const FortunePoolPage = { render, cleanup };
 export default { render, cleanup };

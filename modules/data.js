@@ -1,5 +1,5 @@
 // js/modules/data.js
-// ✅ PRODUCTION V7.0
+// ✅ PRODUCTION V7.1 - FortunePool V2 Support (Instant Resolution)
 
 const ethers = window.ethers;
 
@@ -118,7 +118,10 @@ export const safeContractCall = async (
         'getAllListedTokenIds', 'tokenURI', 'boostBips', 'getListing',
         'balanceOf', 'totalSupply', 'totalNetworkPStake', 'MAX_SUPPLY', 'TGE_SUPPLY',
         'userTotalPStake', 'pendingRewards', 'isRented', 'getRental', 'ownerOf',
-        'getDelegationsOf', 'allowance', 'prizeTiers', 'activeTierCount', 'prizePoolBalance'
+        'getDelegationsOf', 'allowance', 'prizeTiers', 'activeTierCount', 'prizePoolBalance',
+        // V2 FortunePool methods
+        'serviceFee', 'getRequiredServiceFee', 'getAllTiers', 'getTier', 'gameCounter',
+        'getPoolStats', 'getExpectedGuessCount'
     ];
 
     if (!forceRefresh && cacheableMethods.includes(method)) {
@@ -842,11 +845,13 @@ export async function forceRefreshUserData() {
 }
 
 // ====================================================================
-// 9. FORTUNE POOL DATA
+// 9. FORTUNE POOL DATA (V2 - Instant Resolution)
 // ====================================================================
 
 export async function loadFortunePoolData(forceRefresh = false) {
-    const contract = State.actionsManagerContractPublic || State.actionsManagerContract;
+    // V2: Use fortunePoolContract if available, fallback to actionsManager
+    const contract = State.fortunePoolContract || State.fortunePoolContractPublic || 
+                     State.actionsManagerContractPublic || State.actionsManagerContract;
     
     if (!contract) {
         State.fortunePool = { 
@@ -854,13 +859,16 @@ export async function loadFortunePoolData(forceRefresh = false) {
             activeTiers: 0, 
             prizePool: 0n,
             tiers: [],
+            serviceFee1x: 0n,
+            serviceFee5x: 0n,
+            // Backwards compatibility
             oracleFee1x: 0n,
             oracleFee5x: 0n
         };
         return State.fortunePool;
     }
 
-    const cacheKey = 'fortunePool-status';
+    const cacheKey = 'fortunePool-status-v2';
     const now = Date.now();
 
     if (!forceRefresh && contractReadCache.has(cacheKey)) {
@@ -882,39 +890,69 @@ export async function loadFortunePoolData(forceRefresh = false) {
         const pool = prizePool.status === 'fulfilled' ? BigInt(prizePool.value.toString()) : 0n;
         const games = Number(gameCounter.status === 'fulfilled' ? gameCounter.value : 0n);
 
-        let oracleFee1x = ethers.parseEther("0.001");
-        let oracleFee5x = ethers.parseEther("0.005");
+        // V2: Try serviceFee first, fallback to oracleFee for backwards compatibility
+        let serviceFee1x = 0n;
+        let serviceFee5x = 0n;
         
         try {
+            // Try V2 method first (getRequiredServiceFee)
             const [fee1x, fee5x] = await Promise.all([
-                contract.getRequiredOracleFee(false),
-                contract.getRequiredOracleFee(true)
+                contract.getRequiredServiceFee(false).catch(() => null),
+                contract.getRequiredServiceFee(true).catch(() => null)
             ]);
-            oracleFee1x = BigInt(fee1x.toString());
-            oracleFee5x = BigInt(fee5x.toString());
+            
+            if (fee1x !== null && fee5x !== null) {
+                serviceFee1x = BigInt(fee1x.toString());
+                serviceFee5x = BigInt(fee5x.toString());
+            } else {
+                // Fallback to V1 method (getRequiredOracleFee)
+                const [oFee1x, oFee5x] = await Promise.all([
+                    contract.getRequiredOracleFee(false),
+                    contract.getRequiredOracleFee(true)
+                ]);
+                serviceFee1x = BigInt(oFee1x.toString());
+                serviceFee5x = BigInt(oFee5x.toString());
+            }
         } catch (e) {
+            // Ultimate fallback: read base fee and multiply
             try {
-                const baseFee = await contract.oracleFee();
-                oracleFee1x = BigInt(baseFee.toString());
-                oracleFee5x = oracleFee1x * 5n;
-            } catch {}
+                const baseFee = await contract.serviceFee().catch(() => contract.oracleFee());
+                serviceFee1x = BigInt(baseFee.toString());
+                serviceFee5x = serviceFee1x * 5n;
+            } catch {
+                // Use defaults if all else fails
+                serviceFee1x = ethers.parseEther("0.001");
+                serviceFee5x = ethers.parseEther("0.005");
+            }
         }
 
-        // CORREÇÃO: prizeTiers começa em índice 1, não 0
-        const tiers = [];
-        for (let i = 1; i <= Math.min(tierCount, 10); i++) {
-            try {
-                const tier = await safeContractCall(contract, 'prizeTiers', [i], null);
-                if (tier && tier.active !== false) {
-                    tiers.push({
-                        tierId: i,
-                        maxRange: Number(tier.maxRange || tier[0]),
-                        multiplierBips: Number(tier.multiplierBips || tier[1]),
-                        multiplier: Number(tier.multiplierBips || tier[1]) / 10000,
-                        active: tier.active ?? tier[2] ?? true
-                    });
-                }
-            } catch {}
+        // V2: Try getAllTiers first for efficiency
+        let tiers = [];
+        try {
+            const [ranges, multipliers] = await contract.getAllTiers();
+            tiers = ranges.map((range, i) => ({
+                tierId: i + 1,
+                maxRange: Number(range),
+                multiplierBips: Number(multipliers[i]),
+                multiplier: Number(multipliers[i]) / 10000,
+                active: true
+            }));
+        } catch {
+            // Fallback: read tiers individually (V1 style)
+            for (let i = 1; i <= Math.min(tierCount, 10); i++) {
+                try {
+                    const tier = await safeContractCall(contract, 'prizeTiers', [i], null);
+                    if (tier && tier.active !== false) {
+                        tiers.push({
+                            tierId: i,
+                            maxRange: Number(tier.maxRange || tier[0]),
+                            multiplierBips: Number(tier.multiplierBips || tier[1]),
+                            multiplier: Number(tier.multiplierBips || tier[1]) / 10000,
+                            active: tier.active ?? tier[2] ?? true
+                        });
+                    }
+                } catch {}
+            }
         }
 
         const fortuneData = {
@@ -922,8 +960,12 @@ export async function loadFortunePoolData(forceRefresh = false) {
             activeTiers: tierCount,
             prizePool: pool,
             gameCounter: games,
-            oracleFee1x,
-            oracleFee5x,
+            // V2 naming
+            serviceFee1x,
+            serviceFee5x,
+            // Backwards compatibility
+            oracleFee1x: serviceFee1x,
+            oracleFee5x: serviceFee5x,
             tiers
         };
 
@@ -933,11 +975,14 @@ export async function loadFortunePoolData(forceRefresh = false) {
         return fortuneData;
 
     } catch (e) {
+        console.error("loadFortunePoolData error:", e);
         State.fortunePool = { 
             active: false, 
             activeTiers: 0, 
             prizePool: 0n,
             tiers: [],
+            serviceFee1x: ethers.parseEther("0.001"),
+            serviceFee5x: ethers.parseEther("0.005"),
             oracleFee1x: ethers.parseEther("0.001"),
             oracleFee5x: ethers.parseEther("0.005")
         };
@@ -948,12 +993,23 @@ export async function loadFortunePoolData(forceRefresh = false) {
 export async function loadUserFortuneHistory(userAddress, limit = 20) {
     if (!userAddress) return [];
 
-    const contract = State.actionsManagerContractPublic || State.actionsManagerContract;
+    const contract = State.fortunePoolContract || State.fortunePoolContractPublic ||
+                     State.actionsManagerContractPublic || State.actionsManagerContract;
     if (!contract) return [];
 
     try {
-        const filter = contract.filters.GameFulfilled(null, userAddress);
-        const events = await contract.queryFilter(filter, -10000);
+        // V2: Try GamePlayed event first (instant resolution)
+        let events = [];
+        try {
+            const filterV2 = contract.filters.GamePlayed(null, userAddress);
+            events = await contract.queryFilter(filterV2, -10000);
+        } catch {
+            // Fallback to V1 event (GameFulfilled)
+            try {
+                const filterV1 = contract.filters.GameFulfilled(null, userAddress);
+                events = await contract.queryFilter(filterV1, -10000);
+            } catch {}
+        }
 
         const games = events.slice(-limit).reverse().map(event => {
             const args = event.args;
@@ -961,9 +1017,11 @@ export async function loadUserFortuneHistory(userAddress, limit = 20) {
                 gameId: Number(args.gameId),
                 player: args.player,
                 prizeWon: BigInt(args.prizeWon?.toString() || '0'),
+                wagerAmount: BigInt(args.wagerAmount?.toString() || '0'),
                 rolls: args.rolls?.map(r => Number(r)) || [],
                 guesses: args.guesses?.map(g => Number(g)) || [],
                 isCumulative: args.isCumulative,
+                matchCount: Number(args.matchCount || 0),
                 txHash: event.transactionHash,
                 blockNumber: event.blockNumber,
                 won: BigInt(args.prizeWon?.toString() || '0') > 0n
@@ -974,6 +1032,7 @@ export async function loadUserFortuneHistory(userAddress, limit = 20) {
         return games;
 
     } catch (e) {
+        console.error("loadUserFortuneHistory error:", e);
         return [];
     }
 }

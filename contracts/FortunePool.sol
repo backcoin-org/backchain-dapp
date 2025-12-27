@@ -11,27 +11,44 @@ import "./IInterfaces.sol";
 import "./BKCToken.sol";
 
 /**
+ * @title IBackchainRandomness
+ * @notice Interface for Backchain Randomness Oracle (Stylus contract)
+ * @dev The oracle is FREE to use - no fees required for random number generation
+ */
+interface IBackchainRandomness {
+    /// @notice Get a single random number in range [min, max] inclusive
+    function getRandom(uint256 min, uint256 max) external returns (uint256);
+    
+    /// @notice Get multiple random numbers with different ranges
+    function getRandoms(uint256[] calldata mins, uint256[] calldata maxs) external returns (uint256[] memory);
+}
+
+/**
  * @title Fortune Pool
  * @author Backchain Protocol
  * @notice Strategic prediction game powered by Backcoin ($BKC)
- * @dev Implements two game modes with oracle-based randomness:
+ * @dev Uses Backchain Randomness Oracle for INSTANT on-chain resolution
  *
- *      MODE 1x (Jackpot Mode):
- *      - Player competes ONLY for the highest tier (hardest, biggest prize)
- *      - Requires 1 guess for the jackpot tier
- *      - Lower oracle fee (1x)
- *      - Winner takes the highest multiplier
+ *      ╔═══════════════════════════════════════════════════════════════════╗
+ *      ║                    GAME MODES                                      ║
+ *      ╠═══════════════════════════════════════════════════════════════════╣
+ *      ║  MODE 1x (Jackpot Mode):                                          ║
+ *      ║  - Player competes ONLY for the highest tier (hardest, best prize)║
+ *      ║  - Requires 1 guess for the jackpot tier                          ║
+ *      ║  - Pays 1x service fee                                            ║
+ *      ║  - Winner takes the highest multiplier                            ║
+ *      ╠═══════════════════════════════════════════════════════════════════╣
+ *      ║  MODE 5x (Cumulative Mode):                                       ║
+ *      ║  - Player competes for ALL active tiers simultaneously            ║
+ *      ║  - Requires N guesses (one per active tier)                       ║
+ *      ║  - Pays 5x service fee (one per tier)                             ║
+ *      ║  - All matching tiers pay out (cumulative rewards)                ║
+ *      ╚═══════════════════════════════════════════════════════════════════╝
  *
- *      MODE 5x (Cumulative Mode):
- *      - Player competes for ALL active tiers
- *      - Requires N guesses (one per tier)
- *      - Higher oracle fee (5x)
- *      - All matching tiers pay out (cumulative rewards)
- *
- *      Tier Structure (recommended):
- *      - Tier 1: Easy (e.g., 1-3 range, 2x multiplier)
- *      - Tier 2: Medium (e.g., 1-10 range, 5x multiplier)
- *      - Tier 3: Hard/Jackpot (e.g., 1-100 range, 100x multiplier)
+ *      Tier Structure (default):
+ *      - Tier 1: Easy   (1-3 range,   2x multiplier,  ~33% chance)
+ *      - Tier 2: Medium (1-10 range,  5x multiplier,  ~10% chance)
+ *      - Tier 3: Hard   (1-100 range, 50x multiplier, ~1% chance)
  *
  * @custom:security-contact security@backcoin.org
  * @custom:website https://backcoin.org
@@ -61,6 +78,9 @@ contract FortunePool is
     /// @notice Service key for MiningManager authorization
     bytes32 public constant SERVICE_KEY = keccak256("FORTUNE_POOL_SERVICE");
 
+    /// @notice Service fee multiplier for cumulative mode
+    uint256 public constant CUMULATIVE_FEE_MULTIPLIER = 5;
+
     // =========================================================================
     //                              STATE
     // =========================================================================
@@ -74,51 +94,61 @@ contract FortunePool is
     /// @notice Reference to delegation manager for staking integration
     IDelegationManager public delegationManager;
 
-    /// @notice Address authorized to fulfill games
-    address public oracleAddress;
+    /// @notice Backchain Randomness Oracle (Stylus contract)
+    IBackchainRandomness public randomnessOracle;
 
     /// @notice Address of the mining manager for fee distribution
     address public miningManagerAddress;
 
-    /// @notice Native fee (ETH/MATIC) required per oracle call
-    uint256 public oracleFee;
+    /// @notice Native fee (ETH) required per game (for project funding)
+    /// @dev This is NOT an oracle fee - the oracle is free. This funds the project.
+    uint256 public serviceFee;
 
-    /// @notice Game fee in basis points (deducted from wager)
+    /// @notice Game fee in basis points (deducted from wager, goes to mining)
     uint256 public gameFeeBips;
 
-    /// @notice Total games created
+    /// @notice Total games played
     uint256 public gameCounter;
 
-    /// @notice Current prize pool balance
+    /// @notice Current prize pool balance (in BKC)
     uint256 public prizePoolBalance;
 
     /// @notice Number of active prize tiers
     uint256 public activeTierCount;
 
+    /// @notice Total wagered all time
+    uint256 public totalWageredAllTime;
+
+    /// @notice Total paid out all time
+    uint256 public totalPaidOutAllTime;
+
+    /// @notice Total wins all time
+    uint256 public totalWinsAllTime;
+
     /// @notice Prize tier configuration
     struct PrizeTier {
         uint128 maxRange;       // Maximum number in range (e.g., 100 = 1-100)
-        uint64 multiplierBips;  // Reward multiplier (e.g., 50000 = 5x)
+        uint64 multiplierBips;  // Reward multiplier in bips (e.g., 500000 = 50x)
         bool active;            // Whether tier is currently playable
     }
 
-    /// @notice Game request data
-    struct GameRequest {
+    /// @notice Game result data (stored for history)
+    struct GameResult {
         address player;         // Player's address
         uint256 wagerAmount;    // Net wager after fees
+        uint256 prizeWon;       // Prize won (0 if lost)
         uint256[] guesses;      // Player's predictions
+        uint256[] rolls;        // Oracle results
         bool isCumulative;      // true = 5x mode, false = 1x mode
-        uint256 targetTier;     // For 1x mode: jackpot tier ID (0 = all tiers)
+        uint8 matchCount;       // Number of matching tiers
+        uint256 timestamp;      // Block timestamp
     }
 
-    /// @notice Tier ID => Configuration
+    /// @notice Tier ID => Configuration (1-indexed)
     mapping(uint256 => PrizeTier) public prizeTiers;
 
-    /// @notice Game ID => Request data
-    mapping(uint256 => GameRequest) public pendingGames;
-
-    /// @notice Game ID => Result rolls
-    mapping(uint256 => uint256[]) public gameResults;
+    /// @notice Game ID => Result data
+    mapping(uint256 => GameResult) public gameResults;
 
     // =========================================================================
     //                              EVENTS
@@ -138,30 +168,36 @@ contract FortunePool is
     /// @notice Emitted when oracle address changes
     event OracleUpdated(address indexed previousOracle, address indexed newOracle);
 
-    /// @notice Emitted when oracle fee changes
-    event OracleFeeUpdated(uint256 previousFee, uint256 newFee);
+    /// @notice Emitted when service fee changes
+    event ServiceFeeUpdated(uint256 previousFee, uint256 newFee);
 
     /// @notice Emitted when game fee changes
     event GameFeeUpdated(uint256 previousFeeBips, uint256 newFeeBips);
 
-    /// @notice Emitted when a player requests a game
-    event GameRequested(
+    /// @notice Emitted when a game is played and resolved (V2: instant)
+    event GamePlayed(
         uint256 indexed gameId,
         address indexed player,
         uint256 wagerAmount,
-        uint256[] guesses,
+        uint256 prizeWon,
         bool isCumulative,
-        uint256 targetTier
+        uint8 matchCount
     );
 
-    /// @notice Emitted when oracle fulfills a game
-    event GameFulfilled(
+    /// @notice Emitted with detailed game data (for indexers)
+    event GameDetails(
+        uint256 indexed gameId,
+        uint256[] guesses,
+        uint256[] rolls,
+        bool[] matches
+    );
+
+    /// @notice Emitted on jackpot win (high multiplier tier match)
+    event JackpotWon(
         uint256 indexed gameId,
         address indexed player,
-        uint256 prizeWon,
-        uint256[] rolls,
-        uint256[] guesses,
-        bool isCumulative
+        uint256 prizeAmount,
+        uint256 tier
     );
 
     /// @notice Emitted on emergency withdrawal
@@ -178,13 +214,11 @@ contract FortunePool is
     error InvalidTierSequence();
     error InvalidGuessCount();
     error InvalidGuessRange();
-    error InsufficientOracleFee();
-    error OraclePaymentFailed();
-    error UnauthorizedOracle();
-    error GameAlreadyFulfilled();
-    error GameNotFound();
+    error InsufficientServiceFee();
+    error ServiceFeeTransferFailed();
     error NoActiveTiers();
     error CoreContractNotSet();
+    error OracleNotSet();
 
     // =========================================================================
     //                           INITIALIZATION
@@ -196,16 +230,19 @@ contract FortunePool is
     }
 
     /**
-     * @notice Initializes the Fortune Pool contract
+     * @notice Initializes the Fortune Pool V2 contract
      * @param _owner Contract owner address
      * @param _ecosystemManager Address of the ecosystem hub
+     * @param _randomnessOracle Address of BackchainRandomness Oracle
      */
     function initialize(
         address _owner,
-        address _ecosystemManager
+        address _ecosystemManager,
+        address _randomnessOracle
     ) external initializer {
         if (_owner == address(0)) revert ZeroAddress();
         if (_ecosystemManager == address(0)) revert ZeroAddress();
+        if (_randomnessOracle == address(0)) revert ZeroAddress();
 
         __Ownable_init();
         __UUPSUpgradeable_init();
@@ -214,6 +251,7 @@ contract FortunePool is
         _transferOwnership(_owner);
 
         ecosystemManager = IEcosystemManager(_ecosystemManager);
+        randomnessOracle = IBackchainRandomness(_randomnessOracle);
 
         address bkcAddress = ecosystemManager.getBKCTokenAddress();
         address dmAddress = ecosystemManager.getDelegationManagerAddress();
@@ -240,31 +278,32 @@ contract FortunePool is
     // =========================================================================
 
     /**
-     * @notice Sets the oracle address authorized to fulfill games
-     * @param _oracle New oracle address
+     * @notice Sets the randomness oracle address
+     * @param _oracle New oracle address (BackchainRandomness contract)
      */
     function setOracle(address _oracle) external onlyOwner {
         if (_oracle == address(0)) revert ZeroAddress();
 
-        address previousOracle = oracleAddress;
-        oracleAddress = _oracle;
+        address previousOracle = address(randomnessOracle);
+        randomnessOracle = IBackchainRandomness(_oracle);
 
         emit OracleUpdated(previousOracle, _oracle);
     }
 
     /**
-     * @notice Sets the native fee required for oracle calls
+     * @notice Sets the service fee (ETH) for project funding
+     * @dev This is NOT an oracle fee - the oracle is free. This funds the project.
      * @param _fee Fee amount in wei
      */
-    function setOracleFee(uint256 _fee) external onlyOwner {
-        uint256 previousFee = oracleFee;
-        oracleFee = _fee;
+    function setServiceFee(uint256 _fee) external onlyOwner {
+        uint256 previousFee = serviceFee;
+        serviceFee = _fee;
 
-        emit OracleFeeUpdated(previousFee, _fee);
+        emit ServiceFeeUpdated(previousFee, _fee);
     }
 
     /**
-     * @notice Sets the game fee percentage
+     * @notice Sets the game fee percentage (deducted from wager)
      * @param _feeBips Fee in basis points (max 3000 = 30%)
      */
     function setGameFee(uint256 _feeBips) external onlyOwner {
@@ -283,7 +322,7 @@ contract FortunePool is
      *      Highest tier is the jackpot (largest range, highest multiplier)
      * @param _tierId Tier identifier (1-based)
      * @param _maxRange Maximum number in guess range (e.g., 100 for 1-100)
-     * @param _multiplierBips Reward multiplier in bips (10000 = 1x)
+     * @param _multiplierBips Reward multiplier in bips (10000 = 1x, 500000 = 50x)
      */
     function configureTier(
         uint256 _tierId,
@@ -346,15 +385,42 @@ contract FortunePool is
         emit EmergencyWithdrawal(treasury, amount);
     }
 
+    /**
+     * @notice Withdraw accumulated service fees to treasury
+     */
+    function withdrawServiceFees() external onlyOwner {
+        address treasury = ecosystemManager.getTreasuryAddress();
+        if (treasury == address(0)) revert CoreContractNotSet();
+
+        uint256 balance = address(this).balance;
+        if (balance > 0) {
+            (bool sent,) = treasury.call{value: balance}("");
+            if (!sent) revert ServiceFeeTransferFailed();
+        }
+    }
+
     // =========================================================================
     //                          VIEW FUNCTIONS
     // =========================================================================
 
     /**
-     * @notice Returns the jackpot tier ID (highest tier)
+     * @notice Returns the jackpot tier ID (highest active tier)
      */
     function getJackpotTierId() public view returns (uint256) {
         return activeTierCount;
+    }
+
+    /**
+     * @notice Returns a specific tier configuration
+     * @param _tierId Tier identifier (1-based)
+     */
+    function getTier(uint256 _tierId) external view returns (
+        uint128 maxRange,
+        uint64 multiplierBips,
+        bool active
+    ) {
+        PrizeTier storage tier = prizeTiers[_tierId];
+        return (tier.maxRange, tier.multiplierBips, tier.active);
     }
 
     /**
@@ -394,16 +460,17 @@ contract FortunePool is
     }
 
     /**
-     * @notice Calculates required oracle fee for a game mode
-     * @param _isCumulative true = 5x mode, false = 1x mode
+     * @notice Calculates required service fee for a game mode
+     * @param _isCumulative true = 5x mode (pays 5x fee), false = 1x mode (pays 1x fee)
+     * @return Required fee in wei
      */
-    function getRequiredOracleFee(bool _isCumulative) public view returns (uint256) {
-        return _isCumulative ? oracleFee * 5 : oracleFee;
+    function getRequiredServiceFee(bool _isCumulative) public view returns (uint256) {
+        return _isCumulative ? serviceFee * CUMULATIVE_FEE_MULTIPLIER : serviceFee;
     }
 
     /**
      * @notice Returns expected guess count for a game mode
-     * @param _isCumulative true = 5x mode (all tiers), false = 1x mode (1 guess)
+     * @param _isCumulative true = 5x mode (N guesses), false = 1x mode (1 guess)
      */
     function getExpectedGuessCount(bool _isCumulative) public view returns (uint256) {
         return _isCumulative ? activeTierCount : 1;
@@ -427,14 +494,17 @@ contract FortunePool is
         if (count == 0) return (0, netWager);
 
         if (_isCumulative) {
+            // 5x mode: sum of all tier multipliers
             for (uint256 i = 0; i < count;) {
-                maxPrize += (_wagerAmount * prizeTiers[i + 1].multiplierBips) / BIPS_DENOMINATOR;
+                maxPrize += (netWager * prizeTiers[i + 1].multiplierBips) / BIPS_DENOMINATOR;
                 unchecked { ++i; }
             }
         } else {
-            maxPrize = (_wagerAmount * prizeTiers[count].multiplierBips) / BIPS_DENOMINATOR;
+            // 1x mode: only jackpot tier multiplier
+            maxPrize = (netWager * prizeTiers[count].multiplierBips) / BIPS_DENOMINATOR;
         }
 
+        // Apply safety cap (50% of pool)
         uint256 maxPayout = (prizePoolBalance * MAX_PAYOUT_BIPS) / BIPS_DENOMINATOR;
         if (maxPrize > maxPayout) {
             maxPrize = maxPayout;
@@ -442,94 +512,92 @@ contract FortunePool is
     }
 
     /**
-     * @notice Returns game results
+     * @notice Returns game result
      * @param _gameId Game identifier
      */
-    function getGameResults(uint256 _gameId) external view returns (uint256[] memory) {
-        return gameResults[_gameId];
-    }
-
-    /**
-     * @notice Checks if a game has been fulfilled
-     * @param _gameId Game identifier
-     */
-    function isGameFulfilled(uint256 _gameId) external view returns (bool) {
-        return gameResults[_gameId].length > 0;
-    }
-
-    /**
-     * @notice Returns pending game data
-     * @param _gameId Game identifier
-     */
-    function getPendingGame(uint256 _gameId) external view returns (
+    function getGameResult(uint256 _gameId) external view returns (
         address player,
         uint256 wagerAmount,
+        uint256 prizeWon,
         uint256[] memory guesses,
+        uint256[] memory rolls,
         bool isCumulative,
-        uint256 targetTier
+        uint8 matchCount,
+        uint256 timestamp
     ) {
-        GameRequest storage req = pendingGames[_gameId];
-        return (req.player, req.wagerAmount, req.guesses, req.isCumulative, req.targetTier);
+        GameResult storage result = gameResults[_gameId];
+        return (
+            result.player,
+            result.wagerAmount,
+            result.prizeWon,
+            result.guesses,
+            result.rolls,
+            result.isCumulative,
+            result.matchCount,
+            result.timestamp
+        );
     }
 
     /**
-     * @notice Returns comprehensive game status
-     * @param _gameId Game identifier
+     * @notice Returns pool statistics
      */
-    function getGameStatus(uint256 _gameId) external view returns (
-        bool exists,
-        bool fulfilled,
-        bool pending,
-        address player,
-        uint256[] memory results
+    function getPoolStats() external view returns (
+        uint256 poolBalance,
+        uint256 gamesPlayed,
+        uint256 wageredAllTime,
+        uint256 paidOutAllTime,
+        uint256 winsAllTime,
+        uint256 currentFee
     ) {
-        GameRequest storage req = pendingGames[_gameId];
-        uint256[] storage res = gameResults[_gameId];
-
-        exists = res.length > 0 || req.player != address(0);
-        fulfilled = res.length > 0;
-        pending = req.player != address(0) && res.length == 0;
-        player = req.player;
-        results = res;
+        return (
+            prizePoolBalance,
+            gameCounter,
+            totalWageredAllTime,
+            totalPaidOutAllTime,
+            totalWinsAllTime,
+            gameFeeBips
+        );
     }
 
     // =========================================================================
-    //                          GAME LOGIC
+    //                          GAME LOGIC (V2 - INSTANT)
     // =========================================================================
 
     /**
-     * @notice Participates in a Fortune Pool game
-     * @dev
+     * @notice Play a Fortune Pool game (V2: INSTANT RESOLUTION)
+     * @dev Results are determined and paid in the same transaction!
+     *
      *      Mode 1x (isCumulative = false):
      *      - Send 1 guess for the JACKPOT tier only
-     *      - Pay 1x oracle fee
-     *      - Compete for the highest multiplier
+     *      - Pay 1x service fee
+     *      - Compete for the highest multiplier (e.g., 50x)
      *
      *      Mode 5x (isCumulative = true):
      *      - Send N guesses (one per active tier)
-     *      - Pay 5x oracle fee
+     *      - Pay 5x service fee
      *      - All matching tiers pay out cumulatively
      *
      * @param _wagerAmount Amount to wager in BKC
      * @param _guesses Array of predictions (1 for 1x mode, N for 5x mode)
      * @param _isCumulative false = 1x mode (jackpot), true = 5x mode (all tiers)
      */
-    function participate(
+    function play(
         uint256 _wagerAmount,
         uint256[] calldata _guesses,
         bool _isCumulative
     ) external payable nonReentrant {
         if (_wagerAmount == 0) revert ZeroAmount();
+        if (address(randomnessOracle) == address(0)) revert OracleNotSet();
 
         uint256 tierCount = activeTierCount;
         if (tierCount == 0) revert NoActiveTiers();
 
-        uint256 targetTier;
-
+        // ═══════════════════════════════════════════════════════════════════
+        // VALIDATE GUESSES
+        // ═══════════════════════════════════════════════════════════════════
+        
         if (_isCumulative) {
-            // ═══════════════════════════════════════════════════════════════
-            // MODE 5x: COMPETE FOR ALL TIERS
-            // ═══════════════════════════════════════════════════════════════
+            // MODE 5x: Must provide one guess per tier
             if (_guesses.length != tierCount) revert InvalidGuessCount();
 
             for (uint256 i = 0; i < tierCount;) {
@@ -539,143 +607,147 @@ contract FortunePool is
                 }
                 unchecked { ++i; }
             }
-
-            targetTier = 0; // 0 = all tiers
-
         } else {
-            // ═══════════════════════════════════════════════════════════════
-            // MODE 1x: COMPETE FOR JACKPOT ONLY
-            // ═══════════════════════════════════════════════════════════════
+            // MODE 1x: Must provide exactly 1 guess for jackpot tier
             if (_guesses.length != 1) revert InvalidGuessCount();
 
-            targetTier = tierCount; // Jackpot tier
-            uint256 maxRange = uint256(prizeTiers[targetTier].maxRange);
-
+            uint256 maxRange = uint256(prizeTiers[tierCount].maxRange);
             if (_guesses[0] < 1 || _guesses[0] > maxRange) {
                 revert InvalidGuessRange();
             }
         }
 
-        // Validate oracle fee
-        uint256 requiredFee = getRequiredOracleFee(_isCumulative);
-        if (msg.value != requiredFee) revert InsufficientOracleFee();
+        // ═══════════════════════════════════════════════════════════════════
+        // VALIDATE AND COLLECT SERVICE FEE
+        // ═══════════════════════════════════════════════════════════════════
+        
+        uint256 requiredFee = getRequiredServiceFee(_isCumulative);
+        if (msg.value != requiredFee) revert InsufficientServiceFee();
 
-        // Forward oracle fee
-        if (msg.value > 0) {
-            (bool sent,) = oracleAddress.call{value: msg.value}("");
-            if (!sent) revert OraclePaymentFailed();
-        }
+        // Service fees stay in contract, withdrawn by admin to treasury
 
-        // Process BKC payment
+        // ═══════════════════════════════════════════════════════════════════
+        // PROCESS BKC PAYMENT
+        // ═══════════════════════════════════════════════════════════════════
+        
         uint256 netWager = _processPayment(_wagerAmount);
 
-        // Create game request
+        // Increment game counter
         unchecked { ++gameCounter; }
+        uint256 gameId = gameCounter;
 
-        pendingGames[gameCounter] = GameRequest({
-            player: msg.sender,
-            wagerAmount: netWager,
-            guesses: _guesses,
-            isCumulative: _isCumulative,
-            targetTier: targetTier
-        });
+        // Update stats
+        totalWageredAllTime += netWager;
 
-        emit GameRequested(
-            gameCounter,
-            msg.sender,
-            netWager,
-            _guesses,
-            _isCumulative,
-            targetTier
-        );
-    }
-
-    /**
-     * @notice Fulfills a game with random number from oracle
-     * @dev Only callable by authorized oracle address
-     * @param _gameId Game identifier to fulfill
-     * @param _randomSeed Random seed from oracle
-     */
-    function fulfillGame(
-        uint256 _gameId,
-        uint256 _randomSeed
-    ) external nonReentrant {
-        if (msg.sender != oracleAddress) revert UnauthorizedOracle();
-        if (gameResults[_gameId].length != 0) revert GameAlreadyFulfilled();
-
-        GameRequest memory request = pendingGames[_gameId];
-        if (request.player == address(0)) revert GameNotFound();
-
-        uint256 totalPrize;
+        // ═══════════════════════════════════════════════════════════════════
+        // GET RANDOM NUMBERS FROM ORACLE (INSTANT - FREE!)
+        // ═══════════════════════════════════════════════════════════════════
+        
         uint256[] memory rolls;
+        uint256 totalPrize;
+        uint8 matchCount;
+        bool[] memory matches;
 
-        if (request.isCumulative) {
+        if (_isCumulative) {
             // ═══════════════════════════════════════════════════════════════
-            // MODE 5x: PROCESS ALL TIERS
+            // MODE 5x: Get N random numbers (one per tier)
             // ═══════════════════════════════════════════════════════════════
-            uint256 tierCount = request.guesses.length;
-            rolls = new uint256[](tierCount);
-
+            uint256[] memory mins = new uint256[](tierCount);
+            uint256[] memory maxs = new uint256[](tierCount);
+            
             for (uint256 i = 0; i < tierCount;) {
-                uint256 tierId = i + 1;
-                PrizeTier memory tier = prizeTiers[tierId];
-
-                if (tier.maxRange > 0) {
-                    uint256 roll = _generateRoll(_randomSeed, tierId, tier.maxRange);
-                    rolls[i] = roll;
-
-                    if (request.guesses[i] == roll) {
-                        totalPrize += (request.wagerAmount * tier.multiplierBips) / BIPS_DENOMINATOR;
-                    }
-                }
-
+                mins[i] = 1;
+                maxs[i] = uint256(prizeTiers[i + 1].maxRange);
                 unchecked { ++i; }
             }
-
+            
+            // Get all random numbers in one call
+            rolls = randomnessOracle.getRandoms(mins, maxs);
+            matches = new bool[](tierCount);
+            
+            // Check each tier for matches
+            for (uint256 i = 0; i < tierCount;) {
+                if (_guesses[i] == rolls[i]) {
+                    matches[i] = true;
+                    matchCount++;
+                    uint256 tierPrize = (netWager * prizeTiers[i + 1].multiplierBips) / BIPS_DENOMINATOR;
+                    totalPrize += tierPrize;
+                    
+                    // Emit jackpot event for high-multiplier wins (5x or higher)
+                    if (prizeTiers[i + 1].multiplierBips >= 50000) {
+                        emit JackpotWon(gameId, msg.sender, tierPrize, i + 1);
+                    }
+                }
+                unchecked { ++i; }
+            }
+            
         } else {
             // ═══════════════════════════════════════════════════════════════
-            // MODE 1x: PROCESS JACKPOT ONLY
+            // MODE 1x: Get 1 random number for jackpot tier
             // ═══════════════════════════════════════════════════════════════
+            uint256 jackpotTier = tierCount;
+            uint256 maxRange = uint256(prizeTiers[jackpotTier].maxRange);
+            
             rolls = new uint256[](1);
-
-            uint256 tierId = request.targetTier;
-            PrizeTier memory tier = prizeTiers[tierId];
-
-            if (tier.maxRange > 0) {
-                uint256 roll = _generateRoll(_randomSeed, tierId, tier.maxRange);
-                rolls[0] = roll;
-
-                if (request.guesses[0] == roll) {
-                    totalPrize = (request.wagerAmount * tier.multiplierBips) / BIPS_DENOMINATOR;
-                }
+            matches = new bool[](1);
+            
+            // Get single random number
+            rolls[0] = randomnessOracle.getRandom(1, maxRange);
+            
+            if (_guesses[0] == rolls[0]) {
+                matches[0] = true;
+                matchCount = 1;
+                totalPrize = (netWager * prizeTiers[jackpotTier].multiplierBips) / BIPS_DENOMINATOR;
+                
+                emit JackpotWon(gameId, msg.sender, totalPrize, jackpotTier);
             }
         }
 
-        // Apply safety cap
+        // ═══════════════════════════════════════════════════════════════════
+        // APPLY SAFETY CAP AND PAY WINNER
+        // ═══════════════════════════════════════════════════════════════════
+        
         uint256 maxPayout = (prizePoolBalance * MAX_PAYOUT_BIPS) / BIPS_DENOMINATOR;
         if (totalPrize > maxPayout) {
             totalPrize = maxPayout;
         }
 
-        // Save results
-        gameResults[_gameId] = rolls;
-
-        // Pay winner
         if (totalPrize > 0) {
             prizePoolBalance -= totalPrize;
-            bkcToken.safeTransfer(request.player, totalPrize);
+            totalPaidOutAllTime += totalPrize;
+            totalWinsAllTime++;
+            bkcToken.safeTransfer(msg.sender, totalPrize);
         }
 
-        // Cleanup
-        delete pendingGames[_gameId];
+        // ═══════════════════════════════════════════════════════════════════
+        // STORE RESULT AND EMIT EVENTS
+        // ═══════════════════════════════════════════════════════════════════
+        
+        gameResults[gameId] = GameResult({
+            player: msg.sender,
+            wagerAmount: netWager,
+            prizeWon: totalPrize,
+            guesses: _guesses,
+            rolls: rolls,
+            isCumulative: _isCumulative,
+            matchCount: matchCount,
+            timestamp: block.timestamp
+        });
 
-        emit GameFulfilled(
-            _gameId,
-            request.player,
+        emit GamePlayed(
+            gameId,
+            msg.sender,
+            netWager,
             totalPrize,
+            _isCumulative,
+            matchCount
+        );
+
+        emit GameDetails(
+            gameId,
+            _guesses,
             rolls,
-            request.guesses,
-            request.isCumulative
+            matches
         );
     }
 
@@ -697,7 +769,7 @@ contract FortunePool is
         // Add net wager to prize pool
         prizePoolBalance += netWager;
 
-        // Send fee to mining manager
+        // Send fee to mining manager for distribution
         if (fee > 0) {
             bkcToken.safeTransfer(miningManagerAddress, fee);
             IMiningManager(miningManagerAddress).performPurchaseMining(SERVICE_KEY, fee);
@@ -705,13 +777,25 @@ contract FortunePool is
     }
 
     /**
-     * @dev Generates a deterministic roll from random seed
+     * @dev Allows contract to receive ETH (service fees)
      */
-    function _generateRoll(
-        uint256 _seed,
-        uint256 _tierId,
-        uint256 _maxRange
-    ) internal pure returns (uint256) {
-        return (uint256(keccak256(abi.encodePacked(_seed, _tierId))) % _maxRange) + 1;
+    receive() external payable {}
+
+    // =========================================================================
+    //                      BACKWARDS COMPATIBILITY
+    // =========================================================================
+
+    /**
+     * @notice Alias for serviceFee (backwards compatibility with V1)
+     */
+    function oracleFee() external view returns (uint256) {
+        return serviceFee;
+    }
+
+    /**
+     * @notice Alias for getRequiredServiceFee (backwards compatibility with V1)
+     */
+    function getRequiredOracleFee(bool _isCumulative) external view returns (uint256) {
+        return getRequiredServiceFee(_isCumulative);
     }
 }

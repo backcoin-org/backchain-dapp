@@ -1146,16 +1146,45 @@ export async function executeWithdrawNFT(tokenId, btnElement) {
 }
 
 // ====================================================================
-// FORTUNE POOL - PLAY GAME (ROBUST VERSION)
+// ====================================================================
+// FORTUNE POOL V2 - PLAY GAME (INSTANT RESOLUTION)
+// ====================================================================
+// 
+// V2 CHANGES:
+// - Uses BackchainRandomness Oracle for instant results
+// - No more polling for oracle callbacks  
+// - Results returned directly from play() function
+// - No oracle fee required (FREE!)
+//
 // ====================================================================
 
-export async function executeFortuneGame(wager, guesses, isCumulative, btnElement) {
+// FortunePool V2 ABI
+const fortunePoolV2ABI = [
+    "function play(uint256 _wagerAmount, uint256[] calldata _guesses, bool _isCumulative) external payable",
+    "function prizePoolBalance() external view returns (uint256)",
+    "function gameCounter() external view returns (uint256)",
+    "function activeTierCount() external view returns (uint256)",
+    "function serviceFee() external view returns (uint256)",
+    "function getRequiredServiceFee(bool _isCumulative) external view returns (uint256)",
+    "function getExpectedGuessCount(bool _isCumulative) external view returns (uint256)",
+    "function getTier(uint256 _tierId) external view returns (uint128 maxRange, uint64 multiplierBips, bool active)",
+    "function getAllTiers() external view returns (uint128[] memory ranges, uint64[] memory multipliers)",
+    "event GamePlayed(uint256 indexed gameId, address indexed player, uint256 wagerAmount, uint256 prizeWon, bool isCumulative, uint8 matchCount)",
+    "event GameDetails(uint256 indexed gameId, uint256[] guesses, uint256[] rolls, bool[] matches)",
+    "event JackpotWon(uint256 indexed gameId, address indexed player, uint256 prizeAmount, uint256 tier)"
+];
+
+/**
+ * Execute Fortune Pool V2 Game - INSTANT RESOLUTION
+ * Results are returned directly - no polling needed!
+ * Requires serviceFee in ETH for project funding
+ */
+export async function executeFortunePlay(wager, guesses, isCumulative, btnElement) {
     const signer = await getConnectedSigner();
     if (!signer) return { success: false };
     
     const originalText = btnElement?.innerHTML || 'Play';
     
-    // CRITICAL: Disable button immediately to prevent double-clicks
     if (btnElement) {
         btnElement.innerHTML = '<div class="loader inline-block"></div> Processing...';
         btnElement.disabled = true;
@@ -1165,23 +1194,24 @@ export async function executeFortuneGame(wager, guesses, isCumulative, btnElemen
         const wagerBigInt = ethers.parseEther(wager.toString());
         const guessesArray = Array.isArray(guesses) ? guesses.map(g => BigInt(g)) : [BigInt(guesses)];
         
-        console.log("Fortune Game params:", {
+        console.log("Fortune V2 Play params:", {
             wager: wager.toString(),
             wagerWei: wagerBigInt.toString(),
             guesses: guessesArray.map(g => g.toString()),
             isCumulative
         });
         
-        const fortuneAddress = addresses.fortunePool || addresses.actionsManager;
+        // Get contract address - prefer V2
+        const fortuneAddress = addresses.fortunePoolV2 || addresses.fortunePool || addresses.actionsManager;
         if (!fortuneAddress) {
             showToast("Fortune Pool not configured", "error");
             return { success: false };
         }
         
-        const fortuneContract = new ethers.Contract(fortuneAddress, actionsManagerABI, signer);
+        const fortuneContract = new ethers.Contract(fortuneAddress, fortunePoolV2ABI, signer);
         
         // 1. Verify active tiers
-        let tierCount;
+        let tierCount = 0n;
         try {
             tierCount = await fortuneContract.activeTierCount();
             console.log("Active tier count:", tierCount.toString());
@@ -1200,14 +1230,32 @@ export async function executeFortuneGame(wager, guesses, isCumulative, btnElemen
             console.warn("Could not verify tier count:", e.message);
         }
         
-        // 2. Check BKC balance
+        // 2. Get required service fee (ETH)
+        let requiredFee = 0n;
+        try {
+            requiredFee = await fortuneContract.getRequiredServiceFee(isCumulative);
+            console.log("Required service fee:", ethers.formatEther(requiredFee), "ETH");
+        } catch (e) {
+            console.warn("Could not get service fee, using 0:", e.message);
+        }
+        
+        // 3. Check ETH balance for service fee
+        if (requiredFee > 0n) {
+            const ethBalance = await signer.provider.getBalance(State.userAddress);
+            if (ethBalance < requiredFee) {
+                showToast(`Insufficient ETH for game fee (need ${ethers.formatEther(requiredFee)} ETH)`, "error");
+                return { success: false };
+            }
+        }
+        
+        // 4. Check BKC balance
         const bkcBalance = await State.bkcTokenContract.balanceOf(State.userAddress);
         if (bkcBalance < wagerBigInt) {
             showToast("Insufficient BKC balance", "error");
             return { success: false };
         }
         
-        // 3. Approve BKC with retry
+        // 5. Approve BKC
         const approved = await robustApprove(
             addresses.bkcToken, 
             fortuneAddress, 
@@ -1216,47 +1264,13 @@ export async function executeFortuneGame(wager, guesses, isCumulative, btnElemen
         );
         if (!approved) return { success: false };
         
-        // 4. Get oracle fee
-        let oracleFee = 0n;
-        try {
-            oracleFee = await fortuneContract.getRequiredOracleFee(isCumulative);
-            console.log("Oracle fee:", ethers.formatEther(oracleFee), "ETH");
-        } catch (e) {
-            console.warn("getRequiredOracleFee failed, trying oracleFee:", e.message);
-            try {
-                const baseFee = await fortuneContract.oracleFee();
-                oracleFee = isCumulative ? baseFee * 5n : baseFee;
-            } catch {
-                oracleFee = 0n;
-            }
-        }
-        
-        // 5. Check ETH balance
-        let rawProvider = State.web3Provider || State.provider || window.ethereum;
-        const provider = new ethers.BrowserProvider(rawProvider);
-        const ethBalance = await provider.getBalance(State.userAddress);
-        
-        console.log("ETH balance:", ethers.formatEther(ethBalance), "ETH");
-        
-        if (oracleFee > 0n && ethBalance < oracleFee) {
-            showToast(`Need ${ethers.formatEther(oracleFee)} ETH for oracle fee`, "error");
-            return { success: false };
-        }
-        
-        // 6. Execute participate with retry
-        if (btnElement) btnElement.innerHTML = '<div class="loader inline-block"></div> Submitting...';
-        
-        console.log("Calling participate with:", {
-            wagerAmount: wagerBigInt.toString(),
-            guesses: guessesArray.map(g => g.toString()),
-            isCumulative,
-            value: oracleFee.toString()
-        });
+        // 6. Execute play() with service fee - V2 returns results instantly!
+        if (btnElement) btnElement.innerHTML = '<div class="loader inline-block"></div> 🎰 Rolling...';
         
         const result = await executeWithRetry(
-            () => fortuneContract.participate(wagerBigInt, guessesArray, isCumulative, { value: oracleFee }),
+            () => fortuneContract.play(wagerBigInt, guessesArray, isCumulative, { value: requiredFee }),
             {
-                description: 'Fortune Game',
+                description: 'Fortune Game V2',
                 retries: TX_CONFIG.MAX_RETRIES,
                 onAttempt: (attempt) => {
                     if (attempt === 1) {
@@ -1269,30 +1283,72 @@ export async function executeFortuneGame(wager, guesses, isCumulative, btnElemen
         );
         
         if (result.success) {
+            // Parse results from events
             let gameId = null;
+            let rolls = [];
+            let prizeWon = 0;
+            let matches = [];
+            let matchCount = 0;
+            let isJackpot = false;
+            
             for (const log of result.receipt.logs) {
                 try {
-                    const parsed = fortuneContract.interface.parseLog(log);
-                    if (parsed?.name === "GameRequested") {
-                        gameId = parsed.args.gameId?.toString();
-                        break;
+                    const parsed = fortuneContract.interface.parseLog({
+                        topics: log.topics,
+                        data: log.data
+                    });
+                    
+                    if (parsed?.name === "GamePlayed") {
+                        gameId = Number(parsed.args.gameId);
+                        prizeWon = Number(ethers.formatEther(parsed.args.prizeWon));
+                        matchCount = Number(parsed.args.matchCount);
                     }
-                } catch {}
+                    
+                    if (parsed?.name === "GameDetails") {
+                        rolls = parsed.args.rolls.map(r => Number(r));
+                        matches = Array.from(parsed.args.matches);
+                    }
+                    
+                    if (parsed?.name === "JackpotWon") {
+                        isJackpot = true;
+                    }
+                } catch (e) {
+                    // Not our event
+                }
             }
             
-            showToast("🎰 Game submitted! Waiting for result...", "success");
-            loadUserData();
+            // Show result
+            if (prizeWon > 0) {
+                if (isJackpot) {
+                    showToast(`🎰🎰🎰 JACKPOT! You won ${prizeWon.toLocaleString()} BKC! 🎉`, "success");
+                } else {
+                    showToast(`🎉 YOU WON ${prizeWon.toLocaleString()} BKC!`, "success");
+                }
+            } else {
+                showToast("No match this time. Try again!", "warning");
+            }
             
-            // Track platform usage for airdrop points
+            loadUserData();
             trackPlatformUsage('fortune', result.txHash);
             
-            return { success: true, gameId, txHash: result.txHash };
+            return { 
+                success: true, 
+                gameId, 
+                rolls,
+                guesses: guessesArray.map(g => Number(g)),
+                prizeWon,
+                matches,
+                matchCount,
+                isJackpot,
+                isCumulative,
+                txHash: result.txHash 
+            };
         }
         
         return { success: false };
         
     } catch (e) {
-        console.error("Fortune error:", e);
+        console.error("Fortune V2 error:", e);
         
         const errorMsg = e?.message || '';
         if (errorMsg.includes('ZeroAmount')) {
@@ -1303,8 +1359,12 @@ export async function executeFortuneGame(wager, guesses, isCumulative, btnElemen
             showToast("Wrong number of guesses", "error");
         } else if (errorMsg.includes('InvalidGuessRange')) {
             showToast("Guess out of range", "error");
-        } else if (errorMsg.includes('InsufficientOracleFee')) {
-            showToast("Incorrect oracle fee", "error");
+        } else if (errorMsg.includes('OracleNotSet')) {
+            showToast("Oracle not configured", "error");
+        } else if (errorMsg.includes('InsufficientServiceFee')) {
+            showToast("Insufficient ETH for game fee", "error");
+        } else if (errorMsg.includes('InsufficientPrizePool')) {
+            showToast("Prize pool too low", "error");
         } else if (errorMsg.includes('InsufficientBalance') || errorMsg.includes('insufficient')) {
             showToast("Insufficient BKC balance", "error");
         } else {
@@ -1313,13 +1373,16 @@ export async function executeFortuneGame(wager, guesses, isCumulative, btnElemen
         return { success: false };
         
     } finally {
-        // ALWAYS re-enable button
         if (btnElement) {
             btnElement.innerHTML = originalText;
             btnElement.disabled = false;
         }
     }
 }
+
+// Alias for backwards compatibility - V2 is now default
+export const executeFortuneGame = executeFortunePlay;
+export const executeFortuneParticipate = executeFortunePlay;
 
 // ====================================================================
 // NOTARIZE DOCUMENT
@@ -1481,4 +1544,4 @@ export async function executeFaucetClaim(btnElement) {
 
 export const executeBuyBooster = executeBuyNFT;
 export const executeSellBooster = executeSellNFT;
-export const executeFortuneParticipate = executeFortuneGame;
+// Fortune aliases already defined after executeFortunePlay function
