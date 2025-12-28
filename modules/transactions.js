@@ -1,14 +1,13 @@
 // js/modules/transactions.js
-// ✅ PRODUCTION V14.0 - Optimized with Pre-flight Checks & Auto-Adjustment
+// ✅ PRODUCTION V15.0 - Rate Limiting, Timeout Protection, Auto-Adjustment
 // 
-// IMPROVEMENTS:
-// - Pre-flight checks before ANY transaction
-// - Auto-adjustment of amounts when possible
-// - Smart allowance management (approve more to avoid re-approvals)
-// - Gas estimation with buffer
-// - Better error recovery and user feedback
-// - Automatic balance checks
-// - ETH gas buffer verification
+// V15.0 IMPROVEMENTS:
+// - Rate limiting to prevent RPC blocking
+// - Timeout protection on all RPC calls
+// - Silent fallback when RPC fails
+// - Pre-flight checks with graceful degradation
+// - Smart unlimited approval to avoid re-approvals
+// - All missing functions included (executeWithdrawNFT, etc.)
 //
 
 const ethers = window.ethers;
@@ -25,26 +24,27 @@ import { recordPlatformUsage } from './firebase-auth-service.js';
 // ====================================================================
 
 const TX_CONFIG = {
-    MAX_RETRIES: 3,
+    MAX_RETRIES: 2,
     RETRY_DELAY_MS: 2000,
-    APPROVAL_WAIT_MS: 1500,
-    SIMULATION_TIMEOUT_MS: 10000,
+    APPROVAL_WAIT_MS: 1000,
+    RPC_TIMEOUT_MS: 5000,
+    RPC_COOLDOWN_MS: 300,
     
     // Auto-adjustment settings
-    ALLOWANCE_MULTIPLIER: 100n,      // Approve 100x to avoid re-approvals
-    MIN_ETH_FOR_GAS: 0.002,          // Minimum ETH needed for gas
-    GAS_BUFFER_PERCENT: 20,          // Add 20% buffer to gas estimates
-    SLIPPAGE_BIPS: 300,              // 3% slippage tolerance
-    
-    // User-friendly thresholds
-    MAX_AUTO_ADJUST_PERCENT: 5       // Max % to auto-reduce amount
+    MIN_ETH_FOR_GAS: 0.001,
+    SLIPPAGE_BIPS: 300,
+    MAX_AUTO_ADJUST_PERCENT: 5
 };
 
-// Arbitrum Sepolia Faucet Links
+// Rate limiting
+let lastRPCCall = 0;
+let rpcErrorCount = 0;
+const MAX_RPC_ERRORS = 3;
+
+// Faucet Links
 const FAUCET_LINKS = {
     arbitrumSepolia: 'https://www.alchemy.com/faucets/arbitrum-sepolia',
-    alternativeFaucet: 'https://faucet.quicknode.com/arbitrum/sepolia',
-    bkcFaucet: 'https://app.backcoin.org' // Our faucet
+    alternativeFaucet: 'https://faucet.quicknode.com/arbitrum/sepolia'
 };
 
 // ====================================================================
@@ -61,393 +61,58 @@ function safeFormatEther(value) {
     } catch { return "N/A"; }
 }
 
-// ====================================================================
-// PRE-FLIGHT CHECK SYSTEM
-// ====================================================================
-
 /**
- * Comprehensive pre-flight checks before any transaction
- * Returns { canProceed, issues, adjustments }
+ * Throttled RPC call with timeout
  */
-async function preFlightCheck(options) {
-    const {
-        requiredBKC = 0n,
-        requiredETH = 0n,
-        spenderAddress = null,
-        checkAllowance = true,
-        actionName = 'transaction'
-    } = options;
-
-    const issues = [];
-    const adjustments = {};
-    let canProceed = true;
-
-    try {
-        const signer = await getConnectedSigner();
-        if (!signer) {
-            return { canProceed: false, issues: ['Wallet not connected'], adjustments: {} };
-        }
-
-        const provider = signer.provider;
-        const userAddress = State.userAddress;
-
-        // 1. Check ETH balance for gas
-        const ethBalance = await provider.getBalance(userAddress);
-        const minEthForGas = ethers.parseEther(TX_CONFIG.MIN_ETH_FOR_GAS.toString());
-        const totalEthNeeded = requiredETH + minEthForGas;
-
-        if (ethBalance < totalEthNeeded) {
-            if (ethBalance < minEthForGas) {
-                issues.push(`Insufficient ETH for gas (have ${formatEth(ethBalance)}, need ~${TX_CONFIG.MIN_ETH_FOR_GAS} ETH)`);
-                canProceed = false;
-                adjustments.needsETH = true;
-            } else if (requiredETH > 0n && ethBalance < totalEthNeeded) {
-                issues.push(`Insufficient ETH (have ${formatEth(ethBalance)}, need ${formatEth(totalEthNeeded)})`);
-                canProceed = false;
-            }
-        }
-
-        // 2. Check BKC balance
-        if (requiredBKC > 0n) {
-            let bkcBalance = State.currentUserBalance || 0n;
-            
-            // Refresh balance if stale
-            if (State.bkcTokenContract) {
-                try {
-                    bkcBalance = await State.bkcTokenContract.balanceOf(userAddress);
-                    State.currentUserBalance = bkcBalance;
-                } catch (e) {
-                    console.warn('Could not refresh BKC balance:', e.message);
-                }
-            }
-
-            if (bkcBalance < requiredBKC) {
-                const shortfall = requiredBKC - bkcBalance;
-                const shortfallPercent = Number((shortfall * 100n) / requiredBKC);
-                
-                // Can we auto-adjust?
-                if (shortfallPercent <= TX_CONFIG.MAX_AUTO_ADJUST_PERCENT && bkcBalance > 0n) {
-                    adjustments.adjustedBKC = bkcBalance;
-                    adjustments.originalBKC = requiredBKC;
-                    issues.push(`Amount reduced to ${formatBigNumber(bkcBalance)} BKC (your balance)`);
-                } else {
-                    issues.push(`Insufficient BKC (have ${formatBigNumber(bkcBalance)}, need ${formatBigNumber(requiredBKC)})`);
-                    canProceed = false;
-                    adjustments.needsBKC = true;
-                }
-            }
-        }
-
-        // 3. Check allowance
-        if (checkAllowance && spenderAddress && requiredBKC > 0n) {
-            try {
-                const tokenABI = ["function allowance(address,address) view returns (uint256)"];
-                const token = new ethers.Contract(addresses.bkcToken, tokenABI, provider);
-                const currentAllowance = await token.allowance(userAddress, spenderAddress);
-                
-                const amountToCheck = adjustments.adjustedBKC || requiredBKC;
-                
-                if (currentAllowance < amountToCheck) {
-                    adjustments.needsApproval = true;
-                    adjustments.currentAllowance = currentAllowance;
-                    adjustments.requiredAllowance = amountToCheck;
-                    // Not a blocking issue - we'll approve automatically
-                }
-            } catch (e) {
-                console.warn('Could not check allowance:', e.message);
-            }
-        }
-
-        // 4. Estimate gas (if we can proceed so far)
-        if (canProceed && options.estimateGas) {
-            try {
-                const gasEstimate = await options.estimateGas();
-                const gasPrice = await provider.getFeeData();
-                const estimatedCost = gasEstimate * (gasPrice.gasPrice || gasPrice.maxFeePerGas || 0n);
-                
-                if (ethBalance < estimatedCost + requiredETH) {
-                    issues.push(`Gas estimate: ~${formatEth(estimatedCost)} ETH`);
-                    if (ethBalance < estimatedCost) {
-                        canProceed = false;
-                    }
-                }
-                
-                adjustments.gasEstimate = gasEstimate;
-                adjustments.estimatedGasCost = estimatedCost;
-            } catch (e) {
-                console.warn('Gas estimation failed:', e.message);
-                // Continue anyway - wallet will estimate
-            }
-        }
-
-        return { canProceed, issues, adjustments };
-
-    } catch (e) {
-        console.error('Pre-flight check error:', e);
-        return { 
-            canProceed: false, 
-            issues: ['Pre-flight check failed: ' + e.message], 
-            adjustments: {} 
-        };
+async function safeRPCCall(fn, timeoutMs = TX_CONFIG.RPC_TIMEOUT_MS) {
+    // Check if we're being rate limited
+    if (rpcErrorCount >= MAX_RPC_ERRORS) {
+        console.warn('RPC rate limited, skipping call');
+        throw new Error('RPC_RATE_LIMITED');
     }
-}
-
-function formatEth(wei) {
-    return parseFloat(ethers.formatEther(wei)).toFixed(4);
-}
-
-// ====================================================================
-// SMART APPROVAL SYSTEM
-// ====================================================================
-
-/**
- * Smart approval - approves a large amount to avoid future approvals
- */
-async function smartApprove(tokenAddress, spenderAddress, minimumAmount, signer) {
-    const tokenABI = [
-        "function approve(address,uint256) returns (bool)", 
-        "function allowance(address,address) view returns (uint256)",
-        "function balanceOf(address) view returns (uint256)"
-    ];
-    const token = new ethers.Contract(tokenAddress, tokenABI, signer);
+    
+    // Throttle calls
+    const now = Date.now();
+    const timeSinceLastCall = now - lastRPCCall;
+    if (timeSinceLastCall < TX_CONFIG.RPC_COOLDOWN_MS) {
+        await sleep(TX_CONFIG.RPC_COOLDOWN_MS - timeSinceLastCall);
+    }
+    lastRPCCall = Date.now();
+    
+    // Execute with timeout
+    const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('RPC_TIMEOUT')), timeoutMs)
+    );
     
     try {
-        // Check current allowance
-        const currentAllowance = await token.allowance(State.userAddress, spenderAddress);
-        
-        if (currentAllowance >= minimumAmount) {
-            console.log("✅ Already approved:", safeFormatEther(currentAllowance), "BKC");
-            return true;
-        }
-        
-        // Get user's balance to determine approval amount
-        const balance = await token.balanceOf(State.userAddress);
-        
-        // Approve the larger of: minimumAmount * multiplier OR user's full balance
-        // This avoids needing to re-approve for future transactions
-        const approveAmount = balance > minimumAmount * TX_CONFIG.ALLOWANCE_MULTIPLIER 
-            ? minimumAmount * TX_CONFIG.ALLOWANCE_MULTIPLIER 
-            : balance;
-        
-        console.log("Approving:", safeFormatEther(approveAmount), "BKC");
-        showToast("Approve BKC spending...", "info");
-        
-        const tx = await token.approve(spenderAddress, approveAmount);
-        showToast("Waiting for approval...", "info");
-        
-        const receipt = await tx.wait();
-        if (receipt.status === 0) {
-            throw new Error("Approval failed");
-        }
-        
-        await sleep(TX_CONFIG.APPROVAL_WAIT_MS);
-        
-        // Verify
-        const newAllowance = await token.allowance(State.userAddress, spenderAddress);
-        if (newAllowance >= minimumAmount) {
-            showToast("✅ Approved!", "success");
-            return true;
-        }
-        
-        throw new Error("Approval not reflected");
-        
+        const result = await Promise.race([fn(), timeoutPromise]);
+        rpcErrorCount = Math.max(0, rpcErrorCount - 1); // Decrease on success
+        return result;
     } catch (e) {
-        if (isUserRejection(e)) {
-            showToast("Approval cancelled", "error");
-            return false;
+        if (e.message?.includes('rate limit') || e.message?.includes('too many')) {
+            rpcErrorCount++;
         }
-        
-        console.error("Approval error:", e);
-        handleTransactionError(e);
-        return false;
+        throw e;
     }
 }
 
 // ====================================================================
-// TRANSACTION EXECUTOR WITH AUTO-ADJUSTMENT
+// PLATFORM USAGE TRACKING
 // ====================================================================
 
-/**
- * Execute transaction with automatic adjustments and retries
- */
-async function executeWithAutoAdjust(txFunction, options = {}) {
-    const {
-        retries = TX_CONFIG.MAX_RETRIES,
-        onAttempt = () => {},
-        onSuccess = () => {},
-        description = 'Transaction',
-        gasLimitOverride = null
-    } = options;
+async function trackPlatformUsage(actionType, txHash) {
+    if (!txHash) return;
     
-    for (let attempt = 1; attempt <= retries; attempt++) {
+    (async () => {
         try {
-            onAttempt(attempt);
-            
-            // Build transaction options
-            const txOptions = {};
-            
-            if (gasLimitOverride) {
-                txOptions.gasLimit = gasLimitOverride;
+            const result = await recordPlatformUsage(actionType, txHash);
+            if (result?.success && result.pointsAwarded > 0) {
+                showToast(`🎯 +${result.pointsAwarded.toLocaleString()} Airdrop Points!`, "success");
             }
-            
-            const tx = await txFunction(txOptions);
-            showToast("⏳ Confirming...", "info");
-            
-            const receipt = await tx.wait();
-            
-            if (receipt.status === 0) {
-                throw new Error("Transaction reverted");
-            }
-            
-            onSuccess(receipt);
-            return { success: true, receipt, txHash: receipt.hash };
-            
         } catch (e) {
-            console.error(`${description} attempt ${attempt} failed:`, e);
-            
-            // User cancelled - don't retry
-            if (isUserRejection(e)) {
-                showToast("Transaction cancelled", "warning");
-                return { success: false, cancelled: true };
-            }
-            
-            // Gas estimation failed - try with manual gas limit
-            if (e.message?.includes('cannot estimate gas') && !gasLimitOverride) {
-                console.log("Retrying with manual gas limit...");
-                options.gasLimitOverride = 500000n;
-                continue;
-            }
-            
-            // Network error - retry
-            if (attempt < retries && isRetryableError(e)) {
-                showToast(`Network issue, retrying... (${attempt}/${retries})`, "warning");
-                await sleep(TX_CONFIG.RETRY_DELAY_MS * attempt);
-                continue;
-            }
-            
-            handleTransactionError(e);
-            return { success: false, error: e };
+            console.warn('Tracking failed:', e.message);
         }
-    }
-    
-    return { success: false };
-}
-
-// ====================================================================
-// ERROR HANDLING
-// ====================================================================
-
-function isUserRejection(error) {
-    const msg = error?.message || error?.reason || '';
-    return msg.includes('user rejected') || 
-           msg.includes('User denied') || 
-           msg.includes('cancelled') ||
-           msg.includes('canceled') ||
-           error?.code === 4001;
-}
-
-function isRetryableError(error) {
-    const msg = error?.message || error?.reason || '';
-    const retryablePatterns = [
-        'Internal JSON-RPC',
-        'network',
-        'timeout',
-        'ETIMEDOUT',
-        'ECONNRESET',
-        'rate limit',
-        'Too Many Requests',
-        'nonce',
-        'replacement transaction',
-        'already known'
-    ];
-    return retryablePatterns.some(pattern => msg.toLowerCase().includes(pattern.toLowerCase()));
-}
-
-function formatError(error) {
-    const msg = error?.reason || error?.shortMessage || error?.message || 'Unknown error';
-    
-    // Contract-specific errors with user-friendly messages
-    const errorMap = {
-        'insufficient funds': 'INSUFFICIENT_GAS',
-        'exceeds the balance': 'INSUFFICIENT_GAS',
-        'InsufficientOracleFee': 'Insufficient ETH for service fee',
-        'InvalidGuessCount': 'Wrong number of guesses for selected mode',
-        'InvalidGuessRange': 'Guess must be within the valid range',
-        'ZeroAmount': 'Amount cannot be zero',
-        'NoActiveTiers': 'Game is currently unavailable',
-        'InsufficientAllowance': 'Token approval needed',
-        'InsufficientBalance': 'Insufficient BKC balance',
-        'InsufficientTokenBalance': 'Contract has insufficient tokens',
-        'InsufficientEthBalance': 'Contract has insufficient ETH',
-        'DelegationNotFound': 'Delegation not found',
-        'DelegationLocked': 'Delegation is still locked',
-        'LockPeriodActive': 'Lock period still active',
-        'InvalidIndex': 'Invalid delegation index',
-        'NotOwner': 'You are not the owner',
-        'CooldownActive': 'Please wait for cooldown',
-        'NoRewardsToClaim': 'No rewards available to claim',
-        'InsufficientPrizePool': 'Prize pool is too low',
-        'SlippageExceeded': 'Price changed too much, try again',
-        'PoolEmpty': 'No NFTs available in pool'
-    };
-    
-    for (const [pattern, message] of Object.entries(errorMap)) {
-        if (msg.includes(pattern)) {
-            return message;
-        }
-    }
-    
-    // Clean up common prefixes
-    if (msg.includes('execution reverted:')) {
-        return msg.split('execution reverted:')[1].trim().slice(0, 100);
-    }
-    
-    return msg.slice(0, 100);
-}
-
-function handleTransactionError(error) {
-    const formattedError = formatError(error);
-    
-    if (formattedError === 'INSUFFICIENT_GAS') {
-        showInsufficientGasError();
-        return;
-    }
-    
-    showToast(formattedError, "error");
-}
-
-function showInsufficientGasError() {
-    showToast("⛽ Need ETH for gas fees!", "error");
-    
-    // Show modal with faucet links
-    setTimeout(() => {
-        const modal = document.createElement('div');
-        modal.className = 'fixed inset-0 z-[9999] flex items-center justify-center p-4';
-        modal.innerHTML = `
-            <div class="absolute inset-0 bg-black/80" onclick="this.parentElement.remove()"></div>
-            <div class="relative bg-zinc-900 rounded-2xl p-6 max-w-sm w-full border border-zinc-700">
-                <h3 class="text-lg font-bold text-white mb-2">⛽ Need Gas (ETH)</h3>
-                <p class="text-sm text-zinc-400 mb-4">
-                    Transactions on Arbitrum require a small amount of ETH for gas fees.
-                </p>
-                <div class="space-y-2">
-                    <a href="${FAUCET_LINKS.arbitrumSepolia}" target="_blank" 
-                       class="block w-full py-3 px-4 bg-blue-600 hover:bg-blue-700 text-white text-center rounded-xl font-bold">
-                        🚰 Alchemy Faucet
-                    </a>
-                    <a href="${FAUCET_LINKS.alternativeFaucet}" target="_blank"
-                       class="block w-full py-3 px-4 bg-zinc-700 hover:bg-zinc-600 text-white text-center rounded-xl">
-                        QuickNode Faucet
-                    </a>
-                </div>
-                <button onclick="this.parentElement.parentElement.remove()" 
-                        class="mt-4 w-full py-2 text-zinc-500 hover:text-zinc-300">
-                    Close
-                </button>
-            </div>
-        `;
-        document.body.appendChild(modal);
-    }, 300);
+    })();
 }
 
 // ====================================================================
@@ -477,26 +142,373 @@ async function getConnectedSigner() {
 }
 
 // ====================================================================
-// PLATFORM USAGE TRACKING
+// ERROR HANDLING
 // ====================================================================
 
-async function trackPlatformUsage(actionType, txHash) {
-    if (!txHash) return;
+function isUserRejection(error) {
+    const msg = error?.message || error?.reason || '';
+    return msg.includes('user rejected') || 
+           msg.includes('User denied') || 
+           msg.includes('cancelled') ||
+           msg.includes('canceled') ||
+           error?.code === 4001;
+}
+
+function isRPCError(error) {
+    const msg = error?.message || error?.reason || '';
+    return msg.includes('RPC') || 
+           msg.includes('rate limit') ||
+           msg.includes('too many') ||
+           msg.includes('timeout') ||
+           msg.includes('TIMEOUT') ||
+           msg.includes('network');
+}
+
+function isRetryableError(error) {
+    const msg = error?.message || error?.reason || '';
+    const retryablePatterns = [
+        'Internal JSON-RPC',
+        'network',
+        'timeout',
+        'ETIMEDOUT',
+        'ECONNRESET',
+        'nonce',
+        'replacement transaction',
+        'already known'
+    ];
+    return retryablePatterns.some(pattern => msg.toLowerCase().includes(pattern.toLowerCase()));
+}
+
+function formatError(error) {
+    const msg = error?.reason || error?.shortMessage || error?.message || 'Unknown error';
     
-    (async () => {
-        try {
-            const result = await recordPlatformUsage(actionType, txHash);
-            if (result?.success && result.pointsAwarded > 0) {
-                showToast(`🎯 +${result.pointsAwarded.toLocaleString()} Airdrop Points!`, "success");
-            }
-        } catch (e) {
-            console.warn('Tracking failed:', e.message);
+    const errorMap = {
+        'insufficient funds': 'INSUFFICIENT_GAS',
+        'exceeds the balance': 'INSUFFICIENT_GAS',
+        'InsufficientOracleFee': 'Insufficient ETH for service fee',
+        'InvalidGuessCount': 'Wrong number of guesses',
+        'InvalidGuessRange': 'Guess out of valid range',
+        'ZeroAmount': 'Amount cannot be zero',
+        'NoActiveTiers': 'Game currently unavailable',
+        'InsufficientAllowance': 'Token approval needed',
+        'InsufficientBalance': 'Insufficient BKC balance',
+        'InsufficientTokenBalance': 'Contract has insufficient tokens',
+        'DelegationNotFound': 'Delegation not found',
+        'DelegationLocked': 'Delegation still locked',
+        'LockPeriodActive': 'Lock period still active',
+        'InvalidIndex': 'Invalid delegation index',
+        'NotOwner': 'Not the owner',
+        'CooldownActive': 'Cooldown active, please wait',
+        'NoRewardsToClaim': 'No rewards to claim',
+        'SlippageExceeded': 'Price changed, try again',
+        'PoolEmpty': 'No NFTs in pool',
+        'RPC_TIMEOUT': 'Network timeout, please retry',
+        'RPC_RATE_LIMITED': 'Network busy, please wait',
+        'rate limit': 'Network busy, please wait'
+    };
+    
+    for (const [pattern, message] of Object.entries(errorMap)) {
+        if (msg.toLowerCase().includes(pattern.toLowerCase())) {
+            return message;
         }
-    })();
+    }
+    
+    if (msg.includes('execution reverted:')) {
+        return msg.split('execution reverted:')[1].trim().slice(0, 80);
+    }
+    
+    return msg.slice(0, 80);
+}
+
+function handleTransactionError(error) {
+    const formattedError = formatError(error);
+    
+    if (formattedError === 'INSUFFICIENT_GAS') {
+        showInsufficientGasError();
+        return;
+    }
+    
+    showToast(formattedError, "error");
+}
+
+function showInsufficientGasError() {
+    showToast("⛽ Need ETH for gas fees!", "error");
+    
+    setTimeout(() => {
+        const existingModal = document.getElementById('gas-faucet-modal');
+        if (existingModal) existingModal.remove();
+        
+        const modal = document.createElement('div');
+        modal.id = 'gas-faucet-modal';
+        modal.className = 'fixed inset-0 z-[9999] flex items-center justify-center p-4';
+        modal.innerHTML = `
+            <div class="absolute inset-0 bg-black/80" onclick="this.parentElement.remove()"></div>
+            <div class="relative bg-zinc-900 rounded-2xl p-6 max-w-sm w-full border border-zinc-700">
+                <h3 class="text-lg font-bold text-white mb-2">⛽ Need Gas (ETH)</h3>
+                <p class="text-sm text-zinc-400 mb-4">
+                    Transactions require a small amount of ETH for gas fees.
+                </p>
+                <div class="space-y-2">
+                    <a href="${FAUCET_LINKS.arbitrumSepolia}" target="_blank" 
+                       class="block w-full py-3 px-4 bg-blue-600 hover:bg-blue-700 text-white text-center rounded-xl font-bold">
+                        🚰 Alchemy Faucet
+                    </a>
+                    <a href="${FAUCET_LINKS.alternativeFaucet}" target="_blank"
+                       class="block w-full py-3 px-4 bg-zinc-700 hover:bg-zinc-600 text-white text-center rounded-xl">
+                        QuickNode Faucet
+                    </a>
+                </div>
+                <button onclick="this.parentElement.parentElement.remove()" 
+                        class="mt-4 w-full py-2 text-zinc-500 hover:text-zinc-300">
+                    Close
+                </button>
+            </div>
+        `;
+        document.body.appendChild(modal);
+    }, 300);
 }
 
 // ====================================================================
-// DELEGATION - OPTIMIZED
+// PRE-FLIGHT CHECK (with graceful degradation)
+// ====================================================================
+
+async function preFlightCheck(options = {}) {
+    const {
+        requiredBKC = 0n,
+        requiredETH = 0n,
+        spenderAddress = null,
+        checkAllowance = true,
+        actionName = 'transaction'
+    } = options;
+
+    const issues = [];
+    const adjustments = {};
+    let canProceed = true;
+
+    try {
+        const signer = await getConnectedSigner();
+        if (!signer) {
+            return { canProceed: false, issues: ['Wallet not connected'], adjustments: {} };
+        }
+
+        const provider = signer.provider;
+        const userAddress = State.userAddress;
+
+        // 1. Check ETH balance (with timeout)
+        try {
+            const ethBalance = await safeRPCCall(() => provider.getBalance(userAddress), 3000);
+            const minEthForGas = ethers.parseEther(TX_CONFIG.MIN_ETH_FOR_GAS.toString());
+            const totalEthNeeded = requiredETH + minEthForGas;
+
+            if (ethBalance < minEthForGas) {
+                issues.push(`Need ~${TX_CONFIG.MIN_ETH_FOR_GAS} ETH for gas`);
+                canProceed = false;
+                adjustments.needsETH = true;
+            } else if (requiredETH > 0n && ethBalance < totalEthNeeded) {
+                issues.push(`Need ${ethers.formatEther(totalEthNeeded)} ETH total`);
+                canProceed = false;
+            }
+        } catch (e) {
+            console.warn('ETH balance check skipped:', e.message);
+            // Continue anyway - wallet will reject if insufficient
+        }
+
+        // 2. Check BKC balance (use cached if RPC fails)
+        if (requiredBKC > 0n) {
+            let bkcBalance = State.currentUserBalance || 0n;
+            
+            try {
+                if (State.bkcTokenContract) {
+                    bkcBalance = await safeRPCCall(
+                        () => State.bkcTokenContract.balanceOf(userAddress), 
+                        3000
+                    );
+                    State.currentUserBalance = bkcBalance;
+                }
+            } catch (e) {
+                console.warn('BKC balance check using cached value:', e.message);
+            }
+
+            if (bkcBalance < requiredBKC) {
+                const shortfall = requiredBKC - bkcBalance;
+                const shortfallPercent = requiredBKC > 0n 
+                    ? Number((shortfall * 100n) / requiredBKC) 
+                    : 100;
+                
+                if (shortfallPercent <= TX_CONFIG.MAX_AUTO_ADJUST_PERCENT && bkcBalance > 0n) {
+                    adjustments.adjustedBKC = bkcBalance;
+                    adjustments.originalBKC = requiredBKC;
+                } else if (bkcBalance === 0n) {
+                    issues.push('No BKC balance');
+                    canProceed = false;
+                } else {
+                    issues.push(`Insufficient BKC (have ${formatBigNumber(bkcBalance)})`);
+                    canProceed = false;
+                }
+            }
+        }
+
+        // 3. Check allowance (silent fail - will approve if needed)
+        if (checkAllowance && spenderAddress && requiredBKC > 0n && canProceed) {
+            try {
+                const tokenABI = ["function allowance(address,address) view returns (uint256)"];
+                const token = new ethers.Contract(addresses.bkcToken, tokenABI, provider);
+                
+                const currentAllowance = await safeRPCCall(
+                    () => token.allowance(userAddress, spenderAddress),
+                    3000
+                );
+                
+                const amountToCheck = adjustments.adjustedBKC || requiredBKC;
+                
+                if (currentAllowance < amountToCheck) {
+                    adjustments.needsApproval = true;
+                }
+            } catch (e) {
+                console.warn('Allowance check skipped, will approve if needed');
+                adjustments.needsApproval = true;
+            }
+        }
+
+        return { canProceed, issues, adjustments };
+
+    } catch (e) {
+        console.error('Pre-flight error:', e);
+        // Return success to let the transaction try anyway
+        return { canProceed: true, issues: [], adjustments: { needsApproval: true } };
+    }
+}
+
+// ====================================================================
+// SMART APPROVAL (with unlimited approval)
+// ====================================================================
+
+async function smartApprove(tokenAddress, spenderAddress, minimumAmount, signer) {
+    const tokenABI = [
+        "function approve(address,uint256) returns (bool)", 
+        "function allowance(address,address) view returns (uint256)"
+    ];
+    const token = new ethers.Contract(tokenAddress, tokenABI, signer);
+    
+    try {
+        // Quick allowance check with short timeout
+        let currentAllowance = 0n;
+        try {
+            currentAllowance = await safeRPCCall(
+                () => token.allowance(State.userAddress, spenderAddress),
+                3000
+            );
+            
+            if (currentAllowance >= minimumAmount) {
+                console.log("✅ Already approved");
+                return true;
+            }
+        } catch (e) {
+            console.warn('Allowance check failed, proceeding with approval');
+        }
+        
+        // Approve unlimited to avoid future approvals
+        const MAX_UINT256 = 2n ** 256n - 1n;
+        
+        showToast("Approve BKC spending...", "info");
+        
+        const tx = await token.approve(spenderAddress, MAX_UINT256);
+        showToast("Confirming approval...", "info");
+        
+        const receipt = await tx.wait();
+        if (receipt.status === 0) {
+            throw new Error("Approval failed");
+        }
+        
+        await sleep(TX_CONFIG.APPROVAL_WAIT_MS);
+        showToast("✅ Approved!", "success");
+        return true;
+        
+    } catch (e) {
+        if (isUserRejection(e)) {
+            showToast("Approval cancelled", "error");
+            return false;
+        }
+        
+        // Retry once if RPC error
+        if (isRPCError(e)) {
+            showToast("Network busy, retrying...", "warning");
+            await sleep(2000);
+            
+            try {
+                const tx = await token.approve(spenderAddress, 2n ** 256n - 1n);
+                await tx.wait();
+                showToast("✅ Approved!", "success");
+                return true;
+            } catch (retryError) {
+                if (isUserRejection(retryError)) {
+                    showToast("Approval cancelled", "error");
+                    return false;
+                }
+            }
+        }
+        
+        console.error("Approval error:", e);
+        handleTransactionError(e);
+        return false;
+    }
+}
+
+// Legacy alias
+export const robustApprove = smartApprove;
+
+// ====================================================================
+// TRANSACTION EXECUTOR
+// ====================================================================
+
+async function executeWithRetry(txFunction, options = {}) {
+    const {
+        retries = TX_CONFIG.MAX_RETRIES,
+        onAttempt = () => {},
+        onSuccess = () => {},
+        description = 'Transaction'
+    } = options;
+    
+    for (let attempt = 1; attempt <= retries; attempt++) {
+        try {
+            onAttempt(attempt);
+            
+            const tx = await txFunction();
+            showToast("⏳ Confirming...", "info");
+            
+            const receipt = await tx.wait();
+            
+            if (receipt.status === 0) {
+                throw new Error("Transaction reverted");
+            }
+            
+            onSuccess(receipt);
+            return { success: true, receipt, txHash: receipt.hash };
+            
+        } catch (e) {
+            console.error(`${description} attempt ${attempt}:`, e.message?.slice(0, 100));
+            
+            if (isUserRejection(e)) {
+                showToast("Transaction cancelled", "warning");
+                return { success: false, cancelled: true };
+            }
+            
+            if (attempt < retries && isRetryableError(e)) {
+                showToast(`Retrying... (${attempt}/${retries})`, "warning");
+                await sleep(TX_CONFIG.RETRY_DELAY_MS * attempt);
+                continue;
+            }
+            
+            handleTransactionError(e);
+            return { success: false, error: e };
+        }
+    }
+    
+    return { success: false };
+}
+
+// ====================================================================
+// DELEGATION
 // ====================================================================
 
 export async function executeDelegation(totalAmount, durationSeconds, boosterIdToSend, btnElement) {
@@ -504,66 +516,50 @@ export async function executeDelegation(totalAmount, durationSeconds, boosterIdT
     if (!signer) return false;
     
     const originalText = btnElement?.innerHTML || 'Delegate';
-    const updateButton = (text) => {
+    const updateBtn = (text, disabled = true) => {
         if (btnElement) {
             btnElement.innerHTML = text;
-            btnElement.disabled = text !== originalText;
+            btnElement.disabled = disabled;
         }
     };
     
-    updateButton('<div class="loader inline-block"></div> Checking...');
+    updateBtn('<i class="fa-solid fa-spinner fa-spin"></i> Checking...');
     
     try {
-        const totalAmountBigInt = BigInt(totalAmount);
+        const amountBigInt = BigInt(totalAmount);
         const durationBigInt = BigInt(durationSeconds);
         const boosterIdBigInt = BigInt(boosterIdToSend || 0);
         
-        // Pre-flight check
+        // Pre-flight
         const preflight = await preFlightCheck({
-            requiredBKC: totalAmountBigInt,
+            requiredBKC: amountBigInt,
             spenderAddress: addresses.delegationManager,
             actionName: 'delegation'
         });
         
         if (!preflight.canProceed) {
-            preflight.issues.forEach(issue => showToast(issue, "error"));
+            preflight.issues.forEach(i => showToast(i, "error"));
             return false;
         }
         
-        // Use adjusted amount if available
-        const finalAmount = preflight.adjustments.adjustedBKC || totalAmountBigInt;
-        
-        if (preflight.adjustments.adjustedBKC) {
-            showToast(`Amount adjusted to ${formatBigNumber(finalAmount)} BKC`, "info");
-        }
+        const finalAmount = preflight.adjustments.adjustedBKC || amountBigInt;
         
         // Approve if needed
         if (preflight.adjustments.needsApproval) {
-            updateButton('<div class="loader inline-block"></div> Approving...');
-            const approved = await smartApprove(
-                addresses.bkcToken,
-                addresses.delegationManager,
-                finalAmount,
-                signer
-            );
+            updateBtn('<i class="fa-solid fa-spinner fa-spin"></i> Approving...');
+            const approved = await smartApprove(addresses.bkcToken, addresses.delegationManager, finalAmount, signer);
             if (!approved) return false;
         }
         
-        updateButton('<div class="loader inline-block"></div> Delegating...');
+        updateBtn('<i class="fa-solid fa-spinner fa-spin"></i> Delegating...');
         
-        const delegationContract = new ethers.Contract(
-            addresses.delegationManager,
-            delegationManagerABI,
-            signer
-        );
+        const contract = new ethers.Contract(addresses.delegationManager, delegationManagerABI, signer);
         
-        const result = await executeWithAutoAdjust(
-            () => delegationContract.delegate(finalAmount, durationBigInt, boosterIdBigInt),
+        const result = await executeWithRetry(
+            () => contract.delegate(finalAmount, durationBigInt, boosterIdBigInt),
             {
                 description: 'Delegation',
-                onAttempt: (attempt) => {
-                    if (attempt === 1) showToast("Confirm in wallet...", "info");
-                },
+                onAttempt: (a) => { if (a === 1) showToast("Confirm in wallet...", "info"); },
                 onSuccess: () => {
                     showToast("✅ Delegation successful!", "success");
                     loadUserData();
@@ -571,10 +567,7 @@ export async function executeDelegation(totalAmount, durationSeconds, boosterIdT
             }
         );
         
-        if (result.success) {
-            trackPlatformUsage('delegation', result.txHash);
-        }
-        
+        if (result.success) trackPlatformUsage('delegation', result.txHash);
         return result.success;
         
     } catch (e) {
@@ -582,12 +575,12 @@ export async function executeDelegation(totalAmount, durationSeconds, boosterIdT
         handleTransactionError(e);
         return false;
     } finally {
-        updateButton(originalText);
+        updateBtn(originalText, false);
     }
 }
 
 // ====================================================================
-// UNSTAKE - OPTIMIZED
+// UNSTAKE
 // ====================================================================
 
 export async function executeUnstake(index, boosterIdToSend, btnElement) {
@@ -595,43 +588,32 @@ export async function executeUnstake(index, boosterIdToSend, btnElement) {
     if (!signer) return false;
     
     const originalText = btnElement?.innerHTML || 'Unstake';
-    const updateButton = (text) => {
+    const updateBtn = (text, disabled = true) => {
         if (btnElement) {
             btnElement.innerHTML = text;
-            btnElement.disabled = text !== originalText;
+            btnElement.disabled = disabled;
         }
     };
     
-    updateButton('<div class="loader inline-block"></div> Processing...');
+    updateBtn('<i class="fa-solid fa-spinner fa-spin"></i> Processing...');
     
     try {
-        // Pre-flight - only need gas
-        const preflight = await preFlightCheck({
-            requiredETH: 0n,
-            actionName: 'unstake'
-        });
-        
+        const preflight = await preFlightCheck({ actionName: 'unstake' });
         if (!preflight.canProceed) {
-            preflight.issues.forEach(issue => showToast(issue, "error"));
+            preflight.issues.forEach(i => showToast(i, "error"));
             return false;
         }
         
         const indexBigInt = BigInt(Number(index));
         const boosterIdBigInt = BigInt(boosterIdToSend || 0);
         
-        const delegationContract = new ethers.Contract(
-            addresses.delegationManager,
-            delegationManagerABI,
-            signer
-        );
+        const contract = new ethers.Contract(addresses.delegationManager, delegationManagerABI, signer);
         
-        const result = await executeWithAutoAdjust(
-            () => delegationContract.unstake(indexBigInt, boosterIdBigInt),
+        const result = await executeWithRetry(
+            () => contract.unstake(indexBigInt, boosterIdBigInt),
             {
                 description: 'Unstake',
-                onAttempt: (attempt) => {
-                    if (attempt === 1) showToast("Confirm unstake...", "info");
-                },
+                onAttempt: (a) => { if (a === 1) showToast("Confirm unstake...", "info"); },
                 onSuccess: async () => {
                     showToast("✅ Unstaked!", "success");
                     await loadUserData(true);
@@ -640,10 +622,7 @@ export async function executeUnstake(index, boosterIdToSend, btnElement) {
             }
         );
         
-        if (result.success) {
-            trackPlatformUsage('unstake', result.txHash);
-        }
-        
+        if (result.success) trackPlatformUsage('unstake', result.txHash);
         return result.success;
         
     } catch (e) {
@@ -651,12 +630,12 @@ export async function executeUnstake(index, boosterIdToSend, btnElement) {
         handleTransactionError(e);
         return false;
     } finally {
-        updateButton(originalText);
+        updateBtn(originalText, false);
     }
 }
 
 // ====================================================================
-// FORCE UNSTAKE - OPTIMIZED
+// FORCE UNSTAKE
 // ====================================================================
 
 export async function executeForceUnstake(index, boosterIdToSend, btnElement) {
@@ -664,51 +643,41 @@ export async function executeForceUnstake(index, boosterIdToSend, btnElement) {
     if (!signer) return false;
     
     const originalText = btnElement?.innerHTML || 'Force Unstake';
-    const updateButton = (text) => {
+    const updateBtn = (text, disabled = true) => {
         if (btnElement) {
             btnElement.innerHTML = text;
-            btnElement.disabled = text !== originalText;
+            btnElement.disabled = disabled;
         }
     };
     
-    updateButton('<div class="loader inline-block"></div> Processing...');
+    updateBtn('<i class="fa-solid fa-spinner fa-spin"></i> Processing...');
     
     try {
         const preflight = await preFlightCheck({ actionName: 'force unstake' });
-        
         if (!preflight.canProceed) {
-            preflight.issues.forEach(issue => showToast(issue, "error"));
+            preflight.issues.forEach(i => showToast(i, "error"));
             return false;
         }
         
         const indexBigInt = BigInt(Number(index));
         const boosterIdBigInt = BigInt(boosterIdToSend || 0);
         
-        const delegationContract = new ethers.Contract(
-            addresses.delegationManager,
-            delegationManagerABI,
-            signer
-        );
+        const contract = new ethers.Contract(addresses.delegationManager, delegationManagerABI, signer);
         
-        const result = await executeWithAutoAdjust(
-            () => delegationContract.forceUnstake(indexBigInt, boosterIdBigInt),
+        const result = await executeWithRetry(
+            () => contract.forceUnstake(indexBigInt, boosterIdBigInt),
             {
                 description: 'Force Unstake',
-                onAttempt: (attempt) => {
-                    if (attempt === 1) showToast("⚠️ Confirm force unstake (50% penalty)...", "warning");
-                },
+                onAttempt: () => showToast("⚠️ Confirm force unstake (penalty applies)...", "warning"),
                 onSuccess: async () => {
-                    showToast("✅ Force unstaked (penalty applied)", "success");
+                    showToast("✅ Force unstaked!", "success");
                     await loadUserData(true);
                     await loadUserDelegations(true);
                 }
             }
         );
         
-        if (result.success) {
-            trackPlatformUsage('unstake', result.txHash);
-        }
-        
+        if (result.success) trackPlatformUsage('unstake', result.txHash);
         return result.success;
         
     } catch (e) {
@@ -716,12 +685,12 @@ export async function executeForceUnstake(index, boosterIdToSend, btnElement) {
         handleTransactionError(e);
         return false;
     } finally {
-        updateButton(originalText);
+        updateBtn(originalText, false);
     }
 }
 
 // ====================================================================
-// CLAIM REWARDS - OPTIMIZED
+// CLAIM REWARDS
 // ====================================================================
 
 export async function executeClaimRewards(boosterIdToSend, btnElement) {
@@ -729,38 +698,30 @@ export async function executeClaimRewards(boosterIdToSend, btnElement) {
     if (!signer) return false;
     
     const originalText = btnElement?.innerHTML || 'Claim';
-    const updateButton = (text) => {
+    const updateBtn = (text, disabled = true) => {
         if (btnElement) {
             btnElement.innerHTML = text;
-            btnElement.disabled = text !== originalText;
+            btnElement.disabled = disabled;
         }
     };
     
-    updateButton('<div class="loader inline-block"></div> Claiming...');
+    updateBtn('<i class="fa-solid fa-spinner fa-spin"></i> Claiming...');
     
     try {
         const preflight = await preFlightCheck({ actionName: 'claim' });
-        
         if (!preflight.canProceed) {
-            preflight.issues.forEach(issue => showToast(issue, "error"));
+            preflight.issues.forEach(i => showToast(i, "error"));
             return false;
         }
         
         const boosterIdBigInt = BigInt(boosterIdToSend || 0);
+        const contract = new ethers.Contract(addresses.delegationManager, delegationManagerABI, signer);
         
-        const delegationContract = new ethers.Contract(
-            addresses.delegationManager,
-            delegationManagerABI,
-            signer
-        );
-        
-        const result = await executeWithAutoAdjust(
-            () => delegationContract.claimReward(boosterIdBigInt),
+        const result = await executeWithRetry(
+            () => contract.claimReward(boosterIdBigInt),
             {
                 description: 'Claim',
-                onAttempt: (attempt) => {
-                    if (attempt === 1) showToast("Confirm claim...", "info");
-                },
+                onAttempt: () => showToast("Confirm claim...", "info"),
                 onSuccess: () => {
                     showToast("✅ Rewards claimed!", "success");
                     loadUserData();
@@ -768,10 +729,7 @@ export async function executeClaimRewards(boosterIdToSend, btnElement) {
             }
         );
         
-        if (result.success) {
-            trackPlatformUsage('claimReward', result.txHash);
-        }
-        
+        if (result.success) trackPlatformUsage('claimReward', result.txHash);
         return result.success;
         
     } catch (e) {
@@ -779,12 +737,12 @@ export async function executeClaimRewards(boosterIdToSend, btnElement) {
         handleTransactionError(e);
         return false;
     } finally {
-        updateButton(originalText);
+        updateBtn(originalText, false);
     }
 }
 
 // ====================================================================
-// UNIVERSAL CLAIM (Staking + Mining) - OPTIMIZED
+// UNIVERSAL CLAIM (Staking + Mining)
 // ====================================================================
 
 export async function executeUniversalClaim(stakingRewards, minerRewards, boosterIdToSend, btnElement) {
@@ -792,86 +750,70 @@ export async function executeUniversalClaim(stakingRewards, minerRewards, booste
     if (!signer) return false;
     
     const originalText = btnElement?.innerHTML || 'Claim';
-    const updateButton = (text) => {
+    const updateBtn = (text, disabled = true) => {
         if (btnElement) {
             btnElement.innerHTML = text;
-            btnElement.disabled = text !== originalText;
+            btnElement.disabled = disabled;
         }
     };
     
-    updateButton('<div class="loader inline-block"></div> Processing...');
+    updateBtn('<i class="fa-solid fa-spinner fa-spin"></i> Processing...');
     
     try {
-        const preflight = await preFlightCheck({ actionName: 'universal claim' });
-        
+        const preflight = await preFlightCheck({ actionName: 'claim' });
         if (!preflight.canProceed) {
-            preflight.issues.forEach(issue => showToast(issue, "error"));
+            preflight.issues.forEach(i => showToast(i, "error"));
             return false;
         }
         
-        // Validate booster
+        // Validate booster ownership
         let boosterIdBigInt = 0n;
         try {
             const boosterNum = Number(boosterIdToSend || 0);
             if (boosterNum > 0 && State.myBoosters?.length > 0) {
-                const ownsBooster = State.myBoosters.some(b => Number(b.tokenId) === boosterNum);
-                if (ownsBooster) {
-                    boosterIdBigInt = BigInt(boosterNum);
-                }
+                const owns = State.myBoosters.some(b => Number(b.tokenId) === boosterNum);
+                if (owns) boosterIdBigInt = BigInt(boosterNum);
             }
-        } catch (e) {
-            console.warn('Booster validation failed:', e);
-        }
+        } catch (e) {}
         
         const hasStaking = BigInt(stakingRewards || 0) > 0n;
         const hasMining = BigInt(minerRewards || 0) > 0n;
         
-        let stakingSuccess = false;
-        let miningSuccess = false;
+        let anySuccess = false;
         let txHash = null;
         
-        // Claim staking rewards
+        // Claim staking
         if (hasStaking) {
-            updateButton('<div class="loader inline-block"></div> Claiming staking...');
+            updateBtn('<i class="fa-solid fa-spinner fa-spin"></i> Claiming staking...');
+            const contract = new ethers.Contract(addresses.delegationManager, delegationManagerABI, signer);
             
-            const delegationContract = new ethers.Contract(
-                addresses.delegationManager,
-                delegationManagerABI,
-                signer
+            const result = await executeWithRetry(
+                () => contract.claimReward(boosterIdBigInt),
+                { description: 'Claim Staking', onAttempt: () => showToast("Confirm staking claim...", "info") }
             );
             
-            const result = await executeWithAutoAdjust(
-                () => delegationContract.claimReward(boosterIdBigInt),
-                {
-                    description: 'Claim Staking',
-                    onAttempt: () => showToast("Confirm staking claim...", "info")
-                }
-            );
-            
-            stakingSuccess = result.success;
-            if (result.txHash) txHash = result.txHash;
+            if (result.success) {
+                anySuccess = true;
+                txHash = result.txHash;
+            }
         }
         
-        // Claim mining rewards
+        // Claim mining
         if (hasMining && addresses.miningManager) {
-            updateButton('<div class="loader inline-block"></div> Claiming mining...');
-            
+            updateBtn('<i class="fa-solid fa-spinner fa-spin"></i> Claiming mining...');
             const miningABI = ["function claimRewards(uint256) external"];
-            const miningContract = new ethers.Contract(addresses.miningManager, miningABI, signer);
+            const contract = new ethers.Contract(addresses.miningManager, miningABI, signer);
             
-            const result = await executeWithAutoAdjust(
-                () => miningContract.claimRewards(boosterIdBigInt),
-                {
-                    description: 'Claim Mining',
-                    onAttempt: () => showToast("Confirm mining claim...", "info")
-                }
+            const result = await executeWithRetry(
+                () => contract.claimRewards(boosterIdBigInt),
+                { description: 'Claim Mining', onAttempt: () => showToast("Confirm mining claim...", "info") }
             );
             
-            miningSuccess = result.success;
-            if (result.txHash) txHash = result.txHash;
+            if (result.success) {
+                anySuccess = true;
+                txHash = result.txHash;
+            }
         }
-        
-        const anySuccess = stakingSuccess || miningSuccess;
         
         if (anySuccess) {
             showToast("✅ Rewards claimed!", "success");
@@ -886,12 +828,12 @@ export async function executeUniversalClaim(stakingRewards, minerRewards, booste
         handleTransactionError(e);
         return false;
     } finally {
-        updateButton(originalText);
+        updateBtn(originalText, false);
     }
 }
 
 // ====================================================================
-// BUY NFT - OPTIMIZED
+// BUY NFT
 // ====================================================================
 
 export async function executeBuyNFT(poolAddress, maxPrice, btnElement) {
@@ -899,33 +841,36 @@ export async function executeBuyNFT(poolAddress, maxPrice, btnElement) {
     if (!signer) return { success: false };
     
     const originalText = btnElement?.innerHTML || 'Buy';
-    const updateButton = (text) => {
+    const updateBtn = (text, disabled = true) => {
         if (btnElement) {
             btnElement.innerHTML = text;
-            btnElement.disabled = text !== originalText;
+            btnElement.disabled = disabled;
         }
     };
     
-    updateButton('<div class="loader inline-block"></div> Checking...');
+    updateBtn('<i class="fa-solid fa-spinner fa-spin"></i> Checking...');
     
     try {
-        // Get current price from pool
         const poolContract = new ethers.Contract(poolAddress, nftPoolABI, signer);
         
+        // Get price
         let currentPrice;
         try {
-            currentPrice = await poolContract.getBuyPriceWithTax();
-        } catch (e) {
-            currentPrice = await poolContract.getBuyPrice();
+            currentPrice = await safeRPCCall(() => poolContract.getBuyPriceWithTax(), 5000);
+        } catch {
+            try {
+                currentPrice = await safeRPCCall(() => poolContract.getBuyPrice(), 5000);
+            } catch (e) {
+                showToast("Could not get price, try again", "error");
+                return { success: false };
+            }
         }
         
-        // Add slippage tolerance
+        // Add slippage
         const priceWithSlippage = currentPrice + (currentPrice * BigInt(TX_CONFIG.SLIPPAGE_BIPS) / 10000n);
-        const finalMaxPrice = maxPrice && BigInt(maxPrice) > priceWithSlippage 
-            ? BigInt(maxPrice) 
-            : priceWithSlippage;
+        const finalMaxPrice = maxPrice && BigInt(maxPrice) > priceWithSlippage ? BigInt(maxPrice) : priceWithSlippage;
         
-        // Pre-flight check
+        // Pre-flight
         const preflight = await preFlightCheck({
             requiredBKC: finalMaxPrice,
             spenderAddress: poolAddress,
@@ -933,26 +878,24 @@ export async function executeBuyNFT(poolAddress, maxPrice, btnElement) {
         });
         
         if (!preflight.canProceed) {
-            preflight.issues.forEach(issue => showToast(issue, "error"));
+            preflight.issues.forEach(i => showToast(i, "error"));
             return { success: false };
         }
         
         // Approve
         if (preflight.adjustments.needsApproval) {
-            updateButton('<div class="loader inline-block"></div> Approving...');
+            updateBtn('<i class="fa-solid fa-spinner fa-spin"></i> Approving...');
             const approved = await smartApprove(addresses.bkcToken, poolAddress, finalMaxPrice, signer);
             if (!approved) return { success: false };
         }
         
-        updateButton('<div class="loader inline-block"></div> Buying...');
+        updateBtn('<i class="fa-solid fa-spinner fa-spin"></i> Buying...');
         
-        const result = await executeWithAutoAdjust(
+        const result = await executeWithRetry(
             () => poolContract.buyNFTWithSlippage(finalMaxPrice),
             {
                 description: 'Buy NFT',
-                onAttempt: (attempt) => {
-                    if (attempt === 1) showToast("Confirm purchase...", "info");
-                }
+                onAttempt: () => showToast("Confirm purchase...", "info")
             }
         );
         
@@ -982,12 +925,12 @@ export async function executeBuyNFT(poolAddress, maxPrice, btnElement) {
         handleTransactionError(e);
         return { success: false };
     } finally {
-        updateButton(originalText);
+        updateBtn(originalText, false);
     }
 }
 
 // ====================================================================
-// SELL NFT - OPTIMIZED
+// SELL NFT
 // ====================================================================
 
 export async function executeSellNFT(poolAddress, tokenId, btnElement) {
@@ -995,14 +938,14 @@ export async function executeSellNFT(poolAddress, tokenId, btnElement) {
     if (!signer) return { success: false };
     
     const originalText = btnElement?.innerHTML || 'Sell';
-    const updateButton = (text) => {
+    const updateBtn = (text, disabled = true) => {
         if (btnElement) {
             btnElement.innerHTML = text;
-            btnElement.disabled = text !== originalText;
+            btnElement.disabled = disabled;
         }
     };
     
-    updateButton('<div class="loader inline-block"></div> Processing...');
+    updateBtn('<i class="fa-solid fa-spinner fa-spin"></i> Processing...');
     
     try {
         // Validate tokenId
@@ -1011,18 +954,17 @@ export async function executeSellNFT(poolAddress, tokenId, btnElement) {
             validTokenId = tokenId.tokenId || tokenId.id;
         }
         
-        if (!validTokenId) {
+        if (!validTokenId && validTokenId !== 0) {
             showToast("Invalid NFT token ID", "error");
             return { success: false };
         }
         
         validTokenId = BigInt(validTokenId);
         
-        // Pre-flight check
+        // Pre-flight
         const preflight = await preFlightCheck({ actionName: 'sell NFT' });
-        
         if (!preflight.canProceed) {
-            preflight.issues.forEach(issue => showToast(issue, "error"));
+            preflight.issues.forEach(i => showToast(i, "error"));
             return { success: false };
         }
         
@@ -1030,35 +972,38 @@ export async function executeSellNFT(poolAddress, tokenId, btnElement) {
         const nftABI = ["function approve(address,uint256)", "function getApproved(uint256) view returns (address)"];
         const nftContract = new ethers.Contract(addresses.rewardBoosterNFT, nftABI, signer);
         
-        const approved = await nftContract.getApproved(validTokenId);
-        if (approved.toLowerCase() !== poolAddress.toLowerCase()) {
-            updateButton('<div class="loader inline-block"></div> Approving NFT...');
-            showToast("Approving NFT...", "info");
+        try {
+            const approved = await safeRPCCall(() => nftContract.getApproved(validTokenId), 3000);
+            if (approved.toLowerCase() !== poolAddress.toLowerCase()) {
+                updateBtn('<i class="fa-solid fa-spinner fa-spin"></i> Approving NFT...');
+                showToast("Approving NFT...", "info");
+                const approveTx = await nftContract.approve(poolAddress, validTokenId);
+                await approveTx.wait();
+                await sleep(TX_CONFIG.APPROVAL_WAIT_MS);
+            }
+        } catch (e) {
+            // Approve anyway
+            updateBtn('<i class="fa-solid fa-spinner fa-spin"></i> Approving NFT...');
             const approveTx = await nftContract.approve(poolAddress, validTokenId);
             await approveTx.wait();
             await sleep(TX_CONFIG.APPROVAL_WAIT_MS);
         }
         
-        // Get minimum payout with slippage protection
+        // Get min payout with slippage
         const poolContract = new ethers.Contract(poolAddress, nftPoolABI, signer);
-        let sellPrice;
+        let minPayout = 0n;
         try {
-            sellPrice = await poolContract.getSellPriceAfterTax();
-        } catch {
-            sellPrice = await poolContract.getSellPrice();
-        }
+            const sellPrice = await safeRPCCall(() => poolContract.getSellPriceAfterTax(), 3000);
+            minPayout = sellPrice - (sellPrice * BigInt(TX_CONFIG.SLIPPAGE_BIPS) / 10000n);
+        } catch {}
         
-        const minPayout = sellPrice - (sellPrice * BigInt(TX_CONFIG.SLIPPAGE_BIPS) / 10000n);
+        updateBtn('<i class="fa-solid fa-spinner fa-spin"></i> Selling...');
         
-        updateButton('<div class="loader inline-block"></div> Selling...');
-        
-        const result = await executeWithAutoAdjust(
+        const result = await executeWithRetry(
             () => poolContract.sellNFT(validTokenId, minPayout),
             {
                 description: 'Sell NFT',
-                onAttempt: (attempt) => {
-                    if (attempt === 1) showToast("Confirm sale...", "info");
-                }
+                onAttempt: () => showToast("Confirm sale...", "info")
             }
         );
         
@@ -1076,12 +1021,243 @@ export async function executeSellNFT(poolAddress, tokenId, btnElement) {
         handleTransactionError(e);
         return { success: false };
     } finally {
-        updateButton(originalText);
+        updateBtn(originalText, false);
     }
 }
 
 // ====================================================================
-// FORTUNE POOL V2 - OPTIMIZED
+// RENTAL - LIST NFT
+// ====================================================================
+
+export async function executeListNFT(params, btnElement) {
+    const signer = await getConnectedSigner();
+    if (!signer) return { success: false };
+    
+    const originalText = btnElement?.innerHTML || 'List';
+    const updateBtn = (text, disabled = true) => {
+        if (btnElement) {
+            btnElement.innerHTML = text;
+            btnElement.disabled = disabled;
+        }
+    };
+    
+    updateBtn('<i class="fa-solid fa-spinner fa-spin"></i> Processing...');
+    
+    try {
+        const { tokenId, pricePerHour, minHours, maxHours } = params;
+        const rentalAddress = addresses.rentalManager;
+        
+        if (!rentalAddress) {
+            showToast("Rental Manager not configured", "error");
+            return { success: false };
+        }
+        
+        const preflight = await preFlightCheck({ actionName: 'list rental' });
+        if (!preflight.canProceed) {
+            preflight.issues.forEach(i => showToast(i, "error"));
+            return { success: false };
+        }
+        
+        // Approve NFT
+        const nftABI = [
+            "function setApprovalForAll(address,bool)",
+            "function isApprovedForAll(address,address) view returns (bool)"
+        ];
+        const nftContract = new ethers.Contract(addresses.rewardBoosterNFT, nftABI, signer);
+        
+        try {
+            const isApproved = await safeRPCCall(
+                () => nftContract.isApprovedForAll(State.userAddress, rentalAddress),
+                3000
+            );
+            if (!isApproved) {
+                updateBtn('<i class="fa-solid fa-spinner fa-spin"></i> Approving...');
+                showToast("Approving NFTs...", "info");
+                const approveTx = await nftContract.setApprovalForAll(rentalAddress, true);
+                await approveTx.wait();
+                await sleep(TX_CONFIG.APPROVAL_WAIT_MS);
+            }
+        } catch {
+            updateBtn('<i class="fa-solid fa-spinner fa-spin"></i> Approving...');
+            const approveTx = await nftContract.setApprovalForAll(rentalAddress, true);
+            await approveTx.wait();
+        }
+        
+        updateBtn('<i class="fa-solid fa-spinner fa-spin"></i> Listing...');
+        
+        const rentalContract = new ethers.Contract(rentalAddress, rentalManagerABI, signer);
+        
+        const result = await executeWithRetry(
+            () => rentalContract.listNFT(
+                BigInt(tokenId),
+                BigInt(pricePerHour),
+                BigInt(minHours),
+                BigInt(maxHours)
+            ),
+            {
+                description: 'List NFT',
+                onAttempt: () => showToast("Confirm listing...", "info")
+            }
+        );
+        
+        if (result.success) {
+            showToast(`✅ NFT #${tokenId} listed!`, "success");
+            loadRentalListings(true);
+            trackPlatformUsage('listRental', result.txHash);
+            return { success: true, txHash: result.txHash };
+        }
+        
+        return { success: false };
+        
+    } catch (e) {
+        console.error("List NFT error:", e);
+        handleTransactionError(e);
+        return { success: false };
+    } finally {
+        updateBtn(originalText, false);
+    }
+}
+
+// ====================================================================
+// RENTAL - WITHDRAW NFT (Delist)
+// ====================================================================
+
+export async function executeWithdrawNFT(tokenId, btnElement) {
+    const signer = await getConnectedSigner();
+    if (!signer) return { success: false };
+    
+    const originalText = btnElement?.innerHTML || 'Withdraw';
+    const updateBtn = (text, disabled = true) => {
+        if (btnElement) {
+            btnElement.innerHTML = text;
+            btnElement.disabled = disabled;
+        }
+    };
+    
+    updateBtn('<i class="fa-solid fa-spinner fa-spin"></i> Processing...');
+    
+    try {
+        const rentalAddress = addresses.rentalManager;
+        
+        if (!rentalAddress) {
+            showToast("Rental Manager not configured", "error");
+            return { success: false };
+        }
+        
+        const preflight = await preFlightCheck({ actionName: 'withdraw NFT' });
+        if (!preflight.canProceed) {
+            preflight.issues.forEach(i => showToast(i, "error"));
+            return { success: false };
+        }
+        
+        const rentalContract = new ethers.Contract(rentalAddress, rentalManagerABI, signer);
+        
+        const result = await executeWithRetry(
+            () => rentalContract.withdrawNFT(BigInt(tokenId)),
+            {
+                description: 'Withdraw NFT',
+                onAttempt: () => showToast("Confirm withdrawal...", "info")
+            }
+        );
+        
+        if (result.success) {
+            showToast(`✅ NFT #${tokenId} withdrawn!`, "success");
+            loadRentalListings(true);
+            loadUserData();
+            trackPlatformUsage('withdrawRental', result.txHash);
+            return { success: true, txHash: result.txHash };
+        }
+        
+        return { success: false };
+        
+    } catch (e) {
+        console.error("Withdraw NFT error:", e);
+        handleTransactionError(e);
+        return { success: false };
+    } finally {
+        updateBtn(originalText, false);
+    }
+}
+
+// ====================================================================
+// RENTAL - RENT NFT
+// ====================================================================
+
+export async function executeRentNFT(params, btnElement) {
+    const signer = await getConnectedSigner();
+    if (!signer) return { success: false };
+    
+    const originalText = btnElement?.innerHTML || 'Rent';
+    const updateBtn = (text, disabled = true) => {
+        if (btnElement) {
+            btnElement.innerHTML = text;
+            btnElement.disabled = disabled;
+        }
+    };
+    
+    updateBtn('<i class="fa-solid fa-spinner fa-spin"></i> Processing...');
+    
+    try {
+        const { tokenId, hours, totalCost } = params;
+        const rentalAddress = addresses.rentalManager;
+        
+        if (!rentalAddress) {
+            showToast("Rental Manager not configured", "error");
+            return { success: false };
+        }
+        
+        const costBigInt = BigInt(totalCost);
+        
+        const preflight = await preFlightCheck({
+            requiredBKC: costBigInt,
+            spenderAddress: rentalAddress,
+            actionName: 'rent NFT'
+        });
+        
+        if (!preflight.canProceed) {
+            preflight.issues.forEach(i => showToast(i, "error"));
+            return { success: false };
+        }
+        
+        if (preflight.adjustments.needsApproval) {
+            updateBtn('<i class="fa-solid fa-spinner fa-spin"></i> Approving...');
+            const approved = await smartApprove(addresses.bkcToken, rentalAddress, costBigInt, signer);
+            if (!approved) return { success: false };
+        }
+        
+        updateBtn('<i class="fa-solid fa-spinner fa-spin"></i> Renting...');
+        
+        const rentalContract = new ethers.Contract(rentalAddress, rentalManagerABI, signer);
+        
+        const result = await executeWithRetry(
+            () => rentalContract.rent(BigInt(tokenId), BigInt(hours)),
+            {
+                description: 'Rent NFT',
+                onAttempt: () => showToast("Confirm rental...", "info")
+            }
+        );
+        
+        if (result.success) {
+            showToast(`✅ NFT #${tokenId} rented for ${hours}h!`, "success");
+            loadRentalListings(true);
+            loadUserData();
+            trackPlatformUsage('rentNFT', result.txHash);
+            return { success: true, txHash: result.txHash };
+        }
+        
+        return { success: false };
+        
+    } catch (e) {
+        console.error("Rent NFT error:", e);
+        handleTransactionError(e);
+        return { success: false };
+    } finally {
+        updateBtn(originalText, false);
+    }
+}
+
+// ====================================================================
+// FORTUNE POOL V2
 // ====================================================================
 
 const fortunePoolV2ABI = [
@@ -1100,14 +1276,14 @@ export async function executeFortunePlay(wager, guesses, isCumulative, btnElemen
     if (!signer) return { success: false };
     
     const originalText = btnElement?.innerHTML || 'Play';
-    const updateButton = (text) => {
+    const updateBtn = (text, disabled = true) => {
         if (btnElement) {
             btnElement.innerHTML = text;
-            btnElement.disabled = text !== originalText;
+            btnElement.disabled = disabled;
         }
     };
     
-    updateButton('<div class="loader inline-block"></div> Checking...');
+    updateBtn('<i class="fa-solid fa-spinner fa-spin"></i> Checking...');
     
     try {
         const wagerBigInt = ethers.parseEther(wager.toString());
@@ -1121,40 +1297,18 @@ export async function executeFortunePlay(wager, guesses, isCumulative, btnElemen
         
         const fortuneContract = new ethers.Contract(fortuneAddress, fortunePoolV2ABI, signer);
         
-        // Get required service fee (ETH)
+        // Get service fee
         let requiredFee = 0n;
         try {
-            requiredFee = await fortuneContract.getRequiredServiceFee(isCumulative);
+            requiredFee = await safeRPCCall(
+                () => fortuneContract.getRequiredServiceFee(isCumulative),
+                3000
+            );
         } catch (e) {
-            console.warn("Could not get service fee:", e.message);
+            console.warn("Could not get service fee, using 0");
         }
         
-        // Validate guesses against tiers
-        try {
-            const tierCount = await fortuneContract.activeTierCount();
-            const expectedGuesses = isCumulative ? Number(tierCount) : 1;
-            
-            if (guessesArray.length !== expectedGuesses) {
-                showToast(`Need ${expectedGuesses} guess(es) for ${isCumulative ? 'Combo' : 'Jackpot'} mode`, "error");
-                return { success: false };
-            }
-            
-            // Validate each guess is within range
-            for (let i = 0; i < guessesArray.length; i++) {
-                const tierId = isCumulative ? i + 1 : Number(tierCount);
-                const tier = await fortuneContract.prizeTiers(tierId);
-                const maxRange = Number(tier.maxRange);
-                
-                if (guessesArray[i] < 1n || guessesArray[i] > BigInt(maxRange)) {
-                    showToast(`Guess ${i + 1} must be between 1 and ${maxRange}`, "error");
-                    return { success: false };
-                }
-            }
-        } catch (e) {
-            console.warn("Could not validate tiers:", e.message);
-        }
-        
-        // Pre-flight check
+        // Pre-flight
         const preflight = await preFlightCheck({
             requiredBKC: wagerBigInt,
             requiredETH: requiredFee,
@@ -1163,34 +1317,30 @@ export async function executeFortunePlay(wager, guesses, isCumulative, btnElemen
         });
         
         if (!preflight.canProceed) {
-            preflight.issues.forEach(issue => showToast(issue, "error"));
+            preflight.issues.forEach(i => showToast(i, "error"));
             return { success: false };
         }
         
-        // Use adjusted wager if needed
         const finalWager = preflight.adjustments.adjustedBKC || wagerBigInt;
         
         // Approve
         if (preflight.adjustments.needsApproval) {
-            updateButton('<div class="loader inline-block"></div> Approving...');
+            updateBtn('<i class="fa-solid fa-spinner fa-spin"></i> Approving...');
             const approved = await smartApprove(addresses.bkcToken, fortuneAddress, finalWager, signer);
             if (!approved) return { success: false };
         }
         
-        updateButton('<div class="loader inline-block"></div> 🎰 Rolling...');
+        updateBtn('<i class="fa-solid fa-spinner fa-spin"></i> 🎰 Rolling...');
         
-        const result = await executeWithAutoAdjust(
+        const result = await executeWithRetry(
             () => fortuneContract.play(finalWager, guessesArray, isCumulative, { value: requiredFee }),
             {
                 description: 'Fortune Game',
-                onAttempt: (attempt) => {
-                    if (attempt === 1) showToast("🎰 Confirm your bet...", "info");
-                }
+                onAttempt: () => showToast("🎰 Confirm your bet...", "info")
             }
         );
         
         if (result.success) {
-            // Parse results
             let gameId = null, rolls = [], prizeWon = 0, matches = [], matchCount = 0, isJackpot = false;
             
             for (const log of result.receipt.logs) {
@@ -1212,13 +1362,12 @@ export async function executeFortunePlay(wager, guesses, isCumulative, btnElemen
                 } catch {}
             }
             
-            // Show result
             if (prizeWon > 0) {
-                if (isJackpot) {
-                    showToast(`🎰🎰🎰 JACKPOT! +${prizeWon.toLocaleString()} BKC! 🎉`, "success");
-                } else {
-                    showToast(`🎉 YOU WON ${prizeWon.toLocaleString()} BKC!`, "success");
-                }
+                showToast(isJackpot 
+                    ? `🎰🎰🎰 JACKPOT! +${prizeWon.toLocaleString()} BKC!` 
+                    : `🎉 YOU WON ${prizeWon.toLocaleString()} BKC!`, 
+                    "success"
+                );
             } else {
                 showToast("No match this time. Try again!", "warning");
             }
@@ -1241,12 +1390,12 @@ export async function executeFortunePlay(wager, guesses, isCumulative, btnElemen
         handleTransactionError(e);
         return { success: false };
     } finally {
-        updateButton(originalText);
+        updateBtn(originalText, false);
     }
 }
 
 // ====================================================================
-// NOTARIZE DOCUMENT - OPTIMIZED
+// NOTARIZE DOCUMENT
 // ====================================================================
 
 export async function executeNotarize(params, submitButton) {
@@ -1254,14 +1403,14 @@ export async function executeNotarize(params, submitButton) {
     if (!signer) return false;
     
     const originalText = submitButton?.innerHTML || 'Notarize';
-    const updateButton = (text) => {
+    const updateBtn = (text, disabled = true) => {
         if (submitButton) {
             submitButton.innerHTML = text;
-            submitButton.disabled = text !== originalText;
+            submitButton.disabled = disabled;
         }
     };
     
-    updateButton('<div class="loader inline-block"></div> Processing...');
+    updateBtn('<i class="fa-solid fa-spinner fa-spin"></i> Processing...');
     
     try {
         const { ipfsUri, contentHash, description } = params;
@@ -1276,10 +1425,10 @@ export async function executeNotarize(params, submitButton) {
         let feeToPay = ethers.parseEther("1");
         try {
             const notaryRead = new ethers.Contract(notaryAddress, decentralizedNotaryABI, signer.provider);
-            feeToPay = await notaryRead.calculateFee(0);
+            feeToPay = await safeRPCCall(() => notaryRead.calculateFee(0), 3000);
         } catch {}
         
-        // Pre-flight check
+        // Pre-flight
         const preflight = await preFlightCheck({
             requiredBKC: feeToPay,
             spenderAddress: notaryAddress,
@@ -1287,37 +1436,33 @@ export async function executeNotarize(params, submitButton) {
         });
         
         if (!preflight.canProceed) {
-            preflight.issues.forEach(issue => showToast(issue, "error"));
+            preflight.issues.forEach(i => showToast(i, "error"));
             return false;
         }
         
         // Approve
         if (preflight.adjustments.needsApproval) {
-            updateButton('<div class="loader inline-block"></div> Approving...');
+            updateBtn('<i class="fa-solid fa-spinner fa-spin"></i> Approving...');
             const approved = await smartApprove(addresses.bkcToken, notaryAddress, feeToPay, signer);
             if (!approved) return false;
         }
         
-        updateButton('<div class="loader inline-block"></div> Notarizing...');
+        updateBtn('<i class="fa-solid fa-spinner fa-spin"></i> Notarizing...');
         
         const notaryContract = new ethers.Contract(notaryAddress, decentralizedNotaryABI, signer);
         
-        // Get booster for discount
+        // Get booster
         let boosterTokenId = 0n;
         try {
             const boosterInfo = await getHighestBoosterBoostFromAPI();
-            if (boosterInfo?.tokenId) {
-                boosterTokenId = BigInt(boosterInfo.tokenId);
-            }
+            if (boosterInfo?.tokenId) boosterTokenId = BigInt(boosterInfo.tokenId);
         } catch {}
         
-        const result = await executeWithAutoAdjust(
+        const result = await executeWithRetry(
             () => notaryContract.notarize(ipfsUri, description || '', contentHash, boosterTokenId),
             {
                 description: 'Notarize',
-                onAttempt: (attempt) => {
-                    if (attempt === 1) showToast("Confirm notarization...", "info");
-                }
+                onAttempt: () => showToast("Confirm notarization...", "info")
             }
         );
         
@@ -1346,169 +1491,7 @@ export async function executeNotarize(params, submitButton) {
         handleTransactionError(e);
         return false;
     } finally {
-        updateButton(originalText);
-    }
-}
-
-// ====================================================================
-// RENTAL - LIST NFT
-// ====================================================================
-
-export async function executeListNFT(params, btnElement) {
-    const signer = await getConnectedSigner();
-    if (!signer) return { success: false };
-    
-    const originalText = btnElement?.innerHTML || 'List';
-    const updateButton = (text) => {
-        if (btnElement) {
-            btnElement.innerHTML = text;
-            btnElement.disabled = text !== originalText;
-        }
-    };
-    
-    updateButton('<div class="loader inline-block"></div> Processing...');
-    
-    try {
-        const { tokenId, pricePerHour, minHours, maxHours } = params;
-        const rentalAddress = addresses.rentalManager;
-        
-        if (!rentalAddress) {
-            showToast("Rental Manager not configured", "error");
-            return { success: false };
-        }
-        
-        const preflight = await preFlightCheck({ actionName: 'list rental' });
-        
-        if (!preflight.canProceed) {
-            preflight.issues.forEach(issue => showToast(issue, "error"));
-            return { success: false };
-        }
-        
-        // Approve NFT for rental
-        const nftABI = [
-            "function setApprovalForAll(address,bool)",
-            "function isApprovedForAll(address,address) view returns (bool)"
-        ];
-        const nftContract = new ethers.Contract(addresses.rewardBoosterNFT, nftABI, signer);
-        
-        const isApproved = await nftContract.isApprovedForAll(State.userAddress, rentalAddress);
-        if (!isApproved) {
-            updateButton('<div class="loader inline-block"></div> Approving...');
-            showToast("Approving NFTs for rental...", "info");
-            const approveTx = await nftContract.setApprovalForAll(rentalAddress, true);
-            await approveTx.wait();
-            await sleep(TX_CONFIG.APPROVAL_WAIT_MS);
-        }
-        
-        updateButton('<div class="loader inline-block"></div> Listing...');
-        
-        const rentalContract = new ethers.Contract(rentalAddress, rentalManagerABI, signer);
-        
-        const result = await executeWithAutoAdjust(
-            () => rentalContract.listNFT(
-                BigInt(tokenId),
-                BigInt(pricePerHour),
-                BigInt(minHours),
-                BigInt(maxHours)
-            ),
-            {
-                description: 'List NFT',
-                onAttempt: () => showToast("Confirm listing...", "info")
-            }
-        );
-        
-        if (result.success) {
-            showToast(`✅ NFT #${tokenId} listed!`, "success");
-            loadRentalListings(true);
-            trackPlatformUsage('listRental', result.txHash);
-            return { success: true, txHash: result.txHash };
-        }
-        
-        return { success: false };
-        
-    } catch (e) {
-        console.error("List NFT error:", e);
-        handleTransactionError(e);
-        return { success: false };
-    } finally {
-        updateButton(originalText);
-    }
-}
-
-// ====================================================================
-// RENTAL - RENT NFT
-// ====================================================================
-
-export async function executeRentNFT(params, btnElement) {
-    const signer = await getConnectedSigner();
-    if (!signer) return { success: false };
-    
-    const originalText = btnElement?.innerHTML || 'Rent';
-    const updateButton = (text) => {
-        if (btnElement) {
-            btnElement.innerHTML = text;
-            btnElement.disabled = text !== originalText;
-        }
-    };
-    
-    updateButton('<div class="loader inline-block"></div> Processing...');
-    
-    try {
-        const { tokenId, hours, totalCost } = params;
-        const rentalAddress = addresses.rentalManager;
-        
-        if (!rentalAddress) {
-            showToast("Rental Manager not configured", "error");
-            return { success: false };
-        }
-        
-        const costBigInt = BigInt(totalCost);
-        
-        const preflight = await preFlightCheck({
-            requiredBKC: costBigInt,
-            spenderAddress: rentalAddress,
-            actionName: 'rent NFT'
-        });
-        
-        if (!preflight.canProceed) {
-            preflight.issues.forEach(issue => showToast(issue, "error"));
-            return { success: false };
-        }
-        
-        if (preflight.adjustments.needsApproval) {
-            updateButton('<div class="loader inline-block"></div> Approving...');
-            const approved = await smartApprove(addresses.bkcToken, rentalAddress, costBigInt, signer);
-            if (!approved) return { success: false };
-        }
-        
-        updateButton('<div class="loader inline-block"></div> Renting...');
-        
-        const rentalContract = new ethers.Contract(rentalAddress, rentalManagerABI, signer);
-        
-        const result = await executeWithAutoAdjust(
-            () => rentalContract.rent(BigInt(tokenId), BigInt(hours)),
-            {
-                description: 'Rent NFT',
-                onAttempt: () => showToast("Confirm rental...", "info")
-            }
-        );
-        
-        if (result.success) {
-            showToast(`✅ NFT #${tokenId} rented for ${hours}h!`, "success");
-            loadRentalListings(true);
-            loadUserData();
-            trackPlatformUsage('rentNFT', result.txHash);
-            return { success: true, txHash: result.txHash };
-        }
-        
-        return { success: false };
-        
-    } catch (e) {
-        console.error("Rent NFT error:", e);
-        handleTransactionError(e);
-        return { success: false };
-    } finally {
-        updateButton(originalText);
+        updateBtn(originalText, false);
     }
 }
 
@@ -1525,14 +1508,14 @@ export async function executeFaucetClaim(btnElement) {
     }
     
     const originalText = btnElement?.innerHTML || 'Claim';
-    const updateButton = (text) => {
+    const updateBtn = (text, disabled = true) => {
         if (btnElement) {
             btnElement.innerHTML = text;
-            btnElement.disabled = text !== originalText;
+            btnElement.disabled = disabled;
         }
     };
     
-    updateButton('<div class="loader inline-block"></div> Claiming...');
+    updateBtn('<i class="fa-solid fa-spinner fa-spin"></i> Claiming...');
     
     try {
         const response = await fetch(`${FAUCET_API_URL}?address=${State.userAddress}`, {
@@ -1546,9 +1529,7 @@ export async function executeFaucetClaim(btnElement) {
             showToast(`✅ Received ${data.bkcAmount || '20'} BKC!`, "success");
             loadUserData();
             
-            if (data.txHash) {
-                trackPlatformUsage('faucet', data.txHash);
-            }
+            if (data.txHash) trackPlatformUsage('faucet', data.txHash);
             
             return {
                 success: true,
@@ -1557,9 +1538,8 @@ export async function executeFaucetClaim(btnElement) {
                 ethAmount: data.ethAmount
             };
         } else {
-            const msg = data.error || "Faucet unavailable";
-            showToast(msg, "error");
-            return { success: false, error: msg };
+            showToast(data.error || "Faucet unavailable", "error");
+            return { success: false, error: data.error };
         }
         
     } catch (e) {
@@ -1567,7 +1547,7 @@ export async function executeFaucetClaim(btnElement) {
         showToast("Faucet unavailable", "error");
         return { success: false };
     } finally {
-        updateButton(originalText);
+        updateBtn(originalText, false);
     }
 }
 
@@ -1580,67 +1560,3 @@ export const executeBuyBooster = executeBuyNFT;
 export const executeSellBooster = executeSellNFT;
 export const executeFortuneGame = executeFortunePlay;
 export const executeFortuneParticipate = executeFortunePlay;
-
-// Legacy support
-export { smartApprove as robustApprove };
-// ====================================================================
-// RENTAL - WITHDRAW NFT (Delist)
-// ====================================================================
-
-export async function executeWithdrawNFT(tokenId, btnElement) {
-    const signer = await getConnectedSigner();
-    if (!signer) return { success: false };
-    
-    const originalText = btnElement?.innerHTML || 'Withdraw';
-    const updateButton = (text) => {
-        if (btnElement) {
-            btnElement.innerHTML = text;
-            btnElement.disabled = text !== originalText;
-        }
-    };
-    
-    updateButton('<div class="loader inline-block"></div> Processing...');
-    
-    try {
-        const rentalAddress = addresses.rentalManager;
-        
-        if (!rentalAddress) {
-            showToast("Rental Manager not configured", "error");
-            return { success: false };
-        }
-        
-        const preflight = await preFlightCheck({ actionName: 'withdraw NFT' });
-        
-        if (!preflight.canProceed) {
-            preflight.issues.forEach(issue => showToast(issue, "error"));
-            return { success: false };
-        }
-        
-        const rentalContract = new ethers.Contract(rentalAddress, rentalManagerABI, signer);
-        
-        const result = await executeWithAutoAdjust(
-            () => rentalContract.withdrawNFT(BigInt(tokenId)),
-            {
-                description: 'Withdraw NFT',
-                onAttempt: () => showToast("Confirm withdrawal...", "info")
-            }
-        );
-        
-        if (result.success) {
-            showToast(`✅ NFT #${tokenId} withdrawn!`, "success");
-            loadRentalListings(true);
-            loadUserData();
-            trackPlatformUsage('withdrawRental', result.txHash);
-            return { success: true, txHash: result.txHash };
-        }
-        
-        return { success: false };
-        
-    } catch (e) {
-        console.error("Withdraw NFT error:", e);
-        handleTransactionError(e);
-        return { success: false };
-    } finally {
-        updateButton(originalText);
-    }
-}
