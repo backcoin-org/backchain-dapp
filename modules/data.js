@@ -1,13 +1,5 @@
 // js/modules/data.js
-// ✅ PRODUCTION V8.0 - Rate Limit Protection + Aggressive Caching
-//
-// V8.0 IMPROVEMENTS:
-// - Global RPC block flag - stops ALL calls when rate limited
-// - Auto-recovery after 60 seconds
-// - Firebase/API first strategy - RPC only as fallback
-// - Aggressive caching to minimize RPC calls
-// - Visual feedback when RPC is blocked
-//
+// ✅ PRODUCTION V7.0
 
 const ethers = window.ethers;
 
@@ -15,75 +7,13 @@ import { State } from '../state.js';
 import { addresses, boosterTiers, rentalManagerABI, rewardBoosterABI } from '../config.js';
 
 // ====================================================================
-// CONFIGURATION
+// CONSTANTS & CONFIGURATION
 // ====================================================================
-
 const API_TIMEOUT_MS = 5000;
-const CACHE_DURATION_MS = 60000;          // 1 minute cache for API data
-const CONTRACT_READ_CACHE_MS = 30000;      // 30 seconds cache for contract reads
-const OWNERSHIP_CACHE_MS = 60000;          // 1 minute cache for ownership
-const BALANCE_CACHE_MS = 30000;            // 30 seconds cache for balances
-const RPC_BLOCK_DURATION_MS = 60000;       // Block RPC for 1 minute after rate limit
-const RPC_COOLDOWN_MS = 500;               // Minimum 500ms between RPC calls
-
-// ====================================================================
-// GLOBAL RPC PROTECTION
-// ====================================================================
-
-let rpcBlocked = false;
-let rpcBlockedUntil = 0;
-let lastRpcCall = 0;
-let consecutiveRpcErrors = 0;
-const MAX_CONSECUTIVE_ERRORS = 3;
-
-/**
- * Check if RPC is currently blocked
- */
-function isRpcBlocked() {
-    if (!rpcBlocked) return false;
-    
-    if (Date.now() > rpcBlockedUntil) {
-        // Unblock after timeout
-        rpcBlocked = false;
-        consecutiveRpcErrors = 0;
-        console.log('🟢 RPC unblocked - resuming normal operations');
-        return false;
-    }
-    
-    return true;
-}
-
-/**
- * Block RPC calls for a period
- */
-function blockRpc(reason = 'rate limit') {
-    rpcBlocked = true;
-    rpcBlockedUntil = Date.now() + RPC_BLOCK_DURATION_MS;
-    console.warn(`🔴 RPC BLOCKED for ${RPC_BLOCK_DURATION_MS/1000}s - reason: ${reason}`);
-    
-    // Show user-friendly message
-    if (typeof window !== 'undefined' && window.showToast) {
-        window.showToast('⏳ Network busy, using cached data...', 'warning');
-    }
-}
-
-/**
- * Throttle RPC calls
- */
-async function throttleRpc() {
-    const now = Date.now();
-    const timeSinceLastCall = now - lastRpcCall;
-    
-    if (timeSinceLastCall < RPC_COOLDOWN_MS) {
-        await wait(RPC_COOLDOWN_MS - timeSinceLastCall);
-    }
-    
-    lastRpcCall = Date.now();
-}
-
-// ====================================================================
-// CACHES
-// ====================================================================
+const CACHE_DURATION_MS = 60000;
+const CONTRACT_READ_CACHE_MS = 15000;
+const OWNERSHIP_CACHE_MS = 30000;
+const BALANCE_CACHE_MS = 10000;
 
 let systemDataCache = null;
 let systemDataCacheTime = 0;
@@ -98,7 +28,7 @@ const wait = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 // SAFE FETCH WITH TIMEOUT
 // ====================================================================
 
-async function fetchWithTimeout(url, timeoutMs = API_TIMEOUT_MS) {
+async function fetchWithTimeout(url, timeoutMs) {
     const controller = new AbortController();
     const id = setTimeout(() => controller.abort(), timeoutMs);
     try {
@@ -108,7 +38,7 @@ async function fetchWithTimeout(url, timeoutMs = API_TIMEOUT_MS) {
     } catch (error) {
         clearTimeout(id);
         if (error.name === 'AbortError') {
-            throw new Error('API timeout');
+            throw new Error('API request timed out.');
         }
         throw error;
     }
@@ -127,39 +57,27 @@ export const API_ENDPOINTS = {
     getUserRentals: 'https://getuserrentals-4wvdcuoouq-uc.a.run.app',
     fortuneGames: 'https://getfortunegames-4wvdcuoouq-uc.a.run.app',
     uploadFileToIPFS: '/api/upload',
-    claimAirdrop: 'https://us-central1-airdropbackchainnew.cloudfunctions.net/claimAirdrop',
-    getUserBalance: 'https://getuserbalance-4wvdcuoouq-uc.a.run.app'
+    claimAirdrop: 'https://us-central1-airdropbackchainnew.cloudfunctions.net/claimAirdrop'
 };
 
 // ====================================================================
-// ERROR DETECTION
+// RPC SAFETY FUNCTIONS
 // ====================================================================
 
 function isRateLimitError(e) {
-    const msg = e?.message || '';
-    const code = e?.error?.code || e?.code;
-    
     return (
-        code === 429 ||
-        code === -32002 ||
-        msg.includes('429') ||
-        msg.includes('Too Many Requests') ||
-        msg.includes('rate limit') ||
-        msg.includes('too many errors') ||
-        msg.includes('retrying in')
+        e?.error?.code === 429 || 
+        e?.code === 429 ||
+        (e.message && (e.message.includes("429") || e.message.includes("Too Many Requests") || e.message.includes("rate limit")))
     );
 }
 
 function isRpcError(e) {
-    const code = e?.error?.code || e?.code;
-    const msg = e?.message || '';
-    
+    const errorCode = e?.error?.code || e?.code;
     return (
-        code === -32603 ||
-        code === -32000 ||
-        code === -32002 ||
-        msg.includes('Internal JSON-RPC') ||
-        msg.includes('missing revert data')
+        errorCode === -32603 ||
+        errorCode === -32000 ||
+        e.message?.includes("Internal JSON-RPC")
     );
 }
 
@@ -174,7 +92,7 @@ function getContractInstance(address, abi, fallbackStateContract) {
 }
 
 // ====================================================================
-// SAFE CONTRACT CALL WITH CACHE & PROTECTION
+// SAFE CONTRACT CALL WITH CACHE & RETRY
 // ====================================================================
 
 export const safeContractCall = async (
@@ -182,43 +100,25 @@ export const safeContractCall = async (
     method, 
     args = [], 
     fallbackValue = 0n, 
-    retries = 1, 
+    retries = 2, 
     forceRefresh = false
 ) => {
     if (!contract) return fallbackValue;
 
-    // Check if RPC is blocked
-    if (isRpcBlocked()) {
-        // Try to return cached value
-        const contractAddr = contract.target || contract.address;
-        const serializedArgs = JSON.stringify(args, (key, value) =>
-            typeof value === 'bigint' ? value.toString() : value
-        );
-        const cacheKey = `${contractAddr}-${method}-${serializedArgs}`;
-        
-        const cached = contractReadCache.get(cacheKey);
-        if (cached) {
-            return cached.value;
-        }
-        
-        return fallbackValue;
-    }
-
     const contractAddr = contract.target || contract.address;
+
     const serializedArgs = JSON.stringify(args, (key, value) =>
         typeof value === 'bigint' ? value.toString() : value
     );
     const cacheKey = `${contractAddr}-${method}-${serializedArgs}`;
     const now = Date.now();
 
-    // Check cache first (extended list of cacheable methods)
     const cacheableMethods = [
         'getPoolInfo', 'getBuyPrice', 'getSellPrice', 'getAvailableTokenIds',
         'getAllListedTokenIds', 'tokenURI', 'boostBips', 'getListing',
         'balanceOf', 'totalSupply', 'totalNetworkPStake', 'MAX_SUPPLY', 'TGE_SUPPLY',
         'userTotalPStake', 'pendingRewards', 'isRented', 'getRental', 'ownerOf',
-        'getDelegationsOf', 'allowance', 'prizeTiers', 'activeTierCount', 'prizePoolBalance',
-        'gameCounter', 'serviceFee', 'getRequiredServiceFee', 'getRequiredOracleFee'
+        'getDelegationsOf', 'allowance', 'prizeTiers', 'activeTierCount', 'prizePoolBalance'
     ];
 
     if (!forceRefresh && cacheableMethods.includes(method)) {
@@ -228,46 +128,43 @@ export const safeContractCall = async (
         }
     }
 
-    // Throttle RPC calls
-    await throttleRpc();
+    let lastError = null;
+    for (let attempt = 0; attempt <= retries; attempt++) {
+        try {
+            const result = await contract[method](...args);
+            
+            if (cacheableMethods.includes(method)) {
+                contractReadCache.set(cacheKey, { value: result, timestamp: now });
+            }
+            
+            return result;
 
-    // Try the call
-    try {
-        const result = await contract[method](...args);
-        
-        // Cache the result
-        contractReadCache.set(cacheKey, { value: result, timestamp: now });
-        
-        // Reset error counter on success
-        consecutiveRpcErrors = 0;
-        
-        return result;
-
-    } catch (e) {
-        consecutiveRpcErrors++;
-        
-        // Check if we should block RPC
-        if (isRateLimitError(e)) {
-            blockRpc('rate limit detected');
-        } else if (consecutiveRpcErrors >= MAX_CONSECUTIVE_ERRORS) {
-            blockRpc(`${consecutiveRpcErrors} consecutive errors`);
+        } catch (e) {
+            lastError = e;
+            
+            if (isRateLimitError(e) && attempt < retries) {
+                const jitter = Math.floor(Math.random() * 1000);
+                const delay = 1000 * Math.pow(2, attempt) + jitter;
+                await wait(delay);
+                continue;
+            }
+            
+            if (isRpcError(e) && attempt < retries) {
+                await wait(500);
+                continue;
+            }
+            
+            break;
         }
-        
-        // Return cached value if available
-        const cached = contractReadCache.get(cacheKey);
-        if (cached) {
-            return cached.value;
-        }
-        
-        return fallbackValue;
     }
+    
+    return fallbackValue;
 };
 
 export const safeBalanceOf = async (contract, address, forceRefresh = false) => {
     const cacheKey = `balance-${contract?.target || contract?.address}-${address}`;
     const now = Date.now();
     
-    // Return cached if not forcing refresh
     if (!forceRefresh) {
         const cached = balanceCache.get(cacheKey);
         if (cached && (now - cached.timestamp < BALANCE_CACHE_MS)) {
@@ -275,19 +172,13 @@ export const safeBalanceOf = async (contract, address, forceRefresh = false) => 
         }
     }
     
-    // If RPC is blocked, return cached or 0
-    if (isRpcBlocked()) {
-        const cached = balanceCache.get(cacheKey);
-        return cached?.value || 0n;
-    }
-    
-    const balance = await safeContractCall(contract, 'balanceOf', [address], 0n, 1, forceRefresh);
+    const balance = await safeContractCall(contract, 'balanceOf', [address], 0n, 2, forceRefresh);
     balanceCache.set(cacheKey, { value: balance, timestamp: now });
     return balance;
 };
 
 // ====================================================================
-// 1. GLOBAL SYSTEM DATA (Firebase First)
+// 1. GLOBAL SYSTEM DATA
 // ====================================================================
 
 export async function loadSystemDataFromAPI() {
@@ -297,7 +188,6 @@ export async function loadSystemDataFromAPI() {
 
     const now = Date.now();
     
-    // Use cache if fresh
     if (systemDataCache && (now - systemDataCacheTime < CACHE_DURATION_MS)) {
         applySystemDataToState(systemDataCache);
         return true;
@@ -315,7 +205,6 @@ export async function loadSystemDataFromAPI() {
         return true;
         
     } catch (e) {
-        // Use defaults
         if (!State.systemFees['NOTARY_SERVICE']) State.systemFees['NOTARY_SERVICE'] = 100n;
         if (!State.systemFees['CLAIM_REWARD_FEE_BIPS']) State.systemFees['CLAIM_REWARD_FEE_BIPS'] = 500n;
         return false;
@@ -364,95 +253,60 @@ function applySystemDataToState(systemData) {
 }
 
 export async function loadPublicData() {
-    // Only load from API - no RPC needed
-    await loadSystemDataFromAPI();
+    if (!State.publicProvider || !State.bkcTokenContractPublic) return;
+    
+    await Promise.allSettled([
+        safeContractCall(State.bkcTokenContractPublic, 'totalSupply', [], 0n),
+        loadSystemDataFromAPI()
+    ]);
 }
 
 // ====================================================================
-// 2. USER DATA (API First, RPC Fallback)
+// 2. USER DATA
 // ====================================================================
 
 export async function loadUserData(forceRefresh = false) {
     if (!State.isConnected || !State.userAddress) return;
 
-    // Try API first for balance
     try {
-        const response = await fetchWithTimeout(
-            `${API_ENDPOINTS.getUserBalance}/${State.userAddress}`,
-            3000
-        );
-        if (response.ok) {
-            const data = await response.json();
-            if (data.bkcBalance) {
-                State.currentUserBalance = BigInt(data.bkcBalance);
-            }
-            if (data.ethBalance) {
-                State.currentUserNativeBalance = BigInt(data.ethBalance);
-            }
+        const [balance, nativeBalance] = await Promise.allSettled([
+            safeBalanceOf(State.bkcTokenContract, State.userAddress, forceRefresh),
+            State.provider?.getBalance(State.userAddress)
+        ]);
+
+        if (balance.status === 'fulfilled') {
+            State.currentUserBalance = balance.value;
         }
+        
+        if (nativeBalance.status === 'fulfilled') {
+            State.currentUserNativeBalance = nativeBalance.value;
+        }
+
+        await loadMyBoostersFromAPI(forceRefresh);
+
+        if (State.delegationManagerContract) {
+            const totalUserPStake = await safeContractCall(
+                State.delegationManagerContract,
+                'userTotalPStake',
+                [State.userAddress],
+                0n,
+                2,
+                forceRefresh
+            );
+            State.userTotalPStake = totalUserPStake;
+        }
+
     } catch (e) {
-        // API failed, try RPC if not blocked
+        console.error("Error loading user data:", e);
     }
-
-    // Only use RPC if not blocked and API didn't work
-    if (!isRpcBlocked()) {
-        try {
-            // BKC Balance
-            if (!State.currentUserBalance || forceRefresh) {
-                const balance = await safeBalanceOf(State.bkcTokenContract, State.userAddress, forceRefresh);
-                if (balance > 0n) {
-                    State.currentUserBalance = balance;
-                }
-            }
-            
-            // ETH Balance (only if not set)
-            if (!State.currentUserNativeBalance || forceRefresh) {
-                try {
-                    await throttleRpc();
-                    const nativeBalance = await State.provider?.getBalance(State.userAddress);
-                    if (nativeBalance) {
-                        State.currentUserNativeBalance = nativeBalance;
-                    }
-                } catch (e) {
-                    if (isRateLimitError(e)) {
-                        blockRpc('rate limit on getBalance');
-                    }
-                }
-            }
-
-            // User pStake
-            if (State.delegationManagerContract) {
-                const totalUserPStake = await safeContractCall(
-                    State.delegationManagerContract,
-                    'userTotalPStake',
-                    [State.userAddress],
-                    State.userTotalPStake || 0n,
-                    1,
-                    forceRefresh
-                );
-                State.userTotalPStake = totalUserPStake;
-            }
-
-        } catch (e) {
-            console.warn("User data RPC error:", e.message);
-        }
-    }
-
-    // Always load boosters from API (no RPC needed)
-    await loadMyBoostersFromAPI(forceRefresh);
 }
 
 // ====================================================================
-// 3. DELEGATIONS (RPC with cache)
+// 3. DELEGATIONS
 // ====================================================================
 
 export async function loadUserDelegations(forceRefresh = false) {
     if (!State.isConnected || !State.delegationManagerContract) return [];
-    
-    // If RPC is blocked, return cached
-    if (isRpcBlocked() && State.userDelegations) {
-        return State.userDelegations;
-    }
 
     try {
         const delegationsRaw = await safeContractCall(
@@ -460,62 +314,140 @@ export async function loadUserDelegations(forceRefresh = false) {
             'getDelegationsOf',
             [State.userAddress],
             [],
-            1,
+            2,
             forceRefresh
         );
         
-        if (delegationsRaw && delegationsRaw.length > 0) {
-            State.userDelegations = delegationsRaw.map((d, index) => ({
-                amount: d[0] || d.amount || 0n,
-                unlockTime: BigInt(d[1] || d.unlockTime || 0),
-                lockDuration: BigInt(d[2] || d.lockDuration || 0),
-                index
-            }));
-        }
+        State.userDelegations = delegationsRaw.map((d, index) => ({
+            amount: d[0] || d.amount || 0n,
+            unlockTime: BigInt(d[1] || d.unlockTime || 0),
+            lockDuration: BigInt(d[2] || d.lockDuration || 0),
+            index
+        }));
         
-        return State.userDelegations || [];
+        return State.userDelegations;
         
     } catch (e) {
-        console.warn("Error loading delegations:", e.message);
-        return State.userDelegations || [];
+        console.error("Error loading delegations:", e);
+        return [];
     }
 }
 
 // ====================================================================
-// 4. RENTAL MARKET (API First)
+// 4. RENTAL MARKET
 // ====================================================================
 
 export async function loadRentalListings(forceRefresh = false) {
-    // Always try API first
+    let listingsFromApi = [];
+    
     try {
         const response = await fetchWithTimeout(API_ENDPOINTS.getRentalListings, 4000);
         if (response.ok) {
-            const listingsFromApi = await response.json();
-            
-            if (listingsFromApi && listingsFromApi.length > 0) {
-                const enrichedListings = listingsFromApi.map(item => {
-                    const tier = boosterTiers.find(t => t.boostBips === Number(item.boostBips || 0));
-                    return {
-                        ...item,
-                        tokenId: item.tokenId?.toString() || item.id?.toString(),
-                        pricePerHour: item.pricePerHour?.toString() || item.price?.toString() || '0',
-                        totalEarnings: item.totalEarnings?.toString() || '0',
-                        rentalCount: Number(item.rentalCount || 0),
-                        img: tier?.img || './assets/nft.png',
-                        name: tier?.name || 'Booster NFT'
-                    };
-                });
-
-                State.rentalListings = enrichedListings;
-                return enrichedListings;
-            }
+            listingsFromApi = await response.json();
         }
-    } catch (e) {
-        console.warn("Rental API error:", e.message);
+    } catch (e) {}
+    
+    if (listingsFromApi && listingsFromApi.length > 0) {
+        const enrichedListings = listingsFromApi.map(item => {
+            const tier = boosterTiers.find(t => t.boostBips === Number(item.boostBips || 0));
+            return {
+                ...item,
+                tokenId: item.tokenId?.toString() || item.id?.toString(),
+                pricePerHour: item.pricePerHour?.toString() || item.price?.toString() || '0',
+                totalEarnings: item.totalEarnings?.toString() || '0',
+                rentalCount: Number(item.rentalCount || 0),
+                img: tier?.img || './assets/nft.png',
+                name: tier?.name || 'Booster NFT'
+            };
+        });
+
+        State.rentalListings = enrichedListings;
+        return enrichedListings;
     }
 
-    // Return cached if API failed
-    return State.rentalListings || [];
+    const rentalContract = getContractInstance(
+        addresses.rentalManager,
+        rentalManagerABI,
+        State.rentalManagerContractPublic
+    );
+    
+    if (!rentalContract) {
+        State.rentalListings = [];
+        return [];
+    }
+
+    try {
+        const listedIds = await safeContractCall(
+            rentalContract,
+            'getAllListedTokenIds',
+            [],
+            [],
+            2,
+            true
+        );
+        
+        if (!listedIds || listedIds.length === 0) {
+            State.rentalListings = [];
+            return [];
+        }
+
+        const listingsToFetch = listedIds.slice(0, 30);
+
+        const listingsPromises = listingsToFetch.map(async (tokenId) => {
+            try {
+                const listing = await safeContractCall(
+                    rentalContract,
+                    'getListing',
+                    [tokenId],
+                    null,
+                    1,
+                    true
+                );
+                
+                if (listing && listing.isActive) {
+                    const rentalInfo = await safeContractCall(
+                        rentalContract,
+                        'getRental',
+                        [tokenId],
+                        null,
+                        1,
+                        true
+                    );
+                    
+                    const boostInfo = await getBoosterInfo(tokenId);
+                    const nowSec = Math.floor(Date.now() / 1000);
+                    const isCurrentlyRented = rentalInfo && BigInt(rentalInfo.endTime || 0) > BigInt(nowSec);
+                    
+                    return {
+                        tokenId: tokenId.toString(),
+                        owner: listing.owner,
+                        pricePerHour: listing.pricePerHour?.toString() || listing.price?.toString() || '0',
+                        minHours: listing.minHours?.toString() || '1',
+                        maxHours: listing.maxHours?.toString() || '1',
+                        totalEarnings: listing.totalEarnings?.toString() || '0',
+                        rentalCount: Number(listing.rentalCount || 0),
+                        boostBips: boostInfo.boostBips,
+                        img: boostInfo.img || './assets/nft.png',
+                        name: boostInfo.name,
+                        isRented: isCurrentlyRented,
+                        currentTenant: isCurrentlyRented ? rentalInfo.tenant : null,
+                        rentalEndTime: isCurrentlyRented ? rentalInfo.endTime?.toString() : null
+                    };
+                }
+            } catch (e) {}
+            return null;
+        });
+
+        const results = await Promise.all(listingsPromises);
+        const validListings = results.filter(l => l !== null);
+
+        State.rentalListings = validListings;
+        return validListings;
+
+    } catch (e) {
+        State.rentalListings = [];
+        return [];
+    }
 }
 
 export async function loadUserRentals(forceRefresh = false) {
@@ -524,7 +456,6 @@ export async function loadUserRentals(forceRefresh = false) {
         return [];
     }
 
-    // Always try API first
     try {
         const response = await fetchWithTimeout(
             `${API_ENDPOINTS.getUserRentals}/${State.userAddress}`,
@@ -544,16 +475,73 @@ export async function loadUserRentals(forceRefresh = false) {
             State.myRentals = enrichedRentals;
             return enrichedRentals;
         }
-    } catch (e) {
-        console.warn("User rentals API error:", e.message);
+    } catch (e) {}
+
+    const rentalContract = getContractInstance(
+        addresses.rentalManager,
+        rentalManagerABI,
+        State.rentalManagerContractPublic
+    );
+    
+    if (!rentalContract) {
+        State.myRentals = [];
+        return [];
     }
 
-    // Return cached if API failed
-    return State.myRentals || [];
+    try {
+        const listedIds = await safeContractCall(
+            rentalContract,
+            'getAllListedTokenIds',
+            [],
+            [],
+            2,
+            forceRefresh
+        );
+        
+        const myRentals = [];
+        const nowSec = Math.floor(Date.now() / 1000);
+
+        for (const tokenId of listedIds.slice(0, 30)) {
+            try {
+                const rental = await safeContractCall(
+                    rentalContract,
+                    'getRental',
+                    [tokenId],
+                    null,
+                    1,
+                    forceRefresh
+                );
+                
+                if (rental && 
+                    rental.tenant?.toLowerCase() === State.userAddress.toLowerCase() &&
+                    BigInt(rental.endTime || 0) > BigInt(nowSec)) {
+                    
+                    const boostInfo = await getBoosterInfo(tokenId);
+                    myRentals.push({
+                        tokenId: tokenId.toString(),
+                        tenant: rental.tenant,
+                        startTime: rental.startTime?.toString() || '0',
+                        endTime: rental.endTime?.toString() || '0',
+                        paidAmount: rental.paidAmount?.toString() || '0',
+                        boostBips: boostInfo.boostBips,
+                        img: boostInfo.img,
+                        name: boostInfo.name
+                    });
+                }
+            } catch (e) {}
+        }
+
+        State.myRentals = myRentals;
+        return myRentals;
+
+    } catch (e) {
+        State.myRentals = [];
+        return [];
+    }
 }
 
 // ====================================================================
-// 5. BOOSTER HELPERS (API Only - No RPC needed)
+// 5. BOOSTER HELPERS
 // ====================================================================
 
 let cachedBoosterResult = null;
@@ -614,17 +602,6 @@ export async function getHighestBoosterBoostFromAPI(forceRefresh = false) {
 }
 
 async function getBoosterInfo(tokenId) {
-    // Try to get from cache or tiers first
-    const tier = boosterTiers.find(t => {
-        // Try to match by tokenId ranges if defined
-        return false; // Not easily matchable
-    });
-    
-    // If RPC is blocked, return default
-    if (isRpcBlocked()) {
-        return { boostBips: 0, img: 'assets/bkc_logo_3d.png', name: `Booster #${tokenId}` };
-    }
-
     const minABI = ["function boostBips(uint256) view returns (uint256)"];
     const contractToUse = getContractInstance(
         addresses.rewardBoosterNFT,
@@ -645,12 +622,12 @@ async function getBoosterInfo(tokenId) {
         );
         
         const bipsNum = Number(boostBips);
-        const matchedTier = boosterTiers.find(t => t.boostBips === bipsNum);
+        const tier = boosterTiers.find(t => t.boostBips === bipsNum);
         
         return {
             boostBips: bipsNum,
-            img: matchedTier?.img || './assets/nft.png',
-            name: matchedTier?.name || `Booster #${tokenId}`
+            img: tier?.img || './assets/nft.png',
+            name: tier?.name || `Booster #${tokenId}`
         };
         
     } catch {
@@ -667,11 +644,6 @@ export async function calculateUserTotalRewards() {
         return { stakingRewards: 0n, minerRewards: 0n, totalRewards: 0n };
     }
     
-    // If RPC blocked, return cached
-    if (isRpcBlocked()) {
-        return State.cachedRewards || { stakingRewards: 0n, minerRewards: 0n, totalRewards: 0n };
-    }
-    
     try {
         const stakingRewards = await safeContractCall(
             State.delegationManagerContract,
@@ -679,13 +651,10 @@ export async function calculateUserTotalRewards() {
             [State.userAddress],
             0n
         );
-        
-        const result = { stakingRewards, minerRewards: 0n, totalRewards: stakingRewards };
-        State.cachedRewards = result;
-        return result;
+        return { stakingRewards, minerRewards: 0n, totalRewards: stakingRewards };
         
     } catch (e) {
-        return State.cachedRewards || { stakingRewards: 0n, minerRewards: 0n, totalRewards: 0n };
+        return { stakingRewards: 0n, minerRewards: 0n, totalRewards: 0n };
     }
 }
 
@@ -716,7 +685,7 @@ export async function calculateClaimDetails() {
 }
 
 // ====================================================================
-// 7. BOOSTER LOADING (API Only)
+// 7. BOOSTER LOADING
 // ====================================================================
 
 let isLoadingBoosters = false;
@@ -757,16 +726,86 @@ export async function loadMyBoostersFromAPI(forceRefresh = false) {
         
         if (!response.ok) throw new Error(`API Error: ${response.status}`);
 
-        const ownedTokensAPI = await response.json();
+        let ownedTokensAPI = await response.json();
 
-        // Use API data directly - NO RPC verification (saves tons of calls)
-        State.myBoosters = ownedTokensAPI.map(tokenData => ({
-            tokenId: BigInt(tokenData.tokenId),
-            boostBips: Number(tokenData.boostBips || tokenData.boost || 0),
-            imageUrl: tokenData.imageUrl || tokenData.image || null
-        }));
+        const minABI = [
+            "function ownerOf(uint256) view returns (address)",
+            "function boostBips(uint256) view returns (uint256)"
+        ];
+        const contract = getContractInstance(
+            addresses.rewardBoosterNFT,
+            minABI,
+            State.rewardBoosterContractPublic
+        );
+
+        if (contract && ownedTokensAPI.length > 0) {
+            const checks = await Promise.all(
+                ownedTokensAPI.slice(0, 50).map(async (token) => {
+                    const id = BigInt(token.tokenId);
+                    const cacheKey = `ownerOf-${id}`;
+                    const nowTs = Date.now();
+
+                    let tokenBoostBips = Number(token.boostBips || token.boost || 0);
+                    
+                    if (tokenBoostBips === 0) {
+                        try {
+                            const chainBoostBips = await contract.boostBips(id);
+                            tokenBoostBips = Number(chainBoostBips);
+                        } catch (e) {}
+                    }
+
+                    if (!forceRefresh && ownershipCache.has(cacheKey)) {
+                        const cachedData = ownershipCache.get(cacheKey);
+                        if (nowTs - cachedData.timestamp < OWNERSHIP_CACHE_MS) {
+                            if (cachedData.owner.toLowerCase() === State.userAddress.toLowerCase()) {
+                                return {
+                                    tokenId: id,
+                                    boostBips: tokenBoostBips,
+                                    imageUrl: token.imageUrl || token.image || null
+                                };
+                            }
+                            return null;
+                        }
+                    }
+
+                    try {
+                        const owner = await contract.ownerOf(id);
+                        ownershipCache.set(cacheKey, { owner, timestamp: nowTs });
+
+                        if (owner.toLowerCase() === State.userAddress.toLowerCase()) {
+                            return {
+                                tokenId: id,
+                                boostBips: tokenBoostBips,
+                                imageUrl: token.imageUrl || token.image || null
+                            };
+                        }
+                        return null;
+                        
+                    } catch (e) {
+                        if (isRateLimitError(e) || isRpcError(e)) {
+                            return {
+                                tokenId: id,
+                                boostBips: tokenBoostBips,
+                                imageUrl: token.imageUrl || token.image || null
+                            };
+                        }
+                        return null;
+                    }
+                })
+            );
+
+            State.myBoosters = checks.filter(t => t !== null);
+            
+        } else {
+            State.myBoosters = ownedTokensAPI.map(tokenData => ({
+                tokenId: BigInt(tokenData.tokenId),
+                boostBips: Number(tokenData.boostBips || tokenData.boost || 0),
+                imageUrl: tokenData.imageUrl || tokenData.image || null
+            }));
+        }
         
         boosterErrorCount = 0;
+
         return State.myBoosters;
 
     } catch (e) {
@@ -793,33 +832,13 @@ export function clearAllCaches() {
     lastBoosterResultTime = 0;
     lastBoosterFetch = 0;
     boosterErrorCount = 0;
-    
-    // Reset RPC block
-    rpcBlocked = false;
-    rpcBlockedUntil = 0;
-    consecutiveRpcErrors = 0;
 }
 
 export async function forceRefreshUserData() {
-    // Don't clear RPC block status - just clear caches
-    contractReadCache.clear();
-    ownershipCache.clear();
-    balanceCache.clear();
-    
+    clearAllCaches();
     await loadUserData(true);
     await loadUserDelegations(true);
     await loadUserRentals(true);
-}
-
-/**
- * Check if RPC is currently blocked (for UI feedback)
- */
-export function getRpcStatus() {
-    return {
-        blocked: isRpcBlocked(),
-        blockedUntil: rpcBlockedUntil,
-        consecutiveErrors: consecutiveRpcErrors
-    };
 }
 
 // ====================================================================
@@ -838,11 +857,6 @@ export async function loadFortunePoolData(forceRefresh = false) {
             oracleFee1x: 0n,
             oracleFee5x: 0n
         };
-        return State.fortunePool;
-    }
-
-    // Return cached if RPC is blocked
-    if (isRpcBlocked() && State.fortunePool) {
         return State.fortunePool;
     }
 
@@ -873,22 +887,22 @@ export async function loadFortunePoolData(forceRefresh = false) {
         
         try {
             const [fee1x, fee5x] = await Promise.all([
-                safeContractCall(contract, 'getRequiredOracleFee', [false], oracleFee1x),
-                safeContractCall(contract, 'getRequiredOracleFee', [true], oracleFee5x)
+                contract.getRequiredOracleFee(false),
+                contract.getRequiredOracleFee(true)
             ]);
             oracleFee1x = BigInt(fee1x.toString());
             oracleFee5x = BigInt(fee5x.toString());
         } catch (e) {
             try {
-                const baseFee = await safeContractCall(contract, 'oracleFee', [], oracleFee1x);
+                const baseFee = await contract.oracleFee();
                 oracleFee1x = BigInt(baseFee.toString());
                 oracleFee5x = oracleFee1x * 5n;
             } catch {}
         }
 
-        // Load tiers (limit to 5 max to reduce calls)
+        // CORREÇÃO: prizeTiers começa em índice 1, não 0
         const tiers = [];
-        for (let i = 1; i <= Math.min(tierCount, 5); i++) {
+        for (let i = 1; i <= Math.min(tierCount, 10); i++) {
             try {
                 const tier = await safeContractCall(contract, 'prizeTiers', [i], null);
                 if (tier && tier.active !== false) {
@@ -919,9 +933,6 @@ export async function loadFortunePoolData(forceRefresh = false) {
         return fortuneData;
 
     } catch (e) {
-        // Return cached or default
-        if (State.fortunePool) return State.fortunePool;
-        
         State.fortunePool = { 
             active: false, 
             activeTiers: 0, 
@@ -935,23 +946,36 @@ export async function loadFortunePoolData(forceRefresh = false) {
 }
 
 export async function loadUserFortuneHistory(userAddress, limit = 20) {
-    // Use API instead of RPC events
+    if (!userAddress) return [];
+
+    const contract = State.actionsManagerContractPublic || State.actionsManagerContract;
+    if (!contract) return [];
+
     try {
-        const response = await fetchWithTimeout(
-            `${API_ENDPOINTS.fortuneGames}?player=${userAddress}&limit=${limit}`,
-            4000
-        );
-        
-        if (response.ok) {
-            const data = await response.json();
-            State.userFortuneHistory = data.games || [];
-            return State.userFortuneHistory;
-        }
+        const filter = contract.filters.GameFulfilled(null, userAddress);
+        const events = await contract.queryFilter(filter, -10000);
+
+        const games = events.slice(-limit).reverse().map(event => {
+            const args = event.args;
+            return {
+                gameId: Number(args.gameId),
+                player: args.player,
+                prizeWon: BigInt(args.prizeWon?.toString() || '0'),
+                rolls: args.rolls?.map(r => Number(r)) || [],
+                guesses: args.guesses?.map(g => Number(g)) || [],
+                isCumulative: args.isCumulative,
+                txHash: event.transactionHash,
+                blockNumber: event.blockNumber,
+                won: BigInt(args.prizeWon?.toString() || '0') > 0n
+            };
+        });
+
+        State.userFortuneHistory = games;
+        return games;
+
     } catch (e) {
-        console.warn("Fortune history API error:", e.message);
+        return [];
     }
-    
-    return State.userFortuneHistory || [];
 }
 
 export function calculateExpectedPayout(wagerAmount, tierIndex, isWin) {
@@ -967,10 +991,19 @@ export function calculateExpectedPayout(wagerAmount, tierIndex, isWin) {
 }
 
 export async function getExpectedGuessCount(isCumulative) {
-    // Use cached data instead of RPC
-    if (State.fortunePool?.activeTiers) {
-        return isCumulative ? State.fortunePool.activeTiers : 1;
-    }
+    const contract = State.actionsManagerContractPublic || State.actionsManagerContract;
     
-    return isCumulative ? 3 : 1;
+    if (!contract) {
+        return isCumulative ? 3 : 1;
+    }
+
+    try {
+        const count = await contract.getExpectedGuessCount(isCumulative);
+        return Number(count);
+    } catch (e) {
+        if (isCumulative) {
+            return State.fortunePool?.activeTiers || 3;
+        }
+        return 1;
+    }
 }
