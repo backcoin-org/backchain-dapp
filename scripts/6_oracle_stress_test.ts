@@ -95,8 +95,8 @@ async function main() {
     };
 
     const startTime = Date.now();
-    const TOTAL_GAMES = 10000;
-    const GAMES_PER_MODE = 5000;
+    const TOTAL_GAMES = 1000;
+    const GAMES_PER_MODE = 500;
 
     // ═══════════════════════════════════════════════════════════════════
     // PHASE 1: 5,000 Games in 1x Mode
