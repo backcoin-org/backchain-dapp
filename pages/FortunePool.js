@@ -248,8 +248,12 @@ function injectStyles() {
 function render() {
     injectStyles();
     
-    const app = document.getElementById('app');
-    if (!app) return;
+    // O container da página Fortune Pool é a section com id="actions"
+    const app = document.getElementById('actions');
+    if (!app) {
+        console.error("❌ FortunePool: Container #actions not found!");
+        return;
+    }
 
     app.innerHTML = `
         <div class="max-w-md mx-auto px-4 py-6">

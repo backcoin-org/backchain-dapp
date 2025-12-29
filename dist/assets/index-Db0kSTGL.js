@@ -1798,7 +1798,7 @@ Are you sure you want to continue?`)&&$n(a.dataset.index,!0)})})}function En(){c
             border-radius: 4px;
             font-weight: bold;
         }
-    `,document.head.appendChild(e)}function Lr(){Ar();const e=document.getElementById("app");e&&(e.innerHTML=`
+    `,document.head.appendChild(e)}function Lr(){Ar();const e=document.getElementById("actions");if(!e){console.error("❌ FortunePool: Container #actions not found!");return}e.innerHTML=`
         <div class="max-w-md mx-auto px-4 py-6">
             <!-- Header -->
             <div class="text-center mb-6">
@@ -1854,7 +1854,7 @@ Are you sure you want to continue?`)&&$n(a.dataset.index,!0)})})}function En(){c
                 </div>
             </div>
         </div>
-    `,Zs(),G())}function Sr(){}function G(){const e=document.getElementById("game-area");if(e)switch(Pr(w.phase),w.phase){case"select":Mn(e);break;case"pick":Nr(e);break;case"wager":Rr(e);break;case"processing":jr(e);break;case"result":Hr(e);break;default:Mn(e)}}function Pr(e){var s;const t=document.getElementById("tiger-mascot");if(t)switch(t.className="w-28 h-28 object-contain mx-auto",t.style.filter="",e){case"select":t.classList.add("tiger-float","tiger-pulse");break;case"pick":case"wager":t.classList.add("tiger-float");break;case"processing":t.classList.add("tiger-spin");break;case"result":((s=w.result)==null?void 0:s.prizeWon)>0?t.classList.add("tiger-celebrate"):(t.style.filter="grayscale(0.5)",t.classList.add("tiger-float"));break}}function Mn(e){var a,i;const t=w.serviceFee1x>0n?(Number(w.serviceFee1x)/1e18).toFixed(6):"0",s=w.serviceFee5x>0n?(Number(w.serviceFee5x)/1e18).toFixed(6):"0",n=w.serviceFee1x>0n||w.serviceFee5x>0n;e.innerHTML=`
+    `,Zs(),G()}function Sr(){}function G(){const e=document.getElementById("game-area");if(e)switch(Pr(w.phase),w.phase){case"select":Mn(e);break;case"pick":Nr(e);break;case"wager":Rr(e);break;case"processing":jr(e);break;case"result":Hr(e);break;default:Mn(e)}}function Pr(e){var s;const t=document.getElementById("tiger-mascot");if(t)switch(t.className="w-28 h-28 object-contain mx-auto",t.style.filter="",e){case"select":t.classList.add("tiger-float","tiger-pulse");break;case"pick":case"wager":t.classList.add("tiger-float");break;case"processing":t.classList.add("tiger-spin");break;case"result":((s=w.result)==null?void 0:s.prizeWon)>0?t.classList.add("tiger-celebrate"):(t.style.filter="grayscale(0.5)",t.classList.add("tiger-float"));break}}function Mn(e){var a,i;const t=w.serviceFee1x>0n?(Number(w.serviceFee1x)/1e18).toFixed(6):"0",s=w.serviceFee5x>0n?(Number(w.serviceFee5x)/1e18).toFixed(6):"0",n=w.serviceFee1x>0n||w.serviceFee5x>0n;e.innerHTML=`
         <div class="space-y-4">
             <!-- JACKPOT MODE -->
             <button id="btn-jackpot" class="game-mode-card w-full text-left p-5 bg-gradient-to-br from-zinc-900 via-zinc-900 to-amber-950/20 border-2 border-zinc-700/50 rounded-2xl hover:border-amber-500/50 transition-all">
