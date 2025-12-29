@@ -32,6 +32,7 @@ import { showToast, openModal, closeModal } from '../ui-feedback.js';
 const EXPLORER_TX = "https://sepolia.arbiscan.io/tx/";
 const EXPLORER_ADDRESS = "https://sepolia.arbiscan.io/address/";
 const ORACLE_ADDRESS = "0x16346f5a45f9615f1c894414989f0891c54ef07b"; // BackchainRandomness Oracle
+const FORTUNE_POOL_ADDRESS = "0x8093a960b9615330DdbD1B59b1Fc7eB6B6AB1526"; // Fortune Pool Contract
 const TIGER_IMAGE = "./assets/fortune.png";
 const SHARE_POINTS = 1000;
 
@@ -44,17 +45,24 @@ const MODAL_UI = {
 
 const SHARE_TEXTS = {
     pt: {
-        win: (prize) => `🎉 Ganhei ${prize.toLocaleString()} BKC no Fortune Pool!\n\n🐯 Loteria on-chain com resultados instantâneos!\n\n👉 https://backcoin.org\n\n@bacaborr #Backcoin #Web3 #Arbitrum`,
-        lose: `🐯 Jogando Fortune Pool no @bacaborr!\n\nLoteria on-chain verificável com Oracle seguro!\n\n👉 https://backcoin.org\n\n#Backcoin #Web3 #Arbitrum`
+        win: (prize) => `🎉 Ganhei ${prize.toLocaleString()} BKC no Fortune Pool!\n\n🐯 Loteria on-chain com resultados instantâneos!\n\n👉 https://backcoin.org\n\n@backcoin #Backcoin #Web3 #Arbitrum`,
+        lose: `🐯 Jogando Fortune Pool no @backcoin!\n\nLoteria on-chain verificável com Oracle seguro!\n\n👉 https://backcoin.org\n\n#Backcoin #Web3 #Arbitrum`
     },
     en: {
-        win: (prize) => `🎉 Just won ${prize.toLocaleString()} BKC on Fortune Pool!\n\n🐯 On-chain lottery with instant results!\n\n👉 https://backcoin.org\n\n@bacaborr #Backcoin #Web3 #Arbitrum`,
-        lose: `🐯 Playing Fortune Pool on @bacaborr!\n\nVerifiable on-chain lottery with secure Oracle!\n\n👉 https://backcoin.org\n\n#Backcoin #Web3 #Arbitrum`
+        win: (prize) => `🎉 Just won ${prize.toLocaleString()} BKC on Fortune Pool!\n\n🐯 On-chain lottery with instant results!\n\n👉 https://backcoin.org\n\n@backcoin #Backcoin #Web3 #Arbitrum`,
+        lose: `🐯 Playing Fortune Pool on @backcoin!\n\nVerifiable on-chain lottery with secure Oracle!\n\n👉 https://backcoin.org\n\n#Backcoin #Web3 #Arbitrum`
     },
     es: {
-        win: (prize) => `🎉 ¡Gané ${prize.toLocaleString()} BKC en Fortune Pool!\n\n🐯 ¡Lotería on-chain con resultados instantáneos!\n\n👉 https://backcoin.org\n\n@bacaborr #Backcoin #Web3 #Arbitrum`,
-        lose: `🐯 ¡Jugando Fortune Pool en @bacaborr!\n\nLotería on-chain verificable con Oracle seguro!\n\n👉 https://backcoin.org\n\n#Backcoin #Web3 #Arbitrum`
+        win: (prize) => `🎉 ¡Gané ${prize.toLocaleString()} BKC en Fortune Pool!\n\n🐯 ¡Lotería on-chain con resultados instantáneos!\n\n👉 https://backcoin.org\n\n@backcoin #Backcoin #Web3 #Arbitrum`,
+        lose: `🐯 ¡Jugando Fortune Pool en @backcoin!\n\nLotería on-chain verificable con Oracle seguro!\n\n👉 https://backcoin.org\n\n#Backcoin #Web3 #Arbitrum`
     }
+};
+
+// Flag images for language selector
+const FLAG_IMAGES = {
+    pt: './assets/pt.png',
+    en: './assets/en.png',
+    es: './assets/es.png'
 };
 
 let currentLang = 'en';
@@ -299,13 +307,21 @@ function render() {
                 </div>
                 <p class="text-zinc-500 text-sm mt-1">🎰 Instant Results • Verifiable Randomness</p>
                 
-                <!-- Oracle Security Badge -->
-                <a href="${EXPLORER_ADDRESS}${ORACLE_ADDRESS}" target="_blank" rel="noopener" 
-                   class="inline-flex items-center gap-2 mt-3 px-3 py-1.5 bg-emerald-500/10 border border-emerald-500/30 rounded-full hover:bg-emerald-500/20 transition-colors">
-                    <i class="fa-solid fa-shield-halved text-emerald-400 text-xs"></i>
-                    <span class="text-emerald-400 text-xs font-medium">Secured by On-Chain Oracle</span>
-                    <i class="fa-solid fa-external-link text-emerald-400/50 text-[10px]"></i>
-                </a>
+                <!-- Contract Verification Links -->
+                <div class="flex items-center justify-center gap-2 mt-3 flex-wrap">
+                    <a href="${EXPLORER_ADDRESS}${ORACLE_ADDRESS}" target="_blank" rel="noopener" 
+                       class="inline-flex items-center gap-1.5 px-2.5 py-1.5 bg-emerald-500/10 border border-emerald-500/30 rounded-full hover:bg-emerald-500/20 transition-colors">
+                        <i class="fa-solid fa-shield-halved text-emerald-400 text-[10px]"></i>
+                        <span class="text-emerald-400 text-[10px] font-medium">Oracle</span>
+                        <i class="fa-solid fa-external-link text-emerald-400/50 text-[8px]"></i>
+                    </a>
+                    <a href="${EXPLORER_ADDRESS}${FORTUNE_POOL_ADDRESS}" target="_blank" rel="noopener" 
+                       class="inline-flex items-center gap-1.5 px-2.5 py-1.5 bg-amber-500/10 border border-amber-500/30 rounded-full hover:bg-amber-500/20 transition-colors">
+                        <i class="fa-solid fa-file-contract text-amber-400 text-[10px]"></i>
+                        <span class="text-amber-400 text-[10px] font-medium">Game Contract</span>
+                        <i class="fa-solid fa-external-link text-amber-400/50 text-[8px]"></i>
+                    </a>
+                </div>
             </div>
 
             <!-- Stats -->
@@ -532,23 +548,6 @@ function renderJackpotPicker(container) {
     const tier = TIERS[2]; // Hard tier
     const current = Game.guess;
     
-    // Generate number grid (1-100)
-    const generateNumberGrid = () => {
-        let html = '';
-        for (let i = 1; i <= 100; i++) {
-            const isSelected = i === current;
-            html += `
-                <button class="number-btn w-full aspect-square rounded-lg text-sm font-bold transition-all
-                    ${isSelected 
-                        ? `bg-gradient-to-br ${tier.bgFrom} ${tier.bgTo} border-2 ${tier.borderColor} ${tier.textColor} scale-110 shadow-lg` 
-                        : 'bg-zinc-800/50 border border-zinc-700/50 text-zinc-400 hover:bg-zinc-700/50 hover:text-white'
-                    }" 
-                    data-number="${i}">${i}</button>
-            `;
-        }
-        return html;
-    };
-    
     container.innerHTML = `
         <div class="bg-gradient-to-br from-zinc-900 to-zinc-800/50 border border-zinc-700/50 rounded-2xl p-5">
             <div class="text-center mb-4">
@@ -560,28 +559,48 @@ function renderJackpotPicker(container) {
                 <p class="text-xs text-zinc-500 mt-1">Range <span class="text-white font-bold">1-100</span> • Chance <span class="text-emerald-400">1%</span> • Win <span class="${tier.textColor} font-bold">5000x</span></p>
             </div>
 
-            <!-- Selected Number Display -->
-            <div class="text-center mb-4">
-                <div class="inline-flex items-center justify-center w-24 h-24 rounded-2xl bg-gradient-to-br ${tier.bgFrom} ${tier.bgTo} border-2 ${tier.borderColor} glow-pulse" style="--glow-color: ${tier.hex}40">
-                    <span id="display-number" class="text-4xl font-black ${tier.textColor}">${current}</span>
+            <!-- Number Input with +/- buttons -->
+            <div class="flex items-center justify-center gap-4 mb-4">
+                <button id="btn-minus-10" class="w-12 h-12 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white font-bold text-lg transition-all border border-zinc-700">
+                    -10
+                </button>
+                <button id="btn-minus" class="w-12 h-12 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white font-bold text-2xl transition-all border border-zinc-700">
+                    −
+                </button>
+                
+                <div class="relative">
+                    <input type="number" id="number-input" min="1" max="100" value="${current}" 
+                        class="w-24 h-24 text-center text-4xl font-black rounded-2xl bg-gradient-to-br ${tier.bgFrom} ${tier.bgTo} border-2 ${tier.borderColor} ${tier.textColor} focus:outline-none focus:ring-2 focus:ring-amber-500/50 appearance-none"
+                        style="-moz-appearance: textfield;">
                 </div>
-                <p class="text-zinc-500 text-xs mt-2">Your pick</p>
+                
+                <button id="btn-plus" class="w-12 h-12 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white font-bold text-2xl transition-all border border-zinc-700">
+                    +
+                </button>
+                <button id="btn-plus-10" class="w-12 h-12 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white font-bold text-lg transition-all border border-zinc-700">
+                    +10
+                </button>
             </div>
 
-            <!-- Number Grid -->
-            <div class="max-h-[240px] overflow-y-auto mb-4 px-1 scrollbar-thin">
-                <div class="grid grid-cols-10 gap-1.5" id="number-grid">
-                    ${generateNumberGrid()}
+            <!-- Slider -->
+            <div class="mb-4 px-2">
+                <input type="range" id="number-slider" min="1" max="100" value="${current}" 
+                    class="fortune-slider w-full h-3 rounded-full appearance-none cursor-pointer"
+                    style="background: linear-gradient(to right, ${tier.hex} 0%, ${tier.hex} ${current}%, #27272a ${current}%, #27272a 100%)">
+                <div class="flex justify-between text-xs text-zinc-500 mt-2 px-1">
+                    <span>1</span><span>25</span><span>50</span><span>75</span><span>100</span>
                 </div>
             </div>
             
             <!-- Quick Select -->
-            <div class="flex justify-center gap-2 mb-4">
-                <button class="quick-pick px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-400 text-xs rounded-lg" data-number="7">Lucky 7</button>
-                <button class="quick-pick px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-400 text-xs rounded-lg" data-number="13">13</button>
-                <button class="quick-pick px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-400 text-xs rounded-lg" data-number="50">50</button>
-                <button class="quick-pick px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-400 text-xs rounded-lg" data-number="77">77</button>
-                <button id="btn-random" class="px-3 py-1.5 bg-amber-500/20 hover:bg-amber-500/30 text-amber-400 text-xs rounded-lg border border-amber-500/30">
+            <div class="flex justify-center gap-2 mb-4 flex-wrap">
+                <button class="quick-pick px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white text-xs rounded-lg transition-all" data-number="7">Lucky 7</button>
+                <button class="quick-pick px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white text-xs rounded-lg transition-all" data-number="13">13</button>
+                <button class="quick-pick px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white text-xs rounded-lg transition-all" data-number="21">21</button>
+                <button class="quick-pick px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white text-xs rounded-lg transition-all" data-number="50">50</button>
+                <button class="quick-pick px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white text-xs rounded-lg transition-all" data-number="77">77</button>
+                <button class="quick-pick px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white text-xs rounded-lg transition-all" data-number="99">99</button>
+                <button id="btn-random" class="px-3 py-1.5 bg-amber-500/20 hover:bg-amber-500/30 text-amber-400 text-xs rounded-lg border border-amber-500/30 transition-all">
                     <i class="fa-solid fa-dice mr-1"></i>Random
                 </button>
             </div>
@@ -597,44 +616,52 @@ function renderJackpotPicker(container) {
         </div>
     `;
 
-    const display = document.getElementById('display-number');
-    const grid = document.getElementById('number-grid');
+    const input = document.getElementById('number-input');
+    const slider = document.getElementById('number-slider');
+    const tier3 = TIERS[2];
     
-    const selectNumber = (num) => {
-        Game.guess = num;
-        if (display) display.textContent = num;
+    const updateValue = (val) => {
+        // Clamp between 1 and 100
+        val = Math.max(1, Math.min(100, val));
+        Game.guess = val;
         
-        // Update grid selection
-        grid?.querySelectorAll('.number-btn').forEach(btn => {
-            const btnNum = parseInt(btn.dataset.number);
-            if (btnNum === num) {
-                btn.className = `number-btn w-full aspect-square rounded-lg text-sm font-bold transition-all bg-gradient-to-br ${tier.bgFrom} ${tier.bgTo} border-2 ${tier.borderColor} ${tier.textColor} scale-110 shadow-lg`;
-            } else {
-                btn.className = 'number-btn w-full aspect-square rounded-lg text-sm font-bold transition-all bg-zinc-800/50 border border-zinc-700/50 text-zinc-400 hover:bg-zinc-700/50 hover:text-white';
-            }
-        });
-        
-        // Scroll to selected number
-        const selectedBtn = grid?.querySelector(`[data-number="${num}"]`);
-        selectedBtn?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        if (input) input.value = val;
+        if (slider) {
+            slider.value = val;
+            slider.style.background = `linear-gradient(to right, ${tier3.hex} 0%, ${tier3.hex} ${val}%, #27272a ${val}%, #27272a 100%)`;
+        }
     };
     
-    // Number grid click
-    grid?.addEventListener('click', (e) => {
-        const btn = e.target.closest('.number-btn');
-        if (btn) {
-            selectNumber(parseInt(btn.dataset.number));
-        }
+    // Input change
+    input?.addEventListener('input', (e) => {
+        let val = parseInt(e.target.value) || 1;
+        updateValue(val);
     });
+    
+    input?.addEventListener('blur', (e) => {
+        let val = parseInt(e.target.value) || 1;
+        updateValue(val);
+    });
+    
+    // Slider change
+    slider?.addEventListener('input', (e) => {
+        updateValue(parseInt(e.target.value));
+    });
+    
+    // +/- buttons
+    document.getElementById('btn-minus')?.addEventListener('click', () => updateValue(Game.guess - 1));
+    document.getElementById('btn-plus')?.addEventListener('click', () => updateValue(Game.guess + 1));
+    document.getElementById('btn-minus-10')?.addEventListener('click', () => updateValue(Game.guess - 10));
+    document.getElementById('btn-plus-10')?.addEventListener('click', () => updateValue(Game.guess + 10));
     
     // Quick picks
     document.querySelectorAll('.quick-pick').forEach(btn => {
-        btn.addEventListener('click', () => selectNumber(parseInt(btn.dataset.number)));
+        btn.addEventListener('click', () => updateValue(parseInt(btn.dataset.number)));
     });
     
     // Random button
     document.getElementById('btn-random')?.addEventListener('click', () => {
-        selectNumber(Math.floor(Math.random() * 100) + 1);
+        updateValue(Math.floor(Math.random() * 100) + 1);
     });
 
     document.getElementById('btn-back')?.addEventListener('click', () => { 
@@ -1204,36 +1231,43 @@ function showShareModal(isWin, prize) {
             <h3 id="share-modal-title" class="text-lg font-bold text-white">${ui.title}</h3>
             <p id="share-modal-subtitle" class="text-amber-400 text-sm font-medium mb-3">${ui.subtitle}</p>
             
-            <!-- Language Selector -->
+            <!-- Language Selector with Flag Images -->
             <div class="flex justify-center gap-2 mb-4">
-                <button class="lang-btn px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${currentLang === 'pt' ? 'bg-amber-500/20 border-amber-500 text-amber-400' : 'bg-zinc-800 border-zinc-700 text-zinc-400 hover:text-white'} border" data-lang="pt">
-                    🇧🇷 PT
+                <button class="lang-btn flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${currentLang === 'pt' ? 'bg-amber-500/20 border-amber-500 ring-1 ring-amber-500/50' : 'bg-zinc-800 border-zinc-700 hover:border-zinc-500'} border" data-lang="pt">
+                    <img src="${FLAG_IMAGES.pt}" class="w-5 h-5 rounded-full object-cover" alt="PT">
+                    <span class="${currentLang === 'pt' ? 'text-amber-400' : 'text-zinc-400'}">PT</span>
                 </button>
-                <button class="lang-btn px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${currentLang === 'en' ? 'bg-amber-500/20 border-amber-500 text-amber-400' : 'bg-zinc-800 border-zinc-700 text-zinc-400 hover:text-white'} border" data-lang="en">
-                    🇺🇸 EN
+                <button class="lang-btn flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${currentLang === 'en' ? 'bg-amber-500/20 border-amber-500 ring-1 ring-amber-500/50' : 'bg-zinc-800 border-zinc-700 hover:border-zinc-500'} border" data-lang="en">
+                    <img src="${FLAG_IMAGES.en}" class="w-5 h-5 rounded-full object-cover" alt="EN">
+                    <span class="${currentLang === 'en' ? 'text-amber-400' : 'text-zinc-400'}">EN</span>
                 </button>
-                <button class="lang-btn px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${currentLang === 'es' ? 'bg-amber-500/20 border-amber-500 text-amber-400' : 'bg-zinc-800 border-zinc-700 text-zinc-400 hover:text-white'} border" data-lang="es">
-                    🇪🇸 ES
+                <button class="lang-btn flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${currentLang === 'es' ? 'bg-amber-500/20 border-amber-500 ring-1 ring-amber-500/50' : 'bg-zinc-800 border-zinc-700 hover:border-zinc-500'} border" data-lang="es">
+                    <img src="${FLAG_IMAGES.es}" class="w-5 h-5 rounded-full object-cover" alt="ES">
+                    <span class="${currentLang === 'es' ? 'text-amber-400' : 'text-zinc-400'}">ES</span>
                 </button>
             </div>
             
             <!-- Share Buttons -->
-            <div class="grid grid-cols-4 gap-2 mb-4">
-                <button id="share-twitter" class="flex flex-col items-center justify-center p-3 bg-zinc-800/80 hover:bg-zinc-700 border border-zinc-700 hover:border-zinc-500 rounded-xl transition-all">
-                    <i class="fa-brands fa-x-twitter text-xl text-white mb-1"></i>
-                    <span class="text-[10px] text-zinc-500">Twitter</span>
+            <div class="grid grid-cols-5 gap-2 mb-4">
+                <button id="share-twitter" class="flex flex-col items-center justify-center p-2.5 bg-zinc-800/80 hover:bg-zinc-700 border border-zinc-700 hover:border-zinc-500 rounded-xl transition-all">
+                    <i class="fa-brands fa-x-twitter text-lg text-white mb-1"></i>
+                    <span class="text-[9px] text-zinc-500">Twitter</span>
                 </button>
-                <button id="share-telegram" class="flex flex-col items-center justify-center p-3 bg-zinc-800/80 hover:bg-[#0088cc]/20 border border-zinc-700 hover:border-[#0088cc]/50 rounded-xl transition-all">
-                    <i class="fa-brands fa-telegram text-xl text-[#0088cc] mb-1"></i>
-                    <span class="text-[10px] text-zinc-500">Telegram</span>
+                <button id="share-telegram" class="flex flex-col items-center justify-center p-2.5 bg-zinc-800/80 hover:bg-[#0088cc]/20 border border-zinc-700 hover:border-[#0088cc]/50 rounded-xl transition-all">
+                    <i class="fa-brands fa-telegram text-lg text-[#0088cc] mb-1"></i>
+                    <span class="text-[9px] text-zinc-500">Telegram</span>
                 </button>
-                <button id="share-whatsapp" class="flex flex-col items-center justify-center p-3 bg-zinc-800/80 hover:bg-[#25D366]/20 border border-zinc-700 hover:border-[#25D366]/50 rounded-xl transition-all">
-                    <i class="fa-brands fa-whatsapp text-xl text-[#25D366] mb-1"></i>
-                    <span class="text-[10px] text-zinc-500">WhatsApp</span>
+                <button id="share-whatsapp" class="flex flex-col items-center justify-center p-2.5 bg-zinc-800/80 hover:bg-[#25D366]/20 border border-zinc-700 hover:border-[#25D366]/50 rounded-xl transition-all">
+                    <i class="fa-brands fa-whatsapp text-lg text-[#25D366] mb-1"></i>
+                    <span class="text-[9px] text-zinc-500">WhatsApp</span>
                 </button>
-                <button id="share-copy" class="flex flex-col items-center justify-center p-3 bg-zinc-800/80 hover:bg-zinc-700 border border-zinc-700 hover:border-zinc-500 rounded-xl transition-all">
-                    <i class="fa-solid fa-copy text-xl text-zinc-400 mb-1"></i>
-                    <span class="text-[10px] text-zinc-500">Copy</span>
+                <button id="share-instagram" class="flex flex-col items-center justify-center p-2.5 bg-zinc-800/80 hover:bg-[#E4405F]/20 border border-zinc-700 hover:border-[#E4405F]/50 rounded-xl transition-all">
+                    <i class="fa-brands fa-instagram text-lg text-[#E4405F] mb-1"></i>
+                    <span class="text-[9px] text-zinc-500">Instagram</span>
+                </button>
+                <button id="share-copy" class="flex flex-col items-center justify-center p-2.5 bg-zinc-800/80 hover:bg-zinc-700 border border-zinc-700 hover:border-zinc-500 rounded-xl transition-all">
+                    <i class="fa-solid fa-copy text-lg text-zinc-400 mb-1"></i>
+                    <span class="text-[9px] text-zinc-500">Copy</span>
                 </button>
             </div>
             
@@ -1256,13 +1290,16 @@ function showShareModal(isWin, prize) {
         if (subtitleEl) subtitleEl.textContent = newUi.subtitle;
         if (laterEl) laterEl.textContent = newUi.later;
         
-        // Update button styles
+        // Update button styles with flag images
         document.querySelectorAll('.lang-btn').forEach(btn => {
             const btnLang = btn.dataset.lang;
+            const textSpan = btn.querySelector('span');
             if (btnLang === lang) {
-                btn.className = 'lang-btn px-3 py-1.5 rounded-lg text-xs font-medium transition-all bg-amber-500/20 border-amber-500 text-amber-400 border';
+                btn.className = 'lang-btn flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all bg-amber-500/20 border-amber-500 ring-1 ring-amber-500/50 border';
+                if (textSpan) textSpan.className = 'text-amber-400';
             } else {
-                btn.className = 'lang-btn px-3 py-1.5 rounded-lg text-xs font-medium transition-all bg-zinc-800 border-zinc-700 text-zinc-400 hover:text-white border';
+                btn.className = 'lang-btn flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all bg-zinc-800 border-zinc-700 hover:border-zinc-500 border';
+                if (textSpan) textSpan.className = 'text-zinc-400';
             }
         });
     };
@@ -1311,21 +1348,39 @@ function showShareModal(isWin, prize) {
         closeModal();
     };
     
+    // Twitter/X
     document.getElementById('share-twitter')?.addEventListener('click', () => {
         const text = getShareText();
         shareAndTrack('twitter', `https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}`);
     });
     
+    // Telegram - abre o grupo do Backcoin
     document.getElementById('share-telegram')?.addEventListener('click', () => {
         const text = getShareText();
         shareAndTrack('telegram', `https://t.me/share/url?url=https://backcoin.org&text=${encodeURIComponent(text)}`);
     });
     
+    // WhatsApp
     document.getElementById('share-whatsapp')?.addEventListener('click', () => {
         const text = getShareText();
         shareAndTrack('whatsapp', `https://wa.me/?text=${encodeURIComponent(text)}`);
     });
     
+    // Instagram - abre o perfil do Backcoin (não tem share direto)
+    document.getElementById('share-instagram')?.addEventListener('click', async () => {
+        const text = getShareText();
+        try {
+            await navigator.clipboard.writeText(text);
+            showToast('📋 Text copied! Opening Instagram...', 'success');
+            await trackShareOnServer('instagram');
+        } catch {
+            // Continue anyway
+        }
+        window.open('https://www.instagram.com/backcoin.bkc/', '_blank');
+        closeModal();
+    });
+    
+    // Copy
     document.getElementById('share-copy')?.addEventListener('click', async () => {
         const text = getShareText();
         try {
