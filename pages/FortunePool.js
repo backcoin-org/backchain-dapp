@@ -560,24 +560,22 @@ function renderJackpotPicker(container) {
             </div>
 
             <!-- Number Input with +/- buttons -->
-            <div class="flex items-center justify-center gap-4 mb-4">
-                <button id="btn-minus-10" class="w-12 h-12 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white font-bold text-lg transition-all border border-zinc-700">
+            <div class="flex items-center justify-center gap-3 mb-4">
+                <button id="btn-minus-10" class="w-10 h-10 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white font-bold text-sm transition-all border border-zinc-700">
                     -10
                 </button>
-                <button id="btn-minus" class="w-12 h-12 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white font-bold text-2xl transition-all border border-zinc-700">
+                <button id="btn-minus" class="w-10 h-10 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white font-bold text-xl transition-all border border-zinc-700">
                     −
                 </button>
                 
-                <div class="relative">
-                    <input type="number" id="number-input" min="1" max="100" value="${current}" 
-                        class="w-24 h-24 text-center text-4xl font-black rounded-2xl bg-gradient-to-br ${tier.bgFrom} ${tier.bgTo} border-2 ${tier.borderColor} ${tier.textColor} focus:outline-none focus:ring-2 focus:ring-amber-500/50 appearance-none"
-                        style="-moz-appearance: textfield;">
-                </div>
+                <input type="number" id="number-input" min="1" max="100" value="${current}" 
+                    class="w-20 h-20 text-center text-3xl font-black rounded-2xl bg-gradient-to-br ${tier.bgFrom} ${tier.bgTo} border-2 ${tier.borderColor} ${tier.textColor} focus:outline-none focus:ring-2 focus:ring-amber-500/50 appearance-none"
+                    style="-moz-appearance: textfield;">
                 
-                <button id="btn-plus" class="w-12 h-12 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white font-bold text-2xl transition-all border border-zinc-700">
+                <button id="btn-plus" class="w-10 h-10 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white font-bold text-xl transition-all border border-zinc-700">
                     +
                 </button>
-                <button id="btn-plus-10" class="w-12 h-12 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white font-bold text-lg transition-all border border-zinc-700">
+                <button id="btn-plus-10" class="w-10 h-10 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white font-bold text-sm transition-all border border-zinc-700">
                     +10
                 </button>
             </div>
@@ -594,13 +592,13 @@ function renderJackpotPicker(container) {
             
             <!-- Quick Select -->
             <div class="flex justify-center gap-2 mb-4 flex-wrap">
-                <button class="quick-pick px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white text-xs rounded-lg transition-all" data-number="7">Lucky 7</button>
-                <button class="quick-pick px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white text-xs rounded-lg transition-all" data-number="13">13</button>
-                <button class="quick-pick px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white text-xs rounded-lg transition-all" data-number="21">21</button>
-                <button class="quick-pick px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white text-xs rounded-lg transition-all" data-number="50">50</button>
-                <button class="quick-pick px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white text-xs rounded-lg transition-all" data-number="77">77</button>
-                <button class="quick-pick px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white text-xs rounded-lg transition-all" data-number="99">99</button>
-                <button id="btn-random" class="px-3 py-1.5 bg-amber-500/20 hover:bg-amber-500/30 text-amber-400 text-xs rounded-lg border border-amber-500/30 transition-all">
+                <button class="quick-pick px-2.5 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white text-xs rounded-lg transition-all" data-number="7">7</button>
+                <button class="quick-pick px-2.5 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white text-xs rounded-lg transition-all" data-number="13">13</button>
+                <button class="quick-pick px-2.5 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white text-xs rounded-lg transition-all" data-number="21">21</button>
+                <button class="quick-pick px-2.5 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white text-xs rounded-lg transition-all" data-number="50">50</button>
+                <button class="quick-pick px-2.5 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white text-xs rounded-lg transition-all" data-number="77">77</button>
+                <button class="quick-pick px-2.5 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white text-xs rounded-lg transition-all" data-number="99">99</button>
+                <button id="btn-random" class="px-2.5 py-1.5 bg-amber-500/20 hover:bg-amber-500/30 text-amber-400 text-xs rounded-lg border border-amber-500/30 transition-all">
                     <i class="fa-solid fa-dice mr-1"></i>Random
                 </button>
             </div>
@@ -621,7 +619,6 @@ function renderJackpotPicker(container) {
     const tier3 = TIERS[2];
     
     const updateValue = (val) => {
-        // Clamp between 1 and 100
         val = Math.max(1, Math.min(100, val));
         Game.guess = val;
         
@@ -632,34 +629,19 @@ function renderJackpotPicker(container) {
         }
     };
     
-    // Input change
-    input?.addEventListener('input', (e) => {
-        let val = parseInt(e.target.value) || 1;
-        updateValue(val);
-    });
+    input?.addEventListener('input', (e) => updateValue(parseInt(e.target.value) || 1));
+    input?.addEventListener('blur', (e) => updateValue(parseInt(e.target.value) || 1));
+    slider?.addEventListener('input', (e) => updateValue(parseInt(e.target.value)));
     
-    input?.addEventListener('blur', (e) => {
-        let val = parseInt(e.target.value) || 1;
-        updateValue(val);
-    });
-    
-    // Slider change
-    slider?.addEventListener('input', (e) => {
-        updateValue(parseInt(e.target.value));
-    });
-    
-    // +/- buttons
     document.getElementById('btn-minus')?.addEventListener('click', () => updateValue(Game.guess - 1));
     document.getElementById('btn-plus')?.addEventListener('click', () => updateValue(Game.guess + 1));
     document.getElementById('btn-minus-10')?.addEventListener('click', () => updateValue(Game.guess - 10));
     document.getElementById('btn-plus-10')?.addEventListener('click', () => updateValue(Game.guess + 10));
     
-    // Quick picks
     document.querySelectorAll('.quick-pick').forEach(btn => {
         btn.addEventListener('click', () => updateValue(parseInt(btn.dataset.number)));
     });
     
-    // Random button
     document.getElementById('btn-random')?.addEventListener('click', () => {
         updateValue(Math.floor(Math.random() * 100) + 1);
     });
@@ -678,20 +660,21 @@ function renderJackpotPicker(container) {
 function renderComboPicker(container) {
     const tier = TIERS[Game.comboStep];
     const current = Game.guesses[Game.comboStep];
+    const isHardTier = tier.range === 100; // Hard tier has 100 options
     
     container.innerHTML = `
         <div class="bg-gradient-to-br from-zinc-900 to-zinc-800/50 border border-zinc-700/50 rounded-2xl p-5">
             <!-- Progress Pills -->
-            <div class="flex justify-center gap-3 mb-5">
+            <div class="flex justify-center gap-2 sm:gap-3 mb-5">
                 ${TIERS.map((t, i) => {
                     const isActive = i === Game.comboStep;
                     const isDone = i < Game.comboStep;
                     return `
-                        <div class="flex items-center gap-2 px-3 py-2 rounded-xl border ${isActive ? `bg-gradient-to-br ${t.bgFrom} ${t.bgTo} ${t.borderColor}` : isDone ? 'bg-emerald-500/10 border-emerald-500/50' : 'bg-zinc-800/50 border-zinc-700/50'}">
-                            <span class="text-xl">${isDone ? '✓' : t.emoji}</span>
+                        <div class="flex items-center gap-1.5 sm:gap-2 px-2 sm:px-3 py-1.5 sm:py-2 rounded-xl border ${isActive ? `bg-gradient-to-br ${t.bgFrom} ${t.bgTo} ${t.borderColor}` : isDone ? 'bg-emerald-500/10 border-emerald-500/50' : 'bg-zinc-800/50 border-zinc-700/50'}">
+                            <span class="text-lg sm:text-xl">${isDone ? '✓' : t.emoji}</span>
                             <div class="text-left">
-                                <p class="text-xs font-bold ${isActive ? t.textColor : isDone ? 'text-emerald-400' : 'text-zinc-500'}">${t.name}</p>
-                                <p class="text-[10px] ${isDone ? 'text-emerald-400 font-bold' : 'text-zinc-600'}">${isDone ? Game.guesses[i] : t.multiplier + 'x'}</p>
+                                <p class="text-[10px] sm:text-xs font-bold ${isActive ? t.textColor : isDone ? 'text-emerald-400' : 'text-zinc-500'}">${t.name}</p>
+                                <p class="text-[8px] sm:text-[10px] ${isDone ? 'text-emerald-400 font-bold' : 'text-zinc-600'}">${isDone ? Game.guesses[i] : t.multiplier + 'x'}</p>
                             </div>
                         </div>
                     `;
@@ -706,43 +689,123 @@ function renderComboPicker(container) {
                 <p class="text-zinc-400 text-sm">Pick <span class="text-white font-bold">1-${tier.range}</span> • <span class="text-emerald-400">${tier.chance}</span> • <span class="${tier.textColor} font-bold">${tier.multiplier}x</span></p>
             </div>
 
-            <!-- Number Selection -->
-            <div class="flex justify-center gap-2 mb-5">
-                ${Array.from({length: tier.range}, (_, i) => i + 1).map(n => `
-                    <button class="num-btn w-12 h-12 rounded-xl font-bold text-lg transition-all ${n === current ? `bg-gradient-to-br ${tier.bgFrom} ${tier.bgTo} border-2 ${tier.borderColor} ${tier.textColor}` : 'bg-zinc-800/60 border border-zinc-700/50 text-zinc-400 hover:border-zinc-600'}" data-num="${n}">
-                        ${n}
+            ${isHardTier ? `
+                <!-- Hard Tier: Input + Slider (like Jackpot) -->
+                <div class="flex items-center justify-center gap-3 mb-4">
+                    <button class="combo-minus-10 w-10 h-10 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white font-bold text-sm transition-all border border-zinc-700">
+                        -10
                     </button>
-                `).join('')}
-            </div>
+                    <button class="combo-minus w-10 h-10 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white font-bold text-xl transition-all border border-zinc-700">
+                        −
+                    </button>
+                    
+                    <input type="number" id="combo-number-input" min="1" max="100" value="${current}" 
+                        class="w-20 h-20 text-center text-3xl font-black rounded-2xl bg-gradient-to-br ${tier.bgFrom} ${tier.bgTo} border-2 ${tier.borderColor} ${tier.textColor} focus:outline-none focus:ring-2 focus:ring-amber-500/50 appearance-none"
+                        style="-moz-appearance: textfield;">
+                    
+                    <button class="combo-plus w-10 h-10 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white font-bold text-xl transition-all border border-zinc-700">
+                        +
+                    </button>
+                    <button class="combo-plus-10 w-10 h-10 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white font-bold text-sm transition-all border border-zinc-700">
+                        +10
+                    </button>
+                </div>
+                
+                <!-- Slider for Hard tier -->
+                <div class="mb-4 px-2">
+                    <input type="range" id="combo-slider" min="1" max="100" value="${current}" 
+                        class="fortune-slider w-full h-3 rounded-full appearance-none cursor-pointer"
+                        style="background: linear-gradient(to right, ${tier.hex} 0%, ${tier.hex} ${current}%, #27272a ${current}%, #27272a 100%)">
+                    <div class="flex justify-between text-xs text-zinc-500 mt-2 px-1">
+                        <span>1</span><span>25</span><span>50</span><span>75</span><span>100</span>
+                    </div>
+                </div>
+                
+                <!-- Quick picks for Hard tier -->
+                <div class="flex justify-center gap-2 mb-4 flex-wrap">
+                    <button class="combo-quick px-2.5 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white text-xs rounded-lg transition-all" data-num="7">7</button>
+                    <button class="combo-quick px-2.5 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white text-xs rounded-lg transition-all" data-num="13">13</button>
+                    <button class="combo-quick px-2.5 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white text-xs rounded-lg transition-all" data-num="50">50</button>
+                    <button class="combo-quick px-2.5 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white text-xs rounded-lg transition-all" data-num="77">77</button>
+                    <button class="combo-quick px-2.5 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white text-xs rounded-lg transition-all" data-num="99">99</button>
+                    <button class="combo-random px-2.5 py-1.5 bg-amber-500/20 hover:bg-amber-500/30 text-amber-400 text-xs rounded-lg border border-amber-500/30 transition-all">
+                        <i class="fa-solid fa-dice mr-1"></i>Random
+                    </button>
+                </div>
+            ` : `
+                <!-- Easy/Medium Tier: Simple number buttons -->
+                <div class="flex justify-center gap-2 mb-5 flex-wrap">
+                    ${Array.from({length: tier.range}, (_, i) => i + 1).map(n => `
+                        <button class="num-btn w-12 h-12 rounded-xl font-bold text-lg transition-all ${n === current ? `bg-gradient-to-br ${tier.bgFrom} ${tier.bgTo} border-2 ${tier.borderColor} ${tier.textColor}` : 'bg-zinc-800/60 border border-zinc-700/50 text-zinc-400 hover:border-zinc-600'}" data-num="${n}">
+                            ${n}
+                        </button>
+                    `).join('')}
+                </div>
+            `}
 
             <div class="flex gap-3">
                 <button id="btn-back" class="flex-1 py-3.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-bold rounded-xl transition-colors">
                     <i class="fa-solid fa-arrow-left mr-2"></i>${Game.comboStep > 0 ? 'Previous' : 'Back'}
                 </button>
-                <button id="btn-next" class="flex-1 py-3.5 bg-gradient-to-r from-${tier.color}-500 to-${tier.color}-600 text-black font-bold rounded-xl transition-all">
+                <button id="btn-next" class="flex-1 py-3.5 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-black font-bold rounded-xl transition-all">
                     ${Game.comboStep < 2 ? 'Next' : 'Continue'}<i class="fa-solid fa-arrow-right ml-2"></i>
                 </button>
             </div>
         </div>
     `;
 
-    // Number selection
-    document.querySelectorAll('.num-btn').forEach(btn => {
-        btn.addEventListener('click', () => {
-            const num = parseInt(btn.dataset.num);
-            Game.guesses[Game.comboStep] = num;
-            
-            // Update visual
-            document.querySelectorAll('.num-btn').forEach(b => {
-                const n = parseInt(b.dataset.num);
-                if (n === num) {
-                    b.className = `num-btn w-12 h-12 rounded-xl font-bold text-lg transition-all bg-gradient-to-br ${tier.bgFrom} ${tier.bgTo} border-2 ${tier.borderColor} ${tier.textColor}`;
-                } else {
-                    b.className = 'num-btn w-12 h-12 rounded-xl font-bold text-lg transition-all bg-zinc-800/60 border border-zinc-700/50 text-zinc-400 hover:border-zinc-600';
-                }
+    const isHardTierActive = tier.range === 100;
+    
+    if (isHardTierActive) {
+        // Hard tier controls
+        const input = document.getElementById('combo-number-input');
+        const slider = document.getElementById('combo-slider');
+        
+        const updateHardValue = (val) => {
+            val = Math.max(1, Math.min(100, val));
+            Game.guesses[Game.comboStep] = val;
+            if (input) input.value = val;
+            if (slider) {
+                slider.value = val;
+                slider.style.background = `linear-gradient(to right, ${tier.hex} 0%, ${tier.hex} ${val}%, #27272a ${val}%, #27272a 100%)`;
+            }
+        };
+        
+        input?.addEventListener('input', (e) => updateHardValue(parseInt(e.target.value) || 1));
+        input?.addEventListener('blur', (e) => updateHardValue(parseInt(e.target.value) || 1));
+        slider?.addEventListener('input', (e) => updateHardValue(parseInt(e.target.value)));
+        
+        document.querySelector('.combo-minus')?.addEventListener('click', () => updateHardValue(Game.guesses[Game.comboStep] - 1));
+        document.querySelector('.combo-plus')?.addEventListener('click', () => updateHardValue(Game.guesses[Game.comboStep] + 1));
+        document.querySelector('.combo-minus-10')?.addEventListener('click', () => updateHardValue(Game.guesses[Game.comboStep] - 10));
+        document.querySelector('.combo-plus-10')?.addEventListener('click', () => updateHardValue(Game.guesses[Game.comboStep] + 10));
+        
+        document.querySelectorAll('.combo-quick').forEach(btn => {
+            btn.addEventListener('click', () => updateHardValue(parseInt(btn.dataset.num)));
+        });
+        
+        document.querySelector('.combo-random')?.addEventListener('click', () => {
+            updateHardValue(Math.floor(Math.random() * 100) + 1);
+        });
+    } else {
+        // Easy/Medium tier: simple number selection
+        document.querySelectorAll('.num-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const num = parseInt(btn.dataset.num);
+                Game.guesses[Game.comboStep] = num;
+                
+                // Update visual
+                document.querySelectorAll('.num-btn').forEach(b => {
+                    const n = parseInt(b.dataset.num);
+                    if (n === num) {
+                        b.className = `num-btn w-12 h-12 rounded-xl font-bold text-lg transition-all bg-gradient-to-br ${tier.bgFrom} ${tier.bgTo} border-2 ${tier.borderColor} ${tier.textColor}`;
+                    } else {
+                        b.className = 'num-btn w-12 h-12 rounded-xl font-bold text-lg transition-all bg-zinc-800/60 border border-zinc-700/50 text-zinc-400 hover:border-zinc-600';
+                    }
+                });
             });
         });
-    });
+    }
 
     // Navigation
     document.getElementById('btn-back')?.addEventListener('click', () => {
@@ -1068,47 +1131,47 @@ function renderResult(container) {
     }
     
     container.innerHTML = `
-        <div class="bg-gradient-to-br ${isWin ? 'from-emerald-900/30 to-green-900/10 border-emerald-500/30' : 'from-zinc-900 to-zinc-800/50 border-zinc-700/50'} border rounded-2xl p-6 relative overflow-hidden" id="result-container">
+        <div class="bg-gradient-to-br ${isWin ? 'from-emerald-900/30 to-green-900/10 border-emerald-500/30' : 'from-zinc-900 to-zinc-800/50 border-zinc-700/50'} border rounded-2xl p-4 sm:p-6 relative overflow-hidden" id="result-container">
             
             <!-- Result Header -->
-            <div class="text-center mb-6">
+            <div class="text-center mb-4">
                 ${isWin ? `
-                    <div class="text-6xl mb-3">🎉</div>
-                    <h2 class="text-3xl font-black text-emerald-400 mb-2">YOU WON!</h2>
-                    <p class="text-4xl font-black text-white">${displayPrize.toLocaleString()} BKC</p>
+                    <div class="text-5xl mb-2">🎉</div>
+                    <h2 class="text-2xl font-black text-emerald-400 mb-1">YOU WON!</h2>
+                    <p class="text-3xl font-black text-white">${displayPrize.toLocaleString()} BKC</p>
                 ` : `
-                    <div class="text-6xl mb-3">😔</div>
-                    <h2 class="text-2xl font-bold text-zinc-400 mb-2">No Match</h2>
-                    <p class="text-zinc-500">Better luck next time!</p>
+                    <div class="text-5xl mb-2">😔</div>
+                    <h2 class="text-xl font-bold text-zinc-400 mb-1">No Match</h2>
+                    <p class="text-zinc-500 text-sm">Better luck next time!</p>
                 `}
             </div>
             
-            <!-- Results Grid -->
-            <div class="grid ${isJackpot ? 'grid-cols-1' : 'grid-cols-3'} gap-4 mb-6">
+            <!-- Results Grid - Responsive -->
+            <div class="grid ${isJackpot ? 'grid-cols-1 max-w-[200px] mx-auto' : 'grid-cols-3'} gap-2 sm:gap-3 mb-4">
                 ${tiersToShow.map((tier, idx) => {
                     const pick = isJackpot ? picks[0] : picks[idx];
                     const roll = rolls[idx];
                     const isMatch = matches[idx];
                     
                     return `
-                        <div class="text-center p-4 rounded-xl ${isMatch ? 'bg-emerald-500/20 border border-emerald-500/50' : 'bg-zinc-800/50 border border-zinc-700/50'}">
-                            <p class="text-xs text-zinc-500 mb-2">${tier.emoji} ${tier.name}</p>
-                            <div class="flex items-center justify-center gap-3">
+                        <div class="text-center p-2 sm:p-3 rounded-xl ${isMatch ? 'bg-emerald-500/20 border border-emerald-500/50' : 'bg-zinc-800/50 border border-zinc-700/50'}">
+                            <p class="text-[10px] text-zinc-500 mb-1">${tier.emoji} ${tier.name}</p>
+                            <div class="flex items-center justify-center gap-2">
                                 <div class="text-center">
-                                    <p class="text-[10px] text-zinc-600 mb-1">YOU</p>
-                                    <div class="w-12 h-12 rounded-lg bg-gradient-to-br ${tier.bgFrom} ${tier.bgTo} border ${tier.borderColor} flex items-center justify-center">
-                                        <span class="text-xl font-black ${tier.textColor}">${pick}</span>
+                                    <p class="text-[8px] text-zinc-600 mb-0.5">YOU</p>
+                                    <div class="w-10 h-10 sm:w-12 sm:h-12 rounded-lg bg-gradient-to-br ${tier.bgFrom} ${tier.bgTo} border ${tier.borderColor} flex items-center justify-center">
+                                        <span class="text-lg sm:text-xl font-black ${tier.textColor}">${pick}</span>
                                     </div>
                                 </div>
-                                <span class="text-2xl ${isMatch ? 'text-emerald-400' : 'text-red-400'}">${isMatch ? '=' : '≠'}</span>
+                                <span class="text-xl ${isMatch ? 'text-emerald-400' : 'text-red-400'}">${isMatch ? '=' : '≠'}</span>
                                 <div class="text-center">
-                                    <p class="text-[10px] text-zinc-600 mb-1">ROLL</p>
-                                    <div class="w-12 h-12 rounded-lg ${isMatch ? 'bg-emerald-500/30 border-emerald-500' : 'bg-zinc-700/50 border-zinc-600'} border flex items-center justify-center ${isMatch ? 'match-pulse' : 'miss-shake'}">
-                                        <span class="text-xl font-black ${isMatch ? 'text-emerald-400' : 'text-zinc-300'}">${roll}</span>
+                                    <p class="text-[8px] text-zinc-600 mb-0.5">ROLL</p>
+                                    <div class="w-10 h-10 sm:w-12 sm:h-12 rounded-lg ${isMatch ? 'bg-emerald-500/30 border-emerald-500' : 'bg-zinc-700/50 border-zinc-600'} border flex items-center justify-center">
+                                        <span class="text-lg sm:text-xl font-black ${isMatch ? 'text-emerald-400' : 'text-zinc-300'}">${roll !== undefined ? roll : '?'}</span>
                                     </div>
                                 </div>
                             </div>
-                            ${isMatch ? `<p class="text-emerald-400 text-sm font-bold mt-2">+${tier.multiplier}x WIN!</p>` : ''}
+                            ${isMatch ? `<p class="text-emerald-400 text-xs font-bold mt-1">+${tier.multiplier}x</p>` : ''}
                         </div>
                     `;
                 }).join('')}
@@ -1116,7 +1179,7 @@ function renderResult(container) {
             
             <!-- TX Link -->
             ${Game.txHash ? `
-                <div class="text-center mb-4">
+                <div class="text-center mb-3">
                     <a href="${EXPLORER_TX}${Game.txHash}" target="_blank" class="inline-flex items-center gap-2 text-xs text-zinc-500 hover:text-zinc-400">
                         <i class="fa-solid fa-external-link"></i>
                         View Transaction
@@ -1125,9 +1188,9 @@ function renderResult(container) {
             ` : ''}
             
             <!-- Share Section (ALWAYS SHOW - win and lose) -->
-            <div class="bg-gradient-to-r ${isWin ? 'from-amber-500/10 to-orange-500/10 border-amber-500/30' : 'from-zinc-800/50 to-zinc-700/30 border-zinc-600/30'} border rounded-xl p-4 mb-4">
-                <div class="flex items-center gap-3 mb-3">
-                    <div class="w-10 h-10 rounded-full ${isWin ? 'bg-amber-500/20' : 'bg-zinc-700/50'} flex items-center justify-center">
+            <div class="bg-gradient-to-r ${isWin ? 'from-amber-500/10 to-orange-500/10 border-amber-500/30' : 'from-zinc-800/50 to-zinc-700/30 border-zinc-600/30'} border rounded-xl p-3 mb-3">
+                <div class="flex items-center gap-3 mb-2">
+                    <div class="w-9 h-9 rounded-full ${isWin ? 'bg-amber-500/20' : 'bg-zinc-700/50'} flex items-center justify-center flex-shrink-0">
                         <i class="fa-solid fa-gift ${isWin ? 'text-amber-400' : 'text-zinc-400'}"></i>
                     </div>
                     <div>
@@ -1135,12 +1198,12 @@ function renderResult(container) {
                         <p class="text-amber-400 text-xs font-medium">+${SHARE_POINTS} Airdrop Points</p>
                     </div>
                 </div>
-                <button id="btn-share" class="w-full py-3 ${isWin ? 'bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-black' : 'bg-zinc-700 hover:bg-zinc-600 text-white border border-zinc-600'} font-bold rounded-xl transition-all">
+                <button id="btn-share" class="w-full py-2.5 ${isWin ? 'bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-black' : 'bg-zinc-700 hover:bg-zinc-600 text-white border border-zinc-600'} font-bold rounded-xl transition-all text-sm">
                     <i class="fa-solid fa-share-nodes mr-2"></i>${isWin ? 'Share Now' : 'Share Anyway'}
                 </button>
             </div>
             
-            <button id="btn-new-game" class="w-full py-4 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-black font-bold rounded-xl transition-all">
+            <button id="btn-new-game" class="w-full py-3 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-black font-bold rounded-xl transition-all">
                 <i class="fa-solid fa-paw mr-2"></i>Play Again
             </button>
         </div>
@@ -1366,18 +1429,46 @@ function showShareModal(isWin, prize) {
         shareAndTrack('whatsapp', `https://wa.me/?text=${encodeURIComponent(text)}`);
     });
     
-    // Instagram - abre o perfil do Backcoin (não tem share direto)
+    // Instagram - copia texto e mostra instruções (não tem share API direta)
     document.getElementById('share-instagram')?.addEventListener('click', async () => {
         const text = getShareText();
         try {
             await navigator.clipboard.writeText(text);
-            showToast('📋 Text copied! Opening Instagram...', 'success');
             await trackShareOnServer('instagram');
+            
+            // Mostrar modal com instruções
+            const instructionModal = `
+                <div class="text-center p-2">
+                    <i class="fa-brands fa-instagram text-4xl text-[#E4405F] mb-3"></i>
+                    <h3 class="text-lg font-bold text-white mb-2">Text Copied!</h3>
+                    <p class="text-zinc-400 text-sm mb-4">Now paste it in your Instagram story or post!</p>
+                    <div class="bg-zinc-800/50 rounded-xl p-3 mb-4 text-left">
+                        <p class="text-zinc-500 text-xs mb-2">Your message:</p>
+                        <p class="text-zinc-300 text-xs break-words">${text.slice(0, 100)}...</p>
+                    </div>
+                    <button id="btn-open-instagram" class="w-full py-3 bg-gradient-to-r from-[#833AB4] via-[#E4405F] to-[#FCAF45] text-white font-bold rounded-xl mb-2">
+                        <i class="fa-brands fa-instagram mr-2"></i>Open Instagram
+                    </button>
+                    <button id="btn-close-ig-modal" class="text-zinc-500 hover:text-zinc-300 text-xs">Close</button>
+                </div>
+            `;
+            
+            closeModal();
+            setTimeout(() => {
+                openModal(instructionModal, 'max-w-xs');
+                
+                document.getElementById('btn-open-instagram')?.addEventListener('click', () => {
+                    window.open('https://www.instagram.com/backcoin.bkc/', '_blank');
+                    closeModal();
+                });
+                
+                document.getElementById('btn-close-ig-modal')?.addEventListener('click', closeModal);
+            }, 100);
+            
         } catch {
-            // Continue anyway
+            showToast('Could not copy text', 'error');
+            closeModal();
         }
-        window.open('https://www.instagram.com/backcoin.bkc/', '_blank');
-        closeModal();
     });
     
     // Copy
@@ -1505,20 +1596,29 @@ function renderHistoryList(games) {
         const isCumulative = game.isCumulative;
         const rolls = game.rolls || [];
         const guesses = game.guesses || [];
+        const txHash = game.txHash || game.transactionHash;
         
-        const timeAgo = getTimeAgo(game.timestamp);
+        const timeAgo = getTimeAgo(game.timestamp || game.createdAt);
         const shortAddr = game.player ? `${game.player.slice(0,6)}...${game.player.slice(-4)}` : '???';
         const isMe = State.userAddress && game.player?.toLowerCase() === State.userAddress.toLowerCase();
         
+        // Build tx link
+        const txLink = txHash ? `${EXPLORER_TX}${txHash}` : null;
+        
         return `
-            <div class="p-3 rounded-xl mb-2 ${isWin ? 'bg-emerald-500/10 border border-emerald-500/30' : 'bg-zinc-800/30 border border-zinc-700/30'} transition-all hover:scale-[1.01]">
+            <a href="${txLink || '#'}" target="${txLink ? '_blank' : '_self'}" rel="noopener" 
+               class="block p-3 rounded-xl mb-2 ${isWin ? 'bg-emerald-500/10 border border-emerald-500/30' : 'bg-zinc-800/30 border border-zinc-700/30'} transition-all hover:scale-[1.01] ${txLink ? 'cursor-pointer hover:border-zinc-500' : ''}" 
+               ${!txLink ? 'onclick="return false;"' : ''}>
                 <div class="flex items-center justify-between mb-2">
                     <div class="flex items-center gap-2">
                         <span class="text-lg">${isWin ? '🏆' : '🎲'}</span>
                         <span class="text-xs ${isMe ? 'text-amber-400 font-bold' : 'text-zinc-500'}">${isMe ? 'You' : shortAddr}</span>
                         <span class="text-[10px] px-2 py-0.5 rounded-full ${isCumulative ? 'bg-violet-500/20 text-violet-400' : 'bg-amber-500/20 text-amber-400'}">${isCumulative ? 'Combo' : 'Jackpot'}</span>
                     </div>
-                    <span class="text-[10px] text-zinc-600">${timeAgo}</span>
+                    <div class="flex items-center gap-1.5">
+                        <span class="text-[10px] text-zinc-600">${timeAgo}</span>
+                        ${txLink ? '<i class="fa-solid fa-external-link text-[8px] text-zinc-600"></i>' : ''}
+                    </div>
                 </div>
                 <div class="flex items-center justify-between">
                     <div class="flex items-center gap-2">
@@ -1541,26 +1641,57 @@ function renderHistoryList(games) {
                         }).join('')}
                     </div>
                 </div>
-            </div>
+            </a>
         `;
     }).join('');
 }
 
 function getTimeAgo(timestamp) {
-    if (!timestamp) return '';
+    if (!timestamp) return 'N/A';
     
-    const now = Date.now();
-    const time = typeof timestamp === 'number' ? timestamp * 1000 : new Date(timestamp).getTime();
-    const diff = now - time;
-    
-    const minutes = Math.floor(diff / 60000);
-    const hours = Math.floor(diff / 3600000);
-    const days = Math.floor(diff / 86400000);
-    
-    if (minutes < 1) return 'Just now';
-    if (minutes < 60) return `${minutes}m ago`;
-    if (hours < 24) return `${hours}h ago`;
-    return `${days}d ago`;
+    try {
+        const now = Date.now();
+        let time;
+        
+        // Handle different timestamp formats
+        if (typeof timestamp === 'number') {
+            // Unix timestamp (seconds or milliseconds)
+            time = timestamp > 1e12 ? timestamp : timestamp * 1000;
+        } else if (typeof timestamp === 'string') {
+            // ISO string or date string
+            time = new Date(timestamp).getTime();
+        } else if (timestamp._seconds) {
+            // Firestore timestamp
+            time = timestamp._seconds * 1000;
+        } else if (timestamp.seconds) {
+            // Firestore timestamp (alternate format)
+            time = timestamp.seconds * 1000;
+        } else {
+            time = new Date(timestamp).getTime();
+        }
+        
+        if (isNaN(time)) return 'N/A';
+        
+        const diff = now - time;
+        
+        if (diff < 0) return 'Just now'; // Future timestamp
+        
+        const minutes = Math.floor(diff / 60000);
+        const hours = Math.floor(diff / 3600000);
+        const days = Math.floor(diff / 86400000);
+        
+        if (minutes < 1) return 'Just now';
+        if (minutes < 60) return `${minutes}m ago`;
+        if (hours < 24) return `${hours}h ago`;
+        if (days < 7) return `${days}d ago`;
+        
+        // For older dates, show actual date
+        const date = new Date(time);
+        return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    } catch (e) {
+        console.error('getTimeAgo error:', e);
+        return 'N/A';
+    }
 }
 
 // ============================================================================
