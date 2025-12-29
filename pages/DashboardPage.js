@@ -1280,45 +1280,81 @@ function renderActivityItem(item, showAddress = false) {
     
     const style = getActivityStyle(item.type, item.details);
     let extraInfo = '';
-    let rollsHtml = '';
     
     // Detalhes específicos por tipo
     const t = (item.type || '').toUpperCase().trim();
     const details = item.details || {};
     
-    // Fortune - Mostrar números igual ao Fortune Pool
+    // Fortune - Layout IGUAL ao Fortune Pool
     const isFortune = t.includes('GAME') || t.includes('FORTUNE') || t.includes('REQUEST') || t.includes('FULFILLED') || t.includes('RESULT');
     
     if (isFortune) {
         const rolls = details.rolls || item.rolls || [];
         const guesses = details.guesses || item.guesses || [];
-        const isWin = details.isWin || (details.prizeWon && BigInt(details.prizeWon) > 0n);
-        const isCumulative = details.isCumulative || guesses.length > 1;
+        const isWin = details.isWin || (details.prizeWon && BigInt(details.prizeWon || 0) > 0n);
+        const isCumulative = details.isCumulative !== undefined ? details.isCumulative : guesses.length > 1;
+        const wager = details.wagerAmount || details.amount;
+        const prize = details.prizeWon;
         
-        // Criar badges dos números (igual Fortune Pool)
+        // Determinar tipo: Combo ou Jackpot
+        const gameType = isCumulative ? 'Combo' : 'Jackpot';
+        const badgeClass = isCumulative 
+            ? 'bg-purple-500/20 text-purple-400' 
+            : 'bg-amber-500/20 text-amber-400';
+        
+        // Wager e resultado
+        const wagerNum = wager ? formatBigNumber(BigInt(wager)).toFixed(0) : '0';
+        let resultText = 'No win';
+        let resultClass = 'text-zinc-500';
+        
+        if (isWin && prize && BigInt(prize) > 0n) {
+            const prizeNum = formatBigNumber(BigInt(prize)).toFixed(0);
+            resultText = `<span class="text-emerald-400 font-bold">+${prizeNum} BKC</span>`;
+            resultClass = '';
+        }
+        
+        // Criar badges dos números
+        let rollsHtml = '';
         if (rolls.length > 0) {
-            rollsHtml = `<div class="flex gap-1 ml-auto">
+            rollsHtml = `<div class="flex gap-1">
                 ${rolls.map((roll, i) => {
                     const guess = guesses[i];
                     const isMatch = guess !== undefined && Number(guess) === Number(roll);
-                    return `<div class="w-6 h-6 rounded text-[10px] font-bold flex items-center justify-center ${isMatch ? 'bg-emerald-500/30 text-emerald-400' : 'bg-zinc-700/50 text-zinc-400'}">${roll}</div>`;
+                    return `<div class="w-7 h-7 rounded text-xs font-bold flex items-center justify-center border ${isMatch ? 'bg-emerald-500/20 border-emerald-500/50 text-emerald-400' : 'bg-zinc-800 border-zinc-700 text-zinc-400'}">${roll}</div>`;
                 }).join('')}
             </div>`;
         }
         
-        // Wager e Prize
-        const wager = details.wagerAmount || details.amount;
-        const prize = details.prizeWon;
+        const txLink = item.txHash ? `${EXPLORER_BASE_URL}${item.txHash}` : '#';
         
-        if (wager) {
-            const wagerNum = formatBigNumber(BigInt(wager)).toFixed(0);
-            if (isWin && prize) {
-                const prizeNum = formatBigNumber(BigInt(prize)).toFixed(0);
-                extraInfo = `<span class="text-emerald-400 font-bold">+${prizeNum} BKC</span>`;
-            } else {
-                extraInfo = `<span class="text-zinc-500">Bet: ${wagerNum}</span>`;
-            }
-        }
+        // Layout IGUAL ao Fortune Pool
+        return `
+            <a href="${txLink}" target="_blank" class="block p-3 hover:bg-zinc-800/50 border border-zinc-700/30 rounded-lg transition-all group" style="background: rgba(39,39,42,0.4)" title="${fullDateTime}">
+                <div class="flex items-center justify-between mb-2">
+                    <div class="flex items-center gap-2">
+                        <div class="w-8 h-8 rounded-lg bg-zinc-700/50 flex items-center justify-center">
+                            <i class="fa-solid fa-dice text-zinc-400 text-sm"></i>
+                        </div>
+                        <div>
+                            <span class="text-white text-sm font-medium">You</span>
+                            <span class="ml-2 text-[10px] font-bold px-2 py-0.5 rounded ${badgeClass}">${gameType}</span>
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-1.5 text-zinc-500 text-[10px]">
+                        <span>${dateStr}</span>
+                        <i class="fa-solid fa-external-link group-hover:text-blue-400 transition-colors"></i>
+                    </div>
+                </div>
+                <div class="flex items-center justify-between">
+                    <div class="text-xs">
+                        <span class="text-zinc-500">Bet: ${wagerNum}</span>
+                        <span class="mx-2 text-zinc-600">→</span>
+                        <span class="${resultClass}">${resultText}</span>
+                    </div>
+                    ${rollsHtml}
+                </div>
+            </a>
+        `;
     }
     
     // Notary - IPFS CID
@@ -1354,36 +1390,11 @@ function renderActivityItem(item, showAddress = false) {
     }
 
     const txLink = item.txHash ? `${EXPLORER_BASE_URL}${item.txHash}` : '#';
-    
-    // Layout diferente para Fortune (com rolls) vs outros
-    if (isFortune && rollsHtml) {
-        return `
-            <a href="${txLink}" target="_blank" class="block p-2.5 hover:bg-zinc-800/60 border border-zinc-700/30 rounded-lg transition-all hover:border-zinc-600/50 group" style="background: rgba(39,39,42,0.3)" title="${fullDateTime}">
-                <div class="flex items-center justify-between mb-1.5">
-                    <div class="flex items-center gap-2">
-                        <div class="w-7 h-7 rounded-lg flex items-center justify-center border border-zinc-700/30" style="background: ${style.bg}">
-                            <i class="fa-solid ${style.icon} text-[10px]" style="color: ${style.color}"></i>
-                        </div>
-                        <span class="text-white text-xs font-medium">${style.label}</span>
-                    </div>
-                    <div class="flex items-center gap-1.5">
-                        <span class="text-zinc-600 text-[10px]">${dateStr}</span>
-                        <i class="fa-solid fa-external-link text-[8px] text-zinc-600 group-hover:text-blue-400"></i>
-                    </div>
-                </div>
-                <div class="flex items-center justify-between">
-                    <span class="text-[10px] ${extraInfo ? '' : 'text-zinc-500'}">${extraInfo || 'No win'}</span>
-                    ${rollsHtml}
-                </div>
-            </a>
-        `;
-    }
-
-    // Layout padrão para outros tipos
     let rawAmount = item.amount || details.amount || details.wagerAmount || details.prizeWon || "0";
     const amountNum = formatBigNumber(BigInt(rawAmount));
     const amountDisplay = amountNum > 0.001 ? amountNum.toFixed(2) : '';
 
+    // Layout padrão para outros tipos (não-Fortune)
     return `
         <a href="${txLink}" target="_blank" class="flex items-center justify-between p-2.5 hover:bg-zinc-800/60 border border-zinc-700/30 rounded-lg transition-all hover:border-zinc-600/50 group" style="background: rgba(39,39,42,0.3)" title="${fullDateTime}">
             <div class="flex items-center gap-2.5">
