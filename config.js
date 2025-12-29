@@ -404,7 +404,11 @@ export const actionsManagerABI = [
 // FortunePool V2 ABI - Instant resolution with BackchainRandomness
 export const fortunePoolV2ABI = [
     // Main play function - returns results instantly!
-    "function play(uint256 _wagerAmount, uint256[] calldata _guesses, bool _isCumulative) external returns (uint256 gameId, uint256[] memory rolls, uint256 prizeWon)",
+    "function play(uint256 _wagerAmount, uint256[] calldata _guesses, bool _isCumulative) external payable returns (uint256 gameId, uint256[] memory rolls, uint256 prizeWon)",
+    
+    // Service fee functions (for project funding)
+    "function serviceFee() view returns (uint256)",
+    "function getRequiredServiceFee(bool _isCumulative) view returns (uint256)",
     
     // View functions
     "function prizePoolBalance() view returns (uint256)",
@@ -413,7 +417,7 @@ export const fortunePoolV2ABI = [
     "function gameFeeBips() view returns (uint256)",
     "function getExpectedGuessCount(bool _isCumulative) view returns (uint256)",
     "function getTier(uint256 _tierId) view returns (uint128 maxRange, uint64 multiplierBips, bool active)",
-    "function getAllTiers() view returns (uint256[] tierIds, uint128[] maxRanges, uint64[] multipliers, bool[] actives)",
+    "function getAllTiers() view returns (uint128[] ranges, uint64[] multipliers)",
     "function calculatePotentialWinnings(uint256 _wagerAmount, bool _isCumulative) view returns (uint256 maxPrize, uint256 netWager, uint256 fee)",
     "function getGameResult(uint256 _gameId) view returns (address player, uint256 wagerAmount, uint256 prizeWon, uint256 timestamp, bool isCumulative, uint256 matchCount)",
     "function getGameDetails(uint256 _gameId) view returns (address player, uint256 wagerAmount, uint256 prizeWon, uint256[] guesses, uint256[] rolls, bool[] matches, bool isCumulative)",
