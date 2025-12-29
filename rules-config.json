@@ -2,7 +2,7 @@
   "VERSION": "1.0.0",
   "DESCRIPTION": "Configuração Oficial Backchain",
   "NETWORK": "arbitrum-sepolia",
-  "CREATED_AT": "2025-12-27T16:44:52.876Z",
+  "CREATED_AT": "2025-12-29T00:43:57.666Z",
   "serviceFeesBIPS": {
     "DELEGATION_FEE_BIPS": "50",
     "UNSTAKE_FEE_BIPS": "100",
@@ -17,7 +17,8 @@
     "NOTARY_SERVICE": "1.0"
   },
   "fortunePool": {
-    "serviceFeeETH": "0.001",
+    "serviceFee1xETH": "0.000001",
+    "serviceFee5xETH": "0.000005",
     "gameFeeBips": "1000"
   },
   "miningDistribution": {

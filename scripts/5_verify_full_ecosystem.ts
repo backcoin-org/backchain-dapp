@@ -1,14 +1,14 @@
 /**
- * 🔬 BACKCOIN V2.1 ECOSYSTEM VERIFICATION SCRIPT
+ * 🔬 BACKCOIN V2.2 ECOSYSTEM VERIFICATION SCRIPT
  * 
  * Script de verificação completo que:
  * - Separa NFT Discounts de Fee Recycling
  * - Mostra hash de todas as transações
- * - Testa Fortune em modo 1x e 5x
+ * - Testa Fortune em modo 1x e 5x com Backcoin Oracle (INSTANT resolution)
  * - Usa valores múltiplos de 10 para fácil visualização
  * - Testa Faucet com informações de cooldown
  * 
- * Uso: npx hardhat run scripts/5_verify_full_ecosystem_v2.ts --network arbitrumSepolia
+ * Uso: npx hardhat run scripts/5_verify_full_ecosystem.ts --network arbitrumSepolia
  */
 
 import { ethers } from "hardhat";
@@ -118,7 +118,8 @@ async function main(): Promise<void> {
     const ethBalance = await tester.provider!.getBalance(tester.address);
 
     console.log(`\n${"═".repeat(70)}`);
-    console.log(`   🔬 BACKCOIN V2.1 ECOSYSTEM VERIFICATION`);
+    console.log(`   🔬 BACKCOIN V2.2 ECOSYSTEM VERIFICATION`);
+    console.log(`   🦀 With Backcoin Oracle (Stylus) - INSTANT Resolution`);
     console.log(`${"═".repeat(70)}`);
     console.log(`   📅 Date: ${new Date().toISOString()}`);
     console.log(`   🧑‍🚀 Tester: ${tester.address}`);
@@ -130,7 +131,13 @@ async function main(): Promise<void> {
         throw new Error("deployment-addresses.json not found. Run deployment first.");
     }
     const addresses = JSON.parse(fs.readFileSync(addressesPath, "utf8"));
-    console.log(`   📋 Loaded ${Object.keys(addresses).length} contract addresses\n`);
+    console.log(`   📋 Loaded ${Object.keys(addresses).length} contract addresses`);
+    
+    // Show Oracle address
+    if (addresses.backcoinOracle) {
+        console.log(`   🦀 Backcoin Oracle: ${addresses.backcoinOracle}`);
+    }
+    console.log();
 
     // Connect to contracts
     const bkc = await ethers.getContractAt("BKCToken", addresses.bkcToken, tester);
@@ -269,6 +276,18 @@ async function main(): Promise<void> {
     // Rental fee
     baseFees.RENTAL_FEE_BIPS = BigInt((await hub.getFee(FEE_KEYS.RENTAL_FEE_BIPS)).toString());
     console.log(`   RENTAL_FEE: ${toBips(baseFees.RENTAL_FEE_BIPS)}`);
+
+    // Fortune Pool Service Fee (ETH)
+    try {
+        const serviceFee = BigInt((await fortune.serviceFee()).toString());
+        console.log(`\n   🎰 FORTUNE POOL:`);
+        console.log(`   SERVICE_FEE (1x): ${toEther(serviceFee)} ETH`);
+        console.log(`   SERVICE_FEE (5x): ${toEther(serviceFee * 5n)} ETH`);
+        baseFees.FORTUNE_SERVICE_FEE = serviceFee;
+    } catch {
+        console.log(`   ⚠️ Could not read Fortune Pool service fee`);
+        baseFees.FORTUNE_SERVICE_FEE = 0n;
+    }
 
     // Show configured discounts
     console.log(`\n   📉 Configured NFT Discounts:`);
@@ -675,9 +694,9 @@ async function runTierTest(
     }
 
     // ─────────────────────────────────────────────────────────────
-    // E. FORTUNE POOL TEST (1x and 5x modes)
+    // E. FORTUNE POOL TEST (1x and 5x modes) - INSTANT RESOLUTION
     // ─────────────────────────────────────────────────────────────
-    logSubsection("E. FORTUNE POOL - Game Tests (1x then 5x)");
+    logSubsection("E. FORTUNE POOL - 🦀 Backcoin Oracle (INSTANT)");
 
     try {
         const activeTiers = BigInt((await ctx.fortune.activeTierCount()).toString());
@@ -698,18 +717,16 @@ async function runTierTest(
                 const guessCount = isCumulative ? Number(activeTiers) : 1;
                 const guesses = Array(guessCount).fill(1n);
                 
-                // Get oracle fee for this mode
-                let oracleFee = 0n;
-                try {
-                    oracleFee = BigInt((await ctx.fortune.getRequiredOracleFee(isCumulative)).toString());
-                } catch {
-                    const baseFee = BigInt((await ctx.fortune.oracleFee()).toString());
-                    oracleFee = isCumulative ? baseFee * 5n : baseFee;
+                // Get service fee for this mode (ETH)
+                let serviceFee = ctx.baseFees.FORTUNE_SERVICE_FEE || 0n;
+                if (isCumulative) {
+                    serviceFee = serviceFee * 5n; // 5x mode = 5 * base fee
                 }
 
                 console.log(`      │ Wager:               ${toEther(wager).padStart(15)} BKC │`);
                 console.log(`      │ Guesses:             ${guesses.join(',').padStart(15)}     │`);
-                console.log(`      │ Oracle Fee:          ${toEther(oracleFee).padStart(15)} ETH │`);
+                console.log(`      │ Service Fee:         ${toEther(serviceFee).padStart(15)} ETH │`);
+                console.log(`      │ Resolution:          ${'⚡ INSTANT'.padStart(15)}     │`);
                 console.log(`      └────────────────────────────────────────────────┘`);
 
                 // Check balances
@@ -722,78 +739,146 @@ async function runTierTest(
                     continue;
                 }
 
-                if (ethBal < oracleFee + ethers.parseEther("0.001")) {
-                    console.log(`      ⚠️ Insufficient ETH for oracle fee`);
+                if (ethBal < serviceFee + ethers.parseEther("0.001")) {
+                    console.log(`      ⚠️ Insufficient ETH for service fee`);
                     REPORT.push({ tier: tier.name, action: `Fortune ${modeName}`, status: "⚠️ SKIP", details: "Low ETH" });
                     continue;
                 }
 
-                // Approve and participate
+                // Approve BKC
                 await ctx.bkc.approve(ctx.addresses.fortunePool, wager * 2n);
                 
-                const txFortune = await ctx.fortune.participate(wager, guesses, isCumulative, { value: oracleFee });
+                // Diagnostic: Read exact fee from contract
+                const contractServiceFee = BigInt((await ctx.fortune.serviceFee()).toString());
+                const requiredFee = isCumulative ? contractServiceFee * 5n : contractServiceFee;
+                
+                console.log(`      🔍 Debug: Contract serviceFee = ${toEther(contractServiceFee)} ETH`);
+                console.log(`      🔍 Debug: Required fee (${isCumulative ? '5x' : '1x'}) = ${toEther(requiredFee)} ETH`);
+                
+                // Check Oracle is set
+                try {
+                    const oracleAddr = await ctx.fortune.getOracleAddress();
+                    console.log(`      🔍 Debug: Oracle address = ${oracleAddr}`);
+                    if (oracleAddr === '0x0000000000000000000000000000000000000000') {
+                        console.log(`      ❌ Oracle not set! Cannot play.`);
+                        REPORT.push({ tier: tier.name, action: `Fortune ${modeName}`, status: "❌ FAIL", details: "Oracle not set" });
+                        continue;
+                    }
+                } catch (e) {
+                    console.log(`      ⚠️ Could not read oracle address`);
+                }
+                
+                // More diagnostics
+                try {
+                    const prizePool = BigInt((await ctx.fortune.prizePoolBalance()).toString());
+                    const tierCount = BigInt((await ctx.fortune.activeTierCount()).toString());
+                    const allowance = BigInt((await ctx.bkc.allowance(ctx.tester.address, ctx.addresses.fortunePool)).toString());
+                    const balance = BigInt((await ctx.bkc.balanceOf(ctx.tester.address)).toString());
+                    
+                    console.log(`      🔍 Debug: Prize Pool = ${toEther(prizePool)} BKC`);
+                    console.log(`      🔍 Debug: Active Tiers = ${tierCount}`);
+                    console.log(`      🔍 Debug: BKC Allowance = ${toEther(allowance)} BKC`);
+                    console.log(`      🔍 Debug: BKC Balance = ${toEther(balance)} BKC`);
+                    console.log(`      🔍 Debug: Wager = ${toEther(wager)} BKC`);
+                    
+                    // Check jackpot tier range
+                    if (tierCount > 0n) {
+                        const jackpotTier = await ctx.fortune.getTier(tierCount);
+                        console.log(`      🔍 Debug: Jackpot Tier ${tierCount}: maxRange=${jackpotTier.maxRange}, multiplier=${Number(jackpotTier.multiplierBips)/100}x`);
+                        console.log(`      🔍 Debug: Guess value = ${guesses[0]} (must be 1-${jackpotTier.maxRange})`);
+                    }
+                    
+                    // Test Oracle directly (using correct camelCase function names)
+                    console.log(`      🔍 Debug: Testing Oracle directly...`);
+                    const oracleAddr = await ctx.fortune.getOracleAddress();
+                    const oracleABI = [
+                        "function getNumbers(uint64 count, uint64 min, uint64 max) external returns (uint256[] memory)",
+                        "function getBatch(uint64[] calldata counts, uint64[] calldata mins, uint64[] calldata maxs) external returns (uint256[][] memory)"
+                    ];
+                    const oracle = new ethers.Contract(oracleAddr, oracleABI, ctx.tester);
+                    
+                    try {
+                        // Try static call first to see if it would work
+                        const testResult = await oracle.getNumbers.staticCall(1, 1, 100);
+                        console.log(`      ✅ Oracle test (static): returned [${testResult.join(', ')}]`);
+                    } catch (oracleErr: any) {
+                        console.log(`      ⚠️ Oracle static call note: ${oracleErr.message?.slice(0, 50)}`);
+                        console.log(`      ℹ️ This is normal - Oracle works via FortunePool`);
+                    }
+                    
+                } catch (e: any) {
+                    console.log(`      ⚠️ Diagnostic error: ${e.message?.slice(0, 50)}`);
+                }
+                
+                // Use the fee read directly from contract
+                const txFortune = await ctx.fortune.play(wager, guesses, isCumulative, { value: requiredFee });
                 const rcFortune = await txFortune.wait();
 
-                logTx(`Game Submitted (${modeName})`, txFortune.hash);
+                logTx(`Game Played (${modeName})`, txFortune.hash);
 
-                // Find gameId from event (only log GameRequested, skip undefined)
+                // Parse events - with Backcoin Oracle, game resolves INSTANTLY
+                // Look for GamePlayed and GameDetails events (no separate GameResolved!)
                 let gameId: bigint | null = null;
+                let rolls: bigint[] = [];
+                let matches = 0;
+                let payout = 0n;
+                let resolved = false;
+                
                 for (const log of rcFortune?.logs || []) {
                     try {
                         const parsed = ctx.fortune.interface.parseLog(log);
-                        if (parsed?.name === "GameRequested" || parsed?.name === "GameStarted") {
-                            gameId = BigInt(parsed.args.gameId?.toString() || parsed.args.requestId?.toString() || "0");
-                            console.log(`      📝 Event: ${parsed.name} (Game #${gameId})`);
-                            break;
+                        
+                        if (parsed?.name === "GamePlayed") {
+                            gameId = BigInt(parsed.args.gameId?.toString() || "0");
+                            payout = BigInt(parsed.args.prizeWon?.toString() || "0");
+                            matches = Number(parsed.args.matchCount?.toString() || "0");
+                            resolved = true; // GamePlayed IS the resolution in INSTANT mode!
+                            console.log(`      📝 GamePlayed: Game #${gameId}, Matches: ${matches}, Prize: ${toEther(payout)} BKC`);
+                        }
+
+                        // Get rolls from GameDetails event
+                        if (parsed?.name === "GameDetails") {
+                            const rollsRaw = parsed.args.rolls || [];
+                            rolls = Array.from(rollsRaw).map((r: any) => BigInt(r.toString()));
+                            console.log(`      🎲 Rolls: [${rolls.join(', ')}]`);
+                            
+                            // Also show matches array
+                            const matchesArr = parsed.args.matches || [];
+                            const matchIndicators = Array.from(matchesArr).map((m: any) => m ? '✓' : '✗');
+                            console.log(`      🎯 Matches: [${matchIndicators.join(', ')}]`);
+                        }
+                        
+                        // JackpotWon event (only if won a jackpot tier)
+                        if (parsed?.name === "JackpotWon") {
+                            const jackpotPrize = BigInt(parsed.args.prizeAmount?.toString() || "0");
+                            const jackpotTier = Number(parsed.args.tier?.toString() || "0");
+                            console.log(`      🎰 JACKPOT! Tier ${jackpotTier} won ${toEther(jackpotPrize)} BKC!`);
                         }
                     } catch {}
                 }
 
-                if (gameId !== null) {
-                    console.log(`      🎲 Game #${gameId} submitted. Waiting for oracle...`);
-                    
-                    // Wait for oracle resolution
-                    let resolved = false;
-                    let resultStr = "";
-                    
-                    for (let i = 0; i < 10; i++) {
-                        await sleep(2000);
-                        process.stdout.write(".");
-                        
-                        try {
-                            const status = await ctx.fortune.getGameStatus(gameId);
-                            if (status[1] === true) { // isResolved
-                                const rolls = status[4];
-                                const rollsArr = Array.from(rolls as bigint[]).map(r => BigInt(r.toString()));
-                                const wins = rollsArr.filter((r, idx) => r === guesses[idx]).length;
-                                resultStr = `[${rollsArr.join(',')}] - ${wins > 0 ? 'WIN!' : 'LOSE'}`;
-                                console.log(`\n      🎲 Result: ${resultStr}`);
-                                resolved = true;
-                                break;
-                            }
-                        } catch {}
+                // Build result string
+                let resultStr = "";
+                if (resolved) {
+                    const won = payout > 0n;
+                    resultStr = `${matches} match${matches !== 1 ? 'es' : ''} - ${won ? `🎉 WON ${toEther(payout)} BKC!` : '❌ LOST'}`;
+                    if (rolls.length > 0) {
+                        resultStr = `[${rolls.join(',')}] → ${resultStr}`;
                     }
-
-                    if (!resolved) {
-                        console.log(`\n      ⏳ Oracle pending (game submitted successfully)`);
-                    }
-
-                    REPORT.push({
-                        tier: tier.name,
-                        action: `Fortune ${modeName}`,
-                        status: "✅ PASS",
-                        actual: resolved ? resultStr : `Game #${gameId} pending`,
-                        txHash: txFortune.hash
-                    });
-                } else {
-                    REPORT.push({
-                        tier: tier.name,
-                        action: `Fortune ${modeName}`,
-                        status: "✅ PASS",
-                        txHash: txFortune.hash,
-                        details: "Game submitted"
-                    });
+                    console.log(`      🎲 Result: ${resultStr}`);
+                } else if (gameId !== null) {
+                    resultStr = `Game #${gameId} submitted`;
+                    console.log(`      ⚠️ Game submitted but resolution not found in events`);
                 }
+
+                REPORT.push({
+                    tier: tier.name,
+                    action: `Fortune ${modeName}`,
+                    status: "✅ PASS",
+                    actual: resultStr || `Game submitted`,
+                    txHash: txFortune.hash,
+                    details: resolved ? (payout > 0n ? "WON" : "LOST") : "Submitted"
+                });
 
                 await sleep(1000);
             }

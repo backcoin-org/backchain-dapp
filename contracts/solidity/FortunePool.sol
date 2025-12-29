@@ -11,23 +11,65 @@ import "./IInterfaces.sol";
 import "./BKCToken.sol";
 
 /**
- * @title IBackchainRandomness
- * @notice Interface for Backchain Randomness Oracle (Stylus contract)
- * @dev The oracle is FREE to use - no fees required for random number generation
+ * @title IBackcoinOracle
+ * @author Backchain Protocol
+ * @notice Interface for Backcoin Oracle - Free Randomness for Arbitrum Ecosystem
+ * @dev This interface allows Solidity contracts to interact with the Backcoin Oracle,
+ *      which is deployed as a Stylus (Rust/WASM) contract on Arbitrum.
+ *
+ *      ┌─────────────────────────────────────────────────────────────────────────┐
+ *      │                         BACKCOIN ORACLE                                 │
+ *      │                 "Free Randomness for Everyone"                          │
+ *      ├─────────────────────────────────────────────────────────────────────────┤
+ *      │                                                                         │
+ *      │  This is Backchain Protocol's contribution to the Arbitrum ecosystem.  │
+ *      │  Any project can use it - no fees, no tokens, no restrictions.         │
+ *      │                                                                         │
+ *      │  Security: 100% secure while Arbitrum is secure.                       │
+ *      │  Same trust assumption as $18B+ in Arbitrum DeFi.                      │
+ *      │                                                                         │
+ *      └─────────────────────────────────────────────────────────────────────────┘
+ *
+ * @custom:security-contact dev@backcoin.org
+ * @custom:website https://backcoin.org
+ * @custom:docs https://github.com/backcoin-org/backchain-dapp/tree/main/docs
  */
-interface IBackchainRandomness {
-    /// @notice Get a single random number in range [min, max] inclusive
-    function getRandom(uint256 min, uint256 max) external returns (uint256);
-    
-    /// @notice Get multiple random numbers with different ranges
-    function getRandoms(uint256[] calldata mins, uint256[] calldata maxs) external returns (uint256[] memory);
+interface IBackcoinOracle {
+    /**
+     * @notice Generate random numbers (CAN repeat)
+     * @dev IMPORTANT: Uses camelCase (Stylus SDK convention)
+     * @param count How many random numbers to generate (1-500)
+     * @param min Minimum value inclusive
+     * @param max Maximum value inclusive
+     * @return Array of random numbers
+     */
+    function getNumbers(
+        uint64 count,
+        uint64 min,
+        uint64 max
+    ) external returns (uint256[] memory);
+
+    /**
+     * @notice Generate multiple groups of random numbers in ONE transaction
+     * @dev More gas-efficient than multiple separate calls
+     *      IMPORTANT: Uses camelCase (Stylus SDK convention)
+     * @param counts Array of how many numbers per group
+     * @param mins Array of minimum values per group
+     * @param maxs Array of maximum values per group
+     * @return Array of arrays with random numbers per group
+     */
+    function getBatch(
+        uint64[] calldata counts,
+        uint64[] calldata mins,
+        uint64[] calldata maxs
+    ) external returns (uint256[][] memory);
 }
 
 /**
  * @title Fortune Pool
  * @author Backchain Protocol
  * @notice Strategic prediction game powered by Backcoin ($BKC)
- * @dev Uses Backchain Randomness Oracle for INSTANT on-chain resolution
+ * @dev Uses Backcoin Oracle (Stylus) for INSTANT on-chain resolution
  *
  *      ╔═══════════════════════════════════════════════════════════════════╗
  *      ║                    GAME MODES                                      ║
@@ -50,7 +92,9 @@ interface IBackchainRandomness {
  *      - Tier 2: Medium (1-10 range,  5x multiplier,  ~10% chance)
  *      - Tier 3: Hard   (1-100 range, 50x multiplier, ~1% chance)
  *
- * @custom:security-contact security@backcoin.org
+ *      Oracle: Backcoin Oracle (Stylus/Rust) - FREE, instant, secure
+ *
+ * @custom:security-contact dev@backcoin.org
  * @custom:website https://backcoin.org
  * @custom:network Arbitrum
  */
@@ -94,8 +138,8 @@ contract FortunePool is
     /// @notice Reference to delegation manager for staking integration
     IDelegationManager public delegationManager;
 
-    /// @notice Backchain Randomness Oracle (Stylus contract)
-    IBackchainRandomness public randomnessOracle;
+    /// @notice Backcoin Oracle (Stylus contract)
+    IBackcoinOracle public backcoinOracle;
 
     /// @notice Address of the mining manager for fee distribution
     address public miningManagerAddress;
@@ -230,19 +274,19 @@ contract FortunePool is
     }
 
     /**
-     * @notice Initializes the Fortune Pool V2 contract
+     * @notice Initializes the Fortune Pool contract
      * @param _owner Contract owner address
      * @param _ecosystemManager Address of the ecosystem hub
-     * @param _randomnessOracle Address of BackchainRandomness Oracle
+     * @param _backcoinOracle Address of Backcoin Oracle (Stylus)
      */
     function initialize(
         address _owner,
         address _ecosystemManager,
-        address _randomnessOracle
+        address _backcoinOracle
     ) external initializer {
         if (_owner == address(0)) revert ZeroAddress();
         if (_ecosystemManager == address(0)) revert ZeroAddress();
-        if (_randomnessOracle == address(0)) revert ZeroAddress();
+        if (_backcoinOracle == address(0)) revert ZeroAddress();
 
         __Ownable_init();
         __UUPSUpgradeable_init();
@@ -251,7 +295,7 @@ contract FortunePool is
         _transferOwnership(_owner);
 
         ecosystemManager = IEcosystemManager(_ecosystemManager);
-        randomnessOracle = IBackchainRandomness(_randomnessOracle);
+        backcoinOracle = IBackcoinOracle(_backcoinOracle);
 
         address bkcAddress = ecosystemManager.getBKCTokenAddress();
         address dmAddress = ecosystemManager.getDelegationManagerAddress();
@@ -278,14 +322,14 @@ contract FortunePool is
     // =========================================================================
 
     /**
-     * @notice Sets the randomness oracle address
-     * @param _oracle New oracle address (BackchainRandomness contract)
+     * @notice Sets the Backcoin Oracle address
+     * @param _oracle New oracle address (Backcoin Oracle Stylus contract)
      */
     function setOracle(address _oracle) external onlyOwner {
         if (_oracle == address(0)) revert ZeroAddress();
 
-        address previousOracle = address(randomnessOracle);
-        randomnessOracle = IBackchainRandomness(_oracle);
+        address previousOracle = address(backcoinOracle);
+        backcoinOracle = IBackcoinOracle(_oracle);
 
         emit OracleUpdated(previousOracle, _oracle);
     }
@@ -559,13 +603,21 @@ contract FortunePool is
         );
     }
 
+    /**
+     * @notice Returns the oracle address
+     */
+    function getOracleAddress() external view returns (address) {
+        return address(backcoinOracle);
+    }
+
     // =========================================================================
-    //                          GAME LOGIC (V2 - INSTANT)
+    //                          GAME LOGIC (INSTANT)
     // =========================================================================
 
     /**
-     * @notice Play a Fortune Pool game (V2: INSTANT RESOLUTION)
+     * @notice Play a Fortune Pool game (INSTANT RESOLUTION)
      * @dev Results are determined and paid in the same transaction!
+     *      Uses Backcoin Oracle (Stylus) for randomness - FREE!
      *
      *      Mode 1x (isCumulative = false):
      *      - Send 1 guess for the JACKPOT tier only
@@ -587,7 +639,7 @@ contract FortunePool is
         bool _isCumulative
     ) external payable nonReentrant {
         if (_wagerAmount == 0) revert ZeroAmount();
-        if (address(randomnessOracle) == address(0)) revert OracleNotSet();
+        if (address(backcoinOracle) == address(0)) revert OracleNotSet();
 
         uint256 tierCount = activeTierCount;
         if (tierCount == 0) revert NoActiveTiers();
@@ -640,7 +692,7 @@ contract FortunePool is
         totalWageredAllTime += netWager;
 
         // ═══════════════════════════════════════════════════════════════════
-        // GET RANDOM NUMBERS FROM ORACLE (INSTANT - FREE!)
+        // GET RANDOM NUMBERS FROM BACKCOIN ORACLE (INSTANT - FREE!)
         // ═══════════════════════════════════════════════════════════════════
         
         uint256[] memory rolls;
@@ -650,23 +702,29 @@ contract FortunePool is
 
         if (_isCumulative) {
             // ═══════════════════════════════════════════════════════════════
-            // MODE 5x: Get N random numbers (one per tier)
+            // MODE 5x: Get N random numbers (one per tier) using getBatch
             // ═══════════════════════════════════════════════════════════════
-            uint256[] memory mins = new uint256[](tierCount);
-            uint256[] memory maxs = new uint256[](tierCount);
+            uint64[] memory counts = new uint64[](tierCount);
+            uint64[] memory mins = new uint64[](tierCount);
+            uint64[] memory maxs = new uint64[](tierCount);
             
             for (uint256 i = 0; i < tierCount;) {
+                counts[i] = 1;  // 1 number per tier
                 mins[i] = 1;
-                maxs[i] = uint256(prizeTiers[i + 1].maxRange);
+                maxs[i] = uint64(prizeTiers[i + 1].maxRange);
                 unchecked { ++i; }
             }
             
-            // Get all random numbers in one call
-            rolls = randomnessOracle.getRandoms(mins, maxs);
+            // Get all random numbers in one call using getBatch (camelCase!)
+            uint256[][] memory batchResults = backcoinOracle.getBatch(counts, mins, maxs);
+            
+            // Flatten batch results to rolls array
+            rolls = new uint256[](tierCount);
             matches = new bool[](tierCount);
             
-            // Check each tier for matches
             for (uint256 i = 0; i < tierCount;) {
+                rolls[i] = batchResults[i][0];  // Each batch has 1 number
+                
                 if (_guesses[i] == rolls[i]) {
                     matches[i] = true;
                     matchCount++;
@@ -683,16 +741,15 @@ contract FortunePool is
             
         } else {
             // ═══════════════════════════════════════════════════════════════
-            // MODE 1x: Get 1 random number for jackpot tier
+            // MODE 1x: Get 1 random number for jackpot tier using getNumbers
             // ═══════════════════════════════════════════════════════════════
             uint256 jackpotTier = tierCount;
-            uint256 maxRange = uint256(prizeTiers[jackpotTier].maxRange);
+            uint64 maxRange = uint64(prizeTiers[jackpotTier].maxRange);
             
-            rolls = new uint256[](1);
             matches = new bool[](1);
             
-            // Get single random number
-            rolls[0] = randomnessOracle.getRandom(1, maxRange);
+            // Get single random number (camelCase!)
+            rolls = backcoinOracle.getNumbers(1, 1, maxRange);
             
             if (_guesses[0] == rolls[0]) {
                 matches[0] = true;
@@ -786,16 +843,24 @@ contract FortunePool is
     // =========================================================================
 
     /**
-     * @notice Alias for serviceFee (backwards compatibility with V1)
+     * @notice Alias for serviceFee (backwards compatibility)
      */
     function oracleFee() external view returns (uint256) {
         return serviceFee;
     }
 
     /**
-     * @notice Alias for getRequiredServiceFee (backwards compatibility with V1)
+     * @notice Alias for getRequiredServiceFee (backwards compatibility)
      */
     function getRequiredOracleFee(bool _isCumulative) external view returns (uint256) {
         return getRequiredServiceFee(_isCumulative);
+    }
+
+    /**
+     * @notice Alias for backcoinOracle (backwards compatibility)
+     * @dev Returns the oracle address for legacy integrations
+     */
+    function randomnessOracle() external view returns (address) {
+        return address(backcoinOracle);
     }
 }

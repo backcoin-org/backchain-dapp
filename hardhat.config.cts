@@ -1,5 +1,5 @@
 // hardhat.config.ts
-// ✅ VERSÃO V3.0: RPC Arbitrum Official como primária
+// ✅ VERSÃO V3.1: Path corrigido para contracts/solidity
 
 import { HardhatUserConfig } from "hardhat/config";
 import "@nomicfoundation/hardhat-toolbox";
@@ -8,7 +8,7 @@ import "@nomicfoundation/hardhat-verify";
 import "dotenv/config";
 
 // ========================================
-// 🔐 CONFIGURAÇÃO DE CHAVES
+// 🔑 CONFIGURAÇÃO DE CHAVES
 // ========================================
 
 const ALCHEMY_API_KEY = process.env.ALCHEMY_API_KEY || "";
@@ -137,8 +137,11 @@ const config: HardhatUserConfig = {
     noColors: true,
   },
 
+  // ========================================
+  // 📁 PATHS - V3.1: Corrigido para contracts/solidity
+  // ========================================
   paths: {
-    sources: "./contracts",
+    sources: "./contracts/solidity",  // ✅ CORRIGIDO: Pasta onde estão os .sol
     tests: "./test",
     cache: "./cache",
     artifacts: "./artifacts",

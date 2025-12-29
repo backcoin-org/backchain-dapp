@@ -5,7 +5,7 @@
 // - Configura todas as taxas e distribuições
 // - Executa o TGE (Token Generation Event)
 // - Injeta liquidez em todos os pools
-// - Configura o FortunePool com BackchainRandomness
+// - Configura o FortunePool com Backcoin Oracle
 // ============================================================
 
 import { ethers, upgrades, network } from "hardhat";
@@ -86,8 +86,13 @@ const SERVICE_FEES_BKC = {
     NOTARY_SERVICE: ethers.parseEther("1")
 };
 
-// Fortune Pool - Service Fee em ETH (para funding do projeto)
-const FORTUNE_SERVICE_FEE_ETH = ethers.parseEther("0.001");
+// ============================================================
+//          🎰 FORTUNE POOL - TAXAS ÍNFIMAS PARA TESTE
+// ============================================================
+
+// Service Fee em ETH (taxas ínfimas para teste)
+const FORTUNE_SERVICE_FEE_1X = ethers.parseEther("0.000001");  // Mode 1x (Jackpot)
+const FORTUNE_SERVICE_FEE_5X = ethers.parseEther("0.000005");  // Mode 5x (Cumulative) = 5 * 1x
 
 // ============================================================
 //               📊 DISTRIBUIÇÃO DE REWARDS
@@ -225,7 +230,8 @@ function createFullRulesConfig() {
         },
 
         "fortunePool": {
-            "serviceFeeETH": ethers.formatEther(FORTUNE_SERVICE_FEE_ETH),
+            "serviceFee1xETH": ethers.formatEther(FORTUNE_SERVICE_FEE_1X),
+            "serviceFee5xETH": ethers.formatEther(FORTUNE_SERVICE_FEE_5X),
             "gameFeeBips": SERVICE_FEES_BIPS.FORTUNE_POOL_GAME_FEE.toString()
         },
         
@@ -539,7 +545,8 @@ export async function runScript(hre: HardhatRuntimeEnvironment) {
     addresses.treasuryWallet = SYSTEM_WALLETS.TREASURY;
     updateAddressJSON("treasuryWallet", SYSTEM_WALLETS.TREASURY);
     
-    console.log(`   💰 Treasury: ${SYSTEM_WALLETS.TREASURY}\n`);
+    console.log(`   💰 Treasury: ${SYSTEM_WALLETS.TREASURY}`);
+    console.log(`   🦀 Backcoin Oracle: ${addresses.backcoinOracle || 'N/A'}\n`);
 
     createFullRulesConfig();
 
@@ -669,19 +676,22 @@ export async function runScript(hre: HardhatRuntimeEnvironment) {
     }
 
     // ═══════════════════════════════════════════════════════════════════
-    // PARTE 4: FORTUNE POOL (BackchainRandomness)
+    // PARTE 4: FORTUNE POOL (Backcoin Oracle)
     // ═══════════════════════════════════════════════════════════════════
 
-    console.log("\n🎰 PARTE 4: Fortune Pool");
+    console.log("\n🎰 PARTE 4: Fortune Pool (Backcoin Oracle)");
     console.log("────────────────────────────────────────────────────────────────");
 
-    // Configurar Service Fee (ETH)
+    // Mostrar endereço do Oracle
+    console.log(`   🦀 Oracle: ${addresses.backcoinOracle || 'N/A'}`);
+
+    // Configurar Service Fee (ETH) - Taxa ínfima para teste (1x mode)
     try {
         const currentServiceFee = await fortunePool.serviceFee();
-        if (currentServiceFee !== FORTUNE_SERVICE_FEE_ETH) {
+        if (currentServiceFee !== FORTUNE_SERVICE_FEE_1X) {
             await sendTxWithRetry(
-                async () => await fortunePool.setServiceFee(FORTUNE_SERVICE_FEE_ETH),
-                `Fortune: Service Fee → ${ethers.formatEther(FORTUNE_SERVICE_FEE_ETH)} ETH`
+                async () => await fortunePool.setServiceFee(FORTUNE_SERVICE_FEE_1X),
+                `Fortune: Service Fee 1x → ${ethers.formatEther(FORTUNE_SERVICE_FEE_1X)} ETH`
             );
         } else {
             console.log(`   ⏩ Service Fee já configurado (${ethers.formatEther(currentServiceFee)} ETH)`);
@@ -689,6 +699,8 @@ export async function runScript(hre: HardhatRuntimeEnvironment) {
     } catch (e) {
         console.log(`   ⚠️ Service Fee: função pode não existir`);
     }
+
+    console.log(`   ℹ️  Service Fee 5x = ${ethers.formatEther(FORTUNE_SERVICE_FEE_5X)} ETH (5 * 1x)`);
 
     // Configurar Game Fee (BKC %)
     try {
@@ -893,8 +905,9 @@ export async function runScript(hre: HardhatRuntimeEnvironment) {
 
     console.log("\n   🎰 Fortune Pool:");
     console.log(`      Contract: ${addresses.fortunePool}`);
-    console.log(`      Oracle: ${addresses.backchainRandomness || 'N/A'}`);
-    console.log(`      Service Fee: ${ethers.formatEther(FORTUNE_SERVICE_FEE_ETH)} ETH`);
+    console.log(`      Oracle: ${addresses.backcoinOracle || 'N/A'}`);
+    console.log(`      Service Fee 1x: ${ethers.formatEther(FORTUNE_SERVICE_FEE_1X)} ETH`);
+    console.log(`      Service Fee 5x: ${ethers.formatEther(FORTUNE_SERVICE_FEE_5X)} ETH`);
     console.log(`      Game Fee: ${Number(SERVICE_FEES_BIPS.FORTUNE_POOL_GAME_FEE) / 100}%`);
 
     console.log("\n────────────────────────────────────────────────────────────────");
@@ -908,4 +921,4 @@ if (require.main === module) {
         console.error(error);
         process.exit(1);
     });
-} 
+}

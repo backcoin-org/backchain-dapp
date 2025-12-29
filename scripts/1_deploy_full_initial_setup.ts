@@ -3,26 +3,38 @@
 // ============================================================
 // Este script faz deploy de todos os contratos incluindo:
 // - Contratos Solidity (UUPS Proxies)
-// - Contrato Stylus (Rust) BackchainEntropy
-// - BackchainRandomness Oracle
-// - FortunePool com resolução instantânea
+// - FortunePool com Backcoin Oracle (Stylus)
 //
-// OPÇÕES DE DEPLOY DO ORACLE:
-// 1. Fornecer ORACLE_ADDRESS via env (se já deployado)
-//    ORACLE_ADDRESS=0x... npx hardhat run scripts/1_deploy_full_initial_setup.ts
+// IMPORTANTE - ORACLE:
+// O Backcoin Oracle (Stylus) deve ser deployado ANTES via cargo-stylus.
+// Após o deploy, atualize o endereço em EXTERNAL_CONTRACTS.BACKCOIN_ORACLE
 //
-// 2. Deploy automático do Stylus (requer cargo-stylus)
-//    O projeto deve estar em: stylus/
-//
-// PRÉ-REQUISITOS para deploy Stylus:
-//   curl -sSL https://raw.githubusercontent.com/OffchainLabs/cargo-stylus/main/scripts/install.sh | bash
-//   rustup target add wasm32-unknown-unknown
+// GUIA DE DEPLOY DO ORACLE:
+// 1. cd contracts/stylus/backcoin-oracle
+// 2. sudo service docker start (WSL)
+// 3. cargo stylus deploy --endpoint RPC_URL --private-key KEY --max-fee-per-gas-gwei 1
+// 4. Copie o endereço e cole em EXTERNAL_CONTRACTS.BACKCOIN_ORACLE abaixo
 // ============================================================
 
 import { HardhatRuntimeEnvironment } from "hardhat/types";
 import fs from "fs";
 import path from "path";
-import { execSync } from "child_process";
+
+// ============================================================
+//              🔴 CONTRATOS EXTERNOS - CONFIGURAR AQUI
+// ============================================================
+// Atualize estes endereços ANTES de executar o script!
+
+const EXTERNAL_CONTRACTS = {
+    // ══════════════════════════════════════════════════════════
+    // BACKCOIN ORACLE (Stylus) - Deploy separado via cargo-stylus
+    // ══════════════════════════════════════════════════════════
+    // Testnet (Arbitrum Sepolia):
+    BACKCOIN_ORACLE: "0x16346f5a45f9615f1c894414989f0891c54ef07b",
+    
+    // Mainnet (Arbitrum One) - Atualizar após deploy:
+    // BACKCOIN_ORACLE: "0x...",
+};
 
 // ============================================================
 //                    CONFIGURAÇÃO GERAL
@@ -52,7 +64,10 @@ const OFFICIAL_FEES = {
     
     // Fixed Fees
     NOTARY_SERVICE: "1",                // 1 BKC - Taxa de notarização
-    FORTUNE_SERVICE_FEE_ETH: "0.001"    // 0.001 ETH - Service fee por jogo
+    
+    // Fortune Pool Service Fees (ETH) - Taxas ínfimas para teste
+    FORTUNE_SERVICE_FEE_1X: "0.000001", // 0.000001 ETH - Mode 1x (Jackpot)
+    FORTUNE_SERVICE_FEE_5X: "0.000005"  // 0.000005 ETH - Mode 5x (Cumulative) = 5 * 1x
 };
 
 // ============================================================
@@ -102,7 +117,6 @@ const TIERS_TO_SETUP = [
 
 const addressesFilePath = path.join(__dirname, "../deployment-addresses.json");
 const rulesFilePath = path.join(__dirname, "../rules-config.json");
-const stylusProjectPath = path.join(__dirname, "../stylus");
 
 // ============================================================
 //                    FUNÇÕES AUXILIARES
@@ -121,6 +135,11 @@ function clearConfigFiles() {
         "DESCRIPTION": "Configuração Oficial Backchain - Produção",
         "CREATED_AT": new Date().toISOString(),
         
+        "externalContracts": {
+            "COMMENT": "🦀 Contratos externos (deploy separado)",
+            "BACKCOIN_ORACLE": EXTERNAL_CONTRACTS.BACKCOIN_ORACLE
+        },
+        
         "serviceFees": {
             "COMMENT": "💰 Taxas em BIPS (100 = 1%) ou valor fixo",
             "DELEGATION_FEE_BIPS": OFFICIAL_FEES.DELEGATION_FEE_BIPS.toString(),
@@ -132,7 +151,8 @@ function clearConfigFiles() {
             "FORTUNE_POOL_GAME_FEE": OFFICIAL_FEES.FORTUNE_POOL_GAME_FEE.toString(),
             "RENTAL_MARKET_TAX_BIPS": OFFICIAL_FEES.RENTAL_MARKET_TAX_BIPS.toString(),
             "NOTARY_SERVICE": OFFICIAL_FEES.NOTARY_SERVICE,
-            "FORTUNE_SERVICE_FEE_ETH": OFFICIAL_FEES.FORTUNE_SERVICE_FEE_ETH
+            "FORTUNE_SERVICE_FEE_1X": OFFICIAL_FEES.FORTUNE_SERVICE_FEE_1X,
+            "FORTUNE_SERVICE_FEE_5X": OFFICIAL_FEES.FORTUNE_SERVICE_FEE_5X
         },
         
         "miningDistribution": {
@@ -159,8 +179,10 @@ function clearConfigFiles() {
         },
         
         "fortunePool": {
-            "COMMENT": "🎰 FortunePool - Instant Resolution",
-            "serviceFeeETH": OFFICIAL_FEES.FORTUNE_SERVICE_FEE_ETH,
+            "COMMENT": "🎰 FortunePool - Instant Resolution com Backcoin Oracle",
+            "oracleAddress": EXTERNAL_CONTRACTS.BACKCOIN_ORACLE,
+            "serviceFee1xETH": OFFICIAL_FEES.FORTUNE_SERVICE_FEE_1X,
+            "serviceFee5xETH": OFFICIAL_FEES.FORTUNE_SERVICE_FEE_5X,
             "gameFeeBips": OFFICIAL_FEES.FORTUNE_POOL_GAME_FEE.toString(),
             "tiers": FORTUNE_TIERS.map(t => ({
                 id: t.tierId,
@@ -201,83 +223,6 @@ async function deployProxyWithRetry(upgrades: any, Factory: any, args: any[], na
 }
 
 // ============================================================
-//          ORACLE DEPLOYMENT (Stylus + Solidity)
-// ============================================================
-
-async function deployStylusEntropy(hre: HardhatRuntimeEnvironment, privateKey: string, rpcUrl: string): Promise<string> {
-    console.log("\n🦀 STYLUS: Implantando BackchainEntropy...");
-    console.log("----------------------------------------------------");
-    
-    const cargoTomlPath = path.join(stylusProjectPath, "Cargo.toml");
-    
-    if (!fs.existsSync(cargoTomlPath)) {
-        console.log("   ⚠️ Projeto Stylus não encontrado!");
-        console.log(`   → Esperado em: ${stylusProjectPath}`);
-        throw new Error("Stylus project not found. Provide ENTROPY_ADDRESS env variable if already deployed.");
-    }
-    
-    try {
-        console.log("   → Compilando contrato Stylus (Rust → WASM)...");
-        execSync(`cd "${stylusProjectPath}" && cargo build --release --target wasm32-unknown-unknown`, { 
-            stdio: 'inherit' 
-        });
-        console.log("   ✅ Compilação concluída");
-        
-        console.log("   → Fazendo deploy na rede...");
-        const result = execSync(
-            `cd "${stylusProjectPath}" && cargo stylus deploy --private-key ${privateKey} --endpoint ${rpcUrl}`, 
-            { encoding: 'utf-8' }
-        );
-        
-        console.log(result);
-        
-        const addressMatch = result.match(/deployed[:\s]+at[:\s]*(0x[a-fA-F0-9]{40})/i) || 
-                            result.match(/contract[:\s]+address[:\s]*(0x[a-fA-F0-9]{40})/i) ||
-                            result.match(/Address[:\s]*(0x[a-fA-F0-9]{40})/i) ||
-                            result.match(/(0x[a-fA-F0-9]{40})/);
-        
-        if (addressMatch) {
-            const entropyAddress = addressMatch[1];
-            console.log(`   ✅ BackchainEntropy (Stylus): ${entropyAddress}`);
-            return entropyAddress;
-        }
-        
-        throw new Error("Could not parse deployed address from cargo-stylus output");
-        
-    } catch (error: any) {
-        console.error("   ❌ Erro no deploy Stylus:", error.message);
-        throw error;
-    }
-}
-
-async function deployBackchainRandomness(hre: HardhatRuntimeEnvironment, entropyAddress: string): Promise<string> {
-    const { ethers } = hre;
-    
-    console.log("\n📜 SOLIDITY: Implantando BackchainRandomness...");
-    console.log("----------------------------------------------------");
-    
-    const BackchainRandomness = await ethers.getContractFactory("BackchainRandomness");
-    const randomness = await BackchainRandomness.deploy(entropyAddress);
-    await randomness.waitForDeployment();
-    const address = await randomness.getAddress();
-    
-    console.log(`   ✅ BackchainRandomness: ${address}`);
-    console.log(`   → Usa entropia de: ${entropyAddress}`);
-    
-    // Inicializar o contrato Stylus (se ainda não foi)
-    try {
-        const entropy = await ethers.getContractAt("IStylusEntropy", entropyAddress);
-        const initTx = await (entropy as any).initialize?.();
-        if (initTx) await initTx.wait();
-        console.log("   ✅ BackchainEntropy inicializado");
-    } catch (e) {
-        console.log("   → BackchainEntropy já inicializado ou sem initialize()");
-    }
-    
-    return address;
-}
-
-// ============================================================
 //                    SCRIPT PRINCIPAL
 // ============================================================
 
@@ -294,62 +239,43 @@ export async function runScript(hre: HardhatRuntimeEnvironment) {
     console.log(`   💰 Balance: ${ethers.formatEther(await ethers.provider.getBalance(deployer.address))} ETH`);
     console.log("----------------------------------------------------\n");
 
+    // ═══════════════════════════════════════════════════════════════════
+    // VALIDAÇÃO DO ORACLE
+    // ═══════════════════════════════════════════════════════════════════
+    
+    const oracleAddr = EXTERNAL_CONTRACTS.BACKCOIN_ORACLE;
+    
+    if (!oracleAddr || oracleAddr === "0x..." || !oracleAddr.startsWith("0x") || oracleAddr.length !== 42) {
+        console.error("════════════════════════════════════════════════════════");
+        console.error("   ❌ ERRO: BACKCOIN_ORACLE não configurado!");
+        console.error("════════════════════════════════════════════════════════");
+        console.error("\n   Você precisa:");
+        console.error("   1. Fazer deploy do Backcoin Oracle via cargo-stylus");
+        console.error("   2. Atualizar EXTERNAL_CONTRACTS.BACKCOIN_ORACLE neste arquivo");
+        console.error("\n   Guia rápido:");
+        console.error("   cd contracts/stylus/backcoin-oracle");
+        console.error("   cargo stylus deploy --endpoint RPC_URL --private-key KEY --max-fee-per-gas-gwei 1");
+        console.error("════════════════════════════════════════════════════════\n");
+        process.exit(1);
+    }
+
+    console.log("🦀 BACKCOIN ORACLE (Stylus):");
+    console.log(`   Address: ${oracleAddr}`);
+    console.log("----------------------------------------------------\n");
+
     clearConfigFiles();
     const addresses: { [key: string]: string } = {};
+    
+    // Salvar endereço do Oracle
+    addresses.backcoinOracle = oracleAddr;
+    updateAddressJSON("backcoinOracle", oracleAddr);
 
     try {
         // ═══════════════════════════════════════════════════════════════════
-        // FASE 1: ORACLE DEPLOYMENT (Stylus + Solidity)
+        // FASE 1: CORE & ASSETS
         // ═══════════════════════════════════════════════════════════════════
         
-        console.log("\n🎲 FASE 1: Oracle de Randomness");
-        console.log("----------------------------------------------------");
-        
-        let entropyAddr = "";
-        let oracleAddr = "";
-        
-        if (process.env.ENTROPY_ADDRESS && process.env.ORACLE_ADDRESS) {
-            entropyAddr = process.env.ENTROPY_ADDRESS;
-            oracleAddr = process.env.ORACLE_ADDRESS;
-            console.log(`   → Usando contratos existentes:`);
-            console.log(`     BackchainEntropy: ${entropyAddr}`);
-            console.log(`     BackchainRandomness: ${oracleAddr}`);
-        } else if (process.env.ORACLE_ADDRESS) {
-            oracleAddr = process.env.ORACLE_ADDRESS;
-            console.log(`   → Usando Oracle existente: ${oracleAddr}`);
-        } else {
-            const networkConfig = hre.network.config as any;
-            const privateKey = networkConfig.accounts?.[0] || process.env.PRIVATE_KEY || "";
-            const rpcUrl = networkConfig.url || process.env.RPC_URL || "";
-            
-            if (!privateKey || !rpcUrl) {
-                throw new Error("PRIVATE_KEY e RPC_URL são necessários para deploy. Ou forneça ORACLE_ADDRESS.");
-            }
-            
-            if (process.env.ENTROPY_ADDRESS) {
-                entropyAddr = process.env.ENTROPY_ADDRESS;
-                console.log(`   → Usando Entropy existente: ${entropyAddr}`);
-            } else {
-                entropyAddr = await deployStylusEntropy(hre, privateKey, rpcUrl);
-            }
-            
-            oracleAddr = await deployBackchainRandomness(hre, entropyAddr);
-        }
-        
-        if (!oracleAddr || !oracleAddr.startsWith("0x")) {
-            throw new Error("Falha ao obter endereço do Oracle.");
-        }
-        
-        addresses.backchainEntropy = entropyAddr;
-        addresses.backchainRandomness = oracleAddr;
-        updateAddressJSON("backchainEntropy", entropyAddr);
-        updateAddressJSON("backchainRandomness", oracleAddr);
-
-        // ═══════════════════════════════════════════════════════════════════
-        // FASE 2: CORE - HUB & TOKENS
-        // ═══════════════════════════════════════════════════════════════════
-        
-        console.log("\n📡 FASE 2: Core & Assets");
+        console.log("\n📡 FASE 1: Core & Assets");
         console.log("----------------------------------------------------");
 
         const EcosystemManager = await ethers.getContractFactory("EcosystemManager");
@@ -386,10 +312,10 @@ export async function runScript(hre: HardhatRuntimeEnvironment) {
         )).wait();
 
         // ═══════════════════════════════════════════════════════════════════
-        // FASE 3: MANAGERS
+        // FASE 2: MANAGERS
         // ═══════════════════════════════════════════════════════════════════
         
-        console.log("\n🧠 FASE 3: Managers");
+        console.log("\n🧠 FASE 2: Managers");
         console.log("----------------------------------------------------");
 
         const MiningManager = await ethers.getContractFactory("MiningManager");
@@ -425,8 +351,8 @@ export async function runScript(hre: HardhatRuntimeEnvironment) {
         addresses.decentralizedNotary = notaryAddr;
         updateAddressJSON("decentralizedNotary", notaryAddr);
 
-        // FortunePool com BackchainRandomness
-        console.log("\n   🎰 Implantando FortunePool com BackchainRandomness...");
+        // FortunePool com Backcoin Oracle (Stylus)
+        console.log("\n   🎰 Implantando FortunePool com Backcoin Oracle...");
         const FortunePool = await ethers.getContractFactory("FortunePool");
         const { contract: fortune, address: fortuneAddr } = await deployProxyWithRetry(
             upgrades, FortunePool, [deployer.address, hubAddr, oracleAddr], "FortunePool"
@@ -457,10 +383,10 @@ export async function runScript(hre: HardhatRuntimeEnvironment) {
         updateAddressJSON("nftLiquidityPoolFactory", factoryAddr);
 
         // ═══════════════════════════════════════════════════════════════════
-        // FASE 4: UTILITIES
+        // FASE 3: UTILITIES
         // ═══════════════════════════════════════════════════════════════════
         
-        console.log("\n🛠️ FASE 4: Utilities");
+        console.log("\n🛠️ FASE 3: Utilities");
         console.log("----------------------------------------------------");
 
         const PublicSale = await ethers.getContractFactory("PublicSale");
@@ -486,10 +412,10 @@ export async function runScript(hre: HardhatRuntimeEnvironment) {
         updateAddressJSON("treasuryWallet", deployer.address);
 
         // ═══════════════════════════════════════════════════════════════════
-        // FASE 5: WIRING
+        // FASE 4: WIRING
         // ═══════════════════════════════════════════════════════════════════
         
-        console.log("\n🔌 FASE 5: Conectando o Sistema");
+        console.log("\n🔌 FASE 4: Conectando o Sistema");
         console.log("----------------------------------------------------");
 
         console.log("   → Configurando Hub com endereços finais...");
@@ -555,16 +481,19 @@ export async function runScript(hre: HardhatRuntimeEnvironment) {
         console.log(`      + NOTARY_SERVICE: ${OFFICIAL_FEES.NOTARY_SERVICE} BKC`);
 
         // ═══════════════════════════════════════════════════════════════════
-        // FASE 6: FORTUNE POOL CONFIGURATION
+        // FASE 5: FORTUNE POOL CONFIGURATION
         // ═══════════════════════════════════════════════════════════════════
         
-        console.log("\n🎰 FASE 6: Configurando FortunePool");
+        console.log("\n🎰 FASE 5: Configurando FortunePool");
         console.log("----------------------------------------------------");
 
-        const serviceFeeWei = ethers.parseEther(OFFICIAL_FEES.FORTUNE_SERVICE_FEE_ETH);
+        // Service Fee (1x mode) - Taxa ínfima para teste
+        const serviceFeeWei = ethers.parseEther(OFFICIAL_FEES.FORTUNE_SERVICE_FEE_1X);
         await (await fortune.setServiceFee(serviceFeeWei)).wait();
-        console.log(`   ✅ Service Fee: ${OFFICIAL_FEES.FORTUNE_SERVICE_FEE_ETH} ETH`);
+        console.log(`   ✅ Service Fee 1x: ${OFFICIAL_FEES.FORTUNE_SERVICE_FEE_1X} ETH`);
+        console.log(`   ✅ Service Fee 5x: ${OFFICIAL_FEES.FORTUNE_SERVICE_FEE_5X} ETH (5 * 1x)`);
 
+        // Game Fee
         await (await fortune.setGameFee(BigInt(OFFICIAL_FEES.FORTUNE_POOL_GAME_FEE))).wait();
         console.log(`   ✅ Game Fee: ${OFFICIAL_FEES.FORTUNE_POOL_GAME_FEE / 100}%`);
 
@@ -579,10 +508,10 @@ export async function runScript(hre: HardhatRuntimeEnvironment) {
         }
 
         // ═══════════════════════════════════════════════════════════════════
-        // FASE 7: NFT CONFIGURATION
+        // FASE 6: NFT CONFIGURATION
         // ═══════════════════════════════════════════════════════════════════
         
-        console.log("\n🖼️ FASE 7: Configurando NFTs");
+        console.log("\n🖼️ FASE 6: Configurando NFTs");
         console.log("----------------------------------------------------");
 
         await (await nft.setSaleContract(saleAddr)).wait();
@@ -605,10 +534,10 @@ export async function runScript(hre: HardhatRuntimeEnvironment) {
         }
 
         // ═══════════════════════════════════════════════════════════════════
-        // FASE 8: TRANSFERÊNCIA DE CONTROLE
+        // FASE 7: TRANSFERÊNCIA DE CONTROLE
         // ═══════════════════════════════════════════════════════════════════
         
-        console.log("\n🔐 FASE 8: Transferência de Controle");
+        console.log("\n🔐 FASE 7: Transferência de Controle");
         console.log("----------------------------------------------------");
 
         console.log("   → Transferindo ownership do BKC para MiningManager...");
@@ -622,6 +551,13 @@ export async function runScript(hre: HardhatRuntimeEnvironment) {
         console.log("\n════════════════════════════════════════════════════════");
         console.log("              📊 DEPLOY CONCLUÍDO COM SUCESSO!");
         console.log("════════════════════════════════════════════════════════");
+        
+        console.log("\n🦀 BACKCOIN ORACLE (Stylus):");
+        console.log("----------------------------------------------------");
+        console.log(`   Address: ${oracleAddr}`);
+        console.log("   Type: Rust/WASM (Arbitrum Stylus)");
+        console.log("   Status: ✅ Pré-deployado");
+
         console.log("\n📋 CONTRATOS IMPLANTADOS:");
         console.log("----------------------------------------------------");
         
@@ -631,15 +567,12 @@ export async function runScript(hre: HardhatRuntimeEnvironment) {
             }
         }
 
-        console.log("\n🦀 ORACLE:");
-        console.log("----------------------------------------------------");
-        console.log(`   BackchainEntropy (Stylus): ${entropyAddr}`);
-        console.log(`   BackchainRandomness: ${oracleAddr}`);
-
         console.log("\n🎰 FORTUNE POOL:");
         console.log("----------------------------------------------------");
         console.log(`   Contract: ${fortuneAddr}`);
-        console.log(`   Service Fee: ${OFFICIAL_FEES.FORTUNE_SERVICE_FEE_ETH} ETH per game`);
+        console.log(`   Oracle: ${oracleAddr}`);
+        console.log(`   Service Fee 1x: ${OFFICIAL_FEES.FORTUNE_SERVICE_FEE_1X} ETH`);
+        console.log(`   Service Fee 5x: ${OFFICIAL_FEES.FORTUNE_SERVICE_FEE_5X} ETH`);
         console.log(`   Game Fee: ${OFFICIAL_FEES.FORTUNE_POOL_GAME_FEE / 100}% of wager`);
         console.log("   Resolution: INSTANT (same transaction)");
         console.log("\n   Prize Tiers:");
@@ -664,11 +597,13 @@ export async function runScript(hre: HardhatRuntimeEnvironment) {
         console.log("   Mining (novos):     30% Treasury / 70% Stakers");
         console.log("   Fees (existentes):  30% Treasury / 70% Stakers");
 
-        console.log("\n⚠️ PRÓXIMO PASSO:");
+        console.log("\n⚠️ PRÓXIMOS PASSOS:");
         console.log("----------------------------------------------------");
-        console.log("   Execute o script de TGE e liquidez inicial.");
-        console.log("   Para o FortunePool, execute:");
-        console.log("   - fortune.fundPrizePool(amount) para adicionar BKC ao pool");
+        console.log("   1. Execute o script de TGE e liquidez inicial");
+        console.log("   2. Para o FortunePool:");
+        console.log("      - fortune.fundPrizePool(amount) para adicionar BKC ao pool");
+        console.log("   3. Para mudar o Oracle (se necessário):");
+        console.log("      - fortune.setOracle(newAddress)");
 
         console.log("\n🎉 SETUP COMPLETO!\n");
 
