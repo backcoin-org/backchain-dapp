@@ -19,11 +19,13 @@ const initialState = {
     delegationManagerContract: null,
     rewardBoosterContract: null,
     nftLiquidityPoolContract: null, // Antigo nftBondingCurve
-    actionsManagerContract: null,   // FortunePool
+    actionsManagerContract: null,   // FortunePool (Legacy)
+    fortunePoolContract: null,      // FortunePool V2 (Instant Resolution)
     faucetContract: null,
     decentralizedNotaryContract: null,
     ecosystemManagerContract: null,
     publicSaleContract: null,
+    rentalManagerContract: null,
 
     // ============================================================
     // 3. CONTRACTS (PUBLIC - Para Leitura em Background)
@@ -32,6 +34,10 @@ const initialState = {
     bkcTokenContractPublic: null,
     delegationManagerContractPublic: null,
     faucetContractPublic: null,
+    fortunePoolContractPublic: null,      // FortunePool V2 (Leitura)
+    rentalManagerContractPublic: null,
+    ecosystemManagerContractPublic: null,
+    actionsManagerContractPublic: null,
 
     // ============================================================
     // 4. USER DATA (Dados do Usuário Conectado)

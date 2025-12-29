@@ -17,7 +17,8 @@ import {
     bkcTokenABI, 
     delegationManagerABI, 
     rewardBoosterABI, 
-    actionsManagerABI, 
+    actionsManagerABI,
+    fortunePoolV2ABI,
     publicSaleABI,
     faucetABI,
     ecosystemManagerABI,
@@ -236,6 +237,16 @@ async function recreatePublicProvider() {
             );
         }
         
+        // FortunePool V2 - usa fortunePoolV2 ou fortunePool como fallback
+        const fortunePoolAddress = addresses.fortunePoolV2 || addresses.fortunePool;
+        if (isValidAddress(fortunePoolAddress)) {
+            State.fortunePoolContractPublic = new ethers.Contract(
+                fortunePoolAddress, 
+                fortunePoolV2ABI, 
+                State.publicProvider
+            );
+        }
+        
         console.log(`✅ Public provider recreated with: ${newRpcUrl.slice(0, 50)}...`);
         
     } catch (e) {
@@ -291,6 +302,12 @@ function instantiateContracts(signerOrProvider) {
         if (isValidAddress(addresses.actionsManager)) State.actionsManagerContract = new ethers.Contract(addresses.actionsManager, actionsManagerABI, signerOrProvider);
         if (isValidAddress(addresses.decentralizedNotary)) State.decentralizedNotaryContract = new ethers.Contract(addresses.decentralizedNotary, decentralizedNotaryABI, signerOrProvider);
         if (isValidAddress(addresses.ecosystemManager)) State.ecosystemManagerContract = new ethers.Contract(addresses.ecosystemManager, ecosystemManagerABI, signerOrProvider);
+        
+        // FortunePool V2 - usa fortunePoolV2 ou fortunePool como fallback
+        const fortunePoolAddress = addresses.fortunePoolV2 || addresses.fortunePool;
+        if (isValidAddress(fortunePoolAddress)) {
+            State.fortunePoolContract = new ethers.Contract(fortunePoolAddress, fortunePoolV2ABI, signerOrProvider);
+        }
     } catch (e) { console.warn("Contract init partial failure"); }
 }
 
@@ -463,6 +480,13 @@ export async function initPublicProvider() {
         if (isValidAddress(addresses.rentalManager)) State.rentalManagerContractPublic = new ethers.Contract(addresses.rentalManager, rentalManagerABI, State.publicProvider);
         if (isValidAddress(addresses.ecosystemManager)) State.ecosystemManagerContractPublic = new ethers.Contract(addresses.ecosystemManager, ecosystemManagerABI, State.publicProvider);
         if (isValidAddress(addresses.actionsManager)) State.actionsManagerContractPublic = new ethers.Contract(addresses.actionsManager, actionsManagerABI, State.publicProvider);
+        
+        // FortunePool V2 - usa fortunePoolV2 ou fortunePool como fallback
+        const fortunePoolAddress = addresses.fortunePoolV2 || addresses.fortunePool;
+        if (isValidAddress(fortunePoolAddress)) {
+            State.fortunePoolContractPublic = new ethers.Contract(fortunePoolAddress, fortunePoolV2ABI, State.publicProvider);
+            console.log("✅ FortunePool V2 contract initialized:", fortunePoolAddress);
+        }
         
         // 🔥 V7.0: Carrega dados com fallback
         try {

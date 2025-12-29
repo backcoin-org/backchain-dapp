@@ -842,11 +842,13 @@ export async function forceRefreshUserData() {
 }
 
 // ====================================================================
-// 9. FORTUNE POOL DATA
+// 9. FORTUNE POOL DATA (V2 - BackchainRandomness)
 // ====================================================================
 
 export async function loadFortunePoolData(forceRefresh = false) {
-    const contract = State.actionsManagerContractPublic || State.actionsManagerContract;
+    // V2: Prioriza fortunePoolContractPublic, fallback para actionsManager
+    const contract = State.fortunePoolContractPublic || State.fortunePoolContract || 
+                     State.actionsManagerContractPublic || State.actionsManagerContract;
     
     if (!contract) {
         State.fortunePool = { 
@@ -854,13 +856,13 @@ export async function loadFortunePoolData(forceRefresh = false) {
             activeTiers: 0, 
             prizePool: 0n,
             tiers: [],
-            oracleFee1x: 0n,
-            oracleFee5x: 0n
+            serviceFee1x: 0n,
+            serviceFee5x: 0n
         };
         return State.fortunePool;
     }
 
-    const cacheKey = 'fortunePool-status';
+    const cacheKey = 'fortunePool-status-v2';
     const now = Date.now();
 
     if (!forceRefresh && contractReadCache.has(cacheKey)) {
@@ -882,39 +884,65 @@ export async function loadFortunePoolData(forceRefresh = false) {
         const pool = prizePool.status === 'fulfilled' ? BigInt(prizePool.value.toString()) : 0n;
         const games = Number(gameCounter.status === 'fulfilled' ? gameCounter.value : 0n);
 
-        let oracleFee1x = ethers.parseEther("0.001");
-        let oracleFee5x = ethers.parseEther("0.005");
+        // V2: Service fees instead of oracle fees
+        let serviceFee1x = 0n;
+        let serviceFee5x = 0n;
         
         try {
             const [fee1x, fee5x] = await Promise.all([
-                contract.getRequiredOracleFee(false),
-                contract.getRequiredOracleFee(true)
+                contract.getRequiredServiceFee(false),
+                contract.getRequiredServiceFee(true)
             ]);
-            oracleFee1x = BigInt(fee1x.toString());
-            oracleFee5x = BigInt(fee5x.toString());
+            serviceFee1x = BigInt(fee1x.toString());
+            serviceFee5x = BigInt(fee5x.toString());
         } catch (e) {
+            // Fallback: try legacy oracle fee methods
             try {
-                const baseFee = await contract.oracleFee();
-                oracleFee1x = BigInt(baseFee.toString());
-                oracleFee5x = oracleFee1x * 5n;
-            } catch {}
+                const [fee1x, fee5x] = await Promise.all([
+                    contract.getRequiredOracleFee(false),
+                    contract.getRequiredOracleFee(true)
+                ]);
+                serviceFee1x = BigInt(fee1x.toString());
+                serviceFee5x = BigInt(fee5x.toString());
+            } catch {
+                try {
+                    const baseFee = await contract.serviceFee();
+                    serviceFee1x = BigInt(baseFee.toString());
+                    serviceFee5x = serviceFee1x * 5n;
+                } catch {}
+            }
         }
 
-        // CORREÇÃO: prizeTiers começa em índice 1, não 0
+        // V2: Get tiers using getAllTiers or prizeTiers
         const tiers = [];
-        for (let i = 1; i <= Math.min(tierCount, 10); i++) {
-            try {
-                const tier = await safeContractCall(contract, 'prizeTiers', [i], null);
-                if (tier && tier.active !== false) {
-                    tiers.push({
-                        tierId: i,
-                        maxRange: Number(tier.maxRange || tier[0]),
-                        multiplierBips: Number(tier.multiplierBips || tier[1]),
-                        multiplier: Number(tier.multiplierBips || tier[1]) / 10000,
-                        active: tier.active ?? tier[2] ?? true
-                    });
-                }
-            } catch {}
+        try {
+            // Try V2 getAllTiers first
+            const [ranges, multipliers] = await contract.getAllTiers();
+            for (let i = 0; i < ranges.length; i++) {
+                tiers.push({
+                    tierId: i + 1,
+                    maxRange: Number(ranges[i]),
+                    multiplierBips: Number(multipliers[i]),
+                    multiplier: Number(multipliers[i]) / 10000,
+                    active: true
+                });
+            }
+        } catch {
+            // Fallback to legacy prizeTiers
+            for (let i = 1; i <= Math.min(tierCount, 10); i++) {
+                try {
+                    const tier = await safeContractCall(contract, 'prizeTiers', [i], null);
+                    if (tier && tier.active !== false) {
+                        tiers.push({
+                            tierId: i,
+                            maxRange: Number(tier.maxRange || tier[0]),
+                            multiplierBips: Number(tier.multiplierBips || tier[1]),
+                            multiplier: Number(tier.multiplierBips || tier[1]) / 10000,
+                            active: tier.active ?? tier[2] ?? true
+                        });
+                    }
+                } catch {}
+            }
         }
 
         const fortuneData = {
@@ -922,8 +950,11 @@ export async function loadFortunePoolData(forceRefresh = false) {
             activeTiers: tierCount,
             prizePool: pool,
             gameCounter: games,
-            oracleFee1x,
-            oracleFee5x,
+            serviceFee1x,
+            serviceFee5x,
+            // Legacy aliases for backwards compatibility
+            oracleFee1x: serviceFee1x,
+            oracleFee5x: serviceFee5x,
             tiers
         };
 
@@ -938,8 +969,10 @@ export async function loadFortunePoolData(forceRefresh = false) {
             activeTiers: 0, 
             prizePool: 0n,
             tiers: [],
-            oracleFee1x: ethers.parseEther("0.001"),
-            oracleFee5x: ethers.parseEther("0.005")
+            serviceFee1x: 0n,
+            serviceFee5x: 0n,
+            oracleFee1x: 0n,
+            oracleFee5x: 0n
         };
         return State.fortunePool;
     }
@@ -948,11 +981,24 @@ export async function loadFortunePoolData(forceRefresh = false) {
 export async function loadUserFortuneHistory(userAddress, limit = 20) {
     if (!userAddress) return [];
 
-    const contract = State.actionsManagerContractPublic || State.actionsManagerContract;
+    // V2: Prioriza fortunePoolContract
+    const contract = State.fortunePoolContractPublic || State.fortunePoolContract ||
+                     State.actionsManagerContractPublic || State.actionsManagerContract;
     if (!contract) return [];
 
     try {
-        const filter = contract.filters.GameFulfilled(null, userAddress);
+        // V2: Try GamePlayed event first (new), fallback to GameFulfilled (legacy)
+        let filter;
+        let eventName = 'GamePlayed';
+        
+        try {
+            filter = contract.filters.GamePlayed(null, userAddress);
+        } catch {
+            // Fallback to legacy event
+            filter = contract.filters.GameFulfilled(null, userAddress);
+            eventName = 'GameFulfilled';
+        }
+        
         const events = await contract.queryFilter(filter, -10000);
 
         const games = events.slice(-limit).reverse().map(event => {
@@ -964,6 +1010,7 @@ export async function loadUserFortuneHistory(userAddress, limit = 20) {
                 rolls: args.rolls?.map(r => Number(r)) || [],
                 guesses: args.guesses?.map(g => Number(g)) || [],
                 isCumulative: args.isCumulative,
+                matchCount: args.matchCount ? Number(args.matchCount) : 0,
                 txHash: event.transactionHash,
                 blockNumber: event.blockNumber,
                 won: BigInt(args.prizeWon?.toString() || '0') > 0n
@@ -991,7 +1038,9 @@ export function calculateExpectedPayout(wagerAmount, tierIndex, isWin) {
 }
 
 export async function getExpectedGuessCount(isCumulative) {
-    const contract = State.actionsManagerContractPublic || State.actionsManagerContract;
+    // V2: Prioriza fortunePoolContract
+    const contract = State.fortunePoolContractPublic || State.fortunePoolContract ||
+                     State.actionsManagerContractPublic || State.actionsManagerContract;
     
     if (!contract) {
         return isCumulative ? 3 : 1;
