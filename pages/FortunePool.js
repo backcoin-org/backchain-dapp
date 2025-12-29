@@ -35,26 +35,26 @@ const SHARE_POINTS = 1000;
 
 const TIERS = [
     { 
-        id: 1, name: "Easy", emoji: "🍀", range: 3, multiplier: 2, chance: "33%",
+        id: 1, name: "Easy", emoji: "🍀", range: 3, multiplier: 200, chance: "33%",
         color: "emerald", hex: "#10b981",
         bgFrom: "from-emerald-500/20", bgTo: "to-green-600/10",
         borderColor: "border-emerald-500/50", textColor: "text-emerald-400"
     },
     { 
-        id: 2, name: "Medium", emoji: "⚡", range: 10, multiplier: 5, chance: "10%",
+        id: 2, name: "Medium", emoji: "⚡", range: 10, multiplier: 500, chance: "10%",
         color: "violet", hex: "#8b5cf6",
         bgFrom: "from-violet-500/20", bgTo: "to-purple-600/10",
         borderColor: "border-violet-500/50", textColor: "text-violet-400"
     },
     { 
-        id: 3, name: "Hard", emoji: "👑", range: 100, multiplier: 50, chance: "1%",
+        id: 3, name: "Hard", emoji: "👑", range: 100, multiplier: 5000, chance: "1%",
         color: "amber", hex: "#f59e0b",
         bgFrom: "from-amber-500/20", bgTo: "to-orange-600/10",
         borderColor: "border-amber-500/50", textColor: "text-amber-400"
     }
 ];
 
-const MAX_COMBO_MULTIPLIER = 57; // 2 + 5 + 50
+const MAX_COMBO_MULTIPLIER = 5700; // 200 + 500 + 5000
 
 // ============================================================================
 // GAME STATE
@@ -385,7 +385,7 @@ function renderModeSelect(container) {
                     <div class="flex-1">
                         <div class="flex items-center gap-3 mb-1">
                             <h3 class="text-xl font-bold text-white">Jackpot</h3>
-                            <span class="px-2.5 py-1 rounded-full bg-amber-500/20 border border-amber-500/40 text-amber-400 text-sm font-black">50x</span>
+                            <span class="px-2.5 py-1 rounded-full bg-amber-500/20 border border-amber-500/40 text-amber-400 text-sm font-black">5000x</span>
                         </div>
                         <p class="text-zinc-400 text-sm mb-3">Pick 1 number from 1-100</p>
                         <div class="flex items-center gap-2 flex-wrap">
@@ -497,7 +497,7 @@ function renderJackpotPicker(container) {
                     <span class="text-2xl">${tier.emoji}</span>
                     <span class="${tier.textColor} font-bold">Jackpot Mode</span>
                 </div>
-                <p class="text-zinc-400 text-sm">Pick <span class="text-white font-bold">1-100</span> • <span class="text-emerald-400">1%</span> • <span class="${tier.textColor} font-bold">50x</span></p>
+                <p class="text-zinc-400 text-sm">Pick <span class="text-white font-bold">1-100</span> • <span class="text-emerald-400">1%</span> • <span class="${tier.textColor} font-bold">5000x</span></p>
             </div>
 
             <div class="text-center mb-4">
