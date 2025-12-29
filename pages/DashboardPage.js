@@ -74,11 +74,13 @@ const ACTIVITY_ICONS = {
     RENTAL_RENT: { icon: 'fa-clock', color: '#22d3ee', bg: 'rgba(6,182,212,0.15)', label: '⏰ Rented NFT', emoji: '⏰' },
     RENTAL_WITHDRAW: { icon: 'fa-rotate-left', color: '#fb923c', bg: 'rgba(249,115,22,0.15)', label: '↩️ Withdrawn', emoji: '↩️' },
     
-    // Fortune - 🐯 Tiger Theme
+    // Fortune - Separado por modo
     FORTUNE_BET: { icon: 'fa-paw', color: '#f97316', bg: 'rgba(249,115,22,0.2)', label: '🐯 Fortune Bet', emoji: '🐯' },
+    FORTUNE_COMBO: { icon: 'fa-rocket', color: '#a855f7', bg: 'rgba(168,85,247,0.2)', label: '🚀 Combo', emoji: '🚀' },
+    FORTUNE_JACKPOT: { icon: 'fa-crown', color: '#f59e0b', bg: 'rgba(245,158,11,0.2)', label: '👑 Jackpot', emoji: '👑' },
     FORTUNE_ORACLE: { icon: 'fa-eye', color: '#e879f9', bg: 'rgba(232,121,249,0.25)', label: '🔮 Oracle Response', emoji: '🔮' },
-    FORTUNE_WIN: { icon: 'fa-crown', color: '#facc15', bg: 'rgba(234,179,8,0.25)', label: '🏆 Fortune Winner!', emoji: '🏆' },
-    FORTUNE_LOSE: { icon: 'fa-paw', color: '#71717a', bg: 'rgba(39,39,42,0.5)', label: '🐯 No Luck', emoji: '😿' },
+    FORTUNE_WIN: { icon: 'fa-trophy', color: '#facc15', bg: 'rgba(234,179,8,0.25)', label: '🏆 Winner!', emoji: '🏆' },
+    FORTUNE_LOSE: { icon: 'fa-dice', color: '#71717a', bg: 'rgba(39,39,42,0.5)', label: '🎲 No Luck', emoji: '🎲' },
     
     // Notary - 📜 Document Theme
     NOTARY: { icon: 'fa-stamp', color: '#818cf8', bg: 'rgba(99,102,241,0.15)', label: '📜 Notarized', emoji: '📜' },
@@ -187,9 +189,19 @@ function getActivityStyle(type, details = {}) {
         return ACTIVITY_ICONS.RENTAL_WITHDRAW;
     }
     
-    // Fortune
-    if (t === 'GAMEREQUESTED' || t.includes('GAMEREQUESTED') || t.includes('GAME_REQUEST') || t.includes('REQUEST')) {
-        return ACTIVITY_ICONS.FORTUNE_BET;
+    // Fortune - Detectar Combo vs Jackpot
+    if (t === 'GAMEREQUESTED' || t.includes('GAMEREQUESTED') || t.includes('GAME_REQUEST') || t.includes('REQUEST') || t.includes('GAMEPLAYED') || t.includes('FORTUNE') || t.includes('GAME')) {
+        // Verificar se é Combo (isCumulative) ou Jackpot
+        const isCumulative = details?.isCumulative;
+        const guesses = details?.guesses || [];
+        
+        // Se tem mais de 1 guess, é Combo; senão é Jackpot
+        if (isCumulative === true || guesses.length > 1) {
+            return ACTIVITY_ICONS.FORTUNE_COMBO;
+        } else if (isCumulative === false || guesses.length === 1) {
+            return ACTIVITY_ICONS.FORTUNE_JACKPOT;
+        }
+        return ACTIVITY_ICONS.FORTUNE_BET; // Fallback
     }
     if (t === 'GAMEFULFILLED' || t.includes('FULFILLED') || t.includes('ORACLE')) {
         return ACTIVITY_ICONS.FORTUNE_ORACLE;
@@ -197,9 +209,6 @@ function getActivityStyle(type, details = {}) {
     if (t === 'GAMERESULT' || t.includes('RESULT')) {
         const isWin = details?.isWin || details?.prizeWon > 0;
         return isWin ? ACTIVITY_ICONS.FORTUNE_WIN : ACTIVITY_ICONS.FORTUNE_LOSE;
-    }
-    if (t.includes('FORTUNE') || t.includes('GAME')) {
-        return ACTIVITY_ICONS.FORTUNE_BET;
     }
     
     // Notary
@@ -1030,8 +1039,19 @@ function updateBoosterDisplay(data, claimDetails) {
     const badgeColor = isRented ? 'bg-cyan-500/20 text-cyan-300' : 'bg-green-500/20 text-green-300';
     const badgeText = isRented ? 'Rented' : 'Owned';
 
-    let finalImageUrl = data.imageUrl;
+    // Debug: verificar dados recebidos
+    console.log('🎨 Booster Display Data:', { 
+        highestBoost: currentBoostBips, 
+        boostName: data.boostName, 
+        tokenId: data.tokenId,
+        source: data.source 
+    });
+
+    // Buscar tier info baseado no boostBips
     const tierInfo = boosterTiers.find(t => t.boostBips === currentBoostBips);
+    
+    // Fallback: se não encontrar pelo boostBips exato, usar o nome que veio da API
+    let finalImageUrl = data.imageUrl;
     if (!finalImageUrl || finalImageUrl.includes('placeholder')) {
         if (tierInfo && tierInfo.realImg) finalImageUrl = tierInfo.realImg;
     }
@@ -1040,8 +1060,10 @@ function updateBoosterDisplay(data, claimDetails) {
     // Diamond 7000 -> 70%, Iron 2000 -> 20%, etc.
     const discountPercent = currentBoostBips / 100;
     
-    // Nome do tier
-    const tierName = tierInfo?.name || data.boostName?.replace(' Booster', '') || 'Booster';
+    // Nome do tier - priorizar tierInfo do config, depois o nome da API
+    const tierName = tierInfo?.name || data.boostName?.replace(' Booster', '').replace('Booster', '').trim() || 'Booster';
+    
+    console.log('🎨 Calculated:', { discountPercent, tierName, tierInfo });
 
     container.innerHTML = `
         <div class="flex items-center gap-3 bg-zinc-800/40 border border-green-500/20 rounded-lg p-3 nft-clickable-image cursor-pointer" data-address="${addresses.rewardBoosterNFT}" data-tokenid="${data.tokenId}">
@@ -1258,41 +1280,43 @@ function renderActivityItem(item, showAddress = false) {
     
     const style = getActivityStyle(item.type, item.details);
     let extraInfo = '';
+    let rollsHtml = '';
     
     // Detalhes específicos por tipo
     const t = (item.type || '').toUpperCase().trim();
     const details = item.details || {};
     
-    // Fortune - Números apostados
-    if (t.includes('GAMEREQUESTED') || t.includes('REQUEST')) {
-        const guesses = details.guesses || item.guesses;
-        if (guesses && Array.isArray(guesses) && guesses.length > 0) {
-            extraInfo = `<span class="ml-2 px-2 py-0.5 rounded text-[10px] font-bold" style="background: rgba(249,115,22,0.2); color: #f97316">🎯 ${guesses.join(' • ')}</span>`;
+    // Fortune - Mostrar números igual ao Fortune Pool
+    const isFortune = t.includes('GAME') || t.includes('FORTUNE') || t.includes('REQUEST') || t.includes('FULFILLED') || t.includes('RESULT');
+    
+    if (isFortune) {
+        const rolls = details.rolls || item.rolls || [];
+        const guesses = details.guesses || item.guesses || [];
+        const isWin = details.isWin || (details.prizeWon && BigInt(details.prizeWon) > 0n);
+        const isCumulative = details.isCumulative || guesses.length > 1;
+        
+        // Criar badges dos números (igual Fortune Pool)
+        if (rolls.length > 0) {
+            rollsHtml = `<div class="flex gap-1 ml-auto">
+                ${rolls.map((roll, i) => {
+                    const guess = guesses[i];
+                    const isMatch = guess !== undefined && Number(guess) === Number(roll);
+                    return `<div class="w-6 h-6 rounded text-[10px] font-bold flex items-center justify-center ${isMatch ? 'bg-emerald-500/30 text-emerald-400' : 'bg-zinc-700/50 text-zinc-400'}">${roll}</div>`;
+                }).join('')}
+            </div>`;
         }
-        const wager = details.amount || details.wagerAmount;
+        
+        // Wager e Prize
+        const wager = details.wagerAmount || details.amount;
+        const prize = details.prizeWon;
+        
         if (wager) {
-            const wagerNum = formatBigNumber(BigInt(wager)).toFixed(2);
-            extraInfo += `<span class="ml-1 text-[10px] text-zinc-500">(${wagerNum} BKC)</span>`;
-        }
-    }
-    
-    // Fortune Oracle - Números respondidos
-    if (t.includes('FULFILLED') || t.includes('ORACLE')) {
-        const rolls = details.rolls || item.rolls || details.oracleNumbers;
-        if (rolls && Array.isArray(rolls) && rolls.length > 0) {
-            extraInfo = `<span class="ml-2 px-2 py-0.5 rounded text-[11px] font-bold" style="background: linear-gradient(135deg, rgba(168,85,247,0.3), rgba(232,121,249,0.3)); color: #e879f9; border: 1px solid rgba(232,121,249,0.4)">🔮 ${rolls.join(' • ')}</span>`;
-        }
-    }
-    
-    // Fortune Result - Win/Lose com números
-    if (t.includes('RESULT') || t.includes('GAMERESULT')) {
-        const isWin = details.isWin || details.prizeWon > 0;
-        const rolls = details.rolls || item.rolls;
-        if (rolls && Array.isArray(rolls) && rolls.length > 0) {
-            if (isWin) {
-                extraInfo = `<span class="ml-2 px-2 py-0.5 rounded text-[10px] font-bold" style="background: rgba(234,179,8,0.2); color: #facc15">🏆 ${rolls.join(' • ')}</span>`;
+            const wagerNum = formatBigNumber(BigInt(wager)).toFixed(0);
+            if (isWin && prize) {
+                const prizeNum = formatBigNumber(BigInt(prize)).toFixed(0);
+                extraInfo = `<span class="text-emerald-400 font-bold">+${prizeNum} BKC</span>`;
             } else {
-                extraInfo = `<span class="ml-2 text-[9px] text-zinc-500">[${rolls.join(', ')}]</span>`;
+                extraInfo = `<span class="text-zinc-500">Bet: ${wagerNum}</span>`;
             }
         }
     }
@@ -1311,20 +1335,51 @@ function renderActivityItem(item, showAddress = false) {
         const pStake = details.pStakeGenerated;
         if (pStake) {
             const pStakeNum = formatBigNumber(BigInt(pStake)).toFixed(0);
-            extraInfo = `<span class="ml-2 text-[10px] text-purple-400">+${pStakeNum} pStake</span>`;
+            extraInfo = `<span class="text-[10px] text-purple-400">+${pStakeNum} pStake</span>`;
         }
     }
     
     // Claim - Fee pago
     if (t.includes('CLAIM') || t.includes('REWARD')) {
         const feePaid = details.feePaid;
+        const amount = details.amount || item.amount;
+        if (amount) {
+            const amountNum = formatBigNumber(BigInt(amount)).toFixed(2);
+            extraInfo = `<span class="text-amber-400 font-bold">+${amountNum} BKC</span>`;
+        }
         if (feePaid && BigInt(feePaid) > 0n) {
             const feeNum = formatBigNumber(BigInt(feePaid)).toFixed(2);
-            extraInfo = `<span class="ml-2 text-[9px] text-zinc-500">(fee: ${feeNum})</span>`;
+            extraInfo += `<span class="ml-1 text-[9px] text-zinc-500">(fee: ${feeNum})</span>`;
         }
     }
 
     const txLink = item.txHash ? `${EXPLORER_BASE_URL}${item.txHash}` : '#';
+    
+    // Layout diferente para Fortune (com rolls) vs outros
+    if (isFortune && rollsHtml) {
+        return `
+            <a href="${txLink}" target="_blank" class="block p-2.5 hover:bg-zinc-800/60 border border-zinc-700/30 rounded-lg transition-all hover:border-zinc-600/50 group" style="background: rgba(39,39,42,0.3)" title="${fullDateTime}">
+                <div class="flex items-center justify-between mb-1.5">
+                    <div class="flex items-center gap-2">
+                        <div class="w-7 h-7 rounded-lg flex items-center justify-center border border-zinc-700/30" style="background: ${style.bg}">
+                            <i class="fa-solid ${style.icon} text-[10px]" style="color: ${style.color}"></i>
+                        </div>
+                        <span class="text-white text-xs font-medium">${style.label}</span>
+                    </div>
+                    <div class="flex items-center gap-1.5">
+                        <span class="text-zinc-600 text-[10px]">${dateStr}</span>
+                        <i class="fa-solid fa-external-link text-[8px] text-zinc-600 group-hover:text-blue-400"></i>
+                    </div>
+                </div>
+                <div class="flex items-center justify-between">
+                    <span class="text-[10px] ${extraInfo ? '' : 'text-zinc-500'}">${extraInfo || 'No win'}</span>
+                    ${rollsHtml}
+                </div>
+            </a>
+        `;
+    }
+
+    // Layout padrão para outros tipos
     let rawAmount = item.amount || details.amount || details.wagerAmount || details.prizeWon || "0";
     const amountNum = formatBigNumber(BigInt(rawAmount));
     const amountDisplay = amountNum > 0.001 ? amountNum.toFixed(2) : '';
@@ -1336,7 +1391,7 @@ function renderActivityItem(item, showAddress = false) {
                     <i class="fa-solid ${style.icon} text-xs" style="color: ${style.color}"></i>
                 </div>
                 <div>
-                    <p class="text-white text-xs font-medium">${style.label}${extraInfo}</p>
+                    <p class="text-white text-xs font-medium">${style.label}${extraInfo ? ` <span class="ml-1">${extraInfo}</span>` : ''}</p>
                     <p class="text-zinc-600" style="font-size: 10px">${showAddress ? truncAddr + ' • ' : ''}${dateStr}</p>
                 </div>
             </div>
