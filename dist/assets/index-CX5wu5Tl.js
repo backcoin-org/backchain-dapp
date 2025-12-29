@@ -562,7 +562,7 @@ import{defaultConfig as ei,createWeb3Modal as ti}from"https://esm.sh/@web3modal/
                     <button onclick="window.openConnectModal()" class="text-amber-400 hover:text-white text-xs font-bold border border-amber-400/30 px-3 py-1.5 rounded hover:bg-amber-400/10">
                         Connect
                     </button>
-                </div>`);return}try{const n=document.getElementById("dash-user-rewards");e&&n&&n.classList.add("animate-pulse","opacity-70");const[,a,i]=await Promise.all([V(),sa(),Ge()]),o=(a==null?void 0:a.netClaimAmount)||0n;va(o),n&&n.classList.remove("animate-pulse","opacity-70");const r=document.getElementById("dashboardClaimBtn");r&&(r.disabled=o<=0n);const l=document.getElementById("dash-user-pstake");if(l){let d=((t=c.userData)==null?void 0:t.pStake)||((s=c.userData)==null?void 0:s.userTotalPStake)||c.userTotalPStake||0n;if(d===0n&&c.delegationManagerContractPublic&&c.userAddress)try{d=await O(c.delegationManagerContractPublic,"userTotalPStake",[c.userAddress],0n)}catch{}l.innerText=Fe(d)}ha(),tr(i,a),Zo(),Es()}catch(n){console.error("User Hub Error:",n)}}function tr(e,t){const s=document.getElementById("dash-booster-area");if(!s)return;const n=(e==null?void 0:e.highestBoost)||0;if(n===0){const d=((t==null?void 0:t.totalRewards)||0n)*5000n/10000n;if(d>0n){const u=document.getElementById("dash-user-gain-area");u&&(u.classList.remove("hidden"),document.getElementById("dash-user-potential-gain").innerText=B(d).toFixed(2))}s.innerHTML=`
+                </div>`);return}try{const n=document.getElementById("dash-user-rewards");e&&n&&n.classList.add("animate-pulse","opacity-70");const[,a,i]=await Promise.all([V(),sa(),Ge()]),o=(a==null?void 0:a.netClaimAmount)||0n;va(o),n&&n.classList.remove("animate-pulse","opacity-70");const r=document.getElementById("dashboardClaimBtn");r&&(r.disabled=o<=0n);const l=document.getElementById("dash-user-pstake");if(l){let d=((t=c.userData)==null?void 0:t.pStake)||((s=c.userData)==null?void 0:s.userTotalPStake)||c.userTotalPStake||0n;if(d===0n&&c.delegationManagerContractPublic&&c.userAddress)try{d=await O(c.delegationManagerContractPublic,"userTotalPStake",[c.userAddress],0n)}catch{}l.innerText=Fe(d)}ha(),tr(i,a),Zo(),Es()}catch(n){console.error("User Hub Error:",n)}}function tr(e,t){var m;const s=document.getElementById("dash-booster-area");if(!s)return;const n=(e==null?void 0:e.highestBoost)||0;if(n===0){const g=((t==null?void 0:t.totalRewards)||0n)*5000n/10000n;if(g>0n){const f=document.getElementById("dash-user-gain-area");f&&(f.classList.remove("hidden"),document.getElementById("dash-user-potential-gain").innerText=B(g).toFixed(2))}s.innerHTML=`
             <div class="text-center space-y-3">
                 <div class="flex items-center justify-center gap-2">
                     <div class="w-10 h-10 bg-amber-500/20 rounded-full flex items-center justify-center">
@@ -587,19 +587,19 @@ import{defaultConfig as ei,createWeb3Modal as ti}from"https://esm.sh/@web3modal/
                     <button class="go-to-rental bg-cyan-700 hover:bg-cyan-600 text-white text-[10px] font-bold py-1.5 px-3 rounded">Rent</button>
                 </div>
             </div>
-        `;return}const a=e.source==="rented",i=a?"bg-cyan-500/20 text-cyan-300":"bg-green-500/20 text-green-300",o=a?"Rented":"Owned";let r=e.imageUrl;if(!r||r.includes("placeholder")){const l=ee.find(d=>d.boostBips===n);l&&l.realImg&&(r=l.realImg)}s.innerHTML=`
+        `;return}const a=e.source==="rented",i=a?"bg-cyan-500/20 text-cyan-300":"bg-green-500/20 text-green-300",o=a?"Rented":"Owned";let r=e.imageUrl;const l=ee.find(p=>p.boostBips===n);(!r||r.includes("placeholder"))&&l&&l.realImg&&(r=l.realImg);const d=n/100,u=(l==null?void 0:l.name)||((m=e.boostName)==null?void 0:m.replace(" Booster",""))||"Booster";s.innerHTML=`
         <div class="flex items-center gap-3 bg-zinc-800/40 border border-green-500/20 rounded-lg p-3 nft-clickable-image cursor-pointer" data-address="${v.rewardBoosterNFT}" data-tokenid="${e.tokenId}">
             <div class="relative w-14 h-14 flex-shrink-0">
                 <img src="${r}" class="w-full h-full object-cover rounded-lg" onerror="this.src='./assets/bkc_logo_3d.png'">
-                <div class="absolute -top-1 -left-1 bg-green-500 text-black font-black text-[9px] px-1.5 py-0.5 rounded">100%</div>
+                <div class="absolute -top-1 -left-1 bg-green-500 text-black font-black text-[9px] px-1.5 py-0.5 rounded">${d}%</div>
             </div>
             <div class="flex-1 min-w-0">
                 <div class="flex items-center gap-2 mb-0.5">
                     <span class="text-[9px] font-bold ${i} px-1.5 py-0.5 rounded uppercase">${o}</span>
                     <span class="text-[9px] text-zinc-600">#${e.tokenId}</span>
                 </div>
-                <h4 class="text-white font-bold text-xs truncate">${e.boostName}</h4>
-                <p class="text-[10px] text-green-400"><i class="fa-solid fa-check-circle mr-1"></i>Max Yield</p>
+                <h4 class="text-white font-bold text-xs truncate">${u} Booster</h4>
+                <p class="text-[10px] text-green-400"><i class="fa-solid fa-check-circle mr-1"></i>${d}% Fee Discount</p>
             </div>
         </div>
     `}async function Dt(){const e=document.getElementById("dash-activity-list"),t=document.getElementById("activity-title");try{if(c.isConnected){if(E.activities.length===0){e&&(e.innerHTML=`

@@ -1031,24 +1031,31 @@ function updateBoosterDisplay(data, claimDetails) {
     const badgeText = isRented ? 'Rented' : 'Owned';
 
     let finalImageUrl = data.imageUrl;
+    const tierInfo = boosterTiers.find(t => t.boostBips === currentBoostBips);
     if (!finalImageUrl || finalImageUrl.includes('placeholder')) {
-        const tierInfo = boosterTiers.find(t => t.boostBips === currentBoostBips);
         if (tierInfo && tierInfo.realImg) finalImageUrl = tierInfo.realImg;
     }
+
+    // Desconto real: boostBips / 100
+    // Diamond 7000 -> 70%, Iron 2000 -> 20%, etc.
+    const discountPercent = currentBoostBips / 100;
+    
+    // Nome do tier
+    const tierName = tierInfo?.name || data.boostName?.replace(' Booster', '') || 'Booster';
 
     container.innerHTML = `
         <div class="flex items-center gap-3 bg-zinc-800/40 border border-green-500/20 rounded-lg p-3 nft-clickable-image cursor-pointer" data-address="${addresses.rewardBoosterNFT}" data-tokenid="${data.tokenId}">
             <div class="relative w-14 h-14 flex-shrink-0">
                 <img src="${finalImageUrl}" class="w-full h-full object-cover rounded-lg" onerror="this.src='./assets/bkc_logo_3d.png'">
-                <div class="absolute -top-1 -left-1 bg-green-500 text-black font-black text-[9px] px-1.5 py-0.5 rounded">100%</div>
+                <div class="absolute -top-1 -left-1 bg-green-500 text-black font-black text-[9px] px-1.5 py-0.5 rounded">${discountPercent}%</div>
             </div>
             <div class="flex-1 min-w-0">
                 <div class="flex items-center gap-2 mb-0.5">
                     <span class="text-[9px] font-bold ${badgeColor} px-1.5 py-0.5 rounded uppercase">${badgeText}</span>
                     <span class="text-[9px] text-zinc-600">#${data.tokenId}</span>
                 </div>
-                <h4 class="text-white font-bold text-xs truncate">${data.boostName}</h4>
-                <p class="text-[10px] text-green-400"><i class="fa-solid fa-check-circle mr-1"></i>Max Yield</p>
+                <h4 class="text-white font-bold text-xs truncate">${tierName} Booster</h4>
+                <p class="text-[10px] text-green-400"><i class="fa-solid fa-check-circle mr-1"></i>${discountPercent}% Fee Discount</p>
             </div>
         </div>
     `;
