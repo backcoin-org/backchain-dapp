@@ -1682,7 +1682,7 @@ Lotería on-chain verificable con Oracle seguro!
 
 👉 https://backcoin.org
 
-#Backcoin #Web3 #Arbitrum`}},ms={pt:"./assets/pt.png",en:"./assets/en.png",es:"./assets/es.png"};let he="en";const Q=[{id:1,name:"Easy",emoji:"🍀",range:3,multiplier:200,chance:"33%",color:"emerald",hex:"#10b981",bgFrom:"from-emerald-500/20",bgTo:"to-green-600/10",borderColor:"border-emerald-500/50",textColor:"text-emerald-400"},{id:2,name:"Medium",emoji:"⚡",range:10,multiplier:500,chance:"10%",color:"violet",hex:"#8b5cf6",bgFrom:"from-violet-500/20",bgTo:"to-purple-600/10",borderColor:"border-violet-500/50",textColor:"text-violet-400"},{id:3,name:"Hard",emoji:"👑",range:100,multiplier:5e3,chance:"1%",color:"amber",hex:"#f59e0b",bgFrom:"from-amber-500/20",bgTo:"to-orange-600/10",borderColor:"border-amber-500/50",textColor:"text-amber-400"}],Pa=5700,h={mode:null,phase:"select",guess:50,guesses:[2,5,50],comboStep:0,wager:10,gameId:null,result:null,txHash:null,poolStatus:null,history:[],serviceFee:0n,serviceFee1x:0n,serviceFee5x:0n,tiersData:null};function Rr(){if(document.getElementById("fortune-styles-v2"))return;const e=document.createElement("style");e.id="fortune-styles-v2",e.textContent=`
+#Backcoin #Web3 #Arbitrum`}},ms={pt:"./assets/pt.png",en:"./assets/en.png",es:"./assets/es.png"};let he="en";const Q=[{id:1,name:"Easy",emoji:"🍀",range:3,multiplier:2,chance:"33%",color:"emerald",hex:"#10b981",bgFrom:"from-emerald-500/20",bgTo:"to-green-600/10",borderColor:"border-emerald-500/50",textColor:"text-emerald-400"},{id:2,name:"Medium",emoji:"⚡",range:10,multiplier:5,chance:"10%",color:"violet",hex:"#8b5cf6",bgFrom:"from-violet-500/20",bgTo:"to-purple-600/10",borderColor:"border-violet-500/50",textColor:"text-violet-400"},{id:3,name:"Hard",emoji:"👑",range:100,multiplier:50,chance:"1%",color:"amber",hex:"#f59e0b",bgFrom:"from-amber-500/20",bgTo:"to-orange-600/10",borderColor:"border-amber-500/50",textColor:"text-amber-400"}],Pa=57,h={mode:null,phase:"select",guess:50,guesses:[2,5,50],comboStep:0,wager:10,gameId:null,result:null,txHash:null,poolStatus:null,history:[],serviceFee:0n,serviceFee1x:0n,serviceFee5x:0n,tiersData:null};function Rr(){if(document.getElementById("fortune-styles-v2"))return;const e=document.createElement("style");e.id="fortune-styles-v2",e.textContent=`
         /* Tiger Mascot Animations */
         @keyframes tiger-float {
             0%, 100% { transform: translateY(0) rotate(-2deg); }
@@ -2011,8 +2011,9 @@ Lotería on-chain verificable con Oracle seguro!
                     −
                 </button>
                 
+                <!-- Input com fundo sólido amber para melhor contraste -->
                 <input type="number" id="number-input" min="1" max="100" value="${s}" 
-                    class="w-20 h-20 text-center text-3xl font-black rounded-2xl bg-gradient-to-br ${t.bgFrom} ${t.bgTo} border-2 ${t.borderColor} ${t.textColor} focus:outline-none focus:ring-2 focus:ring-amber-500/50 appearance-none"
+                    class="w-20 h-20 text-center text-3xl font-black rounded-2xl bg-amber-500 border-2 border-amber-400 text-zinc-900 focus:outline-none focus:ring-2 focus:ring-amber-300 appearance-none shadow-lg shadow-amber-500/30"
                     style="-moz-appearance: textfield;">
                 
                 <button id="btn-plus" class="w-10 h-10 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white font-bold text-xl transition-all border border-zinc-700">
@@ -2088,8 +2089,9 @@ Lotería on-chain verificable con Oracle seguro!
                         −
                     </button>
                     
+                    <!-- Input com fundo sólido amber para melhor contraste -->
                     <input type="number" id="combo-number-input" min="1" max="100" value="${s}" 
-                        class="w-20 h-20 text-center text-3xl font-black rounded-2xl bg-gradient-to-br ${t.bgFrom} ${t.bgTo} border-2 ${t.borderColor} ${t.textColor} focus:outline-none focus:ring-2 focus:ring-amber-500/50 appearance-none"
+                        class="w-20 h-20 text-center text-3xl font-black rounded-2xl bg-amber-500 border-2 border-amber-400 text-zinc-900 focus:outline-none focus:ring-2 focus:ring-amber-300 appearance-none shadow-lg shadow-amber-500/30"
                         style="-moz-appearance: textfield;">
                     
                     <button class="combo-plus w-10 h-10 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white font-bold text-xl transition-all border border-zinc-700">

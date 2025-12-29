@@ -69,26 +69,26 @@ let currentLang = 'en';
 
 const TIERS = [
     { 
-        id: 1, name: "Easy", emoji: "🍀", range: 3, multiplier: 200, chance: "33%",
+        id: 1, name: "Easy", emoji: "🍀", range: 3, multiplier: 2, chance: "33%",
         color: "emerald", hex: "#10b981",
         bgFrom: "from-emerald-500/20", bgTo: "to-green-600/10",
         borderColor: "border-emerald-500/50", textColor: "text-emerald-400"
     },
     { 
-        id: 2, name: "Medium", emoji: "⚡", range: 10, multiplier: 500, chance: "10%",
+        id: 2, name: "Medium", emoji: "⚡", range: 10, multiplier: 5, chance: "10%",
         color: "violet", hex: "#8b5cf6",
         bgFrom: "from-violet-500/20", bgTo: "to-purple-600/10",
         borderColor: "border-violet-500/50", textColor: "text-violet-400"
     },
     { 
-        id: 3, name: "Hard", emoji: "👑", range: 100, multiplier: 5000, chance: "1%",
+        id: 3, name: "Hard", emoji: "👑", range: 100, multiplier: 50, chance: "1%",
         color: "amber", hex: "#f59e0b",
         bgFrom: "from-amber-500/20", bgTo: "to-orange-600/10",
         borderColor: "border-amber-500/50", textColor: "text-amber-400"
     }
 ];
 
-const MAX_COMBO_MULTIPLIER = 5700; // 200 + 500 + 5000
+const MAX_COMBO_MULTIPLIER = 57; // 2 + 5 + 50
 
 // ============================================================================
 // GAME STATE
@@ -568,8 +568,9 @@ function renderJackpotPicker(container) {
                     −
                 </button>
                 
+                <!-- Input com fundo sólido amber para melhor contraste -->
                 <input type="number" id="number-input" min="1" max="100" value="${current}" 
-                    class="w-20 h-20 text-center text-3xl font-black rounded-2xl bg-gradient-to-br ${tier.bgFrom} ${tier.bgTo} border-2 ${tier.borderColor} ${tier.textColor} focus:outline-none focus:ring-2 focus:ring-amber-500/50 appearance-none"
+                    class="w-20 h-20 text-center text-3xl font-black rounded-2xl bg-amber-500 border-2 border-amber-400 text-zinc-900 focus:outline-none focus:ring-2 focus:ring-amber-300 appearance-none shadow-lg shadow-amber-500/30"
                     style="-moz-appearance: textfield;">
                 
                 <button id="btn-plus" class="w-10 h-10 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white font-bold text-xl transition-all border border-zinc-700">
@@ -699,8 +700,9 @@ function renderComboPicker(container) {
                         −
                     </button>
                     
+                    <!-- Input com fundo sólido amber para melhor contraste -->
                     <input type="number" id="combo-number-input" min="1" max="100" value="${current}" 
-                        class="w-20 h-20 text-center text-3xl font-black rounded-2xl bg-gradient-to-br ${tier.bgFrom} ${tier.bgTo} border-2 ${tier.borderColor} ${tier.textColor} focus:outline-none focus:ring-2 focus:ring-amber-500/50 appearance-none"
+                        class="w-20 h-20 text-center text-3xl font-black rounded-2xl bg-amber-500 border-2 border-amber-400 text-zinc-900 focus:outline-none focus:ring-2 focus:ring-amber-300 appearance-none shadow-lg shadow-amber-500/30"
                         style="-moz-appearance: textfield;">
                     
                     <button class="combo-plus w-10 h-10 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white font-bold text-xl transition-all border border-zinc-700">
