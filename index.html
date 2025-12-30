@@ -55,7 +55,7 @@
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
         :root {
             --bg-main: #18181b; --bg-sidebar: #27272a; --bg-card: #3f3f46; --border-color: #52525b; --text-primary: #f4f4f5; --text-secondary: #a1a1aa; --accent: #f59e0b; --accent-hover: #d97706;
-            --presale-bg-main: #0a0a0a; --presale-bg-darker: #000000; --presale-bg-card: #1a1a1a; --presale-border-color: #2a2a2a;
+            
         }
         body { font-family: 'Inter', sans-serif; background-color: var(--bg-main); color: var(--text-primary); }
         .sidebar-link.active { background-color: var(--accent); color: var(--bg-main); font-weight: 600; }
@@ -72,12 +72,6 @@
         ::-webkit-scrollbar-thumb { background: var(--border-color); border-radius: 4px; }
         ::-webkit-scrollbar-thumb:hover { background: var(--bg-card); }
         
-        /* Presale Styles */
-        #presale { background-color: var(--presale-bg-main); }
-        #presale .loader { border: 2px solid #fff; border-top: 2px solid var(--accent); width: 16px; height: 16px; margin-right: 8px; }
-        #presale .btn-primary { background: linear-gradient(90deg, var(--accent), var(--accent-hover)); box-shadow: 0 0 15px rgba(245, 158, 11, 0.4); transition: all 0.3s ease-in-out; color: #1a1a1a; }
-        #presale .btn-primary:hover:not(:disabled) { transform: translateY(-3px) scale(1.05); box-shadow: 0 0 25px rgba(245, 158, 11, 0.6); }
-        #presale .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
         
         /* AirBNFT Styles */
         .rental-card { transition: transform 0.2s; }
@@ -309,11 +303,11 @@
                             <a href="https://x.com/backcoin" target="_blank" rel="noopener noreferrer" class="text-zinc-400 hover:text-white transition-colors text-xl" title="Twitter"><i class="fa-brands fa-twitter"></i></a>
                             <a href="https://web.telegram.org/k/#@BackCoinorg" target="_blank" rel="noopener noreferrer" class="text-zinc-400 hover:text-white transition-colors text-xl" title="Telegram"><i class="fa-brands fa-telegram"></i></a>
                             <a href="https://www.youtube.com/@Backcoin" target="_blank" rel="noopener noreferrer" class="text-zinc-400 hover:text-white transition-colors text-xl" title="YouTube"><i class="fa-brands fa-youtube"></i></a>
-                            <a href="mailto:dev@backcoin.org" class="text-zinc-400 hover:text-amber-400 transition-colors text-xl" title="Contact Us"><i class="fa-solid fa-envelope"></i></a>
+                            <a href="/cdn-cgi/l/email-protection#47232231072526242c24282e2969283520" class="text-zinc-400 hover:text-amber-400 transition-colors text-xl" title="Contact Us"><i class="fa-solid fa-envelope"></i></a>
                         </div>
                     </div>
                     <a data-target="about" class="sidebar-link flex items-center gap-4 py-2.5 px-4 rounded-lg transition-colors text-amber-400 hover:text-amber-300 hover:bg-zinc-700"><i class="fa-solid fa-circle-info w-5 text-center"></i><span>About the Project</span></a>
-                    <a href="mailto:dev@backcoin.org" class="flex items-center gap-4 py-2.5 px-4 rounded-lg transition-colors text-zinc-400 hover:text-white hover:bg-zinc-700"><i class="fa-solid fa-envelope w-5 text-center"></i><span>Contact Us</span></a>
+                    <a href="/cdn-cgi/l/email-protection#a5c1c0d3e5c7c4c6cec6cacccb8bcad7c2" class="flex items-center gap-4 py-2.5 px-4 rounded-lg transition-colors text-zinc-400 hover:text-white hover:bg-zinc-700"><i class="fa-solid fa-envelope w-5 text-center"></i><span>Contact Us</span></a>
                     <a href="#" id="shareProjectBtn" class="sidebar-link flex items-center gap-4 py-2.5 px-4 rounded-lg transition-colors text-zinc-400 hover:text-white hover:bg-zinc-700"><i class="fa-solid fa-share-nodes w-5 text-center"></i><span>Share Project</span></a>
                     <a data-target="tutorials" class="sidebar-link flex items-center gap-4 py-2.5 px-4 rounded-lg transition-colors text-cyan-400 hover:text-cyan-300 hover:bg-zinc-700"><i class="fa-solid fa-play-circle w-5 text-center"></i><span>Video Tutorials</span></a>
                     
@@ -417,7 +411,7 @@
                             </div>
                         </section>
 
-                        <script>
+                        <script data-cfasync="false" src="/cdn-cgi/scripts/5c5dd728/cloudflare-static/email-decode.min.js"></script><script>
                             (function() {
                                 const bar = document.getElementById('loading-progress-bar');
                                 const txt = document.getElementById('loading-percentage');
@@ -439,7 +433,6 @@
                         </script>
                     </section>
                     
-                    <section id="presale" class="hidden"></section>
                     <section id="mine" class="hidden"></section>
                     <section id="store" class="hidden"></section>
                     <section id="rental" class="hidden"></section>
@@ -497,10 +490,7 @@
         
         // Escuta mudanças na carteira
         if (window.ethereum) {
-            window.ethereum.on('accountsChanged', () => {
-                lastCheckedAddress = null;
-                checkAdminVisibility();
-            });
+            window.ethereum.on('accountsChanged', checkAdminVisibility);
         }
     </script>
 </body>

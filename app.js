@@ -1,5 +1,5 @@
 // js/app.js
-// ✅ VERSÃO FINAL V7.5: Admin via Environment Variables
+// ✅ VERSÃO FINAL V7.6: Removido Presale - 100% Community-Driven
 
 const inject = window.inject || (() => { console.warn("Dev Mode: Analytics disabled."); });
 if (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
@@ -16,7 +16,7 @@ import { formatBigNumber } from './utils.js';
 import { loadAddresses } from './config.js'; 
 import { executeFaucetClaim } from './modules/transactions.js'; 
 
-// Page Imports (Mantidos)
+// Page Imports (Presale Removido)
 import { DashboardPage } from './pages/DashboardPage.js';
 import { EarnPage } from './pages/networkstaking.js'; 
 import { StorePage } from './pages/StorePage.js';
@@ -62,7 +62,6 @@ const routes = {
     'tokenomics': TokenomicsPage,
     'about': AboutPage,
     'admin': AdminPage,
-    'presale': PresalePage,
     'rental': RentalPage,
     'socials': SocialMediaPage,
     'creditcard': CreditCardPage,
