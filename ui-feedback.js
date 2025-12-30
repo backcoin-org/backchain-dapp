@@ -1,5 +1,6 @@
 // js/ui-feedback.js
 // ✅ VERSÃO FINAL: Tratamento de Erro -32002 (MetaMask Sync Issue)
+// ✅ ATUALIZADO: Removida lógica de Presale
 
 import { DOMElements } from './dom-elements.js';
 // Se State não for usado aqui, pode remover a importação, mas mantive para compatibilidade
@@ -355,7 +356,7 @@ export function showShareModal(userAddress) {
     openModal(content, 'max-w-md');
 }
 
-// --- WELCOME MODAL ---
+// --- WELCOME MODAL (SEM PRESALE) ---
 
 const navigateAndClose = (target) => {
     if (window.navigateTo) {
@@ -370,8 +371,8 @@ export function showWelcomeModal() {
     if (hasShownWelcomeModal) return;
     hasShownWelcomeModal = true;
 
-    const PRESALE_URL = "https://backcoin.org/presale";
     const TELEGRAM_URL = "https://t.me/BackCoinorg";
+    const DOCS_URL = "https://github.com/backcoin-org/backchain-dapp";
 
     const content = `
         <div class="text-center pt-2 pb-4">
@@ -393,35 +394,41 @@ export function showWelcomeModal() {
                 Welcome to Backcoin
             </h2> 
             
-            <p class="text-zinc-300 mb-8 text-sm leading-relaxed px-4">
-                This dApp is running on the <strong>Arbitrum Sepolia Testnet</strong>. 
-                However, the <strong class="text-amber-400">Exclusive Presale</strong> is live on <strong>Arbitrum One (Mainnet)</strong>.
+            <p class="text-zinc-300 mb-6 text-sm leading-relaxed px-4">
+                A <strong class="text-amber-400">community-driven</strong> modular RWA/Web3 platform on <strong>Arbitrum</strong>. 
+                Explore our ecosystem: Staking, Fortune Pool, NFT Rentals, Decentralized Notary & more.
             </p>
 
+            <!-- Community Badge -->
+            <div class="inline-flex items-center gap-2 bg-gradient-to-r from-amber-600/20 to-orange-600/20 border border-amber-500/30 rounded-full px-4 py-2 mb-6">
+                <i class="fa-solid fa-users text-amber-400"></i>
+                <span class="text-xs font-semibold text-amber-400 uppercase tracking-wider">100% Community-Driven • No VCs • No Presale</span>
+            </div>
+
             <div class="flex flex-col gap-3">
-                <!-- Presale Button -->
-                <button id="btnPresale" class="group relative w-full bg-gradient-to-r from-amber-600 via-orange-500 to-amber-600 bg-[length:200%_auto] hover:bg-right transition-all duration-500 text-white font-black py-4 px-5 rounded-xl text-lg shadow-xl shadow-amber-500/20 pulse-gold border border-amber-400/50 flex items-center justify-center gap-3 overflow-hidden transform hover:scale-[1.02]">
+                <!-- Airdrop Button (Principal) -->
+                <button id="btnAirdrop" class="group relative w-full bg-gradient-to-r from-amber-600 via-orange-500 to-amber-600 bg-[length:200%_auto] hover:bg-right transition-all duration-500 text-white font-black py-4 px-5 rounded-xl text-lg shadow-xl shadow-amber-500/20 pulse-gold border border-amber-400/50 flex items-center justify-center gap-3 overflow-hidden transform hover:scale-[1.02]">
                     <div class="absolute inset-0 bg-white/10 group-hover:bg-transparent transition-colors"></div>
-                    <i class="fa-solid fa-rocket text-2xl animate-pulse"></i> 
+                    <i class="fa-solid fa-parachute-box text-2xl animate-pulse"></i> 
                     <div class="flex flex-col items-start leading-none z-10">
-                        <span class="text-[10px] font-bold opacity-80 uppercase tracking-wider mb-0.5">Arbitrum One Mainnet</span>
-                        <span class="text-lg">GO TO PRESALE</span>
+                        <span class="text-[10px] font-bold opacity-80 uppercase tracking-wider mb-0.5">Free Tokens</span>
+                        <span class="text-lg">JOIN AIRDROP</span>
                     </div>
                     <i class="fa-solid fa-chevron-right ml-auto text-white/50 text-base group-hover:translate-x-1 transition-transform"></i>
                 </button>
 
-                <!-- Airdrop Button -->
-                <button id="btnAirdrop" class="w-full bg-zinc-800 hover:bg-zinc-700 border border-zinc-600 hover:border-amber-500 text-white font-bold py-3.5 px-5 rounded-xl text-base transition-all duration-300 transform hover:translate-y-[-1px] shadow-lg flex items-center justify-center gap-3 group">
-                    <i class="fa-solid fa-parachute-box text-amber-500 text-lg group-hover:rotate-12 transition-transform"></i>
-                    <span>Join Airdrop</span>
+                <!-- Explore dApp Button -->
+                <button id="btnExplore" class="w-full bg-zinc-800 hover:bg-zinc-700 border border-zinc-600 hover:border-amber-500 text-white font-bold py-3.5 px-5 rounded-xl text-base transition-all duration-300 transform hover:translate-y-[-1px] shadow-lg flex items-center justify-center gap-3 group">
+                    <i class="fa-solid fa-compass text-amber-500 text-lg group-hover:rotate-12 transition-transform"></i>
+                    <span>Explore dApp</span>
                 </button>
 
-                <!-- Two columns: Community & Telegram -->
+                <!-- Two columns: Docs & Telegram -->
                 <div class="grid grid-cols-2 gap-3">
-                    <!-- Community Button -->
-                    <button id="btnSocials" class="bg-zinc-800/70 hover:bg-zinc-700 border border-zinc-700 hover:border-purple-500 text-white font-semibold py-3 px-4 rounded-xl text-sm transition-all duration-300 flex items-center justify-center gap-2 group">
-                        <i class="fa-solid fa-users text-purple-400 group-hover:scale-110 transition-transform"></i>
-                        <span>Community</span>
+                    <!-- Docs Button -->
+                    <button id="btnDocs" class="bg-zinc-800/70 hover:bg-zinc-700 border border-zinc-700 hover:border-purple-500 text-white font-semibold py-3 px-4 rounded-xl text-sm transition-all duration-300 flex items-center justify-center gap-2 group">
+                        <i class="fa-solid fa-book text-purple-400 group-hover:scale-110 transition-transform"></i>
+                        <span>Documentation</span>
                     </button>
 
                     <!-- Telegram Button -->
@@ -430,10 +437,16 @@ export function showWelcomeModal() {
                         <span>Telegram</span>
                     </button>
                 </div>
+
+                <!-- Community Button -->
+                <button id="btnSocials" class="w-full bg-zinc-800/50 hover:bg-zinc-700 border border-zinc-700 hover:border-zinc-500 text-white font-semibold py-3 px-4 rounded-xl text-sm transition-all duration-300 flex items-center justify-center gap-2 group">
+                    <i class="fa-solid fa-share-nodes text-zinc-400 group-hover:text-amber-400 group-hover:scale-110 transition-all"></i>
+                    <span>Community & Socials</span>
+                </button>
             </div>
             
             <div class="mt-6 text-[10px] text-zinc-600 uppercase tracking-widest">
-                Backcoin Protocol on Arbitrum
+                Built by the Community • For the Community • On Arbitrum
             </div>
         </div>
     `;
@@ -443,13 +456,16 @@ export function showWelcomeModal() {
     const modalContent = document.getElementById('modal-content');
     if (!modalContent) return;
 
-    modalContent.querySelector('#btnPresale')?.addEventListener('click', () => {
-        window.open(PRESALE_URL, '_blank');
+    modalContent.querySelector('#btnAirdrop')?.addEventListener('click', () => {
+        navigateAndClose('airdrop');
+    });
+
+    modalContent.querySelector('#btnExplore')?.addEventListener('click', () => {
         closeModal();
     });
 
-    modalContent.querySelector('#btnAirdrop')?.addEventListener('click', () => {
-        navigateAndClose('airdrop');
+    modalContent.querySelector('#btnDocs')?.addEventListener('click', () => {
+        window.open(DOCS_URL, '_blank');
     });
 
     modalContent.querySelector('#btnSocials')?.addEventListener('click', () => {
