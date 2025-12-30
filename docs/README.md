@@ -1,45 +1,33 @@
 # Backcoin Protocol
 
-**Modular DeFi Infrastructure for Real-World Utility on Arbitrum**
+**Modular RWA/Web3 Integration Platform — Bridging the Real World to Arbitrum**
+
+*Built by the Community, for the Community*
 
 ---
 
-## What is Backcoin?
+## 🌉 Our Mission
 
-Backcoin is a **modular ecosystem** of interconnected DeFi services built exclusively on Arbitrum. Each module solves a real problem and can operate independently or integrate with others.
+Backcoin is more than a DeFi protocol — it's a **bridge between Web3 and the real world**. Our mission is to bring new users to the Arbitrum network by offering practical services that anyone can use, even without prior blockchain knowledge.
 
-We're not building another token—we're building **infrastructure** that creates value for Arbitrum.
+We believe that blockchain adoption will only become mainstream when real people can solve real problems using this technology. A freelancer authenticating a contract, an artist registering copyright, a small business certifying documents — none of them need to understand cryptography. They just need it to work.
 
----
-
-## The Problem We Solve
-
-Most DeFi projects create circular economies where tokens only have value within their own ecosystem. Backcoin takes a different approach:
-
-**External Value Capture:**
-- Notary service: Businesses pay to certify documents (real-world demand)
-- NFT Rentals: Asset utilization creates new revenue streams
-- Gaming: Entertainment value attracts users beyond DeFi natives
-- Oracle: Free randomness service benefits the entire Arbitrum ecosystem
-
-**Not Circular:**
-- Rewards come from fees paid for actual services
-- External users (businesses, gamers, developers) bring new capital
-- Each service has standalone utility regardless of token price
+**Backcoin makes it work.**
 
 ---
 
-## Our Contribution to Arbitrum
+## 🦀 Backcoin Oracle — Free Randomness for Arbitrum
 
-### 1. Free Randomness Oracle for Everyone
+Our flagship contribution to the Arbitrum ecosystem: **BackchainRandomness** — a 100% FREE randomness oracle built in Rust/WASM using Arbitrum Stylus.
 
-We built **BackchainRandomness**—a free, instant randomness oracle using Arbitrum Stylus (Rust/WASM). Any developer on Arbitrum can use it at no cost.
+### Why This Matters
 
-**Technical Innovation:**
-- First hybrid Stylus + Solidity randomness solution
-- Combines Rust entropy, block.prevrandao, and transaction mixing
-- No callback delays, no fees, no VRF subscriptions
-- Single transaction resolution
+Most randomness solutions on blockchain are expensive, complex, or require subscriptions. We built something different:
+
+- **100% Free:** No fees, no tokens required, no subscriptions
+- **Instant:** Single transaction resolution, no callback delays
+- **Secure:** Combines Rust entropy, block.prevrandao, and transaction mixing
+- **Open:** Any Arbitrum project can integrate immediately
 
 ```solidity
 // Any Arbitrum developer can use this for free
@@ -47,27 +35,95 @@ IBackchainRandomness oracle = IBackchainRandomness(0x6eB891C2C7bC248EdDf31c77C42
 uint256 random = oracle.getRandomNumber(msg.sender, userSeed, maxValue);
 ```
 
-**Impact:** Reduces barrier for games, NFT projects, and any application needing randomness on Arbitrum.
+### Technical Innovation
 
-### 2. Stylus Showcase
-
-Our StylusEntropy contract demonstrates Arbitrum Stylus capabilities:
+- **First hybrid Stylus + Solidity randomness solution** on Arbitrum
 - Written in Rust, compiled to WASM
-- Runs alongside Solidity contracts
-- Proves Stylus is production-ready
+- Proves Arbitrum Stylus is production-ready
+- StylusEntropy Contract: `0xb6bb5e9c9df36fa9504d87125af0e4b284b55092`
 
-**Contract:** `0xb6bb5e9c9df36fa9504d87125af0e4b284b55092`
-
-### 3. New Users to Arbitrum
-
-Every service we offer brings users who may never have used Arbitrum:
-- **Notary:** Businesses needing document certification
-- **Gaming:** Casual users seeking entertainment
-- **NFT Rentals:** Asset owners wanting passive income
+**Impact:** We're giving back to Arbitrum. Every game, NFT project, lottery, or application needing randomness can use our oracle at zero cost. This lowers the barrier for developers and brings more projects to the network.
 
 ---
 
-## Architecture
+## 🌱 Community-Driven Philosophy
+
+### Built by Independent Developers
+
+Backcoin was created by **autonomous developers from the community** — crypto enthusiasts and self-taught programmers who believe in the transformative power of blockchain. No corporate backing, no venture capital, no external development teams.
+
+### Our Commitment
+
+| Principle | Our Position |
+|-----------|--------------|
+| **External Investors** | ❌ Refused — We declined all angel investor offers |
+| **VC Funding** | ❌ Refused — No venture capital involvement |
+| **Pre-sale** | ❌ None — Zero tokens sold before launch |
+| **Team Allocation** | ❌ 0% — Developers earn like everyone else |
+| **Community Funding** | ✅ Only — Self-funded and community-supported |
+
+### Why We Refuse External Funding
+
+We have **refused all partnerships and investments** that could potentially harm any user. Angel investors approached us, but accepting their money would:
+
+- Drain liquidity from the project
+- Create selling pressure from investor exits
+- Compromise our commitment to fair tokenomics
+- Give privileged access to insiders over community
+
+**We chose integrity over shortcuts.** The only funding we seek is community-based — like the Arbitrum DAO grant program — where the support comes from the ecosystem itself, not from investors looking for returns at users' expense.
+
+---
+
+## 🎯 Why We Chose Arbitrum
+
+We didn't randomly pick a blockchain. We chose Arbitrum deliberately:
+
+| Reason | Why It Matters |
+|--------|----------------|
+| **Transparency** | Open governance, clear documentation, honest communication |
+| **Security** | Battle-tested Layer 2 with Ethereum's security guarantees |
+| **Stylus** | Only chain where our Rust oracle is possible |
+| **Meritocracy** | Good projects can stand out based on quality, not connections |
+| **Low Fees** | Enables micro-transactions (1 BKC notary fee) |
+| **Community** | Strong developer community that values innovation |
+
+**We believe in Arbitrum's vision** — and we're here to contribute, not just extract value.
+
+---
+
+## 🔗 Bridging Web3 and the Real World
+
+### The Problem
+
+Most DeFi projects create circular economies where tokens only have value within their own ecosystem. Users need to already understand crypto to participate.
+
+### Our Solution
+
+Backcoin brings **real-world utility** that attracts people who have never used blockchain:
+
+| Service | Real-World Use Case | New Users Attracted |
+|---------|--------------------|--------------------|
+| **Decentralized Notary** | Document certification, copyright registration | Freelancers, artists, lawyers, businesses |
+| **Fortune Pool** | Transparent, provably fair gaming | Casual gamers, entertainment seekers |
+| **NFT Rentals** | Temporary access to digital assets | Gamers, metaverse users, event attendees |
+| **NFT Liquidity Pools** | Instant trading without order books | Collectors, investors |
+| **Free Oracle** | Randomness infrastructure | Developers building on Arbitrum |
+
+### How We Onboard Non-Crypto Users
+
+A freelancer in Brazil authenticating a contract with a client in Japan doesn't need to:
+- Understand what a blockchain is
+- Know what Arbitrum means
+- Learn about gas fees or wallets
+
+They just need a **simple interface** that solves their problem. We handle the complexity. They get the security and immutability of blockchain without the learning curve.
+
+**This is how we bring mass adoption to Arbitrum** — one real problem solved at a time.
+
+---
+
+## 🏗️ Architecture
 
 ### Hub & Spoke Model
 
@@ -89,58 +145,31 @@ Every service we offer brings users who may never have used Arbitrum:
     DelegationManager         FortunePool            DecentralizedNotary
                                    │                  RentalManager
                                    ▼
-                          BackchainRandomness
-                          (Free for Arbitrum)
+                       ┌───────────────────────┐
+                       │  BackchainRandomness  │
+                       │  🦀 FREE FOR ARBITRUM │
+                       └───────────────────────┘
 ```
 
 **Why This Matters:**
 - Each module can be upgraded independently
 - New services plug into existing infrastructure
-- Configuration changes don't require redeployment
 - Third-party developers can build on our modules
+- Unlimited expansion potential
 
-### This is Just the Beginning
-
-The modular architecture enables unlimited expansion. Future modules planned:
+### Expansion Roadmap
 
 | Phase | Modules | Status |
 |-------|---------|--------|
-| **Current** | Staking, Gaming, Notary, NFT Pools, Rentals | ✅ Live on Testnet |
+| **Current** | Staking, Gaming, Notary, NFT Pools, Rentals, Oracle | ✅ Live on Testnet |
 | **Phase 2** | Governance DAO, Yield Aggregator | 🔜 Planned |
 | **Phase 3** | Crypto Debit Card, Lending/Borrowing | 📋 Roadmap |
 | **Phase 4** | Exchange Integration, Cross-chain Bridge | 🎯 Vision |
 | **Future** | Insurance, Real Estate Tokenization, Supply Chain | 💡 Possibilities |
 
-The infrastructure we're building today supports all of this tomorrow.
-
 ---
 
-## Services
-
-### BKC Token
-Native utility token with capped supply (200M max). Used across all services for fees, staking, and rewards.
-
-### Staking (DelegationManager)
-Lock BKC to earn share of protocol fees. Longer locks = higher rewards through pStake multiplier.
-
-### Fortune Pool
-Provably fair prediction game using our free randomness oracle. Multiple game modes with transparent odds.
-
-### Decentralized Notary
-Blockchain-based document certification. Each notarization mints an NFT certificate with timestamp proof.
-
-### NFT Liquidity Pools
-AMM-style instant trading for Reward Booster NFTs. Seven tiers with bonding curve pricing.
-
-### AirBNFT (Rental Manager)
-Rent NFTs for temporary utility access. Owners earn passive income, renters access benefits without buying.
-
-### Reward Booster NFTs
-Utility NFTs providing fee discounts (10-70%) across all services. Seven tiers from Crystal to Diamond.
-
----
-
-## Tokenomics
+## 📊 Tokenomics
 
 ### Total Supply: 200,000,000 BKC (Fixed Cap)
 
@@ -170,116 +199,59 @@ Utility NFTs providing fee discounts (10-70%) across all services. Seven tiers f
 | **Strategic Reserve** | 10,000,000 | 25% | Future CEX listings |
 | **Developer/Team** | **0** | **0%** | **Nothing** |
 
-### Activity Rewards (160,000,000 BKC)
+### Proof-of-Purchase Mining
 
-These tokens are **not pre-minted**. They are released only when users actively use the ecosystem:
+Unlike traditional mining, our **Proof-of-Purchase Mining** doesn't require computational power:
 
-- User pays fee for service → New tokens released proportionally
-- Release rate decreases as more tokens enter circulation
-- Formula: `releaseRate = remainingSupply / 160M`
-- Eventually reaches zero (no infinite inflation)
-
-**This is not mining in the traditional sense.** Users don't "mine" by clicking buttons. They earn rewards naturally by using real services that have standalone value.
+- Tokens are minted **ONLY** when real economic activity occurs
+- The mined amount is **ALWAYS LESS** than the fee paid
+- This creates deflationary pressure, not inflation
+- No wash trading incentive — cost always exceeds reward
 
 ---
 
-## Sustainability Model
+## ✅ Verified Contracts (Arbitrum Sepolia)
 
-### Addressing the "Circular Economy" Concern
-
-**The Criticism:** "Rewards are issued for protocol interaction, creating circular economy."
-
-**Our Response:**
-
-**1. External Revenue Sources**
-
-| Service | External Value | Who Pays |
-|---------|---------------|----------|
-| Notary | Document certification | Businesses, legal entities |
-| Gaming | Entertainment | Casual users, gamers |
-| NFT Pools | Asset trading | Collectors, investors |
-| Rentals | Asset utilization | Anyone needing temporary access |
-| Oracle | Infrastructure | Developers (free, but brings users) |
-
-**2. Services Work Without Token Speculation**
-
-- Notary: Certify a document regardless of BKC price
-- Gaming: Play for entertainment regardless of BKC price
-- Rentals: Rent an NFT for utility regardless of BKC price
-
-**3. No Guaranteed Returns**
-
-- We don't promise APY percentages
-- Rewards scale with actual ecosystem usage
-- If nobody uses services, no rewards are generated
-
-**4. Deflationary Pressure**
-
-- Activity reward rate decreases over time
-- Max supply is capped at 200M forever
-- After all 160M activity rewards are released, only fee redistribution continues
-
-### Configurable Economics
-
-All fee parameters are adjustable through EcosystemManager:
-- Fee percentages can be tuned based on market conditions
-- Distribution ratios adaptable to ecosystem needs
-- No hardcoded values that can't be changed
+| Contract | Address | Status |
+|----------|---------|--------|
+| EcosystemManager | `0xF7c16C935d70627cf7F94040330C162095b8BEb1` | ✅ Verified |
+| BKC Token | `0x0Df89f8d4f2d4240054A83638448495e1F4d3A6f` | ✅ Verified |
+| MiningManager | `0xAdB6d83Fc7A340a22fbA93304532F0c14C9Cd4fB` | ✅ Verified |
+| DelegationManager | `0xEfDa12B1D1e91FDe57eBCDB7A520cfd1D9aE4701` | ✅ Verified |
+| FortunePool | `0x54Bf4B4D239bce58CdaDe8b3645B40f98FdEe631` | ✅ Verified |
+| DecentralizedNotary | `0x5C9C0a696a555a2a594130014041dc4320Ba7Eb9` | ✅ Verified |
+| RentalManager | `0xD387B3Fd06085676e85130fb07ae06D675cb201f` | ✅ Verified |
+| RewardBoosterNFT | `0x748b4770D6685629Ed9faf48CFa81e3E4641A341` | ✅ Verified |
+| **BackchainRandomness** | `0x6eB891C2C7bC248EdDf31c77C4258205a37C4126` | ✅ **FREE ORACLE** |
+| **StylusEntropy** | `0xb6bb5e9c9df36fa9504d87125af0e4b284b55092` | ✅ **Rust/WASM** |
+| NFT Pool Factory | `0x0bcaB4cA1Fac9f6eFE3Db1849E8E03e88B3D9423` | ✅ Verified |
 
 ---
 
-## Technical Credibility
+## 👥 Who We Are
 
-### Verified Contracts (Arbitrum Sepolia)
+We are **autonomous developers from the community** — crypto enthusiasts who want to leave our mark on the blockchain world. 
 
-| Contract | Address | Verified |
-|----------|---------|----------|
-| EcosystemManager | `0xF7c16C935d70627cf7F94040330C162095b8BEb1` | ✅ |
-| BKC Token | `0x0Df89f8d4f2d4240054A83638448495e1F4d3A6f` | ✅ |
-| MiningManager | `0xAdB6d83Fc7A340a22fbA93304532F0c14C9Cd4fB` | ✅ |
-| DelegationManager | `0xEfDa12B1D1e91FDe57eBCDB7A520cfd1D9aE4701` | ✅ |
-| FortunePool | `0x54Bf4B4D239bce58CdaDe8b3645B40f98FdEe631` | ✅ |
-| DecentralizedNotary | `0x5C9C0a696a555a2a594130014041dc4320Ba7Eb9` | ✅ |
-| RentalManager | `0xD387B3Fd06085676e85130fb07ae06D675cb201f` | ✅ |
-| RewardBoosterNFT | `0x748b4770D6685629Ed9faf48CFa81e3E4641A341` | ✅ |
-| BackchainRandomness | `0x6eB891C2C7bC248EdDf31c77C4258205a37C4126` | ✅ |
-| StylusEntropy | `0xb6bb5e9c9df36fa9504d87125af0e4b284b55092` | ✅ |
-| NFT Pool Factory | `0x0bcaB4cA1Fac9f6eFE3Db1849E8E03e88B3D9423` | ✅ |
+- **3+ years** of self-funded development
+- **No corporate backing** — independent builders
+- **No venture capital** — community-driven
+- **No external investors** — refused all offers
+- **Open source** — transparent and verifiable
 
-### Who We Are
+### Our Principles
 
-We are a group of **crypto enthusiasts** who want to leave our mark on the blockchain world. No corporate backing, no venture capital, no external developers—just passionate builders who believe in what we're creating.
-
-**Our Principles:**
-- **No Pre-sale:** Zero tokens sold before launch
-- **No VC Allocation:** No investors with privileged access
-- **No Team Tokens:** 0% allocated to developers
-- **Community-Driven:** Built by the community, for the community
-- **Participatory Development:** Open source, open contribution
-
-### Development
-
-- **3+ years** of development
-- **Complete working product** on testnet
-- **All contracts verified** on Arbiscan
-- **Open source** codebase
-- **Self-funded:** Built with personal resources and dedication
+```
+✅ Community First      — Built for users, not investors
+✅ Zero Team Tokens     — We earn like everyone else
+✅ No Pre-sale          — Fair launch for all
+✅ No VC Allocation     — No privileged access
+✅ Open Source          — Transparent and auditable
+✅ Self-Funded          — Integrity over shortcuts
+```
 
 ---
 
-## Why Arbitrum?
-
-| Reason | Explanation |
-|--------|-------------|
-| **Stylus** | Only chain where our Rust oracle is possible |
-| **Low Fees** | Enables micro-transactions (1 BKC notary fee) |
-| **Speed** | Instant game resolution in Fortune Pool |
-| **Ecosystem** | Integration with Camelot, GMX, native DeFi |
-| **Developer Tools** | Best-in-class tooling and documentation |
-
----
-
-## Documentation
+## 📚 Documentation
 
 | Document | Description |
 |----------|-------------|
@@ -291,21 +263,33 @@ We are a group of **crypto enthusiasts** who want to leave our mark on the block
 | [Notary](./modules/NOTARY.md) | Document certification |
 | [NFT Pools](./modules/NFT_LIQUIDITY_POOLS.md) | AMM trading |
 | [Rentals](./modules/RENTAL.md) | AirBNFT system |
-| [Oracle](./modules/BACKCHAIN_RANDOMNESS.md) | Free randomness |
+| [**Oracle**](./modules/BACKCHAIN_RANDOMNESS.md) | **Free randomness for Arbitrum** |
 | [Contracts](./developers/CONTRACTS.md) | All addresses |
 | [Quick Start](./getting-started/QUICK_START.md) | Get started guide |
 
 ---
 
-## Contact
+## 🔗 Links
 
 | Channel | Link |
 |---------|------|
-| Email | dev@backcoin.org |
-| X (Twitter) | [x.com/backcoin](https://x.com/backcoin) |
-| GitHub | [github.com/backcoin-org/backchain-dapp](https://github.com/backcoin-org/backchain-dapp) |
-| YouTube | [youtube.com/@Backcoin](https://www.youtube.com/@Backcoin) |
+| 🌐 Website | [backcoin.org](https://backcoin.org) |
+| 📧 Email | dev@backcoin.org |
+| 𝕏 Twitter | [x.com/backcoin](https://x.com/backcoin) |
+| 💼 LinkedIn | [linkedin.com/in/backcoin](https://www.linkedin.com/in/backcoin/) |
+| 📸 Instagram | [instagram.com/backcoin.bkc](https://www.instagram.com/backcoin.bkc/) |
+| 💻 GitHub | [github.com/backcoin-org/backchain-dapp](https://github.com/backcoin-org/backchain-dapp) |
+| 🎬 YouTube | [youtube.com/@Backcoin](https://www.youtube.com/@Backcoin) |
+| 💬 Discord | [backcoin.org](https://backcoin.org) |
 
 ---
 
-**Backcoin Protocol** — *Modular Infrastructure • Real Utility • Built on Arbitrum*
+---
+
+### **Backcoin Protocol**
+
+*Connecting the Real World to Arbitrum*
+
+*Built by the Community • For the Community • On Arbitrum*
+
+**🦀 Free Oracle • 🌉 Web3 Bridge • 🌱 100% Community-Driven**
