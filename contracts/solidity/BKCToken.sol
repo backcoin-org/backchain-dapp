@@ -9,32 +9,63 @@ import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 /**
  * @title BKCToken (Backcoin)
  * @author Backchain Protocol
- * @notice The native utility token of the Backcoin ecosystem
- * @dev ERC20 token with:
- *      - Fixed maximum supply (200M)
- *      - Controlled minting via MiningManager
- *      - Blacklist mechanism for compliance
- *      - UUPS upgradeable pattern
+ * @notice The native utility token powering the Backchain ecosystem
+ * 
+ * @dev Backcoin ($BKC) is the fuel of the Backchain Protocol - a modular ecosystem
+ *      designed to bridge Web2, Web3, and Real World Assets (RWA) into a unified,
+ *      accessible, and transparent infrastructure.
  *
- *      ┌─────────────────────────────────────────────────────────────┐
- *      │                      TOKENOMICS                             │
- *      ├─────────────────────────────────────────────────────────────┤
- *      │  Max Supply:       200,000,000 BKC                          │
- *      │  TGE Supply:        40,000,000 BKC (20%)                    │
- *      │  Mining Reserve:   160,000,000 BKC (80%)                    │
- *      ├─────────────────────────────────────────────────────────────┤
- *      │  Mining Mechanism: Proof-of-Purchase                        │
- *      │  Scarcity Model:   Linear decreasing rate                   │
- *      └─────────────────────────────────────────────────────────────┘
+ *      ┌─────────────────────────────────────────────────────────────────┐
+ *      │                   BACKCHAIN PROTOCOL                            │
+ *      │         "Bridging Web2, Web3 & Real World Assets"               │
+ *      ├─────────────────────────────────────────────────────────────────┤
+ *      │                                                                 │
+ *      │   ┌─────────┐      ┌─────────┐      ┌─────────┐                │
+ *      │   │  Web2   │ ◄──► │   BKC   │ ◄──► │  Web3   │                │
+ *      │   │         │      │  Token  │      │         │                │
+ *      │   └─────────┘      └────┬────┘      └─────────┘                │
+ *      │                         │                                       │
+ *      │                         ▼                                       │
+ *      │                   ┌─────────┐                                   │
+ *      │                   │   RWA   │                                   │
+ *      │                   │ (Real   │                                   │
+ *      │                   │ World)  │                                   │
+ *      │                   └─────────┘                                   │
+ *      │                                                                 │
+ *      └─────────────────────────────────────────────────────────────────┘
  *
- *      Token Utility:
- *      - Staking rewards in DelegationManager
- *      - Fee payments across ecosystem services
- *      - NFT purchases in liquidity pools
- *      - Game participation in FortunePool
- *      - Document notarization fees
+ *      Token Characteristics:
+ *      - Fixed maximum supply with deflationary burn mechanism
+ *      - Proof-of-Purchase mining with linear scarcity curve
+ *      - UUPS upgradeable for future improvements
+ *      - Blacklist mechanism for regulatory compliance
  *
- * @custom:security-contact security@backcoin.org
+ *      ┌─────────────────────────────────────────────────────────────────┐
+ *      │                      TOKENOMICS                                 │
+ *      ├─────────────────────────────────────────────────────────────────┤
+ *      │  Max Supply:       200,000,000 BKC                              │
+ *      │  TGE Supply:        40,000,000 BKC (20%)                        │
+ *      │  Mining Reserve:   160,000,000 BKC (80%)                        │
+ *      ├─────────────────────────────────────────────────────────────────┤
+ *      │  Mining Model:     Proof-of-Purchase (PoP)                      │
+ *      │  Scarcity Curve:   Linear decreasing rate                       │
+ *      │  Burn Mechanism:   Deflationary pressure via ecosystem usage    │
+ *      └─────────────────────────────────────────────────────────────────┘
+ *
+ *      Ecosystem Modules (Modular & Plug-and-Play):
+ *      ┌─────────────────────────────────────────────────────────────────┐
+ *      │  Module              │ Function                                 │
+ *      ├──────────────────────┼──────────────────────────────────────────┤
+ *      │  DelegationManager   │ Staking & weighted reward distribution   │
+ *      │  MiningManager       │ PoP mining & fee distribution engine     │
+ *      │  FortunePool         │ Prediction games & entertainment         │
+ *      │  DecentralizedNotary │ Document certification & timestamping    │
+ *      │  NFTLiquidityPool    │ AMM for RewardBooster NFT trading        │
+ *      │  CharityPool         │ Crowdfunding with burn mechanism         │
+ *      │  [Future Modules]    │ Unlimited expansion possibilities        │
+ *      └─────────────────────────────────────────────────────────────────┘
+ *
+ * @custom:security-contact dev@backcoin.org
  * @custom:website https://backcoin.org
  * @custom:network Arbitrum
  */
@@ -61,6 +92,9 @@ contract BKCToken is
     /// @notice Addresses blocked from transfers
     mapping(address => bool) private _blacklisted;
 
+    /// @notice Total tokens burned (for tracking deflation)
+    uint256 public totalBurned;
+
     // =========================================================================
     //                              EVENTS
     // =========================================================================
@@ -79,6 +113,14 @@ contract BKCToken is
         uint256 newTotalSupply
     );
 
+    /// @notice Emitted when tokens are burned
+    event TokensBurned(
+        address indexed from,
+        uint256 amount,
+        uint256 newTotalSupply,
+        uint256 totalBurnedAllTime
+    );
+
     // =========================================================================
     //                              ERRORS
     // =========================================================================
@@ -88,6 +130,8 @@ contract BKCToken is
     error MaxSupplyExceeded(uint256 requested, uint256 available);
     error AddressBlacklisted(address account);
     error ArrayLengthMismatch();
+    error InsufficientBalance(uint256 requested, uint256 available);
+    error InsufficientAllowance(uint256 requested, uint256 available);
 
     // =========================================================================
     //                           INITIALIZATION
@@ -176,6 +220,70 @@ contract BKCToken is
     }
 
     // =========================================================================
+    //                         BURN FUNCTIONS
+    // =========================================================================
+
+    /**
+     * @notice Burns tokens from caller's balance
+     * @dev Anyone can burn their own tokens. Creates deflationary pressure.
+     *      This is a fundamental capability enabling ecosystem modules to
+     *      implement burn mechanics without requiring token contract changes.
+     *
+     * @param _amount Amount of tokens to burn
+     */
+    function burn(uint256 _amount) external {
+        if (_amount == 0) revert ZeroAmount();
+        
+        uint256 balance = balanceOf(msg.sender);
+        if (_amount > balance) {
+            revert InsufficientBalance(_amount, balance);
+        }
+
+        _burn(msg.sender, _amount);
+        
+        unchecked {
+            totalBurned += _amount;
+        }
+
+        emit TokensBurned(msg.sender, _amount, totalSupply(), totalBurned);
+    }
+
+    /**
+     * @notice Burns tokens from a specific address (requires allowance)
+     * @dev Allows approved contracts to burn tokens on behalf of users.
+     *      Caller must have sufficient allowance from `_from`.
+     *
+     * @param _from Address to burn tokens from
+     * @param _amount Amount of tokens to burn
+     */
+    function burnFrom(address _from, uint256 _amount) external {
+        if (_from == address(0)) revert ZeroAddress();
+        if (_amount == 0) revert ZeroAmount();
+
+        uint256 currentAllowance = allowance(_from, msg.sender);
+        if (_amount > currentAllowance) {
+            revert InsufficientAllowance(_amount, currentAllowance);
+        }
+
+        uint256 balance = balanceOf(_from);
+        if (_amount > balance) {
+            revert InsufficientBalance(_amount, balance);
+        }
+
+        // Decrease allowance
+        _spendAllowance(_from, msg.sender, _amount);
+        
+        // Burn tokens
+        _burn(_from, _amount);
+        
+        unchecked {
+            totalBurned += _amount;
+        }
+
+        emit TokensBurned(_from, _amount, totalSupply(), totalBurned);
+    }
+
+    // =========================================================================
     //                       BLACKLIST MANAGEMENT
     // =========================================================================
 
@@ -228,6 +336,7 @@ contract BKCToken is
 
     /**
      * @notice Returns remaining mintable supply
+     * @dev Accounts for burned tokens - they free up space for new minting
      * @return Tokens remaining until max supply
      */
     function remainingMintableSupply() external view returns (uint256) {
@@ -248,17 +357,20 @@ contract BKCToken is
      * @return maxSupply Maximum possible supply
      * @return currentSupply Current total supply
      * @return mintable Remaining mintable tokens
+     * @return burned Total tokens burned all time
      */
     function getTokenStats() external view returns (
         uint256 maxSupply,
         uint256 currentSupply,
-        uint256 mintable
+        uint256 mintable,
+        uint256 burned
     ) {
         currentSupply = totalSupply();
         return (
             MAX_SUPPLY,
             currentSupply,
-            currentSupply >= MAX_SUPPLY ? 0 : MAX_SUPPLY - currentSupply
+            currentSupply >= MAX_SUPPLY ? 0 : MAX_SUPPLY - currentSupply,
+            totalBurned
         );
     }
 
@@ -268,6 +380,23 @@ contract BKCToken is
      */
     function mintedPercentage() external view returns (uint256) {
         return (totalSupply() * 10000) / MAX_SUPPLY;
+    }
+
+    /**
+     * @notice Returns burn statistics
+     * @return burnedTotal Total tokens burned all time
+     * @return burnedPercentage Percentage of ever-minted tokens that were burned (bips)
+     */
+    function getBurnStats() external view returns (
+        uint256 burnedTotal,
+        uint256 burnedPercentage
+    ) {
+        burnedTotal = totalBurned;
+        // Calculate percentage of total ever minted (current supply + burned)
+        uint256 totalEverMinted = totalSupply() + totalBurned;
+        burnedPercentage = totalEverMinted > 0 
+            ? (totalBurned * 10000) / totalEverMinted 
+            : 0;
     }
 
     // =========================================================================
@@ -290,7 +419,7 @@ contract BKCToken is
             revert AddressBlacklisted(from);
         }
 
-        // Check recipient
+        // Check recipient (skip for burning)
         if (to != address(0) && _blacklisted[to]) {
             revert AddressBlacklisted(to);
         }
