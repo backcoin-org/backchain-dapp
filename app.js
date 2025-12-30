@@ -33,6 +33,7 @@ import { CreditCardPage } from './pages/CreditCardPage.js';
 import { DexPage } from './pages/DexPage.js';
 import { DaoPage } from './pages/DaoPage.js';
 import { TutorialsPage } from './pages/TutorialsPage.js';
+import { CharityPage } from './pages/CharityPage.js';
 
 // ============================================================================
 // 2. CONFIGURATION & STATE
@@ -57,6 +58,7 @@ const routes = {
     'store': StorePage,
     'rewards': RewardsPage,
     'actions': FortunePoolPage, 
+    'charity': CharityPage,
     'notary': NotaryPage,
     'airdrop': AirdropPage,
     'tokenomics': TokenomicsPage,
