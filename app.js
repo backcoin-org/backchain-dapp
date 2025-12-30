@@ -25,7 +25,6 @@ import { FortunePoolPage } from './pages/FortunePool.js';
 import { AboutPage } from './pages/AboutPage.js';
 import { AirdropPage } from './pages/AirdropPage.js';
 import { AdminPage } from './pages/AdminPage.js';
-import { PresalePage } from './pages/PresalePage.js';
 import { TokenomicsPage } from './pages/TokenomicsPage.js';
 import { NotaryPage } from './pages/NotaryPage.js';
 import { RentalPage } from './pages/RentalPage.js';
