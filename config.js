@@ -1,5 +1,5 @@
 // js/config.js
-// ✅ PRODUCTION V28 - Alchemy Primary (CORS-friendly for browsers)
+// ✅ PRODUCTION V29 - Charity Pool Module
 
 // ============================================================================
 // 1. ENVIRONMENT & API KEYS
@@ -219,7 +219,8 @@ export const contractAddresses = {
     publicSale: null,
     decentralizedNotary: null,
     faucet: null,
-    miningManager: null
+    miningManager: null,
+    charityPool: null  // ✅ V29: Charity Pool
 };
 
 export async function loadAddresses() {
@@ -261,11 +262,17 @@ export async function loadAddresses() {
         // BackchainRandomness Oracle
         addresses.backchainRandomness = jsonAddresses.backchainRandomness || null;
 
+        // ✅ V29: Charity Pool
+        addresses.charityPool = jsonAddresses.charityPool || 
+                                jsonAddresses.CharityPool ||
+                                null;
+
         // Also update contractAddresses for compatibility
         Object.assign(contractAddresses, jsonAddresses);
 
         console.log("✅ Contract addresses loaded");
         console.log("   FortunePool V2:", addresses.fortunePoolV2);
+        console.log("   CharityPool:", addresses.charityPool);
         return true;
 
     } catch (error) {
@@ -498,3 +505,54 @@ export const nftPoolFactoryABI = [
     "function getPoolCount() view returns (uint256)",
     "event PoolDeployed(uint256 indexed boostBips, address indexed poolAddress)"
 ];
+
+// ============================================================================
+// ✅ V29: CHARITY POOL ABI
+// ============================================================================
+
+export const charityPoolABI = [
+    // Read Functions
+    "function campaigns(uint256 campaignId) view returns (address creator, string title, string description, uint256 goalAmount, uint256 raisedAmount, uint256 deadline, uint8 status, uint256 donationCount, uint256 createdAt)",
+    "function donations(uint256 donationId) view returns (address donor, uint256 campaignId, uint256 grossAmount, uint256 netAmount, uint256 timestamp)",
+    "function campaignCounter() view returns (uint256)",
+    "function donationCounter() view returns (uint256)",
+    "function userActiveCampaigns(address user) view returns (uint256)",
+    "function maxActiveCampaignsPerWallet() view returns (uint256)",
+    "function minDonationAmount() view returns (uint256)",
+    "function donationMiningFeeBips() view returns (uint256)",
+    "function donationBurnFeeBips() view returns (uint256)",
+    "function withdrawalFeeETH() view returns (uint256)",
+    "function goalNotMetBurnBips() view returns (uint256)",
+    "function totalRaisedAllTime() view returns (uint256)",
+    "function totalBurnedAllTime() view returns (uint256)",
+    "function totalCampaignsCreated() view returns (uint256)",
+    "function totalSuccessfulWithdrawals() view returns (uint256)",
+    "function getCampaignDonations(uint256 campaignId, uint256 offset, uint256 limit) view returns (uint256[])",
+    "function getUserCampaignIds(address user) view returns (uint256[])",
+    
+    // Write Functions
+    "function createCampaign(string _title, string _description, uint256 _goalAmount, uint256 _durationDays) external returns (uint256)",
+    "function donate(uint256 _campaignId, uint256 _amount) external",
+    "function cancelCampaign(uint256 _campaignId) external",
+    "function withdraw(uint256 _campaignId) external payable",
+    
+    // Events
+    "event CampaignCreated(uint256 indexed campaignId, address indexed creator, string title, uint256 goalAmount, uint256 deadline)",
+    "event DonationReceived(uint256 indexed campaignId, address indexed donor, uint256 grossAmount, uint256 netAmount, uint256 burnedAmount)",
+    "event CampaignCancelled(uint256 indexed campaignId, address indexed creator)",
+    "event FundsWithdrawn(uint256 indexed campaignId, address indexed creator, uint256 amount, uint256 burnedAmount, bool goalMet)"
+];
+
+// Campaign Status Enum
+export const CampaignStatus = {
+    ACTIVE: 0,
+    COMPLETED: 1,
+    CANCELLED: 2,
+    WITHDRAWN: 3
+};
+
+// Campaign Categories
+export const CampaignCategories = {
+    ANIMAL: 'animal',
+    HUMANITARIAN: 'humanitarian'
+};
