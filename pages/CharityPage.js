@@ -102,14 +102,392 @@ const Charity = {
 // CSS INJECTION
 // ============================================================================
 function injectStyles() {
-    if (document.getElementById('charity-styles-link')) return;
+    if (document.getElementById('charity-styles-v3')) return;
     
-    // Try to load external CSS first
-    const link = document.createElement('link');
-    link.id = 'charity-styles-link';
-    link.rel = 'stylesheet';
-    link.href = './styles/charity.css';
-    document.head.appendChild(link);
+    const style = document.createElement('style');
+    style.id = 'charity-styles-v3';
+    style.textContent = `
+/* ═══════════════════════════════════════════════════════════════════════════
+   CHARITY PAGE STYLES V3.0 - Embedded CSS
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* HERO SECTION */
+.charity-hero {
+    background: linear-gradient(135deg, rgba(16, 185, 129, 0.08) 0%, rgba(244, 114, 182, 0.08) 100%);
+    border-radius: 1.25rem;
+    padding: 2rem 1.5rem;
+    position: relative;
+    overflow: hidden;
+    border: 1px solid rgba(82, 82, 91, 0.3);
+}
+.charity-hero::before {
+    content: '';
+    position: absolute;
+    top: -100px;
+    right: -100px;
+    width: 300px;
+    height: 300px;
+    background: radial-gradient(circle, rgba(245, 158, 11, 0.1) 0%, transparent 70%);
+    border-radius: 50%;
+    pointer-events: none;
+}
+
+/* CATEGORY CARDS */
+.charity-category-card {
+    background: linear-gradient(145deg, rgba(39, 39, 42, 0.9), rgba(24, 24, 27, 0.95));
+    border: 1px solid rgba(82, 82, 91, 0.5);
+    border-radius: 1.25rem;
+    padding: 2rem;
+    cursor: pointer;
+    transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    position: relative;
+    overflow: hidden;
+}
+.charity-category-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+}
+.charity-category-card:hover {
+    transform: translateY(-6px);
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.4);
+}
+.charity-category-card:hover::before {
+    opacity: 1;
+}
+.charity-category-card.animal::before {
+    background: linear-gradient(90deg, #10b981, #14b8a6);
+}
+.charity-category-card.animal:hover {
+    border-color: #10b981;
+}
+.charity-category-card.humanitarian::before {
+    background: linear-gradient(90deg, #f472b6, #fb7185);
+}
+.charity-category-card.humanitarian:hover {
+    border-color: #f472b6;
+}
+
+/* ICON BOX */
+.charity-icon-box {
+    width: 72px;
+    height: 72px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto 1.25rem;
+    font-size: 1.75rem;
+    transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+.charity-category-card:hover .charity-icon-box {
+    transform: scale(1.1);
+}
+.charity-icon-box.animal {
+    background: linear-gradient(135deg, rgba(16, 185, 129, 0.2), rgba(20, 184, 166, 0.1));
+    color: #10b981;
+    box-shadow: 0 0 25px rgba(16, 185, 129, 0.15);
+}
+.charity-icon-box.humanitarian {
+    background: linear-gradient(135deg, rgba(244, 114, 182, 0.2), rgba(251, 113, 133, 0.1));
+    color: #f472b6;
+    box-shadow: 0 0 25px rgba(244, 114, 182, 0.15);
+}
+
+/* CAMPAIGN CARDS */
+.campaign-card {
+    background: rgba(39, 39, 42, 0.7);
+    border: 1px solid rgba(82, 82, 91, 0.4);
+    border-radius: 1rem;
+    overflow: hidden;
+    transition: all 0.3s ease;
+}
+.campaign-card:hover {
+    border-color: rgba(245, 158, 11, 0.4);
+    transform: translateY(-4px);
+    box-shadow: 0 20px 40px -15px rgba(0, 0, 0, 0.35);
+}
+.campaign-image {
+    width: 100%;
+    height: 160px;
+    object-fit: cover;
+    background: linear-gradient(135deg, #27272a, #3f3f46);
+}
+
+/* PROGRESS BAR */
+.campaign-progress {
+    height: 6px;
+    background: rgba(63, 63, 70, 0.6);
+    border-radius: 3px;
+    overflow: hidden;
+}
+.campaign-progress-fill {
+    height: 100%;
+    border-radius: 3px;
+    transition: width 0.6s ease;
+}
+.campaign-progress-fill.animal {
+    background: linear-gradient(90deg, #10b981, #14b8a6);
+}
+.campaign-progress-fill.humanitarian {
+    background: linear-gradient(90deg, #f472b6, #fb7185);
+}
+
+/* STATUS BADGES */
+.charity-status-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.25rem 0.625rem;
+    border-radius: 9999px;
+    font-size: 0.625rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.025em;
+}
+.charity-status-badge.active {
+    background: rgba(16, 185, 129, 0.15);
+    color: #10b981;
+    border: 1px solid rgba(16, 185, 129, 0.3);
+}
+.charity-status-badge.completed {
+    background: rgba(59, 130, 246, 0.15);
+    color: #3b82f6;
+    border: 1px solid rgba(59, 130, 246, 0.3);
+}
+.charity-status-badge.cancelled {
+    background: rgba(239, 68, 68, 0.15);
+    color: #ef4444;
+    border: 1px solid rgba(239, 68, 68, 0.3);
+}
+.charity-status-badge.withdrawn {
+    background: rgba(113, 113, 122, 0.15);
+    color: #a1a1aa;
+    border: 1px solid rgba(113, 113, 122, 0.3);
+}
+
+/* STAT CARDS */
+.charity-stat {
+    background: rgba(24, 24, 27, 0.6);
+    border: 1px solid rgba(82, 82, 91, 0.3);
+    border-radius: 0.875rem;
+    padding: 1.25rem;
+    text-align: center;
+    transition: all 0.2s ease;
+}
+.charity-stat:hover {
+    border-color: rgba(245, 158, 11, 0.3);
+}
+
+/* BUTTONS */
+.charity-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    padding: 0.75rem 1.25rem;
+    border-radius: 0.75rem;
+    font-weight: 700;
+    font-size: 0.875rem;
+    transition: all 0.2s ease;
+    cursor: pointer;
+    border: none;
+}
+.charity-btn-primary {
+    background: linear-gradient(135deg, #f59e0b, #d97706);
+    color: #000;
+}
+.charity-btn-primary:hover:not(:disabled) {
+    transform: translateY(-1px);
+    box-shadow: 0 10px 25px -5px rgba(245, 158, 11, 0.4);
+}
+.charity-btn-primary:disabled {
+    background: #3f3f46;
+    color: #71717a;
+    cursor: not-allowed;
+}
+.charity-btn-secondary {
+    background: rgba(63, 63, 70, 0.5);
+    color: #a1a1aa;
+    border: 1px solid rgba(82, 82, 91, 0.5);
+}
+.charity-btn-secondary:hover {
+    background: rgba(63, 63, 70, 0.8);
+    color: #f4f4f5;
+}
+.charity-btn-donate {
+    background: linear-gradient(135deg, #10b981, #059669);
+    color: #fff;
+}
+.charity-btn-donate:hover:not(:disabled) {
+    box-shadow: 0 10px 25px -5px rgba(16, 185, 129, 0.4);
+}
+.charity-btn-info {
+    background: rgba(59, 130, 246, 0.15);
+    color: #60a5fa;
+    border: 1px solid rgba(59, 130, 246, 0.3);
+}
+.charity-btn-info:hover {
+    background: rgba(59, 130, 246, 0.25);
+}
+
+/* MODAL */
+.charity-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 100;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.85);
+    backdrop-filter: blur(4px);
+    opacity: 0;
+    visibility: hidden;
+    transition: all 0.3s ease;
+    padding: 1rem;
+}
+.charity-modal.active {
+    opacity: 1;
+    visibility: visible;
+}
+.charity-modal-content {
+    background: #18181b;
+    border: 1px solid #3f3f46;
+    border-radius: 1.25rem;
+    width: 100%;
+    max-width: 600px;
+    max-height: 90vh;
+    overflow-y: auto;
+    transform: scale(0.95) translateY(10px);
+    transition: transform 0.3s ease;
+}
+.charity-modal.active .charity-modal-content {
+    transform: scale(1) translateY(0);
+}
+
+/* FORM INPUTS */
+.charity-input {
+    background: rgba(24, 24, 27, 0.8);
+    border: 1px solid rgba(82, 82, 91, 0.5);
+    border-radius: 0.625rem;
+    padding: 0.875rem 1rem;
+    color: #f4f4f5;
+    width: 100%;
+    transition: border-color 0.2s, box-shadow 0.2s;
+    font-size: 0.9375rem;
+}
+.charity-input:focus {
+    outline: none;
+    border-color: #f59e0b;
+    box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.15);
+}
+.charity-input::placeholder {
+    color: #71717a;
+}
+.charity-textarea {
+    min-height: 100px;
+    resize: vertical;
+}
+
+/* SHARE BUTTONS */
+.share-btn {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s ease;
+    border: none;
+    cursor: pointer;
+    font-size: 1rem;
+}
+.share-btn.twitter { background: rgba(29, 161, 242, 0.2); color: #1da1f2; }
+.share-btn.twitter:hover { background: #1da1f2; color: white; }
+.share-btn.telegram { background: rgba(0, 136, 204, 0.2); color: #0088cc; }
+.share-btn.telegram:hover { background: #0088cc; color: white; }
+.share-btn.whatsapp { background: rgba(37, 211, 102, 0.2); color: #25d366; }
+.share-btn.whatsapp:hover { background: #25d366; color: white; }
+.share-btn.copy { background: rgba(113, 113, 122, 0.2); color: #a1a1aa; }
+.share-btn.copy:hover { background: #3f3f46; color: white; }
+
+/* UTILITIES */
+.line-clamp-2 {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+.line-clamp-3 {
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+/* RESPONSIVE */
+@media (max-width: 640px) {
+    .charity-hero {
+        padding: 1.5rem 1rem;
+    }
+    .charity-category-card {
+        padding: 1.5rem;
+    }
+    .charity-icon-box {
+        width: 60px;
+        height: 60px;
+        font-size: 1.5rem;
+    }
+}
+
+/* ANIMATIONS */
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+.animate-fade-in {
+    animation: fadeIn 0.4s ease-out;
+}
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+}
+
+/* SKELETON LOADING */
+.skeleton {
+    background: linear-gradient(90deg, #27272a 25%, #3f3f46 50%, #27272a 75%);
+    background-size: 200% 100%;
+    animation: skeleton-loading 1.5s infinite;
+    border-radius: 0.5rem;
+}
+@keyframes skeleton-loading {
+    0% { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+}
+
+/* SCROLLBAR */
+.charity-scroll::-webkit-scrollbar {
+    width: 6px;
+}
+.charity-scroll::-webkit-scrollbar-track {
+    background: transparent;
+}
+.charity-scroll::-webkit-scrollbar-thumb {
+    background: #3f3f46;
+    border-radius: 3px;
+}
+.charity-scroll::-webkit-scrollbar-thumb:hover {
+    background: #52525b;
+}
+`;
+    document.head.appendChild(style);
 }
 
 // ============================================================================
