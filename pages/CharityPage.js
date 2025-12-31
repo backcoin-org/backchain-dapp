@@ -395,6 +395,8 @@ function renderMainContent() {
 // ============================================================================
 function renderCategoryCard(categoryId) {
     const cat = CATEGORIES[categoryId];
+    const colorStyle = categoryId === 'animal' ? 'color: #10b981;' : 'color: #f472b6;';
+    
     return `
         <div class="charity-category-card ${categoryId}" data-category="${categoryId}">
             <div class="charity-icon-box ${categoryId}">
@@ -404,11 +406,11 @@ function renderCategoryCard(categoryId) {
             <p class="text-zinc-400 text-center text-sm mb-4">${cat.description}</p>
             <div class="flex justify-center gap-6 text-sm mb-4">
                 <div class="text-center">
-                    <p class="text-${cat.color}-400 font-bold" id="cat-${categoryId}-campaigns">0</p>
+                    <p class="font-bold" style="${colorStyle}" id="cat-${categoryId}-campaigns">0</p>
                     <p class="text-zinc-500 text-xs">Campaigns</p>
                 </div>
                 <div class="text-center">
-                    <p class="text-${cat.color}-400 font-bold" id="cat-${categoryId}-raised">0 BKC</p>
+                    <p class="font-bold" style="${colorStyle}" id="cat-${categoryId}-raised">0 BKC</p>
                     <p class="text-zinc-500 text-xs">Raised</p>
                 </div>
             </div>
@@ -416,7 +418,7 @@ function renderCategoryCard(categoryId) {
                 <button class="btn-create-category charity-btn charity-btn-primary text-sm py-2" data-category="${categoryId}">
                     <i class="fa-solid fa-plus"></i> Create
                 </button>
-                <span class="text-${cat.color}-400 text-sm font-medium flex items-center gap-2 cursor-pointer btn-view-category" data-category="${categoryId}">
+                <span class="text-sm font-medium flex items-center gap-2 cursor-pointer btn-view-category hover:underline" style="${colorStyle}" data-category="${categoryId}">
                     View All <i class="fa-solid fa-arrow-right"></i>
                 </span>
             </div>
@@ -433,6 +435,7 @@ function renderCampaignCard(campaign) {
     const timeInfo = formatTimeRemaining(Number(campaign.deadline));
     const isActive = isCampaignActive(campaign);
     const statusInfo = STATUS_LABELS[campaign.status] || STATUS_LABELS[STATUS.ACTIVE];
+    const colorStyle = campaign.category === 'animal' ? 'color: #10b981;' : 'color: #f472b6;';
     
     return `
         <div class="campaign-card animate-fade-in" data-campaign-id="${campaign.id}">
@@ -467,7 +470,7 @@ function renderCampaignCard(campaign) {
                 
                 <!-- Stats -->
                 <div class="flex justify-between items-center text-xs mb-4">
-                    <span class="text-${cat.color}-400 font-bold">${formatBKC(campaign.raisedAmount)} BKC</span>
+                    <span class="font-bold" style="${colorStyle}">${formatBKC(campaign.raisedAmount)} BKC</span>
                     <span class="text-zinc-500">of ${formatBKC(campaign.goalAmount)} BKC (${progress.toFixed(0)}%)</span>
                 </div>
                 
@@ -594,6 +597,7 @@ function renderCampaignDetailContent(campaign) {
     const isCreator = State.userAddress?.toLowerCase() === campaign.creator?.toLowerCase();
     const canWithdrawFunds = canWithdraw(campaign, State.userAddress);
     const shareUrl = getShareUrl(campaign.id);
+    const colorStyle = campaign.category === 'animal' ? 'color: #10b981;' : 'color: #f472b6;';
     
     container.innerHTML = `
         <div class="min-h-screen pb-24 md:pb-10 animate-fade-in">
@@ -654,7 +658,7 @@ function renderCampaignDetailContent(campaign) {
                     <div class="campaign-detail-card">
                         <div class="flex flex-col md:flex-row md:items-end md:justify-between gap-4 mb-4">
                             <div>
-                                <p class="text-3xl md:text-4xl font-bold text-${cat.color}-400">${formatBKC(campaign.raisedAmount)} BKC</p>
+                                <p class="text-3xl md:text-4xl font-bold" style="${colorStyle}">${formatBKC(campaign.raisedAmount)} BKC</p>
                                 <p class="text-zinc-500">raised of ${formatBKC(campaign.goalAmount)} BKC goal</p>
                             </div>
                             <div class="text-right">
@@ -1137,10 +1141,12 @@ function closeModal(modalId) {
 function openCreateModal(category) {
     Charity.selectedCategory = category;
     const cat = CATEGORIES[category];
+    const bgColor = category === 'animal' ? 'rgba(16, 185, 129, 0.2)' : 'rgba(244, 114, 182, 0.2)';
+    const textColor = category === 'animal' ? '#10b981' : '#f472b6';
     
     document.getElementById('create-category').value = category;
-    document.getElementById('create-modal-icon').className = `w-11 h-11 rounded-full bg-${cat.color}-500/20 flex items-center justify-center`;
-    document.getElementById('create-modal-icon').innerHTML = `<i class="fa-solid ${cat.icon} text-xl text-${cat.color}-400"></i>`;
+    document.getElementById('create-modal-icon').style.background = bgColor;
+    document.getElementById('create-modal-icon').innerHTML = `<i class="fa-solid ${cat.icon} text-xl" style="color: ${textColor}"></i>`;
     document.getElementById('create-modal-subtitle').textContent = `Create a ${cat.name.toLowerCase()} campaign`;
     
     // Reset form
