@@ -142,6 +142,27 @@ function isRetryableError(error) {
     return retryablePatterns.some(pattern => msg.toLowerCase().includes(pattern.toLowerCase()));
 }
 
+/**
+ * Check if error is MetaMask rate limit and extract wait time
+ * @returns {number} Wait time in ms, or 0 if not a rate limit error
+ */
+function getMetaMaskRateLimitWaitTime(error) {
+    const msg = error?.message || '';
+    const code = error?.code || error?.error?.code;
+    
+    if (code !== -32002 && !msg.includes('too many errors')) return 0;
+    
+    // Extract wait time from message like "retrying in 0,5 minutes"
+    const match = msg.match(/retrying in (\d+[,.]?\d*) minutes/i);
+    if (match) {
+        const minutes = parseFloat(match[1].replace(',', '.'));
+        return Math.ceil(minutes * 60 * 1000) + 5000; // Add 5s buffer
+    }
+    
+    // Default 30 seconds if we can't parse
+    return 30000;
+}
+
 function isUserRejection(error) {
     const msg = error?.message || error?.reason || '';
     return msg.includes('user rejected') || 
@@ -341,6 +362,7 @@ async function safeWaitForTx(tx, provider) {
 
 /**
  * Execute transaction with automatic retry on network errors
+ * Includes special handling for MetaMask rate limits
  */
 async function executeWithRetry(txFunction, options = {}) {
     const {
@@ -374,6 +396,24 @@ async function executeWithRetry(txFunction, options = {}) {
             if (isUserRejection(e)) {
                 showToast("Transaction cancelled", "error");
                 return { success: false, cancelled: true };
+            }
+            
+            // Special handling for MetaMask rate limit
+            const rateLimitWait = getMetaMaskRateLimitWaitTime(e);
+            if (rateLimitWait > 0) {
+                const waitSeconds = Math.ceil(rateLimitWait / 1000);
+                showToast(`⏳ MetaMask rate limited. Waiting ${waitSeconds}s...`, "warning");
+                
+                // Show countdown
+                for (let i = waitSeconds; i > 0; i -= 5) {
+                    await sleep(5000);
+                    if (i > 5) {
+                        showToast(`⏳ Waiting ${i - 5}s for MetaMask...`, "info");
+                    }
+                }
+                
+                showToast("🔄 Retrying transaction...", "info");
+                continue; // Retry after waiting
             }
             
             if (attempt < retries && isRetryableError(e)) {
