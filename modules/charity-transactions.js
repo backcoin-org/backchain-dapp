@@ -76,6 +76,7 @@ async function getConnectedSigner() {
 
 function formatError(error) {
     const msg = error?.reason || error?.shortMessage || error?.message || 'Unknown error';
+    const errorData = error?.data || error?.error?.data;
     
     // User cancelled
     if (msg.includes('user rejected') || msg.includes('User denied') || msg.includes('cancelled') || msg.includes('canceled')) {
@@ -85,6 +86,31 @@ function formatError(error) {
     // MetaMask RPC Rate Limit - special handling
     if (msg.includes('too many errors') || msg.includes('retrying in') || error?.code === -32002) {
         return 'RPC_RATE_LIMITED';
+    }
+    
+    // 🔥 V3.3: Decode custom errors from CharityPool contract
+    // Custom error signatures (first 4 bytes of keccak256)
+    const customErrors = {
+        '0x5bf182a2': 'Maximum active campaigns reached (3)',
+        '0x7e273289': 'Campaign not found',
+        '0x8d8b8b8e': 'Campaign is not active',
+        '0x82b42900': 'Not the campaign creator',
+        '0x2c5211c6': 'Donation below minimum (1 BKC)',
+        '0x2075c7c1': 'Insufficient ETH for withdrawal fee'
+    };
+    
+    if (errorData && typeof errorData === 'string' && errorData.startsWith('0x')) {
+        const selector = errorData.slice(0, 10);
+        if (customErrors[selector]) {
+            return customErrors[selector];
+        }
+    }
+    
+    // Check if error message contains the selector
+    for (const [selector, message] of Object.entries(customErrors)) {
+        if (msg.includes(selector)) {
+            return message;
+        }
     }
     
     // Gas/Balance issues
@@ -638,7 +664,7 @@ export async function executeCreateCampaign(params, btnElement = null) {
     }
     
     try {
-        // Validate
+        // Validate inputs
         if (!title || title.trim().length === 0) {
             showToast("Title is required", "error");
             return { success: false };
@@ -657,6 +683,28 @@ export async function executeCreateCampaign(params, btnElement = null) {
         
         const contract = getCharityPoolContract(signer);
         if (!contract) return { success: false };
+        
+        // 🔥 V3.3: Check if user can create more campaigns BEFORE sending tx
+        try {
+            const userAddress = await signer.getAddress();
+            const [userActiveCampaigns, maxActive] = await Promise.all([
+                contract.userActiveCampaigns(userAddress),
+                contract.maxActiveCampaignsPerWallet()
+            ]);
+            
+            const currentActive = Number(userActiveCampaigns);
+            const maxAllowed = Number(maxActive);
+            
+            console.log(`User campaigns: ${currentActive}/${maxAllowed}`);
+            
+            if (currentActive >= maxAllowed) {
+                showToast(`You already have ${currentActive} active campaigns (max: ${maxAllowed})`, "error");
+                return { success: false, error: 'MaxActiveCampaignsReached' };
+            }
+        } catch (e) {
+            console.warn("Could not check campaign limit:", e.message);
+            // Continue anyway, contract will reject if limit reached
+        }
         
         const goalWei = ethers.parseEther(goalAmount.toString());
         
