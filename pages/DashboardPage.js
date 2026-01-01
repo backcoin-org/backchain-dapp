@@ -225,20 +225,20 @@ function getActivityStyle(type, details = {}) {
         return isWin ? ACTIVITY_ICONS.FORTUNE_WIN : ACTIVITY_ICONS.FORTUNE_LOSE;
     }
     
-    // Charity Pool - V9.0
-    if (t === 'DONATIONMADE' || t === 'CHARITY_DONATE' || t === 'DONATED' || t === 'DONATION') {
+    // Charity Pool - V9.0 (Updated to match Firebase types)
+    if (t === 'CHARITYDONATION' || t === 'DONATIONMADE' || t === 'CHARITY_DONATE' || t === 'DONATED' || t === 'DONATION' || t.includes('DONATION')) {
         return ACTIVITY_ICONS.CHARITY_DONATE;
     }
-    if (t === 'CAMPAIGNCREATED' || t === 'CHARITY_CREATE' || t === 'CAMPAIGN_CREATED') {
+    if (t === 'CHARITYCAMPAIGNCREATED' || t === 'CAMPAIGNCREATED' || t === 'CHARITY_CREATE' || t === 'CAMPAIGN_CREATED' || t.includes('CAMPAIGNCREATED')) {
         return ACTIVITY_ICONS.CHARITY_CREATE;
     }
-    if (t === 'CAMPAIGNCANCELLED' || t === 'CHARITY_CANCEL' || t === 'CAMPAIGN_CANCELLED') {
+    if (t === 'CHARITYCAMPAIGNCANCELLED' || t === 'CAMPAIGNCANCELLED' || t === 'CHARITY_CANCEL' || t === 'CAMPAIGN_CANCELLED' || t.includes('CANCELLED')) {
         return ACTIVITY_ICONS.CHARITY_CANCEL;
     }
-    if (t === 'FUNDSWITHDRAWN' || t === 'CHARITY_WITHDRAW' || t === 'CAMPAIGN_WITHDRAW') {
+    if (t === 'CHARITYFUNDSWITHDRAWN' || t === 'FUNDSWITHDRAWN' || t === 'CHARITY_WITHDRAW' || t === 'CAMPAIGN_WITHDRAW' || t.includes('WITHDRAWN')) {
         return ACTIVITY_ICONS.CHARITY_WITHDRAW;
     }
-    if (t === 'GOALREACHED' || t === 'CHARITY_GOAL' || t === 'CAMPAIGN_COMPLETED') {
+    if (t === 'CHARITYGOALREACHED' || t === 'GOALREACHED' || t === 'CHARITY_GOAL' || t === 'CAMPAIGN_COMPLETED') {
         return ACTIVITY_ICONS.CHARITY_GOAL_REACHED;
     }
     
@@ -1408,6 +1408,19 @@ function renderActivityItem(item, showAddress = false) {
         }
     }
     
+    // Charity Donation - Show net amount donated
+    if (t.includes('DONATION') || t.includes('CHARITY')) {
+        const netAmount = details.netAmount || details.amount;
+        const campaignId = details.campaignId;
+        if (netAmount && BigInt(netAmount) > 0n) {
+            const amountNum = formatBigNumber(BigInt(netAmount)).toFixed(2);
+            extraInfo = `<span class="text-pink-400 font-bold">${amountNum} BKC</span>`;
+            if (campaignId) {
+                extraInfo += `<span class="ml-1 text-[9px] text-zinc-500">Campaign #${campaignId}</span>`;
+            }
+        }
+    }
+    
     // Claim - Fee pago
     if (t.includes('CLAIM') || t.includes('REWARD')) {
         const feePaid = details.feePaid;
@@ -1423,7 +1436,7 @@ function renderActivityItem(item, showAddress = false) {
     }
 
     const txLink = item.txHash ? `${EXPLORER_BASE_URL}${item.txHash}` : '#';
-    let rawAmount = item.amount || details.amount || details.wagerAmount || details.prizeWon || "0";
+    let rawAmount = item.amount || details.netAmount || details.amount || details.wagerAmount || details.prizeWon || "0";
     const amountNum = formatBigNumber(BigInt(rawAmount));
     const amountDisplay = amountNum > 0.001 ? amountNum.toFixed(2) : '';
 
