@@ -1,5 +1,5 @@
-// modules/js/core/index.js
-// ✅ PRODUCTION V1.0 - Barrel Export for Core Modules
+// modules/core/index.js
+// ✅ PRODUCTION V1.1 - Fixed: Removed top-level await
 // 
 // This file re-exports all core modules for simplified imports.
 //
@@ -63,7 +63,19 @@ export {
 } from './transaction-engine.js';
 
 // ============================================================================
-// DEFAULT EXPORT
+// CONVENIENCE IMPORTS (Re-exports for easy access)
+// ============================================================================
+
+// Re-export everything from each module for convenience
+import { CacheManager, CacheTTL, CacheKeys } from './cache-manager.js';
+import { ErrorHandler, ErrorTypes } from './error-handler.js';
+import { NetworkManager, NETWORK_CONFIG } from './network-manager.js';
+import { GasManager } from './gas-manager.js';
+import { ValidationLayer } from './validation-layer.js';
+import { txEngine } from './transaction-engine.js';
+
+// ============================================================================
+// DEFAULT EXPORT (No top-level await)
 // ============================================================================
 
 /**
@@ -71,19 +83,19 @@ export {
  */
 export default {
     // Main transaction engine (most used)
-    txEngine: (await import('./transaction-engine.js')).txEngine,
+    txEngine,
     
     // Managers
-    CacheManager: (await import('./cache-manager.js')).CacheManager,
-    NetworkManager: (await import('./network-manager.js')).NetworkManager,
-    GasManager: (await import('./gas-manager.js')).GasManager,
+    CacheManager,
+    NetworkManager,
+    GasManager,
     
     // Handlers
-    ErrorHandler: (await import('./error-handler.js')).ErrorHandler,
-    ValidationLayer: (await import('./validation-layer.js')).ValidationLayer,
+    ErrorHandler,
+    ValidationLayer,
     
     // Config
-    ErrorTypes: (await import('./error-handler.js')).ErrorTypes,
-    NETWORK_CONFIG: (await import('./network-manager.js')).NETWORK_CONFIG,
-    CacheTTL: (await import('./cache-manager.js')).CacheTTL
+    ErrorTypes,
+    NETWORK_CONFIG,
+    CacheTTL
 };
