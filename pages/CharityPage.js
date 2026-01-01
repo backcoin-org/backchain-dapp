@@ -9,7 +9,21 @@ const ethers = window.ethers;
 
 // Campaign Status
 const CampaignStatus = { ACTIVE: 0, COMPLETED: 1, CANCELLED: 2, WITHDRAWN: 3 };
-const isCampaignActive = (c) => c.status === 0 && Number(c.deadline) > Math.floor(Date.now() / 1000);
+const StatusMap = { 'ACTIVE': 0, 'COMPLETED': 1, 'CANCELLED': 2, 'WITHDRAWN': 3 };
+
+// Normalize status to number (handles both string "ACTIVE" and number 0)
+const normalizeStatus = (status) => {
+    if (typeof status === 'number') return status;
+    if (typeof status === 'string') {
+        // Check if it's a string number like "0"
+        if (!isNaN(parseInt(status))) return parseInt(status);
+        // Check if it's a status name like "ACTIVE"
+        return StatusMap[status.toUpperCase()] ?? 0;
+    }
+    return 0;
+};
+
+const isCampaignActive = (c) => normalizeStatus(c.status) === 0 && Number(c.deadline) > Math.floor(Date.now() / 1000);
 
 // ABI - CORRECT ORDER matching CharityPool.sol struct
 const charityPoolABI = [
@@ -184,7 +198,7 @@ const getIdFromUrl = () => { const m=window.location.hash.match(/charity\/campai
 const setUrl = (id) => { window.location.hash=`charity/campaign/${id}`; };
 const clearUrl = () => { window.location.hash='charity'; };
 const getShareUrl = (id) => `${window.location.origin}/#charity/campaign/${id}`;
-const canWithdraw = (c) => { if(!c||!State?.userAddress) return false; const now=Math.floor(Date.now()/1000); const isCreator=c.creator?.toLowerCase()===State.userAddress?.toLowerCase(); const ended=Number(c.deadline)<=now; const hasFunds=BigInt(c.raisedAmount?.toString()||'0')>0n; return isCreator&&hasFunds&&((ended&&c.status===0)||c.status===2); };
+const canWithdraw = (c) => { if(!c||!State?.userAddress) return false; const now=Math.floor(Date.now()/1000); const isCreator=c.creator?.toLowerCase()===State.userAddress?.toLowerCase(); const ended=Number(c.deadline)<=now; const hasFunds=BigInt(c.raisedAmount?.toString()||'0')>0n; const status=normalizeStatus(c.status); return isCreator&&hasFunds&&((ended&&status===0)||status===2); };
 
 // Data Loading
 async function loadStats() {
@@ -200,7 +214,7 @@ async function loadCampaignsData() {
     console.log('🔄 Loading campaigns...');
     try {
         const response=await fetch(`${CHARITY_API.getCampaigns}?limit=50`);
-        if(response.ok) { const data=await response.json(); const campaigns=(data.campaigns||[]).map(c=>({id:String(c.id||c.campaignId),creator:c.creator,title:c.title,description:c.description,goalAmount:BigInt(c.goalAmount?.toString()||'0'),raisedAmount:BigInt(c.raisedAmount?.toString()||'0'),donationCount:Number(c.donationCount||0),deadline:Number(c.deadline||0),createdAt:Number(c.createdAt||0),status:Number(c.status||0),category:c.category||'humanitarian',imageUrl:c.imageUrl||null})); console.log('✅ Firebase:',campaigns.length); return campaigns; }
+        if(response.ok) { const data=await response.json(); const campaigns=(data.campaigns||[]).map(c=>({id:String(c.id||c.campaignId),creator:c.creator,title:c.title,description:c.description,goalAmount:BigInt(c.goalAmount?.toString()||'0'),raisedAmount:BigInt(c.raisedAmount?.toString()||'0'),donationCount:Number(c.donationCount||0),deadline:Number(c.deadline||0),createdAt:Number(c.createdAt||0),status:normalizeStatus(c.status),category:c.category||'humanitarian',imageUrl:c.imageUrl||null})); console.log('✅ Firebase:',campaigns.length); return campaigns; }
     } catch(e) { console.warn('Firebase:',e.message); }
     try {
         const provider=State?.publicProvider; if(!provider) return [];
@@ -222,7 +236,7 @@ async function loadCampaignsData() {
 async function loadData() { [CS.campaigns,CS.stats]=await Promise.all([loadCampaignsData(),loadStats()]); State.charityCampaigns=CS.campaigns; }
 
 // Render helpers
-const renderBadge = (status,cat=null) => { const cfg=STATUS_CONFIG[status]||STATUS_CONFIG[0]; let html=`<span class="cp-badge" style="background:${cfg.color}22;color:${cfg.color}"><i class="fa-solid ${cfg.icon}"></i> ${cfg.label}</span>`; if(cat) { const c=CATEGORIES[cat]||CATEGORIES.humanitarian; html+=`<span class="cp-badge" style="background:${c.color}22;color:${c.color}">${c.emoji} ${c.name}</span>`; } return html; };
+const renderBadge = (status,cat=null) => { const normalizedStatus = normalizeStatus(status); const cfg=STATUS_CONFIG[normalizedStatus]||STATUS_CONFIG[0]; let html=`<span class="cp-badge" style="background:${cfg.color}22;color:${cfg.color}"><i class="fa-solid ${cfg.icon}"></i> ${cfg.label}</span>`; if(cat) { const c=CATEGORIES[cat]||CATEGORIES.humanitarian; html+=`<span class="cp-badge" style="background:${c.color}22;color:${c.color}">${c.emoji} ${c.name}</span>`; } return html; };
 const renderLoading = () => `<div class="cp-loading"><div class="cp-spinner"></div><span style="color:var(--cp-muted)">Loading...</span></div>`;
 const renderEmpty = (msg) => `<div class="cp-empty"><i class="fa-solid fa-heart-crack"></i><h3>${msg}</h3><p style="color:var(--cp-muted)">Be the first to create a campaign!</p></div>`;
 
