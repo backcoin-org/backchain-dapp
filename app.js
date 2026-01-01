@@ -1,5 +1,5 @@
 // js/app.js
-// ✅ VERSÃO FINAL V7.6: Removido Presale - 100% Community-Driven
+// ✅ VERSÃO FINAL V7.7: Fixed URL Hash Routing for Charity Deep Links
 
 const inject = window.inject || (() => { console.warn("Dev Mode: Analytics disabled."); });
 if (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
@@ -318,6 +318,8 @@ function setupGlobalListeners() {
                 }
 
                 if (pageId) {
+                    // ✅ FIX: Update URL hash when navigating via sidebar
+                    window.location.hash = pageId;
                     navigateTo(pageId, false); 
                     if (sidebar && sidebar.classList.contains('translate-x-0')) {
                         sidebar.classList.remove('translate-x-0');
@@ -362,8 +364,30 @@ function setupGlobalListeners() {
 }
 
 // ============================================================================
-// 7. MAIN INITIALIZATION
+// 7. MAIN INITIALIZATION (✅ FIXED: URL Hash Routing)
 // ============================================================================
+
+/**
+ * ✅ FIX: Parse URL hash to determine initial page
+ * Supports formats like:
+ * - #charity
+ * - #charity/campaign/6
+ * - #dashboard
+ */
+function getInitialPageFromHash() {
+    const hash = window.location.hash.replace('#', '');
+    if (!hash) return 'dashboard';
+    
+    // Get the base route (first part before any /)
+    const baseRoute = hash.split('/')[0];
+    
+    // Check if it's a valid route
+    if (routes[baseRoute]) {
+        return baseRoute;
+    }
+    
+    return 'dashboard';
+}
 
 window.addEventListener('load', async () => {
     console.log("🚀 App Initializing...");
@@ -391,9 +415,22 @@ window.addEventListener('load', async () => {
     const preloader = document.getElementById('preloader');
     if(preloader) preloader.style.display = 'none';
     
-    navigateTo('dashboard', true);
+    // ✅ FIX: Navigate to the page specified in URL hash, or dashboard if none
+    const initialPage = getInitialPageFromHash();
+    console.log("📍 Initial page from URL:", initialPage, "Hash:", window.location.hash);
+    navigateTo(initialPage, true);
 
     console.log("✅ App Ready.");
+});
+
+// ✅ FIX: Listen for hash changes (browser back/forward, direct URL changes)
+window.addEventListener('hashchange', () => {
+    const newPage = getInitialPageFromHash();
+    console.log("🔄 Hash changed to:", newPage);
+    
+    if (newPage !== activePageId) {
+        navigateTo(newPage, true);
+    }
 });
 
 window.EarnPage = EarnPage; 
