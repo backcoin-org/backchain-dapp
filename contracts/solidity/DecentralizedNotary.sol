@@ -29,7 +29,7 @@ import "./BKCToken.sol";
  *      - Proof-of-Purchase mining integration
  *      - OpenSea compatible metadata
  *
- * @custom:security-contact security@backcoin.org
+ * @custom:security-contact dev@backcoin.org
  * @custom:website https://backcoin.org
  * @custom:network Arbitrum
  */

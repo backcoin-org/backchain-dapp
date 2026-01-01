@@ -7,27 +7,67 @@ pragma solidity 0.8.28;
  * @notice Defines communication standards between ecosystem contracts
  * @dev All ecosystem contracts reference these interfaces for interoperability.
  *
- *      Architecture Overview:
- *      ┌─────────────────────────────────────────────────────────────────┐
- *      │                     ECOSYSTEM MANAGER (Hub)                     │
- *      │         Central configuration and address registry              │
- *      └─────────────────────────────────────────────────────────────────┘
- *                                    │
- *          ┌─────────────┬──────────┼──────────┬─────────────┐
- *          ▼             ▼          ▼          ▼             ▼
- *    ┌──────────┐  ┌──────────┐ ┌────────┐ ┌────────┐  ┌──────────┐
- *    │ BKCToken │  │ Mining   │ │Delegate│ │Notary  │  │ Fortune  │
- *    │          │  │ Manager  │ │Manager │ │        │  │ Pool     │
- *    └──────────┘  └──────────┘ └────────┘ └────────┘  └──────────┘
- *          │             │          │          │             │
- *          └─────────────┴──────────┼──────────┴─────────────┘
- *                                   ▼
- *                    ┌─────────────────────────────┐
- *                    │   NFT Liquidity System      │
- *                    │  (Factory + Pools + NFT)    │
- *                    └─────────────────────────────┘
+ *      ╔═══════════════════════════════════════════════════════════════════╗
+ *      ║                    BACKCOIN ECOSYSTEM                             ║
+ *      ║            Real World Asset (RWA) Infrastructure                  ║
+ *      ╠═══════════════════════════════════════════════════════════════════╣
+ *      ║                                                                   ║
+ *      ║  Architecture Overview:                                           ║
+ *      ║  ┌─────────────────────────────────────────────────────────────┐  ║
+ *      ║  │                 ECOSYSTEM MANAGER (Hub)                     │  ║
+ *      ║  │         Central configuration and address registry          │  ║
+ *      ║  └─────────────────────────────────────────────────────────────┘  ║
+ *      ║                              │                                    ║
+ *      ║        ┌─────────────┬───────┼───────┬─────────────┐              ║
+ *      ║        ▼             ▼       ▼       ▼             ▼              ║
+ *      ║  ┌──────────┐  ┌──────────┐ ┌────────┐ ┌────────┐  ┌──────────┐   ║
+ *      ║  │ BKCToken │  │ Mining   │ │Delegate│ │Notary  │  │ Fortune  │   ║
+ *      ║  │          │  │ Manager  │ │Manager │ │        │  │ Pool     │   ║
+ *      ║  └──────────┘  └──────────┘ └────────┘ └────────┘  └──────────┘   ║
+ *      ║        │             │          │          │             │        ║
+ *      ║        └─────────────┴──────────┼──────────┴─────────────┘        ║
+ *      ║                                 ▼                                 ║
+ *      ║              ┌─────────────────────────────┐                      ║
+ *      ║              │   NFT Liquidity System      │                      ║
+ *      ║              │  (Factory + Pools + NFT)    │                      ║
+ *      ║              └─────────────────────────────┘                      ║
+ *      ║                                                                   ║
+ *      ╠═══════════════════════════════════════════════════════════════════╣
+ *      ║                    UPGRADE & EXTENSIBILITY                        ║
+ *      ╠═══════════════════════════════════════════════════════════════════╣
+ *      ║                                                                   ║
+ *      ║  When adding new ecosystem modules, there are TWO approaches:     ║
+ *      ║                                                                   ║
+ *      ║  ┌──────────────────────────────────────────────────────────────┐ ║
+ *      ║  │ OPTION 1: Module Registry (RECOMMENDED - No upgrade needed)  │ ║
+ *      ║  │ ──────────────────────────────────────────────────────────── │ ║
+ *      ║  │ Use: ecosystemManager.setModule(key, address)                │ ║
+ *      ║  │ Query: ecosystemManager.getModule(key)                       │ ║
+ *      ║  │                                                              │ ║
+ *      ║  │ Example:                                                     │ ║
+ *      ║  │   bytes32 key = keccak256("CHARITY_POOL");                   │ ║
+ *      ║  │   ecosystemManager.setModule(key, charityPoolAddress);       │ ║
+ *      ║  │   address pool = ecosystemManager.getModule(key);            │ ║
+ *      ║  └──────────────────────────────────────────────────────────────┘ ║
+ *      ║                                                                   ║
+ *      ║  ┌──────────────────────────────────────────────────────────────┐ ║
+ *      ║  │ OPTION 2: Core Address (Requires upgrade)                    │ ║
+ *      ║  │ ──────────────────────────────────────────────────────────── │ ║
+ *      ║  │ When: Need dedicated getter function (e.g., getXAddress())   │ ║
+ *      ║  │                                                              │ ║
+ *      ║  │ Steps:                                                       │ ║
+ *      ║  │ 1. Add interface function to IEcosystemManager               │ ║
+ *      ║  │ 2. Add state variable + getter to EcosystemManager           │ ║
+ *      ║  │ 3. Deploy new implementation                                 │ ║
+ *      ║  │ 4. Call proxy.upgradeTo(newImplementation)                   │ ║
+ *      ║  │                                                              │ ║
+ *      ║  │ CRITICAL: New storage variables MUST be added AFTER existing │ ║
+ *      ║  │ variables to maintain storage layout compatibility!          │ ║
+ *      ║  └──────────────────────────────────────────────────────────────┘ ║
+ *      ║                                                                   ║
+ *      ╚═══════════════════════════════════════════════════════════════════╝
  *
- * @custom:security-contact security@backcoin.org
+ * @custom:security-contact dev@backcoin.org
  * @custom:website https://backcoin.org
  * @custom:network Arbitrum
  */
@@ -44,6 +84,7 @@ pragma solidity 0.8.28;
  *      - NFT discount tiers
  *      - Distribution ratios
  *      - Contract addresses
+ *      - Module registry (extensible without upgrade)
  */
 interface IEcosystemManager {
     // ─────────────────────────────────────────────────────────────────────────
@@ -60,6 +101,8 @@ interface IEcosystemManager {
      *      - keccak256("NOTARY_SERVICE") - Document notarization fee
      *      - keccak256("NFT_POOL_BUY_TAX_BIPS") - NFT purchase tax
      *      - keccak256("NFT_POOL_SELL_TAX_BIPS") - NFT sale tax
+     *      - keccak256("FORTUNE_SERVICE_FEE") - Fortune Pool fee
+     *      - keccak256("RENTAL_FEE_BIPS") - NFT rental fee
      * @param _serviceKey Service identifier (bytes32 hash)
      * @return Fee amount (interpretation depends on service)
      */
@@ -97,7 +140,7 @@ interface IEcosystemManager {
     function getFeeDistributionBips(bytes32 _poolKey) external view returns (uint256);
 
     // ─────────────────────────────────────────────────────────────────────────
-    // Address Registry
+    // Core Address Registry
     // ─────────────────────────────────────────────────────────────────────────
 
     /// @notice Returns BKC token contract address
@@ -123,6 +166,40 @@ interface IEcosystemManager {
 
     /// @notice Returns NFTLiquidityPoolFactory contract address
     function getNFTLiquidityPoolFactoryAddress() external view returns (address);
+
+    /// @notice Returns RentalManager contract address
+    function getRentalManagerAddress() external view returns (address);
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Extensible Module Registry
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /**
+     * @notice Returns a module address from the extensible registry
+     * @dev Use this for new modules added without upgrading EcosystemManager.
+     *
+     *      Predefined module keys:
+     *      - keccak256("RENTAL_MANAGER")
+     *      - keccak256("CHARITY_POOL")
+     *      - keccak256("COMMUNITY_FUNDING")
+     *
+     *      Example usage:
+     *      ```solidity
+     *      address charityPool = ecosystemManager.getModule(keccak256("CHARITY_POOL"));
+     *      require(charityPool != address(0), "Module not registered");
+     *      ```
+     *
+     * @param _moduleKey Module identifier (bytes32)
+     * @return Module contract address (address(0) if not registered)
+     */
+    function getModule(bytes32 _moduleKey) external view returns (address);
+
+    /**
+     * @notice Checks if a module is registered in the extensible registry
+     * @param _moduleKey Module identifier (bytes32)
+     * @return True if module has a non-zero address
+     */
+    function isModuleRegistered(bytes32 _moduleKey) external view returns (bool);
 }
 
 // =============================================================================
@@ -244,7 +321,7 @@ interface IRewardBoosterNFT {
 
     /**
      * @notice Mints NFT from authorized sale contract
-     * @dev Only callable by saleContract address
+     * @dev Only callable by authorized minters (saleContract, authorizedMinters, or poolFactory pools)
      * @param _to Recipient address
      * @param _boostBips Boost power for the NFT
      * @param _metadataFile Metadata filename
@@ -280,6 +357,13 @@ interface IRewardBoosterNFT {
      * @return True if owns at least one NFT
      */
     function hasBooster(address _owner) external view returns (bool);
+
+    /**
+     * @notice Checks if an address is authorized to mint
+     * @param _minter Address to check
+     * @return True if authorized
+     */
+    function isAuthorizedMinter(address _minter) external view returns (bool);
 }
 
 // =============================================================================
@@ -331,7 +415,7 @@ interface INFTLiquidityPoolFactory {
 interface INFTLiquidityPool {
     /**
      * @notice Initializes pool with NFTs and BKC liquidity
-     * @dev Only callable once by owner
+     * @dev Only callable once by owner. All NFTs must match pool's boostBips.
      * @param _tokenIds Array of NFT token IDs
      * @param _bkcAmount Initial BKC liquidity
      */
@@ -342,7 +426,7 @@ interface INFTLiquidityPool {
 
     /**
      * @notice Adds more NFTs to existing pool
-     * @dev Can only be called after initialization
+     * @dev Can only be called after initialization. NFTs must match pool's boostBips.
      * @param _tokenIds Array of NFT token IDs to add
      */
     function addMoreNFTsToPool(uint256[] calldata _tokenIds) external;
@@ -379,9 +463,17 @@ interface INFTLiquidityPool {
 
     /**
      * @notice Sells NFT to pool
+     * @dev NFT must match pool's boostBips tier
      * @param _tokenId NFT token ID to sell
+     * @param _minPayout Minimum BKC expected (slippage protection)
      */
-    function sellNFT(uint256 _tokenId) external;
+    function sellNFT(uint256 _tokenId, uint256 _minPayout) external;
+
+    /**
+     * @notice Returns the boost tier for this pool
+     * @return Boost value in basis points
+     */
+    function boostBips() external view returns (uint256);
 }
 
 // =============================================================================
@@ -391,7 +483,7 @@ interface INFTLiquidityPool {
 /**
  * @title IBKCToken
  * @notice Interface for the BKC token
- * @dev Extended ERC20 with controlled minting (no burn functionality)
+ * @dev Extended ERC20 with controlled minting and burn functionality
  */
 interface IBKCToken {
     /// @notice Maximum token supply
@@ -402,6 +494,12 @@ interface IBKCToken {
 
     /// @notice Mints tokens (only owner/MiningManager)
     function mint(address _to, uint256 _amount) external;
+
+    /// @notice Burns tokens from caller's balance
+    function burn(uint256 _amount) external;
+
+    /// @notice Burns tokens from specified address (requires allowance)
+    function burnFrom(address _from, uint256 _amount) external;
 
     /// @notice Checks if address is blacklisted
     function isBlacklisted(address _account) external view returns (bool);
@@ -488,4 +586,103 @@ interface IDecentralizedNotary {
      * @return Discounted fee
      */
     function calculateFee(uint256 _boosterTokenId) external view returns (uint256);
+}
+
+// =============================================================================
+//                            RENTAL MANAGER
+// =============================================================================
+
+/**
+ * @title IRentalManager
+ * @notice Interface for NFT rental marketplace
+ * @dev Allows NFT owners to rent out their RewardBooster NFTs
+ */
+interface IRentalManager {
+    /**
+     * @notice Lists an NFT for rental
+     * @param _tokenId NFT token ID to list
+     * @param _pricePerDay Daily rental price in BKC
+     * @param _maxDays Maximum rental duration
+     */
+    function listForRental(
+        uint256 _tokenId,
+        uint256 _pricePerDay,
+        uint256 _maxDays
+    ) external;
+
+    /**
+     * @notice Rents an NFT
+     * @param _tokenId NFT token ID to rent
+     * @param _days Number of days to rent
+     */
+    function rent(uint256 _tokenId, uint256 _days) external;
+
+    /**
+     * @notice Returns the current renter of an NFT
+     * @param _tokenId NFT token ID
+     * @return Renter address (address(0) if not rented)
+     */
+    function getCurrentRenter(uint256 _tokenId) external view returns (address);
+
+    /**
+     * @notice Checks if an NFT is currently rented
+     * @param _tokenId NFT token ID
+     * @return True if rented
+     */
+    function isRented(uint256 _tokenId) external view returns (bool);
+}
+
+// =============================================================================
+//                            CHARITY POOL
+// =============================================================================
+
+/**
+ * @title ICharityPool
+ * @notice Interface for charitable crowdfunding module
+ * @dev Enables transparent fundraising with deflationary burn mechanics
+ */
+interface ICharityPool {
+    /**
+     * @notice Creates a new fundraising campaign
+     * @param _title Campaign title
+     * @param _description Campaign description or IPFS CID
+     * @param _goalAmount Target amount in BKC
+     * @param _durationInDays Campaign duration (1-180 days)
+     * @return campaignId Created campaign ID
+     */
+    function createCampaign(
+        string calldata _title,
+        string calldata _description,
+        uint256 _goalAmount,
+        uint256 _durationInDays
+    ) external returns (uint256 campaignId);
+
+    /**
+     * @notice Donates to a campaign
+     * @param _campaignId Campaign ID
+     * @param _amount Donation amount in BKC
+     */
+    function donate(uint256 _campaignId, uint256 _amount) external;
+
+    /**
+     * @notice Withdraws funds from a completed campaign
+     * @param _campaignId Campaign ID
+     */
+    function withdraw(uint256 _campaignId) external payable;
+
+    /**
+     * @notice Returns campaign details
+     * @param _campaignId Campaign ID
+     */
+    function getCampaign(uint256 _campaignId) external view returns (
+        address creator,
+        string memory title,
+        string memory description,
+        uint256 goalAmount,
+        uint256 raisedAmount,
+        uint256 donationCount,
+        uint256 deadline,
+        uint256 createdAt,
+        uint8 status
+    );
 }

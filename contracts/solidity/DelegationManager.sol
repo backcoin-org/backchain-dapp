@@ -26,7 +26,7 @@ import "./BKCToken.sol";
  *      Reward Distribution:
  *      userReward = (userPStake × accRewardPerStake) / 1e18 - rewardDebt
  *
- * @custom:security-contact security@backcoin.org
+ * @custom:security-contact dev@backcoin.org
  * @custom:website https://backcoin.org
  * @custom:network Arbitrum
  */

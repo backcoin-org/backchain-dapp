@@ -8,62 +8,8 @@ import "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.
 import "@openzeppelin/contracts-upgradeable/token/ERC20/utils/SafeERC20Upgradeable.sol";
 
 import "./IInterfaces.sol";
+import "./IBackcoinOracle.sol";
 import "./BKCToken.sol";
-
-/**
- * @title IBackcoinOracle
- * @author Backchain Protocol
- * @notice Interface for Backcoin Oracle - Free Randomness for Arbitrum Ecosystem
- * @dev This interface allows Solidity contracts to interact with the Backcoin Oracle,
- *      which is deployed as a Stylus (Rust/WASM) contract on Arbitrum.
- *
- *      ┌─────────────────────────────────────────────────────────────────────────┐
- *      │                         BACKCOIN ORACLE                                 │
- *      │                 "Free Randomness for Everyone"                          │
- *      ├─────────────────────────────────────────────────────────────────────────┤
- *      │                                                                         │
- *      │  This is Backchain Protocol's contribution to the Arbitrum ecosystem.  │
- *      │  Any project can use it - no fees, no tokens, no restrictions.         │
- *      │                                                                         │
- *      │  Security: 100% secure while Arbitrum is secure.                       │
- *      │  Same trust assumption as $18B+ in Arbitrum DeFi.                      │
- *      │                                                                         │
- *      └─────────────────────────────────────────────────────────────────────────┘
- *
- * @custom:security-contact dev@backcoin.org
- * @custom:website https://backcoin.org
- * @custom:docs https://github.com/backcoin-org/backchain-dapp/tree/main/docs
- */
-interface IBackcoinOracle {
-    /**
-     * @notice Generate random numbers (CAN repeat)
-     * @dev IMPORTANT: Uses camelCase (Stylus SDK convention)
-     * @param count How many random numbers to generate (1-500)
-     * @param min Minimum value inclusive
-     * @param max Maximum value inclusive
-     * @return Array of random numbers
-     */
-    function getNumbers(
-        uint64 count,
-        uint64 min,
-        uint64 max
-    ) external returns (uint256[] memory);
-
-    /**
-     * @notice Generate multiple groups of random numbers in ONE transaction
-     * @dev More gas-efficient than multiple separate calls
-     *      IMPORTANT: Uses camelCase (Stylus SDK convention)
-     * @param counts Array of how many numbers per group
-     * @param mins Array of minimum values per group
-     * @param maxs Array of maximum values per group
-     * @return Array of arrays with random numbers per group
-     */
-    function getBatch(
-        uint64[] calldata counts,
-        uint64[] calldata mins,
-        uint64[] calldata maxs
-    ) external returns (uint256[][] memory);
-}
 
 /**
  * @title Fortune Pool
@@ -715,7 +661,7 @@ contract FortunePool is
                 unchecked { ++i; }
             }
             
-            // Get all random numbers in one call using getBatch (camelCase!)
+            // Get all random numbers in one call using getBatch
             uint256[][] memory batchResults = backcoinOracle.getBatch(counts, mins, maxs);
             
             // Flatten batch results to rolls array
@@ -748,7 +694,7 @@ contract FortunePool is
             
             matches = new bool[](1);
             
-            // Get single random number (camelCase!)
+            // Get single random number
             rolls = backcoinOracle.getNumbers(1, 1, maxRange);
             
             if (_guesses[0] == rolls[0]) {

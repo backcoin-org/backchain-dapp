@@ -23,11 +23,11 @@ import "./BKCToken.sol";
  *      ├─────────────────────────────────────────────────────────────────┤
  *      │  K = NFT_COUNT × BKC_BALANCE (constant product)                 │
  *      │                                                                 │
- *      │  Buy Price = K / (NFT_COUNT - 1) - BKC_BALANCE                 │
- *      │  Sell Price = BKC_BALANCE - K / (NFT_COUNT + 1)                │
+ *      │  Buy Price = K / (NFT_COUNT - 1) - BKC_BALANCE                  │
+ *      │  Sell Price = BKC_BALANCE - K / (NFT_COUNT + 1)                 │
  *      │                                                                 │
- *      │  As NFTs decrease → Price increases (scarcity)                 │
- *      │  As NFTs increase → Price decreases (abundance)                │
+ *      │  As NFTs decrease → Price increases (scarcity)                  │
+ *      │  As NFTs increase → Price decreases (abundance)                 │
  *      └─────────────────────────────────────────────────────────────────┘
  *
  *      Price Movement Example (K = 1000):
@@ -174,6 +174,7 @@ contract NFTLiquidityPool is
     error SlippageExceeded();
     error MathOverflow();
     error InvalidBoostTier();
+    error NFTBoostMismatch();
 
     // =========================================================================
     //                           INITIALIZATION
@@ -238,6 +239,7 @@ contract NFTLiquidityPool is
     /**
      * @notice Initializes pool with NFTs and BKC liquidity
      * @dev Can only be called once. Sets the initial K constant.
+     *      All NFTs must have the same boostBips as the pool.
      * @param _tokenIds Array of NFT token IDs to deposit
      * @param _bkcAmount Amount of BKC to deposit
      */
@@ -251,12 +253,17 @@ contract NFTLiquidityPool is
 
         pool.initialized = true;
 
-        // Transfer NFTs to pool
+        // Transfer NFTs to pool with boost validation
         address boosterAddress = ecosystemManager.getBoosterAddress();
-        IERC721Upgradeable nftContract = IERC721Upgradeable(boosterAddress);
+        IRewardBoosterNFT nftContract = IRewardBoosterNFT(boosterAddress);
 
         for (uint256 i = 0; i < _tokenIds.length;) {
-            nftContract.safeTransferFrom(msg.sender, address(this), _tokenIds[i]);
+            // Validate NFT boost tier matches pool tier
+            if (nftContract.boostBips(_tokenIds[i]) != boostBips) {
+                revert NFTBoostMismatch();
+            }
+            
+            IERC721Upgradeable(boosterAddress).safeTransferFrom(msg.sender, address(this), _tokenIds[i]);
             _addTokenToPool(_tokenIds[i]);
             unchecked { ++i; }
         }
@@ -274,7 +281,8 @@ contract NFTLiquidityPool is
 
     /**
      * @notice Adds more NFTs to an existing pool
-     * @dev Updates K constant to reflect new liquidity
+     * @dev Updates K constant to reflect new liquidity.
+     *      All NFTs must have the same boostBips as the pool.
      * @param _tokenIds Array of NFT token IDs to add
      */
     function addMoreNFTsToPool(
@@ -284,10 +292,15 @@ contract NFTLiquidityPool is
         if (_tokenIds.length == 0) revert ZeroAmount();
 
         address boosterAddress = ecosystemManager.getBoosterAddress();
-        IERC721Upgradeable nftContract = IERC721Upgradeable(boosterAddress);
+        IRewardBoosterNFT nftContract = IRewardBoosterNFT(boosterAddress);
 
         for (uint256 i = 0; i < _tokenIds.length;) {
-            nftContract.safeTransferFrom(msg.sender, address(this), _tokenIds[i]);
+            // Validate NFT boost tier matches pool tier
+            if (nftContract.boostBips(_tokenIds[i]) != boostBips) {
+                revert NFTBoostMismatch();
+            }
+            
+            IERC721Upgradeable(boosterAddress).safeTransferFrom(msg.sender, address(this), _tokenIds[i]);
             _addTokenToPool(_tokenIds[i]);
             unchecked { ++i; }
         }
@@ -383,6 +396,7 @@ contract NFTLiquidityPool is
 
     /**
      * @notice Sells an NFT to the pool
+     * @dev NFT must have matching boostBips for the pool
      * @param _tokenId Token ID to sell
      * @param _minPayout Minimum BKC expected (slippage protection)
      */
@@ -393,10 +407,15 @@ contract NFTLiquidityPool is
         if (!pool.initialized) revert PoolNotInitialized();
 
         address boosterAddress = ecosystemManager.getBoosterAddress();
-        IERC721Upgradeable nftContract = IERC721Upgradeable(boosterAddress);
+        IRewardBoosterNFT nftContract = IRewardBoosterNFT(boosterAddress);
 
         // Verify ownership
-        if (nftContract.ownerOf(_tokenId) != msg.sender) revert NotNFTOwner();
+        if (IERC721Upgradeable(boosterAddress).ownerOf(_tokenId) != msg.sender) revert NotNFTOwner();
+
+        // Validate NFT boost tier matches pool tier
+        if (nftContract.boostBips(_tokenId) != boostBips) {
+            revert NFTBoostMismatch();
+        }
 
         // Calculate payout
         uint256 grossValue = getSellPrice();
@@ -409,7 +428,7 @@ contract NFTLiquidityPool is
         if (pool.bkcBalance < grossValue) revert InsufficientLiquidity();
 
         // Transfer NFT to pool
-        nftContract.safeTransferFrom(msg.sender, address(this), _tokenId);
+        IERC721Upgradeable(boosterAddress).safeTransferFrom(msg.sender, address(this), _tokenId);
         _addTokenToPool(_tokenId);
 
         // Pay seller

@@ -8,6 +8,8 @@ import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/utils/StringsUpgradeable.sol";
 
+import "./IInterfaces.sol";
+
 /**
  * @title RewardBoosterNFT
  * @author Backchain Protocol
@@ -32,10 +34,10 @@ import "@openzeppelin/contracts-upgradeable/utils/StringsUpgradeable.sol";
  *
  *      Minting:
  *      - Owner can mint for giveaways/partnerships via ownerMintBatch()
- *      - Authorized sale contract can mint via mintFromSale()
- *      - NFTLiquidityPool uses mintFromSale() for public sales
+ *      - Authorized minters can mint via mintFromSale()
+ *      - NFTLiquidityPools are authorized via Factory integration
  *
- * @custom:security-contact security@backcoin.org
+ * @custom:security-contact dev@backcoin.org
  * @custom:website https://backcoin.org
  * @custom:network Arbitrum
  */
@@ -71,7 +73,14 @@ contract RewardBoosterNFT is
     /// @notice Next token ID to mint
     uint256 private _nextTokenId;
 
-    /// @notice Authorized contract for public sales (NFTLiquidityPool)
+    /// @notice Authorized minters mapping (address => authorized)
+    mapping(address => bool) public authorizedMinters;
+
+    /// @notice NFTLiquidityPoolFactory address for automatic pool authorization
+    address public poolFactory;
+
+    /// @notice Legacy: single sale contract (kept for backward compatibility)
+    /// @dev New deployments should use authorizedMinters mapping
     address public saleContract;
 
     // =========================================================================
@@ -89,10 +98,22 @@ contract RewardBoosterNFT is
     /// @notice Emitted when base URI is updated
     event BaseURIUpdated(string previousURI, string newURI);
 
-    /// @notice Emitted when sale contract is updated
+    /// @notice Emitted when sale contract is updated (legacy)
     event SaleContractUpdated(
         address indexed previousContract,
         address indexed newContract
+    );
+
+    /// @notice Emitted when a minter is authorized or revoked
+    event MinterAuthorizationChanged(
+        address indexed minter,
+        bool authorized
+    );
+
+    /// @notice Emitted when pool factory is updated
+    event PoolFactoryUpdated(
+        address indexed previousFactory,
+        address indexed newFactory
     );
 
     // =========================================================================
@@ -151,8 +172,8 @@ contract RewardBoosterNFT is
     }
 
     /**
-     * @notice Sets the authorized sale contract
-     * @dev Usually the NFTLiquidityPoolFactory or a specific pool
+     * @notice Sets the authorized sale contract (legacy - single contract)
+     * @dev Kept for backward compatibility. Use setMinterAuthorization for multiple minters.
      * @param _saleContract Address of the sale contract
      */
     function setSaleContract(address _saleContract) external onlyOwner {
@@ -160,6 +181,51 @@ contract RewardBoosterNFT is
         saleContract = _saleContract;
 
         emit SaleContractUpdated(previousContract, _saleContract);
+    }
+
+    /**
+     * @notice Sets authorization for a minter address
+     * @dev Use this for authorizing multiple pools or sale contracts
+     * @param _minter Address to authorize/revoke
+     * @param _authorized True to authorize, false to revoke
+     */
+    function setMinterAuthorization(address _minter, bool _authorized) external onlyOwner {
+        if (_minter == address(0)) revert ZeroAddress();
+        
+        authorizedMinters[_minter] = _authorized;
+        
+        emit MinterAuthorizationChanged(_minter, _authorized);
+    }
+
+    /**
+     * @notice Batch authorize multiple minters
+     * @param _minters Array of addresses to authorize
+     * @param _authorized Authorization status for all
+     */
+    function setMinterAuthorizationBatch(
+        address[] calldata _minters,
+        bool _authorized
+    ) external onlyOwner {
+        for (uint256 i = 0; i < _minters.length;) {
+            if (_minters[i] == address(0)) revert ZeroAddress();
+            
+            authorizedMinters[_minters[i]] = _authorized;
+            emit MinterAuthorizationChanged(_minters[i], _authorized);
+            
+            unchecked { ++i; }
+        }
+    }
+
+    /**
+     * @notice Sets the NFTLiquidityPoolFactory address
+     * @dev Pools created by this factory are automatically authorized
+     * @param _factory Address of the pool factory
+     */
+    function setPoolFactory(address _factory) external onlyOwner {
+        address previousFactory = poolFactory;
+        poolFactory = _factory;
+
+        emit PoolFactoryUpdated(previousFactory, _factory);
     }
 
     /**
@@ -209,8 +275,12 @@ contract RewardBoosterNFT is
     // =========================================================================
 
     /**
-     * @notice Mints an NFT from the authorized sale contract
-     * @dev Called by NFTLiquidityPool during public sales
+     * @notice Mints an NFT from an authorized minter
+     * @dev Called by NFTLiquidityPool during public sales.
+     *      Authorization checked in order:
+     *      1. Legacy saleContract
+     *      2. authorizedMinters mapping
+     *      3. Pool created by poolFactory (via INFTLiquidityPoolFactory.isPool)
      * @param _to Recipient address
      * @param _boostBips Boost power for the NFT
      * @param _metadataFile Metadata file name
@@ -221,11 +291,21 @@ contract RewardBoosterNFT is
         uint256 _boostBips,
         string calldata _metadataFile
     ) external returns (uint256) {
-        if (msg.sender != saleContract) revert UnauthorizedMinter();
+        // Check authorization
+        if (!_isAuthorizedMinter(msg.sender)) revert UnauthorizedMinter();
         if (_to == address(0)) revert ZeroAddress();
         if (_boostBips == 0 || _boostBips > MAX_BOOST_BIPS) revert InvalidBoostValue();
 
         return _mintBooster(_to, _boostBips, _metadataFile);
+    }
+
+    /**
+     * @notice Checks if an address is authorized to mint
+     * @param _minter Address to check
+     * @return True if authorized
+     */
+    function isAuthorizedMinter(address _minter) external view returns (bool) {
+        return _isAuthorizedMinter(_minter);
     }
 
     // =========================================================================
@@ -335,6 +415,36 @@ contract RewardBoosterNFT is
     // =========================================================================
     //                         INTERNAL FUNCTIONS
     // =========================================================================
+
+    /**
+     * @dev Checks if an address is authorized to mint
+     *      Authorization hierarchy:
+     *      1. Legacy saleContract (backward compatibility)
+     *      2. authorizedMinters mapping
+     *      3. Valid pool from poolFactory
+     */
+    function _isAuthorizedMinter(address _minter) internal view returns (bool) {
+        // Check legacy single sale contract
+        if (_minter == saleContract && saleContract != address(0)) {
+            return true;
+        }
+        
+        // Check authorized minters mapping
+        if (authorizedMinters[_minter]) {
+            return true;
+        }
+        
+        // Check if minter is a valid pool from factory
+        if (poolFactory != address(0)) {
+            try INFTLiquidityPoolFactory(poolFactory).isPool(_minter) returns (bool isPool) {
+                if (isPool) return true;
+            } catch {
+                // Factory call failed, continue to return false
+            }
+        }
+        
+        return false;
+    }
 
     /**
      * @dev Internal function to mint a booster NFT

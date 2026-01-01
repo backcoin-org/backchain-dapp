@@ -1,8 +1,14 @@
 {
-  "VERSION": "1.0.0",
-  "DESCRIPTION": "Configuração Oficial Backchain",
+  "VERSION": "2.0.0",
+  "DESCRIPTION": "Backchain Ecosystem - Deploy Unificado",
   "NETWORK": "arbitrum-sepolia",
-  "CREATED_AT": "2025-12-29T00:43:57.666Z",
+  "CREATED_AT": "2025-12-31T20:17:21.440Z",
+  "externalContracts": {
+    "BACKCOIN_ORACLE": "0x16346f5a45f9615f1c894414989f0891c54ef07b"
+  },
+  "wallets": {
+    "TREASURY": "0xc93030333E3a235c2605BcB7C7330650B600B6D0"
+  },
   "serviceFeesBIPS": {
     "DELEGATION_FEE_BIPS": "50",
     "UNSTAKE_FEE_BIPS": "100",
@@ -13,14 +19,7 @@
     "FORTUNE_POOL_GAME_FEE": "1000",
     "RENTAL_MARKET_TAX_BIPS": "1000"
   },
-  "serviceFeesBKC": {
-    "NOTARY_SERVICE": "1.0"
-  },
-  "fortunePool": {
-    "serviceFee1xETH": "0.000001",
-    "serviceFee5xETH": "0.000005",
-    "gameFeeBips": "1000"
-  },
+  "LAST_UPDATED": "2025-12-31T20:22:51.487Z",
   "miningDistribution": {
     "TREASURY": "3000",
     "DELEGATOR_POOL": "7000"
@@ -37,13 +36,5 @@
     "5000": "5000",
     "6000": "6000",
     "7000": "7000"
-  },
-  "fortunePoolTiers": {
-    "1": "3,20000",
-    "2": "10,50000",
-    "3": "100,500000"
-  },
-  "wallets": {
-    "TREASURY_ADDRESS": "0xc93030333E3a235c2605BcB7C7330650B600B6D0"
   }
 }
