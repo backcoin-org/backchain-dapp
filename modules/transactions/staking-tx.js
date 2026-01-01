@@ -1,5 +1,5 @@
 // modules/transactions/staking-tx.js
-// ✅ PRODUCTION V1.1 - Staking/Delegation Transaction Handlers
+// ✅ PRODUCTION V1.2 - Staking/Delegation Transaction Handlers
 // 
 // This module provides transaction functions for the DelegationManager contract.
 // Each function uses the transaction engine for proper validation and execution.
@@ -13,19 +13,40 @@
 // ============================================================================
 
 import { txEngine, ValidationLayer } from '../core/index.js';
-import { addresses } from '../../config.js';
+import { addresses, contractAddresses } from '../../config.js';
 
 // ============================================================================
 // 1. CONTRACT CONFIGURATION
 // ============================================================================
 
 /**
- * Get contract addresses dynamically from config
+ * Get contract addresses dynamically from multiple sources
+ * This is called at transaction time, not import time, ensuring addresses are loaded
  */
 function getContracts() {
+    // Try multiple sources - addresses should be populated by loadAddresses() at app init
+    const delegationManager = addresses?.delegationManager || 
+                              contractAddresses?.delegationManager ||
+                              window.contractAddresses?.delegationManager ||
+                              window.ENV?.DELEGATION_MANAGER_ADDRESS;
+    
+    const bkcToken = addresses?.bkcToken || 
+                     contractAddresses?.bkcToken ||
+                     window.contractAddresses?.bkcToken ||
+                     window.ENV?.BKC_TOKEN_ADDRESS;
+    
+    // Debug log to help troubleshoot
+    if (!delegationManager) {
+        console.error('❌ DelegationManager address not found!', {
+            addresses,
+            contractAddresses,
+            windowContractAddresses: window.contractAddresses
+        });
+    }
+    
     return {
-        BKC_TOKEN: addresses?.bkcToken || window.ENV?.BKC_TOKEN_ADDRESS,
-        DELEGATION_MANAGER: addresses?.delegationManager || window.ENV?.DELEGATION_MANAGER_ADDRESS
+        BKC_TOKEN: bkcToken,
+        DELEGATION_MANAGER: delegationManager
     };
 }
 
