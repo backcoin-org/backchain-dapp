@@ -112,6 +112,7 @@ export const ErrorTypes = {
     // ─────────────────────────────────────────────────────────────────────
     // GENERIC
     // ─────────────────────────────────────────────────────────────────────
+    CONTRACT_ERROR: 'contract_error',
     UNKNOWN: 'unknown'
 };
 
@@ -191,6 +192,7 @@ export const ErrorMessages = {
     [ErrorTypes.EMPTY_METADATA]: 'Document metadata cannot be empty',
     
     // Generic
+    [ErrorTypes.CONTRACT_ERROR]: 'Transaction cannot be completed. Please check your inputs and try again',
     [ErrorTypes.UNKNOWN]: 'An unexpected error occurred. Please try again'
 };
 
@@ -264,6 +266,7 @@ const ErrorConfig = {
     [ErrorTypes.EMPTY_METADATA]: { layer: 4, retry: false },
     
     // Generic
+    [ErrorTypes.CONTRACT_ERROR]: { layer: 4, retry: false },
     [ErrorTypes.UNKNOWN]: { layer: 5, retry: false }
 };
 
@@ -409,7 +412,26 @@ export const ErrorHandler = {
         if (code === -32002) {
             return ErrorTypes.RPC_RATE_LIMITED;
         }
-        if (code === -32603) {
+        
+        // -32603 can be RPC error OR contract revert
+        // Check if it's a contract revert (CALL_EXCEPTION) first
+        if (code === -32603 || code === 'CALL_EXCEPTION') {
+            // If message contains revert indicators, it's a contract error, not RPC
+            if (message.includes('revert') || 
+                message.includes('require') ||
+                message.includes('execution failed') ||
+                message.includes('call_exception') ||
+                error?.code === 'CALL_EXCEPTION') {
+                // Search patterns to classify the specific contract error
+                for (const { pattern, type } of ErrorPatterns) {
+                    if (pattern.test(message)) {
+                        return type;
+                    }
+                }
+                // Generic contract error (e.g., no rewards to claim)
+                return ErrorTypes.CONTRACT_ERROR;
+            }
+            // True RPC error
             return ErrorTypes.RPC_UNHEALTHY;
         }
         
@@ -601,6 +623,10 @@ export const ErrorHandler = {
             },
             'unstake': {
                 [ErrorTypes.LOCK_PERIOD_ACTIVE]: 'Your tokens are still locked. Use force unstake to withdraw early (penalty applies)'
+            },
+            'claimRewards': {
+                [ErrorTypes.CONTRACT_ERROR]: 'No rewards available to claim',
+                [ErrorTypes.NO_REWARDS]: 'No rewards available to claim'
             }
         };
         
