@@ -477,4 +477,4 @@ window.addEventListener('hashchange', () => {
 window.EarnPage = EarnPage; 
 window.openConnectModal = openConnectModal;
 window.disconnectWallet = disconnectWallet;
-window.updateUIState = updateUIState;d
+window.updateUIState = updateUIState;
