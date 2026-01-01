@@ -1,5 +1,7 @@
 // js/pages/CharityPage.js
-// ✅ PRODUCTION V2.0 - Charity Pool with Shareable Campaign Pages & Full Functionality
+// ✅ PRODUCTION V2.1 - Charity Pool with Shareable Campaign Pages & Full Functionality
+// FIX V2.1: Added missing attachMainEventListeners and attachDetailEventListeners functions
+// FIX V2.1: Updated canWithdraw to allow withdrawal after campaign cancellation
 
 import { State } from '../state.js';
 import { showToast } from '../ui-feedback.js';
@@ -575,13 +577,205 @@ function canWithdraw(campaign, userAddress) {
     const isCreator = campaign.creator?.toLowerCase() === userAddress.toLowerCase();
     const hasEnded = Number(campaign.deadline) <= now;
     const isActive = campaign.status === STATUS.ACTIVE;
+    const isCancelled = campaign.status === STATUS.CANCELLED;
     const hasFunds = BigInt(campaign.raisedAmount?.toString() || '0') > 0n;
-    return isCreator && hasEnded && isActive && hasFunds;
+    // Can withdraw if: creator AND has funds AND (campaign ended OR cancelled)
+    return isCreator && hasFunds && ((hasEnded && isActive) || isCancelled);
 }
 
 // ============================================================================
 // MAIN RENDER
 // ============================================================================
+
+// ============================================================================
+// EVENT LISTENERS - MAIN VIEW (FIX: This function was missing!)
+// ============================================================================
+function attachMainEventListeners() {
+    // Category cards
+    document.querySelectorAll('.charity-category-card').forEach(card => {
+        card.addEventListener('click', (e) => {
+            const category = card.dataset.category;
+            if (category) {
+                Charity.selectedCategory = category;
+                updateCampaignsGrid();
+            }
+        });
+    });
+
+    // Create buttons (category specific)
+    document.querySelectorAll('.btn-create-category').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const category = btn.dataset.category;
+            openCreateModal(category);
+        });
+    });
+
+    // View category buttons
+    document.querySelectorAll('.btn-view-category').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const category = btn.dataset.category;
+            Charity.selectedCategory = category;
+            document.getElementById('filter-category').value = category;
+            updateCampaignsGrid();
+            // Scroll to campaigns
+            document.getElementById('campaigns-grid')?.scrollIntoView({ behavior: 'smooth' });
+        });
+    });
+
+    // Campaign cards - Learn More
+    document.querySelectorAll('.btn-campaign-details').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const campaignId = btn.dataset.id;
+            setCampaignUrl(campaignId);
+            renderCampaignDetailPage(campaignId);
+        });
+    });
+
+    // Campaign cards - Quick Donate
+    document.querySelectorAll('.btn-donate-quick').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const campaignId = btn.dataset.id;
+            openDonateModal(campaignId);
+        });
+    });
+
+    // Filter category select
+    const filterSelect = document.getElementById('filter-category');
+    if (filterSelect) {
+        filterSelect.addEventListener('change', (e) => {
+            Charity.selectedCategory = e.target.value || null;
+            updateCampaignsGrid();
+        });
+    }
+
+    // My Campaigns buttons
+    document.getElementById('btn-my-campaigns')?.addEventListener('click', openMyCampaignsModal);
+    document.getElementById('btn-my-campaigns-mobile')?.addEventListener('click', openMyCampaignsModal);
+
+    // Refresh buttons
+    document.getElementById('btn-refresh-main')?.addEventListener('click', () => {
+        clearCharityCache();
+        loadCharityData();
+        showToast('Refreshing data...', 'info');
+    });
+    document.getElementById('btn-refresh-campaigns')?.addEventListener('click', () => {
+        clearCharityCache();
+        loadCharityData();
+    });
+
+    // Modal close buttons
+    document.querySelectorAll('.btn-close-modal').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const modalId = btn.dataset.modal;
+            closeModal(modalId);
+        });
+    });
+
+    // Modal background click to close
+    document.querySelectorAll('.charity-modal').forEach(modal => {
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) {
+                modal.classList.remove('active');
+            }
+        });
+    });
+
+    // Create form submit
+    document.getElementById('form-create-campaign')?.addEventListener('submit', handleCreateCampaign);
+
+    // Donate form submit
+    document.getElementById('form-donate')?.addEventListener('submit', handleDonate);
+
+    // Donate amount input - update fees
+    document.getElementById('donate-amount')?.addEventListener('input', updateDonationFees);
+}
+
+// ============================================================================
+// EVENT LISTENERS - CAMPAIGN DETAIL VIEW (FIX: This function was missing!)
+// ============================================================================
+function attachDetailEventListeners(campaign) {
+    // Donate amount input
+    const donateInput = document.getElementById('detail-donate-amount');
+    if (donateInput) {
+        donateInput.addEventListener('input', updateDetailFees);
+    }
+
+    // Donate button
+    const donateBtn = document.getElementById('btn-detail-donate');
+    if (donateBtn) {
+        donateBtn.addEventListener('click', async () => {
+            if (!State.isConnected) {
+                showToast('Please connect your wallet first', 'warning');
+                return;
+            }
+
+            const amount = document.getElementById('detail-donate-amount')?.value;
+            if (!amount || parseFloat(amount) <= 0) {
+                showToast('Please enter a valid amount', 'error');
+                return;
+            }
+
+            const result = await executeDonate(campaign.id, amount, donateBtn);
+            if (result.success) {
+                clearCharityCache();
+                renderCampaignDetailPage(campaign.id);
+            }
+        });
+    }
+
+    // Withdraw button
+    const withdrawBtn = document.getElementById('btn-withdraw');
+    if (withdrawBtn) {
+        withdrawBtn.addEventListener('click', async () => {
+            if (!State.isConnected) {
+                showToast('Please connect your wallet first', 'warning');
+                return;
+            }
+
+            if (!confirm('Are you sure you want to withdraw funds?\\n\\nWithdrawal fee: 0.001 ETH\\n' + 
+                (calculateProgress(campaign.raisedAmount, campaign.goalAmount) < 100 
+                    ? '⚠️ Goal not reached: 10% penalty will apply' 
+                    : ''))) {
+                return;
+            }
+
+            const result = await executeWithdraw(campaign.id, withdrawBtn);
+            if (result.success) {
+                clearCharityCache();
+                renderCampaignDetailPage(campaign.id);
+            }
+        });
+    }
+
+    // Cancel button
+    const cancelBtn = document.getElementById('btn-cancel');
+    if (cancelBtn) {
+        cancelBtn.addEventListener('click', async () => {
+            if (!State.isConnected) {
+                showToast('Please connect your wallet first', 'warning');
+                return;
+            }
+
+            if (!confirm('Are you sure you want to cancel this campaign?\\n\\nYou will be able to withdraw funds after cancellation.')) {
+                return;
+            }
+
+            const result = await executeCancelCampaign(campaign.id, cancelBtn);
+            if (result.success) {
+                clearCharityCache();
+                renderCampaignDetailPage(campaign.id);
+            }
+        });
+    }
+}
+
+// Make updateDetailFees available globally for onclick handlers
+window.updateDetailFees = updateDetailFees;
+
 function render() {
     const container = document.getElementById('charity');
     if (!container) return;

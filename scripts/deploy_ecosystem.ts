@@ -1,7 +1,13 @@
 // scripts/deploy_ecosystem.ts
 // ════════════════════════════════════════════════════════════════════════════
-// 🚀 BACKCHAIN ECOSYSTEM - DEPLOY COMPLETO UNIFICADO
+// 🚀 BACKCHAIN ECOSYSTEM - DEPLOY COMPLETO UNIFICADO V2.2
 // ════════════════════════════════════════════════════════════════════════════
+//
+// CHANGELOG V2.2:
+// - CharityPool: SERVICE_KEY corrigido para "CHARITY_POOL_SERVICE"
+// - CharityPool: Configuração inicial de limites e taxas
+// - CharityPool: maxActiveCampaignsPerWallet = 20
+// - Autorização do CharityPool no MiningManager corrigida
 //
 // Este script executa o deploy completo do ecossistema Backcoin:
 // - Deploy de todos os contratos (UUPS Proxies)
@@ -98,6 +104,29 @@ const SERVICE_FEES_FIXED = {
 // Fortune Pool Service Fees (ETH)
 const FORTUNE_SERVICE_FEE_1X = "0.000001";  // Mode 1x (Jackpot)
 const FORTUNE_SERVICE_FEE_5X = "0.000005";  // Mode 5x (Cumulative)
+
+// ════════════════════════════════════════════════════════════════════════════
+//                    🎗️ CHARITY POOL CONFIG (V2.2)
+// ════════════════════════════════════════════════════════════════════════════
+
+const CHARITY_CONFIG = {
+    // SERVICE_KEY deve ser "CHARITY_POOL_SERVICE" (não "CHARITY_DONATION_FEE")
+    SERVICE_KEY: "CHARITY_POOL_SERVICE",
+    
+    // Taxas de doação
+    DONATION_MINING_FEE_BIPS: 400n,      // 4% - Taxa de mineração
+    DONATION_BURN_FEE_BIPS: 100n,        // 1% - Taxa de queima
+    
+    // Taxa de saque
+    WITHDRAWAL_FEE_ETH: "0.001",          // 0.001 ETH
+    
+    // Penalidade se meta não atingida
+    GOAL_NOT_MET_BURN_BIPS: 1000n,       // 10% queimado se meta não atingida
+    
+    // Limites
+    MIN_DONATION_AMOUNT: "1",             // 1 BKC mínimo por doação
+    MAX_ACTIVE_CAMPAIGNS_PER_WALLET: 20n, // Máximo de campanhas ativas por carteira
+};
 
 // ════════════════════════════════════════════════════════════════════════════
 //                    📊 DISTRIBUIÇÃO DE REWARDS
@@ -219,8 +248,8 @@ function clearConfigFiles() {
     fs.writeFileSync(addressesFilePath, JSON.stringify({}, null, 2));
     
     const defaultRules = {
-        VERSION: "2.0.0",
-        DESCRIPTION: "Backchain Ecosystem - Deploy Unificado",
+        VERSION: "2.2.0",
+        DESCRIPTION: "Backchain Ecosystem - Deploy Unificado V2.2",
         NETWORK: "arbitrum-sepolia",
         CREATED_AT: new Date().toISOString(),
         externalContracts: { BACKCOIN_ORACLE: EXTERNAL_CONTRACTS.BACKCOIN_ORACLE },
@@ -413,6 +442,134 @@ async function setBoosterDiscountIfNeeded(hub: any, boostBips: bigint, discountB
 }
 
 // ════════════════════════════════════════════════════════════════════════════
+//                    🎗️ CHARITY POOL CONFIGURATION (V2.2)
+// ════════════════════════════════════════════════════════════════════════════
+
+async function configureCharityPool(
+    charity: any,
+    miningManager: any,
+    charityAddr: string,
+    ethers: any
+) {
+    console.log("\n🎗️ FASE 7B: Configurando CharityPool");
+    console.log("────────────────────────────────────────────────────────────────");
+
+    // 1. Autorizar CharityPool no MiningManager com a KEY CORRETA
+    // IMPORTANTE: O contrato usa SERVICE_KEY = keccak256("CHARITY_POOL_SERVICE")
+    const serviceKeyHash = ethers.keccak256(ethers.toUtf8Bytes(CHARITY_CONFIG.SERVICE_KEY));
+    console.log(`\n   🔑 SERVICE_KEY: ${CHARITY_CONFIG.SERVICE_KEY}`);
+    console.log(`      Hash: ${serviceKeyHash}`);
+
+    const currentMiner = await miningManager.authorizedMiners(serviceKeyHash);
+    if (currentMiner.toLowerCase() !== charityAddr.toLowerCase()) {
+        await sendTxWithRetry(
+            async () => await miningManager.setAuthorizedMiner(serviceKeyHash, charityAddr),
+            `Autorizar CharityPool (${CHARITY_CONFIG.SERVICE_KEY})`
+        );
+    } else {
+        console.log(`   ⏩ CharityPool já autorizado no MiningManager`);
+    }
+
+    // 2. Configurar taxas do CharityPool
+    console.log("\n   💰 Configurando taxas...");
+    
+    const withdrawalFeeWei = ethers.parseEther(CHARITY_CONFIG.WITHDRAWAL_FEE_ETH);
+    
+    try {
+        // Verificar taxas atuais
+        const currentMiningFee = await charity.donationMiningFeeBips();
+        const currentBurnFee = await charity.donationBurnFeeBips();
+        const currentWithdrawFee = await charity.withdrawalFeeETH();
+        const currentPenalty = await charity.goalNotMetBurnBips();
+
+        const needsUpdate = 
+            currentMiningFee !== CHARITY_CONFIG.DONATION_MINING_FEE_BIPS ||
+            currentBurnFee !== CHARITY_CONFIG.DONATION_BURN_FEE_BIPS ||
+            currentWithdrawFee !== withdrawalFeeWei ||
+            currentPenalty !== CHARITY_CONFIG.GOAL_NOT_MET_BURN_BIPS;
+
+        if (needsUpdate) {
+            await sendTxWithRetry(
+                async () => await charity.setFees(
+                    CHARITY_CONFIG.DONATION_MINING_FEE_BIPS,
+                    CHARITY_CONFIG.DONATION_BURN_FEE_BIPS,
+                    withdrawalFeeWei,
+                    CHARITY_CONFIG.GOAL_NOT_MET_BURN_BIPS
+                ),
+                `CharityPool: setFees (mining=${Number(CHARITY_CONFIG.DONATION_MINING_FEE_BIPS)/100}%, burn=${Number(CHARITY_CONFIG.DONATION_BURN_FEE_BIPS)/100}%, withdrawETH=${CHARITY_CONFIG.WITHDRAWAL_FEE_ETH}, penalty=${Number(CHARITY_CONFIG.GOAL_NOT_MET_BURN_BIPS)/100}%)`
+            );
+        } else {
+            console.log(`   ⏩ Taxas já configuradas corretamente`);
+        }
+    } catch (e: any) {
+        console.log(`   ⚠️ Erro ao verificar taxas, configurando: ${e.message?.slice(0, 50)}`);
+        await sendTxWithRetry(
+            async () => await charity.setFees(
+                CHARITY_CONFIG.DONATION_MINING_FEE_BIPS,
+                CHARITY_CONFIG.DONATION_BURN_FEE_BIPS,
+                withdrawalFeeWei,
+                CHARITY_CONFIG.GOAL_NOT_MET_BURN_BIPS
+            ),
+            `CharityPool: setFees`
+        );
+    }
+
+    // 3. Configurar limites
+    console.log("\n   📊 Configurando limites...");
+    
+    const minDonationWei = ethers.parseEther(CHARITY_CONFIG.MIN_DONATION_AMOUNT);
+    
+    try {
+        const currentMinDonation = await charity.minDonationAmount();
+        const currentMaxCampaigns = await charity.maxActiveCampaignsPerWallet();
+
+        const needsLimitUpdate = 
+            currentMinDonation !== minDonationWei ||
+            currentMaxCampaigns !== CHARITY_CONFIG.MAX_ACTIVE_CAMPAIGNS_PER_WALLET;
+
+        if (needsLimitUpdate) {
+            await sendTxWithRetry(
+                async () => await charity.setLimits(
+                    minDonationWei,
+                    CHARITY_CONFIG.MAX_ACTIVE_CAMPAIGNS_PER_WALLET
+                ),
+                `CharityPool: setLimits (minDonation=${CHARITY_CONFIG.MIN_DONATION_AMOUNT} BKC, maxCampaigns=${CHARITY_CONFIG.MAX_ACTIVE_CAMPAIGNS_PER_WALLET})`
+            );
+        } else {
+            console.log(`   ⏩ Limites já configurados corretamente`);
+        }
+    } catch (e: any) {
+        console.log(`   ⚠️ Erro ao verificar limites, configurando: ${e.message?.slice(0, 50)}`);
+        await sendTxWithRetry(
+            async () => await charity.setLimits(
+                minDonationWei,
+                CHARITY_CONFIG.MAX_ACTIVE_CAMPAIGNS_PER_WALLET
+            ),
+            `CharityPool: setLimits`
+        );
+    }
+
+    // 4. Salvar configuração no rules.json
+    updateRulesJSON("charityPool", "DONATION_MINING_FEE_BIPS", CHARITY_CONFIG.DONATION_MINING_FEE_BIPS.toString());
+    updateRulesJSON("charityPool", "DONATION_BURN_FEE_BIPS", CHARITY_CONFIG.DONATION_BURN_FEE_BIPS.toString());
+    updateRulesJSON("charityPool", "WITHDRAWAL_FEE_ETH", CHARITY_CONFIG.WITHDRAWAL_FEE_ETH);
+    updateRulesJSON("charityPool", "GOAL_NOT_MET_BURN_BIPS", CHARITY_CONFIG.GOAL_NOT_MET_BURN_BIPS.toString());
+    updateRulesJSON("charityPool", "MIN_DONATION_AMOUNT", CHARITY_CONFIG.MIN_DONATION_AMOUNT);
+    updateRulesJSON("charityPool", "MAX_ACTIVE_CAMPAIGNS_PER_WALLET", CHARITY_CONFIG.MAX_ACTIVE_CAMPAIGNS_PER_WALLET.toString());
+    updateRulesJSON("charityPool", "SERVICE_KEY", CHARITY_CONFIG.SERVICE_KEY);
+
+    console.log("\n   ✅ CharityPool configurado com sucesso!");
+    console.log("   ────────────────────────────────────────────────────────────────");
+    console.log(`      Mining Fee:           ${Number(CHARITY_CONFIG.DONATION_MINING_FEE_BIPS)/100}%`);
+    console.log(`      Burn Fee:             ${Number(CHARITY_CONFIG.DONATION_BURN_FEE_BIPS)/100}%`);
+    console.log(`      Withdrawal Fee:       ${CHARITY_CONFIG.WITHDRAWAL_FEE_ETH} ETH`);
+    console.log(`      Goal Not Met Penalty: ${Number(CHARITY_CONFIG.GOAL_NOT_MET_BURN_BIPS)/100}%`);
+    console.log(`      Min Donation:         ${CHARITY_CONFIG.MIN_DONATION_AMOUNT} BKC`);
+    console.log(`      Max Active Campaigns: ${CHARITY_CONFIG.MAX_ACTIVE_CAMPAIGNS_PER_WALLET}`);
+    console.log(`      SERVICE_KEY:          ${CHARITY_CONFIG.SERVICE_KEY}`);
+}
+
+// ════════════════════════════════════════════════════════════════════════════
 //                    🚀 SCRIPT PRINCIPAL
 // ════════════════════════════════════════════════════════════════════════════
 
@@ -422,7 +579,7 @@ export async function runScript(hre: HardhatRuntimeEnvironment) {
     const networkName = hre.network.name;
 
     console.log("════════════════════════════════════════════════════════════════");
-    console.log("   🚀 BACKCHAIN ECOSYSTEM - DEPLOY COMPLETO");
+    console.log("   🚀 BACKCHAIN ECOSYSTEM - DEPLOY COMPLETO V2.2");
     console.log("════════════════════════════════════════════════════════════════");
     console.log(`   📡 Rede: ${networkName}`);
     console.log(`   👷 Deployer: ${deployer.address}`);
@@ -448,81 +605,45 @@ export async function runScript(hre: HardhatRuntimeEnvironment) {
     console.log(`   Address: ${oracleAddr}`);
     console.log("────────────────────────────────────────────────────────────────\n");
 
-    clearConfigFiles();
-    const addresses: { [key: string]: string } = {};
-    
-    addresses.backcoinOracle = oracleAddr;
-    updateAddressJSON("backcoinOracle", oracleAddr);
-    
-    addresses.treasuryWallet = SYSTEM_WALLETS.TREASURY;
-    updateAddressJSON("treasuryWallet", SYSTEM_WALLETS.TREASURY);
-
     try {
+        // Carregar endereços existentes ou iniciar do zero
+        let addresses: Record<string, string> = {};
+        if (fs.existsSync(addressesFilePath)) {
+            addresses = JSON.parse(fs.readFileSync(addressesFilePath, "utf8"));
+            console.log("📂 Endereços existentes carregados.\n");
+        }
+
         // ══════════════════════════════════════════════════════════════════════
         // FASE 1: CORE CONTRACTS
         // ══════════════════════════════════════════════════════════════════════
         
-        console.log("📦 FASE 1: Core Contracts");
+        console.log("🏗️ FASE 1: Core Contracts");
         console.log("────────────────────────────────────────────────────────────────");
 
-        // EcosystemManager
+        // EcosystemManager (Hub)
         const EcosystemManager = await ethers.getContractFactory("EcosystemManager");
         const { contract: hub, address: hubAddr } = await deployProxyWithRetry(
-            upgrades, EcosystemManager, [deployer.address], "EcosystemManager"
+            upgrades, EcosystemManager, [deployer.address, SYSTEM_WALLETS.TREASURY], "EcosystemManager"
         );
         addresses.ecosystemManager = hubAddr;
         updateAddressJSON("ecosystemManager", hubAddr);
+        updateAddressJSON("backcoinOracle", oracleAddr);
 
         // BKCToken
         const BKCToken = await ethers.getContractFactory("BKCToken");
         const { contract: bkc, address: bkcAddr } = await deployProxyWithRetry(
-            upgrades, BKCToken, [deployer.address], "BKCToken"
+            upgrades, BKCToken, [deployer.address, hubAddr], "BKCToken"
         );
         addresses.bkcToken = bkcAddr;
         updateAddressJSON("bkcToken", bkcAddr);
 
-        // RewardBoosterNFT
-        const RewardBoosterNFT = await ethers.getContractFactory("RewardBoosterNFT");
-        const { contract: nft, address: nftAddr } = await deployProxyWithRetry(
-            upgrades, RewardBoosterNFT, [deployer.address], "RewardBoosterNFT"
-        );
-        addresses.rewardBoosterNFT = nftAddr;
-        updateAddressJSON("rewardBoosterNFT", nftAddr);
-
-        // ══════════════════════════════════════════════════════════════════════
-        // FASE 1.5: CONFIGURAÇÃO INICIAL DO HUB (necessário para MiningManager)
-        // ══════════════════════════════════════════════════════════════════════
-        
-        console.log("\n⚙️ FASE 1.5: Configuração Inicial do Hub");
-        console.log("────────────────────────────────────────────────────────────────");
-
-        // Configurar BKCToken no EcosystemManager ANTES de deployar MiningManager
-        // O MiningManager.initialize() precisa buscar getBKCTokenAddress()
-        await sendTxWithRetry(
-            async () => await hub.setAddress("bkcToken", bkcAddr),
-            "Hub.setAddress(bkcToken)"
-        );
-
-        // ══════════════════════════════════════════════════════════════════════
-        // FASE 2: MANAGERS
-        // ══════════════════════════════════════════════════════════════════════
-        
-        console.log("\n🧠 FASE 2: Managers");
-        console.log("────────────────────────────────────────────────────────────────");
-
-        // MiningManager (precisa de bkcToken configurado)
+        // MiningManager
         const MiningManager = await ethers.getContractFactory("MiningManager");
         const { contract: miningManager, address: mmAddr } = await deployProxyWithRetry(
-            upgrades, MiningManager, [hubAddr], "MiningManager"
+            upgrades, MiningManager, [deployer.address, hubAddr], "MiningManager"
         );
         addresses.miningManager = mmAddr;
         updateAddressJSON("miningManager", mmAddr);
-
-        // Configurar MiningManager no Hub (necessário para DecentralizedNotary, FortunePool, etc)
-        await sendTxWithRetry(
-            async () => await hub.setAddress("miningManager", mmAddr),
-            "Hub.setAddress(miningManager)"
-        );
 
         // DelegationManager
         const DelegationManager = await ethers.getContractFactory("DelegationManager");
@@ -532,21 +653,30 @@ export async function runScript(hre: HardhatRuntimeEnvironment) {
         addresses.delegationManager = dmAddr;
         updateAddressJSON("delegationManager", dmAddr);
 
-        // Configurar DelegationManager no Hub (necessário para FortunePool, etc)
-        await sendTxWithRetry(
-            async () => await hub.setAddress("delegationManager", dmAddr),
-            "Hub.setAddress(delegationManager)"
+        // RewardBoosterNFT
+        const RewardBoosterNFT = await ethers.getContractFactory("RewardBoosterNFT");
+        const { contract: nft, address: nftAddr } = await deployProxyWithRetry(
+            upgrades, RewardBoosterNFT, [deployer.address, hubAddr], "RewardBoosterNFT"
         );
+        addresses.rewardBoosterNFT = nftAddr;
+        updateAddressJSON("rewardBoosterNFT", nftAddr);
+
+        // ══════════════════════════════════════════════════════════════════════
+        // FASE 2: SERVICE CONTRACTS
+        // ══════════════════════════════════════════════════════════════════════
+        
+        console.log("\n🔧 FASE 2: Service Contracts");
+        console.log("────────────────────────────────────────────────────────────────");
 
         // DecentralizedNotary
-        const DecentralizedNotary = await ethers.getContractFactory("DecentralizedNotary");
+        const Notary = await ethers.getContractFactory("DecentralizedNotary");
         const { address: notaryAddr } = await deployProxyWithRetry(
-            upgrades, DecentralizedNotary, [deployer.address, hubAddr], "DecentralizedNotary"
+            upgrades, Notary, [deployer.address, hubAddr], "DecentralizedNotary"
         );
         addresses.decentralizedNotary = notaryAddr;
         updateAddressJSON("decentralizedNotary", notaryAddr);
 
-        // FortunePool (com Backcoin Oracle)
+        // FortunePool
         const FortunePool = await ethers.getContractFactory("FortunePool");
         const { contract: fortune, address: fortuneAddr } = await deployProxyWithRetry(
             upgrades, FortunePool, [deployer.address, hubAddr, oracleAddr], "FortunePool"
@@ -564,7 +694,7 @@ export async function runScript(hre: HardhatRuntimeEnvironment) {
 
         // CharityPool
         const CharityPool = await ethers.getContractFactory("CharityPool");
-        const { address: charityAddr } = await deployProxyWithRetry(
+        const { contract: charity, address: charityAddr } = await deployProxyWithRetry(
             upgrades, CharityPool, [deployer.address, hubAddr], "CharityPool"
         );
         addresses.charityPool = charityAddr;
@@ -662,6 +792,7 @@ export async function runScript(hre: HardhatRuntimeEnvironment) {
         );
 
         // Autorizar Miners no MiningManager
+        // ⚠️ V2.2: CHARITY_POOL_SERVICE é a KEY CORRETA (não CHARITY_DONATION_FEE)
         console.log("\n   → Autorizando Miners...");
         const miners = [
             { key: "FORTUNE_POOL_SERVICE", addr: fortuneAddr },
@@ -673,7 +804,8 @@ export async function runScript(hre: HardhatRuntimeEnvironment) {
             { key: "CLAIM_REWARD_FEE_BIPS", addr: dmAddr },
             { key: "NFT_POOL_BUY_TAX_BIPS", addr: factoryAddr },
             { key: "NFT_POOL_SELL_TAX_BIPS", addr: factoryAddr },
-            { key: "CHARITY_DONATION_FEE", addr: charityAddr },
+            // ✅ V2.2: KEY CORRETA para CharityPool
+            { key: CHARITY_CONFIG.SERVICE_KEY, addr: charityAddr },
         ];
         
         for (const m of miners) {
@@ -726,7 +858,7 @@ export async function runScript(hre: HardhatRuntimeEnvironment) {
         // FASE 7: FORTUNE POOL CONFIG
         // ══════════════════════════════════════════════════════════════════════
         
-        console.log("\n🎰 FASE 7: Fortune Pool");
+        console.log("\n🎰 FASE 7A: Fortune Pool");
         console.log("────────────────────────────────────────────────────────────────");
 
         // Service Fee
@@ -748,90 +880,77 @@ export async function runScript(hre: HardhatRuntimeEnvironment) {
         for (const tier of FORTUNE_TIERS) {
             await sendTxWithRetry(
                 async () => await fortune.configureTier(tier.tierId, tier.range, tier.multiplierBips),
-                `Tier ${tier.tierId} (${tier.name}): 1-${tier.range}, ${tier.multiplierBips/10000}x`
+                `Tier ${tier.tierId} (${tier.name}): 1-${tier.range} → ${tier.multiplierBips/10000}x`
             );
         }
 
         // ══════════════════════════════════════════════════════════════════════
-        // FASE 8: TGE - TOKEN GENERATION EVENT
+        // FASE 7B: CHARITY POOL CONFIG (V2.2)
         // ══════════════════════════════════════════════════════════════════════
         
-        console.log("\n💰 FASE 8: TGE");
+        await configureCharityPool(charity, miningManager, charityAddr, ethers);
+
+        // ══════════════════════════════════════════════════════════════════════
+        // FASE 8: TGE (Token Generation Event)
+        // ══════════════════════════════════════════════════════════════════════
+        
+        console.log("\n💎 FASE 8: Token Generation Event");
         console.log("────────────────────────────────────────────────────────────────");
 
-        // Transferir ownership do BKC para MiningManager
-        const bkcOwner = await bkc.owner();
-        if (bkcOwner.toLowerCase() === deployer.address.toLowerCase()) {
+        const currentSupply = await bkc.totalSupply();
+        if (currentSupply === 0n) {
             await sendTxWithRetry(
-                async () => await bkc.transferOwnership(mmAddr),
-                "BKC: transferOwnership → MiningManager"
-            );
-        } else {
-            console.log("   ⏩ BKC ownership já transferido");
-        }
-
-        // Executar TGE
-        const totalSupply = await bkc.totalSupply();
-        if (totalSupply < LIQUIDITY_CONFIG.TGE_SUPPLY) {
-            await sendTxWithRetry(
-                async () => await miningManager.executeTGE(deployer.address, LIQUIDITY_CONFIG.TGE_SUPPLY),
+                async () => await bkc.mint(deployer.address, LIQUIDITY_CONFIG.TGE_SUPPLY),
                 `TGE: Mint ${ethers.formatEther(LIQUIDITY_CONFIG.TGE_SUPPLY)} BKC`
             );
         } else {
-            console.log(`   ✅ TGE já realizado (${ethers.formatEther(totalSupply)} BKC)`);
+            console.log(`   ⏩ TGE já realizado: ${ethers.formatEther(currentSupply)} BKC`);
         }
 
-        // ══════════════════════════════════════════════════════════════════════
-        // FASE 9: INJETAR LIQUIDEZ
-        // ══════════════════════════════════════════════════════════════════════
-        
-        console.log("\n💧 FASE 9: Liquidez Inicial");
-        console.log("────────────────────────────────────────────────────────────────");
-
-        // Faucet
-        console.log("\n   🚰 Faucet:");
-        const faucetBalance = await bkc.balanceOf(faucetAddr);
-        if (faucetBalance < LIQUIDITY_CONFIG.FAUCET) {
-            const needed = LIQUIDITY_CONFIG.FAUCET - faucetBalance;
-            await sendTxWithRetry(
-                async () => await bkc.transfer(faucetAddr, needed),
-                `Faucet: +${ethers.formatEther(needed)} BKC`
-            );
-        } else {
-            console.log(`      ✅ Faucet já tem ${ethers.formatEther(faucetBalance)} BKC`);
-        }
-
-        // Fortune Pool
-        console.log("\n   🎰 Fortune Pool:");
+        // Transferir para FortunePool
         const fortuneBalance = await bkc.balanceOf(fortuneAddr);
         if (fortuneBalance < LIQUIDITY_CONFIG.FORTUNE_POOL) {
-            const needed = LIQUIDITY_CONFIG.FORTUNE_POOL - fortuneBalance;
             await sendTxWithRetry(
-                async () => await bkc.approve(fortuneAddr, needed),
-                "Fortune: Aprovar BKC"
-            );
-            await sendTxWithRetry(
-                async () => await fortune.fundPrizePool(needed),
-                `Fortune: +${ethers.formatEther(needed)} BKC`
+                async () => await bkc.transfer(fortuneAddr, LIQUIDITY_CONFIG.FORTUNE_POOL),
+                `Liquidez FortunePool: ${ethers.formatEther(LIQUIDITY_CONFIG.FORTUNE_POOL)} BKC`
             );
         } else {
-            console.log(`      ✅ Fortune já tem ${ethers.formatEther(fortuneBalance)} BKC`);
+            console.log(`   ⏩ FortunePool já tem liquidez: ${ethers.formatEther(fortuneBalance)} BKC`);
         }
 
-        // NFT Liquidity Pools
-        console.log("\n   🏊 NFT Liquidity Pools:");
-        
-        for (const tier of NFT_TIERS) {
-            const poolKey = `pool_${tier.name.toLowerCase()}`;
-            console.log(`\n      --- ${tier.name} Pool ---`);
+        // Transferir para Faucet
+        const faucetBalance = await bkc.balanceOf(faucetAddr);
+        if (faucetBalance < LIQUIDITY_CONFIG.FAUCET) {
+            await sendTxWithRetry(
+                async () => await bkc.transfer(faucetAddr, LIQUIDITY_CONFIG.FAUCET),
+                `Liquidez Faucet: ${ethers.formatEther(LIQUIDITY_CONFIG.FAUCET)} BKC`
+            );
+        } else {
+            console.log(`   ⏩ Faucet já tem liquidez: ${ethers.formatEther(faucetBalance)} BKC`);
+        }
 
-            // Deploy pool se não existir
-            let poolAddress = await factory.getPoolAddress(tier.boostBips);
-            if (poolAddress === ethers.ZeroAddress) {
-                await sendTxWithRetry(
-                    async () => await factory.deployPool(tier.boostBips),
-                    `Deploy Pool ${tier.name}`
-                );
+        // ══════════════════════════════════════════════════════════════════════
+        // FASE 9: NFT POOLS E LIQUIDEZ
+        // ══════════════════════════════════════════════════════════════════════
+        
+        console.log("\n🎨 FASE 9: NFT Pools e Liquidez");
+        console.log("────────────────────────────────────────────────────────────────");
+
+        for (const tier of NFT_TIERS) {
+            console.log(`\n   💎 ${tier.name} Pool (Boost: ${Number(tier.boostBips)/100}%)`);
+            
+            const poolKey = `pool_${tier.name.toLowerCase()}`;
+            let poolAddress = addresses[poolKey];
+
+            // Criar pool se não existe
+            if (!poolAddress) {
+                const poolExists = await factory.poolExists(tier.boostBips);
+                if (!poolExists) {
+                    await sendTxWithRetry(
+                        async () => await factory.createPool(tier.boostBips),
+                        `Criar Pool ${tier.name}`
+                    );
+                }
                 poolAddress = await factory.getPoolAddress(tier.boostBips);
                 await sleep(DEPLOY_DELAY_MS);
             }
@@ -948,7 +1067,7 @@ export async function runScript(hre: HardhatRuntimeEnvironment) {
         // ══════════════════════════════════════════════════════════════════════
 
         console.log("\n════════════════════════════════════════════════════════════════");
-        console.log("                    📊 DEPLOY CONCLUÍDO!");
+        console.log("                    📊 DEPLOY CONCLUÍDO V2.2!");
         console.log("════════════════════════════════════════════════════════════════");
 
         console.log("\n📋 CONTRATOS IMPLANTADOS:");
@@ -973,6 +1092,11 @@ export async function runScript(hre: HardhatRuntimeEnvironment) {
         console.log("   Fortune Game:       10%");
         console.log("   Rental:             10%");
         console.log("   Notary:             1 BKC");
+        console.log("\n   🎗️ CHARITY POOL:");
+        console.log(`   Donation Mining:    ${Number(CHARITY_CONFIG.DONATION_MINING_FEE_BIPS)/100}%`);
+        console.log(`   Donation Burn:      ${Number(CHARITY_CONFIG.DONATION_BURN_FEE_BIPS)/100}%`);
+        console.log(`   Withdrawal:         ${CHARITY_CONFIG.WITHDRAWAL_FEE_ETH} ETH`);
+        console.log(`   Goal Not Met:       ${Number(CHARITY_CONFIG.GOAL_NOT_MET_BURN_BIPS)/100}% burned`);
 
         console.log("\n📊 DISTRIBUIÇÃO:");
         console.log("────────────────────────────────────────────────────────────────");
@@ -987,7 +1111,7 @@ export async function runScript(hre: HardhatRuntimeEnvironment) {
         console.log(`   Fortune:  ${ethers.formatEther(await bkc.balanceOf(fortuneAddr))} BKC`);
 
         console.log("\n────────────────────────────────────────────────────────────────");
-        console.log("   🎉 ECOSSISTEMA BACKCHAIN IMPLANTADO COM SUCESSO!");
+        console.log("   🎉 ECOSSISTEMA BACKCHAIN V2.2 IMPLANTADO COM SUCESSO!");
         console.log("────────────────────────────────────────────────────────────────\n");
 
     } catch (error: any) {
