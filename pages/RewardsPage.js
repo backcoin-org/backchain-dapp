@@ -1,5 +1,11 @@
 // pages/RewardsPage.js
-// ✅ PRODUCTION V10.0 - Animated Reward Image + Detailed History + Consistent Icons
+// ✅ PRODUCTION V11.0 - Migrated to Transaction Engine (StakingTx)
+//
+// V11.0 Changes:
+// - Migrated to use StakingTx.claimRewards from transaction engine
+// - Better error handling with onSuccess/onError callbacks
+//
+// V10.0: Animated Reward Image + Detailed History + Consistent Icons
 
 const ethers = window.ethers;
 
@@ -11,9 +17,11 @@ import {
     loadUserData,
     API_ENDPOINTS
 } from '../modules/data.js';
-import { executeUniversalClaim } from '../modules/transactions.js';
 import { formatBigNumber } from '../utils.js';
 import { showToast } from '../ui-feedback.js';
+
+// V11: Import new transaction module
+import { StakingTx } from '../modules/transactions/index.js';
 
 // ============================================================================
 // CONSTANTS
@@ -590,20 +598,38 @@ async function handleClaim(stakingRewards, minerRewards, boosterTokenId) {
     updateMascotAnimation('claiming');
 
     try {
-        const success = await executeUniversalClaim(stakingRewards, minerRewards, boosterTokenId, null);
-        if (success) {
-            updateMascotAnimation('success');
-            btn.className = 'w-full py-4 rounded-xl font-bold text-base flex items-center justify-center gap-2 bg-green-500 text-white';
-            btnText.textContent = '🎉 Claimed!';
-            btnIcon.className = 'fa-solid fa-check';
-            showToast('🎁 Rewards claimed successfully!', 'success');
+        // V11: Use StakingTx.claimRewards from new transaction module
+        await StakingTx.claimRewards({
+            stakingRewards: stakingRewards,
+            minerRewards: minerRewards,
+            boosterTokenId: boosterTokenId,
+            button: btn,
             
-            setTimeout(() => { 
-                lastFetch = 0; 
-                claimHistory = [];
-                RewardsPage.update(true); 
-            }, 2500);
-        }
+            onSuccess: (receipt) => {
+                updateMascotAnimation('success');
+                btn.className = 'w-full py-4 rounded-xl font-bold text-base flex items-center justify-center gap-2 bg-green-500 text-white';
+                btnText.textContent = '🎉 Claimed!';
+                btnIcon.className = 'fa-solid fa-check';
+                showToast('🎁 Rewards claimed successfully!', 'success');
+                
+                setTimeout(() => { 
+                    lastFetch = 0; 
+                    claimHistory = [];
+                    RewardsPage.update(true); 
+                }, 2500);
+            },
+            
+            onError: (error) => {
+                if (!error.cancelled) {
+                    showToast('Claim failed: ' + (error.reason || error.message || 'Error'), 'error');
+                }
+                btn.disabled = false;
+                btn.className = 'w-full py-4 rounded-xl font-bold text-base flex items-center justify-center gap-2 bg-gradient-to-r from-amber-500 to-orange-500 text-black shadow-lg shadow-amber-500/25';
+                btnText.textContent = 'Claim Rewards';
+                btnIcon.className = 'fa-solid fa-coins';
+                updateMascotAnimation('idle');
+            }
+        });
     } catch (e) {
         console.error('Claim error:', e);
         showToast('Claim failed: ' + (e.reason || e.message || 'Error'), 'error');

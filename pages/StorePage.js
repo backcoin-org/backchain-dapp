@@ -1,14 +1,23 @@
 // pages/StorePage.js
-// ✅ PRODUCTION V9.0 - Fixed Grid Tiers + Trade History + Correct Function Calls
+// ✅ PRODUCTION V10.0 - Migrated to Transaction Engine (NftTx)
+//
+// V10.0 Changes:
+// - Migrated to use NftTx module from transaction engine
+// - Automatic token approval and validation
+// - Better error handling with onSuccess/onError callbacks
+//
+// V9.0: Fixed Grid Tiers + Trade History + Correct Function Calls
 
 const ethers = window.ethers;
 
 import { State } from '../state.js';
 import { loadUserData, loadMyBoostersFromAPI, loadRentalListings, safeContractCall, getHighestBoosterBoostFromAPI, loadSystemDataFromAPI, API_ENDPOINTS } from '../modules/data.js';
-import { executeBuyNFT, executeSellNFT } from '../modules/transactions.js';
 import { formatBigNumber, renderNoData } from '../utils.js';
 import { showToast } from '../ui-feedback.js';
 import { boosterTiers, addresses, nftPoolABI, ipfsGateway } from '../config.js';
+
+// V10: Import new transaction module
+import { NftTx } from '../modules/transactions/index.js';
 
 // ============================================================================
 // CONSTANTS
@@ -1112,23 +1121,45 @@ function setupEventListeners() {
 
             try {
                 if (TradeState.tradeDirection === 'buy') {
-                    // CORREÇÃO: executeBuyNFT espera (poolAddress, price, btnElement)
-                    const result = await executeBuyNFT(poolAddress, TradeState.buyPrice, executeBtn);
-                    if (result) {
-                        if (mascot) mascot.className = 'w-14 h-14 object-contain trade-success';
-                        showToast("🟢 NFT Purchased!", "success");
-                        await loadDataForSelectedPool();
-                        loadTradeHistory();
-                    }
+                    // V10: Use NftTx.buyFromPool from new transaction module
+                    await NftTx.buyFromPool({
+                        poolAddress: poolAddress,
+                        price: TradeState.buyPrice,
+                        button: executeBtn,
+                        
+                        onSuccess: async (receipt) => {
+                            if (mascot) mascot.className = 'w-14 h-14 object-contain trade-success';
+                            showToast("🟢 NFT Purchased!", "success");
+                            await loadDataForSelectedPool();
+                            loadTradeHistory();
+                        },
+                        
+                        onError: (error) => {
+                            if (!error.cancelled) {
+                                showToast("Buy failed: " + error.message, "error");
+                            }
+                        }
+                    });
                 } else {
-                    // CORREÇÃO: executeSellNFT espera (poolAddress, tokenId, btnElement)
-                    const success = await executeSellNFT(poolAddress, TradeState.firstAvailableTokenId, executeBtn);
-                    if (success) {
-                        if (mascot) mascot.className = 'w-14 h-14 object-contain trade-success';
-                        showToast("🔴 NFT Sold!", "success");
-                        await loadDataForSelectedPool();
-                        loadTradeHistory();
-                    }
+                    // V10: Use NftTx.sellToPool from new transaction module
+                    await NftTx.sellToPool({
+                        poolAddress: poolAddress,
+                        tokenId: TradeState.firstAvailableTokenId,
+                        button: executeBtn,
+                        
+                        onSuccess: async (receipt) => {
+                            if (mascot) mascot.className = 'w-14 h-14 object-contain trade-success';
+                            showToast("🔴 NFT Sold!", "success");
+                            await loadDataForSelectedPool();
+                            loadTradeHistory();
+                        },
+                        
+                        onError: (error) => {
+                            if (!error.cancelled) {
+                                showToast("Sell failed: " + error.message, "error");
+                            }
+                        }
+                    });
                 }
             } finally {
                 isTransactionInProgress = false;

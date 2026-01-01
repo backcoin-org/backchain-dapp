@@ -1,10 +1,15 @@
 // js/pages/FortunePool.js
-// ✅ PRODUCTION V2.1 - Instant Resolution with Service Fee Display
+// ✅ PRODUCTION V3.0 - Migrated to Transaction Engine (FortuneTx)
 // ═══════════════════════════════════════════════════════════════════════════════
 //                          BACKCHAIN PROTOCOL
 //                    Fortune Pool - Decentralized Lottery
 // ═══════════════════════════════════════════════════════════════════════════════
 // 
+// V3.0 Changes:
+// - Migrated to use FortuneTx module from transaction engine
+// - Automatic token approval handling
+// - Better error handling with onSuccess/onError callbacks
+//
 // V2.1 Changes:
 // - Service fee (ETH) displayed in mode select and wager screens
 // - Reads tier data and fees from contract
@@ -22,9 +27,11 @@
 
 import { State } from '../state.js';
 import { loadUserData, API_ENDPOINTS } from '../modules/data.js';
-import { executeFortunePlay } from '../modules/transactions.js';
 import { formatBigNumber } from '../utils.js';
 import { showToast, openModal, closeModal } from '../ui-feedback.js';
+
+// V3: Import new transaction module
+import { FortuneTx } from '../modules/transactions/index.js';
 
 // ============================================================================
 // CONSTANTS
@@ -997,33 +1004,44 @@ function setupWagerEvents(maxMulti, balanceNum) {
         renderPhase();
         
         try {
-            // V2: Call play() which returns results instantly!
+            // V3: Use FortuneTx.playGame from new transaction module
             const guesses = Game.mode === 'jackpot' ? [Game.guess] : Game.guesses;
             const isCumulative = Game.mode === 'combo';
+            const wagerWei = window.ethers.parseEther(Game.wager.toString());
             
-            const result = await executeFortunePlay(Game.wager, guesses, isCumulative);
-            
-            if (result?.success) {
-                // V2: Results are returned immediately!
-                Game.gameId = result.gameId;
-                Game.txHash = result.txHash;
-                Game.result = {
-                    rolls: result.rolls,
-                    prizeWon: result.prizeWon,
-                    matches: result.matches || []
-                };
+            await FortuneTx.playGame({
+                wagerAmount: wagerWei,
+                guesses: guesses,
+                isCumulative: isCumulative,
+                button: document.getElementById('btn-play'),
                 
-                // Small delay for dramatic effect, then show result
-                setTimeout(() => {
-                    Game.phase = 'result';
+                onSuccess: (receipt, gameResult) => {
+                    // V3: Results are returned immediately via callback!
+                    Game.gameId = gameResult?.gameId || Date.now();
+                    Game.txHash = receipt.hash;
+                    Game.result = {
+                        rolls: gameResult?.rolls || [],
+                        prizeWon: gameResult?.prizeWon || 0n,
+                        matches: gameResult?.matches || []
+                    };
+                    
+                    // Small delay for dramatic effect, then show result
+                    setTimeout(() => {
+                        Game.phase = 'result';
+                        renderPhase();
+                        loadPoolData();
+                    }, 1500);
+                },
+                
+                onError: (error) => {
+                    if (!error.cancelled) {
+                        showToast(error.message || 'Transaction failed', 'error');
+                    }
+                    Game.phase = 'wager';
                     renderPhase();
-                    loadPoolData();
-                }, 1500);
-            } else {
-                showToast(result?.error || 'Transaction failed', 'error');
-                Game.phase = 'wager';
-                renderPhase();
-            }
+                }
+            });
+            
         } catch (e) {
             console.error('Play error:', e);
             showToast('Error: ' + e.message, 'error');

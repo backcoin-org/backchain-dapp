@@ -1,5 +1,12 @@
 // js/pages/DashboardPage.js
-// ✅ PRODUCTION V8.2 - Individual Fallbacks for pStake/TVL + Firebase-first
+// ✅ PRODUCTION V9.0 - Added Charity Pool Event Tracking
+//
+// V9.0 Changes:
+// - Added Charity Pool activity icons and event detection
+// - Support for DONATIONMADE, CAMPAIGNCREATED, CAMPAIGNCANCELLED, FUNDSWITHDRAWN, GOALREACHED
+// - Charity filter option in activity dropdown
+//
+// V8.2: Individual Fallbacks for pStake/TVL + Firebase-first
 
 const ethers = window.ethers;
 
@@ -84,6 +91,13 @@ const ACTIVITY_ICONS = {
     
     // Notary - 📜 Document Theme
     NOTARY: { icon: 'fa-stamp', color: '#818cf8', bg: 'rgba(99,102,241,0.15)', label: '📜 Notarized', emoji: '📜' },
+    
+    // Charity Pool - V9.0
+    CHARITY_DONATE: { icon: 'fa-heart', color: '#ec4899', bg: 'rgba(236,72,153,0.15)', label: '💝 Donated', emoji: '💝' },
+    CHARITY_CREATE: { icon: 'fa-hand-holding-heart', color: '#10b981', bg: 'rgba(16,185,129,0.15)', label: '🌱 Campaign Created', emoji: '🌱' },
+    CHARITY_CANCEL: { icon: 'fa-heart-crack', color: '#ef4444', bg: 'rgba(239,68,68,0.15)', label: '💔 Campaign Cancelled', emoji: '💔' },
+    CHARITY_WITHDRAW: { icon: 'fa-hand-holding-dollar', color: '#8b5cf6', bg: 'rgba(139,92,246,0.15)', label: '💰 Funds Withdrawn', emoji: '💰' },
+    CHARITY_GOAL_REACHED: { icon: 'fa-trophy', color: '#fbbf24', bg: 'rgba(251,191,36,0.15)', label: '🏆 Goal Reached!', emoji: '🏆' },
     
     // Faucet
     FAUCET: { icon: 'fa-droplet', color: '#22d3ee', bg: 'rgba(6,182,212,0.15)', label: '💧 Faucet Claim', emoji: '💧' },
@@ -209,6 +223,23 @@ function getActivityStyle(type, details = {}) {
     if (t === 'GAMERESULT' || t.includes('RESULT')) {
         const isWin = details?.isWin || details?.prizeWon > 0;
         return isWin ? ACTIVITY_ICONS.FORTUNE_WIN : ACTIVITY_ICONS.FORTUNE_LOSE;
+    }
+    
+    // Charity Pool - V9.0
+    if (t === 'DONATIONMADE' || t === 'CHARITY_DONATE' || t === 'DONATED' || t === 'DONATION') {
+        return ACTIVITY_ICONS.CHARITY_DONATE;
+    }
+    if (t === 'CAMPAIGNCREATED' || t === 'CHARITY_CREATE' || t === 'CAMPAIGN_CREATED') {
+        return ACTIVITY_ICONS.CHARITY_CREATE;
+    }
+    if (t === 'CAMPAIGNCANCELLED' || t === 'CHARITY_CANCEL' || t === 'CAMPAIGN_CANCELLED') {
+        return ACTIVITY_ICONS.CHARITY_CANCEL;
+    }
+    if (t === 'FUNDSWITHDRAWN' || t === 'CHARITY_WITHDRAW' || t === 'CAMPAIGN_WITHDRAW') {
+        return ACTIVITY_ICONS.CHARITY_WITHDRAW;
+    }
+    if (t === 'GOALREACHED' || t === 'CHARITY_GOAL' || t === 'CAMPAIGN_COMPLETED') {
+        return ACTIVITY_ICONS.CHARITY_GOAL_REACHED;
     }
     
     // Notary
@@ -490,6 +521,7 @@ function renderDashboardLayout() {
                                     <option value="CLAIM">Claims</option>
                                     <option value="NFT">NFT</option>
                                     <option value="GAME">Fortune</option>
+                                    <option value="CHARITY">Charity</option>
                                     <option value="NOTARY">Notary</option>
                                     <option value="FAUCET">Faucet</option>
                                 </select>
@@ -1211,6 +1243,7 @@ function applyFiltersAndRender() {
             if (type === 'CLAIM') return t.includes('REWARD') || t.includes('CLAIM');
             if (type === 'NFT') return t.includes('BOOSTER') || t.includes('RENT') || t.includes('NFT') || t.includes('TRANSFER');
             if (type === 'GAME') return t.includes('FORTUNE') || t.includes('GAME') || t.includes('REQUEST') || t.includes('RESULT') || t.includes('FULFILLED');
+            if (type === 'CHARITY') return t.includes('CHARITY') || t.includes('CAMPAIGN') || t.includes('DONATION') || t.includes('DONATE');
             if (type === 'NOTARY') return t.includes('NOTARY') || t.includes('NOTARIZED') || t.includes('DOCUMENT');
             if (type === 'FAUCET') return t.includes('FAUCET');
             return true;

@@ -1,11 +1,20 @@
 // js/pages/NotaryPage.js
-// ✅ PRODUCTION V9.2 - Firebase-based History + Date/Time Display
+// ✅ PRODUCTION V10.0 - Migrated to Transaction Engine (NotaryTx)
+//
+// V10.0 Changes:
+// - Migrated to use NotaryTx module from transaction engine
+// - Automatic token approval and validation
+// - Better error handling with onSuccess/onError callbacks
+//
+// V9.2: Firebase-based History + Date/Time Display
 
 import { State } from '../state.js';
 import { formatBigNumber } from '../utils.js';
 import { safeContractCall, API_ENDPOINTS, loadPublicData, loadUserData } from '../modules/data.js';
-import { executeNotarizeDocument } from '../modules/transactions.js';
 import { showToast } from '../ui-feedback.js';
+
+// V10: Import new transaction module
+import { NotaryTx } from '../modules/transactions/index.js';
 
 const ethers = window.ethers;
 
@@ -837,64 +846,68 @@ async function handleMint() {
         // Stamp animation
         if (overlayImg) overlayImg.className = 'w-full h-full object-contain notary-stamp';
 
-        const success = await executeNotarizeDocument({
+        // V10: Use NotaryTx.notarize from new transaction module
+        await NotaryTx.notarize({
             ipfsUri: ipfsCid,
             contentHash: contentHash,
             title: Notary.file?.name || 'Untitled Document',
             description: Notary.description || 'No description',
             docType: getFileCategory(Notary.file?.type) || 'document',
-            tags: []
-        }, btn);
-
-        if (success) {
-            setProgress(100, 'SUCCESS!');
+            tags: [],
+            button: btn,
             
-            // Success animation
-            if (overlayImg) overlayImg.className = 'w-full h-full object-contain notary-success';
-            
-            if (overlay) {
-                overlay.innerHTML = `
-                    <div class="text-center p-6 max-w-sm animate-fade-in">
-                        <div class="w-32 h-32 mx-auto mb-6 relative">
-                            <div class="absolute inset-0 rounded-full bg-green-500/30 animate-pulse"></div>
-                            <div class="absolute inset-0 rounded-full border-4 border-green-400/50"></div>
-                            <div class="relative w-full h-full rounded-full bg-gradient-to-br from-green-900/50 to-emerald-900/50 flex items-center justify-center shadow-2xl shadow-green-500/30 overflow-hidden p-3 border-2 border-green-400">
-                                <img src="${NOTARY_IMAGE}" alt="Success" class="w-full h-full object-contain notary-success">
-                            </div>
-                            <div class="absolute -bottom-1 -right-1 w-10 h-10 bg-green-500 rounded-full flex items-center justify-center shadow-lg">
-                                <i class="fa-solid fa-check text-white text-lg"></i>
-                            </div>
-                        </div>
-                        <h3 class="text-2xl font-bold text-white mb-2">🎉 Notarized!</h3>
-                        <p class="text-green-400 text-sm mb-4">Your document is now permanently certified on the blockchain</p>
-                        <div class="flex items-center justify-center gap-2 text-zinc-500 text-xs">
-                            <i class="fa-solid fa-shield-check text-green-400"></i>
-                            <span>Immutable • Verifiable • Permanent</span>
-                        </div>
-                    </div>
-                `;
-            }
-            
-            setTimeout(() => {
+            onSuccess: (receipt) => {
+                setProgress(100, 'SUCCESS!');
+                
+                // Success animation
+                if (overlayImg) overlayImg.className = 'w-full h-full object-contain notary-success';
+                
                 if (overlay) {
-                    overlay.classList.add('hidden');
-                    overlay.classList.remove('flex');
+                    overlay.innerHTML = `
+                        <div class="text-center p-6 max-w-sm animate-fade-in">
+                            <div class="w-32 h-32 mx-auto mb-6 relative">
+                                <div class="absolute inset-0 rounded-full bg-green-500/30 animate-pulse"></div>
+                                <div class="absolute inset-0 rounded-full border-4 border-green-400/50"></div>
+                                <div class="relative w-full h-full rounded-full bg-gradient-to-br from-green-900/50 to-emerald-900/50 flex items-center justify-center shadow-2xl shadow-green-500/30 overflow-hidden p-3 border-2 border-green-400">
+                                    <img src="${NOTARY_IMAGE}" alt="Success" class="w-full h-full object-contain notary-success">
+                                </div>
+                                <div class="absolute -bottom-1 -right-1 w-10 h-10 bg-green-500 rounded-full flex items-center justify-center shadow-lg">
+                                    <i class="fa-solid fa-check text-white text-lg"></i>
+                                </div>
+                            </div>
+                            <h3 class="text-2xl font-bold text-white mb-2">🎉 Notarized!</h3>
+                            <p class="text-green-400 text-sm mb-4">Your document is now permanently certified on the blockchain</p>
+                            <div class="flex items-center justify-center gap-2 text-zinc-500 text-xs">
+                                <i class="fa-solid fa-shield-check text-green-400"></i>
+                                <span>Immutable • Verifiable • Permanent</span>
+                            </div>
+                        </div>
+                    `;
                 }
                 
-                Notary.file = null;
-                Notary.description = '';
-                Notary.step = 1;
-                Notary.isProcessing = false;
-                
-                renderStepContent();
-                loadCertificates();
-                loadUserData(true);
-                
-                showToast('📜 Document notarized successfully!', 'success');
-            }, 3000);
-        } else {
-            throw new Error('Minting failed');
-        }
+                setTimeout(() => {
+                    if (overlay) {
+                        overlay.classList.add('hidden');
+                        overlay.classList.remove('flex');
+                    }
+                    
+                    Notary.file = null;
+                    Notary.description = '';
+                    Notary.step = 1;
+                    Notary.isProcessing = false;
+                    
+                    renderStepContent();
+                    loadCertificates();
+                    loadUserData(true);
+                    
+                    showToast('📜 Document notarized successfully!', 'success');
+                }, 3000);
+            },
+            
+            onError: (error) => {
+                throw error; // Re-throw to be caught by outer catch
+            }
+        });
 
     } catch (e) {
         console.error('Notary Error:', e);

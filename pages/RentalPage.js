@@ -1,14 +1,23 @@
 // js/pages/RentalPage.js
-// ✅ PRODUCTION V8.0 - Animated AirBNFT Image + Detailed History + Consistent Icons
+// ✅ PRODUCTION V9.0 - Migrated to Transaction Engine (RentalTx)
+//
+// V9.0 Changes:
+// - Migrated to use RentalTx module from transaction engine
+// - Automatic token approval and validation
+// - Better error handling with onSuccess/onError callbacks
+//
+// V8.0: Animated AirBNFT Image + Detailed History + Consistent Icons
 
 const ethers = window.ethers;
 
 import { State } from '../state.js';
 import { loadRentalListings, loadUserRentals, loadMyBoostersFromAPI, API_ENDPOINTS } from '../modules/data.js';
-import { executeListNFT, executeRentNFT, executeWithdrawNFT } from '../modules/transactions.js';
 import { formatBigNumber, renderNoData } from '../utils.js';
 import { showToast } from '../ui-feedback.js';
 import { boosterTiers, ipfsGateway } from '../config.js';
+
+// V9: Import new transaction module
+import { RentalTx } from '../modules/transactions/index.js';
 
 // ============================================================================
 // CONSTANTS
@@ -1311,22 +1320,30 @@ async function handleConfirmRent() {
     if (mascot) mascot.className = 'w-16 h-16 object-contain airbnft-spin';
 
     try {
-        const success = await executeRentNFT({
+        // V9: Use RentalTx.rent from new transaction module
+        await RentalTx.rent({
             tokenId,
             hours,
-            totalCost: totalCost.toString()
-        }, btn);
-
-        if (success) {
-            if (mascot) mascot.className = 'w-16 h-16 object-contain airbnft-success';
-            closeRentModal();
-            showToast('⏰ NFT rented successfully! Boost is now active for 1 hour.', 'success');
+            totalCost: totalCost,
+            button: btn,
             
-            // Cooldown - desabilitar botão por 5 segundos
-            startRentCooldown(5);
+            onSuccess: async (receipt) => {
+                if (mascot) mascot.className = 'w-16 h-16 object-contain airbnft-success';
+                closeRentModal();
+                showToast('⏰ NFT rented successfully! Boost is now active for 1 hour.', 'success');
+                
+                // Cooldown - desabilitar botão por 5 segundos
+                startRentCooldown(5);
+                
+                await refreshData();
+            },
             
-            await refreshData();
-        }
+            onError: (error) => {
+                if (!error.cancelled) {
+                    showToast('Rent failed: ' + error.message, 'error');
+                }
+            }
+        });
     } finally {
         RentalState.isTransactionPending = false;
         btn.innerHTML = originalText;
@@ -1390,14 +1407,28 @@ async function handleConfirmList() {
         const maxHoursInput = document.getElementById('list-max-hours');
         const minHours = minHoursInput ? parseInt(minHoursInput.value) || 1 : 1;
         const maxHours = maxHoursInput ? parseInt(maxHoursInput.value) || 168 : 168;
-        const success = await executeListNFT({ tokenId, pricePerHour: priceWei, minHours, maxHours }, btn);
-
-        if (success) {
-            if (mascot) mascot.className = 'w-16 h-16 object-contain airbnft-success';
-            closeListModal();
-            showToast('🏷️ NFT listed successfully!', 'success');
-            await refreshData();
-        }
+        
+        // V9: Use RentalTx.list from new transaction module
+        await RentalTx.list({
+            tokenId,
+            pricePerHour: priceWei,
+            minHours,
+            maxHours,
+            button: btn,
+            
+            onSuccess: async (receipt) => {
+                if (mascot) mascot.className = 'w-16 h-16 object-contain airbnft-success';
+                closeListModal();
+                showToast('🏷️ NFT listed successfully!', 'success');
+                await refreshData();
+            },
+            
+            onError: (error) => {
+                if (!error.cancelled) {
+                    showToast('List failed: ' + error.message, 'error');
+                }
+            }
+        });
     } finally {
         RentalState.isTransactionPending = false;
         btn.innerHTML = originalText;
@@ -1427,12 +1458,22 @@ async function handleWithdraw(btn) {
     if (mascot) mascot.className = 'w-16 h-16 object-contain airbnft-spin';
 
     try {
-        const success = await executeWithdrawNFT(tokenId, btn);
-
-        if (success) {
-            showToast('↩️ NFT withdrawn successfully!', 'success');
-            await refreshData();
-        }
+        // V9: Use RentalTx.withdraw from new transaction module
+        await RentalTx.withdraw({
+            tokenId,
+            button: btn,
+            
+            onSuccess: async (receipt) => {
+                showToast('↩️ NFT withdrawn successfully!', 'success');
+                await refreshData();
+            },
+            
+            onError: (error) => {
+                if (!error.cancelled) {
+                    showToast('Withdraw failed: ' + error.message, 'error');
+                }
+            }
+        });
     } finally {
         RentalState.isTransactionPending = false;
         btn.innerHTML = originalText;

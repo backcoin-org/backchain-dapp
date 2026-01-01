@@ -1,5 +1,12 @@
 // pages/NetworkStakingPage.js
-// ✅ PRODUCTION V4.1 - Firebase-first for Network pStake + History via API
+// ✅ PRODUCTION V5.0 - Migrated to Transaction Engine (StakingTx)
+//
+// V5.0 Changes:
+// - Migrated to use StakingTx module from transaction engine
+// - Automatic token approval handling
+// - Better error handling with onSuccess/onError callbacks
+//
+// V4.1: Firebase-first for Network pStake + History via API
 
 const ethers = window.ethers;
 
@@ -18,13 +25,10 @@ import {
     API_ENDPOINTS,
     safeContractCall
 } from '../modules/data.js';
-import { 
-    executeDelegation, 
-    executeUnstake, 
-    executeForceUnstake, 
-    executeUniversalClaim 
-} from '../modules/transactions.js';
 import { showToast } from '../ui-feedback.js';
+
+// V5: Import new transaction module
+import { StakingTx } from '../modules/transactions/index.js';
 
 // ============================================================================
 // CONSTANTS
@@ -924,24 +928,36 @@ async function handleStake() {
     }
 
     try {
-        const success = await executeDelegation(amountWei, durationSec, highestBoosterTokenId, null);
-
-        if (success) {
-            amountInput.value = '';
-            showToast('🔒 Delegation successful!', 'success');
+        // V5: Use StakingTx.delegate from new transaction module
+        await StakingTx.delegate({
+            amount: amountWei,
+            lockDuration: durationSec,
+            boosterTokenId: highestBoosterTokenId,
+            button: stakeBtn,
             
-            // Success animation
-            if (stakeMascot) {
-                stakeMascot.className = 'w-14 h-14 object-contain stake-success';
-                setTimeout(() => {
-                    stakeMascot.className = 'w-14 h-14 object-contain stake-pulse stake-float';
-                }, 800);
+            onSuccess: async (receipt) => {
+                amountInput.value = '';
+                showToast('🔒 Delegation successful!', 'success');
+                
+                // Success animation
+                if (stakeMascot) {
+                    stakeMascot.className = 'w-14 h-14 object-contain stake-success';
+                    setTimeout(() => {
+                        stakeMascot.className = 'w-14 h-14 object-contain stake-pulse stake-float';
+                    }, 800);
+                }
+                
+                isLoading = false;
+                lastFetch = 0;
+                await loadData(true);
+            },
+            
+            onError: (error) => {
+                if (!error.cancelled) {
+                    showToast('Delegation failed: ' + (error.reason || error.message || 'Unknown error'), 'error');
+                }
             }
-            
-            isLoading = false;
-            lastFetch = 0;
-            await loadData(true);
-        }
+        });
 
     } catch (e) {
         console.error('Stake error:', e);
@@ -985,17 +1001,29 @@ async function handleUnstake(index, isForce) {
             boosterId: boosterId.toString()
         });
         
-        const success = isForce 
-            ? await executeForceUnstake(delegationIndex, boosterId)
-            : await executeUnstake(delegationIndex, boosterId);
-
-        if (success) {
-            showToast(isForce ? '⚡ Force unstaked (50% penalty applied)' : '🔓 Unstaked successfully!', isForce ? 'warning' : 'success');
-            // Força recarregamento completo
-            isLoading = false;
-            lastFetch = 0;
-            await loadData(true);
-        }
+        // V5: Use StakingTx.unstake or forceUnstake from new transaction module
+        const txMethod = isForce ? StakingTx.forceUnstake : StakingTx.unstake;
+        
+        await txMethod({
+            delegationIndex: delegationIndex,
+            boosterTokenId: boosterId,
+            button: btn,
+            
+            onSuccess: async () => {
+                showToast(isForce ? '⚡ Force unstaked (50% penalty applied)' : '🔓 Unstaked successfully!', isForce ? 'warning' : 'success');
+                // Força recarregamento completo
+                isLoading = false;
+                lastFetch = 0;
+                await loadData(true);
+            },
+            
+            onError: (error) => {
+                if (!error.cancelled) {
+                    showToast('Unstake failed: ' + (error.reason || error.message || 'Unknown error'), 'error');
+                }
+            }
+        });
+        
     } catch (e) {
         console.error('Unstake error:', e);
         showToast('Unstake failed: ' + (e.reason || e.message || 'Unknown error'), 'error');
@@ -1014,14 +1042,27 @@ async function handleClaim(stakingRewards, minerRewards, btn) {
     btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i>';
 
     try {
-        const success = await executeUniversalClaim(stakingRewards, minerRewards, highestBoosterTokenId, null);
-
-        if (success) {
-            showToast('🪙 Rewards claimed!', 'success');
-            isLoading = false;
-            lastFetch = 0;
-            await loadData(true);
-        }
+        // V5: Use StakingTx.claimRewards from new transaction module
+        await StakingTx.claimRewards({
+            stakingRewards: stakingRewards,
+            minerRewards: minerRewards,
+            boosterTokenId: highestBoosterTokenId,
+            button: btn,
+            
+            onSuccess: async () => {
+                showToast('🪙 Rewards claimed!', 'success');
+                isLoading = false;
+                lastFetch = 0;
+                await loadData(true);
+            },
+            
+            onError: (error) => {
+                if (!error.cancelled) {
+                    showToast('Claim failed: ' + (error.reason || error.message || 'Unknown error'), 'error');
+                }
+            }
+        });
+        
     } catch (e) {
         console.error('Claim error:', e);
         showToast('Claim failed: ' + (e.reason || e.message || 'Unknown error'), 'error');
