@@ -245,8 +245,11 @@ export async function loadCampaigns(options = {}) {
     const now = Date.now();
     const cacheKey = `campaigns-${category}-${status}-${creator}-${limit}-${offset}`;
     
+    console.log('🔄 loadCampaigns called with options:', options);
+    
     // Check cache
     if (!forceRefresh && campaignsCache && (now - campaignsCacheTime < CACHE_DURATION_MS)) {
+        console.log('📦 Returning cached campaigns:', campaignsCache.length);
         let filtered = [...campaignsCache];
         if (category) filtered = filtered.filter(c => c.category === category);
         if (status !== null) filtered = filtered.filter(c => c.status === status);
@@ -263,11 +266,14 @@ export async function loadCampaigns(options = {}) {
         params.append('limit', limit);
         params.append('offset', offset);
         
+        console.log('🌐 Fetching from Firebase API:', CHARITY_API.getCampaigns);
         const response = await fetchWithTimeout(`${CHARITY_API.getCampaigns}?${params}`);
         
         if (response.ok) {
             const data = await response.json();
             const campaigns = data.campaigns || [];
+            
+            console.log('✅ Firebase API returned', campaigns.length, 'campaigns');
             
             // Normalize data
             const normalized = campaigns.map(c => normalizeCampaign(c));
@@ -277,12 +283,15 @@ export async function loadCampaigns(options = {}) {
             State.charityCampaigns = normalized;
             
             return normalized;
+        } else {
+            console.warn('⚠️ Firebase API returned status:', response.status);
         }
     } catch (e) {
-        console.warn('Firebase API failed, falling back to blockchain:', e.message);
+        console.warn('❌ Firebase API failed, falling back to blockchain:', e.message);
     }
     
     // Fallback: Load from blockchain
+    console.log('🔗 Loading campaigns from blockchain...');
     return await loadCampaignsFromBlockchain(options);
 }
 
@@ -291,16 +300,27 @@ export async function loadCampaigns(options = {}) {
  */
 async function loadCampaignsFromBlockchain(options = {}) {
     const contract = getCharityPoolContract();
-    if (!contract) return [];
+    if (!contract) {
+        console.error('❌ CharityPool contract not available');
+        return [];
+    }
     
     try {
+        console.log('🔗 Querying campaignCounter from blockchain...');
         const campaignCount = await safeContractCall(contract, 'campaignCounter', [], 0n);
         const count = Number(campaignCount);
         
-        if (count === 0) return [];
+        console.log('📊 Total campaigns on blockchain:', count);
+        
+        if (count === 0) {
+            console.log('ℹ️ No campaigns found on blockchain');
+            return [];
+        }
         
         const campaigns = [];
         const batchSize = 10;
+        
+        console.log(`🔄 Loading ${count} campaigns in batches of ${batchSize}...`);
         
         for (let i = 1; i <= count; i += batchSize) {
             const batch = [];
@@ -308,31 +328,42 @@ async function loadCampaignsFromBlockchain(options = {}) {
                 batch.push(loadCampaignFromBlockchain(j));
             }
             const results = await Promise.allSettled(batch);
-            results.forEach(r => {
+            results.forEach((r, idx) => {
                 if (r.status === 'fulfilled' && r.value) {
                     campaigns.push(r.value);
+                    console.log(`✅ Loaded campaign ${i + idx}:`, r.value.title, '- Status:', r.value.status);
+                } else if (r.status === 'rejected') {
+                    console.warn(`⚠️ Failed to load campaign ${i + idx}:`, r.reason);
                 }
             });
         }
         
+        console.log(`📦 Total campaigns loaded: ${campaigns.length}`);
+        
         // Apply filters
         let filtered = campaigns;
-        if (options.category) filtered = filtered.filter(c => c.category === options.category);
+        if (options.category) {
+            filtered = filtered.filter(c => c.category === options.category);
+            console.log(`🔍 After category filter (${options.category}): ${filtered.length}`);
+        }
         if (options.status !== null && options.status !== undefined) {
             filtered = filtered.filter(c => c.status === options.status);
+            console.log(`🔍 After status filter (${options.status}): ${filtered.length}`);
         }
         if (options.creator) {
             filtered = filtered.filter(c => c.creator.toLowerCase() === options.creator.toLowerCase());
+            console.log(`🔍 After creator filter: ${filtered.length}`);
         }
         
         campaignsCache = campaigns;
         campaignsCacheTime = Date.now();
         State.charityCampaigns = campaigns;
         
+        console.log(`✅ Returning ${filtered.length} campaigns`);
         return filtered;
         
     } catch (e) {
-        console.error('Failed to load campaigns from blockchain:', e);
+        console.error('❌ Failed to load campaigns from blockchain:', e);
         return [];
     }
 }
@@ -347,9 +378,22 @@ async function loadCampaignFromBlockchain(campaignId) {
     try {
         const campaign = await contract.campaigns(campaignId);
         
+        // Debug: log raw response
+        console.log(`🔍 Raw campaign ${campaignId} data:`, {
+            field0: campaign[0],
+            field1: campaign[1],
+            field2: campaign[2]?.slice(0, 30),
+            field3: campaign[3]?.toString(),
+            field4: campaign[4]?.toString(),
+            field5: campaign[5]?.toString(),
+            field6: campaign[6]?.toString(),
+            field7: campaign[7]?.toString(),
+            field8: campaign[8]?.toString()
+        });
+        
         // FIXED: Correct field order matching CharityPool.sol struct
         // Order: creator, title, description, goalAmount, raisedAmount, donationCount, deadline, createdAt, status
-        return {
+        const normalized = {
             id: campaignId.toString(),
             creator: campaign[0],           // creator
             title: campaign[1],             // title
@@ -366,8 +410,12 @@ async function loadCampaignFromBlockchain(campaignId) {
             websiteUrl: null
         };
         
+        console.log(`✅ Campaign ${campaignId} normalized:`, normalized.title, 'Status:', normalized.status, 'Deadline:', new Date(normalized.deadline * 1000).toISOString());
+        
+        return normalized;
+        
     } catch (e) {
-        console.error(`Failed to load campaign ${campaignId}:`, e);
+        console.error(`❌ Failed to load campaign ${campaignId}:`, e);
         return null;
     }
 }
