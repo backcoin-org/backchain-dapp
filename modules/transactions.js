@@ -1,11 +1,22 @@
 // js/modules/transactions.js
-// ✅ PRODUCTION V13.2 - Improved Gas Error Messages + Faucet Link
+// ✅ PRODUCTION V14.0 - Auto Network Fix + Improved RPC Error Handling
 
 const ethers = window.ethers;
 
 import { State } from '../state.js';
 import { showToast, closeModal } from '../ui-feedback.js';
-import { addresses, nftPoolABI, rentalManagerABI, decentralizedNotaryABI, actionsManagerABI, delegationManagerABI } from '../config.js'; 
+import { 
+    addresses, 
+    nftPoolABI, 
+    rentalManagerABI, 
+    decentralizedNotaryABI, 
+    actionsManagerABI, 
+    delegationManagerABI,
+    // 🔥 V14.0: Network Management imports
+    ensureCorrectNetworkConfig,
+    checkRpcHealth,
+    updateMetaMaskNetwork
+} from '../config.js'; 
 import { formatBigNumber } from '../utils.js';
 import { loadUserData, getHighestBoosterBoostFromAPI, loadRentalListings, loadUserDelegations } from './data.js';
 import { recordPlatformUsage } from './firebase-auth-service.js';
@@ -123,6 +134,26 @@ async function getConnectedSigner() {
         return null;
     }
     try {
+        // 🔥 V14.0: Verifica e corrige configuração de rede antes de qualquer transação
+        const networkCheck = await ensureCorrectNetworkConfig();
+        
+        if (!networkCheck.success && !networkCheck.skipped) {
+            // Erro de rede - mostra mensagem apropriada
+            if (networkCheck.rpcReason === 'rate_limited') {
+                showToast("Network is busy. Please wait a moment and try again.", "warning");
+            } else if (networkCheck.error?.includes('switch')) {
+                showToast("Please switch to Arbitrum Sepolia network", "warning");
+            } else {
+                showToast(networkCheck.error || "Network configuration issue", "error");
+            }
+            return null;
+        }
+        
+        // Se a rede foi corrigida, loga para debug
+        if (networkCheck.fixed) {
+            console.log('✅ Network config was auto-fixed before transaction');
+        }
+        
         let rawProvider = State.web3Provider || State.provider || window.ethereum;
         
         if (!rawProvider) {
@@ -135,7 +166,21 @@ async function getConnectedSigner() {
         return signer;
     } catch (e) {
         console.error("Signer error:", e);
-        showToast("Wallet connection error", "error");
+        
+        // 🔥 V14.0: Tratamento específico para erros de RPC
+        const errorMsg = e?.message?.toLowerCase() || '';
+        
+        if (errorMsg.includes('too many') || errorMsg.includes('rate limit') || errorMsg.includes('-32002')) {
+            showToast("Network is congested. Please try again in a moment.", "warning");
+            // Tenta corrigir em background para próxima tentativa
+            updateMetaMaskNetwork().catch(() => {});
+        } else if (errorMsg.includes('network') || errorMsg.includes('rpc') || errorMsg.includes('failed to fetch')) {
+            showToast("Network connection issue. Please try again.", "warning");
+            updateMetaMaskNetwork().catch(() => {});
+        } else {
+            showToast("Wallet connection error", "error");
+        }
+        
         return null;
     }
 }
@@ -145,6 +190,23 @@ function formatError(error) {
     
     // User cancelled
     if (msg.includes('user rejected') || msg.includes('User denied')) return 'Transaction cancelled by user';
+    
+    // 🔥 V14.0: RPC/Network errors - Mensagens amigáveis para usuários leigos
+    if (msg.includes('RPC endpoint returned too many errors') || msg.includes('-32002')) {
+        return 'Network is busy. Please wait a moment and try again.';
+    }
+    if (msg.includes('too many requests') || msg.includes('rate limit') || msg.includes('429')) {
+        return 'Too many requests. Please wait a moment.';
+    }
+    if (msg.includes('Internal JSON-RPC') || msg.includes('-32603')) {
+        return 'Network error. Please try again.';
+    }
+    if (msg.includes('missing revert data') && msg.includes('data=null')) {
+        return 'Network connection issue. Please try again.';
+    }
+    if (msg.includes('failed to fetch') || msg.includes('network request failed')) {
+        return 'Connection lost. Please check your internet and try again.';
+    }
     
     // Gas/ETH errors - MENSAGENS MAIS CLARAS
     if (msg.includes('insufficient funds') || msg.includes('exceeds the balance')) {
@@ -261,6 +323,12 @@ function handleTransactionError(error) {
 
 function isRetryableError(error) {
     const msg = error?.message || error?.reason || '';
+    const code = error?.code || error?.error?.code;
+    
+    // 🔥 V14.0: Códigos de erro RPC específicos
+    const retryableCodes = [-32002, -32603, -32000, 429];
+    if (retryableCodes.includes(code)) return true;
+    
     const retryablePatterns = [
         'Internal JSON-RPC',
         'network',
@@ -269,9 +337,13 @@ function isRetryableError(error) {
         'ECONNRESET',
         'rate limit',
         'Too Many Requests',
+        'too many errors',      // 🔥 V14.0: MetaMask RPC error
+        'RPC endpoint',         // 🔥 V14.0: MetaMask RPC error
+        'failed to fetch',      // 🔥 V14.0: Network error
         'nonce',
         'replacement transaction',
-        'already known'
+        'already known',
+        'missing revert data'   // 🔥 V14.0: RPC não respondeu
     ];
     return retryablePatterns.some(pattern => msg.toLowerCase().includes(pattern.toLowerCase()));
 }
@@ -399,6 +471,18 @@ async function executeWithRetry(txFunction, options = {}) {
             
             if (attempt < retries && isRetryableError(e)) {
                 showToast(`Network issue, retrying... (${attempt}/${retries})`, "warning");
+                
+                // 🔥 V14.0: Tenta corrigir RPC entre tentativas
+                try {
+                    const health = await checkRpcHealth();
+                    if (!health.healthy) {
+                        console.log('⚠️ RPC unhealthy during retry, updating MetaMask...');
+                        await updateMetaMaskNetwork();
+                    }
+                } catch (healthErr) {
+                    console.warn('Health check failed:', healthErr.message);
+                }
+                
                 await sleep(TX_CONFIG.RETRY_DELAY_MS * attempt);
                 continue;
             }

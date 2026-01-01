@@ -1,5 +1,5 @@
 // js/config.js
-// ✅ PRODUCTION V29 - Charity Pool Module
+// ✅ PRODUCTION V30 - Auto Network Management for MetaMask
 
 // ============================================================================
 // 1. ENVIRONMENT & API KEYS
@@ -19,6 +19,36 @@ export const CONFIG = {
         apiKey: ALCHEMY_KEY, 
         gasPolicyId: GAS_POLICY_ID 
     }
+};
+
+// ============================================================================
+// 1.5 🔥 METAMASK NETWORK AUTO-CONFIG (V30 - NOVO!)
+// ============================================================================
+// Esta configuração é usada para adicionar/atualizar a rede no MetaMask automaticamente
+// Resolve o problema de RPC ruim sem intervenção do usuário
+
+export const METAMASK_NETWORK_CONFIG = {
+    chainId: '0x66eee', // 421614 in hex
+    chainIdDecimal: 421614,
+    chainName: 'Arbitrum Sepolia',
+    nativeCurrency: {
+        name: 'Ethereum',
+        symbol: 'ETH',
+        decimals: 18
+    },
+    blockExplorerUrls: ['https://sepolia.arbiscan.io'],
+    // 🔥 RPCs em ordem de prioridade para o MetaMask
+    rpcUrls: ALCHEMY_KEY 
+        ? [
+            `https://arb-sepolia.g.alchemy.com/v2/${ALCHEMY_KEY}`,
+            'https://arbitrum-sepolia.blockpi.network/v1/rpc/public',
+            'https://arbitrum-sepolia-rpc.publicnode.com'
+          ]
+        : [
+            'https://arbitrum-sepolia.blockpi.network/v1/rpc/public',
+            'https://arbitrum-sepolia-rpc.publicnode.com',
+            'https://sepolia-rollup.arbitrum.io/rpc'
+          ]
 };
 
 // ============================================================================
@@ -556,3 +586,215 @@ export const CampaignCategories = {
     ANIMAL: 'animal',
     HUMANITARIAN: 'humanitarian'
 };
+
+// ============================================================================
+// ✅ V30: NETWORK MANAGEMENT FUNCTIONS
+// ============================================================================
+// Funções para gerenciar automaticamente a rede no MetaMask
+// Resolve o problema de RPC ruim sem intervenção do usuário
+
+let lastNetworkCheck = 0;
+const NETWORK_CHECK_THROTTLE_MS = 5000;
+
+/**
+ * Verifica se está na rede correta
+ */
+export async function isCorrectNetwork() {
+    try {
+        if (!window.ethereum) return false;
+        const chainId = await window.ethereum.request({ method: 'eth_chainId' });
+        return chainId === METAMASK_NETWORK_CONFIG.chainId;
+    } catch (e) {
+        console.warn('Network check failed:', e.message);
+        return false;
+    }
+}
+
+/**
+ * Adiciona/Atualiza a rede Arbitrum Sepolia no MetaMask com RPCs confiáveis
+ * Esta função também ATUALIZA os RPCs se a rede já existir!
+ */
+export async function updateMetaMaskNetwork() {
+    if (!window.ethereum) {
+        console.warn('MetaMask not detected');
+        return false;
+    }
+
+    try {
+        await window.ethereum.request({
+            method: 'wallet_addEthereumChain',
+            params: [{
+                chainId: METAMASK_NETWORK_CONFIG.chainId,
+                chainName: METAMASK_NETWORK_CONFIG.chainName,
+                nativeCurrency: METAMASK_NETWORK_CONFIG.nativeCurrency,
+                rpcUrls: METAMASK_NETWORK_CONFIG.rpcUrls,
+                blockExplorerUrls: METAMASK_NETWORK_CONFIG.blockExplorerUrls
+            }]
+        });
+        
+        console.log('✅ MetaMask network config updated');
+        return true;
+    } catch (error) {
+        if (error.code === 4001) {
+            console.log('User rejected network update');
+            return false;
+        }
+        console.warn('Could not update MetaMask network:', error.message);
+        return false;
+    }
+}
+
+/**
+ * Troca para a rede Arbitrum Sepolia
+ * Se a rede não existir, adiciona automaticamente
+ */
+export async function switchToCorrectNetwork() {
+    if (!window.ethereum) {
+        console.warn('MetaMask not detected');
+        return false;
+    }
+
+    try {
+        await window.ethereum.request({
+            method: 'wallet_switchEthereumChain',
+            params: [{ chainId: METAMASK_NETWORK_CONFIG.chainId }]
+        });
+        
+        console.log('✅ Switched to Arbitrum Sepolia');
+        return true;
+        
+    } catch (switchError) {
+        // Error 4902 = chain not added to MetaMask
+        if (switchError.code === 4902) {
+            console.log('🔄 Network not found, adding...');
+            return await updateMetaMaskNetwork();
+        }
+        
+        if (switchError.code === 4001) {
+            console.log('User rejected network switch');
+            return false;
+        }
+        
+        console.error('Network switch error:', switchError);
+        return false;
+    }
+}
+
+/**
+ * Verifica a saúde do RPC atual do MetaMask
+ */
+export async function checkRpcHealth() {
+    if (!window.ethereum) return { healthy: false, reason: 'no_provider' };
+
+    try {
+        const provider = new window.ethers.BrowserProvider(window.ethereum);
+        
+        // Tenta uma operação simples com timeout de 5s
+        const timeoutPromise = new Promise((_, reject) => 
+            setTimeout(() => reject(new Error('timeout')), 5000)
+        );
+        
+        const blockPromise = provider.getBlockNumber();
+        await Promise.race([blockPromise, timeoutPromise]);
+        
+        return { healthy: true };
+        
+    } catch (error) {
+        const errorMsg = error?.message?.toLowerCase() || '';
+        
+        if (errorMsg.includes('timeout')) {
+            return { healthy: false, reason: 'timeout' };
+        }
+        if (errorMsg.includes('too many') || errorMsg.includes('rate limit') || errorMsg.includes('-32002')) {
+            return { healthy: false, reason: 'rate_limited' };
+        }
+        if (errorMsg.includes('failed to fetch') || errorMsg.includes('network')) {
+            return { healthy: false, reason: 'network_error' };
+        }
+        
+        return { healthy: false, reason: 'unknown', error: errorMsg };
+    }
+}
+
+/**
+ * 🔥 FUNÇÃO PRINCIPAL: Garante que o MetaMask está configurado corretamente
+ * Chame isso antes de qualquer transação importante
+ * Retorna: { success: boolean, error?: string, fixed?: boolean }
+ */
+export async function ensureCorrectNetworkConfig() {
+    // Throttle para não chamar muito frequentemente
+    const now = Date.now();
+    if (now - lastNetworkCheck < NETWORK_CHECK_THROTTLE_MS) {
+        return { success: true, skipped: true };
+    }
+    lastNetworkCheck = now;
+
+    if (!window.ethereum) {
+        return { success: false, error: 'MetaMask not detected' };
+    }
+
+    try {
+        // 1. Verifica se está na rede correta
+        const onCorrectNetwork = await isCorrectNetwork();
+        
+        if (!onCorrectNetwork) {
+            console.log('🔄 Wrong network detected, switching...');
+            const switched = await switchToCorrectNetwork();
+            
+            if (!switched) {
+                return { success: false, error: 'Please switch to Arbitrum Sepolia network' };
+            }
+        }
+
+        // 2. Verifica saúde do RPC
+        const rpcHealth = await checkRpcHealth();
+        
+        if (!rpcHealth.healthy) {
+            console.log(`⚠️ RPC unhealthy (${rpcHealth.reason}), updating MetaMask config...`);
+            const updated = await updateMetaMaskNetwork();
+            
+            if (updated) {
+                // Aguarda um pouco e verifica novamente
+                await new Promise(r => setTimeout(r, 1000));
+                const recheckHealth = await checkRpcHealth();
+                
+                if (!recheckHealth.healthy) {
+                    return { 
+                        success: false, 
+                        error: 'Network is congested. Please try again in a moment.',
+                        rpcReason: recheckHealth.reason
+                    };
+                }
+                
+                return { success: true, fixed: true };
+            }
+        }
+
+        return { success: true };
+
+    } catch (error) {
+        console.error('Network config error:', error);
+        return { success: false, error: error.message };
+    }
+}
+
+/**
+ * Configura listener para mudanças de rede no MetaMask
+ */
+export function setupNetworkChangeListener(onNetworkChange) {
+    if (!window.ethereum) return;
+
+    window.ethereum.on('chainChanged', async (chainId) => {
+        console.log('🔄 Network changed to:', chainId);
+        
+        const isCorrect = chainId === METAMASK_NETWORK_CONFIG.chainId;
+        
+        if (onNetworkChange) {
+            onNetworkChange({
+                chainId,
+                isCorrectNetwork: isCorrect,
+                needsSwitch: !isCorrect
+            });
+        }
+    });
+}

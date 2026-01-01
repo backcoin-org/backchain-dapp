@@ -1,5 +1,5 @@
 // js/modules/wallet.js
-// ✅ VERSÃO V7.0: Multi-RPC System - Arbitrum Official + Alchemy Fallback
+// ✅ VERSÃO V8.0: Auto Network Management - Fix RPC issues automatically
 
 import { createWeb3Modal, defaultConfig } from 'https://esm.sh/@web3modal/ethers@5.1.11?bundle';
 
@@ -23,7 +23,13 @@ import {
     faucetABI,
     ecosystemManagerABI,
     decentralizedNotaryABI,
-    rentalManagerABI
+    rentalManagerABI,
+    // 🔥 V8.0: Network Management imports
+    METAMASK_NETWORK_CONFIG,
+    ensureCorrectNetworkConfig,
+    updateMetaMaskNetwork,
+    checkRpcHealth,
+    setupNetworkChangeListener
 } from '../config.js';
 import { loadPublicData, loadUserData } from './data.js';
 import { signIn } from './firebase-auth-service.js';
@@ -55,13 +61,13 @@ let currentPublicProvider = null;
 // ============================================================================
 const WALLETCONNECT_PROJECT_ID = 'cd4bdedee7a7e909ebd3df8bbc502aed';
 
-// 🔥 V7.0: Usa RPC primário (Arbitrum Official)
+// 🔥 V8.0: Usa configuração centralizada do METAMASK_NETWORK_CONFIG
 const arbitrumSepoliaConfig = {
-    chainId: ARBITRUM_SEPOLIA_ID_DECIMAL,
-    name: 'Arbitrum Sepolia',
-    currency: 'ETH',
-    explorerUrl: 'https://sepolia.arbiscan.io',
-    rpcUrl: sepoliaRpcUrl  // Arbitrum Official (gratuito!)
+    chainId: METAMASK_NETWORK_CONFIG.chainIdDecimal,
+    name: METAMASK_NETWORK_CONFIG.chainName,
+    currency: METAMASK_NETWORK_CONFIG.nativeCurrency.symbol,
+    explorerUrl: METAMASK_NETWORK_CONFIG.blockExplorerUrls[0],
+    rpcUrl: METAMASK_NETWORK_CONFIG.rpcUrls[0]  // Usa o RPC primário da config
 };
 
 const metadata = {
@@ -465,9 +471,19 @@ async function setupSignerAndLoadData(provider, address) {
 // 6. EXPORTS
 // ============================================================================
 
-// 🔥 V7.0: initPublicProvider com suporte a multi-RPC
+// 🔥 V8.0: initPublicProvider com Auto Network Management
 export async function initPublicProvider() {
     try {
+        // 🔥 V8.0: Verifica e corrige configuração de rede no MetaMask automaticamente
+        if (window.ethereum) {
+            const networkCheck = await ensureCorrectNetworkConfig();
+            if (networkCheck.fixed) {
+                console.log('✅ MetaMask network config was auto-fixed');
+            } else if (!networkCheck.success && !networkCheck.skipped) {
+                console.warn('Initial network config check:', networkCheck.error);
+            }
+        }
+        
         const rpcUrl = getCurrentRpcUrl();
         console.log(`🌐 Initializing public provider with: ${rpcUrl.slice(0, 50)}...`);
         
@@ -488,7 +504,7 @@ export async function initPublicProvider() {
             console.log("✅ FortunePool V2 contract initialized:", fortunePoolAddress);
         }
         
-        // 🔥 V7.0: Carrega dados com fallback
+        // 🔥 V8.0: Carrega dados com fallback
         try {
             await executeWithRpcFallback(async () => {
                 await loadPublicData();
@@ -497,6 +513,25 @@ export async function initPublicProvider() {
             console.warn("Initial public data load failed, will retry on user interaction");
         }
         
+        // 🔥 V8.0: Configura listener para mudanças de rede
+        setupNetworkChangeListener(async (info) => {
+            if (!info.isCorrectNetwork) {
+                console.log('⚠️ User switched to wrong network');
+                showToast("Please switch back to Arbitrum Sepolia", "warning");
+            } else {
+                // Rede correta, verifica se RPCs estão bons
+                const health = await checkRpcHealth();
+                if (!health.healthy) {
+                    console.log('⚠️ RPC issues after network change, updating...');
+                    await updateMetaMaskNetwork();
+                    await recreatePublicProvider();
+                }
+            }
+        });
+        
+        // 🔥 V8.0: Inicia monitoramento periódico de saúde do RPC
+        startRpcHealthMonitoring();
+        
         if (window.updateUIState) window.updateUIState();
         
         console.log("✅ Public provider initialized");
@@ -504,7 +539,11 @@ export async function initPublicProvider() {
     } catch (e) { 
         console.error("Public provider error:", e);
         
-        // 🔥 V7.0: Tenta com próximo RPC
+        // 🔥 V8.0: Tenta corrigir MetaMask e usar próximo RPC
+        if (window.ethereum) {
+            await updateMetaMaskNetwork();
+        }
+        
         const newRpcUrl = switchToNextRpc();
         console.log(`🔄 Retrying with: ${newRpcUrl}`);
         
@@ -576,5 +615,75 @@ export function initWalletSubscriptions(callback) {
 export function openConnectModal() { web3modal.open(); }
 export async function disconnectWallet() { await web3modal.disconnect(); }
 
-// 🔥 V7.0: Export helper para outros módulos usarem
-export { executeWithRpcFallback, recreatePublicProvider };
+// ============================================================================
+// 7. 🔥 V8.0: RPC HEALTH MONITORING
+// ============================================================================
+
+let rpcHealthMonitorInterval = null;
+
+/**
+ * Inicia monitoramento periódico da saúde do RPC
+ * Se detectar problemas, tenta corrigir automaticamente
+ */
+function startRpcHealthMonitoring() {
+    // Para qualquer monitoramento existente
+    if (rpcHealthMonitorInterval) {
+        clearInterval(rpcHealthMonitorInterval);
+    }
+    
+    // Verifica a cada 30 segundos
+    rpcHealthMonitorInterval = setInterval(async () => {
+        // Só verifica se a tab está visível e o usuário está conectado
+        if (document.hidden || !State.isConnected) return;
+        
+        const health = await checkRpcHealth();
+        
+        if (!health.healthy) {
+            console.log(`⚠️ RPC health check failed (${health.reason}), attempting fix...`);
+            
+            // Tenta atualizar os RPCs no MetaMask
+            const updated = await updateMetaMaskNetwork();
+            
+            if (updated) {
+                console.log('✅ MetaMask RPCs updated via health monitor');
+                await recreatePublicProvider();
+                
+                // Reset contadores
+                balanceErrorCount = 0;
+                rpcRetryCount = 0;
+            }
+        }
+    }, 30000);
+    
+    // Também verifica quando a tab fica ativa
+    document.addEventListener('visibilitychange', async () => {
+        if (!document.hidden && State.isConnected) {
+            const health = await checkRpcHealth();
+            if (!health.healthy) {
+                console.log('⚠️ RPC unhealthy on tab focus, fixing...');
+                await updateMetaMaskNetwork();
+                await recreatePublicProvider();
+            }
+        }
+    });
+    
+    console.log('✅ RPC health monitoring started (30s interval)');
+}
+
+/**
+ * Para o monitoramento de saúde do RPC
+ */
+function stopRpcHealthMonitoring() {
+    if (rpcHealthMonitorInterval) {
+        clearInterval(rpcHealthMonitorInterval);
+        rpcHealthMonitorInterval = null;
+    }
+}
+
+// 🔥 V8.0: Exports atualizados
+export { 
+    executeWithRpcFallback, 
+    recreatePublicProvider,
+    startRpcHealthMonitoring,
+    stopRpcHealthMonitoring
+};
