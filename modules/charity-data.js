@@ -1,5 +1,7 @@
 // js/modules/charity-data.js
-// ✅ PRODUCTION V1.0 - Charity Pool Data Module
+// ✅ PRODUCTION V1.1 - Charity Pool Data Module
+// FIX V1.1: Corrected ABI field order to match CharityPool.sol struct
+// FIX V1.1: Updated canWithdraw to allow withdrawal after cancellation
 
 const ethers = window.ethers;
 
@@ -64,7 +66,8 @@ export const CHARITY_API = {
 
 export const charityPoolABI = [
     // Read Functions
-    "function campaigns(uint256 campaignId) external view returns (address creator, string title, string description, uint256 goalAmount, uint256 raisedAmount, uint256 deadline, uint8 status, uint256 donationCount, uint256 createdAt)",
+    // FIXED: Correct field order matching CharityPool.sol struct Campaign
+    "function campaigns(uint256 campaignId) external view returns (address creator, string title, string description, uint256 goalAmount, uint256 raisedAmount, uint256 donationCount, uint256 deadline, uint256 createdAt, uint8 status)",
     "function donations(uint256 donationId) external view returns (address donor, uint256 campaignId, uint256 grossAmount, uint256 netAmount, uint256 timestamp)",
     "function campaignCounter() external view returns (uint256)",
     "function donationCounter() external view returns (uint256)",
@@ -344,17 +347,19 @@ async function loadCampaignFromBlockchain(campaignId) {
     try {
         const campaign = await contract.campaigns(campaignId);
         
+        // FIXED: Correct field order matching CharityPool.sol struct
+        // Order: creator, title, description, goalAmount, raisedAmount, donationCount, deadline, createdAt, status
         return {
             id: campaignId.toString(),
-            creator: campaign.creator,
-            title: campaign.title,
-            description: campaign.description,
-            goalAmount: BigInt(campaign.goalAmount.toString()),
-            raisedAmount: BigInt(campaign.raisedAmount.toString()),
-            deadline: Number(campaign.deadline),
-            status: Number(campaign.status),
-            donationCount: Number(campaign.donationCount),
-            createdAt: Number(campaign.createdAt),
+            creator: campaign[0],           // creator
+            title: campaign[1],             // title
+            description: campaign[2],       // description
+            goalAmount: BigInt(campaign[3].toString()),    // goalAmount
+            raisedAmount: BigInt(campaign[4].toString()),  // raisedAmount
+            donationCount: Number(campaign[5]),            // donationCount
+            deadline: Number(campaign[6]),                 // deadline
+            createdAt: Number(campaign[7]),                // createdAt
+            status: Number(campaign[8]),                   // status
             // These come from Firebase metadata
             category: 'humanitarian', // Default, override from Firebase
             imageUrl: null,
@@ -647,9 +652,11 @@ export function canWithdraw(campaign, userAddress) {
     const isCreator = campaign.creator.toLowerCase() === userAddress.toLowerCase();
     const hasEnded = campaign.deadline <= now;
     const isActive = campaign.status === CampaignStatus.ACTIVE;
+    const isCancelled = campaign.status === CampaignStatus.CANCELLED;
     const hasFunds = campaign.raisedAmount > 0n;
     
-    return isCreator && hasEnded && isActive && hasFunds;
+    // Can withdraw if: creator AND has funds AND (campaign ended OR cancelled)
+    return isCreator && hasFunds && ((hasEnded && isActive) || isCancelled);
 }
 
 /**
