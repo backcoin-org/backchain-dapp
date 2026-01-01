@@ -1295,6 +1295,11 @@
       "address": "0xD76b5FE4cd863beAd0D0762C5281945f9C325E22",
       "txHash": "0xe9faf94abfdb3419f5f7f91546247f85f85317a887ebe4c6ec98afc18a9a46ad",
       "kind": "uups"
+    },
+    {
+      "address": "0xdaBD813B39AcdF4c817B2D19e76570696E3B2DD7",
+      "txHash": "0x282d82699b6b736d39cda421019e063ed83d749abe81d0ef4fb2134e840e2640",
+      "kind": "uups"
     }
   ],
   "impls": {

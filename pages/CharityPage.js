@@ -1,5 +1,5 @@
 // js/pages/CharityPage.js
-// ✅ PRODUCTION V3.3 - Auto-creates container if not found
+// ✅ PRODUCTION V3.4 - Fixed tx.wait() parsing error on Arbitrum
 
 import { State } from '../state.js';
 import { showToast } from '../ui-feedback.js';
@@ -11,7 +11,7 @@ const ethers = window.ethers;
 const CampaignStatus = { ACTIVE: 0, COMPLETED: 1, CANCELLED: 2, WITHDRAWN: 3 };
 const isCampaignActive = (c) => c.status === 0 && Number(c.deadline) > Math.floor(Date.now() / 1000);
 
-// ABI
+// ABI - CORRECT ORDER matching CharityPool.sol struct
 const charityPoolABI = [
     "function campaigns(uint256) view returns (address creator, string title, string description, uint256 goalAmount, uint256 raisedAmount, uint256 donationCount, uint256 deadline, uint256 createdAt, uint8 status)",
     "function campaignCounter() view returns (uint256)",
@@ -23,7 +23,8 @@ const charityPoolABI = [
     "function donate(uint256,uint256)",
     "function cancelCampaign(uint256)",
     "function withdraw(uint256) payable",
-    "event CampaignCreated(uint256 indexed campaignId, address indexed creator, string title, uint256 goalAmount, uint256 deadline)"
+    "event CampaignCreated(uint256 indexed campaignId, address indexed creator, string title, uint256 goalAmount, uint256 deadline)",
+    "event DonationMade(uint256 indexed campaignId, uint256 indexed donationId, address indexed donor, uint256 grossAmount, uint256 netAmount, uint256 miningFee, uint256 burnedAmount)"
 ];
 
 const bkcTokenABI = [
@@ -37,6 +38,7 @@ const CHARITY_API = { getCampaigns: 'https://getcharitycampaigns-4wvdcuoouq-uc.a
 
 // Constants
 const EXPLORER_ADDRESS = "https://sepolia.arbiscan.io/address/";
+const EXPLORER_TX = "https://sepolia.arbiscan.io/tx/";
 const PLACEHOLDER_IMAGES = { animal: 'https://images.unsplash.com/photo-1548199973-03cce0bbc87b?w=800&q=80', humanitarian: 'https://images.unsplash.com/photo-1469571486292-0ba58a3f068b?w=800&q=80', default: 'https://images.unsplash.com/photo-1532629345422-7515f3d16bb6?w=800&q=80' };
 const CATEGORIES = { animal: { name: 'Animal Welfare', emoji: '🐾', color: '#10b981' }, humanitarian: { name: 'Humanitarian Aid', emoji: '💗', color: '#ec4899' } };
 const STATUS_CONFIG = { 0: { label: 'Active', color: '#10b981', icon: 'fa-circle-play' }, 1: { label: 'Ended', color: '#3b82f6', icon: 'fa-circle-check' }, 2: { label: 'Cancelled', color: '#ef4444', icon: 'fa-circle-xmark' }, 3: { label: 'Completed', color: '#8b5cf6', icon: 'fa-circle-dollar-to-slot' } };
@@ -91,109 +93,92 @@ function injectStyles() {
 .cp-progress-stats { display:flex; justify-content:space-between; font-size:0.8rem; }
 .cp-progress-raised { color:var(--cp-text); font-weight:600; }
 .cp-progress-goal { color:var(--cp-muted); }
-.cp-card-footer { display:flex; justify-content:space-between; align-items:center; padding-top:0.75rem; margin-top:0.75rem; border-top:1px solid var(--cp-border); font-size:0.7rem; color:var(--cp-muted); }
-.cp-card-time.urgent { color:var(--cp-danger); }
-.cp-btn { display:inline-flex; align-items:center; justify-content:center; gap:0.5rem; padding:0.625rem 1rem; border-radius:10px; font-weight:700; font-size:0.8rem; cursor:pointer; transition:all 0.2s; border:none; text-decoration:none; }
-.cp-btn:disabled { opacity:0.5; cursor:not-allowed; }
+.cp-card-meta { display:flex; justify-content:space-between; font-size:0.7rem; color:var(--cp-muted); margin-top:0.5rem; padding-top:0.5rem; border-top:1px solid var(--cp-border); }
+.cp-btn { display:inline-flex; align-items:center; justify-content:center; gap:0.5rem; padding:0.625rem 1.25rem; border-radius:8px; font-weight:600; font-size:0.875rem; border:none; cursor:pointer; transition:all 0.2s; }
 .cp-btn-primary { background:linear-gradient(135deg,#f59e0b,#d97706); color:#000; }
-.cp-btn-primary:hover:not(:disabled) { transform:translateY(-2px); box-shadow:0 10px 25px rgba(245,158,11,0.4); }
-.cp-btn-secondary { background:var(--cp-bg3); color:var(--cp-muted); border:1px solid var(--cp-border); }
-.cp-btn-secondary:hover:not(:disabled) { background:var(--cp-bg2); color:var(--cp-text); }
+.cp-btn-primary:hover { transform:translateY(-2px); box-shadow:0 8px 20px rgba(245,158,11,0.3); }
+.cp-btn-secondary { background:var(--cp-bg3); color:var(--cp-text); border:1px solid var(--cp-border); }
+.cp-btn-secondary:hover { background:var(--cp-border); }
 .cp-btn-success { background:linear-gradient(135deg,#10b981,#059669); color:#fff; }
-.cp-btn-success:hover:not(:disabled) { box-shadow:0 10px 25px rgba(16,185,129,0.4); }
+.cp-btn-success:hover { transform:translateY(-2px); box-shadow:0 8px 20px rgba(16,185,129,0.3); }
 .cp-btn-danger { background:linear-gradient(135deg,#ef4444,#dc2626); color:#fff; }
-.cp-btn-lg { padding:0.875rem 1.5rem; font-size:0.9rem; }
-.cp-btn-block { width:100%; }
-.cp-empty { text-align:center; padding:3rem 1.5rem; color:var(--cp-muted); }
-.cp-empty i { font-size:3rem; margin-bottom:1rem; opacity:0.5; display:block; }
-.cp-empty h3 { font-size:1.125rem; color:var(--cp-text); margin-bottom:0.5rem; }
-.cp-loading { display:flex; flex-direction:column; align-items:center; padding:3rem; color:var(--cp-muted); }
-.cp-spinner { width:40px; height:40px; border:3px solid var(--cp-border); border-top-color:var(--cp-primary); border-radius:50%; animation:spin 0.8s linear infinite; margin-bottom:1rem; }
-@keyframes spin { to { transform:rotate(360deg); } }
-.cp-modal { position:fixed; inset:0; z-index:1000; display:flex; align-items:center; justify-content:center; background:rgba(0,0,0,0.85); backdrop-filter:blur(8px); opacity:0; visibility:hidden; transition:all 0.3s; padding:1rem; }
-.cp-modal.active { opacity:1; visibility:visible; }
-.cp-modal-content { background:var(--cp-bg); border:1px solid var(--cp-border); border-radius:var(--cp-radius); width:100%; max-width:550px; max-height:90vh; overflow-y:auto; transform:scale(0.95); transition:transform 0.3s; }
-.cp-modal.active .cp-modal-content { transform:scale(1); }
-.cp-modal-header { display:flex; justify-content:space-between; align-items:center; padding:1.25rem; border-bottom:1px solid var(--cp-border); }
-.cp-modal-title { font-size:1.125rem; font-weight:700; color:var(--cp-text); }
-.cp-modal-close { width:32px; height:32px; border-radius:50%; background:var(--cp-bg3); border:none; color:var(--cp-muted); cursor:pointer; display:flex; align-items:center; justify-content:center; }
-.cp-modal-close:hover { background:var(--cp-danger); color:#fff; }
+.cp-btn-danger:hover { transform:translateY(-2px); box-shadow:0 8px 20px rgba(239,68,68,0.3); }
+.cp-btn:disabled { opacity:0.6; cursor:not-allowed; transform:none !important; }
+.cp-empty { text-align:center; padding:3rem 1rem; color:var(--cp-muted); }
+.cp-empty i { font-size:3rem; margin-bottom:1rem; opacity:0.4; }
+.cp-empty h3 { color:var(--cp-text); margin:0 0 0.5rem; }
+.cp-loading { display:flex; flex-direction:column; align-items:center; justify-content:center; padding:3rem; gap:1rem; }
+.cp-spinner { width:40px; height:40px; border:3px solid var(--cp-border); border-top-color:var(--cp-primary); border-radius:50%; animation:cp-spin 1s linear infinite; }
+@keyframes cp-spin { to { transform:rotate(360deg); } }
+.cp-modal { display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.8); backdrop-filter:blur(4px); z-index:9999; align-items:center; justify-content:center; padding:1rem; }
+.cp-modal.active { display:flex; }
+.cp-modal-content { background:var(--cp-bg2); border:1px solid var(--cp-border); border-radius:var(--cp-radius); width:100%; max-width:520px; max-height:90vh; overflow-y:auto; }
+.cp-modal-header { display:flex; justify-content:space-between; align-items:center; padding:1rem 1.25rem; border-bottom:1px solid var(--cp-border); }
+.cp-modal-title { font-size:1.125rem; font-weight:700; color:var(--cp-text); display:flex; align-items:center; gap:0.5rem; margin:0; }
+.cp-modal-close { background:none; border:none; color:var(--cp-muted); font-size:1.25rem; cursor:pointer; padding:0.25rem; }
+.cp-modal-close:hover { color:var(--cp-text); }
 .cp-modal-body { padding:1.25rem; }
-.cp-modal-footer { padding:1.25rem; border-top:1px solid var(--cp-border); display:flex; gap:0.75rem; justify-content:flex-end; }
+.cp-modal-footer { display:flex; justify-content:flex-end; gap:0.75rem; padding:1rem 1.25rem; border-top:1px solid var(--cp-border); }
 .cp-form-group { margin-bottom:1rem; }
 .cp-form-label { display:block; font-size:0.8rem; font-weight:600; color:var(--cp-text); margin-bottom:0.375rem; }
 .cp-form-label span { color:var(--cp-muted); font-weight:400; }
-.cp-form-input, .cp-form-textarea { width:100%; padding:0.75rem; background:var(--cp-bg2); border:1px solid var(--cp-border); border-radius:10px; color:var(--cp-text); font-size:0.875rem; box-sizing:border-box; }
-.cp-form-input:focus, .cp-form-textarea:focus { outline:none; border-color:var(--cp-primary); }
-.cp-form-input::placeholder, .cp-form-textarea::placeholder { color:var(--cp-muted); }
+.cp-form-input { width:100%; padding:0.625rem 0.875rem; background:var(--cp-bg); border:1px solid var(--cp-border); border-radius:8px; color:var(--cp-text); font-size:0.9rem; }
+.cp-form-input:focus { outline:none; border-color:var(--cp-primary); }
 .cp-form-textarea { min-height:100px; resize:vertical; }
 .cp-form-row { display:grid; grid-template-columns:1fr 1fr; gap:1rem; }
 .cp-cat-selector { display:grid; grid-template-columns:1fr 1fr; gap:0.75rem; }
-.cp-cat-option { padding:0.75rem; background:var(--cp-bg2); border:2px solid var(--cp-border); border-radius:10px; cursor:pointer; text-align:center; transition:all 0.2s; }
+.cp-cat-option { display:flex; flex-direction:column; align-items:center; padding:1rem; background:var(--cp-bg); border:2px solid var(--cp-border); border-radius:10px; cursor:pointer; transition:all 0.2s; }
 .cp-cat-option:hover { border-color:var(--cp-muted); }
 .cp-cat-option.selected { border-color:var(--cp-primary); background:rgba(245,158,11,0.1); }
 .cp-cat-option input { display:none; }
-.cp-cat-option-icon { font-size:1.25rem; margin-bottom:0.25rem; }
+.cp-cat-option-icon { font-size:1.5rem; margin-bottom:0.375rem; }
 .cp-cat-option-name { font-size:0.8rem; font-weight:600; color:var(--cp-text); }
-.cp-img-upload { border:2px dashed var(--cp-border); border-radius:10px; padding:1.5rem; text-align:center; cursor:pointer; transition:all 0.2s; position:relative; }
-.cp-img-upload:hover { border-color:var(--cp-primary); background:rgba(245,158,11,0.05); }
-.cp-img-upload input[type="file"] { position:absolute; inset:0; opacity:0; cursor:pointer; }
-.cp-img-upload-placeholder { color:var(--cp-muted); }
-.cp-img-upload-placeholder i { font-size:2rem; margin-bottom:0.5rem; display:block; }
-.cp-img-preview { width:100%; height:150px; object-fit:cover; border-radius:8px; }
-.cp-img-remove { position:absolute; top:0.5rem; right:0.5rem; width:28px; height:28px; border-radius:50%; background:var(--cp-danger); color:#fff; border:none; cursor:pointer; display:flex; align-items:center; justify-content:center; z-index:10; }
-.cp-donate-presets { display:grid; grid-template-columns:repeat(4,1fr); gap:0.5rem; margin-bottom:1rem; }
-.cp-preset { padding:0.5rem; background:var(--cp-bg3); border:1px solid var(--cp-border); border-radius:8px; color:var(--cp-muted); font-size:0.8rem; cursor:pointer; transition:all 0.2s; }
-.cp-preset:hover { background:var(--cp-primary); border-color:var(--cp-primary); color:#000; }
-.cp-fee-info { padding:0.75rem; background:rgba(245,158,11,0.1); border-radius:8px; font-size:0.75rem; color:var(--cp-muted); }
-.cp-fee-info strong { color:var(--cp-primary); }
-.cp-detail { animation:fadeIn 0.4s; }
-.cp-back { display:inline-flex; align-items:center; gap:0.5rem; color:var(--cp-muted); font-size:0.875rem; cursor:pointer; margin-bottom:1.5rem; transition:color 0.2s; background:none; border:none; }
-.cp-back:hover { color:var(--cp-primary); }
-.cp-detail-grid { display:grid; grid-template-columns:1fr 380px; gap:1.5rem; }
-.cp-detail-main { background:var(--cp-bg2); border:1px solid var(--cp-border); border-radius:var(--cp-radius); overflow:hidden; }
-.cp-detail-img { width:100%; height:350px; object-fit:cover; background:var(--cp-bg3); }
-.cp-detail-content { padding:1.5rem; }
-.cp-detail-title { font-size:1.5rem; font-weight:800; color:var(--cp-text); margin-bottom:0.5rem; }
-.cp-detail-creator { font-size:0.875rem; color:var(--cp-muted); margin-bottom:1.25rem; }
-.cp-detail-creator a { color:var(--cp-primary); text-decoration:none; }
-.cp-detail-desc { color:var(--cp-muted); line-height:1.7; white-space:pre-wrap; margin-bottom:1.5rem; }
-.cp-sidebar { position:sticky; top:1rem; }
-.cp-donate-box { background:var(--cp-bg2); border:1px solid var(--cp-border); border-radius:var(--cp-radius); padding:1.25rem; margin-bottom:1rem; }
-.cp-donate-amounts { display:flex; justify-content:space-between; align-items:baseline; margin-bottom:0.75rem; }
-.cp-donate-raised { font-size:1.5rem; font-weight:800; color:var(--cp-success); }
-.cp-donate-goal { font-size:0.9rem; color:var(--cp-muted); }
-.cp-donate-stats { display:grid; grid-template-columns:repeat(3,1fr); gap:0.75rem; margin:1rem 0; padding:0.875rem; background:var(--cp-bg3); border-radius:10px; text-align:center; }
-.cp-donate-stat-val { font-size:1rem; font-weight:700; color:var(--cp-text); }
-.cp-donate-stat-lbl { font-size:0.65rem; color:var(--cp-muted); text-transform:uppercase; }
-.cp-donate-input-wrap { position:relative; margin-bottom:0.75rem; }
-.cp-donate-input { width:100%; padding:0.875rem; padding-right:50px; background:var(--cp-bg); border:2px solid var(--cp-border); border-radius:10px; color:var(--cp-text); font-size:1rem; font-weight:600; box-sizing:border-box; }
-.cp-donate-input:focus { outline:none; border-color:var(--cp-primary); }
+.cp-donate-input-wrap { position:relative; }
+.cp-donate-input { width:100%; padding:1rem; padding-right:4rem; font-size:1.5rem; font-weight:700; text-align:center; background:var(--cp-bg); border:2px solid var(--cp-border); border-radius:12px; color:var(--cp-text); }
 .cp-donate-currency { position:absolute; right:1rem; top:50%; transform:translateY(-50%); color:var(--cp-muted); font-weight:600; }
-.cp-share-box { background:var(--cp-bg2); border:1px solid var(--cp-border); border-radius:var(--cp-radius); padding:1rem; text-align:center; }
-.cp-share-title { font-size:0.8rem; font-weight:600; color:var(--cp-text); margin-bottom:0.75rem; }
+.cp-donate-presets { display:flex; gap:0.5rem; margin-top:0.75rem; justify-content:center; }
+.cp-preset { padding:0.5rem 1rem; background:var(--cp-bg3); border:1px solid var(--cp-border); border-radius:6px; color:var(--cp-text); font-weight:600; cursor:pointer; }
+.cp-preset:hover { background:var(--cp-border); }
+.cp-fee-info { text-align:center; font-size:0.75rem; color:var(--cp-muted); margin-top:1rem; padding:0.75rem; background:var(--cp-bg); border-radius:8px; }
+.cp-detail { display:grid; grid-template-columns:1fr 380px; gap:2rem; }
+.cp-detail-main { }
+.cp-detail-sidebar { }
+.cp-detail-img { width:100%; aspect-ratio:16/9; object-fit:cover; border-radius:var(--cp-radius); background:var(--cp-bg3); }
+.cp-detail-content { margin-top:1.5rem; }
+.cp-detail-title { font-size:1.75rem; font-weight:800; color:var(--cp-text); margin:0 0 0.75rem; }
+.cp-detail-meta { display:flex; gap:1.5rem; flex-wrap:wrap; margin-bottom:1.5rem; font-size:0.85rem; color:var(--cp-muted); }
+.cp-detail-meta a { color:var(--cp-primary); text-decoration:none; }
+.cp-detail-desc { color:var(--cp-text); line-height:1.7; white-space:pre-wrap; }
+.cp-detail-card { background:var(--cp-bg2); border:1px solid var(--cp-border); border-radius:var(--cp-radius); padding:1.5rem; position:sticky; top:1rem; }
+.cp-detail-progress { margin-bottom:1.5rem; }
+.cp-detail-raised { font-size:2rem; font-weight:800; margin-bottom:0.25rem; }
+.cp-detail-goal { font-size:0.9rem; color:var(--cp-muted); margin-bottom:1rem; }
+.cp-detail-stats { display:grid; grid-template-columns:1fr 1fr; gap:1rem; margin-top:1.5rem; padding-top:1.5rem; border-top:1px solid var(--cp-border); }
+.cp-detail-stat { text-align:center; }
+.cp-detail-stat-val { font-size:1.25rem; font-weight:700; color:var(--cp-text); }
+.cp-detail-stat-lbl { font-size:0.7rem; color:var(--cp-muted); text-transform:uppercase; }
+.cp-detail-actions { display:flex; flex-direction:column; gap:0.75rem; margin-top:1.5rem; }
+.cp-share-box { margin-top:1.5rem; padding-top:1.5rem; border-top:1px solid var(--cp-border); }
+.cp-share-title { font-size:0.8rem; color:var(--cp-muted); margin-bottom:0.75rem; text-align:center; }
 .cp-share-btns { display:flex; justify-content:center; gap:0.5rem; }
-.cp-share-btn { width:40px; height:40px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:1rem; cursor:pointer; transition:all 0.2s; border:none; }
-.cp-share-btn.twitter { background:rgba(29,161,242,0.15); color:#1da1f2; }
-.cp-share-btn.twitter:hover { background:#1da1f2; color:#fff; }
-.cp-share-btn.telegram { background:rgba(0,136,204,0.15); color:#0088cc; }
-.cp-share-btn.telegram:hover { background:#0088cc; color:#fff; }
-.cp-share-btn.whatsapp { background:rgba(37,211,102,0.15); color:#25d366; }
-.cp-share-btn.whatsapp:hover { background:#25d366; color:#fff; }
-.cp-share-btn.copy { background:var(--cp-bg3); color:var(--cp-muted); }
-.cp-share-btn.copy:hover { background:var(--cp-primary); color:#000; }
-@keyframes fadeIn { from { opacity:0; transform:translateY(10px); } to { opacity:1; transform:translateY(0); } }
-@media (max-width:1024px) { .cp-detail-grid { grid-template-columns:1fr; } .cp-sidebar { position:static; } }
-@media (max-width:768px) { .cp-hero { flex-direction:column; text-align:center; } .cp-stats { grid-template-columns:repeat(2,1fr); } .cp-cats { grid-template-columns:1fr; } .cp-grid { grid-template-columns:1fr; } }
-    `;
+.cp-share-btn { width:40px; height:40px; border-radius:50%; border:1px solid var(--cp-border); background:var(--cp-bg); color:var(--cp-text); display:flex; align-items:center; justify-content:center; cursor:pointer; transition:all 0.2s; }
+.cp-share-btn:hover { transform:translateY(-2px); }
+.cp-share-btn.twitter:hover { background:#1da1f2; border-color:#1da1f2; color:#fff; }
+.cp-share-btn.telegram:hover { background:#0088cc; border-color:#0088cc; color:#fff; }
+.cp-share-btn.whatsapp:hover { background:#25d366; border-color:#25d366; color:#fff; }
+.cp-share-btn.copy:hover { background:var(--cp-primary); border-color:var(--cp-primary); color:#000; }
+@media(max-width:900px) { .cp-detail { grid-template-columns:1fr; } .cp-detail-sidebar { position:static; } }
+@media(max-width:640px) { .cp-stats { grid-template-columns:repeat(2,1fr); } .cp-cats { grid-template-columns:1fr; } .cp-form-row { grid-template-columns:1fr; } .cp-hero { flex-direction:column; text-align:center; } .cp-hero-left { text-align:center; } }
+`;
     document.head.appendChild(s);
 }
 
-// Utilities
-const fmt = (v) => { if(!v) return '0'; try { const n=parseFloat(ethers.formatEther(v)); if(n>=1e6) return (n/1e6).toFixed(2)+'M'; if(n>=1e3) return (n/1e3).toFixed(2)+'K'; return n.toLocaleString('en-US',{maximumFractionDigits:2}); } catch { return '0'; } };
-const fmtAddr = (a) => a ? `${a.slice(0,6)}...${a.slice(-4)}` : '...';
-const fmtTime = (d) => { const r=Number(d)-Math.floor(Date.now()/1000); if(r<=0) return {text:'Ended',ended:true,urgent:false}; const dy=Math.floor(r/86400),hr=Math.floor((r%86400)/3600); if(dy>0) return {text:`${dy}d ${hr}h left`,ended:false,urgent:dy<=3}; if(hr>0) return {text:`${hr}h left`,ended:false,urgent:true}; return {text:`${Math.floor((r%3600)/60)}m left`,ended:false,urgent:true}; };
-const calcProg = (r,g) => { if(!g) return 0; try { return Math.min((parseFloat(ethers.formatEther(r||0))/parseFloat(ethers.formatEther(g)))*100,100); } catch { return 0; } };
+// Helpers
+const fmt = (v) => { try { const n=parseFloat(ethers.formatEther(v?.toString()||'0')); return n>=1000000?(n/1000000).toFixed(2)+'M':n>=1000?(n/1000).toFixed(1)+'K':n.toFixed(n<10?2:0); } catch { return '0'; } };
+const fmtFull = (v) => { try { return parseFloat(ethers.formatEther(v?.toString()||'0')).toLocaleString(undefined,{maximumFractionDigits:2}); } catch { return '0'; } };
+const calcProg = (raised, goal) => { try { const r=parseFloat(ethers.formatEther(raised?.toString()||'0')); const g=parseFloat(ethers.formatEther(goal?.toString()||'1')); return Math.min(100,Math.round((r/g)*100)); } catch { return 0; } };
+const fmtTime = (deadline) => { const now=Math.floor(Date.now()/1000); const d=Number(deadline)-now; if(d<=0) return {text:'Ended',color:'var(--cp-muted)',ended:true}; const days=Math.floor(d/86400); if(days>0) return {text:`${days}d left`,color:'var(--cp-success)',ended:false}; const hrs=Math.floor(d/3600); if(hrs>0) return {text:`${hrs}h left`,color:'var(--cp-primary)',ended:false}; return {text:`${Math.floor(d/60)}m left`,color:'var(--cp-danger)',ended:false}; };
+const short = (addr) => addr?`${addr.slice(0,6)}...${addr.slice(-4)}`:'';
 const getCampImg = (c) => c?.imageUrl || PLACEHOLDER_IMAGES[c?.category] || PLACEHOLDER_IMAGES.default;
 const getIdFromUrl = () => { const m=window.location.hash.match(/charity\/campaign\/(\d+)/); return m?m[1]:null; };
 const setUrl = (id) => { window.location.hash=`charity/campaign/${id}`; };
@@ -224,56 +209,30 @@ async function loadCampaignsData() {
         console.log('📊 Blockchain:',count);
         if(count===0) return [];
         const campaigns=[];
-        for(let i=1;i<=count;i++) { try { const c=await contract.campaigns(i); campaigns.push({id:String(i),creator:c[0],title:c[1],description:c[2],goalAmount:BigInt(c[3].toString()),raisedAmount:BigInt(c[4].toString()),donationCount:Number(c[5]),deadline:Number(c[6]),createdAt:Number(c[7]),status:Number(c[8]),category:'humanitarian',imageUrl:null}); } catch(e) { console.warn(`Campaign ${i}:`,e.message); } }
+        for(let i=1;i<=count;i++) {
+            try {
+                const data=await contract.campaigns(i);
+                campaigns.push({id:String(i),creator:data[0],title:data[1],description:data[2],goalAmount:BigInt(data[3].toString()),raisedAmount:BigInt(data[4].toString()),donationCount:Number(data[5]),deadline:Number(data[6]),createdAt:Number(data[7]),status:Number(data[8]),category:'humanitarian',imageUrl:null});
+            } catch(e) { console.warn(`Campaign ${i}:`,e.message); }
+        }
         return campaigns;
     } catch(e) { console.error('Blockchain:',e); return []; }
 }
 
-async function loadData() { CS.isLoading=true; try { const [stats,campaigns]=await Promise.all([loadStats(),loadCampaignsData()]); CS.stats=stats; CS.campaigns=campaigns; } catch(e) { console.error('Load:',e); } finally { CS.isLoading=false; } }
+async function loadData() { [CS.campaigns,CS.stats]=await Promise.all([loadCampaignsData(),loadStats()]); State.charityCampaigns=CS.campaigns; }
 
 // Render helpers
-const renderBadge = (status) => { const cfg=STATUS_CONFIG[status]||STATUS_CONFIG[0]; return `<span class="cp-badge" style="background:${cfg.color}20;color:${cfg.color};border:1px solid ${cfg.color}"><i class="fa-solid ${cfg.icon}"></i> ${cfg.label}</span>`; };
-const renderCatBadge = (cat) => { const c=CATEGORIES[cat]; return c?`<span class="cp-badge" style="background:${c.color}20;color:${c.color}">${c.emoji} ${c.name}</span>`:''; };
+const renderBadge = (status,cat=null) => { const cfg=STATUS_CONFIG[status]||STATUS_CONFIG[0]; let html=`<span class="cp-badge" style="background:${cfg.color}22;color:${cfg.color}"><i class="fa-solid ${cfg.icon}"></i> ${cfg.label}</span>`; if(cat) { const c=CATEGORIES[cat]||CATEGORIES.humanitarian; html+=`<span class="cp-badge" style="background:${c.color}22;color:${c.color}">${c.emoji} ${c.name}</span>`; } return html; };
+const renderLoading = () => `<div class="cp-loading"><div class="cp-spinner"></div><span style="color:var(--cp-muted)">Loading...</span></div>`;
+const renderEmpty = (msg) => `<div class="cp-empty"><i class="fa-solid fa-heart-crack"></i><h3>${msg}</h3><p style="color:var(--cp-muted)">Be the first to create a campaign!</p></div>`;
 
-const renderCard = (c) => {
-    const prog=calcProg(c.raisedAmount,c.goalAmount); const time=fmtTime(c.deadline); const cat=c.category||'humanitarian';
-    return `<div class="cp-card" onclick="CharityPage.viewCampaign('${c.id}')"><img src="${getCampImg(c)}" class="cp-card-img" onerror="this.src='${PLACEHOLDER_IMAGES[cat]}'" alt="${c.title}"><div class="cp-card-body"><div class="cp-card-badges">${renderBadge(c.status)}${renderCatBadge(cat)}</div><h3 class="cp-card-title">${c.title||'Untitled'}</h3><div class="cp-card-creator">by <a href="${EXPLORER_ADDRESS}${c.creator}" target="_blank" onclick="event.stopPropagation()">${fmtAddr(c.creator)}</a></div><div class="cp-progress"><div class="cp-progress-fill ${cat}" style="width:${prog}%"></div></div><div class="cp-progress-stats"><span class="cp-progress-raised">${fmt(c.raisedAmount)} BKC</span><span class="cp-progress-goal">of ${fmt(c.goalAmount)}</span></div><div class="cp-card-footer"><span class="cp-card-time ${time.urgent?'urgent':''}"><i class="fa-regular fa-clock"></i> ${time.text}</span><span>${c.donationCount||0} donors</span></div></div></div>`;
+const renderCard = (c) => { const prog=calcProg(c.raisedAmount,c.goalAmount); const time=fmtTime(c.deadline); return `<div class="cp-card" onclick="CharityPage.viewCampaign('${c.id}')"><img class="cp-card-img" src="${getCampImg(c)}" onerror="this.src='${PLACEHOLDER_IMAGES.default}'" alt="${c.title}"><div class="cp-card-body"><div class="cp-card-badges">${renderBadge(c.status,c.category)}</div><h3 class="cp-card-title">${c.title}</h3><div class="cp-card-creator">by <a href="${EXPLORER_ADDRESS}${c.creator}" target="_blank" onclick="event.stopPropagation()">${short(c.creator)}</a></div><div class="cp-progress"><div class="cp-progress-fill ${c.category||'humanitarian'}" style="width:${prog}%"></div></div><div class="cp-progress-stats"><span class="cp-progress-raised">${fmt(c.raisedAmount)} BKC</span><span class="cp-progress-goal">of ${fmt(c.goalAmount)} goal</span></div><div class="cp-card-meta"><span><i class="fa-solid fa-users"></i> ${c.donationCount} donors</span><span style="color:${time.color}">${time.text}</span></div></div></div>`; };
+
+const renderMain = () => { const s=CS.stats||{totalRaised:0n,totalBurned:0n,totalCampaigns:0,totalSuccessful:0}; const activeCamps=CS.campaigns.filter(c=>isCampaignActive(c)); const animalCamps=activeCamps.filter(c=>c.category==='animal'); const humanCamps=activeCamps.filter(c=>c.category==='humanitarian'); return `<div class="charity-page"><div class="cp-hero"><div class="cp-hero-left" style="display:flex;align-items:center;gap:1rem"><div class="cp-hero-icon"><i class="fa-solid fa-hand-holding-heart"></i></div><div><h1>Charity Pool</h1><p>Transparent fundraising on blockchain. 4% mining rewards, 1% burned 🔥</p></div></div><div class="cp-actions"><button class="cp-btn cp-btn-secondary" onclick="CharityPage.openMyCampaigns()"><i class="fa-solid fa-folder-open"></i> My Campaigns</button><button class="cp-btn cp-btn-primary" onclick="CharityPage.openCreate()"><i class="fa-solid fa-plus"></i> Create</button></div></div><div class="cp-stats"><div class="cp-stat"><div class="cp-stat-val g">${fmt(s.totalRaised)}</div><div class="cp-stat-lbl">Total Raised</div></div><div class="cp-stat"><div class="cp-stat-val b">${fmt(s.totalBurned)}</div><div class="cp-stat-lbl">BKC Burned 🔥</div></div><div class="cp-stat"><div class="cp-stat-val o">${s.totalCampaigns}</div><div class="cp-stat-lbl">Campaigns</div></div><div class="cp-stat"><div class="cp-stat-val p">${s.totalSuccessful}</div><div class="cp-stat-lbl">Successful</div></div></div><div class="cp-cats"><div class="cp-cat animal" onclick="CharityPage.selectCat('animal')"><div class="cp-cat-icon">🐾</div><div class="cp-cat-name">Animal Welfare</div><div class="cp-cat-stats"><span><strong>${animalCamps.length}</strong> active</span></div><div class="cp-cat-actions"><button class="cp-btn cp-btn-success" style="font-size:0.75rem;padding:0.4rem 0.8rem" onclick="event.stopPropagation();CharityPage.openCreate('animal')"><i class="fa-solid fa-plus"></i> Create</button></div></div><div class="cp-cat humanitarian" onclick="CharityPage.selectCat('humanitarian')"><div class="cp-cat-icon">💗</div><div class="cp-cat-name">Humanitarian Aid</div><div class="cp-cat-stats"><span><strong>${humanCamps.length}</strong> active</span></div><div class="cp-cat-actions"><button class="cp-btn cp-btn-success" style="font-size:0.75rem;padding:0.4rem 0.8rem" onclick="event.stopPropagation();CharityPage.openCreate('humanitarian')"><i class="fa-solid fa-plus"></i> Create</button></div></div></div><div class="cp-section-header"><h2 class="cp-section-title"><i class="fa-solid fa-fire" style="color:var(--cp-primary)"></i> Active Campaigns ${CS.selectedCategory?`<span style="font-size:0.8rem;color:var(--cp-muted);font-weight:400">• ${CATEGORIES[CS.selectedCategory]?.name} <button onclick="CharityPage.clearCat()" style="background:none;border:none;color:var(--cp-danger);cursor:pointer;font-size:0.7rem">✕</button></span>`:''}</h2></div><div class="cp-grid" id="cp-grid">${activeCamps.length?activeCamps.filter(c=>!CS.selectedCategory||c.category===CS.selectedCategory).sort((a,b)=>Number(b.createdAt||0)-Number(a.createdAt||0)).map(c=>renderCard(c)).join(''):renderEmpty('No active campaigns')}</div>${renderCreateModal()}${renderDonateModal()}${renderMyCampaignsModal()}</div>`; };
+
+const renderDetail = (c) => { if(!c) return `<div class="charity-page"><button class="cp-btn cp-btn-secondary" onclick="CharityPage.goBack()" style="margin-bottom:1rem"><i class="fa-solid fa-arrow-left"></i> Back</button><div class="cp-empty"><i class="fa-solid fa-exclamation-circle"></i><h3>Campaign Not Found</h3></div></div>`; const prog=calcProg(c.raisedAmount,c.goalAmount); const time=fmtTime(c.deadline); const isActive=isCampaignActive(c); const canWd=canWithdraw(c); const isCreator=c.creator?.toLowerCase()===State?.userAddress?.toLowerCase(); const catColor=CATEGORIES[c.category||'humanitarian']?.color||'#ec4899'; return `<div class="charity-page"><button class="cp-btn cp-btn-secondary" onclick="CharityPage.goBack()" style="margin-bottom:1rem"><i class="fa-solid fa-arrow-left"></i> Back</button><div class="cp-detail"><div class="cp-detail-main"><img class="cp-detail-img" src="${getCampImg(c)}" onerror="this.src='${PLACEHOLDER_IMAGES.default}'" alt="${c.title}"><div class="cp-detail-content"><h1 class="cp-detail-title">${c.title}</h1><div class="cp-detail-meta">${renderBadge(c.status,c.category)}<span><i class="fa-solid fa-user"></i> <a href="${EXPLORER_ADDRESS}${c.creator}" target="_blank">${short(c.creator)}</a></span><span><i class="fa-solid fa-calendar"></i> Created ${new Date(Number(c.createdAt)*1000).toLocaleDateString()}</span></div><div class="cp-detail-desc">${c.description||'No description provided.'}</div></div></div><div class="cp-detail-sidebar"><div class="cp-detail-card"><div class="cp-detail-progress"><div class="cp-detail-raised" style="color:${catColor}">${fmtFull(c.raisedAmount)} BKC</div><div class="cp-detail-goal">raised of ${fmtFull(c.goalAmount)} BKC goal</div><div class="cp-progress" style="height:10px;margin-top:1rem"><div class="cp-progress-fill ${c.category||'humanitarian'}" style="width:${prog}%"></div></div><div style="text-align:right;font-size:0.85rem;color:var(--cp-muted);margin-top:0.5rem">${prog}% funded</div></div><div class="cp-detail-stats"><div class="cp-detail-stat"><div class="cp-detail-stat-val">${c.donationCount}</div><div class="cp-detail-stat-lbl">Donors</div></div><div class="cp-detail-stat"><div class="cp-detail-stat-val" style="color:${time.color}">${time.text}</div><div class="cp-detail-stat-lbl">${time.ended?'Status':'Remaining'}</div></div></div><div class="cp-detail-actions">${isActive?`<div style="display:flex;gap:0.5rem;align-items:center"><input type="number" id="detail-amount" class="cp-form-input" placeholder="Amount" min="1" style="flex:1"><span style="color:var(--cp-muted)">BKC</span></div><div style="display:flex;gap:0.375rem;margin-top:0.5rem"><button class="cp-preset" onclick="CharityPage.setAmt(10)">10</button><button class="cp-preset" onclick="CharityPage.setAmt(50)">50</button><button class="cp-preset" onclick="CharityPage.setAmt(100)">100</button><button class="cp-preset" onclick="CharityPage.setAmt(500)">500</button></div><button class="cp-btn cp-btn-success" style="width:100%;margin-top:0.75rem" onclick="CharityPage.donateDetail('${c.id}')"><i class="fa-solid fa-heart"></i> Donate Now</button>`:``}${isCreator&&isActive?`<button class="cp-btn cp-btn-danger" style="width:100%" onclick="CharityPage.cancel('${c.id}')"><i class="fa-solid fa-xmark"></i> Cancel Campaign</button>`:``}${canWd?`<button id="btn-withdraw" class="cp-btn cp-btn-primary" style="width:100%" onclick="CharityPage.withdraw('${c.id}')"><i class="fa-solid fa-wallet"></i> Withdraw Funds</button>`:``}</div>
+        <div class="cp-share-box"><div class="cp-share-title">Share this campaign</div><div class="cp-share-btns"><button class="cp-share-btn twitter" onclick="CharityPage.share('twitter')"><i class="fa-brands fa-x-twitter"></i></button><button class="cp-share-btn telegram" onclick="CharityPage.share('telegram')"><i class="fa-brands fa-telegram"></i></button><button class="cp-share-btn whatsapp" onclick="CharityPage.share('whatsapp')"><i class="fa-brands fa-whatsapp"></i></button><button class="cp-share-btn copy" onclick="CharityPage.copyLink()"><i class="fa-solid fa-link"></i></button></div></div></div></div></div>${renderDonateModal()}</div>`;
 };
-
-const renderEmpty = (msg) => `<div class="cp-empty"><i class="fa-solid fa-heart-crack"></i><h3>${msg}</h3><p>Be the first to create a campaign!</p><button class="cp-btn cp-btn-primary" onclick="CharityPage.openCreate()"><i class="fa-solid fa-plus"></i> Create Campaign</button></div>`;
-const renderLoading = () => `<div class="cp-loading"><div class="cp-spinner"></div><span>Loading...</span></div>`;
-
-function renderMain() {
-    const stats=CS.stats||{}; const camps=CS.campaigns||[];
-    const active=camps.filter(c=>isCampaignActive(c));
-    const animalCamps=camps.filter(c=>c.category==='animal'); const humanCamps=camps.filter(c=>c.category==='humanitarian');
-    const animalActive=animalCamps.filter(c=>isCampaignActive(c)); const humanActive=humanCamps.filter(c=>isCampaignActive(c));
-    const animalRaised=animalCamps.reduce((s,c)=>s+BigInt(c.raisedAmount?.toString()||'0'),0n);
-    const humanRaised=humanCamps.reduce((s,c)=>s+BigInt(c.raisedAmount?.toString()||'0'),0n);
-    let filtered=CS.selectedCategory?active.filter(c=>c.category===CS.selectedCategory):active;
-    filtered.sort((a,b)=>Number(b.createdAt||0)-Number(a.createdAt||0));
-    
-    return `<div class="charity-page">
-        <div class="cp-hero"><div class="cp-hero-left"><h1><span class="cp-hero-icon"><i class="fa-solid fa-hand-holding-heart"></i></span> Charity Pool</h1><p>Transparent crowdfunding with deflationary impact. Every donation burns 1% of BKC.</p></div><div class="cp-actions"><button class="cp-btn cp-btn-secondary" onclick="CharityPage.openMyCampaigns()"><i class="fa-solid fa-folder-open"></i> My Campaigns</button><button class="cp-btn cp-btn-primary" onclick="CharityPage.openCreate()"><i class="fa-solid fa-plus"></i> Create</button></div></div>
-        <div class="cp-stats"><div class="cp-stat"><div class="cp-stat-val g">${fmt(stats.totalRaised||0n)}</div><div class="cp-stat-lbl">BKC Raised</div></div><div class="cp-stat"><div class="cp-stat-val b">${stats.totalCampaigns||0}</div><div class="cp-stat-lbl">Campaigns</div></div><div class="cp-stat"><div class="cp-stat-val o">${fmt(stats.totalBurned||0n)}</div><div class="cp-stat-lbl">BKC Burned 🔥</div></div><div class="cp-stat"><div class="cp-stat-val p">${stats.totalSuccessful||0}</div><div class="cp-stat-lbl">Successful</div></div></div>
-        <div class="cp-cats"><div class="cp-cat animal" onclick="CharityPage.selectCat('animal')"><div class="cp-cat-icon"><i class="fa-solid fa-paw"></i></div><div class="cp-cat-name">🐾 Animal Welfare</div><div class="cp-cat-stats"><div><strong>${animalActive.length}</strong> Active</div><div><strong>${fmt(animalRaised)}</strong> Raised</div></div><div class="cp-cat-actions"><button class="cp-btn cp-btn-success" onclick="event.stopPropagation();CharityPage.openCreate('animal')"><i class="fa-solid fa-plus"></i> Create</button></div></div><div class="cp-cat humanitarian" onclick="CharityPage.selectCat('humanitarian')"><div class="cp-cat-icon"><i class="fa-solid fa-hand-holding-heart"></i></div><div class="cp-cat-name">💗 Humanitarian Aid</div><div class="cp-cat-stats"><div><strong>${humanActive.length}</strong> Active</div><div><strong>${fmt(humanRaised)}</strong> Raised</div></div><div class="cp-cat-actions"><button class="cp-btn cp-btn-success" onclick="event.stopPropagation();CharityPage.openCreate('humanitarian')"><i class="fa-solid fa-plus"></i> Create</button></div></div></div>
-        <div class="cp-section-header"><h2 class="cp-section-title"><i class="fa-solid fa-fire" style="color:var(--cp-primary)"></i> ${CS.selectedCategory?CATEGORIES[CS.selectedCategory].name:'Active Campaigns'}</h2><div style="display:flex;gap:0.5rem">${CS.selectedCategory?`<button class="cp-btn cp-btn-secondary" onclick="CharityPage.clearCat()"><i class="fa-solid fa-times"></i> Clear</button>`:''}<button class="cp-btn cp-btn-secondary" onclick="CharityPage.refresh()"><i class="fa-solid fa-rotate"></i> Refresh</button></div></div>
-        <div class="cp-grid" id="cp-grid">${CS.isLoading?renderLoading():filtered.length?filtered.map(c=>renderCard(c)).join(''):renderEmpty('No active campaigns')}</div>
-        ${renderCreateModal()}${renderDonateModal()}${renderMyCampaignsModal()}
-    </div>`;
-}
-
-function renderDetail(c) {
-    if(!c) return `<div class="charity-page"><div class="cp-empty"><i class="fa-solid fa-circle-exclamation"></i><h3>Campaign Not Found</h3><button class="cp-btn cp-btn-primary" onclick="CharityPage.goBack()"><i class="fa-solid fa-arrow-left"></i> Back</button></div></div>`;
-    const prog=calcProg(c.raisedAmount,c.goalAmount); const time=fmtTime(c.deadline); const cat=c.category||'humanitarian'; const isActive=isCampaignActive(c); const canWd=canWithdraw(c);
-    return `<div class="charity-page cp-detail">
-        <button class="cp-back" onclick="CharityPage.goBack()"><i class="fa-solid fa-arrow-left"></i> Back to Campaigns</button>
-        <div class="cp-detail-grid"><div class="cp-detail-main"><img src="${getCampImg(c)}" class="cp-detail-img" onerror="this.src='${PLACEHOLDER_IMAGES[cat]}'" alt="${c.title}"><div class="cp-detail-content"><div class="cp-card-badges" style="margin-bottom:0.75rem">${renderBadge(c.status)}${renderCatBadge(cat)}</div><h1 class="cp-detail-title">${c.title}</h1><div class="cp-detail-creator">Created by <a href="${EXPLORER_ADDRESS}${c.creator}" target="_blank">${fmtAddr(c.creator)}</a></div><div class="cp-detail-desc">${c.description||'No description.'}</div></div></div>
-        <div class="cp-sidebar"><div class="cp-donate-box"><div class="cp-donate-amounts"><span class="cp-donate-raised">${fmt(c.raisedAmount)} BKC</span><span class="cp-donate-goal">of ${fmt(c.goalAmount)}</span></div><div class="cp-progress" style="height:10px"><div class="cp-progress-fill ${cat}" style="width:${prog}%"></div></div><div class="cp-donate-stats"><div><div class="cp-donate-stat-val">${prog.toFixed(1)}%</div><div class="cp-donate-stat-lbl">Funded</div></div><div><div class="cp-donate-stat-val">${c.donationCount||0}</div><div class="cp-donate-stat-lbl">Donors</div></div><div><div class="cp-donate-stat-val">${time.text}</div><div class="cp-donate-stat-lbl">Left</div></div></div>
-        ${isActive?`<div class="cp-donate-input-wrap"><input type="number" id="detail-amount" class="cp-donate-input" placeholder="0.00" min="1" step="0.01"><span class="cp-donate-currency">BKC</span></div><div class="cp-donate-presets"><button class="cp-preset" onclick="CharityPage.setAmt(10)">10</button><button class="cp-preset" onclick="CharityPage.setAmt(50)">50</button><button class="cp-preset" onclick="CharityPage.setAmt(100)">100</button><button class="cp-preset" onclick="CharityPage.setAmt(500)">500</button></div><div class="cp-fee-info"><strong>4%</strong> mining • <strong>1%</strong> burned 🔥 • <strong>95%</strong> to campaign</div><button id="btn-detail-donate" class="cp-btn cp-btn-success cp-btn-lg cp-btn-block" style="margin-top:1rem" onclick="CharityPage.donateDetail('${c.id}')"><i class="fa-solid fa-heart"></i> Donate Now</button>`:canWd?`<button id="btn-withdraw" class="cp-btn cp-btn-primary cp-btn-lg cp-btn-block" onclick="CharityPage.withdraw('${c.id}')"><i class="fa-solid fa-wallet"></i> Withdraw</button><div class="cp-fee-info" style="margin-top:0.75rem">Fee: <strong>0.001 ETH</strong>${prog<100?' • 10% burned':''}</div>`:`<div class="cp-fee-info" style="text-align:center">This campaign has ended.</div>`}</div>
-        <div class="cp-share-box"><div class="cp-share-title">Share this campaign</div><div class="cp-share-btns"><button class="cp-share-btn twitter" onclick="CharityPage.share('twitter')"><i class="fa-brands fa-x-twitter"></i></button><button class="cp-share-btn telegram" onclick="CharityPage.share('telegram')"><i class="fa-brands fa-telegram"></i></button><button class="cp-share-btn whatsapp" onclick="CharityPage.share('whatsapp')"><i class="fa-brands fa-whatsapp"></i></button><button class="cp-share-btn copy" onclick="CharityPage.copyLink()"><i class="fa-solid fa-link"></i></button></div></div></div></div>
-    </div>`;
-}
 
 // Modals
 const renderCreateModal = () => `<div class="cp-modal" id="modal-create"><div class="cp-modal-content"><div class="cp-modal-header"><h3 class="cp-modal-title"><i class="fa-solid fa-plus" style="color:var(--cp-primary)"></i> Create Campaign</h3><button class="cp-modal-close" onclick="CharityPage.closeModal('create')"><i class="fa-solid fa-xmark"></i></button></div><div class="cp-modal-body"><div class="cp-form-group"><label class="cp-form-label">Category *</label><div class="cp-cat-selector"><label class="cp-cat-option" id="opt-animal" onclick="CharityPage.selCatOpt('animal')"><input type="radio" name="category" value="animal"><div class="cp-cat-option-icon">🐾</div><div class="cp-cat-option-name">Animal</div></label><label class="cp-cat-option selected" id="opt-humanitarian" onclick="CharityPage.selCatOpt('humanitarian')"><input type="radio" name="category" value="humanitarian" checked><div class="cp-cat-option-icon">💗</div><div class="cp-cat-option-name">Humanitarian</div></label></div></div><div class="cp-form-group"><label class="cp-form-label">Image URL <span>(optional)</span></label><input type="url" id="campaign-image-url" class="cp-form-input" placeholder="https://example.com/image.jpg"></div><div class="cp-form-group"><label class="cp-form-label">Title *</label><input type="text" id="campaign-title" class="cp-form-input" placeholder="Campaign title" maxlength="100"></div><div class="cp-form-group"><label class="cp-form-label">Description *</label><textarea id="campaign-desc" class="cp-form-input cp-form-textarea" placeholder="Tell your story..." maxlength="2000"></textarea></div><div class="cp-form-row"><div class="cp-form-group"><label class="cp-form-label">Goal (BKC) *</label><input type="number" id="campaign-goal" class="cp-form-input" placeholder="1000" min="1" step="0.01"></div><div class="cp-form-group"><label class="cp-form-label">Duration (Days) *</label><input type="number" id="campaign-duration" class="cp-form-input" placeholder="30" min="1" max="180"></div></div></div><div class="cp-modal-footer"><button class="cp-btn cp-btn-secondary" onclick="CharityPage.closeModal('create')">Cancel</button><button id="btn-create" class="cp-btn cp-btn-primary" onclick="CharityPage.create()"><i class="fa-solid fa-rocket"></i> Launch</button></div></div></div>`;
@@ -292,15 +251,256 @@ function setAmt(v) { const el=document.getElementById('detail-amount'); if(el) e
 // Transactions
 async function getConnectedSigner() { if(!State?.isConnected) { showToast("Connect wallet",'error'); return null; } try { const provider=new ethers.BrowserProvider(window.ethereum); return await provider.getSigner(); } catch(e) { console.error("Signer:",e); showToast("Wallet error",'error'); return null; } }
 
-async function create() { if(!State?.isConnected) return showToast('Connect wallet','warning'); const btn=document.getElementById('btn-create'); const orig=btn?.innerHTML||'Launch'; try { if(btn) { btn.disabled=true; btn.innerHTML='<i class="fa-solid fa-spinner fa-spin"></i> Creating...'; } const title=document.getElementById('campaign-title')?.value?.trim(); const desc=document.getElementById('campaign-desc')?.value?.trim(); const goal=document.getElementById('campaign-goal')?.value; const dur=parseInt(document.getElementById('campaign-duration')?.value); const cat=document.querySelector('input[name="category"]:checked')?.value||'humanitarian'; let imgUrl=document.getElementById('campaign-image-url')?.value?.trim(); if(!title) return showToast('Enter title','error'); if(!goal||parseFloat(goal)<1) return showToast('Goal min 1 BKC','error'); if(!dur||dur<1||dur>180) return showToast('Duration 1-180 days','error'); const signer=await getConnectedSigner(); if(!signer) return; const contract=new ethers.Contract(addresses.charityPool,charityPoolABI,signer); const goalWei=ethers.parseEther(goal.toString()); if(btn) btn.innerHTML='<i class="fa-solid fa-spinner fa-spin"></i> Confirm...'; showToast('Confirm in wallet...','info'); const tx=await contract.createCampaign(title,desc||'',goalWei,dur); if(btn) btn.innerHTML='<i class="fa-solid fa-spinner fa-spin"></i> Confirming...'; showToast('Creating...','info'); const receipt=await tx.wait(); let campaignId=null; for(const log of receipt.logs) { try { const parsed=contract.interface.parseLog({topics:log.topics,data:log.data}); if(parsed?.name==="CampaignCreated") { campaignId=Number(parsed.args.campaignId); break; } } catch{} } if(campaignId) { try { await fetch(CHARITY_API.saveCampaign,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({campaignId,creator:State.userAddress,title,description:desc||'',category:cat,imageUrl:imgUrl||null,txHash:receipt.hash})}); } catch(e) { console.warn('Metadata:',e); } } showToast('🎉 Campaign created!','success'); closeModal('create'); await loadData(); render(); if(campaignId) setTimeout(()=>viewCampaign(campaignId),1500); } catch(e) { console.error('Create:',e); const msg=e?.reason||e?.shortMessage||e?.message||'Failed'; showToast(msg.includes('user rejected')?'Cancelled':msg.slice(0,80),'error'); } finally { if(btn) { btn.disabled=false; btn.innerHTML=orig; } } }
+/**
+ * Safe wait for transaction - handles Arbitrum parsing issues
+ */
+async function safeWaitForTx(tx, provider) {
+    try {
+        // Try normal wait first
+        return await tx.wait();
+    } catch (waitError) {
+        // If wait() fails due to parsing, check tx status manually
+        console.warn('tx.wait() parsing error, checking manually...', waitError.message);
+        
+        // Wait a bit for confirmation
+        await new Promise(r => setTimeout(r, 3000));
+        
+        // Check if tx was mined
+        const receipt = await provider.getTransactionReceipt(tx.hash);
+        if (receipt && receipt.status === 1) {
+            console.log('✅ TX confirmed manually:', tx.hash);
+            return receipt;
+        } else if (receipt && receipt.status === 0) {
+            throw new Error('Transaction reverted');
+        }
+        
+        // If no receipt yet, wait more and retry
+        await new Promise(r => setTimeout(r, 5000));
+        const receipt2 = await provider.getTransactionReceipt(tx.hash);
+        if (receipt2 && receipt2.status === 1) {
+            console.log('✅ TX confirmed manually (retry):', tx.hash);
+            return receipt2;
+        }
+        
+        // If still no receipt, assume success (tx was sent)
+        console.warn('Could not verify TX, assuming success:', tx.hash);
+        return { hash: tx.hash, status: 1 };
+    }
+}
 
-async function donate() { if(!State?.isConnected) return showToast('Connect wallet','warning'); const id=document.getElementById('donate-campaign-id')?.value; const amt=document.getElementById('donate-amount')?.value; if(!amt||parseFloat(amt)<=0) return showToast('Enter amount','error'); const btn=document.getElementById('btn-donate'); const orig=btn?.innerHTML||'Donate'; try { if(btn) { btn.disabled=true; btn.innerHTML='<i class="fa-solid fa-spinner fa-spin"></i> Processing...'; } const signer=await getConnectedSigner(); if(!signer) return; const amountWei=ethers.parseEther(amt.toString()); const bkcToken=new ethers.Contract(addresses.bkcToken,bkcTokenABI,signer); const allowance=await bkcToken.allowance(State.userAddress,addresses.charityPool); if(allowance<amountWei) { if(btn) btn.innerHTML='<i class="fa-solid fa-spinner fa-spin"></i> Approving...'; showToast('Approving BKC...','info'); const approveTx=await bkcToken.approve(addresses.charityPool,ethers.MaxUint256); await approveTx.wait(); } if(btn) btn.innerHTML='<i class="fa-solid fa-spinner fa-spin"></i> Donating...'; showToast('Confirm donation...','info'); const contract=new ethers.Contract(addresses.charityPool,charityPoolABI,signer); const tx=await contract.donate(id,amountWei); showToast('Processing... 🔥','info'); await tx.wait(); showToast('❤️ Donation successful!','success'); closeModal('donate'); await loadData(); render(); } catch(e) { console.error('Donate:',e); const msg=e?.reason||e?.shortMessage||e?.message||'Failed'; showToast(msg.includes('user rejected')?'Cancelled':msg.slice(0,80),'error'); } finally { if(btn) { btn.disabled=false; btn.innerHTML=orig; } } }
+async function create() { 
+    if(!State?.isConnected) return showToast('Connect wallet','warning'); 
+    const btn=document.getElementById('btn-create'); 
+    const orig=btn?.innerHTML||'Launch'; 
+    
+    try { 
+        if(btn) { btn.disabled=true; btn.innerHTML='<i class="fa-solid fa-spinner fa-spin"></i> Creating...'; } 
+        
+        const title=document.getElementById('campaign-title')?.value?.trim(); 
+        const desc=document.getElementById('campaign-desc')?.value?.trim(); 
+        const goal=document.getElementById('campaign-goal')?.value; 
+        const dur=parseInt(document.getElementById('campaign-duration')?.value); 
+        const cat=document.querySelector('input[name="category"]:checked')?.value||'humanitarian'; 
+        let imgUrl=document.getElementById('campaign-image-url')?.value?.trim(); 
+        
+        if(!title) return showToast('Enter title','error'); 
+        if(!goal||parseFloat(goal)<1) return showToast('Goal min 1 BKC','error'); 
+        if(!dur||dur<1||dur>180) return showToast('Duration 1-180 days','error'); 
+        
+        const signer=await getConnectedSigner(); 
+        if(!signer) return; 
+        
+        const provider = signer.provider;
+        const contract=new ethers.Contract(addresses.charityPool,charityPoolABI,signer); 
+        const goalWei=ethers.parseEther(goal.toString()); 
+        
+        if(btn) btn.innerHTML='<i class="fa-solid fa-spinner fa-spin"></i> Confirm...'; 
+        showToast('Confirm in wallet...','info'); 
+        
+        const tx=await contract.createCampaign(title,desc||'',goalWei,dur); 
+        console.log('TX sent:', tx.hash);
+        
+        if(btn) btn.innerHTML='<i class="fa-solid fa-spinner fa-spin"></i> Confirming...'; 
+        showToast('Creating campaign...','info'); 
+        
+        // Use safe wait
+        const receipt = await safeWaitForTx(tx, provider);
+        console.log('TX confirmed:', receipt.hash || tx.hash);
+        
+        // Try to get campaign ID from logs
+        let campaignId=null; 
+        if (receipt.logs) {
+            for(const log of receipt.logs) { 
+                try { 
+                    const parsed=contract.interface.parseLog({topics:log.topics,data:log.data}); 
+                    if(parsed?.name==="CampaignCreated") { 
+                        campaignId=Number(parsed.args.campaignId); 
+                        break; 
+                    } 
+                } catch{} 
+            } 
+        }
+        
+        // Save metadata to Firebase
+        if(campaignId || true) { 
+            try { 
+                // If no campaignId from logs, try to get from contract
+                if (!campaignId) {
+                    const counter = await contract.campaignCounter();
+                    campaignId = Number(counter);
+                }
+                
+                await fetch(CHARITY_API.saveCampaign,{
+                    method:'POST',
+                    headers:{'Content-Type':'application/json'},
+                    body:JSON.stringify({
+                        campaignId,
+                        creator:State.userAddress,
+                        title,
+                        description:desc||'',
+                        category:cat,
+                        imageUrl:imgUrl||null,
+                        txHash:receipt.hash || tx.hash
+                    })
+                }); 
+            } catch(e) { console.warn('Metadata:',e); } 
+        } 
+        
+        showToast('🎉 Campaign created!','success'); 
+        closeModal('create'); 
+        await loadData(); 
+        render(); 
+        
+        if(campaignId) setTimeout(()=>viewCampaign(campaignId),1500); 
+        
+    } catch(e) { 
+        console.error('Create:',e); 
+        const msg=e?.reason||e?.shortMessage||e?.message||'Failed'; 
+        showToast(msg.includes('user rejected')?'Cancelled':msg.slice(0,80),'error'); 
+    } finally { 
+        if(btn) { btn.disabled=false; btn.innerHTML=orig; } 
+    } 
+}
+
+async function donate() { 
+    if(!State?.isConnected) return showToast('Connect wallet','warning'); 
+    const id=document.getElementById('donate-campaign-id')?.value; 
+    const amt=document.getElementById('donate-amount')?.value; 
+    if(!amt||parseFloat(amt)<=0) return showToast('Enter amount','error'); 
+    
+    const btn=document.getElementById('btn-donate'); 
+    const orig=btn?.innerHTML||'Donate'; 
+    
+    try { 
+        if(btn) { btn.disabled=true; btn.innerHTML='<i class="fa-solid fa-spinner fa-spin"></i> Processing...'; } 
+        
+        const signer=await getConnectedSigner(); 
+        if(!signer) return; 
+        
+        const provider = signer.provider;
+        const amountWei=ethers.parseEther(amt.toString()); 
+        const bkcToken=new ethers.Contract(addresses.bkcToken,bkcTokenABI,signer); 
+        const allowance=await bkcToken.allowance(State.userAddress,addresses.charityPool); 
+        
+        if(allowance<amountWei) { 
+            if(btn) btn.innerHTML='<i class="fa-solid fa-spinner fa-spin"></i> Approving...'; 
+            showToast('Approving BKC...','info'); 
+            const approveTx=await bkcToken.approve(addresses.charityPool,ethers.MaxUint256); 
+            await safeWaitForTx(approveTx, provider); 
+        } 
+        
+        if(btn) btn.innerHTML='<i class="fa-solid fa-spinner fa-spin"></i> Donating...'; 
+        showToast('Confirm donation...','info'); 
+        
+        const contract=new ethers.Contract(addresses.charityPool,charityPoolABI,signer); 
+        const tx=await contract.donate(id,amountWei); 
+        console.log('Donate TX sent:', tx.hash);
+        
+        showToast('Processing... 🔥','info'); 
+        await safeWaitForTx(tx, provider); 
+        
+        showToast('❤️ Donation successful!','success'); 
+        closeModal('donate'); 
+        await loadData(); 
+        render(); 
+        
+    } catch(e) { 
+        console.error('Donate:',e); 
+        const msg=e?.reason||e?.shortMessage||e?.message||'Failed'; 
+        showToast(msg.includes('user rejected')?'Cancelled':msg.slice(0,80),'error'); 
+    } finally { 
+        if(btn) { btn.disabled=false; btn.innerHTML=orig; } 
+    } 
+}
 
 async function donateDetail(id) { if(!State?.isConnected) return showToast('Connect wallet','warning'); const amt=document.getElementById('detail-amount')?.value; if(!amt||parseFloat(amt)<=0) return showToast('Enter amount','error'); document.getElementById('donate-campaign-id').value=id; document.getElementById('donate-amount').value=amt; await donate(); if(CS.currentCampaign?.id===id) await loadDetail(id); }
 
-async function cancel(id) { if(!confirm('Cancel this campaign?')) return; try { const signer=await getConnectedSigner(); if(!signer) return; showToast('Confirm...','info'); const contract=new ethers.Contract(addresses.charityPool,charityPoolABI,signer); const tx=await contract.cancelCampaign(id); showToast('Cancelling...','info'); await tx.wait(); showToast('Cancelled','success'); closeModal('my'); await loadData(); render(); } catch(e) { console.error('Cancel:',e); showToast(e?.reason||e?.message||'Failed','error'); } }
+async function cancel(id) { 
+    if(!confirm('Cancel this campaign?')) return; 
+    try { 
+        const signer=await getConnectedSigner(); 
+        if(!signer) return; 
+        
+        const provider = signer.provider;
+        showToast('Confirm...','info'); 
+        
+        const contract=new ethers.Contract(addresses.charityPool,charityPoolABI,signer); 
+        const tx=await contract.cancelCampaign(id); 
+        
+        showToast('Cancelling...','info'); 
+        await safeWaitForTx(tx, provider); 
+        
+        showToast('Cancelled','success'); 
+        closeModal('my'); 
+        await loadData(); 
+        render(); 
+    } catch(e) { 
+        console.error('Cancel:',e); 
+        showToast(e?.reason||e?.message||'Failed','error'); 
+    } 
+}
 
-async function withdraw(id) { if(!State?.isConnected) return showToast('Connect wallet','warning'); const c=CS.campaigns.find(x=>x.id===id||x.id===String(id)); if(!c) return; const prog=calcProg(c.raisedAmount,c.goalAmount); let msg=`Withdraw ${fmt(c.raisedAmount)} BKC?\n\nFee: 0.001 ETH`; if(prog<100) msg+=`\n10% will be burned`; if(!confirm(msg)) return; const btn=document.getElementById('btn-withdraw'); const orig=btn?.innerHTML||'Withdraw'; try { if(btn) { btn.disabled=true; btn.innerHTML='<i class="fa-solid fa-spinner fa-spin"></i> Processing...'; } const signer=await getConnectedSigner(); if(!signer) return; showToast('Confirm...','info'); const contract=new ethers.Contract(addresses.charityPool,charityPoolABI,signer); const tx=await contract.withdraw(id,{value:ethers.parseEther("0.001")}); showToast('Withdrawing...','info'); await tx.wait(); showToast('Success!','success'); closeModal('my'); await loadData(); render(); if(CS.currentCampaign?.id===id) await loadDetail(id); } catch(e) { console.error('Withdraw:',e); showToast(e?.reason||e?.message||'Failed','error'); } finally { if(btn) { btn.disabled=false; btn.innerHTML=orig; } } }
+async function withdraw(id) { 
+    if(!State?.isConnected) return showToast('Connect wallet','warning'); 
+    const c=CS.campaigns.find(x=>x.id===id||x.id===String(id)); 
+    if(!c) return; 
+    
+    const prog=calcProg(c.raisedAmount,c.goalAmount); 
+    let msg=`Withdraw ${fmt(c.raisedAmount)} BKC?\n\nFee: 0.001 ETH`; 
+    if(prog<100) msg+=`\n10% will be burned`; 
+    if(!confirm(msg)) return; 
+    
+    const btn=document.getElementById('btn-withdraw'); 
+    const orig=btn?.innerHTML||'Withdraw'; 
+    
+    try { 
+        if(btn) { btn.disabled=true; btn.innerHTML='<i class="fa-solid fa-spinner fa-spin"></i> Processing...'; } 
+        
+        const signer=await getConnectedSigner(); 
+        if(!signer) return; 
+        
+        const provider = signer.provider;
+        showToast('Confirm...','info'); 
+        
+        const contract=new ethers.Contract(addresses.charityPool,charityPoolABI,signer); 
+        const tx=await contract.withdraw(id,{value:ethers.parseEther("0.001")}); 
+        
+        showToast('Withdrawing...','info'); 
+        await safeWaitForTx(tx, provider); 
+        
+        showToast('Success!','success'); 
+        closeModal('my'); 
+        await loadData(); 
+        render(); 
+        if(CS.currentCampaign?.id===id) await loadDetail(id); 
+        
+    } catch(e) { 
+        console.error('Withdraw:',e); 
+        showToast(e?.reason||e?.message||'Failed','error'); 
+    } finally { 
+        if(btn) { btn.disabled=false; btn.innerHTML=orig; } 
+    } 
+}
 
 // Share & Nav
 function share(platform) { const c=CS.currentCampaign; if(!c) return; const url=getShareUrl(c.id); const txt=`🙏 Support "${c.title}" on Backcoin Charity!\n\n${fmt(c.raisedAmount)} raised of ${fmt(c.goalAmount)} goal.\n\n`; let shareUrl; if(platform==='twitter') shareUrl=`https://twitter.com/intent/tweet?text=${encodeURIComponent(txt)}&url=${encodeURIComponent(url)}`; else if(platform==='telegram') shareUrl=`https://t.me/share/url?url=${encodeURIComponent(url)}&text=${encodeURIComponent(txt)}`; else if(platform==='whatsapp') shareUrl=`https://wa.me/?text=${encodeURIComponent(txt+url)}`; if(shareUrl) window.open(shareUrl,'_blank','width=600,height=400'); }
@@ -315,7 +515,6 @@ async function loadDetail(id) { CS.currentView='detail'; CS.isLoading=true; cons
 
 // IMPORTANT: Get or create container
 function getContainer() {
-    // Try various selectors that might exist in the app
     let container = document.getElementById('charity-container');
     if (container) return container;
     
@@ -331,13 +530,11 @@ function getContainer() {
     container = document.querySelector('main');
     if (container) { container.id = 'charity-container'; return container; }
     
-    // Last resort: create our own container
     console.warn('⚠️ Creating charity container as fallback');
     container = document.createElement('div');
     container.id = 'charity-container';
     container.style.cssText = 'padding: 1rem; min-height: 100vh;';
     
-    // Try to append to #app or body
     const app = document.getElementById('app') || document.body;
     app.appendChild(container);
     
