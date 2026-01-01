@@ -1,5 +1,5 @@
-// modules/js/transactions/staking-tx.js
-// ✅ PRODUCTION V1.0 - Staking/Delegation Transaction Handlers
+// modules/transactions/staking-tx.js
+// ✅ PRODUCTION V1.1 - Staking/Delegation Transaction Handlers
 // 
 // This module provides transaction functions for the DelegationManager contract.
 // Each function uses the transaction engine for proper validation and execution.
@@ -13,18 +13,21 @@
 // ============================================================================
 
 import { txEngine, ValidationLayer } from '../core/index.js';
+import { addresses } from '../../config.js';
 
 // ============================================================================
 // 1. CONTRACT CONFIGURATION
 // ============================================================================
 
 /**
- * Contract addresses
+ * Get contract addresses dynamically from config
  */
-const CONTRACTS = {
-    BKC_TOKEN: window.ENV?.BKC_TOKEN_ADDRESS || '0x5c6d3a63F8A41F4dB91EBA04eA9B39AC2a6d8d79',
-    DELEGATION_MANAGER: window.ENV?.DELEGATION_MANAGER_ADDRESS || '0xYourDelegationManagerAddress'
-};
+function getContracts() {
+    return {
+        BKC_TOKEN: addresses?.bkcToken || window.ENV?.BKC_TOKEN_ADDRESS,
+        DELEGATION_MANAGER: addresses?.delegationManager || window.ENV?.DELEGATION_MANAGER_ADDRESS
+    };
+}
 
 /**
  * DelegationManager ABI - only methods we need
@@ -70,7 +73,13 @@ const BKC_ABI = [
  */
 function getDelegationContract(signer) {
     const ethers = window.ethers;
-    return new ethers.Contract(CONTRACTS.DELEGATION_MANAGER, DELEGATION_ABI, signer);
+    const contracts = getContracts();
+    
+    if (!contracts.DELEGATION_MANAGER) {
+        throw new Error('DelegationManager address not configured. Please wait for addresses to load.');
+    }
+    
+    return new ethers.Contract(contracts.DELEGATION_MANAGER, DELEGATION_ABI, signer);
 }
 
 /**
@@ -144,11 +153,14 @@ export async function delegate({
         args: [stakeAmount, lockPeriod],
         
         // Token approval config
-        approval: {
-            token: CONTRACTS.BKC_TOKEN,
-            spender: CONTRACTS.DELEGATION_MANAGER,
-            amount: stakeAmount
-        },
+        approval: (() => {
+            const contracts = getContracts();
+            return {
+                token: contracts.BKC_TOKEN,
+                spender: contracts.DELEGATION_MANAGER,
+                amount: stakeAmount
+            };
+        })(),
         
         onSuccess,
         onError
@@ -342,7 +354,8 @@ export async function getUserDelegations(userAddress) {
     const ethers = window.ethers;
     const { NetworkManager } = await import('../core/index.js');
     const provider = NetworkManager.getProvider();
-    const contract = new ethers.Contract(CONTRACTS.DELEGATION_MANAGER, DELEGATION_ABI, provider);
+    const contracts = getContracts();
+    const contract = new ethers.Contract(contracts.DELEGATION_MANAGER, DELEGATION_ABI, provider);
     
     const delegations = await contract.getUserDelegations(userAddress);
     const now = Math.floor(Date.now() / 1000);
@@ -370,7 +383,8 @@ export async function getPendingRewards(userAddress) {
     const ethers = window.ethers;
     const { NetworkManager } = await import('../core/index.js');
     const provider = NetworkManager.getProvider();
-    const contract = new ethers.Contract(CONTRACTS.DELEGATION_MANAGER, DELEGATION_ABI, provider);
+    const contracts = getContracts();
+    const contract = new ethers.Contract(contracts.DELEGATION_MANAGER, DELEGATION_ABI, provider);
     
     return await contract.pendingRewards(userAddress);
 }
@@ -384,7 +398,8 @@ export async function getUserPStake(userAddress) {
     const ethers = window.ethers;
     const { NetworkManager } = await import('../core/index.js');
     const provider = NetworkManager.getProvider();
-    const contract = new ethers.Contract(CONTRACTS.DELEGATION_MANAGER, DELEGATION_ABI, provider);
+    const contracts = getContracts();
+    const contract = new ethers.Contract(contracts.DELEGATION_MANAGER, DELEGATION_ABI, provider);
     
     return await contract.getUserPStake(userAddress);
 }
@@ -397,7 +412,8 @@ export async function getTotalPStake() {
     const ethers = window.ethers;
     const { NetworkManager } = await import('../core/index.js');
     const provider = NetworkManager.getProvider();
-    const contract = new ethers.Contract(CONTRACTS.DELEGATION_MANAGER, DELEGATION_ABI, provider);
+    const contracts = getContracts();
+    const contract = new ethers.Contract(contracts.DELEGATION_MANAGER, DELEGATION_ABI, provider);
     
     return await contract.totalPStake();
 }
@@ -410,7 +426,8 @@ export async function getEarlyUnstakePenalty() {
     const ethers = window.ethers;
     const { NetworkManager } = await import('../core/index.js');
     const provider = NetworkManager.getProvider();
-    const contract = new ethers.Contract(CONTRACTS.DELEGATION_MANAGER, DELEGATION_ABI, provider);
+    const contracts = getContracts();
+    const contract = new ethers.Contract(contracts.DELEGATION_MANAGER, DELEGATION_ABI, provider);
     
     return Number(await contract.earlyUnstakePenalty());
 }
@@ -423,7 +440,8 @@ export async function getStakingConfig() {
     const ethers = window.ethers;
     const { NetworkManager } = await import('../core/index.js');
     const provider = NetworkManager.getProvider();
-    const contract = new ethers.Contract(CONTRACTS.DELEGATION_MANAGER, DELEGATION_ABI, provider);
+    const contracts = getContracts();
+    const contract = new ethers.Contract(contracts.DELEGATION_MANAGER, DELEGATION_ABI, provider);
     
     const [minLock, maxLock, penalty] = await Promise.all([
         contract.minLockPeriod(),
