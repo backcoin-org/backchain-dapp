@@ -1,5 +1,5 @@
 // modules/js/transactions/index.js
-// ✅ PRODUCTION V1.0 - Barrel Export for Transaction Modules
+// ✅ PRODUCTION V1.1 - Added FaucetTx
 // 
 // This file re-exports all transaction modules for simplified imports.
 //
@@ -7,7 +7,7 @@
 // USAGE:
 // 
 // Import specific modules:
-//   import { CharityTx, StakingTx } from './transactions/index.js';
+//   import { CharityTx, StakingTx, FaucetTx } from './transactions/index.js';
 //
 // Import everything:
 //   import * as Transactions from './transactions/index.js';
@@ -98,6 +98,12 @@ export {
     calculateFileHash
 } from './notary-tx.js';
 
+// Faucet (Testnet)
+export { 
+    FaucetTx,
+    executeFaucetClaim
+} from './faucet-tx.js';
+
 // ============================================================================
 // CONVENIENCE OBJECT
 // ============================================================================
@@ -111,7 +117,8 @@ export const Transactions = {
     Nft: (async () => (await import('./nft-tx.js')).NftTx)(),
     Fortune: (async () => (await import('./fortune-tx.js')).FortuneTx)(),
     Rental: (async () => (await import('./rental-tx.js')).RentalTx)(),
-    Notary: (async () => (await import('./notary-tx.js')).NotaryTx)()
+    Notary: (async () => (await import('./notary-tx.js')).NotaryTx)(),
+    Faucet: (async () => (await import('./faucet-tx.js')).FaucetTx)()
 };
 
 export default Transactions;
