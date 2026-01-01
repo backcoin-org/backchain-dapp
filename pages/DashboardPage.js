@@ -20,7 +20,7 @@ import {
     calculateClaimDetails,
     API_ENDPOINTS
 } from '../modules/data.js';
-import { executeUniversalClaim } from '../modules/transactions.js';
+import { StakingTx } from '../modules/transactions/index.js';
 import {
     formatBigNumber, formatPStake, renderLoading,
     renderNoData, renderError
@@ -1517,13 +1517,23 @@ function attachDashboardListeners() {
 
                 const { stakingRewards, minerRewards } = await calculateUserTotalRewards();
                 if (stakingRewards > 0n || minerRewards > 0n) {
-                    const success = await executeUniversalClaim(stakingRewards, minerRewards, null);
-                    if (success) {
-                        showToast("Rewards claimed!", "success");
-                        await updateUserHub(true);
-                        DashboardState.activities = [];
-                        fetchAndProcessActivities();
-                    }
+                    await StakingTx.claimRewards({
+                        stakingRewards: stakingRewards,
+                        minerRewards: minerRewards,
+                        boosterTokenId: null,
+                        button: claimBtn,
+                        onSuccess: async () => {
+                            showToast("Rewards claimed!", "success");
+                            await updateUserHub(true);
+                            DashboardState.activities = [];
+                            fetchAndProcessActivities();
+                        },
+                        onError: (error) => {
+                            if (!error.cancelled) {
+                                showToast("Claim failed", "error");
+                            }
+                        }
+                    });
                 }
             } catch (err) {
                 showToast("Claim failed", "error");
