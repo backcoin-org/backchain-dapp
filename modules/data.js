@@ -1,6 +1,5 @@
 // js/modules/data.js
-// ✅ PRODUCTION V8.0 - FIXED: Use publicProvider for ALL reads (not MetaMask)
-// This prevents MetaMask RPC rate limiting errors
+// ✅ PRODUCTION V7.0
 
 const ethers = window.ethers;
 
@@ -69,13 +68,7 @@ function isRateLimitError(e) {
     return (
         e?.error?.code === 429 || 
         e?.code === 429 ||
-        e?.code === -32002 ||  // MetaMask rate limit
-        (e.message && (
-            e.message.includes("429") || 
-            e.message.includes("Too Many Requests") || 
-            e.message.includes("rate limit") ||
-            e.message.includes("too many errors")
-        ))
+        (e.message && (e.message.includes("429") || e.message.includes("Too Many Requests") || e.message.includes("rate limit")))
     );
 }
 
@@ -84,7 +77,6 @@ function isRpcError(e) {
     return (
         errorCode === -32603 ||
         errorCode === -32000 ||
-        errorCode === -32002 ||
         e.message?.includes("Internal JSON-RPC")
     );
 }
@@ -97,29 +89,6 @@ function getContractInstance(address, abi, fallbackStateContract) {
     } catch (e) {
         return null;
     }
-}
-
-// ====================================================================
-// 🔥 V8.0: HELPER TO GET PUBLIC CONTRACT (never uses MetaMask for reads)
-// ====================================================================
-
-/**
- * Get the public version of a contract for reading data
- * ALWAYS uses publicProvider (Alchemy) to avoid MetaMask rate limits
- */
-function getPublicContract(contractName) {
-    // Map of signer contracts to their public counterparts
-    const publicContracts = {
-        'bkcToken': State.bkcTokenContractPublic,
-        'delegationManager': State.delegationManagerContractPublic,
-        'rentalManager': State.rentalManagerContractPublic,
-        'fortunePool': State.fortunePoolContractPublic,
-        'actionsManager': State.actionsManagerContractPublic,
-        'ecosystemManager': State.ecosystemManagerContractPublic,
-        'faucet': State.faucetContractPublic
-    };
-    
-    return publicContracts[contractName] || null;
 }
 
 // ====================================================================
@@ -176,7 +145,6 @@ export const safeContractCall = async (
             if (isRateLimitError(e) && attempt < retries) {
                 const jitter = Math.floor(Math.random() * 1000);
                 const delay = 1000 * Math.pow(2, attempt) + jitter;
-                console.warn(`⚠️ Rate limit hit, waiting ${delay}ms...`);
                 await wait(delay);
                 continue;
             }
@@ -294,22 +262,16 @@ export async function loadPublicData() {
 }
 
 // ====================================================================
-// 2. USER DATA - 🔥 V8.0: FIXED TO USE PUBLIC PROVIDER
+// 2. USER DATA
 // ====================================================================
 
 export async function loadUserData(forceRefresh = false) {
     if (!State.isConnected || !State.userAddress) return;
 
     try {
-        // 🔥 V8.0: Use PUBLIC contracts for reading (Alchemy, not MetaMask!)
-        const bkcContract = State.bkcTokenContractPublic || State.bkcTokenContract;
-        const delegationContract = State.delegationManagerContractPublic || State.delegationManagerContract;
-        
         const [balance, nativeBalance] = await Promise.allSettled([
-            // 🔥 FIXED: Use public contract for balance
-            safeBalanceOf(bkcContract, State.userAddress, forceRefresh),
-            // 🔥 FIXED: Use publicProvider for native balance
-            State.publicProvider?.getBalance(State.userAddress)
+            safeBalanceOf(State.bkcTokenContract, State.userAddress, forceRefresh),
+            State.provider?.getBalance(State.userAddress)
         ]);
 
         if (balance.status === 'fulfilled') {
@@ -322,10 +284,9 @@ export async function loadUserData(forceRefresh = false) {
 
         await loadMyBoostersFromAPI(forceRefresh);
 
-        // 🔥 FIXED: Use public contract for pStake reading
-        if (delegationContract) {
+        if (State.delegationManagerContract) {
             const totalUserPStake = await safeContractCall(
-                delegationContract,
+                State.delegationManagerContract,
                 'userTotalPStake',
                 [State.userAddress],
                 0n,
@@ -341,20 +302,15 @@ export async function loadUserData(forceRefresh = false) {
 }
 
 // ====================================================================
-// 3. DELEGATIONS - 🔥 V8.0: FIXED TO USE PUBLIC PROVIDER
+// 3. DELEGATIONS
 // ====================================================================
 
 export async function loadUserDelegations(forceRefresh = false) {
-    if (!State.isConnected || !State.userAddress) return [];
-
-    // 🔥 FIXED: Use public contract for reading delegations
-    const delegationContract = State.delegationManagerContractPublic || State.delegationManagerContract;
-    
-    if (!delegationContract) return [];
+    if (!State.isConnected || !State.delegationManagerContract) return [];
 
     try {
         const delegationsRaw = await safeContractCall(
-            delegationContract,
+            State.delegationManagerContract,
             'getDelegationsOf',
             [State.userAddress],
             [],
@@ -409,11 +365,10 @@ export async function loadRentalListings(forceRefresh = false) {
         return enrichedListings;
     }
 
-    // 🔥 V8.0: Use public contract
-    const rentalContract = State.rentalManagerContractPublic || getContractInstance(
+    const rentalContract = getContractInstance(
         addresses.rentalManager,
         rentalManagerABI,
-        null
+        State.rentalManagerContractPublic
     );
     
     if (!rentalContract) {
@@ -495,226 +450,376 @@ export async function loadRentalListings(forceRefresh = false) {
     }
 }
 
-// ====================================================================
-// 5. USER RENTALS - 🔥 V8.0: FIXED TO USE PUBLIC PROVIDER
-// ====================================================================
-
 export async function loadUserRentals(forceRefresh = false) {
-    if (!State.isConnected || !State.userAddress) return [];
+    if (!State.userAddress) {
+        State.myRentals = [];
+        return [];
+    }
 
     try {
         const response = await fetchWithTimeout(
-            `${API_ENDPOINTS.getUserRentals}/${State.userAddress.toLowerCase()}`,
-            5000
+            `${API_ENDPOINTS.getUserRentals}/${State.userAddress}`,
+            4000
         );
+        
         if (response.ok) {
-            const rentals = await response.json();
-            State.userRentals = rentals;
-            return rentals;
+            const myRentalsApi = await response.json();
+            const enrichedRentals = myRentalsApi.map(item => {
+                const tier = boosterTiers.find(t => t.boostBips === Number(item.boostBips || 0));
+                return {
+                    ...item,
+                    img: tier?.img || './assets/nft.png',
+                    name: tier?.name || 'Booster NFT'
+                };
+            });
+            State.myRentals = enrichedRentals;
+            return enrichedRentals;
         }
     } catch (e) {}
 
-    // 🔥 V8.0: Use public contract
-    const rentalContract = State.rentalManagerContractPublic || State.rentalManagerContract;
-    if (!rentalContract) return [];
+    const rentalContract = getContractInstance(
+        addresses.rentalManager,
+        rentalManagerABI,
+        State.rentalManagerContractPublic
+    );
+    
+    if (!rentalContract) {
+        State.myRentals = [];
+        return [];
+    }
 
     try {
-        const rentedIds = await safeContractCall(
+        const listedIds = await safeContractCall(
             rentalContract,
-            'getUserRentedTokens',
-            [State.userAddress],
+            'getAllListedTokenIds',
+            [],
             [],
             2,
             forceRefresh
         );
+        
+        const myRentals = [];
+        const nowSec = Math.floor(Date.now() / 1000);
 
-        if (!rentedIds || rentedIds.length === 0) {
-            State.userRentals = [];
-            return [];
-        }
-
-        const rentals = await Promise.all(
-            rentedIds.map(async (tokenId) => {
+        for (const tokenId of listedIds.slice(0, 30)) {
+            try {
                 const rental = await safeContractCall(
                     rentalContract,
                     'getRental',
                     [tokenId],
                     null,
                     1,
-                    true
+                    forceRefresh
                 );
-                if (rental) {
+                
+                if (rental && 
+                    rental.tenant?.toLowerCase() === State.userAddress.toLowerCase() &&
+                    BigInt(rental.endTime || 0) > BigInt(nowSec)) {
+                    
                     const boostInfo = await getBoosterInfo(tokenId);
-                    return {
+                    myRentals.push({
                         tokenId: tokenId.toString(),
                         tenant: rental.tenant,
-                        endTime: rental.endTime?.toString(),
+                        startTime: rental.startTime?.toString() || '0',
+                        endTime: rental.endTime?.toString() || '0',
+                        paidAmount: rental.paidAmount?.toString() || '0',
                         boostBips: boostInfo.boostBips,
                         img: boostInfo.img,
                         name: boostInfo.name
-                    };
+                    });
                 }
-                return null;
-            })
-        );
+            } catch (e) {}
+        }
 
-        const validRentals = rentals.filter(r => r !== null);
-        State.userRentals = validRentals;
-        return validRentals;
+        State.myRentals = myRentals;
+        return myRentals;
 
     } catch (e) {
+        State.myRentals = [];
         return [];
     }
 }
 
 // ====================================================================
-// 6. BOOSTERS / NFTs
+// 5. BOOSTER HELPERS
 // ====================================================================
 
-let boosterErrorCount = 0;
-const MAX_BOOSTER_ERRORS = 3;
+let cachedBoosterResult = null;
+let lastBoosterResultTime = 0;
+const BOOSTER_RESULT_CACHE_MS = 30000;
 
-export async function loadMyBoostersFromAPI(forceRefresh = false) {
-    if (!State.isConnected || !State.userAddress) return [];
-    
-    const cacheKey = `boosters-${State.userAddress.toLowerCase()}`;
+export async function getHighestBoosterBoostFromAPI(forceRefresh = false) {
     const now = Date.now();
     
-    if (!forceRefresh) {
-        const cached = ownershipCache.get(cacheKey);
-        if (cached && (now - cached.timestamp < OWNERSHIP_CACHE_MS)) {
-            State.myBoosters = cached.value;
-            return cached.value;
-        }
+    if (!forceRefresh && cachedBoosterResult && (now - lastBoosterResultTime < BOOSTER_RESULT_CACHE_MS)) {
+        return cachedBoosterResult;
     }
+    
+    await loadMyBoostersFromAPI(forceRefresh);
 
-    try {
-        const response = await fetchWithTimeout(
-            `${API_ENDPOINTS.getBoosters}/${State.userAddress.toLowerCase()}`,
-            5000
+    let maxBoost = 0;
+    let bestTokenId = null;
+    let source = 'none';
+
+    if (State.myBoosters && State.myBoosters.length > 0) {
+        const highestOwned = State.myBoosters.reduce(
+            (max, b) => (b.boostBips > max.boostBips ? b : max),
+            State.myBoosters[0]
         );
-        
-        if (response.ok) {
-            const boosters = await response.json();
-            const enriched = boosters.map(nft => {
-                const tier = boosterTiers.find(t => t.boostBips === Number(nft.boostBips || 0));
-                return {
-                    ...nft,
-                    tokenId: nft.tokenId?.toString() || nft.id?.toString(),
-                    boostBips: Number(nft.boostBips || 0),
-                    img: tier?.img || './assets/nft.png',
-                    name: tier?.name || 'Booster NFT'
-                };
-            });
-            
-            State.myBoosters = enriched;
-            ownershipCache.set(cacheKey, { value: enriched, timestamp: now });
-            boosterErrorCount = 0;
-            return enriched;
-        }
-    } catch (e) {
-        boosterErrorCount++;
-        if (boosterErrorCount <= MAX_BOOSTER_ERRORS) {
-            console.warn(`Boosters API failed (${boosterErrorCount}/${MAX_BOOSTER_ERRORS}):`, e.message);
+        if (highestOwned.boostBips > maxBoost) {
+            maxBoost = highestOwned.boostBips;
+            bestTokenId = highestOwned.tokenId;
+            source = 'owned';
         }
     }
 
-    return State.myBoosters || [];
+    if (State.myRentals && State.myRentals.length > 0) {
+        const highestRented = State.myRentals.reduce(
+            (max, r) => (r.boostBips > max.boostBips ? r : max),
+            State.myRentals[0]
+        );
+        if (highestRented.boostBips > maxBoost) {
+            maxBoost = highestRented.boostBips;
+            bestTokenId = highestRented.tokenId;
+            source = 'rented';
+        }
+    }
+
+    const tier = boosterTiers.find(t => t.boostBips === maxBoost);
+    const imageUrl = tier?.realImg || tier?.img || 'assets/bkc_logo_3d.png';
+    const nftName = tier?.name ? `${tier.name} Booster` : (source !== 'none' ? 'Booster NFT' : 'None');
+
+    cachedBoosterResult = {
+        highestBoost: maxBoost,
+        boostName: nftName,
+        imageUrl,
+        tokenId: bestTokenId ? bestTokenId.toString() : null,
+        source: source
+    };
+    lastBoosterResultTime = Date.now();
+    
+    return cachedBoosterResult;
 }
 
-export async function getBoosterInfo(tokenId) {
-    const tier = boosterTiers.find(t => 
-        State.myBoosters?.some(b => b.tokenId === tokenId?.toString() && Number(b.boostBips) === t.boostBips)
+async function getBoosterInfo(tokenId) {
+    const minABI = ["function boostBips(uint256) view returns (uint256)"];
+    const contractToUse = getContractInstance(
+        addresses.rewardBoosterNFT,
+        minABI,
+        State.rewardBoosterContractPublic
     );
-    
-    if (tier) {
-        return { boostBips: tier.boostBips, img: tier.img, name: tier.name };
-    }
 
-    // 🔥 V8.0: Use public contract
-    const boosterContract = State.rewardBoosterContractPublic || State.rewardBoosterContract;
-    if (!boosterContract) {
-        return { boostBips: 0, img: './assets/nft.png', name: 'Booster NFT' };
+    if (!contractToUse) {
+        return { boostBips: 0, img: 'assets/bkc_logo_3d.png', name: 'Unknown' };
     }
 
     try {
         const boostBips = await safeContractCall(
-            boosterContract,
+            contractToUse,
             'boostBips',
             [tokenId],
-            0n,
-            1,
-            false
+            0n
         );
         
-        const matchedTier = boosterTiers.find(t => t.boostBips === Number(boostBips));
+        const bipsNum = Number(boostBips);
+        const tier = boosterTiers.find(t => t.boostBips === bipsNum);
+        
         return {
-            boostBips: Number(boostBips),
-            img: matchedTier?.img || './assets/nft.png',
-            name: matchedTier?.name || 'Booster NFT'
+            boostBips: bipsNum,
+            img: tier?.img || './assets/nft.png',
+            name: tier?.name || `Booster #${tokenId}`
         };
-    } catch (e) {
-        return { boostBips: 0, img: './assets/nft.png', name: 'Booster NFT' };
+        
+    } catch {
+        return { boostBips: 0, img: 'assets/bkc_logo_3d.png', name: 'Unknown' };
     }
 }
 
-export async function getHighestBoosterBoostFromAPI() {
-    if (!State.isConnected || !State.userAddress) return 0;
+// ====================================================================
+// 6. REWARDS CALCULATION
+// ====================================================================
+
+export async function calculateUserTotalRewards() {
+    if (!State.isConnected || !State.delegationManagerContract) {
+        return { stakingRewards: 0n, minerRewards: 0n, totalRewards: 0n };
+    }
     
-    const boosters = State.myBoosters || [];
-    if (boosters.length === 0) return 0;
+    try {
+        const stakingRewards = await safeContractCall(
+            State.delegationManagerContract,
+            'pendingRewards',
+            [State.userAddress],
+            0n
+        );
+        return { stakingRewards, minerRewards: 0n, totalRewards: stakingRewards };
+        
+    } catch (e) {
+        return { stakingRewards: 0n, minerRewards: 0n, totalRewards: 0n };
+    }
+}
+
+export async function calculateClaimDetails() {
+    if (!State.delegationManagerContract || !State.userAddress) {
+        return { netClaimAmount: 0n, feeAmount: 0n, discountPercent: 0, totalRewards: 0n };
+    }
+
+    const { totalRewards } = await calculateUserTotalRewards();
+    if (totalRewards === 0n) {
+        return { netClaimAmount: 0n, feeAmount: 0n, discountPercent: 0, totalRewards: 0n };
+    }
+
+    let baseFeeBips = State.systemFees?.CLAIM_REWARD_FEE_BIPS || 500n;
     
-    const highest = boosters.reduce((max, b) => {
-        const bips = Number(b.boostBips || 0);
-        return bips > max ? bips : max;
-    }, 0);
-    
-    return highest;
+    const boosterData = await getHighestBoosterBoostFromAPI();
+    let discountBips = State.boosterDiscounts?.[boosterData.highestBoost] || 0n;
+
+    const finalFeeBips = baseFeeBips > discountBips ? baseFeeBips - discountBips : 0n;
+    const feeAmount = (totalRewards * finalFeeBips) / 10000n;
+
+    return {
+        netClaimAmount: totalRewards - feeAmount,
+        feeAmount,
+        discountPercent: Number(discountBips) / 100,
+        totalRewards
+    };
 }
 
 // ====================================================================
-// 7. HISTORY
+// 7. BOOSTER LOADING
 // ====================================================================
 
-export async function loadActivityHistory(limit = 20) {
-    if (!State.isConnected || !State.userAddress) return [];
+let isLoadingBoosters = false;
+let lastBoosterFetch = 0;
+let boosterErrorCount = 0;
+const BOOSTER_FETCH_THROTTLE_MS = 30000;
+const MAX_BOOSTER_ERRORS = 3;
+const BOOSTER_ERROR_COOLDOWN_MS = 120000;
+
+export async function loadMyBoostersFromAPI(forceRefresh = false) {
+    if (!State.userAddress) return [];
+
+    const now = Date.now();
     
+    if (isLoadingBoosters) {
+        return State.myBoosters || [];
+    }
+    
+    if (!forceRefresh && (now - lastBoosterFetch < BOOSTER_FETCH_THROTTLE_MS)) {
+        return State.myBoosters || [];
+    }
+    
+    if (boosterErrorCount >= MAX_BOOSTER_ERRORS) {
+        if (now - lastBoosterFetch < BOOSTER_ERROR_COOLDOWN_MS) {
+            return State.myBoosters || [];
+        }
+        boosterErrorCount = 0;
+    }
+
+    isLoadingBoosters = true;
+    lastBoosterFetch = now;
+
     try {
         const response = await fetchWithTimeout(
-            `${API_ENDPOINTS.getHistory}/${State.userAddress.toLowerCase()}?limit=${limit}`,
+            `${API_ENDPOINTS.getBoosters}/${State.userAddress}`,
             5000
         );
         
-        if (response.ok) {
-            const history = await response.json();
-            State.activityHistory = history;
-            return history;
-        }
-    } catch (e) {}
-    
-    return State.activityHistory || [];
-}
+        if (!response.ok) throw new Error(`API Error: ${response.status}`);
 
-export async function loadNotarizationHistory(limit = 50) {
-    if (!State.isConnected || !State.userAddress) return [];
-    
-    try {
-        const response = await fetchWithTimeout(
-            `${API_ENDPOINTS.getNotaryHistory}/${State.userAddress.toLowerCase()}?limit=${limit}`,
-            5000
+        let ownedTokensAPI = await response.json();
+
+        const minABI = [
+            "function ownerOf(uint256) view returns (address)",
+            "function boostBips(uint256) view returns (uint256)"
+        ];
+        const contract = getContractInstance(
+            addresses.rewardBoosterNFT,
+            minABI,
+            State.rewardBoosterContractPublic
         );
-        
-        if (response.ok) {
-            const history = await response.json();
-            return history;
+
+        if (contract && ownedTokensAPI.length > 0) {
+            const checks = await Promise.all(
+                ownedTokensAPI.slice(0, 50).map(async (token) => {
+                    const id = BigInt(token.tokenId);
+                    const cacheKey = `ownerOf-${id}`;
+                    const nowTs = Date.now();
+
+                    let tokenBoostBips = Number(token.boostBips || token.boost || 0);
+                    
+                    if (tokenBoostBips === 0) {
+                        try {
+                            const chainBoostBips = await contract.boostBips(id);
+                            tokenBoostBips = Number(chainBoostBips);
+                        } catch (e) {}
+                    }
+
+                    if (!forceRefresh && ownershipCache.has(cacheKey)) {
+                        const cachedData = ownershipCache.get(cacheKey);
+                        if (nowTs - cachedData.timestamp < OWNERSHIP_CACHE_MS) {
+                            if (cachedData.owner.toLowerCase() === State.userAddress.toLowerCase()) {
+                                return {
+                                    tokenId: id,
+                                    boostBips: tokenBoostBips,
+                                    imageUrl: token.imageUrl || token.image || null
+                                };
+                            }
+                            return null;
+                        }
+                    }
+
+                    try {
+                        const owner = await contract.ownerOf(id);
+                        ownershipCache.set(cacheKey, { owner, timestamp: nowTs });
+
+                        if (owner.toLowerCase() === State.userAddress.toLowerCase()) {
+                            return {
+                                tokenId: id,
+                                boostBips: tokenBoostBips,
+                                imageUrl: token.imageUrl || token.image || null
+                            };
+                        }
+                        return null;
+                        
+                    } catch (e) {
+                        if (isRateLimitError(e) || isRpcError(e)) {
+                            return {
+                                tokenId: id,
+                                boostBips: tokenBoostBips,
+                                imageUrl: token.imageUrl || token.image || null
+                            };
+                        }
+                        return null;
+                    }
+                })
+            );
+
+            State.myBoosters = checks.filter(t => t !== null);
+            
+        } else {
+            State.myBoosters = ownedTokensAPI.map(tokenData => ({
+                tokenId: BigInt(tokenData.tokenId),
+                boostBips: Number(tokenData.boostBips || tokenData.boost || 0),
+                imageUrl: tokenData.imageUrl || tokenData.image || null
+            }));
         }
-    } catch (e) {}
-    
-    return [];
+        
+        boosterErrorCount = 0;
+
+        return State.myBoosters;
+
+    } catch (e) {
+        boosterErrorCount++;
+        
+        if (!State.myBoosters) State.myBoosters = [];
+        return State.myBoosters;
+    } finally {
+        isLoadingBoosters = false;
+    }
 }
 
 // ====================================================================
-// 8. CACHE MANAGEMENT
+// 8. UTILITY EXPORTS
 // ====================================================================
 
 export function clearAllCaches() {
@@ -723,6 +828,9 @@ export function clearAllCaches() {
     balanceCache.clear();
     systemDataCache = null;
     systemDataCacheTime = 0;
+    cachedBoosterResult = null;
+    lastBoosterResultTime = 0;
+    lastBoosterFetch = 0;
     boosterErrorCount = 0;
 }
 
@@ -738,7 +846,7 @@ export async function forceRefreshUserData() {
 // ====================================================================
 
 export async function loadFortunePoolData(forceRefresh = false) {
-    // 🔥 V8.0: Prioritize public contracts
+    // V2: Prioriza fortunePoolContractPublic, fallback para actionsManager
     const contract = State.fortunePoolContractPublic || State.fortunePoolContract || 
                      State.actionsManagerContractPublic || State.actionsManagerContract;
     
@@ -776,6 +884,7 @@ export async function loadFortunePoolData(forceRefresh = false) {
         const pool = prizePool.status === 'fulfilled' ? BigInt(prizePool.value.toString()) : 0n;
         const games = Number(gameCounter.status === 'fulfilled' ? gameCounter.value : 0n);
 
+        // V2: Service fees instead of oracle fees
         let serviceFee1x = 0n;
         let serviceFee5x = 0n;
         
@@ -787,6 +896,7 @@ export async function loadFortunePoolData(forceRefresh = false) {
             serviceFee1x = BigInt(fee1x.toString());
             serviceFee5x = BigInt(fee5x.toString());
         } catch (e) {
+            // Fallback: try legacy oracle fee methods
             try {
                 const [fee1x, fee5x] = await Promise.all([
                     contract.getRequiredOracleFee(false),
@@ -803,8 +913,10 @@ export async function loadFortunePoolData(forceRefresh = false) {
             }
         }
 
+        // V2: Get tiers using getAllTiers or prizeTiers
         const tiers = [];
         try {
+            // Try V2 getAllTiers first
             const [ranges, multipliers] = await contract.getAllTiers();
             for (let i = 0; i < ranges.length; i++) {
                 tiers.push({
@@ -816,6 +928,7 @@ export async function loadFortunePoolData(forceRefresh = false) {
                 });
             }
         } catch {
+            // Fallback to legacy prizeTiers
             for (let i = 1; i <= Math.min(tierCount, 10); i++) {
                 try {
                     const tier = await safeContractCall(contract, 'prizeTiers', [i], null);
@@ -839,6 +952,7 @@ export async function loadFortunePoolData(forceRefresh = false) {
             gameCounter: games,
             serviceFee1x,
             serviceFee5x,
+            // Legacy aliases for backwards compatibility
             oracleFee1x: serviceFee1x,
             oracleFee5x: serviceFee5x,
             tiers
@@ -867,18 +981,20 @@ export async function loadFortunePoolData(forceRefresh = false) {
 export async function loadUserFortuneHistory(userAddress, limit = 20) {
     if (!userAddress) return [];
 
-    // 🔥 V8.0: Prioritize public contracts
+    // V2: Prioriza fortunePoolContract
     const contract = State.fortunePoolContractPublic || State.fortunePoolContract ||
                      State.actionsManagerContractPublic || State.actionsManagerContract;
     if (!contract) return [];
 
     try {
+        // V2: Try GamePlayed event first (new), fallback to GameFulfilled (legacy)
         let filter;
         let eventName = 'GamePlayed';
         
         try {
             filter = contract.filters.GamePlayed(null, userAddress);
         } catch {
+            // Fallback to legacy event
             filter = contract.filters.GameFulfilled(null, userAddress);
             eventName = 'GameFulfilled';
         }
@@ -922,7 +1038,7 @@ export function calculateExpectedPayout(wagerAmount, tierIndex, isWin) {
 }
 
 export async function getExpectedGuessCount(isCumulative) {
-    // 🔥 V8.0: Prioritize public contracts
+    // V2: Prioriza fortunePoolContract
     const contract = State.fortunePoolContractPublic || State.fortunePoolContract ||
                      State.actionsManagerContractPublic || State.actionsManagerContract;
     
