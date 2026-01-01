@@ -13,7 +13,7 @@ import { showToast } from '../ui-feedback.js';
 import { addresses } from '../config.js';
 
 // Import transaction module
-import { CharityTx } from '../../modules/js/transactions/index.js';
+import { CharityTx } from '../modules/transactions/index.js';
 
 const ethers = window.ethers;
 
