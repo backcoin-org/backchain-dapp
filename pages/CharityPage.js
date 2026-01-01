@@ -513,32 +513,27 @@ function updateGrid() { const grid=document.getElementById('cp-grid'); if(!grid)
 
 async function loadDetail(id) { CS.currentView='detail'; CS.isLoading=true; const container=getContainer(); if(container) container.innerHTML=renderLoading(); try { let c=CS.campaigns.find(x=>x.id===id||x.id===String(id)); if(!c) { const provider=State?.publicProvider; if(provider) { const contract=new ethers.Contract(addresses.charityPool,charityPoolABI,provider); const data=await contract.campaigns(id); c={id:String(id),creator:data[0],title:data[1],description:data[2],goalAmount:BigInt(data[3].toString()),raisedAmount:BigInt(data[4].toString()),donationCount:Number(data[5]),deadline:Number(data[6]),createdAt:Number(data[7]),status:Number(data[8]),category:'humanitarian',imageUrl:null}; } } CS.currentCampaign=c; if(container) container.innerHTML=renderDetail(c); } catch(e) { console.error('Detail:',e); if(container) container.innerHTML=renderDetail(null); } finally { CS.isLoading=false; } }
 
-// IMPORTANT: Get or create container
+// IMPORTANT: Get container - MUST use the charity section to avoid breaking navigation
 function getContainer() {
+    // First check if charity-container already exists inside the charity section
     let container = document.getElementById('charity-container');
     if (container) return container;
     
-    container = document.querySelector('.page-content');
-    if (container) { container.id = 'charity-container'; return container; }
+    // Get the charity section (defined in index.html)
+    const charitySection = document.getElementById('charity');
+    if (charitySection) {
+        // Create container inside the charity section
+        container = document.createElement('div');
+        container.id = 'charity-container';
+        charitySection.innerHTML = ''; // Clear any previous content
+        charitySection.appendChild(container);
+        console.log('✅ Created charity-container inside #charity section');
+        return container;
+    }
     
-    container = document.querySelector('#app .content');
-    if (container) { container.id = 'charity-container'; return container; }
-    
-    container = document.querySelector('.main-content');
-    if (container) { container.id = 'charity-container'; return container; }
-    
-    container = document.querySelector('main');
-    if (container) { container.id = 'charity-container'; return container; }
-    
-    console.warn('⚠️ Creating charity container as fallback');
-    container = document.createElement('div');
-    container.id = 'charity-container';
-    container.style.cssText = 'padding: 1rem; min-height: 100vh;';
-    
-    const app = document.getElementById('app') || document.body;
-    app.appendChild(container);
-    
-    return container;
+    // Fallback: Should not happen if index.html is correct
+    console.error('❌ #charity section not found in DOM');
+    return null;
 }
 
 function render() {
