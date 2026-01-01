@@ -82,6 +82,11 @@ function formatError(error) {
         return 'USER_REJECTED';
     }
     
+    // MetaMask RPC Rate Limit - special handling
+    if (msg.includes('too many errors') || msg.includes('retrying in') || error?.code === -32002) {
+        return 'RPC_RATE_LIMITED';
+    }
+    
     // Gas/Balance issues
     if (msg.includes('insufficient funds') || msg.includes('exceeds the balance')) {
         return 'INSUFFICIENT_GAS';
@@ -114,6 +119,11 @@ function formatError(error) {
 
 function isRetryableError(error) {
     const msg = error?.message || error?.reason || '';
+    const code = error?.code || error?.error?.code;
+    
+    // Rate limit error code from MetaMask
+    if (code === -32002) return true;
+    
     const retryablePatterns = [
         'Internal JSON-RPC',
         'network',
@@ -122,6 +132,8 @@ function isRetryableError(error) {
         'ECONNRESET',
         'rate limit',
         'Too Many Requests',
+        'too many errors',
+        'retrying in',
         'nonce',
         'replacement transaction',
         'already known',
@@ -154,6 +166,11 @@ function handleTransactionError(error) {
         return 'Insufficient ETH for gas';
     }
     
+    if (formattedError === 'RPC_RATE_LIMITED') {
+        showRpcRateLimitError();
+        return 'RPC rate limited - please wait';
+    }
+    
     if (formattedError === 'NETWORK_ERROR') {
         showToast('Network error - please try again', 'error');
         return 'Network error';
@@ -161,6 +178,56 @@ function handleTransactionError(error) {
     
     showToast(formattedError, 'error');
     return formattedError;
+}
+
+/**
+ * Show modal with instructions for RPC rate limit
+ */
+function showRpcRateLimitError() {
+    showToast("⏳ RPC rate limited - wait 30 seconds", "warning");
+    
+    setTimeout(() => {
+        const existingModal = document.getElementById('rpc-limit-modal');
+        if (existingModal) existingModal.remove();
+        
+        const modal = document.createElement('div');
+        modal.id = 'rpc-limit-modal';
+        modal.className = 'fixed inset-0 z-[9999] flex items-center justify-center p-4';
+        modal.innerHTML = `
+            <div class="absolute inset-0 bg-black/80 backdrop-blur-sm" onclick="this.parentElement.remove()"></div>
+            <div class="relative bg-zinc-900 border border-amber-500/50 rounded-2xl p-6 max-w-md w-full shadow-2xl">
+                <button onclick="this.closest('#rpc-limit-modal').remove()" class="absolute top-4 right-4 text-zinc-400 hover:text-white">
+                    <i class="fa-solid fa-times text-xl"></i>
+                </button>
+                <div class="text-center mb-6">
+                    <div class="w-16 h-16 bg-amber-500/20 rounded-full flex items-center justify-center mx-auto mb-4">
+                        <i class="fa-solid fa-clock text-3xl text-amber-400"></i>
+                    </div>
+                    <h3 class="text-xl font-bold text-white mb-2">RPC Rate Limited</h3>
+                    <p class="text-zinc-400 text-sm">MetaMask's RPC is temporarily blocked due to too many requests. Wait 30-60 seconds and try again.</p>
+                </div>
+                <div class="bg-blue-500/10 border border-blue-500/30 rounded-xl p-4 mb-4">
+                    <p class="text-blue-400 text-xs">
+                        <i class="fa-solid fa-lightbulb mr-1"></i>
+                        <strong>Tip:</strong> You can change MetaMask's RPC to avoid this:
+                    </p>
+                    <ol class="text-blue-300 text-xs mt-2 space-y-1 list-decimal list-inside">
+                        <li>Open MetaMask Settings</li>
+                        <li>Go to Networks → Arbitrum Sepolia</li>
+                        <li>Change RPC URL to:</li>
+                    </ol>
+                    <code class="block bg-zinc-800 text-green-400 text-xs p-2 rounded mt-2 break-all">
+                        https://sepolia-rollup.arbitrum.io/rpc
+                    </code>
+                </div>
+                <button onclick="this.closest('#rpc-limit-modal').remove()" 
+                        class="w-full bg-amber-600 hover:bg-amber-500 text-white font-medium py-2.5 rounded-xl transition-colors">
+                    Got it, I'll wait
+                </button>
+            </div>
+        `;
+        document.body.appendChild(modal);
+    }, 500);
 }
 
 /**
