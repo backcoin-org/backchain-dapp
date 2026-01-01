@@ -1,12 +1,11 @@
 // js/modules/charity-data.js
-// ✅ PRODUCTION V2.0 - Charity Pool Data Module
-// Fixed: Better error handling, proper status checks, blockchain fallback
+// ✅ PRODUCTION V3.0 - Robust Data Loading with Retry + Status Normalization
+// Based on data.js patterns for maximum reliability
 
 const ethers = window.ethers;
 
 import { State } from '../state.js';
 import { addresses } from '../config.js';
-import { safeContractCall } from './data.js';
 
 // ====================================================================
 // CONSTANTS & CONFIGURATION
@@ -14,6 +13,8 @@ import { safeContractCall } from './data.js';
 
 const CACHE_DURATION_MS = 30000; // 30 seconds
 const API_TIMEOUT_MS = 8000;
+const CONTRACT_READ_RETRIES = 2;
+const RETRY_DELAY_MS = 1000;
 
 // Campaign Status Enum (matches smart contract)
 export const CampaignStatus = {
@@ -21,6 +22,14 @@ export const CampaignStatus = {
     COMPLETED: 1,
     CANCELLED: 2,
     WITHDRAWN: 3
+};
+
+// Status string to number map
+const StatusMap = {
+    'ACTIVE': 0,
+    'COMPLETED': 1,
+    'CANCELLED': 2,
+    'WITHDRAWN': 3
 };
 
 export const CampaignStatusLabels = {
@@ -45,6 +54,7 @@ let campaignsCacheTime = 0;
 let statsCache = null;
 let statsCacheTime = 0;
 const campaignDetailCache = new Map();
+const contractReadCache = new Map();
 
 // ====================================================================
 // API ENDPOINTS
@@ -56,7 +66,6 @@ export const CHARITY_API = {
     getCharityStats: 'https://getcharitystats-4wvdcuoouq-uc.a.run.app',
     getUserCampaigns: 'https://getusercampaigns-4wvdcuoouq-uc.a.run.app',
     getUserDonations: 'https://getuserdonations-4wvdcuoouq-uc.a.run.app',
-    // NEW: Image upload endpoint
     uploadImage: 'https://uploadcharityimage-4wvdcuoouq-uc.a.run.app'
 };
 
@@ -111,6 +120,8 @@ export const charityPoolABI = [
 // UTILITIES
 // ====================================================================
 
+const wait = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
 async function fetchWithTimeout(url, options = {}, timeoutMs = API_TIMEOUT_MS) {
     const controller = new AbortController();
     const id = setTimeout(() => controller.abort(), timeoutMs);
@@ -126,6 +137,92 @@ async function fetchWithTimeout(url, options = {}, timeoutMs = API_TIMEOUT_MS) {
         throw error;
     }
 }
+
+// ====================================================================
+// RPC SAFETY FUNCTIONS (Based on data.js patterns)
+// ====================================================================
+
+function isRateLimitError(e) {
+    return (
+        e?.error?.code === 429 || 
+        e?.code === 429 ||
+        (e.message && (e.message.includes("429") || e.message.includes("Too Many Requests") || e.message.includes("rate limit")))
+    );
+}
+
+function isRpcError(e) {
+    const errorCode = e?.error?.code || e?.code;
+    return (
+        errorCode === -32603 ||
+        errorCode === -32000 ||
+        e.message?.includes("Internal JSON-RPC")
+    );
+}
+
+// ====================================================================
+// SAFE CONTRACT CALL WITH CACHE & RETRY
+// ====================================================================
+
+export async function safeContractCall(
+    contract, 
+    method, 
+    args = [], 
+    fallbackValue = null, 
+    retries = CONTRACT_READ_RETRIES, 
+    forceRefresh = false
+) {
+    if (!contract) return fallbackValue;
+
+    const contractAddr = contract.target || contract.address;
+    const serializedArgs = JSON.stringify(args, (key, value) =>
+        typeof value === 'bigint' ? value.toString() : value
+    );
+    const cacheKey = `charity-${contractAddr}-${method}-${serializedArgs}`;
+    const now = Date.now();
+
+    // Check cache
+    if (!forceRefresh) {
+        const cached = contractReadCache.get(cacheKey);
+        if (cached && (now - cached.timestamp < CACHE_DURATION_MS)) {
+            return cached.value;
+        }
+    }
+
+    let lastError = null;
+    for (let attempt = 0; attempt <= retries; attempt++) {
+        try {
+            const result = await contract[method](...args);
+            contractReadCache.set(cacheKey, { value: result, timestamp: now });
+            return result;
+
+        } catch (e) {
+            lastError = e;
+            
+            if (isRateLimitError(e) && attempt < retries) {
+                const jitter = Math.floor(Math.random() * 500);
+                const delay = RETRY_DELAY_MS * Math.pow(2, attempt) + jitter;
+                console.warn(`Rate limit hit, retrying in ${delay}ms...`);
+                await wait(delay);
+                continue;
+            }
+            
+            if (isRpcError(e) && attempt < retries) {
+                console.warn(`RPC error, retrying...`);
+                await wait(RETRY_DELAY_MS);
+                continue;
+            }
+            
+            break;
+        }
+    }
+    
+    console.warn(`safeContractCall ${method} failed:`, lastError?.message);
+    return fallbackValue;
+}
+
+// ====================================================================
+// CONTRACT HELPER
+// ====================================================================
 
 function getCharityPoolContract(signerOrProvider = null) {
     const address = addresses.charityPool;
@@ -145,6 +242,28 @@ function getCharityPoolContract(signerOrProvider = null) {
     }
 }
 
+// ====================================================================
+// STATUS NORMALIZATION (Handles both string "ACTIVE" and number 0)
+// ====================================================================
+
+/**
+ * Normalize status to number (handles both string "ACTIVE" and number 0)
+ */
+export function normalizeStatus(status) {
+    if (typeof status === 'number') return status;
+    if (typeof status === 'string') {
+        // Check if it's a string number like "0"
+        if (!isNaN(parseInt(status))) return parseInt(status);
+        // Check if it's a status name like "ACTIVE"
+        return StatusMap[status.toUpperCase()] ?? 0;
+    }
+    return 0;
+}
+
+// ====================================================================
+// CAMPAIGN DATA NORMALIZATION
+// ====================================================================
+
 /**
  * Normalize campaign data from blockchain or API
  */
@@ -161,7 +280,7 @@ function normalizeCampaign(data, id = null) {
             donationCount: Number(data[5] || 0),
             deadline: Number(data[6] || 0),
             createdAt: Number(data[7] || 0),
-            status: Number(data[8] || 0),
+            status: normalizeStatus(data[8]),
             // Metadata (from Firebase if available)
             category: data.category || 'humanitarian',
             imageUrl: data.imageUrl || null,
@@ -184,7 +303,7 @@ function normalizeCampaign(data, id = null) {
         donationCount: Number(data.donationCount || 0),
         deadline: Number(data.deadline || 0),
         createdAt: Number(data.createdAt || 0),
-        status: Number(data.status || 0),
+        status: normalizeStatus(data.status),
         category: data.category || 'humanitarian',
         imageUrl: data.imageUrl || null,
         websiteUrl: data.websiteUrl || null,
@@ -196,173 +315,140 @@ function normalizeCampaign(data, id = null) {
 }
 
 // ====================================================================
-// GLOBAL STATISTICS
+// LOAD CHARITY STATS
 // ====================================================================
 
-/**
- * Load global charity pool statistics
- */
 export async function loadCharityStats(forceRefresh = false) {
     const now = Date.now();
     
+    // Check cache
     if (!forceRefresh && statsCache && (now - statsCacheTime < CACHE_DURATION_MS)) {
         return statsCache;
     }
     
+    // Default stats
     const defaultStats = {
+        totalCampaigns: 0,
         totalRaised: 0n,
         totalBurned: 0n,
-        totalCampaigns: 0,
         totalSuccessful: 0,
-        donationMiningFeeBips: 400,
-        donationBurnFeeBips: 100,
-        withdrawalFeeETH: ethers.parseEther("0.001"),
-        goalNotMetBurnBips: 1000,
-        minDonationAmount: ethers.parseEther("1"),
-        maxActiveCampaignsPerWallet: 3
+        donationMiningFeeBips: 400,  // 4%
+        donationBurnFeeBips: 100,    // 1%
+        withdrawalFeeETH: ethers.parseEther("0.0001"),
+        goalNotMetBurnBips: 500      // 5%
     };
     
+    // Try Firebase first
+    try {
+        const response = await fetchWithTimeout(CHARITY_API.getCharityStats);
+        if (response.ok) {
+            const data = await response.json();
+            const stats = {
+                totalCampaigns: Number(data.totalCampaigns || 0),
+                totalRaised: BigInt(data.totalRaised?.toString() || '0'),
+                totalBurned: BigInt(data.totalBurned?.toString() || '0'),
+                totalSuccessful: Number(data.totalSuccessful || 0),
+                donationMiningFeeBips: Number(data.donationMiningFeeBips || 400),
+                donationBurnFeeBips: Number(data.donationBurnFeeBips || 100),
+                withdrawalFeeETH: BigInt(data.withdrawalFeeETH?.toString() || ethers.parseEther("0.0001").toString()),
+                goalNotMetBurnBips: Number(data.goalNotMetBurnBips || 500)
+            };
+            
+            statsCache = stats;
+            statsCacheTime = now;
+            return stats;
+        }
+    } catch (e) {
+        console.warn('Firebase stats failed:', e.message);
+    }
+    
+    // Fallback to blockchain
     const contract = getCharityPoolContract();
     if (!contract) {
-        State.charityStats = defaultStats;
         return defaultStats;
     }
     
     try {
-        // Try using the view functions first
-        const [globalStats, feeConfig] = await Promise.all([
-            contract.getGlobalStats().catch(() => null),
-            contract.getFeeConfig().catch(() => null)
+        const [
+            totalCampaigns,
+            totalRaised,
+            totalBurned,
+            totalSuccessful,
+            miningFee,
+            burnFee,
+            ethFee,
+            penalty
+        ] = await Promise.all([
+            safeContractCall(contract, 'totalCampaignsCreated', [], 0n),
+            safeContractCall(contract, 'totalRaisedAllTime', [], 0n),
+            safeContractCall(contract, 'totalBurnedAllTime', [], 0n),
+            safeContractCall(contract, 'totalSuccessfulWithdrawals', [], 0n),
+            safeContractCall(contract, 'donationMiningFeeBips', [], 400n),
+            safeContractCall(contract, 'donationBurnFeeBips', [], 100n),
+            safeContractCall(contract, 'withdrawalFeeETH', [], ethers.parseEther("0.0001")),
+            safeContractCall(contract, 'goalNotMetBurnBips', [], 500n)
         ]);
         
-        let stats;
-        
-        if (globalStats && feeConfig) {
-            stats = {
-                totalCampaigns: Number(globalStats[0]),
-                totalRaised: BigInt(globalStats[1].toString()),
-                totalBurned: BigInt(globalStats[2].toString()),
-                totalSuccessful: Number(globalStats[3]),
-                donationMiningFeeBips: Number(feeConfig[0]),
-                donationBurnFeeBips: Number(feeConfig[1]),
-                withdrawalFeeETH: BigInt(feeConfig[2].toString()),
-                goalNotMetBurnBips: Number(feeConfig[3]),
-                minDonationAmount: ethers.parseEther("1"),
-                maxActiveCampaignsPerWallet: 3
-            };
-        } else {
-            // Fallback to individual calls
-            const [
-                totalRaised,
-                totalBurned,
-                totalCampaigns,
-                totalSuccessful,
-                miningFeeBips,
-                burnFeeBips,
-                withdrawalFee,
-                penaltyBips,
-                minDonation,
-                maxCampaigns
-            ] = await Promise.all([
-                safeContractCall(contract, 'totalRaisedAllTime', [], 0n),
-                safeContractCall(contract, 'totalBurnedAllTime', [], 0n),
-                safeContractCall(contract, 'totalCampaignsCreated', [], 0n),
-                safeContractCall(contract, 'totalSuccessfulWithdrawals', [], 0n),
-                safeContractCall(contract, 'donationMiningFeeBips', [], 400n),
-                safeContractCall(contract, 'donationBurnFeeBips', [], 100n),
-                safeContractCall(contract, 'withdrawalFeeETH', [], ethers.parseEther("0.001")),
-                safeContractCall(contract, 'goalNotMetBurnBips', [], 1000n),
-                safeContractCall(contract, 'minDonationAmount', [], ethers.parseEther("1")),
-                safeContractCall(contract, 'maxActiveCampaignsPerWallet', [], 3n)
-            ]);
-            
-            stats = {
-                totalRaised: BigInt(totalRaised.toString()),
-                totalBurned: BigInt(totalBurned.toString()),
-                totalCampaigns: Number(totalCampaigns),
-                totalSuccessful: Number(totalSuccessful),
-                donationMiningFeeBips: Number(miningFeeBips),
-                donationBurnFeeBips: Number(burnFeeBips),
-                withdrawalFeeETH: BigInt(withdrawalFee.toString()),
-                goalNotMetBurnBips: Number(penaltyBips),
-                minDonationAmount: BigInt(minDonation.toString()),
-                maxActiveCampaignsPerWallet: Number(maxCampaigns)
-            };
-        }
+        const stats = {
+            totalCampaigns: Number(totalCampaigns),
+            totalRaised: BigInt(totalRaised.toString()),
+            totalBurned: BigInt(totalBurned.toString()),
+            totalSuccessful: Number(totalSuccessful),
+            donationMiningFeeBips: Number(miningFee),
+            donationBurnFeeBips: Number(burnFee),
+            withdrawalFeeETH: BigInt(ethFee.toString()),
+            goalNotMetBurnBips: Number(penalty)
+        };
         
         statsCache = stats;
         statsCacheTime = now;
-        State.charityStats = stats;
-        
         return stats;
         
     } catch (e) {
         console.error('Failed to load charity stats:', e);
-        State.charityStats = defaultStats;
         return defaultStats;
     }
 }
 
 // ====================================================================
-// CAMPAIGN LOADING
+// LOAD CAMPAIGNS
 // ====================================================================
 
-/**
- * Load all campaigns
- */
 export async function loadCampaigns(options = {}) {
-    const {
-        category = null,
-        status = null,
-        creator = null,
-        forceRefresh = false,
-        limit = 50,
-        offset = 0
-    } = options;
-    
+    const { category, status, creator, forceRefresh = false } = options;
     const now = Date.now();
-    
-    console.log('🔄 loadCampaigns called with options:', options);
     
     // Check cache
     if (!forceRefresh && campaignsCache && (now - campaignsCacheTime < CACHE_DURATION_MS)) {
-        console.log('📦 Returning cached campaigns:', campaignsCache.length);
-        return filterCampaigns(campaignsCache, { category, status, creator });
+        return filterCampaigns(campaignsCache, options);
     }
     
-    // Try Firebase API first
+    // Try Firebase first
     try {
-        const params = new URLSearchParams();
-        if (category) params.append('category', category);
-        if (status !== null) params.append('status', status);
-        if (creator) params.append('creator', creator);
-        params.append('limit', limit);
-        params.append('offset', offset);
+        let url = `${CHARITY_API.getCampaigns}?limit=100`;
+        if (category) url += `&category=${category}`;
+        if (status !== null && status !== undefined) url += `&status=${status}`;
+        if (creator) url += `&creator=${creator.toLowerCase()}`;
         
-        console.log('🌐 Fetching from Firebase API...');
-        const response = await fetchWithTimeout(`${CHARITY_API.getCampaigns}?${params}`);
-        
+        const response = await fetchWithTimeout(url);
         if (response.ok) {
             const data = await response.json();
-            const campaigns = data.campaigns || [];
+            const campaigns = (data.campaigns || []).map(c => normalizeCampaign(c));
             
-            console.log('✅ Firebase API returned', campaigns.length, 'campaigns');
+            console.log(`✅ Firebase: ${campaigns.length} campaigns loaded`);
             
-            // Normalize data
-            const normalized = campaigns.map(c => normalizeCampaign(c));
-            
-            campaignsCache = normalized;
+            campaignsCache = campaigns;
             campaignsCacheTime = now;
-            State.charityCampaigns = normalized;
+            State.charityCampaigns = campaigns;
             
-            return normalized;
+            return filterCampaigns(campaigns, options);
         }
     } catch (e) {
-        console.warn('❌ Firebase API failed, falling back to blockchain:', e.message);
+        console.warn('Firebase campaigns failed:', e.message);
     }
     
-    // Fallback: Load from blockchain
-    return await loadCampaignsFromBlockchain(options);
+    // Fallback to blockchain
+    return loadCampaignsFromBlockchain(options);
 }
 
 /**
@@ -370,39 +456,43 @@ export async function loadCampaigns(options = {}) {
  */
 async function loadCampaignsFromBlockchain(options = {}) {
     const contract = getCharityPoolContract();
-    if (!contract) {
-        console.error('❌ CharityPool contract not available');
-        return [];
-    }
+    if (!contract) return [];
     
     try {
-        console.log('🔗 Loading campaigns from blockchain...');
-        const campaignCount = await safeContractCall(contract, 'campaignCounter', [], 0n);
-        const count = Number(campaignCount);
+        const counter = await safeContractCall(contract, 'campaignCounter', [], 0n);
+        const totalCampaigns = Number(counter);
         
-        console.log('📊 Total campaigns on blockchain:', count);
-        
-        if (count === 0) {
+        if (totalCampaigns === 0) {
+            campaignsCache = [];
+            campaignsCacheTime = Date.now();
             return [];
         }
+        
+        console.log(`📊 Loading ${totalCampaigns} campaigns from blockchain...`);
         
         const campaigns = [];
         const batchSize = 10;
         
-        for (let i = 1; i <= count; i += batchSize) {
+        for (let i = 1; i <= totalCampaigns; i += batchSize) {
             const batch = [];
-            for (let j = i; j < Math.min(i + batchSize, count + 1); j++) {
+            for (let j = i; j < Math.min(i + batchSize, totalCampaigns + 1); j++) {
                 batch.push(loadSingleCampaign(contract, j));
             }
+            
             const results = await Promise.allSettled(batch);
-            results.forEach((r, idx) => {
-                if (r.status === 'fulfilled' && r.value) {
-                    campaigns.push(r.value);
+            results.forEach((result, index) => {
+                if (result.status === 'fulfilled' && result.value) {
+                    campaigns.push(result.value);
                 }
             });
+            
+            // Small delay between batches to avoid rate limits
+            if (i + batchSize <= totalCampaigns) {
+                await wait(200);
+            }
         }
         
-        console.log(`📦 Loaded ${campaigns.length} campaigns from blockchain`);
+        console.log(`✅ Blockchain: ${campaigns.length} campaigns loaded`);
         
         campaignsCache = campaigns;
         campaignsCacheTime = Date.now();
@@ -446,7 +536,8 @@ function filterCampaigns(campaigns, { category, status, creator }) {
         filtered = filtered.filter(c => c.category === category);
     }
     if (status !== null && status !== undefined) {
-        filtered = filtered.filter(c => c.status === status);
+        const normalizedStatus = normalizeStatus(status);
+        filtered = filtered.filter(c => normalizeStatus(c.status) === normalizedStatus);
     }
     if (creator) {
         filtered = filtered.filter(c => c.creator?.toLowerCase() === creator.toLowerCase());
@@ -455,13 +546,16 @@ function filterCampaigns(campaigns, { category, status, creator }) {
     return filtered;
 }
 
-/**
- * Load campaign details
- */
+// ====================================================================
+// LOAD CAMPAIGN DETAILS
+// ====================================================================
+
 export async function loadCampaignDetails(campaignId) {
+    const cacheKey = `campaign-${campaignId}`;
+    
     // Check cache
-    if (campaignDetailCache.has(campaignId)) {
-        const cached = campaignDetailCache.get(campaignId);
+    if (campaignDetailCache.has(cacheKey)) {
+        const cached = campaignDetailCache.get(cacheKey);
         if (Date.now() - cached.timestamp < CACHE_DURATION_MS) {
             return cached.data;
         }
@@ -473,7 +567,7 @@ export async function loadCampaignDetails(campaignId) {
         if (response.ok) {
             const data = await response.json();
             const campaign = normalizeCampaign(data);
-            campaignDetailCache.set(campaignId, { data: campaign, timestamp: Date.now() });
+            campaignDetailCache.set(cacheKey, { data: campaign, timestamp: Date.now() });
             return campaign;
         }
     } catch (e) {
@@ -486,7 +580,7 @@ export async function loadCampaignDetails(campaignId) {
     
     const campaign = await loadSingleCampaign(contract, campaignId);
     if (campaign) {
-        campaignDetailCache.set(campaignId, { data: campaign, timestamp: Date.now() });
+        campaignDetailCache.set(cacheKey, { data: campaign, timestamp: Date.now() });
     }
     return campaign;
 }
@@ -495,9 +589,6 @@ export async function loadCampaignDetails(campaignId) {
 // FEE CALCULATIONS
 // ====================================================================
 
-/**
- * Calculate donation fee breakdown
- */
 export async function calculateDonationFees(amount) {
     const stats = await loadCharityStats();
     
@@ -520,9 +611,6 @@ export async function calculateDonationFees(amount) {
     };
 }
 
-/**
- * Calculate withdrawal fee breakdown
- */
 export async function calculateWithdrawalFees(campaign) {
     const stats = await loadCharityStats();
     
@@ -558,15 +646,16 @@ export async function calculateWithdrawalFees(campaign) {
 // ====================================================================
 
 /**
- * Check if campaign is active
+ * Check if campaign is active (handles string/number status)
  */
 export function isCampaignActive(campaign) {
     const now = Math.floor(Date.now() / 1000);
-    return campaign.status === CampaignStatus.ACTIVE && Number(campaign.deadline) > now;
+    const status = normalizeStatus(campaign.status);
+    return status === CampaignStatus.ACTIVE && Number(campaign.deadline) > now;
 }
 
 /**
- * Check if campaign can be withdrawn
+ * Check if campaign can be withdrawn (handles string/number status)
  */
 export function canWithdraw(campaign, userAddress) {
     if (!campaign || !userAddress) return false;
@@ -574,8 +663,9 @@ export function canWithdraw(campaign, userAddress) {
     const now = Math.floor(Date.now() / 1000);
     const isCreator = campaign.creator?.toLowerCase() === userAddress.toLowerCase();
     const hasEnded = Number(campaign.deadline) <= now;
-    const isActive = campaign.status === CampaignStatus.ACTIVE;
-    const isCancelled = campaign.status === CampaignStatus.CANCELLED;
+    const status = normalizeStatus(campaign.status);
+    const isActive = status === CampaignStatus.ACTIVE;
+    const isCancelled = status === CampaignStatus.CANCELLED;
     const hasFunds = BigInt(campaign.raisedAmount?.toString() || '0') > 0n;
     
     return isCreator && hasFunds && ((hasEnded && isActive) || isCancelled);
@@ -590,6 +680,7 @@ export function clearCharityCache() {
     statsCache = null;
     statsCacheTime = 0;
     campaignDetailCache.clear();
+    contractReadCache.clear();
 }
 
 // ====================================================================
