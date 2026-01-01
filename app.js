@@ -1,5 +1,5 @@
 // js/app.js
-// ✅ VERSÃO FINAL V7.7: Fixed URL Hash Routing for Charity Deep Links
+// ✅ VERSÃO FINAL V7.8: Fixed navigation from deep links + improved route handling
 
 const inject = window.inject || (() => { console.warn("Dev Mode: Analytics disabled."); });
 if (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
@@ -91,27 +91,39 @@ function formatLargeBalance(bigNum) {
 }
 
 // ============================================================================
-// 4. NAVIGATION ENGINE
+// 4. NAVIGATION ENGINE (✅ FIXED: Better page transition)
 // ============================================================================
 
 function navigateTo(pageId, forceUpdate = false) {
     const pageContainer = document.querySelector('main > div.container');
     const navItems = document.querySelectorAll('.sidebar-link');
 
-    if (!pageContainer) return;
+    if (!pageContainer) {
+        console.error('❌ Page container not found');
+        return;
+    }
 
-    if (activePageId === pageId && !forceUpdate) {
+    // ✅ FIX: Always process navigation when coming from a deep link
+    const isComingFromDeepLink = window.location.hash.includes('/');
+    const shouldNavigate = activePageId !== pageId || forceUpdate || isComingFromDeepLink;
+
+    if (!shouldNavigate) {
+        // Just update if same page
         if (routes[pageId] && typeof routes[pageId].update === 'function') {
             routes[pageId].update(State.isConnected);
         }
         return; 
     }
 
+    console.log(`📍 Navigating: ${activePageId} → ${pageId} (force: ${forceUpdate})`);
+
+    // Cleanup previous page
     if (currentPageCleanup && typeof currentPageCleanup === 'function') {
         currentPageCleanup();
         currentPageCleanup = null;
     }
 
+    // ✅ FIX: Hide ALL sections, including any dynamically created content
     Array.from(pageContainer.children).forEach(child => {
         if (child.tagName === 'SECTION') {
             child.classList.add('hidden');
@@ -119,6 +131,13 @@ function navigateTo(pageId, forceUpdate = false) {
         }
     });
 
+    // ✅ FIX: Also clear any page-specific containers that might persist
+    const charityContainer = document.getElementById('charity-container');
+    if (charityContainer && pageId !== 'charity') {
+        charityContainer.innerHTML = '';
+    }
+
+    // Reset nav items
     navItems.forEach(item => {
         item.classList.remove('active');
         item.classList.add('text-zinc-400', 'hover:text-white', 'hover:bg-zinc-700');
@@ -130,27 +149,33 @@ function navigateTo(pageId, forceUpdate = false) {
         targetPage.classList.remove('hidden');
         targetPage.classList.add('active');
         
-        const isNewPage = activePageId !== pageId;
+        const wasNewPage = activePageId !== pageId;
         activePageId = pageId;
 
+        // Highlight nav item
         const activeNavItem = document.querySelector(`.sidebar-link[data-target="${pageId}"]`);
         if (activeNavItem) {
             activeNavItem.classList.remove('text-zinc-400', 'hover:text-white', 'hover:bg-zinc-700');
             activeNavItem.classList.add('active');
         }
 
+        // Render page
         if (routes[pageId] && typeof routes[pageId].render === 'function') {
-            routes[pageId].render(isNewPage || forceUpdate);
+            routes[pageId].render(wasNewPage || forceUpdate);
         }
         
+        // Set cleanup function
         if (typeof routes[pageId].cleanup === 'function') {
             currentPageCleanup = routes[pageId].cleanup;
         }
         
-        if (isNewPage) window.scrollTo(0,0);
+        // Scroll to top on new page
+        if (wasNewPage) {
+            window.scrollTo(0, 0);
+        }
 
     } else {
-        if(pageId !== 'dashboard' && pageId !== 'faucet') { 
+        if (pageId !== 'dashboard' && pageId !== 'faucet') { 
             console.warn(`Route '${pageId}' not found, redirecting to dashboard.`);
             navigateTo('dashboard', true);
         }
@@ -210,20 +235,21 @@ function performUIUpdate(forcePageUpdate) {
         // Atualiza textos auxiliares
         if (mobileAppDisplay) { 
             mobileAppDisplay.textContent = 'Backcoin.org'; 
-            mobileAppDisplay.classList.add('text-amber-400'); 
-            mobileAppDisplay.classList.remove('text-white'); 
+            mobileAppDisplay.classList.add('text-white'); 
+            mobileAppDisplay.classList.remove('text-amber-400'); 
         }
         
+        // Admin link visibility
+        if (adminLinkContainer) {
+            const isAdmin = currentAddress.toLowerCase() === ADMIN_WALLET;
+            adminLinkContainer.style.display = isAdmin ? 'block' : 'none';
+        }
+        
+        // Update balance display
         if (statUserBalanceEl) {
-            statUserBalanceEl.textContent = formatBigNumber(State.currentUserBalance).toLocaleString('en-US', { 
-                minimumFractionDigits: 2, maximumFractionDigits: 2 
-            });
+            statUserBalanceEl.textContent = balanceString;
         }
 
-        if (adminLinkContainer) { 
-            adminLinkContainer.style.display = (currentAddress.toLowerCase() === ADMIN_WALLET.toLowerCase()) ? 'block' : 'none'; 
-        }
-        
     } else {
         // Estilo "Desconectado"
         const defaultText = `<i class="fa-solid fa-plug"></i> Connect Wallet`;
@@ -318,9 +344,12 @@ function setupGlobalListeners() {
                 }
 
                 if (pageId) {
-                    // ✅ FIX: Update URL hash when navigating via sidebar
+                    // ✅ FIX: Clear any sub-routes when navigating via sidebar
+                    // This ensures we go to the main page, not a deep link
                     window.location.hash = pageId;
-                    navigateTo(pageId, false); 
+                    navigateTo(pageId, true); // Force update to ensure clean transition
+                    
+                    // Close sidebar on mobile
                     if (sidebar && sidebar.classList.contains('translate-x-0')) {
                         sidebar.classList.remove('translate-x-0');
                         sidebar.classList.add('-translate-x-full');
@@ -426,10 +455,20 @@ window.addEventListener('load', async () => {
 // ✅ FIX: Listen for hash changes (browser back/forward, direct URL changes)
 window.addEventListener('hashchange', () => {
     const newPage = getInitialPageFromHash();
-    console.log("🔄 Hash changed to:", newPage);
+    const currentHash = window.location.hash;
     
+    console.log("🔄 Hash changed to:", newPage, "Full hash:", currentHash);
+    
+    // ✅ FIX: Always navigate if it's a different base page
+    // This ensures proper cleanup and re-render
     if (newPage !== activePageId) {
         navigateTo(newPage, true);
+    } else if (newPage === 'charity') {
+        // For charity page, we need to handle sub-routes like /campaign/6
+        // The CharityPage itself will handle the detail view
+        if (routes[newPage] && typeof routes[newPage].render === 'function') {
+            routes[newPage].render(true);
+        }
     }
 });
 
