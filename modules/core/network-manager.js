@@ -434,12 +434,27 @@ export const NetworkManager = {
      * @returns {Promise<ethers.Signer>} Signer instance
      */
     async getSigner() {
+        const ethers = window.ethers;
         const provider = this.getBrowserProvider();
         
         try {
+            // Get signer - ethers v6 may try ENS resolution which fails on testnets
             const signer = await provider.getSigner();
             return signer;
         } catch (error) {
+            // Handle ENS not supported error (common on testnets like Arbitrum Sepolia)
+            if (error.message?.includes('ENS') || error.code === 'UNSUPPORTED_OPERATION') {
+                // Fallback: get address directly and create signer without ENS
+                try {
+                    const accounts = await window.ethereum.request({ method: 'eth_accounts' });
+                    if (accounts && accounts.length > 0) {
+                        return await provider.getSigner(accounts[0]);
+                    }
+                } catch (fallbackError) {
+                    console.warn('Signer fallback failed:', fallbackError);
+                }
+            }
+            
             // Not connected
             if (error.code === 4001 || error.message?.includes('user rejected')) {
                 throw ErrorHandler.create(ErrorTypes.USER_REJECTED);

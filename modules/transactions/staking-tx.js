@@ -109,15 +109,31 @@ function daysToSeconds(days) {
 export async function delegate({
     amount,
     lockDays,
+    lockDuration, // Alternative: lock period in seconds (for backward compatibility)
+    boosterTokenId = null, // Optional booster NFT
     button = null,
     onSuccess = null,
     onError = null
 }) {
-    // Validate inputs
-    ValidationLayer.staking.validateDelegate({ amount, lockDays });
+    // Support both lockDays and lockDuration (seconds)
+    let lockPeriod;
+    if (lockDuration !== undefined && lockDuration !== null) {
+        // lockDuration provided in seconds - use directly
+        lockPeriod = BigInt(lockDuration);
+        // Convert to days for validation (approximately)
+        const approxDays = Number(lockPeriod) / 86400;
+        if (approxDays < 1 || approxDays > 3650) {
+            throw new Error('Lock duration must be between 1 and 3650 days');
+        }
+    } else if (lockDays !== undefined && lockDays !== null) {
+        // lockDays provided - convert to seconds
+        ValidationLayer.staking.validateDelegate({ amount, lockDays });
+        lockPeriod = daysToSeconds(lockDays);
+    } else {
+        throw new Error('Either lockDays or lockDuration must be provided');
+    }
 
     const stakeAmount = BigInt(amount);
-    const lockPeriod = daysToSeconds(lockDays);
 
     return await txEngine.execute({
         name: 'Delegate',
