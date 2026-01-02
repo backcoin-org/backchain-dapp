@@ -1,6 +1,8 @@
 // modules/js/core/error-handler.js
-// ✅ PRODUCTION V1.0 - Centralized Error Handler for Backchain dApp
+// ✅ PRODUCTION V1.1 - Centralized Error Handler for Backchain dApp
 // 
+// V1.1: classify() now respects errorType from create() to prevent re-classification
+//
 // This module centralizes all error handling logic.
 // Classifies errors, determines retry behavior, and generates user-friendly messages.
 //
@@ -402,6 +404,11 @@ export const ErrorHandler = {
      * }
      */
     classify(error) {
+        // If error was already classified by create(), use that type
+        if (error?.errorType && Object.values(ErrorTypes).includes(error.errorType)) {
+            return error.errorType;
+        }
+        
         const message = this._extractMessage(error);
         const code = error?.code || error?.error?.code;
         
