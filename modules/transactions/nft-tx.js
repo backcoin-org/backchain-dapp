@@ -1,44 +1,119 @@
 // modules/js/transactions/nft-tx.js
-// ✅ PRODUCTION V1.0 - NFT Pool Transaction Handlers
+// ✅ PRODUCTION V1.1 - FIXED: Uses dynamic addresses from config.js
 // 
-// This module provides transaction functions for the NFT Pool contract.
-// Supports buying and selling NFTs using bonding curve pricing.
+// CHANGES V1.1:
+// - Imports addresses from config.js (loaded from deployment-addresses.json)
+// - Removed hardcoded fallback addresses
+// - Added support for multiple pools by tier (diamond, platinum, gold, etc.)
+// - Uses rewardBoosterNFT as the NFT contract
+// - Added aliases for backward compatibility (buyFromPool, sellToPool)
 //
 // ============================================================================
 // AVAILABLE TRANSACTIONS:
-// - buyNft: Buy an NFT from the pool (pays BKC)
-// - sellNft: Sell your NFT to the pool (receives BKC)
+// - buyNft / buyFromPool: Buy an NFT from a specific pool (pays BKC)
+// - sellNft / sellToPool: Sell your NFT to a pool (receives BKC)
+// - approveAllNfts: Approve all NFTs for a pool
 // ============================================================================
 
 import { txEngine, ValidationLayer } from '../core/index.js';
+import { addresses, contractAddresses } from '../../config.js';
 
 // ============================================================================
 // 1. CONTRACT CONFIGURATION
 // ============================================================================
 
 /**
- * Contract addresses
+ * Pool tiers available
  */
-const CONTRACTS = {
-    BKC_TOKEN: window.ENV?.BKC_TOKEN_ADDRESS || '0x5c6d3a63F8A41F4dB91EBA04eA9B39AC2a6d8d79',
-    NFT_POOL: window.ENV?.NFT_POOL_ADDRESS || '0xYourNftPoolAddress',
-    NFT_CONTRACT: window.ENV?.NFT_CONTRACT_ADDRESS || '0xYourNftContractAddress'
-};
+const POOL_TIERS = ['diamond', 'platinum', 'gold', 'silver', 'bronze', 'iron', 'crystal'];
 
 /**
- * NFT Pool ABI
+ * Get contract addresses dynamically from config.js
+ * 
+ * @param {string} [poolTier] - Pool tier (diamond, platinum, gold, silver, bronze, iron, crystal)
+ * @returns {Object} Contract addresses
+ * @throws {Error} If addresses are not loaded
+ */
+function getContracts(poolTier = null) {
+    const bkcToken = addresses?.bkcToken || 
+                     contractAddresses?.bkcToken ||
+                     window.contractAddresses?.bkcToken;
+    
+    // NFT contract is RewardBoosterNFT
+    const nftContract = addresses?.rewardBoosterNFT || 
+                        contractAddresses?.rewardBoosterNFT ||
+                        window.contractAddresses?.rewardBoosterNFT;
+    
+    // Get pool address based on tier
+    let nftPool = null;
+    if (poolTier) {
+        const poolKey = `pool_${poolTier.toLowerCase()}`;
+        nftPool = addresses?.[poolKey] || 
+                  contractAddresses?.[poolKey] ||
+                  window.contractAddresses?.[poolKey];
+    }
+    
+    if (!bkcToken) {
+        console.error('❌ BKC Token address not found!');
+        throw new Error('Contract addresses not loaded. Please refresh the page.');
+    }
+    
+    if (!nftContract) {
+        console.error('❌ NFT Contract (RewardBoosterNFT) address not found!');
+        throw new Error('Contract addresses not loaded. Please refresh the page.');
+    }
+    
+    return {
+        BKC_TOKEN: bkcToken,
+        NFT_CONTRACT: nftContract,
+        NFT_POOL: nftPool // May be null if no tier specified
+    };
+}
+
+/**
+ * Get pool address for a specific tier
+ * @param {string} tier - Pool tier name
+ * @returns {string|null} Pool address or null
+ */
+function getPoolAddress(tier) {
+    const poolKey = `pool_${tier.toLowerCase()}`;
+    return addresses?.[poolKey] || 
+           contractAddresses?.[poolKey] ||
+           window.contractAddresses?.[poolKey] ||
+           null;
+}
+
+/**
+ * Get all available pool addresses
+ * @returns {Object} Map of tier -> address
+ */
+function getAllPools() {
+    const pools = {};
+    for (const tier of POOL_TIERS) {
+        const address = getPoolAddress(tier);
+        if (address) {
+            pools[tier] = address;
+        }
+    }
+    return pools;
+}
+
+/**
+ * NFT Pool ABI - NFTLiquidityPool contract
  */
 const NFT_POOL_ABI = [
     // Write functions
-    'function buyNFT(uint256 maxPrice) external returns (uint256 tokenId)',
-    'function sellNFT(uint256 tokenId, uint256 minPayout) external',
+    'function buyFromPool(uint256 maxPrice) external returns (uint256 tokenId)',
+    'function sellToPool(uint256 tokenId, uint256 minPayout) external',
     
     // Read functions
     'function getBuyPrice() view returns (uint256)',
     'function getSellPrice() view returns (uint256)',
-    'function getPoolInfo() view returns (uint256 nftCount, uint256 tokenBalance, uint256 buyPrice, uint256 sellPrice)',
-    'function getAvailableNFTs() view returns (uint256[])',
+    'function getPoolNFTCount() view returns (uint256)',
+    'function poolTokenBalance() view returns (uint256)',
+    'function getNFTsInPool() view returns (uint256[])',
     'function isNFTInPool(uint256 tokenId) view returns (bool)',
+    'function tierIndex() view returns (uint256)',
     
     // Events
     'event NFTBought(address indexed buyer, uint256 indexed tokenId, uint256 price)',
@@ -46,7 +121,7 @@ const NFT_POOL_ABI = [
 ];
 
 /**
- * NFT Contract ABI - for approvals
+ * NFT Contract ABI (RewardBoosterNFT) - for approvals
  */
 const NFT_ABI = [
     'function approve(address to, uint256 tokenId) external',
@@ -55,7 +130,8 @@ const NFT_ABI = [
     'function getApproved(uint256 tokenId) view returns (address)',
     'function ownerOf(uint256 tokenId) view returns (address)',
     'function balanceOf(address owner) view returns (uint256)',
-    'function tokenOfOwnerByIndex(address owner, uint256 index) view returns (uint256)'
+    'function tokenOfOwnerByIndex(address owner, uint256 index) view returns (uint256)',
+    'function getTierOfToken(uint256 tokenId) view returns (uint256)'
 ];
 
 /**
@@ -73,10 +149,23 @@ const BKC_ABI = [
 
 /**
  * Creates NFT Pool contract instance
+ * @param {ethers.Signer} signer - Signer
+ * @param {string} poolAddress - Pool address
  */
-function getNftPoolContract(signer) {
+function getNftPoolContract(signer, poolAddress) {
     const ethers = window.ethers;
-    return new ethers.Contract(CONTRACTS.NFT_POOL, NFT_POOL_ABI, signer);
+    return new ethers.Contract(poolAddress, NFT_POOL_ABI, signer);
+}
+
+/**
+ * Creates NFT Pool contract instance (read-only)
+ * @param {string} poolAddress - Pool address
+ */
+async function getNftPoolContractReadOnly(poolAddress) {
+    const ethers = window.ethers;
+    const { NetworkManager } = await import('../core/index.js');
+    const provider = NetworkManager.getProvider();
+    return new ethers.Contract(poolAddress, NFT_POOL_ABI, provider);
 }
 
 /**
@@ -84,7 +173,19 @@ function getNftPoolContract(signer) {
  */
 function getNftContract(signer) {
     const ethers = window.ethers;
-    return new ethers.Contract(CONTRACTS.NFT_CONTRACT, NFT_ABI, signer);
+    const contracts = getContracts();
+    return new ethers.Contract(contracts.NFT_CONTRACT, NFT_ABI, signer);
+}
+
+/**
+ * Creates NFT contract instance (read-only)
+ */
+async function getNftContractReadOnly() {
+    const ethers = window.ethers;
+    const { NetworkManager } = await import('../core/index.js');
+    const provider = NetworkManager.getProvider();
+    const contracts = getContracts();
+    return new ethers.Contract(contracts.NFT_CONTRACT, NFT_ABI, provider);
 }
 
 // ============================================================================
@@ -92,35 +193,35 @@ function getNftContract(signer) {
 // ============================================================================
 
 /**
- * Buys an NFT from the pool
+ * Buys an NFT from a specific pool
  * Price is determined by bonding curve
  * 
  * @param {Object} params - Buy parameters
+ * @param {string} params.poolAddress - Pool contract address
+ * @param {string} [params.poolTier] - Alternative: pool tier name (diamond, gold, etc.)
  * @param {string|bigint} [params.maxPrice] - Maximum price willing to pay (slippage protection)
  * @param {HTMLElement} [params.button] - Button element for loading state
  * @param {Function} [params.onSuccess] - Success callback (receives tokenId)
  * @param {Function} [params.onError] - Error callback
  * @returns {Promise<Object>} Transaction result
- * 
- * @example
- * const result = await NftTx.buyNft({
- *     maxPrice: ethers.parseEther('150'), // Max 150 BKC
- *     button: document.getElementById('buyBtn'),
- *     onSuccess: (receipt, tokenId) => {
- *         showToast(`NFT #${tokenId} purchased!`);
- *         updateNftDisplay();
- *     }
- * });
  */
 export async function buyNft({
+    poolAddress,
+    poolTier,
     maxPrice = null,
     button = null,
     onSuccess = null,
     onError = null
 }) {
     const ethers = window.ethers;
+    const contracts = getContracts();
     
-    // We need to get the current price first
+    // Determine pool address
+    const targetPool = poolAddress || getPoolAddress(poolTier);
+    if (!targetPool) {
+        throw new Error('Pool address or valid pool tier is required');
+    }
+    
     let buyPrice = 0n;
     let finalMaxPrice = maxPrice ? BigInt(maxPrice) : 0n;
 
@@ -128,27 +229,25 @@ export async function buyNft({
         name: 'BuyNFT',
         button,
         
-        getContract: async (signer) => getNftPoolContract(signer),
-        method: 'buyNFT',
-        args: () => [finalMaxPrice], // Use getter to get updated value
+        getContract: async (signer) => getNftPoolContract(signer, targetPool),
+        method: 'buyFromPool',
+        args: () => [finalMaxPrice],
         
-        // Token approval config (set in validate)
+        // Token approval config
         get approval() {
-            return buyPrice > 0n ? {
-                token: CONTRACTS.BKC_TOKEN,
-                spender: CONTRACTS.NFT_POOL,
+            return finalMaxPrice > 0n ? {
+                token: contracts.BKC_TOKEN,
+                spender: targetPool,
                 amount: finalMaxPrice
             } : null;
         },
         
-        // Custom validation: check price and pool has NFTs
         validate: async (signer, userAddress) => {
-            const contract = getNftPoolContract(signer);
+            const contract = getNftPoolContract(signer, targetPool);
             
-            // Get pool info
-            const poolInfo = await contract.getPoolInfo();
-            
-            if (poolInfo.nftCount === 0n) {
+            // Check pool has NFTs
+            const nftCount = await contract.getPoolNFTCount();
+            if (nftCount === 0n) {
                 throw new Error('No NFTs available in pool');
             }
             
@@ -165,17 +264,9 @@ export async function buyNft({
             if (finalMaxPrice < buyPrice) {
                 throw new Error(`Price increased. Current price: ${ethers.formatEther(buyPrice)} BKC`);
             }
-            
-            // Check user has enough tokens
-            await ValidationLayer.validateTokenBalance(
-                CONTRACTS.BKC_TOKEN,
-                finalMaxPrice,
-                userAddress
-            );
         },
         
         onSuccess: async (receipt) => {
-            // Try to extract tokenId from event
             let tokenId = null;
             try {
                 const iface = new ethers.Interface(NFT_POOL_ABI);
@@ -183,7 +274,7 @@ export async function buyNft({
                     try {
                         const parsed = iface.parseLog(log);
                         if (parsed.name === 'NFTBought') {
-                            tokenId = parsed.args.tokenId;
+                            tokenId = Number(parsed.args.tokenId);
                             break;
                         }
                     } catch {}
@@ -199,29 +290,22 @@ export async function buyNft({
 }
 
 /**
- * Sells an NFT to the pool
+ * Sells an NFT to a pool
  * Payout is determined by bonding curve
  * 
  * @param {Object} params - Sell parameters
+ * @param {string} params.poolAddress - Pool contract address
+ * @param {string} [params.poolTier] - Alternative: pool tier name
  * @param {number|bigint} params.tokenId - Token ID to sell
  * @param {string|bigint} [params.minPayout] - Minimum payout expected (slippage protection)
  * @param {HTMLElement} [params.button] - Button element for loading state
  * @param {Function} [params.onSuccess] - Success callback
  * @param {Function} [params.onError] - Error callback
  * @returns {Promise<Object>} Transaction result
- * 
- * @example
- * const result = await NftTx.sellNft({
- *     tokenId: 42,
- *     minPayout: ethers.parseEther('90'), // Min 90 BKC
- *     button: document.getElementById('sellBtn'),
- *     onSuccess: (receipt) => {
- *         showToast('NFT sold!');
- *         updateNftDisplay();
- *     }
- * });
  */
 export async function sellNft({
+    poolAddress,
+    poolTier,
     tokenId,
     minPayout = null,
     button = null,
@@ -229,9 +313,17 @@ export async function sellNft({
     onError = null
 }) {
     const ethers = window.ethers;
+    const contracts = getContracts();
     
-    // Validate inputs
-    ValidationLayer.nftPool.validateSell({ tokenId, minPayout });
+    // Determine pool address
+    const targetPool = poolAddress || getPoolAddress(poolTier);
+    if (!targetPool) {
+        throw new Error('Pool address or valid pool tier is required');
+    }
+    
+    if (tokenId === undefined || tokenId === null) {
+        throw new Error('Token ID is required');
+    }
     
     let sellPrice = 0n;
     let finalMinPayout = minPayout ? BigInt(minPayout) : 0n;
@@ -240,14 +332,13 @@ export async function sellNft({
         name: 'SellNFT',
         button,
         
-        getContract: async (signer) => getNftPoolContract(signer),
-        method: 'sellNFT',
+        getContract: async (signer) => getNftPoolContract(signer, targetPool),
+        method: 'sellToPool',
         args: [tokenId, finalMinPayout],
         
-        // Custom validation: check ownership and approve NFT
         validate: async (signer, userAddress) => {
             const nftContract = getNftContract(signer);
-            const poolContract = getNftPoolContract(signer);
+            const poolContract = getNftPoolContract(signer, targetPool);
             
             // Check user owns the NFT
             const owner = await nftContract.ownerOf(tokenId);
@@ -270,13 +361,12 @@ export async function sellNft({
             }
             
             // Check if NFT is approved for pool
-            const isApprovedForAll = await nftContract.isApprovedForAll(userAddress, CONTRACTS.NFT_POOL);
+            const isApprovedForAll = await nftContract.isApprovedForAll(userAddress, targetPool);
             const approved = await nftContract.getApproved(tokenId);
             
-            if (!isApprovedForAll && approved.toLowerCase() !== CONTRACTS.NFT_POOL.toLowerCase()) {
-                // Need to approve NFT first
+            if (!isApprovedForAll && approved.toLowerCase() !== targetPool.toLowerCase()) {
                 console.log('[NFT] Approving NFT for pool...');
-                const approveTx = await nftContract.approve(CONTRACTS.NFT_POOL, tokenId);
+                const approveTx = await nftContract.approve(targetPool, tokenId);
                 await approveTx.wait();
                 console.log('[NFT] NFT approved');
             }
@@ -288,35 +378,43 @@ export async function sellNft({
 }
 
 /**
- * Approves all NFTs for the pool (one-time operation)
- * This allows selling any NFT without individual approvals
+ * Approves all NFTs for a specific pool (one-time operation)
  * 
  * @param {Object} params - Approval parameters
+ * @param {string} params.poolAddress - Pool contract address
+ * @param {string} [params.poolTier] - Alternative: pool tier name
  * @param {HTMLElement} [params.button] - Button element for loading state
  * @param {Function} [params.onSuccess] - Success callback
  * @param {Function} [params.onError] - Error callback
  * @returns {Promise<Object>} Transaction result
  */
 export async function approveAllNfts({
+    poolAddress,
+    poolTier,
     button = null,
     onSuccess = null,
     onError = null
 } = {}) {
+    // Determine pool address
+    const targetPool = poolAddress || getPoolAddress(poolTier);
+    if (!targetPool) {
+        throw new Error('Pool address or valid pool tier is required');
+    }
+
     return await txEngine.execute({
         name: 'ApproveAllNFTs',
         button,
         
         getContract: async (signer) => getNftContract(signer),
         method: 'setApprovalForAll',
-        args: [CONTRACTS.NFT_POOL, true],
+        args: [targetPool, true],
         
-        // Check if already approved
         validate: async (signer, userAddress) => {
             const nftContract = getNftContract(signer);
-            const isApproved = await nftContract.isApprovedForAll(userAddress, CONTRACTS.NFT_POOL);
+            const isApproved = await nftContract.isApprovedForAll(userAddress, targetPool);
             
             if (isApproved) {
-                throw new Error('NFTs are already approved for the pool');
+                throw new Error('NFTs are already approved for this pool');
             }
         },
         
@@ -330,62 +428,61 @@ export async function approveAllNfts({
 // ============================================================================
 
 /**
- * Gets current buy price
+ * Gets current buy price for a pool
+ * @param {string} poolAddress - Pool address
  * @returns {Promise<bigint>} Price in wei
  */
-export async function getBuyPrice() {
-    const ethers = window.ethers;
-    const { NetworkManager } = await import('../core/index.js');
-    const provider = NetworkManager.getProvider();
-    const contract = new ethers.Contract(CONTRACTS.NFT_POOL, NFT_POOL_ABI, provider);
-    
+export async function getBuyPrice(poolAddress) {
+    const contract = await getNftPoolContractReadOnly(poolAddress);
     return await contract.getBuyPrice();
 }
 
 /**
- * Gets current sell price
+ * Gets current sell price for a pool
+ * @param {string} poolAddress - Pool address
  * @returns {Promise<bigint>} Payout in wei
  */
-export async function getSellPrice() {
-    const ethers = window.ethers;
-    const { NetworkManager } = await import('../core/index.js');
-    const provider = NetworkManager.getProvider();
-    const contract = new ethers.Contract(CONTRACTS.NFT_POOL, NFT_POOL_ABI, provider);
-    
+export async function getSellPrice(poolAddress) {
+    const contract = await getNftPoolContractReadOnly(poolAddress);
     return await contract.getSellPrice();
 }
 
 /**
  * Gets pool information
+ * @param {string} poolAddress - Pool address
  * @returns {Promise<Object>} Pool info
  */
-export async function getPoolInfo() {
+export async function getPoolInfo(poolAddress) {
     const ethers = window.ethers;
-    const { NetworkManager } = await import('../core/index.js');
-    const provider = NetworkManager.getProvider();
-    const contract = new ethers.Contract(CONTRACTS.NFT_POOL, NFT_POOL_ABI, provider);
+    const contract = await getNftPoolContractReadOnly(poolAddress);
     
-    const info = await contract.getPoolInfo();
+    const [nftCount, tokenBalance, buyPrice, sellPrice, tierIndex] = await Promise.all([
+        contract.getPoolNFTCount(),
+        contract.poolTokenBalance(),
+        contract.getBuyPrice(),
+        contract.getSellPrice(),
+        contract.tierIndex().catch(() => 0n)
+    ]);
     
     return {
-        nftCount: Number(info.nftCount),
-        tokenBalance: info.tokenBalance,
-        buyPrice: info.buyPrice,
-        sellPrice: info.sellPrice
+        nftCount: Number(nftCount),
+        tokenBalance,
+        buyPrice,
+        sellPrice,
+        tierIndex: Number(tierIndex),
+        buyPriceFormatted: ethers.formatEther(buyPrice),
+        sellPriceFormatted: ethers.formatEther(sellPrice)
     };
 }
 
 /**
- * Gets NFTs available in pool
+ * Gets NFTs available in a pool
+ * @param {string} poolAddress - Pool address
  * @returns {Promise<number[]>} Array of token IDs
  */
-export async function getAvailableNfts() {
-    const ethers = window.ethers;
-    const { NetworkManager } = await import('../core/index.js');
-    const provider = NetworkManager.getProvider();
-    const contract = new ethers.Contract(CONTRACTS.NFT_POOL, NFT_POOL_ABI, provider);
-    
-    const ids = await contract.getAvailableNFTs();
+export async function getAvailableNfts(poolAddress) {
+    const contract = await getNftPoolContractReadOnly(poolAddress);
+    const ids = await contract.getNFTsInPool();
     return ids.map(id => Number(id));
 }
 
@@ -395,11 +492,7 @@ export async function getAvailableNfts() {
  * @returns {Promise<number[]>} Array of token IDs
  */
 export async function getUserNfts(userAddress) {
-    const ethers = window.ethers;
-    const { NetworkManager } = await import('../core/index.js');
-    const provider = NetworkManager.getProvider();
-    const nftContract = new ethers.Contract(CONTRACTS.NFT_CONTRACT, NFT_ABI, provider);
-    
+    const nftContract = await getNftContractReadOnly();
     const balance = await nftContract.balanceOf(userAddress);
     const tokenIds = [];
     
@@ -412,34 +505,60 @@ export async function getUserNfts(userAddress) {
 }
 
 /**
- * Checks if user has approved all NFTs for pool
+ * Checks if user has approved all NFTs for a pool
  * @param {string} userAddress - User address
+ * @param {string} poolAddress - Pool address
  * @returns {Promise<boolean>} True if approved
  */
-export async function isApprovedForAll(userAddress) {
-    const ethers = window.ethers;
-    const { NetworkManager } = await import('../core/index.js');
-    const provider = NetworkManager.getProvider();
-    const nftContract = new ethers.Contract(CONTRACTS.NFT_CONTRACT, NFT_ABI, provider);
-    
-    return await nftContract.isApprovedForAll(userAddress, CONTRACTS.NFT_POOL);
+export async function isApprovedForAll(userAddress, poolAddress) {
+    const nftContract = await getNftContractReadOnly();
+    return await nftContract.isApprovedForAll(userAddress, poolAddress);
+}
+
+/**
+ * Gets the tier of a specific NFT
+ * @param {number} tokenId - Token ID
+ * @returns {Promise<number>} Tier index
+ */
+export async function getNftTier(tokenId) {
+    const nftContract = await getNftContractReadOnly();
+    return Number(await nftContract.getTierOfToken(tokenId));
 }
 
 // ============================================================================
-// 5. EXPORT
+// 5. ALIASES FOR BACKWARD COMPATIBILITY
+// ============================================================================
+
+// Alias buyFromPool -> buyNft
+export const buyFromPool = buyNft;
+
+// Alias sellToPool -> sellNft  
+export const sellToPool = sellNft;
+
+// ============================================================================
+// 6. EXPORT
 // ============================================================================
 
 export const NftTx = {
+    // Main functions
     buyNft,
     sellNft,
     approveAllNfts,
+    // Aliases
+    buyFromPool,
+    sellToPool,
     // Read helpers
     getBuyPrice,
     getSellPrice,
     getPoolInfo,
     getAvailableNfts,
     getUserNfts,
-    isApprovedForAll
+    isApprovedForAll,
+    getNftTier,
+    // Utility
+    getPoolAddress,
+    getAllPools,
+    POOL_TIERS
 };
 
 export default NftTx;

@@ -1,6 +1,13 @@
 // modules/js/core/transaction-engine.js
-// ✅ PRODUCTION V1.0 - Transaction Engine for Backchain dApp
+// ✅ PRODUCTION V1.1 - FIXED: Support for args as function, better error handling
 // 
+// CHANGES V1.1:
+// - Added support for args as function (getter pattern for dynamic values)
+// - Fixed updateMetaMaskRpcs -> switchToNextRpc (correct method name)
+// - Added better error messages for simulation failures
+// - Added approval getter support for dynamic approval amounts
+// - Improved ENS error handling on testnets
+//
 // This is the main orchestrator for all blockchain transactions.
 // It handles the complete flow: validation → approval → simulation → execution
 //
@@ -59,7 +66,7 @@ const ERC20_APPROVAL_ABI = [
 /**
  * Manages UI state during transaction
  */
-class TransactionUI {
+export class TransactionUI {
     constructor(buttonElement, txName, showToasts = true) {
         this.button = buttonElement;
         this.txName = txName;
@@ -145,12 +152,42 @@ class TransactionUI {
 // 3. TRANSACTION ENGINE
 // ============================================================================
 
-class TransactionEngine {
+export class TransactionEngine {
     constructor() {
         /**
          * Set of pending transaction IDs (anti-reentrancy)
          */
         this.pendingTxIds = new Set();
+    }
+
+    /**
+     * Resolves args - supports both array and function (getter)
+     * @private
+     */
+    _resolveArgs(args) {
+        if (typeof args === 'function') {
+            return args();
+        }
+        return args || [];
+    }
+
+    /**
+     * Resolves approval config - supports getter pattern
+     * @private
+     */
+    _resolveApproval(approval) {
+        if (!approval) return null;
+        
+        // If approval has a getter (defined with get approval()), access it
+        if (typeof approval === 'object') {
+            return {
+                token: approval.token,
+                spender: approval.spender,
+                amount: approval.amount
+            };
+        }
+        
+        return approval;
     }
 
     /**
@@ -167,12 +204,12 @@ class TransactionEngine {
      *     // Contract info
      *     getContract: async (signer) => new ethers.Contract(addr, abi, signer),
      *     method: 'donate',
-     *     args: [campaignId, amount],
+     *     args: [campaignId, amount], // Can also be a function: () => [campaignId, amount]
      *     
      *     // Optional: ETH to send
      *     value: ethers.parseEther('0.001'),
      *     
-     *     // Optional: Token approval
+     *     // Optional: Token approval (can use getter for dynamic amounts)
      *     approval: {
      *         token: BKC_ADDRESS,
      *         spender: CHARITY_ADDRESS,
@@ -202,10 +239,10 @@ class TransactionEngine {
             // Contract
             getContract,           // async (signer) => Contract
             method,
-            args = [],
+            args = [],             // Array or function returning array
             value = null,          // ETH to send (bigint)
             
-            // Approval (optional)
+            // Approval (optional) - can be object or getter
             approval = null,       // { token, spender, amount }
             
             // Validations
@@ -264,10 +301,14 @@ class TransactionEngine {
             // ═══════════════════════════════════════════════════════════════
             // PHASE 2: TOKEN VALIDATION (FREE - reads)
             // ═══════════════════════════════════════════════════════════════
-            if (approval) {
+            
+            // Resolve approval (supports getter pattern)
+            const resolvedApproval = this._resolveApproval(approval);
+            
+            if (resolvedApproval && resolvedApproval.amount > 0n) {
                 await ValidationLayer.validateTokenBalance(
-                    approval.token,
-                    approval.amount,
+                    resolvedApproval.token,
+                    resolvedApproval.amount,
                     userAddress
                 );
             }
@@ -282,11 +323,15 @@ class TransactionEngine {
             // ═══════════════════════════════════════════════════════════════
             // PHASE 4: TOKEN APPROVAL (if needed)
             // ═══════════════════════════════════════════════════════════════
-            if (approval) {
+            
+            // Re-resolve approval after validation (values may have changed)
+            const finalApproval = this._resolveApproval(approval);
+            
+            if (finalApproval && finalApproval.amount > 0n) {
                 const needsApproval = await ValidationLayer.needsApproval(
-                    approval.token,
-                    approval.spender,
-                    approval.amount,
+                    finalApproval.token,
+                    finalApproval.spender,
+                    finalApproval.amount,
                     userAddress
                 );
 
@@ -294,7 +339,7 @@ class TransactionEngine {
                     ui.setPhase('approving');
                     console.log(`[TX] Requesting token approval...`);
                     
-                    await this._executeApproval(approval, signer, userAddress);
+                    await this._executeApproval(finalApproval, signer, userAddress);
                     
                     // Clear allowance cache
                     CacheManager.clear('allowance-');
@@ -309,10 +354,13 @@ class TransactionEngine {
 
             const contract = await getContract(signer);
             const txOptions = value ? { value } : {};
+            
+            // Resolve args (supports function pattern)
+            const resolvedArgs = this._resolveArgs(args);
 
             let gasEstimate;
             try {
-                gasEstimate = await contract[method].estimateGas(...args, txOptions);
+                gasEstimate = await contract[method].estimateGas(...resolvedArgs, txOptions);
                 console.log(`[TX] Gas estimate: ${gasEstimate.toString()}`);
             } catch (simError) {
                 // Simulation failed = transaction WOULD fail
@@ -332,9 +380,12 @@ class TransactionEngine {
 
             const gasLimit = GasManager.addSafetyMargin(gasEstimate);
             const finalTxOptions = { ...txOptions, gasLimit };
+            
+            // Re-resolve args for execution (values may have been updated)
+            const executionArgs = this._resolveArgs(args);
 
             const tx = await this._executeWithRetry(
-                () => contract[method](...args, finalTxOptions),
+                () => contract[method](...executionArgs, finalTxOptions),
                 { maxRetries, ui, signer, name }
             );
 
@@ -465,7 +516,8 @@ class TransactionEngine {
                     const health = await NetworkManager.checkRpcHealth();
                     if (!health.healthy) {
                         console.log('[TX] RPC unhealthy, switching...');
-                        await NetworkManager.updateMetaMaskRpcs();
+                        // Use correct method name
+                        NetworkManager.switchToNextRpc();
                         await new Promise(r => setTimeout(r, 2000));
                     }
                 }
@@ -636,5 +688,4 @@ export function openTxInExplorer(txHash) {
 // 6. EXPORTS
 // ============================================================================
 
-export { TransactionEngine, TransactionUI };
 export default txEngine;

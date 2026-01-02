@@ -1,8 +1,10 @@
 // modules/js/transactions/notary-tx.js
-// ✅ PRODUCTION V1.0 - Notary Transaction Handlers
+// ✅ PRODUCTION V1.1 - FIXED: Uses dynamic addresses from config.js
 // 
-// This module provides transaction functions for the Notary contract.
-// Supports registering documents on the blockchain for proof of existence.
+// CHANGES V1.1:
+// - Imports addresses from config.js (loaded from deployment-addresses.json)
+// - Removed hardcoded fallback addresses
+// - Uses decentralizedNotary as the contract address
 //
 // ============================================================================
 // AVAILABLE TRANSACTIONS:
@@ -10,20 +12,40 @@
 // ============================================================================
 
 import { txEngine, ValidationLayer } from '../core/index.js';
+import { addresses, contractAddresses } from '../../config.js';
 
 // ============================================================================
 // 1. CONTRACT CONFIGURATION
 // ============================================================================
 
 /**
- * Contract addresses
+ * Get contract addresses dynamically from config.js
+ * Addresses are loaded from deployment-addresses.json at app init
+ * 
+ * @returns {Object} Contract addresses
+ * @throws {Error} If addresses are not loaded
  */
-const CONTRACTS = {
-    NOTARY: window.ENV?.NOTARY_ADDRESS || '0xYourNotaryAddress'
-};
+function getContracts() {
+    const notary = addresses?.decentralizedNotary || 
+                   contractAddresses?.decentralizedNotary ||
+                   window.contractAddresses?.decentralizedNotary ||
+                   // Also check alternative names
+                   addresses?.notary ||
+                   contractAddresses?.notary ||
+                   window.contractAddresses?.notary;
+    
+    if (!notary) {
+        console.error('❌ Notary address not found!', { addresses, contractAddresses });
+        throw new Error('Contract addresses not loaded. Please refresh the page.');
+    }
+    
+    return {
+        NOTARY: notary
+    };
+}
 
 /**
- * Notary ABI
+ * Notary ABI - DecentralizedNotary contract
  */
 const NOTARY_ABI = [
     // Write functions
@@ -49,7 +71,19 @@ const NOTARY_ABI = [
  */
 function getNotaryContract(signer) {
     const ethers = window.ethers;
-    return new ethers.Contract(CONTRACTS.NOTARY, NOTARY_ABI, signer);
+    const contracts = getContracts();
+    return new ethers.Contract(contracts.NOTARY, NOTARY_ABI, signer);
+}
+
+/**
+ * Creates Notary contract instance (read-only)
+ */
+async function getNotaryContractReadOnly() {
+    const ethers = window.ethers;
+    const { NetworkManager } = await import('../core/index.js');
+    const provider = NetworkManager.getProvider();
+    const contracts = getContracts();
+    return new ethers.Contract(contracts.NOTARY, NOTARY_ABI, provider);
 }
 
 /**
@@ -88,23 +122,6 @@ function isValidBytes32(hash) {
  * @param {Function} [params.onSuccess] - Success callback (receives documentId)
  * @param {Function} [params.onError] - Error callback
  * @returns {Promise<Object>} Transaction result
- * 
- * @example
- * // Hash your file content first (client-side)
- * const fileBuffer = await file.arrayBuffer();
- * const hashBuffer = await crypto.subtle.digest('SHA-256', fileBuffer);
- * const contentHash = '0x' + Array.from(new Uint8Array(hashBuffer))
- *     .map(b => b.toString(16).padStart(2, '0')).join('');
- * 
- * const result = await NotaryTx.notarize({
- *     ipfsCid: 'QmXxx...', // From IPFS upload
- *     description: 'Contract Agreement v1.0',
- *     contentHash: contentHash,
- *     button: document.getElementById('notarizeBtn'),
- *     onSuccess: (receipt, documentId) => {
- *         showToast(`Document #${documentId} notarized!`);
- *     }
- * });
  */
 export async function notarize({
     ipfsCid,
@@ -179,11 +196,7 @@ export async function notarize({
  * @returns {Promise<Object>} Document info
  */
 export async function getDocument(documentId) {
-    const ethers = window.ethers;
-    const { NetworkManager } = await import('../core/index.js');
-    const provider = NetworkManager.getProvider();
-    const contract = new ethers.Contract(CONTRACTS.NOTARY, NOTARY_ABI, provider);
-    
+    const contract = await getNotaryContractReadOnly();
     const doc = await contract.getDocument(documentId);
     
     if (!doc.exists) {
@@ -208,9 +221,7 @@ export async function getDocument(documentId) {
  */
 export async function getDocumentByHash(contentHash) {
     const ethers = window.ethers;
-    const { NetworkManager } = await import('../core/index.js');
-    const provider = NetworkManager.getProvider();
-    const contract = new ethers.Contract(CONTRACTS.NOTARY, NOTARY_ABI, provider);
+    const contract = await getNotaryContractReadOnly();
     
     const formattedHash = contentHash.startsWith('0x') ? contentHash : `0x${contentHash}`;
     
@@ -240,11 +251,7 @@ export async function getDocumentByHash(contentHash) {
  * @returns {Promise<number[]>} Array of document IDs
  */
 export async function getUserDocuments(userAddress) {
-    const ethers = window.ethers;
-    const { NetworkManager } = await import('../core/index.js');
-    const provider = NetworkManager.getProvider();
-    const contract = new ethers.Contract(CONTRACTS.NOTARY, NOTARY_ABI, provider);
-    
+    const contract = await getNotaryContractReadOnly();
     const ids = await contract.getUserDocuments(userAddress);
     return ids.map(id => Number(id));
 }
@@ -254,11 +261,7 @@ export async function getUserDocuments(userAddress) {
  * @returns {Promise<number>} Total documents notarized
  */
 export async function getDocumentCount() {
-    const ethers = window.ethers;
-    const { NetworkManager } = await import('../core/index.js');
-    const provider = NetworkManager.getProvider();
-    const contract = new ethers.Contract(CONTRACTS.NOTARY, NOTARY_ABI, provider);
-    
+    const contract = await getNotaryContractReadOnly();
     return Number(await contract.documentCount());
 }
 
@@ -268,11 +271,7 @@ export async function getDocumentCount() {
  * @returns {Promise<boolean>} True if already notarized
  */
 export async function isHashNotarized(contentHash) {
-    const ethers = window.ethers;
-    const { NetworkManager } = await import('../core/index.js');
-    const provider = NetworkManager.getProvider();
-    const contract = new ethers.Contract(CONTRACTS.NOTARY, NOTARY_ABI, provider);
-    
+    const contract = await getNotaryContractReadOnly();
     const formattedHash = contentHash.startsWith('0x') ? contentHash : `0x${contentHash}`;
     return await contract.hashExists(formattedHash);
 }
@@ -308,10 +307,6 @@ export async function verifyDocument(fileContent) {
  * 
  * @param {File|Blob|ArrayBuffer} file - File to hash
  * @returns {Promise<string>} Content hash as hex string with 0x prefix
- * 
- * @example
- * const file = document.getElementById('fileInput').files[0];
- * const contentHash = await NotaryTx.calculateFileHash(file);
  */
 export async function calculateFileHash(file) {
     let buffer;
