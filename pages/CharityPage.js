@@ -1,7 +1,13 @@
 // js/pages/CharityPage.js
-// ✅ PRODUCTION V4.0 - Migrated to use Transaction Engine
+// ✅ PRODUCTION V5.0 - Improved Error Handling
 // 
-// This version uses the new modular transaction system for:
+// V5.0 Changes:
+// - Added user_rejected check for cleaner UX
+// - Improved error message extraction
+// - Minor code improvements
+//
+// V4.0 Changes:
+// - Uses new modular transaction system
 // - Automatic validation (network, wallet, balances)
 // - Automatic token approvals
 // - Automatic retry on RPC errors
@@ -440,8 +446,9 @@ async function create() {
         },
         
         onError: (error) => {
-            if (!error.cancelled) {
-                showToast(error.message?.slice(0, 80) || 'Failed', 'error');
+            if (!error.cancelled && error.type !== 'user_rejected') {
+                const msg = error.message || error.reason || 'Failed';
+                showToast(msg.slice(0, 80), 'error');
             }
         }
     });
@@ -473,8 +480,9 @@ async function donate() {
         },
         
         onError: (error) => {
-            if (!error.cancelled) {
-                showToast(error.message?.slice(0, 80) || 'Failed', 'error');
+            if (!error.cancelled && error.type !== 'user_rejected') {
+                const msg = error.message || error.reason || 'Failed';
+                showToast(msg.slice(0, 80), 'error');
             }
         }
     });
@@ -503,8 +511,9 @@ async function donateDetail(id) {
         },
         
         onError: (error) => {
-            if (!error.cancelled) {
-                showToast(error.message?.slice(0, 80) || 'Failed', 'error');
+            if (!error.cancelled && error.type !== 'user_rejected') {
+                const msg = error.message || error.reason || 'Failed';
+                showToast(msg.slice(0, 80), 'error');
             }
         }
     });
@@ -528,8 +537,9 @@ async function cancel(id) {
         },
         
         onError: (error) => {
-            if (!error.cancelled) {
-                showToast(error.message?.slice(0, 80) || 'Failed', 'error');
+            if (!error.cancelled && error.type !== 'user_rejected') {
+                const msg = error.message || error.reason || 'Failed';
+                showToast(msg.slice(0, 80), 'error');
             }
         }
     });
@@ -562,8 +572,9 @@ async function withdraw(id) {
         },
         
         onError: (error) => {
-            if (!error.cancelled) {
-                showToast(error.message?.slice(0, 80) || 'Failed', 'error');
+            if (!error.cancelled && error.type !== 'user_rejected') {
+                const msg = error.message || error.reason || 'Failed';
+                showToast(msg.slice(0, 80), 'error');
             }
         }
     });
