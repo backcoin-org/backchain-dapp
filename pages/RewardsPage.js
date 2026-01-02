@@ -1,10 +1,13 @@
 // pages/RewardsPage.js
-// ✅ PRODUCTION V11.0 - Migrated to Transaction Engine (StakingTx)
+// ✅ PRODUCTION V12.0 - Fixed for Contract V2
 //
-// V11.0 Changes:
-// - Migrated to use StakingTx.claimRewards from transaction engine
-// - Better error handling with onSuccess/onError callbacks
+// V12.0 Changes:
+// - Fixed claimRewards call to match new contract signature (only boosterTokenId)
+// - Removed unused stakingRewards/minerRewards parameters from claim
+// - Added better error handling for BigInt serialization
+// - Improved loading states
 //
+// V11.0: Migrated to use StakingTx.claimRewards from transaction engine
 // V10.0: Animated Reward Image + Detailed History + Consistent Icons
 
 const ethers = window.ethers;
@@ -36,12 +39,13 @@ let lastFetch = 0;
 let isLoading = false;
 let isProcessing = false;
 let claimHistory = [];
-let _claimParams = { stakingRewards: 0n, minerRewards: 0n, boosterTokenId: 0n };
+// V12: Only boosterTokenId is needed for the claim
+let _claimParams = { boosterTokenId: 0n };
 
 // Global claim handler
 window.handleRewardsClaim = async function() {
     if (isProcessing) return;
-    await handleClaim(_claimParams.stakingRewards, _claimParams.minerRewards, _claimParams.boosterTokenId);
+    await handleClaim(_claimParams.boosterTokenId);
 };
 
 // ============================================================================
@@ -455,9 +459,10 @@ function renderContent(claimDetails, grossRewards, boosterData) {
     
     const hasRewards = netReward > 0n;
     const hasBooster = highestBoost > 0;
-    const boosterTokenId = BigInt(booster.tokenId || 0);
     
-    _claimParams = { stakingRewards, minerRewards, boosterTokenId };
+    // V12: Only store boosterTokenId - contract handles reward calculation
+    const boosterTokenId = BigInt(booster.tokenId || 0);
+    _claimParams = { boosterTokenId };
     
     let netRewardNum = 0, totalGrossNum = 0, feeAmountNum = 0, stakingNum = 0, miningNum = 0;
     try {
@@ -580,9 +585,9 @@ function renderContent(claimDetails, grossRewards, boosterData) {
 }
 
 // ============================================================================
-// CLAIM HANDLER
+// CLAIM HANDLER - V12: Only uses boosterTokenId
 // ============================================================================
-async function handleClaim(stakingRewards, minerRewards, boosterTokenId) {
+async function handleClaim(boosterTokenId) {
     if (isProcessing) return;
     const btn = document.getElementById('claim-btn');
     const btnText = document.getElementById('claim-btn-text');
@@ -598,11 +603,10 @@ async function handleClaim(stakingRewards, minerRewards, boosterTokenId) {
     updateMascotAnimation('claiming');
 
     try {
-        // V11: Use StakingTx.claimRewards from new transaction module
-        await StakingTx.claimRewards({
-            stakingRewards: stakingRewards,
-            minerRewards: minerRewards,
-            boosterTokenId: boosterTokenId,
+        // V12: Use StakingTx.claimRewards with only boosterTokenId
+        // The contract handles reward calculation internally
+        const result = await StakingTx.claimRewards({
+            boosterTokenId: Number(boosterTokenId) || 0,
             button: btn,
             
             onSuccess: (receipt) => {
@@ -620,27 +624,40 @@ async function handleClaim(stakingRewards, minerRewards, boosterTokenId) {
             },
             
             onError: (error) => {
-                if (!error.cancelled) {
-                    showToast('Claim failed: ' + (error.reason || error.message || 'Error'), 'error');
+                // Don't show error for user rejection
+                if (error && !error.cancelled && error.type !== 'user_rejected') {
+                    const msg = error.message || error.reason || 'Claim failed';
+                    showToast(msg, 'error');
                 }
-                btn.disabled = false;
-                btn.className = 'w-full py-4 rounded-xl font-bold text-base flex items-center justify-center gap-2 bg-gradient-to-r from-amber-500 to-orange-500 text-black shadow-lg shadow-amber-500/25';
-                btnText.textContent = 'Claim Rewards';
-                btnIcon.className = 'fa-solid fa-coins';
+                resetClaimButton(btn, btnText, btnIcon);
                 updateMascotAnimation('idle');
             }
         });
+
+        // Handle case where result comes back but callbacks weren't triggered
+        if (result && !result.success && !result.cancelled) {
+            resetClaimButton(btn, btnText, btnIcon);
+            updateMascotAnimation('idle');
+        }
+
     } catch (e) {
         console.error('Claim error:', e);
-        showToast('Claim failed: ' + (e.reason || e.message || 'Error'), 'error');
-        btn.disabled = false;
-        btn.className = 'w-full py-4 rounded-xl font-bold text-base flex items-center justify-center gap-2 bg-gradient-to-r from-amber-500 to-orange-500 text-black shadow-lg shadow-amber-500/25';
-        btnText.textContent = 'Claim Rewards';
-        btnIcon.className = 'fa-solid fa-coins';
+        // Avoid BigInt serialization in error message
+        const errorMsg = e.message || 'Claim failed';
+        showToast(errorMsg, 'error');
+        resetClaimButton(btn, btnText, btnIcon);
         updateMascotAnimation('idle');
     } finally {
         isProcessing = false;
     }
+}
+
+function resetClaimButton(btn, btnText, btnIcon) {
+    if (!btn) return;
+    btn.disabled = false;
+    btn.className = 'w-full py-4 rounded-xl font-bold text-base flex items-center justify-center gap-2 bg-gradient-to-r from-amber-500 to-orange-500 text-black shadow-lg shadow-amber-500/25';
+    if (btnText) btnText.textContent = 'Claim Rewards';
+    if (btnIcon) btnIcon.className = 'fa-solid fa-coins';
 }
 
 window.RewardsPage = RewardsPage;

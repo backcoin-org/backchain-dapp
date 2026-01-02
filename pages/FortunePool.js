@@ -1,10 +1,15 @@
 // js/pages/FortunePool.js
-// ✅ PRODUCTION V3.0 - Migrated to Transaction Engine (FortuneTx)
+// ✅ PRODUCTION V4.0 - Fixed for Contract V2
 // ═══════════════════════════════════════════════════════════════════════════════
 //                          BACKCHAIN PROTOCOL
 //                    Fortune Pool - Decentralized Lottery
 // ═══════════════════════════════════════════════════════════════════════════════
 // 
+// V4.0 Changes:
+// - Fixed getRequiredServiceFee call (V2 takes wagerAmount, not boolean)
+// - Added fallback for legacy contract methods
+// - Fixed BigInt serialization in error handling
+//
 // V3.0 Changes:
 // - Migrated to use FortuneTx module from transaction engine
 // - Automatic token approval handling
@@ -1044,7 +1049,9 @@ function setupWagerEvents(maxMulti, balanceNum) {
             
         } catch (e) {
             console.error('Play error:', e);
-            showToast('Error: ' + e.message, 'error');
+            // V4: Avoid BigInt in error message - extract just the text
+            const errorMsg = e.message || e.reason || 'Transaction failed';
+            showToast('Error: ' + errorMsg, 'error');
             Game.phase = 'wager';
             renderPhase();
         }
@@ -1518,20 +1525,38 @@ async function getFortunePoolStatus() {
     }
 
     try {
-        // V2: Get all data including service fees and tiers
-        const [prizePool, gameCount, serviceFee, fee1x, fee5x, tierCount] = await Promise.all([
+        // V4: Updated for V2 contract - getRequiredServiceFee takes wagerAmount, not boolean
+        // Use default wager amounts for fee estimation
+        const defaultWager1x = window.ethers.parseEther('10');  // 10 BKC for basic fee
+        const defaultWager5x = window.ethers.parseEther('100'); // 100 BKC for higher fee
+        
+        const [prizePool, gameCount, tierCount] = await Promise.all([
             contract.prizePoolBalance().catch(() => 0n),
             contract.gameCounter().catch(() => 0),
-            contract.serviceFee().catch(() => 0n),
-            contract.getRequiredServiceFee(false).catch(() => 0n), // 1x mode
-            contract.getRequiredServiceFee(true).catch(() => 0n),  // 5x mode
             contract.activeTierCount().catch(() => 3)
         ]);
         
+        // Get service fees with wager amounts (V2 signature)
+        let fee1x = 0n, fee5x = 0n, baseFee = 0n;
+        try {
+            fee1x = await contract.getRequiredServiceFee(defaultWager1x);
+            fee5x = await contract.getRequiredServiceFee(defaultWager5x);
+            baseFee = fee1x;
+        } catch (e) {
+            // Fallback: try legacy method if V2 method fails
+            try {
+                baseFee = await contract.serviceFee();
+                fee1x = baseFee;
+                fee5x = baseFee;
+            } catch (e2) {
+                console.log("Could not fetch service fee");
+            }
+        }
+        
         // Store service fees in Game state
-        Game.serviceFee = serviceFee || 0n;
-        Game.serviceFee1x = fee1x || 0n;
-        Game.serviceFee5x = fee5x || 0n;
+        Game.serviceFee = baseFee;
+        Game.serviceFee1x = fee1x;
+        Game.serviceFee5x = fee5x;
         
         // Try to get tier data
         try {
@@ -1548,9 +1573,9 @@ async function getFortunePoolStatus() {
         return {
             prizePool: prizePool || 0n,
             gameCounter: Number(gameCount) || 0,
-            serviceFee: serviceFee || 0n,
-            serviceFee1x: fee1x || 0n,
-            serviceFee5x: fee5x || 0n,
+            serviceFee: baseFee,
+            serviceFee1x: fee1x,
+            serviceFee5x: fee5x,
             tierCount: Number(tierCount) || 3
         };
     } catch (e) {

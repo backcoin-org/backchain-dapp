@@ -1,5 +1,10 @@
 // js/pages/NotaryPage.js
-// ✅ PRODUCTION V10.0 - Migrated to Transaction Engine (NotaryTx)
+// ✅ PRODUCTION V11.0 - Fixed Parameter Names
+//
+// V11.0 Changes:
+// - Fixed notarize() parameter: ipfsUri -> ipfsCid
+// - Removed unused parameters (title, docType, tags)
+// - Improved error handling in onError callback
 //
 // V10.0 Changes:
 // - Migrated to use NotaryTx module from transaction engine
@@ -846,14 +851,12 @@ async function handleMint() {
         // Stamp animation
         if (overlayImg) overlayImg.className = 'w-full h-full object-contain notary-stamp';
 
-        // V10: Use NotaryTx.notarize from new transaction module
+        // V11: Use NotaryTx.notarize from new transaction module
+        // Fixed: parameter is ipfsCid, not ipfsUri; removed unused params
         await NotaryTx.notarize({
-            ipfsUri: ipfsCid,
+            ipfsCid: ipfsCid,
             contentHash: contentHash,
-            title: Notary.file?.name || 'Untitled Document',
             description: Notary.description || 'No description',
-            docType: getFileCategory(Notary.file?.type) || 'document',
-            tags: [],
             button: btn,
             
             onSuccess: (receipt) => {
@@ -905,7 +908,20 @@ async function handleMint() {
             },
             
             onError: (error) => {
-                throw error; // Re-throw to be caught by outer catch
+                // Don't throw for user rejection - just let it fail silently
+                if (error.cancelled || error.type === 'user_rejected') {
+                    Notary.isProcessing = false;
+                    if (overlay) {
+                        overlay.classList.add('hidden');
+                        overlay.classList.remove('flex');
+                    }
+                    if (btn) {
+                        btn.disabled = false;
+                        btn.innerHTML = '<i class="fa-solid fa-stamp mr-2"></i> Sign & Mint';
+                    }
+                    return;
+                }
+                throw error; // Re-throw other errors to be caught by outer catch
             }
         });
 

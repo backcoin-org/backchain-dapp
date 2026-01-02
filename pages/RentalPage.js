@@ -1,5 +1,10 @@
 // js/pages/RentalPage.js
-// ✅ PRODUCTION V9.0 - Migrated to Transaction Engine (RentalTx)
+// ✅ PRODUCTION V10.0 - Improved Error Handling
+//
+// V10.0 Changes:
+// - Improved error message handling to avoid BigInt issues
+// - Added fallback for error messages
+// - Minor code cleanup
 //
 // V9.0 Changes:
 // - Migrated to use RentalTx module from transaction engine
@@ -1339,8 +1344,9 @@ async function handleConfirmRent() {
             },
             
             onError: (error) => {
-                if (!error.cancelled) {
-                    showToast('Rent failed: ' + error.message, 'error');
+                if (!error.cancelled && error.type !== 'user_rejected') {
+                    const msg = error.message || error.reason || 'Transaction failed';
+                    showToast('Rent failed: ' + msg, 'error');
                 }
             }
         });
@@ -1424,8 +1430,9 @@ async function handleConfirmList() {
             },
             
             onError: (error) => {
-                if (!error.cancelled) {
-                    showToast('List failed: ' + error.message, 'error');
+                if (!error.cancelled && error.type !== 'user_rejected') {
+                    const msg = error.message || error.reason || 'Transaction failed';
+                    showToast('List failed: ' + msg, 'error');
                 }
             }
         });
@@ -1469,8 +1476,9 @@ async function handleWithdraw(btn) {
             },
             
             onError: (error) => {
-                if (!error.cancelled) {
-                    showToast('Withdraw failed: ' + error.message, 'error');
+                if (!error.cancelled && error.type !== 'user_rejected') {
+                    const msg = error.message || error.reason || 'Transaction failed';
+                    showToast('Withdraw failed: ' + msg, 'error');
                 }
             }
         });

@@ -1,6 +1,7 @@
 // modules/js/core/error-handler.js
-// ✅ PRODUCTION V1.1 - Centralized Error Handler for Backchain dApp
+// ✅ PRODUCTION V1.2 - Centralized Error Handler for Backchain dApp
 // 
+// V1.2: Fixed BigInt serialization error in _extractMessage (added _safeStringify)
 // V1.1: classify() now respects errorType from create() to prevent re-classification
 //
 // This module centralizes all error handling logic.
@@ -455,6 +456,8 @@ export const ErrorHandler = {
     /**
      * Extracts error message from different formats
      * @private
+     * 
+     * V1.2: Fixed BigInt serialization error - replaced JSON.stringify with safe version
      */
     _extractMessage(error) {
         if (!error) return '';
@@ -467,10 +470,29 @@ export const ErrorHandler = {
             error.error?.reason,
             error.data?.message,
             error.shortMessage,
-            JSON.stringify(error)
+            this._safeStringify(error)
         ];
         
         return candidates.filter(Boolean).join(' ').toLowerCase();
+    },
+
+    /**
+     * Safely stringifies an object, handling BigInt values
+     * @private
+     */
+    _safeStringify(obj) {
+        try {
+            return JSON.stringify(obj, (key, value) => {
+                // Convert BigInt to string to avoid serialization error
+                if (typeof value === 'bigint') {
+                    return value.toString();
+                }
+                return value;
+            });
+        } catch (e) {
+            // If still fails, return empty string
+            return '';
+        }
     },
 
     /**

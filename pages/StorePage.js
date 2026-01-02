@@ -1,5 +1,10 @@
 // pages/StorePage.js
-// ✅ PRODUCTION V10.0 - Migrated to Transaction Engine (NftTx)
+// ✅ PRODUCTION V11.0 - Fixed Parameter Names
+//
+// V11.0 Changes:
+// - Fixed buyFromPool parameter: price -> maxPrice
+// - Improved error handling with fallback messages
+// - Added user_rejected check for cleaner UX
 //
 // V10.0 Changes:
 // - Migrated to use NftTx module from transaction engine
@@ -1121,10 +1126,11 @@ function setupEventListeners() {
 
             try {
                 if (TradeState.tradeDirection === 'buy') {
-                    // V10: Use NftTx.buyFromPool from new transaction module
+                    // V11: Use NftTx.buyFromPool from new transaction module
+                    // Fixed: parameter is maxPrice, not price
                     await NftTx.buyFromPool({
                         poolAddress: poolAddress,
-                        price: TradeState.buyPrice,
+                        maxPrice: TradeState.buyPrice,
                         button: executeBtn,
                         
                         onSuccess: async (receipt) => {
@@ -1135,13 +1141,14 @@ function setupEventListeners() {
                         },
                         
                         onError: (error) => {
-                            if (!error.cancelled) {
-                                showToast("Buy failed: " + error.message, "error");
+                            if (!error.cancelled && error.type !== 'user_rejected') {
+                                const msg = error.message || error.reason || 'Transaction failed';
+                                showToast("Buy failed: " + msg, "error");
                             }
                         }
                     });
                 } else {
-                    // V10: Use NftTx.sellToPool from new transaction module
+                    // V11: Use NftTx.sellToPool from new transaction module
                     await NftTx.sellToPool({
                         poolAddress: poolAddress,
                         tokenId: TradeState.firstAvailableTokenId,
@@ -1155,8 +1162,9 @@ function setupEventListeners() {
                         },
                         
                         onError: (error) => {
-                            if (!error.cancelled) {
-                                showToast("Sell failed: " + error.message, "error");
+                            if (!error.cancelled && error.type !== 'user_rejected') {
+                                const msg = error.message || error.reason || 'Transaction failed';
+                                showToast("Sell failed: " + msg, "error");
                             }
                         }
                     });
