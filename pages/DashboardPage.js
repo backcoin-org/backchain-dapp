@@ -1,5 +1,8 @@
 // js/pages/DashboardPage.js
-// ✅ PRODUCTION V9.0 - Added Charity Pool Event Tracking
+// ✅ PRODUCTION V10.0 - Fixed rewards loading on first visit
+//
+// V10.0 Changes:
+// - Fixed: Rewards now load on first visit (retry mechanism for async wallet connection)
 //
 // V9.0 Changes:
 // - Added Charity Pool activity icons and event detection
