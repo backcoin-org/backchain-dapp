@@ -1589,8 +1589,25 @@ export const DashboardPage = {
         updateGlobalMetrics();
         fetchAndProcessActivities();
 
+        // Always try to load user data - even if not connected yet
+        // This ensures rewards load when wallet is already connected
         if (State.isConnected) {
             await updateUserHub(false);
+        } else {
+            // If not connected yet, wait a bit and try again
+            // This handles the case where wallet is connecting asynchronously
+            setTimeout(async () => {
+                if (State.isConnected) {
+                    await updateUserHub(false);
+                }
+            }, 500);
+            
+            // Try one more time after a longer delay
+            setTimeout(async () => {
+                if (State.isConnected) {
+                    await updateUserHub(false);
+                }
+            }, 1500);
         }
     },
 
