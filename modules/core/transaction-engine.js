@@ -441,20 +441,39 @@ export class TransactionEngine {
 
         } catch (error) {
             // ═══════════════════════════════════════════════════════════════
-            // ERROR HANDLING - V1.2: Use handleWithRpcSwitch for auto RPC switch
+            // ERROR HANDLING - V1.4: Immediate button restoration
             // ═══════════════════════════════════════════════════════════════
-            const handled = await ErrorHandler.handleWithRpcSwitch(error, name);
+            console.log(`[TX] Error caught:`, error?.message || error);
             
-            // Log if RPC was switched
-            if (handled.rpcSwitched) {
-                console.log(`[TX] RPC switched to: ${handled.newRpc}`);
+            // IMMEDIATELY restore button FIRST to prevent stuck state
+            if (button) {
+                console.log(`[TX] Immediately restoring button...`);
+                button.disabled = false;
+                if (ui.originalContent) {
+                    button.innerHTML = ui.originalContent;
+                }
             }
             
-            // Show appropriate UI
-            if (handled.type === ErrorTypes.USER_REJECTED) {
-                ui.cleanup(); // Just restore, don't show error
-            } else {
-                ui.showError();
+            // Handle error (may switch RPC) - wrapped in try/catch for safety
+            let handled;
+            try {
+                handled = await ErrorHandler.handleWithRpcSwitch(error, name);
+                
+                if (handled.rpcSwitched) {
+                    console.log(`[TX] RPC switched to: ${handled.newRpc}`);
+                }
+            } catch (handlerError) {
+                console.warn('[TX] Error in handleWithRpcSwitch:', handlerError);
+                handled = ErrorHandler.handle(error, name);
+            }
+            
+            // Show brief error indication (button already restored)
+            if (handled.type !== ErrorTypes.USER_REJECTED && button) {
+                const savedContent = ui.originalContent;
+                button.innerHTML = `<span style="display:flex;align-items:center;justify-content:center;gap:8px"><span>❌</span><span>Failed</span></span>`;
+                setTimeout(() => {
+                    if (button) button.innerHTML = savedContent;
+                }, 1500);
             }
 
             // Error callback
@@ -476,6 +495,15 @@ export class TransactionEngine {
         } finally {
             // Always remove from pending set
             this.pendingTxIds.delete(uniqueTxId);
+            
+            // V1.3: Extra safety - ensure button is restored after a timeout
+            // This catches cases where the error handler doesn't reach cleanup
+            setTimeout(() => {
+                if (button && button.disabled) {
+                    console.log('[TX] Safety cleanup triggered');
+                    ui.cleanup();
+                }
+            }, 5000);
         }
     }
 
