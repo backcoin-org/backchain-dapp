@@ -88,115 +88,14 @@ function injectStyles() {
     const style = document.createElement('style');
     style.id = 'reward-styles-v14';
     style.textContent = `
-        @keyframes pulse-glow {
-            0%, 100% { box-shadow: 0 0 20px rgba(245,158,11,0.3); }
-            50% { box-shadow: 0 0 40px rgba(245,158,11,0.6); }
-        }
         @keyframes float {
             0%, 100% { transform: translateY(0); }
-            50% { transform: translateY(-8px); }
+            50% { transform: translateY(-6px); }
         }
-        @keyframes shine {
-            0% { background-position: -200% center; }
-            100% { background-position: 200% center; }
-        }
-        @keyframes reward-bounce {
-            0%, 100% { transform: scale(1) translateY(0); }
-            25% { transform: scale(1.05) translateY(-5px); }
-            50% { transform: scale(1) translateY(0); }
-            75% { transform: scale(1.02) translateY(-3px); }
-        }
-        @keyframes glow-ring {
-            0%, 100% { 
-                box-shadow: 0 0 20px rgba(245,158,11,0.4), 
-                            0 0 40px rgba(245,158,11,0.2),
-                            inset 0 0 20px rgba(245,158,11,0.1);
-            }
-            50% { 
-                box-shadow: 0 0 30px rgba(245,158,11,0.6), 
-                            0 0 60px rgba(245,158,11,0.3),
-                            inset 0 0 30px rgba(245,158,11,0.2);
-            }
-        }
-        @keyframes spin-slow {
-            from { transform: rotate(0deg); }
-            to { transform: rotate(360deg); }
-        }
-        @keyframes fadeInUp {
-            from {
-                opacity: 0;
-                transform: translateY(20px);
-            }
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
-        }
-        @keyframes nft-float {
-            0%, 100% { 
-                transform: translateY(0) rotate(-2deg); 
-                filter: drop-shadow(0 10px 20px rgba(0,0,0,0.3));
-            }
-            50% { 
-                transform: translateY(-10px) rotate(2deg); 
-                filter: drop-shadow(0 20px 30px rgba(0,0,0,0.4));
-            }
-        }
-        .pulse-glow { animation: pulse-glow 2s ease-in-out infinite; }
         .float-animation { animation: float 3s ease-in-out infinite; }
-        .reward-bounce { animation: reward-bounce 2s ease-in-out infinite; }
-        .glow-ring { animation: glow-ring 2s ease-in-out infinite; }
-        .spin-slow { animation: spin-slow 20s linear infinite; }
-        .fade-in-up { animation: fadeInUp 0.5s ease-out forwards; }
-        .nft-float { animation: nft-float 4s ease-in-out infinite; }
-        .shine-text {
-            background: linear-gradient(90deg, #fbbf24, #f59e0b, #fbbf24);
-            background-size: 200% auto;
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            animation: shine 3s linear infinite;
-        }
-        .history-item:hover {
-            background: rgba(63,63,70,0.5) !important;
-            transform: translateX(4px);
-        }
-        .tier-card:hover {
-            transform: scale(1.02);
-            border-color: rgba(245,158,11,0.5);
-        }
         .custom-scrollbar::-webkit-scrollbar { width: 4px; }
         .custom-scrollbar::-webkit-scrollbar-track { background: rgba(39,39,42,0.3); }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(113,113,122,0.5); border-radius: 2px; }
-        .reward-image-container {
-            position: relative;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-        }
-        .reward-image-container::before {
-            content: '';
-            position: absolute;
-            width: 120%;
-            height: 120%;
-            background: radial-gradient(circle, rgba(245,158,11,0.15) 0%, transparent 70%);
-            border-radius: 50%;
-            animation: pulse-glow 3s ease-in-out infinite;
-        }
-        .nft-image-wrapper {
-            position: relative;
-            border-radius: 12px;
-            overflow: hidden;
-        }
-        .nft-image-wrapper::after {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: -100%;
-            width: 100%;
-            height: 100%;
-            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
-            animation: shine 3s infinite;
-        }
     `;
     document.head.appendChild(style);
 }
@@ -403,302 +302,144 @@ function renderContent(claimDetails, grossRewards, boosterData) {
     // Find current tier info
     const currentTier = BOOST_TIERS.find(t => t.boost === highestBoost) || BOOST_TIERS[0];
     
-    // V14.1: Get NFT image URL with fallback
+    // V14.2: Get NFT image URL with fallback
     const nftImageUrl = booster.imageUrl || booster.image || null;
 
     container.innerHTML = `
         <div class="space-y-4">
             
-            <!-- ANIMATED REWARD IMAGE -->
-            <div class="reward-image-container py-4 fade-in-up">
-                <img 
-                    src="assets/reward.png" 
-                    alt="Rewards" 
-                    class="w-32 h-32 object-contain reward-bounce drop-shadow-2xl"
-                    onerror="this.style.display='none'"
-                />
-            </div>
-            
-            <!-- MAIN CLAIM CARD -->
-            <div class="bg-gradient-to-br from-zinc-900 via-zinc-900 to-zinc-800/50 border border-zinc-700/50 rounded-2xl overflow-hidden fade-in-up" style="animation-delay: 0.1s">
+            <!-- MAIN CLAIM CARD - Clean Design -->
+            <div class="bg-gradient-to-b from-zinc-900 to-zinc-900/80 border border-zinc-800 rounded-2xl overflow-hidden">
                 
-                <!-- Header with amount -->
-                <div class="p-6 text-center border-b border-zinc-800/50">
-                    <p class="text-xs text-zinc-500 uppercase tracking-wider mb-2">Available to Claim</p>
-                    <div class="flex items-center justify-center gap-2">
-                        <span class="text-4xl font-black ${hasBooster ? 'text-green-400' : 'text-white'}">${netNum.toFixed(4)}</span>
-                        <span class="text-lg font-bold text-amber-400">BKC</span>
+                <!-- Hero Section with Image -->
+                <div class="relative pt-6 pb-4 px-6">
+                    <!-- Subtle glow background -->
+                    <div class="absolute inset-0 flex items-center justify-center pointer-events-none overflow-hidden">
+                        <div class="w-48 h-48 bg-amber-500/5 rounded-full blur-3xl"></div>
                     </div>
-                    ${hasBooster ? `
-                        <div class="inline-flex items-center gap-1.5 mt-2 px-3 py-1 rounded-full bg-green-500/10 border border-green-500/20">
-                            <i class="fa-solid fa-bolt text-green-400 text-xs"></i>
-                            <span class="text-xs text-green-400 font-medium">${currentTier.name} Booster Active</span>
+                    
+                    <!-- Reward Image - Clean & Simple -->
+                    <div class="relative flex justify-center mb-4">
+                        <img 
+                            src="assets/reward.png" 
+                            alt="Rewards" 
+                            class="w-20 h-20 object-contain float-animation"
+                            onerror="this.parentElement.innerHTML='<div class=\\'w-16 h-16 rounded-2xl bg-gradient-to-br from-amber-500 to-orange-600 flex items-center justify-center\\'><i class=\\'fa-solid fa-gift text-white text-2xl\\'></i></div>'"
+                        />
+                    </div>
+                    
+                    <!-- Amount Display -->
+                    <div class="text-center">
+                        <p class="text-xs text-zinc-500 uppercase tracking-wider mb-1">Available to Claim</p>
+                        <div class="flex items-baseline justify-center gap-2">
+                            <span class="text-4xl font-black ${hasRewards ? (hasBooster ? 'text-green-400' : 'text-white') : 'text-zinc-600'}">${netNum.toFixed(4)}</span>
+                            <span class="text-base font-bold text-amber-500">BKC</span>
                         </div>
-                    ` : ''}
-                </div>
-
-                <!-- Breakdown -->
-                ${hasRewards ? `
-                <div class="p-4 bg-black/20">
-                    <div class="space-y-3">
                         
-                        <!-- Mined Rewards -->
-                        <div class="flex items-center justify-between">
-                            <div class="flex items-center gap-2">
-                                <div class="w-8 h-8 rounded-lg bg-purple-500/20 flex items-center justify-center">
-                                    <i class="fa-solid fa-hammer text-purple-400 text-sm"></i>
-                                </div>
-                                <span class="text-sm text-zinc-400">Mined Rewards</span>
+                        ${hasBooster ? `
+                            <div class="inline-flex items-center gap-1.5 mt-3 px-3 py-1.5 rounded-full bg-green-500/10 border border-green-500/20">
+                                <i class="fa-solid fa-bolt text-green-400 text-[10px]"></i>
+                                <span class="text-[11px] text-green-400 font-medium">${currentTier.name} +${boostPercent}%</span>
                             </div>
-                            <span class="text-sm font-mono text-white">${grossNum.toFixed(4)} BKC</span>
-                        </div>
-
-                        <!-- Booster Bonus (if has booster) -->
-                        ${hasBooster && boosterBonus > 0 ? `
-                        <div class="flex items-center justify-between">
-                            <div class="flex items-center gap-2">
-                                <div class="w-8 h-8 rounded-lg ${currentTier.bg} flex items-center justify-center">
-                                    <i class="fa-solid ${currentTier.icon} ${currentTier.color} text-sm"></i>
-                                </div>
-                                <div>
-                                    <span class="text-sm text-green-400">${currentTier.name} Bonus</span>
-                                    <span class="text-[10px] text-zinc-500 ml-1">(+${boostPercent}%)</span>
-                                </div>
-                            </div>
-                            <span class="text-sm font-mono text-green-400">+${boosterBonus.toFixed(4)} BKC</span>
-                        </div>
-                        ` : ''}
-
-                        <!-- Divider -->
-                        <div class="border-t border-zinc-700/50 my-1"></div>
-
-                        <!-- You Receive -->
-                        <div class="flex items-center justify-between">
-                            <div class="flex items-center gap-2">
-                                <div class="w-8 h-8 rounded-lg bg-amber-500/20 flex items-center justify-center">
-                                    <i class="fa-solid fa-coins text-amber-400 text-sm"></i>
-                                </div>
-                                <span class="text-sm font-bold text-white">You Receive</span>
-                            </div>
-                            <span class="text-lg font-mono font-bold ${hasBooster ? 'text-green-400' : 'text-amber-400'}">${netNum.toFixed(4)} BKC</span>
-                        </div>
-
-                        ${!hasBooster ? `
-                        <!-- No booster warning -->
-                        <div class="mt-2 p-2 rounded-lg bg-amber-500/10 border border-amber-500/20">
-                            <p class="text-xs text-amber-400 text-center">
-                                <i class="fa-solid fa-lightbulb mr-1"></i>
-                                Get a Booster NFT to earn <span class="font-bold">up to 70% more</span> on claims!
-                            </p>
-                        </div>
                         ` : ''}
                     </div>
                 </div>
-                ` : ''}
 
                 <!-- Claim Button -->
-                <div class="p-4">
+                <div class="px-4 pb-4">
                     <button id="claim-btn" onclick="${hasRewards ? 'window.handleRewardsClaim()' : ''}" 
-                        class="w-full py-4 rounded-xl font-bold text-base flex items-center justify-center gap-2 transition-all ${hasRewards ? 'bg-gradient-to-r from-amber-500 to-orange-500 text-black shadow-lg shadow-amber-500/25 hover:shadow-amber-500/40 active:scale-[0.98] cursor-pointer pulse-glow' : 'bg-zinc-800 text-zinc-500 cursor-not-allowed'}" 
+                        class="w-full py-3.5 rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition-all ${hasRewards ? 'bg-gradient-to-r from-amber-500 to-orange-500 text-black hover:shadow-lg hover:shadow-amber-500/30 active:scale-[0.98]' : 'bg-zinc-800 text-zinc-500 cursor-not-allowed'}" 
                         ${!hasRewards ? 'disabled' : ''}>
-                        <i id="claim-btn-icon" class="fa-solid ${hasRewards ? 'fa-coins' : 'fa-clock'}"></i>
-                        <span id="claim-btn-text">${hasRewards ? 'Claim ' + netNum.toFixed(4) + ' BKC' : 'No Rewards Yet'}</span>
+                        <i id="claim-btn-icon" class="fa-solid ${hasRewards ? 'fa-arrow-right' : 'fa-clock'}"></i>
+                        <span id="claim-btn-text">${hasRewards ? 'Claim Rewards' : 'No Rewards Yet'}</span>
                     </button>
-                    
-                    ${!hasRewards ? `
-                    <p class="text-center text-xs text-zinc-600 mt-3">
-                        <i class="fa-solid fa-info-circle mr-1"></i>
-                        <a href="#mine" onclick="window.navigateTo('mine')" class="text-amber-500 hover:text-amber-400">Stake BKC</a> to start earning
-                    </p>
-                    ` : ''}
                 </div>
             </div>
 
-            <!-- REWARD SOURCES -->
-            <div class="bg-zinc-900/50 border border-zinc-800 rounded-xl p-4 fade-in-up" style="animation-delay: 0.2s">
-                <p class="text-[10px] text-zinc-500 uppercase mb-3">
-                    <i class="fa-solid fa-layer-group mr-1"></i> Reward Sources
+            ${hasRewards ? `
+            <!-- BREAKDOWN - Minimal -->
+            <div class="bg-zinc-900/50 border border-zinc-800 rounded-xl p-4">
+                <div class="flex items-center justify-between text-sm">
+                    <span class="text-zinc-500">Earned</span>
+                    <span class="font-mono text-white">${grossNum.toFixed(4)} BKC</span>
+                </div>
+                ${hasBooster ? `
+                <div class="flex items-center justify-between text-sm mt-2">
+                    <span class="text-green-400 flex items-center gap-1.5">
+                        <i class="fa-solid ${currentTier.icon} text-[10px]"></i>
+                        Booster Bonus
+                    </span>
+                    <span class="font-mono text-green-400">+${boosterBonus.toFixed(4)} BKC</span>
+                </div>
+                ` : ''}
+                <div class="border-t border-zinc-800 mt-3 pt-3 flex items-center justify-between">
+                    <span class="text-white font-medium">You Receive</span>
+                    <span class="font-mono font-bold ${hasBooster ? 'text-green-400' : 'text-amber-400'}">${netNum.toFixed(4)} BKC</span>
+                </div>
+            </div>
+            ` : `
+            <!-- Empty State -->
+            <div class="text-center py-2">
+                <p class="text-zinc-600 text-sm">
+                    <a href="#mine" onclick="window.navigateTo('mine')" class="text-amber-500 hover:text-amber-400">Stake BKC</a> to start earning rewards
                 </p>
-                <div class="grid grid-cols-2 gap-3">
-                    <div class="p-3 rounded-lg bg-zinc-800/30 text-center">
-                        <div class="w-8 h-8 rounded-lg bg-purple-500/15 flex items-center justify-center mx-auto mb-2">
-                            <i class="fa-solid fa-lock text-purple-400 text-sm"></i>
-                        </div>
-                        <p class="text-lg font-bold font-mono text-white">${stakingNum.toFixed(2)}</p>
-                        <p class="text-[10px] text-zinc-500">Staking</p>
-                    </div>
-                    <div class="p-3 rounded-lg bg-zinc-800/30 text-center">
-                        <div class="w-8 h-8 rounded-lg bg-orange-500/15 flex items-center justify-center mx-auto mb-2">
-                            <i class="fa-solid fa-hammer text-orange-400 text-sm"></i>
-                        </div>
-                        <p class="text-lg font-bold font-mono text-white">${miningNum.toFixed(2)}</p>
-                        <p class="text-[10px] text-zinc-500">Mining</p>
-                    </div>
-                </div>
             </div>
+            `}
 
-            <!-- BOOSTER CARD -->
-            <div class="bg-zinc-900/50 border border-zinc-800 rounded-xl overflow-hidden fade-in-up" style="animation-delay: 0.3s">
-                <div class="p-3 border-b border-zinc-800/50 flex items-center justify-between">
-                    <p class="text-[10px] text-zinc-500 uppercase">
-                        <i class="fa-solid fa-rocket mr-1"></i> Your Booster
-                    </p>
-                    ${hasBooster ? 
-                        `<span class="px-2 py-0.5 bg-green-500/20 text-green-400 text-[10px] font-bold rounded-full">ACTIVE</span>` : 
-                        `<span class="px-2 py-0.5 bg-zinc-700 text-zinc-400 text-[10px] font-bold rounded-full">NONE</span>`
-                    }
-                </div>
-                <div class="p-4">
-                    ${hasBooster ? `
-                        <div class="flex items-center gap-4">
-                            <!-- NFT Image with fallback to icon -->
-                            <div class="nft-image-wrapper w-20 h-20 rounded-xl ${currentTier.bg} border-2 border-green-500/30 flex items-center justify-center overflow-hidden nft-float">
+            <!-- BOOSTER STATUS - Compact -->
+            <div class="bg-zinc-900/50 border border-zinc-800 rounded-xl p-4">
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center gap-3">
+                        ${hasBooster ? `
+                            <!-- NFT Image or Icon -->
+                            <div class="w-12 h-12 rounded-xl overflow-hidden ${currentTier.bg} border border-zinc-700 flex items-center justify-center">
                                 ${nftImageUrl ? `
-                                    <img 
-                                        src="${nftImageUrl}" 
-                                        alt="${currentTier.name} Booster" 
-                                        class="w-full h-full object-cover"
-                                        onerror="this.parentElement.innerHTML='<i class=\\'fa-solid ${currentTier.icon} ${currentTier.color} text-2xl\\'></i>'"
-                                    />
+                                    <img src="${nftImageUrl}" alt="${currentTier.name}" class="w-full h-full object-cover" 
+                                         onerror="this.parentElement.innerHTML='<i class=\\'fa-solid ${currentTier.icon} ${currentTier.color} text-lg\\'></i>'" />
                                 ` : `
-                                    <i class="fa-solid ${currentTier.icon} ${currentTier.color} text-2xl"></i>
+                                    <i class="fa-solid ${currentTier.icon} ${currentTier.color} text-lg"></i>
                                 `}
                             </div>
-                            <div class="flex-1">
-                                <p class="text-white font-bold text-lg">${currentTier.name}</p>
-                                <p class="text-xs text-zinc-500">${booster.source === 'rented' ? '🔗 Rented' : '✓ Owned'}</p>
-                                ${booster.tokenId ? `<p class="text-[10px] text-zinc-600">ID: #${booster.tokenId}</p>` : ''}
+                            <div>
+                                <p class="text-white font-semibold">${currentTier.name} Booster</p>
+                                <p class="text-xs text-zinc-500">${booster.source === 'rented' ? 'Rented' : 'Owned'} • +${boostPercent}% bonus</p>
                             </div>
-                            <div class="text-right">
-                                <p class="text-2xl font-black text-green-400">+${boostPercent}%</p>
-                                <p class="text-[10px] text-zinc-500">Bonus</p>
+                        ` : `
+                            <div class="w-12 h-12 rounded-xl bg-zinc-800 border border-zinc-700 flex items-center justify-center">
+                                <i class="fa-solid fa-rocket text-zinc-600 text-lg"></i>
                             </div>
-                        </div>
-                        ${boosterBonus > 0 ? `
-                        <div class="mt-3 p-2 rounded-lg bg-green-500/10 border border-green-500/20 text-center">
-                            <p class="text-xs text-green-400">
-                                <i class="fa-solid fa-piggy-bank mr-1"></i>
-                                This claim: earning <span class="font-bold">+${boosterBonus.toFixed(4)} BKC</span> extra!
-                            </p>
-                        </div>
-                        ` : ''}
+                            <div>
+                                <p class="text-zinc-400 font-medium">No Booster</p>
+                                <p class="text-xs text-zinc-600">Get up to +70% bonus</p>
+                            </div>
+                        `}
+                    </div>
+                    
+                    ${!hasBooster ? `
+                        <button onclick="window.navigateTo('store')" class="px-4 py-2 text-xs font-bold bg-amber-500 text-black rounded-lg hover:bg-amber-400 transition-colors">
+                            Get One
+                        </button>
                     ` : `
-                        <div class="text-center py-2">
-                            <div class="w-16 h-16 rounded-xl bg-zinc-800 flex items-center justify-center mx-auto mb-3">
-                                <i class="fa-solid fa-circle-plus text-zinc-600 text-2xl"></i>
-                            </div>
-                            <p class="text-zinc-400 text-sm mb-1">No Booster Active</p>
-                            <p class="text-zinc-600 text-xs mb-4">Get a Booster NFT to earn up to <span class="text-green-400 font-bold">70% more</span></p>
-                            <div class="flex gap-2">
-                                <button onclick="window.navigateTo('store')" class="flex-1 py-2.5 text-xs font-bold bg-gradient-to-r from-amber-500 to-orange-500 text-black rounded-lg hover:shadow-lg hover:shadow-amber-500/20 transition-all">
-                                    <i class="fa-solid fa-gem mr-1"></i> Buy NFT
-                                </button>
-                                <button onclick="window.navigateTo('rental')" class="flex-1 py-2.5 text-xs font-bold bg-zinc-800 hover:bg-zinc-700 text-white rounded-lg transition-all">
-                                    <i class="fa-solid fa-clock mr-1"></i> Rent
-                                </button>
-                            </div>
+                        <div class="px-3 py-1 bg-green-500/10 border border-green-500/20 rounded-full">
+                            <span class="text-[10px] text-green-400 font-bold">ACTIVE</span>
                         </div>
                     `}
                 </div>
             </div>
 
-            <!-- BOOST SIMULATOR -->
-            ${renderBoostSimulator(grossNum, baseFeeBips, highestBoost, hasRewards)}
-
-            <!-- CLAIM HISTORY -->
-            <div class="bg-zinc-900/50 border border-zinc-800 rounded-xl overflow-hidden">
-                <div class="p-3 border-b border-zinc-800/50 flex items-center justify-between">
-                    <p class="text-[10px] text-zinc-500 uppercase">
-                        <i class="fa-solid fa-clock-rotate-left mr-1"></i> Claim History
-                    </p>
-                    <span class="text-[10px] text-zinc-600">${claimHistory.length} claims</span>
-                </div>
-                <div class="p-3 space-y-2 max-h-[250px] overflow-y-auto custom-scrollbar">
+            <!-- CLAIM HISTORY - Collapsible style -->
+            <details class="bg-zinc-900/50 border border-zinc-800 rounded-xl overflow-hidden group">
+                <summary class="p-4 flex items-center justify-between cursor-pointer hover:bg-zinc-800/30 transition-colors">
+                    <span class="text-sm text-zinc-400 flex items-center gap-2">
+                        <i class="fa-solid fa-clock-rotate-left text-xs"></i>
+                        Claim History
+                    </span>
+                    <i class="fa-solid fa-chevron-down text-zinc-600 text-xs transition-transform group-open:rotate-180"></i>
+                </summary>
+                <div class="px-4 pb-4 space-y-2 max-h-[200px] overflow-y-auto custom-scrollbar">
                     ${renderClaimHistory()}
                 </div>
-            </div>
-        </div>
-    `;
-}
-
-// ============================================================================
-// BOOST SIMULATOR
-// ============================================================================
-function renderBoostSimulator(grossReward, baseFeeBips, currentBoost, hasRewards) {
-    if (!hasRewards || grossReward <= 0) {
-        return '';
-    }
-
-    // Calculate what user gets with each tier
-    const simulations = BOOST_TIERS.map(tier => {
-        const discountAmount = (baseFeeBips * tier.boost) / 10000;
-        const finalFeeBips = Math.max(0, baseFeeBips - discountAmount);
-        const fee = grossReward * (finalFeeBips / 10000);
-        const net = grossReward - fee;
-        const bonus = grossReward * (discountAmount / 10000);
-        
-        return {
-            ...tier,
-            net,
-            bonus,
-            isCurrentTier: tier.boost === currentBoost,
-            isBetterTier: tier.boost > currentBoost
-        };
-    });
-
-    const currentSim = simulations.find(s => s.isCurrentTier) || simulations[0];
-    const bestSim = simulations[simulations.length - 1]; // Diamond
-    const potentialExtra = bestSim.net - currentSim.net;
-
-    return `
-        <div class="bg-zinc-900/50 border border-zinc-800 rounded-xl overflow-hidden">
-            <div class="p-3 border-b border-zinc-800/50 flex items-center justify-between">
-                <p class="text-[10px] text-zinc-500 uppercase">
-                    <i class="fa-solid fa-chart-line mr-1"></i> Booster Comparison
-                </p>
-                ${potentialExtra > 0 ? `
-                    <span class="px-2 py-0.5 bg-green-500/10 text-green-400 text-[10px] font-bold rounded-full">
-                        +${potentialExtra.toFixed(4)} possible
-                    </span>
-                ` : ''}
-            </div>
-            <div class="p-3">
-                <div class="space-y-2">
-                    ${simulations.map(sim => `
-                        <div class="flex items-center gap-2 p-2 rounded-lg transition-all tier-card ${sim.isCurrentTier ? 'bg-green-500/10 border border-green-500/30' : 'bg-zinc-800/30 border border-transparent'}">
-                            <div class="w-7 h-7 rounded-lg ${sim.bg} flex items-center justify-center flex-shrink-0">
-                                <i class="fa-solid ${sim.icon} ${sim.color} text-xs"></i>
-                            </div>
-                            <div class="flex-1 min-w-0">
-                                <div class="flex items-center gap-1">
-                                    <span class="text-xs font-medium ${sim.color}">${sim.name}</span>
-                                    ${sim.isCurrentTier ? '<span class="px-1 py-0.5 bg-green-500/20 text-green-400 text-[8px] font-bold rounded">YOU</span>' : ''}
-                                </div>
-                            </div>
-                            <div class="text-right flex-shrink-0">
-                                <span class="text-sm font-mono ${sim.isCurrentTier ? 'text-green-400 font-bold' : 'text-white'}">${sim.net.toFixed(4)}</span>
-                                ${sim.isBetterTier && sim.bonus > currentSim.bonus ? `
-                                    <span class="text-[10px] text-green-400 ml-1">+${(sim.net - currentSim.net).toFixed(4)}</span>
-                                ` : ''}
-                            </div>
-                        </div>
-                    `).join('')}
-                </div>
-                
-                ${currentBoost < 7000 ? `
-                    <div class="mt-3 flex gap-2">
-                        <button onclick="window.navigateTo('store')" class="flex-1 py-2 text-xs font-bold bg-gradient-to-r from-amber-500 to-orange-500 text-black rounded-lg hover:shadow-lg hover:shadow-amber-500/20 transition-all">
-                            <i class="fa-solid fa-arrow-up mr-1"></i> Upgrade Booster
-                        </button>
-                    </div>
-                ` : `
-                    <div class="mt-3 p-2 rounded-lg bg-cyan-500/10 border border-cyan-500/20 text-center">
-                        <p class="text-xs text-cyan-400">
-                            <i class="fa-solid fa-crown mr-1"></i> Maximum boost achieved!
-                        </p>
-                    </div>
-                `}
-            </div>
+            </details>
         </div>
     `;
 }
