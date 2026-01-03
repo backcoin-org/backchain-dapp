@@ -1,6 +1,11 @@
 // modules/js/transactions/nft-tx.js
-// ✅ PRODUCTION V1.2 - FIXED: Uses getAvailableNFTs instead of getPoolNFTCount
+// ✅ PRODUCTION V1.3 - FIXED: Let txEngine handle approval with retry
 // 
+// CHANGES V1.3:
+// - Reverted to txEngine approval handling (has retry logic)
+// - Removed manual approve in validate() to avoid RPC issues
+// - Keep detailed logging for debugging
+//
 // CHANGES V1.2:
 // - Fixed validate() to use getAvailableNFTs() instead of getPoolNFTCount()
 // - Added better error handling for pool validation
@@ -238,7 +243,14 @@ export async function buyNft({
         method: 'buyFromPool',
         args: () => [finalMaxPrice], // Dynamic args - maxPrice is set in validate
         
-        // V1.2: Approval is now handled in validate() to ensure it's done before simulation
+        // V1.3: Token approval config - let txEngine handle approval with retry logic
+        get approval() {
+            return finalMaxPrice > 0n ? {
+                token: contracts.BKC_TOKEN,
+                spender: targetPool,
+                amount: finalMaxPrice
+            } : null;
+        },
         
         validate: async (signer, userAddress) => {
             const ethers = window.ethers;
@@ -283,7 +295,7 @@ export async function buyNft({
                 throw new Error(`Price increased. Current price: ${ethers.formatEther(buyPrice)} BKC`);
             }
             
-            // V1.2: Check BKC balance
+            // V1.3: Check BKC balance (approval will be handled by txEngine)
             const bkcContract = new ethers.Contract(contracts.BKC_TOKEN, BKC_ABI, signer);
             const userBalance = await bkcContract.balanceOf(userAddress);
             console.log('[NFT] User BKC balance:', ethers.formatEther(userBalance), 'BKC');
@@ -292,16 +304,10 @@ export async function buyNft({
                 throw new Error(`Insufficient BKC balance. Need ${ethers.formatEther(finalMaxPrice)} BKC, have ${ethers.formatEther(userBalance)} BKC`);
             }
             
-            // V1.2: Check and set BKC approval if needed
+            // Log allowance for debugging (approval handled by txEngine)
             const currentAllowance = await bkcContract.allowance(userAddress, targetPool);
             console.log('[NFT] Current BKC allowance:', ethers.formatEther(currentAllowance), 'BKC');
-            
-            if (currentAllowance < finalMaxPrice) {
-                console.log('[NFT] Approving BKC for pool...');
-                const approveTx = await bkcContract.approve(targetPool, finalMaxPrice);
-                await approveTx.wait();
-                console.log('[NFT] BKC approved');
-            }
+            console.log('[NFT] Validation passed, txEngine will handle approval if needed');
         },
         
         onSuccess: async (receipt) => {
