@@ -1,17 +1,16 @@
 // pages/StorePage.js
-// ✅ PRODUCTION V11.0 - Fixed Parameter Names
+// ✅ PRODUCTION V12.0 - Performance Optimized
+//
+// V12.0 Changes:
+// - Removed 2-second throttle for instant tier switching
+// - Added pool data cache (30s TTL) to avoid redundant contract calls
+// - Parallel contract calls for better performance
+// - Background refresh for cached data
 //
 // V11.0 Changes:
 // - Fixed buyFromPool parameter: price -> maxPrice
 // - Improved error handling with fallback messages
 // - Added user_rejected check for cleaner UX
-//
-// V10.0 Changes:
-// - Migrated to use NftTx module from transaction engine
-// - Automatic token approval and validation
-// - Better error handling with onSuccess/onError callbacks
-//
-// V9.0: Fixed Grid Tiers + Trade History + Correct Function Calls
 
 const ethers = window.ethers;
 
@@ -28,6 +27,7 @@ import { NftTx } from '../modules/transactions/index.js';
 // CONSTANTS
 // ============================================================================
 const EXPLORER_TX = "https://sepolia.arbiscan.io/tx/";
+const POOL_CACHE_TTL = 30000; // V12: 30 seconds cache for pool data
 
 // ============================================================================
 // TIER CONFIGURATION
@@ -106,18 +106,19 @@ const TradeState = {
     netSellPrice: 0n,
     poolNFTCount: 0,
     userBalanceOfSelectedNFT: 0,
-    availableToSellCount: 0,  // NFTs disponíveis para venda (não listados/alugados)
+    availableToSellCount: 0,
     firstAvailableTokenId: null,
     firstAvailableTokenIdForBuy: null,
     bestBoosterTokenId: 0n,
     bestBoosterBips: 0,
     isDataLoading: false,
-    lastFetchTimestamp: 0,
     tradeHistory: []
 };
 
 const poolAddressCache = new Map();
+const poolDataCache = new Map(); // V12: Cache pool data
 let isTransactionInProgress = false;
+let currentLoadingRequest = null; // V12: Track current request to cancel stale ones
 
 const factoryABI = [
     "function getPoolAddress(uint256 boostBips) view returns (address)",
@@ -142,6 +143,23 @@ function formatDate(timestamp) {
         const date = new Date(secs * 1000);
         return date.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
     } catch (e) { return ''; }
+}
+
+// V12: Pool data cache functions
+function getCachedPoolData(boostBips) {
+    const cached = poolDataCache.get(boostBips);
+    if (cached && (Date.now() - cached.timestamp < POOL_CACHE_TTL)) {
+        return cached.data;
+    }
+    return null;
+}
+
+function setCachedPoolData(boostBips, data) {
+    poolDataCache.set(boostBips, { data, timestamp: Date.now() });
+}
+
+function invalidatePoolCache(boostBips) {
+    poolDataCache.delete(boostBips);
 }
 
 // ============================================================================
@@ -847,40 +865,39 @@ function renderInventory() {
 }
 
 // ============================================================================
-// DATA LOADING
+// DATA LOADING - V12: Optimized with caching
 // ============================================================================
-async function loadDataForSelectedPool() {
-    if (TradeState.isDataLoading) return;
+async function loadDataForSelectedPool(forceRefresh = false) {
     if (TradeState.selectedPoolBoostBips === null) return;
 
-    const now = Date.now();
-    if (now - TradeState.lastFetchTimestamp < 2000) return;
+    const boostBips = TradeState.selectedPoolBoostBips;
+    const requestId = Date.now();
+    currentLoadingRequest = requestId;
+
+    // V12: Check cache first (instant response)
+    if (!forceRefresh) {
+        const cachedData = getCachedPoolData(boostBips);
+        if (cachedData) {
+            applyPoolData(cachedData, boostBips);
+            renderSwapInterface();
+            renderInventory();
+            // Refresh in background silently
+            refreshPoolDataInBackground(boostBips, requestId);
+            return;
+        }
+    }
 
     TradeState.isDataLoading = true;
-    TradeState.lastFetchTimestamp = now;
-
-    const boostBips = TradeState.selectedPoolBoostBips;
 
     try {
-        const boosterData = await getHighestBoosterBoostFromAPI();
-        TradeState.bestBoosterTokenId = boosterData?.tokenId ? BigInt(boosterData.tokenId) : 0n;
-        TradeState.bestBoosterBips = boosterData?.boostBips || 0;
-
-        // Carregar boosters e rental listings em paralelo
-        await Promise.all([
-            loadMyBoostersFromAPI(true),
-            loadRentalListings()
-        ]);
-
-        // Filtrar NFTs que estão listados para aluguel
+        // Update user NFT data
+        const userNFTs = State.myBoosters || [];
         const rentalListings = State.rentalListings || [];
         const listedTokenIds = new Set(rentalListings.map(l => l.tokenId?.toString()));
         const nowSec = Math.floor(Date.now() / 1000);
 
-        const userNFTs = State.myBoosters || [];
         const userNFTsOfTier = userNFTs.filter(nft => Number(nft.boostBips) === boostBips);
         
-        // NFTs disponíveis para venda (não listados/alugados)
         const availableNFTsOfTier = userNFTsOfTier.filter(nft => {
             const tokenIdStr = nft.tokenId?.toString();
             const listing = rentalListings.find(l => l.tokenId?.toString() === tokenIdStr);
@@ -888,18 +905,6 @@ async function loadDataForSelectedPool() {
             const isRented = listing && listing.rentalEndTime && Number(listing.rentalEndTime) > nowSec;
             return !isListed && !isRented;
         });
-        
-        TradeState.userBalanceOfSelectedNFT = userNFTsOfTier.length;
-        TradeState.availableToSellCount = availableNFTsOfTier.length;
-        
-        // Só define firstAvailableTokenId se não foi selecionado manualmente pelo usuário
-        // ou se o tokenId selecionado não está disponível
-        const currentSelection = TradeState.firstAvailableTokenId;
-        const selectionIsAvailable = currentSelection && availableNFTsOfTier.some(nft => BigInt(nft.tokenId) === currentSelection);
-        
-        if (!selectionIsAvailable) {
-            TradeState.firstAvailableTokenId = (availableNFTsOfTier.length > 0) ? BigInt(availableNFTsOfTier[0].tokenId) : null;
-        }
 
         const tier = boosterTiers.find(t => t.boostBips === boostBips);
         if (!tier) {
@@ -908,7 +913,7 @@ async function loadDataForSelectedPool() {
         }
 
         const poolKey = `pool_${tier.name.toLowerCase()}`;
-        let poolAddress = addresses[poolKey];
+        let poolAddress = addresses[poolKey] || poolAddressCache.get(boostBips);
 
         if (!poolAddress) {
             const factoryAddress = addresses.nftLiquidityPoolFactory;
@@ -924,6 +929,9 @@ async function loadDataForSelectedPool() {
                 }
             }
         }
+
+        // Check if request is still valid
+        if (currentLoadingRequest !== requestId) return;
 
         if (!poolAddress || poolAddress === ethers.ZeroAddress) {
             const el = document.getElementById('swap-interface');
@@ -943,62 +951,159 @@ async function loadDataForSelectedPool() {
 
         const poolContract = new ethers.Contract(poolAddress, nftPoolABI, State.publicProvider);
 
-        let buyPrice = ethers.MaxUint256;
-        let sellPrice = 0n;
-        let availableTokenIds = [];
+        // V12: Fetch all pool data in parallel for speed
+        const [buyPriceResult, sellPriceResult, availableNFTsResult] = await Promise.all([
+            safeContractCall(poolContract, 'getBuyPrice', [], ethers.MaxUint256).catch(() => ethers.MaxUint256),
+            safeContractCall(poolContract, 'getSellPrice', [], 0n).catch(() => 0n),
+            poolContract.getAvailableNFTs().catch(() => [])
+        ]);
+
+        // Check if request is still valid
+        if (currentLoadingRequest !== requestId) return;
+
+        const availableTokenIds = Array.isArray(availableNFTsResult) ? [...availableNFTsResult] : [];
+        const buyPrice = (buyPriceResult === ethers.MaxUint256) ? 0n : buyPriceResult;
+        const sellPrice = sellPriceResult;
+
+        // Calculate net sell price
         let baseTaxBips = State.systemFees?.["NFT_POOL_SELL_TAX_BIPS"] || 1000n;
         let discountBips = BigInt(State.boosterDiscounts?.[TradeState.bestBoosterBips] || 0);
-
-        try {
-            buyPrice = await safeContractCall(poolContract, 'getBuyPrice', [], ethers.MaxUint256);
-        } catch (e) {
-            console.warn('getBuyPrice failed:', e.message);
-        }
-
-        try {
-            sellPrice = await safeContractCall(poolContract, 'getSellPrice', [], 0n);
-        } catch (e) {
-            console.warn('getSellPrice failed:', e.message);
-        }
-
-        try {
-            const result = await poolContract.getAvailableNFTs();
-            availableTokenIds = Array.isArray(result) ? [...result] : [];
-        } catch (e) {
-            console.warn('getAvailableNFTs failed:', e.message);
-            availableTokenIds = [];
-        }
-
-        TradeState.poolNFTCount = availableTokenIds.length;
-        TradeState.firstAvailableTokenIdForBuy = (availableTokenIds.length > 0) ? BigInt(availableTokenIds[availableTokenIds.length - 1]) : null;
-        TradeState.buyPrice = (buyPrice === ethers.MaxUint256) ? 0n : buyPrice;
-        TradeState.sellPrice = sellPrice;
-
         const baseTaxBipsBigInt = typeof baseTaxBips === 'bigint' ? baseTaxBips : BigInt(baseTaxBips);
         const discountBipsBigInt = typeof discountBips === 'bigint' ? discountBips : BigInt(discountBips);
         const finalTaxBips = (baseTaxBipsBigInt > discountBipsBigInt) ? (baseTaxBipsBigInt - discountBipsBigInt) : 0n;
         const taxAmount = (sellPrice * finalTaxBips) / 10000n;
-        TradeState.netSellPrice = sellPrice - taxAmount;
+        const netSellPrice = sellPrice - taxAmount;
+
+        // Build pool data object
+        const poolData = {
+            buyPrice,
+            sellPrice,
+            netSellPrice,
+            poolNFTCount: availableTokenIds.length,
+            firstAvailableTokenIdForBuy: (availableTokenIds.length > 0) ? BigInt(availableTokenIds[availableTokenIds.length - 1]) : null,
+            userBalanceOfSelectedNFT: userNFTsOfTier.length,
+            availableToSellCount: availableNFTsOfTier.length,
+            availableNFTsOfTier
+        };
+
+        // Cache the data
+        setCachedPoolData(boostBips, poolData);
+
+        // Apply to state and render
+        applyPoolData(poolData, boostBips);
 
     } catch (err) {
         console.warn("Store Data Warning:", err.message);
-        const el = document.getElementById('swap-interface');
-        if (el) {
-            el.innerHTML = `
-                <div class="text-center py-12">
-                    <div class="w-12 h-12 bg-zinc-800 rounded-full flex items-center justify-center mx-auto mb-3">
-                        <i class="fa-solid fa-exclamation-triangle text-amber-500"></i>
+        if (currentLoadingRequest === requestId) {
+            const el = document.getElementById('swap-interface');
+            if (el) {
+                el.innerHTML = `
+                    <div class="text-center py-12">
+                        <div class="w-12 h-12 bg-zinc-800 rounded-full flex items-center justify-center mx-auto mb-3">
+                            <i class="fa-solid fa-exclamation-triangle text-amber-500"></i>
+                        </div>
+                        <p class="text-zinc-400 text-sm">Pool unavailable</p>
+                        <p class="text-zinc-600 text-xs mt-1">${err.message}</p>
                     </div>
-                    <p class="text-zinc-400 text-sm">Pool unavailable</p>
-                    <p class="text-zinc-600 text-xs mt-1">${err.message}</p>
-                </div>
-            `;
+                `;
+            }
         }
         return;
     } finally {
-        TradeState.isDataLoading = false;
-        renderSwapInterface();
-        renderInventory();
+        if (currentLoadingRequest === requestId) {
+            TradeState.isDataLoading = false;
+            renderSwapInterface();
+            renderInventory();
+        }
+    }
+}
+
+// V12: Background refresh without blocking UI
+async function refreshPoolDataInBackground(boostBips, requestId) {
+    try {
+        // Silently refresh data
+        const userNFTs = State.myBoosters || [];
+        const rentalListings = State.rentalListings || [];
+        const listedTokenIds = new Set(rentalListings.map(l => l.tokenId?.toString()));
+        const nowSec = Math.floor(Date.now() / 1000);
+
+        const userNFTsOfTier = userNFTs.filter(nft => Number(nft.boostBips) === boostBips);
+        const availableNFTsOfTier = userNFTsOfTier.filter(nft => {
+            const tokenIdStr = nft.tokenId?.toString();
+            const listing = rentalListings.find(l => l.tokenId?.toString() === tokenIdStr);
+            const isListed = listedTokenIds.has(tokenIdStr);
+            const isRented = listing && listing.rentalEndTime && Number(listing.rentalEndTime) > nowSec;
+            return !isListed && !isRented;
+        });
+
+        const tier = boosterTiers.find(t => t.boostBips === boostBips);
+        if (!tier) return;
+
+        const poolKey = `pool_${tier.name.toLowerCase()}`;
+        let poolAddress = addresses[poolKey] || poolAddressCache.get(boostBips);
+        if (!poolAddress || poolAddress === ethers.ZeroAddress) return;
+
+        const poolContract = new ethers.Contract(poolAddress, nftPoolABI, State.publicProvider);
+
+        const [buyPriceResult, sellPriceResult, availableNFTsResult] = await Promise.all([
+            safeContractCall(poolContract, 'getBuyPrice', [], ethers.MaxUint256).catch(() => ethers.MaxUint256),
+            safeContractCall(poolContract, 'getSellPrice', [], 0n).catch(() => 0n),
+            poolContract.getAvailableNFTs().catch(() => [])
+        ]);
+
+        if (currentLoadingRequest !== requestId) return;
+
+        const availableTokenIds = Array.isArray(availableNFTsResult) ? [...availableNFTsResult] : [];
+        const buyPrice = (buyPriceResult === ethers.MaxUint256) ? 0n : buyPriceResult;
+        const sellPrice = sellPriceResult;
+
+        let baseTaxBips = State.systemFees?.["NFT_POOL_SELL_TAX_BIPS"] || 1000n;
+        let discountBips = BigInt(State.boosterDiscounts?.[TradeState.bestBoosterBips] || 0);
+        const baseTaxBipsBigInt = typeof baseTaxBips === 'bigint' ? baseTaxBips : BigInt(baseTaxBips);
+        const discountBipsBigInt = typeof discountBips === 'bigint' ? discountBips : BigInt(discountBips);
+        const finalTaxBips = (baseTaxBipsBigInt > discountBipsBigInt) ? (baseTaxBipsBigInt - discountBipsBigInt) : 0n;
+        const taxAmount = (sellPrice * finalTaxBips) / 10000n;
+        const netSellPrice = sellPrice - taxAmount;
+
+        const poolData = {
+            buyPrice, sellPrice, netSellPrice,
+            poolNFTCount: availableTokenIds.length,
+            firstAvailableTokenIdForBuy: (availableTokenIds.length > 0) ? BigInt(availableTokenIds[availableTokenIds.length - 1]) : null,
+            userBalanceOfSelectedNFT: userNFTsOfTier.length,
+            availableToSellCount: availableNFTsOfTier.length,
+            availableNFTsOfTier
+        };
+
+        setCachedPoolData(boostBips, poolData);
+
+        // Only update UI if still on same tier
+        if (TradeState.selectedPoolBoostBips === boostBips && currentLoadingRequest === requestId) {
+            applyPoolData(poolData, boostBips);
+            renderSwapInterface();
+        }
+    } catch (e) {
+        console.warn('Background refresh failed:', e.message);
+    }
+}
+
+// V12: Apply pool data to TradeState
+function applyPoolData(poolData, boostBips) {
+    TradeState.buyPrice = poolData.buyPrice;
+    TradeState.sellPrice = poolData.sellPrice;
+    TradeState.netSellPrice = poolData.netSellPrice;
+    TradeState.poolNFTCount = poolData.poolNFTCount;
+    TradeState.firstAvailableTokenIdForBuy = poolData.firstAvailableTokenIdForBuy;
+    TradeState.userBalanceOfSelectedNFT = poolData.userBalanceOfSelectedNFT;
+    TradeState.availableToSellCount = poolData.availableToSellCount;
+
+    // Update firstAvailableTokenId for selling
+    const currentSelection = TradeState.firstAvailableTokenId;
+    const selectionIsAvailable = currentSelection && poolData.availableNFTsOfTier?.some(nft => BigInt(nft.tokenId) === currentSelection);
+    
+    if (!selectionIsAvailable && poolData.availableNFTsOfTier?.length > 0) {
+        TradeState.firstAvailableTokenId = BigInt(poolData.availableNFTsOfTier[0].tokenId);
+    } else if (!poolData.availableNFTsOfTier?.length) {
+        TradeState.firstAvailableTokenId = null;
     }
 }
 
@@ -1010,23 +1115,32 @@ function setupEventListeners() {
     if (!container) return;
 
     container.addEventListener('click', async (e) => {
-        // Refresh button
+        // Refresh button - V12: Invalidate cache and force refresh
         if (e.target.closest('#refresh-btn')) {
             const btn = e.target.closest('#refresh-btn');
             const icon = btn.querySelector('i');
             icon.classList.add('fa-spin');
-            await loadDataForSelectedPool();
+            
+            invalidatePoolCache(TradeState.selectedPoolBoostBips);
+            
+            await Promise.all([
+                loadMyBoostersFromAPI(true),
+                loadRentalListings()
+            ]);
+            
+            await loadDataForSelectedPool(true);
             loadTradeHistory();
             icon.classList.remove('fa-spin');
             return;
         }
 
-        // Tier selection
+        // Tier selection - V12: Instant with cache
         const tierBtn = e.target.closest('.tier-chip');
         if (tierBtn) {
             const boost = Number(tierBtn.dataset.boost);
             if (TradeState.selectedPoolBoostBips !== boost) {
                 TradeState.selectedPoolBoostBips = boost;
+                TradeState.firstAvailableTokenId = null; // Reset selection
                 updateTierSelection(boost);
                 await loadDataForSelectedPool();
             }
@@ -1126,8 +1240,7 @@ function setupEventListeners() {
 
             try {
                 if (TradeState.tradeDirection === 'buy') {
-                    // V11: Use NftTx.buyFromPool from new transaction module
-                    // Fixed: parameter is maxPrice, not price
+                    // V12: Buy NFT with cache invalidation
                     await NftTx.buyFromPool({
                         poolAddress: poolAddress,
                         maxPrice: TradeState.buyPrice,
@@ -1136,7 +1249,13 @@ function setupEventListeners() {
                         onSuccess: async (receipt) => {
                             if (mascot) mascot.className = 'w-14 h-14 object-contain trade-success';
                             showToast("🟢 NFT Purchased!", "success");
-                            await loadDataForSelectedPool();
+                            
+                            // Invalidate cache and reload
+                            invalidatePoolCache(TradeState.selectedPoolBoostBips);
+                            await Promise.all([
+                                loadMyBoostersFromAPI(true),
+                                loadDataForSelectedPool(true)
+                            ]);
                             loadTradeHistory();
                         },
                         
@@ -1148,7 +1267,16 @@ function setupEventListeners() {
                         }
                     });
                 } else {
-                    // V11: Use NftTx.sellToPool from new transaction module
+                    // V12: Validate we have a token to sell
+                    if (!TradeState.firstAvailableTokenId) {
+                        showToast("No NFT selected for sale", "error");
+                        isTransactionInProgress = false;
+                        executeBtn.disabled = false;
+                        executeBtn.innerHTML = originalHTML;
+                        return;
+                    }
+                    
+                    // V12: Sell NFT with cache invalidation
                     await NftTx.sellToPool({
                         poolAddress: poolAddress,
                         tokenId: TradeState.firstAvailableTokenId,
@@ -1157,7 +1285,13 @@ function setupEventListeners() {
                         onSuccess: async (receipt) => {
                             if (mascot) mascot.className = 'w-14 h-14 object-contain trade-success';
                             showToast("🔴 NFT Sold!", "success");
-                            await loadDataForSelectedPool();
+                            
+                            // Invalidate cache and reload
+                            invalidatePoolCache(TradeState.selectedPoolBoostBips);
+                            await Promise.all([
+                                loadMyBoostersFromAPI(true),
+                                loadDataForSelectedPool(true)
+                            ]);
                             loadTradeHistory();
                         },
                         
