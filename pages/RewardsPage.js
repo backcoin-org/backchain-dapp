@@ -94,14 +94,61 @@ function injectStyles() {
         }
         @keyframes float {
             0%, 100% { transform: translateY(0); }
-            50% { transform: translateY(-5px); }
+            50% { transform: translateY(-8px); }
         }
         @keyframes shine {
             0% { background-position: -200% center; }
             100% { background-position: 200% center; }
         }
+        @keyframes reward-bounce {
+            0%, 100% { transform: scale(1) translateY(0); }
+            25% { transform: scale(1.05) translateY(-5px); }
+            50% { transform: scale(1) translateY(0); }
+            75% { transform: scale(1.02) translateY(-3px); }
+        }
+        @keyframes glow-ring {
+            0%, 100% { 
+                box-shadow: 0 0 20px rgba(245,158,11,0.4), 
+                            0 0 40px rgba(245,158,11,0.2),
+                            inset 0 0 20px rgba(245,158,11,0.1);
+            }
+            50% { 
+                box-shadow: 0 0 30px rgba(245,158,11,0.6), 
+                            0 0 60px rgba(245,158,11,0.3),
+                            inset 0 0 30px rgba(245,158,11,0.2);
+            }
+        }
+        @keyframes spin-slow {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+        @keyframes fadeInUp {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        @keyframes nft-float {
+            0%, 100% { 
+                transform: translateY(0) rotate(-2deg); 
+                filter: drop-shadow(0 10px 20px rgba(0,0,0,0.3));
+            }
+            50% { 
+                transform: translateY(-10px) rotate(2deg); 
+                filter: drop-shadow(0 20px 30px rgba(0,0,0,0.4));
+            }
+        }
         .pulse-glow { animation: pulse-glow 2s ease-in-out infinite; }
         .float-animation { animation: float 3s ease-in-out infinite; }
+        .reward-bounce { animation: reward-bounce 2s ease-in-out infinite; }
+        .glow-ring { animation: glow-ring 2s ease-in-out infinite; }
+        .spin-slow { animation: spin-slow 20s linear infinite; }
+        .fade-in-up { animation: fadeInUp 0.5s ease-out forwards; }
+        .nft-float { animation: nft-float 4s ease-in-out infinite; }
         .shine-text {
             background: linear-gradient(90deg, #fbbf24, #f59e0b, #fbbf24);
             background-size: 200% auto;
@@ -120,6 +167,36 @@ function injectStyles() {
         .custom-scrollbar::-webkit-scrollbar { width: 4px; }
         .custom-scrollbar::-webkit-scrollbar-track { background: rgba(39,39,42,0.3); }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(113,113,122,0.5); border-radius: 2px; }
+        .reward-image-container {
+            position: relative;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        .reward-image-container::before {
+            content: '';
+            position: absolute;
+            width: 120%;
+            height: 120%;
+            background: radial-gradient(circle, rgba(245,158,11,0.15) 0%, transparent 70%);
+            border-radius: 50%;
+            animation: pulse-glow 3s ease-in-out infinite;
+        }
+        .nft-image-wrapper {
+            position: relative;
+            border-radius: 12px;
+            overflow: hidden;
+        }
+        .nft-image-wrapper::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
+            animation: shine 3s infinite;
+        }
     `;
     document.head.appendChild(style);
 }
@@ -325,12 +402,25 @@ function renderContent(claimDetails, grossRewards, boosterData) {
 
     // Find current tier info
     const currentTier = BOOST_TIERS.find(t => t.boost === highestBoost) || BOOST_TIERS[0];
+    
+    // V14.1: Get NFT image URL with fallback
+    const nftImageUrl = booster.imageUrl || booster.image || null;
 
     container.innerHTML = `
         <div class="space-y-4">
             
+            <!-- ANIMATED REWARD IMAGE -->
+            <div class="reward-image-container py-4 fade-in-up">
+                <img 
+                    src="assets/reward.png" 
+                    alt="Rewards" 
+                    class="w-32 h-32 object-contain reward-bounce drop-shadow-2xl"
+                    onerror="this.style.display='none'"
+                />
+            </div>
+            
             <!-- MAIN CLAIM CARD -->
-            <div class="bg-gradient-to-br from-zinc-900 via-zinc-900 to-zinc-800/50 border border-zinc-700/50 rounded-2xl overflow-hidden">
+            <div class="bg-gradient-to-br from-zinc-900 via-zinc-900 to-zinc-800/50 border border-zinc-700/50 rounded-2xl overflow-hidden fade-in-up" style="animation-delay: 0.1s">
                 
                 <!-- Header with amount -->
                 <div class="p-6 text-center border-b border-zinc-800/50">
@@ -425,7 +515,7 @@ function renderContent(claimDetails, grossRewards, boosterData) {
             </div>
 
             <!-- REWARD SOURCES -->
-            <div class="bg-zinc-900/50 border border-zinc-800 rounded-xl p-4">
+            <div class="bg-zinc-900/50 border border-zinc-800 rounded-xl p-4 fade-in-up" style="animation-delay: 0.2s">
                 <p class="text-[10px] text-zinc-500 uppercase mb-3">
                     <i class="fa-solid fa-layer-group mr-1"></i> Reward Sources
                 </p>
@@ -448,7 +538,7 @@ function renderContent(claimDetails, grossRewards, boosterData) {
             </div>
 
             <!-- BOOSTER CARD -->
-            <div class="bg-zinc-900/50 border border-zinc-800 rounded-xl overflow-hidden">
+            <div class="bg-zinc-900/50 border border-zinc-800 rounded-xl overflow-hidden fade-in-up" style="animation-delay: 0.3s">
                 <div class="p-3 border-b border-zinc-800/50 flex items-center justify-between">
                     <p class="text-[10px] text-zinc-500 uppercase">
                         <i class="fa-solid fa-rocket mr-1"></i> Your Booster
@@ -461,12 +551,23 @@ function renderContent(claimDetails, grossRewards, boosterData) {
                 <div class="p-4">
                     ${hasBooster ? `
                         <div class="flex items-center gap-4">
-                            <div class="w-16 h-16 rounded-xl ${currentTier.bg} border-2 border-green-500/30 flex items-center justify-center">
-                                <i class="fa-solid ${currentTier.icon} ${currentTier.color} text-2xl"></i>
+                            <!-- NFT Image with fallback to icon -->
+                            <div class="nft-image-wrapper w-20 h-20 rounded-xl ${currentTier.bg} border-2 border-green-500/30 flex items-center justify-center overflow-hidden nft-float">
+                                ${nftImageUrl ? `
+                                    <img 
+                                        src="${nftImageUrl}" 
+                                        alt="${currentTier.name} Booster" 
+                                        class="w-full h-full object-cover"
+                                        onerror="this.parentElement.innerHTML='<i class=\\'fa-solid ${currentTier.icon} ${currentTier.color} text-2xl\\'></i>'"
+                                    />
+                                ` : `
+                                    <i class="fa-solid ${currentTier.icon} ${currentTier.color} text-2xl"></i>
+                                `}
                             </div>
                             <div class="flex-1">
                                 <p class="text-white font-bold text-lg">${currentTier.name}</p>
                                 <p class="text-xs text-zinc-500">${booster.source === 'rented' ? '🔗 Rented' : '✓ Owned'}</p>
+                                ${booster.tokenId ? `<p class="text-[10px] text-zinc-600">ID: #${booster.tokenId}</p>` : ''}
                             </div>
                             <div class="text-right">
                                 <p class="text-2xl font-black text-green-400">+${boostPercent}%</p>
@@ -609,13 +710,20 @@ async function loadClaimHistory() {
     if (!State.userAddress) return;
     
     try {
-        const response = await fetch(`${API_ENDPOINTS.getUserTransactions}?address=${State.userAddress}&type=CLAIM`);
+        // V14.1 FIX: Check if endpoint is defined before fetching
+        const endpoint = API_ENDPOINTS?.getUserTransactions;
+        if (!endpoint) {
+            console.warn('[Rewards] getUserTransactions endpoint not defined');
+            return;
+        }
+        
+        const response = await fetch(`${endpoint}?address=${State.userAddress}&type=CLAIM`);
         if (response.ok) {
             const data = await response.json();
             claimHistory = (data.transactions || data || []).slice(0, 10);
         }
     } catch (e) {
-        console.warn('[Rewards] Failed to load claim history');
+        console.warn('[Rewards] Failed to load claim history:', e.message);
     }
 }
 
