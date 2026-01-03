@@ -1,12 +1,11 @@
 // pages/RewardsPage.js
-// ✅ PRODUCTION V14.2 - Clean Design + Performance Fixes
+// ✅ PRODUCTION V14.4 - Clean Design + API History Fix
 //
-// V14.2 Changes:
-// - Cleaner, minimal UI design
-// - Removed excessive animations
-// - Fixed render loop issues with cache/throttle
-// - Removed unused API endpoint call
+// V14.4 Changes:
+// - Fixed claim history to use getHistory API (same as Dashboard)
+// - Filters activities by type === 'ClaimReward'
 //
+// V14.2: Cleaner, minimal UI design
 // V14.0: Complete UI redesign focusing on booster BENEFITS
 // V13.0: NFT Discount Simulator
 // V12.0: Fixed claimRewards signature
@@ -19,7 +18,8 @@ import {
     calculateUserTotalRewards,
     calculateClaimDetails,
     getHighestBoosterBoostFromAPI,
-    loadUserData
+    loadUserData,
+    API_ENDPOINTS
 } from '../modules/data.js';
 import { formatBigNumber } from '../utils.js';
 import { showToast } from '../ui-feedback.js';
@@ -449,76 +449,37 @@ async function loadClaimHistory() {
     if (!State.userAddress) return;
     
     try {
-        // V14.3: Buscar histórico de claims do Firebase (user_activity collection)
-        // Os claims são salvos pelo indexer com type: "ClaimReward"
+        // V14.4: Usar o mesmo endpoint que o Dashboard usa
+        // API_ENDPOINTS.getHistory retorna todas as atividades do usuário
+        const historyUrl = API_ENDPOINTS?.getHistory || 'https://gethistory-4wvdcuoouq-uc.a.run.app';
+        const response = await fetch(`${historyUrl}/${State.userAddress}`);
         
-        // Verificar se Firebase está disponível
-        const firebase = window.firebase;
-        if (!firebase || !firebase.firestore) {
-            console.warn('[Rewards] Firebase not available for claim history');
+        if (!response.ok) {
+            console.warn('[Rewards] Failed to fetch history:', response.status);
             return;
         }
         
-        const db = firebase.firestore();
-        const userAddress = State.userAddress.toLowerCase();
+        const activities = await response.json();
         
-        const snapshot = await db.collection('user_activity')
-            .where('user', '==', userAddress)
-            .where('type', '==', 'ClaimReward')
-            .orderBy('timestamp', 'desc')
-            .limit(10)
-            .get();
-        
-        claimHistory = [];
-        snapshot.forEach(doc => {
-            const data = doc.data();
-            claimHistory.push({
-                id: doc.id,
-                amount: data.amount || data.details?.amount || '0',
-                timestamp: data.timestamp?.toDate?.() || data.timestamp || new Date(),
-                transactionHash: data.txHash || '',
-                feePaid: data.details?.feePaid || '0'
-            });
-        });
+        // Filtrar apenas os ClaimReward
+        claimHistory = activities
+            .filter(item => item.type === 'ClaimReward')
+            .slice(0, 10)
+            .map(item => ({
+                id: item.id || item.txHash,
+                amount: item.amount || item.details?.amount || '0',
+                timestamp: item.timestamp?._seconds 
+                    ? new Date(item.timestamp._seconds * 1000) 
+                    : (item.timestamp ? new Date(item.timestamp) : new Date()),
+                transactionHash: item.txHash || '',
+                feePaid: item.details?.feePaid || '0'
+            }));
         
         console.log(`[Rewards] Loaded ${claimHistory.length} claim history items`);
         
     } catch (e) {
-        // Se der erro de índice ou permissão, tentar busca alternativa
-        if (e.code === 'failed-precondition' || e.message?.includes('index')) {
-            console.warn('[Rewards] Firebase index not ready, trying alternative query');
-            try {
-                const db = window.firebase.firestore();
-                const userAddress = State.userAddress.toLowerCase();
-                
-                // Query mais simples sem orderBy (pode não precisar de índice composto)
-                const snapshot = await db.collection('user_activity')
-                    .where('user', '==', userAddress)
-                    .where('type', '==', 'ClaimReward')
-                    .limit(10)
-                    .get();
-                
-                claimHistory = [];
-                snapshot.forEach(doc => {
-                    const data = doc.data();
-                    claimHistory.push({
-                        id: doc.id,
-                        amount: data.amount || data.details?.amount || '0',
-                        timestamp: data.timestamp?.toDate?.() || data.timestamp || new Date(),
-                        transactionHash: data.txHash || '',
-                        feePaid: data.details?.feePaid || '0'
-                    });
-                });
-                
-                // Ordenar manualmente
-                claimHistory.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-                
-            } catch (e2) {
-                console.warn('[Rewards] Failed to load claim history:', e2.message);
-            }
-        } else {
-            console.warn('[Rewards] Failed to load claim history:', e.message);
-        }
+        console.warn('[Rewards] Failed to load claim history:', e.message);
+        claimHistory = [];
     }
 }
 
