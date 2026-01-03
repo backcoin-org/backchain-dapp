@@ -1,6 +1,11 @@
 // modules/js/transactions/nft-tx.js
-// ✅ PRODUCTION V1.1 - FIXED: Uses dynamic addresses from config.js
+// ✅ PRODUCTION V1.2 - FIXED: Uses getAvailableNFTs instead of getPoolNFTCount
 // 
+// CHANGES V1.2:
+// - Fixed validate() to use getAvailableNFTs() instead of getPoolNFTCount()
+// - Added better error handling for pool validation
+// - Fixed args to be array, not function
+//
 // CHANGES V1.1:
 // - Imports addresses from config.js (loaded from deployment-addresses.json)
 // - Removed hardcoded fallback addresses
@@ -109,7 +114,7 @@ const NFT_POOL_ABI = [
     // Read functions
     'function getBuyPrice() view returns (uint256)',
     'function getSellPrice() view returns (uint256)',
-    'function getPoolNFTCount() view returns (uint256)',
+    'function getAvailableNFTs() view returns (uint256[])',
     'function poolTokenBalance() view returns (uint256)',
     'function getNFTsInPool() view returns (uint256[])',
     'function isNFTInPool(uint256 tokenId) view returns (bool)',
@@ -231,7 +236,7 @@ export async function buyNft({
         
         getContract: async (signer) => getNftPoolContract(signer, targetPool),
         method: 'buyFromPool',
-        args: () => [finalMaxPrice],
+        args: () => [finalMaxPrice], // Dynamic args - maxPrice is set in validate
         
         // Token approval config
         get approval() {
@@ -245,9 +250,21 @@ export async function buyNft({
         validate: async (signer, userAddress) => {
             const contract = getNftPoolContract(signer, targetPool);
             
-            // Check pool has NFTs
-            const nftCount = await contract.getPoolNFTCount();
-            if (nftCount === 0n) {
+            // V1.2: Use getAvailableNFTs instead of getPoolNFTCount
+            let availableNFTs = [];
+            try {
+                availableNFTs = await contract.getAvailableNFTs();
+            } catch (e) {
+                console.warn('[NFT] getAvailableNFTs failed, trying getNFTsInPool:', e.message);
+                try {
+                    availableNFTs = await contract.getNFTsInPool();
+                } catch (e2) {
+                    console.error('[NFT] Could not get pool NFT count:', e2.message);
+                    throw new Error('Could not verify pool NFT availability');
+                }
+            }
+            
+            if (!availableNFTs || availableNFTs.length === 0) {
                 throw new Error('No NFTs available in pool');
             }
             
@@ -334,20 +351,30 @@ export async function sellNft({
         
         getContract: async (signer) => getNftPoolContract(signer, targetPool),
         method: 'sellToPool',
-        args: [tokenId, finalMinPayout],
+        args: () => [tokenId, finalMinPayout], // V1.2: Dynamic args
         
         validate: async (signer, userAddress) => {
             const nftContract = getNftContract(signer);
             const poolContract = getNftPoolContract(signer, targetPool);
             
             // Check user owns the NFT
-            const owner = await nftContract.ownerOf(tokenId);
+            let owner;
+            try {
+                owner = await nftContract.ownerOf(tokenId);
+            } catch (e) {
+                throw new Error('Could not verify NFT ownership. Token may not exist.');
+            }
+            
             if (owner.toLowerCase() !== userAddress.toLowerCase()) {
                 throw new Error('You do not own this NFT');
             }
             
             // Get current sell price
-            sellPrice = await poolContract.getSellPrice();
+            try {
+                sellPrice = await poolContract.getSellPrice();
+            } catch (e) {
+                throw new Error('Could not get sell price from pool');
+            }
             
             // Set min payout with 5% slippage if not specified
             if (!minPayout) {
