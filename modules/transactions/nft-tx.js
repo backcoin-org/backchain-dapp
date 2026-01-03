@@ -1,18 +1,17 @@
 // modules/js/transactions/nft-tx.js
-// ✅ PRODUCTION V1.7 - Reduced retries, MaxUint256 approval first
+// ✅ PRODUCTION V1.8 - Fixed MaxUint256 overflow in allowance check
 // 
+// CHANGES V1.8:
+// - Fixed RangeError overflow when checking allowance against MaxUint256
+// - Uses MaxUint256/2 threshold to detect unlimited approval
+// - Prevents formatEther overflow on very large numbers
+//
 // CHANGES V1.7:
 // - MaxUint256 approval as first strategy (one-time approval for pool)
 // - Reduced retry logging noise
 // - Added 500ms delay before sending tx (RPC stabilization)
 // - Longer delays between retries (2s, 4s, 6s instead of 1s, 2s, 4s)
 // - Cleaner console output
-//
-// CHANGES V1.6:
-// - CRITICAL FIX: buyFromPool → buyNFTWithSlippage (correct method name)
-// - CRITICAL FIX: sellToPool → sellNFT (correct method name)
-// - Updated ABI to match actual NFTLiquidityPool.sol contract
-// - Updated event names: NFTBought → NFTPurchased
 //
 // CHANGES V1.3:
 // - Reverted to txEngine approval handling (has retry logic)
@@ -232,6 +231,15 @@ async function approveWithRetry(signer, userAddress, tokenAddress, spenderAddres
     
     // Check current allowance
     const currentAllowance = await bkcContract.allowance(userAddress, spenderAddress);
+    
+    // V1.8: Handle MaxUint256 allowance without overflow
+    const isUnlimitedAllowance = currentAllowance >= ethers.MaxUint256 / 2n;
+    
+    if (isUnlimitedAllowance) {
+        console.log('[NFT] Unlimited allowance already set, skipping approval');
+        return true;
+    }
+    
     console.log('[NFT] Current allowance:', ethers.formatEther(currentAllowance), 'BKC');
     
     if (currentAllowance >= amount) {
@@ -289,10 +297,11 @@ async function approveWithRetry(signer, userAddress, tokenAddress, spenderAddres
                 const receipt = await approveTx.wait();
                 console.log('[NFT] Approval confirmed in block:', receipt.blockNumber);
                 
-                // Verify allowance
+                // V1.8: Verify allowance (handle MaxUint256 without overflow)
                 const newAllowance = await bkcContract.allowance(userAddress, spenderAddress);
+                const isNewUnlimited = newAllowance >= ethers.MaxUint256 / 2n;
                 
-                if (newAllowance >= amount) {
+                if (isNewUnlimited || newAllowance >= amount) {
                     console.log('[NFT] ✅ Approval successful!');
                     return true;
                 }
