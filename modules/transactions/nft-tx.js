@@ -1,6 +1,14 @@
 // modules/js/transactions/nft-tx.js
-// ✅ PRODUCTION V1.3 - FIXED: Let txEngine handle approval with retry
+// ✅ PRODUCTION V1.4 - Approval with retry and multiple strategies
 // 
+// CHANGES V1.4:
+// - Added approveWithRetry() with 3 strategies:
+//   1. Exact amount approval
+//   2. MaxUint256 (unlimited) approval  
+//   3. Reset to 0, then approve
+// - Each strategy has 3 retry attempts with exponential backoff
+// - Better error handling for user rejection
+//
 // CHANGES V1.3:
 // - Reverted to txEngine approval handling (has retry logic)
 // - Removed manual approve in validate() to avoid RPC issues
@@ -199,7 +207,106 @@ async function getNftContractReadOnly() {
 }
 
 // ============================================================================
-// 3. TRANSACTION FUNCTIONS
+// 3. HELPER: Approval with retry and fallback strategies
+// ============================================================================
+
+/**
+ * Approve BKC with retry logic and multiple strategies
+ * Strategy 1: Normal approve with exact amount
+ * Strategy 2: Approve with MaxUint256 (unlimited)
+ * Strategy 3: Reset to 0 first, then approve
+ */
+async function approveWithRetry(signer, userAddress, tokenAddress, spenderAddress, amount, maxRetries = 3) {
+    const ethers = window.ethers;
+    const bkcContract = new ethers.Contract(tokenAddress, BKC_ABI, signer);
+    
+    // Check current allowance
+    const currentAllowance = await bkcContract.allowance(userAddress, spenderAddress);
+    console.log('[NFT] Current allowance:', ethers.formatEther(currentAllowance), 'BKC');
+    
+    if (currentAllowance >= amount) {
+        console.log('[NFT] Sufficient allowance, skipping approval');
+        return true;
+    }
+    
+    const strategies = [
+        {
+            name: 'exact_amount',
+            amount: amount,
+            description: 'Approving exact amount'
+        },
+        {
+            name: 'max_uint256',
+            amount: ethers.MaxUint256,
+            description: 'Approving unlimited (MaxUint256)'
+        },
+        {
+            name: 'reset_then_approve',
+            amount: amount,
+            resetFirst: true,
+            description: 'Resetting to 0, then approving'
+        }
+    ];
+    
+    for (let strategyIndex = 0; strategyIndex < strategies.length; strategyIndex++) {
+        const strategy = strategies[strategyIndex];
+        
+        for (let attempt = 1; attempt <= maxRetries; attempt++) {
+            try {
+                console.log(`[NFT] ${strategy.description} (Strategy ${strategyIndex + 1}, Attempt ${attempt}/${maxRetries})`);
+                
+                // Reset to 0 first if strategy requires it
+                if (strategy.resetFirst && currentAllowance > 0n) {
+                    console.log('[NFT] Resetting allowance to 0...');
+                    const resetTx = await bkcContract.approve(spenderAddress, 0n);
+                    await resetTx.wait();
+                    console.log('[NFT] Allowance reset to 0');
+                }
+                
+                // Execute approval
+                const approveTx = await bkcContract.approve(spenderAddress, strategy.amount);
+                console.log('[NFT] Approval tx sent:', approveTx.hash);
+                
+                const receipt = await approveTx.wait();
+                console.log('[NFT] Approval confirmed in block:', receipt.blockNumber);
+                
+                // Verify allowance
+                const newAllowance = await bkcContract.allowance(userAddress, spenderAddress);
+                console.log('[NFT] New allowance:', ethers.formatEther(newAllowance), 'BKC');
+                
+                if (newAllowance >= amount) {
+                    console.log('[NFT] ✅ Approval successful!');
+                    return true;
+                }
+            } catch (error) {
+                console.warn(`[NFT] Strategy ${strategyIndex + 1}, Attempt ${attempt} failed:`, error.message);
+                
+                // Check if user rejected
+                if (error.code === 'ACTION_REJECTED' || 
+                    error.code === 4001 || 
+                    error.message?.includes('user rejected') ||
+                    error.message?.includes('User denied')) {
+                    console.log('[NFT] User rejected approval');
+                    throw new Error('User rejected the approval');
+                }
+                
+                // Wait before retry (exponential backoff)
+                if (attempt < maxRetries) {
+                    const delay = Math.min(1000 * Math.pow(2, attempt - 1), 5000);
+                    console.log(`[NFT] Waiting ${delay}ms before retry...`);
+                    await new Promise(r => setTimeout(r, delay));
+                }
+            }
+        }
+        
+        console.log(`[NFT] Strategy ${strategyIndex + 1} exhausted, trying next...`);
+    }
+    
+    throw new Error('All approval strategies failed. Please try again later or check your network connection.');
+}
+
+// ============================================================================
+// 4. TRANSACTION FUNCTIONS
 // ============================================================================
 
 /**
@@ -234,6 +341,7 @@ export async function buyNft({
     
     let buyPrice = 0n;
     let finalMaxPrice = maxPrice ? BigInt(maxPrice) : 0n;
+    let approvalDone = false;
 
     return await txEngine.execute({
         name: 'BuyNFT',
@@ -241,16 +349,10 @@ export async function buyNft({
         
         getContract: async (signer) => getNftPoolContract(signer, targetPool),
         method: 'buyFromPool',
-        args: () => [finalMaxPrice], // Dynamic args - maxPrice is set in validate
+        args: () => [finalMaxPrice],
         
-        // V1.3: Token approval config - let txEngine handle approval with retry logic
-        get approval() {
-            return finalMaxPrice > 0n ? {
-                token: contracts.BKC_TOKEN,
-                spender: targetPool,
-                amount: finalMaxPrice
-            } : null;
-        },
+        // V1.4: No automatic approval - we handle it in validate with retry logic
+        approval: null,
         
         validate: async (signer, userAddress) => {
             const ethers = window.ethers;
@@ -258,7 +360,7 @@ export async function buyNft({
             
             console.log('[NFT] Validating buy from pool:', targetPool);
             
-            // V1.2: Use getAvailableNFTs instead of getPoolNFTCount
+            // Check pool has NFTs
             let availableNFTs = [];
             try {
                 availableNFTs = await contract.getAvailableNFTs();
@@ -295,7 +397,7 @@ export async function buyNft({
                 throw new Error(`Price increased. Current price: ${ethers.formatEther(buyPrice)} BKC`);
             }
             
-            // V1.3: Check BKC balance (approval will be handled by txEngine)
+            // Check BKC balance
             const bkcContract = new ethers.Contract(contracts.BKC_TOKEN, BKC_ABI, signer);
             const userBalance = await bkcContract.balanceOf(userAddress);
             console.log('[NFT] User BKC balance:', ethers.formatEther(userBalance), 'BKC');
@@ -304,10 +406,19 @@ export async function buyNft({
                 throw new Error(`Insufficient BKC balance. Need ${ethers.formatEther(finalMaxPrice)} BKC, have ${ethers.formatEther(userBalance)} BKC`);
             }
             
-            // Log allowance for debugging (approval handled by txEngine)
-            const currentAllowance = await bkcContract.allowance(userAddress, targetPool);
-            console.log('[NFT] Current BKC allowance:', ethers.formatEther(currentAllowance), 'BKC');
-            console.log('[NFT] Validation passed, txEngine will handle approval if needed');
+            // V1.4: Handle approval with retry and multiple strategies
+            if (!approvalDone) {
+                await approveWithRetry(
+                    signer, 
+                    userAddress, 
+                    contracts.BKC_TOKEN, 
+                    targetPool, 
+                    finalMaxPrice
+                );
+                approvalDone = true;
+            }
+            
+            console.log('[NFT] ✅ Validation complete, ready to buy');
         },
         
         onSuccess: async (receipt) => {
