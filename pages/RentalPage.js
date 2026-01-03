@@ -1,5 +1,10 @@
 // js/pages/RentalPage.js
-// ✅ PRODUCTION V10.0 - Improved Error Handling
+// ✅ PRODUCTION V10.1 - UI Improvements
+//
+// V10.1 Changes:
+// - Removed house emoji from header (cleaner look)
+// - Replaced "Floor Price" stat with "Available" (NFTs for rent count)
+// - More useful dashboard metric for users
 //
 // V10.0 Changes:
 // - Improved error message handling to avoid BigInt issues
@@ -356,7 +361,7 @@ export const RentalPage = {
                                 </div>
                             </div>
                             <div>
-                                <h1 class="text-2xl font-bold text-white">🏠 Boost Rentals</h1>
+                                <h1 class="text-2xl font-bold text-white">Boost Rentals</h1>
                                 <p class="text-sm text-zinc-500">Rent boosters • Earn passive income</p>
                             </div>
                         </div>
@@ -437,10 +442,6 @@ function renderStatsDashboard() {
         if (l.rentalEndTime && Number(l.rentalEndTime) > now) return false;
         return true;
     });
-    
-    const floorPrice = availableListings.length > 0
-        ? Math.min(...availableListings.map(l => parseFloat(ethers.formatEther(l.pricePerHour || '0'))))
-        : 0;
 
     const totalRentals = myListings.reduce((sum, l) => sum + Number(l.rentalCount || 0), 0);
 
@@ -481,12 +482,12 @@ function renderStatsDashboard() {
         <div class="stat-card">
             <div class="flex items-center gap-3 mb-3">
                 <div class="w-10 h-10 rounded-xl bg-cyan-500/20 flex items-center justify-center">
-                    <i class="fa-solid fa-arrow-trend-down text-cyan-400"></i>
+                    <i class="fa-solid fa-store text-cyan-400"></i>
                 </div>
-                <span class="text-xs text-zinc-400 uppercase tracking-wider font-medium">Floor Price</span>
+                <span class="text-xs text-zinc-400 uppercase tracking-wider font-medium">Available</span>
             </div>
-            <p class="text-2xl font-bold text-white">${floorPrice > 0 ? floorPrice.toFixed(2) : '--'}</p>
-            <p class="text-xs text-zinc-500 mt-1">BKC / hour</p>
+            <p class="text-2xl font-bold text-white">${availableListings.length}</p>
+            <p class="text-xs text-zinc-500 mt-1">NFTs for rent</p>
         </div>
     `;
 }

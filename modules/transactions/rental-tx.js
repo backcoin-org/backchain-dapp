@@ -1,6 +1,11 @@
 // modules/js/transactions/rental-tx.js
-// ✅ PRODUCTION V1.1 - FIXED: Uses dynamic addresses from config.js
+// ✅ PRODUCTION V1.2 - Use setApprovalForAll for one-time approval
 // 
+// CHANGES V1.2:
+// - Changed from individual approve() to setApprovalForAll() 
+// - One-time approval for all NFTs (no need to approve each listing)
+// - Added delay after approval for RPC propagation
+//
 // CHANGES V1.1:
 // - Imports addresses from config.js (loaded from deployment-addresses.json)
 // - Removed hardcoded fallback addresses
@@ -207,13 +212,20 @@ export async function listNft({
             }
             
             const isApprovedForAll = await nftContract.isApprovedForAll(userAddress, contracts.RENTAL_MARKETPLACE);
-            const approved = await nftContract.getApproved(tokenId);
             
-            if (!isApprovedForAll && approved.toLowerCase() !== contracts.RENTAL_MARKETPLACE.toLowerCase()) {
-                console.log('[Rental] Approving NFT for marketplace...');
-                const approveTx = await nftContract.approve(contracts.RENTAL_MARKETPLACE, tokenId);
+            // V1.2: Use setApprovalForAll (one-time approval for all NFTs)
+            if (!isApprovedForAll) {
+                console.log('[Rental] Setting approval for all NFTs...');
+                
+                // Small delay before approval (RPC stabilization)
+                await new Promise(r => setTimeout(r, 500));
+                
+                const approveTx = await nftContract.setApprovalForAll(contracts.RENTAL_MARKETPLACE, true);
                 await approveTx.wait();
-                console.log('[Rental] NFT approved');
+                console.log('[Rental] ✅ All NFTs approved for marketplace');
+                
+                // Wait for propagation
+                await new Promise(r => setTimeout(r, 1000));
             }
         },
         
