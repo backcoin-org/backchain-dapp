@@ -400,10 +400,19 @@ export async function buyNft({
             }
             
             // Set max price with 5% slippage on top of price+tax
-            if (!maxPrice) {
-                finalMaxPrice = (buyPriceWithTax * 105n) / 100n;
-            } else {
-                finalMaxPrice = BigInt(maxPrice);
+            // V1.6: Always recalculate based on current price with tax, ignoring passed maxPrice
+            // This ensures we account for tax that may not be included in StorePage's maxPrice
+            finalMaxPrice = (buyPriceWithTax * 105n) / 100n;
+            
+            // If user explicitly passed a maxPrice that's higher, use that instead
+            if (maxPrice) {
+                const passedMaxPrice = BigInt(maxPrice);
+                // Only use passed maxPrice if it's higher than our calculated one
+                // (user might want to pay more for faster execution)
+                if (passedMaxPrice > finalMaxPrice) {
+                    finalMaxPrice = passedMaxPrice;
+                    console.log('[NFT] Using user-provided max price:', ethers.formatEther(finalMaxPrice), 'BKC');
+                }
             }
             
             console.log('[NFT] Max price (with slippage):', ethers.formatEther(finalMaxPrice), 'BKC');
