@@ -1,16 +1,18 @@
 // modules/js/transactions/nft-tx.js
-// ✅ PRODUCTION V1.6 - FIXED: Correct contract method names
+// ✅ PRODUCTION V1.7 - Reduced retries, MaxUint256 approval first
 // 
+// CHANGES V1.7:
+// - MaxUint256 approval as first strategy (one-time approval for pool)
+// - Reduced retry logging noise
+// - Added 500ms delay before sending tx (RPC stabilization)
+// - Longer delays between retries (2s, 4s, 6s instead of 1s, 2s, 4s)
+// - Cleaner console output
+//
 // CHANGES V1.6:
 // - CRITICAL FIX: buyFromPool → buyNFTWithSlippage (correct method name)
 // - CRITICAL FIX: sellToPool → sellNFT (correct method name)
 // - Updated ABI to match actual NFTLiquidityPool.sol contract
 // - Updated event names: NFTBought → NFTPurchased
-//
-// CHANGES V1.5:
-// - Added skipSimulation option to bypass estimateGas (for RPC issues)
-// - When skipSimulation=true, uses fixed gas limit instead of estimating
-// - Useful when simulation fails but transaction should work
 //
 // CHANGES V1.3:
 // - Reverted to txEngine approval handling (has retry logic)
@@ -237,22 +239,23 @@ async function approveWithRetry(signer, userAddress, tokenAddress, spenderAddres
         return true;
     }
     
+    // V1.7: MaxUint256 first to avoid future re-approvals
     const strategies = [
+        {
+            name: 'max_uint256',
+            amount: ethers.MaxUint256,
+            description: 'Approving unlimited (one-time)'
+        },
         {
             name: 'exact_amount',
             amount: amount,
             description: 'Approving exact amount'
         },
         {
-            name: 'max_uint256',
-            amount: ethers.MaxUint256,
-            description: 'Approving unlimited (MaxUint256)'
-        },
-        {
             name: 'reset_then_approve',
-            amount: amount,
+            amount: ethers.MaxUint256,
             resetFirst: true,
-            description: 'Resetting to 0, then approving'
+            description: 'Resetting to 0, then approving unlimited'
         }
     ];
     
@@ -261,7 +264,12 @@ async function approveWithRetry(signer, userAddress, tokenAddress, spenderAddres
         
         for (let attempt = 1; attempt <= maxRetries; attempt++) {
             try {
-                console.log(`[NFT] ${strategy.description} (Strategy ${strategyIndex + 1}, Attempt ${attempt}/${maxRetries})`);
+                // V1.7: Only log on first attempt or if retrying
+                if (attempt === 1) {
+                    console.log(`[NFT] ${strategy.description}...`);
+                } else {
+                    console.log(`[NFT] Retry ${attempt}/${maxRetries}...`);
+                }
                 
                 // Reset to 0 first if strategy requires it
                 if (strategy.resetFirst && currentAllowance > 0n) {
@@ -270,6 +278,9 @@ async function approveWithRetry(signer, userAddress, tokenAddress, spenderAddres
                     await resetTx.wait();
                     console.log('[NFT] Allowance reset to 0');
                 }
+                
+                // V1.7: Add small delay before sending to let RPC stabilize
+                await new Promise(r => setTimeout(r, 500));
                 
                 // Execute approval
                 const approveTx = await bkcContract.approve(spenderAddress, strategy.amount);
@@ -280,34 +291,37 @@ async function approveWithRetry(signer, userAddress, tokenAddress, spenderAddres
                 
                 // Verify allowance
                 const newAllowance = await bkcContract.allowance(userAddress, spenderAddress);
-                console.log('[NFT] New allowance:', ethers.formatEther(newAllowance), 'BKC');
                 
                 if (newAllowance >= amount) {
                     console.log('[NFT] ✅ Approval successful!');
                     return true;
                 }
             } catch (error) {
-                console.warn(`[NFT] Strategy ${strategyIndex + 1}, Attempt ${attempt} failed:`, error.message);
+                // V1.7: Quieter logging
+                console.warn(`[NFT] Attempt ${attempt} failed:`, error.message?.substring(0, 80));
                 
                 // Check if user rejected
                 if (error.code === 'ACTION_REJECTED' || 
                     error.code === 4001 || 
                     error.message?.includes('user rejected') ||
                     error.message?.includes('User denied')) {
-                    console.log('[NFT] User rejected approval');
                     throw new Error('User rejected the approval');
                 }
                 
-                // Wait before retry (exponential backoff)
+                // Wait before retry (longer delay for RPC issues)
                 if (attempt < maxRetries) {
-                    const delay = Math.min(1000 * Math.pow(2, attempt - 1), 5000);
-                    console.log(`[NFT] Waiting ${delay}ms before retry...`);
+                    const delay = 2000 * attempt; // 2s, 4s, 6s
+                    console.log(`[NFT] Waiting ${delay/1000}s...`);
                     await new Promise(r => setTimeout(r, delay));
                 }
             }
         }
         
-        console.log(`[NFT] Strategy ${strategyIndex + 1} exhausted, trying next...`);
+        // Only try next strategy if current one failed all attempts
+        if (strategyIndex < strategies.length - 1) {
+            console.log(`[NFT] Trying alternative approach...`);
+        }
+    }
     }
     
     throw new Error('All approval strategies failed. Please try again later or check your network connection.');

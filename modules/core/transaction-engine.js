@@ -1,706 +1,786 @@
-// modules/js/core/transaction-engine.js
-// ✅ PRODUCTION V1.2 - Added skipSimulation option
+// modules/js/transactions/nft-tx.js
+// ✅ PRODUCTION V1.7 - Reduced retries, MaxUint256 approval first
 // 
+// CHANGES V1.7:
+// - MaxUint256 approval as first strategy (one-time approval for pool)
+// - Reduced retry logging noise
+// - Added 500ms delay before sending tx (RPC stabilization)
+// - Longer delays between retries (2s, 4s, 6s instead of 1s, 2s, 4s)
+// - Cleaner console output
+//
+// CHANGES V1.6:
+// - CRITICAL FIX: buyFromPool → buyNFTWithSlippage (correct method name)
+// - CRITICAL FIX: sellToPool → sellNFT (correct method name)
+// - Updated ABI to match actual NFTLiquidityPool.sol contract
+// - Updated event names: NFTBought → NFTPurchased
+//
+// CHANGES V1.3:
+// - Reverted to txEngine approval handling (has retry logic)
+// - Removed manual approve in validate() to avoid RPC issues
+// - Keep detailed logging for debugging
+//
 // CHANGES V1.2:
-// - Added skipSimulation option to bypass estimateGas (for RPC issues)
-// - When skipSimulation=true, uses fixed gas limit instead of estimating
-// - Useful when simulation fails but transaction should work
+// - Fixed validate() to use getAvailableNFTs() instead of getPoolNFTCount()
+// - Added better error handling for pool validation
+// - Fixed args to be array, not function
 //
 // CHANGES V1.1:
-// - Added support for args as function (getter pattern for dynamic values)
-// - Fixed updateMetaMaskRpcs -> switchToNextRpc (correct method name)
-// - Added better error messages for simulation failures
-// - Added approval getter support for dynamic approval amounts
-// - Improved ENS error handling on testnets
-//
-// This is the main orchestrator for all blockchain transactions.
-// It handles the complete flow: validation → approval → simulation → execution
+// - Imports addresses from config.js (loaded from deployment-addresses.json)
+// - Removed hardcoded fallback addresses
+// - Added support for multiple pools by tier (diamond, platinum, gold, etc.)
+// - Uses rewardBoosterNFT as the NFT contract
+// - Added aliases for backward compatibility (buyFromPool, sellToPool)
 //
 // ============================================================================
-// TRANSACTION FLOW:
-// 1. Anti-reentrancy check (prevent double-clicks)
-// 2. Layer 1-2: Network + Wallet validation (FREE)
-// 3. Layer 3: Balance validation (FREE - reads)
-// 4. Custom domain validation (FREE - reads)
-// 5. Token approval if needed
-// 6. Simulation via estimateGas (FREE)
-// 7. Execute transaction
-// 8. Wait for confirmation
-// 9. Invalidate caches + callbacks
+// AVAILABLE TRANSACTIONS:
+// - buyNft / buyFromPool: Buy an NFT from a specific pool (pays BKC)
+// - sellNft / sellToPool: Sell your NFT to a pool (receives BKC)
+// - approveAllNfts: Approve all NFTs for a pool
 // ============================================================================
 
-import { NetworkManager } from './network-manager.js';
-import { ErrorHandler, ErrorTypes } from './error-handler.js';
-import { ValidationLayer } from './validation-layer.js';
-import { GasManager } from './gas-manager.js';
-import { CacheManager } from './cache-manager.js';
+import { txEngine, ValidationLayer } from '../core/index.js';
+import { addresses, contractAddresses } from '../../config.js';
 
 // ============================================================================
-// 1. CONFIGURATION
+// 1. CONTRACT CONFIGURATION
 // ============================================================================
-
-const ENGINE_CONFIG = {
-    // Retry settings
-    DEFAULT_MAX_RETRIES: 2,
-    RETRY_BASE_DELAY: 2000,
-    
-    // Approval settings
-    APPROVAL_MULTIPLIER: 10n,  // Approve 10x to reduce future approvals
-    APPROVAL_WAIT_TIME: 1500,  // Wait after approval for propagation
-    
-    // Confirmation settings
-    CONFIRMATION_TIMEOUT: 60000,  // 60 seconds
-    CONFIRMATION_RETRY_DELAY: 3000,
-    
-    // Gas settings
-    GAS_SAFETY_MARGIN: 20  // 20% margin
-};
 
 /**
- * ERC20 ABI for approvals
+ * Pool tiers available
  */
-const ERC20_APPROVAL_ABI = [
+const POOL_TIERS = ['diamond', 'platinum', 'gold', 'silver', 'bronze', 'iron', 'crystal'];
+
+/**
+ * Get contract addresses dynamically from config.js
+ * 
+ * @param {string} [poolTier] - Pool tier (diamond, platinum, gold, silver, bronze, iron, crystal)
+ * @returns {Object} Contract addresses
+ * @throws {Error} If addresses are not loaded
+ */
+function getContracts(poolTier = null) {
+    const bkcToken = addresses?.bkcToken || 
+                     contractAddresses?.bkcToken ||
+                     window.contractAddresses?.bkcToken;
+    
+    // NFT contract is RewardBoosterNFT
+    const nftContract = addresses?.rewardBoosterNFT || 
+                        contractAddresses?.rewardBoosterNFT ||
+                        window.contractAddresses?.rewardBoosterNFT;
+    
+    // Get pool address based on tier
+    let nftPool = null;
+    if (poolTier) {
+        const poolKey = `pool_${poolTier.toLowerCase()}`;
+        nftPool = addresses?.[poolKey] || 
+                  contractAddresses?.[poolKey] ||
+                  window.contractAddresses?.[poolKey];
+    }
+    
+    if (!bkcToken) {
+        console.error('❌ BKC Token address not found!');
+        throw new Error('Contract addresses not loaded. Please refresh the page.');
+    }
+    
+    if (!nftContract) {
+        console.error('❌ NFT Contract (RewardBoosterNFT) address not found!');
+        throw new Error('Contract addresses not loaded. Please refresh the page.');
+    }
+    
+    return {
+        BKC_TOKEN: bkcToken,
+        NFT_CONTRACT: nftContract,
+        NFT_POOL: nftPool // May be null if no tier specified
+    };
+}
+
+/**
+ * Get pool address for a specific tier
+ * @param {string} tier - Pool tier name
+ * @returns {string|null} Pool address or null
+ */
+function getPoolAddress(tier) {
+    const poolKey = `pool_${tier.toLowerCase()}`;
+    return addresses?.[poolKey] || 
+           contractAddresses?.[poolKey] ||
+           window.contractAddresses?.[poolKey] ||
+           null;
+}
+
+/**
+ * Get all available pool addresses
+ * @returns {Object} Map of tier -> address
+ */
+function getAllPools() {
+    const pools = {};
+    for (const tier of POOL_TIERS) {
+        const address = getPoolAddress(tier);
+        if (address) {
+            pools[tier] = address;
+        }
+    }
+    return pools;
+}
+
+/**
+ * NFT Pool ABI - NFTLiquidityPool contract
+ */
+const NFT_POOL_ABI = [
+    // Write functions
+    'function buyNFT() external returns (uint256 tokenId)',
+    'function buySpecificNFT(uint256 _tokenId) external',
+    'function buyNFTWithSlippage(uint256 _maxPrice) external returns (uint256 tokenId)',
+    'function sellNFT(uint256 _tokenId, uint256 _minPayout) external',
+    
+    // Read functions
+    'function getBuyPrice() view returns (uint256)',
+    'function getBuyPriceWithTax() view returns (uint256)',
+    'function getSellPrice() view returns (uint256)',
+    'function getSellPriceAfterTax() view returns (uint256)',
+    'function getAvailableNFTs() view returns (uint256[])',
+    'function getPoolInfo() view returns (uint256 bkcBalance, uint256 nftCount, uint256 k, bool initialized)',
+    'function getNFTBalance() view returns (uint256)',
+    'function getBKCBalance() view returns (uint256)',
+    'function isNFTInPool(uint256 _tokenId) view returns (bool)',
+    'function boostBips() view returns (uint256)',
+    
+    // Events
+    'event NFTPurchased(address indexed buyer, uint256 indexed tokenId, uint256 price, uint256 tax, uint256 newBkcBalance, uint256 newNftCount)',
+    'event NFTSold(address indexed seller, uint256 indexed tokenId, uint256 payout, uint256 tax, uint256 newBkcBalance, uint256 newNftCount)'
+];
+
+/**
+ * NFT Contract ABI (RewardBoosterNFT) - for approvals
+ */
+const NFT_ABI = [
+    'function approve(address to, uint256 tokenId) external',
+    'function setApprovalForAll(address operator, bool approved) external',
+    'function isApprovedForAll(address owner, address operator) view returns (bool)',
+    'function getApproved(uint256 tokenId) view returns (address)',
+    'function ownerOf(uint256 tokenId) view returns (address)',
+    'function balanceOf(address owner) view returns (uint256)',
+    'function tokenOfOwnerByIndex(address owner, uint256 index) view returns (uint256)',
+    'function getTierOfToken(uint256 tokenId) view returns (uint256)'
+];
+
+/**
+ * BKC Token ABI
+ */
+const BKC_ABI = [
     'function approve(address spender, uint256 amount) returns (bool)',
-    'function allowance(address owner, address spender) view returns (uint256)'
+    'function allowance(address owner, address spender) view returns (uint256)',
+    'function balanceOf(address owner) view returns (uint256)'
 ];
 
 // ============================================================================
-// 2. TRANSACTION UI HELPER
+// 2. HELPER FUNCTIONS
 // ============================================================================
 
 /**
- * Manages UI state during transaction
+ * Creates NFT Pool contract instance
+ * @param {ethers.Signer} signer - Signer
+ * @param {string} poolAddress - Pool address
  */
-export class TransactionUI {
-    constructor(buttonElement, txName, showToasts = true) {
-        this.button = buttonElement;
-        this.txName = txName;
-        this.showToasts = showToasts;
-        this.originalContent = null;
-        this.originalDisabled = false;
-        
-        if (this.button) {
-            this.originalContent = this.button.innerHTML;
-            this.originalDisabled = this.button.disabled;
-        }
-    }
+function getNftPoolContract(signer, poolAddress) {
+    const ethers = window.ethers;
+    return new ethers.Contract(poolAddress, NFT_POOL_ABI, signer);
+}
 
-    /**
-     * Sets the current phase and updates button
-     */
-    setPhase(phase) {
-        if (!this.button) return;
+/**
+ * Creates NFT Pool contract instance (read-only)
+ * @param {string} poolAddress - Pool address
+ */
+async function getNftPoolContractReadOnly(poolAddress) {
+    const ethers = window.ethers;
+    const { NetworkManager } = await import('../core/index.js');
+    const provider = NetworkManager.getProvider();
+    return new ethers.Contract(poolAddress, NFT_POOL_ABI, provider);
+}
 
-        const phases = {
-            'validating': { text: 'Validating...', icon: '🔍' },
-            'approving': { text: 'Approving...', icon: '✅' },
-            'simulating': { text: 'Simulating...', icon: '🧪' },
-            'confirming': { text: 'Confirm in Wallet', icon: '👛' },
-            'waiting': { text: 'Processing...', icon: '⏳' },
-            'success': { text: 'Success!', icon: '🎉' },
-            'error': { text: 'Failed', icon: '❌' }
-        };
+/**
+ * Creates NFT contract instance
+ */
+function getNftContract(signer) {
+    const ethers = window.ethers;
+    const contracts = getContracts();
+    return new ethers.Contract(contracts.NFT_CONTRACT, NFT_ABI, signer);
+}
 
-        const config = phases[phase] || { text: phase, icon: '⏳' };
-        
-        this.button.disabled = true;
-        this.button.innerHTML = `
-            <span class="tx-status">
-                <span class="tx-icon">${config.icon}</span>
-                <span class="tx-text">${config.text}</span>
-            </span>
-        `;
-    }
-
-    /**
-     * Shows retry attempt
-     */
-    setRetry(attempt, maxAttempts) {
-        if (!this.button) return;
-        
-        this.button.innerHTML = `
-            <span class="tx-status">
-                <span class="tx-icon">🔄</span>
-                <span class="tx-text">Retry ${attempt}/${maxAttempts}...</span>
-            </span>
-        `;
-    }
-
-    /**
-     * Restores button to original state
-     */
-    cleanup() {
-        if (!this.button) return;
-        
-        this.button.innerHTML = this.originalContent;
-        this.button.disabled = this.originalDisabled;
-    }
-
-    /**
-     * Shows success state temporarily then restores
-     */
-    showSuccess(duration = 2000) {
-        this.setPhase('success');
-        setTimeout(() => this.cleanup(), duration);
-    }
-
-    /**
-     * Shows error state temporarily then restores
-     */
-    showError(duration = 2000) {
-        this.setPhase('error');
-        setTimeout(() => this.cleanup(), duration);
-    }
+/**
+ * Creates NFT contract instance (read-only)
+ */
+async function getNftContractReadOnly() {
+    const ethers = window.ethers;
+    const { NetworkManager } = await import('../core/index.js');
+    const provider = NetworkManager.getProvider();
+    const contracts = getContracts();
+    return new ethers.Contract(contracts.NFT_CONTRACT, NFT_ABI, provider);
 }
 
 // ============================================================================
-// 3. TRANSACTION ENGINE
+// 3. HELPER: Approval with retry and fallback strategies
 // ============================================================================
 
-export class TransactionEngine {
-    constructor() {
-        /**
-         * Set of pending transaction IDs (anti-reentrancy)
-         */
-        this.pendingTxIds = new Set();
+/**
+ * Approve BKC with retry logic and multiple strategies
+ * Strategy 1: Normal approve with exact amount
+ * Strategy 2: Approve with MaxUint256 (unlimited)
+ * Strategy 3: Reset to 0 first, then approve
+ */
+async function approveWithRetry(signer, userAddress, tokenAddress, spenderAddress, amount, maxRetries = 3) {
+    const ethers = window.ethers;
+    const bkcContract = new ethers.Contract(tokenAddress, BKC_ABI, signer);
+    
+    // Check current allowance
+    const currentAllowance = await bkcContract.allowance(userAddress, spenderAddress);
+    console.log('[NFT] Current allowance:', ethers.formatEther(currentAllowance), 'BKC');
+    
+    if (currentAllowance >= amount) {
+        console.log('[NFT] Sufficient allowance, skipping approval');
+        return true;
     }
-
-    /**
-     * Resolves args - supports both array and function (getter)
-     * @private
-     */
-    _resolveArgs(args) {
-        if (typeof args === 'function') {
-            return args();
+    
+    // V1.7: MaxUint256 first to avoid future re-approvals
+    const strategies = [
+        {
+            name: 'max_uint256',
+            amount: ethers.MaxUint256,
+            description: 'Approving unlimited (one-time)'
+        },
+        {
+            name: 'exact_amount',
+            amount: amount,
+            description: 'Approving exact amount'
+        },
+        {
+            name: 'reset_then_approve',
+            amount: ethers.MaxUint256,
+            resetFirst: true,
+            description: 'Resetting to 0, then approving unlimited'
         }
-        return args || [];
-    }
-
-    /**
-     * Resolves approval config - supports getter pattern
-     * @private
-     */
-    _resolveApproval(approval) {
-        if (!approval) return null;
+    ];
+    
+    for (let strategyIndex = 0; strategyIndex < strategies.length; strategyIndex++) {
+        const strategy = strategies[strategyIndex];
         
-        // If approval has a getter (defined with get approval()), access it
-        if (typeof approval === 'object') {
-            return {
-                token: approval.token,
-                spender: approval.spender,
-                amount: approval.amount
-            };
-        }
-        
-        return approval;
-    }
-
-    /**
-     * Executes a transaction with full validation and error handling
-     * 
-     * @param {Object} config - Transaction configuration
-     * @returns {Promise<Object>} Result { success, receipt?, error?, cancelled? }
-     * 
-     * @example
-     * const result = await txEngine.execute({
-     *     name: 'Donate',
-     *     button: document.getElementById('donateBtn'),
-     *     
-     *     // Contract info
-     *     getContract: async (signer) => new ethers.Contract(addr, abi, signer),
-     *     method: 'donate',
-     *     args: [campaignId, amount], // Can also be a function: () => [campaignId, amount]
-     *     
-     *     // Optional: ETH to send
-     *     value: ethers.parseEther('0.001'),
-     *     
-     *     // Optional: Token approval (can use getter for dynamic amounts)
-     *     approval: {
-     *         token: BKC_ADDRESS,
-     *         spender: CHARITY_ADDRESS,
-     *         amount: donationAmount
-     *     },
-     *     
-     *     // Optional: Custom validation
-     *     validate: async (signer, userAddress) => {
-     *         // Check campaign is active, etc.
-     *     },
-     *     
-     *     // Callbacks
-     *     onSuccess: (receipt) => { showToast('Donated!'); },
-     *     onError: (error) => { console.error(error); }
-     * });
-     */
-    async execute(config) {
-        const {
-            // Identification
-            name,
-            txId = null,
-            
-            // UI
-            button = null,
-            showToasts = true,
-            
-            // Contract
-            getContract,           // async (signer) => Contract
-            method,
-            args = [],             // Array or function returning array
-            value = null,          // ETH to send (bigint)
-            
-            // Approval (optional) - can be object or getter
-            approval = null,       // { token, spender, amount }
-            
-            // Validations
-            validate = null,       // async (signer, userAddress) => void
-            
-            // Callbacks
-            onSuccess = null,
-            onError = null,
-            
-            // Options
-            maxRetries = ENGINE_CONFIG.DEFAULT_MAX_RETRIES,
-            invalidateCache = true,
-            skipSimulation = false,  // V1.2: Skip estimateGas if RPC is unreliable
-            fixedGasLimit = 500000n  // V1.2: Gas limit when skipping simulation
-        } = config;
-
-        // Generate unique transaction ID
-        const uniqueTxId = txId || `${name}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-
-        // ═══════════════════════════════════════════════════════════════════
-        // ANTI-REENTRANCY CHECK
-        // ═══════════════════════════════════════════════════════════════════
-        if (this.pendingTxIds.has(uniqueTxId)) {
-            console.warn(`[TX] Transaction ${uniqueTxId} already in progress`);
-            return { 
-                success: false, 
-                reason: 'DUPLICATE_TX',
-                message: 'Transaction already in progress'
-            };
-        }
-        this.pendingTxIds.add(uniqueTxId);
-
-        // Initialize UI helper
-        const ui = new TransactionUI(button, name, showToasts);
-
-        try {
-            // ═══════════════════════════════════════════════════════════════
-            // PHASE 1: PRE-VALIDATION (FREE)
-            // ═══════════════════════════════════════════════════════════════
-            ui.setPhase('validating');
-            console.log(`[TX] Starting ${name}...`);
-
-            // Layer 1: Network validation
-            await ValidationLayer.validateNetwork();
-
-            // Layer 1b: RPC health check
-            await ValidationLayer.validateRpcHealth();
-
-            // Layer 2: Wallet validation
-            const userAddress = await ValidationLayer.validateWalletConnected();
-
-            // Get signer
-            const signer = await NetworkManager.getSigner();
-
-            // Layer 3: ETH balance for gas
-            await ValidationLayer.validateEthForGas(userAddress);
-
-            // ═══════════════════════════════════════════════════════════════
-            // PHASE 2: TOKEN VALIDATION (FREE - reads)
-            // ═══════════════════════════════════════════════════════════════
-            
-            // Resolve approval (supports getter pattern)
-            const resolvedApproval = this._resolveApproval(approval);
-            
-            if (resolvedApproval && resolvedApproval.amount > 0n) {
-                await ValidationLayer.validateTokenBalance(
-                    resolvedApproval.token,
-                    resolvedApproval.amount,
-                    userAddress
-                );
-            }
-
-            // ═══════════════════════════════════════════════════════════════
-            // PHASE 3: CUSTOM DOMAIN VALIDATION (FREE)
-            // ═══════════════════════════════════════════════════════════════
-            if (validate) {
-                await validate(signer, userAddress);
-            }
-
-            // ═══════════════════════════════════════════════════════════════
-            // PHASE 4: TOKEN APPROVAL (if needed)
-            // ═══════════════════════════════════════════════════════════════
-            
-            // Re-resolve approval after validation (values may have changed)
-            const finalApproval = this._resolveApproval(approval);
-            
-            if (finalApproval && finalApproval.amount > 0n) {
-                const needsApproval = await ValidationLayer.needsApproval(
-                    finalApproval.token,
-                    finalApproval.spender,
-                    finalApproval.amount,
-                    userAddress
-                );
-
-                if (needsApproval) {
-                    ui.setPhase('approving');
-                    console.log(`[TX] Requesting token approval...`);
-                    
-                    await this._executeApproval(finalApproval, signer, userAddress);
-                    
-                    // Clear allowance cache
-                    CacheManager.clear('allowance-');
-                }
-            }
-
-            // ═══════════════════════════════════════════════════════════════
-            // PHASE 5: SIMULATION (FREE - estimateGas) - Can be skipped
-            // ═══════════════════════════════════════════════════════════════
-
-            const contract = await getContract(signer);
-            const txOptions = value ? { value } : {};
-            
-            // Resolve args (supports function pattern)
-            const resolvedArgs = this._resolveArgs(args);
-
-            let gasEstimate;
-            
-            // V1.2: Support skipSimulation option
-            if (skipSimulation) {
-                console.log(`[TX] Skipping simulation (skipSimulation=true), using fixed gas limit: ${fixedGasLimit}`);
-                gasEstimate = fixedGasLimit;
-            } else {
-                ui.setPhase('simulating');
-                console.log(`[TX] Simulating transaction...`);
-                
-                try {
-                    gasEstimate = await contract[method].estimateGas(...resolvedArgs, txOptions);
-                    console.log(`[TX] Gas estimate: ${gasEstimate.toString()}`);
-                } catch (simError) {
-                    // Simulation failed = transaction WOULD fail
-                    console.error(`[TX] Simulation failed:`, simError);
-                    const parsed = ErrorHandler.parseSimulationError(simError, method);
-                    throw ErrorHandler.create(parsed.type, { 
-                        message: parsed.message,
-                        original: simError 
-                    });
-                }
-            }
-
-            // ═══════════════════════════════════════════════════════════════
-            // PHASE 6: EXECUTE TRANSACTION
-            // ═══════════════════════════════════════════════════════════════
-            ui.setPhase('confirming');
-            console.log(`[TX] Requesting signature...`);
-
-            const gasLimit = GasManager.addSafetyMargin(gasEstimate);
-            const finalTxOptions = { ...txOptions, gasLimit };
-            
-            // Re-resolve args for execution (values may have been updated)
-            const executionArgs = this._resolveArgs(args);
-
-            const tx = await this._executeWithRetry(
-                () => contract[method](...executionArgs, finalTxOptions),
-                { maxRetries, ui, signer, name }
-            );
-
-            console.log(`[TX] Transaction submitted: ${tx.hash}`);
-
-            // ═══════════════════════════════════════════════════════════════
-            // PHASE 7: WAIT FOR CONFIRMATION
-            // ═══════════════════════════════════════════════════════════════
-            ui.setPhase('waiting');
-            console.log(`[TX] Waiting for confirmation...`);
-
-            const receipt = await this._waitForConfirmation(tx, signer.provider);
-            console.log(`[TX] Confirmed in block ${receipt.blockNumber}`);
-
-            // ═══════════════════════════════════════════════════════════════
-            // SUCCESS!
-            // ═══════════════════════════════════════════════════════════════
-            ui.showSuccess();
-
-            // Invalidate relevant caches
-            if (invalidateCache) {
-                CacheManager.invalidateByTx(name);
-            }
-
-            // Success callback
-            if (onSuccess) {
-                try {
-                    await onSuccess(receipt);
-                } catch (callbackError) {
-                    console.warn('[TX] onSuccess callback error:', callbackError);
-                }
-            }
-
-            return {
-                success: true,
-                receipt,
-                txHash: receipt.hash || tx.hash,
-                blockNumber: receipt.blockNumber
-            };
-
-        } catch (error) {
-            // ═══════════════════════════════════════════════════════════════
-            // ERROR HANDLING
-            // ═══════════════════════════════════════════════════════════════
-            const handled = ErrorHandler.handle(error, name);
-            
-            // Show appropriate UI
-            if (handled.type === ErrorTypes.USER_REJECTED) {
-                ui.cleanup(); // Just restore, don't show error
-            } else {
-                ui.showError();
-            }
-
-            // Error callback
-            if (onError) {
-                try {
-                    onError(handled);
-                } catch (callbackError) {
-                    console.warn('[TX] onError callback error:', callbackError);
-                }
-            }
-
-            return {
-                success: false,
-                error: handled,
-                message: handled.message,
-                cancelled: handled.type === ErrorTypes.USER_REJECTED
-            };
-
-        } finally {
-            // Always remove from pending set
-            this.pendingTxIds.delete(uniqueTxId);
-        }
-    }
-
-    /**
-     * Executes token approval
-     * @private
-     */
-    async _executeApproval(approval, signer, userAddress) {
-        const ethers = window.ethers;
-        const { token, spender, amount } = approval;
-
-        const tokenContract = new ethers.Contract(token, ERC20_APPROVAL_ABI, signer);
-
-        // Approve more than needed to reduce future approvals
-        const approveAmount = amount * ENGINE_CONFIG.APPROVAL_MULTIPLIER;
-
-        try {
-            const tx = await tokenContract.approve(spender, approveAmount);
-            await tx.wait();
-            
-            console.log(`[TX] Approval confirmed`);
-
-            // Wait for propagation
-            await new Promise(r => setTimeout(r, ENGINE_CONFIG.APPROVAL_WAIT_TIME));
-
-            // Verify approval worked
-            const newAllowance = await tokenContract.allowance(userAddress, spender);
-            
-            if (newAllowance < amount) {
-                throw new Error('Approval not reflected on-chain');
-            }
-
-        } catch (error) {
-            if (ErrorHandler.isUserRejection(error)) {
-                throw ErrorHandler.create(ErrorTypes.USER_REJECTED);
-            }
-            throw error;
-        }
-    }
-
-    /**
-     * Executes transaction with retry logic
-     * @private
-     */
-    async _executeWithRetry(txFunction, { maxRetries, ui, signer, name }) {
-        let lastError;
-
-        for (let attempt = 1; attempt <= maxRetries + 1; attempt++) {
+        for (let attempt = 1; attempt <= maxRetries; attempt++) {
             try {
-                // Show retry status
-                if (attempt > 1) {
-                    ui.setRetry(attempt, maxRetries + 1);
-                    console.log(`[TX] Retry attempt ${attempt}/${maxRetries + 1}`);
-
-                    // Check RPC health before retry
-                    const health = await NetworkManager.checkRpcHealth();
-                    if (!health.healthy) {
-                        console.log('[TX] RPC unhealthy, switching...');
-                        // Use correct method name
-                        NetworkManager.switchToNextRpc();
-                        await new Promise(r => setTimeout(r, 2000));
-                    }
+                // V1.7: Only log on first attempt or if retrying
+                if (attempt === 1) {
+                    console.log(`[NFT] ${strategy.description}...`);
+                } else {
+                    console.log(`[NFT] Retry ${attempt}/${maxRetries}...`);
                 }
-
-                return await txFunction();
-
+                
+                // Reset to 0 first if strategy requires it
+                if (strategy.resetFirst && currentAllowance > 0n) {
+                    console.log('[NFT] Resetting allowance to 0...');
+                    const resetTx = await bkcContract.approve(spenderAddress, 0n);
+                    await resetTx.wait();
+                    console.log('[NFT] Allowance reset to 0');
+                }
+                
+                // V1.7: Add small delay before sending to let RPC stabilize
+                await new Promise(r => setTimeout(r, 500));
+                
+                // Execute approval
+                const approveTx = await bkcContract.approve(spenderAddress, strategy.amount);
+                console.log('[NFT] Approval tx sent:', approveTx.hash);
+                
+                const receipt = await approveTx.wait();
+                console.log('[NFT] Approval confirmed in block:', receipt.blockNumber);
+                
+                // Verify allowance
+                const newAllowance = await bkcContract.allowance(userAddress, spenderAddress);
+                
+                if (newAllowance >= amount) {
+                    console.log('[NFT] ✅ Approval successful!');
+                    return true;
+                }
             } catch (error) {
-                lastError = error;
-
-                // User rejected - don't retry
-                if (ErrorHandler.isUserRejection(error)) {
-                    throw error;
+                // V1.7: Quieter logging
+                console.warn(`[NFT] Attempt ${attempt} failed:`, error.message?.substring(0, 80));
+                
+                // Check if user rejected
+                if (error.code === 'ACTION_REJECTED' || 
+                    error.code === 4001 || 
+                    error.message?.includes('user rejected') ||
+                    error.message?.includes('User denied')) {
+                    throw new Error('User rejected the approval');
                 }
-
-                // Not retryable - don't retry
-                if (!ErrorHandler.isRetryable(error)) {
-                    throw error;
+                
+                // Wait before retry (longer delay for RPC issues)
+                if (attempt < maxRetries) {
+                    const delay = 2000 * attempt; // 2s, 4s, 6s
+                    console.log(`[NFT] Waiting ${delay/1000}s...`);
+                    await new Promise(r => setTimeout(r, delay));
                 }
-
-                // Last attempt - throw
-                if (attempt === maxRetries + 1) {
-                    throw error;
-                }
-
-                // Wait before retry
-                const waitTime = ErrorHandler.getWaitTime(error);
-                console.log(`[TX] Waiting ${waitTime}ms before retry...`);
-                await new Promise(r => setTimeout(r, waitTime));
             }
         }
-
-        throw lastError;
-    }
-
-    /**
-     * Waits for transaction confirmation with retry
-     * @private
-     */
-    async _waitForConfirmation(tx, provider) {
-        try {
-            // Try standard wait
-            const receipt = await tx.wait();
-            
-            if (receipt.status === 1) {
-                return receipt;
-            }
-            
-            if (receipt.status === 0) {
-                throw new Error('Transaction reverted on-chain');
-            }
-
-            return receipt;
-
-        } catch (waitError) {
-            // Handle wait errors (common on Arbitrum)
-            console.warn('[TX] tx.wait() error, checking manually:', waitError.message);
-
-            // Wait a bit then check manually
-            await new Promise(r => setTimeout(r, ENGINE_CONFIG.CONFIRMATION_RETRY_DELAY));
-
-            // Try to get receipt manually
-            let receipt = await provider.getTransactionReceipt(tx.hash);
-
-            if (receipt && receipt.status === 1) {
-                return receipt;
-            }
-
-            if (receipt && receipt.status === 0) {
-                throw new Error('Transaction reverted on-chain');
-            }
-
-            // One more try
-            await new Promise(r => setTimeout(r, ENGINE_CONFIG.CONFIRMATION_RETRY_DELAY * 2));
-            receipt = await provider.getTransactionReceipt(tx.hash);
-
-            if (receipt && receipt.status === 1) {
-                return receipt;
-            }
-
-            if (receipt && receipt.status === 0) {
-                throw new Error('Transaction reverted on-chain');
-            }
-
-            // If we have a hash, assume success (optimistic)
-            console.warn('[TX] Could not verify receipt, assuming success');
-            return { 
-                hash: tx.hash, 
-                status: 1,
-                blockNumber: 0 
-            };
+        
+        // Only try next strategy if current one failed all attempts
+        if (strategyIndex < strategies.length - 1) {
+            console.log(`[NFT] Trying alternative approach...`);
         }
     }
-
-    /**
-     * Checks if a transaction is currently pending
-     * @param {string} txId - Transaction ID
-     * @returns {boolean}
-     */
-    isPending(txId) {
-        return this.pendingTxIds.has(txId);
     }
-
-    /**
-     * Gets count of pending transactions
-     * @returns {number}
-     */
-    getPendingCount() {
-        return this.pendingTxIds.size;
-    }
-
-    /**
-     * Clears all pending transaction flags (use with caution)
-     */
-    clearPending() {
-        this.pendingTxIds.clear();
-    }
-}
+    
+    throw new Error('All approval strategies failed. Please try again later or check your network connection.');
 
 // ============================================================================
-// 4. SINGLETON INSTANCE
+// 4. TRANSACTION FUNCTIONS
 // ============================================================================
 
 /**
- * Singleton instance of TransactionEngine
- * Import this to use the engine
- */
-export const txEngine = new TransactionEngine();
-
-// ============================================================================
-// 5. HELPER FUNCTIONS
-// ============================================================================
-
-/**
- * Creates a simple toast notification
- * This is a fallback - integrate with your existing toast system
+ * Buys an NFT from a specific pool
+ * Price is determined by bonding curve
  * 
- * @param {string} message - Message to show
- * @param {string} type - 'success' | 'error' | 'info' | 'warning'
+ * @param {Object} params - Buy parameters
+ * @param {string} params.poolAddress - Pool contract address
+ * @param {string} [params.poolTier] - Alternative: pool tier name (diamond, gold, etc.)
+ * @param {string|bigint} [params.maxPrice] - Maximum price willing to pay (slippage protection)
+ * @param {HTMLElement} [params.button] - Button element for loading state
+ * @param {Function} [params.onSuccess] - Success callback (receives tokenId)
+ * @param {Function} [params.onError] - Error callback
+ * @returns {Promise<Object>} Transaction result
  */
-export function showToast(message, type = 'info') {
-    // Try to use existing toast system
-    if (window.showToast) {
-        window.showToast(message, type);
-        return;
+export async function buyNft({
+    poolAddress,
+    poolTier,
+    maxPrice = null,
+    button = null,
+    onSuccess = null,
+    onError = null
+}) {
+    const ethers = window.ethers;
+    const contracts = getContracts();
+    
+    // Determine pool address
+    const targetPool = poolAddress || getPoolAddress(poolTier);
+    if (!targetPool) {
+        throw new Error('Pool address or valid pool tier is required');
     }
+    
+    let buyPrice = 0n;
+    let finalMaxPrice = maxPrice ? BigInt(maxPrice) : 0n;
+    let approvalDone = false;
 
-    // Fallback to console
-    const prefix = {
-        'success': '✅',
-        'error': '❌',
-        'warning': '⚠️',
-        'info': 'ℹ️'
-    }[type] || 'ℹ️';
+    return await txEngine.execute({
+        name: 'BuyNFT',
+        button,
+        
+        getContract: async (signer) => getNftPoolContract(signer, targetPool),
+        method: 'buyNFTWithSlippage',  // V1.6: Corrected method name
+        args: () => [finalMaxPrice],
+        
+        // V1.4: No automatic approval - we handle it in validate with retry logic
+        approval: null,
+        
+        // V1.5: Skip simulation - it's failing due to RPC issues but tx might work
+        skipSimulation: true,
+        
+        validate: async (signer, userAddress) => {
+            const ethers = window.ethers;
+            const contract = getNftPoolContract(signer, targetPool);
+            
+            console.log('[NFT] Validating buy from pool:', targetPool);
+            
+            // Check pool has NFTs
+            let availableNFTs = [];
+            try {
+                availableNFTs = await contract.getAvailableNFTs();
+                console.log('[NFT] Available NFTs in pool:', availableNFTs.length);
+            } catch (e) {
+                console.warn('[NFT] getAvailableNFTs failed:', e.message);
+                throw new Error('Could not verify pool NFT availability');
+            }
+            
+            if (!availableNFTs || availableNFTs.length === 0) {
+                throw new Error('No NFTs available in pool');
+            }
+            
+            // V1.6: Get buy price WITH TAX (this is what buyNFTWithSlippage checks)
+            let buyPriceWithTax;
+            try {
+                buyPriceWithTax = await contract.getBuyPriceWithTax();
+                buyPrice = await contract.getBuyPrice();
+                console.log('[NFT] Buy price (without tax):', ethers.formatEther(buyPrice), 'BKC');
+                console.log('[NFT] Buy price (with tax):', ethers.formatEther(buyPriceWithTax), 'BKC');
+            } catch (e) {
+                // Fallback to getBuyPrice and add 10% for tax estimate
+                buyPrice = await contract.getBuyPrice();
+                buyPriceWithTax = (buyPrice * 110n) / 100n;
+                console.log('[NFT] Buy price (estimated with tax):', ethers.formatEther(buyPriceWithTax), 'BKC');
+            }
+            
+            // Set max price with 5% slippage on top of price+tax
+            // V1.6: Always recalculate based on current price with tax, ignoring passed maxPrice
+            // This ensures we account for tax that may not be included in StorePage's maxPrice
+            finalMaxPrice = (buyPriceWithTax * 105n) / 100n;
+            
+            // If user explicitly passed a maxPrice that's higher, use that instead
+            if (maxPrice) {
+                const passedMaxPrice = BigInt(maxPrice);
+                // Only use passed maxPrice if it's higher than our calculated one
+                // (user might want to pay more for faster execution)
+                if (passedMaxPrice > finalMaxPrice) {
+                    finalMaxPrice = passedMaxPrice;
+                    console.log('[NFT] Using user-provided max price:', ethers.formatEther(finalMaxPrice), 'BKC');
+                }
+            }
+            
+            console.log('[NFT] Max price (with slippage):', ethers.formatEther(finalMaxPrice), 'BKC');
+            
+            if (finalMaxPrice < buyPriceWithTax) {
+                throw new Error(`Price increased. Current price: ${ethers.formatEther(buyPriceWithTax)} BKC`);
+            }
+            
+            // Check BKC balance
+            const bkcContract = new ethers.Contract(contracts.BKC_TOKEN, BKC_ABI, signer);
+            const userBalance = await bkcContract.balanceOf(userAddress);
+            console.log('[NFT] User BKC balance:', ethers.formatEther(userBalance), 'BKC');
+            
+            if (userBalance < finalMaxPrice) {
+                throw new Error(`Insufficient BKC balance. Need ${ethers.formatEther(finalMaxPrice)} BKC, have ${ethers.formatEther(userBalance)} BKC`);
+            }
+            
+            // V1.4: Handle approval with retry and multiple strategies
+            if (!approvalDone) {
+                await approveWithRetry(
+                    signer, 
+                    userAddress, 
+                    contracts.BKC_TOKEN, 
+                    targetPool, 
+                    finalMaxPrice
+                );
+                approvalDone = true;
+            }
+            
+            console.log('[NFT] ✅ Validation complete, ready to buy');
+        },
+        
+        onSuccess: async (receipt) => {
+            let tokenId = null;
+            try {
+                const iface = new ethers.Interface(NFT_POOL_ABI);
+                for (const log of receipt.logs) {
+                    try {
+                        const parsed = iface.parseLog(log);
+                        if (parsed.name === 'NFTPurchased') {  // V1.6: Correct event name
+                            tokenId = Number(parsed.args.tokenId);
+                            break;
+                        }
+                    } catch {}
+                }
+            } catch {}
 
-    console.log(`${prefix} ${message}`);
+            if (onSuccess) {
+                onSuccess(receipt, tokenId);
+            }
+        },
+        onError
+    });
 }
 
 /**
- * Opens block explorer for transaction
- * @param {string} txHash - Transaction hash
+ * Sells an NFT to a pool
+ * Payout is determined by bonding curve
+ * 
+ * @param {Object} params - Sell parameters
+ * @param {string} params.poolAddress - Pool contract address
+ * @param {string} [params.poolTier] - Alternative: pool tier name
+ * @param {number|bigint} params.tokenId - Token ID to sell
+ * @param {string|bigint} [params.minPayout] - Minimum payout expected (slippage protection)
+ * @param {HTMLElement} [params.button] - Button element for loading state
+ * @param {Function} [params.onSuccess] - Success callback
+ * @param {Function} [params.onError] - Error callback
+ * @returns {Promise<Object>} Transaction result
  */
-export function openTxInExplorer(txHash) {
-    const url = NetworkManager.getTxExplorerUrl(txHash);
-    window.open(url, '_blank');
+export async function sellNft({
+    poolAddress,
+    poolTier,
+    tokenId,
+    minPayout = null,
+    button = null,
+    onSuccess = null,
+    onError = null
+}) {
+    const ethers = window.ethers;
+    const contracts = getContracts();
+    
+    // Determine pool address
+    const targetPool = poolAddress || getPoolAddress(poolTier);
+    if (!targetPool) {
+        throw new Error('Pool address or valid pool tier is required');
+    }
+    
+    if (tokenId === undefined || tokenId === null) {
+        throw new Error('Token ID is required');
+    }
+    
+    let sellPrice = 0n;
+    let finalMinPayout = minPayout ? BigInt(minPayout) : 0n;
+
+    return await txEngine.execute({
+        name: 'SellNFT',
+        button,
+        
+        getContract: async (signer) => getNftPoolContract(signer, targetPool),
+        method: 'sellNFT',  // V1.6: Corrected method name
+        args: () => [tokenId, finalMinPayout],
+        
+        // V1.5: Skip simulation - RPC issues may cause false failures
+        skipSimulation: true,
+        
+        validate: async (signer, userAddress) => {
+            const ethers = window.ethers;
+            const nftContract = getNftContract(signer);
+            const poolContract = getNftPoolContract(signer, targetPool);
+            
+            console.log('[NFT] Validating sell to pool:', targetPool);
+            console.log('[NFT] Token ID to sell:', tokenId.toString());
+            
+            // Check user owns the NFT
+            let owner;
+            try {
+                owner = await nftContract.ownerOf(tokenId);
+                console.log('[NFT] Token owner:', owner);
+            } catch (e) {
+                throw new Error('Could not verify NFT ownership. Token may not exist.');
+            }
+            
+            if (owner.toLowerCase() !== userAddress.toLowerCase()) {
+                throw new Error('You do not own this NFT');
+            }
+            
+            // V1.6: Get sell price AFTER TAX (this is what the user actually receives)
+            let sellPriceAfterTax;
+            try {
+                sellPrice = await poolContract.getSellPrice();
+                sellPriceAfterTax = await poolContract.getSellPriceAfterTax();
+                console.log('[NFT] Sell price (gross):', ethers.formatEther(sellPrice), 'BKC');
+                console.log('[NFT] Sell price (after tax):', ethers.formatEther(sellPriceAfterTax), 'BKC');
+            } catch (e) {
+                // Fallback: estimate 10% tax
+                sellPrice = await poolContract.getSellPrice();
+                sellPriceAfterTax = (sellPrice * 90n) / 100n;
+                console.log('[NFT] Sell price (estimated after tax):', ethers.formatEther(sellPriceAfterTax), 'BKC');
+            }
+            
+            // Set min payout with 5% slippage below net payout
+            if (!minPayout) {
+                finalMinPayout = (sellPriceAfterTax * 95n) / 100n;
+            } else {
+                finalMinPayout = BigInt(minPayout);
+            }
+            
+            console.log('[NFT] Min payout (with slippage):', ethers.formatEther(finalMinPayout), 'BKC');
+            
+            if (sellPriceAfterTax < finalMinPayout) {
+                throw new Error(`Price decreased. Current payout: ${ethers.formatEther(sellPriceAfterTax)} BKC`);
+            }
+            
+            // Check if NFT is approved for pool
+            const isApprovedForAll = await nftContract.isApprovedForAll(userAddress, targetPool);
+            const approved = await nftContract.getApproved(tokenId);
+            
+            console.log('[NFT] Is approved for all:', isApprovedForAll);
+            console.log('[NFT] Individual approval:', approved);
+            
+            if (!isApprovedForAll && approved.toLowerCase() !== targetPool.toLowerCase()) {
+                console.log('[NFT] Approving NFT for pool...');
+                const approveTx = await nftContract.approve(targetPool, tokenId);
+                await approveTx.wait();
+                console.log('[NFT] NFT approved');
+            }
+        },
+        
+        onSuccess,
+        onError
+    });
+}
+
+/**
+ * Approves all NFTs for a specific pool (one-time operation)
+ * 
+ * @param {Object} params - Approval parameters
+ * @param {string} params.poolAddress - Pool contract address
+ * @param {string} [params.poolTier] - Alternative: pool tier name
+ * @param {HTMLElement} [params.button] - Button element for loading state
+ * @param {Function} [params.onSuccess] - Success callback
+ * @param {Function} [params.onError] - Error callback
+ * @returns {Promise<Object>} Transaction result
+ */
+export async function approveAllNfts({
+    poolAddress,
+    poolTier,
+    button = null,
+    onSuccess = null,
+    onError = null
+} = {}) {
+    // Determine pool address
+    const targetPool = poolAddress || getPoolAddress(poolTier);
+    if (!targetPool) {
+        throw new Error('Pool address or valid pool tier is required');
+    }
+
+    return await txEngine.execute({
+        name: 'ApproveAllNFTs',
+        button,
+        
+        getContract: async (signer) => getNftContract(signer),
+        method: 'setApprovalForAll',
+        args: [targetPool, true],
+        
+        validate: async (signer, userAddress) => {
+            const nftContract = getNftContract(signer);
+            const isApproved = await nftContract.isApprovedForAll(userAddress, targetPool);
+            
+            if (isApproved) {
+                throw new Error('NFTs are already approved for this pool');
+            }
+        },
+        
+        onSuccess,
+        onError
+    });
 }
 
 // ============================================================================
-// 6. EXPORTS
+// 4. READ FUNCTIONS (Helpers)
 // ============================================================================
 
-export default txEngine;
+/**
+ * Gets current buy price for a pool
+ * @param {string} poolAddress - Pool address
+ * @returns {Promise<bigint>} Price in wei
+ */
+export async function getBuyPrice(poolAddress) {
+    const contract = await getNftPoolContractReadOnly(poolAddress);
+    return await contract.getBuyPrice();
+}
+
+/**
+ * Gets current sell price for a pool
+ * @param {string} poolAddress - Pool address
+ * @returns {Promise<bigint>} Payout in wei
+ */
+export async function getSellPrice(poolAddress) {
+    const contract = await getNftPoolContractReadOnly(poolAddress);
+    return await contract.getSellPrice();
+}
+
+/**
+ * Gets pool information
+ * @param {string} poolAddress - Pool address
+ * @returns {Promise<Object>} Pool info
+ */
+export async function getPoolInfo(poolAddress) {
+    const ethers = window.ethers;
+    const contract = await getNftPoolContractReadOnly(poolAddress);
+    
+    const [nftCount, tokenBalance, buyPrice, sellPrice, tierIndex] = await Promise.all([
+        contract.getPoolNFTCount(),
+        contract.poolTokenBalance(),
+        contract.getBuyPrice(),
+        contract.getSellPrice(),
+        contract.tierIndex().catch(() => 0n)
+    ]);
+    
+    return {
+        nftCount: Number(nftCount),
+        tokenBalance,
+        buyPrice,
+        sellPrice,
+        tierIndex: Number(tierIndex),
+        buyPriceFormatted: ethers.formatEther(buyPrice),
+        sellPriceFormatted: ethers.formatEther(sellPrice)
+    };
+}
+
+/**
+ * Gets NFTs available in a pool
+ * @param {string} poolAddress - Pool address
+ * @returns {Promise<number[]>} Array of token IDs
+ */
+export async function getAvailableNfts(poolAddress) {
+    const contract = await getNftPoolContractReadOnly(poolAddress);
+    const ids = await contract.getNFTsInPool();
+    return ids.map(id => Number(id));
+}
+
+/**
+ * Gets NFTs owned by user
+ * @param {string} userAddress - User address
+ * @returns {Promise<number[]>} Array of token IDs
+ */
+export async function getUserNfts(userAddress) {
+    const nftContract = await getNftContractReadOnly();
+    const balance = await nftContract.balanceOf(userAddress);
+    const tokenIds = [];
+    
+    for (let i = 0; i < Number(balance); i++) {
+        const tokenId = await nftContract.tokenOfOwnerByIndex(userAddress, i);
+        tokenIds.push(Number(tokenId));
+    }
+    
+    return tokenIds;
+}
+
+/**
+ * Checks if user has approved all NFTs for a pool
+ * @param {string} userAddress - User address
+ * @param {string} poolAddress - Pool address
+ * @returns {Promise<boolean>} True if approved
+ */
+export async function isApprovedForAll(userAddress, poolAddress) {
+    const nftContract = await getNftContractReadOnly();
+    return await nftContract.isApprovedForAll(userAddress, poolAddress);
+}
+
+/**
+ * Gets the tier of a specific NFT
+ * @param {number} tokenId - Token ID
+ * @returns {Promise<number>} Tier index
+ */
+export async function getNftTier(tokenId) {
+    const nftContract = await getNftContractReadOnly();
+    return Number(await nftContract.getTierOfToken(tokenId));
+}
+
+// ============================================================================
+// 5. ALIASES FOR BACKWARD COMPATIBILITY
+// ============================================================================
+
+// Alias buyFromPool -> buyNft
+export const buyFromPool = buyNft;
+
+// Alias sellToPool -> sellNft  
+export const sellToPool = sellNft;
+
+// ============================================================================
+// 6. EXPORT
+// ============================================================================
+
+export const NftTx = {
+    // Main functions
+    buyNft,
+    sellNft,
+    approveAllNfts,
+    // Aliases
+    buyFromPool,
+    sellToPool,
+    // Read helpers
+    getBuyPrice,
+    getSellPrice,
+    getPoolInfo,
+    getAvailableNfts,
+    getUserNfts,
+    isApprovedForAll,
+    getNftTier,
+    // Utility
+    getPoolAddress,
+    getAllPools,
+    POOL_TIERS
+};
+
+export default NftTx;
