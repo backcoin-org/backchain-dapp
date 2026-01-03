@@ -1,20 +1,17 @@
 // pages/RewardsPage.js
-// ✅ PRODUCTION V13.0 - NFT Discount Simulator
+// ✅ PRODUCTION V14.0 - Complete Redesign with Booster Benefits Focus
 //
-// V13.0 Changes:
-// - Added NFT discount simulator showing potential earnings with different tiers
-// - Shows comparison between current rewards and what user would receive with each NFT
-// - Incentivizes NFT purchases by showing concrete savings
-// - Clean UI with tier comparison cards
+// V14.0 Changes:
+// - Complete UI redesign focusing on booster BENEFITS (not fees)
+// - Shows: Mined → Booster Bonus → You Receive
+// - Compares what user would get WITHOUT booster vs WITH booster
+// - Clean, incentive-focused presentation
+// - Removed fee-centric language
 //
-// V12.0 Changes:
-// - Fixed claimRewards call to match new contract signature (only boosterTokenId)
-// - Removed unused stakingRewards/minerRewards parameters from claim
-// - Added better error handling for BigInt serialization
-// - Improved loading states
-//
-// V11.0: Migrated to use StakingTx.claimRewards from transaction engine
-// V10.0: Animated Reward Image + Detailed History + Consistent Icons
+// V13.0: NFT Discount Simulator
+// V12.0: Fixed claimRewards signature
+// V11.0: Migrated to StakingTx
+// V10.0: Animated Reward Image
 
 const ethers = window.ethers;
 
@@ -29,28 +26,23 @@ import {
 import { formatBigNumber } from '../utils.js';
 import { showToast } from '../ui-feedback.js';
 import { boosterTiers } from '../config.js';
-
-// V11: Import new transaction module
 import { StakingTx } from '../modules/transactions/index.js';
 
 // ============================================================================
 // CONSTANTS
 // ============================================================================
-const REWARD_IMAGE = './assets/reward.png';
 const EXPLORER_TX = 'https://sepolia.arbiscan.io/tx/';
 
-// V13: Boost tiers for simulation (based on boosterTiers from config)
-// boost = boostBips, represents the fee REDUCTION percentage in basis points
-// e.g., boost: 7000 = 70% fee reduction, meaning you keep 85% instead of 50%
+// Boost tiers for simulation
 const BOOST_TIERS = [
-    { name: 'No Booster', boost: 0, icon: 'fa-ban', textColor: 'text-zinc-400', bgColor: 'bg-zinc-700/50' },
-    { name: 'Crystal', boost: 1000, icon: 'fa-gem', textColor: 'text-indigo-300', bgColor: 'bg-indigo-500/20' },
-    { name: 'Iron', boost: 2000, icon: 'fa-shield', textColor: 'text-slate-400', bgColor: 'bg-slate-500/20' },
-    { name: 'Bronze', boost: 3000, icon: 'fa-medal', textColor: 'text-yellow-600', bgColor: 'bg-yellow-600/20' },
-    { name: 'Silver', boost: 4000, icon: 'fa-star', textColor: 'text-gray-300', bgColor: 'bg-gray-400/20' },
-    { name: 'Gold', boost: 5000, icon: 'fa-crown', textColor: 'text-amber-400', bgColor: 'bg-amber-500/20' },
-    { name: 'Platinum', boost: 6000, icon: 'fa-trophy', textColor: 'text-gray-200', bgColor: 'bg-gray-300/20' },
-    { name: 'Diamond', boost: 7000, icon: 'fa-diamond', textColor: 'text-cyan-400', bgColor: 'bg-cyan-500/20' }
+    { name: 'No Booster', boost: 0, icon: 'fa-circle-xmark', color: 'text-zinc-500', bg: 'bg-zinc-800' },
+    { name: 'Crystal', boost: 1000, icon: 'fa-gem', color: 'text-indigo-400', bg: 'bg-indigo-500/20' },
+    { name: 'Iron', boost: 2000, icon: 'fa-shield-halved', color: 'text-slate-300', bg: 'bg-slate-500/20' },
+    { name: 'Bronze', boost: 3000, icon: 'fa-medal', color: 'text-orange-400', bg: 'bg-orange-500/20' },
+    { name: 'Silver', boost: 4000, icon: 'fa-star', color: 'text-gray-300', bg: 'bg-gray-400/20' },
+    { name: 'Gold', boost: 5000, icon: 'fa-crown', color: 'text-amber-400', bg: 'bg-amber-500/20' },
+    { name: 'Platinum', boost: 6000, icon: 'fa-trophy', color: 'text-purple-300', bg: 'bg-purple-400/20' },
+    { name: 'Diamond', boost: 7000, icon: 'fa-diamond', color: 'text-cyan-400', bg: 'bg-cyan-500/20' }
 ];
 
 // ============================================================================
@@ -60,73 +52,54 @@ let lastFetch = 0;
 let isLoading = false;
 let isProcessing = false;
 let claimHistory = [];
-// V12: Only boosterTokenId is needed for the claim
 let _claimParams = { boosterTokenId: 0n };
 
-// Global claim handler
 window.handleRewardsClaim = async function() {
     if (isProcessing) return;
     await handleClaim(_claimParams.boosterTokenId);
 };
 
 // ============================================================================
-// STYLES INJECTION
+// STYLES
 // ============================================================================
 function injectStyles() {
-    if (document.getElementById('reward-styles-v10')) return;
+    if (document.getElementById('reward-styles-v14')) return;
     
     const style = document.createElement('style');
-    style.id = 'reward-styles-v10';
+    style.id = 'reward-styles-v14';
     style.textContent = `
-        /* Reward Image Animations */
-        @keyframes reward-float {
-            0%, 100% { transform: translateY(0) rotate(-2deg); }
-            50% { transform: translateY(-10px) rotate(2deg); }
+        @keyframes pulse-glow {
+            0%, 100% { box-shadow: 0 0 20px rgba(245,158,11,0.3); }
+            50% { box-shadow: 0 0 40px rgba(245,158,11,0.6); }
         }
-        @keyframes reward-pulse {
-            0%, 100% { filter: drop-shadow(0 0 15px rgba(245,158,11,0.4)); }
-            50% { filter: drop-shadow(0 0 35px rgba(245,158,11,0.8)); }
+        @keyframes float {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-5px); }
         }
-        @keyframes reward-spin {
-            0% { transform: rotateY(0deg); }
-            100% { transform: rotateY(360deg); }
+        @keyframes shine {
+            0% { background-position: -200% center; }
+            100% { background-position: 200% center; }
         }
-        @keyframes reward-bounce {
-            0%, 100% { transform: scale(1); }
-            50% { transform: scale(1.1); }
+        .pulse-glow { animation: pulse-glow 2s ease-in-out infinite; }
+        .float-animation { animation: float 3s ease-in-out infinite; }
+        .shine-text {
+            background: linear-gradient(90deg, #fbbf24, #f59e0b, #fbbf24);
+            background-size: 200% auto;
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            animation: shine 3s linear infinite;
         }
-        @keyframes reward-success {
-            0% { transform: scale(1) rotate(0deg); }
-            25% { transform: scale(1.2) rotate(-10deg); }
-            50% { transform: scale(1.3) rotate(10deg); filter: drop-shadow(0 0 50px rgba(34,197,94,1)); }
-            75% { transform: scale(1.1) rotate(-5deg); }
-            100% { transform: scale(1) rotate(0deg); }
-        }
-        @keyframes reward-coins {
-            0% { transform: translateY(0) rotate(0deg); opacity: 1; }
-            100% { transform: translateY(-30px) rotate(360deg); opacity: 0; }
-        }
-        .reward-float { animation: reward-float 3s ease-in-out infinite; }
-        .reward-pulse { animation: reward-pulse 2s ease-in-out infinite; }
-        .reward-spin { animation: reward-spin 1.5s ease-in-out; }
-        .reward-bounce { animation: reward-bounce 1s ease-in-out infinite; }
-        .reward-success { animation: reward-success 1s ease-out; }
-        
         .history-item:hover {
             background: rgba(63,63,70,0.5) !important;
             transform: translateX(4px);
         }
-        
-        .custom-scrollbar::-webkit-scrollbar {
-            width: 4px;
+        .tier-card:hover {
+            transform: scale(1.02);
+            border-color: rgba(245,158,11,0.5);
         }
-        .custom-scrollbar::-webkit-scrollbar-track {
-            background: rgba(39,39,42,0.3);
-        }
-        .custom-scrollbar::-webkit-scrollbar-thumb {
-            background: rgba(113,113,122,0.5);
-            border-radius: 2px;
-        }
+        .custom-scrollbar::-webkit-scrollbar { width: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: rgba(39,39,42,0.3); }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(113,113,122,0.5); border-radius: 2px; }
     `;
     document.head.appendChild(style);
 }
@@ -145,7 +118,7 @@ export const RewardsPage = {
         }
 
         if (State.isConnected) {
-            renderContentImmediate();
+            renderLoading();
             this.update(isNewPage);
         } else {
             renderNotConnected();
@@ -163,11 +136,10 @@ export const RewardsPage = {
         if (!force && (now - lastFetch < 60000)) return;
 
         isLoading = true;
-        updateMascotAnimation('loading');
 
         try {
-            let boosterData = { highestBoost: 0, boostName: 'None', tokenId: null, source: 'none' };
-            let claimDetails = { netClaimAmount: 0n, feeAmount: 0n, totalRewards: 0n };
+            let boosterData = { highestBoost: 0, boostName: 'None', tokenId: null, source: 'none', imageUrl: null };
+            let claimDetails = { netClaimAmount: 0n, feeAmount: 0n, totalRewards: 0n, baseFeeBips: 100, finalFeeBips: 100 };
             let grossRewards = { stakingRewards: 0n, minerRewards: 0n };
 
             try { await loadUserData(); } catch (e) {}
@@ -178,7 +150,6 @@ export const RewardsPage = {
 
             renderContent(claimDetails, grossRewards, boosterData);
             lastFetch = now;
-            updateMascotAnimation('idle');
 
         } catch (e) {
             console.error("Rewards Error:", e);
@@ -189,235 +160,18 @@ export const RewardsPage = {
 };
 
 // ============================================================================
-// MASCOT ANIMATION
-// ============================================================================
-function updateMascotAnimation(state) {
-    const mascot = document.getElementById('reward-mascot');
-    if (!mascot) return;
-    
-    mascot.className = 'w-12 h-12 object-contain';
-    
-    switch (state) {
-        case 'loading':
-            mascot.classList.add('reward-spin');
-            break;
-        case 'claiming':
-            mascot.classList.add('reward-bounce');
-            break;
-        case 'success':
-            mascot.classList.add('reward-success');
-            break;
-        default:
-            mascot.classList.add('reward-float', 'reward-pulse');
-    }
-}
-
-// ============================================================================
-// CLAIM HISTORY
-// ============================================================================
-async function loadClaimHistory() {
-    if (!State.userAddress) return;
-    
-    try {
-        const response = await fetch(`${API_ENDPOINTS.getHistory}/${State.userAddress}`);
-        if (response.ok) {
-            const allHistory = await response.json();
-            claimHistory = allHistory.filter(item => {
-                const type = (item.type || '').toUpperCase();
-                return type.includes('REWARD') || type.includes('CLAIM');
-            }).slice(0, 15);
-        }
-    } catch (e) {
-        claimHistory = [];
-    }
-}
-
-function renderClaimHistory() {
-    if (claimHistory.length === 0) {
-        return `
-            <div class="text-center py-6">
-                <div class="w-12 h-12 mx-auto rounded-full bg-zinc-800/50 flex items-center justify-center mb-2">
-                    <i class="fa-solid fa-clock-rotate-left text-zinc-600 text-lg"></i>
-                </div>
-                <p class="text-zinc-500 text-xs">No claims yet</p>
-                <p class="text-zinc-600 text-[10px] mt-1">Your claim history will appear here</p>
-            </div>
-        `;
-    }
-
-    return claimHistory.map(item => {
-        const date = formatDate(item.timestamp || item.createdAt);
-        const details = item.details || {};
-        const txHash = item.txHash || '';
-        const txLink = txHash ? `${EXPLORER_TX}${txHash}` : '#';
-        
-        // Calcular o valor total recebido (amountReceived ou amount - fee)
-        let amountReceived = '0';
-        let feeAmount = '0';
-        
-        if (details.amountReceived) {
-            amountReceived = details.amountReceived;
-        } else if (item.amount) {
-            amountReceived = item.amount;
-        } else if (details.amount) {
-            amountReceived = details.amount;
-        }
-        
-        if (details.feePaid) {
-            feeAmount = details.feePaid;
-        } else if (details.feeAmount) {
-            feeAmount = details.feeAmount;
-        }
-        
-        const formattedAmount = formatHistoryAmount(amountReceived);
-        const formattedFee = formatHistoryAmount(feeAmount);
-        
-        // Determine claim type
-        let icon, iconColor, bgColor, label;
-        const type = (item.type || '').toUpperCase();
-        
-        if (type.includes('STAKING') || type.includes('DELEGAT')) {
-            icon = 'fa-lock';
-            iconColor = '#a855f7';
-            bgColor = 'rgba(168,85,247,0.15)';
-            label = '🔒 Staking Reward';
-        } else if (type.includes('MINING') || type.includes('MINER')) {
-            icon = 'fa-hammer';
-            iconColor = '#f97316';
-            bgColor = 'rgba(249,115,22,0.15)';
-            label = '⛏️ Mining Reward';
-        } else if (type.includes('CLAIM') || type.includes('REWARD')) {
-            icon = 'fa-gift';
-            iconColor = '#22c55e';
-            bgColor = 'rgba(34,197,94,0.15)';
-            label = '🎁 Claimed';
-        } else {
-            icon = 'fa-coins';
-            iconColor = '#eab308';
-            bgColor = 'rgba(234,179,8,0.15)';
-            label = '💰 Reward';
-        }
-
-        return `
-            <a href="${txLink}" target="_blank" rel="noopener" 
-               class="history-item flex items-center justify-between p-3 bg-zinc-800/30 hover:bg-zinc-800/50 rounded-xl transition-all group border border-zinc-700/30">
-                <div class="flex items-center gap-3">
-                    <div class="w-10 h-10 rounded-xl flex items-center justify-center" style="background: ${bgColor}">
-                        <i class="fa-solid ${icon} text-sm" style="color: ${iconColor}"></i>
-                    </div>
-                    <div>
-                        <p class="text-sm text-white font-medium">${label}</p>
-                        <p class="text-[10px] text-zinc-500">${date}</p>
-                        ${parseFloat(formattedFee) > 0 ? `<p class="text-[9px] text-zinc-600">Fee: ${formattedFee} BKC</p>` : ''}
-                    </div>
-                </div>
-                <div class="flex items-center gap-2">
-                    <div class="text-right">
-                        <span class="text-sm font-mono font-bold text-green-400">+${formattedAmount}</span>
-                        <span class="text-zinc-500 text-[10px] ml-1">BKC</span>
-                    </div>
-                    ${txHash ? '<i class="fa-solid fa-arrow-up-right-from-square text-zinc-600 group-hover:text-green-400 text-[10px] ml-2"></i>' : ''}
-                </div>
-            </a>
-        `;
-    }).join('');
-}
-
-function formatDate(timestamp) {
-    if (!timestamp) return 'Unknown date';
-    
-    try {
-        let date;
-        
-        // Handle Firebase Timestamp format
-        if (timestamp.seconds || timestamp._seconds) {
-            const secs = timestamp.seconds || timestamp._seconds;
-            date = new Date(secs * 1000);
-        }
-        // Handle ISO string
-        else if (typeof timestamp === 'string') {
-            date = new Date(timestamp);
-        }
-        // Handle milliseconds timestamp
-        else if (typeof timestamp === 'number') {
-            // If it's in seconds (Unix), convert to ms
-            date = new Date(timestamp < 10000000000 ? timestamp * 1000 : timestamp);
-        }
-        // Handle Date object
-        else if (timestamp instanceof Date) {
-            date = timestamp;
-        }
-        else {
-            return 'Unknown date';
-        }
-        
-        // Validate date
-        if (isNaN(date.getTime())) return 'Unknown date';
-        
-        const now = new Date();
-        const diff = now - date;
-        
-        if (diff < 60000) return 'Just now';
-        if (diff < 3600000) return `${Math.floor(diff / 60000)}m ago`;
-        if (diff < 86400000) return `${Math.floor(diff / 3600000)}h ago`;
-        if (diff < 604800000) return `${Math.floor(diff / 86400000)}d ago`;
-        
-        return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-    } catch (e) {
-        console.warn('Date parse error:', e);
-        return 'Unknown date';
-    }
-}
-
-function formatHistoryAmount(amount) {
-    if (!amount) return '0.00';
-    try {
-        // Se for string que parece ser wei (muito longa), usar formatEther
-        if (typeof amount === 'string') {
-            // Se tem mais de 10 dígitos, provavelmente é wei
-            if (amount.length > 10 && !amount.includes('.')) {
-                const formatted = ethers.formatEther(BigInt(amount));
-                return parseFloat(formatted).toFixed(4);
-            }
-            // Senão, já está formatado
-            return parseFloat(amount).toFixed(4);
-        }
-        // Se for BigInt
-        if (typeof amount === 'bigint') {
-            const formatted = ethers.formatEther(amount);
-            return parseFloat(formatted).toFixed(4);
-        }
-        // Se for número muito grande, provavelmente é wei
-        if (typeof amount === 'number' && amount > 1e10) {
-            const formatted = ethers.formatEther(BigInt(Math.floor(amount)));
-            return parseFloat(formatted).toFixed(4);
-        }
-        // Senão, usar como está
-        return parseFloat(amount).toFixed(4);
-    } catch (e) {
-        console.warn('Amount format error:', e);
-        return '0.00';
-    }
-}
-
-// ============================================================================
-// PAGE STRUCTURE
+// PAGE HTML
 // ============================================================================
 function getPageHTML() {
     return `
-        <div class="max-w-lg mx-auto px-4 py-4 pb-24">
-            <div class="flex items-center justify-between mb-4">
+        <div class="max-w-lg mx-auto px-4 py-6">
+            <div class="flex items-center justify-between mb-6">
                 <div class="flex items-center gap-3">
-                    <img src="${REWARD_IMAGE}" 
-                         alt="Rewards" 
-                         class="w-12 h-12 object-contain reward-float reward-pulse"
-                         id="reward-mascot"
-                         onerror="this.style.display='none'; document.getElementById('reward-fallback').style.display='flex';">
-                    <div id="reward-fallback" class="hidden w-10 h-10 rounded-xl bg-gradient-to-br from-amber-500/20 to-orange-500/10 items-center justify-center">
-                        <i class="fa-solid fa-coins text-amber-400"></i>
+                    <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-500 to-orange-600 flex items-center justify-center">
+                        <i class="fa-solid fa-gift text-white text-lg"></i>
                     </div>
                     <div>
-                        <h1 class="text-lg font-bold text-white">🎁 Rewards</h1>
+                        <h1 class="text-lg font-bold text-white">Rewards</h1>
                         <p class="text-[10px] text-zinc-500">Claim your earnings</p>
                     </div>
                 </div>
@@ -435,8 +189,10 @@ function renderNotConnected() {
     if (!container) return;
 
     container.innerHTML = `
-        <div class="flex flex-col items-center justify-center py-12 bg-zinc-900/50 border border-zinc-800 rounded-2xl">
-            <img src="${REWARD_IMAGE}" class="w-16 h-16 opacity-30 mb-4" onerror="this.style.display='none'">
+        <div class="flex flex-col items-center justify-center py-16 bg-zinc-900/50 border border-zinc-800 rounded-2xl">
+            <div class="w-16 h-16 rounded-full bg-zinc-800 flex items-center justify-center mb-4">
+                <i class="fa-solid fa-wallet text-2xl text-zinc-600"></i>
+            </div>
             <p class="text-zinc-400 font-medium mb-1">Wallet not connected</p>
             <p class="text-zinc-600 text-sm mb-4">Connect to view your rewards</p>
             <button onclick="window.openConnectModal()" 
@@ -447,182 +203,20 @@ function renderNotConnected() {
     `;
 }
 
-function renderContentImmediate() {
-    renderContent(
-        { netClaimAmount: 0n, feeAmount: 0n, totalRewards: 0n },
-        { stakingRewards: 0n, minerRewards: 0n },
-        { highestBoost: 0, boostName: 'None', tokenId: null, source: 'none' }
-    );
-}
+function renderLoading() {
+    const container = document.getElementById('rewards-content');
+    if (!container) return;
 
-// ============================================================================
-// V13: BOOST SIMULATION CALCULATOR
-// ============================================================================
-
-/**
- * Calculates net reward for a given boost percentage
- * @param {bigint} grossReward - Total gross reward
- * @param {number} baseFeeBips - Base fee in basis points (e.g., 5000 = 50%)
- * @param {number} boostBips - Boost in basis points (e.g., 2000 = 20% fee reduction)
- * @returns {Object} { netReward, feeAmount, keepPercent }
- */
-function calculateSimulatedReward(grossReward, baseFeeBips, boostBips) {
-    if (grossReward <= 0n) {
-        return { netReward: 0, feeAmount: 0, keepPercent: 50 };
-    }
-    
-    // Fee reduction: boost reduces the fee proportionally
-    // If baseFeeBips = 5000 (50%) and boostBips = 2000 (20%)
-    // effectiveFee = 5000 - (5000 * 2000 / 10000) = 5000 - 1000 = 4000 (40%)
-    const effectiveFeeBips = baseFeeBips - (baseFeeBips * boostBips / 10000);
-    const keepPercent = 100 - (effectiveFeeBips / 100);
-    
-    // Calculate amounts
-    const grossNum = Number(grossReward) / 1e18;
-    const feeAmount = grossNum * (effectiveFeeBips / 10000);
-    const netReward = grossNum - feeAmount;
-    
-    return { netReward, feeAmount, keepPercent };
-}
-
-/**
- * Generates simulation data for all boost tiers
- * @param {bigint} grossReward - Total gross reward
- * @param {number} baseFeeBips - Base fee in basis points
- * @param {number} currentBoost - User's current boost
- * @returns {Array} Array of simulation results for each tier
- */
-function generateBoostSimulations(grossReward, baseFeeBips, currentBoost) {
-    const currentSim = calculateSimulatedReward(grossReward, baseFeeBips, currentBoost);
-    
-    return BOOST_TIERS.map(tier => {
-        const sim = calculateSimulatedReward(grossReward, baseFeeBips, tier.boost);
-        const extraEarnings = sim.netReward - currentSim.netReward;
-        const isCurrentTier = tier.boost === currentBoost;
-        const isBetterTier = tier.boost > currentBoost;
-        
-        return {
-            ...tier,
-            ...sim,
-            extraEarnings,
-            isCurrentTier,
-            isBetterTier,
-            boostPercent: tier.boost / 100
-        };
-    });
-}
-
-/**
- * Renders the boost simulator section
- */
-function renderBoostSimulator(grossReward, baseFeeBips, currentBoost, hasRewards) {
-    if (!hasRewards) {
-        return `
-            <div class="bg-zinc-900/50 border border-zinc-800 rounded-xl p-4">
-                <div class="flex items-center gap-2 mb-3">
-                    <div class="w-7 h-7 rounded-lg bg-amber-500/15 flex items-center justify-center">
-                        <i class="fa-solid fa-calculator text-amber-400 text-xs"></i>
-                    </div>
-                    <p class="text-[10px] text-zinc-500 uppercase">Boost Simulator</p>
-                </div>
-                <p class="text-sm text-zinc-500 text-center py-4">
-                    <i class="fa-solid fa-info-circle mr-1"></i>
-                    Earn rewards to see boost simulations
-                </p>
-            </div>
-        `;
-    }
-    
-    const simulations = generateBoostSimulations(grossReward, baseFeeBips, currentBoost);
-    const currentTier = simulations.find(s => s.isCurrentTier) || simulations[0];
-    const bestTier = simulations[simulations.length - 1]; // Diamond
-    const potentialSavings = bestTier.netReward - currentTier.netReward;
-    
-    return `
-        <div class="bg-zinc-900/50 border border-zinc-800 rounded-xl overflow-hidden">
-            <div class="p-3 border-b border-zinc-800/50 flex items-center justify-between">
-                <div class="flex items-center gap-2">
-                    <div class="w-7 h-7 rounded-lg bg-amber-500/15 flex items-center justify-center">
-                        <i class="fa-solid fa-calculator text-amber-400 text-xs"></i>
-                    </div>
-                    <p class="text-[10px] text-zinc-500 uppercase">Boost Simulator</p>
-                </div>
-                ${potentialSavings > 0 ? `
-                    <span class="px-2 py-0.5 bg-green-500/20 text-green-400 text-[10px] font-bold rounded-full">
-                        +${potentialSavings.toFixed(2)} BKC possible
-                    </span>
-                ` : ''}
-            </div>
-            
-            <div class="p-3">
-                <!-- Current vs Best comparison -->
-                ${currentBoost < 7000 ? `
-                    <div class="bg-gradient-to-r from-amber-500/10 to-green-500/10 border border-amber-500/20 rounded-lg p-3 mb-3">
-                        <div class="flex items-center justify-between">
-                            <div>
-                                <p class="text-[10px] text-zinc-500 uppercase mb-1">With Diamond Booster</p>
-                                <p class="text-lg font-bold text-green-400">${bestTier.netReward.toFixed(2)} BKC</p>
-                            </div>
-                            <div class="text-right">
-                                <p class="text-[10px] text-zinc-500 uppercase mb-1">You'd save</p>
-                                <p class="text-lg font-bold text-amber-400">+${potentialSavings.toFixed(2)} BKC</p>
-                            </div>
-                        </div>
-                    </div>
-                ` : `
-                    <div class="bg-green-500/10 border border-green-500/20 rounded-lg p-3 mb-3 text-center">
-                        <i class="fa-solid fa-crown text-yellow-400 mr-2"></i>
-                        <span class="text-green-400 font-bold">Maximum boost active!</span>
-                    </div>
-                `}
-                
-                <!-- All tiers comparison -->
-                <div class="space-y-2">
-                    ${simulations.map(sim => `
-                        <div class="flex items-center gap-2 p-2 rounded-lg transition-all ${sim.isCurrentTier ? 'bg-green-500/10 border border-green-500/30' : 'bg-zinc-800/30 hover:bg-zinc-800/50'}">
-                            <div class="w-8 h-8 rounded-lg ${sim.bgColor} flex items-center justify-center flex-shrink-0">
-                                <i class="fa-solid ${sim.icon} ${sim.textColor} text-xs"></i>
-                            </div>
-                            <div class="flex-1 min-w-0">
-                                <div class="flex items-center gap-2">
-                                    <span class="text-sm font-medium ${sim.textColor}">${sim.name}</span>
-                                    ${sim.isCurrentTier ? '<span class="px-1.5 py-0.5 bg-green-500/20 text-green-400 text-[8px] font-bold rounded">YOU</span>' : ''}
-                                    ${sim.boost > 0 ? `<span class="text-[10px] text-zinc-500">-${sim.boostPercent}% fee</span>` : ''}
-                                </div>
-                            </div>
-                            <div class="text-right flex-shrink-0">
-                                <p class="text-sm font-mono font-bold ${sim.isCurrentTier ? 'text-green-400' : 'text-white'}">${sim.netReward.toFixed(2)}</p>
-                                ${sim.isBetterTier && sim.extraEarnings > 0 ? `
-                                    <p class="text-[10px] text-amber-400">+${sim.extraEarnings.toFixed(2)}</p>
-                                ` : ''}
-                            </div>
-                            ${sim.isBetterTier && sim.boost > 0 ? `
-                                <button onclick="window.navigateTo('store')" class="ml-1 px-2 py-1 bg-amber-500/20 hover:bg-amber-500/30 text-amber-400 text-[10px] font-bold rounded transition-all flex-shrink-0">
-                                    <i class="fa-solid fa-cart-plus"></i>
-                                </button>
-                            ` : '<div class="w-8"></div>'}
-                        </div>
-                    `).join('')}
-                </div>
-                
-                <!-- Action buttons -->
-                ${currentBoost < 7000 ? `
-                    <div class="flex gap-2 mt-3">
-                        <button onclick="window.navigateTo('store')" class="flex-1 py-2 text-xs font-bold bg-gradient-to-r from-amber-500 to-orange-500 text-black rounded-lg hover:shadow-lg hover:shadow-amber-500/25 transition-all">
-                            <i class="fa-solid fa-gem mr-1"></i> Buy Booster
-                        </button>
-                        <button onclick="window.navigateTo('rental')" class="flex-1 py-2 text-xs font-bold bg-zinc-800 hover:bg-zinc-700 text-white rounded-lg transition-all">
-                            <i class="fa-solid fa-clock mr-1"></i> Rent (1hr)
-                        </button>
-                    </div>
-                ` : ''}
-            </div>
+    container.innerHTML = `
+        <div class="flex flex-col items-center justify-center py-16">
+            <div class="w-12 h-12 rounded-full border-2 border-amber-500 border-t-transparent animate-spin mb-4"></div>
+            <p class="text-zinc-500 text-sm">Loading rewards...</p>
         </div>
     `;
 }
 
 // ============================================================================
-// MAIN CONTENT
+// MAIN CONTENT - V14 REDESIGN
 // ============================================================================
 function renderContent(claimDetails, grossRewards, boosterData) {
     const container = document.getElementById('rewards-content');
@@ -632,219 +226,233 @@ function renderContent(claimDetails, grossRewards, boosterData) {
     const gross = grossRewards || {};
     const booster = boosterData || {};
 
-    // Get values from claimDetails (calculated by data.js using real contract fees)
+    // Get values
     const netReward = details.netClaimAmount || 0n;
     const totalGross = details.totalRewards || 0n;
     const feeAmount = details.feeAmount || 0n;
-    
-    // Fallback: calculate from gross if claimDetails is empty
     const stakingRewards = gross.stakingRewards || 0n;
     const minerRewards = gross.minerRewards || 0n;
     const grossFromSources = stakingRewards + minerRewards;
-    
-    // Use claimDetails totalRewards if available, otherwise use sum of sources
     const actualGross = totalGross > 0n ? totalGross : grossFromSources;
     
     const highestBoost = booster.highestBoost || 0;
-    const boostPercent = highestBoost / 100; // e.g., 2000 → 20%
+    const boostPercent = highestBoost / 100;
+    const baseFeeBips = details.baseFeeBips || 100;
 
-    // Calculate percentages from actual values
-    let feePercent = 0;
-    let keepPercent = 100;
-    
-    if (actualGross > 0n && feeAmount > 0n) {
-        // Calculate actual fee percentage from the real values
-        feePercent = (Number(feeAmount) / Number(actualGross)) * 100;
-        keepPercent = 100 - feePercent;
-    } else if (actualGross > 0n && netReward > 0n) {
-        // Calculate from net reward
-        keepPercent = (Number(netReward) / Number(actualGross)) * 100;
-        feePercent = 100 - keepPercent;
-    }
-    
-    // Convert to numbers for display
-    let totalGrossNum = 0, feeAmountNum = 0, netRewardNum = 0, stakingNum = 0, miningNum = 0;
+    // Convert to numbers
+    let grossNum = 0, netNum = 0, feeNum = 0, stakingNum = 0, miningNum = 0;
     try {
-        totalGrossNum = formatBigNumber ? formatBigNumber(actualGross) : Number(actualGross) / 1e18;
+        grossNum = formatBigNumber ? formatBigNumber(actualGross) : Number(actualGross) / 1e18;
+        netNum = formatBigNumber ? formatBigNumber(netReward) : Number(netReward) / 1e18;
+        feeNum = formatBigNumber ? formatBigNumber(feeAmount) : Number(feeAmount) / 1e18;
         stakingNum = formatBigNumber ? formatBigNumber(stakingRewards) : Number(stakingRewards) / 1e18;
         miningNum = formatBigNumber ? formatBigNumber(minerRewards) : Number(minerRewards) / 1e18;
-        feeAmountNum = formatBigNumber ? formatBigNumber(feeAmount) : Number(feeAmount) / 1e18;
-        netRewardNum = formatBigNumber ? formatBigNumber(netReward) : Number(netReward) / 1e18;
-        
-        // If netReward is 0 but we have gross, calculate locally as fallback
-        if (netRewardNum === 0 && totalGrossNum > 0) {
-            netRewardNum = totalGrossNum - feeAmountNum;
-        }
-    } catch (e) {
-        console.error('[Rewards] Calculation error:', e);
-    }
-    
+        if (netNum === 0 && grossNum > 0) netNum = grossNum - feeNum;
+    } catch (e) {}
+
+    // Calculate booster bonus (what user gains by having booster)
+    // Without booster: user would pay full base fee
+    // With booster: user pays reduced fee
+    // Bonus = what they saved
+    const feeWithoutBooster = grossNum * (baseFeeBips / 10000);
+    const boosterBonus = feeWithoutBooster - feeNum;
+    const netWithoutBooster = grossNum - feeWithoutBooster;
+
     const hasRewards = actualGross > 0n;
     const hasBooster = highestBoost > 0;
     
-    // V12: Only store boosterTokenId - contract handles reward calculation
-    const boosterTokenId = BigInt(booster.tokenId || 0);
-    _claimParams = { boosterTokenId };
-    
-    // Debug log
-    console.log('[Rewards] Display values:', {
-        totalGross: totalGrossNum.toFixed(4),
-        feeAmount: feeAmountNum.toFixed(4),
-        netReward: netRewardNum.toFixed(4),
-        feePercent: feePercent.toFixed(2) + '%',
-        keepPercent: keepPercent.toFixed(2) + '%',
-        boostPercent: boostPercent + '%'
-    });
+    _claimParams = { boosterTokenId: BigInt(booster.tokenId || 0) };
 
-    const circumference = 2 * Math.PI * 45;
-    const strokeDashoffset = circumference - (keepPercent / 100) * circumference;
+    // Find current tier info
+    const currentTier = BOOST_TIERS.find(t => t.boost === highestBoost) || BOOST_TIERS[0];
 
     container.innerHTML = `
         <div class="space-y-4">
+            
             <!-- MAIN CLAIM CARD -->
-            <div class="bg-gradient-to-br from-zinc-900 via-zinc-900 to-zinc-800/50 border border-zinc-700/50 rounded-2xl p-5">
-                <div class="flex flex-col items-center mb-5">
-                    <div class="relative w-32 h-32 mb-3">
-                        <svg class="w-full h-full" style="transform: rotate(-90deg)" viewBox="0 0 100 100">
-                            <circle cx="50" cy="50" r="45" fill="none" stroke="#27272a" stroke-width="6"/>
-                            <circle cx="50" cy="50" r="45" fill="none" stroke="${hasBooster ? '#4ade80' : '#f59e0b'}" stroke-width="6" stroke-linecap="round" stroke-dasharray="${circumference}" stroke-dashoffset="${strokeDashoffset}"/>
-                        </svg>
-                        <div class="absolute inset-0 flex flex-col items-center justify-center">
-                            <span class="text-2xl font-black text-white">${netRewardNum.toFixed(2)}</span>
-                            <span class="text-xs text-amber-400 font-bold">BKC</span>
-                        </div>
-                    </div>
-                    <p class="text-xs text-zinc-500">You keep <span class="${hasBooster ? 'text-green-400' : 'text-amber-400'} font-bold">${keepPercent.toFixed(1)}%</span> of earnings</p>
-                </div>
-
-                <button id="claim-btn" onclick="${hasRewards ? 'window.handleRewardsClaim()' : ''}" class="w-full py-4 rounded-xl font-bold text-base flex items-center justify-center gap-2 transition-all ${hasRewards ? 'bg-gradient-to-r from-amber-500 to-orange-500 text-black shadow-lg shadow-amber-500/25 hover:shadow-amber-500/40 active:scale-[0.98] cursor-pointer' : 'bg-zinc-800 text-zinc-500 cursor-not-allowed'}" ${!hasRewards ? 'disabled' : ''}>
-                    <i id="claim-btn-icon" class="fa-solid ${hasRewards ? 'fa-coins' : 'fa-clock'}"></i>
-                    <span id="claim-btn-text">${hasRewards ? 'Claim ' + netRewardNum.toFixed(2) + ' BKC' : 'No Rewards Yet'}</span>
-                </button>
+            <div class="bg-gradient-to-br from-zinc-900 via-zinc-900 to-zinc-800/50 border border-zinc-700/50 rounded-2xl overflow-hidden">
                 
-                ${!hasRewards ? '<p class="text-center text-xs text-zinc-600 mt-3"><i class="fa-solid fa-info-circle mr-1"></i><a href="#mine" onclick="window.navigateTo(\'mine\')" class="text-amber-500 hover:text-amber-400">Stake BKC</a> to start earning</p>' : ''}
-            </div>
-
-            <!-- V13: BREAKDOWN CARD - Shows calculation clearly -->
-            ${hasRewards ? `
-            <div class="bg-zinc-900/50 border border-zinc-800 rounded-xl p-4">
-                <p class="text-[10px] text-zinc-500 uppercase mb-3"><i class="fa-solid fa-receipt mr-1"></i> Claim Breakdown</p>
-                <div class="space-y-2">
-                    <div class="flex items-center justify-between">
-                        <span class="text-sm text-zinc-400">Gross Rewards</span>
-                        <span class="text-sm font-mono text-white">${totalGrossNum.toFixed(4)} BKC</span>
-                    </div>
-                    <div class="flex items-center justify-between">
-                        <span class="text-sm text-zinc-400">
-                            Protocol Fee 
-                            <span class="text-xs ${feeAmountNum > 0 ? 'text-red-400' : 'text-green-400'}">
-                                (${feePercent.toFixed(2)}%)
-                            </span>
-                        </span>
-                        <span class="text-sm font-mono text-red-400">-${feeAmountNum.toFixed(4)} BKC</span>
+                <!-- Header with amount -->
+                <div class="p-6 text-center border-b border-zinc-800/50">
+                    <p class="text-xs text-zinc-500 uppercase tracking-wider mb-2">Available to Claim</p>
+                    <div class="flex items-center justify-center gap-2">
+                        <span class="text-4xl font-black ${hasBooster ? 'text-green-400' : 'text-white'}">${netNum.toFixed(4)}</span>
+                        <span class="text-lg font-bold text-amber-400">BKC</span>
                     </div>
                     ${hasBooster ? `
-                    <div class="flex items-center justify-between text-xs">
-                        <span class="text-green-400">
-                            <i class="fa-solid fa-bolt mr-1"></i>
-                            ${booster.boostName || 'Booster'} (${boostPercent}% discount applied)
-                        </span>
-                    </div>
-                    ` : `
-                    <div class="flex items-center justify-between text-xs">
-                        <span class="text-amber-400">
-                            <i class="fa-solid fa-info-circle mr-1"></i>
-                            Get a booster to reduce fees!
-                        </span>
-                    </div>
-                    `}
-                    <div class="border-t border-zinc-700 my-2"></div>
-                    <div class="flex items-center justify-between">
-                        <span class="text-sm font-bold text-white">You Receive</span>
-                        <span class="text-lg font-mono font-bold ${hasBooster ? 'text-green-400' : 'text-amber-400'}">${netRewardNum.toFixed(4)} BKC</span>
-                    </div>
+                        <div class="inline-flex items-center gap-1.5 mt-2 px-3 py-1 rounded-full bg-green-500/10 border border-green-500/20">
+                            <i class="fa-solid fa-bolt text-green-400 text-xs"></i>
+                            <span class="text-xs text-green-400 font-medium">${currentTier.name} Booster Active</span>
+                        </div>
+                    ` : ''}
                 </div>
-            </div>
-            ` : ''}
 
-            <!-- STATS GRID -->
-            <div class="grid grid-cols-2 gap-3">
-                <div class="bg-zinc-900/50 border border-zinc-800 rounded-xl p-3">
-                    <div class="flex items-center gap-2 mb-2">
-                        <div class="w-7 h-7 rounded-lg bg-purple-500/15 flex items-center justify-center"><i class="fa-solid fa-chart-line text-purple-400 text-xs"></i></div>
-                        <span class="text-[10px] text-zinc-500 uppercase">Gross Earned</span>
+                <!-- Breakdown -->
+                ${hasRewards ? `
+                <div class="p-4 bg-black/20">
+                    <div class="space-y-3">
+                        
+                        <!-- Mined Rewards -->
+                        <div class="flex items-center justify-between">
+                            <div class="flex items-center gap-2">
+                                <div class="w-8 h-8 rounded-lg bg-purple-500/20 flex items-center justify-center">
+                                    <i class="fa-solid fa-hammer text-purple-400 text-sm"></i>
+                                </div>
+                                <span class="text-sm text-zinc-400">Mined Rewards</span>
+                            </div>
+                            <span class="text-sm font-mono text-white">${grossNum.toFixed(4)} BKC</span>
+                        </div>
+
+                        <!-- Booster Bonus (if has booster) -->
+                        ${hasBooster && boosterBonus > 0 ? `
+                        <div class="flex items-center justify-between">
+                            <div class="flex items-center gap-2">
+                                <div class="w-8 h-8 rounded-lg ${currentTier.bg} flex items-center justify-center">
+                                    <i class="fa-solid ${currentTier.icon} ${currentTier.color} text-sm"></i>
+                                </div>
+                                <div>
+                                    <span class="text-sm text-green-400">${currentTier.name} Bonus</span>
+                                    <span class="text-[10px] text-zinc-500 ml-1">(+${boostPercent}%)</span>
+                                </div>
+                            </div>
+                            <span class="text-sm font-mono text-green-400">+${boosterBonus.toFixed(4)} BKC</span>
+                        </div>
+                        ` : ''}
+
+                        <!-- Divider -->
+                        <div class="border-t border-zinc-700/50 my-1"></div>
+
+                        <!-- You Receive -->
+                        <div class="flex items-center justify-between">
+                            <div class="flex items-center gap-2">
+                                <div class="w-8 h-8 rounded-lg bg-amber-500/20 flex items-center justify-center">
+                                    <i class="fa-solid fa-coins text-amber-400 text-sm"></i>
+                                </div>
+                                <span class="text-sm font-bold text-white">You Receive</span>
+                            </div>
+                            <span class="text-lg font-mono font-bold ${hasBooster ? 'text-green-400' : 'text-amber-400'}">${netNum.toFixed(4)} BKC</span>
+                        </div>
+
+                        ${!hasBooster ? `
+                        <!-- No booster warning -->
+                        <div class="mt-2 p-2 rounded-lg bg-amber-500/10 border border-amber-500/20">
+                            <p class="text-xs text-amber-400 text-center">
+                                <i class="fa-solid fa-lightbulb mr-1"></i>
+                                Get a Booster NFT to earn <span class="font-bold">up to 70% more</span> on claims!
+                            </p>
+                        </div>
+                        ` : ''}
                     </div>
-                    <p class="text-lg font-bold text-white font-mono">${totalGrossNum.toFixed(2)}</p>
-                    <p class="text-[10px] text-zinc-600">Before fees</p>
                 </div>
-                <div class="bg-zinc-900/50 border border-zinc-800 rounded-xl p-3">
-                    <div class="flex items-center gap-2 mb-2">
-                        <div class="w-7 h-7 rounded-lg bg-red-500/15 flex items-center justify-center"><i class="fa-solid fa-percent text-red-400 text-xs"></i></div>
-                        <span class="text-[10px] text-zinc-500 uppercase">Fee (${feePercent.toFixed(1)}%)</span>
-                    </div>
-                    <p class="text-lg font-bold text-red-400 font-mono">-${feeAmountNum.toFixed(4)}</p>
-                    <p class="text-[10px] text-zinc-600">${hasBooster ? 'Booster discount applied' : 'Protocol fee'}</p>
+                ` : ''}
+
+                <!-- Claim Button -->
+                <div class="p-4">
+                    <button id="claim-btn" onclick="${hasRewards ? 'window.handleRewardsClaim()' : ''}" 
+                        class="w-full py-4 rounded-xl font-bold text-base flex items-center justify-center gap-2 transition-all ${hasRewards ? 'bg-gradient-to-r from-amber-500 to-orange-500 text-black shadow-lg shadow-amber-500/25 hover:shadow-amber-500/40 active:scale-[0.98] cursor-pointer pulse-glow' : 'bg-zinc-800 text-zinc-500 cursor-not-allowed'}" 
+                        ${!hasRewards ? 'disabled' : ''}>
+                        <i id="claim-btn-icon" class="fa-solid ${hasRewards ? 'fa-coins' : 'fa-clock'}"></i>
+                        <span id="claim-btn-text">${hasRewards ? 'Claim ' + netNum.toFixed(4) + ' BKC' : 'No Rewards Yet'}</span>
+                    </button>
+                    
+                    ${!hasRewards ? `
+                    <p class="text-center text-xs text-zinc-600 mt-3">
+                        <i class="fa-solid fa-info-circle mr-1"></i>
+                        <a href="#mine" onclick="window.navigateTo('mine')" class="text-amber-500 hover:text-amber-400">Stake BKC</a> to start earning
+                    </p>
+                    ` : ''}
                 </div>
             </div>
 
             <!-- REWARD SOURCES -->
             <div class="bg-zinc-900/50 border border-zinc-800 rounded-xl p-4">
-                <p class="text-[10px] text-zinc-500 uppercase mb-3"><i class="fa-solid fa-layer-group mr-1"></i> Sources</p>
-                <div class="space-y-2">
-                    <div class="flex items-center justify-between p-2.5 bg-zinc-800/30 rounded-lg">
-                        <div class="flex items-center gap-2.5">
-                            <div class="w-8 h-8 rounded-lg bg-purple-500/15 flex items-center justify-center"><i class="fa-solid fa-lock text-purple-400 text-xs"></i></div>
-                            <span class="text-sm text-zinc-300">Staking</span>
+                <p class="text-[10px] text-zinc-500 uppercase mb-3">
+                    <i class="fa-solid fa-layer-group mr-1"></i> Reward Sources
+                </p>
+                <div class="grid grid-cols-2 gap-3">
+                    <div class="p-3 rounded-lg bg-zinc-800/30 text-center">
+                        <div class="w-8 h-8 rounded-lg bg-purple-500/15 flex items-center justify-center mx-auto mb-2">
+                            <i class="fa-solid fa-lock text-purple-400 text-sm"></i>
                         </div>
-                        <span class="text-sm font-mono font-bold text-white">${stakingNum.toFixed(2)} <span class="text-zinc-500 text-xs">BKC</span></span>
+                        <p class="text-lg font-bold font-mono text-white">${stakingNum.toFixed(2)}</p>
+                        <p class="text-[10px] text-zinc-500">Staking</p>
                     </div>
-                    <div class="flex items-center justify-between p-2.5 bg-zinc-800/30 rounded-lg">
-                        <div class="flex items-center gap-2.5">
-                            <div class="w-8 h-8 rounded-lg bg-orange-500/15 flex items-center justify-center"><i class="fa-solid fa-hammer text-orange-400 text-xs"></i></div>
-                            <span class="text-sm text-zinc-300">Mining</span>
+                    <div class="p-3 rounded-lg bg-zinc-800/30 text-center">
+                        <div class="w-8 h-8 rounded-lg bg-orange-500/15 flex items-center justify-center mx-auto mb-2">
+                            <i class="fa-solid fa-hammer text-orange-400 text-sm"></i>
                         </div>
-                        <span class="text-sm font-mono font-bold text-white">${miningNum.toFixed(2)} <span class="text-zinc-500 text-xs">BKC</span></span>
+                        <p class="text-lg font-bold font-mono text-white">${miningNum.toFixed(2)}</p>
+                        <p class="text-[10px] text-zinc-500">Mining</p>
                     </div>
                 </div>
             </div>
 
-            <!-- BOOSTER -->
+            <!-- BOOSTER CARD -->
             <div class="bg-zinc-900/50 border border-zinc-800 rounded-xl overflow-hidden">
                 <div class="p-3 border-b border-zinc-800/50 flex items-center justify-between">
-                    <p class="text-[10px] text-zinc-500 uppercase"><i class="fa-solid fa-rocket mr-1"></i> Booster</p>
-                    ${hasBooster ? '<span class="px-2 py-0.5 bg-green-500/20 text-green-400 text-[10px] font-bold rounded-full">ACTIVE</span>' : '<span class="px-2 py-0.5 bg-zinc-700 text-zinc-400 text-[10px] font-bold rounded-full">NONE</span>'}
+                    <p class="text-[10px] text-zinc-500 uppercase">
+                        <i class="fa-solid fa-rocket mr-1"></i> Your Booster
+                    </p>
+                    ${hasBooster ? 
+                        `<span class="px-2 py-0.5 bg-green-500/20 text-green-400 text-[10px] font-bold rounded-full">ACTIVE</span>` : 
+                        `<span class="px-2 py-0.5 bg-zinc-700 text-zinc-400 text-[10px] font-bold rounded-full">NONE</span>`
+                    }
                 </div>
                 <div class="p-4">
                     ${hasBooster ? `
-                        <div class="flex items-center gap-3">
-                            <div class="w-14 h-14 bg-black/50 rounded-xl border-2 border-green-500/30 overflow-hidden">
-                                <img src="${booster.imageUrl || './assets/bkc_logo_3d.png'}" class="w-full h-full object-cover" onerror="this.src='./assets/bkc_logo_3d.png'">
+                        <div class="flex items-center gap-4">
+                            <div class="w-16 h-16 rounded-xl ${currentTier.bg} border-2 border-green-500/30 flex items-center justify-center">
+                                <i class="fa-solid ${currentTier.icon} ${currentTier.color} text-2xl"></i>
                             </div>
-                            <div class="flex-1"><p class="text-white font-bold">${booster.boostName || 'Booster'}</p><p class="text-[11px] text-zinc-500">${booster.source === 'rented' ? '🔗 Rented' : '✓ Owned'}</p></div>
-                            <div class="text-right"><p class="text-xl font-bold text-green-400">+${boostPercent}%</p><p class="text-[10px] text-zinc-500">Discount</p></div>
+                            <div class="flex-1">
+                                <p class="text-white font-bold text-lg">${currentTier.name}</p>
+                                <p class="text-xs text-zinc-500">${booster.source === 'rented' ? '🔗 Rented' : '✓ Owned'}</p>
+                            </div>
+                            <div class="text-right">
+                                <p class="text-2xl font-black text-green-400">+${boostPercent}%</p>
+                                <p class="text-[10px] text-zinc-500">Bonus</p>
+                            </div>
                         </div>
+                        ${boosterBonus > 0 ? `
+                        <div class="mt-3 p-2 rounded-lg bg-green-500/10 border border-green-500/20 text-center">
+                            <p class="text-xs text-green-400">
+                                <i class="fa-solid fa-piggy-bank mr-1"></i>
+                                This claim: earning <span class="font-bold">+${boosterBonus.toFixed(4)} BKC</span> extra!
+                            </p>
+                        </div>
+                        ` : ''}
                     ` : `
-                        <div class="text-center">
-                            <p class="text-sm text-zinc-400 mb-3">Get a Booster to keep up to <span class="text-green-400 font-bold">85%</span></p>
+                        <div class="text-center py-2">
+                            <div class="w-16 h-16 rounded-xl bg-zinc-800 flex items-center justify-center mx-auto mb-3">
+                                <i class="fa-solid fa-circle-plus text-zinc-600 text-2xl"></i>
+                            </div>
+                            <p class="text-zinc-400 text-sm mb-1">No Booster Active</p>
+                            <p class="text-zinc-600 text-xs mb-4">Get a Booster NFT to earn up to <span class="text-green-400 font-bold">70% more</span></p>
                             <div class="flex gap-2">
-                                <button onclick="window.navigateTo('store')" class="flex-1 py-2.5 text-xs font-bold bg-gradient-to-r from-amber-500 to-orange-500 text-black rounded-lg"><i class="fa-solid fa-gem mr-1"></i> Buy</button>
-                                <button onclick="window.navigateTo('rental')" class="flex-1 py-2.5 text-xs font-bold bg-zinc-800 text-white rounded-lg"><i class="fa-solid fa-clock mr-1"></i> Rent</button>
+                                <button onclick="window.navigateTo('store')" class="flex-1 py-2.5 text-xs font-bold bg-gradient-to-r from-amber-500 to-orange-500 text-black rounded-lg hover:shadow-lg hover:shadow-amber-500/20 transition-all">
+                                    <i class="fa-solid fa-gem mr-1"></i> Buy NFT
+                                </button>
+                                <button onclick="window.navigateTo('rental')" class="flex-1 py-2.5 text-xs font-bold bg-zinc-800 hover:bg-zinc-700 text-white rounded-lg transition-all">
+                                    <i class="fa-solid fa-clock mr-1"></i> Rent
+                                </button>
                             </div>
                         </div>
                     `}
                 </div>
             </div>
 
-            <!-- V13: BOOST SIMULATOR -->
-            ${renderBoostSimulator(totalGross, 5000, highestBoost, hasRewards)}
+            <!-- BOOST SIMULATOR -->
+            ${renderBoostSimulator(grossNum, baseFeeBips, highestBoost, hasRewards)}
 
             <!-- CLAIM HISTORY -->
             <div class="bg-zinc-900/50 border border-zinc-800 rounded-xl overflow-hidden">
                 <div class="p-3 border-b border-zinc-800/50 flex items-center justify-between">
-                    <p class="text-[10px] text-zinc-500 uppercase"><i class="fa-solid fa-clock-rotate-left mr-1"></i> Claim History</p>
+                    <p class="text-[10px] text-zinc-500 uppercase">
+                        <i class="fa-solid fa-clock-rotate-left mr-1"></i> Claim History
+                    </p>
                     <span class="text-[10px] text-zinc-600">${claimHistory.length} claims</span>
                 </div>
-                <div class="p-3 space-y-2 max-h-[300px] overflow-y-auto custom-scrollbar">
+                <div class="p-3 space-y-2 max-h-[250px] overflow-y-auto custom-scrollbar">
                     ${renderClaimHistory()}
                 </div>
             </div>
@@ -853,7 +461,151 @@ function renderContent(claimDetails, grossRewards, boosterData) {
 }
 
 // ============================================================================
-// CLAIM HANDLER - V12: Only uses boosterTokenId
+// BOOST SIMULATOR
+// ============================================================================
+function renderBoostSimulator(grossReward, baseFeeBips, currentBoost, hasRewards) {
+    if (!hasRewards || grossReward <= 0) {
+        return '';
+    }
+
+    // Calculate what user gets with each tier
+    const simulations = BOOST_TIERS.map(tier => {
+        const discountAmount = (baseFeeBips * tier.boost) / 10000;
+        const finalFeeBips = Math.max(0, baseFeeBips - discountAmount);
+        const fee = grossReward * (finalFeeBips / 10000);
+        const net = grossReward - fee;
+        const bonus = grossReward * (discountAmount / 10000);
+        
+        return {
+            ...tier,
+            net,
+            bonus,
+            isCurrentTier: tier.boost === currentBoost,
+            isBetterTier: tier.boost > currentBoost
+        };
+    });
+
+    const currentSim = simulations.find(s => s.isCurrentTier) || simulations[0];
+    const bestSim = simulations[simulations.length - 1]; // Diamond
+    const potentialExtra = bestSim.net - currentSim.net;
+
+    return `
+        <div class="bg-zinc-900/50 border border-zinc-800 rounded-xl overflow-hidden">
+            <div class="p-3 border-b border-zinc-800/50 flex items-center justify-between">
+                <p class="text-[10px] text-zinc-500 uppercase">
+                    <i class="fa-solid fa-chart-line mr-1"></i> Booster Comparison
+                </p>
+                ${potentialExtra > 0 ? `
+                    <span class="px-2 py-0.5 bg-green-500/10 text-green-400 text-[10px] font-bold rounded-full">
+                        +${potentialExtra.toFixed(4)} possible
+                    </span>
+                ` : ''}
+            </div>
+            <div class="p-3">
+                <div class="space-y-2">
+                    ${simulations.map(sim => `
+                        <div class="flex items-center gap-2 p-2 rounded-lg transition-all tier-card ${sim.isCurrentTier ? 'bg-green-500/10 border border-green-500/30' : 'bg-zinc-800/30 border border-transparent'}">
+                            <div class="w-7 h-7 rounded-lg ${sim.bg} flex items-center justify-center flex-shrink-0">
+                                <i class="fa-solid ${sim.icon} ${sim.color} text-xs"></i>
+                            </div>
+                            <div class="flex-1 min-w-0">
+                                <div class="flex items-center gap-1">
+                                    <span class="text-xs font-medium ${sim.color}">${sim.name}</span>
+                                    ${sim.isCurrentTier ? '<span class="px-1 py-0.5 bg-green-500/20 text-green-400 text-[8px] font-bold rounded">YOU</span>' : ''}
+                                </div>
+                            </div>
+                            <div class="text-right flex-shrink-0">
+                                <span class="text-sm font-mono ${sim.isCurrentTier ? 'text-green-400 font-bold' : 'text-white'}">${sim.net.toFixed(4)}</span>
+                                ${sim.isBetterTier && sim.bonus > currentSim.bonus ? `
+                                    <span class="text-[10px] text-green-400 ml-1">+${(sim.net - currentSim.net).toFixed(4)}</span>
+                                ` : ''}
+                            </div>
+                        </div>
+                    `).join('')}
+                </div>
+                
+                ${currentBoost < 7000 ? `
+                    <div class="mt-3 flex gap-2">
+                        <button onclick="window.navigateTo('store')" class="flex-1 py-2 text-xs font-bold bg-gradient-to-r from-amber-500 to-orange-500 text-black rounded-lg hover:shadow-lg hover:shadow-amber-500/20 transition-all">
+                            <i class="fa-solid fa-arrow-up mr-1"></i> Upgrade Booster
+                        </button>
+                    </div>
+                ` : `
+                    <div class="mt-3 p-2 rounded-lg bg-cyan-500/10 border border-cyan-500/20 text-center">
+                        <p class="text-xs text-cyan-400">
+                            <i class="fa-solid fa-crown mr-1"></i> Maximum boost achieved!
+                        </p>
+                    </div>
+                `}
+            </div>
+        </div>
+    `;
+}
+
+// ============================================================================
+// CLAIM HISTORY
+// ============================================================================
+async function loadClaimHistory() {
+    if (!State.userAddress) return;
+    
+    try {
+        const response = await fetch(`${API_ENDPOINTS.getUserTransactions}?address=${State.userAddress}&type=CLAIM`);
+        if (response.ok) {
+            const data = await response.json();
+            claimHistory = (data.transactions || data || []).slice(0, 10);
+        }
+    } catch (e) {
+        console.warn('[Rewards] Failed to load claim history');
+    }
+}
+
+function renderClaimHistory() {
+    if (claimHistory.length === 0) {
+        return `
+            <div class="text-center py-6">
+                <i class="fa-solid fa-inbox text-zinc-700 text-2xl mb-2"></i>
+                <p class="text-zinc-600 text-xs">No claims yet</p>
+            </div>
+        `;
+    }
+
+    return claimHistory.map(tx => {
+        const amount = tx.amount ? (Number(tx.amount) / 1e18).toFixed(4) : '0';
+        const date = tx.timestamp ? new Date(tx.timestamp).toLocaleDateString() : 'Recent';
+        const timeAgo = tx.timestamp ? getTimeAgo(new Date(tx.timestamp)) : '';
+        const hash = tx.transactionHash || tx.hash || '';
+        
+        return `
+            <a href="${EXPLORER_TX}${hash}" target="_blank" 
+               class="history-item flex items-center gap-3 p-2.5 rounded-lg bg-zinc-800/30 transition-all cursor-pointer">
+                <div class="w-8 h-8 rounded-lg bg-green-500/15 flex items-center justify-center flex-shrink-0">
+                    <i class="fa-solid fa-gift text-green-400 text-xs"></i>
+                </div>
+                <div class="flex-1 min-w-0">
+                    <p class="text-sm text-white font-medium">Claimed</p>
+                    <p class="text-[10px] text-zinc-500">${timeAgo || date}</p>
+                </div>
+                <div class="text-right flex-shrink-0">
+                    <p class="text-sm font-mono font-bold text-green-400">+${amount}</p>
+                    <p class="text-[10px] text-zinc-500">BKC</p>
+                </div>
+                <i class="fa-solid fa-external-link text-zinc-600 text-[10px] flex-shrink-0"></i>
+            </a>
+        `;
+    }).join('');
+}
+
+function getTimeAgo(date) {
+    const seconds = Math.floor((new Date() - date) / 1000);
+    if (seconds < 60) return 'Just now';
+    if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
+    if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`;
+    if (seconds < 604800) return `${Math.floor(seconds / 86400)}d ago`;
+    return date.toLocaleDateString();
+}
+
+// ============================================================================
+// CLAIM HANDLER
 // ============================================================================
 async function handleClaim(boosterTokenId) {
     if (isProcessing) return;
@@ -867,18 +619,13 @@ async function handleClaim(boosterTokenId) {
     btn.className = 'w-full py-4 rounded-xl font-bold text-base flex items-center justify-center gap-2 bg-zinc-700 text-zinc-400';
     btnText.textContent = 'Processing...';
     btnIcon.className = 'fa-solid fa-spinner fa-spin';
-    
-    updateMascotAnimation('claiming');
 
     try {
-        // V12: Use StakingTx.claimRewards with only boosterTokenId
-        // The contract handles reward calculation internally
-        const result = await StakingTx.claimRewards({
+        await StakingTx.claimRewards({
             boosterTokenId: Number(boosterTokenId) || 0,
             button: btn,
             
             onSuccess: (receipt) => {
-                updateMascotAnimation('success');
                 btn.className = 'w-full py-4 rounded-xl font-bold text-base flex items-center justify-center gap-2 bg-green-500 text-white';
                 btnText.textContent = '🎉 Claimed!';
                 btnIcon.className = 'fa-solid fa-check';
@@ -892,29 +639,17 @@ async function handleClaim(boosterTokenId) {
             },
             
             onError: (error) => {
-                // Don't show error for user rejection
                 if (error && !error.cancelled && error.type !== 'user_rejected') {
-                    const msg = error.message || error.reason || 'Claim failed';
-                    showToast(msg, 'error');
+                    showToast(error.message || 'Claim failed', 'error');
                 }
                 resetClaimButton(btn, btnText, btnIcon);
-                updateMascotAnimation('idle');
             }
         });
 
-        // Handle case where result comes back but callbacks weren't triggered
-        if (result && !result.success && !result.cancelled) {
-            resetClaimButton(btn, btnText, btnIcon);
-            updateMascotAnimation('idle');
-        }
-
     } catch (e) {
         console.error('Claim error:', e);
-        // Avoid BigInt serialization in error message
-        const errorMsg = e.message || 'Claim failed';
-        showToast(errorMsg, 'error');
+        showToast(e.message || 'Claim failed', 'error');
         resetClaimButton(btn, btnText, btnIcon);
-        updateMascotAnimation('idle');
     } finally {
         isProcessing = false;
     }
@@ -923,7 +658,7 @@ async function handleClaim(boosterTokenId) {
 function resetClaimButton(btn, btnText, btnIcon) {
     if (!btn) return;
     btn.disabled = false;
-    btn.className = 'w-full py-4 rounded-xl font-bold text-base flex items-center justify-center gap-2 bg-gradient-to-r from-amber-500 to-orange-500 text-black shadow-lg shadow-amber-500/25';
+    btn.className = 'w-full py-4 rounded-xl font-bold text-base flex items-center justify-center gap-2 bg-gradient-to-r from-amber-500 to-orange-500 text-black shadow-lg shadow-amber-500/25 pulse-glow';
     if (btnText) btnText.textContent = 'Claim Rewards';
     if (btnIcon) btnIcon.className = 'fa-solid fa-coins';
 }
