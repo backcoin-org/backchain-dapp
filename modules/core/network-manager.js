@@ -1,6 +1,11 @@
 // modules/js/core/network-manager.js
-// ✅ PRODUCTION V1.1 - More RPC fallbacks + Better rate limit handling
+// ✅ PRODUCTION V1.2 - Added cooldown to prevent MetaMask update spam
 // 
+// CHANGES V1.2:
+// - Added 60s cooldown between MetaMask RPC updates
+// - Prevents loop when rate limited
+// - Reduces spam of wallet_addEthereumChain requests
+//
 // CHANGES V1.1:
 // - Added 3 more RPC endpoints (7 total)
 // - Added StackUp, Chainstack, and Tenderly RPCs
@@ -103,10 +108,12 @@ let currentRpcIndex = 0;
 let healthCheckInterval = null;
 let lastHealthCheck = null;
 let consecutiveFailures = 0;
+let lastMetaMaskUpdate = 0; // V1.2: Track last MetaMask update time
 
 const MAX_CONSECUTIVE_FAILURES = 3;
 const HEALTH_CHECK_INTERVAL = 30000; // 30 seconds
 const RPC_TIMEOUT = 5000; // 5 seconds
+const METAMASK_UPDATE_COOLDOWN = 60000; // V1.2: 60 seconds cooldown between MetaMask updates
 
 // ============================================================================
 // 3. NETWORK MANAGER
@@ -462,6 +469,13 @@ export const NetworkManager = {
     async updateMetaMaskRpcs() {
         if (!window.ethereum) return false;
 
+        // V1.2: Cooldown to prevent spam updates
+        const now = Date.now();
+        if (now - lastMetaMaskUpdate < METAMASK_UPDATE_COOLDOWN) {
+            console.log('[Network] MetaMask update on cooldown, skipping...');
+            return false;
+        }
+
         // Check if on correct network first
         const isCorrect = await this.isCorrectNetwork();
         if (!isCorrect) {
@@ -484,6 +498,7 @@ export const NetworkManager = {
                 }]
             });
 
+            lastMetaMaskUpdate = now; // V1.2: Record update time
             console.log('[Network] Updated MetaMask RPCs');
             return true;
 
