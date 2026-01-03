@@ -1,5 +1,5 @@
 // js/modules/data.js
-// ✅ PRODUCTION V7.0
+// ✅ PRODUCTION V8.0 - Fixed claim fee calculation (proportional discount)
 
 const ethers = window.ethers;
 
@@ -660,27 +660,54 @@ export async function calculateUserTotalRewards() {
 
 export async function calculateClaimDetails() {
     if (!State.delegationManagerContract || !State.userAddress) {
-        return { netClaimAmount: 0n, feeAmount: 0n, discountPercent: 0, totalRewards: 0n };
+        return { netClaimAmount: 0n, feeAmount: 0n, discountPercent: 0, totalRewards: 0n, baseFeeBips: 0n, finalFeeBips: 0n };
     }
 
     const { totalRewards } = await calculateUserTotalRewards();
     if (totalRewards === 0n) {
-        return { netClaimAmount: 0n, feeAmount: 0n, discountPercent: 0, totalRewards: 0n };
+        return { netClaimAmount: 0n, feeAmount: 0n, discountPercent: 0, totalRewards: 0n, baseFeeBips: 0n, finalFeeBips: 0n };
     }
 
-    let baseFeeBips = State.systemFees?.CLAIM_REWARD_FEE_BIPS || 500n;
+    // Get base fee from system (e.g., 100 = 1%, 500 = 5%, 5000 = 50%)
+    let baseFeeBips = State.systemFees?.CLAIM_REWARD_FEE_BIPS || 100n;
     
+    // Get booster data
     const boosterData = await getHighestBoosterBoostFromAPI();
-    let discountBips = State.boosterDiscounts?.[boosterData.highestBoost] || 0n;
+    const boostBips = BigInt(boosterData.highestBoost || 0); // e.g., 2000 = 20%
+    
+    // Get discount percentage for this boost level
+    // discountBips represents the percentage reduction (e.g., 2000 = 20% reduction of the fee)
+    let discountBips = State.boosterDiscounts?.[boosterData.highestBoost] || boostBips;
 
-    const finalFeeBips = baseFeeBips > discountBips ? baseFeeBips - discountBips : 0n;
+    // V8: Calculate PROPORTIONAL discount (matching contract logic)
+    // discountAmount = baseFeeBips × discountBips / 10000
+    // Example: baseFeeBips=100 (1%), discountBips=2000 (20%)
+    // discountAmount = 100 × 2000 / 10000 = 20
+    // finalFeeBips = 100 - 20 = 80 (0.8%)
+    const discountAmount = (baseFeeBips * discountBips) / 10000n;
+    const finalFeeBips = baseFeeBips > discountAmount ? baseFeeBips - discountAmount : 0n;
+    
+    // Calculate fee amount
     const feeAmount = (totalRewards * finalFeeBips) / 10000n;
+
+    console.log('[Data] Claim calculation:', {
+        totalRewards: Number(totalRewards) / 1e18,
+        baseFeeBips: Number(baseFeeBips),
+        boostBips: Number(boostBips),
+        discountBips: Number(discountBips),
+        discountAmount: Number(discountAmount),
+        finalFeeBips: Number(finalFeeBips),
+        feeAmount: Number(feeAmount) / 1e18,
+        netAmount: Number(totalRewards - feeAmount) / 1e18
+    });
 
     return {
         netClaimAmount: totalRewards - feeAmount,
         feeAmount,
         discountPercent: Number(discountBips) / 100,
-        totalRewards
+        totalRewards,
+        baseFeeBips: Number(baseFeeBips),
+        finalFeeBips: Number(finalFeeBips)
     };
 }
 
