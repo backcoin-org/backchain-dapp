@@ -238,26 +238,24 @@ export async function buyNft({
         method: 'buyFromPool',
         args: () => [finalMaxPrice], // Dynamic args - maxPrice is set in validate
         
-        // Token approval config
-        get approval() {
-            return finalMaxPrice > 0n ? {
-                token: contracts.BKC_TOKEN,
-                spender: targetPool,
-                amount: finalMaxPrice
-            } : null;
-        },
+        // V1.2: Approval is now handled in validate() to ensure it's done before simulation
         
         validate: async (signer, userAddress) => {
+            const ethers = window.ethers;
             const contract = getNftPoolContract(signer, targetPool);
+            
+            console.log('[NFT] Validating buy from pool:', targetPool);
             
             // V1.2: Use getAvailableNFTs instead of getPoolNFTCount
             let availableNFTs = [];
             try {
                 availableNFTs = await contract.getAvailableNFTs();
+                console.log('[NFT] Available NFTs in pool:', availableNFTs.length);
             } catch (e) {
                 console.warn('[NFT] getAvailableNFTs failed, trying getNFTsInPool:', e.message);
                 try {
                     availableNFTs = await contract.getNFTsInPool();
+                    console.log('[NFT] NFTs in pool (fallback):', availableNFTs.length);
                 } catch (e2) {
                     console.error('[NFT] Could not get pool NFT count:', e2.message);
                     throw new Error('Could not verify pool NFT availability');
@@ -270,6 +268,7 @@ export async function buyNft({
             
             // Get current buy price
             buyPrice = await contract.getBuyPrice();
+            console.log('[NFT] Current buy price:', ethers.formatEther(buyPrice), 'BKC');
             
             // Set max price with 5% slippage if not specified
             if (!maxPrice) {
@@ -278,8 +277,30 @@ export async function buyNft({
                 finalMaxPrice = BigInt(maxPrice);
             }
             
+            console.log('[NFT] Max price (with slippage):', ethers.formatEther(finalMaxPrice), 'BKC');
+            
             if (finalMaxPrice < buyPrice) {
                 throw new Error(`Price increased. Current price: ${ethers.formatEther(buyPrice)} BKC`);
+            }
+            
+            // V1.2: Check BKC balance
+            const bkcContract = new ethers.Contract(contracts.BKC_TOKEN, BKC_ABI, signer);
+            const userBalance = await bkcContract.balanceOf(userAddress);
+            console.log('[NFT] User BKC balance:', ethers.formatEther(userBalance), 'BKC');
+            
+            if (userBalance < finalMaxPrice) {
+                throw new Error(`Insufficient BKC balance. Need ${ethers.formatEther(finalMaxPrice)} BKC, have ${ethers.formatEther(userBalance)} BKC`);
+            }
+            
+            // V1.2: Check and set BKC approval if needed
+            const currentAllowance = await bkcContract.allowance(userAddress, targetPool);
+            console.log('[NFT] Current BKC allowance:', ethers.formatEther(currentAllowance), 'BKC');
+            
+            if (currentAllowance < finalMaxPrice) {
+                console.log('[NFT] Approving BKC for pool...');
+                const approveTx = await bkcContract.approve(targetPool, finalMaxPrice);
+                await approveTx.wait();
+                console.log('[NFT] BKC approved');
             }
         },
         
@@ -354,13 +375,18 @@ export async function sellNft({
         args: () => [tokenId, finalMinPayout], // V1.2: Dynamic args
         
         validate: async (signer, userAddress) => {
+            const ethers = window.ethers;
             const nftContract = getNftContract(signer);
             const poolContract = getNftPoolContract(signer, targetPool);
+            
+            console.log('[NFT] Validating sell to pool:', targetPool);
+            console.log('[NFT] Token ID to sell:', tokenId.toString());
             
             // Check user owns the NFT
             let owner;
             try {
                 owner = await nftContract.ownerOf(tokenId);
+                console.log('[NFT] Token owner:', owner);
             } catch (e) {
                 throw new Error('Could not verify NFT ownership. Token may not exist.');
             }
@@ -372,6 +398,7 @@ export async function sellNft({
             // Get current sell price
             try {
                 sellPrice = await poolContract.getSellPrice();
+                console.log('[NFT] Current sell price:', ethers.formatEther(sellPrice), 'BKC');
             } catch (e) {
                 throw new Error('Could not get sell price from pool');
             }
@@ -383,6 +410,8 @@ export async function sellNft({
                 finalMinPayout = BigInt(minPayout);
             }
             
+            console.log('[NFT] Min payout (with slippage):', ethers.formatEther(finalMinPayout), 'BKC');
+            
             if (sellPrice < finalMinPayout) {
                 throw new Error(`Price decreased. Current payout: ${ethers.formatEther(sellPrice)} BKC`);
             }
@@ -390,6 +419,9 @@ export async function sellNft({
             // Check if NFT is approved for pool
             const isApprovedForAll = await nftContract.isApprovedForAll(userAddress, targetPool);
             const approved = await nftContract.getApproved(tokenId);
+            
+            console.log('[NFT] Is approved for all:', isApprovedForAll);
+            console.log('[NFT] Individual approval:', approved);
             
             if (!isApprovedForAll && approved.toLowerCase() !== targetPool.toLowerCase()) {
                 console.log('[NFT] Approving NFT for pool...');
