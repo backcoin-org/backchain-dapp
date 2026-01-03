@@ -1,5 +1,10 @@
 // pages/StorePage.js
-// ✅ PRODUCTION V12.0 - Performance Optimized
+// ✅ PRODUCTION V12.1 - Auto-refresh after transactions
+//
+// V12.1 Changes:
+// - Added auto-refresh in finally block (2s after any transaction)
+// - Ensures UI updates even if onSuccess callback fails
+// - More reliable post-transaction state sync
 //
 // V12.0 Changes:
 // - Removed 2-second throttle for instant tier switching
@@ -1307,6 +1312,20 @@ function setupEventListeners() {
                 isTransactionInProgress = false;
                 executeBtn.disabled = false;
                 executeBtn.innerHTML = originalHTML;
+                
+                // V12.1: Always refresh data after transaction attempt
+                // This ensures UI is updated even if callback failed
+                setTimeout(async () => {
+                    try {
+                        await Promise.all([
+                            loadMyBoostersFromAPI(true),
+                            loadDataForSelectedPool(true)
+                        ]);
+                        loadTradeHistory();
+                    } catch (e) {
+                        console.warn('[Store] Post-transaction refresh failed:', e.message);
+                    }
+                }, 2000);
                 
                 // Reset mascot animation
                 if (mascot) {

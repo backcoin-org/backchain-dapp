@@ -581,16 +581,22 @@ export async function sellNft({
             
             // Check if NFT is approved for pool
             const isApprovedForAll = await nftContract.isApprovedForAll(userAddress, targetPool);
-            const approved = await nftContract.getApproved(tokenId);
             
             console.log('[NFT] Is approved for all:', isApprovedForAll);
-            console.log('[NFT] Individual approval:', approved);
             
-            if (!isApprovedForAll && approved.toLowerCase() !== targetPool.toLowerCase()) {
-                console.log('[NFT] Approving NFT for pool...');
-                const approveTx = await nftContract.approve(targetPool, tokenId);
+            // V1.7: Use setApprovalForAll (one-time, more reliable than individual approve)
+            if (!isApprovedForAll) {
+                console.log('[NFT] Setting approval for all NFTs...');
+                
+                // Add delay before approval (RPC stabilization)
+                await new Promise(r => setTimeout(r, 500));
+                
+                const approveTx = await nftContract.setApprovalForAll(targetPool, true);
                 await approveTx.wait();
-                console.log('[NFT] NFT approved');
+                console.log('[NFT] ✅ All NFTs approved for pool');
+                
+                // Wait for propagation
+                await new Promise(r => setTimeout(r, 1000));
             }
         },
         
