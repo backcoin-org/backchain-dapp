@@ -54,6 +54,26 @@ let isProcessing = false;
 let claimHistory = [];
 let _claimParams = { boosterTokenId: 0n };
 
+// V14.1 FIX: Cache and debounce to prevent re-render loops
+let _cachedData = null;
+let _cacheTimestamp = 0;
+const CACHE_DURATION = 30000; // 30 seconds cache
+let _updateDebounceTimer = null;
+let _renderCount = 0;
+const MAX_RENDERS_PER_SECOND = 3;
+let _lastRenderReset = Date.now();
+
+// V14.1 FIX: Rate limiter for renders
+function shouldThrottleRender() {
+    const now = Date.now();
+    if (now - _lastRenderReset > 1000) {
+        _renderCount = 0;
+        _lastRenderReset = now;
+    }
+    _renderCount++;
+    return _renderCount > MAX_RENDERS_PER_SECOND;
+}
+
 window.handleRewardsClaim = async function() {
     if (isProcessing) return;
     await handleClaim(_claimParams.boosterTokenId);
@@ -118,7 +138,12 @@ export const RewardsPage = {
         }
 
         if (State.isConnected) {
-            renderLoading();
+            // V14.1 FIX: Use cached data for immediate render if available
+            if (_cachedData && (Date.now() - _cacheTimestamp < CACHE_DURATION)) {
+                renderContent(_cachedData.claimDetails, _cachedData.grossRewards, _cachedData.boosterData);
+            } else {
+                renderLoading();
+            }
             this.update(isNewPage);
         } else {
             renderNotConnected();
@@ -131,9 +156,33 @@ export const RewardsPage = {
             return;
         }
 
+        // V14.1 FIX: Throttle renders to prevent loops
+        if (shouldThrottleRender()) {
+            console.warn('[Rewards] Render throttled - too many updates');
+            return;
+        }
+
         const now = Date.now();
+        
+        // V14.1 FIX: Debounce rapid update calls
+        if (_updateDebounceTimer) {
+            clearTimeout(_updateDebounceTimer);
+        }
+        
+        // V14.1 FIX: Use cache if available and not forcing refresh
+        if (!force && _cachedData && (now - _cacheTimestamp < CACHE_DURATION)) {
+            renderContent(_cachedData.claimDetails, _cachedData.grossRewards, _cachedData.boosterData);
+            return;
+        }
+
         if (!force && isLoading) return;
-        if (!force && (now - lastFetch < 60000)) return;
+        if (!force && (now - lastFetch < 60000)) {
+            // Use cached data if we fetched recently
+            if (_cachedData) {
+                renderContent(_cachedData.claimDetails, _cachedData.grossRewards, _cachedData.boosterData);
+            }
+            return;
+        }
 
         isLoading = true;
 
@@ -148,6 +197,10 @@ export const RewardsPage = {
             try { grossRewards = await calculateUserTotalRewards() || grossRewards; } catch (e) {}
             try { await loadClaimHistory(); } catch (e) {}
 
+            // V14.1 FIX: Cache the fetched data
+            _cachedData = { claimDetails, grossRewards, boosterData };
+            _cacheTimestamp = now;
+
             renderContent(claimDetails, grossRewards, boosterData);
             lastFetch = now;
 
@@ -156,6 +209,13 @@ export const RewardsPage = {
         } finally {
             isLoading = false;
         }
+    },
+    
+    // V14.1 FIX: Method to clear cache when needed (e.g., after claim)
+    clearCache() {
+        _cachedData = null;
+        _cacheTimestamp = 0;
+        lastFetch = 0;
     }
 };
 
@@ -632,7 +692,8 @@ async function handleClaim(boosterTokenId) {
                 showToast('🎁 Rewards claimed successfully!', 'success');
                 
                 setTimeout(() => { 
-                    lastFetch = 0; 
+                    // V14.1 FIX: Use clearCache method
+                    RewardsPage.clearCache();
                     claimHistory = [];
                     RewardsPage.update(true); 
                 }, 2500);
