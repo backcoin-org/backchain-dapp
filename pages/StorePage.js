@@ -382,12 +382,12 @@ export const StorePage = {
                     <!-- Header with NFT Icon -->
                     <div class="flex justify-between items-center mb-6">
                         <div class="flex items-center gap-3">
-                            <div class="w-14 h-14 rounded-2xl bg-gradient-to-br from-purple-500/20 to-pink-500/20 border border-purple-500/30 flex items-center justify-center"
+                            <div class="w-14 h-14 rounded-2xl flex items-center justify-center"
                                  id="trade-mascot">
-                                <i class="fa-solid fa-gem text-2xl text-purple-400"></i>
+                                <img src="/assets/nft.png" alt="NFT" class="w-12 h-12 object-contain">
                             </div>
                             <div>
-                                <h1 class="text-lg font-semibold text-white">💎 NFT Market</h1>
+                                <h1 class="text-lg font-semibold text-white">NFT Market</h1>
                                 <p class="text-xs text-zinc-500">Buy & Sell Booster NFTs</p>
                             </div>
                         </div>
