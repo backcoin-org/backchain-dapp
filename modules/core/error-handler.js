@@ -647,7 +647,7 @@ export const ErrorHandler = {
                 
                 // Try to update MetaMask too
                 try {
-                    await NetworkManager.updateMetaMaskRpc();
+                    await NetworkManager.updateMetaMaskRpcs();
                     console.log('[ErrorHandler] MetaMask RPC updated');
                 } catch (e) {
                     console.warn('[ErrorHandler] Could not update MetaMask:', e.message);

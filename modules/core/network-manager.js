@@ -200,7 +200,7 @@ export const NetworkManager = {
         
         // Also update MetaMask with new RPC
         try {
-            await this.updateMetaMaskRpc();
+            await this.updateMetaMaskRpcs();
             console.log('[Network] MetaMask updated with new RPC');
         } catch (e) {
             console.warn('[Network] Could not update MetaMask:', e.message);
