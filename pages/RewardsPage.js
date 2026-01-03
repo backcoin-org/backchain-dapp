@@ -632,33 +632,57 @@ function renderContent(claimDetails, grossRewards, boosterData) {
     const gross = grossRewards || {};
     const booster = boosterData || {};
 
-    const netReward = details.netClaimAmount || 0n;
-    const totalGross = details.totalRewards || 0n;
-    const feeAmount = details.feeAmount || 0n;
+    // V13: Get gross rewards (before any fees)
     const stakingRewards = gross.stakingRewards || 0n;
     const minerRewards = gross.minerRewards || 0n;
-    const highestBoost = booster.highestBoost || 0;
-
-    const feeBips = details.baseFeeBips || 5000;
-    const boostPercent = highestBoost / 100;
-    const effectiveFeeBips = details.finalFeeBips || (feeBips - (feeBips * highestBoost / 10000));
-    const keepPercent = 100 - (effectiveFeeBips / 100);
+    const totalGross = stakingRewards + minerRewards; // Total bruto
     
-    const hasRewards = netReward > 0n;
+    const highestBoost = booster.highestBoost || 0; // e.g., 2000 = 20% fee reduction
+
+    // V13: Fixed fee calculation
+    // Base fee is 50% (5000 bips)
+    // Boost reduces the fee by a percentage of the base fee
+    // e.g., Iron (2000 bips) = 20% reduction → effective fee = 50% - (50% × 20%) = 40%
+    const BASE_FEE_BIPS = 5000; // 50% base fee for claims
+    const boostPercent = highestBoost / 100; // e.g., 2000 → 20%
+    
+    // Calculate effective fee: base fee reduced by boost percentage
+    // effectiveFeeBips = baseFee - (baseFee * boostBips / 10000)
+    const effectiveFeeBips = BASE_FEE_BIPS - (BASE_FEE_BIPS * highestBoost / 10000);
+    const keepPercent = 100 - (effectiveFeeBips / 100); // What % user keeps
+    const feePercent = effectiveFeeBips / 100; // What % goes to fees
+    
+    // Calculate actual amounts
+    let totalGrossNum = 0, feeAmountNum = 0, netRewardNum = 0, stakingNum = 0, miningNum = 0;
+    try {
+        totalGrossNum = formatBigNumber ? formatBigNumber(totalGross) : Number(totalGross) / 1e18;
+        stakingNum = formatBigNumber ? formatBigNumber(stakingRewards) : Number(stakingRewards) / 1e18;
+        miningNum = formatBigNumber ? formatBigNumber(minerRewards) : Number(minerRewards) / 1e18;
+        
+        // V13: Calculate fee and net based on effective fee
+        feeAmountNum = totalGrossNum * (feePercent / 100);
+        netRewardNum = totalGrossNum - feeAmountNum;
+    } catch (e) {
+        console.error('[Rewards] Calculation error:', e);
+    }
+    
+    const hasRewards = totalGross > 0n;
     const hasBooster = highestBoost > 0;
     
     // V12: Only store boosterTokenId - contract handles reward calculation
     const boosterTokenId = BigInt(booster.tokenId || 0);
     _claimParams = { boosterTokenId };
     
-    let netRewardNum = 0, totalGrossNum = 0, feeAmountNum = 0, stakingNum = 0, miningNum = 0;
-    try {
-        netRewardNum = formatBigNumber ? formatBigNumber(netReward) : Number(netReward) / 1e18;
-        totalGrossNum = formatBigNumber ? formatBigNumber(totalGross) : Number(totalGross) / 1e18;
-        feeAmountNum = formatBigNumber ? formatBigNumber(feeAmount) : Number(feeAmount) / 1e18;
-        stakingNum = formatBigNumber ? formatBigNumber(stakingRewards) : Number(stakingRewards) / 1e18;
-        miningNum = formatBigNumber ? formatBigNumber(minerRewards) : Number(minerRewards) / 1e18;
-    } catch (e) {}
+    // Debug log
+    console.log('[Rewards] Calculation:', {
+        totalGross: totalGrossNum.toFixed(2),
+        baseFee: '50%',
+        boostPercent: boostPercent + '%',
+        effectiveFee: feePercent.toFixed(1) + '%',
+        keepPercent: keepPercent.toFixed(1) + '%',
+        feeAmount: feeAmountNum.toFixed(2),
+        netReward: netRewardNum.toFixed(2)
+    });
 
     const circumference = 2 * Math.PI * 45;
     const strokeDashoffset = circumference - (keepPercent / 100) * circumference;
@@ -689,23 +713,68 @@ function renderContent(claimDetails, grossRewards, boosterData) {
                 ${!hasRewards ? '<p class="text-center text-xs text-zinc-600 mt-3"><i class="fa-solid fa-info-circle mr-1"></i><a href="#mine" onclick="window.navigateTo(\'mine\')" class="text-amber-500 hover:text-amber-400">Stake BKC</a> to start earning</p>' : ''}
             </div>
 
+            <!-- V13: BREAKDOWN CARD - Shows calculation clearly -->
+            ${hasRewards ? `
+            <div class="bg-zinc-900/50 border border-zinc-800 rounded-xl p-4">
+                <p class="text-[10px] text-zinc-500 uppercase mb-3"><i class="fa-solid fa-receipt mr-1"></i> Claim Breakdown</p>
+                <div class="space-y-2">
+                    <div class="flex items-center justify-between">
+                        <span class="text-sm text-zinc-400">Gross Rewards</span>
+                        <span class="text-sm font-mono text-white">${totalGrossNum.toFixed(2)} BKC</span>
+                    </div>
+                    <div class="flex items-center justify-between">
+                        <span class="text-sm text-zinc-400">
+                            Protocol Fee 
+                            <span class="text-xs ${hasBooster ? 'text-green-400' : 'text-red-400'}">
+                                (${feePercent.toFixed(1)}%${hasBooster ? ' with booster' : ''})
+                            </span>
+                        </span>
+                        <span class="text-sm font-mono text-red-400">-${feeAmountNum.toFixed(2)} BKC</span>
+                    </div>
+                    ${hasBooster ? `
+                    <div class="flex items-center justify-between text-xs">
+                        <span class="text-green-400">
+                            <i class="fa-solid fa-arrow-down mr-1"></i>
+                            ${booster.boostName || 'Booster'} saves you ${boostPercent}% on fees
+                        </span>
+                        <span class="text-green-400">
+                            +${(totalGrossNum * (50 - feePercent) / 100).toFixed(2)} BKC
+                        </span>
+                    </div>
+                    ` : `
+                    <div class="flex items-center justify-between text-xs">
+                        <span class="text-amber-400">
+                            <i class="fa-solid fa-info-circle mr-1"></i>
+                            Get a booster to reduce fees up to 35%!
+                        </span>
+                    </div>
+                    `}
+                    <div class="border-t border-zinc-700 my-2"></div>
+                    <div class="flex items-center justify-between">
+                        <span class="text-sm font-bold text-white">You Receive</span>
+                        <span class="text-lg font-mono font-bold ${hasBooster ? 'text-green-400' : 'text-amber-400'}">${netRewardNum.toFixed(2)} BKC</span>
+                    </div>
+                </div>
+            </div>
+            ` : ''}
+
             <!-- STATS GRID -->
             <div class="grid grid-cols-2 gap-3">
                 <div class="bg-zinc-900/50 border border-zinc-800 rounded-xl p-3">
                     <div class="flex items-center gap-2 mb-2">
                         <div class="w-7 h-7 rounded-lg bg-purple-500/15 flex items-center justify-center"><i class="fa-solid fa-chart-line text-purple-400 text-xs"></i></div>
-                        <span class="text-[10px] text-zinc-500 uppercase">Earned</span>
+                        <span class="text-[10px] text-zinc-500 uppercase">Gross Earned</span>
                     </div>
                     <p class="text-lg font-bold text-white font-mono">${totalGrossNum.toFixed(2)}</p>
-                    <p class="text-[10px] text-zinc-600">Total BKC</p>
+                    <p class="text-[10px] text-zinc-600">Before fees</p>
                 </div>
                 <div class="bg-zinc-900/50 border border-zinc-800 rounded-xl p-3">
                     <div class="flex items-center gap-2 mb-2">
                         <div class="w-7 h-7 rounded-lg bg-red-500/15 flex items-center justify-center"><i class="fa-solid fa-percent text-red-400 text-xs"></i></div>
-                        <span class="text-[10px] text-zinc-500 uppercase">Fee</span>
+                        <span class="text-[10px] text-zinc-500 uppercase">Fee (${feePercent.toFixed(0)}%)</span>
                     </div>
-                    <p class="text-lg font-bold text-zinc-400 font-mono">${feeAmountNum.toFixed(2)}</p>
-                    <p class="text-[10px] text-zinc-600">${(100 - keepPercent).toFixed(1)}% fee</p>
+                    <p class="text-lg font-bold text-red-400 font-mono">-${feeAmountNum.toFixed(2)}</p>
+                    <p class="text-[10px] text-zinc-600">${hasBooster ? 'Reduced by booster' : 'Base rate 50%'}</p>
                 </div>
             </div>
 
@@ -758,7 +827,7 @@ function renderContent(claimDetails, grossRewards, boosterData) {
             </div>
 
             <!-- V13: BOOST SIMULATOR -->
-            ${renderBoostSimulator(totalGross, feeBips, highestBoost, hasRewards)}
+            ${renderBoostSimulator(totalGross, 5000, highestBoost, hasRewards)}
 
             <!-- CLAIM HISTORY -->
             <div class="bg-zinc-900/50 border border-zinc-800 rounded-xl overflow-hidden">
