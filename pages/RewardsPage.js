@@ -1,5 +1,11 @@
 // pages/RewardsPage.js
-// ✅ PRODUCTION V12.0 - Fixed for Contract V2
+// ✅ PRODUCTION V13.0 - NFT Discount Simulator
+//
+// V13.0 Changes:
+// - Added NFT discount simulator showing potential earnings with different tiers
+// - Shows comparison between current rewards and what user would receive with each NFT
+// - Incentivizes NFT purchases by showing concrete savings
+// - Clean UI with tier comparison cards
 //
 // V12.0 Changes:
 // - Fixed claimRewards call to match new contract signature (only boosterTokenId)
@@ -22,6 +28,7 @@ import {
 } from '../modules/data.js';
 import { formatBigNumber } from '../utils.js';
 import { showToast } from '../ui-feedback.js';
+import { boosterTiers } from '../config.js';
 
 // V11: Import new transaction module
 import { StakingTx } from '../modules/transactions/index.js';
@@ -31,6 +38,20 @@ import { StakingTx } from '../modules/transactions/index.js';
 // ============================================================================
 const REWARD_IMAGE = './assets/reward.png';
 const EXPLORER_TX = 'https://sepolia.arbiscan.io/tx/';
+
+// V13: Boost tiers for simulation (based on boosterTiers from config)
+// boost = boostBips, represents the fee REDUCTION percentage in basis points
+// e.g., boost: 7000 = 70% fee reduction, meaning you keep 85% instead of 50%
+const BOOST_TIERS = [
+    { name: 'No Booster', boost: 0, icon: 'fa-ban', textColor: 'text-zinc-400', bgColor: 'bg-zinc-700/50' },
+    { name: 'Crystal', boost: 1000, icon: 'fa-gem', textColor: 'text-indigo-300', bgColor: 'bg-indigo-500/20' },
+    { name: 'Iron', boost: 2000, icon: 'fa-shield', textColor: 'text-slate-400', bgColor: 'bg-slate-500/20' },
+    { name: 'Bronze', boost: 3000, icon: 'fa-medal', textColor: 'text-yellow-600', bgColor: 'bg-yellow-600/20' },
+    { name: 'Silver', boost: 4000, icon: 'fa-star', textColor: 'text-gray-300', bgColor: 'bg-gray-400/20' },
+    { name: 'Gold', boost: 5000, icon: 'fa-crown', textColor: 'text-amber-400', bgColor: 'bg-amber-500/20' },
+    { name: 'Platinum', boost: 6000, icon: 'fa-trophy', textColor: 'text-gray-200', bgColor: 'bg-gray-300/20' },
+    { name: 'Diamond', boost: 7000, icon: 'fa-diamond', textColor: 'text-cyan-400', bgColor: 'bg-cyan-500/20' }
+];
 
 // ============================================================================
 // LOCAL STATE
@@ -435,6 +456,172 @@ function renderContentImmediate() {
 }
 
 // ============================================================================
+// V13: BOOST SIMULATION CALCULATOR
+// ============================================================================
+
+/**
+ * Calculates net reward for a given boost percentage
+ * @param {bigint} grossReward - Total gross reward
+ * @param {number} baseFeeBips - Base fee in basis points (e.g., 5000 = 50%)
+ * @param {number} boostBips - Boost in basis points (e.g., 2000 = 20% fee reduction)
+ * @returns {Object} { netReward, feeAmount, keepPercent }
+ */
+function calculateSimulatedReward(grossReward, baseFeeBips, boostBips) {
+    if (grossReward <= 0n) {
+        return { netReward: 0, feeAmount: 0, keepPercent: 50 };
+    }
+    
+    // Fee reduction: boost reduces the fee proportionally
+    // If baseFeeBips = 5000 (50%) and boostBips = 2000 (20%)
+    // effectiveFee = 5000 - (5000 * 2000 / 10000) = 5000 - 1000 = 4000 (40%)
+    const effectiveFeeBips = baseFeeBips - (baseFeeBips * boostBips / 10000);
+    const keepPercent = 100 - (effectiveFeeBips / 100);
+    
+    // Calculate amounts
+    const grossNum = Number(grossReward) / 1e18;
+    const feeAmount = grossNum * (effectiveFeeBips / 10000);
+    const netReward = grossNum - feeAmount;
+    
+    return { netReward, feeAmount, keepPercent };
+}
+
+/**
+ * Generates simulation data for all boost tiers
+ * @param {bigint} grossReward - Total gross reward
+ * @param {number} baseFeeBips - Base fee in basis points
+ * @param {number} currentBoost - User's current boost
+ * @returns {Array} Array of simulation results for each tier
+ */
+function generateBoostSimulations(grossReward, baseFeeBips, currentBoost) {
+    const currentSim = calculateSimulatedReward(grossReward, baseFeeBips, currentBoost);
+    
+    return BOOST_TIERS.map(tier => {
+        const sim = calculateSimulatedReward(grossReward, baseFeeBips, tier.boost);
+        const extraEarnings = sim.netReward - currentSim.netReward;
+        const isCurrentTier = tier.boost === currentBoost;
+        const isBetterTier = tier.boost > currentBoost;
+        
+        return {
+            ...tier,
+            ...sim,
+            extraEarnings,
+            isCurrentTier,
+            isBetterTier,
+            boostPercent: tier.boost / 100
+        };
+    });
+}
+
+/**
+ * Renders the boost simulator section
+ */
+function renderBoostSimulator(grossReward, baseFeeBips, currentBoost, hasRewards) {
+    if (!hasRewards) {
+        return `
+            <div class="bg-zinc-900/50 border border-zinc-800 rounded-xl p-4">
+                <div class="flex items-center gap-2 mb-3">
+                    <div class="w-7 h-7 rounded-lg bg-amber-500/15 flex items-center justify-center">
+                        <i class="fa-solid fa-calculator text-amber-400 text-xs"></i>
+                    </div>
+                    <p class="text-[10px] text-zinc-500 uppercase">Boost Simulator</p>
+                </div>
+                <p class="text-sm text-zinc-500 text-center py-4">
+                    <i class="fa-solid fa-info-circle mr-1"></i>
+                    Earn rewards to see boost simulations
+                </p>
+            </div>
+        `;
+    }
+    
+    const simulations = generateBoostSimulations(grossReward, baseFeeBips, currentBoost);
+    const currentTier = simulations.find(s => s.isCurrentTier) || simulations[0];
+    const bestTier = simulations[simulations.length - 1]; // Diamond
+    const potentialSavings = bestTier.netReward - currentTier.netReward;
+    
+    return `
+        <div class="bg-zinc-900/50 border border-zinc-800 rounded-xl overflow-hidden">
+            <div class="p-3 border-b border-zinc-800/50 flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                    <div class="w-7 h-7 rounded-lg bg-amber-500/15 flex items-center justify-center">
+                        <i class="fa-solid fa-calculator text-amber-400 text-xs"></i>
+                    </div>
+                    <p class="text-[10px] text-zinc-500 uppercase">Boost Simulator</p>
+                </div>
+                ${potentialSavings > 0 ? `
+                    <span class="px-2 py-0.5 bg-green-500/20 text-green-400 text-[10px] font-bold rounded-full">
+                        +${potentialSavings.toFixed(2)} BKC possible
+                    </span>
+                ` : ''}
+            </div>
+            
+            <div class="p-3">
+                <!-- Current vs Best comparison -->
+                ${currentBoost < 7000 ? `
+                    <div class="bg-gradient-to-r from-amber-500/10 to-green-500/10 border border-amber-500/20 rounded-lg p-3 mb-3">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <p class="text-[10px] text-zinc-500 uppercase mb-1">With Diamond Booster</p>
+                                <p class="text-lg font-bold text-green-400">${bestTier.netReward.toFixed(2)} BKC</p>
+                            </div>
+                            <div class="text-right">
+                                <p class="text-[10px] text-zinc-500 uppercase mb-1">You'd save</p>
+                                <p class="text-lg font-bold text-amber-400">+${potentialSavings.toFixed(2)} BKC</p>
+                            </div>
+                        </div>
+                    </div>
+                ` : `
+                    <div class="bg-green-500/10 border border-green-500/20 rounded-lg p-3 mb-3 text-center">
+                        <i class="fa-solid fa-crown text-yellow-400 mr-2"></i>
+                        <span class="text-green-400 font-bold">Maximum boost active!</span>
+                    </div>
+                `}
+                
+                <!-- All tiers comparison -->
+                <div class="space-y-2">
+                    ${simulations.map(sim => `
+                        <div class="flex items-center gap-2 p-2 rounded-lg transition-all ${sim.isCurrentTier ? 'bg-green-500/10 border border-green-500/30' : 'bg-zinc-800/30 hover:bg-zinc-800/50'}">
+                            <div class="w-8 h-8 rounded-lg ${sim.bgColor} flex items-center justify-center flex-shrink-0">
+                                <i class="fa-solid ${sim.icon} ${sim.textColor} text-xs"></i>
+                            </div>
+                            <div class="flex-1 min-w-0">
+                                <div class="flex items-center gap-2">
+                                    <span class="text-sm font-medium ${sim.textColor}">${sim.name}</span>
+                                    ${sim.isCurrentTier ? '<span class="px-1.5 py-0.5 bg-green-500/20 text-green-400 text-[8px] font-bold rounded">YOU</span>' : ''}
+                                    ${sim.boost > 0 ? `<span class="text-[10px] text-zinc-500">-${sim.boostPercent}% fee</span>` : ''}
+                                </div>
+                            </div>
+                            <div class="text-right flex-shrink-0">
+                                <p class="text-sm font-mono font-bold ${sim.isCurrentTier ? 'text-green-400' : 'text-white'}">${sim.netReward.toFixed(2)}</p>
+                                ${sim.isBetterTier && sim.extraEarnings > 0 ? `
+                                    <p class="text-[10px] text-amber-400">+${sim.extraEarnings.toFixed(2)}</p>
+                                ` : ''}
+                            </div>
+                            ${sim.isBetterTier && sim.boost > 0 ? `
+                                <button onclick="window.navigateTo('store')" class="ml-1 px-2 py-1 bg-amber-500/20 hover:bg-amber-500/30 text-amber-400 text-[10px] font-bold rounded transition-all flex-shrink-0">
+                                    <i class="fa-solid fa-cart-plus"></i>
+                                </button>
+                            ` : '<div class="w-8"></div>'}
+                        </div>
+                    `).join('')}
+                </div>
+                
+                <!-- Action buttons -->
+                ${currentBoost < 7000 ? `
+                    <div class="flex gap-2 mt-3">
+                        <button onclick="window.navigateTo('store')" class="flex-1 py-2 text-xs font-bold bg-gradient-to-r from-amber-500 to-orange-500 text-black rounded-lg hover:shadow-lg hover:shadow-amber-500/25 transition-all">
+                            <i class="fa-solid fa-gem mr-1"></i> Buy Booster
+                        </button>
+                        <button onclick="window.navigateTo('rental')" class="flex-1 py-2 text-xs font-bold bg-zinc-800 hover:bg-zinc-700 text-white rounded-lg transition-all">
+                            <i class="fa-solid fa-clock mr-1"></i> Rent (1hr)
+                        </button>
+                    </div>
+                ` : ''}
+            </div>
+        </div>
+    `;
+}
+
+// ============================================================================
 // MAIN CONTENT
 // ============================================================================
 function renderContent(claimDetails, grossRewards, boosterData) {
@@ -569,6 +756,9 @@ function renderContent(claimDetails, grossRewards, boosterData) {
                     `}
                 </div>
             </div>
+
+            <!-- V13: BOOST SIMULATOR -->
+            ${renderBoostSimulator(totalGross, feeBips, highestBoost, hasRewards)}
 
             <!-- CLAIM HISTORY -->
             <div class="bg-zinc-900/50 border border-zinc-800 rounded-xl overflow-hidden">
