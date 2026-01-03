@@ -1,6 +1,11 @@
 // modules/js/core/transaction-engine.js
-// ✅ PRODUCTION V1.1 - FIXED: Support for args as function, better error handling
+// ✅ PRODUCTION V1.2 - Added skipSimulation option
 // 
+// CHANGES V1.2:
+// - Added skipSimulation option to bypass estimateGas (for RPC issues)
+// - When skipSimulation=true, uses fixed gas limit instead of estimating
+// - Useful when simulation fails but transaction should work
+//
 // CHANGES V1.1:
 // - Added support for args as function (getter pattern for dynamic values)
 // - Fixed updateMetaMaskRpcs -> switchToNextRpc (correct method name)
@@ -254,7 +259,9 @@ export class TransactionEngine {
             
             // Options
             maxRetries = ENGINE_CONFIG.DEFAULT_MAX_RETRIES,
-            invalidateCache = true
+            invalidateCache = true,
+            skipSimulation = false,  // V1.2: Skip estimateGas if RPC is unreliable
+            fixedGasLimit = 500000n  // V1.2: Gas limit when skipping simulation
         } = config;
 
         // Generate unique transaction ID
@@ -347,10 +354,8 @@ export class TransactionEngine {
             }
 
             // ═══════════════════════════════════════════════════════════════
-            // PHASE 5: SIMULATION (FREE - estimateGas)
+            // PHASE 5: SIMULATION (FREE - estimateGas) - Can be skipped
             // ═══════════════════════════════════════════════════════════════
-            ui.setPhase('simulating');
-            console.log(`[TX] Simulating transaction...`);
 
             const contract = await getContract(signer);
             const txOptions = value ? { value } : {};
@@ -359,17 +364,27 @@ export class TransactionEngine {
             const resolvedArgs = this._resolveArgs(args);
 
             let gasEstimate;
-            try {
-                gasEstimate = await contract[method].estimateGas(...resolvedArgs, txOptions);
-                console.log(`[TX] Gas estimate: ${gasEstimate.toString()}`);
-            } catch (simError) {
-                // Simulation failed = transaction WOULD fail
-                console.error(`[TX] Simulation failed:`, simError);
-                const parsed = ErrorHandler.parseSimulationError(simError, method);
-                throw ErrorHandler.create(parsed.type, { 
-                    message: parsed.message,
-                    original: simError 
-                });
+            
+            // V1.2: Support skipSimulation option
+            if (skipSimulation) {
+                console.log(`[TX] Skipping simulation (skipSimulation=true), using fixed gas limit: ${fixedGasLimit}`);
+                gasEstimate = fixedGasLimit;
+            } else {
+                ui.setPhase('simulating');
+                console.log(`[TX] Simulating transaction...`);
+                
+                try {
+                    gasEstimate = await contract[method].estimateGas(...resolvedArgs, txOptions);
+                    console.log(`[TX] Gas estimate: ${gasEstimate.toString()}`);
+                } catch (simError) {
+                    // Simulation failed = transaction WOULD fail
+                    console.error(`[TX] Simulation failed:`, simError);
+                    const parsed = ErrorHandler.parseSimulationError(simError, method);
+                    throw ErrorHandler.create(parsed.type, { 
+                        message: parsed.message,
+                        original: simError 
+                    });
+                }
             }
 
             // ═══════════════════════════════════════════════════════════════
