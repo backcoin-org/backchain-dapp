@@ -1,18 +1,16 @@
 // modules/js/transactions/nft-tx.js
-// ✅ PRODUCTION V1.5 - Skip simulation to avoid RPC false failures
+// ✅ PRODUCTION V1.6 - FIXED: Correct contract method names
 // 
-// CHANGES V1.5:
-// - Added skipSimulation: true to bypass estimateGas failures
-// - Simulation was failing with RPC errors even after successful approval
-// - Transaction will be sent directly to MetaMask for user confirmation
+// CHANGES V1.6:
+// - CRITICAL FIX: buyFromPool → buyNFTWithSlippage (correct method name)
+// - CRITICAL FIX: sellToPool → sellNFT (correct method name)
+// - Updated ABI to match actual NFTLiquidityPool.sol contract
+// - Updated event names: NFTBought → NFTPurchased
 //
-// CHANGES V1.4:
-// - Added approveWithRetry() with 3 strategies:
-//   1. Exact amount approval
-//   2. MaxUint256 (unlimited) approval  
-//   3. Reset to 0, then approve
-// - Each strategy has 3 retry attempts with exponential backoff
-// - Better error handling for user rejection
+// CHANGES V1.5:
+// - Added skipSimulation option to bypass estimateGas (for RPC issues)
+// - When skipSimulation=true, uses fixed gas limit instead of estimating
+// - Useful when simulation fails but transaction should work
 //
 // CHANGES V1.3:
 // - Reverted to txEngine approval handling (has retry logic)
@@ -126,21 +124,26 @@ function getAllPools() {
  */
 const NFT_POOL_ABI = [
     // Write functions
-    'function buyFromPool(uint256 maxPrice) external returns (uint256 tokenId)',
-    'function sellToPool(uint256 tokenId, uint256 minPayout) external',
+    'function buyNFT() external returns (uint256 tokenId)',
+    'function buySpecificNFT(uint256 _tokenId) external',
+    'function buyNFTWithSlippage(uint256 _maxPrice) external returns (uint256 tokenId)',
+    'function sellNFT(uint256 _tokenId, uint256 _minPayout) external',
     
     // Read functions
     'function getBuyPrice() view returns (uint256)',
+    'function getBuyPriceWithTax() view returns (uint256)',
     'function getSellPrice() view returns (uint256)',
+    'function getSellPriceAfterTax() view returns (uint256)',
     'function getAvailableNFTs() view returns (uint256[])',
-    'function poolTokenBalance() view returns (uint256)',
-    'function getNFTsInPool() view returns (uint256[])',
-    'function isNFTInPool(uint256 tokenId) view returns (bool)',
-    'function tierIndex() view returns (uint256)',
+    'function getPoolInfo() view returns (uint256 bkcBalance, uint256 nftCount, uint256 k, bool initialized)',
+    'function getNFTBalance() view returns (uint256)',
+    'function getBKCBalance() view returns (uint256)',
+    'function isNFTInPool(uint256 _tokenId) view returns (bool)',
+    'function boostBips() view returns (uint256)',
     
     // Events
-    'event NFTBought(address indexed buyer, uint256 indexed tokenId, uint256 price)',
-    'event NFTSold(address indexed seller, uint256 indexed tokenId, uint256 payout)'
+    'event NFTPurchased(address indexed buyer, uint256 indexed tokenId, uint256 price, uint256 tax, uint256 newBkcBalance, uint256 newNftCount)',
+    'event NFTSold(address indexed seller, uint256 indexed tokenId, uint256 payout, uint256 tax, uint256 newBkcBalance, uint256 newNftCount)'
 ];
 
 /**
@@ -353,7 +356,7 @@ export async function buyNft({
         button,
         
         getContract: async (signer) => getNftPoolContract(signer, targetPool),
-        method: 'buyFromPool',
+        method: 'buyNFTWithSlippage',  // V1.6: Corrected method name
         args: () => [finalMaxPrice],
         
         // V1.4: No automatic approval - we handle it in validate with retry logic
@@ -374,35 +377,39 @@ export async function buyNft({
                 availableNFTs = await contract.getAvailableNFTs();
                 console.log('[NFT] Available NFTs in pool:', availableNFTs.length);
             } catch (e) {
-                console.warn('[NFT] getAvailableNFTs failed, trying getNFTsInPool:', e.message);
-                try {
-                    availableNFTs = await contract.getNFTsInPool();
-                    console.log('[NFT] NFTs in pool (fallback):', availableNFTs.length);
-                } catch (e2) {
-                    console.error('[NFT] Could not get pool NFT count:', e2.message);
-                    throw new Error('Could not verify pool NFT availability');
-                }
+                console.warn('[NFT] getAvailableNFTs failed:', e.message);
+                throw new Error('Could not verify pool NFT availability');
             }
             
             if (!availableNFTs || availableNFTs.length === 0) {
                 throw new Error('No NFTs available in pool');
             }
             
-            // Get current buy price
-            buyPrice = await contract.getBuyPrice();
-            console.log('[NFT] Current buy price:', ethers.formatEther(buyPrice), 'BKC');
+            // V1.6: Get buy price WITH TAX (this is what buyNFTWithSlippage checks)
+            let buyPriceWithTax;
+            try {
+                buyPriceWithTax = await contract.getBuyPriceWithTax();
+                buyPrice = await contract.getBuyPrice();
+                console.log('[NFT] Buy price (without tax):', ethers.formatEther(buyPrice), 'BKC');
+                console.log('[NFT] Buy price (with tax):', ethers.formatEther(buyPriceWithTax), 'BKC');
+            } catch (e) {
+                // Fallback to getBuyPrice and add 10% for tax estimate
+                buyPrice = await contract.getBuyPrice();
+                buyPriceWithTax = (buyPrice * 110n) / 100n;
+                console.log('[NFT] Buy price (estimated with tax):', ethers.formatEther(buyPriceWithTax), 'BKC');
+            }
             
-            // Set max price with 5% slippage if not specified
+            // Set max price with 5% slippage on top of price+tax
             if (!maxPrice) {
-                finalMaxPrice = (buyPrice * 105n) / 100n;
+                finalMaxPrice = (buyPriceWithTax * 105n) / 100n;
             } else {
                 finalMaxPrice = BigInt(maxPrice);
             }
             
             console.log('[NFT] Max price (with slippage):', ethers.formatEther(finalMaxPrice), 'BKC');
             
-            if (finalMaxPrice < buyPrice) {
-                throw new Error(`Price increased. Current price: ${ethers.formatEther(buyPrice)} BKC`);
+            if (finalMaxPrice < buyPriceWithTax) {
+                throw new Error(`Price increased. Current price: ${ethers.formatEther(buyPriceWithTax)} BKC`);
             }
             
             // Check BKC balance
@@ -436,7 +443,7 @@ export async function buyNft({
                 for (const log of receipt.logs) {
                     try {
                         const parsed = iface.parseLog(log);
-                        if (parsed.name === 'NFTBought') {
+                        if (parsed.name === 'NFTPurchased') {  // V1.6: Correct event name
                             tokenId = Number(parsed.args.tokenId);
                             break;
                         }
@@ -496,7 +503,7 @@ export async function sellNft({
         button,
         
         getContract: async (signer) => getNftPoolContract(signer, targetPool),
-        method: 'sellToPool',
+        method: 'sellNFT',  // V1.6: Corrected method name
         args: () => [tokenId, finalMinPayout],
         
         // V1.5: Skip simulation - RPC issues may cause false failures
@@ -523,25 +530,31 @@ export async function sellNft({
                 throw new Error('You do not own this NFT');
             }
             
-            // Get current sell price
+            // V1.6: Get sell price AFTER TAX (this is what the user actually receives)
+            let sellPriceAfterTax;
             try {
                 sellPrice = await poolContract.getSellPrice();
-                console.log('[NFT] Current sell price:', ethers.formatEther(sellPrice), 'BKC');
+                sellPriceAfterTax = await poolContract.getSellPriceAfterTax();
+                console.log('[NFT] Sell price (gross):', ethers.formatEther(sellPrice), 'BKC');
+                console.log('[NFT] Sell price (after tax):', ethers.formatEther(sellPriceAfterTax), 'BKC');
             } catch (e) {
-                throw new Error('Could not get sell price from pool');
+                // Fallback: estimate 10% tax
+                sellPrice = await poolContract.getSellPrice();
+                sellPriceAfterTax = (sellPrice * 90n) / 100n;
+                console.log('[NFT] Sell price (estimated after tax):', ethers.formatEther(sellPriceAfterTax), 'BKC');
             }
             
-            // Set min payout with 5% slippage if not specified
+            // Set min payout with 5% slippage below net payout
             if (!minPayout) {
-                finalMinPayout = (sellPrice * 95n) / 100n;
+                finalMinPayout = (sellPriceAfterTax * 95n) / 100n;
             } else {
                 finalMinPayout = BigInt(minPayout);
             }
             
             console.log('[NFT] Min payout (with slippage):', ethers.formatEther(finalMinPayout), 'BKC');
             
-            if (sellPrice < finalMinPayout) {
-                throw new Error(`Price decreased. Current payout: ${ethers.formatEther(sellPrice)} BKC`);
+            if (sellPriceAfterTax < finalMinPayout) {
+                throw new Error(`Price decreased. Current payout: ${ethers.formatEther(sellPriceAfterTax)} BKC`);
             }
             
             // Check if NFT is approved for pool
