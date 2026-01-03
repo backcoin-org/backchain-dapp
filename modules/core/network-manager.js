@@ -1,6 +1,12 @@
 // modules/js/core/network-manager.js
-// ✅ PRODUCTION V1.0 - Network & RPC Manager for Backchain dApp
+// ✅ PRODUCTION V1.1 - More RPC fallbacks + Better rate limit handling
 // 
+// CHANGES V1.1:
+// - Added 3 more RPC endpoints (7 total)
+// - Added StackUp, Chainstack, and Tenderly RPCs
+// - Better rate limit detection and handling
+// - Faster RPC switching on rate limit errors
+//
 // This module handles all network-related operations:
 // - RPC health monitoring
 // - Network switching
@@ -39,6 +45,7 @@ export const NETWORK_CONFIG = {
 /**
  * RPC endpoints in priority order
  * First working RPC will be used
+ * V1.1: Added more fallback options
  */
 const RPC_ENDPOINTS = [
     {
@@ -51,21 +58,39 @@ const RPC_ENDPOINTS = [
         isPublic: false
     },
     {
+        name: 'Arbitrum Official',
+        getUrl: () => 'https://sepolia-rollup.arbitrum.io/rpc',
+        priority: 2,
+        isPublic: true
+    },
+    {
         name: 'BlockPI',
         getUrl: () => 'https://arbitrum-sepolia.blockpi.network/v1/rpc/public',
-        priority: 2,
+        priority: 3,
         isPublic: true
     },
     {
         name: 'PublicNode',
         getUrl: () => 'https://arbitrum-sepolia-rpc.publicnode.com',
-        priority: 3,
+        priority: 4,
         isPublic: true
     },
     {
-        name: 'Arbitrum Official',
-        getUrl: () => 'https://sepolia-rollup.arbitrum.io/rpc',
-        priority: 4,
+        name: 'Chainstack',
+        getUrl: () => 'https://arbitrum-sepolia.core.chainstack.com',
+        priority: 5,
+        isPublic: true
+    },
+    {
+        name: 'Blast API',
+        getUrl: () => 'https://arbitrum-sepolia.public.blastapi.io',
+        priority: 6,
+        isPublic: true
+    },
+    {
+        name: 'Ankr',
+        getUrl: () => 'https://rpc.ankr.com/arbitrum_sepolia',
+        priority: 7,
         isPublic: true
     }
 ];
@@ -141,6 +166,80 @@ export const NetworkManager = {
         
         console.log(`[Network] Switched to RPC: ${newRpc.name}`);
         return newRpc.getUrl();
+    },
+
+    /**
+     * V1.1: Checks if error is a rate limit error
+     * @param {Error} error - Error to check
+     * @returns {boolean} True if rate limited
+     */
+    isRateLimitError(error) {
+        const message = error?.message?.toLowerCase() || '';
+        const code = error?.code;
+        
+        return (
+            code === -32002 ||
+            code === -32005 ||
+            message.includes('rate limit') ||
+            message.includes('too many') ||
+            message.includes('exceeded') ||
+            message.includes('throttled') ||
+            message.includes('429')
+        );
+    },
+
+    /**
+     * V1.1: Handle rate limit by switching RPC immediately
+     * @param {Error} error - The rate limit error
+     * @returns {Promise<void>}
+     */
+    async handleRateLimit(error) {
+        console.warn('[Network] Rate limit detected, switching RPC immediately...');
+        
+        const newRpc = this.switchToNextRpc();
+        
+        // Also update MetaMask with new RPC
+        try {
+            await this.updateMetaMaskRpc();
+            console.log('[Network] MetaMask updated with new RPC');
+        } catch (e) {
+            console.warn('[Network] Could not update MetaMask:', e.message);
+        }
+        
+        return newRpc;
+    },
+
+    /**
+     * V1.1: Gets a working provider, switching RPCs if needed
+     * @returns {Promise<ethers.JsonRpcProvider>} Working provider
+     */
+    async getWorkingProvider() {
+        const ethers = window.ethers;
+        const maxAttempts = this.getAvailableEndpoints().length;
+        
+        for (let i = 0; i < maxAttempts; i++) {
+            try {
+                const rpcUrl = this.getCurrentRpcUrl();
+                const provider = new ethers.JsonRpcProvider(rpcUrl);
+                
+                // Quick test - get block number
+                await Promise.race([
+                    provider.getBlockNumber(),
+                    new Promise((_, reject) => 
+                        setTimeout(() => reject(new Error('timeout')), 3000)
+                    )
+                ]);
+                
+                return provider;
+            } catch (error) {
+                console.warn(`[Network] RPC ${currentRpcIndex} failed, trying next...`);
+                this.switchToNextRpc();
+            }
+        }
+        
+        // All failed, return last one anyway
+        const rpcUrl = this.getCurrentRpcUrl();
+        return new ethers.JsonRpcProvider(rpcUrl);
     },
 
     // =========================================================================

@@ -441,9 +441,14 @@ export class TransactionEngine {
 
         } catch (error) {
             // ═══════════════════════════════════════════════════════════════
-            // ERROR HANDLING
+            // ERROR HANDLING - V1.2: Use handleWithRpcSwitch for auto RPC switch
             // ═══════════════════════════════════════════════════════════════
-            const handled = ErrorHandler.handle(error, name);
+            const handled = await ErrorHandler.handleWithRpcSwitch(error, name);
+            
+            // Log if RPC was switched
+            if (handled.rpcSwitched) {
+                console.log(`[TX] RPC switched to: ${handled.newRpc}`);
+            }
             
             // Show appropriate UI
             if (handled.type === ErrorTypes.USER_REJECTED) {

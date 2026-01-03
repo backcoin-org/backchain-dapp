@@ -1,6 +1,7 @@
 // modules/js/core/error-handler.js
-// ✅ PRODUCTION V1.2 - Centralized Error Handler for Backchain dApp
+// ✅ PRODUCTION V1.3 - Auto RPC switch on rate limit
 // 
+// V1.3: Added handleWithRpcSwitch() to automatically switch RPC on rate limit
 // V1.2: Fixed BigInt serialization error in _extractMessage (added _safeStringify)
 // V1.1: classify() now respects errorType from create() to prevent re-classification
 //
@@ -213,9 +214,9 @@ export const ErrorMessages = {
 const ErrorConfig = {
     // Network - can retry
     [ErrorTypes.WRONG_NETWORK]: { layer: 1, retry: false, action: 'switch_network' },
-    [ErrorTypes.RPC_UNHEALTHY]: { layer: 1, retry: true, waitMs: 2000 },
-    [ErrorTypes.RPC_RATE_LIMITED]: { layer: 1, retry: true, waitMs: 'extract' },
-    [ErrorTypes.NETWORK_ERROR]: { layer: 1, retry: true, waitMs: 3000 },
+    [ErrorTypes.RPC_UNHEALTHY]: { layer: 1, retry: true, waitMs: 2000, action: 'switch_rpc' },
+    [ErrorTypes.RPC_RATE_LIMITED]: { layer: 1, retry: true, waitMs: 'extract', action: 'switch_rpc' },
+    [ErrorTypes.NETWORK_ERROR]: { layer: 1, retry: true, waitMs: 3000, action: 'switch_rpc' },
     
     // Wallet - no retry
     [ErrorTypes.WALLET_NOT_CONNECTED]: { layer: 2, retry: false, action: 'connect_wallet' },
@@ -622,6 +623,49 @@ export const ErrorHandler = {
             original: error,
             context
         };
+    },
+
+    /**
+     * V1.3: Handles error with automatic RPC switch for network errors
+     * Imports NetworkManager dynamically to avoid circular dependency
+     * 
+     * @param {Error} error - Error to handle
+     * @param {string} context - Context where it occurred
+     * @returns {Promise<Object>} Structured error information + rpcSwitched flag
+     */
+    async handleWithRpcSwitch(error, context = 'Transaction') {
+        const result = this.handle(error, context);
+        
+        // If action is switch_rpc, do it automatically
+        if (result.action === 'switch_rpc') {
+            try {
+                // Dynamic import to avoid circular dependency
+                const { NetworkManager } = await import('./network-manager.js');
+                
+                console.log('[ErrorHandler] Switching RPC due to network error...');
+                const newRpc = NetworkManager.switchToNextRpc();
+                
+                // Try to update MetaMask too
+                try {
+                    await NetworkManager.updateMetaMaskRpc();
+                    console.log('[ErrorHandler] MetaMask RPC updated');
+                } catch (e) {
+                    console.warn('[ErrorHandler] Could not update MetaMask:', e.message);
+                }
+                
+                result.rpcSwitched = true;
+                result.newRpc = newRpc;
+                
+                // Reduce wait time since we switched RPC
+                result.waitMs = Math.min(result.waitMs, 2000);
+                
+            } catch (e) {
+                console.warn('[ErrorHandler] Could not switch RPC:', e.message);
+                result.rpcSwitched = false;
+            }
+        }
+        
+        return result;
     },
 
     /**
