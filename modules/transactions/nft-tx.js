@@ -325,7 +325,6 @@ async function approveWithRetry(signer, userAddress, tokenAddress, spenderAddres
     }
     
     throw new Error('All approval strategies failed. Please try again later or check your network connection.');
-}
 
 // ============================================================================
 // 4. TRANSACTION FUNCTIONS
