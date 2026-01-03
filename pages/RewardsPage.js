@@ -1,17 +1,16 @@
 // pages/RewardsPage.js
-// ✅ PRODUCTION V14.0 - Complete Redesign with Booster Benefits Focus
+// ✅ PRODUCTION V14.2 - Clean Design + Performance Fixes
 //
-// V14.0 Changes:
-// - Complete UI redesign focusing on booster BENEFITS (not fees)
-// - Shows: Mined → Booster Bonus → You Receive
-// - Compares what user would get WITHOUT booster vs WITH booster
-// - Clean, incentive-focused presentation
-// - Removed fee-centric language
+// V14.2 Changes:
+// - Cleaner, minimal UI design
+// - Removed excessive animations
+// - Fixed render loop issues with cache/throttle
+// - Removed unused API endpoint call
 //
+// V14.0: Complete UI redesign focusing on booster BENEFITS
 // V13.0: NFT Discount Simulator
 // V12.0: Fixed claimRewards signature
 // V11.0: Migrated to StakingTx
-// V10.0: Animated Reward Image
 
 const ethers = window.ethers;
 
@@ -20,8 +19,7 @@ import {
     calculateUserTotalRewards,
     calculateClaimDetails,
     getHighestBoosterBoostFromAPI,
-    loadUserData,
-    API_ENDPOINTS
+    loadUserData
 } from '../modules/data.js';
 import { formatBigNumber } from '../utils.js';
 import { showToast } from '../ui-feedback.js';
@@ -448,24 +446,10 @@ function renderContent(claimDetails, grossRewards, boosterData) {
 // CLAIM HISTORY
 // ============================================================================
 async function loadClaimHistory() {
-    if (!State.userAddress) return;
-    
-    try {
-        // V14.1 FIX: Check if endpoint is defined before fetching
-        const endpoint = API_ENDPOINTS?.getUserTransactions;
-        if (!endpoint) {
-            console.warn('[Rewards] getUserTransactions endpoint not defined');
-            return;
-        }
-        
-        const response = await fetch(`${endpoint}?address=${State.userAddress}&type=CLAIM`);
-        if (response.ok) {
-            const data = await response.json();
-            claimHistory = (data.transactions || data || []).slice(0, 10);
-        }
-    } catch (e) {
-        console.warn('[Rewards] Failed to load claim history:', e.message);
-    }
+    // V14.2: Claim history endpoint não implementado na API
+    // O histórico pode ser buscado do Firebase diretamente se configurado
+    // Por enquanto, mantemos vazio para evitar erros 404
+    claimHistory = [];
 }
 
 function renderClaimHistory() {
