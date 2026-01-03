@@ -446,10 +446,80 @@ function renderContent(claimDetails, grossRewards, boosterData) {
 // CLAIM HISTORY
 // ============================================================================
 async function loadClaimHistory() {
-    // V14.2: Claim history endpoint não implementado na API
-    // O histórico pode ser buscado do Firebase diretamente se configurado
-    // Por enquanto, mantemos vazio para evitar erros 404
-    claimHistory = [];
+    if (!State.userAddress) return;
+    
+    try {
+        // V14.3: Buscar histórico de claims do Firebase (user_activity collection)
+        // Os claims são salvos pelo indexer com type: "ClaimReward"
+        
+        // Verificar se Firebase está disponível
+        const firebase = window.firebase;
+        if (!firebase || !firebase.firestore) {
+            console.warn('[Rewards] Firebase not available for claim history');
+            return;
+        }
+        
+        const db = firebase.firestore();
+        const userAddress = State.userAddress.toLowerCase();
+        
+        const snapshot = await db.collection('user_activity')
+            .where('user', '==', userAddress)
+            .where('type', '==', 'ClaimReward')
+            .orderBy('timestamp', 'desc')
+            .limit(10)
+            .get();
+        
+        claimHistory = [];
+        snapshot.forEach(doc => {
+            const data = doc.data();
+            claimHistory.push({
+                id: doc.id,
+                amount: data.amount || data.details?.amount || '0',
+                timestamp: data.timestamp?.toDate?.() || data.timestamp || new Date(),
+                transactionHash: data.txHash || '',
+                feePaid: data.details?.feePaid || '0'
+            });
+        });
+        
+        console.log(`[Rewards] Loaded ${claimHistory.length} claim history items`);
+        
+    } catch (e) {
+        // Se der erro de índice ou permissão, tentar busca alternativa
+        if (e.code === 'failed-precondition' || e.message?.includes('index')) {
+            console.warn('[Rewards] Firebase index not ready, trying alternative query');
+            try {
+                const db = window.firebase.firestore();
+                const userAddress = State.userAddress.toLowerCase();
+                
+                // Query mais simples sem orderBy (pode não precisar de índice composto)
+                const snapshot = await db.collection('user_activity')
+                    .where('user', '==', userAddress)
+                    .where('type', '==', 'ClaimReward')
+                    .limit(10)
+                    .get();
+                
+                claimHistory = [];
+                snapshot.forEach(doc => {
+                    const data = doc.data();
+                    claimHistory.push({
+                        id: doc.id,
+                        amount: data.amount || data.details?.amount || '0',
+                        timestamp: data.timestamp?.toDate?.() || data.timestamp || new Date(),
+                        transactionHash: data.txHash || '',
+                        feePaid: data.details?.feePaid || '0'
+                    });
+                });
+                
+                // Ordenar manualmente
+                claimHistory.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+                
+            } catch (e2) {
+                console.warn('[Rewards] Failed to load claim history:', e2.message);
+            }
+        } else {
+            console.warn('[Rewards] Failed to load claim history:', e.message);
+        }
+    }
 }
 
 function renderClaimHistory() {
