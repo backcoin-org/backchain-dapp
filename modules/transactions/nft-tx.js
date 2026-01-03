@@ -322,9 +322,9 @@ async function approveWithRetry(signer, userAddress, tokenAddress, spenderAddres
             console.log(`[NFT] Trying alternative approach...`);
         }
     }
-    }
     
     throw new Error('All approval strategies failed. Please try again later or check your network connection.');
+}
 
 // ============================================================================
 // 4. TRANSACTION FUNCTIONS
