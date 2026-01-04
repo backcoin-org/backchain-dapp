@@ -1,18 +1,16 @@
 // modules/js/transactions/fortune-tx.js
-// ✅ PRODUCTION V1.3 - FIXED: Correct contract ABI and play() signature
+// ✅ PRODUCTION V1.4 - FIXED: Use Alchemy for reads, MetaMask only for signing
 // 
+// CHANGES V1.4:
+// - All validation reads now use Alchemy provider (getFortuneContractReadOnly)
+// - MetaMask RPC is only used for signing the transaction
+// - This fixes rate-limit issues when MetaMask has a public RPC configured
+// - Users don't need to change their MetaMask settings!
+//
 // CHANGES V1.3:
-// - Fixed play() signature: play(uint256, uint256[], bool) instead of play(uint256, uint8)
+// - Fixed play() signature: play(uint256, uint256[], bool)
 // - Fixed prizeTiers structure: (maxRange, multiplierBips, active) - 1-indexed
 // - Fixed getRequiredServiceFee(bool) signature
-// - Removed validation for minWager/maxWager (contract doesn't have these)
-// - Updated event parsing for GamePlayed and GameDetails
-//
-// CHANGES V1.2:
-// - Fixed getRequiredServiceFee signature
-//
-// CHANGES V1.1:
-// - Imports addresses from config.js
 //
 // ============================================================================
 // AVAILABLE TRANSACTIONS:
@@ -220,17 +218,20 @@ export async function playGame({
         },
         
         // Custom validation
+        // V1.4 FIX: Use read-only contract (Alchemy) for validation reads
+        // This avoids MetaMask RPC rate limits
         validate: async (signer, userAddress) => {
-            const contract = getFortuneContract(signer);
+            // Use read-only contract (uses Alchemy, not MetaMask RPC)
+            const readContract = await getFortuneContractReadOnly();
             
-            // Get service fee
+            // Get service fee using Alchemy provider
             try {
-                serviceFee = await contract.getRequiredServiceFee(isCumulative);
+                serviceFee = await readContract.getRequiredServiceFee(isCumulative);
             } catch (e) {
                 try {
-                    serviceFee = await contract.serviceFee();
+                    serviceFee = await readContract.serviceFee();
                     if (isCumulative) {
-                        serviceFee = serviceFee * 5n; // 5x multiplier for cumulative
+                        serviceFee = serviceFee * 5n;
                     }
                 } catch (e2) {
                     console.warn('[FortuneTx] Could not fetch service fee, using 0');
@@ -239,29 +240,29 @@ export async function playGame({
             }
             
             // Check user has enough ETH for service fee
-            const provider = signer.provider;
-            const ethBalance = await provider.getBalance(userAddress);
+            // Use Alchemy provider for balance check too
+            const { NetworkManager } = await import('../core/index.js');
+            const readProvider = NetworkManager.getProvider();
+            const ethBalance = await readProvider.getBalance(userAddress);
             
             if (serviceFee > 0n && ethBalance < serviceFee) {
                 throw new Error(`Insufficient ETH for service fee (${ethers.formatEther(serviceFee)} ETH required)`);
             }
             
-            // V1.3: Validate guesses based on mode and tier configuration
-            const tierCount = Number(await contract.activeTierCount());
+            // Validate guesses using Alchemy provider
+            const tierCount = Number(await readContract.activeTierCount());
             
             if (tierCount === 0) {
                 throw new Error('No active tiers available');
             }
             
             if (isCumulative) {
-                // Cumulative mode: need one guess per tier
                 if (guessesArray.length !== tierCount) {
                     throw new Error(`Cumulative mode requires ${tierCount} guesses (one per tier), got ${guessesArray.length}`);
                 }
                 
-                // Validate each guess against its tier's range
                 for (let i = 0; i < tierCount; i++) {
-                    const tier = await contract.prizeTiers(i + 1); // Tiers are 1-indexed
+                    const tier = await readContract.prizeTiers(i + 1);
                     const maxRange = Number(tier.maxRange);
                     const guessNum = Number(guessesArray[i]);
                     
@@ -270,13 +271,11 @@ export async function playGame({
                     }
                 }
             } else {
-                // Jackpot mode: need exactly 1 guess for the highest tier
                 if (guessesArray.length !== 1) {
                     throw new Error('Jackpot mode requires exactly 1 guess');
                 }
                 
-                // Validate against jackpot tier (highest tier = tierCount)
-                const jackpotTier = await contract.prizeTiers(tierCount);
+                const jackpotTier = await readContract.prizeTiers(tierCount);
                 const maxRange = Number(jackpotTier.maxRange);
                 const guessNum = Number(guessesArray[0]);
                 
