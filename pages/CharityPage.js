@@ -367,6 +367,8 @@ async function loadStats() {
  */
 function handleImageSelect(event, inputType = 'create') {
     const file = event.target.files?.[0];
+    console.log('📷 handleImageSelect:', { inputType, file: file?.name, size: file?.size });
+    
     if (!file) return;
     
     // Validate file type
@@ -571,17 +573,29 @@ function openEdit(id) {
     selCatOpt(c.category || 'humanitarian', 'edit');
     
     // Show current image if exists
-    if (c.imageUrl) {
-        const uploadDiv = document.getElementById('edit-image-upload');
-        if (uploadDiv) {
+    const uploadDiv = document.getElementById('edit-image-upload');
+    if (uploadDiv) {
+        if (c.imageUrl) {
             uploadDiv.innerHTML = `
-                <input type="file" id="edit-image-file" accept="image/*" onchange="CharityPage.handleImageSelect(event,'edit')">
-                <img src="${c.imageUrl}" class="cp-image-preview" id="edit-image-preview">
+                <input type="file" id="edit-image-file" accept="image/*" onchange="CharityPage.handleImageSelect(event,'edit')" style="display:none">
+                <img src="${c.imageUrl}" class="cp-image-preview" id="edit-image-preview" onclick="document.getElementById('edit-image-file').click()" style="cursor:pointer" title="Click to change image">
                 <button type="button" class="cp-image-remove" onclick="CharityPage.removeImage('edit')">
                     <i class="fa-solid fa-trash"></i> Remove
                 </button>
             `;
             uploadDiv.classList.add('has-image');
+        } else {
+            // Reset to default upload UI
+            uploadDiv.innerHTML = `
+                <input type="file" id="edit-image-file" accept="image/*" onchange="CharityPage.handleImageSelect(event,'edit')">
+                <div class="cp-image-upload-icon"><i class="fa-solid fa-cloud-arrow-up"></i></div>
+                <div class="cp-image-upload-text">
+                    <span>Click to upload</span> or drag and drop<br>
+                    <small>PNG, JPG, GIF up to 5MB</small>
+                </div>
+                <div id="edit-image-preview"></div>
+            `;
+            uploadDiv.classList.remove('has-image');
         }
     }
     
@@ -709,6 +723,8 @@ async function saveEdit() {
     const catEl = document.querySelector('#modal-edit .cp-cat-option.selected input');
     const category = catEl?.value || 'humanitarian';
     
+    console.log('📝 saveEdit called:', { id, title, hasFile: !!CS.pendingImageFile, imageUrl });
+    
     if (!title) return showToast('Enter title', 'error');
     
     const btn = document.getElementById('btn-save-edit');
@@ -720,12 +736,16 @@ async function saveEdit() {
     try {
         // Handle image upload if new file selected
         if (CS.pendingImageFile) {
+            console.log('📤 Uploading image file:', CS.pendingImageFile.name, CS.pendingImageFile.size);
             showToast('Uploading image...', 'info');
             imageUrl = await uploadImageToServer(CS.pendingImageFile);
+            console.log('✅ Image uploaded, URL:', imageUrl);
         }
         
+        console.log('💾 Saving to Firebase:', { campaignId: id, title, category, imageUrl });
+        
         // Save to Firebase (off-chain metadata)
-        await fetch(CHARITY_API.saveCampaign, {
+        const response = await fetch(CHARITY_API.saveCampaign, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -737,6 +757,13 @@ async function saveEdit() {
                 creator: State.userAddress
             })
         });
+        
+        const result = await response.json();
+        console.log('📦 Firebase response:', result);
+        
+        if (!response.ok) {
+            throw new Error(result.error || 'Save failed');
+        }
         
         showToast('✅ Campaign updated!', 'success');
         closeModal('edit');
