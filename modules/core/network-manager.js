@@ -1,6 +1,13 @@
 // modules/js/core/network-manager.js
-// ✅ PRODUCTION V1.2 - Added cooldown to prevent MetaMask update spam
+// ✅ PRODUCTION V1.3 - Fixed: Always prioritize Alchemy, don't abandon paid RPC
 // 
+// CHANGES V1.3:
+// - Alchemy is now ALWAYS tried first, even after errors
+// - Public RPCs only used as fallback when Alchemy fails
+// - MetaMask uses Alchemy URL directly when available
+// - Added forceAlchemy flag to prevent switching away from paid RPC
+// - Reduced unnecessary RPC switching
+//
 // CHANGES V1.2:
 // - Added 60s cooldown between MetaMask RPC updates
 // - Prevents loop when rate limited
@@ -20,9 +27,9 @@
 //
 // ============================================================================
 // ARCHITECTURE:
-// - Uses multiple RPC endpoints for redundancy
-// - Automatically detects and recovers from RPC issues
-// - Updates MetaMask when RPCs are slow/broken
+// - Alchemy (paid) is always preferred
+// - Public RPCs used only when Alchemy unavailable
+// - Automatic recovery without abandoning paid RPC
 // ============================================================================
 
 import { ErrorHandler, ErrorTypes } from './error-handler.js';
@@ -48,55 +55,46 @@ export const NETWORK_CONFIG = {
 };
 
 /**
+ * V1.3: Get Alchemy URL - centralized function
+ * @returns {string|null} Alchemy URL or null if not configured
+ */
+function getAlchemyUrl() {
+    const key = import.meta.env?.VITE_ALCHEMY_API_KEY;
+    return key ? `https://arb-sepolia.g.alchemy.com/v2/${key}` : null;
+}
+
+/**
  * RPC endpoints in priority order
- * First working RPC will be used
- * V1.1: Added more fallback options
+ * V1.3: Alchemy is always first and never skipped
  */
 const RPC_ENDPOINTS = [
     {
         name: 'Alchemy',
-        getUrl: () => {
-            const key = import.meta.env?.VITE_ALCHEMY_API_KEY;
-            return key ? `https://arb-sepolia.g.alchemy.com/v2/${key}` : null;
-        },
+        getUrl: getAlchemyUrl,
         priority: 1,
-        isPublic: false
+        isPublic: false,
+        isPaid: true  // V1.3: Mark as paid RPC
     },
     {
         name: 'Arbitrum Official',
         getUrl: () => 'https://sepolia-rollup.arbitrum.io/rpc',
         priority: 2,
-        isPublic: true
-    },
-    {
-        name: 'BlockPI',
-        getUrl: () => 'https://arbitrum-sepolia.blockpi.network/v1/rpc/public',
-        priority: 3,
-        isPublic: true
+        isPublic: true,
+        isPaid: false
     },
     {
         name: 'PublicNode',
         getUrl: () => 'https://arbitrum-sepolia-rpc.publicnode.com',
-        priority: 4,
-        isPublic: true
-    },
-    {
-        name: 'Chainstack',
-        getUrl: () => 'https://arbitrum-sepolia.core.chainstack.com',
-        priority: 5,
-        isPublic: true
-    },
-    {
-        name: 'Blast API',
-        getUrl: () => 'https://arbitrum-sepolia.public.blastapi.io',
-        priority: 6,
-        isPublic: true
+        priority: 3,
+        isPublic: true,
+        isPaid: false
     },
     {
         name: 'Ankr',
         getUrl: () => 'https://rpc.ankr.com/arbitrum_sepolia',
-        priority: 7,
-        isPublic: true
+        priority: 4,
+        isPublic: true,
+        isPaid: false
     }
 ];
 
@@ -108,12 +106,14 @@ let currentRpcIndex = 0;
 let healthCheckInterval = null;
 let lastHealthCheck = null;
 let consecutiveFailures = 0;
-let lastMetaMaskUpdate = 0; // V1.2: Track last MetaMask update time
+let lastMetaMaskUpdate = 0;
+let useAlchemyOnly = true; // V1.3: Flag to prefer Alchemy
 
 const MAX_CONSECUTIVE_FAILURES = 3;
 const HEALTH_CHECK_INTERVAL = 30000; // 30 seconds
 const RPC_TIMEOUT = 5000; // 5 seconds
-const METAMASK_UPDATE_COOLDOWN = 60000; // V1.2: 60 seconds cooldown between MetaMask updates
+const METAMASK_UPDATE_COOLDOWN = 60000; // 60 seconds cooldown
+const ALCHEMY_RETRY_DELAY = 2000; // V1.3: Wait before retrying Alchemy
 
 // ============================================================================
 // 3. NETWORK MANAGER
@@ -126,15 +126,29 @@ export const NetworkManager = {
     // =========================================================================
 
     /**
-     * Gets the current best RPC URL
+     * V1.3: Gets the best RPC URL, always trying Alchemy first
      * @returns {string} RPC URL
      */
     getCurrentRpcUrl() {
+        // V1.3: Always try Alchemy first if available
+        const alchemyUrl = getAlchemyUrl();
+        if (alchemyUrl && useAlchemyOnly) {
+            return alchemyUrl;
+        }
+        
         const endpoints = this.getAvailableEndpoints();
         if (endpoints.length === 0) {
             throw new Error('No RPC endpoints available');
         }
         return endpoints[currentRpcIndex % endpoints.length].getUrl();
+    },
+
+    /**
+     * V1.3: Gets the primary RPC URL (Alchemy if available)
+     * @returns {string|null} Primary RPC URL
+     */
+    getPrimaryRpcUrl() {
+        return getAlchemyUrl();
     },
 
     /**
@@ -148,31 +162,78 @@ export const NetworkManager = {
     },
 
     /**
-     * Gets array of RPC URLs for MetaMask
+     * V1.3: Gets array of RPC URLs for MetaMask
+     * Alchemy is always first if available
      * @returns {string[]} Array of RPC URLs
      */
     getRpcUrlsForMetaMask() {
-        return this.getAvailableEndpoints()
+        const alchemyUrl = getAlchemyUrl();
+        const publicUrls = this.getAvailableEndpoints()
+            .filter(rpc => rpc.isPublic)
             .map(rpc => rpc.getUrl())
             .filter(Boolean);
+        
+        // V1.3: Alchemy always first
+        if (alchemyUrl) {
+            return [alchemyUrl, ...publicUrls];
+        }
+        return publicUrls;
     },
 
     /**
-     * Switches to next available RPC
+     * V1.3: Switches to fallback RPC (only when Alchemy fails)
+     * @param {boolean} temporary - If true, will retry Alchemy soon
      * @returns {string} New RPC URL
      */
-    switchToNextRpc() {
+    switchToNextRpc(temporary = true) {
         const endpoints = this.getAvailableEndpoints();
-        if (endpoints.length <= 1) {
+        
+        // V1.3: If we're using Alchemy and it failed, try public RPCs temporarily
+        if (useAlchemyOnly && getAlchemyUrl()) {
+            useAlchemyOnly = false;
+            currentRpcIndex = 0;
+            
+            // Find first public RPC
+            const publicEndpoint = endpoints.find(e => e.isPublic);
+            if (publicEndpoint) {
+                console.log(`[Network] Alchemy temporarily unavailable, using: ${publicEndpoint.name}`);
+                
+                // V1.3: Schedule retry of Alchemy
+                if (temporary) {
+                    setTimeout(() => {
+                        console.log('[Network] Retrying Alchemy...');
+                        useAlchemyOnly = true;
+                        currentRpcIndex = 0;
+                    }, ALCHEMY_RETRY_DELAY);
+                }
+                
+                return publicEndpoint.getUrl();
+            }
+        }
+        
+        // Cycle through public RPCs
+        const publicEndpoints = endpoints.filter(e => e.isPublic);
+        if (publicEndpoints.length <= 1) {
             console.warn('[Network] No alternative RPCs available');
             return this.getCurrentRpcUrl();
         }
 
-        currentRpcIndex = (currentRpcIndex + 1) % endpoints.length;
-        const newRpc = endpoints[currentRpcIndex];
+        currentRpcIndex = (currentRpcIndex + 1) % publicEndpoints.length;
+        const newRpc = publicEndpoints[currentRpcIndex];
         
         console.log(`[Network] Switched to RPC: ${newRpc.name}`);
         return newRpc.getUrl();
+    },
+
+    /**
+     * V1.3: Force reset to Alchemy
+     */
+    resetToAlchemy() {
+        if (getAlchemyUrl()) {
+            useAlchemyOnly = true;
+            currentRpcIndex = 0;
+            console.log('[Network] Reset to Alchemy RPC');
+        }
     },
 
     /**
@@ -196,40 +257,54 @@ export const NetworkManager = {
     },
 
     /**
-     * V1.1: Handle rate limit by switching RPC immediately
+     * V1.3: Handle rate limit - smart handling for Alchemy vs public RPCs
      * @param {Error} error - The rate limit error
-     * @returns {Promise<void>}
+     * @returns {Promise<string>} New RPC URL
      */
     async handleRateLimit(error) {
-        console.warn('[Network] Rate limit detected, switching RPC immediately...');
+        // V1.3: Check if the rate limit is from Alchemy or public RPC
+        const currentUrl = this.getCurrentRpcUrl();
+        const alchemyUrl = getAlchemyUrl();
+        const isAlchemyError = alchemyUrl && currentUrl === alchemyUrl;
         
+        if (isAlchemyError) {
+            // Alchemy rate limited (unusual for paid plans)
+            console.warn('[Network] Alchemy rate limited (check your plan limits)');
+            // Wait a bit and retry Alchemy instead of switching
+            await new Promise(r => setTimeout(r, 1000));
+            return alchemyUrl;
+        }
+        
+        // Public RPC rate limited - this is expected, switch RPCs
+        console.warn('[Network] Public RPC rate limited, switching...');
         const newRpc = this.switchToNextRpc();
         
-        // Also update MetaMask with new RPC
-        try {
-            await this.updateMetaMaskRpcs();
-            console.log('[Network] MetaMask updated with new RPC');
-        } catch (e) {
-            console.warn('[Network] Could not update MetaMask:', e.message);
+        // Don't spam MetaMask updates for public RPC issues
+        const now = Date.now();
+        if (now - lastMetaMaskUpdate > METAMASK_UPDATE_COOLDOWN) {
+            try {
+                await this.updateMetaMaskRpcs();
+                lastMetaMaskUpdate = now;
+            } catch (e) {
+                console.warn('[Network] Could not update MetaMask:', e.message);
+            }
         }
         
         return newRpc;
     },
 
     /**
-     * V1.1: Gets a working provider, switching RPCs if needed
+     * V1.3: Gets a working provider, always trying Alchemy first
      * @returns {Promise<ethers.JsonRpcProvider>} Working provider
      */
     async getWorkingProvider() {
         const ethers = window.ethers;
-        const maxAttempts = this.getAvailableEndpoints().length;
         
-        for (let i = 0; i < maxAttempts; i++) {
+        // V1.3: Always try Alchemy first if available
+        const alchemyUrl = getAlchemyUrl();
+        if (alchemyUrl) {
             try {
-                const rpcUrl = this.getCurrentRpcUrl();
-                const provider = new ethers.JsonRpcProvider(rpcUrl);
-                
-                // Quick test - get block number
+                const provider = new ethers.JsonRpcProvider(alchemyUrl);
                 await Promise.race([
                     provider.getBlockNumber(),
                     new Promise((_, reject) => 
@@ -237,16 +312,42 @@ export const NetworkManager = {
                     )
                 ]);
                 
+                // Alchemy works, ensure we're using it
+                useAlchemyOnly = true;
                 return provider;
             } catch (error) {
-                console.warn(`[Network] RPC ${currentRpcIndex} failed, trying next...`);
-                this.switchToNextRpc();
+                console.warn('[Network] Alchemy temporarily unavailable:', error.message);
             }
         }
         
-        // All failed, return last one anyway
-        const rpcUrl = this.getCurrentRpcUrl();
-        return new ethers.JsonRpcProvider(rpcUrl);
+        // V1.3: Fallback to public RPCs
+        const publicEndpoints = this.getAvailableEndpoints().filter(e => e.isPublic);
+        
+        for (const endpoint of publicEndpoints) {
+            try {
+                const rpcUrl = endpoint.getUrl();
+                const provider = new ethers.JsonRpcProvider(rpcUrl);
+                
+                await Promise.race([
+                    provider.getBlockNumber(),
+                    new Promise((_, reject) => 
+                        setTimeout(() => reject(new Error('timeout')), 3000)
+                    )
+                ]);
+                
+                console.log(`[Network] Using fallback RPC: ${endpoint.name}`);
+                return provider;
+            } catch (error) {
+                console.warn(`[Network] RPC ${endpoint.name} failed, trying next...`);
+            }
+        }
+        
+        // All failed, return Alchemy anyway (might recover)
+        if (alchemyUrl) {
+            return new ethers.JsonRpcProvider(alchemyUrl);
+        }
+        
+        throw new Error('No working RPC endpoints available');
     },
 
     // =========================================================================
