@@ -1,6 +1,11 @@
 // modules/js/transactions/fortune-tx.js
-// ✅ PRODUCTION V1.1 - FIXED: Uses dynamic addresses from config.js
+// ✅ PRODUCTION V1.2 - FIXED: getRequiredServiceFee signature
 // 
+// CHANGES V1.2:
+// - Fixed getRequiredServiceFee to use correct signature (bool isCumulative)
+// - The deployed contract uses V1 signature, not V2 (uint256 wagerAmount)
+// - Added fallback to legacy serviceFee() method
+//
 // CHANGES V1.1:
 // - Imports addresses from config.js (loaded from deployment-addresses.json)
 // - Removed hardcoded fallback addresses
@@ -57,6 +62,9 @@ function getContracts() {
 
 /**
  * Fortune Pool V2 ABI - matches actual deployed contract
+ * 
+ * V1.2 FIX: Added multiple signatures for getRequiredServiceFee compatibility
+ * The deployed contract uses: getRequiredServiceFee(bool isCumulative)
  */
 const FORTUNE_ABI = [
     // Write functions
@@ -65,7 +73,8 @@ const FORTUNE_ABI = [
     // Read functions
     'function activeTierCount() view returns (uint256)',
     'function prizeTiers(uint256 index) view returns (uint256 minWager, uint256 maxWager, uint8 maxNumber, uint16 multiplierBps, bool active)',
-    'function getRequiredServiceFee(uint256 wagerAmount) view returns (uint256)',
+    'function serviceFee() view returns (uint256)', // Legacy fallback
+    'function getRequiredServiceFee(bool isCumulative) view returns (uint256)', // V1 signature (current contract)
     'function totalGamesPlayed() view returns (uint256)',
     'function totalWagered() view returns (uint256)',
     'function totalPaidOut() view returns (uint256)',
@@ -189,14 +198,27 @@ export async function playGame({
         validate: async (signer, userAddress) => {
             const contract = getFortuneContract(signer);
             
-            // Get service fee for this wager
-            serviceFee = await contract.getRequiredServiceFee(wager);
+            // V1.2 FIX: Get service fee using correct signature
+            // Contract uses getRequiredServiceFee(bool isCumulative)
+            // For single guess game, isCumulative = false
+            try {
+                // Try V1 signature (bool isCumulative)
+                serviceFee = await contract.getRequiredServiceFee(false);
+            } catch (e) {
+                // Fallback to legacy serviceFee()
+                try {
+                    serviceFee = await contract.serviceFee();
+                } catch (e2) {
+                    console.warn('[FortuneTx] Could not fetch service fee, using 0');
+                    serviceFee = 0n;
+                }
+            }
             
             // Check user has enough ETH for service fee
             const provider = signer.provider;
             const ethBalance = await provider.getBalance(userAddress);
             
-            if (ethBalance < serviceFee) {
+            if (serviceFee > 0n && ethBalance < serviceFee) {
                 throw new Error(`Insufficient ETH for service fee (${ethers.formatEther(serviceFee)} ETH required)`);
             }
             
@@ -312,13 +334,26 @@ export async function getTierForWager(wagerAmount) {
 }
 
 /**
- * Gets required service fee for a wager amount
- * @param {string|bigint} wagerAmount - Wager amount in wei
+ * Gets required service fee
+ * V1.2 FIX: Uses correct contract signature (bool isCumulative)
+ * @param {boolean} isCumulative - Whether it's a cumulative (combo) game
  * @returns {Promise<bigint>} Fee in wei
  */
-export async function getServiceFee(wagerAmount = 0n) {
+export async function getServiceFee(isCumulative = false) {
     const contract = await getFortuneContractReadOnly();
-    return await contract.getRequiredServiceFee(wagerAmount);
+    
+    try {
+        // Try V1 signature (bool isCumulative)
+        return await contract.getRequiredServiceFee(isCumulative);
+    } catch (e) {
+        // Fallback to legacy serviceFee()
+        try {
+            return await contract.serviceFee();
+        } catch (e2) {
+            console.warn('[FortuneTx] Could not fetch service fee');
+            return 0n;
+        }
+    }
 }
 
 /**
