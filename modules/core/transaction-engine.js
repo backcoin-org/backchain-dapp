@@ -1,6 +1,12 @@
 // modules/js/core/transaction-engine.js
-// ✅ PRODUCTION V1.2 - Added skipSimulation option
+// ✅ PRODUCTION V1.3 - Use Alchemy for all reads/confirmations
 // 
+// CHANGES V1.3:
+// - _executeApproval now uses Alchemy to wait for confirmation
+// - _waitForConfirmation uses Alchemy instead of MetaMask RPC
+// - This fixes rate-limit issues when MetaMask has a slow/blocked RPC
+// - MetaMask is ONLY used for signing transactions
+//
 // CHANGES V1.2:
 // - Added skipSimulation option to bypass estimateGas (for RPC issues)
 // - When skipSimulation=true, uses fixed gas limit instead of estimating
@@ -509,6 +515,7 @@ export class TransactionEngine {
 
     /**
      * Executes token approval
+     * V1.3 FIX: Use Alchemy provider for waiting confirmation
      * @private
      */
     async _executeApproval(approval, signer, userAddress) {
@@ -521,16 +528,38 @@ export class TransactionEngine {
         const approveAmount = amount * ENGINE_CONFIG.APPROVAL_MULTIPLIER;
 
         try {
+            // Send approval transaction (uses MetaMask to sign)
             const tx = await tokenContract.approve(spender, approveAmount);
-            await tx.wait();
+            
+            // V1.3 FIX: Wait for confirmation using Alchemy provider instead of MetaMask
+            // This avoids rate-limit issues on MetaMask's RPC
+            const readProvider = NetworkManager.getProvider();
+            let receipt = null;
+            
+            // Poll for receipt using Alchemy
+            for (let i = 0; i < 30; i++) { // Max 30 attempts (45 seconds)
+                await new Promise(r => setTimeout(r, 1500));
+                receipt = await readProvider.getTransactionReceipt(tx.hash);
+                if (receipt) break;
+            }
+            
+            if (!receipt) {
+                // Fallback: try standard wait
+                receipt = await tx.wait();
+            }
+            
+            if (receipt.status === 0) {
+                throw new Error('Approval transaction reverted');
+            }
             
             console.log(`[TX] Approval confirmed`);
 
             // Wait for propagation
             await new Promise(r => setTimeout(r, ENGINE_CONFIG.APPROVAL_WAIT_TIME));
 
-            // Verify approval worked
-            const newAllowance = await tokenContract.allowance(userAddress, spender);
+            // Verify approval worked using Alchemy
+            const readTokenContract = new ethers.Contract(token, ERC20_APPROVAL_ABI, readProvider);
+            const newAllowance = await readTokenContract.allowance(userAddress, spender);
             
             if (newAllowance < amount) {
                 throw new Error('Approval not reflected on-chain');
@@ -600,12 +629,21 @@ export class TransactionEngine {
 
     /**
      * Waits for transaction confirmation with retry
+     * V1.3 FIX: Always use Alchemy provider for checking receipts
      * @private
      */
     async _waitForConfirmation(tx, provider) {
+        // V1.3: Always use Alchemy for confirmation checks
+        const readProvider = NetworkManager.getProvider();
+        
         try {
-            // Try standard wait
-            const receipt = await tx.wait();
+            // Try standard wait first (might work if MetaMask RPC is ok)
+            const receipt = await Promise.race([
+                tx.wait(),
+                new Promise((_, reject) => 
+                    setTimeout(() => reject(new Error('wait_timeout')), 10000)
+                )
+            ]);
             
             if (receipt.status === 1) {
                 return receipt;
@@ -618,33 +656,23 @@ export class TransactionEngine {
             return receipt;
 
         } catch (waitError) {
-            // Handle wait errors (common on Arbitrum)
-            console.warn('[TX] tx.wait() error, checking manually:', waitError.message);
+            // Handle wait errors - use Alchemy provider instead
+            console.warn('[TX] tx.wait() issue, using Alchemy to check:', waitError.message);
 
-            // Wait a bit then check manually
-            await new Promise(r => setTimeout(r, ENGINE_CONFIG.CONFIRMATION_RETRY_DELAY));
+            // Poll for receipt using Alchemy (reliable)
+            for (let i = 0; i < 20; i++) { // Max 20 attempts (30 seconds)
+                await new Promise(r => setTimeout(r, 1500));
+                
+                const receipt = await readProvider.getTransactionReceipt(tx.hash);
 
-            // Try to get receipt manually
-            let receipt = await provider.getTransactionReceipt(tx.hash);
+                if (receipt && receipt.status === 1) {
+                    console.log('[TX] Confirmed via Alchemy');
+                    return receipt;
+                }
 
-            if (receipt && receipt.status === 1) {
-                return receipt;
-            }
-
-            if (receipt && receipt.status === 0) {
-                throw new Error('Transaction reverted on-chain');
-            }
-
-            // One more try
-            await new Promise(r => setTimeout(r, ENGINE_CONFIG.CONFIRMATION_RETRY_DELAY * 2));
-            receipt = await provider.getTransactionReceipt(tx.hash);
-
-            if (receipt && receipt.status === 1) {
-                return receipt;
-            }
-
-            if (receipt && receipt.status === 0) {
-                throw new Error('Transaction reverted on-chain');
+                if (receipt && receipt.status === 0) {
+                    throw new Error('Transaction reverted on-chain');
+                }
             }
 
             // If we have a hash, assume success (optimistic)

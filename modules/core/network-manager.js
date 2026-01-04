@@ -599,13 +599,58 @@ export const NetworkManager = {
                 }]
             });
 
-            lastMetaMaskUpdate = now; // V1.2: Record update time
-            console.log('[Network] Updated MetaMask RPCs');
+            lastMetaMaskUpdate = now;
+            console.log('[Network] MetaMask RPCs updated with:', rpcUrls[0]);
             return true;
 
         } catch (error) {
-            // Silently fail - this is an optimization, not critical
             console.warn('[Network] Could not update MetaMask RPCs:', error.message);
+            return false;
+        }
+    },
+
+    /**
+     * V1.3: Force reset MetaMask network to use Alchemy
+     * This prompts user to switch networks, which resets RPC
+     * @returns {Promise<boolean>} true if successful
+     */
+    async forceResetMetaMaskRpc() {
+        if (!window.ethereum) return false;
+        
+        const alchemyUrl = getAlchemyUrl();
+        if (!alchemyUrl) {
+            console.warn('[Network] Alchemy not configured');
+            return false;
+        }
+
+        try {
+            // First, try to switch to mainnet (or any other network)
+            try {
+                await window.ethereum.request({
+                    method: 'wallet_switchEthereumChain',
+                    params: [{ chainId: '0x1' }] // Ethereum Mainnet
+                });
+            } catch (e) {
+                // Ignore - user might reject or network not exist
+            }
+
+            // Now add our network with fresh RPC
+            await window.ethereum.request({
+                method: 'wallet_addEthereumChain',
+                params: [{
+                    chainId: NETWORK_CONFIG.chainIdHex,
+                    chainName: NETWORK_CONFIG.name + ' (Alchemy)', // Slightly different name
+                    nativeCurrency: NETWORK_CONFIG.nativeCurrency,
+                    rpcUrls: [alchemyUrl], // ONLY Alchemy
+                    blockExplorerUrls: [NETWORK_CONFIG.blockExplorer]
+                }]
+            });
+
+            console.log('[Network] MetaMask reset to Alchemy RPC');
+            return true;
+
+        } catch (error) {
+            console.error('[Network] Failed to reset MetaMask:', error.message);
             return false;
         }
     },
