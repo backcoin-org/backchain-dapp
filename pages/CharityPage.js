@@ -1,18 +1,15 @@
 // js/pages/CharityPage.js
-// ✅ PRODUCTION V5.0 - Improved Error Handling
+// ✅ PRODUCTION V6.0 - Edit campaigns, Image upload, New icon
 // 
+// V6.0 Changes:
+// - Added campaign editing for creators (title, description, image)
+// - Added image upload support (not just URL)
+// - Changed hero icon to custom image (assets/charity-page.png)
+// - Improved modal styling
+//
 // V5.0 Changes:
 // - Added user_rejected check for cleaner UX
 // - Improved error message extraction
-// - Minor code improvements
-//
-// V4.0 Changes:
-// - Uses new modular transaction system
-// - Automatic validation (network, wallet, balances)
-// - Automatic token approvals
-// - Automatic retry on RPC errors
-// - Automatic UI state management
-// - Better error handling
 
 import { State } from '../state.js';
 import { showToast } from '../ui-feedback.js';
@@ -61,8 +58,12 @@ const charityPoolABI = [
 
 const CHARITY_API = { 
     getCampaigns: 'https://getcharitycampaigns-4wvdcuoouq-uc.a.run.app', 
-    saveCampaign: 'https://savecharitycampaign-4wvdcuoouq-uc.a.run.app' 
+    saveCampaign: 'https://savecharitycampaign-4wvdcuoouq-uc.a.run.app',
+    uploadImage: 'https://uploadcharityimage-4wvdcuoouq-uc.a.run.app' // V6.0: Image upload endpoint
 };
+
+// V6.0: Custom hero icon
+const HERO_ICON = 'assets/charity-page.png';
 
 const EXPLORER_ADDRESS = "https://sepolia.arbiscan.io/address/";
 const EXPLORER_TX = "https://sepolia.arbiscan.io/tx/";
@@ -85,6 +86,10 @@ const STATUS_CONFIG = {
     3: { label: 'Completed', color: '#8b5cf6', icon: 'fa-circle-dollar-to-slot' } 
 };
 
+// V6.0: Max image size (5MB)
+const MAX_IMAGE_SIZE = 5 * 1024 * 1024;
+const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+
 // ============================================================================
 // STATE
 // ============================================================================
@@ -96,23 +101,25 @@ const CS = {
     currentCampaign: null, 
     selectedCategory: null, 
     isLoading: false, 
-    pendingImage: null 
+    pendingImage: null,
+    pendingImageFile: null, // V6.0: For file uploads
+    editingCampaign: null   // V6.0: Campaign being edited
 };
 
 // ============================================================================
-// STYLES (unchanged)
+// STYLES
 // ============================================================================
 
 function injectStyles() {
-    if (document.getElementById('cp-styles-v4')) return;
+    if (document.getElementById('cp-styles-v6')) return;
     const s = document.createElement('style');
-    s.id = 'cp-styles-v4';
+    s.id = 'cp-styles-v6';
     s.textContent = `
 .charity-page { --cp-primary:#f59e0b; --cp-success:#10b981; --cp-danger:#ef4444; --cp-bg:#18181b; --cp-bg2:#27272a; --cp-bg3:#3f3f46; --cp-border:rgba(63,63,70,0.6); --cp-text:#fafafa; --cp-muted:#a1a1aa; --cp-radius:16px; max-width:1400px; margin:0 auto; padding:1rem; min-height:400px; }
 .cp-hero { background:linear-gradient(135deg,rgba(16,185,129,0.08),rgba(236,72,153,0.08),rgba(245,158,11,0.05)); border:1px solid var(--cp-border); border-radius:var(--cp-radius); padding:2rem; margin-bottom:1.5rem; display:flex; justify-content:space-between; align-items:center; gap:1.5rem; flex-wrap:wrap; }
 .cp-hero-left h1 { font-size:1.75rem; font-weight:800; color:var(--cp-text); margin:0 0 0.5rem; display:flex; align-items:center; gap:0.75rem; }
 .cp-hero-left p { color:var(--cp-muted); font-size:0.9rem; max-width:500px; margin:0; }
-.cp-hero-icon { width:48px; height:48px; background:linear-gradient(135deg,#10b981,#ec4899); border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:1.25rem; color:#fff; }
+.cp-hero-icon { width:56px; height:56px; border-radius:12px; object-fit:contain; }
 .cp-actions { display:flex; gap:0.75rem; }
 .cp-stats { display:grid; grid-template-columns:repeat(4,1fr); gap:1rem; margin-bottom:1.5rem; }
 .cp-stat { background:var(--cp-bg2); border:1px solid var(--cp-border); border-radius:12px; padding:1rem; text-align:center; }
@@ -178,7 +185,7 @@ function injectStyles() {
 .cp-form-group { margin-bottom:1rem; }
 .cp-form-label { display:block; font-size:0.8rem; font-weight:600; color:var(--cp-text); margin-bottom:0.375rem; }
 .cp-form-label span { color:var(--cp-muted); font-weight:400; }
-.cp-form-input { width:100%; padding:0.625rem 0.875rem; background:var(--cp-bg); border:1px solid var(--cp-border); border-radius:8px; color:var(--cp-text); font-size:0.9rem; }
+.cp-form-input { width:100%; padding:0.625rem 0.875rem; background:var(--cp-bg); border:1px solid var(--cp-border); border-radius:8px; color:var(--cp-text); font-size:0.9rem; box-sizing:border-box; }
 .cp-form-input:focus { outline:none; border-color:var(--cp-primary); }
 .cp-form-textarea { min-height:100px; resize:vertical; }
 .cp-form-row { display:grid; grid-template-columns:1fr 1fr; gap:1rem; }
@@ -190,7 +197,7 @@ function injectStyles() {
 .cp-cat-option-icon { font-size:1.5rem; margin-bottom:0.375rem; }
 .cp-cat-option-name { font-size:0.8rem; font-weight:600; color:var(--cp-text); }
 .cp-donate-input-wrap { position:relative; }
-.cp-donate-input { width:100%; padding:1rem; padding-right:4rem; font-size:1.5rem; font-weight:700; text-align:center; background:var(--cp-bg); border:2px solid var(--cp-border); border-radius:12px; color:var(--cp-text); }
+.cp-donate-input { width:100%; padding:1rem; padding-right:4rem; font-size:1.5rem; font-weight:700; text-align:center; background:var(--cp-bg); border:2px solid var(--cp-border); border-radius:12px; color:var(--cp-text); box-sizing:border-box; }
 .cp-donate-input:focus { outline:none; border-color:var(--cp-primary); }
 .cp-donate-currency { position:absolute; right:1rem; top:50%; transform:translateY(-50%); color:var(--cp-muted); font-weight:600; }
 .cp-donate-presets { display:flex; gap:0.5rem; margin:0.75rem 0; }
@@ -218,7 +225,7 @@ function injectStyles() {
 .cp-detail-stat-val { font-size:1rem; font-weight:700; color:var(--cp-text); }
 .cp-detail-stat-lbl { font-size:0.7rem; color:var(--cp-muted); margin-top:0.125rem; }
 .cp-detail-donate { display:flex; flex-direction:column; gap:0.75rem; }
-.cp-detail-donate input { width:100%; padding:0.75rem; font-size:1.125rem; font-weight:600; text-align:center; background:var(--cp-bg); border:1px solid var(--cp-border); border-radius:8px; color:var(--cp-text); }
+.cp-detail-donate input { width:100%; padding:0.75rem; font-size:1.125rem; font-weight:600; text-align:center; background:var(--cp-bg); border:1px solid var(--cp-border); border-radius:8px; color:var(--cp-text); box-sizing:border-box; }
 .cp-detail-donate input:focus { outline:none; border-color:var(--cp-primary); }
 .cp-detail-presets { display:flex; gap:0.375rem; }
 .cp-detail-presets button { flex:1; padding:0.375rem; background:var(--cp-bg3); border:1px solid var(--cp-border); border-radius:6px; color:var(--cp-text); font-size:0.75rem; cursor:pointer; }
@@ -235,13 +242,30 @@ function injectStyles() {
 .tx-status { display:inline-flex; align-items:center; gap:0.375rem; }
 .tx-icon { font-size:1rem; }
 .tx-text { font-size:0.8rem; }
+
+/* V6.0: Image upload styles */
+.cp-image-upload { border:2px dashed var(--cp-border); border-radius:12px; padding:1.5rem; text-align:center; cursor:pointer; transition:all 0.2s; background:var(--cp-bg); }
+.cp-image-upload:hover { border-color:var(--cp-primary); background:rgba(245,158,11,0.05); }
+.cp-image-upload.has-image { border-style:solid; }
+.cp-image-upload input { display:none; }
+.cp-image-upload-icon { font-size:2rem; color:var(--cp-muted); margin-bottom:0.5rem; }
+.cp-image-upload-text { font-size:0.85rem; color:var(--cp-muted); }
+.cp-image-upload-text span { color:var(--cp-primary); font-weight:600; }
+.cp-image-preview { width:100%; max-height:200px; object-fit:cover; border-radius:8px; margin-bottom:0.5rem; }
+.cp-image-remove { background:var(--cp-danger); color:#fff; border:none; padding:0.25rem 0.5rem; border-radius:4px; font-size:0.7rem; cursor:pointer; }
+.cp-tabs { display:flex; gap:0.5rem; margin-bottom:1rem; }
+.cp-tab { flex:1; padding:0.5rem; background:var(--cp-bg); border:1px solid var(--cp-border); border-radius:6px; color:var(--cp-muted); font-size:0.8rem; cursor:pointer; text-align:center; }
+.cp-tab.active { background:var(--cp-primary); color:#000; border-color:var(--cp-primary); font-weight:600; }
+.cp-url-input-wrap { display:none; }
+.cp-url-input-wrap.active { display:block; }
+
 @media(max-width:768px) { .cp-stats { grid-template-columns:repeat(2,1fr); } .cp-cats { grid-template-columns:1fr; } .cp-detail-content { grid-template-columns:1fr; } .cp-detail-sidebar { order:-1; } }
     `;
     document.head.appendChild(s);
 }
 
 // ============================================================================
-// UTILITIES (unchanged)
+// UTILITIES
 // ============================================================================
 
 const fmt = (v) => { try { const n = Number(ethers.formatEther(BigInt(v || 0))); return n >= 1000 ? `${(n/1000).toFixed(1)}K` : n.toFixed(n < 10 ? 2 : 0); } catch { return '0'; } };
@@ -256,7 +280,7 @@ const clearUrl = () => { if (window.location.hash.startsWith('#charity/')) windo
 const canWithdraw = (c) => { const status = normalizeStatus(c.status); const ended = Number(c.deadline) <= Math.floor(Date.now() / 1000); return (status === 0 || status === 1) && ended && !c.withdrawn && BigInt(c.raisedAmount || 0) > 0n; };
 
 // ============================================================================
-// DATA LOADING (unchanged)
+// DATA LOADING
 // ============================================================================
 
 async function loadData() {
@@ -283,8 +307,8 @@ async function loadData() {
                         return {
                             id: String(id),
                             creator: data[0],
-                            title: data[1] || apiData?.title || `Campaign #${id}`,
-                            description: data[2] || apiData?.description || '',
+                            title: apiData?.title || data[1] || `Campaign #${id}`,
+                            description: apiData?.description || data[2] || '',
                             goalAmount: BigInt(data[3].toString()),
                             raisedAmount: BigInt(data[4].toString()),
                             donationCount: Number(data[5]),
@@ -333,7 +357,127 @@ async function loadStats() {
 }
 
 // ============================================================================
-// RENDER FUNCTIONS (unchanged - just UI)
+// V6.0: IMAGE UPLOAD FUNCTIONS
+// ============================================================================
+
+/**
+ * Handles image file selection
+ */
+function handleImageSelect(event, inputType = 'create') {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    
+    // Validate file type
+    if (!ALLOWED_IMAGE_TYPES.includes(file.type)) {
+        showToast('Please select a valid image (JPG, PNG, GIF, WebP)', 'error');
+        return;
+    }
+    
+    // Validate file size
+    if (file.size > MAX_IMAGE_SIZE) {
+        showToast('Image must be less than 5MB', 'error');
+        return;
+    }
+    
+    // Store the file
+    CS.pendingImageFile = file;
+    
+    // Show preview
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        const previewId = inputType === 'edit' ? 'edit-image-preview' : 'create-image-preview';
+        const uploadDiv = document.getElementById(previewId)?.parentElement;
+        
+        if (uploadDiv) {
+            uploadDiv.innerHTML = `
+                <img src="${e.target.result}" class="cp-image-preview" id="${previewId}">
+                <button type="button" class="cp-image-remove" onclick="CharityPage.removeImage('${inputType}')">
+                    <i class="fa-solid fa-trash"></i> Remove
+                </button>
+            `;
+            uploadDiv.classList.add('has-image');
+        }
+    };
+    reader.readAsDataURL(file);
+}
+
+/**
+ * Removes the selected image
+ */
+function removeImage(inputType = 'create') {
+    CS.pendingImageFile = null;
+    
+    const uploadId = inputType === 'edit' ? 'edit-image-upload' : 'create-image-upload';
+    const uploadDiv = document.getElementById(uploadId);
+    
+    if (uploadDiv) {
+        uploadDiv.innerHTML = `
+            <input type="file" id="${inputType}-image-file" accept="image/*" onchange="CharityPage.handleImageSelect(event, '${inputType}')">
+            <div class="cp-image-upload-icon"><i class="fa-solid fa-cloud-arrow-up"></i></div>
+            <div class="cp-image-upload-text">
+                <span>Click to upload</span> or drag and drop<br>
+                <small>PNG, JPG, GIF up to 5MB</small>
+            </div>
+            <div id="${inputType}-image-preview"></div>
+        `;
+        uploadDiv.classList.remove('has-image');
+    }
+}
+
+/**
+ * Switches between URL and Upload tabs
+ */
+function switchImageTab(tab, inputType = 'create') {
+    const tabs = document.querySelectorAll(`#${inputType}-image-tabs .cp-tab`);
+    tabs.forEach(t => t.classList.remove('active'));
+    document.querySelector(`#${inputType}-image-tabs .cp-tab[data-tab="${tab}"]`)?.classList.add('active');
+    
+    const uploadWrap = document.getElementById(`${inputType}-image-upload`);
+    const urlWrap = document.getElementById(`${inputType}-image-url-wrap`);
+    
+    if (tab === 'upload') {
+        uploadWrap.style.display = 'block';
+        urlWrap.style.display = 'none';
+    } else {
+        uploadWrap.style.display = 'none';
+        urlWrap.style.display = 'block';
+    }
+}
+
+/**
+ * Uploads image to server and returns URL
+ */
+async function uploadImageToServer(file) {
+    try {
+        // Create form data
+        const formData = new FormData();
+        formData.append('image', file);
+        formData.append('wallet', State?.userAddress || '');
+        
+        const response = await fetch(CHARITY_API.uploadImage, {
+            method: 'POST',
+            body: formData
+        });
+        
+        if (!response.ok) {
+            throw new Error('Upload failed');
+        }
+        
+        const result = await response.json();
+        return result.imageUrl;
+    } catch (error) {
+        console.error('Image upload error:', error);
+        // Fallback: convert to base64 data URL (not ideal for production)
+        return new Promise((resolve) => {
+            const reader = new FileReader();
+            reader.onload = (e) => resolve(e.target.result);
+            reader.readAsDataURL(file);
+        });
+    }
+}
+
+// ============================================================================
+// RENDER FUNCTIONS
 // ============================================================================
 
 const renderBadge = (status) => { const s = STATUS_CONFIG[normalizeStatus(status)] || STATUS_CONFIG[0]; return `<span class="cp-badge" style="background:${s.color}20;color:${s.color}"><i class="fa-solid ${s.icon}"></i> ${s.label}</span>`; };
@@ -347,14 +491,16 @@ const renderCard = (c) => {
     return `<div class="cp-card" onclick="CharityPage.viewCampaign('${c.id}')"><img src="${getCampImg(c)}" class="cp-card-img" onerror="this.src='${PLACEHOLDER_IMAGES.default}'"><div class="cp-card-body"><div class="cp-card-badges">${renderBadge(c.status)}<span class="cp-badge" style="background:${CATEGORIES[cat]?.color || '#666'}20;color:${CATEGORIES[cat]?.color || '#666'}">${CATEGORIES[cat]?.emoji || '💗'} ${CATEGORIES[cat]?.name || 'Other'}</span></div><h3 class="cp-card-title">${c.title}</h3><div class="cp-card-creator">by <a href="${EXPLORER_ADDRESS}${c.creator}" target="_blank">${fmtAddr(c.creator)}</a></div><div class="cp-progress"><div class="cp-progress-fill ${cat}" style="width:${prog}%"></div></div><div class="cp-progress-stats"><span class="cp-progress-raised">${fmt(c.raisedAmount)} BKC</span><span class="cp-progress-goal">${prog}% of ${fmt(c.goalAmount)}</span></div><div class="cp-card-meta"><span><i class="fa-solid fa-heart"></i> ${c.donationCount || 0}</span><span style="color:${time.color}">${time.text}</span></div></div></div>`;
 };
 
+// V6.0: Updated hero with custom image
 const renderMain = () => {
     const active = CS.campaigns.filter(c => isCampaignActive(c));
     const animal = active.filter(c => c.category === 'animal');
     const humanitarian = active.filter(c => c.category === 'humanitarian');
     
-    return `<div class="charity-page">${renderCreateModal()}${renderMyCampaignsModal()}<div class="cp-hero"><div class="cp-hero-left" style="display:flex;align-items:center;gap:1rem"><div class="cp-hero-icon">💝</div><div><h1>Charity Pool</h1><p>Support causes you care about with BKC tokens. 95% goes directly to campaigns.</p></div></div><div class="cp-actions"><button class="cp-btn cp-btn-secondary" onclick="CharityPage.openMyCampaigns()"><i class="fa-solid fa-folder-open"></i> My Campaigns</button><button class="cp-btn cp-btn-primary" onclick="CharityPage.openCreate()"><i class="fa-solid fa-plus"></i> Create</button></div></div><div class="cp-stats"><div class="cp-stat"><div class="cp-stat-val g">${CS.stats ? fmt(CS.stats.raised) : '...'}</div><div class="cp-stat-lbl">Total Raised</div></div><div class="cp-stat"><div class="cp-stat-val b">${CS.stats ? fmt(CS.stats.burned) : '...'}</div><div class="cp-stat-lbl">Burned 🔥</div></div><div class="cp-stat"><div class="cp-stat-val o">${CS.stats?.created ?? '...'}</div><div class="cp-stat-lbl">Campaigns</div></div><div class="cp-stat"><div class="cp-stat-val p">${CS.stats?.withdrawals ?? '...'}</div><div class="cp-stat-lbl">Completed</div></div></div><div class="cp-cats"><div class="cp-cat animal" onclick="CharityPage.selectCat('animal')"><div class="cp-cat-icon">🐾</div><div class="cp-cat-name">Animal Welfare</div><div class="cp-cat-stats"><span><strong>${animal.length}</strong> active</span><span><strong>${fmt(animal.reduce((s,c)=>s+BigInt(c.raisedAmount||0),0n))}</strong> raised</span></div><div class="cp-cat-actions"><button class="cp-btn cp-btn-success" style="font-size:0.75rem;padding:0.4rem 0.8rem" onclick="event.stopPropagation();CharityPage.openCreate('animal')"><i class="fa-solid fa-plus"></i> Create</button></div></div><div class="cp-cat humanitarian" onclick="CharityPage.selectCat('humanitarian')"><div class="cp-cat-icon">💗</div><div class="cp-cat-name">Humanitarian Aid</div><div class="cp-cat-stats"><span><strong>${humanitarian.length}</strong> active</span><span><strong>${fmt(humanitarian.reduce((s,c)=>s+BigInt(c.raisedAmount||0),0n))}</strong> raised</span></div><div class="cp-cat-actions"><button class="cp-btn cp-btn-success" style="font-size:0.75rem;padding:0.4rem 0.8rem" onclick="event.stopPropagation();CharityPage.openCreate('humanitarian')"><i class="fa-solid fa-plus"></i> Create</button></div></div></div><div class="cp-section-header"><h2 class="cp-section-title">${CS.selectedCategory ? `<span style="cursor:pointer" onclick="CharityPage.clearCat()">←</span> ${CATEGORIES[CS.selectedCategory]?.name}` : '<i class="fa-solid fa-fire" style="color:var(--cp-primary)"></i> Active Campaigns'}</h2></div><div class="cp-grid" id="cp-grid">${active.length ? active.filter(c => !CS.selectedCategory || c.category === CS.selectedCategory).sort((a,b) => Number(b.createdAt||0) - Number(a.createdAt||0)).map(c => renderCard(c)).join('') : renderEmpty('No active campaigns')}</div></div>`;
+    return `<div class="charity-page">${renderCreateModal()}${renderMyCampaignsModal()}${renderEditModal()}<div class="cp-hero"><div class="cp-hero-left" style="display:flex;align-items:center;gap:1rem"><img src="${HERO_ICON}" class="cp-hero-icon" onerror="this.outerHTML='<div class=\\'cp-hero-icon\\' style=\\'background:linear-gradient(135deg,#10b981,#ec4899);display:flex;align-items:center;justify-content:center;font-size:1.5rem;color:#fff;border-radius:50%\\'>💝</div>'"><div><h1>Charity Pool</h1><p>Support causes you care about with BKC tokens. 95% goes directly to campaigns.</p></div></div><div class="cp-actions"><button class="cp-btn cp-btn-secondary" onclick="CharityPage.openMyCampaigns()"><i class="fa-solid fa-folder-open"></i> My Campaigns</button><button class="cp-btn cp-btn-primary" onclick="CharityPage.openCreate()"><i class="fa-solid fa-plus"></i> Create</button></div></div><div class="cp-stats"><div class="cp-stat"><div class="cp-stat-val g">${CS.stats ? fmt(CS.stats.raised) : '...'}</div><div class="cp-stat-lbl">Total Raised</div></div><div class="cp-stat"><div class="cp-stat-val b">${CS.stats ? fmt(CS.stats.burned) : '...'}</div><div class="cp-stat-lbl">Burned 🔥</div></div><div class="cp-stat"><div class="cp-stat-val o">${CS.stats?.created ?? '...'}</div><div class="cp-stat-lbl">Campaigns</div></div><div class="cp-stat"><div class="cp-stat-val p">${CS.stats?.withdrawals ?? '...'}</div><div class="cp-stat-lbl">Completed</div></div></div><div class="cp-cats"><div class="cp-cat animal" onclick="CharityPage.selectCat('animal')"><div class="cp-cat-icon">🐾</div><div class="cp-cat-name">Animal Welfare</div><div class="cp-cat-stats"><span><strong>${animal.length}</strong> active</span><span><strong>${fmt(animal.reduce((s,c)=>s+BigInt(c.raisedAmount||0),0n))}</strong> raised</span></div><div class="cp-cat-actions"><button class="cp-btn cp-btn-success" style="font-size:0.75rem;padding:0.4rem 0.8rem" onclick="event.stopPropagation();CharityPage.openCreate('animal')"><i class="fa-solid fa-plus"></i> Create</button></div></div><div class="cp-cat humanitarian" onclick="CharityPage.selectCat('humanitarian')"><div class="cp-cat-icon">💗</div><div class="cp-cat-name">Humanitarian Aid</div><div class="cp-cat-stats"><span><strong>${humanitarian.length}</strong> active</span><span><strong>${fmt(humanitarian.reduce((s,c)=>s+BigInt(c.raisedAmount||0),0n))}</strong> raised</span></div><div class="cp-cat-actions"><button class="cp-btn cp-btn-success" style="font-size:0.75rem;padding:0.4rem 0.8rem" onclick="event.stopPropagation();CharityPage.openCreate('humanitarian')"><i class="fa-solid fa-plus"></i> Create</button></div></div></div><div class="cp-section-header"><h2 class="cp-section-title">${CS.selectedCategory ? `<span style="cursor:pointer" onclick="CharityPage.clearCat()">←</span> ${CATEGORIES[CS.selectedCategory]?.name}` : '<i class="fa-solid fa-fire" style="color:var(--cp-primary)"></i> Active Campaigns'}</h2></div><div class="cp-grid" id="cp-grid">${active.length ? active.filter(c => !CS.selectedCategory || c.category === CS.selectedCategory).sort((a,b) => Number(b.createdAt||0) - Number(a.createdAt||0)).map(c => renderCard(c)).join('') : renderEmpty('No active campaigns')}</div></div>`;
 };
 
+// V6.0: Detail page with edit button for creator
 const renderDetail = (c) => {
     if (!c) return `<div class="charity-page"><button class="cp-btn cp-btn-secondary" onclick="CharityPage.goBack()"><i class="fa-solid fa-arrow-left"></i> Back</button><div class="cp-empty" style="margin-top:2rem"><i class="fa-solid fa-circle-question"></i><h3>Campaign not found</h3></div></div>`;
     
@@ -365,33 +511,119 @@ const renderDetail = (c) => {
     const isCreator = c.creator?.toLowerCase() === State?.userAddress?.toLowerCase();
     const canWd = canWithdraw(c);
     
-    return `<div class="charity-page"><div class="cp-detail"><div class="cp-detail-header"><button class="cp-btn cp-btn-secondary" onclick="CharityPage.goBack()"><i class="fa-solid fa-arrow-left"></i> Back</button>${renderBadge(c.status)}<span class="cp-badge" style="background:${CATEGORIES[cat]?.color}20;color:${CATEGORIES[cat]?.color}">${CATEGORIES[cat]?.emoji} ${CATEGORIES[cat]?.name}</span>${isCreator ? '<span class="cp-badge" style="background:var(--cp-primary)20;color:var(--cp-primary)"><i class="fa-solid fa-user"></i> Your Campaign</span>' : ''}</div><img src="${getCampImg(c)}" class="cp-detail-img" onerror="this.src='${PLACEHOLDER_IMAGES.default}'"><div class="cp-detail-content"><div class="cp-detail-main"><h1 class="cp-detail-title">${c.title}</h1><div class="cp-detail-creator">Created by <a href="${EXPLORER_ADDRESS}${c.creator}" target="_blank">${fmtAddr(c.creator)}</a></div><p class="cp-detail-desc">${c.description || 'No description provided.'}</p></div><div class="cp-detail-sidebar"><div class="cp-detail-card"><div class="cp-detail-progress"><div class="cp-progress"><div class="cp-progress-fill ${cat}" style="width:${prog}%"></div></div><div class="cp-detail-amount">${fmt(c.raisedAmount)} BKC</div><div class="cp-detail-goal">raised of ${fmt(c.goalAmount)} BKC goal (${prog}%)</div></div><div class="cp-detail-stats"><div class="cp-detail-stat"><div class="cp-detail-stat-val">${c.donationCount || 0}</div><div class="cp-detail-stat-lbl">Donations</div></div><div class="cp-detail-stat"><div class="cp-detail-stat-val" style="color:${time.color}">${time.text}</div><div class="cp-detail-stat-lbl">${isActive ? 'Remaining' : 'Status'}</div></div></div></div>${isActive ? `<div class="cp-detail-card"><h4><i class="fa-solid fa-heart" style="color:var(--cp-success)"></i> Make a Donation</h4><div class="cp-detail-donate"><input type="number" id="detail-amount" placeholder="Amount in BKC" min="1"><div class="cp-detail-presets"><button onclick="CharityPage.setAmt(10)">10</button><button onclick="CharityPage.setAmt(50)">50</button><button onclick="CharityPage.setAmt(100)">100</button><button onclick="CharityPage.setAmt(500)">500</button></div><button id="btn-donate-detail" class="cp-btn cp-btn-success" onclick="CharityPage.donateDetail('${c.id}')"><i class="fa-solid fa-heart"></i> Donate Now</button></div><div class="cp-fee-info" style="margin-top:0.75rem"><strong>4%</strong> mining • <strong>1%</strong> burned 🔥</div></div>` : ''}${isCreator && isActive ? `<button id="btn-cancel" class="cp-btn cp-btn-danger" style="width:100%" onclick="CharityPage.cancel('${c.id}')"><i class="fa-solid fa-xmark"></i> Cancel Campaign</button>` : ''}${isCreator && canWd ? `<button id="btn-withdraw" class="cp-btn cp-btn-primary" style="width:100%" onclick="CharityPage.withdraw('${c.id}')"><i class="fa-solid fa-wallet"></i> Withdraw Funds</button>` : ''}<div class="cp-share-box"><div class="cp-share-title">Share this campaign</div><div class="cp-share-btns"><button class="cp-share-btn twitter" onclick="CharityPage.share('twitter')"><i class="fa-brands fa-x-twitter"></i></button><button class="cp-share-btn telegram" onclick="CharityPage.share('telegram')"><i class="fa-brands fa-telegram"></i></button><button class="cp-share-btn whatsapp" onclick="CharityPage.share('whatsapp')"><i class="fa-brands fa-whatsapp"></i></button><button class="cp-share-btn copy" onclick="CharityPage.copyLink()"><i class="fa-solid fa-link"></i></button></div></div></div></div></div>${renderDonateModal()}</div>`;
+    return `<div class="charity-page"><div class="cp-detail"><div class="cp-detail-header"><button class="cp-btn cp-btn-secondary" onclick="CharityPage.goBack()"><i class="fa-solid fa-arrow-left"></i> Back</button>${renderBadge(c.status)}<span class="cp-badge" style="background:${CATEGORIES[cat]?.color}20;color:${CATEGORIES[cat]?.color}">${CATEGORIES[cat]?.emoji} ${CATEGORIES[cat]?.name}</span>${isCreator ? '<span class="cp-badge" style="background:var(--cp-primary)20;color:var(--cp-primary)"><i class="fa-solid fa-user"></i> Your Campaign</span>' : ''}${isCreator ? `<button class="cp-btn cp-btn-secondary" style="margin-left:auto;font-size:0.75rem;padding:0.4rem 0.8rem" onclick="CharityPage.openEdit('${c.id}')"><i class="fa-solid fa-pen"></i> Edit</button>` : ''}</div><img src="${getCampImg(c)}" class="cp-detail-img" onerror="this.src='${PLACEHOLDER_IMAGES.default}'"><div class="cp-detail-content"><div class="cp-detail-main"><h1 class="cp-detail-title">${c.title}</h1><div class="cp-detail-creator">Created by <a href="${EXPLORER_ADDRESS}${c.creator}" target="_blank">${fmtAddr(c.creator)}</a></div><p class="cp-detail-desc">${c.description || 'No description provided.'}</p></div><div class="cp-detail-sidebar"><div class="cp-detail-card"><div class="cp-detail-progress"><div class="cp-progress"><div class="cp-progress-fill ${cat}" style="width:${prog}%"></div></div><div class="cp-detail-amount">${fmt(c.raisedAmount)} BKC</div><div class="cp-detail-goal">raised of ${fmt(c.goalAmount)} BKC goal (${prog}%)</div></div><div class="cp-detail-stats"><div class="cp-detail-stat"><div class="cp-detail-stat-val">${c.donationCount || 0}</div><div class="cp-detail-stat-lbl">Donations</div></div><div class="cp-detail-stat"><div class="cp-detail-stat-val" style="color:${time.color}">${time.text}</div><div class="cp-detail-stat-lbl">${isActive ? 'Remaining' : 'Status'}</div></div></div></div>${isActive ? `<div class="cp-detail-card"><h4><i class="fa-solid fa-heart" style="color:var(--cp-success)"></i> Make a Donation</h4><div class="cp-detail-donate"><input type="number" id="detail-amount" placeholder="Amount in BKC" min="1"><div class="cp-detail-presets"><button onclick="CharityPage.setAmt(10)">10</button><button onclick="CharityPage.setAmt(50)">50</button><button onclick="CharityPage.setAmt(100)">100</button><button onclick="CharityPage.setAmt(500)">500</button></div><button id="btn-donate-detail" class="cp-btn cp-btn-success" onclick="CharityPage.donateDetail('${c.id}')"><i class="fa-solid fa-heart"></i> Donate Now</button></div><div class="cp-fee-info" style="margin-top:0.75rem"><strong>4%</strong> mining • <strong>1%</strong> burned 🔥</div></div>` : ''}${isCreator && isActive ? `<button id="btn-cancel" class="cp-btn cp-btn-danger" style="width:100%" onclick="CharityPage.cancel('${c.id}')"><i class="fa-solid fa-xmark"></i> Cancel Campaign</button>` : ''}${isCreator && canWd ? `<button id="btn-withdraw" class="cp-btn cp-btn-primary" style="width:100%" onclick="CharityPage.withdraw('${c.id}')"><i class="fa-solid fa-wallet"></i> Withdraw Funds</button>` : ''}<div class="cp-share-box"><div class="cp-share-title">Share this campaign</div><div class="cp-share-btns"><button class="cp-share-btn twitter" onclick="CharityPage.share('twitter')"><i class="fa-brands fa-x-twitter"></i></button><button class="cp-share-btn telegram" onclick="CharityPage.share('telegram')"><i class="fa-brands fa-telegram"></i></button><button class="cp-share-btn whatsapp" onclick="CharityPage.share('whatsapp')"><i class="fa-brands fa-whatsapp"></i></button><button class="cp-share-btn copy" onclick="CharityPage.copyLink()"><i class="fa-solid fa-link"></i></button></div></div></div></div></div>${renderDonateModal()}${renderEditModal()}</div>`;
 };
 
-const renderCreateModal = () => `<div class="cp-modal" id="modal-create"><div class="cp-modal-content"><div class="cp-modal-header"><h3 class="cp-modal-title"><i class="fa-solid fa-plus" style="color:var(--cp-primary)"></i> Create Campaign</h3><button class="cp-modal-close" onclick="CharityPage.closeModal('create')"><i class="fa-solid fa-xmark"></i></button></div><div class="cp-modal-body"><div class="cp-form-group"><label class="cp-form-label">Category *</label><div class="cp-cat-selector"><label class="cp-cat-option" id="opt-animal" onclick="CharityPage.selCatOpt('animal')"><input type="radio" name="category" value="animal"><div class="cp-cat-option-icon">🐾</div><div class="cp-cat-option-name">Animal</div></label><label class="cp-cat-option selected" id="opt-humanitarian" onclick="CharityPage.selCatOpt('humanitarian')"><input type="radio" name="category" value="humanitarian" checked><div class="cp-cat-option-icon">💗</div><div class="cp-cat-option-name">Humanitarian</div></label></div></div><div class="cp-form-group"><label class="cp-form-label">Image URL <span>(optional)</span></label><input type="url" id="campaign-image-url" class="cp-form-input" placeholder="https://example.com/image.jpg"></div><div class="cp-form-group"><label class="cp-form-label">Title *</label><input type="text" id="campaign-title" class="cp-form-input" placeholder="Campaign title" maxlength="100"></div><div class="cp-form-group"><label class="cp-form-label">Description *</label><textarea id="campaign-desc" class="cp-form-input cp-form-textarea" placeholder="Tell your story..." maxlength="2000"></textarea></div><div class="cp-form-row"><div class="cp-form-group"><label class="cp-form-label">Goal (BKC) *</label><input type="number" id="campaign-goal" class="cp-form-input" placeholder="1000" min="1" step="0.01"></div><div class="cp-form-group"><label class="cp-form-label">Duration (Days) *</label><input type="number" id="campaign-duration" class="cp-form-input" placeholder="30" min="1" max="180"></div></div></div><div class="cp-modal-footer"><button class="cp-btn cp-btn-secondary" onclick="CharityPage.closeModal('create')">Cancel</button><button id="btn-create" class="cp-btn cp-btn-primary" onclick="CharityPage.create()"><i class="fa-solid fa-rocket"></i> Launch</button></div></div></div>`;
+// V6.0: Updated create modal with image upload option
+const renderCreateModal = () => `<div class="cp-modal" id="modal-create"><div class="cp-modal-content"><div class="cp-modal-header"><h3 class="cp-modal-title"><i class="fa-solid fa-plus" style="color:var(--cp-primary)"></i> Create Campaign</h3><button class="cp-modal-close" onclick="CharityPage.closeModal('create')"><i class="fa-solid fa-xmark"></i></button></div><div class="cp-modal-body"><div class="cp-form-group"><label class="cp-form-label">Category *</label><div class="cp-cat-selector"><label class="cp-cat-option" id="opt-animal" onclick="CharityPage.selCatOpt('animal')"><input type="radio" name="category" value="animal"><div class="cp-cat-option-icon">🐾</div><div class="cp-cat-option-name">Animal</div></label><label class="cp-cat-option selected" id="opt-humanitarian" onclick="CharityPage.selCatOpt('humanitarian')"><input type="radio" name="category" value="humanitarian" checked><div class="cp-cat-option-icon">💗</div><div class="cp-cat-option-name">Humanitarian</div></label></div></div><div class="cp-form-group"><label class="cp-form-label">Campaign Image <span>(optional)</span></label><div class="cp-tabs" id="create-image-tabs"><button type="button" class="cp-tab active" data-tab="upload" onclick="CharityPage.switchImageTab('upload','create')">Upload</button><button type="button" class="cp-tab" data-tab="url" onclick="CharityPage.switchImageTab('url','create')">URL</button></div><div class="cp-image-upload" id="create-image-upload" onclick="document.getElementById('create-image-file').click()"><input type="file" id="create-image-file" accept="image/*" onchange="CharityPage.handleImageSelect(event,'create')"><div class="cp-image-upload-icon"><i class="fa-solid fa-cloud-arrow-up"></i></div><div class="cp-image-upload-text"><span>Click to upload</span> or drag and drop<br><small>PNG, JPG, GIF up to 5MB</small></div><div id="create-image-preview"></div></div><div id="create-image-url-wrap" style="display:none"><input type="url" id="campaign-image-url" class="cp-form-input" placeholder="https://example.com/image.jpg"></div></div><div class="cp-form-group"><label class="cp-form-label">Title *</label><input type="text" id="campaign-title" class="cp-form-input" placeholder="Campaign title" maxlength="100"></div><div class="cp-form-group"><label class="cp-form-label">Description *</label><textarea id="campaign-desc" class="cp-form-input cp-form-textarea" placeholder="Tell your story..." maxlength="2000"></textarea></div><div class="cp-form-row"><div class="cp-form-group"><label class="cp-form-label">Goal (BKC) *</label><input type="number" id="campaign-goal" class="cp-form-input" placeholder="1000" min="1" step="0.01"></div><div class="cp-form-group"><label class="cp-form-label">Duration (Days) *</label><input type="number" id="campaign-duration" class="cp-form-input" placeholder="30" min="1" max="180"></div></div></div><div class="cp-modal-footer"><button class="cp-btn cp-btn-secondary" onclick="CharityPage.closeModal('create')">Cancel</button><button id="btn-create" class="cp-btn cp-btn-primary" onclick="CharityPage.create()"><i class="fa-solid fa-rocket"></i> Launch</button></div></div></div>`;
 
 const renderDonateModal = () => `<div class="cp-modal" id="modal-donate"><div class="cp-modal-content" style="max-width:420px"><div class="cp-modal-header"><h3 class="cp-modal-title"><i class="fa-solid fa-heart" style="color:var(--cp-success)"></i> Donate</h3><button class="cp-modal-close" onclick="CharityPage.closeModal('donate')"><i class="fa-solid fa-xmark"></i></button></div><div class="cp-modal-body"><input type="hidden" id="donate-campaign-id"><div id="donate-info" style="margin-bottom:1rem"></div><div class="cp-form-group"><label class="cp-form-label">Amount (BKC)</label><div class="cp-donate-input-wrap"><input type="number" id="donate-amount" class="cp-donate-input" placeholder="0.00" min="1" step="0.01"><span class="cp-donate-currency">BKC</span></div></div><div class="cp-donate-presets"><button class="cp-preset" onclick="document.getElementById('donate-amount').value=10">10</button><button class="cp-preset" onclick="document.getElementById('donate-amount').value=50">50</button><button class="cp-preset" onclick="document.getElementById('donate-amount').value=100">100</button><button class="cp-preset" onclick="document.getElementById('donate-amount').value=500">500</button></div><div class="cp-fee-info"><strong>4%</strong> mining • <strong>1%</strong> burned 🔥 • <strong>95%</strong> to campaign</div></div><div class="cp-modal-footer"><button class="cp-btn cp-btn-secondary" onclick="CharityPage.closeModal('donate')">Cancel</button><button id="btn-donate" class="cp-btn cp-btn-success" onclick="CharityPage.donate()"><i class="fa-solid fa-heart"></i> Donate</button></div></div></div>`;
 
 const renderMyCampaignsModal = () => `<div class="cp-modal" id="modal-my"><div class="cp-modal-content" style="max-width:650px"><div class="cp-modal-header"><h3 class="cp-modal-title"><i class="fa-solid fa-folder-open" style="color:var(--cp-primary)"></i> My Campaigns</h3><button class="cp-modal-close" onclick="CharityPage.closeModal('my')"><i class="fa-solid fa-xmark"></i></button></div><div class="cp-modal-body" id="my-campaigns-content">${renderLoading()}</div></div></div>`;
 
+// V6.0: Edit modal for campaign owners
+const renderEditModal = () => `<div class="cp-modal" id="modal-edit"><div class="cp-modal-content"><div class="cp-modal-header"><h3 class="cp-modal-title"><i class="fa-solid fa-pen" style="color:var(--cp-primary)"></i> Edit Campaign</h3><button class="cp-modal-close" onclick="CharityPage.closeModal('edit')"><i class="fa-solid fa-xmark"></i></button></div><div class="cp-modal-body"><input type="hidden" id="edit-campaign-id"><div class="cp-form-group"><label class="cp-form-label">Category</label><div class="cp-cat-selector"><label class="cp-cat-option" id="edit-opt-animal" onclick="CharityPage.selCatOpt('animal','edit')"><input type="radio" name="edit-category" value="animal"><div class="cp-cat-option-icon">🐾</div><div class="cp-cat-option-name">Animal</div></label><label class="cp-cat-option" id="edit-opt-humanitarian" onclick="CharityPage.selCatOpt('humanitarian','edit')"><input type="radio" name="edit-category" value="humanitarian"><div class="cp-cat-option-icon">💗</div><div class="cp-cat-option-name">Humanitarian</div></label></div></div><div class="cp-form-group"><label class="cp-form-label">Campaign Image</label><div class="cp-tabs" id="edit-image-tabs"><button type="button" class="cp-tab active" data-tab="upload" onclick="CharityPage.switchImageTab('upload','edit')">Upload</button><button type="button" class="cp-tab" data-tab="url" onclick="CharityPage.switchImageTab('url','edit')">URL</button></div><div class="cp-image-upload" id="edit-image-upload" onclick="document.getElementById('edit-image-file').click()"><input type="file" id="edit-image-file" accept="image/*" onchange="CharityPage.handleImageSelect(event,'edit')"><div class="cp-image-upload-icon"><i class="fa-solid fa-cloud-arrow-up"></i></div><div class="cp-image-upload-text"><span>Click to upload</span> or drag and drop<br><small>PNG, JPG, GIF up to 5MB</small></div><div id="edit-image-preview"></div></div><div id="edit-image-url-wrap" style="display:none"><input type="url" id="edit-image-url" class="cp-form-input" placeholder="https://example.com/image.jpg"></div></div><div class="cp-form-group"><label class="cp-form-label">Title</label><input type="text" id="edit-title" class="cp-form-input" placeholder="Campaign title" maxlength="100"></div><div class="cp-form-group"><label class="cp-form-label">Description</label><textarea id="edit-desc" class="cp-form-input cp-form-textarea" placeholder="Tell your story..." maxlength="2000"></textarea></div><p style="font-size:0.75rem;color:var(--cp-muted);margin-top:1rem"><i class="fa-solid fa-info-circle"></i> Note: Goal amount and duration cannot be changed after creation.</p></div><div class="cp-modal-footer"><button class="cp-btn cp-btn-secondary" onclick="CharityPage.closeModal('edit')">Cancel</button><button id="btn-save-edit" class="cp-btn cp-btn-primary" onclick="CharityPage.saveEdit()"><i class="fa-solid fa-check"></i> Save Changes</button></div></div></div>`;
+
 // ============================================================================
-// EVENT HANDLERS (unchanged)
+// EVENT HANDLERS
 // ============================================================================
 
 function openModal(id) { document.getElementById(`modal-${id}`)?.classList.add('active'); }
-function closeModal(id) { document.getElementById(`modal-${id}`)?.classList.remove('active'); }
-function openCreate(cat = null) { if (!State?.isConnected) { showToast('Connect wallet first', 'warning'); return; } openModal('create'); if (cat) selCatOpt(cat); }
+function closeModal(id) { 
+    document.getElementById(`modal-${id}`)?.classList.remove('active'); 
+    // Clear pending image when closing
+    if (id === 'create' || id === 'edit') {
+        CS.pendingImageFile = null;
+    }
+}
+function openCreate(cat = null) { 
+    if (!State?.isConnected) { showToast('Connect wallet first', 'warning'); return; } 
+    CS.pendingImageFile = null;
+    openModal('create'); 
+    if (cat) selCatOpt(cat); 
+}
 function openDonate(id) { if (!State?.isConnected) { showToast('Connect wallet first', 'warning'); return; } const c = CS.campaigns.find(x => x.id === id || x.id === String(id)); if (!c) return showToast('Not found', 'error'); document.getElementById('donate-campaign-id').value = id; document.getElementById('donate-amount').value = ''; document.getElementById('donate-info').innerHTML = `<div style="padding:0.75rem;background:var(--cp-bg3);border-radius:8px"><strong style="color:var(--cp-text)">${c.title}</strong><div style="font-size:0.8rem;color:var(--cp-muted);margin-top:0.25rem">${fmt(c.raisedAmount)} / ${fmt(c.goalAmount)} BKC</div></div>`; openModal('donate'); }
-function openMyCampaigns() { if (!State?.isConnected) { showToast('Connect wallet first', 'warning'); return; } openModal('my'); const el = document.getElementById('my-campaigns-content'); el.innerHTML = renderLoading(); const mine = CS.campaigns.filter(c => c.creator?.toLowerCase() === State.userAddress?.toLowerCase()); if (!mine.length) { el.innerHTML = `<div class="cp-empty" style="padding:1.5rem"><i class="fa-solid fa-folder-open"></i><h3>No Campaigns</h3><button class="cp-btn cp-btn-primary" onclick="CharityPage.closeModal('my');CharityPage.openCreate()"><i class="fa-solid fa-plus"></i> Create</button></div>`; return; } el.innerHTML = mine.map(c => { const prog = calcProg(c.raisedAmount, c.goalAmount); const time = fmtTime(c.deadline); const isActive = isCampaignActive(c); const canWd = canWithdraw(c); return `<div style="display:flex;gap:1rem;padding:1rem;background:var(--cp-bg3);border-radius:10px;margin-bottom:0.75rem"><img src="${getCampImg(c)}" style="width:70px;height:70px;object-fit:cover;border-radius:8px" onerror="this.src='${PLACEHOLDER_IMAGES.default}'"><div style="flex:1;min-width:0"><div style="display:flex;justify-content:space-between;align-items:flex-start;gap:0.5rem"><h4 style="margin:0;color:var(--cp-text);font-size:0.9rem">${c.title}</h4>${renderBadge(c.status)}</div><div style="margin-top:0.5rem"><div class="cp-progress"><div class="cp-progress-fill ${c.category || 'humanitarian'}" style="width:${prog}%"></div></div><div style="display:flex;justify-content:space-between;font-size:0.7rem;margin-top:0.25rem"><span style="color:var(--cp-text)">${fmt(c.raisedAmount)} BKC</span><span style="color:var(--cp-muted)">${time.text}</span></div></div><div style="display:flex;gap:0.375rem;margin-top:0.625rem"><button class="cp-btn cp-btn-secondary" style="padding:0.3rem 0.6rem;font-size:0.7rem" onclick="CharityPage.closeModal('my');CharityPage.viewCampaign('${c.id}')"><i class="fa-solid fa-eye"></i> View</button>${isActive ? `<button id="btn-cancel-${c.id}" class="cp-btn cp-btn-danger" style="padding:0.3rem 0.6rem;font-size:0.7rem" onclick="CharityPage.cancel('${c.id}')"><i class="fa-solid fa-xmark"></i> Cancel</button>` : ''}${canWd ? `<button id="btn-withdraw-${c.id}" class="cp-btn cp-btn-primary" style="padding:0.3rem 0.6rem;font-size:0.7rem" onclick="CharityPage.withdraw('${c.id}')"><i class="fa-solid fa-wallet"></i> Withdraw</button>` : ''}</div></div></div>`; }).join(''); }
-function selCatOpt(cat) { document.querySelectorAll('.cp-cat-option').forEach(e => e.classList.remove('selected')); const opt = document.getElementById(`opt-${cat}`); if (opt) { opt.classList.add('selected'); const radio = opt.querySelector('input[type="radio"]'); if (radio) radio.checked = true; } }
+
+// V6.0: Open edit modal
+function openEdit(id) {
+    if (!State?.isConnected) { showToast('Connect wallet first', 'warning'); return; }
+    
+    const c = CS.campaigns.find(x => x.id === id || x.id === String(id));
+    if (!c) return showToast('Campaign not found', 'error');
+    
+    // Check if user is the creator
+    if (c.creator?.toLowerCase() !== State?.userAddress?.toLowerCase()) {
+        return showToast('Only the creator can edit', 'error');
+    }
+    
+    CS.editingCampaign = c;
+    CS.pendingImageFile = null;
+    
+    // Populate form fields
+    document.getElementById('edit-campaign-id').value = id;
+    document.getElementById('edit-title').value = c.title || '';
+    document.getElementById('edit-desc').value = c.description || '';
+    document.getElementById('edit-image-url').value = c.imageUrl || '';
+    
+    // Set category
+    selCatOpt(c.category || 'humanitarian', 'edit');
+    
+    // Show current image if exists
+    if (c.imageUrl) {
+        const uploadDiv = document.getElementById('edit-image-upload');
+        if (uploadDiv) {
+            uploadDiv.innerHTML = `
+                <input type="file" id="edit-image-file" accept="image/*" onchange="CharityPage.handleImageSelect(event,'edit')">
+                <img src="${c.imageUrl}" class="cp-image-preview" id="edit-image-preview">
+                <button type="button" class="cp-image-remove" onclick="CharityPage.removeImage('edit')">
+                    <i class="fa-solid fa-trash"></i> Remove
+                </button>
+            `;
+            uploadDiv.classList.add('has-image');
+        }
+    }
+    
+    openModal('edit');
+}
+
+async function openMyCampaigns() {
+    if (!State?.isConnected) { showToast('Connect wallet first', 'warning'); return; }
+    openModal('my');
+    
+    const content = document.getElementById('my-campaigns-content');
+    if (content) content.innerHTML = renderLoading();
+    
+    const addr = State.userAddress?.toLowerCase();
+    const mine = CS.campaigns.filter(c => c.creator?.toLowerCase() === addr);
+    
+    if (content) {
+        if (mine.length === 0) {
+            content.innerHTML = renderEmpty('No campaigns yet');
+        } else {
+            // V6.0: Added edit button to my campaigns list
+            content.innerHTML = mine.map(c => {
+                const prog = calcProg(c.raisedAmount, c.goalAmount);
+                const canWd = canWithdraw(c);
+                const isActive = isCampaignActive(c);
+                return `<div style="display:flex;align-items:center;gap:1rem;padding:1rem;background:var(--cp-bg3);border-radius:10px;margin-bottom:0.75rem"><img src="${getCampImg(c)}" style="width:60px;height:60px;border-radius:8px;object-fit:cover" onerror="this.src='${PLACEHOLDER_IMAGES.default}'"><div style="flex:1;min-width:0"><div style="font-weight:600;color:var(--cp-text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${c.title}</div><div style="font-size:0.75rem;color:var(--cp-muted)">${fmt(c.raisedAmount)} / ${fmt(c.goalAmount)} BKC (${prog}%)</div><div style="display:flex;gap:0.25rem;margin-top:0.375rem">${renderBadge(c.status)}</div></div><div style="display:flex;flex-direction:column;gap:0.375rem"><button class="cp-btn cp-btn-secondary" style="font-size:0.7rem;padding:0.3rem 0.6rem" onclick="CharityPage.viewCampaign('${c.id}')"><i class="fa-solid fa-eye"></i></button><button class="cp-btn cp-btn-secondary" style="font-size:0.7rem;padding:0.3rem 0.6rem" onclick="CharityPage.openEdit('${c.id}')" title="Edit"><i class="fa-solid fa-pen"></i></button>${isActive ? `<button id="btn-cancel-${c.id}" class="cp-btn cp-btn-danger" style="font-size:0.7rem;padding:0.3rem 0.6rem" onclick="CharityPage.cancel('${c.id}')"><i class="fa-solid fa-xmark"></i></button>` : ''}${canWd ? `<button id="btn-withdraw-${c.id}" class="cp-btn cp-btn-primary" style="font-size:0.7rem;padding:0.3rem 0.6rem" onclick="CharityPage.withdraw('${c.id}')"><i class="fa-solid fa-wallet"></i></button>` : ''}</div></div>`;
+            }).join('');
+        }
+    }
+}
+
+function selCatOpt(cat, prefix = '') {
+    const idPrefix = prefix ? `${prefix}-opt-` : 'opt-';
+    document.querySelectorAll(`[id^="${idPrefix}"]`).forEach(el => el.classList.remove('selected'));
+    document.getElementById(`${idPrefix}${cat}`)?.classList.add('selected');
+}
 function setAmt(v) { const el = document.getElementById('detail-amount'); if (el) el.value = v; }
 
 // ============================================================================
-// TRANSACTIONS - USING NEW TRANSACTION ENGINE
+// TRANSACTIONS
 // ============================================================================
 
 /**
- * Create Campaign - Now uses CharityTx module
+ * Create Campaign - Now with image upload support
  */
 async function create() {
     if (!State?.isConnected) return showToast('Connect wallet', 'warning');
@@ -399,22 +631,34 @@ async function create() {
     const title = document.getElementById('campaign-title')?.value?.trim();
     const desc = document.getElementById('campaign-desc')?.value?.trim();
     const goal = document.getElementById('campaign-goal')?.value;
-    const dur = parseInt(document.getElementById('campaign-duration')?.value);
-    const cat = document.querySelector('input[name="category"]:checked')?.value || 'humanitarian';
-    const imgUrl = document.getElementById('campaign-image-url')?.value?.trim();
+    const days = document.getElementById('campaign-duration')?.value;
+    let imageUrl = document.getElementById('campaign-image-url')?.value?.trim();
+    const catEl = document.querySelector('.cp-cat-option.selected input');
+    const category = catEl?.value || 'humanitarian';
     
-    // Basic validation
     if (!title) return showToast('Enter title', 'error');
-    if (!goal || parseFloat(goal) < 1) return showToast('Goal min 1 BKC', 'error');
-    if (!dur || dur < 1 || dur > 180) return showToast('Duration 1-180 days', 'error');
+    if (!desc) return showToast('Enter description', 'error');
+    if (!goal || parseFloat(goal) <= 0) return showToast('Enter goal amount', 'error');
+    if (!days || parseInt(days) < 1 || parseInt(days) > 180) return showToast('Duration: 1-180 days', 'error');
+    
+    // V6.0: Handle image upload
+    if (CS.pendingImageFile) {
+        try {
+            showToast('Uploading image...', 'info');
+            imageUrl = await uploadImageToServer(CS.pendingImageFile);
+        } catch (e) {
+            console.error('Image upload failed:', e);
+            // Continue without image
+        }
+    }
     
     const goalWei = ethers.parseEther(goal.toString());
     
-    const result = await CharityTx.createCampaign({
+    await CharityTx.createCampaign({
         title,
-        description: desc || '',
+        description: desc,
         goalAmount: goalWei,
-        durationDays: dur,
+        durationDays: parseInt(days),
         button: document.getElementById('btn-create'),
         
         onSuccess: async (receipt, campaignId) => {
@@ -425,24 +669,22 @@ async function create() {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
-                            campaignId,
-                            creator: State.userAddress,
+                            id: campaignId,
                             title,
-                            description: desc || '',
-                            category: cat,
-                            imageUrl: imgUrl || null,
-                            txHash: receipt.hash
+                            description: desc,
+                            category,
+                            imageUrl,
+                            creator: State.userAddress
                         })
                     });
-                } catch (e) { console.warn('Metadata:', e); }
+                } catch (e) { console.warn('Save meta:', e); }
             }
             
             showToast('🎉 Campaign created!', 'success');
             closeModal('create');
+            CS.pendingImageFile = null;
             await loadData();
             render();
-            
-            if (campaignId) setTimeout(() => viewCampaign(campaignId), 1500);
         },
         
         onError: (error) => {
@@ -454,8 +696,74 @@ async function create() {
     });
 }
 
+// V6.0: Save campaign edits
+async function saveEdit() {
+    if (!State?.isConnected) return showToast('Connect wallet', 'warning');
+    
+    const id = document.getElementById('edit-campaign-id')?.value;
+    const title = document.getElementById('edit-title')?.value?.trim();
+    const desc = document.getElementById('edit-desc')?.value?.trim();
+    let imageUrl = document.getElementById('edit-image-url')?.value?.trim();
+    const catEl = document.querySelector('#modal-edit .cp-cat-option.selected input');
+    const category = catEl?.value || 'humanitarian';
+    
+    if (!title) return showToast('Enter title', 'error');
+    
+    const btn = document.getElementById('btn-save-edit');
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Saving...';
+    }
+    
+    try {
+        // Handle image upload if new file selected
+        if (CS.pendingImageFile) {
+            showToast('Uploading image...', 'info');
+            imageUrl = await uploadImageToServer(CS.pendingImageFile);
+        }
+        
+        // Save to Firebase (off-chain metadata)
+        await fetch(CHARITY_API.saveCampaign, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                id: parseInt(id),
+                title,
+                description: desc,
+                category,
+                imageUrl,
+                creator: State.userAddress
+            })
+        });
+        
+        showToast('✅ Campaign updated!', 'success');
+        closeModal('edit');
+        CS.pendingImageFile = null;
+        CS.editingCampaign = null;
+        
+        // Reload data
+        await loadData();
+        
+        // Re-render current view
+        if (CS.currentView === 'detail' && CS.currentCampaign?.id === id) {
+            await loadDetail(id);
+        } else {
+            render();
+        }
+        
+    } catch (error) {
+        console.error('Save edit error:', error);
+        showToast('Failed to save changes', 'error');
+    } finally {
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fa-solid fa-check"></i> Save Changes';
+        }
+    }
+}
+
 /**
- * Donate - Now uses CharityTx module
+ * Donate - Uses CharityTx module
  */
 async function donate() {
     if (!State?.isConnected) return showToast('Connect wallet', 'warning');
@@ -505,8 +813,36 @@ async function donateDetail(id) {
         button: document.getElementById('btn-donate-detail'),
         
         onSuccess: async () => {
-            showToast('❤️ Donation successful!', 'success');
+            showToast('❤️ Thank you for your donation!', 'success');
             await loadData();
+            await loadDetail(id);
+        },
+        
+        onError: (error) => {
+            if (!error.cancelled && error.type !== 'user_rejected') {
+                const msg = error.message || error.reason || 'Failed';
+                showToast(msg.slice(0, 80), 'error');
+            }
+        }
+    });
+}
+
+/**
+ * Cancel - Uses CharityTx module
+ */
+async function cancel(id) {
+    if (!State?.isConnected) return showToast('Connect wallet', 'warning');
+    if (!confirm('Cancel this campaign? This cannot be undone.')) return;
+    
+    await CharityTx.cancelCampaign({
+        campaignId: id,
+        button: document.getElementById(`btn-cancel-${id}`) || document.getElementById('btn-cancel'),
+        
+        onSuccess: async () => {
+            showToast('Campaign cancelled', 'success');
+            closeModal('my');
+            await loadData();
+            render();
             if (CS.currentCampaign?.id === id) await loadDetail(id);
         },
         
@@ -520,33 +856,7 @@ async function donateDetail(id) {
 }
 
 /**
- * Cancel Campaign - Now uses CharityTx module
- */
-async function cancel(id) {
-    if (!confirm('Cancel this campaign?')) return;
-    
-    await CharityTx.cancelCampaign({
-        campaignId: id,
-        button: document.getElementById(`btn-cancel-${id}`) || document.getElementById('btn-cancel'),
-        
-        onSuccess: async () => {
-            showToast('Campaign cancelled', 'success');
-            closeModal('my');
-            await loadData();
-            render();
-        },
-        
-        onError: (error) => {
-            if (!error.cancelled && error.type !== 'user_rejected') {
-                const msg = error.message || error.reason || 'Failed';
-                showToast(msg.slice(0, 80), 'error');
-            }
-        }
-    });
-}
-
-/**
- * Withdraw - Now uses CharityTx module
+ * Withdraw - Uses CharityTx module
  */
 async function withdraw(id) {
     if (!State?.isConnected) return showToast('Connect wallet', 'warning');
@@ -581,13 +891,13 @@ async function withdraw(id) {
 }
 
 // ============================================================================
-// NAVIGATION (unchanged)
+// NAVIGATION
 // ============================================================================
 
 function share(platform) { const c = CS.currentCampaign; if (!c) return; const url = getShareUrl(c.id); const txt = `🙏 Support "${c.title}" on Backcoin Charity!\n\n${fmt(c.raisedAmount)} raised of ${fmt(c.goalAmount)} goal.\n\n`; let shareUrl; if (platform === 'twitter') shareUrl = `https://twitter.com/intent/tweet?text=${encodeURIComponent(txt)}&url=${encodeURIComponent(url)}`; else if (platform === 'telegram') shareUrl = `https://t.me/share/url?url=${encodeURIComponent(url)}&text=${encodeURIComponent(txt)}`; else if (platform === 'whatsapp') shareUrl = `https://wa.me/?text=${encodeURIComponent(txt + url)}`; if (shareUrl) window.open(shareUrl, '_blank', 'width=600,height=400'); }
 function copyLink() { const c = CS.currentCampaign; if (!c) return; navigator.clipboard.writeText(getShareUrl(c.id)).then(() => showToast('Link copied!', 'success')).catch(() => showToast('Copy failed', 'error')); }
 function goBack() { clearUrl(); CS.currentCampaign = null; CS.currentView = 'main'; render(); }
-function viewCampaign(id) { closeModal('my'); closeModal('donate'); setUrl(id); loadDetail(id); }
+function viewCampaign(id) { closeModal('my'); closeModal('donate'); closeModal('edit'); setUrl(id); loadDetail(id); }
 function selectCat(cat) { CS.selectedCategory = CS.selectedCategory === cat ? null : cat; updateGrid(); }
 function clearCat() { CS.selectedCategory = null; updateGrid(); }
 function updateGrid() { const grid = document.getElementById('cp-grid'); if (!grid) return; let active = CS.campaigns.filter(c => isCampaignActive(c)); if (CS.selectedCategory) active = active.filter(c => c.category === CS.selectedCategory); active.sort((a, b) => Number(b.createdAt || 0) - Number(a.createdAt || 0)); grid.innerHTML = active.length ? active.map(c => renderCard(c)).join('') : renderEmpty('No campaigns'); }
@@ -619,7 +929,7 @@ async function loadDetail(id) {
 }
 
 // ============================================================================
-// CONTAINER & RENDER (unchanged)
+// CONTAINER & RENDER
 // ============================================================================
 
 function getContainer() {
@@ -640,7 +950,7 @@ function getContainer() {
 }
 
 function render() {
-    console.log('🎨 CharityPage render v4.0');
+    console.log('🎨 CharityPage render v6.0');
     injectStyles();
     
     const container = getContainer();
@@ -689,11 +999,13 @@ window.addEventListener('hashchange', () => {
 // ============================================================================
 
 export const CharityPage = {
-    render(isActive) { console.log('🚀 CharityPage.render v4.0, isActive:', isActive); if (isActive) render(); },
+    render(isActive) { console.log('🚀 CharityPage.render v6.0, isActive:', isActive); if (isActive) render(); },
     update() { if (CS.currentView === 'main') updateGrid(); },
-    refresh, openModal, closeModal, openCreate, openDonate, openMyCampaigns,
-    create, donate, donateDetail, cancel, withdraw,
-    selCatOpt, setAmt, goBack, viewCampaign, selectCat, clearCat, share, copyLink
+    refresh, openModal, closeModal, openCreate, openDonate, openMyCampaigns, openEdit,
+    create, donate, donateDetail, cancel, withdraw, saveEdit,
+    selCatOpt, setAmt, goBack, viewCampaign, selectCat, clearCat, share, copyLink,
+    // V6.0: Image upload functions
+    handleImageSelect, removeImage, switchImageTab
 };
 
 window.CharityPage = CharityPage;
