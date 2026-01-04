@@ -1,16 +1,14 @@
 // modules/js/transactions/fortune-tx.js
-// ✅ PRODUCTION V1.4 - FIXED: Use Alchemy for reads, MetaMask only for signing
+// ✅ PRODUCTION V1.5 - FIXED: Service fee now properly sent with transaction
 // 
+// CHANGES V1.5:
+// - Added detailed logging for service fee debugging
+// - Service fee fetch now throws error instead of defaulting to 0
+// - This fixes InsufficientServiceFee() contract error
+//
 // CHANGES V1.4:
 // - All validation reads now use Alchemy provider (getFortuneContractReadOnly)
 // - MetaMask RPC is only used for signing the transaction
-// - This fixes rate-limit issues when MetaMask has a public RPC configured
-// - Users don't need to change their MetaMask settings!
-//
-// CHANGES V1.3:
-// - Fixed play() signature: play(uint256, uint256[], bool)
-// - Fixed prizeTiers structure: (maxRange, multiplierBips, active) - 1-indexed
-// - Fixed getRequiredServiceFee(bool) signature
 //
 // ============================================================================
 // AVAILABLE TRANSACTIONS:
@@ -204,11 +202,14 @@ export async function playGame({
         
         getContract: async (signer) => getFortuneContract(signer),
         method: 'play',
-        // V1.3: Correct args - [wagerAmount, guesses[], isCumulative]
+        // V1.4: Correct args - [wagerAmount, guesses[], isCumulative]
         args: [wager, guessesArray, isCumulative],
         
         // ETH value for service fee (set in validate)
-        get value() { return serviceFee; },
+        get value() { 
+            console.log('[FortuneTx] Service fee for tx:', serviceFee?.toString());
+            return serviceFee; 
+        },
         
         // Token approval config
         approval: {
@@ -218,32 +219,40 @@ export async function playGame({
         },
         
         // Custom validation
-        // V1.4 FIX: Use read-only contract (Alchemy) for validation reads
-        // This avoids MetaMask RPC rate limits
+        // V1.5 FIX: Ensure service fee is fetched correctly
         validate: async (signer, userAddress) => {
             // Use read-only contract (uses Alchemy, not MetaMask RPC)
             const readContract = await getFortuneContractReadOnly();
             
             // Get service fee using Alchemy provider
+            // CRITICAL: Contract requires ETH for service fee
             try {
                 serviceFee = await readContract.getRequiredServiceFee(isCumulative);
+                console.log('[FortuneTx] Got service fee via getRequiredServiceFee:', serviceFee.toString());
             } catch (e) {
+                console.warn('[FortuneTx] getRequiredServiceFee failed:', e.message);
                 try {
-                    serviceFee = await readContract.serviceFee();
-                    if (isCumulative) {
-                        serviceFee = serviceFee * 5n;
-                    }
+                    const baseFee = await readContract.serviceFee();
+                    serviceFee = isCumulative ? baseFee * 5n : baseFee;
+                    console.log('[FortuneTx] Got service fee via serviceFee():', serviceFee.toString());
                 } catch (e2) {
-                    console.warn('[FortuneTx] Could not fetch service fee, using 0');
-                    serviceFee = 0n;
+                    console.error('[FortuneTx] serviceFee() also failed:', e2.message);
+                    // DO NOT default to 0 - this will cause InsufficientServiceFee error
+                    throw new Error('Could not fetch service fee from contract');
                 }
             }
             
+            // Ensure we have a valid service fee
+            if (serviceFee === undefined || serviceFee === null) {
+                throw new Error('Service fee is undefined');
+            }
+            
             // Check user has enough ETH for service fee
-            // Use Alchemy provider for balance check too
             const { NetworkManager } = await import('../core/index.js');
             const readProvider = NetworkManager.getProvider();
             const ethBalance = await readProvider.getBalance(userAddress);
+            
+            console.log('[FortuneTx] ETH balance:', ethBalance.toString(), 'Required:', serviceFee.toString());
             
             if (serviceFee > 0n && ethBalance < serviceFee) {
                 throw new Error(`Insufficient ETH for service fee (${ethers.formatEther(serviceFee)} ETH required)`);

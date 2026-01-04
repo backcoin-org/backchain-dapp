@@ -1,6 +1,11 @@
 // modules/js/core/transaction-engine.js
-// ✅ PRODUCTION V1.3 - Use Alchemy for all reads/confirmations
+// ✅ PRODUCTION V1.4 - Fixed value getter not being preserved
 // 
+// CHANGES V1.4:
+// - Fixed: value getter was being evaluated at destructuring time
+// - Now accesses config.value directly to preserve getter pattern
+// - This fixes InsufficientServiceFee errors when value is set in validate()
+//
 // CHANGES V1.3:
 // - _executeApproval now uses Alchemy to wait for confirmation
 // - _waitForConfirmation uses Alchemy instead of MetaMask RPC
@@ -251,7 +256,7 @@ export class TransactionEngine {
             getContract,           // async (signer) => Contract
             method,
             args = [],             // Array or function returning array
-            value = null,          // ETH to send (bigint)
+            // value is accessed via config.value to preserve getter
             
             // Approval (optional) - can be object or getter
             approval = null,       // { token, spender, amount }
@@ -364,7 +369,13 @@ export class TransactionEngine {
             // ═══════════════════════════════════════════════════════════════
 
             const contract = await getContract(signer);
-            const txOptions = value ? { value } : {};
+            
+            // V1.4 FIX: Access value from config to preserve getter
+            // This allows value to be computed during validate() and used here
+            const txValue = config.value;
+            console.log(`[TX] Transaction value (ETH):`, txValue?.toString() || '0');
+            
+            const txOptions = txValue ? { value: txValue } : {};
             
             // Resolve args (supports function pattern)
             const resolvedArgs = this._resolveArgs(args);
