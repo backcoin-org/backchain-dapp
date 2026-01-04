@@ -292,6 +292,8 @@ async function loadData() {
         ]);
         
         const apiCampaigns = apiRes?.campaigns || [];
+        console.log('📦 API Campaigns loaded:', apiCampaigns.map(c => ({ id: c.id, imageUrl: c.imageUrl, title: c.title })));
+        
         const provider = State?.publicProvider;
         
         if (provider) {
