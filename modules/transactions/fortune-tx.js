@@ -1,16 +1,18 @@
 // modules/js/transactions/fortune-tx.js
-// ✅ PRODUCTION V1.2 - FIXED: getRequiredServiceFee signature
+// ✅ PRODUCTION V1.3 - FIXED: Correct contract ABI and play() signature
 // 
+// CHANGES V1.3:
+// - Fixed play() signature: play(uint256, uint256[], bool) instead of play(uint256, uint8)
+// - Fixed prizeTiers structure: (maxRange, multiplierBips, active) - 1-indexed
+// - Fixed getRequiredServiceFee(bool) signature
+// - Removed validation for minWager/maxWager (contract doesn't have these)
+// - Updated event parsing for GamePlayed and GameDetails
+//
 // CHANGES V1.2:
-// - Fixed getRequiredServiceFee to use correct signature (bool isCumulative)
-// - The deployed contract uses V1 signature, not V2 (uint256 wagerAmount)
-// - Added fallback to legacy serviceFee() method
+// - Fixed getRequiredServiceFee signature
 //
 // CHANGES V1.1:
-// - Imports addresses from config.js (loaded from deployment-addresses.json)
-// - Removed hardcoded fallback addresses
-// - Uses fortunePool or fortunePoolV2 from config (V2 takes priority)
-// - Updated ABI to match FortunePoolV2 contract
+// - Imports addresses from config.js
 //
 // ============================================================================
 // AVAILABLE TRANSACTIONS:
@@ -63,24 +65,30 @@ function getContracts() {
 /**
  * Fortune Pool V2 ABI - matches actual deployed contract
  * 
- * V1.2 FIX: Added multiple signatures for getRequiredServiceFee compatibility
- * The deployed contract uses: getRequiredServiceFee(bool isCumulative)
+ * V1.3 FIX: Correct play() signature
+ * The actual contract function is:
+ * play(uint256 _wagerAmount, uint256[] calldata _guesses, bool _isCumulative)
  */
 const FORTUNE_ABI = [
-    // Write functions
-    'function play(uint256 wagerAmount, uint8 guess) external payable',
+    // Write functions - CORRECT SIGNATURE
+    'function play(uint256 _wagerAmount, uint256[] calldata _guesses, bool _isCumulative) external payable',
     
     // Read functions
     'function activeTierCount() view returns (uint256)',
-    'function prizeTiers(uint256 index) view returns (uint256 minWager, uint256 maxWager, uint8 maxNumber, uint16 multiplierBps, bool active)',
-    'function serviceFee() view returns (uint256)', // Legacy fallback
-    'function getRequiredServiceFee(bool isCumulative) view returns (uint256)', // V1 signature (current contract)
-    'function totalGamesPlayed() view returns (uint256)',
-    'function totalWagered() view returns (uint256)',
-    'function totalPaidOut() view returns (uint256)',
+    'function prizeTiers(uint256 tierId) view returns (uint128 maxRange, uint64 multiplierBips, bool active)',
+    'function serviceFee() view returns (uint256)',
+    'function getRequiredServiceFee(bool isCumulative) view returns (uint256)',
+    'function gameCounter() view returns (uint256)',
+    'function prizePoolBalance() view returns (uint256)',
+    'function totalWageredAllTime() view returns (uint256)',
+    'function totalPaidOutAllTime() view returns (uint256)',
+    'function totalWinsAllTime() view returns (uint256)',
+    'function gameResults(uint256 gameId) view returns (address player, uint256 wagerAmount, uint256 prizeWon, bool isCumulative, uint8 matchCount, uint256 timestamp)',
     
     // Events
-    'event GamePlayed(address indexed player, uint256 indexed visibleGameId, uint256 wagerAmount, uint8 guess, uint8 winningNumber, uint256 payout, bool won)'
+    'event GamePlayed(uint256 indexed gameId, address indexed player, uint256 wagerAmount, uint256 prizeWon, bool isCumulative, uint8 matchCount)',
+    'event GameDetails(uint256 indexed gameId, uint256[] guesses, uint256[] rolls, bool[] matches)',
+    'event JackpotWon(uint256 indexed gameId, address indexed player, uint256 prizeAmount, uint256 tier)'
 ];
 
 /**
@@ -123,34 +131,39 @@ async function getFortuneContractReadOnly() {
 /**
  * Plays the fortune guessing game
  * 
+ * V1.3 FIX: Updated to match actual contract signature:
+ * play(uint256 _wagerAmount, uint256[] calldata _guesses, bool _isCumulative)
+ * 
  * @param {Object} params - Game parameters
  * @param {string|bigint} params.wagerAmount - Wager amount in tokens (wei)
- * @param {number|number[]} params.guess - Guess number (1-100) or array with single guess
- * @param {number[]} [params.guesses] - Alternative: array of guesses (uses first one)
+ * @param {number|number[]} params.guess - Single guess for jackpot mode (1x)
+ * @param {number[]} [params.guesses] - Array of guesses for cumulative mode (5x)
+ * @param {boolean} [params.isCumulative=false] - false = 1x mode (jackpot), true = 5x mode
  * @param {HTMLElement} [params.button] - Button element for loading state
  * @param {Function} [params.onSuccess] - Success callback (receives game result)
  * @param {Function} [params.onError] - Error callback
  * @returns {Promise<Object>} Transaction result with game outcome
  * 
  * @example
+ * // Jackpot mode (1x) - single guess
  * const result = await FortuneTx.playGame({
  *     wagerAmount: ethers.parseEther('10'),
  *     guess: 42,
- *     button: document.getElementById('playBtn'),
- *     onSuccess: (receipt, gameResult) => {
- *         if (gameResult.won) {
- *             showToast(`You won ${ethers.formatEther(gameResult.payout)} BKC!`);
- *         } else {
- *             showToast(`Winning number was ${gameResult.winningNumber}. Try again!`);
- *         }
- *     }
+ *     isCumulative: false
+ * });
+ * 
+ * // Cumulative mode (5x) - multiple guesses
+ * const result = await FortuneTx.playGame({
+ *     wagerAmount: ethers.parseEther('10'),
+ *     guesses: [2, 5, 50],  // One guess per tier
+ *     isCumulative: true
  * });
  */
 export async function playGame({
     wagerAmount,
     guess,
-    guesses, // Alternative parameter for backward compatibility
-    isCumulative = false, // Kept for backward compatibility but not used in V2
+    guesses,
+    isCumulative = false,
     button = null,
     onSuccess = null,
     onError = null
@@ -158,19 +171,30 @@ export async function playGame({
     const ethers = window.ethers;
     const contracts = getContracts();
     
-    // Support both 'guess' and 'guesses' parameters
-    let playerGuess;
-    if (guess !== undefined) {
-        playerGuess = Array.isArray(guess) ? guess[0] : guess;
-    } else if (guesses !== undefined && guesses.length > 0) {
-        playerGuess = guesses[0];
-    } else {
-        throw new Error('Guess is required');
-    }
+    // Build guesses array based on mode
+    let guessesArray = [];
     
-    // Validate guess range
-    if (playerGuess < 1 || playerGuess > 100) {
-        throw new Error('Guess must be between 1 and 100');
+    if (isCumulative) {
+        // Cumulative mode (5x): needs array of guesses
+        if (guesses && Array.isArray(guesses) && guesses.length > 0) {
+            guessesArray = guesses.map(g => BigInt(g));
+        } else if (guess !== undefined) {
+            // Fallback: if single guess provided, use it (but might fail if tier count > 1)
+            guessesArray = [BigInt(Array.isArray(guess) ? guess[0] : guess)];
+        } else {
+            throw new Error('Guesses array is required for cumulative mode');
+        }
+    } else {
+        // Jackpot mode (1x): needs exactly 1 guess
+        let singleGuess;
+        if (guess !== undefined) {
+            singleGuess = Array.isArray(guess) ? guess[0] : guess;
+        } else if (guesses && guesses.length > 0) {
+            singleGuess = guesses[guesses.length - 1]; // Use last guess (highest tier)
+        } else {
+            throw new Error('Guess is required');
+        }
+        guessesArray = [BigInt(singleGuess)];
     }
 
     const wager = BigInt(wagerAmount);
@@ -182,12 +206,13 @@ export async function playGame({
         
         getContract: async (signer) => getFortuneContract(signer),
         method: 'play',
-        args: [wager, playerGuess],
+        // V1.3: Correct args - [wagerAmount, guesses[], isCumulative]
+        args: [wager, guessesArray, isCumulative],
         
         // ETH value for service fee (set in validate)
         get value() { return serviceFee; },
         
-        // Token approval config - using dynamic addresses
+        // Token approval config
         approval: {
             token: contracts.BKC_TOKEN,
             spender: contracts.FORTUNE_POOL,
@@ -198,16 +223,15 @@ export async function playGame({
         validate: async (signer, userAddress) => {
             const contract = getFortuneContract(signer);
             
-            // V1.2 FIX: Get service fee using correct signature
-            // Contract uses getRequiredServiceFee(bool isCumulative)
-            // For single guess game, isCumulative = false
+            // Get service fee
             try {
-                // Try V1 signature (bool isCumulative)
-                serviceFee = await contract.getRequiredServiceFee(false);
+                serviceFee = await contract.getRequiredServiceFee(isCumulative);
             } catch (e) {
-                // Fallback to legacy serviceFee()
                 try {
                     serviceFee = await contract.serviceFee();
+                    if (isCumulative) {
+                        serviceFee = serviceFee * 5n; // 5x multiplier for cumulative
+                    }
                 } catch (e2) {
                     console.warn('[FortuneTx] Could not fetch service fee, using 0');
                     serviceFee = 0n;
@@ -222,34 +246,53 @@ export async function playGame({
                 throw new Error(`Insufficient ETH for service fee (${ethers.formatEther(serviceFee)} ETH required)`);
             }
             
-            // Validate wager is within tier limits
-            const tierCount = await contract.activeTierCount();
-            let validTier = false;
+            // V1.3: Validate guesses based on mode and tier configuration
+            const tierCount = Number(await contract.activeTierCount());
             
-            for (let i = 0; i < tierCount; i++) {
-                try {
-                    const tier = await contract.prizeTiers(i);
-                    if (tier.active && wager >= tier.minWager && wager <= tier.maxWager) {
-                        validTier = true;
-                        
-                        // Validate guess against tier's maxNumber
-                        if (playerGuess > tier.maxNumber) {
-                            throw new Error(`Guess must be between 1 and ${tier.maxNumber} for this tier`);
-                        }
-                        break;
+            if (tierCount === 0) {
+                throw new Error('No active tiers available');
+            }
+            
+            if (isCumulative) {
+                // Cumulative mode: need one guess per tier
+                if (guessesArray.length !== tierCount) {
+                    throw new Error(`Cumulative mode requires ${tierCount} guesses (one per tier), got ${guessesArray.length}`);
+                }
+                
+                // Validate each guess against its tier's range
+                for (let i = 0; i < tierCount; i++) {
+                    const tier = await contract.prizeTiers(i + 1); // Tiers are 1-indexed
+                    const maxRange = Number(tier.maxRange);
+                    const guessNum = Number(guessesArray[i]);
+                    
+                    if (guessNum < 1 || guessNum > maxRange) {
+                        throw new Error(`Tier ${i + 1} guess must be between 1 and ${maxRange}`);
                     }
-                } catch (e) {
-                    if (e.message.includes('Guess must be')) throw e;
+                }
+            } else {
+                // Jackpot mode: need exactly 1 guess for the highest tier
+                if (guessesArray.length !== 1) {
+                    throw new Error('Jackpot mode requires exactly 1 guess');
+                }
+                
+                // Validate against jackpot tier (highest tier = tierCount)
+                const jackpotTier = await contract.prizeTiers(tierCount);
+                const maxRange = Number(jackpotTier.maxRange);
+                const guessNum = Number(guessesArray[0]);
+                
+                if (guessNum < 1 || guessNum > maxRange) {
+                    throw new Error(`Jackpot guess must be between 1 and ${maxRange}`);
                 }
             }
             
-            if (!validTier) {
-                throw new Error('Wager amount does not match any active tier');
+            // Validate wager amount > 0
+            if (wager <= 0n) {
+                throw new Error('Wager amount must be greater than 0');
             }
         },
         
         onSuccess: async (receipt) => {
-            // Try to extract game result from event
+            // Extract game result from events
             let gameResult = null;
             try {
                 const iface = new ethers.Interface(FORTUNE_ABI);
@@ -258,14 +301,18 @@ export async function playGame({
                         const parsed = iface.parseLog(log);
                         if (parsed.name === 'GamePlayed') {
                             gameResult = {
-                                gameId: Number(parsed.args.visibleGameId),
-                                wager: parsed.args.wagerAmount,
-                                guess: Number(parsed.args.guess),
-                                winningNumber: Number(parsed.args.winningNumber),
-                                payout: parsed.args.payout,
-                                won: parsed.args.won
+                                gameId: Number(parsed.args.gameId),
+                                wagerAmount: parsed.args.wagerAmount,
+                                prizeWon: parsed.args.prizeWon,
+                                isCumulative: parsed.args.isCumulative,
+                                matchCount: Number(parsed.args.matchCount),
+                                won: parsed.args.prizeWon > 0n
                             };
-                            break;
+                        }
+                        if (parsed.name === 'GameDetails' && gameResult) {
+                            gameResult.guesses = parsed.args.guesses.map(g => Number(g));
+                            gameResult.rolls = parsed.args.rolls.map(r => Number(r));
+                            gameResult.matches = parsed.args.matches;
                         }
                     } catch {}
                 }
@@ -285,25 +332,25 @@ export async function playGame({
 
 /**
  * Gets all active tiers
+ * V1.3 FIX: Updated to use correct prizeTiers structure (1-indexed)
  * @returns {Promise<Array>} Array of tier objects
  */
 export async function getActiveTiers() {
     const contract = await getFortuneContractReadOnly();
     
-    const tierCount = await contract.activeTierCount();
+    const tierCount = Number(await contract.activeTierCount());
     const tiers = [];
     
-    for (let i = 0; i < tierCount; i++) {
+    // Tiers are 1-indexed in the contract
+    for (let i = 1; i <= tierCount; i++) {
         try {
             const tier = await contract.prizeTiers(i);
             if (tier.active) {
                 tiers.push({
-                    index: i,
-                    minWager: tier.minWager,
-                    maxWager: tier.maxWager,
-                    maxNumber: Number(tier.maxNumber),
-                    multiplierBps: Number(tier.multiplierBps),
-                    multiplier: Number(tier.multiplierBps) / 100, // Convert bps to multiplier
+                    tierId: i,
+                    maxRange: Number(tier.maxRange),
+                    multiplierBips: Number(tier.multiplierBips),
+                    multiplier: Number(tier.multiplierBips) / 10000, // Convert bips to multiplier
                     active: tier.active
                 });
             }
@@ -316,26 +363,31 @@ export async function getActiveTiers() {
 }
 
 /**
- * Gets tier info for a specific wager amount
- * @param {string|bigint} wagerAmount - Wager amount in wei
- * @returns {Promise<Object|null>} Tier info or null if invalid
+ * Gets tier by ID
+ * @param {number} tierId - Tier ID (1-indexed)
+ * @returns {Promise<Object|null>} Tier info or null
  */
-export async function getTierForWager(wagerAmount) {
-    const wager = BigInt(wagerAmount);
-    const tiers = await getActiveTiers();
+export async function getTierById(tierId) {
+    const contract = await getFortuneContractReadOnly();
     
-    for (const tier of tiers) {
-        if (wager >= tier.minWager && wager <= tier.maxWager) {
-            return tier;
+    try {
+        const tier = await contract.prizeTiers(tierId);
+        if (tier.active) {
+            return {
+                tierId,
+                maxRange: Number(tier.maxRange),
+                multiplierBips: Number(tier.multiplierBips),
+                multiplier: Number(tier.multiplierBips) / 10000,
+                active: tier.active
+            };
         }
-    }
+    } catch {}
     
     return null;
 }
 
 /**
  * Gets required service fee
- * V1.2 FIX: Uses correct contract signature (bool isCumulative)
  * @param {boolean} isCumulative - Whether it's a cumulative (combo) game
  * @returns {Promise<bigint>} Fee in wei
  */
@@ -343,12 +395,11 @@ export async function getServiceFee(isCumulative = false) {
     const contract = await getFortuneContractReadOnly();
     
     try {
-        // Try V1 signature (bool isCumulative)
         return await contract.getRequiredServiceFee(isCumulative);
     } catch (e) {
-        // Fallback to legacy serviceFee()
         try {
-            return await contract.serviceFee();
+            const baseFee = await contract.serviceFee();
+            return isCumulative ? baseFee * 5n : baseFee;
         } catch (e2) {
             console.warn('[FortuneTx] Could not fetch service fee');
             return 0n;
@@ -364,18 +415,23 @@ export async function getPoolStats() {
     const ethers = window.ethers;
     const contract = await getFortuneContractReadOnly();
     
-    const [totalGames, totalWagered, totalPaidOut] = await Promise.all([
-        contract.totalGamesPlayed(),
-        contract.totalWagered(),
-        contract.totalPaidOut()
+    const [gameCounter, prizePool, totalWagered, totalPaidOut, totalWins] = await Promise.all([
+        contract.gameCounter().catch(() => 0n),
+        contract.prizePoolBalance().catch(() => 0n),
+        contract.totalWageredAllTime().catch(() => 0n),
+        contract.totalPaidOutAllTime().catch(() => 0n),
+        contract.totalWinsAllTime().catch(() => 0n)
     ]);
     
     return {
-        totalGamesPlayed: Number(totalGames),
-        totalWagered,
-        totalPaidOut,
+        gameCounter: Number(gameCounter),
+        prizePoolBalance: prizePool,
+        prizePoolFormatted: ethers.formatEther(prizePool),
+        totalWageredAllTime: totalWagered,
         totalWageredFormatted: ethers.formatEther(totalWagered),
-        totalPaidOutFormatted: ethers.formatEther(totalPaidOut)
+        totalPaidOutAllTime: totalPaidOut,
+        totalPaidOutFormatted: ethers.formatEther(totalPaidOut),
+        totalWinsAllTime: Number(totalWins)
     };
 }
 
@@ -389,27 +445,60 @@ export async function getActiveTierCount() {
 }
 
 /**
- * Calculates potential win amount
+ * Calculates potential win amount for a specific tier
  * @param {string|bigint} wagerAmount - Wager amount
+ * @param {number} tierId - Tier ID (1-indexed)
  * @returns {Promise<Object>} Potential win info
  */
-export async function calculatePotentialWin(wagerAmount) {
+export async function calculatePotentialWin(wagerAmount, tierId = null) {
     const ethers = window.ethers;
-    const tier = await getTierForWager(wagerAmount);
+    
+    // If no tierId specified, use jackpot tier (highest)
+    if (tierId === null) {
+        tierId = await getActiveTierCount();
+    }
+    
+    const tier = await getTierById(tierId);
     
     if (!tier) {
         return { potentialWin: 0n, multiplier: 0 };
     }
     
     const wager = BigInt(wagerAmount);
-    const potentialWin = (wager * BigInt(tier.multiplierBps)) / 100n;
+    const potentialWin = (wager * BigInt(tier.multiplierBips)) / 10000n;
     
     return {
         potentialWin,
         potentialWinFormatted: ethers.formatEther(potentialWin),
         multiplier: tier.multiplier,
+        maxRange: tier.maxRange,
         tier
     };
+}
+
+/**
+ * Gets game result by ID
+ * @param {number} gameId - Game ID
+ * @returns {Promise<Object|null>} Game result or null
+ */
+export async function getGameResult(gameId) {
+    const ethers = window.ethers;
+    const contract = await getFortuneContractReadOnly();
+    
+    try {
+        const result = await contract.gameResults(gameId);
+        return {
+            player: result.player,
+            wagerAmount: result.wagerAmount,
+            prizeWon: result.prizeWon,
+            isCumulative: result.isCumulative,
+            matchCount: Number(result.matchCount),
+            timestamp: Number(result.timestamp),
+            won: result.prizeWon > 0n
+        };
+    } catch {
+        return null;
+    }
 }
 
 // ============================================================================
@@ -420,11 +509,12 @@ export const FortuneTx = {
     playGame,
     // Read helpers
     getActiveTiers,
-    getTierForWager,
+    getTierById,
     getServiceFee,
     getPoolStats,
     getActiveTierCount,
-    calculatePotentialWin
+    calculatePotentialWin,
+    getGameResult
 };
 
 export default FortuneTx;
