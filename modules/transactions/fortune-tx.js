@@ -1,14 +1,16 @@
 // modules/js/transactions/fortune-tx.js
-// ✅ PRODUCTION V1.5 - FIXED: Service fee now properly sent with transaction
+// ✅ PRODUCTION V1.6 - FIXED: Pre-fetch service fee before txEngine
 // 
+// CHANGES V1.6:
+// - Service fee is now pre-fetched BEFORE calling txEngine.execute
+// - Value is static (not a getter) - this ensures it's available when txEngine reads it
+// - This fixes InsufficientServiceFee() error
+//
 // CHANGES V1.5:
 // - Added detailed logging for service fee debugging
-// - Service fee fetch now throws error instead of defaulting to 0
-// - This fixes InsufficientServiceFee() contract error
 //
 // CHANGES V1.4:
-// - All validation reads now use Alchemy provider (getFortuneContractReadOnly)
-// - MetaMask RPC is only used for signing the transaction
+// - All validation reads now use Alchemy provider
 //
 // ============================================================================
 // AVAILABLE TRANSACTIONS:
@@ -194,7 +196,25 @@ export async function playGame({
     }
 
     const wager = BigInt(wagerAmount);
+    
+    // V1.6 FIX: Pre-fetch service fee BEFORE calling txEngine
+    // This ensures the value is available when txEngine accesses config.value
     let serviceFee = 0n;
+    try {
+        const readContract = await getFortuneContractReadOnly();
+        serviceFee = await readContract.getRequiredServiceFee(isCumulative);
+        console.log('[FortuneTx] Service fee (pre-fetch):', serviceFee.toString());
+    } catch (e) {
+        try {
+            const readContract = await getFortuneContractReadOnly();
+            const baseFee = await readContract.serviceFee();
+            serviceFee = isCumulative ? baseFee * 5n : baseFee;
+            console.log('[FortuneTx] Service fee from serviceFee() (pre-fetch):', serviceFee.toString());
+        } catch (e2) {
+            console.error('[FortuneTx] Could not fetch service fee:', e2.message);
+            throw new Error('Could not fetch service fee from contract');
+        }
+    }
 
     return await txEngine.execute({
         name: 'PlayGame',
@@ -202,14 +222,10 @@ export async function playGame({
         
         getContract: async (signer) => getFortuneContract(signer),
         method: 'play',
-        // V1.4: Correct args - [wagerAmount, guesses[], isCumulative]
         args: [wager, guessesArray, isCumulative],
         
-        // ETH value for service fee (set in validate)
-        get value() { 
-            console.log('[FortuneTx] Service fee for tx:', serviceFee?.toString());
-            return serviceFee; 
-        },
+        // V1.6 FIX: Static value (not a getter) - serviceFee already fetched above
+        value: serviceFee,
         
         // Token approval config
         approval: {
@@ -218,34 +234,9 @@ export async function playGame({
             amount: wager
         },
         
-        // Custom validation
-        // V1.5 FIX: Ensure service fee is fetched correctly
+        // V1.6: Validation - fee already pre-fetched, just validate guesses and ETH balance
         validate: async (signer, userAddress) => {
-            // Use read-only contract (uses Alchemy, not MetaMask RPC)
             const readContract = await getFortuneContractReadOnly();
-            
-            // Get service fee using Alchemy provider
-            // CRITICAL: Contract requires ETH for service fee
-            try {
-                serviceFee = await readContract.getRequiredServiceFee(isCumulative);
-                console.log('[FortuneTx] Got service fee via getRequiredServiceFee:', serviceFee.toString());
-            } catch (e) {
-                console.warn('[FortuneTx] getRequiredServiceFee failed:', e.message);
-                try {
-                    const baseFee = await readContract.serviceFee();
-                    serviceFee = isCumulative ? baseFee * 5n : baseFee;
-                    console.log('[FortuneTx] Got service fee via serviceFee():', serviceFee.toString());
-                } catch (e2) {
-                    console.error('[FortuneTx] serviceFee() also failed:', e2.message);
-                    // DO NOT default to 0 - this will cause InsufficientServiceFee error
-                    throw new Error('Could not fetch service fee from contract');
-                }
-            }
-            
-            // Ensure we have a valid service fee
-            if (serviceFee === undefined || serviceFee === null) {
-                throw new Error('Service fee is undefined');
-            }
             
             // Check user has enough ETH for service fee
             const { NetworkManager } = await import('../core/index.js');

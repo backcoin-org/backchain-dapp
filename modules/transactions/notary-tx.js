@@ -1,15 +1,14 @@
 // modules/js/transactions/notary-tx.js
-// ✅ PRODUCTION V1.2 - FIXED: Correct ABI and uses Alchemy for reads
+// ✅ PRODUCTION V1.3 - FIXED: Pre-fetch fee before txEngine to ensure approval works
 // 
+// CHANGES V1.3:
+// - Fee is now fetched BEFORE calling txEngine.execute
+// - Approval object is static (not a getter) with pre-fetched fee amount
+// - This fixes "ERC20: insufficient allowance" error
+//
 // CHANGES V1.2:
 // - Fixed notarize() signature: added _boosterTokenId parameter
-// - Uses Alchemy provider for all read operations (avoids MetaMask RPC issues)
-// - Fixed event name: DocumentNotarized uses tokenId not documentId
-// - Added getBaseFee() and calculateFee() helpers
-//
-// CHANGES V1.1:
-// - Imports addresses from config.js (loaded from deployment-addresses.json)
-// - Removed hardcoded fallback addresses
+// - Uses Alchemy provider for all read operations
 //
 // ============================================================================
 // AVAILABLE TRANSACTIONS:
@@ -152,8 +151,22 @@ export async function notarize({
     // Convert boosterTokenId to BigInt
     const boosterId = BigInt(boosterTokenId || 0);
     
-    // Get fee amount for approval
+    // V1.3 FIX: Get fee BEFORE calling txEngine.execute
+    // This ensures approval amount is known before the transaction starts
     let feeAmount = 0n;
+    try {
+        const readContract = await getNotaryContractReadOnly();
+        feeAmount = await readContract.calculateFee(boosterId);
+        console.log('[NotaryTx] Fee to pay (pre-fetch):', feeAmount.toString());
+    } catch (e) {
+        try {
+            const readContract = await getNotaryContractReadOnly();
+            feeAmount = await readContract.getBaseFee();
+            console.log('[NotaryTx] Base fee (pre-fetch):', feeAmount.toString());
+        } catch (e2) {
+            console.warn('[NotaryTx] Could not pre-fetch fee');
+        }
+    }
 
     return await txEngine.execute({
         name: 'Notarize',
@@ -161,40 +174,18 @@ export async function notarize({
         
         getContract: async (signer) => getNotaryContract(signer),
         method: 'notarize',
-        // V1.2: Correct args order matching contract
         args: [ipfsCid, description || '', formattedHash, boosterId],
         
-        // Token approval for fee payment
-        get approval() {
-            if (feeAmount > 0n && contracts.BKC_TOKEN) {
-                return {
-                    token: contracts.BKC_TOKEN,
-                    spender: contracts.NOTARY,
-                    amount: feeAmount
-                };
-            }
-            return null;
-        },
+        // V1.3 FIX: Static approval object (not a getter)
+        // feeAmount is already known from pre-fetch above
+        approval: (feeAmount > 0n && contracts.BKC_TOKEN) ? {
+            token: contracts.BKC_TOKEN,
+            spender: contracts.NOTARY,
+            amount: feeAmount
+        } : null,
         
-        // V1.2: Use Alchemy for validation reads
+        // Validation using Alchemy
         validate: async (signer, userAddress) => {
-            const readContract = await getNotaryContractReadOnly();
-            
-            // Get fee amount for this notarization
-            try {
-                feeAmount = await readContract.calculateFee(boosterId);
-                console.log('[NotaryTx] Fee to pay:', feeAmount.toString());
-            } catch (e) {
-                // If calculateFee fails, try getBaseFee
-                try {
-                    feeAmount = await readContract.getBaseFee();
-                    console.log('[NotaryTx] Base fee:', feeAmount.toString());
-                } catch (e2) {
-                    console.warn('[NotaryTx] Could not fetch fee, assuming 0');
-                    feeAmount = 0n;
-                }
-            }
-            
             // Check user has enough BKC for fee
             if (feeAmount > 0n && contracts.BKC_TOKEN) {
                 const { NetworkManager } = await import('../core/index.js');
@@ -203,6 +194,8 @@ export async function notarize({
                 const bkcAbi = ['function balanceOf(address) view returns (uint256)'];
                 const bkcContract = new ethers.Contract(contracts.BKC_TOKEN, bkcAbi, provider);
                 const balance = await bkcContract.balanceOf(userAddress);
+                
+                console.log('[NotaryTx] BKC balance:', ethers.formatEther(balance), 'Required:', ethers.formatEther(feeAmount));
                 
                 if (balance < feeAmount) {
                     throw new Error(`Insufficient BKC balance. Need ${ethers.formatEther(feeAmount)} BKC`);
