@@ -1,6 +1,12 @@
 // modules/js/core/transaction-engine.js
-// ✅ PRODUCTION V1.4 - Fixed value getter not being preserved
+// ✅ PRODUCTION V1.5 - Fixed contract method validation
 // 
+// CHANGES V1.5:
+// - Added contract method validation before estimateGas
+// - Better error messages when contract[method] is undefined
+// - Added debug logging for contract instantiation
+// - Clearer error when ABI doesn't match contract
+//
 // CHANGES V1.4:
 // - Fixed: value getter was being evaluated at destructuring time
 // - Now accesses config.value directly to preserve getter pattern
@@ -11,21 +17,6 @@
 // - _waitForConfirmation uses Alchemy instead of MetaMask RPC
 // - This fixes rate-limit issues when MetaMask has a slow/blocked RPC
 // - MetaMask is ONLY used for signing transactions
-//
-// CHANGES V1.2:
-// - Added skipSimulation option to bypass estimateGas (for RPC issues)
-// - When skipSimulation=true, uses fixed gas limit instead of estimating
-// - Added small delays before sending to stabilize RPC
-//
-// CHANGES V1.1:
-// - Added support for args as function (getter pattern for dynamic values)
-// - Fixed updateMetaMaskRpcs -> switchToNextRpc (correct method name)
-// - Added better error messages for simulation failures
-// - Added approval getter support for dynamic approval amounts
-// - Improved ENS error handling on testnets
-//
-// This is the main orchestrator for all blockchain transactions.
-// It handles the complete flow: validation → approval → simulation → execution
 //
 // ============================================================================
 // TRANSACTION FLOW:
@@ -64,7 +55,8 @@ const ENGINE_CONFIG = {
     CONFIRMATION_RETRY_DELAY: 3000,
     
     // Gas settings
-    GAS_SAFETY_MARGIN: 20  // 20% margin
+    GAS_SAFETY_MARGIN: 20,  // 20% margin
+    DEFAULT_GAS_LIMIT: 500000n  // Fallback gas limit
 };
 
 /**
@@ -207,40 +199,44 @@ export class TransactionEngine {
     }
 
     /**
+     * V1.5: Validates that the contract has the required method
+     * @private
+     */
+    _validateContractMethod(contract, method) {
+        if (!contract) {
+            throw new Error('Contract instance is null or undefined');
+        }
+        
+        if (typeof contract[method] !== 'function') {
+            // Get available methods for debugging
+            const availableMethods = Object.keys(contract)
+                .filter(key => typeof contract[key] === 'function')
+                .filter(key => !key.startsWith('_') && !['on', 'once', 'emit', 'removeListener'].includes(key))
+                .slice(0, 15);
+            
+            console.error(`[TX] Contract method "${method}" not found!`);
+            console.error('[TX] Available methods:', availableMethods);
+            
+            throw new Error(
+                `Contract method "${method}" not found. ` +
+                `This usually means the ABI doesn't match the contract. ` +
+                `Available methods: ${availableMethods.join(', ')}`
+            );
+        }
+        
+        // Also check estimateGas is available
+        if (typeof contract[method].estimateGas !== 'function') {
+            console.warn(`[TX] Method ${method} exists but estimateGas is not available`);
+        }
+        
+        return true;
+    }
+
+    /**
      * Executes a transaction with full validation and error handling
      * 
      * @param {Object} config - Transaction configuration
      * @returns {Promise<Object>} Result { success, receipt?, error?, cancelled? }
-     * 
-     * @example
-     * const result = await txEngine.execute({
-     *     name: 'Donate',
-     *     button: document.getElementById('donateBtn'),
-     *     
-     *     // Contract info
-     *     getContract: async (signer) => new ethers.Contract(addr, abi, signer),
-     *     method: 'donate',
-     *     args: [campaignId, amount], // Can also be a function: () => [campaignId, amount]
-     *     
-     *     // Optional: ETH to send
-     *     value: ethers.parseEther('0.001'),
-     *     
-     *     // Optional: Token approval (can use getter for dynamic amounts)
-     *     approval: {
-     *         token: BKC_ADDRESS,
-     *         spender: CHARITY_ADDRESS,
-     *         amount: donationAmount
-     *     },
-     *     
-     *     // Optional: Custom validation
-     *     validate: async (signer, userAddress) => {
-     *         // Check campaign is active, etc.
-     *     },
-     *     
-     *     // Callbacks
-     *     onSuccess: (receipt) => { showToast('Donated!'); },
-     *     onError: (error) => { console.error(error); }
-     * });
      */
     async execute(config) {
         const {
@@ -272,7 +268,7 @@ export class TransactionEngine {
             maxRetries = ENGINE_CONFIG.DEFAULT_MAX_RETRIES,
             invalidateCache = true,
             skipSimulation = false,
-            fixedGasLimit = 500000n
+            fixedGasLimit = ENGINE_CONFIG.DEFAULT_GAS_LIMIT
         } = config;
 
         // Generate unique transaction ID
@@ -299,7 +295,7 @@ export class TransactionEngine {
             // PHASE 1: PRE-VALIDATION (FREE)
             // ═══════════════════════════════════════════════════════════════
             ui.setPhase('validating');
-            console.log(`[TX] Starting ${name}...`);
+            console.log(`[TX] Starting: ${name}`);
 
             // Layer 1: Network validation
             await ValidationLayer.validateNetwork();
@@ -309,12 +305,19 @@ export class TransactionEngine {
 
             // Layer 2: Wallet validation
             const userAddress = await ValidationLayer.validateWalletConnected();
+            console.log(`[TX] User address: ${userAddress}`);
 
             // Get signer
             const signer = await NetworkManager.getSigner();
+            console.log(`[TX] Signer obtained`);
 
             // Layer 3: ETH balance for gas
-            await ValidationLayer.validateEthForGas(userAddress);
+            try {
+                await ValidationLayer.validateEthForGas(userAddress);
+            } catch (gasError) {
+                console.warn('[TX] ETH gas validation failed, continuing anyway:', gasError.message);
+                // Don't throw - let the transaction try and potentially fail with a clearer error
+            }
 
             // ═══════════════════════════════════════════════════════════════
             // PHASE 2: TOKEN VALIDATION (FREE - reads)
@@ -335,6 +338,7 @@ export class TransactionEngine {
             // PHASE 3: CUSTOM DOMAIN VALIDATION (FREE)
             // ═══════════════════════════════════════════════════════════════
             if (validate) {
+                console.log(`[TX] Running custom validation...`);
                 await validate(signer, userAddress);
             }
 
@@ -365,20 +369,33 @@ export class TransactionEngine {
             }
 
             // ═══════════════════════════════════════════════════════════════
-            // PHASE 5: SIMULATION (FREE - estimateGas) - Can be skipped
+            // PHASE 5: GET CONTRACT & VALIDATE METHOD
             // ═══════════════════════════════════════════════════════════════
-
+            console.log(`[TX] Getting contract instance...`);
             const contract = await getContract(signer);
             
+            // V1.5: Validate the contract has the method
+            this._validateContractMethod(contract, method);
+            console.log(`[TX] Contract method "${method}" validated`);
+
+            // ═══════════════════════════════════════════════════════════════
+            // PHASE 6: SIMULATION (FREE - estimateGas) - Can be skipped
+            // ═══════════════════════════════════════════════════════════════
+
             // V1.4 FIX: Access value from config to preserve getter
-            // This allows value to be computed during validate() and used here
             const txValue = config.value;
-            console.log(`[TX] Transaction value (ETH):`, txValue?.toString() || '0');
+            if (txValue) {
+                console.log(`[TX] Transaction value (ETH):`, txValue.toString());
+            }
             
             const txOptions = txValue ? { value: txValue } : {};
             
             // Resolve args (supports function pattern)
             const resolvedArgs = this._resolveArgs(args);
+            console.log(`[TX] Args resolved:`, resolvedArgs.map(a => 
+                typeof a === 'bigint' ? a.toString() : 
+                typeof a === 'string' && a.length > 50 ? a.substring(0, 50) + '...' : a
+            ));
 
             let gasEstimate;
             
@@ -390,10 +407,24 @@ export class TransactionEngine {
                 console.log(`[TX] Simulating transaction...`);
                 
                 try {
+                    // V1.5: Extra check before calling estimateGas
+                    if (!contract[method] || typeof contract[method].estimateGas !== 'function') {
+                        throw new Error(`estimateGas not available for method "${method}"`);
+                    }
+                    
                     gasEstimate = await contract[method].estimateGas(...resolvedArgs, txOptions);
                     console.log(`[TX] Gas estimate: ${gasEstimate.toString()}`);
                 } catch (simError) {
-                    console.error(`[TX] Simulation failed:`, simError);
+                    console.error(`[TX] Simulation failed:`, simError.message);
+                    
+                    // V1.5: Better error parsing
+                    if (simError.message?.includes('not found') || simError.message?.includes('undefined')) {
+                        throw new Error(
+                            `Contract method "${method}" is not callable. ` +
+                            `Check that the ABI matches the deployed contract.`
+                        );
+                    }
+                    
                     const parsed = ErrorHandler.parseSimulationError(simError, method);
                     throw ErrorHandler.create(parsed.type, { 
                         message: parsed.message,
@@ -403,7 +434,7 @@ export class TransactionEngine {
             }
 
             // ═══════════════════════════════════════════════════════════════
-            // PHASE 6: EXECUTE TRANSACTION
+            // PHASE 7: EXECUTE TRANSACTION
             // ═══════════════════════════════════════════════════════════════
             ui.setPhase('confirming');
             console.log(`[TX] Requesting signature...`);
@@ -422,7 +453,7 @@ export class TransactionEngine {
             console.log(`[TX] Transaction submitted: ${tx.hash}`);
 
             // ═══════════════════════════════════════════════════════════════
-            // PHASE 7: WAIT FOR CONFIRMATION
+            // PHASE 8: WAIT FOR CONFIRMATION
             // ═══════════════════════════════════════════════════════════════
             ui.setPhase('waiting');
             console.log(`[TX] Waiting for confirmation...`);
@@ -458,20 +489,20 @@ export class TransactionEngine {
 
         } catch (error) {
             // ═══════════════════════════════════════════════════════════════
-            // ERROR HANDLING - V1.4: Immediate button restoration
+            // ERROR HANDLING
             // ═══════════════════════════════════════════════════════════════
-            console.log(`[TX] Error caught:`, error?.message || error);
+            console.error(`[TX] Error:`, error?.message || error);
             
-            // IMMEDIATELY restore button FIRST to prevent stuck state
+            // IMMEDIATELY restore button to prevent stuck state
             if (button) {
-                console.log(`[TX] Immediately restoring button...`);
+                console.log(`[TX] Restoring button...`);
                 button.disabled = false;
                 if (ui.originalContent) {
                     button.innerHTML = ui.originalContent;
                 }
             }
             
-            // Handle error (may switch RPC) - wrapped in try/catch for safety
+            // Handle error (may switch RPC)
             let handled;
             try {
                 handled = await ErrorHandler.handleWithRpcSwitch(error, name);
@@ -484,7 +515,7 @@ export class TransactionEngine {
                 handled = ErrorHandler.handle(error, name);
             }
             
-            // Show brief error indication (button already restored)
+            // Show brief error indication
             if (handled.type !== ErrorTypes.USER_REJECTED && button) {
                 const savedContent = ui.originalContent;
                 button.innerHTML = `<span style="display:flex;align-items:center;justify-content:center;gap:8px"><span>❌</span><span>Failed</span></span>`;
@@ -513,8 +544,7 @@ export class TransactionEngine {
             // Always remove from pending set
             this.pendingTxIds.delete(uniqueTxId);
             
-            // V1.3: Extra safety - ensure button is restored after a timeout
-            // This catches cases where the error handler doesn't reach cleanup
+            // Safety cleanup after timeout
             setTimeout(() => {
                 if (button && button.disabled) {
                     console.log('[TX] Safety cleanup triggered');
@@ -526,12 +556,13 @@ export class TransactionEngine {
 
     /**
      * Executes token approval
-     * V1.3 FIX: Use Alchemy provider for waiting confirmation
      * @private
      */
     async _executeApproval(approval, signer, userAddress) {
         const ethers = window.ethers;
         const { token, spender, amount } = approval;
+
+        console.log(`[TX] Approving ${ethers.formatEther(amount)} tokens...`);
 
         const tokenContract = new ethers.Contract(token, ERC20_APPROVAL_ABI, signer);
 
@@ -542,8 +573,7 @@ export class TransactionEngine {
             // Send approval transaction (uses MetaMask to sign)
             const tx = await tokenContract.approve(spender, approveAmount);
             
-            // V1.3 FIX: Wait for confirmation using Alchemy provider instead of MetaMask
-            // This avoids rate-limit issues on MetaMask's RPC
+            // Wait for confirmation using Alchemy provider instead of MetaMask
             const readProvider = NetworkManager.getProvider();
             let receipt = null;
             
@@ -596,13 +626,12 @@ export class TransactionEngine {
                 // Show retry status
                 if (attempt > 1) {
                     ui.setRetry(attempt, maxRetries + 1);
-                    console.log(`[TX] Retry attempt ${attempt}/${maxRetries + 1}`);
+                    console.log(`[TX] Retry ${attempt}/${maxRetries + 1}`);
 
                     // Check RPC health before retry
                     const health = await NetworkManager.checkRpcHealth();
                     if (!health.healthy) {
                         console.log('[TX] RPC unhealthy, switching...');
-                        // Use correct method name
                         NetworkManager.switchToNextRpc();
                         await new Promise(r => setTimeout(r, 2000));
                     }
@@ -640,15 +669,14 @@ export class TransactionEngine {
 
     /**
      * Waits for transaction confirmation with retry
-     * V1.3 FIX: Always use Alchemy provider for checking receipts
      * @private
      */
     async _waitForConfirmation(tx, provider) {
-        // V1.3: Always use Alchemy for confirmation checks
+        // Always use Alchemy for confirmation checks
         const readProvider = NetworkManager.getProvider();
         
         try {
-            // Try standard wait first (might work if MetaMask RPC is ok)
+            // Try standard wait first
             const receipt = await Promise.race([
                 tx.wait(),
                 new Promise((_, reject) => 
@@ -670,7 +698,7 @@ export class TransactionEngine {
             // Handle wait errors - use Alchemy provider instead
             console.warn('[TX] tx.wait() issue, using Alchemy to check:', waitError.message);
 
-            // Poll for receipt using Alchemy (reliable)
+            // Poll for receipt using Alchemy
             for (let i = 0; i < 20; i++) { // Max 20 attempts (30 seconds)
                 await new Promise(r => setTimeout(r, 1500));
                 
@@ -698,8 +726,6 @@ export class TransactionEngine {
 
     /**
      * Checks if a transaction is currently pending
-     * @param {string} txId - Transaction ID
-     * @returns {boolean}
      */
     isPending(txId) {
         return this.pendingTxIds.has(txId);
@@ -707,14 +733,13 @@ export class TransactionEngine {
 
     /**
      * Gets count of pending transactions
-     * @returns {number}
      */
     getPendingCount() {
         return this.pendingTxIds.size;
     }
 
     /**
-     * Clears all pending transaction flags (use with caution)
+     * Clears all pending transaction flags
      */
     clearPending() {
         this.pendingTxIds.clear();
@@ -725,10 +750,6 @@ export class TransactionEngine {
 // 4. SINGLETON INSTANCE
 // ============================================================================
 
-/**
- * Singleton instance of TransactionEngine
- * Import this to use the engine
- */
 export const txEngine = new TransactionEngine();
 
 // ============================================================================
@@ -737,19 +758,13 @@ export const txEngine = new TransactionEngine();
 
 /**
  * Creates a simple toast notification
- * This is a fallback - integrate with your existing toast system
- * 
- * @param {string} message - Message to show
- * @param {string} type - 'success' | 'error' | 'info' | 'warning'
  */
 export function showToast(message, type = 'info') {
-    // Try to use existing toast system
     if (window.showToast) {
         window.showToast(message, type);
         return;
     }
 
-    // Fallback to console
     const prefix = {
         'success': '✅',
         'error': '❌',
@@ -762,7 +777,6 @@ export function showToast(message, type = 'info') {
 
 /**
  * Opens block explorer for transaction
- * @param {string} txHash - Transaction hash
  */
 export function openTxInExplorer(txHash) {
     const url = NetworkManager.getTxExplorerUrl(txHash);

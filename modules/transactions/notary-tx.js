@@ -1,14 +1,17 @@
 // modules/js/transactions/notary-tx.js
-// ✅ PRODUCTION V1.3 - FIXED: Pre-fetch fee before txEngine to ensure approval works
+// ✅ PRODUCTION V1.4 - FIXED: ABI format and contract instantiation
 // 
+// CHANGES V1.4:
+// - Changed ABI from string format to object format (ethers v6 compatibility)
+// - Added fallback for getContract when signer is not available
+// - Better error handling for contract instantiation
+// - Added debug logging for troubleshooting
+// - Fixed: "Cannot read properties of undefined (reading 'estimateGas')"
+//
 // CHANGES V1.3:
 // - Fee is now fetched BEFORE calling txEngine.execute
 // - Approval object is static (not a getter) with pre-fetched fee amount
 // - This fixes "ERC20: insufficient allowance" error
-//
-// CHANGES V1.2:
-// - Fixed notarize() signature: added _boosterTokenId parameter
-// - Uses Alchemy provider for all read operations
 //
 // ============================================================================
 // AVAILABLE TRANSACTIONS:
@@ -42,6 +45,8 @@ function getContracts() {
         throw new Error('Contract addresses not loaded. Please refresh the page.');
     }
     
+    console.log('[NotaryTx] Using addresses:', { notary, bkcToken });
+    
     return {
         NOTARY: notary,
         BKC_TOKEN: bkcToken
@@ -50,23 +55,102 @@ function getContracts() {
 
 /**
  * Notary ABI - DecentralizedNotary contract
- * V1.2: Fixed to match actual contract signature
+ * V1.4: Using OBJECT format instead of string for ethers v6 compatibility
  */
 const NOTARY_ABI = [
-    // Write functions - CORRECT SIGNATURE
-    'function notarize(string calldata _ipfsCid, string calldata _description, bytes32 _contentHash, uint256 _boosterTokenId) external returns (uint256 tokenId)',
+    // Write functions
+    {
+        name: 'notarize',
+        type: 'function',
+        stateMutability: 'nonpayable',
+        inputs: [
+            { name: '_ipfsCid', type: 'string' },
+            { name: '_description', type: 'string' },
+            { name: '_contentHash', type: 'bytes32' },
+            { name: '_boosterTokenId', type: 'uint256' }
+        ],
+        outputs: [
+            { name: 'tokenId', type: 'uint256' }
+        ]
+    },
     
     // Read functions
-    'function getDocument(uint256 _tokenId) view returns (tuple(string ipfsCid, string description, bytes32 contentHash, uint256 timestamp))',
-    'function getBaseFee() view returns (uint256)',
-    'function calculateFee(uint256 _boosterTokenId) view returns (uint256)',
-    'function totalSupply() view returns (uint256)',
-    'function ownerOf(uint256 tokenId) view returns (address)',
-    'function balanceOf(address owner) view returns (uint256)',
-    'function tokenOfOwnerByIndex(address owner, uint256 index) view returns (uint256)',
+    {
+        name: 'getDocument',
+        type: 'function',
+        stateMutability: 'view',
+        inputs: [{ name: '_tokenId', type: 'uint256' }],
+        outputs: [
+            {
+                name: '',
+                type: 'tuple',
+                components: [
+                    { name: 'ipfsCid', type: 'string' },
+                    { name: 'description', type: 'string' },
+                    { name: 'contentHash', type: 'bytes32' },
+                    { name: 'timestamp', type: 'uint256' }
+                ]
+            }
+        ]
+    },
+    {
+        name: 'getBaseFee',
+        type: 'function',
+        stateMutability: 'view',
+        inputs: [],
+        outputs: [{ name: '', type: 'uint256' }]
+    },
+    {
+        name: 'calculateFee',
+        type: 'function',
+        stateMutability: 'view',
+        inputs: [{ name: '_boosterTokenId', type: 'uint256' }],
+        outputs: [{ name: '', type: 'uint256' }]
+    },
+    {
+        name: 'totalSupply',
+        type: 'function',
+        stateMutability: 'view',
+        inputs: [],
+        outputs: [{ name: '', type: 'uint256' }]
+    },
+    {
+        name: 'ownerOf',
+        type: 'function',
+        stateMutability: 'view',
+        inputs: [{ name: 'tokenId', type: 'uint256' }],
+        outputs: [{ name: '', type: 'address' }]
+    },
+    {
+        name: 'balanceOf',
+        type: 'function',
+        stateMutability: 'view',
+        inputs: [{ name: 'owner', type: 'address' }],
+        outputs: [{ name: '', type: 'uint256' }]
+    },
+    {
+        name: 'tokenOfOwnerByIndex',
+        type: 'function',
+        stateMutability: 'view',
+        inputs: [
+            { name: 'owner', type: 'address' },
+            { name: 'index', type: 'uint256' }
+        ],
+        outputs: [{ name: '', type: 'uint256' }]
+    },
     
     // Events
-    'event DocumentNotarized(uint256 indexed tokenId, address indexed owner, string ipfsCid, bytes32 indexed contentHash, uint256 feePaid)'
+    {
+        name: 'DocumentNotarized',
+        type: 'event',
+        inputs: [
+            { name: 'tokenId', type: 'uint256', indexed: true },
+            { name: 'owner', type: 'address', indexed: true },
+            { name: 'ipfsCid', type: 'string', indexed: false },
+            { name: 'contentHash', type: 'bytes32', indexed: true },
+            { name: 'feePaid', type: 'uint256', indexed: false }
+        ]
+    }
 ];
 
 // ============================================================================
@@ -75,23 +159,70 @@ const NOTARY_ABI = [
 
 /**
  * Creates Notary contract instance with signer (for write operations)
+ * V1.4: Added validation and debug logging
  */
 function getNotaryContract(signer) {
     const ethers = window.ethers;
+    
+    if (!ethers) {
+        throw new Error('ethers.js not loaded');
+    }
+    
+    if (!signer) {
+        throw new Error('Signer is required for write operations');
+    }
+    
     const contracts = getContracts();
-    return new ethers.Contract(contracts.NOTARY, NOTARY_ABI, signer);
+    
+    console.log('[NotaryTx] Creating contract with signer:', {
+        address: contracts.NOTARY,
+        hasSigner: !!signer
+    });
+    
+    const contract = new ethers.Contract(contracts.NOTARY, NOTARY_ABI, signer);
+    
+    // V1.4: Verify contract has the notarize method
+    if (typeof contract.notarize !== 'function') {
+        console.error('[NotaryTx] Contract missing notarize method!', {
+            contractMethods: Object.keys(contract).filter(k => typeof contract[k] === 'function')
+        });
+        throw new Error('Contract ABI error: notarize method not found');
+    }
+    
+    console.log('[NotaryTx] Contract created successfully, methods:', 
+        Object.keys(contract).filter(k => typeof contract[k] === 'function').slice(0, 10)
+    );
+    
+    return contract;
 }
 
 /**
  * Creates Notary contract instance with Alchemy provider (for read operations)
- * V1.2: Uses Alchemy to avoid MetaMask RPC rate limits
+ * V1.4: Added better error handling and fallback
  */
 async function getNotaryContractReadOnly() {
     const ethers = window.ethers;
-    const { NetworkManager } = await import('../core/index.js');
-    const provider = NetworkManager.getProvider();
-    const contracts = getContracts();
-    return new ethers.Contract(contracts.NOTARY, NOTARY_ABI, provider);
+    
+    if (!ethers) {
+        throw new Error('ethers.js not loaded');
+    }
+    
+    try {
+        const { NetworkManager } = await import('../core/index.js');
+        const provider = NetworkManager.getProvider();
+        
+        if (!provider) {
+            throw new Error('Provider not available');
+        }
+        
+        const contracts = getContracts();
+        const contract = new ethers.Contract(contracts.NOTARY, NOTARY_ABI, provider);
+        
+        return contract;
+    } catch (error) {
+        console.warn('[NotaryTx] Failed to get read-only contract:', error.message);
+        throw error;
+    }
 }
 
 /**
@@ -132,6 +263,13 @@ export async function notarize({
     const ethers = window.ethers;
     const contracts = getContracts();
     
+    console.log('[NotaryTx] Starting notarize with params:', {
+        ipfsCid,
+        description: description?.substring(0, 50) + '...',
+        contentHash: contentHash?.substring(0, 20) + '...',
+        boosterTokenId
+    });
+    
     // Validate inputs
     if (!ipfsCid || ipfsCid.trim() === '') {
         throw new Error('IPFS CID is required');
@@ -157,14 +295,15 @@ export async function notarize({
     try {
         const readContract = await getNotaryContractReadOnly();
         feeAmount = await readContract.calculateFee(boosterId);
-        console.log('[NotaryTx] Fee to pay (pre-fetch):', feeAmount.toString());
+        console.log('[NotaryTx] Fee to pay (pre-fetch):', ethers.formatEther(feeAmount), 'BKC');
     } catch (e) {
+        console.warn('[NotaryTx] calculateFee failed, trying getBaseFee:', e.message);
         try {
             const readContract = await getNotaryContractReadOnly();
             feeAmount = await readContract.getBaseFee();
-            console.log('[NotaryTx] Base fee (pre-fetch):', feeAmount.toString());
+            console.log('[NotaryTx] Base fee (pre-fetch):', ethers.formatEther(feeAmount), 'BKC');
         } catch (e2) {
-            console.warn('[NotaryTx] Could not pre-fetch fee');
+            console.warn('[NotaryTx] Could not pre-fetch fee, will try during validation:', e2.message);
         }
     }
 
@@ -172,7 +311,15 @@ export async function notarize({
         name: 'Notarize',
         button,
         
-        getContract: async (signer) => getNotaryContract(signer),
+        // V1.4 FIX: Added debug logging in getContract
+        getContract: async (signer) => {
+            console.log('[NotaryTx] getContract called with signer:', !!signer);
+            const contract = getNotaryContract(signer);
+            console.log('[NotaryTx] Contract instance created:', !!contract);
+            console.log('[NotaryTx] Contract.notarize exists:', typeof contract.notarize);
+            return contract;
+        },
+        
         method: 'notarize',
         args: [ipfsCid, description || '', formattedHash, boosterId],
         
@@ -186,6 +333,8 @@ export async function notarize({
         
         // Validation using Alchemy
         validate: async (signer, userAddress) => {
+            console.log('[NotaryTx] Validating for user:', userAddress);
+            
             // Check user has enough BKC for fee
             if (feeAmount > 0n && contracts.BKC_TOKEN) {
                 const { NetworkManager } = await import('../core/index.js');
@@ -201,9 +350,13 @@ export async function notarize({
                     throw new Error(`Insufficient BKC balance. Need ${ethers.formatEther(feeAmount)} BKC`);
                 }
             }
+            
+            console.log('[NotaryTx] Validation passed');
         },
         
         onSuccess: async (receipt) => {
+            console.log('[NotaryTx] Transaction successful:', receipt.hash);
+            
             // Extract tokenId from event
             let tokenId = null;
             try {
@@ -211,19 +364,28 @@ export async function notarize({
                 for (const log of receipt.logs) {
                     try {
                         const parsed = iface.parseLog(log);
-                        if (parsed.name === 'DocumentNotarized') {
+                        if (parsed && parsed.name === 'DocumentNotarized') {
                             tokenId = Number(parsed.args.tokenId);
+                            console.log('[NotaryTx] Minted token ID:', tokenId);
                             break;
                         }
                     } catch {}
                 }
-            } catch {}
+            } catch (e) {
+                console.warn('[NotaryTx] Could not parse event logs:', e.message);
+            }
 
             if (onSuccess) {
                 onSuccess(receipt, tokenId);
             }
         },
-        onError
+        
+        onError: (error) => {
+            console.error('[NotaryTx] Transaction failed:', error);
+            if (onError) {
+                onError(error);
+            }
+        }
     });
 }
 
