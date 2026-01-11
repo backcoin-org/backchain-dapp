@@ -1,6 +1,13 @@
 // modules/js/transactions/rental-tx.js
-// ✅ PRODUCTION V1.4 - Fixed ABI format for ethers v6 compatibility
+// ✅ PRODUCTION V1.5 - Improved RPC resilience and approval handling
 // 
+// CHANGES V1.5:
+// - IMPROVED: Use setApprovalForAll instead of individual approve (one-time approval)
+// - IMPROVED: Better error handling during NFT approval with timeout
+// - IMPROVED: Re-check approval status after RPC errors
+// - IMPROVED: Fixed gas limit for approval transactions
+// - IMPROVED: Cleaner error messages for users
+//
 // CHANGES V1.4:
 // - Changed ABI from string format to object format (ethers v6 compatibility)
 // - Fixed: listing.active → listing.isActive (match contract struct)
@@ -491,7 +498,7 @@ export async function listNft({
                 if (e.message.includes('already listed')) throw e;
             }
             
-            // Check NFT approval
+            // V1.5: Improved NFT approval handling with better RPC error resilience
             const isApprovedForAll = await nftContract.isApprovedForAll(userAddress, contracts.RENTAL_MARKETPLACE);
             console.log('[RentalTx] Is approved for all:', isApprovedForAll);
             
@@ -501,9 +508,41 @@ export async function listNft({
                 
                 if (approved.toLowerCase() !== contracts.RENTAL_MARKETPLACE.toLowerCase()) {
                     console.log('[RentalTx] Approving NFT for marketplace...');
-                    const approveTx = await nftContract.approve(contracts.RENTAL_MARKETPLACE, tokenId);
-                    await approveTx.wait();
-                    console.log('[RentalTx] NFT approved');
+                    
+                    // V1.5: Use setApprovalForAll for better UX (one-time approval for all NFTs)
+                    // This avoids needing to approve each NFT individually
+                    try {
+                        const approveTx = await nftContract.setApprovalForAll(
+                            contracts.RENTAL_MARKETPLACE, 
+                            true,
+                            { gasLimit: 100000 } // Fixed gas limit for approval
+                        );
+                        
+                        console.log('[RentalTx] Approval tx submitted:', approveTx.hash);
+                        
+                        // Wait with timeout
+                        const receipt = await Promise.race([
+                            approveTx.wait(),
+                            new Promise((_, reject) => 
+                                setTimeout(() => reject(new Error('Approval timeout - please try again')), 60000)
+                            )
+                        ]);
+                        
+                        console.log('[RentalTx] ✅ NFT approval confirmed in block:', receipt.blockNumber);
+                    } catch (approvalError) {
+                        console.error('[RentalTx] Approval error:', approvalError);
+                        
+                        // Check if approval actually went through despite error
+                        await new Promise(r => setTimeout(r, 2000)); // Wait 2s
+                        const recheckApproval = await nftContract.isApprovedForAll(userAddress, contracts.RENTAL_MARKETPLACE);
+                        
+                        if (recheckApproval) {
+                            console.log('[RentalTx] ✅ Approval confirmed on recheck');
+                        } else {
+                            // Propagate a cleaner error
+                            throw new Error('NFT approval failed. Please check MetaMask and try again.');
+                        }
+                    }
                 }
             }
             
