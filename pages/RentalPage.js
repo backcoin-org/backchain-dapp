@@ -720,7 +720,10 @@ function openRentModal(tokenId) {
     const listing = (State.rentalListings || []).find(l => tokenIdsMatch(l.tokenId, tokenId));
     if (!listing) { showToast('Not found', 'error'); return; }
     
+    // V12.3: Reset state when opening modal
+    RentalState.isTransactionPending = false;
     RentalState.selectedRentalId = normalizeTokenId(tokenId);
+    
     const tier = getTierInfo(listing.boostBips);
     const color = getTierColor(tier.name);
     const price = formatBigNumber(BigInt(listing.pricePerHour || 0)).toFixed(2);
@@ -736,6 +739,13 @@ function openRentModal(tokenId) {
         </div>`;
     document.getElementById('rent-cost').innerHTML = `${price} <span class="text-base text-zinc-500">BKC</span>`;
     
+    // V12.3: Reset button state
+    const btn = document.getElementById('confirm-rent');
+    if (btn) {
+        btn.innerHTML = '<i class="fa-solid fa-check mr-2"></i>Confirm';
+        btn.disabled = false;
+    }
+    
     const modal = document.getElementById('rent-modal');
     modal.classList.remove('hidden');
     modal.classList.add('flex');
@@ -746,9 +756,20 @@ function closeRentModal() {
     modal.classList.remove('flex');
     modal.classList.add('hidden');
     RentalState.selectedRentalId = null;
+    // V12.3: Always reset state when closing modal
+    RentalState.isTransactionPending = false;
+    // Reset button state
+    const btn = document.getElementById('confirm-rent');
+    if (btn) {
+        btn.innerHTML = '<i class="fa-solid fa-check mr-2"></i>Confirm';
+        btn.disabled = false;
+    }
 }
 
 function openListModal() {
+    // V12.3: Reset state when opening modal
+    RentalState.isTransactionPending = false;
+    
     const listings = State.rentalListings || [];
     const listedIds = new Set(listings.map(l => normalizeTokenId(l.tokenId)));
     const available = (State.myBoosters || []).filter(b => !listedIds.has(normalizeTokenId(b.tokenId)));
@@ -762,6 +783,14 @@ function openListModal() {
         }).join('');
     
     document.getElementById('list-price').value = '';
+    
+    // V12.3: Reset button state
+    const btn = document.getElementById('confirm-list');
+    if (btn) {
+        btn.innerHTML = '<i class="fa-solid fa-tag mr-2"></i>List NFT';
+        btn.disabled = false;
+    }
+    
     const modal = document.getElementById('list-modal');
     modal.classList.remove('hidden');
     modal.classList.add('flex');
@@ -771,6 +800,14 @@ function closeListModal() {
     const modal = document.getElementById('list-modal');
     modal.classList.remove('flex');
     modal.classList.add('hidden');
+    // V12.3: Always reset state when closing modal
+    RentalState.isTransactionPending = false;
+    // Reset button state
+    const btn = document.getElementById('confirm-list');
+    if (btn) {
+        btn.innerHTML = '<i class="fa-solid fa-tag mr-2"></i>List NFT';
+        btn.disabled = false;
+    }
 }
 
 async function handleRent() {
@@ -781,9 +818,8 @@ async function handleRent() {
     
     const btn = document.getElementById('confirm-rent');
     RentalState.isTransactionPending = true;
-    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-2"></i>Processing...';
-    btn.disabled = true;
     
+    // V12.4: Don't change button before passing to txEngine
     console.log('[RentalPage] Starting rent transaction for tokenId:', tokenId);
     
     try {
@@ -806,11 +842,6 @@ async function handleRent() {
             onError: (e) => { 
                 console.log('[RentalPage] ❌ Rent onError called:', e);
                 RentalState.isTransactionPending = false;
-                const currentBtn = document.getElementById('confirm-rent');
-                if (currentBtn) {
-                    currentBtn.innerHTML = '<i class="fa-solid fa-check mr-2"></i>Confirm';
-                    currentBtn.disabled = false;
-                }
                 if (!e.cancelled && e.type !== 'user_rejected') {
                     showToast('Failed: ' + (e.message || 'Error'), 'error'); 
                 }
@@ -821,11 +852,6 @@ async function handleRent() {
     } catch (err) {
         console.error('[RentalPage] handleRent catch error:', err);
         RentalState.isTransactionPending = false;
-        const currentBtn = document.getElementById('confirm-rent');
-        if (currentBtn) {
-            currentBtn.innerHTML = '<i class="fa-solid fa-check mr-2"></i>Confirm';
-            currentBtn.disabled = false;
-        }
         if (!err.cancelled && err.type !== 'user_rejected') {
             showToast('Failed: ' + (err.message || 'Transaction failed'), 'error');
         }
@@ -840,11 +866,10 @@ async function handleList() {
     if (!price || parseFloat(price) <= 0) { showToast('Enter valid price', 'error'); return; }
     
     const btn = document.getElementById('confirm-list');
-    const orig = btn.innerHTML;
     RentalState.isTransactionPending = true;
-    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-2"></i>Processing...';
-    btn.disabled = true;
     
+    // V12.4: Don't change button before passing to txEngine
+    // Let txEngine manage the button state completely
     console.log('[RentalPage] Starting list transaction for tokenId:', tokenId);
     
     try {
@@ -853,14 +878,12 @@ async function handleList() {
             pricePerHour: ethers.parseUnits(price, 18),
             minHours: 1,
             maxHours: 168,
-            button: btn,
+            button: btn, // txEngine will save original state and manage it
             onSuccess: async (receipt) => { 
                 console.log('[RentalPage] ✅ List onSuccess called, hash:', receipt?.hash);
-                // Cleanup first
                 RentalState.isTransactionPending = false;
                 closeListModal(); 
                 showToast('🏷️ NFT Listed Successfully!', 'success'); 
-                // Refresh data after showing success
                 try {
                     await refreshData();
                 } catch (e) {
@@ -870,12 +893,6 @@ async function handleList() {
             onError: (e) => { 
                 console.log('[RentalPage] ❌ List onError called:', e);
                 RentalState.isTransactionPending = false;
-                // Reset button
-                const currentBtn = document.getElementById('confirm-list');
-                if (currentBtn) {
-                    currentBtn.innerHTML = '<i class="fa-solid fa-tag mr-2"></i>List NFT';
-                    currentBtn.disabled = false;
-                }
                 if (!e.cancelled && e.type !== 'user_rejected') {
                     showToast('Failed: ' + (e.message || 'Error'), 'error'); 
                 }
@@ -886,11 +903,6 @@ async function handleList() {
     } catch (err) {
         console.error('[RentalPage] handleList catch error:', err);
         RentalState.isTransactionPending = false;
-        const currentBtn = document.getElementById('confirm-list');
-        if (currentBtn) {
-            currentBtn.innerHTML = '<i class="fa-solid fa-tag mr-2"></i>List NFT';
-            currentBtn.disabled = false;
-        }
         if (!err.cancelled && err.type !== 'user_rejected') {
             showToast('Failed: ' + (err.message || 'Transaction failed'), 'error');
         }
@@ -902,11 +914,9 @@ async function handleWithdraw(btn) {
     const tokenId = btn.dataset.id;
     if (!confirm('Withdraw this NFT from marketplace?')) return;
     
-    const orig = btn.innerHTML;
     RentalState.isTransactionPending = true;
-    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i>';
-    btn.disabled = true;
     
+    // V12.4: Don't change button before passing to txEngine
     console.log('[RentalPage] Starting withdraw transaction for tokenId:', tokenId);
     
     try {
@@ -926,11 +936,6 @@ async function handleWithdraw(btn) {
             onError: (e) => { 
                 console.log('[RentalPage] ❌ Withdraw onError called:', e);
                 RentalState.isTransactionPending = false;
-                // Reset button if still in DOM
-                if (btn && btn.parentNode) {
-                    btn.innerHTML = orig;
-                    btn.disabled = false;
-                }
                 if (!e.cancelled && e.type !== 'user_rejected') {
                     showToast('Failed: ' + (e.message || 'Error'), 'error'); 
                 }
@@ -941,10 +946,6 @@ async function handleWithdraw(btn) {
     } catch (err) {
         console.error('[RentalPage] handleWithdraw catch error:', err);
         RentalState.isTransactionPending = false;
-        if (btn && btn.parentNode) {
-            btn.innerHTML = orig;
-            btn.disabled = false;
-        }
         if (!err.cancelled && err.type !== 'user_rejected') {
             showToast('Failed: ' + (err.message || 'Transaction failed'), 'error');
         }
