@@ -201,8 +201,9 @@ function renderHeaderStats() {
     const myListings = listings.filter(l => State.isConnected && addressesMatch(l.owner, State.userAddress));
     const earnings = myListings.reduce((s, l) => s + Number(ethers.formatEther(BigInt(l.totalEarnings || 0))), 0);
     const now = Math.floor(Date.now() / 1000);
+    
+    // V12.1: Count ALL available NFTs (including user's own)
     const available = listings.filter(l => {
-        if (State.isConnected && addressesMatch(l.owner, State.userAddress)) return false;
         return !l.isRented && !(l.rentalEndTime && Number(l.rentalEndTime) > now);
     }).length;
     
@@ -279,9 +280,11 @@ function renderMarketplace() {
     const listings = State.rentalListings || [];
     const now = Math.floor(Date.now() / 1000);
     
+    // V12.1: Show ALL listings (including user's own), filter only by rental status and tier
     let available = listings.filter(l => {
-        if (State.isConnected && addressesMatch(l.owner, State.userAddress)) return false;
+        // Hide currently rented NFTs
         if (l.isRented || (l.rentalEndTime && Number(l.rentalEndTime) > now)) return false;
+        // Apply tier filter
         if (RentalState.filterTier !== 'ALL' && getTierInfo(l.boostBips).name !== RentalState.filterTier) return false;
         return true;
     });
@@ -323,14 +326,18 @@ function renderNFTCard(listing, idx) {
     const price = formatBigNumber(BigInt(listing.pricePerHour || 0)).toFixed(2);
     const tokenId = normalizeTokenId(listing.tokenId);
     
+    // V12.1: Check if this NFT belongs to the connected user
+    const isOwner = State.isConnected && addressesMatch(listing.owner, State.userAddress);
+    
     return `
-        <div class="r-card r-fadeUp" style="animation-delay:${idx * 40}ms">
+        <div class="r-card r-fadeUp ${isOwner ? 'ring-2 ring-blue-500/30' : ''}" style="animation-delay:${idx * 40}ms">
             <div class="img-wrap">
                 <div class="absolute top-3 left-3 z-10">
                     <span class="r-badge tier-${tier.name.toLowerCase()}">${tier.name}</span>
                 </div>
-                <div class="absolute top-3 right-3 z-10">
+                <div class="absolute top-3 right-3 z-10 flex flex-col gap-1 items-end">
                     <span class="px-2.5 py-1 rounded-lg text-[11px] font-bold bg-black/50 backdrop-blur" style="color:${color.accent}">+${(listing.boostBips||0)/100}%</span>
+                    ${isOwner ? `<span class="px-2 py-0.5 rounded text-[9px] font-bold bg-blue-500/20 text-blue-400 border border-blue-500/30">YOURS</span>` : ''}
                 </div>
                 <img src="${buildImageUrl(listing.img || tier.img)}" class="nft-img" onerror="this.src='./assets/nft.png'">
             </div>
@@ -344,9 +351,15 @@ function renderNFTCard(listing, idx) {
                         <p class="text-[9px] text-zinc-500 uppercase mb-0.5">Price/hr</p>
                         <p class="text-xl font-bold text-white">${price} <span class="text-xs text-zinc-500">BKC</span></p>
                     </div>
-                    <button class="rent-btn r-btn r-btn-primary text-sm px-4 py-2" data-id="${tokenId}">
-                        <i class="fa-solid fa-clock mr-1"></i>Rent
-                    </button>
+                    ${isOwner ? `
+                        <button class="withdraw-btn r-btn r-btn-danger text-sm px-4 py-2" data-id="${tokenId}">
+                            <i class="fa-solid fa-arrow-right-from-bracket mr-1"></i>Withdraw
+                        </button>
+                    ` : `
+                        <button class="rent-btn r-btn r-btn-primary text-sm px-4 py-2" data-id="${tokenId}">
+                            <i class="fa-solid fa-clock mr-1"></i>Rent
+                        </button>
+                    `}
                 </div>
             </div>
         </div>`;
