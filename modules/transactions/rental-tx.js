@@ -1,965 +1,989 @@
-// modules/js/transactions/rental-tx.js
-// ✅ PRODUCTION V1.5 - Improved RPC resilience and approval handling
-// 
-// CHANGES V1.5:
-// - IMPROVED: Use setApprovalForAll instead of individual approve (one-time approval)
-// - IMPROVED: Better error handling during NFT approval with timeout
-// - IMPROVED: Re-check approval status after RPC errors
-// - IMPROVED: Fixed gas limit for approval transactions
-// - IMPROVED: Cleaner error messages for users
-//
-// CHANGES V1.4:
-// - Changed ABI from string format to object format (ethers v6 compatibility)
-// - Fixed: listing.active → listing.isActive (match contract struct)
-// - Fixed: rental.renter → rental.tenant (match contract struct)
-// - Fixed: rental.totalPaid → rental.paidAmount (match contract struct)
-// - Removed non-existent functions: getActiveListings, getUserListings, getUserRentals
-// - Added proper contract method validation
-// - Added debug logging for troubleshooting
-//
-// CHANGES V1.3:
-// - Fixed: listing.active → listing.isActive (match contract)
-// - Fixed: calculateRentalCost → getRentalCost (match contract)
-// - Added: BKC balance check before rent
-// - Added: Better error messages for each failure case
-//
-// ============================================================================
-// AVAILABLE TRANSACTIONS:
-// - listNft / list: List an NFT for rent
-// - rentNft / rent: Rent a listed NFT
-// - withdrawNft / withdraw: Remove NFT from marketplace
-// - updateListing: Update listing price/duration
-// ============================================================================
+// js/pages/RentalPage.js
+// ✅ PRODUCTION V12.0 - Complete UI Redesign
+const ethers = window.ethers;
+import { State } from '../state.js';
+import { loadRentalListings, loadUserRentals, loadMyBoostersFromAPI, API_ENDPOINTS } from '../modules/data.js';
+import { formatBigNumber } from '../utils.js';
+import { showToast } from '../ui-feedback.js';
+import { boosterTiers, ipfsGateway } from '../config.js';
+import { RentalTx } from '../modules/transactions/index.js';
 
-import { txEngine, ValidationLayer } from '../core/index.js';
-import { addresses, contractAddresses } from '../../config.js';
+const AIRBNFT_IMAGE = "./assets/airbnft.png";
+const EXPLORER_TX = "https://sepolia.arbiscan.io/tx/";
 
-// ============================================================================
-// 1. CONTRACT CONFIGURATION
-// ============================================================================
-
-/**
- * Get contract addresses dynamically from config.js
- */
-function getContracts() {
-    const bkcToken = addresses?.bkcToken || 
-                     contractAddresses?.bkcToken ||
-                     window.contractAddresses?.bkcToken;
-    
-    const rentalMarketplace = addresses?.rentalManager || 
-                              contractAddresses?.rentalManager ||
-                              window.contractAddresses?.rentalManager;
-    
-    const nftContract = addresses?.rewardBoosterNFT || 
-                        contractAddresses?.rewardBoosterNFT ||
-                        window.contractAddresses?.rewardBoosterNFT;
-    
-    if (!bkcToken) {
-        console.error('❌ BKC Token address not found!');
-        throw new Error('Contract addresses not loaded. Please refresh the page.');
-    }
-    
-    if (!rentalMarketplace) {
-        console.error('❌ RentalManager address not found!', { addresses, contractAddresses });
-        throw new Error('Contract addresses not loaded. Please refresh the page.');
-    }
-    
-    if (!nftContract) {
-        console.error('❌ NFT Contract (RewardBoosterNFT) address not found!');
-        throw new Error('Contract addresses not loaded. Please refresh the page.');
-    }
-    
-    console.log('[RentalTx] Using addresses:', { bkcToken, rentalMarketplace, nftContract });
-    
-    return {
-        BKC_TOKEN: bkcToken,
-        RENTAL_MARKETPLACE: rentalMarketplace,
-        NFT_CONTRACT: nftContract
-    };
-}
-
-/**
- * Rental Marketplace ABI - RentalManager contract
- * V1.4: Using OBJECT format for ethers v6 compatibility
- */
-const RENTAL_ABI = [
-    // Write functions
-    {
-        name: 'listNFT',
-        type: 'function',
-        stateMutability: 'nonpayable',
-        inputs: [
-            { name: 'tokenId', type: 'uint256' },
-            { name: 'pricePerHour', type: 'uint256' },
-            { name: 'minHours', type: 'uint256' },
-            { name: 'maxHours', type: 'uint256' }
-        ],
-        outputs: []
-    },
-    {
-        name: 'rentNFT',
-        type: 'function',
-        stateMutability: 'nonpayable',
-        inputs: [
-            { name: 'tokenId', type: 'uint256' },
-            { name: 'hours', type: 'uint256' }
-        ],
-        outputs: []
-    },
-    {
-        name: 'rentNFTSimple',
-        type: 'function',
-        stateMutability: 'nonpayable',
-        inputs: [
-            { name: 'tokenId', type: 'uint256' }
-        ],
-        outputs: []
-    },
-    {
-        name: 'withdrawNFT',
-        type: 'function',
-        stateMutability: 'nonpayable',
-        inputs: [
-            { name: 'tokenId', type: 'uint256' }
-        ],
-        outputs: []
-    },
-    {
-        name: 'updateListing',
-        type: 'function',
-        stateMutability: 'nonpayable',
-        inputs: [
-            { name: 'tokenId', type: 'uint256' },
-            { name: 'pricePerHour', type: 'uint256' },
-            { name: 'minHours', type: 'uint256' },
-            { name: 'maxHours', type: 'uint256' }
-        ],
-        outputs: []
-    },
-    
-    // Read functions - V1.4: Match contract struct fields exactly
-    {
-        name: 'getListing',
-        type: 'function',
-        stateMutability: 'view',
-        inputs: [{ name: 'tokenId', type: 'uint256' }],
-        outputs: [
-            { name: 'owner', type: 'address' },
-            { name: 'pricePerHour', type: 'uint256' },
-            { name: 'minHours', type: 'uint256' },
-            { name: 'maxHours', type: 'uint256' },
-            { name: 'isActive', type: 'bool' },
-            { name: 'totalEarnings', type: 'uint256' },
-            { name: 'rentalCount', type: 'uint256' }
-        ]
-    },
-    {
-        name: 'getRental',
-        type: 'function',
-        stateMutability: 'view',
-        inputs: [{ name: 'tokenId', type: 'uint256' }],
-        outputs: [
-            { name: 'tenant', type: 'address' },
-            { name: 'startTime', type: 'uint256' },
-            { name: 'endTime', type: 'uint256' },
-            { name: 'paidAmount', type: 'uint256' }
-        ]
-    },
-    {
-        name: 'getRentalCost',
-        type: 'function',
-        stateMutability: 'view',
-        inputs: [
-            { name: 'tokenId', type: 'uint256' },
-            { name: 'hours', type: 'uint256' }
-        ],
-        outputs: [
-            { name: 'totalCost', type: 'uint256' },
-            { name: 'protocolFee', type: 'uint256' },
-            { name: 'ownerPayout', type: 'uint256' }
-        ]
-    },
-    {
-        name: 'getAllListedTokenIds',
-        type: 'function',
-        stateMutability: 'view',
-        inputs: [],
-        outputs: [{ name: '', type: 'uint256[]' }]
-    },
-    {
-        name: 'isRented',
-        type: 'function',
-        stateMutability: 'view',
-        inputs: [{ name: 'tokenId', type: 'uint256' }],
-        outputs: [{ name: '', type: 'bool' }]
-    },
-    {
-        name: 'hasRentalRights',
-        type: 'function',
-        stateMutability: 'view',
-        inputs: [
-            { name: 'tokenId', type: 'uint256' },
-            { name: 'user', type: 'address' }
-        ],
-        outputs: [{ name: '', type: 'bool' }]
-    },
-    {
-        name: 'getRemainingRentalTime',
-        type: 'function',
-        stateMutability: 'view',
-        inputs: [{ name: 'tokenId', type: 'uint256' }],
-        outputs: [{ name: '', type: 'uint256' }]
-    },
-    {
-        name: 'paused',
-        type: 'function',
-        stateMutability: 'view',
-        inputs: [],
-        outputs: [{ name: '', type: 'bool' }]
-    },
-    {
-        name: 'getListingCount',
-        type: 'function',
-        stateMutability: 'view',
-        inputs: [],
-        outputs: [{ name: '', type: 'uint256' }]
-    },
-    {
-        name: 'getMarketplaceStats',
-        type: 'function',
-        stateMutability: 'view',
-        inputs: [],
-        outputs: [
-            { name: 'activeListings', type: 'uint256' },
-            { name: 'totalVol', type: 'uint256' },
-            { name: 'totalFees', type: 'uint256' },
-            { name: 'rentals', type: 'uint256' }
-        ]
-    },
-    
-    // Events
-    {
-        name: 'NFTListed',
-        type: 'event',
-        inputs: [
-            { name: 'tokenId', type: 'uint256', indexed: true },
-            { name: 'owner', type: 'address', indexed: true },
-            { name: 'pricePerHour', type: 'uint256', indexed: false },
-            { name: 'minHours', type: 'uint256', indexed: false },
-            { name: 'maxHours', type: 'uint256', indexed: false }
-        ]
-    },
-    {
-        name: 'NFTRented',
-        type: 'event',
-        inputs: [
-            { name: 'tokenId', type: 'uint256', indexed: true },
-            { name: 'tenant', type: 'address', indexed: true },
-            { name: 'owner', type: 'address', indexed: true },
-            { name: 'hours_', type: 'uint256', indexed: false },
-            { name: 'totalCost', type: 'uint256', indexed: false },
-            { name: 'protocolFee', type: 'uint256', indexed: false },
-            { name: 'ownerPayout', type: 'uint256', indexed: false },
-            { name: 'endTime', type: 'uint256', indexed: false }
-        ]
-    },
-    {
-        name: 'NFTWithdrawn',
-        type: 'event',
-        inputs: [
-            { name: 'tokenId', type: 'uint256', indexed: true },
-            { name: 'owner', type: 'address', indexed: true }
-        ]
-    },
-    {
-        name: 'ListingUpdated',
-        type: 'event',
-        inputs: [
-            { name: 'tokenId', type: 'uint256', indexed: true },
-            { name: 'newPricePerHour', type: 'uint256', indexed: false },
-            { name: 'newMinHours', type: 'uint256', indexed: false },
-            { name: 'newMaxHours', type: 'uint256', indexed: false }
-        ]
-    },
-    {
-        name: 'RentalExpired',
-        type: 'event',
-        inputs: [
-            { name: 'tokenId', type: 'uint256', indexed: true },
-            { name: 'tenant', type: 'address', indexed: true }
-        ]
-    }
-];
-
-/**
- * NFT Contract ABI (RewardBoosterNFT) - Object format
- */
-const NFT_ABI = [
-    {
-        name: 'approve',
-        type: 'function',
-        stateMutability: 'nonpayable',
-        inputs: [
-            { name: 'to', type: 'address' },
-            { name: 'tokenId', type: 'uint256' }
-        ],
-        outputs: []
-    },
-    {
-        name: 'setApprovalForAll',
-        type: 'function',
-        stateMutability: 'nonpayable',
-        inputs: [
-            { name: 'operator', type: 'address' },
-            { name: 'approved', type: 'bool' }
-        ],
-        outputs: []
-    },
-    {
-        name: 'isApprovedForAll',
-        type: 'function',
-        stateMutability: 'view',
-        inputs: [
-            { name: 'owner', type: 'address' },
-            { name: 'operator', type: 'address' }
-        ],
-        outputs: [{ name: '', type: 'bool' }]
-    },
-    {
-        name: 'getApproved',
-        type: 'function',
-        stateMutability: 'view',
-        inputs: [{ name: 'tokenId', type: 'uint256' }],
-        outputs: [{ name: '', type: 'address' }]
-    },
-    {
-        name: 'ownerOf',
-        type: 'function',
-        stateMutability: 'view',
-        inputs: [{ name: 'tokenId', type: 'uint256' }],
-        outputs: [{ name: '', type: 'address' }]
-    }
-];
-
-/**
- * BKC Token ABI - Object format
- */
-const BKC_ABI = [
-    {
-        name: 'approve',
-        type: 'function',
-        stateMutability: 'nonpayable',
-        inputs: [
-            { name: 'spender', type: 'address' },
-            { name: 'amount', type: 'uint256' }
-        ],
-        outputs: [{ name: '', type: 'bool' }]
-    },
-    {
-        name: 'allowance',
-        type: 'function',
-        stateMutability: 'view',
-        inputs: [
-            { name: 'owner', type: 'address' },
-            { name: 'spender', type: 'address' }
-        ],
-        outputs: [{ name: '', type: 'uint256' }]
-    },
-    {
-        name: 'balanceOf',
-        type: 'function',
-        stateMutability: 'view',
-        inputs: [{ name: 'owner', type: 'address' }],
-        outputs: [{ name: '', type: 'uint256' }]
-    }
-];
-
-// ============================================================================
-// 2. HELPER FUNCTIONS
-// ============================================================================
-
-/**
- * Creates Rental Marketplace contract instance
- * V1.4: Added validation and debug logging
- */
-function getRentalContract(signer) {
-    const ethers = window.ethers;
-    
-    if (!ethers) {
-        throw new Error('ethers.js not loaded');
-    }
-    
-    const contracts = getContracts();
-    const contract = new ethers.Contract(contracts.RENTAL_MARKETPLACE, RENTAL_ABI, signer);
-    
-    console.log('[RentalTx] Contract created, checking methods...');
-    
-    return contract;
-}
-
-/**
- * Creates Rental Marketplace contract instance (read-only)
- */
-async function getRentalContractReadOnly() {
-    const ethers = window.ethers;
-    const { NetworkManager } = await import('../core/index.js');
-    const provider = NetworkManager.getProvider();
-    const contracts = getContracts();
-    return new ethers.Contract(contracts.RENTAL_MARKETPLACE, RENTAL_ABI, provider);
-}
-
-/**
- * Creates NFT contract instance
- */
-function getNftContract(signer) {
-    const ethers = window.ethers;
-    const contracts = getContracts();
-    return new ethers.Contract(contracts.NFT_CONTRACT, NFT_ABI, signer);
-}
-
-/**
- * Creates NFT contract instance (read-only)
- */
-async function getNftContractReadOnly() {
-    const ethers = window.ethers;
-    const { NetworkManager } = await import('../core/index.js');
-    const provider = NetworkManager.getProvider();
-    const contracts = getContracts();
-    return new ethers.Contract(contracts.NFT_CONTRACT, NFT_ABI, provider);
-}
-
-// ============================================================================
-// 3. TRANSACTION FUNCTIONS
-// ============================================================================
-
-/**
- * Lists an NFT for rent on the marketplace
- */
-export async function listNft({
-    tokenId,
-    pricePerHour,
-    minHours,
-    maxHours,
-    button = null,
-    onSuccess = null,
-    onError = null
-}) {
-    console.log('[RentalTx] listNft called with:', { tokenId, pricePerHour, minHours, maxHours });
-    
-    ValidationLayer.rental.validateList({ tokenId, pricePerHour, minHours, maxHours });
-
-    const price = BigInt(pricePerHour);
-    const contracts = getContracts();
-
-    return await txEngine.execute({
-        name: 'ListNFT',
-        button,
-        
-        getContract: async (signer) => {
-            const contract = getRentalContract(signer);
-            console.log('[RentalTx] Contract.listNFT exists:', typeof contract.listNFT);
-            return contract;
-        },
-        method: 'listNFT',
-        args: [BigInt(tokenId), price, BigInt(minHours), BigInt(maxHours)],
-        
-        validate: async (signer, userAddress) => {
-            console.log('[RentalTx] Validating listNFT for user:', userAddress);
-            
-            const rentalContract = getRentalContract(signer);
-            const nftContract = getNftContract(signer);
-            
-            // Check if marketplace is paused
-            try {
-                const isPaused = await rentalContract.paused();
-                console.log('[RentalTx] Marketplace paused:', isPaused);
-                if (isPaused) {
-                    throw new Error('Marketplace is currently paused');
-                }
-            } catch (e) {
-                if (e.message.includes('paused')) throw e;
-            }
-            
-            // Check ownership
-            const owner = await nftContract.ownerOf(tokenId);
-            console.log('[RentalTx] NFT owner:', owner);
-            if (owner.toLowerCase() !== userAddress.toLowerCase()) {
-                throw new Error('You do not own this NFT');
-            }
-            
-            // Check if already listed - V1.4: Use isActive (not active)
-            try {
-                const listing = await rentalContract.getListing(tokenId);
-                console.log('[RentalTx] Current listing:', listing);
-                if (listing.isActive) {
-                    throw new Error('This NFT is already listed');
-                }
-            } catch (e) {
-                if (e.message.includes('already listed')) throw e;
-            }
-            
-            // V1.5: Improved NFT approval handling with better RPC error resilience
-            const isApprovedForAll = await nftContract.isApprovedForAll(userAddress, contracts.RENTAL_MARKETPLACE);
-            console.log('[RentalTx] Is approved for all:', isApprovedForAll);
-            
-            if (!isApprovedForAll) {
-                const approved = await nftContract.getApproved(tokenId);
-                console.log('[RentalTx] Approved address:', approved);
-                
-                if (approved.toLowerCase() !== contracts.RENTAL_MARKETPLACE.toLowerCase()) {
-                    console.log('[RentalTx] Approving NFT for marketplace...');
-                    
-                    // V1.5: Use setApprovalForAll for better UX (one-time approval for all NFTs)
-                    // This avoids needing to approve each NFT individually
-                    try {
-                        const approveTx = await nftContract.setApprovalForAll(
-                            contracts.RENTAL_MARKETPLACE, 
-                            true,
-                            { gasLimit: 100000 } // Fixed gas limit for approval
-                        );
-                        
-                        console.log('[RentalTx] Approval tx submitted:', approveTx.hash);
-                        
-                        // Wait with timeout
-                        const receipt = await Promise.race([
-                            approveTx.wait(),
-                            new Promise((_, reject) => 
-                                setTimeout(() => reject(new Error('Approval timeout - please try again')), 60000)
-                            )
-                        ]);
-                        
-                        console.log('[RentalTx] ✅ NFT approval confirmed in block:', receipt.blockNumber);
-                    } catch (approvalError) {
-                        console.error('[RentalTx] Approval error:', approvalError);
-                        
-                        // Check if approval actually went through despite error
-                        await new Promise(r => setTimeout(r, 2000)); // Wait 2s
-                        const recheckApproval = await nftContract.isApprovedForAll(userAddress, contracts.RENTAL_MARKETPLACE);
-                        
-                        if (recheckApproval) {
-                            console.log('[RentalTx] ✅ Approval confirmed on recheck');
-                        } else {
-                            // Propagate a cleaner error
-                            throw new Error('NFT approval failed. Please check MetaMask and try again.');
-                        }
-                    }
-                }
-            }
-            
-            console.log('[RentalTx] ✅ All validations passed for listNFT');
-        },
-        
-        onSuccess: async (receipt) => {
-            console.log('[RentalTx] ListNFT successful:', receipt.hash);
-            if (onSuccess) await onSuccess(receipt);
-        },
-        onError: (error) => {
-            console.error('[RentalTx] ListNFT failed:', error);
-            if (onError) onError(error);
-        }
-    });
-}
-
-/**
- * Rents a listed NFT
- */
-export async function rentNft({
-    tokenId,
-    hours = 1,
-    button = null,
-    onSuccess = null,
-    onError = null
-}) {
-    console.log('[RentalTx] rentNft called with:', { tokenId, hours });
-    
-    ValidationLayer.rental.validateRent({ tokenId, hours });
-    
-    const contracts = getContracts();
-    
-    // Pre-fetch rental cost for approval
-    let rentalCost = 0n;
-    try {
-        const readContract = await getRentalContractReadOnly();
-        const costData = await readContract.getRentalCost(tokenId, hours);
-        rentalCost = costData.totalCost;
-        console.log('[RentalTx] Pre-fetched rental cost:', window.ethers.formatEther(rentalCost), 'BKC');
-    } catch (e) {
-        console.warn('[RentalTx] Could not pre-fetch rental cost:', e.message);
-    }
-
-    return await txEngine.execute({
-        name: 'RentNFT',
-        button,
-        
-        getContract: async (signer) => {
-            const contract = getRentalContract(signer);
-            console.log('[RentalTx] Contract.rentNFT exists:', typeof contract.rentNFT);
-            return contract;
-        },
-        method: 'rentNFT',
-        args: [BigInt(tokenId), BigInt(hours)],
-        
-        // Token approval for rental payment
-        approval: (rentalCost > 0n) ? {
-            token: contracts.BKC_TOKEN,
-            spender: contracts.RENTAL_MARKETPLACE,
-            amount: rentalCost
-        } : null,
-        
-        validate: async (signer, userAddress) => {
-            const ethers = window.ethers;
-            console.log('[RentalTx] Validating rent for tokenId:', tokenId, 'hours:', hours);
-            
-            const contract = getRentalContract(signer);
-            
-            // Check marketplace paused
-            const isPaused = await contract.paused();
-            console.log('[RentalTx] Marketplace paused:', isPaused);
-            if (isPaused) {
-                throw new Error('Marketplace is currently paused');
-            }
-            
-            // Check listing - V1.4: Use isActive (not active)
-            const listing = await contract.getListing(tokenId);
-            console.log('[RentalTx] Listing:', listing);
-            
-            if (!listing.isActive) {
-                throw new Error('This NFT is not listed for rent');
-            }
-            
-            // Check hours within bounds
-            const minH = Number(listing.minHours);
-            const maxH = Number(listing.maxHours);
-            if (hours < minH || hours > maxH) {
-                throw new Error(`Rental duration must be between ${minH} and ${maxH} hours`);
-            }
-            
-            // Check if currently rented
-            const isCurrentlyRented = await contract.isRented(tokenId);
-            console.log('[RentalTx] Is currently rented:', isCurrentlyRented);
-            if (isCurrentlyRented) {
-                throw new Error('This NFT is currently being rented by someone else');
-            }
-            
-            // Calculate and validate cost
-            const costData = await contract.getRentalCost(tokenId, hours);
-            const totalCost = costData.totalCost;
-            console.log('[RentalTx] Rental cost:', ethers.formatEther(totalCost), 'BKC');
-            
-            // Check user balance
-            const { NetworkManager } = await import('../core/index.js');
-            const provider = NetworkManager.getProvider();
-            const bkcContract = new ethers.Contract(contracts.BKC_TOKEN, BKC_ABI, provider);
-            const balance = await bkcContract.balanceOf(userAddress);
-            console.log('[RentalTx] User BKC balance:', ethers.formatEther(balance), 'BKC');
-            
-            if (balance < totalCost) {
-                throw new Error(`Insufficient BKC balance. Need ${ethers.formatEther(totalCost)} BKC`);
-            }
-            
-            console.log('[RentalTx] ✅ All validations passed');
-        },
-        
-        onSuccess: async (receipt) => {
-            console.log('[RentalTx] RentNFT successful:', receipt.hash);
-            if (onSuccess) await onSuccess(receipt);
-        },
-        onError: (error) => {
-            console.error('[RentalTx] RentNFT failed:', error);
-            if (onError) onError(error);
-        }
-    });
-}
-
-/**
- * Withdraws an NFT from the marketplace (de-list)
- */
-export async function withdrawNft({
-    tokenId,
-    button = null,
-    onSuccess = null,
-    onError = null
-}) {
-    console.log('[RentalTx] withdrawNft called with:', { tokenId });
-    
-    if (tokenId === undefined || tokenId === null) {
-        throw new Error('Token ID is required');
-    }
-
-    return await txEngine.execute({
-        name: 'WithdrawNFT',
-        button,
-        
-        getContract: async (signer) => {
-            const contract = getRentalContract(signer);
-            console.log('[RentalTx] Contract.withdrawNFT exists:', typeof contract.withdrawNFT);
-            return contract;
-        },
-        method: 'withdrawNFT',
-        args: [BigInt(tokenId)],
-        
-        validate: async (signer, userAddress) => {
-            console.log('[RentalTx] Validating withdrawNFT for user:', userAddress);
-            
-            const contract = getRentalContract(signer);
-            
-            // V1.4: Use isActive (not active)
-            const listing = await contract.getListing(tokenId);
-            console.log('[RentalTx] Listing:', listing);
-            
-            if (!listing.isActive) {
-                throw new Error('This NFT is not listed');
-            }
-            
-            if (listing.owner.toLowerCase() !== userAddress.toLowerCase()) {
-                throw new Error('Only the listing owner can withdraw');
-            }
-            
-            const isRented = await contract.isRented(tokenId);
-            console.log('[RentalTx] Is rented:', isRented);
-            if (isRented) {
-                throw new Error('Cannot withdraw while NFT is being rented');
-            }
-            
-            console.log('[RentalTx] ✅ Validation passed for withdrawNFT');
-        },
-        
-        onSuccess: async (receipt) => {
-            console.log('[RentalTx] WithdrawNFT successful:', receipt.hash);
-            if (onSuccess) await onSuccess(receipt);
-        },
-        onError: (error) => {
-            console.error('[RentalTx] WithdrawNFT failed:', error);
-            if (onError) onError(error);
-        }
-    });
-}
-
-/**
- * Updates a listing's price and duration parameters
- */
-export async function updateListing({
-    tokenId,
-    pricePerHour,
-    minHours,
-    maxHours,
-    button = null,
-    onSuccess = null,
-    onError = null
-}) {
-    console.log('[RentalTx] updateListing called with:', { tokenId, pricePerHour, minHours, maxHours });
-    
-    ValidationLayer.rental.validateList({ tokenId, pricePerHour, minHours, maxHours });
-
-    const price = BigInt(pricePerHour);
-
-    return await txEngine.execute({
-        name: 'UpdateListing',
-        button,
-        
-        getContract: async (signer) => {
-            const contract = getRentalContract(signer);
-            console.log('[RentalTx] Contract.updateListing exists:', typeof contract.updateListing);
-            return contract;
-        },
-        method: 'updateListing',
-        args: [BigInt(tokenId), price, BigInt(minHours), BigInt(maxHours)],
-        
-        validate: async (signer, userAddress) => {
-            console.log('[RentalTx] Validating updateListing for user:', userAddress);
-            
-            const contract = getRentalContract(signer);
-            
-            // V1.4: Use isActive (not active)
-            const listing = await contract.getListing(tokenId);
-            console.log('[RentalTx] Listing:', listing);
-            
-            if (!listing.isActive) {
-                throw new Error('This NFT is not listed');
-            }
-            
-            if (listing.owner.toLowerCase() !== userAddress.toLowerCase()) {
-                throw new Error('Only the listing owner can update');
-            }
-            
-            const isRented = await contract.isRented(tokenId);
-            if (isRented) {
-                throw new Error('Cannot update while NFT is being rented');
-            }
-            
-            console.log('[RentalTx] ✅ Validation passed for updateListing');
-        },
-        
-        onSuccess: async (receipt) => {
-            console.log('[RentalTx] UpdateListing successful:', receipt.hash);
-            if (onSuccess) await onSuccess(receipt);
-        },
-        onError: (error) => {
-            console.error('[RentalTx] UpdateListing failed:', error);
-            if (onError) onError(error);
-        }
-    });
-}
-
-// ============================================================================
-// 4. READ FUNCTIONS (Helpers)
-// ============================================================================
-
-/**
- * Gets listing details for a token
- * V1.4: Fixed field names to match contract struct
- */
-export async function getListing(tokenId) {
-    const ethers = window.ethers;
-    const contract = await getRentalContractReadOnly();
-    const listing = await contract.getListing(tokenId);
-    
-    return {
-        owner: listing.owner,
-        pricePerHour: listing.pricePerHour,
-        pricePerHourFormatted: ethers.formatEther(listing.pricePerHour),
-        minHours: Number(listing.minHours),
-        maxHours: Number(listing.maxHours),
-        isActive: listing.isActive,  // V1.4: Correct field name
-        totalEarnings: listing.totalEarnings,
-        totalEarningsFormatted: ethers.formatEther(listing.totalEarnings),
-        rentalCount: Number(listing.rentalCount)
-    };
-}
-
-/**
- * Gets rental details for a token
- * V1.4: Fixed field names to match contract struct
- */
-export async function getRental(tokenId) {
-    const ethers = window.ethers;
-    const contract = await getRentalContractReadOnly();
-    const rental = await contract.getRental(tokenId);
-    const now = Math.floor(Date.now() / 1000);
-    const endTime = Number(rental.endTime);
-    const isActive = endTime > now;
-    
-    return {
-        tenant: rental.tenant,  // V1.4: Correct field name (was renter)
-        startTime: Number(rental.startTime),
-        endTime: endTime,
-        paidAmount: rental.paidAmount,  // V1.4: Correct field name (was totalPaid)
-        paidAmountFormatted: ethers.formatEther(rental.paidAmount),
-        isActive: isActive,
-        hoursRemaining: isActive ? Math.max(0, Math.ceil((endTime - now) / 3600)) : 0,
-        isExpired: !isActive && endTime > 0
-    };
-}
-
-/**
- * Gets all listed token IDs
- */
-export async function getAllListedTokenIds() {
-    const contract = await getRentalContractReadOnly();
-    const ids = await contract.getAllListedTokenIds();
-    return ids.map(id => Number(id));
-}
-
-/**
- * Gets rental cost for specified duration
- */
-export async function getRentalCost(tokenId, hours) {
-    const ethers = window.ethers;
-    const contract = await getRentalContractReadOnly();
-    const cost = await contract.getRentalCost(tokenId, hours);
-    
-    return {
-        totalCost: cost.totalCost,
-        totalCostFormatted: ethers.formatEther(cost.totalCost),
-        protocolFee: cost.protocolFee,
-        protocolFeeFormatted: ethers.formatEther(cost.protocolFee),
-        ownerPayout: cost.ownerPayout,
-        ownerPayoutFormatted: ethers.formatEther(cost.ownerPayout)
-    };
-}
-
-/**
- * Checks if NFT is currently rented
- */
-export async function isRented(tokenId) {
-    const contract = await getRentalContractReadOnly();
-    return await contract.isRented(tokenId);
-}
-
-/**
- * Gets remaining rental time in seconds
- */
-export async function getRemainingRentalTime(tokenId) {
-    const contract = await getRentalContractReadOnly();
-    return Number(await contract.getRemainingRentalTime(tokenId));
-}
-
-/**
- * Checks if user has rental rights for an NFT
- */
-export async function hasRentalRights(tokenId, userAddress) {
-    const contract = await getRentalContractReadOnly();
-    return await contract.hasRentalRights(tokenId, userAddress);
-}
-
-/**
- * Gets marketplace statistics
- */
-export async function getMarketplaceStats() {
-    const ethers = window.ethers;
-    const contract = await getRentalContractReadOnly();
-    const stats = await contract.getMarketplaceStats();
-    
-    return {
-        activeListings: Number(stats.activeListings),
-        totalVolume: stats.totalVol,
-        totalVolumeFormatted: ethers.formatEther(stats.totalVol),
-        totalFees: stats.totalFees,
-        totalFeesFormatted: ethers.formatEther(stats.totalFees),
-        totalRentals: Number(stats.rentals)
-    };
-}
-
-/**
- * Checks if marketplace is paused
- */
-export async function isMarketplacePaused() {
-    const contract = await getRentalContractReadOnly();
-    return await contract.paused();
-}
-
-// ============================================================================
-// 5. ALIASES FOR BACKWARD COMPATIBILITY
-// ============================================================================
-
-export const list = listNft;
-export const rent = rentNft;
-export const withdraw = withdrawNft;
-
-// ============================================================================
-// 6. EXPORT
-// ============================================================================
-
-export const RentalTx = {
-    // Write functions
-    listNft,
-    rentNft,
-    withdrawNft,
-    updateListing,
-    // Aliases
-    list,
-    rent,
-    withdraw,
-    // Read helpers
-    getListing,
-    getRental,
-    getAllListedTokenIds,
-    getRentalCost,
-    isRented,
-    getRemainingRentalTime,
-    hasRentalRights,
-    getMarketplaceStats,
-    isMarketplacePaused
+const RentalState = {
+    activeTab: 'marketplace',
+    filterTier: 'ALL',
+    sortBy: 'price-low',
+    selectedRentalId: null,
+    isLoading: false,
+    isTransactionPending: false,
+    countdownIntervals: []
 };
 
-export default RentalTx;
+// Utilities
+const normalizeTokenId = (id) => id == null ? '' : String(id);
+const tokenIdsMatch = (a, b) => normalizeTokenId(a) === normalizeTokenId(b);
+const addressesMatch = (a, b) => a && b && a.toLowerCase() === b.toLowerCase();
+
+function buildImageUrl(url) {
+    if (!url) return './assets/nft.png';
+    if (url.startsWith('http')) return url;
+    if (url.includes('ipfs.io/ipfs/')) return `${ipfsGateway}${url.split('ipfs.io/ipfs/')[1]}`;
+    if (url.startsWith('ipfs://')) return `${ipfsGateway}${url.substring(7)}`;
+    return url;
+}
+
+function formatTimeRemaining(endTime) {
+    const remaining = endTime - Math.floor(Date.now() / 1000);
+    if (remaining <= 0) return { text: 'Expired', expired: true, seconds: 0 };
+    const h = Math.floor(remaining / 3600);
+    const m = Math.floor((remaining % 3600) / 60);
+    const s = remaining % 60;
+    if (h > 0) return { text: `${h}h ${m}m`, expired: false, seconds: remaining };
+    if (m > 0) return { text: `${m}m ${s}s`, expired: false, seconds: remaining };
+    return { text: `${s}s`, expired: false, seconds: remaining };
+}
+
+function getTierInfo(boostBips) {
+    return boosterTiers.find(t => t.boostBips === Number(boostBips)) || { name: 'Unknown', img: './assets/nft.png', boostBips: 0 };
+}
+
+const TIER_COLORS = {
+    'Diamond': { accent: '#22d3ee', bg: 'rgba(34,211,238,0.15)' },
+    'Platinum': { accent: '#cbd5e1', bg: 'rgba(148,163,184,0.15)' },
+    'Gold': { accent: '#fbbf24', bg: 'rgba(251,191,36,0.15)' },
+    'Silver': { accent: '#d1d5db', bg: 'rgba(156,163,175,0.15)' },
+    'Bronze': { accent: '#fb923c', bg: 'rgba(251,146,60,0.15)' }
+};
+
+function getTierColor(name) {
+    return TIER_COLORS[name] || { accent: '#71717a', bg: 'rgba(113,113,122,0.15)' };
+}
+
+// Styles
+function injectStyles() {
+    if (document.getElementById('rental-v12-css')) return;
+    const css = document.createElement('style');
+    css.id = 'rental-v12-css';
+    css.textContent = `
+        @keyframes r-float { 0%,100%{transform:translateY(0) rotate(-2deg)} 50%{transform:translateY(-10px) rotate(2deg)} }
+        @keyframes r-glow { 0%,100%{filter:drop-shadow(0 0 15px rgba(34,197,94,0.3))} 50%{filter:drop-shadow(0 0 30px rgba(34,197,94,0.6))} }
+        @keyframes r-fadeUp { from{opacity:0;transform:translateY(20px)} to{opacity:1;transform:translateY(0)} }
+        @keyframes r-scaleIn { from{opacity:0;transform:scale(0.95)} to{opacity:1;transform:scale(1)} }
+        @keyframes r-pulse { 0%,100%{transform:scale(1)} 50%{transform:scale(1.03)} }
+        
+        .r-float{animation:r-float 4s ease-in-out infinite}
+        .r-glow{animation:r-glow 2s ease-in-out infinite}
+        .r-fadeUp{animation:r-fadeUp .4s ease-out forwards}
+        .r-scaleIn{animation:r-scaleIn .3s ease-out}
+        .r-pulse{animation:r-pulse 2s ease-in-out infinite}
+        
+        .r-glass{background:rgba(24,24,27,.85);backdrop-filter:blur(16px);border:1px solid rgba(63,63,70,.6);border-radius:20px}
+        .r-glass-light{background:rgba(39,39,42,.6);backdrop-filter:blur(10px);border:1px solid rgba(63,63,70,.4);border-radius:16px}
+        
+        .r-card{background:linear-gradient(160deg,rgba(24,24,27,.95),rgba(39,39,42,.9));border:1px solid rgba(63,63,70,.5);border-radius:24px;overflow:hidden;transition:all .4s cubic-bezier(.4,0,.2,1)}
+        .r-card:hover{transform:translateY(-8px) scale(1.01);border-color:rgba(34,197,94,.4);box-shadow:0 30px 60px -15px rgba(0,0,0,.4),0 0 30px -10px rgba(34,197,94,.15)}
+        .r-card .img-wrap{aspect-ratio:1;background:radial-gradient(circle at 50% 30%,rgba(34,197,94,.08),transparent 60%);display:flex;align-items:center;justify-content:center;padding:20px;position:relative}
+        .r-card .img-wrap::after{content:'';position:absolute;bottom:0;left:0;right:0;height:50%;background:linear-gradient(to top,rgba(24,24,27,1),transparent);pointer-events:none}
+        .r-card .nft-img{width:65%;height:65%;object-fit:contain;filter:drop-shadow(0 15px 30px rgba(0,0,0,.5));transition:transform .5s ease;z-index:1}
+        .r-card:hover .nft-img{transform:scale(1.12) rotate(4deg)}
+        
+        .r-badge{padding:5px 12px;border-radius:10px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px}
+        
+        .r-tab{padding:10px 20px;font-size:13px;font-weight:600;border-radius:12px;transition:all .25s;cursor:pointer;color:#71717a;white-space:nowrap}
+        .r-tab:hover:not(.active){color:#a1a1aa;background:rgba(63,63,70,.3)}
+        .r-tab.active{background:linear-gradient(135deg,#22c55e,#16a34a);color:#000;box-shadow:0 4px 20px rgba(34,197,94,.35)}
+        .r-tab .cnt{display:inline-flex;min-width:18px;height:18px;padding:0 5px;margin-left:6px;font-size:10px;font-weight:700;border-radius:9px;background:rgba(0,0,0,.25);align-items:center;justify-content:center}
+        
+        .r-chip{padding:8px 16px;border-radius:20px;font-size:12px;font-weight:600;transition:all .25s;cursor:pointer;border:1px solid transparent}
+        .r-chip.active{background:rgba(34,197,94,.15);color:#22c55e;border-color:rgba(34,197,94,.3)}
+        .r-chip:not(.active){background:rgba(39,39,42,.7);color:#71717a}
+        .r-chip:not(.active):hover{color:#fff;background:rgba(63,63,70,.7)}
+        
+        .r-btn{font-weight:700;padding:12px 24px;border-radius:14px;transition:all .25s;position:relative;overflow:hidden}
+        .r-btn-primary{background:linear-gradient(135deg,#22c55e,#16a34a);color:#fff}
+        .r-btn-primary:hover{transform:translateY(-2px);box-shadow:0 10px 25px -8px rgba(34,197,94,.5)}
+        .r-btn-primary:disabled{opacity:.5;cursor:not-allowed;transform:none!important}
+        .r-btn-secondary{background:rgba(39,39,42,.8);color:#a1a1aa;border:1px solid rgba(63,63,70,.8)}
+        .r-btn-secondary:hover{background:rgba(63,63,70,.8);color:#fff}
+        .r-btn-danger{background:rgba(239,68,68,.15);color:#f87171;border:1px solid rgba(239,68,68,.3)}
+        .r-btn-danger:hover{background:rgba(239,68,68,.25)}
+        .r-btn-danger:disabled{opacity:.4;cursor:not-allowed}
+        
+        .r-timer{font-family:'SF Mono',monospace;font-size:12px;font-weight:700;padding:6px 12px;border-radius:8px;background:rgba(34,197,94,.15);color:#22c55e;border:1px solid rgba(34,197,94,.25)}
+        .r-timer.warn{background:rgba(245,158,11,.15);color:#f59e0b;border-color:rgba(245,158,11,.25)}
+        .r-timer.crit{background:rgba(239,68,68,.15);color:#ef4444;border-color:rgba(239,68,68,.25);animation:r-pulse 1s infinite}
+        
+        .r-stat{padding:16px;border-radius:16px;background:linear-gradient(145deg,rgba(24,24,27,.9),rgba(39,39,42,.8));border:1px solid rgba(63,63,70,.4);transition:all .25s}
+        .r-stat:hover{border-color:rgba(34,197,94,.25);transform:translateY(-3px)}
+        
+        .r-empty{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:50px 20px;text-align:center}
+        .r-empty img{width:80px;height:80px;opacity:.25;margin-bottom:20px}
+        
+        @media(max-width:768px){
+            .r-grid{grid-template-columns:1fr!important}
+            .r-header-stats{display:none!important}
+        }
+    `;
+    document.head.appendChild(css);
+}
+
+// Main Export
+export const RentalPage = {
+    async render(isNewPage = false) {
+        injectStyles();
+        const container = document.getElementById('rental');
+        if (!container) return;
+        if (container.innerHTML.trim() === '' || isNewPage) {
+            container.innerHTML = renderLayout();
+            setupEvents();
+        }
+        await refreshData();
+    },
+    update() {
+        if (!RentalState.isLoading) renderContent();
+    }
+};
+
+function renderLayout() {
+    return `
+    <div class="min-h-screen pb-12">
+        <!-- Header -->
+        <div class="relative overflow-hidden mb-6">
+            <div class="absolute inset-0 bg-gradient-to-br from-green-500/5 via-transparent to-emerald-500/5"></div>
+            <div class="relative max-w-7xl mx-auto px-4 py-6">
+                <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-5">
+                    <div class="flex items-center gap-4">
+                        <div class="relative">
+                            <div class="absolute inset-0 bg-green-500/20 rounded-2xl blur-xl"></div>
+                            <div class="relative w-16 h-16 rounded-2xl bg-gradient-to-br from-zinc-800 to-zinc-900 flex items-center justify-center border border-green-500/30">
+                                <img src="${AIRBNFT_IMAGE}" alt="AirBNFT" class="w-12 h-12 object-contain r-float r-glow" id="mascot" onerror="this.src='./assets/nft.png'">
+                            </div>
+                        </div>
+                        <div>
+                            <h1 class="text-2xl font-bold text-white">Boost Rentals</h1>
+                            <p class="text-zinc-500 text-sm">Rent boosters • Earn passive income</p>
+                        </div>
+                    </div>
+                    <div class="r-header-stats flex gap-3" id="header-stats">${renderHeaderStats()}</div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Nav -->
+        <div class="max-w-7xl mx-auto px-4 mb-6">
+            <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                <div class="flex gap-2 p-1.5 r-glass-light rounded-2xl" id="tabs">
+                    <button class="r-tab active" data-tab="marketplace"><i class="fa-solid fa-store mr-2"></i>Marketplace</button>
+                    <button class="r-tab" data-tab="my-listings"><i class="fa-solid fa-tags mr-2"></i>My Listings<span class="cnt" id="cnt-listings">0</span></button>
+                    <button class="r-tab" data-tab="my-rentals"><i class="fa-solid fa-bolt mr-2"></i>Active<span class="cnt" id="cnt-rentals">0</span></button>
+                </div>
+                <button id="btn-refresh" class="r-btn r-btn-secondary flex items-center gap-2 text-sm">
+                    <i class="fa-solid fa-rotate" id="refresh-icon"></i>Refresh
+                </button>
+            </div>
+        </div>
+        
+        <!-- Content -->
+        <div class="max-w-7xl mx-auto px-4">
+            <div id="content" class="r-fadeUp">${renderLoading()}</div>
+        </div>
+        
+        <!-- Modals -->
+        ${renderRentModal()}
+        ${renderListModal()}
+    </div>`;
+}
+
+function renderHeaderStats() {
+    const listings = State.rentalListings || [];
+    const myListings = listings.filter(l => State.isConnected && addressesMatch(l.owner, State.userAddress));
+    const earnings = myListings.reduce((s, l) => s + Number(ethers.formatEther(BigInt(l.totalEarnings || 0))), 0);
+    const now = Math.floor(Date.now() / 1000);
+    
+    // V12.1: Count ALL available NFTs (including user's own)
+    const available = listings.filter(l => {
+        return !l.isRented && !(l.rentalEndTime && Number(l.rentalEndTime) > now);
+    }).length;
+    
+    return `
+        <div class="r-glass-light rounded-xl px-4 py-2.5 flex items-center gap-3">
+            <div class="w-9 h-9 rounded-lg bg-green-500/20 flex items-center justify-center">
+                <i class="fa-solid fa-coins text-green-400 text-sm"></i>
+            </div>
+            <div>
+                <p class="text-[9px] text-zinc-500 uppercase tracking-wider">Earned</p>
+                <p class="text-base font-bold text-white">${earnings.toFixed(2)} <span class="text-xs text-zinc-500">BKC</span></p>
+            </div>
+        </div>
+        <div class="r-glass-light rounded-xl px-4 py-2.5 flex items-center gap-3">
+            <div class="w-9 h-9 rounded-lg bg-cyan-500/20 flex items-center justify-center">
+                <i class="fa-solid fa-store text-cyan-400 text-sm"></i>
+            </div>
+            <div>
+                <p class="text-[9px] text-zinc-500 uppercase tracking-wider">Available</p>
+                <p class="text-base font-bold text-white">${available}</p>
+            </div>
+        </div>`;
+}
+
+function renderLoading() {
+    return `
+        <div class="flex flex-col items-center justify-center py-16">
+            <div class="relative mb-5">
+                <div class="absolute inset-0 bg-green-500/25 rounded-full blur-xl"></div>
+                <div class="relative w-20 h-20 rounded-full bg-zinc-800 flex items-center justify-center border-2 border-green-500/30">
+                    <img src="${AIRBNFT_IMAGE}" class="w-14 h-14 object-contain r-float" onerror="this.src='./assets/nft.png'">
+                </div>
+                <div class="absolute inset-[-3px] rounded-full border-2 border-transparent border-t-green-400 animate-spin"></div>
+            </div>
+            <p class="text-green-400 text-sm font-medium animate-pulse">Loading...</p>
+        </div>`;
+}
+
+function renderContent() {
+    const el = document.getElementById('content');
+    if (!el) return;
+    
+    RentalState.countdownIntervals.forEach(clearInterval);
+    RentalState.countdownIntervals = [];
+    
+    el.classList.remove('r-fadeUp');
+    void el.offsetWidth;
+    el.classList.add('r-fadeUp');
+    
+    switch (RentalState.activeTab) {
+        case 'marketplace': el.innerHTML = renderMarketplace(); break;
+        case 'my-listings': el.innerHTML = renderMyListings(); break;
+        case 'my-rentals': el.innerHTML = renderMyRentals(); startTimers(); break;
+    }
+    
+    document.getElementById('header-stats').innerHTML = renderHeaderStats();
+    updateBadges();
+}
+
+function updateBadges() {
+    const listings = State.rentalListings || [];
+    const myListings = listings.filter(l => State.isConnected && addressesMatch(l.owner, State.userAddress));
+    const now = Math.floor(Date.now() / 1000);
+    const activeRentals = (State.myRentals || []).filter(r => addressesMatch(r.tenant, State.userAddress) && Number(r.endTime) > now);
+    
+    const el1 = document.getElementById('cnt-listings');
+    const el2 = document.getElementById('cnt-rentals');
+    if (el1) el1.textContent = myListings.length;
+    if (el2) el2.textContent = activeRentals.length;
+}
+
+// MARKETPLACE
+function renderMarketplace() {
+    const listings = State.rentalListings || [];
+    const now = Math.floor(Date.now() / 1000);
+    
+    // V12.1: Show ALL listings (including user's own), filter only by rental status and tier
+    let available = listings.filter(l => {
+        // Hide currently rented NFTs
+        if (l.isRented || (l.rentalEndTime && Number(l.rentalEndTime) > now)) return false;
+        // Apply tier filter
+        if (RentalState.filterTier !== 'ALL' && getTierInfo(l.boostBips).name !== RentalState.filterTier) return false;
+        return true;
+    });
+    
+    available.sort((a, b) => {
+        const pa = BigInt(a.pricePerHour || 0), pb = BigInt(b.pricePerHour || 0);
+        if (RentalState.sortBy === 'price-low') return pa < pb ? -1 : 1;
+        if (RentalState.sortBy === 'price-high') return pa > pb ? -1 : 1;
+        return (b.boostBips || 0) - (a.boostBips || 0);
+    });
+    
+    return `
+        <div>
+            <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 mb-6">
+                <div class="flex flex-wrap gap-2">
+                    <button class="r-chip ${RentalState.filterTier === 'ALL' ? 'active' : ''}" data-filter="ALL">All</button>
+                    ${boosterTiers.map(t => `<button class="r-chip ${RentalState.filterTier === t.name ? 'active' : ''}" data-filter="${t.name}">${t.name}</button>`).join('')}
+                </div>
+                <div class="flex items-center gap-3">
+                    <select id="sort-select" class="bg-zinc-800/80 border border-zinc-700 rounded-xl px-3 py-2 text-sm text-white outline-none cursor-pointer">
+                        <option value="price-low" ${RentalState.sortBy === 'price-low' ? 'selected' : ''}>Price ↑</option>
+                        <option value="price-high" ${RentalState.sortBy === 'price-high' ? 'selected' : ''}>Price ↓</option>
+                        <option value="boost-high" ${RentalState.sortBy === 'boost-high' ? 'selected' : ''}>Boost ↓</option>
+                    </select>
+                    ${State.isConnected ? `<button id="btn-list" class="r-btn r-btn-primary text-sm"><i class="fa-solid fa-plus mr-2"></i>List NFT</button>` : ''}
+                </div>
+            </div>
+            ${available.length === 0 ? renderEmpty('No NFTs available', 'Be the first to list!', true) : `
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5 r-grid">
+                    ${available.map((l, i) => renderNFTCard(l, i)).join('')}
+                </div>
+            `}
+        </div>`;
+}
+
+function renderNFTCard(listing, idx) {
+    const tier = getTierInfo(listing.boostBips);
+    const color = getTierColor(tier.name);
+    const price = formatBigNumber(BigInt(listing.pricePerHour || 0)).toFixed(2);
+    const tokenId = normalizeTokenId(listing.tokenId);
+    
+    // V12.1: Check if this NFT belongs to the connected user
+    const isOwner = State.isConnected && addressesMatch(listing.owner, State.userAddress);
+    
+    return `
+        <div class="r-card r-fadeUp ${isOwner ? 'ring-2 ring-blue-500/30' : ''}" style="animation-delay:${idx * 40}ms">
+            <div class="img-wrap">
+                <div class="absolute top-3 left-3 z-10">
+                    <span class="r-badge tier-${tier.name.toLowerCase()}">${tier.name}</span>
+                </div>
+                <div class="absolute top-3 right-3 z-10 flex flex-col gap-1 items-end">
+                    <span class="px-2.5 py-1 rounded-lg text-[11px] font-bold bg-black/50 backdrop-blur" style="color:${color.accent}">+${(listing.boostBips||0)/100}%</span>
+                    ${isOwner ? `<span class="px-2 py-0.5 rounded text-[9px] font-bold bg-blue-500/20 text-blue-400 border border-blue-500/30">YOURS</span>` : ''}
+                </div>
+                <img src="${buildImageUrl(listing.img || tier.img)}" class="nft-img" onerror="this.src='./assets/nft.png'">
+            </div>
+            <div class="p-4 relative z-10">
+                <div class="mb-3">
+                    <h3 class="text-white font-bold">${tier.name} Booster</h3>
+                    <p class="text-xs font-mono" style="color:${color.accent}">#${tokenId}</p>
+                </div>
+                <div class="flex items-end justify-between">
+                    <div>
+                        <p class="text-[9px] text-zinc-500 uppercase mb-0.5">Price/hr</p>
+                        <p class="text-xl font-bold text-white">${price} <span class="text-xs text-zinc-500">BKC</span></p>
+                    </div>
+                    ${isOwner ? `
+                        <button class="withdraw-btn r-btn r-btn-danger text-sm px-4 py-2" data-id="${tokenId}">
+                            <i class="fa-solid fa-arrow-right-from-bracket mr-1"></i>Withdraw
+                        </button>
+                    ` : `
+                        <button class="rent-btn r-btn r-btn-primary text-sm px-4 py-2" data-id="${tokenId}">
+                            <i class="fa-solid fa-clock mr-1"></i>Rent
+                        </button>
+                    `}
+                </div>
+            </div>
+        </div>`;
+}
+
+// MY LISTINGS
+function renderMyListings() {
+    if (!State.isConnected) return renderConnect('View your listings');
+    
+    const listings = State.rentalListings || [];
+    const mine = listings.filter(l => addressesMatch(l.owner, State.userAddress));
+    const listedIds = new Set(listings.map(l => normalizeTokenId(l.tokenId)));
+    const canList = (State.myBoosters || []).filter(b => !listedIds.has(normalizeTokenId(b.tokenId)));
+    const earnings = mine.reduce((s, l) => s + Number(ethers.formatEther(BigInt(l.totalEarnings || 0))), 0);
+    
+    return `
+        <div>
+            <div class="r-glass p-6 mb-6">
+                <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-5">
+                    <div class="flex items-center gap-5">
+                        <div class="w-16 h-16 rounded-2xl bg-green-500/15 flex items-center justify-center border border-green-500/25">
+                            <i class="fa-solid fa-sack-dollar text-green-400 text-2xl"></i>
+                        </div>
+                        <div>
+                            <p class="text-sm text-zinc-400">Total Earnings</p>
+                            <p class="text-3xl font-bold text-white">${earnings.toFixed(4)} <span class="text-lg text-zinc-500">BKC</span></p>
+                        </div>
+                    </div>
+                    <div class="flex gap-3">
+                        <div class="r-stat text-center min-w-[100px]">
+                            <p class="text-2xl font-bold text-white">${mine.length}</p>
+                            <p class="text-[9px] text-zinc-500 uppercase">Listed</p>
+                        </div>
+                        <div class="r-stat text-center min-w-[100px]">
+                            <p class="text-2xl font-bold text-white">${canList.length}</p>
+                            <p class="text-[9px] text-zinc-500 uppercase">Available</p>
+                        </div>
+                        <button id="btn-list-main" class="r-btn r-btn-primary px-6" ${canList.length === 0 ? 'disabled' : ''}>
+                            <i class="fa-solid fa-plus mr-2"></i>List
+                        </button>
+                    </div>
+                </div>
+            </div>
+            ${mine.length === 0 ? renderEmpty('No listings yet', 'List your NFTs to earn') : `
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 r-grid">
+                    ${mine.map((l, i) => renderMyCard(l, i)).join('')}
+                </div>
+            `}
+        </div>`;
+}
+
+function renderMyCard(listing, idx) {
+    const tier = getTierInfo(listing.boostBips);
+    const color = getTierColor(tier.name);
+    const price = formatBigNumber(BigInt(listing.pricePerHour || 0)).toFixed(2);
+    const earned = Number(ethers.formatEther(BigInt(listing.totalEarnings || 0))).toFixed(4);
+    const tokenId = normalizeTokenId(listing.tokenId);
+    const now = Math.floor(Date.now() / 1000);
+    const rented = listing.isRented || (listing.rentalEndTime && Number(listing.rentalEndTime) > now);
+    const time = rented && listing.rentalEndTime ? formatTimeRemaining(Number(listing.rentalEndTime)) : null;
+    
+    return `
+        <div class="r-card r-fadeUp ${rented ? 'ring-2 ring-amber-500/25' : ''}" style="animation-delay:${idx * 40}ms">
+            <div class="img-wrap">
+                <div class="absolute top-3 left-3 z-10">
+                    <span class="r-badge tier-${tier.name.toLowerCase()}">${tier.name}</span>
+                </div>
+                <div class="absolute top-3 right-3 z-10">
+                    ${rented ? `<span class="r-timer warn"><i class="fa-solid fa-clock mr-1"></i>${time?.text || 'Rented'}</span>` : 
+                              `<span class="px-2.5 py-1 rounded-lg text-[10px] font-bold bg-green-500/20 text-green-400 border border-green-500/25">Available</span>`}
+                </div>
+                <img src="${buildImageUrl(listing.img || tier.img)}" class="nft-img" onerror="this.src='./assets/nft.png'">
+            </div>
+            <div class="p-4 relative z-10">
+                <div class="flex justify-between items-start mb-2">
+                    <div>
+                        <h3 class="text-white font-bold">${tier.name}</h3>
+                        <p class="text-xs font-mono" style="color:${color.accent}">#${tokenId}</p>
+                    </div>
+                    <span class="text-xs px-2 py-0.5 rounded-lg font-bold" style="background:${color.bg};color:${color.accent}">+${(listing.boostBips||0)/100}%</span>
+                </div>
+                <div class="grid grid-cols-2 gap-3 py-3 border-t border-b border-zinc-700/40 mb-3">
+                    <div><p class="text-[9px] text-zinc-500 uppercase">Price/hr</p><p class="text-white font-bold">${price}</p></div>
+                    <div><p class="text-[9px] text-zinc-500 uppercase">Earned</p><p class="text-green-400 font-bold">${earned}</p></div>
+                </div>
+                <div class="flex justify-between items-center">
+                    <span class="text-xs text-zinc-500"><i class="fa-solid fa-repeat mr-1"></i>${listing.rentalCount || 0}</span>
+                    <button class="withdraw-btn r-btn r-btn-danger text-xs px-3 py-1.5" data-id="${tokenId}" ${rented ? 'disabled' : ''}>
+                        <i class="fa-solid fa-arrow-right-from-bracket mr-1"></i>Withdraw
+                    </button>
+                </div>
+            </div>
+        </div>`;
+}
+
+// MY RENTALS
+function renderMyRentals() {
+    if (!State.isConnected) return renderConnect('View your rentals');
+    
+    const now = Math.floor(Date.now() / 1000);
+    const all = (State.myRentals || []).filter(r => addressesMatch(r.tenant, State.userAddress));
+    const active = all.filter(r => Number(r.endTime) > now);
+    const expired = all.filter(r => Number(r.endTime) <= now).slice(0, 5);
+    
+    return `
+        <div>
+            <h3 class="text-sm font-bold text-zinc-400 uppercase tracking-wider mb-4 flex items-center gap-2">
+                <i class="fa-solid fa-bolt text-green-400"></i>Active Boosts (${active.length})
+            </h3>
+            ${active.length === 0 ? renderEmpty('No active rentals', 'Rent an NFT to boost!') : `
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 r-grid mb-8">
+                    ${active.map((r, i) => renderActiveCard(r, i)).join('')}
+                </div>
+            `}
+            ${expired.length > 0 ? `
+                <h3 class="text-sm font-bold text-zinc-400 uppercase tracking-wider mb-3 flex items-center gap-2">
+                    <i class="fa-solid fa-clock-rotate-left text-zinc-500"></i>Recent
+                </h3>
+                <div class="space-y-2">
+                    ${expired.map(r => renderExpiredRow(r)).join('')}
+                </div>
+            ` : ''}
+        </div>`;
+}
+
+function renderActiveCard(rental, idx) {
+    const tokenId = normalizeTokenId(rental.tokenId);
+    const listing = (State.rentalListings || []).find(l => tokenIdsMatch(l.tokenId, rental.tokenId));
+    const tier = getTierInfo(listing?.boostBips || 0);
+    const color = getTierColor(tier.name);
+    const time = formatTimeRemaining(Number(rental.endTime));
+    const paid = formatBigNumber(BigInt(rental.paidAmount || 0)).toFixed(2);
+    
+    let timerClass = '';
+    if (time.seconds < 300) timerClass = 'crit';
+    else if (time.seconds < 1800) timerClass = 'warn';
+    
+    return `
+        <div class="r-card ring-2 ring-green-500/25 r-fadeUp" style="animation-delay:${idx * 40}ms">
+            <div class="img-wrap bg-gradient-to-br from-green-500/5 to-transparent">
+                <div class="absolute top-3 left-3 z-10">
+                    <span class="r-badge tier-${tier.name.toLowerCase()}">${tier.name}</span>
+                </div>
+                <div class="absolute top-3 right-3 z-10">
+                    <span class="r-timer ${timerClass}" data-end="${rental.endTime}" id="timer-${tokenId}">
+                        <i class="fa-solid fa-clock mr-1"></i>${time.text}
+                    </span>
+                </div>
+                <img src="${buildImageUrl(listing?.img || tier.img)}" class="nft-img" onerror="this.src='./assets/nft.png'">
+            </div>
+            <div class="p-4 relative z-10">
+                <div class="flex justify-between items-start mb-3">
+                    <div>
+                        <h3 class="text-white font-bold">${tier.name}</h3>
+                        <p class="text-xs font-mono" style="color:${color.accent}">#${tokenId}</p>
+                    </div>
+                    <span class="px-2.5 py-1 rounded-lg text-[10px] font-bold bg-green-500/20 text-green-400 border border-green-500/25">
+                        +${(listing?.boostBips||0)/100}% <i class="fa-solid fa-bolt ml-1"></i>
+                    </span>
+                </div>
+                <div class="pt-3 border-t border-zinc-700/40 flex justify-between">
+                    <span class="text-zinc-500 text-sm">Paid</span>
+                    <span class="text-white font-bold">${paid} BKC</span>
+                </div>
+            </div>
+        </div>`;
+}
+
+function renderExpiredRow(rental) {
+    const tokenId = normalizeTokenId(rental.tokenId);
+    const listing = (State.rentalListings || []).find(l => tokenIdsMatch(l.tokenId, rental.tokenId));
+    const tier = getTierInfo(listing?.boostBips || 0);
+    const paid = formatBigNumber(BigInt(rental.paidAmount || 0)).toFixed(2);
+    
+    return `
+        <div class="flex items-center gap-3 r-glass-light p-3 rounded-xl">
+            <img src="${buildImageUrl(listing?.img || tier.img)}" class="w-10 h-10 rounded-lg object-contain bg-black/30" onerror="this.src='./assets/nft.png'">
+            <div class="flex-1 min-w-0">
+                <div class="flex items-center gap-2 mb-0.5">
+                    <span class="r-badge tier-${tier.name.toLowerCase()} text-[8px] py-0.5 px-2">${tier.name}</span>
+                    <span class="text-zinc-400 text-xs font-mono">#${tokenId}</span>
+                </div>
+                <p class="text-zinc-500 text-[11px]">Paid: ${paid} BKC</p>
+            </div>
+            <span class="px-2.5 py-1 rounded-lg text-[10px] font-bold bg-red-500/15 text-red-400 border border-red-500/25">Expired</span>
+        </div>`;
+}
+
+function startTimers() {
+    document.querySelectorAll('[data-end]').forEach(el => {
+        const end = Number(el.dataset.end);
+        const interval = setInterval(() => {
+            const t = formatTimeRemaining(end);
+            if (t.expired) {
+                el.innerHTML = '<i class="fa-solid fa-clock mr-1"></i>Expired';
+                el.className = 'r-timer crit';
+                clearInterval(interval);
+                setTimeout(() => refreshData(), 2000);
+            } else {
+                el.innerHTML = `<i class="fa-solid fa-clock mr-1"></i>${t.text}`;
+                el.classList.remove('warn', 'crit');
+                if (t.seconds < 300) el.classList.add('crit');
+                else if (t.seconds < 1800) el.classList.add('warn');
+            }
+        }, 1000);
+        RentalState.countdownIntervals.push(interval);
+    });
+}
+
+// Helpers
+function renderEmpty(title, sub, showBtn = false) {
+    return `
+        <div class="r-empty r-glass p-10">
+            <img src="${AIRBNFT_IMAGE}" onerror="this.style.display='none'">
+            <h3 class="text-lg font-bold text-zinc-300 mb-1">${title}</h3>
+            <p class="text-zinc-500 mb-5">${sub}</p>
+            ${showBtn && State.isConnected ? `<button id="btn-list-empty" class="r-btn r-btn-primary"><i class="fa-solid fa-plus mr-2"></i>List NFT</button>` : ''}
+        </div>`;
+}
+
+function renderConnect(msg) {
+    return `
+        <div class="r-empty r-glass p-10">
+            <div class="w-20 h-20 rounded-full bg-zinc-800 flex items-center justify-center mb-5 border border-zinc-700">
+                <i class="fa-solid fa-wallet text-zinc-500 text-3xl"></i>
+            </div>
+            <h3 class="text-lg font-bold text-zinc-300 mb-1">Connect Wallet</h3>
+            <p class="text-zinc-500">${msg}</p>
+        </div>`;
+}
+
+// Modals
+function renderRentModal() {
+    return `
+        <div id="rent-modal" class="hidden fixed inset-0 bg-black/80 backdrop-blur-sm z-50 items-center justify-center p-4">
+            <div class="r-glass max-w-md w-full p-6 r-scaleIn">
+                <div class="flex justify-between items-center mb-5">
+                    <h3 class="text-lg font-bold text-white flex items-center gap-2">
+                        <i class="fa-solid fa-clock text-green-400"></i>Rent Booster
+                    </h3>
+                    <button id="close-rent" class="w-9 h-9 rounded-xl bg-zinc-800 hover:bg-zinc-700 flex items-center justify-center text-zinc-400 hover:text-white">
+                        <i class="fa-solid fa-xmark"></i>
+                    </button>
+                </div>
+                <div id="rent-content" class="mb-4"></div>
+                <div class="r-glass-light rounded-xl p-3 mb-4 text-center">
+                    <i class="fa-solid fa-hourglass-half text-amber-400 mr-2"></i>
+                    Duration: <span class="text-white font-bold">1 hour</span>
+                </div>
+                <div class="r-glass-light rounded-xl p-4 mb-5 flex justify-between items-center">
+                    <span class="text-zinc-400">Total</span>
+                    <span id="rent-cost" class="text-2xl font-bold text-white">--</span>
+                </div>
+                <button id="confirm-rent" class="r-btn r-btn-primary w-full py-3">
+                    <i class="fa-solid fa-check mr-2"></i>Confirm
+                </button>
+            </div>
+        </div>`;
+}
+
+function renderListModal() {
+    return `
+        <div id="list-modal" class="hidden fixed inset-0 bg-black/80 backdrop-blur-sm z-50 items-center justify-center p-4">
+            <div class="r-glass max-w-md w-full p-6 r-scaleIn">
+                <div class="flex justify-between items-center mb-5">
+                    <h3 class="text-lg font-bold text-white flex items-center gap-2">
+                        <i class="fa-solid fa-tag text-green-400"></i>List NFT
+                    </h3>
+                    <button id="close-list" class="w-9 h-9 rounded-xl bg-zinc-800 hover:bg-zinc-700 flex items-center justify-center text-zinc-400 hover:text-white">
+                        <i class="fa-solid fa-xmark"></i>
+                    </button>
+                </div>
+                <div class="space-y-4 mb-6">
+                    <div>
+                        <label class="text-sm text-zinc-400 mb-1.5 block">Select NFT</label>
+                        <select id="list-select" class="w-full bg-zinc-800 border border-zinc-700 rounded-xl p-3 text-white outline-none"></select>
+                    </div>
+                    <div>
+                        <label class="text-sm text-zinc-400 mb-1.5 block">Price/Hour (BKC)</label>
+                        <input type="number" id="list-price" placeholder="10" step="0.01" min="0.01" class="w-full bg-zinc-800 border border-zinc-700 rounded-xl p-3 text-white outline-none">
+                    </div>
+                </div>
+                <button id="confirm-list" class="r-btn r-btn-primary w-full py-3">
+                    <i class="fa-solid fa-tag mr-2"></i>List NFT
+                </button>
+            </div>
+        </div>`;
+}
+
+// Data
+async function refreshData() {
+    RentalState.isLoading = true;
+    try {
+        await Promise.all([
+            loadRentalListings(),
+            State.isConnected ? loadUserRentals() : null,
+            State.isConnected ? loadMyBoostersFromAPI() : null
+        ]);
+        renderContent();
+    } catch (e) {
+        console.error('[Rental] Refresh error:', e);
+    } finally {
+        RentalState.isLoading = false;
+    }
+}
+
+// Events
+function setupEvents() {
+    // Tabs
+    document.querySelectorAll('.r-tab').forEach(t => {
+        t.addEventListener('click', () => {
+            document.querySelectorAll('.r-tab').forEach(x => x.classList.remove('active'));
+            t.classList.add('active');
+            RentalState.activeTab = t.dataset.tab;
+            renderContent();
+        });
+    });
+    
+    // Refresh
+    document.getElementById('btn-refresh')?.addEventListener('click', async () => {
+        const icon = document.getElementById('refresh-icon');
+        icon?.classList.add('fa-spin');
+        await refreshData();
+        setTimeout(() => icon?.classList.remove('fa-spin'), 500);
+    });
+    
+    // Delegated
+    document.addEventListener('click', e => {
+        const chip = e.target.closest('.r-chip');
+        if (chip) { RentalState.filterTier = chip.dataset.filter; renderContent(); return; }
+        
+        const rent = e.target.closest('.rent-btn');
+        if (rent && !rent.disabled) { openRentModal(rent.dataset.id); return; }
+        
+        const withdraw = e.target.closest('.withdraw-btn');
+        if (withdraw && !withdraw.disabled) { handleWithdraw(withdraw); return; }
+        
+        const listBtn = e.target.closest('#btn-list, #btn-list-main, #btn-list-empty');
+        if (listBtn && !listBtn.disabled) { openListModal(); return; }
+    });
+    
+    document.addEventListener('change', e => {
+        if (e.target.id === 'sort-select') { RentalState.sortBy = e.target.value; renderContent(); }
+    });
+    
+    // Modals
+    document.getElementById('close-rent')?.addEventListener('click', closeRentModal);
+    document.getElementById('close-list')?.addEventListener('click', closeListModal);
+    document.getElementById('rent-modal')?.addEventListener('click', e => { if (e.target.id === 'rent-modal') closeRentModal(); });
+    document.getElementById('list-modal')?.addEventListener('click', e => { if (e.target.id === 'list-modal') closeListModal(); });
+    document.getElementById('confirm-rent')?.addEventListener('click', handleRent);
+    document.getElementById('confirm-list')?.addEventListener('click', handleList);
+}
+
+// Modal handlers
+function openRentModal(tokenId) {
+    if (!State.isConnected) { showToast('Connect wallet first', 'warning'); return; }
+    const listing = (State.rentalListings || []).find(l => tokenIdsMatch(l.tokenId, tokenId));
+    if (!listing) { showToast('Not found', 'error'); return; }
+    
+    // V12.3: Reset state when opening modal
+    RentalState.isTransactionPending = false;
+    RentalState.selectedRentalId = normalizeTokenId(tokenId);
+    
+    const tier = getTierInfo(listing.boostBips);
+    const color = getTierColor(tier.name);
+    const price = formatBigNumber(BigInt(listing.pricePerHour || 0)).toFixed(2);
+    
+    document.getElementById('rent-content').innerHTML = `
+        <div class="flex items-center gap-4 r-glass-light p-4 rounded-xl">
+            <img src="${buildImageUrl(listing.img || tier.img)}" class="w-20 h-20 object-contain rounded-xl" onerror="this.src='./assets/nft.png'">
+            <div>
+                <span class="r-badge tier-${tier.name.toLowerCase()} mb-2">${tier.name}</span>
+                <p class="text-white font-bold text-lg">${tier.name} Booster</p>
+                <p class="text-sm" style="color:${color.accent}">+${(listing.boostBips||0)/100}% boost</p>
+            </div>
+        </div>`;
+    document.getElementById('rent-cost').innerHTML = `${price} <span class="text-base text-zinc-500">BKC</span>`;
+    
+    // V12.3: Reset button state
+    const btn = document.getElementById('confirm-rent');
+    if (btn) {
+        btn.innerHTML = '<i class="fa-solid fa-check mr-2"></i>Confirm';
+        btn.disabled = false;
+    }
+    
+    const modal = document.getElementById('rent-modal');
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+}
+
+function closeRentModal() {
+    const modal = document.getElementById('rent-modal');
+    modal.classList.remove('flex');
+    modal.classList.add('hidden');
+    RentalState.selectedRentalId = null;
+    // V12.3: Always reset state when closing modal
+    RentalState.isTransactionPending = false;
+    // Reset button state
+    const btn = document.getElementById('confirm-rent');
+    if (btn) {
+        btn.innerHTML = '<i class="fa-solid fa-check mr-2"></i>Confirm';
+        btn.disabled = false;
+    }
+}
+
+function openListModal() {
+    // V12.3: Reset state when opening modal
+    RentalState.isTransactionPending = false;
+    
+    const listings = State.rentalListings || [];
+    const listedIds = new Set(listings.map(l => normalizeTokenId(l.tokenId)));
+    const available = (State.myBoosters || []).filter(b => !listedIds.has(normalizeTokenId(b.tokenId)));
+    
+    const select = document.getElementById('list-select');
+    select.innerHTML = available.length === 0 
+        ? '<option value="">No NFTs available</option>'
+        : available.map(b => {
+            const t = getTierInfo(b.boostBips);
+            return `<option value="${normalizeTokenId(b.tokenId)}">#${normalizeTokenId(b.tokenId)} - ${t.name} (+${(b.boostBips||0)/100}%)</option>`;
+        }).join('');
+    
+    document.getElementById('list-price').value = '';
+    
+    // V12.3: Reset button state
+    const btn = document.getElementById('confirm-list');
+    if (btn) {
+        btn.innerHTML = '<i class="fa-solid fa-tag mr-2"></i>List NFT';
+        btn.disabled = false;
+    }
+    
+    const modal = document.getElementById('list-modal');
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+}
+
+function closeListModal() {
+    const modal = document.getElementById('list-modal');
+    modal.classList.remove('flex');
+    modal.classList.add('hidden');
+    // V12.3: Always reset state when closing modal
+    RentalState.isTransactionPending = false;
+    // Reset button state
+    const btn = document.getElementById('confirm-list');
+    if (btn) {
+        btn.innerHTML = '<i class="fa-solid fa-tag mr-2"></i>List NFT';
+        btn.disabled = false;
+    }
+}
+
+async function handleRent() {
+    if (RentalState.isTransactionPending) return;
+    const tokenId = RentalState.selectedRentalId;
+    const listing = (State.rentalListings || []).find(l => tokenIdsMatch(l.tokenId, tokenId));
+    if (!listing) return;
+    
+    const btn = document.getElementById('confirm-rent');
+    RentalState.isTransactionPending = true;
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-2"></i>Processing...';
+    btn.disabled = true;
+    
+    console.log('[RentalPage] Starting rent transaction for tokenId:', tokenId);
+    
+    try {
+        await RentalTx.rent({
+            tokenId,
+            hours: 1,
+            totalCost: BigInt(listing.pricePerHour || 0),
+            button: btn,
+            onSuccess: async (receipt) => { 
+                console.log('[RentalPage] ✅ Rent onSuccess called, hash:', receipt?.hash);
+                RentalState.isTransactionPending = false;
+                closeRentModal(); 
+                showToast('⏰ NFT Rented Successfully!', 'success'); 
+                try {
+                    await refreshData();
+                } catch (e) {
+                    console.warn('[RentalPage] Refresh after rent failed:', e);
+                }
+            },
+            onError: (e) => { 
+                console.log('[RentalPage] ❌ Rent onError called:', e);
+                RentalState.isTransactionPending = false;
+                const currentBtn = document.getElementById('confirm-rent');
+                if (currentBtn) {
+                    currentBtn.innerHTML = '<i class="fa-solid fa-check mr-2"></i>Confirm';
+                    currentBtn.disabled = false;
+                }
+                if (!e.cancelled && e.type !== 'user_rejected') {
+                    showToast('Failed: ' + (e.message || 'Error'), 'error'); 
+                }
+            }
+        });
+        
+        console.log('[RentalPage] Rent transaction call completed');
+    } catch (err) {
+        console.error('[RentalPage] handleRent catch error:', err);
+        RentalState.isTransactionPending = false;
+        const currentBtn = document.getElementById('confirm-rent');
+        if (currentBtn) {
+            currentBtn.innerHTML = '<i class="fa-solid fa-check mr-2"></i>Confirm';
+            currentBtn.disabled = false;
+        }
+        if (!err.cancelled && err.type !== 'user_rejected') {
+            showToast('Failed: ' + (err.message || 'Transaction failed'), 'error');
+        }
+    }
+}
+
+async function handleList() {
+    if (RentalState.isTransactionPending) return;
+    const tokenId = document.getElementById('list-select').value;
+    const price = document.getElementById('list-price').value;
+    if (!tokenId) { showToast('Select an NFT', 'error'); return; }
+    if (!price || parseFloat(price) <= 0) { showToast('Enter valid price', 'error'); return; }
+    
+    const btn = document.getElementById('confirm-list');
+    const orig = btn.innerHTML;
+    RentalState.isTransactionPending = true;
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-2"></i>Processing...';
+    btn.disabled = true;
+    
+    console.log('[RentalPage] Starting list transaction for tokenId:', tokenId);
+    
+    try {
+        await RentalTx.list({
+            tokenId,
+            pricePerHour: ethers.parseUnits(price, 18),
+            minHours: 1,
+            maxHours: 168,
+            button: btn,
+            onSuccess: async (receipt) => { 
+                console.log('[RentalPage] ✅ List onSuccess called, hash:', receipt?.hash);
+                // Cleanup first
+                RentalState.isTransactionPending = false;
+                closeListModal(); 
+                showToast('🏷️ NFT Listed Successfully!', 'success'); 
+                // Refresh data after showing success
+                try {
+                    await refreshData();
+                } catch (e) {
+                    console.warn('[RentalPage] Refresh after list failed:', e);
+                }
+            },
+            onError: (e) => { 
+                console.log('[RentalPage] ❌ List onError called:', e);
+                RentalState.isTransactionPending = false;
+                // Reset button
+                const currentBtn = document.getElementById('confirm-list');
+                if (currentBtn) {
+                    currentBtn.innerHTML = '<i class="fa-solid fa-tag mr-2"></i>List NFT';
+                    currentBtn.disabled = false;
+                }
+                if (!e.cancelled && e.type !== 'user_rejected') {
+                    showToast('Failed: ' + (e.message || 'Error'), 'error'); 
+                }
+            }
+        });
+        
+        console.log('[RentalPage] List transaction call completed');
+    } catch (err) {
+        console.error('[RentalPage] handleList catch error:', err);
+        RentalState.isTransactionPending = false;
+        const currentBtn = document.getElementById('confirm-list');
+        if (currentBtn) {
+            currentBtn.innerHTML = '<i class="fa-solid fa-tag mr-2"></i>List NFT';
+            currentBtn.disabled = false;
+        }
+        if (!err.cancelled && err.type !== 'user_rejected') {
+            showToast('Failed: ' + (err.message || 'Transaction failed'), 'error');
+        }
+    }
+}
+
+async function handleWithdraw(btn) {
+    if (RentalState.isTransactionPending) return;
+    const tokenId = btn.dataset.id;
+    if (!confirm('Withdraw this NFT from marketplace?')) return;
+    
+    const orig = btn.innerHTML;
+    RentalState.isTransactionPending = true;
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i>';
+    btn.disabled = true;
+    
+    console.log('[RentalPage] Starting withdraw transaction for tokenId:', tokenId);
+    
+    try {
+        await RentalTx.withdraw({
+            tokenId,
+            button: btn,
+            onSuccess: async (receipt) => { 
+                console.log('[RentalPage] ✅ Withdraw onSuccess called, hash:', receipt?.hash);
+                RentalState.isTransactionPending = false;
+                showToast('↩️ NFT Withdrawn Successfully!', 'success'); 
+                try {
+                    await refreshData();
+                } catch (e) {
+                    console.warn('[RentalPage] Refresh after withdraw failed:', e);
+                }
+            },
+            onError: (e) => { 
+                console.log('[RentalPage] ❌ Withdraw onError called:', e);
+                RentalState.isTransactionPending = false;
+                // Reset button if still in DOM
+                if (btn && btn.parentNode) {
+                    btn.innerHTML = orig;
+                    btn.disabled = false;
+                }
+                if (!e.cancelled && e.type !== 'user_rejected') {
+                    showToast('Failed: ' + (e.message || 'Error'), 'error'); 
+                }
+            }
+        });
+        
+        console.log('[RentalPage] Withdraw transaction call completed');
+    } catch (err) {
+        console.error('[RentalPage] handleWithdraw catch error:', err);
+        RentalState.isTransactionPending = false;
+        if (btn && btn.parentNode) {
+            btn.innerHTML = orig;
+            btn.disabled = false;
+        }
+        if (!err.cancelled && err.type !== 'user_rejected') {
+            showToast('Failed: ' + (err.message || 'Transaction failed'), 'error');
+        }
+    }
+}
