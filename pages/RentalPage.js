@@ -780,10 +780,11 @@ async function handleRent() {
     if (!listing) return;
     
     const btn = document.getElementById('confirm-rent');
-    const orig = btn.innerHTML;
     RentalState.isTransactionPending = true;
     btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-2"></i>Processing...';
     btn.disabled = true;
+    
+    console.log('[RentalPage] Starting rent transaction for tokenId:', tokenId);
     
     try {
         await RentalTx.rent({
@@ -791,13 +792,43 @@ async function handleRent() {
             hours: 1,
             totalCost: BigInt(listing.pricePerHour || 0),
             button: btn,
-            onSuccess: async () => { closeRentModal(); showToast('⏰ Rented!', 'success'); await refreshData(); },
-            onError: (e) => { if (!e.cancelled && e.type !== 'user_rejected') showToast('Failed: ' + (e.message || 'Error'), 'error'); }
+            onSuccess: async (receipt) => { 
+                console.log('[RentalPage] ✅ Rent onSuccess called, hash:', receipt?.hash);
+                RentalState.isTransactionPending = false;
+                closeRentModal(); 
+                showToast('⏰ NFT Rented Successfully!', 'success'); 
+                try {
+                    await refreshData();
+                } catch (e) {
+                    console.warn('[RentalPage] Refresh after rent failed:', e);
+                }
+            },
+            onError: (e) => { 
+                console.log('[RentalPage] ❌ Rent onError called:', e);
+                RentalState.isTransactionPending = false;
+                const currentBtn = document.getElementById('confirm-rent');
+                if (currentBtn) {
+                    currentBtn.innerHTML = '<i class="fa-solid fa-check mr-2"></i>Confirm';
+                    currentBtn.disabled = false;
+                }
+                if (!e.cancelled && e.type !== 'user_rejected') {
+                    showToast('Failed: ' + (e.message || 'Error'), 'error'); 
+                }
+            }
         });
-    } finally {
+        
+        console.log('[RentalPage] Rent transaction call completed');
+    } catch (err) {
+        console.error('[RentalPage] handleRent catch error:', err);
         RentalState.isTransactionPending = false;
-        btn.innerHTML = orig;
-        btn.disabled = false;
+        const currentBtn = document.getElementById('confirm-rent');
+        if (currentBtn) {
+            currentBtn.innerHTML = '<i class="fa-solid fa-check mr-2"></i>Confirm';
+            currentBtn.disabled = false;
+        }
+        if (!err.cancelled && err.type !== 'user_rejected') {
+            showToast('Failed: ' + (err.message || 'Transaction failed'), 'error');
+        }
     }
 }
 
@@ -814,6 +845,8 @@ async function handleList() {
     btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-2"></i>Processing...';
     btn.disabled = true;
     
+    console.log('[RentalPage] Starting list transaction for tokenId:', tokenId);
+    
     try {
         await RentalTx.list({
             tokenId,
@@ -821,36 +854,99 @@ async function handleList() {
             minHours: 1,
             maxHours: 168,
             button: btn,
-            onSuccess: async () => { closeListModal(); showToast('🏷️ Listed!', 'success'); await refreshData(); },
-            onError: (e) => { if (!e.cancelled && e.type !== 'user_rejected') showToast('Failed: ' + (e.message || 'Error'), 'error'); }
+            onSuccess: async (receipt) => { 
+                console.log('[RentalPage] ✅ List onSuccess called, hash:', receipt?.hash);
+                // Cleanup first
+                RentalState.isTransactionPending = false;
+                closeListModal(); 
+                showToast('🏷️ NFT Listed Successfully!', 'success'); 
+                // Refresh data after showing success
+                try {
+                    await refreshData();
+                } catch (e) {
+                    console.warn('[RentalPage] Refresh after list failed:', e);
+                }
+            },
+            onError: (e) => { 
+                console.log('[RentalPage] ❌ List onError called:', e);
+                RentalState.isTransactionPending = false;
+                // Reset button
+                const currentBtn = document.getElementById('confirm-list');
+                if (currentBtn) {
+                    currentBtn.innerHTML = '<i class="fa-solid fa-tag mr-2"></i>List NFT';
+                    currentBtn.disabled = false;
+                }
+                if (!e.cancelled && e.type !== 'user_rejected') {
+                    showToast('Failed: ' + (e.message || 'Error'), 'error'); 
+                }
+            }
         });
-    } finally {
+        
+        console.log('[RentalPage] List transaction call completed');
+    } catch (err) {
+        console.error('[RentalPage] handleList catch error:', err);
         RentalState.isTransactionPending = false;
-        btn.innerHTML = orig;
-        btn.disabled = false;
+        const currentBtn = document.getElementById('confirm-list');
+        if (currentBtn) {
+            currentBtn.innerHTML = '<i class="fa-solid fa-tag mr-2"></i>List NFT';
+            currentBtn.disabled = false;
+        }
+        if (!err.cancelled && err.type !== 'user_rejected') {
+            showToast('Failed: ' + (err.message || 'Transaction failed'), 'error');
+        }
     }
 }
 
 async function handleWithdraw(btn) {
     if (RentalState.isTransactionPending) return;
     const tokenId = btn.dataset.id;
-    if (!confirm('Withdraw this NFT?')) return;
+    if (!confirm('Withdraw this NFT from marketplace?')) return;
     
     const orig = btn.innerHTML;
     RentalState.isTransactionPending = true;
     btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i>';
     btn.disabled = true;
     
+    console.log('[RentalPage] Starting withdraw transaction for tokenId:', tokenId);
+    
     try {
         await RentalTx.withdraw({
             tokenId,
             button: btn,
-            onSuccess: async () => { showToast('↩️ Withdrawn!', 'success'); await refreshData(); },
-            onError: (e) => { if (!e.cancelled && e.type !== 'user_rejected') showToast('Failed: ' + (e.message || 'Error'), 'error'); }
+            onSuccess: async (receipt) => { 
+                console.log('[RentalPage] ✅ Withdraw onSuccess called, hash:', receipt?.hash);
+                RentalState.isTransactionPending = false;
+                showToast('↩️ NFT Withdrawn Successfully!', 'success'); 
+                try {
+                    await refreshData();
+                } catch (e) {
+                    console.warn('[RentalPage] Refresh after withdraw failed:', e);
+                }
+            },
+            onError: (e) => { 
+                console.log('[RentalPage] ❌ Withdraw onError called:', e);
+                RentalState.isTransactionPending = false;
+                // Reset button if still in DOM
+                if (btn && btn.parentNode) {
+                    btn.innerHTML = orig;
+                    btn.disabled = false;
+                }
+                if (!e.cancelled && e.type !== 'user_rejected') {
+                    showToast('Failed: ' + (e.message || 'Error'), 'error'); 
+                }
+            }
         });
-    } finally {
+        
+        console.log('[RentalPage] Withdraw transaction call completed');
+    } catch (err) {
+        console.error('[RentalPage] handleWithdraw catch error:', err);
         RentalState.isTransactionPending = false;
-        btn.innerHTML = orig;
-        btn.disabled = false;
+        if (btn && btn.parentNode) {
+            btn.innerHTML = orig;
+            btn.disabled = false;
+        }
+        if (!err.cancelled && err.type !== 'user_rejected') {
+            showToast('Failed: ' + (err.message || 'Transaction failed'), 'error');
+        }
     }
 }

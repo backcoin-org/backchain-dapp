@@ -551,7 +551,7 @@ export async function listNft({
         
         onSuccess: async (receipt) => {
             console.log('[RentalTx] ListNFT successful:', receipt.hash);
-            if (onSuccess) onSuccess(receipt);
+            if (onSuccess) await onSuccess(receipt);
         },
         onError: (error) => {
             console.error('[RentalTx] ListNFT failed:', error);
@@ -662,7 +662,7 @@ export async function rentNft({
         
         onSuccess: async (receipt) => {
             console.log('[RentalTx] RentNFT successful:', receipt.hash);
-            if (onSuccess) onSuccess(receipt);
+            if (onSuccess) await onSuccess(receipt);
         },
         onError: (error) => {
             console.error('[RentalTx] RentNFT failed:', error);
@@ -726,7 +726,7 @@ export async function withdrawNft({
         
         onSuccess: async (receipt) => {
             console.log('[RentalTx] WithdrawNFT successful:', receipt.hash);
-            if (onSuccess) onSuccess(receipt);
+            if (onSuccess) await onSuccess(receipt);
         },
         onError: (error) => {
             console.error('[RentalTx] WithdrawNFT failed:', error);
@@ -792,7 +792,7 @@ export async function updateListing({
         
         onSuccess: async (receipt) => {
             console.log('[RentalTx] UpdateListing successful:', receipt.hash);
-            if (onSuccess) onSuccess(receipt);
+            if (onSuccess) await onSuccess(receipt);
         },
         onError: (error) => {
             console.error('[RentalTx] UpdateListing failed:', error);
