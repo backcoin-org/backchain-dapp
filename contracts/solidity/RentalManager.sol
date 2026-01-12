@@ -11,22 +11,36 @@ import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 
 import "./IInterfaces.sol";
+import "./BKCToken.sol";
 
 /**
  * @title RentalManager V2 (AirBNFT Protocol)
  * @author Backchain Protocol
- * @notice Decentralized marketplace for time-limited NFT rentals with MetaAds promotion system
- * @dev V2 adds promotion system where owners can pay ETH to boost listing visibility
+ * @notice Decentralized marketplace for time-limited NFT rentals with MetaAds & Burn mechanics
+ * @dev V2 Features:
+ *      - MetaAds promotion system (pay ETH to boost listing visibility)
+ *      - Configurable burn mechanism (deflationary)
+ *      - Configurable mining fee distribution
  *
  *      ┌─────────────────────────────────────────────────────────────────┐
  *      │                      RENTAL FLOW                                │
  *      ├─────────────────────────────────────────────────────────────────┤
  *      │  1. Owner lists NFT → NFT transferred to escrow                 │
  *      │  2. Owner promotes listing (optional) → Pay ETH to treasury     │
- *      │  3. Tenant rents NFT → Payment distributed                      │
+ *      │  3. Tenant rents NFT → Payment distributed:                     │
+ *      │     • Mining fee → MiningManager (PoP)                          │
+ *      │     • Burn fee → Burned (deflationary) 🔥                       │
+ *      │     • Net amount → Owner payout                                 │
  *      │  4. Rental expires → NFT available for next rental              │
  *      │  5. Owner withdraws → NFT returned (if not rented)              │
  *      └─────────────────────────────────────────────────────────────────┘
+ *
+ *      Fee Structure (Configurable):
+ *      ┌────────────────────────────────────────────┐
+ *      │  Default: 10% total fee                    │
+ *      │  ├── 7% → MiningManager (PoP mining)       │
+ *      │  └── 3% → Burn (deflationary)              │
+ *      └────────────────────────────────────────────┘
  *
  *      Promotion System (MetaAds):
  *      ┌────────────────────────────────────────────┐
@@ -48,6 +62,7 @@ contract RentalManager is
     UUPSUpgradeable
 {
     using SafeERC20Upgradeable for IERC20Upgradeable;
+    using SafeERC20Upgradeable for BKCToken;
 
     // =========================================================================
     //                              STRUCTS
@@ -76,24 +91,27 @@ contract RentalManager is
     //                              CONSTANTS
     // =========================================================================
 
-    /// @notice Basis points denominator
-    uint256 private constant BIPS_DENOMINATOR = 10_000;
+    /// @notice Basis points denominator (10000 = 100%)
+    uint256 public constant BIPS_DENOMINATOR = 10_000;
 
-    /// @notice Fee key for rental marketplace tax
-    bytes32 public constant RENTAL_TAX_KEY = keccak256("RENTAL_MARKET_TAX_BIPS");
+    /// @notice Service key for MiningManager authorization
+    bytes32 public constant SERVICE_KEY = keccak256("RENTAL_MARKET_TAX_BIPS");
 
     /// @notice Default rental duration (1 hour)
     uint256 public constant DEFAULT_DURATION = 1 hours;
 
+    /// @notice Maximum total fee allowed (30%)
+    uint256 public constant MAX_TOTAL_FEE_BIPS = 3000;
+
     // =========================================================================
-    //                              STATE
+    //                              STATE (V1)
     // =========================================================================
 
     /// @notice Ecosystem manager reference
     IEcosystemManager public ecosystemManager;
 
-    /// @notice BKC token contract
-    IERC20Upgradeable public bkcToken;
+    /// @notice BKC token contract (using BKCToken for burn function)
+    BKCToken public bkcToken;
 
     /// @notice NFT contract (RewardBoosterNFT)
     IERC721Upgradeable public nftContract;
@@ -110,7 +128,7 @@ contract RentalManager is
     /// @notice Token ID => Array index (for O(1) removal)
     mapping(uint256 => uint256) private _tokenIndex;
 
-    /// @notice Total protocol fees collected
+    /// @notice Total protocol fees collected (mining)
     uint256 public totalFeesCollected;
 
     /// @notice Total rental volume
@@ -126,7 +144,7 @@ contract RentalManager is
     uint256 public globalRentalDuration;
 
     // =========================================================================
-    //                         V2 STATE (PROMOTION SYSTEM)
+    //                         V2 STATE (PROMOTION + BURN)
     // =========================================================================
 
     /// @notice Token ID => Promotion fee paid in ETH (wei)
@@ -137,6 +155,19 @@ contract RentalManager is
 
     /// @notice Total promotion fees collected (ETH)
     uint256 public totalPromotionFeesCollected;
+
+    // -------------------------------------------------------------------------
+    // V2: Configurable Fee Structure
+    // -------------------------------------------------------------------------
+
+    /// @notice Fee sent to MiningManager on rental (default: 700 = 7%)
+    uint256 public rentalMiningFeeBips;
+
+    /// @notice Fee burned on rental (default: 300 = 3%)
+    uint256 public rentalBurnFeeBips;
+
+    /// @notice Total BKC burned through rentals
+    uint256 public totalBurnedAllTime;
 
     // =========================================================================
     //                              EVENTS
@@ -172,7 +203,8 @@ contract RentalManager is
         address indexed owner,
         uint256 hours_,
         uint256 totalCost,
-        uint256 protocolFee,
+        uint256 miningFee,
+        uint256 burnFee,
         uint256 ownerPayout,
         uint256 endTime
     );
@@ -194,6 +226,25 @@ contract RentalManager is
         uint256 totalPromotionFee
     );
 
+    /// @notice V2: Emitted when tokens are burned
+    event TokensBurned(
+        uint256 indexed tokenId,
+        uint256 amount,
+        string reason
+    );
+
+    /// @notice V2: Emitted when fees are updated
+    event FeesUpdated(
+        uint256 miningFeeBips,
+        uint256 burnFeeBips
+    );
+
+    /// @notice V2: Emitted when treasury is updated
+    event TreasuryUpdated(
+        address oldTreasury,
+        address newTreasury
+    );
+
     // =========================================================================
     //                              ERRORS
     // =========================================================================
@@ -209,6 +260,8 @@ contract RentalManager is
     error InsufficientPayment();
     error InvalidHoursRange();
     error ETHTransferFailed();
+    error InvalidFeeBips();
+    error AlreadyInitializedV2();
 
     // =========================================================================
     //                           INITIALIZATION
@@ -220,7 +273,7 @@ contract RentalManager is
     }
 
     /**
-     * @notice Initializes the rental marketplace
+     * @notice Initializes the rental marketplace (V1)
      * @param _ecosystemManager Ecosystem hub address
      * @param _nftContract NFT contract address (RewardBoosterNFT)
      */
@@ -237,20 +290,47 @@ contract RentalManager is
         __UUPSUpgradeable_init();
 
         ecosystemManager = IEcosystemManager(_ecosystemManager);
-        bkcToken = IERC20Upgradeable(ecosystemManager.getBKCAddress());
+        bkcToken = BKCToken(ecosystemManager.getBKCTokenAddress());
         nftContract = IERC721Upgradeable(_nftContract);
         
-        // V2: Set default treasury to owner
+        // V2: Set default treasury to owner (will be updated in initializeV2)
         treasury = msg.sender;
+        
+        // V2: Set default fees (total 10%: 7% mining + 3% burn)
+        rentalMiningFeeBips = 700;  // 7%
+        rentalBurnFeeBips = 300;    // 3%
     }
 
     /**
      * @notice V2: Initialize V2 state (call after upgrade)
+     * @dev Sets treasury and optionally custom fees
      * @param _treasury Treasury address for promotion payments
+     * @param _miningFeeBips Mining fee in basis points (0 = keep current)
+     * @param _burnFeeBips Burn fee in basis points (0 = keep current)
      */
-    function initializeV2(address _treasury) external onlyOwner {
+    function initializeV2(
+        address _treasury,
+        uint256 _miningFeeBips,
+        uint256 _burnFeeBips
+    ) external onlyOwner {
         if (_treasury == address(0)) revert ZeroAddress();
+        
         treasury = _treasury;
+        
+        // Only update fees if provided (non-zero)
+        if (_miningFeeBips > 0 || _burnFeeBips > 0) {
+            uint256 newMining = _miningFeeBips > 0 ? _miningFeeBips : rentalMiningFeeBips;
+            uint256 newBurn = _burnFeeBips > 0 ? _burnFeeBips : rentalBurnFeeBips;
+            
+            if (newMining + newBurn > MAX_TOTAL_FEE_BIPS) revert InvalidFeeBips();
+            
+            rentalMiningFeeBips = newMining;
+            rentalBurnFeeBips = newBurn;
+            
+            emit FeesUpdated(newMining, newBurn);
+        }
+        
+        emit TreasuryUpdated(address(0), _treasury);
     }
 
     /// @dev Required by UUPSUpgradeable
@@ -294,8 +374,7 @@ contract RentalManager is
     }
 
     /**
-     * @notice Get all listings sorted by promotion fee (for frontend reference)
-     * @dev Frontend should use this data to sort listings
+     * @notice Get all listings with promotion fees (for frontend sorting)
      * @return tokenIds Array of token IDs
      * @return fees Array of promotion fees
      */
@@ -419,6 +498,11 @@ contract RentalManager is
 
     /**
      * @notice Rents an NFT for specified hours
+     * @dev Fee distribution:
+     *      - rentalMiningFeeBips% → MiningManager (triggers PoP)
+     *      - rentalBurnFeeBips% → Burned (deflationary)
+     *      - Remainder → Owner payout
+     *
      * @param _tokenId Token ID to rent
      * @param _hours Duration in hours
      */
@@ -440,20 +524,29 @@ contract RentalManager is
 
         // Calculate costs
         uint256 totalCost = listing.pricePerHour * _hours;
-        uint256 feeBips = ecosystemManager.getFee(RENTAL_TAX_KEY);
-        uint256 protocolFee = (totalCost * feeBips) / BIPS_DENOMINATOR;
-        uint256 ownerPayout = totalCost - protocolFee;
+        uint256 miningFee = (totalCost * rentalMiningFeeBips) / BIPS_DENOMINATOR;
+        uint256 burnFee = (totalCost * rentalBurnFeeBips) / BIPS_DENOMINATOR;
+        uint256 ownerPayout = totalCost - miningFee - burnFee;
 
-        // Transfer payment
+        // Transfer payment from tenant
         bkcToken.safeTransferFrom(msg.sender, address(this), totalCost);
 
-        // Protocol fee -> Mining
-        if (protocolFee > 0) {
+        // Process mining fee → MiningManager
+        if (miningFee > 0) {
             address miningManager = ecosystemManager.getMiningManagerAddress();
             if (miningManager != address(0)) {
-                bkcToken.safeTransfer(miningManager, protocolFee);
-                IMiningManager(miningManager).performPurchaseMining(RENTAL_TAX_KEY, protocolFee);
+                bkcToken.safeTransfer(miningManager, miningFee);
+                IMiningManager(miningManager).performPurchaseMining(SERVICE_KEY, miningFee);
             }
+        }
+
+        // Process burn fee → Burn (deflationary) 🔥
+        if (burnFee > 0) {
+            bkcToken.burn(burnFee);
+            unchecked {
+                totalBurnedAllTime += burnFee;
+            }
+            emit TokensBurned(_tokenId, burnFee, "rental_fee");
         }
 
         // Owner payout
@@ -478,7 +571,7 @@ contract RentalManager is
         // Update stats
         listing.totalEarnings += ownerPayout;
         listing.rentalCount++;
-        totalFeesCollected += protocolFee;
+        totalFeesCollected += miningFee;
         totalVolume += totalCost;
         totalRentals++;
 
@@ -488,7 +581,8 @@ contract RentalManager is
             listing.owner,
             _hours,
             totalCost,
-            protocolFee,
+            miningFee,
+            burnFee,
             ownerPayout,
             endTime
         );
@@ -509,20 +603,31 @@ contract RentalManager is
         }
 
         uint256 totalCost = listing.pricePerHour;
-        uint256 feeBips = ecosystemManager.getFee(RENTAL_TAX_KEY);
-        uint256 protocolFee = (totalCost * feeBips) / BIPS_DENOMINATOR;
-        uint256 ownerPayout = totalCost - protocolFee;
+        uint256 miningFee = (totalCost * rentalMiningFeeBips) / BIPS_DENOMINATOR;
+        uint256 burnFee = (totalCost * rentalBurnFeeBips) / BIPS_DENOMINATOR;
+        uint256 ownerPayout = totalCost - miningFee - burnFee;
 
         bkcToken.safeTransferFrom(msg.sender, address(this), totalCost);
 
-        if (protocolFee > 0) {
+        // Mining fee
+        if (miningFee > 0) {
             address miningManager = ecosystemManager.getMiningManagerAddress();
             if (miningManager != address(0)) {
-                bkcToken.safeTransfer(miningManager, protocolFee);
-                IMiningManager(miningManager).performPurchaseMining(RENTAL_TAX_KEY, protocolFee);
+                bkcToken.safeTransfer(miningManager, miningFee);
+                IMiningManager(miningManager).performPurchaseMining(SERVICE_KEY, miningFee);
             }
         }
 
+        // Burn fee 🔥
+        if (burnFee > 0) {
+            bkcToken.burn(burnFee);
+            unchecked {
+                totalBurnedAllTime += burnFee;
+            }
+            emit TokensBurned(_tokenId, burnFee, "rental_fee");
+        }
+
+        // Owner payout
         if (ownerPayout > 0) {
             bkcToken.safeTransfer(listing.owner, ownerPayout);
         }
@@ -538,7 +643,7 @@ contract RentalManager is
 
         listing.totalEarnings += ownerPayout;
         listing.rentalCount++;
-        totalFeesCollected += protocolFee;
+        totalFeesCollected += miningFee;
         totalVolume += totalCost;
         totalRentals++;
 
@@ -548,7 +653,8 @@ contract RentalManager is
             listing.owner,
             1,
             totalCost,
-            protocolFee,
+            miningFee,
+            burnFee,
             ownerPayout,
             endTime
         );
@@ -581,7 +687,31 @@ contract RentalManager is
      */
     function setTreasury(address _treasury) external onlyOwner {
         if (_treasury == address(0)) revert ZeroAddress();
+        address oldTreasury = treasury;
         treasury = _treasury;
+        emit TreasuryUpdated(oldTreasury, _treasury);
+    }
+
+    /**
+     * @notice V2: Updates rental fee configuration
+     * @dev Total fee cannot exceed 30% (MAX_TOTAL_FEE_BIPS)
+     *
+     * @param _miningFeeBips Mining fee in basis points (e.g., 700 = 7%)
+     * @param _burnFeeBips Burn fee in basis points (e.g., 300 = 3%)
+     */
+    function setRentalFees(
+        uint256 _miningFeeBips,
+        uint256 _burnFeeBips
+    ) external onlyOwner {
+        // Total fee cannot exceed 30%
+        if (_miningFeeBips + _burnFeeBips > MAX_TOTAL_FEE_BIPS) {
+            revert InvalidFeeBips();
+        }
+
+        rentalMiningFeeBips = _miningFeeBips;
+        rentalBurnFeeBips = _burnFeeBips;
+
+        emit FeesUpdated(_miningFeeBips, _burnFeeBips);
     }
 
     /**
@@ -670,23 +800,25 @@ contract RentalManager is
     }
 
     /**
-     * @notice Returns rental cost for specified duration
+     * @notice Returns rental cost breakdown for specified duration
      * @param _tokenId Token ID
      * @param _hours Number of hours
      * @return totalCost Total cost
-     * @return protocolFee Fee amount
+     * @return miningFee Fee to MiningManager
+     * @return burnFee Fee to be burned
      * @return ownerPayout Owner receives
      */
     function getRentalCost(uint256 _tokenId, uint256 _hours) external view returns (
         uint256 totalCost,
-        uint256 protocolFee,
+        uint256 miningFee,
+        uint256 burnFee,
         uint256 ownerPayout
     ) {
         Listing memory listing = listings[_tokenId];
         totalCost = listing.pricePerHour * _hours;
-        uint256 feeBips = ecosystemManager.getFee(RENTAL_TAX_KEY);
-        protocolFee = (totalCost * feeBips) / BIPS_DENOMINATOR;
-        ownerPayout = totalCost - protocolFee;
+        miningFee = (totalCost * rentalMiningFeeBips) / BIPS_DENOMINATOR;
+        burnFee = (totalCost * rentalBurnFeeBips) / BIPS_DENOMINATOR;
+        ownerPayout = totalCost - miningFee - burnFee;
     }
 
     /**
@@ -695,10 +827,17 @@ contract RentalManager is
     function getMarketplaceStats() external view returns (
         uint256 activeListings,
         uint256 totalVol,
-        uint256 totalFees,
+        uint256 totalMiningFees,
+        uint256 totalBurned,
         uint256 rentals
     ) {
-        return (listedTokenIds.length, totalVolume, totalFeesCollected, totalRentals);
+        return (
+            listedTokenIds.length,
+            totalVolume,
+            totalFeesCollected,
+            totalBurnedAllTime,
+            totalRentals
+        );
     }
 
     /**
@@ -709,6 +848,24 @@ contract RentalManager is
         address treasuryAddress
     ) {
         return (totalPromotionFeesCollected, treasury);
+    }
+
+    /**
+     * @notice V2: Returns current fee configuration
+     * @return miningFeeBips Mining fee in bips
+     * @return burnFeeBips Burn fee in bips
+     * @return totalFeeBips Total fee in bips
+     */
+    function getFeeConfig() external view returns (
+        uint256 miningFeeBips,
+        uint256 burnFeeBips,
+        uint256 totalFeeBips
+    ) {
+        return (
+            rentalMiningFeeBips,
+            rentalBurnFeeBips,
+            rentalMiningFeeBips + rentalBurnFeeBips
+        );
     }
 
     // =========================================================================

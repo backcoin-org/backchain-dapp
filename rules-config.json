@@ -19,7 +19,7 @@
     "FORTUNE_POOL_GAME_FEE": "1000",
     "RENTAL_MARKET_TAX_BIPS": "1000"
   },
-  "LAST_UPDATED": "2025-12-31T20:22:51.487Z",
+  "LAST_UPDATED": "2026-01-12T13:08:45.421Z",
   "miningDistribution": {
     "TREASURY": "3000",
     "DELEGATOR_POOL": "7000"
@@ -36,5 +36,11 @@
     "5000": "5000",
     "6000": "6000",
     "7000": "7000"
+  },
+  "rentalManager": {
+    "METAADS_ENABLED": "true",
+    "TREASURY": "0xc93030333E3a235c2605BcB7C7330650B600B6D0",
+    "VERSION": "V2",
+    "UPGRADED_AT": "2026-01-12T13:08:45.421Z"
   }
 }

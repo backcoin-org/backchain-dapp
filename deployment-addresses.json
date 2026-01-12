@@ -10,7 +10,6 @@
   "fortunePool": "0x905D7397EDef61A0b32AE9A90a31ebB29F7eE3aF",
   "rentalManager": "0x413803D0f96aeF02C0E23733b67d6ed82C190855",
   "charityPool": "0xdaBD813B39AcdF4c817B2D19e76570696E3B2DD7",
-  "nftLiquidityPool_Implementation": "0x050836dF42099aD97a1c53a9712205b99f5E0E92",
   "nftLiquidityPoolFactory": "0xcaF7F8772d6F84c770242cb210BC122B5b88936f",
   "faucet": "0xD76b5FE4cd863beAd0D0762C5281945f9C325E22",
   "pool_diamond": "0xD5493d5A9EFE3dcd6f041eb994921624a7723A79",
@@ -19,6 +18,5 @@
   "pool_silver": "0xd27cEBaD64458AaB2977D9E24475a3FC23752aac",
   "pool_bronze": "0x410aaB1ce098B0F9269Eaa27559F152fBDcE86D3",
   "pool_iron": "0x5D20ADAc98b5b94a549b9352E4925a061493Fa3b",
-  "pool_crystal": "0x16894554d2cD69788c52a86eDb327C344E8A3C01",
-  "charityPool_Implementation": "0x56ce46408b6587af5b90d35ba5630d06b37620b7"
+  "pool_crystal": "0x16894554d2cD69788c52a86eDb327C344E8A3C01"
 }

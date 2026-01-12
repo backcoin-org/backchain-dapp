@@ -8295,9 +8295,9 @@
             "label": "ecosystemManager",
             "offset": 0,
             "slot": "301",
-            "type": "t_contract(IEcosystemManager)10342",
+            "type": "t_contract(IEcosystemManager)12422",
             "contract": "RentalManager",
-            "src": "contracts\\RentalManager.sol:124"
+            "src": "contracts\\solidity\\RentalManager.sol:124"
           },
           {
             "label": "bkcToken",
@@ -8305,7 +8305,7 @@
             "slot": "302",
             "type": "t_contract(IERC20Upgradeable)1575",
             "contract": "RentalManager",
-            "src": "contracts\\RentalManager.sol:127"
+            "src": "contracts\\solidity\\RentalManager.sol:127"
           },
           {
             "label": "nftContract",
@@ -8313,23 +8313,23 @@
             "slot": "303",
             "type": "t_contract(IERC721Upgradeable)3098",
             "contract": "RentalManager",
-            "src": "contracts\\RentalManager.sol:130"
+            "src": "contracts\\solidity\\RentalManager.sol:130"
           },
           {
             "label": "listings",
             "offset": 0,
             "slot": "304",
-            "type": "t_mapping(t_uint256,t_struct(Listing)15518_storage)",
+            "type": "t_mapping(t_uint256,t_struct(Listing)16357_storage)",
             "contract": "RentalManager",
-            "src": "contracts\\RentalManager.sol:133"
+            "src": "contracts\\solidity\\RentalManager.sol:133"
           },
           {
             "label": "activeRentals",
             "offset": 0,
             "slot": "305",
-            "type": "t_mapping(t_uint256,t_struct(Rental)15528_storage)",
+            "type": "t_mapping(t_uint256,t_struct(Rental)16367_storage)",
             "contract": "RentalManager",
-            "src": "contracts\\RentalManager.sol:136"
+            "src": "contracts\\solidity\\RentalManager.sol:136"
           },
           {
             "label": "listedTokenIds",
@@ -8337,7 +8337,7 @@
             "slot": "306",
             "type": "t_array(t_uint256)dyn_storage",
             "contract": "RentalManager",
-            "src": "contracts\\RentalManager.sol:139"
+            "src": "contracts\\solidity\\RentalManager.sol:139"
           },
           {
             "label": "_tokenIndex",
@@ -8345,7 +8345,7 @@
             "slot": "307",
             "type": "t_mapping(t_uint256,t_uint256)",
             "contract": "RentalManager",
-            "src": "contracts\\RentalManager.sol:141"
+            "src": "contracts\\solidity\\RentalManager.sol:141"
           },
           {
             "label": "totalFeesCollected",
@@ -8353,7 +8353,7 @@
             "slot": "308",
             "type": "t_uint256",
             "contract": "RentalManager",
-            "src": "contracts\\RentalManager.sol:143"
+            "src": "contracts\\solidity\\RentalManager.sol:143"
           },
           {
             "label": "totalVolume",
@@ -8361,7 +8361,7 @@
             "slot": "309",
             "type": "t_uint256",
             "contract": "RentalManager",
-            "src": "contracts\\RentalManager.sol:146"
+            "src": "contracts\\solidity\\RentalManager.sol:146"
           },
           {
             "label": "totalRentals",
@@ -8369,7 +8369,7 @@
             "slot": "310",
             "type": "t_uint256",
             "contract": "RentalManager",
-            "src": "contracts\\RentalManager.sol:149"
+            "src": "contracts\\solidity\\RentalManager.sol:149"
           },
           {
             "label": "paused",
@@ -8377,7 +8377,7 @@
             "slot": "311",
             "type": "t_bool",
             "contract": "RentalManager",
-            "src": "contracts\\RentalManager.sol:153"
+            "src": "contracts\\solidity\\RentalManager.sol:153"
           },
           {
             "label": "globalRentalDuration",
@@ -8385,7 +8385,7 @@
             "slot": "312",
             "type": "t_uint256",
             "contract": "RentalManager",
-            "src": "contracts\\RentalManager.sol:156"
+            "src": "contracts\\solidity\\RentalManager.sol:156"
           }
         ],
         "types": {
@@ -8417,15 +8417,15 @@
             "label": "contract IERC721Upgradeable",
             "numberOfBytes": "20"
           },
-          "t_contract(IEcosystemManager)10342": {
+          "t_contract(IEcosystemManager)12422": {
             "label": "contract IEcosystemManager",
             "numberOfBytes": "20"
           },
-          "t_mapping(t_uint256,t_struct(Listing)15518_storage)": {
+          "t_mapping(t_uint256,t_struct(Listing)16357_storage)": {
             "label": "mapping(uint256 => struct RentalManager.Listing)",
             "numberOfBytes": "32"
           },
-          "t_mapping(t_uint256,t_struct(Rental)15528_storage)": {
+          "t_mapping(t_uint256,t_struct(Rental)16367_storage)": {
             "label": "mapping(uint256 => struct RentalManager.Rental)",
             "numberOfBytes": "32"
           },
@@ -8433,7 +8433,7 @@
             "label": "mapping(uint256 => uint256)",
             "numberOfBytes": "32"
           },
-          "t_struct(Listing)15518_storage": {
+          "t_struct(Listing)16357_storage": {
             "label": "struct RentalManager.Listing",
             "members": [
               {
@@ -8481,7 +8481,7 @@
             ],
             "numberOfBytes": "224"
           },
-          "t_struct(Rental)15528_storage": {
+          "t_struct(Rental)16367_storage": {
             "label": "struct RentalManager.Rental",
             "members": [
               {
@@ -11318,6 +11318,373 @@
               }
             ],
             "numberOfBytes": "160"
+          },
+          "t_uint256": {
+            "label": "uint256",
+            "numberOfBytes": "32"
+          },
+          "t_uint8": {
+            "label": "uint8",
+            "numberOfBytes": "1"
+          }
+        },
+        "namespaces": {}
+      }
+    },
+    "5be422d211e073de2fa812757261c88b8ce83860c32b499e1e8781d912a556fe": {
+      "address": "0xDb6A2c35Ca47A9d4d6F21cfb514204B71d5d8FF5",
+      "txHash": "0x52cb2f3fa0e6549d56a2d33696ddddef7b777314118113ec08e075a14f55584a",
+      "layout": {
+        "solcVersion": "0.8.28",
+        "storage": [
+          {
+            "label": "_initialized",
+            "offset": 0,
+            "slot": "0",
+            "type": "t_uint8",
+            "contract": "Initializable",
+            "src": "@openzeppelin\\contracts-upgradeable\\proxy\\utils\\Initializable.sol:63",
+            "retypedFrom": "bool"
+          },
+          {
+            "label": "_initializing",
+            "offset": 1,
+            "slot": "0",
+            "type": "t_bool",
+            "contract": "Initializable",
+            "src": "@openzeppelin\\contracts-upgradeable\\proxy\\utils\\Initializable.sol:68"
+          },
+          {
+            "label": "__gap",
+            "offset": 0,
+            "slot": "1",
+            "type": "t_array(t_uint256)50_storage",
+            "contract": "ContextUpgradeable",
+            "src": "@openzeppelin\\contracts-upgradeable\\utils\\ContextUpgradeable.sol:36"
+          },
+          {
+            "label": "_owner",
+            "offset": 0,
+            "slot": "51",
+            "type": "t_address",
+            "contract": "OwnableUpgradeable",
+            "src": "@openzeppelin\\contracts-upgradeable\\access\\OwnableUpgradeable.sol:22"
+          },
+          {
+            "label": "__gap",
+            "offset": 0,
+            "slot": "52",
+            "type": "t_array(t_uint256)49_storage",
+            "contract": "OwnableUpgradeable",
+            "src": "@openzeppelin\\contracts-upgradeable\\access\\OwnableUpgradeable.sol:94"
+          },
+          {
+            "label": "_status",
+            "offset": 0,
+            "slot": "101",
+            "type": "t_uint256",
+            "contract": "ReentrancyGuardUpgradeable",
+            "src": "@openzeppelin\\contracts-upgradeable\\security\\ReentrancyGuardUpgradeable.sol:38"
+          },
+          {
+            "label": "__gap",
+            "offset": 0,
+            "slot": "102",
+            "type": "t_array(t_uint256)49_storage",
+            "contract": "ReentrancyGuardUpgradeable",
+            "src": "@openzeppelin\\contracts-upgradeable\\security\\ReentrancyGuardUpgradeable.sol:88"
+          },
+          {
+            "label": "__gap",
+            "offset": 0,
+            "slot": "151",
+            "type": "t_array(t_uint256)50_storage",
+            "contract": "ERC721HolderUpgradeable",
+            "src": "@openzeppelin\\contracts-upgradeable\\token\\ERC721\\utils\\ERC721HolderUpgradeable.sol:35"
+          },
+          {
+            "label": "__gap",
+            "offset": 0,
+            "slot": "201",
+            "type": "t_array(t_uint256)50_storage",
+            "contract": "ERC1967UpgradeUpgradeable",
+            "src": "@openzeppelin\\contracts-upgradeable\\proxy\\ERC1967\\ERC1967UpgradeUpgradeable.sol:169"
+          },
+          {
+            "label": "__gap",
+            "offset": 0,
+            "slot": "251",
+            "type": "t_array(t_uint256)50_storage",
+            "contract": "UUPSUpgradeable",
+            "src": "@openzeppelin\\contracts-upgradeable\\proxy\\utils\\UUPSUpgradeable.sol:111"
+          },
+          {
+            "label": "ecosystemManager",
+            "offset": 0,
+            "slot": "301",
+            "type": "t_contract(IEcosystemManager)3515",
+            "contract": "RentalManager",
+            "src": "contracts\\solidity\\RentalManager.sol:138"
+          },
+          {
+            "label": "bkcToken",
+            "offset": 0,
+            "slot": "302",
+            "type": "t_contract(BKCToken)3409",
+            "contract": "RentalManager",
+            "src": "contracts\\solidity\\RentalManager.sol:143"
+          },
+          {
+            "label": "nftContract",
+            "offset": 0,
+            "slot": "303",
+            "type": "t_contract(IERC721Upgradeable)2146",
+            "contract": "RentalManager",
+            "src": "contracts\\solidity\\RentalManager.sol:144"
+          },
+          {
+            "label": "listings",
+            "offset": 0,
+            "slot": "304",
+            "type": "t_mapping(t_uint256,t_struct(Listing)3978_storage)",
+            "contract": "RentalManager",
+            "src": "contracts\\solidity\\RentalManager.sol:146"
+          },
+          {
+            "label": "activeRentals",
+            "offset": 0,
+            "slot": "305",
+            "type": "t_mapping(t_uint256,t_struct(Rental)3988_storage)",
+            "contract": "RentalManager",
+            "src": "contracts\\solidity\\RentalManager.sol:148"
+          },
+          {
+            "label": "listedTokenIds",
+            "offset": 0,
+            "slot": "306",
+            "type": "t_array(t_uint256)dyn_storage",
+            "contract": "RentalManager",
+            "src": "contracts\\solidity\\RentalManager.sol:150"
+          },
+          {
+            "label": "_tokenIndex",
+            "offset": 0,
+            "slot": "307",
+            "type": "t_mapping(t_uint256,t_uint256)",
+            "contract": "RentalManager",
+            "src": "contracts\\solidity\\RentalManager.sol:153"
+          },
+          {
+            "label": "totalFeesCollected",
+            "offset": 0,
+            "slot": "308",
+            "type": "t_uint256",
+            "contract": "RentalManager",
+            "src": "contracts\\solidity\\RentalManager.sol:157"
+          },
+          {
+            "label": "totalVolume",
+            "offset": 0,
+            "slot": "309",
+            "type": "t_uint256",
+            "contract": "RentalManager",
+            "src": "contracts\\solidity\\RentalManager.sol:159"
+          },
+          {
+            "label": "totalRentals",
+            "offset": 0,
+            "slot": "310",
+            "type": "t_uint256",
+            "contract": "RentalManager",
+            "src": "contracts\\solidity\\RentalManager.sol:160"
+          },
+          {
+            "label": "paused",
+            "offset": 0,
+            "slot": "311",
+            "type": "t_bool",
+            "contract": "RentalManager",
+            "src": "contracts\\solidity\\RentalManager.sol:161"
+          },
+          {
+            "label": "globalRentalDuration",
+            "offset": 0,
+            "slot": "312",
+            "type": "t_uint256",
+            "contract": "RentalManager",
+            "src": "contracts\\solidity\\RentalManager.sol:164"
+          },
+          {
+            "label": "promotionFees",
+            "offset": 0,
+            "slot": "313",
+            "type": "t_mapping(t_uint256,t_uint256)",
+            "contract": "RentalManager",
+            "src": "contracts\\solidity\\RentalManager.sol:173"
+          },
+          {
+            "label": "treasury",
+            "offset": 0,
+            "slot": "314",
+            "type": "t_address",
+            "contract": "RentalManager",
+            "src": "contracts\\solidity\\RentalManager.sol:176"
+          },
+          {
+            "label": "totalPromotionFeesCollected",
+            "offset": 0,
+            "slot": "315",
+            "type": "t_uint256",
+            "contract": "RentalManager",
+            "src": "contracts\\solidity\\RentalManager.sol:178"
+          },
+          {
+            "label": "rentalMiningFeeBips",
+            "offset": 0,
+            "slot": "316",
+            "type": "t_uint256",
+            "contract": "RentalManager",
+            "src": "contracts\\solidity\\RentalManager.sol:190"
+          },
+          {
+            "label": "rentalBurnFeeBips",
+            "offset": 0,
+            "slot": "317",
+            "type": "t_uint256",
+            "contract": "RentalManager",
+            "src": "contracts\\solidity\\RentalManager.sol:195"
+          },
+          {
+            "label": "totalBurnedAllTime",
+            "offset": 0,
+            "slot": "318",
+            "type": "t_uint256",
+            "contract": "RentalManager",
+            "src": "contracts\\solidity\\RentalManager.sol:199"
+          }
+        ],
+        "types": {
+          "t_address": {
+            "label": "address",
+            "numberOfBytes": "20"
+          },
+          "t_array(t_uint256)49_storage": {
+            "label": "uint256[49]",
+            "numberOfBytes": "1568"
+          },
+          "t_array(t_uint256)50_storage": {
+            "label": "uint256[50]",
+            "numberOfBytes": "1600"
+          },
+          "t_array(t_uint256)dyn_storage": {
+            "label": "uint256[]",
+            "numberOfBytes": "32"
+          },
+          "t_bool": {
+            "label": "bool",
+            "numberOfBytes": "1"
+          },
+          "t_contract(BKCToken)3409": {
+            "label": "contract BKCToken",
+            "numberOfBytes": "20"
+          },
+          "t_contract(IERC721Upgradeable)2146": {
+            "label": "contract IERC721Upgradeable",
+            "numberOfBytes": "20"
+          },
+          "t_contract(IEcosystemManager)3515": {
+            "label": "contract IEcosystemManager",
+            "numberOfBytes": "20"
+          },
+          "t_mapping(t_uint256,t_struct(Listing)3978_storage)": {
+            "label": "mapping(uint256 => struct RentalManager.Listing)",
+            "numberOfBytes": "32"
+          },
+          "t_mapping(t_uint256,t_struct(Rental)3988_storage)": {
+            "label": "mapping(uint256 => struct RentalManager.Rental)",
+            "numberOfBytes": "32"
+          },
+          "t_mapping(t_uint256,t_uint256)": {
+            "label": "mapping(uint256 => uint256)",
+            "numberOfBytes": "32"
+          },
+          "t_struct(Listing)3978_storage": {
+            "label": "struct RentalManager.Listing",
+            "members": [
+              {
+                "label": "owner",
+                "type": "t_address",
+                "offset": 0,
+                "slot": "0"
+              },
+              {
+                "label": "pricePerHour",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "1"
+              },
+              {
+                "label": "minHours",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "2"
+              },
+              {
+                "label": "maxHours",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "3"
+              },
+              {
+                "label": "isActive",
+                "type": "t_bool",
+                "offset": 0,
+                "slot": "4"
+              },
+              {
+                "label": "totalEarnings",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "5"
+              },
+              {
+                "label": "rentalCount",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "6"
+              }
+            ],
+            "numberOfBytes": "224"
+          },
+          "t_struct(Rental)3988_storage": {
+            "label": "struct RentalManager.Rental",
+            "members": [
+              {
+                "label": "tenant",
+                "type": "t_address",
+                "offset": 0,
+                "slot": "0"
+              },
+              {
+                "label": "startTime",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "1"
+              },
+              {
+                "label": "endTime",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "2"
+              },
+              {
+                "label": "paidAmount",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "3"
+              }
+            ],
+            "numberOfBytes": "128"
           },
           "t_uint256": {
             "label": "uint256",

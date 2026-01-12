@@ -1,5 +1,5 @@
 // js/pages/RentalPage.js
-// ✅ PRODUCTION V12.5 - Complete UI Redesign + MetaAds Promotions (On-Chain)
+// ✅ PRODUCTION V13.0 - MetaAds Promotions (List with Promotion Option)
 const ethers = window.ethers;
 import { State } from '../state.js';
 import { loadRentalListings, loadUserRentals, loadMyBoostersFromAPI, API_ENDPOINTS } from '../modules/data.js';
@@ -291,10 +291,12 @@ function renderMarketplace() {
         return true;
     });
     
-    // V12.5: Sort by promotion first (highest paid first), then by selected criteria
+    // V13.0: Sort by promotion first (highest paid first), then by selected criteria
+    // Use promotionFee from API (Firebase) which is kept in sync by indexer
     available.sort((a, b) => {
-        const promoA = RentalState.promotions.get(normalizeTokenId(a.tokenId)) || 0n;
-        const promoB = RentalState.promotions.get(normalizeTokenId(b.tokenId)) || 0n;
+        // Get promotion from API data first, fallback to contract data
+        const promoA = BigInt(a.promotionFee || '0') || (RentalState.promotions.get(normalizeTokenId(a.tokenId)) || 0n);
+        const promoB = BigInt(b.promotionFee || '0') || (RentalState.promotions.get(normalizeTokenId(b.tokenId)) || 0n);
         
         // If sorting by promotion, always prioritize promoted listings
         if (RentalState.sortBy === 'promotion') {
@@ -349,8 +351,10 @@ function renderNFTCard(listing, idx) {
     // V12.1: Check if this NFT belongs to the connected user
     const isOwner = State.isConnected && addressesMatch(listing.owner, State.userAddress);
     
-    // V12.5: Check promotion status
-    const promoAmount = RentalState.promotions.get(tokenId) || 0n;
+    // V13.0: Check promotion status from API first, fallback to contract
+    const promoFromApi = BigInt(listing.promotionFee || '0');
+    const promoFromContract = RentalState.promotions.get(tokenId) || 0n;
+    const promoAmount = promoFromApi > 0n ? promoFromApi : promoFromContract;
     const isPromoted = promoAmount > 0n;
     const promoEth = isPromoted ? ethers.formatEther(promoAmount) : '0';
     
@@ -675,10 +679,32 @@ function renderListModal() {
                         <label class="text-sm text-zinc-400 mb-1.5 block">Price/Hour (BKC)</label>
                         <input type="number" id="list-price" placeholder="10" step="0.01" min="0.01" class="w-full bg-zinc-800 border border-zinc-700 rounded-xl p-3 text-white outline-none">
                     </div>
+                    
+                    <!-- V13.0: Promotion Option During Listing -->
+                    <div class="r-glass-light p-4 rounded-xl border border-yellow-500/20">
+                        <div class="flex items-center gap-2 mb-3">
+                            <i class="fa-solid fa-rocket text-yellow-400"></i>
+                            <span class="text-sm font-bold text-yellow-400">Boost Visibility (Optional)</span>
+                        </div>
+                        <p class="text-xs text-zinc-400 mb-3">Pay ETH to promote your listing. Higher amounts = more visibility!</p>
+                        <div>
+                            <label class="text-xs text-zinc-500 mb-1 block">Promotion Amount (ETH)</label>
+                            <input type="number" id="list-promo-amount" placeholder="0 (no promotion)" step="0.001" min="0" class="w-full bg-zinc-800/80 border border-zinc-700 rounded-lg p-2.5 text-white text-sm outline-none">
+                        </div>
+                        <div class="flex items-center gap-2 mt-2 text-[10px] text-zinc-500">
+                            <span class="px-2 py-0.5 rounded bg-zinc-800">0.01 ETH</span>
+                            <span class="px-2 py-0.5 rounded bg-zinc-800">0.05 ETH</span>
+                            <span class="px-2 py-0.5 rounded bg-zinc-800">0.1 ETH</span>
+                            <span class="text-zinc-600">← Suggested</span>
+                        </div>
+                    </div>
                 </div>
                 <button id="confirm-list" class="r-btn r-btn-primary w-full py-3">
                     <i class="fa-solid fa-tag mr-2"></i>List NFT
                 </button>
+                <p id="list-promo-note" class="text-xs text-zinc-500 text-center mt-2 hidden">
+                    <i class="fa-solid fa-info-circle mr-1"></i>2 transactions: List + Promote
+                </p>
             </div>
         </div>
         
@@ -905,6 +931,27 @@ function openListModal() {
     
     document.getElementById('list-price').value = '';
     
+    // V13.0: Reset promotion input
+    const promoInput = document.getElementById('list-promo-amount');
+    if (promoInput) {
+        promoInput.value = '';
+        promoInput.addEventListener('input', () => {
+            const note = document.getElementById('list-promo-note');
+            if (note) {
+                const val = parseFloat(promoInput.value) || 0;
+                if (val > 0) {
+                    note.classList.remove('hidden');
+                } else {
+                    note.classList.add('hidden');
+                }
+            }
+        });
+    }
+    
+    // Hide promo note initially
+    const note = document.getElementById('list-promo-note');
+    if (note) note.classList.add('hidden');
+    
     // V12.3: Reset button state
     const btn = document.getElementById('confirm-list');
     if (btn) {
@@ -1089,12 +1136,13 @@ async function handleList() {
     if (!tokenId) { showToast('Select an NFT', 'error'); return; }
     if (!price || parseFloat(price) <= 0) { showToast('Enter valid price', 'error'); return; }
     
+    // V13.0: Get promotion amount
+    const promoAmountEth = parseFloat(document.getElementById('list-promo-amount')?.value) || 0;
+    
     const btn = document.getElementById('confirm-list');
     RentalState.isTransactionPending = true;
     
-    // V12.4: Don't change button before passing to txEngine
-    // Let txEngine manage the button state completely
-    console.log('[RentalPage] Starting list transaction for tokenId:', tokenId);
+    console.log('[RentalPage] Starting list transaction for tokenId:', tokenId, 'with promo:', promoAmountEth, 'ETH');
     
     try {
         await RentalTx.list({
@@ -1102,16 +1150,53 @@ async function handleList() {
             pricePerHour: ethers.parseUnits(price, 18),
             minHours: 1,
             maxHours: 168,
-            button: btn, // txEngine will save original state and manage it
+            button: btn,
             onSuccess: async (receipt) => { 
                 console.log('[RentalPage] ✅ List onSuccess called, hash:', receipt?.hash);
-                RentalState.isTransactionPending = false;
-                closeListModal(); 
-                showToast('🏷️ NFT Listed Successfully!', 'success'); 
-                try {
-                    await refreshData();
-                } catch (e) {
-                    console.warn('[RentalPage] Refresh after list failed:', e);
+                
+                // V13.0: If promotion amount was set, do promotion transaction
+                if (promoAmountEth > 0) {
+                    showToast('🏷️ NFT Listed! Now promoting...', 'success');
+                    
+                    try {
+                        // Small delay to ensure listing is indexed
+                        await new Promise(r => setTimeout(r, 2000));
+                        
+                        await RentalTx.promote({
+                            tokenId,
+                            amountEth: promoAmountEth.toString(),
+                            button: btn,
+                            onSuccess: async () => {
+                                RentalState.isTransactionPending = false;
+                                closeListModal();
+                                showToast('🚀 NFT Listed & Promoted!', 'success');
+                                await refreshData();
+                            },
+                            onError: (e) => {
+                                RentalState.isTransactionPending = false;
+                                closeListModal();
+                                // Listing succeeded but promotion failed
+                                showToast('⚠️ Listed but promotion failed. You can promote later.', 'warning');
+                                refreshData();
+                            }
+                        });
+                    } catch (promoErr) {
+                        console.warn('[RentalPage] Promotion after list failed:', promoErr);
+                        RentalState.isTransactionPending = false;
+                        closeListModal();
+                        showToast('⚠️ Listed but promotion failed. You can promote later.', 'warning');
+                        refreshData();
+                    }
+                } else {
+                    // No promotion, just close and refresh
+                    RentalState.isTransactionPending = false;
+                    closeListModal(); 
+                    showToast('🏷️ NFT Listed Successfully!', 'success'); 
+                    try {
+                        await refreshData();
+                    } catch (e) {
+                        console.warn('[RentalPage] Refresh after list failed:', e);
+                    }
                 }
             },
             onError: (e) => { 

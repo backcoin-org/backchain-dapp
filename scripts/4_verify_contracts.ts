@@ -1,5 +1,5 @@
 // scripts/4_verify_contracts.ts
-// VERSAO V6.3: CharityPool.sol (p minusculo)
+// VERSAO V6.4: RentalManager V2 (MetaAds + Burn)
 
 import { HardhatRuntimeEnvironment } from "hardhat/types";
 import fs from "fs";
@@ -62,6 +62,47 @@ async function verifyImplementation(
   }
 }
 
+async function verifyDirectImplementation(
+  hre: HardhatRuntimeEnvironment,
+  contractName: string,
+  implAddress: string,
+  contractPath: string
+): Promise<{ name: string; status: string }> {
+  try {
+    if (!implAddress || implAddress === "0x0000000000000000000000000000000000000000") {
+      console.log(`   Pulando ${contractName}: Endereco invalido.`);
+      return { name: contractName, status: "skipped" };
+    }
+
+    console.log(`\nVerificando ${contractName} (Implementation Direta)...`);
+    console.log(`   Implementation: ${implAddress}`);
+    
+    await hre.run("verify:verify", {
+      address: implAddress,
+      constructorArguments: [],
+      contract: contractPath,
+    });
+    
+    console.log(`   ${contractName} verificado!`);
+    return { name: contractName, status: "verified" };
+    
+  } catch (error: any) {
+    const msg = error.message.toLowerCase();
+    
+    if (msg.includes("already verified")) {
+      console.log(`   ${contractName} ja estava verificado.`);
+      return { name: contractName, status: "already_verified" };
+    } else if (msg.includes("rate limit")) {
+      console.log(`   Rate limit. Aguardando 15s...`);
+      await sleep(15000);
+      return verifyDirectImplementation(hre, contractName, implAddress, contractPath);
+    } else {
+      console.log(`   Erro: ${error.message.substring(0, 100)}`);
+      return { name: contractName, status: "failed" };
+    }
+  }
+}
+
 async function verifyContract(
   hre: HardhatRuntimeEnvironment,
   contractName: string,
@@ -109,7 +150,7 @@ export async function runScript(hre: HardhatRuntimeEnvironment) {
   const networkName = hre.network.name;
 
   console.log(`\n${"=".repeat(70)}`);
-  console.log(`VERIFICACAO DE CONTRATOS V6.3 - ${networkName.toUpperCase()}`);
+  console.log(`VERIFICACAO DE CONTRATOS V6.4 - ${networkName.toUpperCase()}`);
   console.log(`${"=".repeat(70)}`);
   console.log(`Conta: ${deployer.address}`);
 
@@ -170,6 +211,9 @@ export async function runScript(hre: HardhatRuntimeEnvironment) {
       await sleep(3000);
     }
   }
+
+  // NOTA: Todas as implementations são descobertas automaticamente
+  // via slot EIP-1967, não precisamos de campos _Implementation no JSON
 
   // BACKCOIN ORACLE
   console.log("\n" + "=".repeat(70));
