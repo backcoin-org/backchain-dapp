@@ -13,41 +13,30 @@ import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import "./IInterfaces.sol";
 
 /**
- * @title RentalManager (AirBNFT Protocol)
+ * @title RentalManager V2 (AirBNFT Protocol)
  * @author Backchain Protocol
- * @notice Decentralized marketplace for time-limited NFT rentals
- * @dev Implements escrow-based NFT rental with configurable duration:
+ * @notice Decentralized marketplace for time-limited NFT rentals with MetaAds promotion system
+ * @dev V2 adds promotion system where owners can pay ETH to boost listing visibility
  *
  *      ┌─────────────────────────────────────────────────────────────────┐
  *      │                      RENTAL FLOW                                │
  *      ├─────────────────────────────────────────────────────────────────┤
- *      │  1. Owner lists NFT → NFT transferred to escrow               │
- *      │  2. Tenant rents NFT → Payment distributed                     │
- *      │  3. Rental expires → NFT available for next rental            │
- *      │  4. Owner withdraws → NFT returned (if not rented)            │
+ *      │  1. Owner lists NFT → NFT transferred to escrow                 │
+ *      │  2. Owner promotes listing (optional) → Pay ETH to treasury     │
+ *      │  3. Tenant rents NFT → Payment distributed                      │
+ *      │  4. Rental expires → NFT available for next rental              │
+ *      │  5. Owner withdraws → NFT returned (if not rented)              │
  *      └─────────────────────────────────────────────────────────────────┘
  *
- *      Payment Distribution:
+ *      Promotion System (MetaAds):
  *      ┌────────────────────────────────────────────┐
- *      │  Rental Payment                            │
- *      │  └─> Protocol Fee (configurable %)        │
- *      │      └─> MiningManager (PoP mining)       │
- *      │  └─> Owner Payout (remaining %)           │
+ *      │  Owner pays ETH → Treasury receives ETH    │
+ *      │  promotionFee stored in listing            │
+ *      │  Frontend sorts by promotionFee (desc)     │
+ *      │  Higher fee = More visibility              │
  *      └────────────────────────────────────────────┘
  *
- *      Features:
- *      - Configurable rental duration (default 1 hour)
- *      - Protocol fee triggers Proof-of-Purchase mining
- *      - O(1) array management for scalability
- *      - Active rental tracking with usage rights
- *      - NFT held in escrow during listing period
- *
- *      Use Cases:
- *      - Rent boost NFTs for temporary fee discounts
- *      - Try before you buy
- *      - Passive income for NFT holders
- *
- * @custom:security-contact security@backcoin.org
+ * @custom:security-contact dev@backcoin.org
  * @custom:website https://backcoin.org
  * @custom:network Arbitrum
  */
@@ -137,6 +126,19 @@ contract RentalManager is
     uint256 public globalRentalDuration;
 
     // =========================================================================
+    //                         V2 STATE (PROMOTION SYSTEM)
+    // =========================================================================
+
+    /// @notice Token ID => Promotion fee paid in ETH (wei)
+    mapping(uint256 => uint256) public promotionFees;
+
+    /// @notice Treasury address for promotion payments
+    address public treasury;
+
+    /// @notice Total promotion fees collected (ETH)
+    uint256 public totalPromotionFeesCollected;
+
+    // =========================================================================
     //                              EVENTS
     // =========================================================================
 
@@ -184,6 +186,14 @@ contract RentalManager is
     /// @notice Emitted when marketplace is paused/unpaused
     event MarketplacePaused(bool isPaused);
 
+    /// @notice V2: Emitted when listing is promoted
+    event ListingPromoted(
+        uint256 indexed tokenId,
+        address indexed owner,
+        uint256 amount,
+        uint256 totalPromotionFee
+    );
+
     // =========================================================================
     //                              ERRORS
     // =========================================================================
@@ -198,6 +208,7 @@ contract RentalManager is
     error MarketplaceIsPaused();
     error InsufficientPayment();
     error InvalidHoursRange();
+    error ETHTransferFailed();
 
     // =========================================================================
     //                           INITIALIZATION
@@ -226,31 +237,94 @@ contract RentalManager is
         __UUPSUpgradeable_init();
 
         ecosystemManager = IEcosystemManager(_ecosystemManager);
+        bkcToken = IERC20Upgradeable(ecosystemManager.getBKCAddress());
         nftContract = IERC721Upgradeable(_nftContract);
-
-        address bkcAddress = ecosystemManager.getBKCTokenAddress();
-        if (bkcAddress == address(0)) revert ZeroAddress();
-        bkcToken = IERC20Upgradeable(bkcAddress);
-
-        globalRentalDuration = DEFAULT_DURATION;
+        
+        // V2: Set default treasury to owner
+        treasury = msg.sender;
     }
 
     /**
-     * @dev Authorizes contract upgrades (owner only)
+     * @notice V2: Initialize V2 state (call after upgrade)
+     * @param _treasury Treasury address for promotion payments
      */
-    function _authorizeUpgrade(address) internal override onlyOwner {}
+    function initializeV2(address _treasury) external onlyOwner {
+        if (_treasury == address(0)) revert ZeroAddress();
+        treasury = _treasury;
+    }
+
+    /// @dev Required by UUPSUpgradeable
+    function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
 
     // =========================================================================
-    //                         LISTING FUNCTIONS
+    //                         V2: PROMOTION FUNCTIONS
     // =========================================================================
 
     /**
-     * @notice Lists an NFT for rent with custom settings
-     * @dev NFT is transferred to escrow (this contract)
-     * @param _tokenId NFT token ID to list
-     * @param _pricePerHour Rental price per hour in BKC (wei)
-     * @param _minHours Minimum rental duration (hours)
-     * @param _maxHours Maximum rental duration (hours)
+     * @notice Promote a listing by paying ETH (MetaAds)
+     * @dev ETH is sent to treasury, amount is added to existing promotion fee
+     * @param _tokenId Token ID to promote
+     */
+    function promoteListing(uint256 _tokenId) external payable nonReentrant {
+        if (paused) revert MarketplaceIsPaused();
+        if (msg.value == 0) revert ZeroAmount();
+        
+        Listing storage listing = listings[_tokenId];
+        if (!listing.isActive) revert NFTNotListed();
+        if (listing.owner != msg.sender) revert NotListingOwner();
+
+        // Add to promotion fee (accumulative)
+        promotionFees[_tokenId] += msg.value;
+        totalPromotionFeesCollected += msg.value;
+
+        // Send ETH to treasury
+        (bool sent, ) = treasury.call{value: msg.value}("");
+        if (!sent) revert ETHTransferFailed();
+
+        emit ListingPromoted(_tokenId, msg.sender, msg.value, promotionFees[_tokenId]);
+    }
+
+    /**
+     * @notice Get promotion fee for a listing
+     * @param _tokenId Token ID to query
+     * @return Promotion fee in wei
+     */
+    function getPromotionFee(uint256 _tokenId) external view returns (uint256) {
+        return promotionFees[_tokenId];
+    }
+
+    /**
+     * @notice Get all listings sorted by promotion fee (for frontend reference)
+     * @dev Frontend should use this data to sort listings
+     * @return tokenIds Array of token IDs
+     * @return fees Array of promotion fees
+     */
+    function getPromotionRanking() external view returns (
+        uint256[] memory tokenIds,
+        uint256[] memory fees
+    ) {
+        uint256 length = listedTokenIds.length;
+        tokenIds = new uint256[](length);
+        fees = new uint256[](length);
+        
+        for (uint256 i = 0; i < length; i++) {
+            tokenIds[i] = listedTokenIds[i];
+            fees[i] = promotionFees[listedTokenIds[i]];
+        }
+        
+        return (tokenIds, fees);
+    }
+
+    // =========================================================================
+    //                          LISTING FUNCTIONS
+    // =========================================================================
+
+    /**
+     * @notice Lists an NFT for rental
+     * @param _tokenId Token ID to list
+     * @param _pricePerHour Price per hour in BKC (wei)
+     * @param _minHours Minimum rental hours
+     * @param _maxHours Maximum rental hours
      */
     function listNFT(
         uint256 _tokenId,
@@ -260,14 +334,13 @@ contract RentalManager is
     ) external nonReentrant {
         if (paused) revert MarketplaceIsPaused();
         if (_pricePerHour == 0) revert ZeroAmount();
-        if (_minHours == 0) revert InvalidDuration();
-        if (_maxHours < _minHours) revert InvalidHoursRange();
+        if (_minHours == 0 || _maxHours == 0) revert InvalidDuration();
+        if (_minHours > _maxHours) revert InvalidHoursRange();
         if (listings[_tokenId].isActive) revert NFTAlreadyListed();
 
-        // Transfer NFT to escrow
+        // Transfer NFT to contract (escrow)
         nftContract.safeTransferFrom(msg.sender, address(this), _tokenId);
 
-        // Create listing
         listings[_tokenId] = Listing({
             owner: msg.sender,
             pricePerHour: _pricePerHour,
@@ -278,109 +351,76 @@ contract RentalManager is
             rentalCount: 0
         });
 
-        // Add to array with O(1) tracking
         _addToListedArray(_tokenId);
 
         emit NFTListed(_tokenId, msg.sender, _pricePerHour, _minHours, _maxHours);
     }
 
     /**
-     * @notice Lists an NFT with default 1-hour fixed rental
-     * @param _tokenId NFT token ID
-     * @param _price Total price for 1-hour rental
-     */
-    function listNFTSimple(
-        uint256 _tokenId,
-        uint256 _price
-    ) external nonReentrant {
-        if (paused) revert MarketplaceIsPaused();
-        if (_price == 0) revert ZeroAmount();
-        if (listings[_tokenId].isActive) revert NFTAlreadyListed();
-
-        nftContract.safeTransferFrom(msg.sender, address(this), _tokenId);
-
-        listings[_tokenId] = Listing({
-            owner: msg.sender,
-            pricePerHour: _price,
-            minHours: 1,
-            maxHours: 1,
-            isActive: true,
-            totalEarnings: 0,
-            rentalCount: 0
-        });
-
-        _addToListedArray(_tokenId);
-
-        emit NFTListed(_tokenId, msg.sender, _price, 1, 1);
-    }
-
-    /**
      * @notice Updates listing parameters
-     * @param _tokenId NFT token ID
-     * @param _newPricePerHour New price per hour
-     * @param _newMinHours New minimum hours
-     * @param _newMaxHours New maximum hours
+     * @param _tokenId Token ID
+     * @param _pricePerHour New price per hour
+     * @param _minHours New minimum hours
+     * @param _maxHours New maximum hours
      */
     function updateListing(
         uint256 _tokenId,
-        uint256 _newPricePerHour,
-        uint256 _newMinHours,
-        uint256 _newMaxHours
-    ) external nonReentrant {
+        uint256 _pricePerHour,
+        uint256 _minHours,
+        uint256 _maxHours
+    ) external {
         Listing storage listing = listings[_tokenId];
-        if (listing.owner != msg.sender) revert NotListingOwner();
         if (!listing.isActive) revert NFTNotListed();
+        if (listing.owner != msg.sender) revert NotListingOwner();
+        if (_pricePerHour == 0) revert ZeroAmount();
+        if (_minHours == 0 || _maxHours == 0) revert InvalidDuration();
+        if (_minHours > _maxHours) revert InvalidHoursRange();
 
-        // Cannot update during active rental
-        if (activeRentals[_tokenId].endTime > block.timestamp) {
-            revert RentalStillActive();
-        }
+        listing.pricePerHour = _pricePerHour;
+        listing.minHours = _minHours;
+        listing.maxHours = _maxHours;
 
-        if (_newPricePerHour == 0) revert ZeroAmount();
-        if (_newMinHours == 0) revert InvalidDuration();
-        if (_newMaxHours < _newMinHours) revert InvalidHoursRange();
-
-        listing.pricePerHour = _newPricePerHour;
-        listing.minHours = _newMinHours;
-        listing.maxHours = _newMaxHours;
-
-        emit ListingUpdated(_tokenId, _newPricePerHour, _newMinHours, _newMaxHours);
+        emit ListingUpdated(_tokenId, _pricePerHour, _minHours, _maxHours);
     }
 
     /**
      * @notice Withdraws NFT from marketplace
-     * @dev Only possible when not actively rented
-     * @param _tokenId NFT token ID
+     * @param _tokenId Token ID to withdraw
      */
     function withdrawNFT(uint256 _tokenId) external nonReentrant {
         Listing storage listing = listings[_tokenId];
-        if (listing.owner != msg.sender) revert NotListingOwner();
         if (!listing.isActive) revert NFTNotListed();
+        if (listing.owner != msg.sender) revert NotListingOwner();
 
-        // Check rental has expired
+        // Check rental not active
         if (activeRentals[_tokenId].endTime > block.timestamp) {
             revert RentalStillActive();
         }
 
-        // Clean up
+        // Clear listing state
+        address owner = listing.owner;
         delete listings[_tokenId];
         delete activeRentals[_tokenId];
+        
+        // V2: Clear promotion fee
+        delete promotionFees[_tokenId];
+        
         _removeFromListedArray(_tokenId);
 
         // Return NFT
-        nftContract.safeTransferFrom(address(this), msg.sender, _tokenId);
+        nftContract.safeTransferFrom(address(this), owner, _tokenId);
 
-        emit NFTWithdrawn(_tokenId, msg.sender);
+        emit NFTWithdrawn(_tokenId, owner);
     }
 
     // =========================================================================
-    //                         RENTAL FUNCTIONS
+    //                          RENTAL FUNCTIONS
     // =========================================================================
 
     /**
-     * @notice Rents an NFT for specified duration
-     * @param _tokenId NFT token ID to rent
-     * @param _hours Number of hours to rent
+     * @notice Rents an NFT for specified hours
+     * @param _tokenId Token ID to rent
+     * @param _hours Duration in hours
      */
     function rentNFT(uint256 _tokenId, uint256 _hours) external nonReentrant {
         if (paused) revert MarketplaceIsPaused();
@@ -390,10 +430,10 @@ contract RentalManager is
 
         // Validate duration
         if (_hours < listing.minHours || _hours > listing.maxHours) {
-            revert InvalidDuration();
+            revert InvalidHoursRange();
         }
 
-        // Check not already rented
+        // Check not currently rented
         if (activeRentals[_tokenId].endTime > block.timestamp) {
             revert RentalStillActive();
         }
@@ -404,10 +444,10 @@ contract RentalManager is
         uint256 protocolFee = (totalCost * feeBips) / BIPS_DENOMINATOR;
         uint256 ownerPayout = totalCost - protocolFee;
 
-        // Pull payment
+        // Transfer payment
         bkcToken.safeTransferFrom(msg.sender, address(this), totalCost);
 
-        // Send protocol fee to MiningManager
+        // Protocol fee -> Mining
         if (protocolFee > 0) {
             address miningManager = ecosystemManager.getMiningManagerAddress();
             if (miningManager != address(0)) {
@@ -416,13 +456,15 @@ contract RentalManager is
             }
         }
 
-        // Pay owner
+        // Owner payout
         if (ownerPayout > 0) {
             bkcToken.safeTransfer(listing.owner, ownerPayout);
         }
 
         // Calculate end time
-        uint256 duration = globalRentalDuration > 0 ? globalRentalDuration : _hours * 1 hours;
+        uint256 duration = globalRentalDuration > 0 
+            ? globalRentalDuration 
+            : _hours * 1 hours;
         uint256 endTime = block.timestamp + duration;
 
         // Record rental
@@ -534,6 +576,15 @@ contract RentalManager is
     }
 
     /**
+     * @notice V2: Sets treasury address for promotion payments
+     * @param _treasury New treasury address
+     */
+    function setTreasury(address _treasury) external onlyOwner {
+        if (_treasury == address(0)) revert ZeroAddress();
+        treasury = _treasury;
+    }
+
+    /**
      * @notice Emergency NFT recovery (only if not actively rented)
      * @param _tokenId Token to recover
      * @param _to Recipient address
@@ -545,6 +596,7 @@ contract RentalManager is
 
         delete listings[_tokenId];
         delete activeRentals[_tokenId];
+        delete promotionFees[_tokenId];
         _removeFromListedArray(_tokenId);
 
         nftContract.safeTransferFrom(address(this), _to, _tokenId);
@@ -647,6 +699,16 @@ contract RentalManager is
         uint256 rentals
     ) {
         return (listedTokenIds.length, totalVolume, totalFeesCollected, totalRentals);
+    }
+
+    /**
+     * @notice V2: Returns promotion statistics
+     */
+    function getPromotionStats() external view returns (
+        uint256 totalPromotionFees,
+        address treasuryAddress
+    ) {
+        return (totalPromotionFeesCollected, treasury);
     }
 
     // =========================================================================
