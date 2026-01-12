@@ -1,6 +1,11 @@
 // modules/js/transactions/rental-tx.js
-// ✅ PRODUCTION V1.5 - Improved RPC resilience and approval handling
+// ✅ PRODUCTION V2.0 - MetaAds Promotion Support
 // 
+// CHANGES V2.0:
+// - NEW: promoteListing function for MetaAds (pay ETH to boost visibility)
+// - NEW: getPromotionFee read function
+// - UPDATED: ABI with V2 functions (promoteListing, getPromotionFee)
+//
 // CHANGES V1.5:
 // - IMPROVED: Use setApprovalForAll instead of individual approve (one-time approval)
 // - IMPROVED: Better error handling during NFT approval with timeout
@@ -29,6 +34,7 @@
 // - rentNft / rent: Rent a listed NFT
 // - withdrawNft / withdraw: Remove NFT from marketplace
 // - updateListing: Update listing price/duration
+// - promoteListing / promote: Pay ETH to boost listing visibility (V2)
 // ============================================================================
 
 import { txEngine, ValidationLayer } from '../core/index.js';
@@ -216,6 +222,33 @@ const RENTAL_ABI = [
         stateMutability: 'view',
         inputs: [],
         outputs: [{ name: '', type: 'bool' }]
+    },
+    // V2.0: MetaAds Promotion Functions
+    {
+        name: 'promoteListing',
+        type: 'function',
+        stateMutability: 'payable',
+        inputs: [
+            { name: 'tokenId', type: 'uint256' }
+        ],
+        outputs: []
+    },
+    {
+        name: 'getPromotionFee',
+        type: 'function',
+        stateMutability: 'view',
+        inputs: [{ name: 'tokenId', type: 'uint256' }],
+        outputs: [{ name: '', type: 'uint256' }]
+    },
+    {
+        name: 'getPromotionRanking',
+        type: 'function',
+        stateMutability: 'view',
+        inputs: [],
+        outputs: [
+            { name: 'tokenIds', type: 'uint256[]' },
+            { name: 'fees', type: 'uint256[]' }
+        ]
     },
     {
         name: 'getListingCount',
@@ -801,6 +834,86 @@ export async function updateListing({
     });
 }
 
+/**
+ * V2.0: Promotes a listing by paying ETH (MetaAds)
+ * Higher ETH = higher visibility in marketplace
+ */
+export async function promoteListing({
+    tokenId,
+    amountEth,
+    button = null,
+    onSuccess = null,
+    onError = null
+}) {
+    const ethers = window.ethers;
+    console.log('[RentalTx] promoteListing called with:', { tokenId, amountEth });
+    
+    if (!tokenId) {
+        throw new Error('Token ID is required');
+    }
+    
+    if (!amountEth || parseFloat(amountEth) <= 0) {
+        throw new Error('Promotion amount must be greater than 0');
+    }
+    
+    const amountWei = ethers.parseEther(amountEth.toString());
+    
+    return await txEngine.execute({
+        name: 'PromoteListing',
+        button,
+        
+        getContract: async (signer) => {
+            const contract = getRentalContract(signer);
+            console.log('[RentalTx] Contract.promoteListing exists:', typeof contract.promoteListing);
+            return contract;
+        },
+        method: 'promoteListing',
+        args: [BigInt(tokenId)],
+        value: amountWei, // Send ETH with the transaction
+        
+        validate: async (signer, userAddress) => {
+            console.log('[RentalTx] Validating promoteListing for user:', userAddress);
+            
+            const contract = getRentalContract(signer);
+            
+            // Check listing exists and is active
+            const listing = await contract.getListing(tokenId);
+            console.log('[RentalTx] Listing:', listing);
+            
+            if (!listing.isActive) {
+                throw new Error('This NFT is not listed. List it first before promoting.');
+            }
+            
+            if (listing.owner.toLowerCase() !== userAddress.toLowerCase()) {
+                throw new Error('Only the listing owner can promote');
+            }
+            
+            // Check user has enough ETH
+            const provider = signer.provider;
+            const balance = await provider.getBalance(userAddress);
+            console.log('[RentalTx] User ETH balance:', ethers.formatEther(balance));
+            
+            if (balance < amountWei) {
+                throw new Error(`Insufficient ETH. Need ${amountEth} ETH but have ${ethers.formatEther(balance)} ETH`);
+            }
+            
+            console.log('[RentalTx] ✅ Validation passed for promoteListing');
+        },
+        
+        onSuccess: async (receipt) => {
+            console.log('[RentalTx] PromoteListing successful:', receipt.hash);
+            if (onSuccess) await onSuccess(receipt);
+        },
+        onError: (error) => {
+            console.error('[RentalTx] PromoteListing failed:', error);
+            if (onError) onError(error);
+        }
+    });
+}
+
+// Alias for promote
+export const promote = promoteListing;
+
 // ============================================================================
 // 4. READ FUNCTIONS (Helpers)
 // ============================================================================
@@ -928,6 +1041,45 @@ export async function isMarketplacePaused() {
     return await contract.paused();
 }
 
+/**
+ * V2.0: Gets the promotion fee for a listing
+ */
+export async function getPromotionFee(tokenId) {
+    const ethers = window.ethers;
+    const contract = await getRentalContractReadOnly();
+    try {
+        const fee = await contract.getPromotionFee(tokenId);
+        return {
+            fee: fee,
+            feeFormatted: ethers.formatEther(fee)
+        };
+    } catch (e) {
+        // Contract might not have V2 functions
+        console.warn('[RentalTx] getPromotionFee not available:', e.message);
+        return { fee: 0n, feeFormatted: '0' };
+    }
+}
+
+/**
+ * V2.0: Gets the promotion ranking (sorted by highest fee)
+ */
+export async function getPromotionRanking() {
+    const ethers = window.ethers;
+    const contract = await getRentalContractReadOnly();
+    try {
+        const [tokenIds, fees] = await contract.getPromotionRanking();
+        return tokenIds.map((id, i) => ({
+            tokenId: Number(id),
+            fee: fees[i],
+            feeFormatted: ethers.formatEther(fees[i])
+        }));
+    } catch (e) {
+        // Contract might not have V2 functions
+        console.warn('[RentalTx] getPromotionRanking not available:', e.message);
+        return [];
+    }
+}
+
 // ============================================================================
 // 5. ALIASES FOR BACKWARD COMPATIBILITY
 // ============================================================================
@@ -935,6 +1087,7 @@ export async function isMarketplacePaused() {
 export const list = listNft;
 export const rent = rentNft;
 export const withdraw = withdrawNft;
+// promote alias is defined above after promoteListing function
 
 // ============================================================================
 // 6. EXPORT
@@ -946,10 +1099,12 @@ export const RentalTx = {
     rentNft,
     withdrawNft,
     updateListing,
+    promoteListing, // V2.0
     // Aliases
     list,
     rent,
     withdraw,
+    promote, // V2.0
     // Read helpers
     getListing,
     getRental,
@@ -959,7 +1114,9 @@ export const RentalTx = {
     getRemainingRentalTime,
     hasRentalRights,
     getMarketplaceStats,
-    isMarketplacePaused
+    isMarketplacePaused,
+    getPromotionFee, // V2.0
+    getPromotionRanking // V2.0
 };
 
 export default RentalTx;
