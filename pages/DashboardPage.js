@@ -1,5 +1,9 @@
 // js/pages/DashboardPage.js
-// ✅ PRODUCTION V11.0 - Total Burned metric (replaces Economic Output)
+// ✅ PRODUCTION V11.1 - Compatible with Indexer V15.2 burn_stats
+//
+// V11.1 Changes:
+// - Updated to read from burn.totalBurned (from burn_stats/global)
+// - Fallback chain: burn.totalBurned → burn.sources.rental.total + burn.sources.charity.total
 //
 // V11.0 Changes:
 // - Replaced "Economic Output" with "Total Burned" metric
@@ -814,8 +818,19 @@ async function updateGlobalMetrics() {
             if (ecoData.economy?.fortunePoolBalance) fortunePoolBalance = BigInt(ecoData.economy.fortunePoolBalance);
             if (ecoData.stats?.notarizedDocuments) notaryCount = ecoData.stats.notarizedDocuments;
             
-            // V11.0: Get totalBurned from rental marketplace stats
-            if (ecoData.rental?.totalBurned) {
+            // V11.1: Get totalBurned from burn_stats/global (Indexer V15.2)
+            // Priority: burn.totalBurned → sum of sources → rental.totalBurned (legacy)
+            if (ecoData.burn?.totalBurned) {
+                totalBurned = BigInt(ecoData.burn.totalBurned);
+            } else if (ecoData.burn?.sources) {
+                // Sum all sources if totalBurned not directly available
+                let sum = 0n;
+                for (const source of Object.values(ecoData.burn.sources)) {
+                    if (source?.total) sum += BigInt(source.total);
+                }
+                totalBurned = sum;
+            } else if (ecoData.rental?.totalBurned) {
+                // Legacy fallback
                 totalBurned = BigInt(ecoData.rental.totalBurned);
             }
         }
