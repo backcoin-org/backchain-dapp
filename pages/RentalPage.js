@@ -480,17 +480,19 @@ function renderNFTCard(listing, idx) {
                         <p class="text-xl font-bold text-white">${price} <span class="text-xs text-zinc-500">BKC</span></p>
                     </div>
                     ${isOwner ? `
-                        <div class="flex gap-2">
-                            <button class="promote-btn r-btn text-sm px-3 py-2 bg-gradient-to-r from-yellow-600/20 to-orange-600/20 border border-yellow-500/30 text-yellow-400 hover:border-yellow-400/50" data-id="${tokenId}" title="Boost visibility">
-                                <i class="fa-solid fa-rocket"></i>
+                        <div class="flex gap-2 items-center">
+                            <button class="promote-btn flex items-center justify-center w-10 h-10 rounded-xl bg-gradient-to-br from-yellow-500/20 to-orange-500/20 border border-yellow-500/40 text-yellow-400 hover:border-yellow-400 hover:from-yellow-500/30 hover:to-orange-500/30 transition-all" data-id="${tokenId}" title="Boost visibility">
+                                <i class="fa-solid fa-rocket text-sm"></i>
                             </button>
-                            <button class="withdraw-btn r-btn r-btn-danger text-sm px-4 py-2" data-id="${tokenId}">
-                                <i class="fa-solid fa-arrow-right-from-bracket mr-1"></i>Withdraw
+                            <button class="withdraw-btn flex items-center gap-1.5 h-10 px-4 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 text-sm font-semibold hover:bg-red-500/20 hover:border-red-400 transition-all" data-id="${tokenId}">
+                                <i class="fa-solid fa-arrow-right-from-bracket text-xs"></i>
+                                <span>Withdraw</span>
                             </button>
                         </div>
                     ` : `
-                        <button class="rent-btn r-btn r-btn-primary text-sm px-4 py-2" data-id="${tokenId}" ${inCooldown ? 'disabled' : ''}>
-                            <i class="fa-solid fa-clock mr-1"></i>Rent
+                        <button class="rent-btn flex items-center gap-1.5 h-10 px-5 rounded-xl bg-gradient-to-r from-green-500 to-emerald-600 text-white text-sm font-bold hover:from-green-400 hover:to-emerald-500 hover:shadow-lg hover:shadow-green-500/25 transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:shadow-none" data-id="${tokenId}" ${inCooldown ? 'disabled' : ''}>
+                            <i class="fa-solid fa-clock text-xs"></i>
+                            <span>Rent</span>
                         </button>
                     `}
                 </div>
@@ -586,8 +588,9 @@ function renderMyCard(listing, idx) {
                 </div>
                 <div class="flex justify-between items-center">
                     <span class="text-xs text-zinc-500"><i class="fa-solid fa-repeat mr-1"></i>${listing.rentalCount || 0} rentals</span>
-                    <button class="withdraw-btn r-btn r-btn-danger text-xs px-3 py-1.5" data-id="${tokenId}" ${rented ? 'disabled' : ''}>
-                        <i class="fa-solid fa-arrow-right-from-bracket mr-1"></i>Withdraw
+                    <button class="withdraw-btn flex items-center gap-1.5 h-8 px-3 rounded-lg bg-red-500/10 border border-red-500/30 text-red-400 text-xs font-semibold hover:bg-red-500/20 hover:border-red-400 transition-all disabled:opacity-40 disabled:cursor-not-allowed" data-id="${tokenId}" ${rented ? 'disabled' : ''}>
+                        <i class="fa-solid fa-arrow-right-from-bracket text-[10px]"></i>
+                        <span>Withdraw</span>
                     </button>
                 </div>
             </div>
