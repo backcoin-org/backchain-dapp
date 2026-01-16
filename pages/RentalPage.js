@@ -210,13 +210,16 @@ function injectStyles() {
             font-family: 'SF Mono', 'Roboto Mono', monospace;
         }
         
-        /* Promo Banner */
+        /* Promo Section - V14.4 with button */
+        .promo-section {
+            margin: 12px 16px 0 16px;
+        }
         .promo-banner {
             display: flex;
             align-items: center;
             justify-content: center;
             gap: 6px;
-            padding: 8px;
+            padding: 8px 12px;
             margin: 12px 16px 0 16px;
             background: linear-gradient(90deg, rgba(251,191,36,0.15), rgba(249,115,22,0.15));
             border: 1px solid rgba(251,191,36,0.25);
@@ -232,6 +235,76 @@ function injectStyles() {
             margin-left: auto;
             font-family: 'SF Mono', monospace;
             color: #fcd34d;
+        }
+        
+        /* Promo Banner with Button (Owner view) */
+        .promo-banner-with-btn {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 6px 6px 12px;
+            background: linear-gradient(90deg, rgba(251,191,36,0.12), rgba(249,115,22,0.1));
+            border: 1px solid rgba(251,191,36,0.2);
+            border-radius: 10px;
+        }
+        .promo-banner-with-btn .promo-info {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            flex: 1;
+            font-size: 10px;
+            font-weight: 700;
+            color: #fbbf24;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .promo-banner-with-btn .promo-info i { font-size: 10px; }
+        .promo-banner-with-btn .promo-value {
+            font-family: 'SF Mono', monospace;
+            color: #fcd34d;
+            margin-left: auto;
+        }
+        .promo-boost-btn {
+            width: 28px;
+            height: 28px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 11px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            border: none;
+            background: linear-gradient(145deg, rgba(251,191,36,0.3), rgba(249,115,22,0.2));
+            color: #fcd34d;
+        }
+        .promo-boost-btn:hover {
+            background: linear-gradient(145deg, rgba(251,191,36,0.5), rgba(249,115,22,0.35));
+            transform: scale(1.05);
+        }
+        
+        /* Add Promotion Button (no promo yet) */
+        .promo-add-btn {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            width: 100%;
+            padding: 10px 16px;
+            background: linear-gradient(145deg, rgba(251,191,36,0.08), rgba(249,115,22,0.05));
+            border: 1px dashed rgba(251,191,36,0.3);
+            border-radius: 10px;
+            font-size: 11px;
+            font-weight: 600;
+            color: #fbbf24;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        .promo-add-btn i { font-size: 12px; }
+        .promo-add-btn:hover {
+            background: linear-gradient(145deg, rgba(251,191,36,0.15), rgba(249,115,22,0.1));
+            border-color: rgba(251,191,36,0.5);
+            border-style: solid;
         }
         
         /* Image Section */
@@ -797,14 +870,34 @@ function renderNFTCard(listing, idx) {
                 </div>
             </div>
             
-            <!-- Promoted Banner -->
-            ${isPromoted ? `
+            <!-- Promo Section - Banner or Promote Button for Owner -->
+            ${isOwner ? `
+                <div class="promo-section">
+                    ${isPromoted ? `
+                        <div class="promo-banner-with-btn">
+                            <div class="promo-info">
+                                <i class="fa-solid fa-fire"></i>
+                                <span>PROMOTED</span>
+                                <span class="promo-value">${parseFloat(promoEth).toFixed(3)} ETH</span>
+                            </div>
+                            <button class="promote-btn promo-boost-btn" data-id="${tokenId}" title="Add more promotion">
+                                <i class="fa-solid fa-plus"></i>
+                            </button>
+                        </div>
+                    ` : `
+                        <button class="promote-btn promo-add-btn" data-id="${tokenId}">
+                            <i class="fa-solid fa-rocket"></i>
+                            <span>Promote Listing</span>
+                        </button>
+                    `}
+                </div>
+            ` : (isPromoted ? `
                 <div class="promo-banner">
                     <i class="fa-solid fa-fire"></i>
                     <span>PROMOTED</span>
                     <span class="promo-value">${parseFloat(promoEth).toFixed(3)} ETH</span>
                 </div>
-            ` : ''}
+            ` : '')}
             
             <!-- NFT Image Section -->
             <div class="card-image-section">
@@ -835,9 +928,6 @@ function renderNFTCard(listing, idx) {
                     
                     <div class="action-buttons">
                         ${isOwner ? `
-                            <button class="promote-btn action-btn-icon" data-id="${tokenId}" title="Promote listing">
-                                <i class="fa-solid fa-rocket"></i>
-                            </button>
                             <button class="withdraw-btn action-btn-secondary" data-id="${tokenId}">
                                 <i class="fa-solid fa-arrow-right-from-bracket"></i>
                                 Withdraw
