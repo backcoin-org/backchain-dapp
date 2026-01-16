@@ -1,5 +1,11 @@
 // js/pages/DashboardPage.js
-// ✅ PRODUCTION V11.1 - Compatible with Indexer V15.2 burn_stats
+// ✅ PRODUCTION V12.0 - Promote Activity + Charity Link
+//
+// V12.0 Changes:
+// - Added RENTAL_PROMOTE activity type with bullhorn icon
+// - Promote/Ads shows value in ETH instead of BKC
+// - Added Charity Pool quick link card in sidebar
+// - Fixed activity type detection for promote events
 //
 // V11.1 Changes:
 // - Updated to read from burn.totalBurned (from burn_stats/global)
@@ -92,6 +98,7 @@ const ACTIVITY_ICONS = {
     RENTAL_LIST: { icon: 'fa-tag', color: '#4ade80', bg: 'rgba(34,197,94,0.15)', label: '🏷️ Listed NFT', emoji: '🏷️' },
     RENTAL_RENT: { icon: 'fa-clock', color: '#22d3ee', bg: 'rgba(6,182,212,0.15)', label: '⏰ Rented NFT', emoji: '⏰' },
     RENTAL_WITHDRAW: { icon: 'fa-rotate-left', color: '#fb923c', bg: 'rgba(249,115,22,0.15)', label: '↩️ Withdrawn', emoji: '↩️' },
+    RENTAL_PROMOTE: { icon: 'fa-bullhorn', color: '#fbbf24', bg: 'rgba(251,191,36,0.2)', label: '📢 Promoted NFT', emoji: '📢' },
     
     // Fortune - Separado por modo
     FORTUNE_BET: { icon: 'fa-paw', color: '#f97316', bg: 'rgba(249,115,22,0.2)', label: '🐯 Fortune Bet', emoji: '🐯' },
@@ -205,8 +212,11 @@ function getActivityStyle(type, details = {}) {
     }
     
     // Rental
-    if (t === 'RENTALLISTED' || t.includes('LISTED') || t.includes('LIST')) {
+    if (t === 'RENTALLISTED' || t === 'NFTLISTED' || (t.includes('LIST') && !t.includes('PROMOTE'))) {
         return ACTIVITY_ICONS.RENTAL_LIST;
+    }
+    if (t === 'RENTALPROMOTED' || t === 'PROMOTED' || t === 'PROMOTE' || t.includes('PROMOT') || t.includes('ADS') || t.includes('ADVERTIS')) {
+        return ACTIVITY_ICONS.RENTAL_PROMOTE;
     }
     if (t === 'RENTALRENTED' || t === 'RENTED' || t.includes('RENTAL') && t.includes('RENT')) {
         return ACTIVITY_ICONS.RENTAL_RENT;
@@ -640,6 +650,22 @@ function renderDashboardLayout() {
                         </div>
                         <button class="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-2.5 rounded-lg text-sm go-to-notary transition-colors">
                             Notarize Now <i class="fa-solid fa-stamp ml-2"></i>
+                        </button>
+                    </div>
+
+                    <!-- CHARITY POOL CARD - 💝 Heart Theme -->
+                    <div class="glass-panel p-4 bg-gradient-to-b from-pink-900/20 to-transparent border-pink-500/20">
+                        <div class="flex items-center gap-2 mb-2">
+                            <i class="fa-solid fa-heart text-pink-400"></i>
+                            <h3 class="font-bold text-white text-sm">Charity Pool</h3>
+                        </div>
+                        <p class="text-xs text-zinc-400 mb-3">Support causes, make a difference</p>
+                        <div class="flex items-center justify-between text-[10px] text-zinc-500 mb-3">
+                            <span>Tokens Burned</span>
+                            <span class="text-pink-400 font-mono">🔥 From donations</span>
+                        </div>
+                        <button class="w-full bg-gradient-to-r from-pink-600 to-rose-600 hover:from-pink-500 hover:to-rose-500 text-white font-bold py-2.5 rounded-lg text-sm go-to-charity transition-colors">
+                            Donate Now <i class="fa-solid fa-heart ml-2"></i>
                         </button>
                     </div>
 
@@ -1473,11 +1499,40 @@ function renderActivityItem(item, showAddress = false) {
             extraInfo += `<span class="ml-1 text-[9px] text-zinc-500">(fee: ${feeNum})</span>`;
         }
     }
+    
+    // V12.0: Promote/Ads - Show value in ETH, not BKC
+    const isPromote = t.includes('PROMOT') || t.includes('ADS') || t.includes('ADVERTIS');
+    if (isPromote) {
+        const promoAmount = details.promotionFee || details.amount || item.amount;
+        if (promoAmount && BigInt(promoAmount) > 0n) {
+            // Convert from wei to ETH
+            const ethAmount = ethers.formatEther(BigInt(promoAmount));
+            const ethDisplay = parseFloat(ethAmount).toFixed(4);
+            extraInfo = `<span class="text-yellow-400 font-bold">${ethDisplay} ETH</span>`;
+        }
+        const tokenId = details.tokenId || item.tokenId;
+        if (tokenId) {
+            extraInfo += `<span class="ml-1 text-[9px] text-zinc-500">NFT #${tokenId}</span>`;
+        }
+    }
 
     const txLink = item.txHash ? `${EXPLORER_BASE_URL}${item.txHash}` : '#';
-    let rawAmount = item.amount || details.netAmount || details.amount || details.wagerAmount || details.prizeWon || "0";
-    const amountNum = formatBigNumber(BigInt(rawAmount));
-    const amountDisplay = amountNum > 0.001 ? amountNum.toFixed(2) : '';
+    
+    // V12.0: For promote, show ETH amount, not BKC
+    let amountDisplay = '';
+    if (isPromote) {
+        const promoAmount = details.promotionFee || details.amount || item.amount;
+        if (promoAmount && BigInt(promoAmount) > 0n) {
+            const ethAmount = ethers.formatEther(BigInt(promoAmount));
+            amountDisplay = parseFloat(ethAmount).toFixed(4);
+        }
+    } else {
+        let rawAmount = item.amount || details.netAmount || details.amount || details.wagerAmount || details.prizeWon || "0";
+        const amountNum = formatBigNumber(BigInt(rawAmount));
+        amountDisplay = amountNum > 0.001 ? amountNum.toFixed(2) : '';
+    }
+    
+    const currencyLabel = isPromote ? 'ETH' : 'BKC';
 
     // Layout padrão para outros tipos (não-Fortune)
     return `
@@ -1492,7 +1547,7 @@ function renderActivityItem(item, showAddress = false) {
                 </div>
             </div>
             <div class="text-right flex items-center gap-2">
-                ${amountDisplay ? `<p class="text-white text-xs font-mono">${amountDisplay} <span class="text-zinc-500">BKC</span></p>` : ''}
+                ${amountDisplay ? `<p class="text-white text-xs font-mono">${amountDisplay} <span class="text-zinc-500">${currencyLabel}</span></p>` : ''}
                 <i class="fa-solid fa-arrow-up-right-from-square text-zinc-600 group-hover:text-blue-400 transition-colors" style="font-size: 9px"></i>
             </div>
         </a>
@@ -1536,6 +1591,7 @@ function attachDashboardListeners() {
         if (target.closest('.go-to-rental')) { e.preventDefault(); window.navigateTo('rental'); }
         if (target.closest('.go-to-fortune')) { e.preventDefault(); window.navigateTo('actions'); }
         if (target.closest('.go-to-notary')) { e.preventDefault(); window.navigateTo('notary'); }
+        if (target.closest('.go-to-charity')) { e.preventDefault(); window.navigateTo('charity'); }
 
         if (target.closest('#open-booster-info')) {
             const modal = document.getElementById('booster-info-modal');
