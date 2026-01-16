@@ -157,6 +157,23 @@ function injectStyles() {
         .tiger-spin { animation: tiger-spin 1s linear infinite; }
         .tiger-celebrate { animation: tiger-celebrate 0.8s ease-out infinite; }
         
+        /* Hide number input arrows */
+        input[type="number"]::-webkit-outer-spin-button,
+        input[type="number"]::-webkit-inner-spin-button {
+            -webkit-appearance: none;
+            margin: 0;
+        }
+        input[type="number"] {
+            -moz-appearance: textfield;
+        }
+        
+        /* Wager box subtle glow animation */
+        @keyframes wager-glow {
+            0%, 100% { box-shadow: 0 0 15px rgba(245, 158, 11, 0.15); }
+            50% { box-shadow: 0 0 25px rgba(245, 158, 11, 0.3); }
+        }
+        .wager-box-glow { animation: wager-glow 2s ease-in-out infinite; }
+        
         /* Processing Animation */
         @keyframes processing-pulse {
             0%, 100% { opacity: 1; transform: scale(1); }
@@ -872,20 +889,51 @@ function renderWager(container) {
                 </div>
             </div>
 
-            <!-- Wager Input -->
+            <!-- Wager Input - ENHANCED UX -->
             <div class="mb-5">
-                <label class="block text-sm text-zinc-400 mb-2">Wager Amount (BKC)</label>
-                <div class="flex items-center gap-3 mb-3">
-                    <input type="number" id="custom-wager" value="${Game.wager}" min="1" max="${Math.floor(balanceNum)}"
-                        class="flex-1 bg-zinc-800/80 border border-zinc-700 rounded-xl px-4 py-3 text-white font-bold text-center text-xl focus:outline-none focus:border-amber-500/50">
-                    <span class="text-zinc-500 text-sm">/ ${balanceNum.toFixed(2)}</span>
+                <div class="flex items-center justify-between mb-3">
+                    <label class="text-sm text-zinc-400 flex items-center gap-2">
+                        <i class="fa-solid fa-coins text-amber-400"></i>
+                        Wager Amount
+                    </label>
+                    <span class="text-xs text-zinc-500">Balance: <span class="text-amber-400 font-bold">${balanceNum.toFixed(2)}</span> BKC</span>
                 </div>
                 
-                <!-- Quick Buttons -->
-                <div class="grid grid-cols-4 gap-2">
-                    ${[10, 50, 100, Math.floor(balanceNum)].map(val => `
-                        <button class="percent-btn py-2 text-sm font-bold rounded-lg transition-all ${Game.wager === val ? 'bg-amber-500/20 border border-amber-500/50 text-amber-400' : 'bg-zinc-800/60 border border-zinc-700/50 text-zinc-400 hover:border-zinc-600'}" data-value="${val}">
-                            ${val === Math.floor(balanceNum) ? 'MAX' : val}
+                <!-- Main Input with +/- Buttons -->
+                <div class="relative p-4 bg-gradient-to-br from-amber-500/10 to-orange-500/5 border-2 border-amber-500/40 rounded-2xl mb-3 hover:border-amber-500/60 transition-all group">
+                    <div class="absolute -top-2.5 left-4 px-2 bg-zinc-900">
+                        <span class="text-[10px] text-amber-400 font-bold uppercase tracking-wider animate-pulse">✨ Adjust your bet</span>
+                    </div>
+                    
+                    <div class="flex items-center justify-center gap-3">
+                        <button id="wager-minus-10" class="w-11 h-11 rounded-xl bg-zinc-800 hover:bg-red-500/20 border border-zinc-700 hover:border-red-500/50 text-zinc-400 hover:text-red-400 font-bold text-sm transition-all active:scale-95">
+                            -10
+                        </button>
+                        <button id="wager-minus" class="w-11 h-11 rounded-xl bg-zinc-800 hover:bg-red-500/20 border border-zinc-700 hover:border-red-500/50 text-zinc-400 hover:text-red-400 font-bold text-2xl transition-all active:scale-95">
+                            −
+                        </button>
+                        
+                        <div class="relative">
+                            <input type="number" id="custom-wager" value="${Game.wager}" min="1" max="${Math.floor(balanceNum)}"
+                                class="w-28 h-16 text-center text-3xl font-black rounded-xl bg-zinc-900/80 border-2 border-amber-500/50 text-amber-400 focus:outline-none focus:border-amber-400 focus:ring-2 focus:ring-amber-400/30 transition-all appearance-none"
+                                style="-moz-appearance: textfield;">
+                            <span class="absolute -bottom-1 left-1/2 -translate-x-1/2 text-[10px] text-zinc-500 bg-zinc-900 px-1">BKC</span>
+                        </div>
+                        
+                        <button id="wager-plus" class="w-11 h-11 rounded-xl bg-zinc-800 hover:bg-emerald-500/20 border border-zinc-700 hover:border-emerald-500/50 text-zinc-400 hover:text-emerald-400 font-bold text-2xl transition-all active:scale-95">
+                            +
+                        </button>
+                        <button id="wager-plus-10" class="w-11 h-11 rounded-xl bg-zinc-800 hover:bg-emerald-500/20 border border-zinc-700 hover:border-emerald-500/50 text-zinc-400 hover:text-emerald-400 font-bold text-sm transition-all active:scale-95">
+                            +10
+                        </button>
+                    </div>
+                </div>
+                
+                <!-- Quick Amount Buttons -->
+                <div class="grid grid-cols-5 gap-2">
+                    ${[10, 25, 50, 100, Math.floor(balanceNum)].map(val => `
+                        <button class="percent-btn py-2.5 text-sm font-bold rounded-xl transition-all ${Game.wager === val ? 'bg-gradient-to-r from-amber-500/30 to-orange-500/20 border-2 border-amber-500/60 text-amber-400 shadow-lg shadow-amber-500/20' : 'bg-zinc-800/60 border border-zinc-700/50 text-zinc-400 hover:border-amber-500/30 hover:text-amber-300'}" data-value="${val}">
+                            ${val === Math.floor(balanceNum) ? '<i class="fa-solid fa-fire text-orange-400"></i> MAX' : val}
                         </button>
                     `).join('')}
                 </div>
@@ -959,12 +1007,12 @@ function setupWagerEvents(maxMulti, balanceNum) {
         document.querySelectorAll('.percent-btn').forEach(btn => {
             const value = parseInt(btn.dataset.value);
             const isSelected = Game.wager === value;
-            btn.classList.toggle('bg-amber-500/20', isSelected);
-            btn.classList.toggle('border-amber-500/50', isSelected);
-            btn.classList.toggle('text-amber-400', isSelected);
-            btn.classList.toggle('border-zinc-700/50', !isSelected);
-            btn.classList.toggle('bg-zinc-800/60', !isSelected);
-            btn.classList.toggle('text-zinc-400', !isSelected);
+            
+            if (isSelected) {
+                btn.className = `percent-btn py-2.5 text-sm font-bold rounded-xl transition-all bg-gradient-to-r from-amber-500/30 to-orange-500/20 border-2 border-amber-500/60 text-amber-400 shadow-lg shadow-amber-500/20`;
+            } else {
+                btn.className = `percent-btn py-2.5 text-sm font-bold rounded-xl transition-all bg-zinc-800/60 border border-zinc-700/50 text-zinc-400 hover:border-amber-500/30 hover:text-amber-300`;
+            }
         });
     };
 
@@ -976,6 +1024,20 @@ function setupWagerEvents(maxMulti, balanceNum) {
     
     document.getElementById('custom-wager')?.addEventListener('input', (e) => {
         updateWager(parseInt(e.target.value) || 1);
+    });
+    
+    // New +/- buttons event listeners
+    document.getElementById('wager-minus')?.addEventListener('click', () => {
+        updateWager(Game.wager - 1);
+    });
+    document.getElementById('wager-plus')?.addEventListener('click', () => {
+        updateWager(Game.wager + 1);
+    });
+    document.getElementById('wager-minus-10')?.addEventListener('click', () => {
+        updateWager(Game.wager - 10);
+    });
+    document.getElementById('wager-plus-10')?.addEventListener('click', () => {
+        updateWager(Game.wager + 10);
     });
     
     document.getElementById('btn-faucet')?.addEventListener('click', async () => {
@@ -1145,10 +1207,13 @@ function renderResult(container) {
     const matchCount = matches.filter(m => m).length;
     const isWin = result.prizeWon > 0 || matchCount > 0;
     
-    // Calculate display prize
-    let displayPrize = result.prizeWon;
-    if (!displayPrize && matchCount > 0) {
-        displayPrize = 0;
+    // Calculate display prize - CONVERT FROM WEI TO BKC!
+    let displayPrize = 0;
+    if (result.prizeWon && result.prizeWon > 0n) {
+        // prizeWon comes in wei (BigInt), convert to human-readable BKC
+        displayPrize = formatBigNumber(BigInt(result.prizeWon));
+    } else if (matchCount > 0) {
+        // Fallback calculation if no prizeWon but matches exist
         matches.forEach((hit, i) => {
             if (hit) {
                 const tier = isJackpot ? TIERS[2] : TIERS[i];
@@ -1156,6 +1221,11 @@ function renderResult(container) {
             }
         });
     }
+    
+    // Format prize for display (handles both number and BigInt scenarios)
+    const displayPrizeFormatted = typeof displayPrize === 'number' 
+        ? displayPrize.toLocaleString(undefined, { maximumFractionDigits: 2 })
+        : displayPrize.toLocaleString();
     
     container.innerHTML = `
         <div class="bg-gradient-to-br ${isWin ? 'from-emerald-900/30 to-green-900/10 border-emerald-500/30' : 'from-zinc-900 to-zinc-800/50 border-zinc-700/50'} border rounded-2xl p-4 sm:p-6 relative overflow-hidden" id="result-container">
@@ -1165,7 +1235,7 @@ function renderResult(container) {
                 ${isWin ? `
                     <div class="text-5xl mb-2">🎉</div>
                     <h2 class="text-2xl font-black text-emerald-400 mb-1">YOU WON!</h2>
-                    <p class="text-3xl font-black text-white">${displayPrize.toLocaleString()} BKC</p>
+                    <p class="text-3xl font-black text-white">${displayPrizeFormatted} BKC</p>
                 ` : `
                     <div class="text-5xl mb-2">😔</div>
                     <h2 class="text-xl font-bold text-zinc-400 mb-1">No Match</h2>
