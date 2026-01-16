@@ -147,9 +147,334 @@ function injectStyles() {
         .r-cooldown-text{color:#a5b4fc;font-size:12px;font-weight:600}
         .r-cooldown-time{color:#818cf8;font-size:18px;font-weight:700;font-family:'SF Mono',monospace}
         
+        /* ========== V14.2 REDESIGNED NFT CARDS ========== */
+        @keyframes cardFadeIn { from{opacity:0;transform:translateY(20px) scale(0.95)} to{opacity:1;transform:translateY(0) scale(1)} }
+        @keyframes shimmer { 0%{background-position:-200% 0} 100%{background-position:200% 0} }
+        @keyframes floatImage { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-8px)} }
+        
+        .nft-card-v2 {
+            position:relative;
+            background: linear-gradient(165deg, #1a1a1d 0%, #0d0d0f 100%);
+            border: 1px solid rgba(255,255,255,0.06);
+            border-radius: 20px;
+            overflow: hidden;
+            animation: cardFadeIn 0.5s ease-out forwards;
+            opacity: 0;
+            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .nft-card-v2:hover {
+            transform: translateY(-6px);
+            border-color: rgba(34,197,94,0.3);
+            box-shadow: 0 20px 40px -15px rgba(0,0,0,0.5), 0 0 0 1px rgba(34,197,94,0.1);
+        }
+        .nft-card-v2.promoted {
+            border-color: rgba(251,191,36,0.3);
+            box-shadow: 0 0 30px -10px rgba(251,191,36,0.2);
+        }
+        .nft-card-v2.promoted:hover {
+            border-color: rgba(251,191,36,0.5);
+            box-shadow: 0 20px 40px -15px rgba(0,0,0,0.5), 0 0 40px -10px rgba(251,191,36,0.3);
+        }
+        .nft-card-v2.owned { border-color: rgba(59,130,246,0.25); }
+        .nft-card-v2.cooldown { opacity:0.6; filter:grayscale(40%); }
+        .nft-card-v2.cooldown:hover { transform:none; }
+        
+        /* Card Header */
+        .card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 14px 16px 0 16px;
+        }
+        .tier-badge {
+            padding: 6px 12px;
+            border-radius: 8px;
+            font-size: 11px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            background: rgba(255,255,255,0.05);
+            color: #a1a1aa;
+        }
+        .tier-badge.tier-diamond { background: linear-gradient(135deg, rgba(34,211,238,0.2), rgba(34,211,238,0.05)); color: #22d3ee; border: 1px solid rgba(34,211,238,0.3); }
+        .tier-badge.tier-platinum { background: linear-gradient(135deg, rgba(203,213,225,0.2), rgba(203,213,225,0.05)); color: #cbd5e1; border: 1px solid rgba(203,213,225,0.3); }
+        .tier-badge.tier-gold { background: linear-gradient(135deg, rgba(251,191,36,0.2), rgba(251,191,36,0.05)); color: #fbbf24; border: 1px solid rgba(251,191,36,0.3); }
+        .tier-badge.tier-silver { background: linear-gradient(135deg, rgba(156,163,175,0.2), rgba(156,163,175,0.05)); color: #9ca3af; border: 1px solid rgba(156,163,175,0.3); }
+        .tier-badge.tier-bronze { background: linear-gradient(135deg, rgba(251,146,60,0.2), rgba(251,146,60,0.05)); color: #fb923c; border: 1px solid rgba(251,146,60,0.3); }
+        .tier-badge.tier-iron { background: linear-gradient(135deg, rgba(113,113,122,0.2), rgba(113,113,122,0.05)); color: #71717a; border: 1px solid rgba(113,113,122,0.3); }
+        .tier-badge.tier-crystal { background: linear-gradient(135deg, rgba(139,92,246,0.2), rgba(139,92,246,0.05)); color: #a78bfa; border: 1px solid rgba(139,92,246,0.3); }
+        
+        .boost-percent {
+            font-size: 13px;
+            font-weight: 800;
+            font-family: 'SF Mono', 'Roboto Mono', monospace;
+        }
+        
+        /* Promo Banner */
+        .promo-banner {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            padding: 8px;
+            margin: 12px 16px 0 16px;
+            background: linear-gradient(90deg, rgba(251,191,36,0.15), rgba(249,115,22,0.15));
+            border: 1px solid rgba(251,191,36,0.25);
+            border-radius: 10px;
+            font-size: 10px;
+            font-weight: 700;
+            color: #fbbf24;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .promo-banner i { font-size: 10px; }
+        .promo-value { 
+            margin-left: auto;
+            font-family: 'SF Mono', monospace;
+            color: #fcd34d;
+        }
+        
+        /* Image Section */
+        .card-image-section {
+            position: relative;
+            aspect-ratio: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 24px;
+            margin: 8px 16px;
+        }
+        .image-glow {
+            position: absolute;
+            inset: 0;
+            border-radius: 16px;
+            opacity: 0.6;
+            transition: opacity 0.3s ease;
+        }
+        .nft-card-v2:hover .image-glow { opacity: 1; }
+        .card-nft-image {
+            width: 70%;
+            height: 70%;
+            object-fit: contain;
+            filter: drop-shadow(0 12px 24px rgba(0,0,0,0.4));
+            transition: transform 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+            z-index: 1;
+            animation: floatImage 4s ease-in-out infinite;
+        }
+        .nft-card-v2:hover .card-nft-image {
+            transform: scale(1.08) rotate(3deg);
+        }
+        .owner-badge, .cooldown-badge {
+            position: absolute;
+            bottom: 12px;
+            left: 50%;
+            transform: translateX(-50%);
+            padding: 5px 12px;
+            border-radius: 20px;
+            font-size: 10px;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            z-index: 2;
+        }
+        .owner-badge {
+            background: rgba(59,130,246,0.2);
+            color: #60a5fa;
+            border: 1px solid rgba(59,130,246,0.3);
+        }
+        .cooldown-badge {
+            background: rgba(99,102,241,0.2);
+            color: #a5b4fc;
+            border: 1px solid rgba(99,102,241,0.3);
+        }
+        
+        /* Card Info Section */
+        .card-info {
+            padding: 0 20px 20px 20px;
+        }
+        .nft-identity {
+            display: flex;
+            align-items: baseline;
+            justify-content: space-between;
+            margin-bottom: 12px;
+        }
+        .nft-name {
+            font-size: 16px;
+            font-weight: 700;
+            color: #fff;
+            margin: 0;
+        }
+        .nft-id {
+            font-size: 12px;
+            font-family: 'SF Mono', monospace;
+            font-weight: 600;
+        }
+        .card-divider {
+            height: 1px;
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.08), transparent);
+            margin-bottom: 16px;
+        }
+        
+        /* Footer with Price & Actions */
+        .card-footer {
+            display: flex;
+            align-items: flex-end;
+            justify-content: space-between;
+            gap: 12px;
+        }
+        .price-section { flex-shrink: 0; }
+        .price-label {
+            display: block;
+            font-size: 10px;
+            font-weight: 600;
+            color: #71717a;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 4px;
+        }
+        .price-value {
+            display: flex;
+            align-items: baseline;
+            gap: 6px;
+        }
+        .price-amount {
+            font-size: 22px;
+            font-weight: 800;
+            color: #fff;
+            line-height: 1;
+        }
+        .price-currency {
+            font-size: 12px;
+            font-weight: 600;
+            color: #52525b;
+        }
+        
+        /* Action Buttons */
+        .action-buttons {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+        }
+        .action-btn-icon {
+            width: 42px;
+            height: 42px;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.25s ease;
+            border: 1px solid rgba(251,191,36,0.3);
+            background: linear-gradient(135deg, rgba(251,191,36,0.12), rgba(249,115,22,0.08));
+            color: #fbbf24;
+        }
+        .action-btn-icon:hover {
+            background: linear-gradient(135deg, rgba(251,191,36,0.25), rgba(249,115,22,0.15));
+            border-color: rgba(251,191,36,0.5);
+            transform: translateY(-2px);
+            box-shadow: 0 8px 20px -6px rgba(251,191,36,0.3);
+        }
+        .action-btn-secondary {
+            height: 42px;
+            padding: 0 16px;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.25s ease;
+            border: 1px solid rgba(239,68,68,0.25);
+            background: rgba(239,68,68,0.08);
+            color: #f87171;
+        }
+        .action-btn-secondary i { font-size: 12px; }
+        .action-btn-secondary:hover {
+            background: rgba(239,68,68,0.15);
+            border-color: rgba(239,68,68,0.4);
+            transform: translateY(-2px);
+        }
+        .action-btn-secondary:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+            transform: none !important;
+        }
+        .action-btn-primary {
+            height: 42px;
+            padding: 0 20px;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 13px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.25s ease;
+            border: none;
+            background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
+            color: #fff;
+            box-shadow: 0 4px 15px -4px rgba(34,197,94,0.4);
+        }
+        .action-btn-primary i { font-size: 12px; }
+        .action-btn-primary:hover {
+            background: linear-gradient(135deg, #4ade80 0%, #22c55e 100%);
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px -6px rgba(34,197,94,0.5);
+        }
+        .action-btn-primary:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+            transform: none !important;
+            box-shadow: none;
+        }
+        
+        /* Cooldown Overlay V2 */
+        .card-cooldown-overlay {
+            position: absolute;
+            inset: 0;
+            background: rgba(0,0,0,0.75);
+            backdrop-filter: blur(4px);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 30;
+            border-radius: 20px;
+        }
+        .cooldown-content {
+            text-align: center;
+        }
+        .cooldown-content i {
+            font-size: 36px;
+            color: #818cf8;
+            margin-bottom: 12px;
+            display: block;
+            animation: r-pulse 2s ease-in-out infinite;
+        }
+        .cooldown-label {
+            display: block;
+            font-size: 11px;
+            font-weight: 600;
+            color: #a5b4fc;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 4px;
+        }
+        .cooldown-timer {
+            display: block;
+            font-size: 20px;
+            font-weight: 800;
+            color: #c7d2fe;
+            font-family: 'SF Mono', monospace;
+        }
+        
         @media(max-width:768px){
             .r-grid{grid-template-columns:1fr!important}
             .r-header-stats{display:none!important}
+            .card-footer { flex-direction: column; align-items: stretch; }
+            .action-buttons { justify-content: flex-end; }
         }
     `;
     document.head.appendChild(css);
@@ -442,59 +767,79 @@ function renderNFTCard(listing, idx) {
     const isPromoted = promoAmount > 0n;
     const promoEth = isPromoted ? ethers.formatEther(promoAmount) : '0';
     
+    // V14.2: Completely redesigned card
     return `
-        <div class="r-card r-fadeUp ${isOwner ? 'ring-2 ring-blue-500/30' : ''} ${isPromoted ? 'ring-2 ring-yellow-500/40' : ''} ${inCooldown ? 'cooldown' : ''}" style="animation-delay:${idx * 40}ms">
+        <div class="nft-card-v2 ${isPromoted ? 'promoted' : ''} ${isOwner ? 'owned' : ''} ${inCooldown ? 'cooldown' : ''}" style="animation-delay:${idx * 50}ms">
             ${inCooldown && !isOwner ? `
-                <div class="r-cooldown-overlay">
-                    <i class="fa-solid fa-hourglass-half r-cooldown-icon"></i>
-                    <p class="r-cooldown-text">Cooldown Period</p>
-                    <p class="r-cooldown-time">${cooldownRemaining}</p>
-                    <p class="text-[10px] text-zinc-400 mt-2">Available soon</p>
+                <div class="card-cooldown-overlay">
+                    <div class="cooldown-content">
+                        <i class="fa-solid fa-hourglass-half"></i>
+                        <span class="cooldown-label">Cooldown</span>
+                        <span class="cooldown-timer">${cooldownRemaining}</span>
+                    </div>
                 </div>
             ` : ''}
-            <div class="img-wrap">
-                <div class="absolute top-3 left-3 z-10 flex flex-col gap-1">
-                    <span class="r-badge tier-${tier.name.toLowerCase()}">${tier.name}</span>
-                    ${isPromoted ? `<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-gradient-to-r from-yellow-500/20 to-orange-500/20 text-yellow-400 border border-yellow-500/30 flex items-center gap-1">
-                        <i class="fa-solid fa-fire text-[8px]"></i>PROMOTED
-                    </span>` : ''}
-                    ${inCooldown && isOwner ? `<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-500/20 text-indigo-400 border border-indigo-500/30 flex items-center gap-1">
-                        <i class="fa-solid fa-hourglass-half text-[8px]"></i>${cooldownRemaining}
-                    </span>` : ''}
+            
+            <!-- Card Header with Tier & Badges -->
+            <div class="card-header">
+                <div class="tier-badge tier-${tier.name.toLowerCase()}">${tier.name}</div>
+                <div class="header-right">
+                    <span class="boost-percent" style="color:${color.accent}">+${(listing.boostBips||0)/100}%</span>
                 </div>
-                <div class="absolute top-3 right-3 z-10 flex flex-col gap-1 items-end">
-                    <span class="px-2.5 py-1 rounded-lg text-[11px] font-bold bg-black/50 backdrop-blur" style="color:${color.accent}">+${(listing.boostBips||0)/100}%</span>
-                    ${isOwner ? `<span class="px-2 py-0.5 rounded text-[9px] font-bold bg-blue-500/20 text-blue-400 border border-blue-500/30">YOURS</span>` : ''}
-                    ${isPromoted ? `<span class="px-2 py-0.5 rounded text-[9px] font-mono bg-yellow-500/10 text-yellow-400">${parseFloat(promoEth).toFixed(4)} ETH</span>` : ''}
-                </div>
-                <img src="${buildImageUrl(listing.img || tier.img)}" class="nft-img" onerror="this.src='./assets/nft.png'">
             </div>
-            <div class="p-4 relative z-10">
-                <div class="mb-3">
-                    <h3 class="text-white font-bold">${tier.name} Booster</h3>
-                    <p class="text-xs font-mono" style="color:${color.accent}">#${tokenId}</p>
+            
+            <!-- Promoted Banner -->
+            ${isPromoted ? `
+                <div class="promo-banner">
+                    <i class="fa-solid fa-fire"></i>
+                    <span>PROMOTED</span>
+                    <span class="promo-value">${parseFloat(promoEth).toFixed(3)} ETH</span>
                 </div>
-                <div class="flex items-end justify-between">
-                    <div>
-                        <p class="text-[9px] text-zinc-500 uppercase mb-0.5">Price/hr</p>
-                        <p class="text-xl font-bold text-white">${price} <span class="text-xs text-zinc-500">BKC</span></p>
-                    </div>
-                    ${isOwner ? `
-                        <div class="flex gap-2 items-center">
-                            <button class="promote-btn flex items-center justify-center w-10 h-10 rounded-xl bg-gradient-to-br from-yellow-500/20 to-orange-500/20 border border-yellow-500/40 text-yellow-400 hover:border-yellow-400 hover:from-yellow-500/30 hover:to-orange-500/30 transition-all" data-id="${tokenId}" title="Boost visibility">
-                                <i class="fa-solid fa-rocket text-sm"></i>
-                            </button>
-                            <button class="withdraw-btn flex items-center gap-1.5 h-10 px-4 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 text-sm font-semibold hover:bg-red-500/20 hover:border-red-400 transition-all" data-id="${tokenId}">
-                                <i class="fa-solid fa-arrow-right-from-bracket text-xs"></i>
-                                <span>Withdraw</span>
-                            </button>
+            ` : ''}
+            
+            <!-- NFT Image Section -->
+            <div class="card-image-section">
+                <div class="image-glow" style="background: radial-gradient(circle, ${color.accent}15 0%, transparent 70%);"></div>
+                <img src="${buildImageUrl(listing.img || tier.img)}" class="card-nft-image" onerror="this.src='./assets/nft.png'">
+                ${isOwner ? `<div class="owner-badge"><i class="fa-solid fa-user"></i> YOURS</div>` : ''}
+                ${inCooldown && isOwner ? `<div class="cooldown-badge"><i class="fa-solid fa-clock"></i> ${cooldownRemaining}</div>` : ''}
+            </div>
+            
+            <!-- Card Info Section -->
+            <div class="card-info">
+                <div class="nft-identity">
+                    <h3 class="nft-name">${tier.name} Booster</h3>
+                    <span class="nft-id" style="color:${color.accent}">#${tokenId}</span>
+                </div>
+                
+                <div class="card-divider"></div>
+                
+                <!-- Price & Actions Row -->
+                <div class="card-footer">
+                    <div class="price-section">
+                        <span class="price-label">Price/hr</span>
+                        <div class="price-value">
+                            <span class="price-amount">${price}</span>
+                            <span class="price-currency">BKC</span>
                         </div>
-                    ` : `
-                        <button class="rent-btn flex items-center gap-1.5 h-10 px-5 rounded-xl bg-gradient-to-r from-green-500 to-emerald-600 text-white text-sm font-bold hover:from-green-400 hover:to-emerald-500 hover:shadow-lg hover:shadow-green-500/25 transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:shadow-none" data-id="${tokenId}" ${inCooldown ? 'disabled' : ''}>
-                            <i class="fa-solid fa-clock text-xs"></i>
-                            <span>Rent</span>
-                        </button>
-                    `}
+                    </div>
+                    
+                    <div class="action-buttons">
+                        ${isOwner ? `
+                            <button class="promote-btn action-btn-icon" data-id="${tokenId}" title="Promote listing">
+                                <i class="fa-solid fa-rocket"></i>
+                            </button>
+                            <button class="withdraw-btn action-btn-secondary" data-id="${tokenId}">
+                                <i class="fa-solid fa-arrow-right-from-bracket"></i>
+                                Withdraw
+                            </button>
+                        ` : `
+                            <button class="rent-btn action-btn-primary" data-id="${tokenId}" ${inCooldown ? 'disabled' : ''}>
+                                <i class="fa-solid fa-bolt"></i>
+                                Rent Now
+                            </button>
+                        `}
+                    </div>
                 </div>
             </div>
         </div>`;
