@@ -1,5 +1,5 @@
 // js/pages/RentalPage.js
-// ✅ PRODUCTION V13.0 - MetaAds Promotions (List with Promotion Option)
+// ✅ PRODUCTION V14.0 - Enhanced Promotions + 24h Cooldown + Smart Sorting
 const ethers = window.ethers;
 import { State } from '../state.js';
 import { loadRentalListings, loadUserRentals, loadMyBoostersFromAPI, API_ENDPOINTS } from '../modules/data.js';
@@ -12,15 +12,19 @@ const AIRBNFT_IMAGE = "./assets/airbnft.png";
 const EXPLORER_TX = "https://sepolia.arbiscan.io/tx/";
 const TREASURY_WALLET = '0xc93030333E3a235c2605BcB7C7330650B600B6D0';
 
+// V14.0: Cooldown period after rental ends (24 hours in seconds)
+const COOLDOWN_PERIOD = 24 * 60 * 60; // 24 hours
+
 const RentalState = {
     activeTab: 'marketplace',
     filterTier: 'ALL',
-    sortBy: 'promotion', // V12.5: Default sort by promotion
+    sortBy: 'featured', // V14.0: Default sort - promoted first, then longest idle
     selectedRentalId: null,
     isLoading: false,
     isTransactionPending: false,
     countdownIntervals: [],
-    promotions: new Map() // V12.5: Store promotions from contract
+    promotions: new Map(), // V12.5: Store promotions from contract
+    pendingPromotion: null // V14.0: Track pending promotion for retry
 };
 
 // Utilities
@@ -47,6 +51,17 @@ function formatTimeRemaining(endTime) {
     return { text: `${s}s`, expired: false, seconds: remaining };
 }
 
+// V14.0: Format cooldown time
+function formatCooldownRemaining(cooldownEnds) {
+    const now = Math.floor(Date.now() / 1000);
+    const remaining = cooldownEnds - now;
+    if (remaining <= 0) return null;
+    const h = Math.floor(remaining / 3600);
+    const m = Math.floor((remaining % 3600) / 60);
+    if (h > 0) return `${h}h ${m}m`;
+    return `${m}m`;
+}
+
 function getTierInfo(boostBips) {
     return boosterTiers.find(t => t.boostBips === Number(boostBips)) || { name: 'Unknown', img: './assets/nft.png', boostBips: 0 };
 }
@@ -65,9 +80,9 @@ function getTierColor(name) {
 
 // Styles
 function injectStyles() {
-    if (document.getElementById('rental-v12-css')) return;
+    if (document.getElementById('rental-v14-css')) return;
     const css = document.createElement('style');
-    css.id = 'rental-v12-css';
+    css.id = 'rental-v14-css';
     css.textContent = `
         @keyframes r-float { 0%,100%{transform:translateY(0) rotate(-2deg)} 50%{transform:translateY(-10px) rotate(2deg)} }
         @keyframes r-glow { 0%,100%{filter:drop-shadow(0 0 15px rgba(34,197,94,0.3))} 50%{filter:drop-shadow(0 0 30px rgba(34,197,94,0.6))} }
@@ -86,10 +101,13 @@ function injectStyles() {
         
         .r-card{background:linear-gradient(160deg,rgba(24,24,27,.95),rgba(39,39,42,.9));border:1px solid rgba(63,63,70,.5);border-radius:24px;overflow:hidden;transition:all .4s cubic-bezier(.4,0,.2,1)}
         .r-card:hover{transform:translateY(-8px) scale(1.01);border-color:rgba(34,197,94,.4);box-shadow:0 30px 60px -15px rgba(0,0,0,.4),0 0 30px -10px rgba(34,197,94,.15)}
+        .r-card.cooldown{opacity:.7;filter:grayscale(30%)}
+        .r-card.cooldown:hover{transform:none;border-color:rgba(63,63,70,.5)}
         .r-card .img-wrap{aspect-ratio:1;background:radial-gradient(circle at 50% 30%,rgba(34,197,94,.08),transparent 60%);display:flex;align-items:center;justify-content:center;padding:20px;position:relative}
         .r-card .img-wrap::after{content:'';position:absolute;bottom:0;left:0;right:0;height:50%;background:linear-gradient(to top,rgba(24,24,27,1),transparent);pointer-events:none}
         .r-card .nft-img{width:65%;height:65%;object-fit:contain;filter:drop-shadow(0 15px 30px rgba(0,0,0,.5));transition:transform .5s ease;z-index:1}
         .r-card:hover .nft-img{transform:scale(1.12) rotate(4deg)}
+        .r-card.cooldown .nft-img{filter:drop-shadow(0 15px 30px rgba(0,0,0,.5)) grayscale(50%)}
         
         .r-badge{padding:5px 12px;border-radius:10px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px}
         
@@ -116,12 +134,18 @@ function injectStyles() {
         .r-timer{font-family:'SF Mono',monospace;font-size:12px;font-weight:700;padding:6px 12px;border-radius:8px;background:rgba(34,197,94,.15);color:#22c55e;border:1px solid rgba(34,197,94,.25)}
         .r-timer.warn{background:rgba(245,158,11,.15);color:#f59e0b;border-color:rgba(245,158,11,.25)}
         .r-timer.crit{background:rgba(239,68,68,.15);color:#ef4444;border-color:rgba(239,68,68,.25);animation:r-pulse 1s infinite}
+        .r-timer.cooldown{background:rgba(99,102,241,.15);color:#818cf8;border-color:rgba(99,102,241,.25)}
         
         .r-stat{padding:16px;border-radius:16px;background:linear-gradient(145deg,rgba(24,24,27,.9),rgba(39,39,42,.8));border:1px solid rgba(63,63,70,.4);transition:all .25s}
         .r-stat:hover{border-color:rgba(34,197,94,.25);transform:translateY(-3px)}
         
         .r-empty{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:50px 20px;text-align:center}
         .r-empty img{width:80px;height:80px;opacity:.25;margin-bottom:20px}
+        
+        .r-cooldown-overlay{position:absolute;inset:0;background:rgba(0,0,0,.6);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:20;border-radius:24px}
+        .r-cooldown-icon{font-size:32px;color:#818cf8;margin-bottom:8px}
+        .r-cooldown-text{color:#a5b4fc;font-size:12px;font-weight:600}
+        .r-cooldown-time{color:#818cf8;font-size:18px;font-weight:700;font-family:'SF Mono',monospace}
         
         @media(max-width:768px){
             .r-grid{grid-template-columns:1fr!important}
@@ -204,9 +228,13 @@ function renderHeaderStats() {
     const earnings = myListings.reduce((s, l) => s + Number(ethers.formatEther(BigInt(l.totalEarnings || 0))), 0);
     const now = Math.floor(Date.now() / 1000);
     
-    // V12.1: Count ALL available NFTs (including user's own)
+    // V14.0: Count available NFTs excluding those in cooldown
     const available = listings.filter(l => {
-        return !l.isRented && !(l.rentalEndTime && Number(l.rentalEndTime) > now);
+        if (l.isRented || (l.rentalEndTime && Number(l.rentalEndTime) > now)) return false;
+        // Check cooldown
+        const cooldownEnds = getCooldownEndTime(l);
+        if (cooldownEnds && cooldownEnds > now) return false;
+        return true;
     }).length;
     
     return `
@@ -277,12 +305,54 @@ function updateBadges() {
     if (el2) el2.textContent = activeRentals.length;
 }
 
+// V14.0: Calculate cooldown end time for a listing
+function getCooldownEndTime(listing) {
+    // Cooldown starts when rental ends
+    // If rentalEndTime exists and rental is not currently active, calculate cooldown end
+    if (listing.lastRentalEndTime) {
+        return Number(listing.lastRentalEndTime) + COOLDOWN_PERIOD;
+    }
+    if (listing.rentalEndTime && !listing.isRented) {
+        const rentalEnd = Number(listing.rentalEndTime);
+        const now = Math.floor(Date.now() / 1000);
+        if (rentalEnd < now) {
+            // Rental has ended, cooldown applies
+            return rentalEnd + COOLDOWN_PERIOD;
+        }
+    }
+    return null;
+}
+
+// V14.0: Check if listing is in cooldown
+function isInCooldown(listing) {
+    const now = Math.floor(Date.now() / 1000);
+    const cooldownEnds = getCooldownEndTime(listing);
+    return cooldownEnds && cooldownEnds > now;
+}
+
+// V14.0: Get time since last rental (for sorting - higher = longer idle = more priority)
+function getIdleTime(listing) {
+    const now = Math.floor(Date.now() / 1000);
+    
+    // If never rented, use listing creation time or a very old date
+    if (!listing.lastRentalEndTime && !listing.rentalEndTime) {
+        return listing.createdAt ? now - Number(listing.createdAt) : Number.MAX_SAFE_INTEGER;
+    }
+    
+    const lastEnd = listing.lastRentalEndTime 
+        ? Number(listing.lastRentalEndTime) 
+        : (listing.rentalEndTime ? Number(listing.rentalEndTime) : 0);
+    
+    if (lastEnd > now) return 0; // Currently rented
+    return now - lastEnd;
+}
+
 // MARKETPLACE
 function renderMarketplace() {
     const listings = State.rentalListings || [];
     const now = Math.floor(Date.now() / 1000);
     
-    // V12.1: Show ALL listings (including user's own), filter only by rental status and tier
+    // V14.0: Enhanced filtering with cooldown support
     let available = listings.filter(l => {
         // Hide currently rented NFTs
         if (l.isRented || (l.rentalEndTime && Number(l.rentalEndTime) > now)) return false;
@@ -291,25 +361,33 @@ function renderMarketplace() {
         return true;
     });
     
-    // V13.0: Sort by promotion first (highest paid first), then by selected criteria
-    // Use promotionFee from API (Firebase) which is kept in sync by indexer
+    // V14.0: Smart sorting - promoted first, then by idle time (longest idle first)
     available.sort((a, b) => {
         // Get promotion from API data first, fallback to contract data
         const promoA = BigInt(a.promotionFee || '0') || (RentalState.promotions.get(normalizeTokenId(a.tokenId)) || 0n);
         const promoB = BigInt(b.promotionFee || '0') || (RentalState.promotions.get(normalizeTokenId(b.tokenId)) || 0n);
         
-        // If sorting by promotion, always prioritize promoted listings
-        if (RentalState.sortBy === 'promotion') {
-            if (promoB > promoA) return 1;
-            if (promoB < promoA) return -1;
-            // If same promotion, sort by price
+        // Check cooldown status
+        const cooldownA = isInCooldown(a);
+        const cooldownB = isInCooldown(b);
+        
+        // Items NOT in cooldown come first
+        if (!cooldownA && cooldownB) return -1;
+        if (cooldownA && !cooldownB) return 1;
+        
+        // Then sort by promotion (higher first)
+        if (promoB > promoA) return 1;
+        if (promoB < promoA) return -1;
+        
+        // V14.0: If same promotion level, sort by idle time (longest idle first)
+        if (RentalState.sortBy === 'featured') {
+            const idleA = getIdleTime(a);
+            const idleB = getIdleTime(b);
+            if (idleB !== idleA) return idleB - idleA; // Longer idle = higher priority
+            // If same idle time, sort by price (lower first)
             const pa = BigInt(a.pricePerHour || 0), pb = BigInt(b.pricePerHour || 0);
             return pa < pb ? -1 : 1;
         }
-        
-        // For other sorts, still show promoted first, then apply criteria
-        if (promoB > promoA) return 1;
-        if (promoB < promoA) return -1;
         
         const pa = BigInt(a.pricePerHour || 0), pb = BigInt(b.pricePerHour || 0);
         if (RentalState.sortBy === 'price-low') return pa < pb ? -1 : 1;
@@ -326,7 +404,7 @@ function renderMarketplace() {
                 </div>
                 <div class="flex items-center gap-3">
                     <select id="sort-select" class="bg-zinc-800/80 border border-zinc-700 rounded-xl px-3 py-2 text-sm text-white outline-none cursor-pointer">
-                        <option value="promotion" ${RentalState.sortBy === 'promotion' ? 'selected' : ''}>🔥 Featured</option>
+                        <option value="featured" ${RentalState.sortBy === 'featured' ? 'selected' : ''}>🔥 Featured</option>
                         <option value="price-low" ${RentalState.sortBy === 'price-low' ? 'selected' : ''}>Price ↑</option>
                         <option value="price-high" ${RentalState.sortBy === 'price-high' ? 'selected' : ''}>Price ↓</option>
                         <option value="boost-high" ${RentalState.sortBy === 'boost-high' ? 'selected' : ''}>Boost ↓</option>
@@ -348,10 +426,16 @@ function renderNFTCard(listing, idx) {
     const price = formatBigNumber(BigInt(listing.pricePerHour || 0)).toFixed(2);
     const tokenId = normalizeTokenId(listing.tokenId);
     
-    // V12.1: Check if this NFT belongs to the connected user
+    // Check if this NFT belongs to the connected user
     const isOwner = State.isConnected && addressesMatch(listing.owner, State.userAddress);
     
-    // V13.0: Check promotion status from API first, fallback to contract
+    // V14.0: Check cooldown status
+    const cooldownEnds = getCooldownEndTime(listing);
+    const now = Math.floor(Date.now() / 1000);
+    const inCooldown = cooldownEnds && cooldownEnds > now;
+    const cooldownRemaining = inCooldown ? formatCooldownRemaining(cooldownEnds) : null;
+    
+    // Check promotion status from API first, fallback to contract
     const promoFromApi = BigInt(listing.promotionFee || '0');
     const promoFromContract = RentalState.promotions.get(tokenId) || 0n;
     const promoAmount = promoFromApi > 0n ? promoFromApi : promoFromContract;
@@ -359,12 +443,23 @@ function renderNFTCard(listing, idx) {
     const promoEth = isPromoted ? ethers.formatEther(promoAmount) : '0';
     
     return `
-        <div class="r-card r-fadeUp ${isOwner ? 'ring-2 ring-blue-500/30' : ''} ${isPromoted ? 'ring-2 ring-yellow-500/40' : ''}" style="animation-delay:${idx * 40}ms">
+        <div class="r-card r-fadeUp ${isOwner ? 'ring-2 ring-blue-500/30' : ''} ${isPromoted ? 'ring-2 ring-yellow-500/40' : ''} ${inCooldown ? 'cooldown' : ''}" style="animation-delay:${idx * 40}ms">
+            ${inCooldown && !isOwner ? `
+                <div class="r-cooldown-overlay">
+                    <i class="fa-solid fa-hourglass-half r-cooldown-icon"></i>
+                    <p class="r-cooldown-text">Cooldown Period</p>
+                    <p class="r-cooldown-time">${cooldownRemaining}</p>
+                    <p class="text-[10px] text-zinc-400 mt-2">Available soon</p>
+                </div>
+            ` : ''}
             <div class="img-wrap">
                 <div class="absolute top-3 left-3 z-10 flex flex-col gap-1">
                     <span class="r-badge tier-${tier.name.toLowerCase()}">${tier.name}</span>
                     ${isPromoted ? `<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-gradient-to-r from-yellow-500/20 to-orange-500/20 text-yellow-400 border border-yellow-500/30 flex items-center gap-1">
                         <i class="fa-solid fa-fire text-[8px]"></i>PROMOTED
+                    </span>` : ''}
+                    ${inCooldown && isOwner ? `<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-500/20 text-indigo-400 border border-indigo-500/30 flex items-center gap-1">
+                        <i class="fa-solid fa-hourglass-half text-[8px]"></i>${cooldownRemaining}
                     </span>` : ''}
                 </div>
                 <div class="absolute top-3 right-3 z-10 flex flex-col gap-1 items-end">
@@ -394,7 +489,7 @@ function renderNFTCard(listing, idx) {
                             </button>
                         </div>
                     ` : `
-                        <button class="rent-btn r-btn r-btn-primary text-sm px-4 py-2" data-id="${tokenId}">
+                        <button class="rent-btn r-btn r-btn-primary text-sm px-4 py-2" data-id="${tokenId}" ${inCooldown ? 'disabled' : ''}>
                             <i class="fa-solid fa-clock mr-1"></i>Rent
                         </button>
                     `}
@@ -459,14 +554,20 @@ function renderMyCard(listing, idx) {
     const rented = listing.isRented || (listing.rentalEndTime && Number(listing.rentalEndTime) > now);
     const time = rented && listing.rentalEndTime ? formatTimeRemaining(Number(listing.rentalEndTime)) : null;
     
+    // V14.0: Check cooldown for my listings too
+    const cooldownEnds = !rented ? getCooldownEndTime(listing) : null;
+    const inCooldown = cooldownEnds && cooldownEnds > now;
+    const cooldownRemaining = inCooldown ? formatCooldownRemaining(cooldownEnds) : null;
+    
     return `
-        <div class="r-card r-fadeUp ${rented ? 'ring-2 ring-amber-500/25' : ''}" style="animation-delay:${idx * 40}ms">
+        <div class="r-card r-fadeUp ${rented ? 'ring-2 ring-amber-500/25' : ''} ${inCooldown ? 'ring-2 ring-indigo-500/25' : ''}" style="animation-delay:${idx * 40}ms">
             <div class="img-wrap">
                 <div class="absolute top-3 left-3 z-10">
                     <span class="r-badge tier-${tier.name.toLowerCase()}">${tier.name}</span>
                 </div>
                 <div class="absolute top-3 right-3 z-10">
                     ${rented ? `<span class="r-timer warn"><i class="fa-solid fa-clock mr-1"></i>${time?.text || 'Rented'}</span>` : 
+                      inCooldown ? `<span class="r-timer cooldown"><i class="fa-solid fa-hourglass-half mr-1"></i>${cooldownRemaining}</span>` :
                               `<span class="px-2.5 py-1 rounded-lg text-[10px] font-bold bg-green-500/20 text-green-400 border border-green-500/25">Available</span>`}
                 </div>
                 <img src="${buildImageUrl(listing.img || tier.img)}" class="nft-img" onerror="this.src='./assets/nft.png'">
@@ -484,7 +585,7 @@ function renderMyCard(listing, idx) {
                     <div><p class="text-[9px] text-zinc-500 uppercase">Earned</p><p class="text-green-400 font-bold">${earned}</p></div>
                 </div>
                 <div class="flex justify-between items-center">
-                    <span class="text-xs text-zinc-500"><i class="fa-solid fa-repeat mr-1"></i>${listing.rentalCount || 0}</span>
+                    <span class="text-xs text-zinc-500"><i class="fa-solid fa-repeat mr-1"></i>${listing.rentalCount || 0} rentals</span>
                     <button class="withdraw-btn r-btn r-btn-danger text-xs px-3 py-1.5" data-id="${tokenId}" ${rented ? 'disabled' : ''}>
                         <i class="fa-solid fa-arrow-right-from-bracket mr-1"></i>Withdraw
                     </button>
@@ -549,18 +650,16 @@ function renderActiveCard(rental, idx) {
                 <img src="${buildImageUrl(listing?.img || tier.img)}" class="nft-img" onerror="this.src='./assets/nft.png'">
             </div>
             <div class="p-4 relative z-10">
-                <div class="flex justify-between items-start mb-3">
+                <div class="flex justify-between items-start mb-2">
                     <div>
                         <h3 class="text-white font-bold">${tier.name}</h3>
                         <p class="text-xs font-mono" style="color:${color.accent}">#${tokenId}</p>
                     </div>
-                    <span class="px-2.5 py-1 rounded-lg text-[10px] font-bold bg-green-500/20 text-green-400 border border-green-500/25">
-                        +${(listing?.boostBips||0)/100}% <i class="fa-solid fa-bolt ml-1"></i>
-                    </span>
+                    <span class="text-xs px-2 py-0.5 rounded-lg font-bold" style="background:${color.bg};color:${color.accent}">+${(listing?.boostBips||0)/100}%</span>
                 </div>
-                <div class="pt-3 border-t border-zinc-700/40 flex justify-between">
-                    <span class="text-zinc-500 text-sm">Paid</span>
-                    <span class="text-white font-bold">${paid} BKC</span>
+                <div class="flex items-center justify-between pt-2 border-t border-zinc-700/40">
+                    <span class="text-xs text-zinc-500">Paid:</span>
+                    <span class="text-sm font-bold text-white">${paid} BKC</span>
                 </div>
             </div>
         </div>`;
@@ -570,63 +669,60 @@ function renderExpiredRow(rental) {
     const tokenId = normalizeTokenId(rental.tokenId);
     const listing = (State.rentalListings || []).find(l => tokenIdsMatch(l.tokenId, rental.tokenId));
     const tier = getTierInfo(listing?.boostBips || 0);
+    const color = getTierColor(tier.name);
     const paid = formatBigNumber(BigInt(rental.paidAmount || 0)).toFixed(2);
+    const expiry = new Date(Number(rental.endTime) * 1000).toLocaleString();
     
     return `
-        <div class="flex items-center gap-3 r-glass-light p-3 rounded-xl">
-            <img src="${buildImageUrl(listing?.img || tier.img)}" class="w-10 h-10 rounded-lg object-contain bg-black/30" onerror="this.src='./assets/nft.png'">
-            <div class="flex-1 min-w-0">
-                <div class="flex items-center gap-2 mb-0.5">
-                    <span class="r-badge tier-${tier.name.toLowerCase()} text-[8px] py-0.5 px-2">${tier.name}</span>
-                    <span class="text-zinc-400 text-xs font-mono">#${tokenId}</span>
+        <div class="r-glass-light flex items-center justify-between px-4 py-3 rounded-xl">
+            <div class="flex items-center gap-3">
+                <img src="${buildImageUrl(listing?.img || tier.img)}" class="w-10 h-10 rounded-lg object-contain bg-zinc-800" onerror="this.src='./assets/nft.png'">
+                <div>
+                    <p class="text-sm text-white font-medium">${tier.name} <span class="font-mono text-xs" style="color:${color.accent}">#${tokenId}</span></p>
+                    <p class="text-[10px] text-zinc-500">${expiry}</p>
                 </div>
-                <p class="text-zinc-500 text-[11px]">Paid: ${paid} BKC</p>
             </div>
-            <span class="px-2.5 py-1 rounded-lg text-[10px] font-bold bg-red-500/15 text-red-400 border border-red-500/25">Expired</span>
+            <span class="text-xs text-zinc-400">${paid} BKC</span>
         </div>`;
 }
 
-function startTimers() {
-    document.querySelectorAll('[data-end]').forEach(el => {
-        const end = Number(el.dataset.end);
-        const interval = setInterval(() => {
-            const t = formatTimeRemaining(end);
-            if (t.expired) {
-                el.innerHTML = '<i class="fa-solid fa-clock mr-1"></i>Expired';
-                el.className = 'r-timer crit';
-                clearInterval(interval);
-                setTimeout(() => refreshData(), 2000);
-            } else {
-                el.innerHTML = `<i class="fa-solid fa-clock mr-1"></i>${t.text}`;
-                el.classList.remove('warn', 'crit');
-                if (t.seconds < 300) el.classList.add('crit');
-                else if (t.seconds < 1800) el.classList.add('warn');
-            }
-        }, 1000);
-        RentalState.countdownIntervals.push(interval);
-    });
-}
-
-// Helpers
-function renderEmpty(title, sub, showBtn = false) {
+function renderEmpty(title, sub, showList = false) {
     return `
-        <div class="r-empty r-glass p-10">
-            <img src="${AIRBNFT_IMAGE}" onerror="this.style.display='none'">
-            <h3 class="text-lg font-bold text-zinc-300 mb-1">${title}</h3>
-            <p class="text-zinc-500 mb-5">${sub}</p>
-            ${showBtn && State.isConnected ? `<button id="btn-list-empty" class="r-btn r-btn-primary"><i class="fa-solid fa-plus mr-2"></i>List NFT</button>` : ''}
+        <div class="r-empty r-glass-light py-16 rounded-2xl">
+            <img src="${AIRBNFT_IMAGE}" class="opacity-30 mb-4" onerror="this.src='./assets/nft.png'">
+            <h4 class="text-lg font-bold text-zinc-400 mb-1">${title}</h4>
+            <p class="text-sm text-zinc-600 mb-4">${sub}</p>
+            ${showList && State.isConnected ? `<button id="btn-list-empty" class="r-btn r-btn-primary text-sm"><i class="fa-solid fa-plus mr-2"></i>List Now</button>` : ''}
         </div>`;
 }
 
 function renderConnect(msg) {
-    return `
-        <div class="r-empty r-glass p-10">
-            <div class="w-20 h-20 rounded-full bg-zinc-800 flex items-center justify-center mb-5 border border-zinc-700">
-                <i class="fa-solid fa-wallet text-zinc-500 text-3xl"></i>
-            </div>
-            <h3 class="text-lg font-bold text-zinc-300 mb-1">Connect Wallet</h3>
-            <p class="text-zinc-500">${msg}</p>
-        </div>`;
+    return `<div class="r-empty r-glass-light py-16 rounded-2xl">
+        <i class="fa-solid fa-wallet text-4xl text-zinc-600 mb-4"></i>
+        <h4 class="text-lg font-bold text-zinc-400 mb-1">Wallet Required</h4>
+        <p class="text-sm text-zinc-600">${msg}</p>
+    </div>`;
+}
+
+function startTimers() {
+    const timers = document.querySelectorAll('[data-end]');
+    timers.forEach(el => {
+        const update = () => {
+            const end = Number(el.dataset.end);
+            const t = formatTimeRemaining(end);
+            el.innerHTML = `<i class="fa-solid fa-clock mr-1"></i>${t.text}`;
+            el.classList.remove('warn', 'crit');
+            if (t.seconds > 0 && t.seconds < 300) el.classList.add('crit');
+            else if (t.seconds > 0 && t.seconds < 1800) el.classList.add('warn');
+            if (t.expired) {
+                clearInterval(el._int);
+                refreshData();
+            }
+        };
+        update();
+        el._int = setInterval(update, 1000);
+        RentalState.countdownIntervals.push(el._int);
+    });
 }
 
 // Modals
@@ -643,13 +739,15 @@ function renderRentModal() {
                     </button>
                 </div>
                 <div id="rent-content" class="mb-4"></div>
-                <div class="r-glass-light rounded-xl p-3 mb-4 text-center">
-                    <i class="fa-solid fa-hourglass-half text-amber-400 mr-2"></i>
-                    Duration: <span class="text-white font-bold">1 hour</span>
-                </div>
-                <div class="r-glass-light rounded-xl p-4 mb-5 flex justify-between items-center">
-                    <span class="text-zinc-400">Total</span>
-                    <span id="rent-cost" class="text-2xl font-bold text-white">--</span>
+                <div class="r-glass-light p-4 rounded-xl mb-6">
+                    <div class="flex justify-between text-sm mb-2">
+                        <span class="text-zinc-400">Duration</span>
+                        <span class="text-white font-bold">1 Hour</span>
+                    </div>
+                    <div class="flex justify-between text-sm">
+                        <span class="text-zinc-400">Total Cost</span>
+                        <span id="rent-cost" class="text-2xl font-bold text-green-400">0 BKC</span>
+                    </div>
                 </div>
                 <button id="confirm-rent" class="r-btn r-btn-primary w-full py-3">
                     <i class="fa-solid fa-check mr-2"></i>Confirm
@@ -670,33 +768,26 @@ function renderListModal() {
                         <i class="fa-solid fa-xmark"></i>
                     </button>
                 </div>
-                <div class="space-y-4 mb-6">
-                    <div>
-                        <label class="text-sm text-zinc-400 mb-1.5 block">Select NFT</label>
-                        <select id="list-select" class="w-full bg-zinc-800 border border-zinc-700 rounded-xl p-3 text-white outline-none"></select>
+                <div class="mb-4">
+                    <label class="text-sm text-zinc-400 mb-1.5 block">Select NFT</label>
+                    <select id="list-select" class="w-full bg-zinc-800 border border-zinc-700 rounded-xl p-3 text-white outline-none">
+                        <option value="">Loading...</option>
+                    </select>
+                </div>
+                <div class="mb-4">
+                    <label class="text-sm text-zinc-400 mb-1.5 block">Price per Hour (BKC)</label>
+                    <input type="number" id="list-price" placeholder="100" min="1" class="w-full bg-zinc-800 border border-zinc-700 rounded-xl p-3 text-white outline-none">
+                </div>
+                <!-- V13.0: Add promotion option during listing -->
+                <div class="r-glass-light p-4 rounded-xl mb-4">
+                    <div class="flex items-center gap-2 mb-2">
+                        <i class="fa-solid fa-rocket text-yellow-400"></i>
+                        <span class="text-sm font-bold text-white">Promote (Optional)</span>
                     </div>
-                    <div>
-                        <label class="text-sm text-zinc-400 mb-1.5 block">Price/Hour (BKC)</label>
-                        <input type="number" id="list-price" placeholder="10" step="0.01" min="0.01" class="w-full bg-zinc-800 border border-zinc-700 rounded-xl p-3 text-white outline-none">
-                    </div>
-                    
-                    <!-- V13.0: Promotion Option During Listing -->
-                    <div class="r-glass-light p-4 rounded-xl border border-yellow-500/20">
-                        <div class="flex items-center gap-2 mb-3">
-                            <i class="fa-solid fa-rocket text-yellow-400"></i>
-                            <span class="text-sm font-bold text-yellow-400">Boost Visibility (Optional)</span>
-                        </div>
-                        <p class="text-xs text-zinc-400 mb-3">Pay ETH to promote your listing. Higher amounts = more visibility!</p>
-                        <div>
-                            <label class="text-xs text-zinc-500 mb-1 block">Promotion Amount (ETH)</label>
-                            <input type="number" id="list-promo-amount" placeholder="0 (no promotion)" step="0.001" min="0" class="w-full bg-zinc-800/80 border border-zinc-700 rounded-lg p-2.5 text-white text-sm outline-none">
-                        </div>
-                        <div class="flex items-center gap-2 mt-2 text-[10px] text-zinc-500">
-                            <span class="px-2 py-0.5 rounded bg-zinc-800">0.01 ETH</span>
-                            <span class="px-2 py-0.5 rounded bg-zinc-800">0.05 ETH</span>
-                            <span class="px-2 py-0.5 rounded bg-zinc-800">0.1 ETH</span>
-                            <span class="text-zinc-600">← Suggested</span>
-                        </div>
+                    <p class="text-xs text-zinc-400 mb-3">Pay ETH to boost visibility in marketplace</p>
+                    <div class="flex gap-2">
+                        <input type="number" id="list-promo-amount" placeholder="0.01" step="0.001" min="0" class="flex-1 bg-zinc-800 border border-zinc-700 rounded-lg p-2.5 text-white text-sm outline-none">
+                        <span class="flex items-center px-3 bg-zinc-800 rounded-lg text-zinc-400 text-sm">ETH</span>
                     </div>
                 </div>
                 <button id="confirm-list" class="r-btn r-btn-primary w-full py-3">
@@ -867,7 +958,15 @@ function openRentModal(tokenId) {
     const listing = (State.rentalListings || []).find(l => tokenIdsMatch(l.tokenId, tokenId));
     if (!listing) { showToast('Not found', 'error'); return; }
     
-    // V12.3: Reset state when opening modal
+    // V14.0: Check cooldown
+    if (isInCooldown(listing)) {
+        const cooldownEnds = getCooldownEndTime(listing);
+        const remaining = formatCooldownRemaining(cooldownEnds);
+        showToast(`⏳ Cooldown active. Available in ${remaining}`, 'warning');
+        return;
+    }
+    
+    // Reset state when opening modal
     RentalState.isTransactionPending = false;
     RentalState.selectedRentalId = normalizeTokenId(tokenId);
     
@@ -886,7 +985,7 @@ function openRentModal(tokenId) {
         </div>`;
     document.getElementById('rent-cost').innerHTML = `${price} <span class="text-base text-zinc-500">BKC</span>`;
     
-    // V12.3: Reset button state
+    // Reset button state
     const btn = document.getElementById('confirm-rent');
     if (btn) {
         btn.innerHTML = '<i class="fa-solid fa-check mr-2"></i>Confirm';
@@ -903,9 +1002,7 @@ function closeRentModal() {
     modal.classList.remove('flex');
     modal.classList.add('hidden');
     RentalState.selectedRentalId = null;
-    // V12.3: Always reset state when closing modal
     RentalState.isTransactionPending = false;
-    // Reset button state
     const btn = document.getElementById('confirm-rent');
     if (btn) {
         btn.innerHTML = '<i class="fa-solid fa-check mr-2"></i>Confirm';
@@ -914,7 +1011,6 @@ function closeRentModal() {
 }
 
 function openListModal() {
-    // V12.3: Reset state when opening modal
     RentalState.isTransactionPending = false;
     
     const listings = State.rentalListings || [];
@@ -948,11 +1044,9 @@ function openListModal() {
         });
     }
     
-    // Hide promo note initially
     const note = document.getElementById('list-promo-note');
     if (note) note.classList.add('hidden');
     
-    // V12.3: Reset button state
     const btn = document.getElementById('confirm-list');
     if (btn) {
         btn.innerHTML = '<i class="fa-solid fa-tag mr-2"></i>List NFT';
@@ -968,9 +1062,8 @@ function closeListModal() {
     const modal = document.getElementById('list-modal');
     modal.classList.remove('flex');
     modal.classList.add('hidden');
-    // V12.3: Always reset state when closing modal
     RentalState.isTransactionPending = false;
-    // Reset button state
+    RentalState.pendingPromotion = null;
     const btn = document.getElementById('confirm-list');
     if (btn) {
         btn.innerHTML = '<i class="fa-solid fa-tag mr-2"></i>List NFT';
@@ -1029,6 +1122,60 @@ function closePromoteModal() {
     }
 }
 
+// V14.0: Enhanced promotion with retry logic
+async function executePromotion(tokenId, amountEth, maxRetries = 5) {
+    console.log('[RentalPage] executePromotion starting for tokenId:', tokenId, 'amount:', amountEth, 'ETH');
+    
+    const amountWei = ethers.parseEther(amountEth);
+    const abi = ['function promoteListing(uint256 tokenId) payable'];
+    
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        try {
+            console.log(`[RentalPage] Promote attempt ${attempt}/${maxRetries}`);
+            
+            // Get fresh provider/signer for each attempt
+            const provider = new ethers.BrowserProvider(window.ethereum);
+            const signer = await provider.getSigner();
+            const contract = new ethers.Contract(addresses.rentalManager, abi, signer);
+            
+            const tx = await contract.promoteListing(tokenId, { value: amountWei });
+            console.log('[RentalPage] Promote TX submitted:', tx.hash);
+            
+            const receipt = await tx.wait();
+            console.log('[RentalPage] ✅ Promote confirmed in block:', receipt.blockNumber);
+            
+            return { success: true, hash: receipt.hash };
+            
+        } catch (err) {
+            console.warn(`[RentalPage] Promote attempt ${attempt} failed:`, err.message);
+            
+            // User rejection - stop immediately
+            if (err.code === 'ACTION_REJECTED' || err.code === 4001) {
+                return { success: false, cancelled: true };
+            }
+            
+            // If it's an RPC error and we have more retries, wait and try again
+            if (attempt < maxRetries && (
+                err.message?.includes('Internal JSON-RPC') ||
+                err.message?.includes('could not coalesce') ||
+                err.code === -32603
+            )) {
+                const delay = Math.min(2000 * attempt, 8000); // 2s, 4s, 6s, 8s, 8s
+                console.log(`[RentalPage] Waiting ${delay}ms before retry...`);
+                await new Promise(r => setTimeout(r, delay));
+                continue;
+            }
+            
+            // Last attempt failed or non-retryable error
+            if (attempt === maxRetries) {
+                return { success: false, error: err.reason || err.message || 'Unknown error' };
+            }
+        }
+    }
+    
+    return { success: false, error: 'Max retries exceeded' };
+}
+
 async function handlePromote() {
     if (RentalState.isTransactionPending) return;
     const tokenId = RentalState.selectedRentalId;
@@ -1044,40 +1191,23 @@ async function handlePromote() {
     
     console.log('[RentalPage] Starting promote transaction for tokenId:', tokenId, 'amount:', amountEth, 'ETH');
     
-    try {
-        // V12.5: Call contract directly
-        const provider = new ethers.BrowserProvider(window.ethereum);
-        const signer = await provider.getSigner();
-        
-        const amountWei = ethers.parseEther(amountEth);
-        
-        // Minimal ABI for promoteListing
-        const abi = ['function promoteListing(uint256 tokenId) payable'];
-        const contract = new ethers.Contract(addresses.rentalManager, abi, signer);
-        
-        const tx = await contract.promoteListing(tokenId, { value: amountWei });
-        console.log('[RentalPage] Promote TX submitted:', tx.hash);
-        
-        const receipt = await tx.wait();
-        console.log('[RentalPage] ✅ Promote confirmed in block:', receipt.blockNumber);
-        
+    const result = await executePromotion(tokenId, amountEth);
+    
+    if (result.success) {
         RentalState.isTransactionPending = false;
         closePromoteModal();
         showToast('🚀 NFT Promoted Successfully!', 'success');
         await refreshData();
-        
-    } catch (err) {
-        console.error('[RentalPage] handlePromote error:', err);
+    } else if (result.cancelled) {
+        // User cancelled - just reset
         RentalState.isTransactionPending = false;
         btn.innerHTML = '<i class="fa-solid fa-rocket mr-2"></i>Promote Now';
         btn.disabled = false;
-        
-        if (err.code === 'ACTION_REJECTED' || err.code === 4001) {
-            // User cancelled - don't show error
-            return;
-        }
-        
-        showToast('Failed: ' + (err.reason || err.message || 'Unknown error'), 'error');
+    } else {
+        RentalState.isTransactionPending = false;
+        btn.innerHTML = '<i class="fa-solid fa-rocket mr-2"></i>Promote Now';
+        btn.disabled = false;
+        showToast('Failed: ' + result.error, 'error');
     }
 }
 
@@ -1087,10 +1217,15 @@ async function handleRent() {
     const listing = (State.rentalListings || []).find(l => tokenIdsMatch(l.tokenId, tokenId));
     if (!listing) return;
     
+    // V14.0: Double check cooldown
+    if (isInCooldown(listing)) {
+        showToast('⏳ This NFT is in cooldown period', 'error');
+        return;
+    }
+    
     const btn = document.getElementById('confirm-rent');
     RentalState.isTransactionPending = true;
     
-    // V12.4: Don't change button before passing to txEngine
     console.log('[RentalPage] Starting rent transaction for tokenId:', tokenId);
     
     try {
@@ -1142,6 +1277,11 @@ async function handleList() {
     const btn = document.getElementById('confirm-list');
     RentalState.isTransactionPending = true;
     
+    // Store pending promotion for retry if needed
+    if (promoAmountEth > 0) {
+        RentalState.pendingPromotion = { tokenId, amountEth: promoAmountEth.toString() };
+    }
+    
     console.log('[RentalPage] Starting list transaction for tokenId:', tokenId, 'with promo:', promoAmountEth, 'ETH');
     
     try {
@@ -1154,38 +1294,34 @@ async function handleList() {
             onSuccess: async (receipt) => { 
                 console.log('[RentalPage] ✅ List onSuccess called, hash:', receipt?.hash);
                 
-                // V13.0: If promotion amount was set, do promotion transaction
+                // V14.0: Enhanced promotion flow with better retry handling
                 if (promoAmountEth > 0) {
                     showToast('🏷️ NFT Listed! Now promoting...', 'success');
                     
-                    try {
-                        // Small delay to ensure listing is indexed
-                        await new Promise(r => setTimeout(r, 2000));
-                        
-                        await RentalTx.promote({
-                            tokenId,
-                            amountEth: promoAmountEth.toString(),
-                            button: btn,
-                            onSuccess: async () => {
-                                RentalState.isTransactionPending = false;
-                                closeListModal();
-                                showToast('🚀 NFT Listed & Promoted!', 'success');
-                                await refreshData();
-                            },
-                            onError: (e) => {
-                                RentalState.isTransactionPending = false;
-                                closeListModal();
-                                // Listing succeeded but promotion failed
-                                showToast('⚠️ Listed but promotion failed. You can promote later.', 'warning');
-                                refreshData();
-                            }
-                        });
-                    } catch (promoErr) {
-                        console.warn('[RentalPage] Promotion after list failed:', promoErr);
+                    // Small delay to ensure listing is indexed
+                    await new Promise(r => setTimeout(r, 3000));
+                    
+                    const promoResult = await executePromotion(tokenId, promoAmountEth.toString());
+                    
+                    if (promoResult.success) {
+                        RentalState.isTransactionPending = false;
+                        RentalState.pendingPromotion = null;
+                        closeListModal();
+                        showToast('🚀 NFT Listed & Promoted!', 'success');
+                        await refreshData();
+                    } else if (promoResult.cancelled) {
+                        // User cancelled promotion but list succeeded
+                        RentalState.isTransactionPending = false;
+                        RentalState.pendingPromotion = null;
+                        closeListModal();
+                        showToast('🏷️ NFT Listed (promotion skipped)', 'info');
+                        await refreshData();
+                    } else {
+                        // Promotion failed but list succeeded
                         RentalState.isTransactionPending = false;
                         closeListModal();
                         showToast('⚠️ Listed but promotion failed. You can promote later.', 'warning');
-                        refreshData();
+                        await refreshData();
                     }
                 } else {
                     // No promotion, just close and refresh
@@ -1225,7 +1361,6 @@ async function handleWithdraw(btn) {
     
     RentalState.isTransactionPending = true;
     
-    // V12.4: Don't change button before passing to txEngine
     console.log('[RentalPage] Starting withdraw transaction for tokenId:', tokenId);
     
     try {
@@ -1236,7 +1371,6 @@ async function handleWithdraw(btn) {
                 console.log('[RentalPage] ✅ Withdraw onSuccess called, hash:', receipt?.hash);
                 RentalState.isTransactionPending = false;
                 
-                // V12.5: Promotion is automatically cleared by contract on withdraw
                 console.log('[RentalPage] Promotion cleared by contract for tokenId:', tokenId);
                 
                 showToast('↩️ NFT Withdrawn Successfully!', 'success'); 
