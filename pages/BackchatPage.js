@@ -1,6 +1,11 @@
 // js/pages/BackchatPage.js
-// ✅ PRODUCTION V1.0 - Messages Only (X Style)
+// ✅ PRODUCTION V1.1 - Messages Only (X Style) + Contract Availability Check
 // 
+// V1.1 Changes:
+// - Added contract availability check
+// - Graceful handling when contract is not deployed
+// - "Coming Soon" UI when contract unavailable
+//
 // V1.0 Features:
 // - Private Messages (E2EE ready)
 // - Conversation list (X/Twitter DM style)
@@ -73,7 +78,9 @@ const BS = {
     hasPublicKey: false,
     isLoading: false,
     newMessageRecipient: '',
-    view: 'list' // 'list' | 'chat' | 'new'
+    view: 'list', // 'list' | 'chat' | 'new'
+    contractAvailable: true, // V1.1: Track if contract is available
+    contractError: null // V1.1: Store error message
 };
 
 // ============================================================================
@@ -649,6 +656,10 @@ const encodeContent = (content) => {
 // ============================================================================
 
 async function getContract(withSigner = false) {
+    // V1.1: Check if contract address is available
+    if (!addresses?.backchat) {
+        throw new Error('Backchat contract not deployed yet');
+    }
     const provider = withSigner ? State?.signer : State?.publicProvider;
     if (!provider) throw new Error('Provider not available');
     return new ethers.Contract(addresses.backchat, backchatABI, provider);
@@ -666,6 +677,13 @@ async function getBkcContract(withSigner = false) {
 
 async function loadStats() {
     try {
+        // V1.1: Check if contract address exists
+        if (!addresses?.backchat) {
+            BS.contractAvailable = false;
+            BS.contractError = 'Backchat contract not deployed yet. Coming soon!';
+            return;
+        }
+        
         const contract = await getContract();
         const [totalMessages, totalConversations] = await Promise.all([
             contract.totalMessages(),
@@ -675,13 +693,19 @@ async function loadStats() {
             totalMessages: Number(totalMessages),
             totalConversations: Number(totalConversations)
         };
+        BS.contractAvailable = true;
+        BS.contractError = null;
     } catch (e) {
         console.error('Load stats error:', e);
+        // V1.1: Mark contract as unavailable on error
+        BS.contractAvailable = false;
+        BS.contractError = 'Backchat service temporarily unavailable. Please try again later.';
     }
 }
 
 async function loadConversations() {
     if (!State?.isConnected || !State?.userAddress) return;
+    if (!BS.contractAvailable) return; // V1.1: Skip if contract unavailable
     
     try {
         const contract = await getContract();
@@ -754,6 +778,7 @@ async function loadMessages(conversationId) {
 
 async function checkPublicKey() {
     if (!State?.isConnected || !State?.userAddress) return;
+    if (!BS.contractAvailable) return; // V1.1: Skip if contract unavailable
     
     try {
         const contract = await getContract();
@@ -1100,6 +1125,32 @@ function renderConnectPrompt() {
     `;
 }
 
+// V1.1: Render when contract is not available
+function renderUnavailable() {
+    return `
+        <div class="bc-connect">
+            <img src="${HERO_ICON}" alt="Backchat" class="bc-connect-icon" style="opacity:0.5;">
+            <div class="bc-empty-title" style="color:#f59e0b;">
+                <i class="fa-solid fa-tools" style="margin-right:8px;"></i>
+                Coming Soon!
+            </div>
+            <div class="bc-empty-text" style="margin-bottom:24px; max-width:400px;">
+                ${BS.contractError || 'Backchat is currently being deployed. Private messaging on the blockchain will be available soon!'}
+            </div>
+            <div style="display:flex; gap:12px; flex-wrap:wrap; justify-content:center;">
+                <a href="https://x.com/backcoin" target="_blank" class="bc-btn bc-btn-secondary" style="text-decoration:none;">
+                    <i class="fa-brands fa-twitter"></i>
+                    Follow Updates
+                </a>
+                <button class="bc-btn bc-btn-primary" onclick="BackchatPage.refresh()">
+                    <i class="fa-solid fa-rotate"></i>
+                    Retry
+                </button>
+            </div>
+        </div>
+    `;
+}
+
 function renderLoading() {
     return `
         <div class="bc-loading" style="min-height:300px;">
@@ -1139,11 +1190,22 @@ function getContainer() {
 }
 
 function render() {
-    console.log('🎨 BackchatPage render v1.0');
+    console.log('🎨 BackchatPage render v1.1');
     injectStyles();
     
     const container = getContainer();
     if (!container) return;
+    
+    // V1.1: Contract not available
+    if (!BS.contractAvailable) {
+        container.innerHTML = `
+            <div class="backchat-page">
+                ${renderHeader()}
+                ${renderUnavailable()}
+            </div>
+        `;
+        return;
+    }
     
     // Not connected
     if (!State?.isConnected) {
@@ -1211,7 +1273,7 @@ function setRecipient(value) {
 
 export const BackchatPage = {
     render(isActive) {
-        console.log('🚀 BackchatPage.render v1.0, isActive:', isActive);
+        console.log('🚀 BackchatPage.render v1.1, isActive:', isActive);
         if (isActive) {
             render();
             refresh();
