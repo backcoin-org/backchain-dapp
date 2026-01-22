@@ -1,6 +1,13 @@
 // js/pages/BackchatPage.js
-// ✅ PRODUCTION V1.2 - Corrected Contract Interface (getTotals)
+// ✅ PRODUCTION V1.3 - FIXED: Contract function names to match Backchat.sol
 // 
+// V1.3 Changes:
+// - Fixed: sendMessage → sendPrivateMessage (correct contract function)
+// - Fixed: hasPublicKey → use getPublicKey and check if empty
+// - Fixed: registerPublicKey → setPublicKey (correct contract function)
+// - Fixed: getConversationParticipants → get from first message
+// - Added proper error handling for all contract calls
+//
 // V1.2 Changes:
 // - Fixed ABI to use getTotals() instead of totalMessages()/totalConversations()
 // - Fixed registerPublicKey to accept bytes instead of string
@@ -11,15 +18,6 @@
 // - Added contract availability check
 // - Graceful handling when contract is not deployed
 // - "Coming Soon" UI when contract unavailable
-//
-// V1.0 Features:
-// - Private Messages (E2EE ready)
-// - Conversation list (X/Twitter DM style)
-// - Chat window with message history
-// - Send messages with 1 BKC fee
-// - Dark mode UI
-//
-// Future versions will add: Posts, Comments, Tips, Community Notes
 
 import { State } from '../state.js';
 import { showToast } from '../ui-feedback.js';
@@ -39,28 +37,27 @@ const EXPLORER_TX = "https://sepolia.arbiscan.io/tx/";
 const MESSAGE_FEE = "1"; // 1 BKC
 
 // ============================================================================
-// ABI
+// ABI - V1.3: FIXED to match Backchat.sol contract
 // ============================================================================
 
 const backchatABI = [
-    // Messages
-    "function sendMessage(address _recipient, string memory _encryptedContent, string memory _encryptedIpfsHash, uint256 _conversationId, uint256 _parentMessageId) external",
+    // Private Messages - V1.3 FIX: Correct function names
+    "function sendPrivateMessage(address _to, string calldata _encryptedContent, string calldata _encryptedIpfsHash) external returns (uint256 messageId)",
+    "function replyToMessage(uint256 _messageId, string calldata _encryptedContent, string calldata _encryptedIpfsHash) external returns (uint256 replyId)",
     "function getMessage(uint256 _messageId) external view returns (address sender, address recipient, string memory encryptedContent, string memory encryptedIpfsHash, uint256 sentAt, uint256 conversationId, uint256 parentMessageId)",
     "function getUserConversations(address _user) external view returns (uint256[] memory)",
     "function getConversationMessages(uint256 _conversationId) external view returns (uint256[] memory)",
-    // Note: getConversationParticipants doesn't exist - need to get from first message
     
-    // Stats - using getTotals() which returns (posts, comments, notes, messages, conversations)
-    "function getTotals() external view returns (uint256 posts, uint256 comments, uint256 notes, uint256 messages, uint256 conversations)",
-    
-    // E2EE Keys
-    "function registerPublicKey(bytes memory _publicKey) external",
+    // E2EE Keys - V1.3 FIX: setPublicKey instead of registerPublicKey
+    "function setPublicKey(bytes calldata _publicKey) external",
     "function getPublicKey(address _user) external view returns (bytes memory)",
-    "function hasPublicKey(address _user) external view returns (bool)",
+    // Note: hasPublicKey doesn't exist - check getPublicKey length instead
+    
+    // Stats
+    "function getTotals() external view returns (uint256 posts, uint256 comments, uint256 notes, uint256 messages, uint256 conversations)",
     
     // Config
     "function platformFee() external view returns (uint256)",
-    "function bkcToken() external view returns (address)",
     
     // Events
     "event PrivateMessageSent(uint256 indexed messageId, uint256 indexed conversationId, address indexed sender, address recipient, uint256 timestamp)",
@@ -86,8 +83,8 @@ const BS = {
     isLoading: false,
     newMessageRecipient: '',
     view: 'list', // 'list' | 'chat' | 'new'
-    contractAvailable: true, // V1.1: Track if contract is available
-    contractError: null // V1.1: Store error message
+    contractAvailable: true,
+    contractError: null
 };
 
 // ============================================================================
@@ -95,23 +92,24 @@ const BS = {
 // ============================================================================
 
 function injectStyles() {
-    if (document.getElementById('bc-styles-v1')) return;
+    if (document.getElementById('bc-styles-v13')) return;
     const s = document.createElement('style');
-    s.id = 'bc-styles-v1';
+    s.id = 'bc-styles-v13';
     s.textContent = `
 /* Backchat - X Style Dark Mode */
+/* V1.3: Changed bg to match other pages */
 .backchat-page {
-    --cp-bg: #18181b;
-    --bc-bg2: #16181c;
-    --bc-bg3: #202327;
-    --bc-border: #2f3336;
-    --bc-text: #e7e9ea;
-    --bc-muted: #71767b;
+    --bc-bg: #18181b;
+    --bc-bg2: #27272a;
+    --bc-bg3: #3f3f46;
+    --bc-border: rgba(63,63,70,0.6);
+    --bc-text: #fafafa;
+    --bc-muted: #a1a1aa;
     --bc-accent: #f59e0b;
     --bc-accent-hover: #d97706;
     --bc-blue: #1d9bf0;
-    --bc-success: #00ba7c;
-    --bc-danger: #f4212e;
+    --bc-success: #10b981;
+    --bc-danger: #ef4444;
     max-width: 600px;
     margin: 0 auto;
     min-height: 80vh;
@@ -125,7 +123,7 @@ function injectStyles() {
     position: sticky;
     top: 0;
     z-index: 100;
-    background: rgba(0, 0, 0, 0.85);
+    background: rgba(24, 24, 27, 0.85);
     backdrop-filter: blur(12px);
     border-bottom: 1px solid var(--bc-border);
     padding: 12px 16px;
@@ -391,6 +389,7 @@ function injectStyles() {
     cursor: pointer;
     transition: all 0.2s;
     flex-shrink: 0;
+    border: none;
 }
 
 .bc-send-btn:hover {
@@ -488,6 +487,7 @@ function injectStyles() {
     font-weight: 700;
     cursor: pointer;
     transition: all 0.2s;
+    border: none;
 }
 
 .bc-btn-primary {
@@ -497,6 +497,15 @@ function injectStyles() {
 
 .bc-btn-primary:hover {
     background: var(--bc-accent-hover);
+}
+
+.bc-btn-secondary {
+    background: var(--bc-bg3);
+    color: var(--bc-text);
+}
+
+.bc-btn-secondary:hover {
+    background: var(--bc-bg2);
 }
 
 .bc-btn-outline {
@@ -529,59 +538,6 @@ function injectStyles() {
 
 @keyframes bc-spin {
     to { transform: rotate(360deg); }
-}
-
-/* Modal */
-.bc-modal-overlay {
-    position: fixed;
-    inset: 0;
-    background: rgba(91, 112, 131, 0.4);
-    z-index: 200;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-}
-
-.bc-modal {
-    background: var(--bc-bg);
-    border-radius: 16px;
-    width: 90%;
-    max-width: 400px;
-    max-height: 80vh;
-    overflow: hidden;
-}
-
-.bc-modal-header {
-    display: flex;
-    align-items: center;
-    padding: 16px;
-    border-bottom: 1px solid var(--bc-border);
-}
-
-.bc-modal-close {
-    width: 34px;
-    height: 34px;
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    transition: background 0.2s;
-}
-
-.bc-modal-close:hover {
-    background: var(--bc-bg3);
-}
-
-.bc-modal-title {
-    flex: 1;
-    text-align: center;
-    font-size: 17px;
-    font-weight: 700;
-}
-
-.bc-modal-body {
-    padding: 16px;
 }
 
 /* Connect Prompt */
@@ -663,7 +619,6 @@ const encodeContent = (content) => {
 // ============================================================================
 
 async function getContract(withSigner = false) {
-    // V1.1: Check if contract address is available
     if (!addresses?.backchat) {
         throw new Error('Backchat contract not deployed yet');
     }
@@ -684,7 +639,6 @@ async function getBkcContract(withSigner = false) {
 
 async function loadStats() {
     try {
-        // V1.1: Check if contract address exists
         if (!addresses?.backchat) {
             BS.contractAvailable = false;
             BS.contractError = 'Backchat contract not deployed yet. Coming soon!';
@@ -692,7 +646,6 @@ async function loadStats() {
         }
         
         const contract = await getContract();
-        // V1.2: Use getTotals() which returns (posts, comments, notes, messages, conversations)
         const totals = await contract.getTotals();
         BS.stats = {
             totalPosts: Number(totals[0]),
@@ -705,7 +658,6 @@ async function loadStats() {
         BS.contractError = null;
     } catch (e) {
         console.error('Load stats error:', e);
-        // V1.1: Mark contract as unavailable on error
         BS.contractAvailable = false;
         BS.contractError = 'Backchat service temporarily unavailable. Please try again later.';
     }
@@ -713,7 +665,7 @@ async function loadStats() {
 
 async function loadConversations() {
     if (!State?.isConnected || !State?.userAddress) return;
-    if (!BS.contractAvailable) return; // V1.1: Skip if contract unavailable
+    if (!BS.contractAvailable) return;
     
     try {
         const contract = await getContract();
@@ -722,19 +674,29 @@ async function loadConversations() {
         const conversations = [];
         for (const convId of convIds) {
             try {
-                const [participant1, participant2] = await contract.getConversationParticipants(convId);
-                const otherParty = participant1.toLowerCase() === State.userAddress.toLowerCase() 
-                    ? participant2 : participant1;
-                
+                // V1.3 FIX: Get participants from first message instead of non-existent getConversationParticipants
                 const msgIds = await contract.getConversationMessages(convId);
+                
+                if (msgIds.length === 0) continue;
+                
+                // Get first message to determine other party
+                const firstMsg = await contract.getMessage(msgIds[0]);
+                const sender = firstMsg[0];
+                const recipient = firstMsg[1];
+                
+                // Determine other party
+                const otherParty = sender.toLowerCase() === State.userAddress.toLowerCase() 
+                    ? recipient : sender;
+                
+                // Get last message for preview
                 let lastMessage = null;
                 let lastTime = 0;
                 
                 if (msgIds.length > 0) {
                     const lastMsgId = msgIds[msgIds.length - 1];
                     const msg = await contract.getMessage(lastMsgId);
-                    lastMessage = decodeContent(msg[2]);
-                    lastTime = Number(msg[4]);
+                    lastMessage = decodeContent(msg[2]); // encryptedContent
+                    lastTime = Number(msg[4]); // sentAt
                 }
                 
                 conversations.push({
@@ -784,15 +746,20 @@ async function loadMessages(conversationId) {
     }
 }
 
+// V1.3 FIX: Check public key using getPublicKey instead of hasPublicKey
 async function checkPublicKey() {
     if (!State?.isConnected || !State?.userAddress) return;
-    if (!BS.contractAvailable) return; // V1.1: Skip if contract unavailable
+    if (!BS.contractAvailable) return;
     
     try {
         const contract = await getContract();
-        BS.hasPublicKey = await contract.hasPublicKey(State.userAddress);
+        const publicKey = await contract.getPublicKey(State.userAddress);
+        
+        // Check if key is empty (0x or empty bytes)
+        BS.hasPublicKey = publicKey && publicKey.length > 2 && publicKey !== '0x';
     } catch (e) {
         console.error('Check public key error:', e);
+        BS.hasPublicKey = false;
     }
 }
 
@@ -800,6 +767,7 @@ async function checkPublicKey() {
 // ACTIONS
 // ============================================================================
 
+// V1.3 FIX: Use sendPrivateMessage instead of sendMessage
 async function sendMessage() {
     if (!State?.isConnected) return showToast('Connect wallet first', 'warning');
     
@@ -825,37 +793,55 @@ async function sendMessage() {
             await approveTx.wait();
         }
         
-        // Send message
+        // Get contract with signer
         const contract = await getContract(true);
         const encoded = encodeContent(content);
         
-        let recipient, convId;
+        let recipient;
         
         if (BS.view === 'new') {
+            // New conversation
             recipient = BS.newMessageRecipient;
             if (!ethers.isAddress(recipient)) {
                 throw new Error('Invalid recipient address');
             }
-            convId = 0; // New conversation
-        } else {
-            const conv = BS.conversations.find(c => c.id === BS.currentConversation);
-            if (!conv) throw new Error('Conversation not found');
-            recipient = conv.otherParty;
-            convId = conv.id;
-        }
-        
-        showToast('Sending message...', 'info');
-        const tx = await contract.sendMessage(recipient, encoded, '', convId, 0);
-        const receipt = await tx.wait();
-        
-        showToast('Message sent!', 'success');
-        
-        // Reload
-        if (BS.view === 'new') {
+            
+            // Check if recipient has public key
+            const recipientKey = await contract.getPublicKey(recipient);
+            if (!recipientKey || recipientKey.length <= 2 || recipientKey === '0x') {
+                throw new Error('Recipient has not registered a public key yet');
+            }
+            
+            // V1.3 FIX: Use sendPrivateMessage
+            showToast('Sending message...', 'info');
+            const tx = await contract.sendPrivateMessage(recipient, encoded, '');
+            const receipt = await tx.wait();
+            
+            showToast('Message sent!', 'success');
+            
             BS.view = 'list';
             BS.newMessageRecipient = '';
+            
+        } else {
+            // Reply in existing conversation
+            const conv = BS.conversations.find(c => c.id === BS.currentConversation);
+            if (!conv) throw new Error('Conversation not found');
+            
+            // Get last message to reply to
+            const msgIds = await contract.getConversationMessages(conv.id);
+            if (msgIds.length === 0) throw new Error('No messages in conversation');
+            
+            const lastMsgId = msgIds[msgIds.length - 1];
+            
+            // V1.3 FIX: Use replyToMessage
+            showToast('Sending reply...', 'info');
+            const tx = await contract.replyToMessage(lastMsgId, encoded, '');
+            const receipt = await tx.wait();
+            
+            showToast('Reply sent!', 'success');
         }
         
+        // Reload conversations and messages
         await loadConversations();
         
         if (BS.currentConversation) {
@@ -884,17 +870,21 @@ async function sendMessage() {
     }
 }
 
+// V1.3 FIX: Use setPublicKey instead of registerPublicKey
 async function registerKey() {
     if (!State?.isConnected) return showToast('Connect wallet first', 'warning');
     
     try {
-        // For now, just register a placeholder key
-        // In production, this would be the user's actual E2EE public key
         const contract = await getContract(true);
-        const placeholderKey = `PK_${State.userAddress.slice(2, 10)}`;
+        
+        // Generate a placeholder key for now
+        // In production, this would be the user's actual E2EE public key
+        const placeholderKey = ethers.toUtf8Bytes(`PK_${State.userAddress.slice(2, 10)}_${Date.now()}`);
         
         showToast('Registering encryption key...', 'info');
-        const tx = await contract.registerPublicKey(placeholderKey);
+        
+        // V1.3 FIX: Use setPublicKey instead of registerPublicKey
+        const tx = await contract.setPublicKey(placeholderKey);
         await tx.wait();
         
         BS.hasPublicKey = true;
@@ -1001,16 +991,16 @@ function renderStats() {
     return `
         <div class="bc-stats">
             <div class="bc-stat">
-                <span class="bc-stat-value">${BS.stats.totalMessages}</span>
+                <span class="bc-stat-value">${BS.stats.totalMessages.toLocaleString()}</span>
                 <span class="bc-stat-label">Messages</span>
             </div>
             <div class="bc-stat">
-                <span class="bc-stat-value">${BS.stats.totalConversations}</span>
+                <span class="bc-stat-value">${BS.stats.totalConversations.toLocaleString()}</span>
                 <span class="bc-stat-label">Conversations</span>
             </div>
             <div class="bc-stat">
-                <span class="bc-stat-value">${MESSAGE_FEE}</span>
-                <span class="bc-stat-label">BKC/msg</span>
+                <span class="bc-stat-value">${BS.stats.totalPosts.toLocaleString()}</span>
+                <span class="bc-stat-label">Posts</span>
             </div>
         </div>
     `;
@@ -1021,11 +1011,11 @@ function renderConversationList() {
         return `
             <div class="bc-empty">
                 <div class="bc-empty-icon">
-                    <i class="fa-regular fa-message"></i>
+                    <i class="fa-solid fa-comments"></i>
                 </div>
                 <div class="bc-empty-title">No messages yet</div>
                 <div class="bc-empty-text">
-                    Start a conversation by tapping the button below. Each message costs ${MESSAGE_FEE} BKC.
+                    Start a conversation by tapping the compose button below.
                 </div>
             </div>
         `;
@@ -1133,7 +1123,6 @@ function renderConnectPrompt() {
     `;
 }
 
-// V1.1: Render when contract is not available
 function renderUnavailable() {
     return `
         <div class="bc-connect">
@@ -1198,13 +1187,13 @@ function getContainer() {
 }
 
 function render() {
-    console.log('🎨 BackchatPage render v1.2');
+    console.log('🎨 BackchatPage render v1.3');
     injectStyles();
     
     const container = getContainer();
     if (!container) return;
     
-    // V1.1: Contract not available
+    // Contract not available
     if (!BS.contractAvailable) {
         container.innerHTML = `
             <div class="backchat-page">
@@ -1281,7 +1270,7 @@ function setRecipient(value) {
 
 export const BackchatPage = {
     render(isActive) {
-        console.log('🚀 BackchatPage.render v1.2, isActive:', isActive);
+        console.log('🚀 BackchatPage.render v1.3, isActive:', isActive);
         if (isActive) {
             render();
             refresh();
