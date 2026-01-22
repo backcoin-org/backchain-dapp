@@ -1300,6 +1300,26 @@
       "address": "0xdaBD813B39AcdF4c817B2D19e76570696E3B2DD7",
       "txHash": "0x282d82699b6b736d39cda421019e063ed83d749abe81d0ef4fb2134e840e2640",
       "kind": "uups"
+    },
+    {
+      "address": "0xafB1B0f2DCeb08eCEDC08bEC3fC4791B27d34712",
+      "txHash": "0xd626e70e9780b4c101681a03048e29b6d77a9a55e04ee24307861276b87b931a",
+      "kind": "uups"
+    },
+    {
+      "address": "0x97c0176aD249b9DD128e1133dad16b3bBC8b868C",
+      "txHash": "0xde82c3a2d0a1c2d22d479c546ae71e56b371049961333db069d71b6f29bbfec4",
+      "kind": "uups"
+    },
+    {
+      "address": "0x12A081F8a9fEe309f11196Ef8A491875192c7556",
+      "txHash": "0xd317f621bd5bb6240d449fe336be72ebd134f6925ee1ec54e409c19e19946fa5",
+      "kind": "uups"
+    },
+    {
+      "address": "0x01afdE917E354f513758149B5a848E02cf030682",
+      "txHash": "0xdb5289ed6c4b17e147e1034712fe5ffa523007177e0f25b09d7a6675df59b949",
+      "kind": "uups"
     }
   ],
   "impls": {
@@ -11685,6 +11705,2152 @@
               }
             ],
             "numberOfBytes": "128"
+          },
+          "t_uint256": {
+            "label": "uint256",
+            "numberOfBytes": "32"
+          },
+          "t_uint8": {
+            "label": "uint8",
+            "numberOfBytes": "1"
+          }
+        },
+        "namespaces": {}
+      }
+    },
+    "f7a17fc41dc371edd4995f2db4a12c85b96fbb33309be33e00ab108ce1abf573": {
+      "address": "0x6095314F7AB482CD5B05FFF34002000a6806Efc6",
+      "txHash": "0x81679af91e106ef068a4258fa38653c5db0cd0c656056fc4b57c3e459ea5c831",
+      "layout": {
+        "solcVersion": "0.8.28",
+        "storage": [
+          {
+            "label": "_initialized",
+            "offset": 0,
+            "slot": "0",
+            "type": "t_uint8",
+            "contract": "Initializable",
+            "src": "@openzeppelin\\contracts-upgradeable\\proxy\\utils\\Initializable.sol:63",
+            "retypedFrom": "bool"
+          },
+          {
+            "label": "_initializing",
+            "offset": 1,
+            "slot": "0",
+            "type": "t_bool",
+            "contract": "Initializable",
+            "src": "@openzeppelin\\contracts-upgradeable\\proxy\\utils\\Initializable.sol:68"
+          },
+          {
+            "label": "__gap",
+            "offset": 0,
+            "slot": "1",
+            "type": "t_array(t_uint256)50_storage",
+            "contract": "ERC1967UpgradeUpgradeable",
+            "src": "@openzeppelin\\contracts-upgradeable\\proxy\\ERC1967\\ERC1967UpgradeUpgradeable.sol:169"
+          },
+          {
+            "label": "__gap",
+            "offset": 0,
+            "slot": "51",
+            "type": "t_array(t_uint256)50_storage",
+            "contract": "UUPSUpgradeable",
+            "src": "@openzeppelin\\contracts-upgradeable\\proxy\\utils\\UUPSUpgradeable.sol:111"
+          },
+          {
+            "label": "__gap",
+            "offset": 0,
+            "slot": "101",
+            "type": "t_array(t_uint256)50_storage",
+            "contract": "ContextUpgradeable",
+            "src": "@openzeppelin\\contracts-upgradeable\\utils\\ContextUpgradeable.sol:36"
+          },
+          {
+            "label": "_owner",
+            "offset": 0,
+            "slot": "151",
+            "type": "t_address",
+            "contract": "OwnableUpgradeable",
+            "src": "@openzeppelin\\contracts-upgradeable\\access\\OwnableUpgradeable.sol:22"
+          },
+          {
+            "label": "__gap",
+            "offset": 0,
+            "slot": "152",
+            "type": "t_array(t_uint256)49_storage",
+            "contract": "OwnableUpgradeable",
+            "src": "@openzeppelin\\contracts-upgradeable\\access\\OwnableUpgradeable.sol:94"
+          },
+          {
+            "label": "_status",
+            "offset": 0,
+            "slot": "201",
+            "type": "t_uint256",
+            "contract": "ReentrancyGuardUpgradeable",
+            "src": "@openzeppelin\\contracts-upgradeable\\security\\ReentrancyGuardUpgradeable.sol:38"
+          },
+          {
+            "label": "__gap",
+            "offset": 0,
+            "slot": "202",
+            "type": "t_array(t_uint256)49_storage",
+            "contract": "ReentrancyGuardUpgradeable",
+            "src": "@openzeppelin\\contracts-upgradeable\\security\\ReentrancyGuardUpgradeable.sol:88"
+          },
+          {
+            "label": "_paused",
+            "offset": 0,
+            "slot": "251",
+            "type": "t_bool",
+            "contract": "PausableUpgradeable",
+            "src": "@openzeppelin\\contracts-upgradeable\\security\\PausableUpgradeable.sol:29"
+          },
+          {
+            "label": "__gap",
+            "offset": 0,
+            "slot": "252",
+            "type": "t_array(t_uint256)49_storage",
+            "contract": "PausableUpgradeable",
+            "src": "@openzeppelin\\contracts-upgradeable\\security\\PausableUpgradeable.sol:116"
+          },
+          {
+            "label": "bipsDenominator",
+            "offset": 0,
+            "slot": "301",
+            "type": "t_uint256",
+            "contract": "Backchat",
+            "src": "contracts\\solidity\\Backchat.sol:282"
+          },
+          {
+            "label": "serviceKey",
+            "offset": 0,
+            "slot": "302",
+            "type": "t_bytes32",
+            "contract": "Backchat",
+            "src": "contracts\\solidity\\Backchat.sol:283"
+          },
+          {
+            "label": "platformFee",
+            "offset": 0,
+            "slot": "303",
+            "type": "t_uint256",
+            "contract": "Backchat",
+            "src": "contracts\\solidity\\Backchat.sol:287"
+          },
+          {
+            "label": "platformMiningFeeBips",
+            "offset": 0,
+            "slot": "304",
+            "type": "t_uint256",
+            "contract": "Backchat",
+            "src": "contracts\\solidity\\Backchat.sol:290"
+          },
+          {
+            "label": "platformTreasuryFeeBips",
+            "offset": 0,
+            "slot": "305",
+            "type": "t_uint256",
+            "contract": "Backchat",
+            "src": "contracts\\solidity\\Backchat.sol:295"
+          },
+          {
+            "label": "minTipAmount",
+            "offset": 0,
+            "slot": "306",
+            "type": "t_uint256",
+            "contract": "Backchat",
+            "src": "contracts\\solidity\\Backchat.sol:296"
+          },
+          {
+            "label": "tipMiningFeeBips",
+            "offset": 0,
+            "slot": "307",
+            "type": "t_uint256",
+            "contract": "Backchat",
+            "src": "contracts\\solidity\\Backchat.sol:300"
+          },
+          {
+            "label": "thresholdTrusted",
+            "offset": 0,
+            "slot": "308",
+            "type": "t_uint256",
+            "contract": "Backchat",
+            "src": "contracts\\solidity\\Backchat.sol:303"
+          },
+          {
+            "label": "thresholdWarning",
+            "offset": 0,
+            "slot": "309",
+            "type": "t_uint256",
+            "contract": "Backchat",
+            "src": "contracts\\solidity\\Backchat.sol:308"
+          },
+          {
+            "label": "thresholdHidden",
+            "offset": 0,
+            "slot": "310",
+            "type": "t_uint256",
+            "contract": "Backchat",
+            "src": "contracts\\solidity\\Backchat.sol:311"
+          },
+          {
+            "label": "noteApprovalThreshold",
+            "offset": 0,
+            "slot": "311",
+            "type": "t_uint256",
+            "contract": "Backchat",
+            "src": "contracts\\solidity\\Backchat.sol:314"
+          },
+          {
+            "label": "noteRejectionThreshold",
+            "offset": 0,
+            "slot": "312",
+            "type": "t_uint256",
+            "contract": "Backchat",
+            "src": "contracts\\solidity\\Backchat.sol:317"
+          },
+          {
+            "label": "inactivityBurnPeriod",
+            "offset": 0,
+            "slot": "313",
+            "type": "t_uint256",
+            "contract": "Backchat",
+            "src": "contracts\\solidity\\Backchat.sol:321"
+          },
+          {
+            "label": "postCooldown",
+            "offset": 0,
+            "slot": "314",
+            "type": "t_uint256",
+            "contract": "Backchat",
+            "src": "contracts\\solidity\\Backchat.sol:322"
+          },
+          {
+            "label": "commentCooldown",
+            "offset": 0,
+            "slot": "315",
+            "type": "t_uint256",
+            "contract": "Backchat",
+            "src": "contracts\\solidity\\Backchat.sol:324"
+          },
+          {
+            "label": "maxPlatformFee",
+            "offset": 0,
+            "slot": "316",
+            "type": "t_uint256",
+            "contract": "Backchat",
+            "src": "contracts\\solidity\\Backchat.sol:327"
+          },
+          {
+            "label": "maxTipMiningFeeBips",
+            "offset": 0,
+            "slot": "317",
+            "type": "t_uint256",
+            "contract": "Backchat",
+            "src": "contracts\\solidity\\Backchat.sol:328"
+          },
+          {
+            "label": "maxContentLength",
+            "offset": 0,
+            "slot": "318",
+            "type": "t_uint256",
+            "contract": "Backchat",
+            "src": "contracts\\solidity\\Backchat.sol:331"
+          },
+          {
+            "label": "maxIpfsHashLength",
+            "offset": 0,
+            "slot": "319",
+            "type": "t_uint256",
+            "contract": "Backchat",
+            "src": "contracts\\solidity\\Backchat.sol:334"
+          },
+          {
+            "label": "minInactivityBurnPeriod",
+            "offset": 0,
+            "slot": "320",
+            "type": "t_uint256",
+            "contract": "Backchat",
+            "src": "contracts\\solidity\\Backchat.sol:336"
+          },
+          {
+            "label": "kycRequired",
+            "offset": 0,
+            "slot": "321",
+            "type": "t_bool",
+            "contract": "Backchat",
+            "src": "contracts\\solidity\\Backchat.sol:338"
+          },
+          {
+            "label": "kycProvider",
+            "offset": 1,
+            "slot": "321",
+            "type": "t_address",
+            "contract": "Backchat",
+            "src": "contracts\\solidity\\Backchat.sol:341"
+          },
+          {
+            "label": "kycMinimumLevel",
+            "offset": 21,
+            "slot": "321",
+            "type": "t_uint8",
+            "contract": "Backchat",
+            "src": "contracts\\solidity\\Backchat.sol:343"
+          },
+          {
+            "label": "kycValidityPeriod",
+            "offset": 0,
+            "slot": "322",
+            "type": "t_uint256",
+            "contract": "Backchat",
+            "src": "contracts\\solidity\\Backchat.sol:346"
+          },
+          {
+            "label": "ecosystemManager",
+            "offset": 0,
+            "slot": "323",
+            "type": "t_contract(IEcosystemManager)16350",
+            "contract": "Backchat",
+            "src": "contracts\\solidity\\Backchat.sol:360"
+          },
+          {
+            "label": "bkcToken",
+            "offset": 0,
+            "slot": "324",
+            "type": "t_contract(BKCToken)6291",
+            "contract": "Backchat",
+            "src": "contracts\\solidity\\Backchat.sol:363"
+          },
+          {
+            "label": "treasury",
+            "offset": 0,
+            "slot": "325",
+            "type": "t_address",
+            "contract": "Backchat",
+            "src": "contracts\\solidity\\Backchat.sol:366"
+          },
+          {
+            "label": "_posts",
+            "offset": 0,
+            "slot": "326",
+            "type": "t_mapping(t_uint256,t_struct(Post)6350_storage)",
+            "contract": "Backchat",
+            "src": "contracts\\solidity\\Backchat.sol:381"
+          },
+          {
+            "label": "_postScores",
+            "offset": 0,
+            "slot": "327",
+            "type": "t_mapping(t_uint256,t_struct(ModerationScore)6414_storage)",
+            "contract": "Backchat",
+            "src": "contracts\\solidity\\Backchat.sol:382"
+          },
+          {
+            "label": "_postComments",
+            "offset": 0,
+            "slot": "328",
+            "type": "t_mapping(t_uint256,t_array(t_uint256)dyn_storage)",
+            "contract": "Backchat",
+            "src": "contracts\\solidity\\Backchat.sol:385"
+          },
+          {
+            "label": "_postNotes",
+            "offset": 0,
+            "slot": "329",
+            "type": "t_mapping(t_uint256,t_array(t_uint256)dyn_storage)",
+            "contract": "Backchat",
+            "src": "contracts\\solidity\\Backchat.sol:386"
+          },
+          {
+            "label": "postBoostAmount",
+            "offset": 0,
+            "slot": "330",
+            "type": "t_mapping(t_uint256,t_uint256)",
+            "contract": "Backchat",
+            "src": "contracts\\solidity\\Backchat.sol:388"
+          },
+          {
+            "label": "postTipsReceived",
+            "offset": 0,
+            "slot": "331",
+            "type": "t_mapping(t_uint256,t_uint256)",
+            "contract": "Backchat",
+            "src": "contracts\\solidity\\Backchat.sol:391"
+          },
+          {
+            "label": "_totalPosts",
+            "offset": 0,
+            "slot": "332",
+            "type": "t_uint256",
+            "contract": "Backchat",
+            "src": "contracts\\solidity\\Backchat.sol:394"
+          },
+          {
+            "label": "_comments",
+            "offset": 0,
+            "slot": "333",
+            "type": "t_mapping(t_uint256,t_struct(Comment)6370_storage)",
+            "contract": "Backchat",
+            "src": "contracts\\solidity\\Backchat.sol:408"
+          },
+          {
+            "label": "_commentScores",
+            "offset": 0,
+            "slot": "334",
+            "type": "t_mapping(t_uint256,t_struct(ModerationScore)6414_storage)",
+            "contract": "Backchat",
+            "src": "contracts\\solidity\\Backchat.sol:411"
+          },
+          {
+            "label": "_commentReplies",
+            "offset": 0,
+            "slot": "335",
+            "type": "t_mapping(t_uint256,t_array(t_uint256)dyn_storage)",
+            "contract": "Backchat",
+            "src": "contracts\\solidity\\Backchat.sol:414"
+          },
+          {
+            "label": "_totalComments",
+            "offset": 0,
+            "slot": "336",
+            "type": "t_uint256",
+            "contract": "Backchat",
+            "src": "contracts\\solidity\\Backchat.sol:417"
+          },
+          {
+            "label": "_notes",
+            "offset": 0,
+            "slot": "337",
+            "type": "t_mapping(t_uint256,t_struct(CommunityNote)6386_storage)",
+            "contract": "Backchat",
+            "src": "contracts\\solidity\\Backchat.sol:434"
+          },
+          {
+            "label": "_noteScores",
+            "offset": 0,
+            "slot": "338",
+            "type": "t_mapping(t_uint256,t_struct(NoteVotingScore)6422_storage)",
+            "contract": "Backchat",
+            "src": "contracts\\solidity\\Backchat.sol:438"
+          },
+          {
+            "label": "_totalNotes",
+            "offset": 0,
+            "slot": "339",
+            "type": "t_uint256",
+            "contract": "Backchat",
+            "src": "contracts\\solidity\\Backchat.sol:441"
+          },
+          {
+            "label": "_messages",
+            "offset": 0,
+            "slot": "340",
+            "type": "t_mapping(t_uint256,t_struct(PrivateMessage)6406_storage)",
+            "contract": "Backchat",
+            "src": "contracts\\solidity\\Backchat.sol:454"
+          },
+          {
+            "label": "_conversationMessages",
+            "offset": 0,
+            "slot": "341",
+            "type": "t_mapping(t_uint256,t_array(t_uint256)dyn_storage)",
+            "contract": "Backchat",
+            "src": "contracts\\solidity\\Backchat.sol:458"
+          },
+          {
+            "label": "_userConversations",
+            "offset": 0,
+            "slot": "342",
+            "type": "t_mapping(t_address,t_array(t_uint256)dyn_storage)",
+            "contract": "Backchat",
+            "src": "contracts\\solidity\\Backchat.sol:463"
+          },
+          {
+            "label": "_publicKeys",
+            "offset": 0,
+            "slot": "343",
+            "type": "t_mapping(t_address,t_bytes_storage)",
+            "contract": "Backchat",
+            "src": "contracts\\solidity\\Backchat.sol:469"
+          },
+          {
+            "label": "_totalMessages",
+            "offset": 0,
+            "slot": "344",
+            "type": "t_uint256",
+            "contract": "Backchat",
+            "src": "contracts\\solidity\\Backchat.sol:472"
+          },
+          {
+            "label": "_totalConversations",
+            "offset": 0,
+            "slot": "345",
+            "type": "t_uint256",
+            "contract": "Backchat",
+            "src": "contracts\\solidity\\Backchat.sol:476"
+          },
+          {
+            "label": "_votedOnPost",
+            "offset": 0,
+            "slot": "346",
+            "type": "t_mapping(t_address,t_mapping(t_uint256,t_bool))",
+            "contract": "Backchat",
+            "src": "contracts\\solidity\\Backchat.sol:503"
+          },
+          {
+            "label": "_votedOnComment",
+            "offset": 0,
+            "slot": "347",
+            "type": "t_mapping(t_address,t_mapping(t_uint256,t_bool))",
+            "contract": "Backchat",
+            "src": "contracts\\solidity\\Backchat.sol:509"
+          },
+          {
+            "label": "_votedOnNote",
+            "offset": 0,
+            "slot": "348",
+            "type": "t_mapping(t_address,t_mapping(t_uint256,t_bool))",
+            "contract": "Backchat",
+            "src": "contracts\\solidity\\Backchat.sol:513"
+          },
+          {
+            "label": "creatorBalance",
+            "offset": 0,
+            "slot": "349",
+            "type": "t_mapping(t_address,t_uint256)",
+            "contract": "Backchat",
+            "src": "contracts\\solidity\\Backchat.sol:543"
+          },
+          {
+            "label": "lastActivity",
+            "offset": 0,
+            "slot": "350",
+            "type": "t_mapping(t_address,t_uint256)",
+            "contract": "Backchat",
+            "src": "contracts\\solidity\\Backchat.sol:549"
+          },
+          {
+            "label": "_creatorStats",
+            "offset": 0,
+            "slot": "351",
+            "type": "t_mapping(t_address,t_struct(CreatorStats)6444_storage)",
+            "contract": "Backchat",
+            "src": "contracts\\solidity\\Backchat.sol:552"
+          },
+          {
+            "label": "_kycCache",
+            "offset": 0,
+            "slot": "352",
+            "type": "t_mapping(t_address,t_struct(KYCData)6432_storage)",
+            "contract": "Backchat",
+            "src": "contracts\\solidity\\Backchat.sol:557"
+          },
+          {
+            "label": "_authorPosts",
+            "offset": 0,
+            "slot": "353",
+            "type": "t_mapping(t_address,t_array(t_uint256)dyn_storage)",
+            "contract": "Backchat",
+            "src": "contracts\\solidity\\Backchat.sol:586"
+          },
+          {
+            "label": "_authorComments",
+            "offset": 0,
+            "slot": "354",
+            "type": "t_mapping(t_address,t_array(t_uint256)dyn_storage)",
+            "contract": "Backchat",
+            "src": "contracts\\solidity\\Backchat.sol:591"
+          },
+          {
+            "label": "_authorNotes",
+            "offset": 0,
+            "slot": "355",
+            "type": "t_mapping(t_address,t_array(t_uint256)dyn_storage)",
+            "contract": "Backchat",
+            "src": "contracts\\solidity\\Backchat.sol:592"
+          },
+          {
+            "label": "_lastPostTime",
+            "offset": 0,
+            "slot": "356",
+            "type": "t_mapping(t_address,t_uint256)",
+            "contract": "Backchat",
+            "src": "contracts\\solidity\\Backchat.sol:593"
+          },
+          {
+            "label": "_lastCommentTime",
+            "offset": 0,
+            "slot": "357",
+            "type": "t_mapping(t_address,t_uint256)",
+            "contract": "Backchat",
+            "src": "contracts\\solidity\\Backchat.sol:599"
+          },
+          {
+            "label": "totalPlatformFees",
+            "offset": 0,
+            "slot": "358",
+            "type": "t_uint256",
+            "contract": "Backchat",
+            "src": "contracts\\solidity\\Backchat.sol:619"
+          },
+          {
+            "label": "totalTipsProcessed",
+            "offset": 0,
+            "slot": "359",
+            "type": "t_uint256",
+            "contract": "Backchat",
+            "src": "contracts\\solidity\\Backchat.sol:620"
+          },
+          {
+            "label": "totalTipsToCreators",
+            "offset": 0,
+            "slot": "360",
+            "type": "t_uint256",
+            "contract": "Backchat",
+            "src": "contracts\\solidity\\Backchat.sol:623"
+          },
+          {
+            "label": "totalTipsToMining",
+            "offset": 0,
+            "slot": "361",
+            "type": "t_uint256",
+            "contract": "Backchat",
+            "src": "contracts\\solidity\\Backchat.sol:625"
+          },
+          {
+            "label": "totalBoostCollected",
+            "offset": 0,
+            "slot": "362",
+            "type": "t_uint256",
+            "contract": "Backchat",
+            "src": "contracts\\solidity\\Backchat.sol:628"
+          },
+          {
+            "label": "totalBurnedInactive",
+            "offset": 0,
+            "slot": "363",
+            "type": "t_uint256",
+            "contract": "Backchat",
+            "src": "contracts\\solidity\\Backchat.sol:632"
+          },
+          {
+            "label": "__gap",
+            "offset": 0,
+            "slot": "364",
+            "type": "t_array(t_uint256)50_storage",
+            "contract": "Backchat",
+            "src": "contracts\\solidity\\Backchat.sol:645"
+          }
+        ],
+        "types": {
+          "t_address": {
+            "label": "address",
+            "numberOfBytes": "20"
+          },
+          "t_array(t_uint256)49_storage": {
+            "label": "uint256[49]",
+            "numberOfBytes": "1568"
+          },
+          "t_array(t_uint256)50_storage": {
+            "label": "uint256[50]",
+            "numberOfBytes": "1600"
+          },
+          "t_array(t_uint256)dyn_storage": {
+            "label": "uint256[]",
+            "numberOfBytes": "32"
+          },
+          "t_bool": {
+            "label": "bool",
+            "numberOfBytes": "1"
+          },
+          "t_bytes32": {
+            "label": "bytes32",
+            "numberOfBytes": "32"
+          },
+          "t_bytes_storage": {
+            "label": "bytes",
+            "numberOfBytes": "32"
+          },
+          "t_contract(BKCToken)6291": {
+            "label": "contract BKCToken",
+            "numberOfBytes": "20"
+          },
+          "t_contract(IEcosystemManager)16350": {
+            "label": "contract IEcosystemManager",
+            "numberOfBytes": "20"
+          },
+          "t_mapping(t_address,t_array(t_uint256)dyn_storage)": {
+            "label": "mapping(address => uint256[])",
+            "numberOfBytes": "32"
+          },
+          "t_mapping(t_address,t_bytes_storage)": {
+            "label": "mapping(address => bytes)",
+            "numberOfBytes": "32"
+          },
+          "t_mapping(t_address,t_mapping(t_uint256,t_bool))": {
+            "label": "mapping(address => mapping(uint256 => bool))",
+            "numberOfBytes": "32"
+          },
+          "t_mapping(t_address,t_struct(CreatorStats)6444_storage)": {
+            "label": "mapping(address => struct Backchat.CreatorStats)",
+            "numberOfBytes": "32"
+          },
+          "t_mapping(t_address,t_struct(KYCData)6432_storage)": {
+            "label": "mapping(address => struct Backchat.KYCData)",
+            "numberOfBytes": "32"
+          },
+          "t_mapping(t_address,t_uint256)": {
+            "label": "mapping(address => uint256)",
+            "numberOfBytes": "32"
+          },
+          "t_mapping(t_uint256,t_array(t_uint256)dyn_storage)": {
+            "label": "mapping(uint256 => uint256[])",
+            "numberOfBytes": "32"
+          },
+          "t_mapping(t_uint256,t_bool)": {
+            "label": "mapping(uint256 => bool)",
+            "numberOfBytes": "32"
+          },
+          "t_mapping(t_uint256,t_struct(Comment)6370_storage)": {
+            "label": "mapping(uint256 => struct Backchat.Comment)",
+            "numberOfBytes": "32"
+          },
+          "t_mapping(t_uint256,t_struct(CommunityNote)6386_storage)": {
+            "label": "mapping(uint256 => struct Backchat.CommunityNote)",
+            "numberOfBytes": "32"
+          },
+          "t_mapping(t_uint256,t_struct(ModerationScore)6414_storage)": {
+            "label": "mapping(uint256 => struct Backchat.ModerationScore)",
+            "numberOfBytes": "32"
+          },
+          "t_mapping(t_uint256,t_struct(NoteVotingScore)6422_storage)": {
+            "label": "mapping(uint256 => struct Backchat.NoteVotingScore)",
+            "numberOfBytes": "32"
+          },
+          "t_mapping(t_uint256,t_struct(Post)6350_storage)": {
+            "label": "mapping(uint256 => struct Backchat.Post)",
+            "numberOfBytes": "32"
+          },
+          "t_mapping(t_uint256,t_struct(PrivateMessage)6406_storage)": {
+            "label": "mapping(uint256 => struct Backchat.PrivateMessage)",
+            "numberOfBytes": "32"
+          },
+          "t_mapping(t_uint256,t_uint256)": {
+            "label": "mapping(uint256 => uint256)",
+            "numberOfBytes": "32"
+          },
+          "t_string_storage": {
+            "label": "string",
+            "numberOfBytes": "32"
+          },
+          "t_struct(Comment)6370_storage": {
+            "label": "struct Backchat.Comment",
+            "members": [
+              {
+                "label": "id",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "0"
+              },
+              {
+                "label": "postId",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "1"
+              },
+              {
+                "label": "parentCommentId",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "2"
+              },
+              {
+                "label": "author",
+                "type": "t_address",
+                "offset": 0,
+                "slot": "3"
+              },
+              {
+                "label": "content",
+                "type": "t_string_storage",
+                "offset": 0,
+                "slot": "4"
+              },
+              {
+                "label": "ipfsHash",
+                "type": "t_string_storage",
+                "offset": 0,
+                "slot": "5"
+              },
+              {
+                "label": "createdAt",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "6"
+              },
+              {
+                "label": "exists",
+                "type": "t_bool",
+                "offset": 0,
+                "slot": "7"
+              },
+              {
+                "label": "deleted",
+                "type": "t_bool",
+                "offset": 1,
+                "slot": "7"
+              }
+            ],
+            "numberOfBytes": "256"
+          },
+          "t_struct(CommunityNote)6386_storage": {
+            "label": "struct Backchat.CommunityNote",
+            "members": [
+              {
+                "label": "id",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "0"
+              },
+              {
+                "label": "postId",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "1"
+              },
+              {
+                "label": "author",
+                "type": "t_address",
+                "offset": 0,
+                "slot": "2"
+              },
+              {
+                "label": "content",
+                "type": "t_string_storage",
+                "offset": 0,
+                "slot": "3"
+              },
+              {
+                "label": "ipfsHash",
+                "type": "t_string_storage",
+                "offset": 0,
+                "slot": "4"
+              },
+              {
+                "label": "createdAt",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "5"
+              },
+              {
+                "label": "exists",
+                "type": "t_bool",
+                "offset": 0,
+                "slot": "6"
+              }
+            ],
+            "numberOfBytes": "224"
+          },
+          "t_struct(CreatorStats)6444_storage": {
+            "label": "struct Backchat.CreatorStats",
+            "members": [
+              {
+                "label": "totalPosts",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "0"
+              },
+              {
+                "label": "totalComments",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "1"
+              },
+              {
+                "label": "totalTipsReceived",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "2"
+              },
+              {
+                "label": "totalTipsClaimed",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "3"
+              },
+              {
+                "label": "reputationScore",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "4"
+              }
+            ],
+            "numberOfBytes": "160"
+          },
+          "t_struct(KYCData)6432_storage": {
+            "label": "struct Backchat.KYCData",
+            "members": [
+              {
+                "label": "verified",
+                "type": "t_bool",
+                "offset": 0,
+                "slot": "0"
+              },
+              {
+                "label": "level",
+                "type": "t_uint8",
+                "offset": 1,
+                "slot": "0"
+              },
+              {
+                "label": "verifiedAt",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "1"
+              },
+              {
+                "label": "expiresAt",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "2"
+              }
+            ],
+            "numberOfBytes": "96"
+          },
+          "t_struct(ModerationScore)6414_storage": {
+            "label": "struct Backchat.ModerationScore",
+            "members": [
+              {
+                "label": "safeVotes",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "0"
+              },
+              {
+                "label": "unsafeVotes",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "1"
+              },
+              {
+                "label": "totalVoters",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "2"
+              }
+            ],
+            "numberOfBytes": "96"
+          },
+          "t_struct(NoteVotingScore)6422_storage": {
+            "label": "struct Backchat.NoteVotingScore",
+            "members": [
+              {
+                "label": "believeVotes",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "0"
+              },
+              {
+                "label": "dontBelieveVotes",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "1"
+              },
+              {
+                "label": "totalVoters",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "2"
+              }
+            ],
+            "numberOfBytes": "96"
+          },
+          "t_struct(Post)6350_storage": {
+            "label": "struct Backchat.Post",
+            "members": [
+              {
+                "label": "id",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "0"
+              },
+              {
+                "label": "author",
+                "type": "t_address",
+                "offset": 0,
+                "slot": "1"
+              },
+              {
+                "label": "content",
+                "type": "t_string_storage",
+                "offset": 0,
+                "slot": "2"
+              },
+              {
+                "label": "ipfsHash",
+                "type": "t_string_storage",
+                "offset": 0,
+                "slot": "3"
+              },
+              {
+                "label": "createdAt",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "4"
+              },
+              {
+                "label": "editedAt",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "5"
+              },
+              {
+                "label": "exists",
+                "type": "t_bool",
+                "offset": 0,
+                "slot": "6"
+              },
+              {
+                "label": "deleted",
+                "type": "t_bool",
+                "offset": 1,
+                "slot": "6"
+              }
+            ],
+            "numberOfBytes": "224"
+          },
+          "t_struct(PrivateMessage)6406_storage": {
+            "label": "struct Backchat.PrivateMessage",
+            "members": [
+              {
+                "label": "id",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "0"
+              },
+              {
+                "label": "conversationId",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "1"
+              },
+              {
+                "label": "parentMessageId",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "2"
+              },
+              {
+                "label": "sender",
+                "type": "t_address",
+                "offset": 0,
+                "slot": "3"
+              },
+              {
+                "label": "recipient",
+                "type": "t_address",
+                "offset": 0,
+                "slot": "4"
+              },
+              {
+                "label": "encryptedContent",
+                "type": "t_string_storage",
+                "offset": 0,
+                "slot": "5"
+              },
+              {
+                "label": "encryptedIpfsHash",
+                "type": "t_string_storage",
+                "offset": 0,
+                "slot": "6"
+              },
+              {
+                "label": "sentAt",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "7"
+              },
+              {
+                "label": "exists",
+                "type": "t_bool",
+                "offset": 0,
+                "slot": "8"
+              }
+            ],
+            "numberOfBytes": "288"
+          },
+          "t_uint256": {
+            "label": "uint256",
+            "numberOfBytes": "32"
+          },
+          "t_uint8": {
+            "label": "uint8",
+            "numberOfBytes": "1"
+          }
+        },
+        "namespaces": {}
+      }
+    },
+    "03e37c10af93d46aa471f6460457e968ba2e2f0615cd5f4b45d71b04fa236923": {
+      "address": "0x237F30Da01Fc9a43629814f3A99514DEf6B126Db",
+      "txHash": "0xdba35ee2914a6beccf9da461a579bf8c6f54305339f235a7cb517a680e61d002",
+      "layout": {
+        "solcVersion": "0.8.28",
+        "storage": [
+          {
+            "label": "_initialized",
+            "offset": 0,
+            "slot": "0",
+            "type": "t_uint8",
+            "contract": "Initializable",
+            "src": "@openzeppelin\\contracts-upgradeable\\proxy\\utils\\Initializable.sol:63",
+            "retypedFrom": "bool"
+          },
+          {
+            "label": "_initializing",
+            "offset": 1,
+            "slot": "0",
+            "type": "t_bool",
+            "contract": "Initializable",
+            "src": "@openzeppelin\\contracts-upgradeable\\proxy\\utils\\Initializable.sol:68"
+          },
+          {
+            "label": "__gap",
+            "offset": 0,
+            "slot": "1",
+            "type": "t_array(t_uint256)50_storage",
+            "contract": "ERC1967UpgradeUpgradeable",
+            "src": "@openzeppelin\\contracts-upgradeable\\proxy\\ERC1967\\ERC1967UpgradeUpgradeable.sol:169"
+          },
+          {
+            "label": "__gap",
+            "offset": 0,
+            "slot": "51",
+            "type": "t_array(t_uint256)50_storage",
+            "contract": "UUPSUpgradeable",
+            "src": "@openzeppelin\\contracts-upgradeable\\proxy\\utils\\UUPSUpgradeable.sol:111"
+          },
+          {
+            "label": "__gap",
+            "offset": 0,
+            "slot": "101",
+            "type": "t_array(t_uint256)50_storage",
+            "contract": "ContextUpgradeable",
+            "src": "@openzeppelin\\contracts-upgradeable\\utils\\ContextUpgradeable.sol:36"
+          },
+          {
+            "label": "_owner",
+            "offset": 0,
+            "slot": "151",
+            "type": "t_address",
+            "contract": "OwnableUpgradeable",
+            "src": "@openzeppelin\\contracts-upgradeable\\access\\OwnableUpgradeable.sol:22"
+          },
+          {
+            "label": "__gap",
+            "offset": 0,
+            "slot": "152",
+            "type": "t_array(t_uint256)49_storage",
+            "contract": "OwnableUpgradeable",
+            "src": "@openzeppelin\\contracts-upgradeable\\access\\OwnableUpgradeable.sol:94"
+          },
+          {
+            "label": "_status",
+            "offset": 0,
+            "slot": "201",
+            "type": "t_uint256",
+            "contract": "ReentrancyGuardUpgradeable",
+            "src": "@openzeppelin\\contracts-upgradeable\\security\\ReentrancyGuardUpgradeable.sol:38"
+          },
+          {
+            "label": "__gap",
+            "offset": 0,
+            "slot": "202",
+            "type": "t_array(t_uint256)49_storage",
+            "contract": "ReentrancyGuardUpgradeable",
+            "src": "@openzeppelin\\contracts-upgradeable\\security\\ReentrancyGuardUpgradeable.sol:88"
+          },
+          {
+            "label": "_paused",
+            "offset": 0,
+            "slot": "251",
+            "type": "t_bool",
+            "contract": "PausableUpgradeable",
+            "src": "@openzeppelin\\contracts-upgradeable\\security\\PausableUpgradeable.sol:29"
+          },
+          {
+            "label": "__gap",
+            "offset": 0,
+            "slot": "252",
+            "type": "t_array(t_uint256)49_storage",
+            "contract": "PausableUpgradeable",
+            "src": "@openzeppelin\\contracts-upgradeable\\security\\PausableUpgradeable.sol:116"
+          },
+          {
+            "label": "bipsDenominator",
+            "offset": 0,
+            "slot": "301",
+            "type": "t_uint256",
+            "contract": "Backchat",
+            "src": "contracts\\solidity\\Backchat.sol:282"
+          },
+          {
+            "label": "serviceKey",
+            "offset": 0,
+            "slot": "302",
+            "type": "t_bytes32",
+            "contract": "Backchat",
+            "src": "contracts\\solidity\\Backchat.sol:283"
+          },
+          {
+            "label": "platformFee",
+            "offset": 0,
+            "slot": "303",
+            "type": "t_uint256",
+            "contract": "Backchat",
+            "src": "contracts\\solidity\\Backchat.sol:287"
+          },
+          {
+            "label": "platformMiningFeeBips",
+            "offset": 0,
+            "slot": "304",
+            "type": "t_uint256",
+            "contract": "Backchat",
+            "src": "contracts\\solidity\\Backchat.sol:290"
+          },
+          {
+            "label": "platformTreasuryFeeBips",
+            "offset": 0,
+            "slot": "305",
+            "type": "t_uint256",
+            "contract": "Backchat",
+            "src": "contracts\\solidity\\Backchat.sol:295"
+          },
+          {
+            "label": "minTipAmount",
+            "offset": 0,
+            "slot": "306",
+            "type": "t_uint256",
+            "contract": "Backchat",
+            "src": "contracts\\solidity\\Backchat.sol:296"
+          },
+          {
+            "label": "tipMiningFeeBips",
+            "offset": 0,
+            "slot": "307",
+            "type": "t_uint256",
+            "contract": "Backchat",
+            "src": "contracts\\solidity\\Backchat.sol:300"
+          },
+          {
+            "label": "thresholdTrusted",
+            "offset": 0,
+            "slot": "308",
+            "type": "t_uint256",
+            "contract": "Backchat",
+            "src": "contracts\\solidity\\Backchat.sol:303"
+          },
+          {
+            "label": "thresholdWarning",
+            "offset": 0,
+            "slot": "309",
+            "type": "t_uint256",
+            "contract": "Backchat",
+            "src": "contracts\\solidity\\Backchat.sol:308"
+          },
+          {
+            "label": "thresholdHidden",
+            "offset": 0,
+            "slot": "310",
+            "type": "t_uint256",
+            "contract": "Backchat",
+            "src": "contracts\\solidity\\Backchat.sol:311"
+          },
+          {
+            "label": "noteApprovalThreshold",
+            "offset": 0,
+            "slot": "311",
+            "type": "t_uint256",
+            "contract": "Backchat",
+            "src": "contracts\\solidity\\Backchat.sol:314"
+          },
+          {
+            "label": "noteRejectionThreshold",
+            "offset": 0,
+            "slot": "312",
+            "type": "t_uint256",
+            "contract": "Backchat",
+            "src": "contracts\\solidity\\Backchat.sol:317"
+          },
+          {
+            "label": "inactivityBurnPeriod",
+            "offset": 0,
+            "slot": "313",
+            "type": "t_uint256",
+            "contract": "Backchat",
+            "src": "contracts\\solidity\\Backchat.sol:321"
+          },
+          {
+            "label": "postCooldown",
+            "offset": 0,
+            "slot": "314",
+            "type": "t_uint256",
+            "contract": "Backchat",
+            "src": "contracts\\solidity\\Backchat.sol:322"
+          },
+          {
+            "label": "commentCooldown",
+            "offset": 0,
+            "slot": "315",
+            "type": "t_uint256",
+            "contract": "Backchat",
+            "src": "contracts\\solidity\\Backchat.sol:324"
+          },
+          {
+            "label": "maxPlatformFee",
+            "offset": 0,
+            "slot": "316",
+            "type": "t_uint256",
+            "contract": "Backchat",
+            "src": "contracts\\solidity\\Backchat.sol:327"
+          },
+          {
+            "label": "maxTipMiningFeeBips",
+            "offset": 0,
+            "slot": "317",
+            "type": "t_uint256",
+            "contract": "Backchat",
+            "src": "contracts\\solidity\\Backchat.sol:328"
+          },
+          {
+            "label": "maxContentLength",
+            "offset": 0,
+            "slot": "318",
+            "type": "t_uint256",
+            "contract": "Backchat",
+            "src": "contracts\\solidity\\Backchat.sol:331"
+          },
+          {
+            "label": "maxIpfsHashLength",
+            "offset": 0,
+            "slot": "319",
+            "type": "t_uint256",
+            "contract": "Backchat",
+            "src": "contracts\\solidity\\Backchat.sol:334"
+          },
+          {
+            "label": "minInactivityBurnPeriod",
+            "offset": 0,
+            "slot": "320",
+            "type": "t_uint256",
+            "contract": "Backchat",
+            "src": "contracts\\solidity\\Backchat.sol:336"
+          },
+          {
+            "label": "kycRequired",
+            "offset": 0,
+            "slot": "321",
+            "type": "t_bool",
+            "contract": "Backchat",
+            "src": "contracts\\solidity\\Backchat.sol:338"
+          },
+          {
+            "label": "kycProvider",
+            "offset": 1,
+            "slot": "321",
+            "type": "t_address",
+            "contract": "Backchat",
+            "src": "contracts\\solidity\\Backchat.sol:341"
+          },
+          {
+            "label": "kycMinimumLevel",
+            "offset": 21,
+            "slot": "321",
+            "type": "t_uint8",
+            "contract": "Backchat",
+            "src": "contracts\\solidity\\Backchat.sol:343"
+          },
+          {
+            "label": "kycValidityPeriod",
+            "offset": 0,
+            "slot": "322",
+            "type": "t_uint256",
+            "contract": "Backchat",
+            "src": "contracts\\solidity\\Backchat.sol:346"
+          },
+          {
+            "label": "ecosystemManager",
+            "offset": 0,
+            "slot": "323",
+            "type": "t_contract(IEcosystemManager)7293",
+            "contract": "Backchat",
+            "src": "contracts\\solidity\\Backchat.sol:360"
+          },
+          {
+            "label": "bkcToken",
+            "offset": 0,
+            "slot": "324",
+            "type": "t_contract(BKCToken)3343",
+            "contract": "Backchat",
+            "src": "contracts\\solidity\\Backchat.sol:363"
+          },
+          {
+            "label": "treasury",
+            "offset": 0,
+            "slot": "325",
+            "type": "t_address",
+            "contract": "Backchat",
+            "src": "contracts\\solidity\\Backchat.sol:366"
+          },
+          {
+            "label": "_posts",
+            "offset": 0,
+            "slot": "326",
+            "type": "t_mapping(t_uint256,t_struct(Post)3402_storage)",
+            "contract": "Backchat",
+            "src": "contracts\\solidity\\Backchat.sol:381"
+          },
+          {
+            "label": "_postScores",
+            "offset": 0,
+            "slot": "327",
+            "type": "t_mapping(t_uint256,t_struct(ModerationScore)3466_storage)",
+            "contract": "Backchat",
+            "src": "contracts\\solidity\\Backchat.sol:382"
+          },
+          {
+            "label": "_postComments",
+            "offset": 0,
+            "slot": "328",
+            "type": "t_mapping(t_uint256,t_array(t_uint256)dyn_storage)",
+            "contract": "Backchat",
+            "src": "contracts\\solidity\\Backchat.sol:385"
+          },
+          {
+            "label": "_postNotes",
+            "offset": 0,
+            "slot": "329",
+            "type": "t_mapping(t_uint256,t_array(t_uint256)dyn_storage)",
+            "contract": "Backchat",
+            "src": "contracts\\solidity\\Backchat.sol:386"
+          },
+          {
+            "label": "postBoostAmount",
+            "offset": 0,
+            "slot": "330",
+            "type": "t_mapping(t_uint256,t_uint256)",
+            "contract": "Backchat",
+            "src": "contracts\\solidity\\Backchat.sol:388"
+          },
+          {
+            "label": "postTipsReceived",
+            "offset": 0,
+            "slot": "331",
+            "type": "t_mapping(t_uint256,t_uint256)",
+            "contract": "Backchat",
+            "src": "contracts\\solidity\\Backchat.sol:391"
+          },
+          {
+            "label": "_totalPosts",
+            "offset": 0,
+            "slot": "332",
+            "type": "t_uint256",
+            "contract": "Backchat",
+            "src": "contracts\\solidity\\Backchat.sol:394"
+          },
+          {
+            "label": "_comments",
+            "offset": 0,
+            "slot": "333",
+            "type": "t_mapping(t_uint256,t_struct(Comment)3422_storage)",
+            "contract": "Backchat",
+            "src": "contracts\\solidity\\Backchat.sol:408"
+          },
+          {
+            "label": "_commentScores",
+            "offset": 0,
+            "slot": "334",
+            "type": "t_mapping(t_uint256,t_struct(ModerationScore)3466_storage)",
+            "contract": "Backchat",
+            "src": "contracts\\solidity\\Backchat.sol:411"
+          },
+          {
+            "label": "_commentReplies",
+            "offset": 0,
+            "slot": "335",
+            "type": "t_mapping(t_uint256,t_array(t_uint256)dyn_storage)",
+            "contract": "Backchat",
+            "src": "contracts\\solidity\\Backchat.sol:414"
+          },
+          {
+            "label": "_totalComments",
+            "offset": 0,
+            "slot": "336",
+            "type": "t_uint256",
+            "contract": "Backchat",
+            "src": "contracts\\solidity\\Backchat.sol:417"
+          },
+          {
+            "label": "_notes",
+            "offset": 0,
+            "slot": "337",
+            "type": "t_mapping(t_uint256,t_struct(CommunityNote)3438_storage)",
+            "contract": "Backchat",
+            "src": "contracts\\solidity\\Backchat.sol:434"
+          },
+          {
+            "label": "_noteScores",
+            "offset": 0,
+            "slot": "338",
+            "type": "t_mapping(t_uint256,t_struct(NoteVotingScore)3474_storage)",
+            "contract": "Backchat",
+            "src": "contracts\\solidity\\Backchat.sol:438"
+          },
+          {
+            "label": "_totalNotes",
+            "offset": 0,
+            "slot": "339",
+            "type": "t_uint256",
+            "contract": "Backchat",
+            "src": "contracts\\solidity\\Backchat.sol:441"
+          },
+          {
+            "label": "_messages",
+            "offset": 0,
+            "slot": "340",
+            "type": "t_mapping(t_uint256,t_struct(PrivateMessage)3458_storage)",
+            "contract": "Backchat",
+            "src": "contracts\\solidity\\Backchat.sol:454"
+          },
+          {
+            "label": "_conversationMessages",
+            "offset": 0,
+            "slot": "341",
+            "type": "t_mapping(t_uint256,t_array(t_uint256)dyn_storage)",
+            "contract": "Backchat",
+            "src": "contracts\\solidity\\Backchat.sol:458"
+          },
+          {
+            "label": "_userConversations",
+            "offset": 0,
+            "slot": "342",
+            "type": "t_mapping(t_address,t_array(t_uint256)dyn_storage)",
+            "contract": "Backchat",
+            "src": "contracts\\solidity\\Backchat.sol:463"
+          },
+          {
+            "label": "_publicKeys",
+            "offset": 0,
+            "slot": "343",
+            "type": "t_mapping(t_address,t_bytes_storage)",
+            "contract": "Backchat",
+            "src": "contracts\\solidity\\Backchat.sol:469"
+          },
+          {
+            "label": "_totalMessages",
+            "offset": 0,
+            "slot": "344",
+            "type": "t_uint256",
+            "contract": "Backchat",
+            "src": "contracts\\solidity\\Backchat.sol:472"
+          },
+          {
+            "label": "_totalConversations",
+            "offset": 0,
+            "slot": "345",
+            "type": "t_uint256",
+            "contract": "Backchat",
+            "src": "contracts\\solidity\\Backchat.sol:476"
+          },
+          {
+            "label": "_votedOnPost",
+            "offset": 0,
+            "slot": "346",
+            "type": "t_mapping(t_address,t_mapping(t_uint256,t_bool))",
+            "contract": "Backchat",
+            "src": "contracts\\solidity\\Backchat.sol:503"
+          },
+          {
+            "label": "_votedOnComment",
+            "offset": 0,
+            "slot": "347",
+            "type": "t_mapping(t_address,t_mapping(t_uint256,t_bool))",
+            "contract": "Backchat",
+            "src": "contracts\\solidity\\Backchat.sol:509"
+          },
+          {
+            "label": "_votedOnNote",
+            "offset": 0,
+            "slot": "348",
+            "type": "t_mapping(t_address,t_mapping(t_uint256,t_bool))",
+            "contract": "Backchat",
+            "src": "contracts\\solidity\\Backchat.sol:513"
+          },
+          {
+            "label": "creatorBalance",
+            "offset": 0,
+            "slot": "349",
+            "type": "t_mapping(t_address,t_uint256)",
+            "contract": "Backchat",
+            "src": "contracts\\solidity\\Backchat.sol:543"
+          },
+          {
+            "label": "lastActivity",
+            "offset": 0,
+            "slot": "350",
+            "type": "t_mapping(t_address,t_uint256)",
+            "contract": "Backchat",
+            "src": "contracts\\solidity\\Backchat.sol:549"
+          },
+          {
+            "label": "_creatorStats",
+            "offset": 0,
+            "slot": "351",
+            "type": "t_mapping(t_address,t_struct(CreatorStats)3496_storage)",
+            "contract": "Backchat",
+            "src": "contracts\\solidity\\Backchat.sol:552"
+          },
+          {
+            "label": "_kycCache",
+            "offset": 0,
+            "slot": "352",
+            "type": "t_mapping(t_address,t_struct(KYCData)3484_storage)",
+            "contract": "Backchat",
+            "src": "contracts\\solidity\\Backchat.sol:557"
+          },
+          {
+            "label": "_authorPosts",
+            "offset": 0,
+            "slot": "353",
+            "type": "t_mapping(t_address,t_array(t_uint256)dyn_storage)",
+            "contract": "Backchat",
+            "src": "contracts\\solidity\\Backchat.sol:586"
+          },
+          {
+            "label": "_authorComments",
+            "offset": 0,
+            "slot": "354",
+            "type": "t_mapping(t_address,t_array(t_uint256)dyn_storage)",
+            "contract": "Backchat",
+            "src": "contracts\\solidity\\Backchat.sol:591"
+          },
+          {
+            "label": "_authorNotes",
+            "offset": 0,
+            "slot": "355",
+            "type": "t_mapping(t_address,t_array(t_uint256)dyn_storage)",
+            "contract": "Backchat",
+            "src": "contracts\\solidity\\Backchat.sol:592"
+          },
+          {
+            "label": "_lastPostTime",
+            "offset": 0,
+            "slot": "356",
+            "type": "t_mapping(t_address,t_uint256)",
+            "contract": "Backchat",
+            "src": "contracts\\solidity\\Backchat.sol:593"
+          },
+          {
+            "label": "_lastCommentTime",
+            "offset": 0,
+            "slot": "357",
+            "type": "t_mapping(t_address,t_uint256)",
+            "contract": "Backchat",
+            "src": "contracts\\solidity\\Backchat.sol:599"
+          },
+          {
+            "label": "totalPlatformFees",
+            "offset": 0,
+            "slot": "358",
+            "type": "t_uint256",
+            "contract": "Backchat",
+            "src": "contracts\\solidity\\Backchat.sol:619"
+          },
+          {
+            "label": "totalTipsProcessed",
+            "offset": 0,
+            "slot": "359",
+            "type": "t_uint256",
+            "contract": "Backchat",
+            "src": "contracts\\solidity\\Backchat.sol:620"
+          },
+          {
+            "label": "totalTipsToCreators",
+            "offset": 0,
+            "slot": "360",
+            "type": "t_uint256",
+            "contract": "Backchat",
+            "src": "contracts\\solidity\\Backchat.sol:623"
+          },
+          {
+            "label": "totalTipsToMining",
+            "offset": 0,
+            "slot": "361",
+            "type": "t_uint256",
+            "contract": "Backchat",
+            "src": "contracts\\solidity\\Backchat.sol:625"
+          },
+          {
+            "label": "totalBoostCollected",
+            "offset": 0,
+            "slot": "362",
+            "type": "t_uint256",
+            "contract": "Backchat",
+            "src": "contracts\\solidity\\Backchat.sol:628"
+          },
+          {
+            "label": "totalBurnedInactive",
+            "offset": 0,
+            "slot": "363",
+            "type": "t_uint256",
+            "contract": "Backchat",
+            "src": "contracts\\solidity\\Backchat.sol:632"
+          },
+          {
+            "label": "__gap",
+            "offset": 0,
+            "slot": "364",
+            "type": "t_array(t_uint256)50_storage",
+            "contract": "Backchat",
+            "src": "contracts\\solidity\\Backchat.sol:645"
+          }
+        ],
+        "types": {
+          "t_address": {
+            "label": "address",
+            "numberOfBytes": "20"
+          },
+          "t_array(t_uint256)49_storage": {
+            "label": "uint256[49]",
+            "numberOfBytes": "1568"
+          },
+          "t_array(t_uint256)50_storage": {
+            "label": "uint256[50]",
+            "numberOfBytes": "1600"
+          },
+          "t_array(t_uint256)dyn_storage": {
+            "label": "uint256[]",
+            "numberOfBytes": "32"
+          },
+          "t_bool": {
+            "label": "bool",
+            "numberOfBytes": "1"
+          },
+          "t_bytes32": {
+            "label": "bytes32",
+            "numberOfBytes": "32"
+          },
+          "t_bytes_storage": {
+            "label": "bytes",
+            "numberOfBytes": "32"
+          },
+          "t_contract(BKCToken)3343": {
+            "label": "contract BKCToken",
+            "numberOfBytes": "20"
+          },
+          "t_contract(IEcosystemManager)7293": {
+            "label": "contract IEcosystemManager",
+            "numberOfBytes": "20"
+          },
+          "t_mapping(t_address,t_array(t_uint256)dyn_storage)": {
+            "label": "mapping(address => uint256[])",
+            "numberOfBytes": "32"
+          },
+          "t_mapping(t_address,t_bytes_storage)": {
+            "label": "mapping(address => bytes)",
+            "numberOfBytes": "32"
+          },
+          "t_mapping(t_address,t_mapping(t_uint256,t_bool))": {
+            "label": "mapping(address => mapping(uint256 => bool))",
+            "numberOfBytes": "32"
+          },
+          "t_mapping(t_address,t_struct(CreatorStats)3496_storage)": {
+            "label": "mapping(address => struct Backchat.CreatorStats)",
+            "numberOfBytes": "32"
+          },
+          "t_mapping(t_address,t_struct(KYCData)3484_storage)": {
+            "label": "mapping(address => struct Backchat.KYCData)",
+            "numberOfBytes": "32"
+          },
+          "t_mapping(t_address,t_uint256)": {
+            "label": "mapping(address => uint256)",
+            "numberOfBytes": "32"
+          },
+          "t_mapping(t_uint256,t_array(t_uint256)dyn_storage)": {
+            "label": "mapping(uint256 => uint256[])",
+            "numberOfBytes": "32"
+          },
+          "t_mapping(t_uint256,t_bool)": {
+            "label": "mapping(uint256 => bool)",
+            "numberOfBytes": "32"
+          },
+          "t_mapping(t_uint256,t_struct(Comment)3422_storage)": {
+            "label": "mapping(uint256 => struct Backchat.Comment)",
+            "numberOfBytes": "32"
+          },
+          "t_mapping(t_uint256,t_struct(CommunityNote)3438_storage)": {
+            "label": "mapping(uint256 => struct Backchat.CommunityNote)",
+            "numberOfBytes": "32"
+          },
+          "t_mapping(t_uint256,t_struct(ModerationScore)3466_storage)": {
+            "label": "mapping(uint256 => struct Backchat.ModerationScore)",
+            "numberOfBytes": "32"
+          },
+          "t_mapping(t_uint256,t_struct(NoteVotingScore)3474_storage)": {
+            "label": "mapping(uint256 => struct Backchat.NoteVotingScore)",
+            "numberOfBytes": "32"
+          },
+          "t_mapping(t_uint256,t_struct(Post)3402_storage)": {
+            "label": "mapping(uint256 => struct Backchat.Post)",
+            "numberOfBytes": "32"
+          },
+          "t_mapping(t_uint256,t_struct(PrivateMessage)3458_storage)": {
+            "label": "mapping(uint256 => struct Backchat.PrivateMessage)",
+            "numberOfBytes": "32"
+          },
+          "t_mapping(t_uint256,t_uint256)": {
+            "label": "mapping(uint256 => uint256)",
+            "numberOfBytes": "32"
+          },
+          "t_string_storage": {
+            "label": "string",
+            "numberOfBytes": "32"
+          },
+          "t_struct(Comment)3422_storage": {
+            "label": "struct Backchat.Comment",
+            "members": [
+              {
+                "label": "id",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "0"
+              },
+              {
+                "label": "postId",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "1"
+              },
+              {
+                "label": "parentCommentId",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "2"
+              },
+              {
+                "label": "author",
+                "type": "t_address",
+                "offset": 0,
+                "slot": "3"
+              },
+              {
+                "label": "content",
+                "type": "t_string_storage",
+                "offset": 0,
+                "slot": "4"
+              },
+              {
+                "label": "ipfsHash",
+                "type": "t_string_storage",
+                "offset": 0,
+                "slot": "5"
+              },
+              {
+                "label": "createdAt",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "6"
+              },
+              {
+                "label": "exists",
+                "type": "t_bool",
+                "offset": 0,
+                "slot": "7"
+              },
+              {
+                "label": "deleted",
+                "type": "t_bool",
+                "offset": 1,
+                "slot": "7"
+              }
+            ],
+            "numberOfBytes": "256"
+          },
+          "t_struct(CommunityNote)3438_storage": {
+            "label": "struct Backchat.CommunityNote",
+            "members": [
+              {
+                "label": "id",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "0"
+              },
+              {
+                "label": "postId",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "1"
+              },
+              {
+                "label": "author",
+                "type": "t_address",
+                "offset": 0,
+                "slot": "2"
+              },
+              {
+                "label": "content",
+                "type": "t_string_storage",
+                "offset": 0,
+                "slot": "3"
+              },
+              {
+                "label": "ipfsHash",
+                "type": "t_string_storage",
+                "offset": 0,
+                "slot": "4"
+              },
+              {
+                "label": "createdAt",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "5"
+              },
+              {
+                "label": "exists",
+                "type": "t_bool",
+                "offset": 0,
+                "slot": "6"
+              }
+            ],
+            "numberOfBytes": "224"
+          },
+          "t_struct(CreatorStats)3496_storage": {
+            "label": "struct Backchat.CreatorStats",
+            "members": [
+              {
+                "label": "totalPosts",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "0"
+              },
+              {
+                "label": "totalComments",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "1"
+              },
+              {
+                "label": "totalTipsReceived",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "2"
+              },
+              {
+                "label": "totalTipsClaimed",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "3"
+              },
+              {
+                "label": "reputationScore",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "4"
+              }
+            ],
+            "numberOfBytes": "160"
+          },
+          "t_struct(KYCData)3484_storage": {
+            "label": "struct Backchat.KYCData",
+            "members": [
+              {
+                "label": "verified",
+                "type": "t_bool",
+                "offset": 0,
+                "slot": "0"
+              },
+              {
+                "label": "level",
+                "type": "t_uint8",
+                "offset": 1,
+                "slot": "0"
+              },
+              {
+                "label": "verifiedAt",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "1"
+              },
+              {
+                "label": "expiresAt",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "2"
+              }
+            ],
+            "numberOfBytes": "96"
+          },
+          "t_struct(ModerationScore)3466_storage": {
+            "label": "struct Backchat.ModerationScore",
+            "members": [
+              {
+                "label": "safeVotes",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "0"
+              },
+              {
+                "label": "unsafeVotes",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "1"
+              },
+              {
+                "label": "totalVoters",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "2"
+              }
+            ],
+            "numberOfBytes": "96"
+          },
+          "t_struct(NoteVotingScore)3474_storage": {
+            "label": "struct Backchat.NoteVotingScore",
+            "members": [
+              {
+                "label": "believeVotes",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "0"
+              },
+              {
+                "label": "dontBelieveVotes",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "1"
+              },
+              {
+                "label": "totalVoters",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "2"
+              }
+            ],
+            "numberOfBytes": "96"
+          },
+          "t_struct(Post)3402_storage": {
+            "label": "struct Backchat.Post",
+            "members": [
+              {
+                "label": "id",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "0"
+              },
+              {
+                "label": "author",
+                "type": "t_address",
+                "offset": 0,
+                "slot": "1"
+              },
+              {
+                "label": "content",
+                "type": "t_string_storage",
+                "offset": 0,
+                "slot": "2"
+              },
+              {
+                "label": "ipfsHash",
+                "type": "t_string_storage",
+                "offset": 0,
+                "slot": "3"
+              },
+              {
+                "label": "createdAt",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "4"
+              },
+              {
+                "label": "editedAt",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "5"
+              },
+              {
+                "label": "exists",
+                "type": "t_bool",
+                "offset": 0,
+                "slot": "6"
+              },
+              {
+                "label": "deleted",
+                "type": "t_bool",
+                "offset": 1,
+                "slot": "6"
+              }
+            ],
+            "numberOfBytes": "224"
+          },
+          "t_struct(PrivateMessage)3458_storage": {
+            "label": "struct Backchat.PrivateMessage",
+            "members": [
+              {
+                "label": "id",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "0"
+              },
+              {
+                "label": "conversationId",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "1"
+              },
+              {
+                "label": "parentMessageId",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "2"
+              },
+              {
+                "label": "sender",
+                "type": "t_address",
+                "offset": 0,
+                "slot": "3"
+              },
+              {
+                "label": "recipient",
+                "type": "t_address",
+                "offset": 0,
+                "slot": "4"
+              },
+              {
+                "label": "encryptedContent",
+                "type": "t_string_storage",
+                "offset": 0,
+                "slot": "5"
+              },
+              {
+                "label": "encryptedIpfsHash",
+                "type": "t_string_storage",
+                "offset": 0,
+                "slot": "6"
+              },
+              {
+                "label": "sentAt",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "7"
+              },
+              {
+                "label": "exists",
+                "type": "t_bool",
+                "offset": 0,
+                "slot": "8"
+              }
+            ],
+            "numberOfBytes": "288"
           },
           "t_uint256": {
             "label": "uint256",

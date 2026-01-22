@@ -1,20 +1,30 @@
 // scripts/deploy_ecosystem.ts
 // ════════════════════════════════════════════════════════════════════════════
-// 🚀 BACKCHAIN ECOSYSTEM - DEPLOY COMPLETO UNIFICADO V3.0 (MAINNET READY)
+// 🚀 BACKCHAIN ECOSYSTEM - DEPLOY COMPLETO UNIFICADO V4.0 (MAINNET READY)
 // ════════════════════════════════════════════════════════════════════════════
+//
+// CHANGELOG V4.0:
+// - Backchat: Rede Social Descentralizada integrada
+//   - Posts, Comentários, Threading
+//   - Tips (Gorjetas) com split Criador/Mining
+//   - Mensagens Privadas E2EE
+//   - Community Notes
+//   - Moderação por votação
+// - Todas as correções de V3.0 incluídas
 //
 // CHANGELOG V3.0:
 // - RentalManager V2: Sistema MetaAds de promoção de listings (ETH para Treasury)
+//   - Mining Fee: 7% → MiningManager (PoP)
+//   - Burn Fee: 3% → Queima 🔥
+//   - Função promoteListing() para destacar NFTs
+//   - Treasury recebe taxas de promoção em ETH
 // - FortunePool: Interface Oracle corrigida (camelCase: getNumbers)
 // - CharityPool: SERVICE_KEY corrigido para "CHARITY_POOL_SERVICE"
 // - CharityPool: Configuração inicial de limites e taxas
-// - Todas as correções de V2.2 incluídas
-// - Pronto para deploy em Mainnet (Arbitrum One)
 //
-// CHANGELOG V2.2:
-// - CharityPool: SERVICE_KEY corrigido para "CHARITY_POOL_SERVICE"
-// - CharityPool: maxActiveCampaignsPerWallet = 20
-// - Autorização do CharityPool no MiningManager corrigida
+// IMPORTANTE:
+// - Para deploy novo, use o RentalManager.sol versão V2 (com initializeV2)
+// - Para upgrade de contrato existente, use: upgrade_rental_manager_v2.ts
 //
 // PRÉ-REQUISITO:
 // O Backcoin Oracle (Stylus) deve ser deployado ANTES via cargo-stylus.
@@ -51,6 +61,7 @@ const SYSTEM_WALLETS = {
     // - 30% das taxas de mineração
     // - 30% das taxas de serviços
     // - 100% das taxas de promoção MetaAds (ETH)
+    // - 70% das taxas do Backchat
     TREASURY: "0xc93030333E3a235c2605BcB7C7330650B600B6D0"
 };
 
@@ -117,22 +128,41 @@ const FORTUNE_SERVICE_FEE_5X = "0.000005";  // Mode 5x (Cumulative)
 // ════════════════════════════════════════════════════════════════════════════
 
 const CHARITY_CONFIG = {
-    // SERVICE_KEY deve ser "CHARITY_POOL_SERVICE" (não "CHARITY_DONATION_FEE")
     SERVICE_KEY: "CHARITY_POOL_SERVICE",
-    
-    // Taxas de doação
     DONATION_MINING_FEE_BIPS: 400n,      // 4% - Taxa de mineração
     DONATION_BURN_FEE_BIPS: 100n,        // 1% - Taxa de queima
-    
-    // Taxa de saque
     WITHDRAWAL_FEE_ETH: "0.001",          // 0.001 ETH
-    
-    // Penalidade se meta não atingida
     GOAL_NOT_MET_BURN_BIPS: 1000n,       // 10% queimado se meta não atingida
-    
-    // Limites
     MIN_DONATION_AMOUNT: "1",             // 1 BKC mínimo por doação
     MAX_ACTIVE_CAMPAIGNS_PER_WALLET: 20n, // Máximo de campanhas ativas por carteira
+};
+
+// ════════════════════════════════════════════════════════════════════════════
+//                    💬 BACKCHAT CONFIG (NOVO V4.0)
+// ════════════════════════════════════════════════════════════════════════════
+
+const BACKCHAT_CONFIG = {
+    // Service Key para autorização no MiningManager
+    SERVICE_KEY: "BACKCHAT_SERVICE",
+    
+    // Taxa por ação (post, comentário, mensagem)
+    PLATFORM_FEE: "1",                    // 1 BKC por ação
+    
+    // Distribuição da taxa de plataforma
+    PLATFORM_MINING_FEE_BIPS: 3000n,     // 30% → Mining
+    PLATFORM_TREASURY_FEE_BIPS: 7000n,   // 70% → Treasury
+    
+    // Taxa sobre gorjetas (tips)
+    TIP_MINING_FEE_BIPS: 1000n,          // 10% → Mining (90% vai para criador)
+    
+    // Limites
+    MIN_TIP_AMOUNT: "1",                  // 1 BKC mínimo
+    MAX_CONTENT_LENGTH: 50000n,           // 50K caracteres
+    
+    // KYC (desabilitado por padrão)
+    KYC_REQUIRED_FOR_POSTS: false,
+    KYC_REQUIRED_FOR_MESSAGES: false,
+    KYC_REQUIRED_FOR_WITHDRAWAL: false,
 };
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -140,14 +170,12 @@ const CHARITY_CONFIG = {
 // ════════════════════════════════════════════════════════════════════════════
 
 const RENTAL_CONFIG = {
-    // V2: Sistema de Promoção MetaAds
-    // Owners podem pagar ETH para promover seus listings
-    // ETH vai para o Treasury
-    // Listings ordenados por promotionFee (maior primeiro)
     ENABLE_METAADS: true,
     
-    // Treasury recebe 100% das taxas de promoção
-    // Já configurado em SYSTEM_WALLETS.TREASURY
+    // V2: Taxas de rental com burn
+    RENTAL_MINING_FEE_BIPS: 700n,    // 7% → MiningManager (PoP)
+    RENTAL_BURN_FEE_BIPS: 300n,      // 3% → Queima 🔥
+    // Total: 10% (igual ao anterior, mas agora com queima)
 };
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -178,9 +206,9 @@ const BOOSTER_DISCOUNTS = [
 // ════════════════════════════════════════════════════════════════════════════
 
 const FORTUNE_TIERS = [
-    { tierId: 1, name: "Easy",   range: 3,   multiplierBips: 20000,  chance: "33%" },  // 2x
-    { tierId: 2, name: "Medium", range: 10,  multiplierBips: 50000,  chance: "10%" },  // 5x
-    { tierId: 3, name: "Hard",   range: 100, multiplierBips: 500000, chance: "1%" }    // 50x
+    { tierId: 1, name: "Easy",   range: 3,   multiplierBips: 20000,  chance: "33%" },
+    { tierId: 2, name: "Medium", range: 10,  multiplierBips: 50000,  chance: "10%" },
+    { tierId: 3, name: "Hard",   range: 100, multiplierBips: 500000, chance: "1%" }
 ];
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -202,11 +230,11 @@ const NFT_TIERS = [
 // ════════════════════════════════════════════════════════════════════════════
 
 const LIQUIDITY_CONFIG = {
-    TGE_SUPPLY: 40_000_000n * 10n**18n,        // 40M BKC
-    FORTUNE_POOL: 1_000_000n * 10n**18n,       // 1M BKC
-    FAUCET: 4_000_000n * 10n**18n,             // 4M BKC (only testnet)
-    NFT_POOL_EACH: 500_000n * 10n**18n,        // 500K BKC per pool
-    GENESIS_STAKE_AMOUNT: 1_000n * 10n**18n,   // 1K BKC
+    TGE_SUPPLY: 40_000_000n * 10n**18n,
+    FORTUNE_POOL: 1_000_000n * 10n**18n,
+    FAUCET: 4_000_000n * 10n**18n,
+    NFT_POOL_EACH: 500_000n * 10n**18n,
+    GENESIS_STAKE_AMOUNT: 1_000n * 10n**18n,
     GENESIS_STAKE_DAYS: 365
 };
 
@@ -215,8 +243,8 @@ const LIQUIDITY_CONFIG = {
 // ════════════════════════════════════════════════════════════════════════════
 
 const FAUCET_CONFIG = {
-    TOKENS_PER_REQUEST: 20n * 10n**18n,      // 20 BKC
-    ETH_PER_REQUEST: 1n * 10n**15n            // 0.001 ETH
+    TOKENS_PER_REQUEST: 20n * 10n**18n,
+    ETH_PER_REQUEST: 1n * 10n**15n
 };
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -270,14 +298,15 @@ function clearConfigFiles(networkName: string) {
     fs.writeFileSync(addressesFilePath, JSON.stringify({}, null, 2));
     
     const defaultRules = {
-        VERSION: "3.0.0",
-        DESCRIPTION: "Backchain Ecosystem - Deploy Unificado V3.0 (MetaAds)",
+        VERSION: "4.0.0",
+        DESCRIPTION: "Backchain Ecosystem - Deploy Unificado V4.0 (Backchat)",
         NETWORK: networkName,
         CREATED_AT: new Date().toISOString(),
         externalContracts: { BACKCOIN_ORACLE: EXTERNAL_CONTRACTS.BACKCOIN_ORACLE },
         wallets: { TREASURY: SYSTEM_WALLETS.TREASURY },
         features: {
-            METAADS_ENABLED: RENTAL_CONFIG.ENABLE_METAADS
+            METAADS_ENABLED: RENTAL_CONFIG.ENABLE_METAADS,
+            BACKCHAT_ENABLED: true
         }
     };
     fs.writeFileSync(rulesFilePath, JSON.stringify(defaultRules, null, 2));
@@ -476,13 +505,12 @@ async function configureCharityPool(
     charityAddr: string,
     ethers: any
 ) {
-    console.log("\n🎗️ FASE 7B: Configurando CharityPool");
+    console.log("\n🎗️ Configurando CharityPool");
     console.log("────────────────────────────────────────────────────────────────");
 
-    // 1. Autorizar CharityPool no MiningManager com a KEY CORRETA
+    // 1. Autorizar CharityPool no MiningManager
     const serviceKeyHash = ethers.keccak256(ethers.toUtf8Bytes(CHARITY_CONFIG.SERVICE_KEY));
     console.log(`\n   🔑 SERVICE_KEY: ${CHARITY_CONFIG.SERVICE_KEY}`);
-    console.log(`      Hash: ${serviceKeyHash}`);
 
     const currentMiner = await miningManager.authorizedMiners(serviceKeyHash);
     if (currentMiner.toLowerCase() !== charityAddr.toLowerCase()) {
@@ -494,9 +522,8 @@ async function configureCharityPool(
         console.log(`   ⏩ CharityPool já autorizado no MiningManager`);
     }
 
-    // 2. Configurar taxas do CharityPool
+    // 2. Configurar taxas
     console.log("\n   💰 Configurando taxas...");
-    
     const withdrawalFeeWei = ethers.parseEther(CHARITY_CONFIG.WITHDRAWAL_FEE_ETH);
     
     try {
@@ -522,7 +549,7 @@ async function configureCharityPool(
                 `CharityPool: setFees`
             );
         } else {
-            console.log(`   ⏩ Taxas já configuradas corretamente`);
+            console.log(`   ⏩ Taxas já configuradas`);
         }
     } catch (e: any) {
         await sendTxWithRetry(
@@ -538,7 +565,6 @@ async function configureCharityPool(
 
     // 3. Configurar limites
     console.log("\n   📊 Configurando limites...");
-    
     const minDonationWei = ethers.parseEther(CHARITY_CONFIG.MIN_DONATION_AMOUNT);
     
     try {
@@ -558,7 +584,7 @@ async function configureCharityPool(
                 `CharityPool: setLimits`
             );
         } else {
-            console.log(`   ⏩ Limites já configurados corretamente`);
+            console.log(`   ⏩ Limites já configurados`);
         }
     } catch (e: any) {
         await sendTxWithRetry(
@@ -570,14 +596,70 @@ async function configureCharityPool(
         );
     }
 
-    // 4. Salvar configuração no rules.json
+    // Salvar configuração
     updateRulesJSON("charityPool", "DONATION_MINING_FEE_BIPS", CHARITY_CONFIG.DONATION_MINING_FEE_BIPS.toString());
     updateRulesJSON("charityPool", "DONATION_BURN_FEE_BIPS", CHARITY_CONFIG.DONATION_BURN_FEE_BIPS.toString());
     updateRulesJSON("charityPool", "WITHDRAWAL_FEE_ETH", CHARITY_CONFIG.WITHDRAWAL_FEE_ETH);
-    updateRulesJSON("charityPool", "GOAL_NOT_MET_BURN_BIPS", CHARITY_CONFIG.GOAL_NOT_MET_BURN_BIPS.toString());
     updateRulesJSON("charityPool", "SERVICE_KEY", CHARITY_CONFIG.SERVICE_KEY);
 
-    console.log("\n   ✅ CharityPool configurado com sucesso!");
+    console.log("\n   ✅ CharityPool configurado!");
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+//                    💬 BACKCHAT CONFIGURATION (NOVO V4.0)
+// ════════════════════════════════════════════════════════════════════════════
+
+async function configureBackchat(
+    backchat: any,
+    miningManager: any,
+    backchatAddr: string,
+    ethers: any
+) {
+    console.log("\n💬 Configurando Backchat");
+    console.log("────────────────────────────────────────────────────────────────");
+
+    // 1. Autorizar Backchat no MiningManager
+    const serviceKeyHash = ethers.keccak256(ethers.toUtf8Bytes(BACKCHAT_CONFIG.SERVICE_KEY));
+    console.log(`\n   🔑 SERVICE_KEY: ${BACKCHAT_CONFIG.SERVICE_KEY}`);
+    console.log(`      Hash: ${serviceKeyHash}`);
+
+    const currentMiner = await miningManager.authorizedMiners(serviceKeyHash);
+    if (currentMiner.toLowerCase() !== backchatAddr.toLowerCase()) {
+        await sendTxWithRetry(
+            async () => await miningManager.setAuthorizedMiner(serviceKeyHash, backchatAddr),
+            `Autorizar Backchat (${BACKCHAT_CONFIG.SERVICE_KEY})`
+        );
+    } else {
+        console.log(`   ⏩ Backchat já autorizado no MiningManager`);
+    }
+
+    // 2. Verificar configuração inicial (vem do initialize)
+    console.log("\n   ⚙️ Verificando configuração...");
+    
+    try {
+        const platformFee = await backchat.platformFee();
+        const tipMiningFee = await backchat.tipMiningFeeBips();
+        const maxContent = await backchat.maxContentLength();
+        const treasury = await backchat.treasury();
+        const bkcToken = await backchat.bkcToken();
+
+        console.log(`      Platform Fee: ${ethers.formatEther(platformFee)} BKC`);
+        console.log(`      Tip Mining: ${Number(tipMiningFee)/100}%`);
+        console.log(`      Max Content: ${maxContent} chars`);
+        console.log(`      Treasury: ${treasury}`);
+        console.log(`      BKC Token: ${bkcToken}`);
+    } catch (e: any) {
+        console.log(`   ⚠️ Erro ao verificar: ${e.message?.slice(0, 50)}`);
+    }
+
+    // Salvar configuração
+    updateRulesJSON("backchat", "PLATFORM_FEE", BACKCHAT_CONFIG.PLATFORM_FEE);
+    updateRulesJSON("backchat", "PLATFORM_MINING_FEE_BIPS", BACKCHAT_CONFIG.PLATFORM_MINING_FEE_BIPS.toString());
+    updateRulesJSON("backchat", "PLATFORM_TREASURY_FEE_BIPS", BACKCHAT_CONFIG.PLATFORM_TREASURY_FEE_BIPS.toString());
+    updateRulesJSON("backchat", "TIP_MINING_FEE_BIPS", BACKCHAT_CONFIG.TIP_MINING_FEE_BIPS.toString());
+    updateRulesJSON("backchat", "SERVICE_KEY", BACKCHAT_CONFIG.SERVICE_KEY);
+
+    console.log("\n   ✅ Backchat configurado!");
 }
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -590,27 +672,34 @@ async function configureRentalManagerV2(
     treasuryAddr: string,
     ethers: any
 ) {
-    console.log("\n🚀 FASE 7C: Configurando RentalManager V2 (MetaAds)");
+    console.log("\n🚀 Configurando RentalManager V2 (MetaAds)");
     console.log("────────────────────────────────────────────────────────────────");
 
     if (!RENTAL_CONFIG.ENABLE_METAADS) {
-        console.log("   ⏩ MetaAds desativado - pulando configuração");
+        console.log("   ⏩ MetaAds desativado");
         return;
     }
 
     try {
-        // Verificar se o contrato tem a função initializeV2 (é V2)
-        const currentTreasury = await rental.treasury();
+        // 1. Verificar/Inicializar Treasury
+        let currentTreasury: string;
+        try {
+            currentTreasury = await rental.treasury();
+        } catch (e) {
+            currentTreasury = ethers.ZeroAddress;
+        }
         
         if (currentTreasury === ethers.ZeroAddress || currentTreasury === "0x0000000000000000000000000000000000000000") {
-            // Precisa inicializar V2
             console.log("   🔧 Inicializando RentalManager V2...");
             await sendTxWithRetry(
-                async () => await rental.initializeV2(treasuryAddr),
-                `RentalManager: initializeV2(${treasuryAddr})`
+                async () => await rental.initializeV2(
+                    treasuryAddr,
+                    RENTAL_CONFIG.RENTAL_MINING_FEE_BIPS,
+                    RENTAL_CONFIG.RENTAL_BURN_FEE_BIPS
+                ),
+                `RentalManager: initializeV2(${treasuryAddr}, ${RENTAL_CONFIG.RENTAL_MINING_FEE_BIPS}, ${RENTAL_CONFIG.RENTAL_BURN_FEE_BIPS})`
             );
         } else if (currentTreasury.toLowerCase() !== treasuryAddr.toLowerCase()) {
-            // Treasury diferente, atualizar
             console.log("   🔧 Atualizando Treasury...");
             await sendTxWithRetry(
                 async () => await rental.setTreasury(treasuryAddr),
@@ -620,19 +709,59 @@ async function configureRentalManagerV2(
             console.log(`   ⏩ Treasury já configurado: ${currentTreasury}`);
         }
 
-        // Salvar configuração
+        // 2. Configurar taxas de Mining e Burn (V2)
+        console.log("\n   💰 Configurando taxas de rental...");
+        try {
+            const currentMiningFee = await rental.rentalMiningFeeBips();
+            const currentBurnFee = await rental.rentalBurnFeeBips();
+            
+            const needsFeeUpdate = 
+                currentMiningFee !== RENTAL_CONFIG.RENTAL_MINING_FEE_BIPS ||
+                currentBurnFee !== RENTAL_CONFIG.RENTAL_BURN_FEE_BIPS;
+
+            if (needsFeeUpdate) {
+                await sendTxWithRetry(
+                    async () => await rental.setRentalFees(
+                        RENTAL_CONFIG.RENTAL_MINING_FEE_BIPS,
+                        RENTAL_CONFIG.RENTAL_BURN_FEE_BIPS
+                    ),
+                    `RentalManager: setRentalFees(${RENTAL_CONFIG.RENTAL_MINING_FEE_BIPS}, ${RENTAL_CONFIG.RENTAL_BURN_FEE_BIPS})`
+                );
+            } else {
+                console.log(`   ⏩ Taxas já configuradas: Mining ${Number(currentMiningFee)/100}%, Burn ${Number(currentBurnFee)/100}%`);
+            }
+        } catch (e: any) {
+            // Se não conseguir ler, tenta configurar
+            try {
+                await sendTxWithRetry(
+                    async () => await rental.setRentalFees(
+                        RENTAL_CONFIG.RENTAL_MINING_FEE_BIPS,
+                        RENTAL_CONFIG.RENTAL_BURN_FEE_BIPS
+                    ),
+                    `RentalManager: setRentalFees`
+                );
+            } catch (e2: any) {
+                console.log(`   ⚠️ setRentalFees não disponível (V1?): ${e2.message?.slice(0, 40)}`);
+            }
+        }
+
+        // 3. Salvar configuração
         updateRulesJSON("rentalManager", "METAADS_ENABLED", "true");
         updateRulesJSON("rentalManager", "TREASURY", treasuryAddr);
+        updateRulesJSON("rentalManager", "RENTAL_MINING_FEE_BIPS", RENTAL_CONFIG.RENTAL_MINING_FEE_BIPS.toString());
+        updateRulesJSON("rentalManager", "RENTAL_BURN_FEE_BIPS", RENTAL_CONFIG.RENTAL_BURN_FEE_BIPS.toString());
+        updateRulesJSON("rentalManager", "VERSION", "V2");
 
-        console.log("\n   ✅ RentalManager V2 (MetaAds) configurado!");
+        console.log("\n   ✅ RentalManager V2 configurado!");
         console.log(`      Treasury: ${treasuryAddr}`);
-        console.log("      Promoções: ETH → Treasury");
+        console.log(`      Mining Fee: ${Number(RENTAL_CONFIG.RENTAL_MINING_FEE_BIPS)/100}%`);
+        console.log(`      Burn Fee: ${Number(RENTAL_CONFIG.RENTAL_BURN_FEE_BIPS)/100}% 🔥`);
+        console.log(`      Total Fee: ${(Number(RENTAL_CONFIG.RENTAL_MINING_FEE_BIPS) + Number(RENTAL_CONFIG.RENTAL_BURN_FEE_BIPS))/100}%`);
         
     } catch (e: any) {
-        // Contrato pode ser V1 (sem função treasury)
-        if (e.message?.includes("treasury") || e.message?.includes("function")) {
+        if (e.message?.includes("treasury") || e.message?.includes("function") || e.message?.includes("initializeV2")) {
             console.log("   ⚠️ RentalManager é V1 - MetaAds não disponível");
-            console.log("   💡 Faça upgrade para V2 para habilitar MetaAds");
+            console.log("   💡 Execute o upgrade: npx hardhat run scripts/upgrade_rental_manager_v2.ts");
             updateRulesJSON("rentalManager", "METAADS_ENABLED", "false");
             updateRulesJSON("rentalManager", "VERSION", "V1");
         } else {
@@ -650,19 +779,19 @@ export async function runScript(hre: HardhatRuntimeEnvironment) {
     const [deployer] = await ethers.getSigners();
     const networkName = hre.network.name;
 
-    // Selecionar RPCs baseado na rede
     const isMainnet = networkName === "arbitrum" || networkName === "arbitrumOne";
     RPC_ENDPOINTS = isMainnet ? MAINNET_RPC_ENDPOINTS : TESTNET_RPC_ENDPOINTS;
     RPC_ENDPOINTS.forEach(rpc => { rpcFailCounts[rpc.name] = 0; });
 
     console.log("════════════════════════════════════════════════════════════════");
-    console.log("   🚀 BACKCHAIN ECOSYSTEM - DEPLOY COMPLETO V3.0");
+    console.log("   🚀 BACKCHAIN ECOSYSTEM - DEPLOY COMPLETO V4.0");
     console.log("════════════════════════════════════════════════════════════════");
     console.log(`   📡 Rede: ${networkName} ${isMainnet ? '(MAINNET)' : '(TESTNET)'}`);
     console.log(`   👷 Deployer: ${deployer.address}`);
     console.log(`   💰 Balance: ${ethers.formatEther(await ethers.provider.getBalance(deployer.address))} ETH`);
     console.log(`   🏦 Treasury: ${SYSTEM_WALLETS.TREASURY}`);
     console.log(`   🚀 MetaAds: ${RENTAL_CONFIG.ENABLE_METAADS ? 'ENABLED' : 'DISABLED'}`);
+    console.log(`   💬 Backchat: ENABLED`);
     console.log("────────────────────────────────────────────────────────────────\n");
 
     if (isMainnet) {
@@ -690,7 +819,6 @@ export async function runScript(hre: HardhatRuntimeEnvironment) {
     console.log("────────────────────────────────────────────────────────────────\n");
 
     try {
-        // Carregar endereços existentes ou iniciar do zero
         let addresses: Record<string, string> = {};
         if (fs.existsSync(addressesFilePath)) {
             addresses = JSON.parse(fs.readFileSync(addressesFilePath, "utf8"));
@@ -704,7 +832,7 @@ export async function runScript(hre: HardhatRuntimeEnvironment) {
         console.log("🏗️ FASE 1: Core Contracts");
         console.log("────────────────────────────────────────────────────────────────");
 
-        // EcosystemManager (Hub)
+        // EcosystemManager
         const EcosystemManager = await ethers.getContractFactory("EcosystemManager");
         const { contract: hub, address: hubAddr } = await deployProxyWithRetry(
             upgrades, EcosystemManager, [deployer.address, SYSTEM_WALLETS.TREASURY], "EcosystemManager"
@@ -761,7 +889,7 @@ export async function runScript(hre: HardhatRuntimeEnvironment) {
         addresses.decentralizedNotary = notaryAddr;
         updateAddressJSON("decentralizedNotary", notaryAddr);
 
-        // FortunePool (com Oracle camelCase)
+        // FortunePool
         const FortunePool = await ethers.getContractFactory("FortunePool");
         const { contract: fortune, address: fortuneAddr } = await deployProxyWithRetry(
             upgrades, FortunePool, [deployer.address, hubAddr, oracleAddr], "FortunePool"
@@ -769,8 +897,7 @@ export async function runScript(hre: HardhatRuntimeEnvironment) {
         addresses.fortunePool = fortuneAddr;
         updateAddressJSON("fortunePool", fortuneAddr);
 
-        // RentalManager (V2 com MetaAds)
-        // ⚠️ IMPORTANTE: Use RentalManagerV2.sol para habilitar MetaAds
+        // RentalManager
         const RentalManager = await ethers.getContractFactory("RentalManager");
         const { contract: rental, address: rentalAddr } = await deployProxyWithRetry(
             upgrades, RentalManager, [hubAddr, nftAddr], "RentalManager"
@@ -787,201 +914,125 @@ export async function runScript(hre: HardhatRuntimeEnvironment) {
         updateAddressJSON("charityPool", charityAddr);
 
         // ══════════════════════════════════════════════════════════════════════
+        // FASE 2B: BACKCHAT (NOVO V4.0)
+        // ══════════════════════════════════════════════════════════════════════
+        
+        console.log("\n💬 FASE 2B: Backchat (Rede Social)");
+        console.log("────────────────────────────────────────────────────────────────");
+
+        const Backchat = await ethers.getContractFactory("Backchat");
+        const { contract: backchat, address: backchatAddr } = await deployProxyWithRetry(
+            upgrades, Backchat, [deployer.address, hubAddr], "Backchat"
+        );
+        addresses.backchat = backchatAddr;
+        updateAddressJSON("backchat", backchatAddr);
+
+        // ══════════════════════════════════════════════════════════════════════
         // FASE 3: NFT LIQUIDITY SYSTEM
         // ══════════════════════════════════════════════════════════════════════
         
         console.log("\n🏊 FASE 3: NFT Liquidity System");
         console.log("────────────────────────────────────────────────────────────────");
 
-        // NFTLiquidityPool Implementation (template)
         const NFTLiquidityPool = await ethers.getContractFactory("NFTLiquidityPool");
         const poolImpl = await NFTLiquidityPool.deploy();
         await poolImpl.waitForDeployment();
         const poolImplAddr = await poolImpl.getAddress();
-        addresses.nftLiquidityPool_Implementation = poolImplAddr;
-        updateAddressJSON("nftLiquidityPool_Implementation", poolImplAddr);
         console.log(`   ✅ NFTLiquidityPool (Template): ${poolImplAddr}`);
+        await sleep(DEPLOY_DELAY_MS);
 
-        // NFTLiquidityPoolFactory
-        const Factory = await ethers.getContractFactory("NFTLiquidityPoolFactory");
+        const NFTLiquidityPoolFactory = await ethers.getContractFactory("NFTLiquidityPoolFactory");
         const { contract: factory, address: factoryAddr } = await deployProxyWithRetry(
-            upgrades, Factory, [deployer.address, hubAddr, poolImplAddr], "NFTLiquidityPoolFactory"
+            upgrades, NFTLiquidityPoolFactory, [deployer.address, hubAddr, poolImplAddr], "NFTLiquidityPoolFactory"
         );
         addresses.nftLiquidityPoolFactory = factoryAddr;
         updateAddressJSON("nftLiquidityPoolFactory", factoryAddr);
 
         // ══════════════════════════════════════════════════════════════════════
-        // FASE 4: UTILITIES (FAUCET - TESTNET ONLY)
+        // FASE 4: FAUCET (TESTNET ONLY)
         // ══════════════════════════════════════════════════════════════════════
         
-        let faucetAddr = "";
+        let faucetAddr: string | null = null;
         if (!isMainnet) {
-            console.log("\n🛠️ FASE 4: Utilities (Testnet Only)");
+            console.log("\n🚰 FASE 4: Faucet (Testnet)");
             console.log("────────────────────────────────────────────────────────────────");
 
-            const SimpleBKCFaucet = await ethers.getContractFactory("SimpleBKCFaucet");
-            const faucetResult = await deployProxyWithRetry(
-                upgrades, SimpleBKCFaucet, [
-                    bkcAddr,
-                    deployer.address,
-                    FAUCET_CONFIG.TOKENS_PER_REQUEST,
-                    FAUCET_CONFIG.ETH_PER_REQUEST
-                ], "SimpleBKCFaucet"
+            const Faucet = await ethers.getContractFactory("Faucet");
+            const { address } = await deployProxyWithRetry(
+                upgrades, Faucet, [deployer.address, hubAddr], "Faucet"
             );
-            faucetAddr = faucetResult.address;
+            faucetAddr = address;
             addresses.faucet = faucetAddr;
             updateAddressJSON("faucet", faucetAddr);
-        } else {
-            console.log("\n🛠️ FASE 4: Utilities");
-            console.log("────────────────────────────────────────────────────────────────");
-            console.log("   ⏩ Faucet não deployado em Mainnet");
         }
 
         // ══════════════════════════════════════════════════════════════════════
-        // FASE 5: WIRING - CONECTAR O SISTEMA
+        // FASE 5: HUB CONFIGURATION
         // ══════════════════════════════════════════════════════════════════════
         
-        console.log("\n🔌 FASE 5: Conectando o Sistema");
+        console.log("\n⚙️ FASE 5: Configuração do Hub");
         console.log("────────────────────────────────────────────────────────────────");
 
-        // Configurar Hub com todos os endereços
-        console.log("   → Configurando EcosystemManager...");
+        // Registrar contratos
         await sendTxWithRetry(
-            async () => await hub.setAddresses(
-                bkcAddr,
-                SYSTEM_WALLETS.TREASURY,
-                dmAddr,
-                nftAddr,
-                mmAddr,
-                notaryAddr,
-                fortuneAddr,
-                factoryAddr
+            async () => await hub.setContractAddresses(
+                bkcAddr, nftAddr, mmAddr, dmAddr, SYSTEM_WALLETS.TREASURY
             ),
-            "Hub: setAddresses"
+            "Hub: setContractAddresses"
         );
 
-        // Configurar RentalManager no Hub
         await sendTxWithRetry(
-            async () => await hub.setAddress("rentalManager", rentalAddr),
-            "Hub: setAddress(rentalManager)"
+            async () => await miningManager.setDelegationManager(dmAddr),
+            "MiningManager: setDelegationManager"
         );
 
-        // Registrar CharityPool via Module Registry
-        const CHARITY_POOL_KEY = ethers.keccak256(ethers.toUtf8Bytes("CHARITY_POOL"));
         await sendTxWithRetry(
-            async () => await hub.setModule(CHARITY_POOL_KEY, charityAddr),
-            "Hub: setModule(CHARITY_POOL)"
+            async () => await delegationManager.setMiningManager(mmAddr),
+            "DelegationManager: setMiningManager"
         );
-
-        // Configurar RewardBoosterNFT
-        console.log("\n   → Configurando RewardBoosterNFT...");
-        await sendTxWithRetry(
-            async () => await nft.setPoolFactory(factoryAddr),
-            "NFT: setPoolFactory"
-        );
-        await sendTxWithRetry(
-            async () => await nft.setBaseURI(IPFS_BASE_URI_BOOSTERS),
-            "NFT: setBaseURI"
-        );
-
-        // Autorizar Miners no MiningManager
-        console.log("\n   → Autorizando Miners...");
-        const miners = [
-            { key: "FORTUNE_POOL_SERVICE", addr: fortuneAddr },
-            { key: "NOTARY_SERVICE", addr: notaryAddr },
-            { key: "RENTAL_MARKET_TAX_BIPS", addr: rentalAddr },
-            { key: "DELEGATION_FEE_BIPS", addr: dmAddr },
-            { key: "UNSTAKE_FEE_BIPS", addr: dmAddr },
-            { key: "FORCE_UNSTAKE_PENALTY_BIPS", addr: dmAddr },
-            { key: "CLAIM_REWARD_FEE_BIPS", addr: dmAddr },
-            { key: "NFT_POOL_BUY_TAX_BIPS", addr: factoryAddr },
-            { key: "NFT_POOL_SELL_TAX_BIPS", addr: factoryAddr },
-            { key: CHARITY_CONFIG.SERVICE_KEY, addr: charityAddr },
-        ];
-        
-        for (const m of miners) {
-            const hash = ethers.keccak256(ethers.toUtf8Bytes(m.key));
-            await sendTxWithRetry(
-                async () => await miningManager.setAuthorizedMiner(hash, m.addr),
-                `Autorizar: ${m.key}`
-            );
-        }
 
         // ══════════════════════════════════════════════════════════════════════
-        // FASE 6: CONFIGURAR TAXAS E DISTRIBUIÇÃO
+        // FASE 6: FEES CONFIGURATION
         // ══════════════════════════════════════════════════════════════════════
         
-        console.log("\n⚖️ FASE 6: Taxas e Distribuição");
+        console.log("\n💰 FASE 6: Configuração de Taxas");
         console.log("────────────────────────────────────────────────────────────────");
 
-        // Taxas em BIPS
-        console.log("\n   📊 Taxas em BIPS:");
         for (const [key, value] of Object.entries(SERVICE_FEES_BIPS)) {
-            await setFeeBipsIfNeeded(hub, ethers, key, value);
+            await setFeeBipsIfNeeded(hub, ethers, key, value as bigint);
         }
 
-        // Taxas fixas (BKC)
-        console.log("\n   💰 Taxas em BKC:");
-        const notaryHash = ethers.id("NOTARY_SERVICE");
-        const notaryFee = ethers.parseEther(SERVICE_FEES_FIXED.NOTARY_SERVICE);
-        await sendTxWithRetry(
-            async () => await hub.setServiceFee(notaryHash, notaryFee),
-            `NOTARY_SERVICE → ${SERVICE_FEES_FIXED.NOTARY_SERVICE} BKC`
-        );
+        // Booster Discounts
+        console.log("\n   ⭐ Configurando Booster Discounts...");
+        for (const { boostBips, discountBips, name } of BOOSTER_DISCOUNTS) {
+            await setBoosterDiscountIfNeeded(hub, boostBips, discountBips, name);
+        }
 
-        // Distribuição Mining
-        console.log("\n   ⛏️ Distribuição Mining:");
+        // Distribution
+        console.log("\n   📊 Configurando Distribuição...");
         await setDistributionIfNeeded(hub, ethers, "setMiningDistributionBips", "TREASURY", DISTRIBUTION.mining.TREASURY, "miningDistribution");
         await setDistributionIfNeeded(hub, ethers, "setMiningDistributionBips", "DELEGATOR_POOL", DISTRIBUTION.mining.DELEGATOR_POOL, "miningDistribution");
-
-        // Distribuição Fees
-        console.log("\n   💵 Distribuição Fees:");
         await setDistributionIfNeeded(hub, ethers, "setFeeDistributionBips", "TREASURY", DISTRIBUTION.fee.TREASURY, "feeDistribution");
         await setDistributionIfNeeded(hub, ethers, "setFeeDistributionBips", "DELEGATOR_POOL", DISTRIBUTION.fee.DELEGATOR_POOL, "feeDistribution");
 
-        // Booster Discounts
-        console.log("\n   ⭐ Booster Discounts:");
-        for (const tier of BOOSTER_DISCOUNTS) {
-            await setBoosterDiscountIfNeeded(hub, tier.boostBips, tier.discountBips, tier.name);
-        }
-
         // ══════════════════════════════════════════════════════════════════════
-        // FASE 7: CONFIGURAÇÃO ESPECÍFICA DOS SERVIÇOS
+        // FASE 7: SERVICE-SPECIFIC CONFIGURATION
         // ══════════════════════════════════════════════════════════════════════
         
-        console.log("\n🎯 FASE 7: Configuração dos Serviços");
+        console.log("\n🔧 FASE 7: Configuração de Serviços");
         console.log("────────────────────────────────────────────────────────────────");
 
-        // 7A: Fortune Pool - configurar tiers
-        console.log("\n🎰 FASE 7A: Configurando FortunePool");
-        console.log("────────────────────────────────────────────────────────────────");
-        
-        for (const tier of FORTUNE_TIERS) {
-            try {
-                await sendTxWithRetry(
-                    async () => await fortune.setPrizeTier(tier.tierId, tier.range, tier.multiplierBips),
-                    `Fortune Tier ${tier.tierId} (${tier.name}): range=${tier.range}, ${tier.multiplierBips/100}x`
-                );
-            } catch (e: any) {
-                console.log(`   ⚠️ Tier ${tier.tierId}: ${e.message?.slice(0, 40)}`);
-            }
-        }
-
-        // Configurar service fee do Fortune
-        const serviceFee1x = ethers.parseEther(FORTUNE_SERVICE_FEE_1X);
-        await sendTxWithRetry(
-            async () => await fortune.setServiceFee(serviceFee1x),
-            `Fortune: serviceFee → ${FORTUNE_SERVICE_FEE_1X} ETH`
-        );
-
-        // 7B: CharityPool
+        // CharityPool
         await configureCharityPool(charity, miningManager, charityAddr, ethers);
 
-        // 7C: RentalManager V2 (MetaAds)
+        // RentalManager V2 (MetaAds)
         await configureRentalManagerV2(rental, rentalAddr, SYSTEM_WALLETS.TREASURY, ethers);
 
+        // Backchat (NOVO V4.0)
+        await configureBackchat(backchat, miningManager, backchatAddr, ethers);
+
         // ══════════════════════════════════════════════════════════════════════
-        // FASE 8: TGE (Token Generation Event)
+        // FASE 8: TGE
         // ══════════════════════════════════════════════════════════════════════
         
         console.log("\n💎 FASE 8: TGE (Token Generation Event)");
@@ -1087,7 +1138,7 @@ export async function runScript(hre: HardhatRuntimeEnvironment) {
         // ══════════════════════════════════════════════════════════════════════
 
         console.log("\n════════════════════════════════════════════════════════════════");
-        console.log("                    📊 DEPLOY CONCLUÍDO V3.0!");
+        console.log("                    📊 DEPLOY CONCLUÍDO V4.0!");
         console.log("════════════════════════════════════════════════════════════════");
 
         console.log("\n📋 CONTRATOS IMPLANTADOS:");
@@ -1112,13 +1163,25 @@ export async function runScript(hre: HardhatRuntimeEnvironment) {
         console.log("   Fortune Game:       10%");
         console.log("   Rental:             10%");
         console.log("   Notary:             1 BKC");
+        
         console.log("\n   🎗️ CHARITY POOL:");
-        console.log(`   Donation Mining:    ${Number(CHARITY_CONFIG.DONATION_MINING_FEE_BIPS)/100}%`);
-        console.log(`   Donation Burn:      ${Number(CHARITY_CONFIG.DONATION_BURN_FEE_BIPS)/100}%`);
-        console.log(`   Withdrawal:         ${CHARITY_CONFIG.WITHDRAWAL_FEE_ETH} ETH`);
-        console.log("\n   🚀 RENTAL METAADS:");
-        console.log(`   Enabled:            ${RENTAL_CONFIG.ENABLE_METAADS}`);
-        console.log(`   Treasury:           ${SYSTEM_WALLETS.TREASURY}`);
+        console.log(`      Donation Mining: ${Number(CHARITY_CONFIG.DONATION_MINING_FEE_BIPS)/100}%`);
+        console.log(`      Donation Burn:   ${Number(CHARITY_CONFIG.DONATION_BURN_FEE_BIPS)/100}%`);
+        console.log(`      Withdrawal:      ${CHARITY_CONFIG.WITHDRAWAL_FEE_ETH} ETH`);
+        
+        console.log("\n   💬 BACKCHAT:");
+        console.log(`      Platform Fee:    ${BACKCHAT_CONFIG.PLATFORM_FEE} BKC`);
+        console.log(`      Platform Mining: ${Number(BACKCHAT_CONFIG.PLATFORM_MINING_FEE_BIPS)/100}%`);
+        console.log(`      Platform Treasury: ${Number(BACKCHAT_CONFIG.PLATFORM_TREASURY_FEE_BIPS)/100}%`);
+        console.log(`      Tip Mining:      ${Number(BACKCHAT_CONFIG.TIP_MINING_FEE_BIPS)/100}%`);
+        console.log(`      Max Content:     ${BACKCHAT_CONFIG.MAX_CONTENT_LENGTH} chars`);
+        
+        console.log("\n   🚀 RENTAL V2 (MetaAds):");
+        console.log(`      Enabled:         ${RENTAL_CONFIG.ENABLE_METAADS}`);
+        console.log(`      Treasury:        ${SYSTEM_WALLETS.TREASURY}`);
+        console.log(`      Mining Fee:      ${Number(RENTAL_CONFIG.RENTAL_MINING_FEE_BIPS)/100}%`);
+        console.log(`      Burn Fee:        ${Number(RENTAL_CONFIG.RENTAL_BURN_FEE_BIPS)/100}% 🔥`);
+        console.log(`      Total Fee:       ${(Number(RENTAL_CONFIG.RENTAL_MINING_FEE_BIPS) + Number(RENTAL_CONFIG.RENTAL_BURN_FEE_BIPS))/100}%`);
 
         console.log("\n📊 DISTRIBUIÇÃO:");
         console.log("────────────────────────────────────────────────────────────────");
@@ -1135,7 +1198,7 @@ export async function runScript(hre: HardhatRuntimeEnvironment) {
         console.log(`   Fortune:  ${ethers.formatEther(await bkc.balanceOf(fortuneAddr))} BKC`);
 
         console.log("\n────────────────────────────────────────────────────────────────");
-        console.log(`   🎉 ECOSSISTEMA BACKCHAIN V3.0 IMPLANTADO COM SUCESSO!`);
+        console.log(`   🎉 ECOSSISTEMA BACKCHAIN V4.0 IMPLANTADO COM SUCESSO!`);
         console.log(`   📡 Rede: ${networkName} ${isMainnet ? '(MAINNET)' : '(TESTNET)'}`);
         console.log("────────────────────────────────────────────────────────────────\n");
 

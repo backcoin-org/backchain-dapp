@@ -1,5 +1,5 @@
 // js/app.js
-// ✅ VERSÃO FINAL V7.9: Updated to use new transaction modules
+// ✅ VERSÃO FINAL V8.0: Added Backchat page
 
 const inject = window.inject || (() => { console.warn("Dev Mode: Analytics disabled."); });
 if (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
@@ -36,6 +36,7 @@ import { DexPage } from './pages/DexPage.js';
 import { DaoPage } from './pages/DaoPage.js';
 import { TutorialsPage } from './pages/TutorialsPage.js';
 import { CharityPage } from './pages/CharityPage.js';
+import { BackchatPage } from './pages/BackchatPage.js';
 
 // ============================================================================
 // 2. CONFIGURATION & STATE
@@ -61,6 +62,7 @@ const routes = {
     'rewards': RewardsPage,
     'actions': FortunePoolPage, 
     'charity': CharityPage,
+    'backchat': BackchatPage,
     'notary': NotaryPage,
     'airdrop': AirdropPage,
     'tokenomics': TokenomicsPage,

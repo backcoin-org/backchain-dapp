@@ -1,5 +1,5 @@
 // scripts/4_verify_contracts.ts
-// VERSAO V6.4: RentalManager V2 (MetaAds + Burn)
+// VERSAO V6.5: Backchat + RentalManager V2 (MetaAds + Burn)
 
 import { HardhatRuntimeEnvironment } from "hardhat/types";
 import fs from "fs";
@@ -150,7 +150,7 @@ export async function runScript(hre: HardhatRuntimeEnvironment) {
   const networkName = hre.network.name;
 
   console.log(`\n${"=".repeat(70)}`);
-  console.log(`VERIFICACAO DE CONTRATOS V6.4 - ${networkName.toUpperCase()}`);
+  console.log(`VERIFICACAO DE CONTRATOS V6.5 - ${networkName.toUpperCase()}`);
   console.log(`${"=".repeat(70)}`);
   console.log(`Conta: ${deployer.address}`);
 
@@ -202,6 +202,7 @@ export async function runScript(hre: HardhatRuntimeEnvironment) {
     { name: "PublicSale", proxy: addresses.publicSale, path: "contracts/solidity/PublicSale.sol:PublicSale" },
     { name: "NFTLiquidityPoolFactory", proxy: addresses.nftLiquidityPoolFactory, path: "contracts/solidity/NFTLiquidityPoolFactory.sol:NFTLiquidityPoolFactory" },
     { name: "CharityPool", proxy: addresses.charityPool, path: "contracts/solidity/CharityPool.sol:CharityPool" },
+    { name: "Backchat", proxy: addresses.backchat, path: "contracts/solidity/Backchat.sol:Backchat" },
   ];
 
   for (const c of serviceContracts) {
@@ -211,9 +212,6 @@ export async function runScript(hre: HardhatRuntimeEnvironment) {
       await sleep(3000);
     }
   }
-
-  // NOTA: Todas as implementations são descobertas automaticamente
-  // via slot EIP-1967, não precisamos de campos _Implementation no JSON
 
   // BACKCOIN ORACLE
   console.log("\n" + "=".repeat(70));
@@ -286,18 +284,24 @@ export async function runScript(hre: HardhatRuntimeEnvironment) {
   const verified = results.filter(r => r.status === "verified" || r.status === "already_verified");
   const clones = results.filter(r => r.status === "clone_ok");
   const failed = results.filter(r => r.status === "failed");
+  const skipped = results.filter(r => r.status === "skipped");
 
   console.log(`\nVerificados: ${verified.length}`);
-  verified.forEach(r => console.log(`   ${r.name}`));
+  verified.forEach(r => console.log(`   ✅ ${r.name}`));
 
   if (clones.length > 0) {
     console.log(`\nClones OK: ${clones.length}`);
-    clones.forEach(r => console.log(`   ${r.name}`));
+    clones.forEach(r => console.log(`   📦 ${r.name}`));
+  }
+
+  if (skipped.length > 0) {
+    console.log(`\nPulados: ${skipped.length}`);
+    skipped.forEach(r => console.log(`   ⏩ ${r.name}`));
   }
 
   if (failed.length > 0) {
     console.log(`\nFalhas: ${failed.length}`);
-    failed.forEach(r => console.log(`   ${r.name}`));
+    failed.forEach(r => console.log(`   ❌ ${r.name}`));
   }
 
   const explorerBase = networkName === "arbitrumOne" 
@@ -309,15 +313,16 @@ export async function runScript(hre: HardhatRuntimeEnvironment) {
   console.log("=".repeat(70));
 
   const mainProxies = [
-    { name: "FortunePool", address: addresses.fortunePool },
+    { name: "EcosystemManager", address: addresses.ecosystemManager },
     { name: "BKCToken", address: addresses.bkcToken },
     { name: "MiningManager", address: addresses.miningManager },
     { name: "DelegationManager", address: addresses.delegationManager },
-    { name: "DecentralizedNotary", address: addresses.decentralizedNotary },
     { name: "RewardBoosterNFT", address: addresses.rewardBoosterNFT },
+    { name: "FortunePool", address: addresses.fortunePool },
+    { name: "DecentralizedNotary", address: addresses.decentralizedNotary },
     { name: "RentalManager", address: addresses.rentalManager },
-    { name: "EcosystemManager", address: addresses.ecosystemManager },
     { name: "CharityPool", address: addresses.charityPool },
+    { name: "Backchat", address: addresses.backchat },
   ];
 
   mainProxies.forEach(p => {
@@ -330,6 +335,12 @@ export async function runScript(hre: HardhatRuntimeEnvironment) {
   console.log("\n" + "=".repeat(70));
   console.log("VERIFICACAO CONCLUIDA!");
   console.log("=".repeat(70));
+  console.log(`
+   Proxies linkados automaticamente pelo OpenZeppelin Upgrades.
+   
+   Para verificar um contrato manualmente:
+   npx hardhat verify --network ${networkName} <IMPLEMENTATION_ADDRESS>
+`);
 }
 
 import hre from "hardhat";
