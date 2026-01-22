@@ -101,7 +101,7 @@ function injectStyles() {
     s.textContent = `
 /* Backchat - X Style Dark Mode */
 .backchat-page {
-    --bc-bg: #000000;
+    --cp-bg: #18181b;
     --bc-bg2: #16181c;
     --bc-bg3: #202327;
     --bc-border: #2f3336;

@@ -1,5 +1,5 @@
 // modules/js/transactions/index.js
-// ✅ PRODUCTION V1.1 - Added FaucetTx
+// ✅ PRODUCTION V1.2 - Added BackchatTx
 // 
 // This file re-exports all transaction modules for simplified imports.
 //
@@ -7,11 +7,12 @@
 // USAGE:
 // 
 // Import specific modules:
-//   import { CharityTx, StakingTx, FaucetTx } from './transactions/index.js';
+//   import { CharityTx, StakingTx, BackchatTx } from './transactions/index.js';
 //
 // Import everything:
 //   import * as Transactions from './transactions/index.js';
 //   Transactions.CharityTx.donate({ ... });
+//   Transactions.BackchatTx.createPost({ ... });
 // ============================================================================
 
 // Charity Pool
@@ -33,7 +34,7 @@ export {
     delegate,
     unstake,
     forceUnstake,
-    claimRewards,
+    claimRewards as claimStakingRewards,
     getUserDelegations,
     getPendingRewards,
     getUserPStake,
@@ -104,6 +105,62 @@ export {
     executeFaucetClaim
 } from './faucet-tx.js';
 
+// Backchat (Social Network) - V1.2
+export { 
+    BackchatTx,
+    // Posts
+    createPost,
+    editPost,
+    deletePost,
+    // Comments
+    createComment,
+    replyToComment,
+    deleteComment,
+    // Moderation
+    voteOnPost,
+    voteOnComment,
+    // Community Notes
+    proposeNote,
+    voteOnNote,
+    // Tips
+    sendTip,
+    claimRewards as claimBackchatRewards,
+    // Boost
+    boostPost,
+    // Private Messages
+    setPublicKey,
+    sendPrivateMessage,
+    replyToMessage,
+    // Read functions
+    getPost,
+    getPostScore,
+    getComment,
+    getNote,
+    getNoteScore,
+    getCreatorStats,
+    getTotals,
+    getFinancialStats,
+    getPlatformFeeAmount,
+    getMinTipAmount,
+    getUserPosts,
+    getPostComments,
+    getPostNotes,
+    getCommentReplies,
+    getUserConversations,
+    getConversationMessages,
+    getMessage,
+    getPublicKey,
+    hasPublicKey,
+    hasVotedOnPost,
+    hasVotedOnComment,
+    hasVotedOnNote,
+    hasBoosterAccess,
+    getKYCStatus,
+    // Enums
+    ContentStatus,
+    NoteStatus
+} from './backchat-tx.js';
+
 // ============================================================================
 // CONVENIENCE OBJECT
 // ============================================================================
@@ -118,7 +175,8 @@ export const Transactions = {
     Fortune: (async () => (await import('./fortune-tx.js')).FortuneTx)(),
     Rental: (async () => (await import('./rental-tx.js')).RentalTx)(),
     Notary: (async () => (await import('./notary-tx.js')).NotaryTx)(),
-    Faucet: (async () => (await import('./faucet-tx.js')).FaucetTx)()
+    Faucet: (async () => (await import('./faucet-tx.js')).FaucetTx)(),
+    Backchat: (async () => (await import('./backchat-tx.js')).BackchatTx)() // V1.2
 };
 
 export default Transactions;
