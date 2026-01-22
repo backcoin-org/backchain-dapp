@@ -1,6 +1,12 @@
 // js/pages/BackchatPage.js
-// ✅ PRODUCTION V1.1 - Messages Only (X Style) + Contract Availability Check
+// ✅ PRODUCTION V1.2 - Corrected Contract Interface (getTotals)
 // 
+// V1.2 Changes:
+// - Fixed ABI to use getTotals() instead of totalMessages()/totalConversations()
+// - Fixed registerPublicKey to accept bytes instead of string
+// - Fixed event names: PrivateMessageSent instead of MessageSent
+// - Added totalPosts, totalComments, totalNotes to stats
+//
 // V1.1 Changes:
 // - Added contract availability check
 // - Graceful handling when contract is not deployed
@@ -42,13 +48,14 @@ const backchatABI = [
     "function getMessage(uint256 _messageId) external view returns (address sender, address recipient, string memory encryptedContent, string memory encryptedIpfsHash, uint256 sentAt, uint256 conversationId, uint256 parentMessageId)",
     "function getUserConversations(address _user) external view returns (uint256[] memory)",
     "function getConversationMessages(uint256 _conversationId) external view returns (uint256[] memory)",
-    "function getConversationParticipants(uint256 _conversationId) external view returns (address, address)",
-    "function totalMessages() external view returns (uint256)",
-    "function totalConversations() external view returns (uint256)",
+    // Note: getConversationParticipants doesn't exist - need to get from first message
+    
+    // Stats - using getTotals() which returns (posts, comments, notes, messages, conversations)
+    "function getTotals() external view returns (uint256 posts, uint256 comments, uint256 notes, uint256 messages, uint256 conversations)",
     
     // E2EE Keys
-    "function registerPublicKey(string memory _encryptedPublicKey) external",
-    "function getPublicKey(address _user) external view returns (string memory)",
+    "function registerPublicKey(bytes memory _publicKey) external",
+    "function getPublicKey(address _user) external view returns (bytes memory)",
     "function hasPublicKey(address _user) external view returns (bool)",
     
     // Config
@@ -56,8 +63,8 @@ const backchatABI = [
     "function bkcToken() external view returns (address)",
     
     // Events
-    "event MessageSent(uint256 indexed messageId, uint256 indexed conversationId, address indexed sender, address recipient)",
-    "event PublicKeyRegistered(address indexed user)"
+    "event PrivateMessageSent(uint256 indexed messageId, uint256 indexed conversationId, address indexed sender, address recipient, uint256 timestamp)",
+    "event PublicKeyRegistered(address indexed user, uint256 timestamp)"
 ];
 
 const erc20ABI = [
@@ -74,7 +81,7 @@ const BS = {
     conversations: [],
     currentConversation: null,
     currentMessages: [],
-    stats: { totalMessages: 0, totalConversations: 0 },
+    stats: { totalPosts: 0, totalComments: 0, totalNotes: 0, totalMessages: 0, totalConversations: 0 },
     hasPublicKey: false,
     isLoading: false,
     newMessageRecipient: '',
@@ -685,13 +692,14 @@ async function loadStats() {
         }
         
         const contract = await getContract();
-        const [totalMessages, totalConversations] = await Promise.all([
-            contract.totalMessages(),
-            contract.totalConversations()
-        ]);
+        // V1.2: Use getTotals() which returns (posts, comments, notes, messages, conversations)
+        const totals = await contract.getTotals();
         BS.stats = {
-            totalMessages: Number(totalMessages),
-            totalConversations: Number(totalConversations)
+            totalPosts: Number(totals[0]),
+            totalComments: Number(totals[1]),
+            totalNotes: Number(totals[2]),
+            totalMessages: Number(totals[3]),
+            totalConversations: Number(totals[4])
         };
         BS.contractAvailable = true;
         BS.contractError = null;
@@ -1190,7 +1198,7 @@ function getContainer() {
 }
 
 function render() {
-    console.log('🎨 BackchatPage render v1.1');
+    console.log('🎨 BackchatPage render v1.2');
     injectStyles();
     
     const container = getContainer();
@@ -1273,7 +1281,7 @@ function setRecipient(value) {
 
 export const BackchatPage = {
     render(isActive) {
-        console.log('🚀 BackchatPage.render v1.1, isActive:', isActive);
+        console.log('🚀 BackchatPage.render v1.2, isActive:', isActive);
         if (isActive) {
             render();
             refresh();
