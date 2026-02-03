@@ -1,951 +1,1342 @@
-// js/pages/StorePage.js
-// ✅ PRODUCTION V6.9 - Complete Redesign
-// ═══════════════════════════════════════════════════════════════════════════════
-//                          BACKCHAIN PROTOCOL
-//                     NFT Store - AMM Liquidity Pool
-// ═══════════════════════════════════════════════════════════════════════════════
+// pages/StorePage.js
+// ✅ PRODUCTION V6.8 - NFT Burn Rate System (4 Tiers)
 //
-// V6.9 Changes:
-// - COMPLETE UI REDESIGN - Modern, clean, consistent with other pages
-// - Better price display with bonding curve visualization
-// - Improved tier cards with keep rate display
-// - Enhanced buy/sell modals
-// - Smoother transitions and animations
-// - Consistent styling with all V6.9 pages
+// V6.8 Changes:
+// - Updated to 4 tiers: Diamond (50%), Gold (40%), Silver (25%), Bronze (10%)
+// - Shows "keep rate" instead of boost percentage (what user receives)
+// - Positive messaging: "Keep 100%" instead of "50% boost"
+// - Tier display shows emoji and keep rate
 //
-// Features:
-// - AMM-style NFT trading with XY=K bonding curve
-// - 4 Tiers: Diamond (100%), Gold (90%), Silver (75%), Bronze (60%)
-// - Buy NFT from pool, Sell NFT back to pool
-// - Dynamic pricing based on pool liquidity
+// V12.1 Changes:
+// - Added auto-refresh in finally block (2s after any transaction)
+// - Ensures UI updates even if onSuccess callback fails
 //
-// Website: https://backcoin.org
-// ═══════════════════════════════════════════════════════════════════════════════
+// V12.0 Changes:
+// - Removed 2-second throttle for instant tier switching
+// - Added pool data cache (30s TTL) to avoid redundant contract calls
 
 const ethers = window.ethers;
+
 import { State } from '../state.js';
-import { formatBigNumber } from '../utils.js';
-import { safeContractCall, loadPublicData, loadUserData } from '../modules/data.js';
+import { loadUserData, loadMyBoostersFromAPI, loadRentalListings, safeContractCall, getHighestBoosterBoostFromAPI, loadSystemDataFromAPI, API_ENDPOINTS } from '../modules/data.js';
+import { formatBigNumber, renderNoData } from '../utils.js';
 import { showToast } from '../ui-feedback.js';
-import { boosterTiers, getKeepRateFromBoost } from '../config.js';
-import { StoreTx } from '../modules/transactions/index.js';
+import { boosterTiers, addresses, nftPoolABI, ipfsGateway, getTierByBoost, getKeepRateFromBoost } from '../config.js';
+
+// V10: Import new transaction module
+import { NftTx } from '../modules/transactions/index.js';
 
 // ============================================================================
 // CONSTANTS
 // ============================================================================
-
 const EXPLORER_TX = "https://sepolia.arbiscan.io/tx/";
+const POOL_CACHE_TTL = 30000; // V12: 30 seconds cache for pool data
 
-// Tier configurations
+// ============================================================================
+// TIER CONFIGURATION - V6.8 (4 TIERS)
+// ============================================================================
 const TIER_CONFIG = {
-    'Diamond': { emoji: '💎', color: '#22d3ee', bg: 'rgba(34,211,238,0.15)', border: 'rgba(34,211,238,0.3)', keepRate: 100, boostBips: 5000 },
-    'Gold': { emoji: '🥇', color: '#fbbf24', bg: 'rgba(251,191,36,0.15)', border: 'rgba(251,191,36,0.3)', keepRate: 90, boostBips: 4000 },
-    'Silver': { emoji: '🥈', color: '#9ca3af', bg: 'rgba(156,163,175,0.15)', border: 'rgba(156,163,175,0.3)', keepRate: 75, boostBips: 2500 },
-    'Bronze': { emoji: '🥉', color: '#fb923c', bg: 'rgba(251,146,60,0.15)', border: 'rgba(251,146,60,0.3)', keepRate: 60, boostBips: 1000 }
+    'Diamond': { 
+        color: '#22d3ee',
+        gradient: 'from-cyan-500/20 to-blue-500/20',
+        border: 'border-cyan-500/40',
+        text: 'text-cyan-400',
+        glow: 'shadow-cyan-500/30',
+        icon: '💎',
+        keepRate: 100,
+        burnRate: 0
+    },
+    'Gold': { 
+        color: '#fbbf24',
+        gradient: 'from-yellow-500/20 to-amber-500/20',
+        border: 'border-yellow-500/40',
+        text: 'text-yellow-400',
+        glow: 'shadow-yellow-500/30',
+        icon: '🥇',
+        keepRate: 90,
+        burnRate: 10
+    },
+    'Silver': { 
+        color: '#9ca3af',
+        gradient: 'from-gray-400/20 to-slate-400/20',
+        border: 'border-gray-400/40',
+        text: 'text-gray-300',
+        glow: 'shadow-gray-400/30',
+        icon: '🥈',
+        keepRate: 75,
+        burnRate: 25
+    },
+    'Bronze': { 
+        color: '#f97316',
+        gradient: 'from-orange-600/20 to-amber-700/20',
+        border: 'border-orange-600/40',
+        text: 'text-orange-400',
+        glow: 'shadow-orange-500/30',
+        icon: '🥉',
+        keepRate: 60,
+        burnRate: 40
+    }
 };
 
-// ============================================================================
-// STATE
-// ============================================================================
+function getTierStyle(tierName) {
+    return TIER_CONFIG[tierName] || TIER_CONFIG['Bronze'];
+}
 
-const Store = {
-    activeTab: 'buy',
-    selectedTier: null,
-    pools: {},  // Pool data per tier
-    userNFTs: [], // User's NFTs for selling
-    isLoading: false,
-    isTransactionPending: false
+// ============================================================================
+// LOCAL STATE
+// ============================================================================
+const TradeState = {
+    tradeDirection: 'buy',
+    selectedPoolBoostBips: null,
+    buyPrice: 0n,
+    sellPrice: 0n,
+    netSellPrice: 0n,
+    poolNFTCount: 0,
+    userBalanceOfSelectedNFT: 0,
+    availableToSellCount: 0,
+    firstAvailableTokenId: null,
+    firstAvailableTokenIdForBuy: null,
+    bestBoosterTokenId: 0n,
+    bestBoosterBips: 0,
+    isDataLoading: false,
+    tradeHistory: []
 };
 
-// ============================================================================
-// UTILITIES
-// ============================================================================
+const poolAddressCache = new Map();
+const poolDataCache = new Map(); // V12: Cache pool data
+let isTransactionInProgress = false;
+let currentLoadingRequest = null; // V12: Track current request to cancel stale ones
 
-function getTierConfig(name) {
-    return TIER_CONFIG[name] || TIER_CONFIG['Bronze'];
+const factoryABI = [
+    "function getPoolAddress(uint256 boostBips) view returns (address)",
+    "function isPool(address) view returns (bool)"
+];
+
+// ============================================================================
+// HELPERS
+// ============================================================================
+function buildImageUrl(ipfsIoUrl) {
+    if (!ipfsIoUrl) return './assets/bkc_logo_3d.png';
+    if (ipfsIoUrl.startsWith('https://') || ipfsIoUrl.startsWith('http://')) return ipfsIoUrl;
+    if (ipfsIoUrl.includes('ipfs.io/ipfs/')) return `${ipfsGateway}${ipfsIoUrl.split('ipfs.io/ipfs/')[1]}`;
+    if (ipfsIoUrl.startsWith('ipfs://')) return `${ipfsGateway}${ipfsIoUrl.substring(7)}`;
+    return ipfsIoUrl;
 }
 
-function formatPrice(wei) {
-    if (!wei || wei === 0n) return '0.00';
-    return parseFloat(ethers.formatEther(wei)).toFixed(2);
+function formatDate(timestamp) {
+    if (!timestamp) return '';
+    try {
+        const secs = timestamp.seconds || timestamp._seconds || (new Date(timestamp).getTime() / 1000);
+        const date = new Date(secs * 1000);
+        return date.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+    } catch (e) { return ''; }
 }
 
-function formatETH(wei) {
-    if (!wei || wei === 0n) return '0.000';
-    return parseFloat(ethers.formatEther(wei)).toFixed(4);
+// V12: Pool data cache functions
+function getCachedPoolData(boostBips) {
+    const cached = poolDataCache.get(boostBips);
+    if (cached && (Date.now() - cached.timestamp < POOL_CACHE_TTL)) {
+        return cached.data;
+    }
+    return null;
+}
+
+function setCachedPoolData(boostBips, data) {
+    poolDataCache.set(boostBips, { data, timestamp: Date.now() });
+}
+
+function invalidatePoolCache(boostBips) {
+    poolDataCache.delete(boostBips);
 }
 
 // ============================================================================
-// STYLES
+// INJECT STYLES
 // ============================================================================
-
 function injectStyles() {
-    if (document.getElementById('store-styles-v6')) return;
+    if (document.getElementById('swap-styles-v9')) return;
+    
     const style = document.createElement('style');
-    style.id = 'store-styles-v6';
+    style.id = 'swap-styles-v9';
     style.textContent = `
-        /* ═══════════════════════════════════════════════════════════════════
-           V6.9 Store Page Styles - Modern & Clean
-           ═══════════════════════════════════════════════════════════════════ */
-        
-        @keyframes float { 
-            0%, 100% { transform: translateY(0); } 
-            50% { transform: translateY(-8px); } 
+        /* Trade Image Animations */
+        @keyframes trade-float {
+            0%, 100% { transform: translateY(0) rotate(-1deg); }
+            50% { transform: translateY(-8px) rotate(1deg); }
         }
-        @keyframes pulse-glow { 
-            0%, 100% { box-shadow: 0 0 20px rgba(139,92,246,0.2); } 
-            50% { box-shadow: 0 0 40px rgba(139,92,246,0.4); } 
+        @keyframes trade-pulse {
+            0%, 100% { filter: drop-shadow(0 0 15px rgba(34,197,94,0.3)); }
+            50% { filter: drop-shadow(0 0 30px rgba(34,197,94,0.6)); }
         }
-        @keyframes card-in {
-            from { opacity: 0; transform: translateY(20px) scale(0.95); }
-            to { opacity: 1; transform: translateY(0) scale(1); }
+        @keyframes trade-buy {
+            0%, 100% { filter: drop-shadow(0 0 20px rgba(34,197,94,0.4)); transform: scale(1); }
+            50% { filter: drop-shadow(0 0 40px rgba(34,197,94,0.7)); transform: scale(1.05); }
+        }
+        @keyframes trade-sell {
+            0%, 100% { filter: drop-shadow(0 0 20px rgba(239,68,68,0.4)); transform: scale(1); }
+            50% { filter: drop-shadow(0 0 40px rgba(239,68,68,0.7)); transform: scale(1.05); }
+        }
+        @keyframes trade-spin {
+            0% { transform: rotateY(0deg); }
+            100% { transform: rotateY(360deg); }
+        }
+        @keyframes trade-success {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.2); filter: drop-shadow(0 0 50px rgba(34,197,94,0.9)); }
+            100% { transform: scale(1); }
+        }
+        .trade-float { animation: trade-float 4s ease-in-out infinite; }
+        .trade-pulse { animation: trade-pulse 2s ease-in-out infinite; }
+        .trade-buy { animation: trade-buy 2s ease-in-out infinite; }
+        .trade-sell { animation: trade-sell 2s ease-in-out infinite; }
+        .trade-spin { animation: trade-spin 1.5s ease-in-out; }
+        .trade-success { animation: trade-success 0.8s ease-out; }
+        
+        .swap-container {
+            font-family: 'Inter', -apple-system, sans-serif;
         }
         
-        .float-animation { animation: float 4s ease-in-out infinite; }
-        .pulse-glow { animation: pulse-glow 2s ease-in-out infinite; }
-        
-        /* Cards */
-        .store-card {
-            background: linear-gradient(145deg, rgba(39,39,42,0.9) 0%, rgba(24,24,27,0.95) 100%);
+        .swap-card {
+            background: linear-gradient(180deg, rgba(24,24,27,0.95) 0%, rgba(9,9,11,0.98) 100%);
             border: 1px solid rgba(63,63,70,0.5);
-            border-radius: 20px;
-            transition: all 0.3s ease;
-        }
-        .store-card:hover {
-            border-color: rgba(139,92,246,0.3);
+            backdrop-filter: blur(20px);
         }
         
-        /* Tier Cards */
-        .tier-card {
-            background: linear-gradient(165deg, rgba(24,24,27,0.98) 0%, rgba(15,15,17,0.99) 100%);
+        .tier-chip {
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        
+        .tier-chip:hover {
+            transform: translateY(-2px);
+        }
+        
+        .tier-chip.active {
+            transform: scale(1.02);
+            box-shadow: 0 0 20px rgba(139,92,246,0.3);
+        }
+        
+        .swap-input-box {
+            background: rgba(39,39,42,0.5);
             border: 1px solid rgba(63,63,70,0.4);
-            border-radius: 20px;
-            overflow: hidden;
-            animation: card-in 0.5s ease-out forwards;
-            opacity: 0;
-            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-            cursor: pointer;
-        }
-        .tier-card:hover {
-            transform: translateY(-6px);
-            box-shadow: 0 25px 50px -15px rgba(0,0,0,0.5);
-        }
-        .tier-card.selected {
-            border-color: rgba(139,92,246,0.5);
-            box-shadow: 0 0 30px -10px rgba(139,92,246,0.3);
-        }
-        
-        /* Tabs */
-        .store-tab {
-            padding: 12px 24px;
-            font-size: 14px;
-            font-weight: 600;
-            border-radius: 12px;
-            transition: all 0.25s;
-            cursor: pointer;
-            color: #71717a;
-            white-space: nowrap;
-            border: none;
-            background: transparent;
-        }
-        .store-tab:hover:not(.active) {
-            color: #a1a1aa;
-            background: rgba(63,63,70,0.3);
-        }
-        .store-tab.active {
-            background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);
-            color: #fff;
-            box-shadow: 0 4px 20px rgba(139,92,246,0.35);
-        }
-        
-        /* Buttons */
-        .btn-store {
-            background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);
-            color: #fff;
-            font-weight: 700;
-            border: none;
-            border-radius: 12px;
             transition: all 0.2s ease;
-            cursor: pointer;
-        }
-        .btn-store:hover:not(:disabled) {
-            transform: translateY(-2px);
-            box-shadow: 0 10px 25px rgba(139,92,246,0.4);
-        }
-        .btn-store:disabled {
-            opacity: 0.5;
-            cursor: not-allowed;
         }
         
-        .btn-secondary {
+        .swap-input-box:hover {
+            border-color: rgba(113,113,122,0.5);
+        }
+        
+        .swap-input-box.active {
+            border-color: rgba(245,158,11,0.5);
+            background: rgba(39,39,42,0.7);
+        }
+        
+        .swap-arrow-btn {
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        
+        .swap-arrow-btn:hover {
+            transform: rotate(180deg);
             background: rgba(63,63,70,0.8);
-            color: #a1a1aa;
-            font-weight: 600;
-            border: 1px solid rgba(63,63,70,0.8);
-            border-radius: 12px;
-            transition: all 0.2s ease;
-            cursor: pointer;
-        }
-        .btn-secondary:hover {
-            background: rgba(63,63,70,1);
-            color: #fff;
         }
         
-        .btn-sell {
-            background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
-            color: #fff;
-            font-weight: 700;
-            border: none;
-            border-radius: 12px;
+        .swap-btn {
             transition: all 0.2s ease;
-            cursor: pointer;
-        }
-        .btn-sell:hover:not(:disabled) {
-            transform: translateY(-2px);
-            box-shadow: 0 10px 25px rgba(239,68,68,0.4);
         }
         
-        /* Modal */
-        .store-modal {
-            display: none;
-            position: fixed;
-            inset: 0;
-            z-index: 9999;
-            background: rgba(0,0,0,0.9);
-            backdrop-filter: blur(10px);
-            align-items: center;
-            justify-content: center;
-            padding: 1rem;
+        .swap-btn:not(:disabled):hover {
+            transform: translateY(-1px);
+            box-shadow: 0 10px 40px -10px currentColor;
         }
-        .store-modal.active { display: flex; }
-        .store-modal-content {
-            background: linear-gradient(145deg, rgba(39,39,42,0.98) 0%, rgba(24,24,27,0.99) 100%);
+        
+        .swap-btn:not(:disabled):active {
+            transform: translateY(0);
+        }
+        
+        .token-selector {
+            background: rgba(39,39,42,0.8);
             border: 1px solid rgba(63,63,70,0.5);
-            border-radius: 20px;
-            width: 100%;
-            max-width: 480px;
-            max-height: 90vh;
-            overflow-y: auto;
+            transition: all 0.2s ease;
         }
         
-        /* Price Display */
-        .price-tag {
-            font-family: 'SF Mono', 'Roboto Mono', monospace;
+        .token-selector:hover {
+            background: rgba(63,63,70,0.8);
+            border-color: rgba(113,113,122,0.5);
         }
         
-        /* Pool Stats */
-        .pool-stat {
-            background: rgba(0,0,0,0.3);
-            border-radius: 12px;
-            padding: 12px 16px;
+        .inventory-item {
+            transition: all 0.2s ease;
         }
         
-        /* Empty State */
-        .store-empty {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            padding: 60px 20px;
-            text-align: center;
+        .inventory-item:hover {
+            transform: scale(1.05);
+            border-color: rgba(245,158,11,0.5);
         }
         
-        /* Responsive */
-        @media (max-width: 768px) {
-            .tier-grid { grid-template-columns: repeat(2, 1fr) !important; }
+        .history-item {
+            transition: all 0.2s ease;
         }
-        @media (max-width: 480px) {
-            .tier-grid { grid-template-columns: 1fr !important; }
+        
+        .history-item:hover {
+            background: rgba(63,63,70,0.5) !important;
+            transform: translateX(4px);
+        }
+        
+        @keyframes shimmer {
+            0% { background-position: -200% 0; }
+            100% { background-position: 200% 0; }
+        }
+        
+        .skeleton {
+            background: linear-gradient(90deg, rgba(39,39,42,0.5) 25%, rgba(63,63,70,0.5) 50%, rgba(39,39,42,0.5) 75%);
+            background-size: 200% 100%;
+            animation: shimmer 1.5s infinite;
+        }
+        
+        .fade-in {
+            animation: fadeIn 0.3s ease forwards;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(8px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        .custom-scroll::-webkit-scrollbar {
+            width: 4px;
+            height: 4px;
+        }
+        .custom-scroll::-webkit-scrollbar-track {
+            background: rgba(39,39,42,0.3);
+        }
+        .custom-scroll::-webkit-scrollbar-thumb {
+            background: rgba(113,113,122,0.5);
+            border-radius: 2px;
+        }
+        
+        /* Tier Grid - Responsive */
+        .tier-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 0.5rem;
+        }
+        
+        @media (max-width: 400px) {
+            .tier-grid {
+                grid-template-columns: repeat(3, 1fr);
+            }
         }
     `;
     document.head.appendChild(style);
 }
 
 // ============================================================================
-// MAIN RENDER
+// LOADING STATES
 // ============================================================================
-
-function render() {
-    const container = document.getElementById('store');
-    if (!container) return;
-    
-    injectStyles();
-    
-    container.innerHTML = `
-        <div class="max-w-5xl mx-auto px-4 py-6">
-            
-            <!-- Header -->
-            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
-                <div class="flex items-center gap-4">
-                    <div class="w-14 h-14 rounded-2xl bg-gradient-to-br from-purple-500/20 to-violet-600/20 border border-purple-500/30 flex items-center justify-center float-animation">
-                        <i class="fa-solid fa-store text-2xl text-purple-400"></i>
-                    </div>
-                    <div>
-                        <h1 class="text-2xl font-bold text-white">NFT Store</h1>
-                        <p class="text-sm text-zinc-500">Buy & sell RewardBooster NFTs</p>
-                    </div>
-                </div>
-                <div id="balance-display" class="flex items-center gap-2 px-4 py-2 rounded-full bg-zinc-800/50 text-sm">
-                    <i class="fa-solid fa-wallet text-purple-400"></i>
-                    <span class="text-zinc-400">--</span>
+function renderLoading() {
+    return `
+        <div class="flex flex-col items-center justify-center py-12">
+            <div class="relative w-16 h-16">
+                <div class="absolute inset-0 rounded-full border-2 border-zinc-700"></div>
+                <div class="absolute inset-0 rounded-full border-2 border-transparent border-t-purple-500 animate-spin"></div>
+                <div class="absolute inset-2 rounded-full bg-zinc-800 flex items-center justify-center">
+                    <i class="fa-solid fa-gem text-xl text-purple-400"></i>
                 </div>
             </div>
-            
-            <!-- Info Banner -->
-            <div class="store-card p-5 mb-6 border-purple-500/20">
-                <div class="flex items-start gap-4">
-                    <div class="w-12 h-12 rounded-xl bg-purple-500/15 flex items-center justify-center flex-shrink-0">
-                        <i class="fa-solid fa-lightbulb text-purple-400"></i>
-                    </div>
-                    <div>
-                        <h3 class="text-sm font-bold text-white mb-1">Why Buy an NFT?</h3>
-                        <p class="text-xs text-zinc-400">
-                            NFTs reduce your burn rate when claiming staking rewards. Without an NFT, 50% is burned. 
-                            With Diamond NFT, you keep 100% of your rewards!
-                        </p>
-                    </div>
-                </div>
-            </div>
-            
-            <!-- Tabs -->
-            <div class="flex items-center gap-2 mb-6 pb-4 border-b border-zinc-800/50">
-                <button class="store-tab ${Store.activeTab === 'buy' ? 'active' : ''}" data-tab="buy">
-                    <i class="fa-solid fa-cart-shopping mr-2"></i>Buy NFT
-                </button>
-                <button class="store-tab ${Store.activeTab === 'sell' ? 'active' : ''}" data-tab="sell">
-                    <i class="fa-solid fa-coins mr-2"></i>Sell NFT
-                </button>
-            </div>
-            
-            <!-- Tab Content -->
-            <div id="tab-content"></div>
+            <p class="text-zinc-500 text-xs mt-4">Loading pool...</p>
         </div>
-        
-        <!-- Buy Modal -->
-        ${renderBuyModal()}
-        
-        <!-- Sell Modal -->
-        ${renderSellModal()}
     `;
-    
-    attachEventListeners();
-    renderTabContent();
-    updateBalanceDisplay();
 }
 
-function updateBalanceDisplay() {
-    const el = document.getElementById('balance-display');
-    if (!el) return;
+// ============================================================================
+// MAIN RENDER
+// ============================================================================
+export const StorePage = {
+    async render(isNewPage) {
+        injectStyles();
+        await loadSystemDataFromAPI();
+        
+        const container = document.getElementById('store');
+        if (!container) return;
+
+        if (container.innerHTML.trim() === '' || isNewPage) {
+            container.innerHTML = `
+                <div class="swap-container max-w-lg mx-auto py-6 px-4">
+                    
+                    <!-- Header with NFT Icon -->
+                    <div class="flex justify-between items-center mb-6">
+                        <div class="flex items-center gap-3">
+                            <div class="w-14 h-14 rounded-2xl flex items-center justify-center text-3xl"
+                                 id="trade-mascot">
+                                💎
+                            </div>
+                            <div>
+                                <h1 class="text-lg font-semibold text-white">NFT Market</h1>
+                                <p class="text-xs text-zinc-500">Keep up to 100% of rewards</p>
+                            </div>
+                        </div>
+                        <button id="refresh-btn" class="w-8 h-8 rounded-lg bg-zinc-800/50 hover:bg-zinc-700 flex items-center justify-center text-zinc-400 hover:text-white transition-colors">
+                            <i class="fa-solid fa-rotate text-xs"></i>
+                        </button>
+                    </div>
+                    
+                    <!-- Main Swap Card -->
+                    <div class="swap-card rounded-2xl p-4 mb-4">
+                        
+                        <!-- Tier Selector - GRID Layout V6.8 -->
+                        <div class="mb-4">
+                            <p class="text-xs text-zinc-500 mb-2">Select NFT Tier (Higher = Keep More Rewards)</p>
+                            <div id="tier-selector" class="tier-grid">
+                                ${renderTierChips()}
+                            </div>
+                        </div>
+                        
+                        <!-- Swap Interface -->
+                        <div id="swap-interface">
+                            ${renderLoading()}
+                        </div>
+                        
+                    </div>
+                    
+                    <!-- My NFTs (Collapsible) -->
+                    <div class="swap-card rounded-2xl overflow-hidden mb-4">
+                        <button id="inventory-toggle" class="w-full flex justify-between items-center p-4 hover:bg-zinc-800/30 transition-colors">
+                            <div class="flex items-center gap-2">
+                                <i class="fa-solid fa-wallet text-amber-500 text-sm"></i>
+                                <span class="text-sm font-medium text-white">My NFTs</span>
+                                <span id="nft-count" class="text-xs bg-zinc-700 px-2 py-0.5 rounded-full text-zinc-300">0</span>
+                            </div>
+                            <i id="inventory-chevron" class="fa-solid fa-chevron-down text-zinc-500 text-xs transition-transform"></i>
+                        </button>
+                        <div id="inventory-panel" class="hidden border-t border-zinc-800">
+                            <div id="inventory-grid" class="p-4 grid grid-cols-4 gap-2 max-h-[200px] overflow-y-auto custom-scroll">
+                                ${renderNoData("No NFTs")}
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Trade History (Collapsible) - OPEN by default -->
+                    <div class="swap-card rounded-2xl overflow-hidden">
+                        <button id="history-toggle" class="w-full flex justify-between items-center p-4 hover:bg-zinc-800/30 transition-colors">
+                            <div class="flex items-center gap-2">
+                                <i class="fa-solid fa-clock-rotate-left text-green-500 text-sm"></i>
+                                <span class="text-sm font-medium text-white">Trade History</span>
+                                <span id="history-count" class="text-xs bg-zinc-700 px-2 py-0.5 rounded-full text-zinc-300">0</span>
+                            </div>
+                            <i id="history-chevron" class="fa-solid fa-chevron-down text-zinc-500 text-xs transition-transform" style="transform: rotate(180deg)"></i>
+                        </button>
+                        <div id="history-panel" class="border-t border-zinc-800">
+                            <div id="history-list" class="p-4 space-y-2 max-h-[300px] overflow-y-auto custom-scroll">
+                                <div class="text-center py-4 text-xs text-zinc-600">Loading history...</div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                </div>
+            `;
+
+            setupEventListeners();
+        }
+
+        if (TradeState.selectedPoolBoostBips === null && boosterTiers.length > 0) {
+            TradeState.selectedPoolBoostBips = boosterTiers[0].boostBips;
+        }
+
+        await loadDataForSelectedPool();
+        await loadTradeHistory();
+    },
+
+    async update() {
+        if (TradeState.selectedPoolBoostBips !== null && !TradeState.isDataLoading) {
+            const container = document.getElementById('store');
+            if (container && !document.hidden) {
+                await loadDataForSelectedPool();
+            }
+        }
+    }
+};
+
+// ============================================================================
+// TRADE HISTORY - IMPROVED
+// ============================================================================
+async function loadTradeHistory() {
+    const container = document.getElementById('history-list');
     
-    if (!State.isConnected) {
-        el.innerHTML = `
-            <i class="fa-solid fa-wallet text-zinc-500"></i>
-            <span class="text-zinc-500">Not connected</span>
-        `;
+    if (!State.userAddress) {
+        if (container) {
+            container.innerHTML = `<div class="text-center py-4 text-xs text-zinc-600">Connect wallet to view history</div>`;
+        }
         return;
     }
     
-    const balance = State.currentUserBalance || 0n;
-    el.innerHTML = `
-        <i class="fa-solid fa-wallet text-purple-400"></i>
-        <span class="text-purple-400 font-mono font-bold">${formatBigNumber(balance)} BKC</span>
-    `;
-}
-
-function renderTabContent() {
-    const el = document.getElementById('tab-content');
-    if (!el) return;
-    
-    switch (Store.activeTab) {
-        case 'buy': el.innerHTML = renderBuyTab(); break;
-        case 'sell': el.innerHTML = renderSellTab(); break;
-    }
-}
-
-// ============================================================================
-// BUY TAB
-// ============================================================================
-
-function renderBuyTab() {
-    const tiers = Object.keys(TIER_CONFIG);
-    
-    return `
-        <div>
-            <!-- Tier Selection -->
-            <h3 class="text-sm font-bold text-zinc-400 uppercase tracking-wider mb-4">Select Tier</h3>
-            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 tier-grid">
-                ${tiers.map((tierName, idx) => renderTierCard(tierName, idx, 'buy')).join('')}
-            </div>
-            
-            <!-- Pool Info -->
-            <div class="mt-8">
-                <h3 class="text-sm font-bold text-zinc-400 uppercase tracking-wider mb-4">How It Works</h3>
-                <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                    <div class="store-card p-5">
-                        <div class="w-10 h-10 rounded-xl bg-purple-500/15 flex items-center justify-center mb-3">
-                            <i class="fa-solid fa-chart-line text-purple-400"></i>
-                        </div>
-                        <h4 class="text-sm font-bold text-white mb-1">Dynamic Pricing</h4>
-                        <p class="text-xs text-zinc-500">Prices adjust based on supply. Less NFTs = higher price.</p>
-                    </div>
-                    <div class="store-card p-5">
-                        <div class="w-10 h-10 rounded-xl bg-emerald-500/15 flex items-center justify-center mb-3">
-                            <i class="fa-solid fa-shield-check text-emerald-400"></i>
-                        </div>
-                        <h4 class="text-sm font-bold text-white mb-1">Reduce Burn Rate</h4>
-                        <p class="text-xs text-zinc-500">Keep more of your staking rewards with higher tier NFTs.</p>
-                    </div>
-                    <div class="store-card p-5">
-                        <div class="w-10 h-10 rounded-xl bg-amber-500/15 flex items-center justify-center mb-3">
-                            <i class="fa-solid fa-rotate text-amber-400"></i>
-                        </div>
-                        <h4 class="text-sm font-bold text-white mb-1">Trade Anytime</h4>
-                        <p class="text-xs text-zinc-500">Sell back to the pool whenever you want (10% fee).</p>
-                    </div>
-                </div>
-            </div>
-        </div>
-    `;
-}
-
-function renderTierCard(tierName, idx, mode) {
-    const config = getTierConfig(tierName);
-    const pool = Store.pools[tierName] || {};
-    const buyPrice = pool.buyPrice ? formatPrice(pool.buyPrice) : '--';
-    const sellPrice = pool.sellPrice ? formatPrice(pool.sellPrice) : '--';
-    const available = pool.nftCount || 0;
-    const ethFee = pool.buyEthFee ? formatETH(pool.buyEthFee) : '0';
-    
-    return `
-        <div class="tier-card ${Store.selectedTier === tierName ? 'selected' : ''}" 
-             data-tier="${tierName}" style="animation-delay:${idx * 80}ms">
-            
-            <!-- Header -->
-            <div class="p-4 pb-0 flex items-center justify-between">
-                <div class="px-3 py-1.5 rounded-lg text-xs font-bold" 
-                     style="background:${config.bg};color:${config.color};border:1px solid ${config.border}">
-                    ${config.emoji} ${tierName}
-                </div>
-                <span class="text-xs font-bold" style="color:${config.color}">Keep ${config.keepRate}%</span>
-            </div>
-            
-            <!-- NFT Display -->
-            <div class="relative aspect-square flex items-center justify-center p-4">
-                <div class="absolute inset-0 opacity-30" 
-                     style="background: radial-gradient(circle at center, ${config.color}20 0%, transparent 70%);"></div>
-                <div class="text-6xl float-animation">${config.emoji}</div>
-            </div>
-            
-            <!-- Info -->
-            <div class="p-4 pt-0 space-y-3">
-                <div class="h-px bg-gradient-to-r from-transparent via-zinc-700 to-transparent"></div>
-                
-                <div class="flex justify-between text-sm">
-                    <span class="text-zinc-500">Available</span>
-                    <span class="text-white font-bold">${available}</span>
-                </div>
-                
-                ${mode === 'buy' ? `
-                    <div class="flex justify-between items-baseline">
-                        <span class="text-zinc-500 text-sm">Buy Price</span>
-                        <div class="text-right">
-                            <span class="text-lg font-bold text-white price-tag">${buyPrice}</span>
-                            <span class="text-xs text-zinc-500"> BKC</span>
-                        </div>
-                    </div>
-                    ${ethFee !== '0' ? `
-                        <div class="flex justify-between text-xs">
-                            <span class="text-zinc-600">+ ETH Fee</span>
-                            <span class="text-zinc-400">${ethFee} ETH</span>
-                        </div>
-                    ` : ''}
-                ` : `
-                    <div class="flex justify-between items-baseline">
-                        <span class="text-zinc-500 text-sm">Sell Price</span>
-                        <div class="text-right">
-                            <span class="text-lg font-bold text-white price-tag">${sellPrice}</span>
-                            <span class="text-xs text-zinc-500"> BKC</span>
-                        </div>
-                    </div>
-                `}
-                
-                <button class="${mode === 'buy' ? 'btn-store' : 'btn-sell'} w-full py-3 text-sm" 
-                        data-action="${mode}" data-tier="${tierName}"
-                        ${available === 0 && mode === 'buy' ? 'disabled' : ''}>
-                    ${mode === 'buy' ? `<i class="fa-solid fa-cart-plus mr-2"></i>Buy Now` : `<i class="fa-solid fa-coins mr-2"></i>Sell`}
-                </button>
-            </div>
-        </div>
-    `;
-}
-
-// ============================================================================
-// SELL TAB
-// ============================================================================
-
-function renderSellTab() {
-    if (!State.isConnected) {
-        return renderConnectPrompt('Sell your NFTs');
-    }
-    
-    const myNFTs = Store.userNFTs || [];
-    
-    if (myNFTs.length === 0) {
-        return `
-            <div class="store-empty">
-                <div class="w-20 h-20 rounded-2xl bg-zinc-800/50 flex items-center justify-center mb-4">
-                    <i class="fa-solid fa-box-open text-3xl text-zinc-500"></i>
-                </div>
-                <h3 class="text-lg font-bold text-white mb-2">No NFTs to Sell</h3>
-                <p class="text-sm text-zinc-500 mb-4">You don't have any RewardBooster NFTs</p>
-                <button class="btn-store px-6 py-3" onclick="StorePage.switchTab('buy')">
-                    <i class="fa-solid fa-cart-shopping mr-2"></i>Buy an NFT
-                </button>
-            </div>
-        `;
-    }
-    
-    return `
-        <div>
-            <h3 class="text-sm font-bold text-zinc-400 uppercase tracking-wider mb-4">Your NFTs (${myNFTs.length})</h3>
-            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 tier-grid">
-                ${myNFTs.map((nft, idx) => renderUserNFTCard(nft, idx)).join('')}
-            </div>
-            
-            <div class="mt-6 p-4 rounded-xl bg-amber-500/10 border border-amber-500/20">
-                <p class="text-sm text-amber-400">
-                    <i class="fa-solid fa-info-circle mr-2"></i>
-                    Selling an NFT incurs a 10% fee. You'll receive the net amount shown.
-                </p>
-            </div>
-        </div>
-    `;
-}
-
-function renderUserNFTCard(nft, idx) {
-    const tierName = getTierNameFromBoost(nft.boostBips);
-    const config = getTierConfig(tierName);
-    const pool = Store.pools[tierName] || {};
-    const sellPrice = pool.sellPrice ? formatPrice(pool.sellPrice) : '--';
-    
-    return `
-        <div class="tier-card" style="animation-delay:${idx * 80}ms">
-            <div class="p-4 pb-0 flex items-center justify-between">
-                <div class="px-3 py-1.5 rounded-lg text-xs font-bold" 
-                     style="background:${config.bg};color:${config.color};border:1px solid ${config.border}">
-                    ${config.emoji} ${tierName}
-                </div>
-                <span class="text-xs font-mono" style="color:${config.color}">#${nft.tokenId}</span>
-            </div>
-            
-            <div class="relative aspect-square flex items-center justify-center p-4">
-                <div class="absolute inset-0 opacity-30" 
-                     style="background: radial-gradient(circle at center, ${config.color}20 0%, transparent 70%);"></div>
-                <div class="text-6xl float-animation">${config.emoji}</div>
-            </div>
-            
-            <div class="p-4 pt-0 space-y-3">
-                <div class="h-px bg-gradient-to-r from-transparent via-zinc-700 to-transparent"></div>
-                
-                <div class="flex justify-between items-baseline">
-                    <span class="text-zinc-500 text-sm">You'll receive</span>
-                    <div class="text-right">
-                        <span class="text-lg font-bold text-emerald-400 price-tag">${sellPrice}</span>
-                        <span class="text-xs text-zinc-500"> BKC</span>
-                    </div>
-                </div>
-                
-                <button class="btn-sell w-full py-3 text-sm" data-action="sell" data-token="${nft.tokenId}" data-tier="${tierName}">
-                    <i class="fa-solid fa-coins mr-2"></i>Sell NFT
-                </button>
-            </div>
-        </div>
-    `;
-}
-
-function getTierNameFromBoost(boostBips) {
-    const boost = Number(boostBips);
-    if (boost >= 5000) return 'Diamond';
-    if (boost >= 4000) return 'Gold';
-    if (boost >= 2500) return 'Silver';
-    return 'Bronze';
-}
-
-// ============================================================================
-// MODALS
-// ============================================================================
-
-function renderBuyModal() {
-    return `
-        <div class="store-modal" id="modal-buy">
-            <div class="store-modal-content">
-                <div class="flex items-center justify-between p-5 border-b border-zinc-800">
-                    <h3 class="text-lg font-bold text-white flex items-center gap-2">
-                        <i class="fa-solid fa-cart-shopping text-purple-400"></i>Buy NFT
-                    </h3>
-                    <button onclick="StorePage.closeBuyModal()" class="text-zinc-500 hover:text-white text-xl">
-                        <i class="fa-solid fa-xmark"></i>
-                    </button>
-                </div>
-                <div id="buy-modal-content" class="p-5">
-                    <!-- Content populated dynamically -->
-                </div>
-            </div>
-        </div>
-    `;
-}
-
-function renderSellModal() {
-    return `
-        <div class="store-modal" id="modal-sell">
-            <div class="store-modal-content">
-                <div class="flex items-center justify-between p-5 border-b border-zinc-800">
-                    <h3 class="text-lg font-bold text-white flex items-center gap-2">
-                        <i class="fa-solid fa-coins text-red-400"></i>Sell NFT
-                    </h3>
-                    <button onclick="StorePage.closeSellModal()" class="text-zinc-500 hover:text-white text-xl">
-                        <i class="fa-solid fa-xmark"></i>
-                    </button>
-                </div>
-                <div id="sell-modal-content" class="p-5">
-                    <!-- Content populated dynamically -->
-                </div>
-            </div>
-        </div>
-    `;
-}
-
-function openBuyModal(tierName) {
-    const config = getTierConfig(tierName);
-    const pool = Store.pools[tierName] || {};
-    const buyPrice = pool.buyPrice || 0n;
-    const buyTax = pool.buyTax || 0n;
-    const totalCost = buyPrice + buyTax;
-    const ethFee = pool.buyEthFee || 0n;
-    const balance = State.currentUserBalance || 0n;
-    const canAfford = balance >= totalCost;
-    
-    document.getElementById('buy-modal-content').innerHTML = `
-        <div class="flex items-center gap-4 mb-5 p-4 rounded-xl" style="background:${config.bg}">
-            <div class="text-5xl">${config.emoji}</div>
-            <div>
-                <h3 class="text-lg font-bold text-white">${tierName} Booster</h3>
-                <p class="text-sm" style="color:${config.color}">Keep ${config.keepRate}% of rewards</p>
-            </div>
-        </div>
-        
-        <div class="space-y-3 mb-5">
-            <div class="pool-stat flex justify-between">
-                <span class="text-zinc-500">Base Price</span>
-                <span class="text-white font-mono">${formatPrice(buyPrice)} BKC</span>
-            </div>
-            <div class="pool-stat flex justify-between">
-                <span class="text-zinc-500">Buy Tax (5%)</span>
-                <span class="text-amber-400 font-mono">+${formatPrice(buyTax)} BKC</span>
-            </div>
-            ${ethFee > 0n ? `
-                <div class="pool-stat flex justify-between">
-                    <span class="text-zinc-500">ETH Fee</span>
-                    <span class="text-blue-400 font-mono">${formatETH(ethFee)} ETH</span>
-                </div>
-            ` : ''}
-            <div class="h-px bg-zinc-700"></div>
-            <div class="flex justify-between text-lg">
-                <span class="text-zinc-300 font-bold">Total Cost</span>
-                <span class="text-purple-400 font-bold font-mono">${formatPrice(totalCost)} BKC</span>
-            </div>
-        </div>
-        
-        <div class="p-4 rounded-xl mb-5 ${canAfford ? 'bg-emerald-500/10 border border-emerald-500/20' : 'bg-red-500/10 border border-red-500/20'}">
-            <div class="flex justify-between text-sm">
-                <span class="${canAfford ? 'text-emerald-400' : 'text-red-400'}">Your Balance</span>
-                <span class="${canAfford ? 'text-emerald-400' : 'text-red-400'} font-mono font-bold">${formatBigNumber(balance)} BKC</span>
-            </div>
-        </div>
-        
-        <div class="flex gap-3">
-            <button onclick="StorePage.closeBuyModal()" class="btn-secondary flex-1 py-3">Cancel</button>
-            <button id="confirm-buy" onclick="StorePage.handleBuy('${tierName}')" class="btn-store flex-1 py-3" ${!canAfford ? 'disabled' : ''}>
-                <i class="fa-solid fa-cart-plus mr-2"></i>Buy Now
-            </button>
-        </div>
-    `;
-    
-    document.getElementById('modal-buy').classList.add('active');
-}
-
-function closeBuyModal() {
-    document.getElementById('modal-buy').classList.remove('active');
-}
-
-function openSellModal(tokenId, tierName) {
-    const config = getTierConfig(tierName);
-    const pool = Store.pools[tierName] || {};
-    const sellPrice = pool.sellPrice || 0n;
-    const ethFee = pool.sellEthFee || 0n;
-    
-    document.getElementById('sell-modal-content').innerHTML = `
-        <div class="flex items-center gap-4 mb-5 p-4 rounded-xl" style="background:${config.bg}">
-            <div class="text-5xl">${config.emoji}</div>
-            <div>
-                <h3 class="text-lg font-bold text-white">${tierName} Booster #${tokenId}</h3>
-                <p class="text-sm" style="color:${config.color}">Keep ${config.keepRate}% tier</p>
-            </div>
-        </div>
-        
-        <div class="space-y-3 mb-5">
-            <div class="pool-stat flex justify-between">
-                <span class="text-zinc-500">Sell Price (after 10% tax)</span>
-                <span class="text-emerald-400 font-mono font-bold">${formatPrice(sellPrice)} BKC</span>
-            </div>
-            ${ethFee > 0n ? `
-                <div class="pool-stat flex justify-between">
-                    <span class="text-zinc-500">ETH Fee Required</span>
-                    <span class="text-blue-400 font-mono">${formatETH(ethFee)} ETH</span>
-                </div>
-            ` : ''}
-        </div>
-        
-        <div class="p-4 rounded-xl bg-amber-500/10 border border-amber-500/20 mb-5">
-            <p class="text-sm text-amber-400">
-                <i class="fa-solid fa-warning mr-2"></i>
-                This action cannot be undone. The NFT will be sold to the liquidity pool.
-            </p>
-        </div>
-        
-        <div class="flex gap-3">
-            <button onclick="StorePage.closeSellModal()" class="btn-secondary flex-1 py-3">Cancel</button>
-            <button id="confirm-sell" onclick="StorePage.handleSell('${tokenId}', '${tierName}')" class="btn-sell flex-1 py-3">
-                <i class="fa-solid fa-coins mr-2"></i>Sell for ${formatPrice(sellPrice)} BKC
-            </button>
-        </div>
-    `;
-    
-    document.getElementById('modal-sell').classList.add('active');
-}
-
-function closeSellModal() {
-    document.getElementById('modal-sell').classList.remove('active');
-}
-
-// ============================================================================
-// HELPERS
-// ============================================================================
-
-function renderConnectPrompt(action) {
-    return `
-        <div class="store-empty">
-            <div class="w-20 h-20 rounded-2xl bg-zinc-800/50 flex items-center justify-center mb-4">
-                <i class="fa-solid fa-wallet text-3xl text-zinc-500"></i>
-            </div>
-            <h3 class="text-lg font-bold text-white mb-2">Connect Wallet</h3>
-            <p class="text-sm text-zinc-500 mb-4">${action}</p>
-            <button onclick="window.openConnectModal && window.openConnectModal()" class="btn-store px-8 py-3">
-                <i class="fa-solid fa-wallet mr-2"></i>Connect Wallet
-            </button>
-        </div>
-    `;
-}
-
-// ============================================================================
-// EVENT HANDLERS
-// ============================================================================
-
-function attachEventListeners() {
-    document.addEventListener('click', e => {
-        // Tab clicks
-        const tab = e.target.closest('.store-tab');
-        if (tab) {
-            Store.activeTab = tab.dataset.tab;
-            document.querySelectorAll('.store-tab').forEach(t => t.classList.remove('active'));
-            tab.classList.add('active');
-            renderTabContent();
-            return;
-        }
-        
-        // Buy action
-        const buyBtn = e.target.closest('[data-action="buy"]');
-        if (buyBtn && !buyBtn.disabled) {
-            if (!State.isConnected) {
-                showToast('Please connect wallet first', 'error');
-                return;
-            }
-            openBuyModal(buyBtn.dataset.tier);
-            return;
-        }
-        
-        // Sell action
-        const sellBtn = e.target.closest('[data-action="sell"]');
-        if (sellBtn) {
-            const tokenId = sellBtn.dataset.token;
-            const tier = sellBtn.dataset.tier;
-            if (tokenId) {
-                openSellModal(tokenId, tier);
-            }
-            return;
-        }
-    });
-}
-
-// ============================================================================
-// TRANSACTION HANDLERS
-// ============================================================================
-
-async function handleBuy(tierName) {
-    if (Store.isTransactionPending) return;
-    
-    const pool = Store.pools[tierName] || {};
-    const btn = document.getElementById('confirm-buy');
-    
-    Store.isTransactionPending = true;
-    
     try {
-        await StoreTx.buy({
-            tier: tierName,
-            button: btn,
-            onSuccess: async () => {
-                Store.isTransactionPending = false;
-                closeBuyModal();
-                showToast(`🎉 ${tierName} NFT purchased!`, 'success');
-                await refreshData();
-            },
-            onError: (e) => {
-                Store.isTransactionPending = false;
-                if (!e.cancelled && e.type !== 'user_rejected') {
-                    showToast('Failed: ' + (e.message || 'Error'), 'error');
-                }
-            }
+        const endpoint = API_ENDPOINTS.getHistory || 'https://gethistory-4wvdcuoouq-uc.a.run.app';
+        const response = await fetch(`${endpoint}/${State.userAddress}`);
+        
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
+        }
+        
+        const data = await response.json();
+        
+        // Debug: mostrar todos os tipos de transação
+        console.log("All history types:", [...new Set((data || []).map(item => item.type))]);
+        
+        // Filtro RESTRITO - APENAS compra e venda de NFT
+        TradeState.tradeHistory = (data || []).filter(item => {
+            const t = (item.type || '').toUpperCase();
+            
+            // APENAS estes tipos específicos de trade de NFT
+            return t === 'NFTBOUGHT' || 
+                   t === 'NFTSOLD' ||
+                   t === 'NFT_BOUGHT' ||
+                   t === 'NFT_SOLD' ||
+                   t === 'NFTPURCHASED' ||
+                   t === 'NFT_PURCHASED' ||
+                   t.includes('NFTBOUGHT') ||
+                   t.includes('NFTSOLD') ||
+                   t.includes('NFTPURCHASED');
         });
-    } catch (err) {
-        Store.isTransactionPending = false;
-        if (!err.cancelled && err.type !== 'user_rejected') {
-            showToast('Failed: ' + (err.message || 'Error'), 'error');
-        }
-    }
-}
-
-async function handleSell(tokenId, tierName) {
-    if (Store.isTransactionPending) return;
-    
-    const btn = document.getElementById('confirm-sell');
-    Store.isTransactionPending = true;
-    
-    try {
-        await StoreTx.sell({
-            tokenId,
-            tier: tierName,
-            button: btn,
-            onSuccess: async () => {
-                Store.isTransactionPending = false;
-                closeSellModal();
-                showToast(`💰 NFT sold successfully!`, 'success');
-                await refreshData();
-            },
-            onError: (e) => {
-                Store.isTransactionPending = false;
-                if (!e.cancelled && e.type !== 'user_rejected') {
-                    showToast('Failed: ' + (e.message || 'Error'), 'error');
-                }
-            }
-        });
-    } catch (err) {
-        Store.isTransactionPending = false;
-        if (!err.cancelled && err.type !== 'user_rejected') {
-            showToast('Failed: ' + (err.message || 'Error'), 'error');
-        }
-    }
-}
-
-// ============================================================================
-// DATA
-// ============================================================================
-
-async function loadPoolData() {
-    Store.isLoading = true;
-    
-    try {
-        // Load pool data for each tier from contracts
-        for (const tierName of Object.keys(TIER_CONFIG)) {
-            const contract = State[`nftPool${tierName}`] || State.nftPoolContract;
-            if (!contract) continue;
-            
-            try {
-                const [buyPrice, sellPrice, nftCount, buyEthFee, sellEthFee] = await Promise.all([
-                    safeContractCall(contract, 'getBuyPriceWithTax', [], 0n),
-                    safeContractCall(contract, 'getSellPriceAfterTax', [], 0n),
-                    safeContractCall(contract, 'getNFTCount', [], 0),
-                    safeContractCall(contract, 'buyEthFee', [], 0n),
-                    safeContractCall(contract, 'sellEthFee', [], 0n)
-                ]);
-                
-                const buyTax = buyPrice > 0n ? buyPrice * 5n / 105n : 0n; // Reverse calculate 5% tax
-                
-                Store.pools[tierName] = {
-                    buyPrice: buyPrice - buyTax,
-                    buyTax,
-                    sellPrice,
-                    nftCount: Number(nftCount),
-                    buyEthFee,
-                    sellEthFee
-                };
-            } catch (e) {
-                console.warn(`Failed to load ${tierName} pool:`, e);
-            }
-        }
         
-        // Load user's NFTs for selling
-        if (State.isConnected && State.userAddress) {
-            Store.userNFTs = State.myBoosters || [];
-        }
+        console.log("NFT trade history:", TradeState.tradeHistory.length, "items");
+        
+        // Update count badge
+        const countEl = document.getElementById('history-count');
+        if (countEl) countEl.textContent = TradeState.tradeHistory.length;
+        
+        renderTradeHistory();
         
     } catch (e) {
-        console.error('Pool data load error:', e);
+        console.error('History load error:', e);
+        // Mesmo com erro, renderizar estado vazio
+        TradeState.tradeHistory = [];
+        renderTradeHistory();
     }
-    
-    Store.isLoading = false;
 }
 
-async function refreshData() {
-    await loadPoolData();
-    if (State.isConnected) await loadUserData();
-    render();
+function renderTradeHistory() {
+    const container = document.getElementById('history-list');
+    if (!container) return;
+
+    if (!State.isConnected) {
+        container.innerHTML = `<div class="text-center py-4 text-xs text-zinc-600">Connect wallet to view history</div>`;
+        return;
+    }
+
+    if (TradeState.tradeHistory.length === 0) {
+        container.innerHTML = `
+            <div class="text-center py-6">
+                <div class="w-12 h-12 mx-auto rounded-full bg-zinc-800/50 flex items-center justify-center mb-2">
+                    <i class="fa-solid fa-receipt text-zinc-600 text-lg"></i>
+                </div>
+                <p class="text-zinc-600 text-xs">No NFT trades yet</p>
+                <p class="text-zinc-700 text-[10px] mt-1">Buy or sell NFTs to see history</p>
+            </div>
+        `;
+        return;
+    }
+
+    container.innerHTML = TradeState.tradeHistory.slice(0, 20).map(item => {
+        const t = (item.type || '').toUpperCase();
+        const details = item.details || {};
+        const dateStr = formatDate(item.timestamp || item.createdAt);
+        
+        // Determinar se é Buy ou Sell
+        const isBuy = t.includes('BOUGHT') || t.includes('PURCHASED');
+        
+        const icon = isBuy ? 'fa-cart-plus' : 'fa-money-bill-transfer';
+        const iconColor = isBuy ? '#22c55e' : '#f59e0b';
+        const bgColor = isBuy ? 'rgba(34,197,94,0.15)' : 'rgba(245,158,11,0.15)';
+        const label = isBuy ? '🛒 Bought NFT' : '💰 Sold NFT';
+        const amountPrefix = isBuy ? '-' : '+';
+
+        const txLink = item.txHash ? `${EXPLORER_TX}${item.txHash}` : '#';
+        
+        // Handle amount safely
+        let amountDisplay = '';
+        try {
+            let rawAmount = item.amount || details.amount || details.price || details.payout || "0";
+            if (typeof rawAmount === 'string' && rawAmount !== "0") {
+                const amountNum = formatBigNumber(BigInt(rawAmount));
+                if (amountNum > 0.001) {
+                    amountDisplay = amountNum.toFixed(2);
+                }
+            }
+        } catch (e) {
+            // Ignore parse errors
+        }
+        
+        const tokenId = details.tokenId || '';
+        const boostBips = details.boostBips || details.boost || '';
+
+        return `
+            <a href="${txLink}" target="_blank" class="history-item flex items-center justify-between p-3 hover:bg-zinc-800/60 border border-zinc-700/30 rounded-lg transition-all group bg-zinc-800/20">
+                <div class="flex items-center gap-3">
+                    <div class="w-9 h-9 rounded-lg flex items-center justify-center border border-zinc-700/30" style="background: ${bgColor}">
+                        <i class="fa-solid ${icon} text-sm" style="color: ${iconColor}"></i>
+                    </div>
+                    <div>
+                        <p class="text-white text-xs font-medium">
+                            ${label}
+                            ${tokenId ? `<span class="ml-1 text-[10px] text-amber-400 font-mono">#${tokenId}</span>` : ''}
+                            ${boostBips ? `<span class="ml-1 text-[9px] text-purple-400">+${Number(boostBips)/100}%</span>` : ''}
+                        </p>
+                        <p class="text-zinc-600 text-[10px]">${dateStr}</p>
+                    </div>
+                </div>
+                <div class="flex items-center gap-2">
+                    ${amountDisplay ? `<span class="text-xs font-mono font-bold ${isBuy ? 'text-white' : 'text-green-400'}">${amountPrefix}${amountDisplay} <span class="text-zinc-500">BKC</span></span>` : ''}
+                    <i class="fa-solid fa-arrow-up-right-from-square text-zinc-600 group-hover:text-blue-400 text-[9px]"></i>
+                </div>
+            </a>
+        `;
+    }).join('');
 }
 
-function switchTab(tab) {
-    Store.activeTab = tab;
-    renderTabContent();
-    document.querySelectorAll('.store-tab').forEach(t => {
-        t.classList.toggle('active', t.dataset.tab === tab);
+// ============================================================================
+// TIER CHIPS - GRID Layout
+// ============================================================================
+function renderTierChips() {
+    return boosterTiers.map((tier, idx) => {
+        const style = getTierStyle(tier.name);
+        const isFirst = idx === 0;
+        const keepRate = getKeepRateFromBoost(tier.boostBips);
+        const emoji = style.icon || tier.emoji || '💎';
+        
+        return `
+            <button class="tier-chip flex flex-col items-center gap-1 p-2 rounded-xl border transition-all
+                ${isFirst 
+                    ? `bg-gradient-to-br ${style.gradient} ${style.border} ${style.text} active` 
+                    : 'bg-zinc-800/50 border-zinc-700/50 text-zinc-400 hover:border-zinc-600'
+                }" 
+                data-boost="${tier.boostBips}" 
+                data-tier="${tier.name}">
+                <span class="text-2xl">${emoji}</span>
+                <span class="text-[10px] font-medium truncate w-full text-center">${tier.name}</span>
+                <span class="text-[9px] ${keepRate === 100 ? 'text-green-400 font-bold' : 'opacity-70'}">Keep ${keepRate}%</span>
+            </button>
+        `;
+    }).join('');
+}
+
+function updateTierSelection(boostBips) {
+    document.querySelectorAll('.tier-chip').forEach(btn => {
+        const isSelected = Number(btn.dataset.boost) === boostBips;
+        const tierName = btn.dataset.tier;
+        const style = getTierStyle(tierName);
+        
+        btn.className = `tier-chip flex flex-col items-center gap-1 p-2 rounded-xl border transition-all ${
+            isSelected 
+                ? `bg-gradient-to-br ${style.gradient} ${style.border} ${style.text} active` 
+                : 'bg-zinc-800/50 border-zinc-700/50 text-zinc-400 hover:border-zinc-600'
+        }`;
     });
 }
 
 // ============================================================================
-// EXPORT
+// SWAP INTERFACE
 // ============================================================================
+function renderSwapInterface() {
+    const el = document.getElementById('swap-interface');
+    if (!el) return;
 
-export const StorePage = {
-    async render(isActive) {
-        if (!isActive) return;
-        render();
-        await loadPoolData();
-        render();
-    },
+    const tier = boosterTiers.find(t => t.boostBips === TradeState.selectedPoolBoostBips);
+    const style = getTierStyle(tier?.name);
+    const isBuy = TradeState.tradeDirection === 'buy';
     
-    update() {
-        updateBalanceDisplay();
-        renderTabContent();
-    },
+    // Update mascot animation based on trade direction
+    updateMascotAnimation(isBuy);
     
-    refresh: refreshData,
-    switchTab,
+    const price = isBuy ? TradeState.buyPrice : TradeState.netSellPrice;
+    const priceFormatted = formatBigNumber(price).toFixed(2);
+    const balance = formatBigNumber(State.currentUserBalance || 0n).toFixed(2);
     
-    // Modal handlers
-    closeBuyModal,
-    closeSellModal,
-    
-    // Transaction handlers
-    handleBuy,
-    handleSell
-};
+    const soldOut = isBuy && TradeState.firstAvailableTokenIdForBuy === null;
+    const noNFTtoSell = !isBuy && TradeState.availableToSellCount === 0;
+    const hasListedNFTs = !isBuy && TradeState.userBalanceOfSelectedNFT > TradeState.availableToSellCount;
+    const insufficientBalance = isBuy && TradeState.buyPrice > (State.currentUserBalance || 0n);
 
-window.StorePage = StorePage;
+    // Texto de owned que mostra quantos estão disponíveis vs total
+    const ownedText = !isBuy 
+        ? (hasListedNFTs 
+            ? `<span class="${noNFTtoSell ? 'text-red-400' : 'text-zinc-400'}">${TradeState.availableToSellCount}</span>/<span class="text-zinc-500">${TradeState.userBalanceOfSelectedNFT}</span> <span class="text-[9px] text-blue-400">(${TradeState.userBalanceOfSelectedNFT - TradeState.availableToSellCount} rented)</span>`
+            : `<span class="${noNFTtoSell ? 'text-red-400' : 'text-zinc-400'}">${TradeState.userBalanceOfSelectedNFT}</span>`)
+        : '';
+
+    // V6.8: Get tier emoji for display
+    const tierEmoji = style.icon || tier?.emoji || '💎';
+    const keepRate = getKeepRateFromBoost(tier?.boostBips || 0);
+
+    el.innerHTML = `
+        <div class="fade-in">
+            
+            <!-- From Section -->
+            <div class="swap-input-box rounded-2xl p-4 mb-1">
+                <div class="flex justify-between items-center mb-2">
+                    <span class="text-xs text-zinc-500">${isBuy ? 'You pay' : 'You sell'}</span>
+                    <span class="text-xs text-zinc-600">
+                        ${isBuy 
+                            ? `Balance: <span class="${insufficientBalance ? 'text-red-400' : 'text-zinc-400'}">${balance}</span>` 
+                            : `Available: ${ownedText}`
+                        }
+                    </span>
+                </div>
+                <div class="flex justify-between items-center">
+                    <span class="text-2xl font-semibold ${insufficientBalance && isBuy ? 'text-red-400' : 'text-white'}">
+                        ${isBuy ? priceFormatted : '1'}
+                        ${!isBuy && TradeState.firstAvailableTokenId ? `<span class="text-sm text-amber-400 ml-2">#${TradeState.firstAvailableTokenId.toString()}</span>` : ''}
+                    </span>
+                    <div class="token-selector flex items-center gap-2 px-3 py-2 rounded-xl cursor-default">
+                        ${isBuy 
+                            ? `<img src="./assets/bkc_logo_3d.png" class="w-6 h-6 rounded">`
+                            : `<span class="text-xl">${tierEmoji}</span>`
+                        }
+                        <span class="text-white text-sm font-medium">${isBuy ? 'BKC' : tier?.name || 'NFT'}</span>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Swap Arrow -->
+            <div class="flex justify-center -my-3 relative z-10">
+                <button id="swap-direction-btn" class="swap-arrow-btn w-10 h-10 rounded-xl bg-zinc-800 border-4 border-zinc-900 flex items-center justify-center text-zinc-400 hover:text-white">
+                    <i class="fa-solid fa-arrow-down"></i>
+                </button>
+            </div>
+            
+            <!-- To Section -->
+            <div class="swap-input-box rounded-2xl p-4 mt-1 mb-4">
+                <div class="flex justify-between items-center mb-2">
+                    <span class="text-xs text-zinc-500">${isBuy ? 'You receive' : 'You receive'}</span>
+                    <span class="text-xs text-zinc-600">
+                        ${isBuy 
+                            ? `In pool: <span class="${soldOut ? 'text-red-400' : 'text-green-400'}">${TradeState.poolNFTCount}</span>` 
+                            : `Net after fee`
+                        }
+                    </span>
+                </div>
+                <div class="flex justify-between items-center">
+                    <span class="text-2xl font-semibold text-white">${isBuy ? '1' : formatBigNumber(TradeState.netSellPrice).toFixed(2)}</span>
+                    <div class="token-selector flex items-center gap-2 px-3 py-2 rounded-xl cursor-default">
+                        ${isBuy 
+                            ? `<span class="text-xl">${tierEmoji}</span>`
+                            : `<img src="./assets/bkc_logo_3d.png" class="w-6 h-6 rounded">`
+                        }
+                        <span class="text-white text-sm font-medium">${isBuy ? tier?.name || 'NFT' : 'BKC'}</span>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Pool Info - V6.8 -->
+            <div class="flex justify-between items-center text-[10px] text-zinc-600 mb-4 px-1">
+                <span class="flex items-center gap-1">
+                    <span>${style.icon || '💎'}</span>
+                    <span>${tier?.name || 'Unknown'} Pool</span>
+                </span>
+                <span class="text-green-400">Keep ${getKeepRateFromBoost(tier?.boostBips || 0)}% of rewards</span>
+            </div>
+            
+            <!-- Execute Button -->
+            ${renderExecuteButton(isBuy, soldOut, noNFTtoSell, insufficientBalance, hasListedNFTs)}
+        </div>
+    `;
+}
+
+function renderExecuteButton(isBuy, soldOut, noNFTtoSell, insufficientBalance, hasListedNFTs = false) {
+    if (!State.isConnected) {
+        return `
+            <button id="execute-btn" data-action="connect" class="swap-btn w-full py-4 rounded-2xl font-semibold text-white bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-500 hover:to-cyan-500">
+                <i class="fa-solid fa-wallet mr-2"></i> Connect Wallet
+            </button>
+        `;
+    }
+
+    if (isBuy) {
+        if (soldOut) {
+            return `
+                <button disabled class="w-full py-4 rounded-2xl font-semibold text-zinc-500 bg-zinc-800 cursor-not-allowed">
+                    <i class="fa-solid fa-box-open mr-2"></i> Sold Out
+                </button>
+            `;
+        }
+        if (insufficientBalance) {
+            return `
+                <button disabled class="w-full py-4 rounded-2xl font-semibold text-red-400 bg-red-950/30 cursor-not-allowed border border-red-500/30">
+                    <i class="fa-solid fa-coins mr-2"></i> Insufficient BKC
+                </button>
+            `;
+        }
+        return `
+            <button id="execute-btn" data-action="buy" class="swap-btn w-full py-4 rounded-2xl font-semibold text-white bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-500 hover:to-emerald-500">
+                <i class="fa-solid fa-cart-plus mr-2"></i> Buy NFT
+            </button>
+        `;
+    } else {
+        if (noNFTtoSell && hasListedNFTs) {
+            // Tem NFTs mas todos estão alugados
+            return `
+                <button disabled class="w-full py-4 rounded-2xl font-semibold text-blue-400 bg-blue-950/30 cursor-not-allowed border border-blue-500/30">
+                    <i class="fa-solid fa-key mr-2"></i> All NFTs Rented
+                </button>
+            `;
+        }
+        if (noNFTtoSell) {
+            return `
+                <button disabled class="w-full py-4 rounded-2xl font-semibold text-zinc-500 bg-zinc-800 cursor-not-allowed">
+                    <i class="fa-solid fa-gem mr-2"></i> No NFT to Sell
+                </button>
+            `;
+        }
+        return `
+            <button id="execute-btn" data-action="sell" class="swap-btn w-full py-4 rounded-2xl font-semibold text-white bg-gradient-to-r from-orange-600 to-amber-600 hover:from-orange-500 hover:to-amber-500">
+                <i class="fa-solid fa-money-bill-transfer mr-2"></i> Sell NFT
+            </button>
+        `;
+    }
+}
+
+function updateMascotAnimation(isBuy) {
+    const mascot = document.getElementById('trade-mascot');
+    if (mascot) {
+        // V6.8: Animation classes work on the div containing emoji
+        mascot.className = `w-14 h-14 rounded-2xl flex items-center justify-center text-3xl ${isBuy ? 'trade-buy' : 'trade-sell'}`;
+    }
+}
+
+// ============================================================================
+// INVENTORY
+// ============================================================================
+function renderInventory() {
+    const container = document.getElementById('inventory-grid');
+    const countEl = document.getElementById('nft-count');
+    
+    if (!container) return;
+
+    const boosters = State.myBoosters || [];
+    if (countEl) countEl.textContent = boosters.length;
+
+    if (!State.isConnected) {
+        container.innerHTML = `<div class="col-span-4 text-center py-4 text-xs text-zinc-600">Connect wallet</div>`;
+        return;
+    }
+
+    if (boosters.length === 0) {
+        container.innerHTML = `
+            <div class="col-span-4 text-center py-4">
+                <p class="text-zinc-600 text-xs">No NFTs owned</p>
+                <p class="text-zinc-700 text-[10px] mt-1">Buy from pool to get started</p>
+            </div>
+        `;
+        return;
+    }
+
+    // Verificar quais NFTs estão listados para aluguel
+    const rentalListings = State.rentalListings || [];
+    const listedTokenIds = new Set(rentalListings.map(l => l.tokenId?.toString()));
+    const now = Math.floor(Date.now() / 1000);
+
+    container.innerHTML = boosters.map(nft => {
+        const tier = boosterTiers.find(t => t.boostBips === Number(nft.boostBips));
+        const style = getTierStyle(tier?.name);
+        const keepRate = getKeepRateFromBoost(Number(nft.boostBips));
+        const emoji = style.icon || tier?.emoji || '💎';
+        const isSelected = TradeState.firstAvailableTokenId && BigInt(nft.tokenId) === TradeState.firstAvailableTokenId;
+        
+        // Verificar status de aluguel
+        const tokenIdStr = nft.tokenId?.toString();
+        const isListed = listedTokenIds.has(tokenIdStr);
+        const listing = rentalListings.find(l => l.tokenId?.toString() === tokenIdStr);
+        const isRented = listing && listing.rentalEndTime && Number(listing.rentalEndTime) > now;
+        const isUnavailable = isListed || isRented;
+        
+        // Status badge
+        let statusBadge = '';
+        if (isRented) {
+            statusBadge = `<span class="absolute top-1 right-1 bg-blue-500 text-white text-[7px] px-1.5 py-0.5 rounded-full font-bold">🔑</span>`;
+        } else if (isListed) {
+            statusBadge = `<span class="absolute top-1 right-1 bg-green-500 text-white text-[7px] px-1.5 py-0.5 rounded-full font-bold">📋</span>`;
+        }
+        
+        return `
+            <div class="inventory-item ${isUnavailable ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'} rounded-xl p-2 border ${isSelected && !isUnavailable ? 'border-amber-500 ring-2 ring-amber-500/50 bg-amber-500/10' : 'border-zinc-700/50 bg-zinc-800/30'} hover:bg-zinc-800/50 transition-all relative"
+                 data-boost="${nft.boostBips}" 
+                 data-tokenid="${nft.tokenId}"
+                 data-unavailable="${isUnavailable}">
+                ${statusBadge}
+                <div class="w-full aspect-square rounded-lg bg-gradient-to-br ${style.gradient} border ${style.border} flex items-center justify-center ${isUnavailable ? 'grayscale' : ''}">
+                    <span class="text-3xl">${emoji}</span>
+                </div>
+                <p class="text-[9px] text-center mt-1 ${style.text} truncate">${tier?.name || 'NFT'}</p>
+                <p class="text-[8px] text-center ${keepRate === 100 ? 'text-green-400' : 'text-zinc-500'}">Keep ${keepRate}%</p>
+                <p class="text-[7px] text-center ${isSelected && !isUnavailable ? 'text-amber-400 font-bold' : 'text-zinc-600'}">#${nft.tokenId}</p>
+            </div>
+        `;
+    }).join('');
+}
+
+// ============================================================================
+// DATA LOADING - V12: Optimized with caching
+// ============================================================================
+async function loadDataForSelectedPool(forceRefresh = false) {
+    if (TradeState.selectedPoolBoostBips === null) return;
+
+    const boostBips = TradeState.selectedPoolBoostBips;
+    const requestId = Date.now();
+    currentLoadingRequest = requestId;
+
+    // V12: Check cache first (instant response)
+    if (!forceRefresh) {
+        const cachedData = getCachedPoolData(boostBips);
+        if (cachedData) {
+            applyPoolData(cachedData, boostBips);
+            renderSwapInterface();
+            renderInventory();
+            // Refresh in background silently
+            refreshPoolDataInBackground(boostBips, requestId);
+            return;
+        }
+    }
+
+    TradeState.isDataLoading = true;
+
+    try {
+        // Update user NFT data
+        const userNFTs = State.myBoosters || [];
+        const rentalListings = State.rentalListings || [];
+        const listedTokenIds = new Set(rentalListings.map(l => l.tokenId?.toString()));
+        const nowSec = Math.floor(Date.now() / 1000);
+
+        const userNFTsOfTier = userNFTs.filter(nft => Number(nft.boostBips) === boostBips);
+        
+        const availableNFTsOfTier = userNFTsOfTier.filter(nft => {
+            const tokenIdStr = nft.tokenId?.toString();
+            const listing = rentalListings.find(l => l.tokenId?.toString() === tokenIdStr);
+            const isListed = listedTokenIds.has(tokenIdStr);
+            const isRented = listing && listing.rentalEndTime && Number(listing.rentalEndTime) > nowSec;
+            return !isListed && !isRented;
+        });
+
+        const tier = boosterTiers.find(t => t.boostBips === boostBips);
+        if (!tier) {
+            console.warn("Tier not found for boostBips:", boostBips);
+            return;
+        }
+
+        const poolKey = `pool_${tier.name.toLowerCase()}`;
+        let poolAddress = addresses[poolKey] || poolAddressCache.get(boostBips);
+
+        if (!poolAddress) {
+            const factoryAddress = addresses.nftLiquidityPoolFactory;
+            if (factoryAddress && State.publicProvider) {
+                try {
+                    const factory = new ethers.Contract(factoryAddress, factoryABI, State.publicProvider);
+                    poolAddress = await factory.getPoolAddress(boostBips);
+                    if (poolAddress && poolAddress !== ethers.ZeroAddress) {
+                        poolAddressCache.set(boostBips, poolAddress);
+                    }
+                } catch (e) {
+                    console.warn('Factory lookup failed:', e.message);
+                }
+            }
+        }
+
+        // Check if request is still valid
+        if (currentLoadingRequest !== requestId) return;
+
+        if (!poolAddress || poolAddress === ethers.ZeroAddress) {
+            const el = document.getElementById('swap-interface');
+            if (el) {
+                el.innerHTML = `
+                    <div class="text-center py-12">
+                        <div class="w-12 h-12 bg-zinc-800 rounded-full flex items-center justify-center mx-auto mb-3">
+                            <i class="fa-solid fa-store-slash text-zinc-600"></i>
+                        </div>
+                        <p class="text-zinc-400 text-sm">Pool not available</p>
+                        <p class="text-zinc-600 text-xs mt-1">${tier.name} pool coming soon</p>
+                    </div>
+                `;
+            }
+            return;
+        }
+
+        const poolContract = new ethers.Contract(poolAddress, nftPoolABI, State.publicProvider);
+
+        // V12: Fetch all pool data in parallel for speed
+        const [buyPriceResult, sellPriceResult, availableNFTsResult] = await Promise.all([
+            safeContractCall(poolContract, 'getBuyPrice', [], ethers.MaxUint256).catch(() => ethers.MaxUint256),
+            safeContractCall(poolContract, 'getSellPrice', [], 0n).catch(() => 0n),
+            poolContract.getAvailableNFTs().catch(() => [])
+        ]);
+
+        // Check if request is still valid
+        if (currentLoadingRequest !== requestId) return;
+
+        const availableTokenIds = Array.isArray(availableNFTsResult) ? [...availableNFTsResult] : [];
+        const buyPrice = (buyPriceResult === ethers.MaxUint256) ? 0n : buyPriceResult;
+        const sellPrice = sellPriceResult;
+
+        // Calculate net sell price
+        let baseTaxBips = State.systemFees?.["NFT_POOL_SELL_TAX_BIPS"] || 1000n;
+        let discountBips = BigInt(State.boosterDiscounts?.[TradeState.bestBoosterBips] || 0);
+        const baseTaxBipsBigInt = typeof baseTaxBips === 'bigint' ? baseTaxBips : BigInt(baseTaxBips);
+        const discountBipsBigInt = typeof discountBips === 'bigint' ? discountBips : BigInt(discountBips);
+        const finalTaxBips = (baseTaxBipsBigInt > discountBipsBigInt) ? (baseTaxBipsBigInt - discountBipsBigInt) : 0n;
+        const taxAmount = (sellPrice * finalTaxBips) / 10000n;
+        const netSellPrice = sellPrice - taxAmount;
+
+        // Build pool data object
+        const poolData = {
+            buyPrice,
+            sellPrice,
+            netSellPrice,
+            poolNFTCount: availableTokenIds.length,
+            firstAvailableTokenIdForBuy: (availableTokenIds.length > 0) ? BigInt(availableTokenIds[availableTokenIds.length - 1]) : null,
+            userBalanceOfSelectedNFT: userNFTsOfTier.length,
+            availableToSellCount: availableNFTsOfTier.length,
+            availableNFTsOfTier
+        };
+
+        // Cache the data
+        setCachedPoolData(boostBips, poolData);
+
+        // Apply to state and render
+        applyPoolData(poolData, boostBips);
+
+    } catch (err) {
+        console.warn("Store Data Warning:", err.message);
+        if (currentLoadingRequest === requestId) {
+            const el = document.getElementById('swap-interface');
+            if (el) {
+                el.innerHTML = `
+                    <div class="text-center py-12">
+                        <div class="w-12 h-12 bg-zinc-800 rounded-full flex items-center justify-center mx-auto mb-3">
+                            <i class="fa-solid fa-exclamation-triangle text-amber-500"></i>
+                        </div>
+                        <p class="text-zinc-400 text-sm">Pool unavailable</p>
+                        <p class="text-zinc-600 text-xs mt-1">${err.message}</p>
+                    </div>
+                `;
+            }
+        }
+        return;
+    } finally {
+        if (currentLoadingRequest === requestId) {
+            TradeState.isDataLoading = false;
+            renderSwapInterface();
+            renderInventory();
+        }
+    }
+}
+
+// V12: Background refresh without blocking UI
+async function refreshPoolDataInBackground(boostBips, requestId) {
+    try {
+        // Silently refresh data
+        const userNFTs = State.myBoosters || [];
+        const rentalListings = State.rentalListings || [];
+        const listedTokenIds = new Set(rentalListings.map(l => l.tokenId?.toString()));
+        const nowSec = Math.floor(Date.now() / 1000);
+
+        const userNFTsOfTier = userNFTs.filter(nft => Number(nft.boostBips) === boostBips);
+        const availableNFTsOfTier = userNFTsOfTier.filter(nft => {
+            const tokenIdStr = nft.tokenId?.toString();
+            const listing = rentalListings.find(l => l.tokenId?.toString() === tokenIdStr);
+            const isListed = listedTokenIds.has(tokenIdStr);
+            const isRented = listing && listing.rentalEndTime && Number(listing.rentalEndTime) > nowSec;
+            return !isListed && !isRented;
+        });
+
+        const tier = boosterTiers.find(t => t.boostBips === boostBips);
+        if (!tier) return;
+
+        const poolKey = `pool_${tier.name.toLowerCase()}`;
+        let poolAddress = addresses[poolKey] || poolAddressCache.get(boostBips);
+        if (!poolAddress || poolAddress === ethers.ZeroAddress) return;
+
+        const poolContract = new ethers.Contract(poolAddress, nftPoolABI, State.publicProvider);
+
+        const [buyPriceResult, sellPriceResult, availableNFTsResult] = await Promise.all([
+            safeContractCall(poolContract, 'getBuyPrice', [], ethers.MaxUint256).catch(() => ethers.MaxUint256),
+            safeContractCall(poolContract, 'getSellPrice', [], 0n).catch(() => 0n),
+            poolContract.getAvailableNFTs().catch(() => [])
+        ]);
+
+        if (currentLoadingRequest !== requestId) return;
+
+        const availableTokenIds = Array.isArray(availableNFTsResult) ? [...availableNFTsResult] : [];
+        const buyPrice = (buyPriceResult === ethers.MaxUint256) ? 0n : buyPriceResult;
+        const sellPrice = sellPriceResult;
+
+        let baseTaxBips = State.systemFees?.["NFT_POOL_SELL_TAX_BIPS"] || 1000n;
+        let discountBips = BigInt(State.boosterDiscounts?.[TradeState.bestBoosterBips] || 0);
+        const baseTaxBipsBigInt = typeof baseTaxBips === 'bigint' ? baseTaxBips : BigInt(baseTaxBips);
+        const discountBipsBigInt = typeof discountBips === 'bigint' ? discountBips : BigInt(discountBips);
+        const finalTaxBips = (baseTaxBipsBigInt > discountBipsBigInt) ? (baseTaxBipsBigInt - discountBipsBigInt) : 0n;
+        const taxAmount = (sellPrice * finalTaxBips) / 10000n;
+        const netSellPrice = sellPrice - taxAmount;
+
+        const poolData = {
+            buyPrice, sellPrice, netSellPrice,
+            poolNFTCount: availableTokenIds.length,
+            firstAvailableTokenIdForBuy: (availableTokenIds.length > 0) ? BigInt(availableTokenIds[availableTokenIds.length - 1]) : null,
+            userBalanceOfSelectedNFT: userNFTsOfTier.length,
+            availableToSellCount: availableNFTsOfTier.length,
+            availableNFTsOfTier
+        };
+
+        setCachedPoolData(boostBips, poolData);
+
+        // Only update UI if still on same tier
+        if (TradeState.selectedPoolBoostBips === boostBips && currentLoadingRequest === requestId) {
+            applyPoolData(poolData, boostBips);
+            renderSwapInterface();
+        }
+    } catch (e) {
+        console.warn('Background refresh failed:', e.message);
+    }
+}
+
+// V12: Apply pool data to TradeState
+function applyPoolData(poolData, boostBips) {
+    TradeState.buyPrice = poolData.buyPrice;
+    TradeState.sellPrice = poolData.sellPrice;
+    TradeState.netSellPrice = poolData.netSellPrice;
+    TradeState.poolNFTCount = poolData.poolNFTCount;
+    TradeState.firstAvailableTokenIdForBuy = poolData.firstAvailableTokenIdForBuy;
+    TradeState.userBalanceOfSelectedNFT = poolData.userBalanceOfSelectedNFT;
+    TradeState.availableToSellCount = poolData.availableToSellCount;
+
+    // Update firstAvailableTokenId for selling
+    const currentSelection = TradeState.firstAvailableTokenId;
+    const selectionIsAvailable = currentSelection && poolData.availableNFTsOfTier?.some(nft => BigInt(nft.tokenId) === currentSelection);
+    
+    if (!selectionIsAvailable && poolData.availableNFTsOfTier?.length > 0) {
+        TradeState.firstAvailableTokenId = BigInt(poolData.availableNFTsOfTier[0].tokenId);
+    } else if (!poolData.availableNFTsOfTier?.length) {
+        TradeState.firstAvailableTokenId = null;
+    }
+}
+
+// ============================================================================
+// EVENT LISTENERS
+// ============================================================================
+function setupEventListeners() {
+    const container = document.getElementById('store');
+    if (!container) return;
+
+    container.addEventListener('click', async (e) => {
+        // Refresh button - V12: Invalidate cache and force refresh
+        if (e.target.closest('#refresh-btn')) {
+            const btn = e.target.closest('#refresh-btn');
+            const icon = btn.querySelector('i');
+            icon.classList.add('fa-spin');
+            
+            invalidatePoolCache(TradeState.selectedPoolBoostBips);
+            
+            await Promise.all([
+                loadMyBoostersFromAPI(true),
+                loadRentalListings()
+            ]);
+            
+            await loadDataForSelectedPool(true);
+            loadTradeHistory();
+            icon.classList.remove('fa-spin');
+            return;
+        }
+
+        // Tier selection - V12: Instant with cache
+        const tierBtn = e.target.closest('.tier-chip');
+        if (tierBtn) {
+            const boost = Number(tierBtn.dataset.boost);
+            if (TradeState.selectedPoolBoostBips !== boost) {
+                TradeState.selectedPoolBoostBips = boost;
+                TradeState.firstAvailableTokenId = null; // Reset selection
+                updateTierSelection(boost);
+                await loadDataForSelectedPool();
+            }
+            return;
+        }
+
+        // Swap direction toggle
+        if (e.target.closest('#swap-direction-btn')) {
+            TradeState.tradeDirection = TradeState.tradeDirection === 'buy' ? 'sell' : 'buy';
+            renderSwapInterface();
+            return;
+        }
+
+        // Inventory toggle
+        if (e.target.closest('#inventory-toggle')) {
+            const panel = document.getElementById('inventory-panel');
+            const chevron = document.getElementById('inventory-chevron');
+            if (panel && chevron) {
+                panel.classList.toggle('hidden');
+                chevron.style.transform = panel.classList.contains('hidden') ? '' : 'rotate(180deg)';
+            }
+            return;
+        }
+
+        // History toggle
+        if (e.target.closest('#history-toggle')) {
+            const panel = document.getElementById('history-panel');
+            const chevron = document.getElementById('history-chevron');
+            if (panel && chevron) {
+                panel.classList.toggle('hidden');
+                chevron.style.transform = panel.classList.contains('hidden') ? '' : 'rotate(180deg)';
+            }
+            return;
+        }
+
+        // Inventory item click - user selected a specific NFT to sell
+        const invItem = e.target.closest('.inventory-item');
+        if (invItem) {
+            // Verificar se o NFT está disponível para venda
+            const isUnavailable = invItem.dataset.unavailable === 'true';
+            if (isUnavailable) {
+                showToast("This NFT is listed for rental and cannot be sold", "warning");
+                return;
+            }
+            
+            const boost = Number(invItem.dataset.boost);
+            const tokenId = invItem.dataset.tokenid;
+            
+            TradeState.selectedPoolBoostBips = boost;
+            TradeState.tradeDirection = 'sell';
+            
+            // CORREÇÃO: Salvar o tokenId específico que o usuário clicou
+            if (tokenId) {
+                TradeState.firstAvailableTokenId = BigInt(tokenId);
+                console.log("User selected NFT #" + tokenId + " for sale");
+            }
+            
+            updateTierSelection(boost);
+            await loadDataForSelectedPool();
+            return;
+        }
+
+        // Execute button
+        const executeBtn = e.target.closest('#execute-btn');
+        if (executeBtn) {
+            e.preventDefault();
+            e.stopPropagation();
+            
+            if (isTransactionInProgress || executeBtn.disabled) return;
+            
+            const action = executeBtn.dataset.action;
+            const mascot = document.getElementById('trade-mascot');
+
+            if (action === "connect") {
+                window.openConnectModal();
+                return;
+            }
+
+            const tier = boosterTiers.find(t => t.boostBips === TradeState.selectedPoolBoostBips);
+            if (!tier) return;
+
+            const poolKey = `pool_${tier.name.toLowerCase()}`;
+            const poolAddress = addresses[poolKey] || poolAddressCache.get(tier.boostBips);
+            
+            if (!poolAddress) {
+                showToast("Pool address not found", "error");
+                return;
+            }
+
+            isTransactionInProgress = true;
+            executeBtn.disabled = true;
+            const originalHTML = executeBtn.innerHTML;
+            executeBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Processing...';
+            
+            // Animate mascot
+            if (mascot) mascot.className = 'w-14 h-14 object-contain trade-spin';
+
+            try {
+                if (TradeState.tradeDirection === 'buy') {
+                    // V12: Buy NFT with cache invalidation
+                    await NftTx.buyFromPool({
+                        poolAddress: poolAddress,
+                        maxPrice: TradeState.buyPrice,
+                        button: executeBtn,
+                        
+                        onSuccess: async (receipt) => {
+                            if (mascot) mascot.className = 'w-14 h-14 object-contain trade-success';
+                            showToast("🟢 NFT Purchased!", "success");
+                            
+                            // Invalidate cache and reload
+                            invalidatePoolCache(TradeState.selectedPoolBoostBips);
+                            await Promise.all([
+                                loadMyBoostersFromAPI(true),
+                                loadDataForSelectedPool(true)
+                            ]);
+                            loadTradeHistory();
+                        },
+                        
+                        onError: (error) => {
+                            if (!error.cancelled && error.type !== 'user_rejected') {
+                                const msg = error.message || error.reason || 'Transaction failed';
+                                showToast("Buy failed: " + msg, "error");
+                            }
+                        }
+                    });
+                } else {
+                    // V12: Validate we have a token to sell
+                    if (!TradeState.firstAvailableTokenId) {
+                        showToast("No NFT selected for sale", "error");
+                        isTransactionInProgress = false;
+                        executeBtn.disabled = false;
+                        executeBtn.innerHTML = originalHTML;
+                        return;
+                    }
+                    
+                    // V12: Sell NFT with cache invalidation
+                    await NftTx.sellToPool({
+                        poolAddress: poolAddress,
+                        tokenId: TradeState.firstAvailableTokenId,
+                        button: executeBtn,
+                        
+                        onSuccess: async (receipt) => {
+                            if (mascot) mascot.className = 'w-14 h-14 object-contain trade-success';
+                            showToast("🔴 NFT Sold!", "success");
+                            
+                            // Invalidate cache and reload
+                            invalidatePoolCache(TradeState.selectedPoolBoostBips);
+                            await Promise.all([
+                                loadMyBoostersFromAPI(true),
+                                loadDataForSelectedPool(true)
+                            ]);
+                            loadTradeHistory();
+                        },
+                        
+                        onError: (error) => {
+                            if (!error.cancelled && error.type !== 'user_rejected') {
+                                const msg = error.message || error.reason || 'Transaction failed';
+                                showToast("Sell failed: " + msg, "error");
+                            }
+                        }
+                    });
+                }
+            } finally {
+                isTransactionInProgress = false;
+                executeBtn.disabled = false;
+                executeBtn.innerHTML = originalHTML;
+                
+                // V12.1: Always refresh data after transaction attempt
+                // This ensures UI is updated even if callback failed
+                setTimeout(async () => {
+                    try {
+                        await Promise.all([
+                            loadMyBoostersFromAPI(true),
+                            loadDataForSelectedPool(true)
+                        ]);
+                        loadTradeHistory();
+                    } catch (e) {
+                        console.warn('[Store] Post-transaction refresh failed:', e.message);
+                    }
+                }, 2000);
+                
+                // Reset mascot animation
+                if (mascot) {
+                    setTimeout(() => {
+                        const isBuy = TradeState.tradeDirection === 'buy';
+                        mascot.className = `w-14 h-14 object-contain ${isBuy ? 'trade-buy' : 'trade-sell'}`;
+                    }, 800);
+                }
+            }
+        }
+    });
+}

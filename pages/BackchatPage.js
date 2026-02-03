@@ -1,70 +1,117 @@
 // js/pages/BackchatPage.js
-// ✅ PRODUCTION V1.3 - FIXED: Contract function names to match Backchat.sol
-// 
-// V1.3 Changes:
-// - Fixed: sendMessage → sendPrivateMessage (correct contract function)
-// - Fixed: hasPublicKey → use getPublicKey and check if empty
-// - Fixed: registerPublicKey → setPublicKey (correct contract function)
-// - Fixed: getConversationParticipants → get from first message
-// - Added proper error handling for all contract calls
+// ✅ PRODUCTION V6.9 - Complete Decentralized Social Network
+// ═══════════════════════════════════════════════════════════════════════════════
+//                          BACKCHAIN PROTOCOL
+//                    BACKCHAT - Unstoppable Social Network
+// ═══════════════════════════════════════════════════════════════════════════════
 //
-// V1.2 Changes:
-// - Fixed ABI to use getTotals() instead of totalMessages()/totalConversations()
-// - Fixed registerPublicKey to accept bytes instead of string
-// - Fixed event names: PrivateMessageSent instead of MessageSent
-// - Added totalPosts, totalComments, totalNotes to stats
+// V6.9 Changes:
+// - COMPLETE REDESIGN as full social network (not just DMs)
+// - Feed with posts, replies, reposts
+// - Trending by Super Likes (organic ranking)
+// - Profile system with usernames, badges, boosts
+// - Full engagement: like, super like, follow, tip
+// - Modern V6.9 UI consistent with other pages
+// - Event-based data loading from blockchain
 //
-// V1.1 Changes:
-// - Added contract availability check
-// - Graceful handling when contract is not deployed
-// - "Coming Soon" UI when contract unavailable
-
-import { State } from '../state.js';
-import { showToast } from '../ui-feedback.js';
-import { addresses } from '../config.js';
+// Features:
+// - 📝 Posts (max 500 chars + IPFS media)
+// - 💬 Replies with tips
+// - 🔁 Reposts
+// - ❤️ Likes (1 per user per post)
+// - ⭐ Super Likes (unlimited, ETH-based trending)
+// - 👥 Follow/Unfollow
+// - 💰 BKC Tips (90% to creator)
+// - 👤 Profiles with vanity usernames
+// - ✅ Trust Badges (1 year)
+// - 🚀 Profile Boost (visibility)
+// - 💸 ETH Earnings withdrawal
+//
+// Resilience: Works even if ecosystem contracts fail
+// Website: https://backcoin.org
+// ═══════════════════════════════════════════════════════════════════════════════
 
 const ethers = window.ethers;
 
+import { State } from '../state.js';
+import { showToast } from '../ui-feedback.js';
+import { addresses, ipfsGateway } from '../config.js';
+import { formatBigNumber } from '../utils.js';
+
 // ============================================================================
-// CONSTANTS & CONFIG
+// CONSTANTS
 // ============================================================================
 
-const HERO_ICON = 'assets/backchat.png';
 const EXPLORER_ADDRESS = "https://sepolia.arbiscan.io/address/";
 const EXPLORER_TX = "https://sepolia.arbiscan.io/tx/";
+const IPFS_GATEWAY = ipfsGateway || "https://gateway.pinata.cloud/ipfs/";
 
-// Platform fee per message
-const MESSAGE_FEE = "1"; // 1 BKC
+// Get addresses from config (loaded from deployment-addresses.json)
+function getBackchatAddress() {
+    return addresses.backchat || addresses.Backchat || null;
+}
+
+// Operator address for fee distribution (your frontend earns 30-60% of fees!)
+function getOperatorAddress() {
+    return addresses.operator || addresses.treasury || null;
+}
 
 // ============================================================================
-// ABI - V1.3: FIXED to match Backchat.sol contract
+// ABI - Backchat V7.0.0
 // ============================================================================
 
 const backchatABI = [
-    // Private Messages - V1.3 FIX: Correct function names
-    "function sendPrivateMessage(address _to, string calldata _encryptedContent, string calldata _encryptedIpfsHash) external returns (uint256 messageId)",
-    "function replyToMessage(uint256 _messageId, string calldata _encryptedContent, string calldata _encryptedIpfsHash) external returns (uint256 replyId)",
-    "function getMessage(uint256 _messageId) external view returns (address sender, address recipient, string memory encryptedContent, string memory encryptedIpfsHash, uint256 sentAt, uint256 conversationId, uint256 parentMessageId)",
-    "function getUserConversations(address _user) external view returns (uint256[] memory)",
-    "function getConversationMessages(uint256 _conversationId) external view returns (uint256[] memory)",
+    // Profile
+    "function createProfile(string calldata username, string calldata displayName, string calldata bio, address operator) external payable",
+    "function updateProfile(string calldata displayName, string calldata bio) external",
+    "function getUsernameFee(uint256 length) public pure returns (uint256)",
+    "function isUsernameAvailable(string calldata username) external view returns (bool)",
+    "function getUsernameOwner(string calldata username) external view returns (address)",
     
-    // E2EE Keys - V1.3 FIX: setPublicKey instead of registerPublicKey
-    "function setPublicKey(bytes calldata _publicKey) external",
-    "function getPublicKey(address _user) external view returns (bytes memory)",
-    // Note: hasPublicKey doesn't exist - check getPublicKey length instead
+    // Content
+    "function createPost(string calldata content, string calldata mediaCID, address operator) external payable returns (uint256 postId)",
+    "function createReply(uint256 parentId, string calldata content, string calldata mediaCID, address operator, uint256 tipBkc) external payable returns (uint256 postId)",
+    "function createRepost(uint256 originalPostId, address operator, uint256 tipBkc) external payable returns (uint256 postId)",
     
-    // Stats
-    "function getTotals() external view returns (uint256 posts, uint256 comments, uint256 notes, uint256 messages, uint256 conversations)",
+    // Engagement
+    "function like(uint256 postId, address operator, uint256 tipBkc) external payable",
+    "function superLike(uint256 postId, address operator, uint256 tipBkc) external payable",
+    "function follow(address toFollow, address operator, uint256 tipBkc) external payable",
+    "function unfollow(address toUnfollow) external",
     
-    // Config
-    "function platformFee() external view returns (uint256)",
+    // Premium
+    "function boostProfile(address operator) external payable",
+    "function obtainBadge(address operator) external payable",
+    
+    // View
+    "function getCurrentFees() external view returns (uint256 postFee, uint256 replyFee, uint256 likeFee, uint256 followFee, uint256 repostFee, uint256 superLikeMin, uint256 boostMin, uint256 badgeFee_)",
+    "function isProfileBoosted(address user) external view returns (bool)",
+    "function hasTrustBadge(address user) external view returns (bool)",
+    "function hasUserLiked(uint256 postId, address user) external view returns (bool)",
+    "function getPendingBalance(address user) external view returns (uint256)",
+    "function postAuthor(uint256 postId) external view returns (address)",
+    "function postCounter() external view returns (uint256)",
+    "function boostExpiry(address user) external view returns (uint256)",
+    "function badgeExpiry(address user) external view returns (uint256)",
+    
+    // Withdrawal
+    "function withdraw() external",
+    "function pendingEth(address user) external view returns (uint256)",
     
     // Events
-    "event PrivateMessageSent(uint256 indexed messageId, uint256 indexed conversationId, address indexed sender, address recipient, uint256 timestamp)",
-    "event PublicKeyRegistered(address indexed user, uint256 timestamp)"
+    "event ProfileCreated(address indexed user, bytes32 indexed usernameHash, string username, string displayName, string bio, uint256 ethPaid, address indexed operator)",
+    "event PostCreated(uint256 indexed postId, address indexed author, string content, string mediaCID, address indexed operator)",
+    "event ReplyCreated(uint256 indexed postId, uint256 indexed parentId, address indexed author, string content, string mediaCID, uint256 tipBkc, address operator)",
+    "event RepostCreated(uint256 indexed newPostId, uint256 indexed originalPostId, address indexed reposter, uint256 tipBkc, address operator)",
+    "event Liked(uint256 indexed postId, address indexed user, uint256 tipBkc, address indexed operator)",
+    "event SuperLiked(uint256 indexed postId, address indexed user, uint256 ethAmount, uint256 tipBkc, address indexed operator)",
+    "event Followed(address indexed follower, address indexed followed, uint256 tipBkc, address indexed operator)",
+    "event Unfollowed(address indexed follower, address indexed followed)",
+    "event ProfileBoosted(address indexed user, uint256 amount, uint256 expiresAt, address indexed operator)",
+    "event BadgeObtained(address indexed user, uint256 expiresAt, address indexed operator)"
 ];
 
-const erc20ABI = [
+const bkcABI = [
     "function balanceOf(address) view returns (uint256)",
     "function allowance(address owner, address spender) view returns (uint256)",
     "function approve(address spender, uint256 amount) returns (bool)"
@@ -74,17 +121,46 @@ const erc20ABI = [
 // STATE
 // ============================================================================
 
-const BS = {
-    conversations: [],
-    currentConversation: null,
-    currentMessages: [],
-    stats: { totalPosts: 0, totalComments: 0, totalNotes: 0, totalMessages: 0, totalConversations: 0 },
-    hasPublicKey: false,
+const BC = {
+    // UI State
+    activeTab: 'feed',       // feed | trending | profile | messages | notifications
+    view: 'feed',            // feed | post | compose | profile | settings
+    
+    // Data
+    posts: [],               // All loaded posts
+    trendingPosts: [],       // Posts sorted by super likes
+    userProfile: null,       // Current user's profile
+    profiles: new Map(),     // address → profile cache
+    following: new Set(),    // Set of addresses user follows
+    
+    // Selected
+    selectedPost: null,      // For viewing single post with replies
+    selectedProfile: null,   // For viewing other user's profile
+    
+    // Fees
+    fees: {
+        post: 0n,
+        reply: 0n,
+        like: 0n,
+        follow: 0n,
+        repost: 0n,
+        superLikeMin: 0n,
+        boostMin: 0n,
+        badge: 0n
+    },
+    
+    // User stats
+    pendingEth: 0n,
+    hasBadge: false,
+    isBoosted: false,
+    boostExpiry: 0,
+    badgeExpiry: 0,
+    
+    // Loading
     isLoading: false,
-    newMessageRecipient: '',
-    view: 'list', // 'list' | 'chat' | 'new'
+    isPosting: false,
     contractAvailable: true,
-    contractError: null
+    error: null
 };
 
 // ============================================================================
@@ -92,674 +168,949 @@ const BS = {
 // ============================================================================
 
 function injectStyles() {
-    if (document.getElementById('bc-styles-v13')) return;
-    const s = document.createElement('style');
-    s.id = 'bc-styles-v13';
-    s.textContent = `
-/* Backchat - X Style Dark Mode */
-/* V1.3: Changed bg to match other pages */
-.backchat-page {
-    --bc-bg: #18181b;
-    --bc-bg2: #27272a;
-    --bc-bg3: #3f3f46;
-    --bc-border: rgba(63,63,70,0.6);
-    --bc-text: #fafafa;
-    --bc-muted: #a1a1aa;
-    --bc-accent: #f59e0b;
-    --bc-accent-hover: #d97706;
-    --bc-blue: #1d9bf0;
-    --bc-success: #10b981;
-    --bc-danger: #ef4444;
-    max-width: 600px;
-    margin: 0 auto;
-    min-height: 80vh;
-    background: var(--bc-bg);
-    border-left: 1px solid var(--bc-border);
-    border-right: 1px solid var(--bc-border);
+    if (document.getElementById('backchat-styles-v69')) return;
+    const style = document.createElement('style');
+    style.id = 'backchat-styles-v69';
+    style.textContent = `
+        /* ═══════════════════════════════════════════════════════════════════
+           V6.9 Backchat - Decentralized Social Network Styles
+           ═══════════════════════════════════════════════════════════════════ */
+        
+        @keyframes float { 
+            0%, 100% { transform: translateY(0); } 
+            50% { transform: translateY(-6px); } 
+        }
+        @keyframes pulse-glow { 
+            0%, 100% { box-shadow: 0 0 15px rgba(245,158,11,0.2); } 
+            50% { box-shadow: 0 0 30px rgba(245,158,11,0.4); } 
+        }
+        @keyframes like-pop {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.3); }
+            100% { transform: scale(1); }
+        }
+        @keyframes slide-up {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        .float-animation { animation: float 3s ease-in-out infinite; }
+        .like-pop { animation: like-pop 0.3s ease-out; }
+        .slide-up { animation: slide-up 0.3s ease-out; }
+        
+        /* Layout */
+        .bc-container {
+            max-width: 600px;
+            margin: 0 auto;
+            min-height: 100vh;
+            background: #18181b;
+            border-left: 1px solid rgba(63,63,70,0.5);
+            border-right: 1px solid rgba(63,63,70,0.5);
+        }
+        
+        /* Header */
+        .bc-header {
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            background: rgba(24,24,27,0.9);
+            backdrop-filter: blur(12px);
+            border-bottom: 1px solid rgba(63,63,70,0.5);
+            padding: 12px 16px;
+        }
+        
+        .bc-header-top {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 12px;
+        }
+        
+        .bc-logo {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        
+        .bc-logo-icon {
+            width: 36px;
+            height: 36px;
+            border-radius: 10px;
+        }
+        
+        .bc-logo-text {
+            font-size: 20px;
+            font-weight: 800;
+            background: linear-gradient(135deg, #f59e0b, #fbbf24);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        
+        .bc-header-actions {
+            display: flex;
+            gap: 8px;
+        }
+        
+        .bc-icon-btn {
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            background: rgba(63,63,70,0.5);
+            border: none;
+            color: #a1a1aa;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s;
+        }
+        
+        .bc-icon-btn:hover {
+            background: rgba(63,63,70,0.8);
+            color: #fff;
+        }
+        
+        .bc-icon-btn.has-notification::after {
+            content: '';
+            position: absolute;
+            top: 6px;
+            right: 6px;
+            width: 8px;
+            height: 8px;
+            background: #ef4444;
+            border-radius: 50%;
+        }
+        
+        /* Tabs */
+        .bc-tabs {
+            display: flex;
+            gap: 4px;
+        }
+        
+        .bc-tab {
+            flex: 1;
+            padding: 10px 8px;
+            background: none;
+            border: none;
+            color: #71717a;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            border-bottom: 2px solid transparent;
+            transition: all 0.2s;
+        }
+        
+        .bc-tab:hover {
+            color: #a1a1aa;
+        }
+        
+        .bc-tab.active {
+            color: #f59e0b;
+            border-bottom-color: #f59e0b;
+        }
+        
+        /* Compose Box */
+        .bc-compose {
+            padding: 16px;
+            border-bottom: 1px solid rgba(63,63,70,0.5);
+            background: rgba(24,24,27,0.5);
+        }
+        
+        .bc-compose-input {
+            width: 100%;
+            min-height: 80px;
+            background: rgba(39,39,42,0.5);
+            border: 1px solid rgba(63,63,70,0.5);
+            border-radius: 12px;
+            padding: 12px;
+            color: #fafafa;
+            font-size: 15px;
+            resize: none;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+        
+        .bc-compose-input:focus {
+            border-color: rgba(245,158,11,0.5);
+        }
+        
+        .bc-compose-input::placeholder {
+            color: #71717a;
+        }
+        
+        .bc-compose-footer {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-top: 12px;
+        }
+        
+        .bc-compose-actions {
+            display: flex;
+            gap: 8px;
+        }
+        
+        .bc-compose-btn {
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            background: rgba(63,63,70,0.3);
+            border: none;
+            color: #f59e0b;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        
+        .bc-compose-btn:hover {
+            background: rgba(245,158,11,0.2);
+        }
+        
+        .bc-post-btn {
+            padding: 10px 20px;
+            background: linear-gradient(135deg, #f59e0b, #d97706);
+            border: none;
+            border-radius: 20px;
+            color: #000;
+            font-weight: 700;
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        
+        .bc-post-btn:hover:not(:disabled) {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 15px rgba(245,158,11,0.4);
+        }
+        
+        .bc-post-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        
+        /* Post Card */
+        .bc-post {
+            padding: 16px;
+            border-bottom: 1px solid rgba(63,63,70,0.3);
+            transition: background 0.2s;
+            cursor: pointer;
+        }
+        
+        .bc-post:hover {
+            background: rgba(39,39,42,0.3);
+        }
+        
+        .bc-post-header {
+            display: flex;
+            align-items: flex-start;
+            gap: 12px;
+        }
+        
+        .bc-avatar {
+            width: 44px;
+            height: 44px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #f59e0b 0%, #fbbf24 100%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            color: #000;
+            font-size: 16px;
+            flex-shrink: 0;
+        }
+        
+        .bc-avatar.boosted {
+            box-shadow: 0 0 0 2px #18181b, 0 0 0 4px #f59e0b;
+        }
+        
+        .bc-post-meta {
+            flex: 1;
+            min-width: 0;
+        }
+        
+        .bc-post-author {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            flex-wrap: wrap;
+        }
+        
+        .bc-username {
+            font-weight: 700;
+            color: #fafafa;
+            font-size: 15px;
+        }
+        
+        .bc-badge {
+            color: #f59e0b;
+            font-size: 14px;
+        }
+        
+        .bc-handle {
+            color: #71717a;
+            font-size: 14px;
+        }
+        
+        .bc-time {
+            color: #52525b;
+            font-size: 13px;
+        }
+        
+        .bc-post-content {
+            margin-top: 8px;
+            margin-left: 56px;
+            color: #e4e4e7;
+            font-size: 15px;
+            line-height: 1.5;
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+        
+        .bc-post-media {
+            margin-top: 12px;
+            margin-left: 56px;
+            border-radius: 16px;
+            overflow: hidden;
+            border: 1px solid rgba(63,63,70,0.5);
+        }
+        
+        .bc-post-media img {
+            width: 100%;
+            max-height: 400px;
+            object-fit: cover;
+        }
+        
+        /* Engagement Bar */
+        .bc-engagement {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 12px;
+            margin-left: 56px;
+            max-width: 400px;
+        }
+        
+        .bc-engage-btn {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 6px 12px;
+            background: none;
+            border: none;
+            border-radius: 20px;
+            color: #71717a;
+            font-size: 13px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        
+        .bc-engage-btn:hover {
+            background: rgba(63,63,70,0.3);
+        }
+        
+        .bc-engage-btn.reply:hover { color: #3b82f6; background: rgba(59,130,246,0.1); }
+        .bc-engage-btn.repost:hover { color: #22c55e; background: rgba(34,197,94,0.1); }
+        .bc-engage-btn.like:hover { color: #ef4444; background: rgba(239,68,68,0.1); }
+        .bc-engage-btn.like.liked { color: #ef4444; }
+        .bc-engage-btn.super:hover { color: #f59e0b; background: rgba(245,158,11,0.1); }
+        .bc-engage-btn.tip:hover { color: #8b5cf6; background: rgba(139,92,246,0.1); }
+        
+        /* Trending Badge */
+        .bc-trending-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 2px 8px;
+            background: rgba(245,158,11,0.15);
+            border: 1px solid rgba(245,158,11,0.3);
+            border-radius: 12px;
+            color: #f59e0b;
+            font-size: 11px;
+            font-weight: 600;
+        }
+        
+        /* Profile Card */
+        .bc-profile-card {
+            padding: 20px 16px;
+            border-bottom: 1px solid rgba(63,63,70,0.5);
+        }
+        
+        .bc-profile-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+        }
+        
+        .bc-profile-avatar {
+            width: 80px;
+            height: 80px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #f59e0b, #fbbf24);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 28px;
+            font-weight: 700;
+            color: #000;
+        }
+        
+        .bc-profile-avatar.boosted {
+            box-shadow: 0 0 0 3px #18181b, 0 0 0 6px #f59e0b;
+        }
+        
+        .bc-profile-info {
+            margin-top: 16px;
+        }
+        
+        .bc-profile-name {
+            font-size: 20px;
+            font-weight: 800;
+            color: #fafafa;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        
+        .bc-profile-handle {
+            color: #71717a;
+            font-size: 14px;
+            margin-top: 2px;
+        }
+        
+        .bc-profile-bio {
+            color: #a1a1aa;
+            font-size: 14px;
+            margin-top: 12px;
+            line-height: 1.5;
+        }
+        
+        .bc-profile-stats {
+            display: flex;
+            gap: 20px;
+            margin-top: 16px;
+        }
+        
+        .bc-profile-stat {
+            display: flex;
+            gap: 4px;
+            font-size: 14px;
+        }
+        
+        .bc-profile-stat-value {
+            font-weight: 700;
+            color: #fafafa;
+        }
+        
+        .bc-profile-stat-label {
+            color: #71717a;
+        }
+        
+        /* Buttons */
+        .bc-btn {
+            padding: 10px 20px;
+            border-radius: 20px;
+            font-weight: 700;
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.2s;
+            border: none;
+        }
+        
+        .bc-btn-primary {
+            background: linear-gradient(135deg, #f59e0b, #d97706);
+            color: #000;
+        }
+        
+        .bc-btn-primary:hover {
+            box-shadow: 0 4px 15px rgba(245,158,11,0.4);
+        }
+        
+        .bc-btn-secondary {
+            background: transparent;
+            border: 1px solid rgba(63,63,70,0.8);
+            color: #fafafa;
+        }
+        
+        .bc-btn-secondary:hover {
+            background: rgba(63,63,70,0.5);
+        }
+        
+        .bc-btn-follow {
+            background: #fafafa;
+            color: #000;
+        }
+        
+        .bc-btn-following {
+            background: transparent;
+            border: 1px solid rgba(63,63,70,0.8);
+            color: #fafafa;
+        }
+        
+        /* Modal */
+        .bc-modal {
+            display: none;
+            position: fixed;
+            inset: 0;
+            z-index: 9999;
+            background: rgba(0,0,0,0.8);
+            backdrop-filter: blur(8px);
+            align-items: center;
+            justify-content: center;
+            padding: 16px;
+        }
+        
+        .bc-modal.active {
+            display: flex;
+        }
+        
+        .bc-modal-content {
+            background: linear-gradient(145deg, rgba(39,39,42,0.98), rgba(24,24,27,0.99));
+            border: 1px solid rgba(63,63,70,0.5);
+            border-radius: 20px;
+            width: 100%;
+            max-width: 500px;
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+        
+        .bc-modal-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 16px;
+            border-bottom: 1px solid rgba(63,63,70,0.5);
+        }
+        
+        .bc-modal-title {
+            font-size: 18px;
+            font-weight: 700;
+            color: #fafafa;
+        }
+        
+        .bc-modal-close {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            background: rgba(63,63,70,0.5);
+            border: none;
+            color: #a1a1aa;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .bc-modal-close:hover {
+            background: rgba(63,63,70,0.8);
+            color: #fff;
+        }
+        
+        .bc-modal-body {
+            padding: 16px;
+        }
+        
+        /* Input */
+        .bc-input {
+            width: 100%;
+            padding: 12px 16px;
+            background: rgba(39,39,42,0.5);
+            border: 1px solid rgba(63,63,70,0.5);
+            border-radius: 12px;
+            color: #fafafa;
+            font-size: 14px;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+        
+        .bc-input:focus {
+            border-color: rgba(245,158,11,0.5);
+        }
+        
+        .bc-input-group {
+            margin-bottom: 16px;
+        }
+        
+        .bc-input-label {
+            display: block;
+            margin-bottom: 8px;
+            color: #a1a1aa;
+            font-size: 13px;
+            font-weight: 600;
+        }
+        
+        /* Fee Display */
+        .bc-fee {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 12px;
+            background: rgba(245,158,11,0.1);
+            border: 1px solid rgba(245,158,11,0.2);
+            border-radius: 12px;
+            margin-top: 16px;
+        }
+        
+        .bc-fee-label {
+            color: #f59e0b;
+            font-size: 13px;
+        }
+        
+        .bc-fee-value {
+            color: #fafafa;
+            font-weight: 700;
+            font-size: 14px;
+        }
+        
+        /* Empty State */
+        .bc-empty {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 60px 20px;
+            text-align: center;
+        }
+        
+        .bc-empty-icon {
+            width: 80px;
+            height: 80px;
+            border-radius: 50%;
+            background: rgba(63,63,70,0.3);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 16px;
+        }
+        
+        .bc-empty-icon i {
+            font-size: 32px;
+            color: #52525b;
+        }
+        
+        .bc-empty-title {
+            font-size: 18px;
+            font-weight: 700;
+            color: #fafafa;
+            margin-bottom: 8px;
+        }
+        
+        .bc-empty-text {
+            color: #71717a;
+            font-size: 14px;
+            max-width: 300px;
+        }
+        
+        /* Earnings Card */
+        .bc-earnings {
+            margin: 16px;
+            padding: 16px;
+            background: linear-gradient(145deg, rgba(34,197,94,0.15), rgba(16,185,129,0.1));
+            border: 1px solid rgba(34,197,94,0.3);
+            border-radius: 16px;
+        }
+        
+        .bc-earnings-title {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            color: #22c55e;
+            font-size: 14px;
+            font-weight: 600;
+            margin-bottom: 12px;
+        }
+        
+        .bc-earnings-amount {
+            font-size: 28px;
+            font-weight: 800;
+            color: #fafafa;
+        }
+        
+        .bc-earnings-amount span {
+            font-size: 16px;
+            color: #71717a;
+        }
+        
+        /* Loading */
+        .bc-loading {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 40px;
+        }
+        
+        .bc-spinner {
+            width: 40px;
+            height: 40px;
+            border: 3px solid rgba(63,63,70,0.5);
+            border-top-color: #f59e0b;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        
+        /* Responsive */
+        @media (max-width: 640px) {
+            .bc-container {
+                border: none;
+            }
+            .bc-engagement {
+                margin-left: 0;
+                margin-top: 16px;
+            }
+            .bc-post-content {
+                margin-left: 0;
+                margin-top: 12px;
+            }
+            .bc-post-media {
+                margin-left: 0;
+            }
+        }
+    `;
+    document.head.appendChild(style);
 }
 
-/* Header */
-.bc-header {
-    position: sticky;
-    top: 0;
-    z-index: 100;
-    background: rgba(24, 24, 27, 0.85);
-    backdrop-filter: blur(12px);
-    border-bottom: 1px solid var(--bc-border);
-    padding: 12px 16px;
-    display: flex;
-    align-items: center;
-    gap: 24px;
+// ============================================================================
+// UTILITIES
+// ============================================================================
+
+function shortenAddress(addr) {
+    if (!addr) return '';
+    return `${addr.slice(0, 6)}...${addr.slice(-4)}`;
 }
 
-.bc-header-back {
-    width: 34px;
-    height: 34px;
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: var(--bc-text);
-    cursor: pointer;
-    transition: background 0.2s;
+function formatTimeAgo(timestamp) {
+    const now = Date.now() / 1000;
+    const diff = now - timestamp;
+    
+    if (diff < 60) return 'now';
+    if (diff < 3600) return `${Math.floor(diff / 60)}m`;
+    if (diff < 86400) return `${Math.floor(diff / 3600)}h`;
+    if (diff < 604800) return `${Math.floor(diff / 86400)}d`;
+    
+    const date = new Date(timestamp * 1000);
+    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
 
-.bc-header-back:hover {
-    background: var(--bc-bg3);
+function formatETH(wei) {
+    if (!wei || wei === 0n) return '0';
+    const eth = parseFloat(ethers.formatEther(wei));
+    if (eth < 0.0001) return '<0.0001';
+    if (eth < 0.01) return eth.toFixed(4);
+    if (eth < 1) return eth.toFixed(3);
+    return eth.toFixed(2);
 }
 
-.bc-header-title {
-    font-size: 20px;
-    font-weight: 700;
-    color: var(--bc-text);
+function getInitials(address) {
+    if (!address) return '?';
+    return address.slice(2, 4).toUpperCase();
 }
 
-.bc-header-icon {
-    width: 32px;
-    height: 32px;
-    border-radius: 8px;
-}
+// ============================================================================
+// CONTRACT INTERACTION
+// ============================================================================
 
-.bc-header-actions {
-    margin-left: auto;
-    display: flex;
-    gap: 8px;
-}
-
-/* Stats Bar */
-.bc-stats {
-    display: flex;
-    gap: 24px;
-    padding: 12px 16px;
-    border-bottom: 1px solid var(--bc-border);
-    font-size: 14px;
-}
-
-.bc-stat {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-}
-
-.bc-stat-value {
-    font-weight: 700;
-    color: var(--bc-text);
-}
-
-.bc-stat-label {
-    color: var(--bc-muted);
-}
-
-/* New Message Button */
-.bc-new-msg-btn {
-    position: fixed;
-    bottom: 80px;
-    right: calc(50% - 280px);
-    width: 56px;
-    height: 56px;
-    border-radius: 50%;
-    background: var(--bc-accent);
-    color: #000;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 24px;
-    cursor: pointer;
-    box-shadow: 0 4px 12px rgba(245, 158, 11, 0.4);
-    transition: all 0.2s;
-    z-index: 50;
-}
-
-.bc-new-msg-btn:hover {
-    background: var(--bc-accent-hover);
-    transform: scale(1.05);
-}
-
-/* Conversation List */
-.bc-conv-list {
-    display: flex;
-    flex-direction: column;
-}
-
-.bc-conv-item {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    padding: 16px;
-    border-bottom: 1px solid var(--bc-border);
-    cursor: pointer;
-    transition: background 0.2s;
-}
-
-.bc-conv-item:hover {
-    background: var(--bc-bg2);
-}
-
-.bc-conv-avatar {
-    width: 48px;
-    height: 48px;
-    border-radius: 50%;
-    background: linear-gradient(135deg, var(--bc-accent), var(--bc-blue));
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 18px;
-    font-weight: 700;
-    color: #000;
-    flex-shrink: 0;
-}
-
-.bc-conv-content {
-    flex: 1;
-    min-width: 0;
-}
-
-.bc-conv-header {
-    display: flex;
-    align-items: center;
-    gap: 4px;
-    margin-bottom: 2px;
-}
-
-.bc-conv-name {
-    font-weight: 700;
-    color: var(--bc-text);
-    font-size: 15px;
-}
-
-.bc-conv-address {
-    color: var(--bc-muted);
-    font-size: 14px;
-}
-
-.bc-conv-time {
-    color: var(--bc-muted);
-    font-size: 14px;
-    margin-left: auto;
-}
-
-.bc-conv-preview {
-    color: var(--bc-muted);
-    font-size: 14px;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
-
-.bc-conv-badge {
-    background: var(--bc-accent);
-    color: #000;
-    font-size: 12px;
-    font-weight: 700;
-    padding: 2px 8px;
-    border-radius: 12px;
-    margin-left: 8px;
-}
-
-/* Chat Window */
-.bc-chat {
-    display: flex;
-    flex-direction: column;
-    height: calc(100vh - 200px);
-    min-height: 400px;
-}
-
-.bc-chat-messages {
-    flex: 1;
-    overflow-y: auto;
-    padding: 16px;
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-}
-
-.bc-message {
-    max-width: 80%;
-    padding: 12px 16px;
-    border-radius: 20px;
-    font-size: 15px;
-    line-height: 1.4;
-    word-wrap: break-word;
-}
-
-.bc-message.sent {
-    align-self: flex-end;
-    background: var(--bc-accent);
-    color: #000;
-    border-bottom-right-radius: 4px;
-}
-
-.bc-message.received {
-    align-self: flex-start;
-    background: var(--bc-bg3);
-    color: var(--bc-text);
-    border-bottom-left-radius: 4px;
-}
-
-.bc-message-time {
-    font-size: 12px;
-    color: var(--bc-muted);
-    margin-top: 4px;
-    text-align: right;
-}
-
-.bc-message.sent .bc-message-time {
-    color: rgba(0, 0, 0, 0.6);
-}
-
-/* Chat Input */
-.bc-chat-input {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    padding: 12px 16px;
-    border-top: 1px solid var(--bc-border);
-    background: var(--bc-bg);
-}
-
-.bc-input {
-    flex: 1;
-    background: var(--bc-bg3);
-    border: 1px solid var(--bc-border);
-    border-radius: 20px;
-    padding: 12px 16px;
-    color: var(--bc-text);
-    font-size: 15px;
-    outline: none;
-    transition: border-color 0.2s;
-}
-
-.bc-input:focus {
-    border-color: var(--bc-accent);
-}
-
-.bc-input::placeholder {
-    color: var(--bc-muted);
-}
-
-.bc-send-btn {
-    width: 40px;
-    height: 40px;
-    border-radius: 50%;
-    background: var(--bc-accent);
-    color: #000;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    transition: all 0.2s;
-    flex-shrink: 0;
-    border: none;
-}
-
-.bc-send-btn:hover {
-    background: var(--bc-accent-hover);
-}
-
-.bc-send-btn:disabled {
-    background: var(--bc-bg3);
-    color: var(--bc-muted);
-    cursor: not-allowed;
-}
-
-/* New Conversation */
-.bc-new-conv {
-    padding: 16px;
-}
-
-.bc-new-conv-input {
-    width: 100%;
-    background: var(--bc-bg);
-    border: none;
-    border-bottom: 1px solid var(--bc-border);
-    padding: 16px 0;
-    color: var(--bc-text);
-    font-size: 17px;
-    outline: none;
-}
-
-.bc-new-conv-input::placeholder {
-    color: var(--bc-muted);
-}
-
-.bc-fee-notice {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 12px 16px;
-    background: var(--bc-bg2);
-    border-radius: 12px;
-    margin: 16px;
-    font-size: 14px;
-    color: var(--bc-muted);
-}
-
-.bc-fee-notice i {
-    color: var(--bc-accent);
-}
-
-/* Empty State */
-.bc-empty {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    padding: 60px 20px;
-    text-align: center;
-}
-
-.bc-empty-icon {
-    width: 80px;
-    height: 80px;
-    border-radius: 50%;
-    background: var(--bc-bg3);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 32px;
-    color: var(--bc-muted);
-    margin-bottom: 20px;
-}
-
-.bc-empty-title {
-    font-size: 24px;
-    font-weight: 700;
-    color: var(--bc-text);
-    margin-bottom: 8px;
-}
-
-.bc-empty-text {
-    font-size: 15px;
-    color: var(--bc-muted);
-    max-width: 300px;
-    line-height: 1.5;
-}
-
-/* Button */
-.bc-btn {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: 8px;
-    padding: 12px 24px;
-    border-radius: 9999px;
-    font-size: 15px;
-    font-weight: 700;
-    cursor: pointer;
-    transition: all 0.2s;
-    border: none;
-}
-
-.bc-btn-primary {
-    background: var(--bc-accent);
-    color: #000;
-}
-
-.bc-btn-primary:hover {
-    background: var(--bc-accent-hover);
-}
-
-.bc-btn-secondary {
-    background: var(--bc-bg3);
-    color: var(--bc-text);
-}
-
-.bc-btn-secondary:hover {
-    background: var(--bc-bg2);
-}
-
-.bc-btn-outline {
-    background: transparent;
-    border: 1px solid var(--bc-border);
-    color: var(--bc-text);
-}
-
-.bc-btn-outline:hover {
-    background: var(--bc-bg3);
-    border-color: var(--bc-muted);
-}
-
-/* Loading */
-.bc-loading {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 40px;
-}
-
-.bc-spinner {
-    width: 32px;
-    height: 32px;
-    border: 3px solid var(--bc-bg3);
-    border-top-color: var(--bc-accent);
-    border-radius: 50%;
-    animation: bc-spin 1s linear infinite;
-}
-
-@keyframes bc-spin {
-    to { transform: rotate(360deg); }
-}
-
-/* Connect Prompt */
-.bc-connect {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    padding: 60px 20px;
-    text-align: center;
-}
-
-.bc-connect-icon {
-    width: 100px;
-    height: 100px;
-    margin-bottom: 24px;
-}
-
-/* Responsive */
-@media (max-width: 640px) {
-    .bc-new-msg-btn {
-        right: 20px;
+function getContract() {
+    // First check if contract exists in State (initialized by app.js)
+    if (State.backchatContract) return State.backchatContract;
+    if (State.backchatContractPublic) return State.backchatContractPublic;
+    
+    // Otherwise try to create from address
+    const backchatAddress = getBackchatAddress();
+    if (!backchatAddress) {
+        console.warn('Backchat address not found in deployment-addresses.json');
+        return null;
     }
     
-    .backchat-page {
-        border: none;
+    // Use public provider if available
+    if (State.publicProvider) {
+        return new ethers.Contract(backchatAddress, backchatABI, State.publicProvider);
     }
-}
-`;
-    document.head.appendChild(s);
+    
+    return null;
 }
 
-// ============================================================================
-// HELPERS
-// ============================================================================
+function getSignedContract() {
+    // First check State
+    if (State.backchatContract) return State.backchatContract;
+    
+    // Try to create signed contract
+    const backchatAddress = getBackchatAddress();
+    if (!backchatAddress || !State.signer) return null;
+    
+    return new ethers.Contract(backchatAddress, backchatABI, State.signer);
+}
 
-const fmt = (val) => {
-    if (!val) return '0';
+async function loadFees() {
     try {
-        const n = typeof val === 'bigint' ? val : BigInt(val.toString());
-        return Number(ethers.formatEther(n)).toLocaleString('en-US', { maximumFractionDigits: 2 });
-    } catch { return '0'; }
-};
-
-const shortAddr = (addr) => addr ? `${addr.slice(0, 6)}...${addr.slice(-4)}` : '';
-
-const getInitials = (addr) => addr ? addr.slice(2, 4).toUpperCase() : '??';
-
-const timeAgo = (timestamp) => {
-    const seconds = Math.floor(Date.now() / 1000) - Number(timestamp);
-    if (seconds < 60) return 'now';
-    if (seconds < 3600) return `${Math.floor(seconds / 60)}m`;
-    if (seconds < 86400) return `${Math.floor(seconds / 3600)}h`;
-    if (seconds < 604800) return `${Math.floor(seconds / 86400)}d`;
-    return new Date(Number(timestamp) * 1000).toLocaleDateString();
-};
-
-const formatTime = (timestamp) => {
-    return new Date(Number(timestamp) * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-};
-
-const decodeContent = (content) => {
-    if (!content) return '';
-    if (content.startsWith('ENC:')) {
-        try {
-            const b64 = content.slice(4);
-            return atob(b64);
-        } catch { return content; }
+        const contract = getContract();
+        if (!contract) return;
+        
+        const fees = await contract.getCurrentFees();
+        BC.fees = {
+            post: fees.postFee,
+            reply: fees.replyFee,
+            like: fees.likeFee,
+            follow: fees.followFee,
+            repost: fees.repostFee,
+            superLikeMin: fees.superLikeMin,
+            boostMin: fees.boostMin,
+            badge: fees.badgeFee_
+        };
+    } catch (e) {
+        console.warn('Failed to load fees:', e.message);
     }
-    return content;
-};
-
-const encodeContent = (content) => {
-    return 'ENC:' + btoa(content);
-};
-
-// ============================================================================
-// CONTRACT HELPERS
-// ============================================================================
-
-async function getContract(withSigner = false) {
-    if (!addresses?.backchat) {
-        throw new Error('Backchat contract not deployed yet');
-    }
-    const provider = withSigner ? State?.signer : State?.publicProvider;
-    if (!provider) throw new Error('Provider not available');
-    return new ethers.Contract(addresses.backchat, backchatABI, provider);
 }
 
-async function getBkcContract(withSigner = false) {
-    const provider = withSigner ? State?.signer : State?.publicProvider;
-    if (!provider) throw new Error('Provider not available');
-    return new ethers.Contract(addresses.bkcToken, erc20ABI, provider);
-}
-
-// ============================================================================
-// DATA LOADING
-// ============================================================================
-
-async function loadStats() {
+async function loadUserStatus() {
+    if (!State.isConnected || !State.userAddress) return;
+    
     try {
-        if (!addresses?.backchat) {
-            BS.contractAvailable = false;
-            BS.contractError = 'Backchat contract not deployed yet. Coming soon!';
+        const contract = getContract();
+        if (!contract) return;
+        
+        const [pending, hasBadge, isBoosted, boostExp, badgeExp] = await Promise.all([
+            contract.getPendingBalance(State.userAddress).catch(() => 0n),
+            contract.hasTrustBadge(State.userAddress).catch(() => false),
+            contract.isProfileBoosted(State.userAddress).catch(() => false),
+            contract.boostExpiry(State.userAddress).catch(() => 0),
+            contract.badgeExpiry(State.userAddress).catch(() => 0)
+        ]);
+        
+        BC.pendingEth = pending;
+        BC.hasBadge = hasBadge;
+        BC.isBoosted = isBoosted;
+        BC.boostExpiry = Number(boostExp);
+        BC.badgeExpiry = Number(badgeExp);
+    } catch (e) {
+        console.warn('Failed to load user status:', e.message);
+    }
+}
+
+async function loadPosts() {
+    BC.isLoading = true;
+    renderContent();
+    
+    try {
+        const backchatAddress = getBackchatAddress();
+        
+        if (!backchatAddress) {
+            BC.contractAvailable = false;
+            BC.error = 'Backchat contract not deployed yet. Add "backchat" to deployment-addresses.json';
+            console.warn('⚠️ Backchat address not found in config');
             return;
         }
         
-        const contract = await getContract();
-        const totals = await contract.getTotals();
-        BS.stats = {
-            totalPosts: Number(totals[0]),
-            totalComments: Number(totals[1]),
-            totalNotes: Number(totals[2]),
-            totalMessages: Number(totals[3]),
-            totalConversations: Number(totals[4])
-        };
-        BS.contractAvailable = true;
-        BS.contractError = null;
-    } catch (e) {
-        console.error('Load stats error:', e);
-        BS.contractAvailable = false;
-        BS.contractError = 'Backchat service temporarily unavailable. Please try again later.';
-    }
-}
-
-async function loadConversations() {
-    if (!State?.isConnected || !State?.userAddress) return;
-    if (!BS.contractAvailable) return;
-    
-    try {
-        const contract = await getContract();
-        const convIds = await contract.getUserConversations(State.userAddress);
-        
-        const conversations = [];
-        for (const convId of convIds) {
-            try {
-                // V1.3 FIX: Get participants from first message instead of non-existent getConversationParticipants
-                const msgIds = await contract.getConversationMessages(convId);
-                
-                if (msgIds.length === 0) continue;
-                
-                // Get first message to determine other party
-                const firstMsg = await contract.getMessage(msgIds[0]);
-                const sender = firstMsg[0];
-                const recipient = firstMsg[1];
-                
-                // Determine other party
-                const otherParty = sender.toLowerCase() === State.userAddress.toLowerCase() 
-                    ? recipient : sender;
-                
-                // Get last message for preview
-                let lastMessage = null;
-                let lastTime = 0;
-                
-                if (msgIds.length > 0) {
-                    const lastMsgId = msgIds[msgIds.length - 1];
-                    const msg = await contract.getMessage(lastMsgId);
-                    lastMessage = decodeContent(msg[2]); // encryptedContent
-                    lastTime = Number(msg[4]); // sentAt
-                }
-                
-                conversations.push({
-                    id: Number(convId),
-                    otherParty,
-                    lastMessage,
-                    lastTime,
-                    messageCount: msgIds.length
-                });
-            } catch (e) {
-                console.error(`Error loading conversation ${convId}:`, e);
-            }
+        const contract = getContract();
+        if (!contract) {
+            BC.contractAvailable = false;
+            BC.error = 'Could not connect to Backchat contract';
+            return;
         }
         
-        // Sort by last message time
-        conversations.sort((a, b) => b.lastTime - a.lastTime);
-        BS.conversations = conversations;
+        BC.contractAvailable = true;
         
-    } catch (e) {
-        console.error('Load conversations error:', e);
-    }
-}
-
-async function loadMessages(conversationId) {
-    try {
-        const contract = await getContract();
-        const msgIds = await contract.getConversationMessages(conversationId);
+        const postCount = await contract.postCounter();
+        const count = Number(postCount);
         
-        const messages = [];
-        for (const msgId of msgIds) {
-            const msg = await contract.getMessage(msgId);
-            messages.push({
-                id: Number(msgId),
-                sender: msg[0],
-                recipient: msg[1],
-                content: decodeContent(msg[2]),
-                ipfsHash: msg[3],
-                sentAt: Number(msg[4]),
-                conversationId: Number(msg[5]),
-                parentMessageId: Number(msg[6])
+        if (count === 0) {
+            BC.posts = [];
+            return;
+        }
+        
+        // Load last 50 posts via events
+        const filter = contract.filters.PostCreated();
+        const events = await contract.queryFilter(filter, -10000);
+        
+        // Also load replies
+        const replyFilter = contract.filters.ReplyCreated();
+        const replyEvents = await contract.queryFilter(replyFilter, -10000);
+        
+        // Also load reposts
+        const repostFilter = contract.filters.RepostCreated();
+        const repostEvents = await contract.queryFilter(repostFilter, -10000);
+        
+        // Also load super likes for trending
+        const superLikeFilter = contract.filters.SuperLiked();
+        const superLikeEvents = await contract.queryFilter(superLikeFilter, -10000);
+        
+        // Build super likes map
+        const superLikesMap = new Map();
+        for (const event of superLikeEvents) {
+            const postId = event.args.postId.toString();
+            const amount = event.args.ethAmount;
+            const current = superLikesMap.get(postId) || 0n;
+            superLikesMap.set(postId, current + amount);
+        }
+        
+        // Process posts
+        const posts = [];
+        
+        for (const event of events.slice(-50)) {
+            const block = await event.getBlock();
+            posts.push({
+                id: event.args.postId.toString(),
+                type: 'post',
+                author: event.args.author,
+                content: event.args.content,
+                mediaCID: event.args.mediaCID,
+                timestamp: block.timestamp,
+                superLikes: superLikesMap.get(event.args.postId.toString()) || 0n,
+                txHash: event.transactionHash
             });
         }
         
-        BS.currentMessages = messages;
-    } catch (e) {
-        console.error('Load messages error:', e);
-    }
-}
-
-// V1.3 FIX: Check public key using getPublicKey instead of hasPublicKey
-async function checkPublicKey() {
-    if (!State?.isConnected || !State?.userAddress) return;
-    if (!BS.contractAvailable) return;
-    
-    try {
-        const contract = await getContract();
-        const publicKey = await contract.getPublicKey(State.userAddress);
+        // Process replies
+        for (const event of replyEvents.slice(-30)) {
+            const block = await event.getBlock();
+            posts.push({
+                id: event.args.postId.toString(),
+                type: 'reply',
+                parentId: event.args.parentId.toString(),
+                author: event.args.author,
+                content: event.args.content,
+                mediaCID: event.args.mediaCID,
+                tipBkc: event.args.tipBkc,
+                timestamp: block.timestamp,
+                superLikes: superLikesMap.get(event.args.postId.toString()) || 0n,
+                txHash: event.transactionHash
+            });
+        }
         
-        // Check if key is empty (0x or empty bytes)
-        BS.hasPublicKey = publicKey && publicKey.length > 2 && publicKey !== '0x';
+        // Process reposts
+        for (const event of repostEvents.slice(-20)) {
+            const block = await event.getBlock();
+            posts.push({
+                id: event.args.newPostId.toString(),
+                type: 'repost',
+                originalPostId: event.args.originalPostId.toString(),
+                author: event.args.reposter,
+                timestamp: block.timestamp,
+                txHash: event.transactionHash
+            });
+        }
+        
+        // Sort by timestamp (newest first)
+        posts.sort((a, b) => b.timestamp - a.timestamp);
+        BC.posts = posts;
+        
+        // Build trending list
+        BC.trendingPosts = [...posts]
+            .filter(p => p.superLikes > 0n)
+            .sort((a, b) => {
+                const aVal = BigInt(a.superLikes || 0);
+                const bVal = BigInt(b.superLikes || 0);
+                return bVal > aVal ? 1 : bVal < aVal ? -1 : 0;
+            });
+        
     } catch (e) {
-        console.error('Check public key error:', e);
-        BS.hasPublicKey = false;
+        console.error('Failed to load posts:', e);
+        BC.error = e.message;
+    } finally {
+        BC.isLoading = false;
+        renderContent();
     }
 }
 
@@ -767,176 +1118,184 @@ async function checkPublicKey() {
 // ACTIONS
 // ============================================================================
 
-// V1.3 FIX: Use sendPrivateMessage instead of sendMessage
-async function sendMessage() {
-    if (!State?.isConnected) return showToast('Connect wallet first', 'warning');
-    
-    const input = document.getElementById('bc-msg-input');
+async function createPost() {
+    const input = document.getElementById('bc-compose-input');
     const content = input?.value?.trim();
-    if (!content) return showToast('Enter a message', 'warning');
     
-    const btn = document.getElementById('bc-send-btn');
-    if (btn) {
-        btn.disabled = true;
-        btn.innerHTML = '<div class="bc-spinner" style="width:20px;height:20px;border-width:2px;"></div>';
+    if (!content) {
+        showToast('Please write something', 'error');
+        return;
     }
     
-    try {
-        // Check allowance
-        const bkc = await getBkcContract(true);
-        const fee = ethers.parseEther(MESSAGE_FEE);
-        const allowance = await bkc.allowance(State.userAddress, addresses.backchat);
-        
-        if (allowance < fee) {
-            showToast('Approving BKC...', 'info');
-            const approveTx = await bkc.approve(addresses.backchat, ethers.MaxUint256);
-            await approveTx.wait();
-        }
-        
-        // Get contract with signer
-        const contract = await getContract(true);
-        const encoded = encodeContent(content);
-        
-        let recipient;
-        
-        if (BS.view === 'new') {
-            // New conversation
-            recipient = BS.newMessageRecipient;
-            if (!ethers.isAddress(recipient)) {
-                throw new Error('Invalid recipient address');
-            }
-            
-            // Check if recipient has public key
-            const recipientKey = await contract.getPublicKey(recipient);
-            if (!recipientKey || recipientKey.length <= 2 || recipientKey === '0x') {
-                throw new Error('Recipient has not registered a public key yet');
-            }
-            
-            // V1.3 FIX: Use sendPrivateMessage
-            showToast('Sending message...', 'info');
-            const tx = await contract.sendPrivateMessage(recipient, encoded, '');
-            const receipt = await tx.wait();
-            
-            showToast('Message sent!', 'success');
-            
-            BS.view = 'list';
-            BS.newMessageRecipient = '';
-            
-        } else {
-            // Reply in existing conversation
-            const conv = BS.conversations.find(c => c.id === BS.currentConversation);
-            if (!conv) throw new Error('Conversation not found');
-            
-            // Get last message to reply to
-            const msgIds = await contract.getConversationMessages(conv.id);
-            if (msgIds.length === 0) throw new Error('No messages in conversation');
-            
-            const lastMsgId = msgIds[msgIds.length - 1];
-            
-            // V1.3 FIX: Use replyToMessage
-            showToast('Sending reply...', 'info');
-            const tx = await contract.replyToMessage(lastMsgId, encoded, '');
-            const receipt = await tx.wait();
-            
-            showToast('Reply sent!', 'success');
-        }
-        
-        // Reload conversations and messages
-        await loadConversations();
-        
-        if (BS.currentConversation) {
-            await loadMessages(BS.currentConversation);
-        }
-        
-        render();
-        
-        // Scroll to bottom
-        setTimeout(() => {
-            const container = document.getElementById('bc-messages');
-            if (container) container.scrollTop = container.scrollHeight;
-        }, 100);
-        
-    } catch (e) {
-        console.error('Send message error:', e);
-        if (!e.message?.includes('user rejected')) {
-            showToast(e.reason || e.message || 'Failed to send', 'error');
-        }
-    } finally {
-        if (btn) {
-            btn.disabled = false;
-            btn.innerHTML = '<i class="fa-solid fa-paper-plane"></i>';
-        }
-        if (input) input.value = '';
+    if (content.length > 500) {
+        showToast('Post too long (max 500 chars)', 'error');
+        return;
     }
-}
-
-// V1.3 FIX: Use setPublicKey instead of registerPublicKey
-async function registerKey() {
-    if (!State?.isConnected) return showToast('Connect wallet first', 'warning');
+    
+    const contract = getSignedContract();
+    if (!contract) {
+        showToast('Please connect wallet', 'error');
+        return;
+    }
+    
+    BC.isPosting = true;
+    renderContent();
     
     try {
-        const contract = await getContract(true);
+        const fee = BC.fees.post || await contract.calculateFee(50000);
         
-        // Generate a placeholder key for now
-        // In production, this would be the user's actual E2EE public key
-        const placeholderKey = ethers.toUtf8Bytes(`PK_${State.userAddress.slice(2, 10)}_${Date.now()}`);
+        const tx = await contract.createPost(
+            content,
+            '', // mediaCID - empty for now
+            getOperatorAddress() || ethers.ZeroAddress,
+            { value: fee }
+        );
         
-        showToast('Registering encryption key...', 'info');
-        
-        // V1.3 FIX: Use setPublicKey instead of registerPublicKey
-        const tx = await contract.setPublicKey(placeholderKey);
+        showToast('Posting...', 'info');
         await tx.wait();
         
-        BS.hasPublicKey = true;
-        showToast('Key registered!', 'success');
-        render();
+        showToast('Post created! 🎉', 'success');
+        input.value = '';
+        
+        // Reload posts
+        await loadPosts();
         
     } catch (e) {
-        console.error('Register key error:', e);
-        if (!e.message?.includes('user rejected')) {
-            showToast(e.reason || e.message || 'Failed to register', 'error');
+        console.error('Post error:', e);
+        if (e.code !== 'ACTION_REJECTED') {
+            showToast('Failed: ' + (e.reason || e.message), 'error');
+        }
+    } finally {
+        BC.isPosting = false;
+        renderContent();
+    }
+}
+
+async function likePost(postId) {
+    const contract = getSignedContract();
+    if (!contract) {
+        showToast('Please connect wallet', 'error');
+        return;
+    }
+    
+    try {
+        const fee = BC.fees.like || await contract.calculateFee(55000);
+        
+        const tx = await contract.like(
+            postId,
+            getOperatorAddress() || ethers.ZeroAddress,
+            0, // tipBkc
+            { value: fee }
+        );
+        
+        showToast('Liking...', 'info');
+        await tx.wait();
+        
+        showToast('Liked! ❤️', 'success');
+        
+    } catch (e) {
+        console.error('Like error:', e);
+        if (e.code !== 'ACTION_REJECTED') {
+            if (e.message?.includes('AlreadyLiked')) {
+                showToast('Already liked this post', 'warning');
+            } else {
+                showToast('Failed: ' + (e.reason || e.message), 'error');
+            }
         }
     }
 }
 
-// ============================================================================
-// NAVIGATION
-// ============================================================================
-
-function openConversation(convId) {
-    BS.currentConversation = convId;
-    BS.view = 'chat';
-    BS.isLoading = true;
-    render();
+async function superLikePost(postId, amount) {
+    const contract = getSignedContract();
+    if (!contract) {
+        showToast('Please connect wallet', 'error');
+        return;
+    }
     
-    loadMessages(convId).then(() => {
-        BS.isLoading = false;
-        render();
+    const ethAmount = ethers.parseEther(amount || '0.0001');
+    
+    try {
+        const tx = await contract.superLike(
+            postId,
+            getOperatorAddress() || ethers.ZeroAddress,
+            0, // tipBkc
+            { value: ethAmount }
+        );
         
-        // Scroll to bottom
-        setTimeout(() => {
-            const container = document.getElementById('bc-messages');
-            if (container) container.scrollTop = container.scrollHeight;
-        }, 100);
-    });
+        showToast('Super liking...', 'info');
+        await tx.wait();
+        
+        showToast('Super Liked! ⭐', 'success');
+        await loadPosts();
+        
+    } catch (e) {
+        console.error('Super like error:', e);
+        if (e.code !== 'ACTION_REJECTED') {
+            showToast('Failed: ' + (e.reason || e.message), 'error');
+        }
+    }
 }
 
-function openNewMessage() {
-    BS.view = 'new';
-    BS.newMessageRecipient = '';
-    render();
+async function followUser(address) {
+    const contract = getSignedContract();
+    if (!contract) {
+        showToast('Please connect wallet', 'error');
+        return;
+    }
     
-    setTimeout(() => {
-        const input = document.getElementById('bc-new-recipient');
-        if (input) input.focus();
-    }, 100);
+    try {
+        const fee = BC.fees.follow || await contract.calculateFee(45000);
+        
+        const tx = await contract.follow(
+            address,
+            getOperatorAddress() || ethers.ZeroAddress,
+            0, // tipBkc
+            { value: fee }
+        );
+        
+        showToast('Following...', 'info');
+        await tx.wait();
+        
+        BC.following.add(address.toLowerCase());
+        showToast('Followed! 👥', 'success');
+        renderContent();
+        
+    } catch (e) {
+        console.error('Follow error:', e);
+        if (e.code !== 'ACTION_REJECTED') {
+            showToast('Failed: ' + (e.reason || e.message), 'error');
+        }
+    }
 }
 
-function goBack() {
-    BS.view = 'list';
-    BS.currentConversation = null;
-    BS.currentMessages = [];
-    render();
+async function withdrawEarnings() {
+    const contract = getSignedContract();
+    if (!contract) {
+        showToast('Please connect wallet', 'error');
+        return;
+    }
+    
+    if (BC.pendingEth === 0n) {
+        showToast('No earnings to withdraw', 'warning');
+        return;
+    }
+    
+    try {
+        const tx = await contract.withdraw();
+        
+        showToast('Withdrawing...', 'info');
+        await tx.wait();
+        
+        showToast(`Withdrawn ${formatETH(BC.pendingEth)} ETH! 💰`, 'success');
+        BC.pendingEth = 0n;
+        renderContent();
+        
+    } catch (e) {
+        console.error('Withdraw error:', e);
+        if (e.code !== 'ACTION_REJECTED') {
+            showToast('Failed: ' + (e.reason || e.message), 'error');
+        }
+    }
 }
 
 // ============================================================================
@@ -944,223 +1303,368 @@ function goBack() {
 // ============================================================================
 
 function renderHeader() {
-    if (BS.view === 'list') {
-        return `
-            <div class="bc-header">
-                <img src="${HERO_ICON}" alt="Backchat" class="bc-header-icon">
-                <span class="bc-header-title">Messages</span>
+    return `
+        <div class="bc-header">
+            <div class="bc-header-top">
+                <div class="bc-logo">
+                    <img src="assets/backchat.png" alt="Backchat" class="bc-logo-icon" onerror="this.style.display='none'">
+                    <span class="bc-logo-text">Backchat</span>
+                </div>
                 <div class="bc-header-actions">
-                    <button onclick="BackchatPage.refresh()" class="bc-header-back" title="Refresh">
+                    ${State.isConnected && BC.pendingEth > 0n ? `
+                        <button class="bc-icon-btn" onclick="BackchatPage.openEarnings()" title="Earnings: ${formatETH(BC.pendingEth)} ETH">
+                            <i class="fa-solid fa-coins" style="color:#22c55e"></i>
+                        </button>
+                    ` : ''}
+                    <button class="bc-icon-btn" onclick="BackchatPage.refresh()">
                         <i class="fa-solid fa-rotate"></i>
                     </button>
                 </div>
             </div>
-        `;
-    }
+            <div class="bc-tabs">
+                <button class="bc-tab ${BC.activeTab === 'feed' ? 'active' : ''}" onclick="BackchatPage.setTab('feed')">
+                    <i class="fa-solid fa-house"></i> Feed
+                </button>
+                <button class="bc-tab ${BC.activeTab === 'trending' ? 'active' : ''}" onclick="BackchatPage.setTab('trending')">
+                    <i class="fa-solid fa-fire"></i> Trending
+                </button>
+                <button class="bc-tab ${BC.activeTab === 'profile' ? 'active' : ''}" onclick="BackchatPage.setTab('profile')">
+                    <i class="fa-solid fa-user"></i> Profile
+                </button>
+            </div>
+        </div>
+    `;
+}
+
+function renderCompose() {
+    if (!State.isConnected) return '';
     
-    if (BS.view === 'new') {
-        return `
-            <div class="bc-header">
-                <div class="bc-header-back" onclick="BackchatPage.goBack()">
-                    <i class="fa-solid fa-arrow-left"></i>
+    const fee = formatETH(BC.fees.post);
+    
+    return `
+        <div class="bc-compose">
+            <textarea id="bc-compose-input" class="bc-compose-input" placeholder="What's happening?" maxlength="500"></textarea>
+            <div class="bc-compose-footer">
+                <div class="bc-compose-actions">
+                    <button class="bc-compose-btn" title="Add image (coming soon)" disabled>
+                        <i class="fa-solid fa-image"></i>
+                    </button>
                 </div>
-                <span class="bc-header-title">New Message</span>
+                <div style="display:flex;align-items:center;gap:12px;">
+                    <span style="color:#71717a;font-size:12px;">${fee} ETH fee</span>
+                    <button class="bc-post-btn" onclick="BackchatPage.createPost()" ${BC.isPosting ? 'disabled' : ''}>
+                        ${BC.isPosting ? '<i class="fa-solid fa-spinner fa-spin"></i>' : 'Post'}
+                    </button>
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+function renderPost(post) {
+    const isBoosted = false; // Would need to check from contract
+    const hasBadge = false;  // Would need to check from contract
+    const superLikesETH = formatETH(post.superLikes);
+    
+    return `
+        <div class="bc-post slide-up" data-post-id="${post.id}">
+            <div class="bc-post-header">
+                <div class="bc-avatar ${isBoosted ? 'boosted' : ''}" onclick="BackchatPage.viewProfile('${post.author}')">
+                    ${getInitials(post.author)}
+                </div>
+                <div class="bc-post-meta">
+                    <div class="bc-post-author">
+                        <span class="bc-username">${shortenAddress(post.author)}</span>
+                        ${hasBadge ? '<i class="fa-solid fa-circle-check bc-badge" title="Verified"></i>' : ''}
+                        ${post.superLikes > 0n ? `<span class="bc-trending-badge"><i class="fa-solid fa-fire"></i> ${superLikesETH} ETH</span>` : ''}
+                    </div>
+                    <div class="bc-handle">
+                        <span class="bc-time">${formatTimeAgo(post.timestamp)}</span>
+                        ${post.type === 'reply' ? `<span style="margin-left:4px;">· Replying to #${post.parentId}</span>` : ''}
+                        ${post.type === 'repost' ? `<span style="margin-left:4px;">· Reposted #${post.originalPostId}</span>` : ''}
+                    </div>
+                </div>
+            </div>
+            
+            ${post.content ? `<div class="bc-post-content">${escapeHtml(post.content)}</div>` : ''}
+            
+            ${post.mediaCID ? `
+                <div class="bc-post-media">
+                    <img src="${IPFS_GATEWAY}${post.mediaCID}" alt="Media" loading="lazy">
+                </div>
+            ` : ''}
+            
+            <div class="bc-engagement">
+                <button class="bc-engage-btn reply" onclick="BackchatPage.openReply('${post.id}')">
+                    <i class="fa-regular fa-comment"></i>
+                </button>
+                <button class="bc-engage-btn repost" onclick="BackchatPage.repost('${post.id}')">
+                    <i class="fa-solid fa-retweet"></i>
+                </button>
+                <button class="bc-engage-btn like" onclick="BackchatPage.like('${post.id}')">
+                    <i class="fa-regular fa-heart"></i>
+                </button>
+                <button class="bc-engage-btn super" onclick="BackchatPage.openSuperLike('${post.id}')" title="Super Like">
+                    <i class="fa-solid fa-star"></i>
+                </button>
+                <button class="bc-engage-btn tip" onclick="BackchatPage.openTip('${post.author}')" title="Tip BKC">
+                    <i class="fa-solid fa-gift"></i>
+                </button>
+            </div>
+        </div>
+    `;
+}
+
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+function renderFeed() {
+    // Contract not available - show coming soon
+    if (!BC.contractAvailable) {
+        return `
+            <div class="bc-empty">
+                <div class="bc-empty-icon" style="background:rgba(245,158,11,0.2);">
+                    <i class="fa-solid fa-rocket" style="color:#f59e0b;"></i>
+                </div>
+                <div class="bc-empty-title">Coming Soon!</div>
+                <div class="bc-empty-text">
+                    ${BC.error || 'Backchat is being deployed. The unstoppable social network will be live soon!'}
+                </div>
+                <button class="bc-btn bc-btn-secondary" style="margin-top:20px;" onclick="BackchatPage.refresh()">
+                    <i class="fa-solid fa-rotate"></i> Retry
+                </button>
             </div>
         `;
     }
     
-    // Chat view
-    const conv = BS.conversations.find(c => c.id === BS.currentConversation);
-    const otherParty = conv?.otherParty || '';
+    if (BC.isLoading) {
+        return `
+            <div class="bc-loading">
+                <div class="bc-spinner"></div>
+            </div>
+        `;
+    }
     
-    return `
-        <div class="bc-header">
-            <div class="bc-header-back" onclick="BackchatPage.goBack()">
-                <i class="fa-solid fa-arrow-left"></i>
-            </div>
-            <div class="bc-conv-avatar">${getInitials(otherParty)}</div>
-            <div>
-                <div class="bc-conv-name">${shortAddr(otherParty)}</div>
-                <div class="bc-conv-address" style="font-size:12px;">${conv?.messageCount || 0} messages</div>
-            </div>
-        </div>
-    `;
-}
-
-function renderStats() {
-    return `
-        <div class="bc-stats">
-            <div class="bc-stat">
-                <span class="bc-stat-value">${BS.stats.totalMessages.toLocaleString()}</span>
-                <span class="bc-stat-label">Messages</span>
-            </div>
-            <div class="bc-stat">
-                <span class="bc-stat-value">${BS.stats.totalConversations.toLocaleString()}</span>
-                <span class="bc-stat-label">Conversations</span>
-            </div>
-            <div class="bc-stat">
-                <span class="bc-stat-value">${BS.stats.totalPosts.toLocaleString()}</span>
-                <span class="bc-stat-label">Posts</span>
-            </div>
-        </div>
-    `;
-}
-
-function renderConversationList() {
-    if (BS.conversations.length === 0) {
+    if (BC.posts.length === 0) {
         return `
             <div class="bc-empty">
                 <div class="bc-empty-icon">
-                    <i class="fa-solid fa-comments"></i>
+                    <i class="fa-solid fa-message"></i>
                 </div>
-                <div class="bc-empty-title">No messages yet</div>
-                <div class="bc-empty-text">
-                    Start a conversation by tapping the compose button below.
-                </div>
+                <div class="bc-empty-title">No posts yet</div>
+                <div class="bc-empty-text">Be the first to post on Backchat!</div>
             </div>
         `;
     }
     
-    return `
-        <div class="bc-conv-list">
-            ${BS.conversations.map(conv => `
-                <div class="bc-conv-item" onclick="BackchatPage.openConversation(${conv.id})">
-                    <div class="bc-conv-avatar">${getInitials(conv.otherParty)}</div>
-                    <div class="bc-conv-content">
-                        <div class="bc-conv-header">
-                            <span class="bc-conv-name">${shortAddr(conv.otherParty)}</span>
-                            <span class="bc-conv-time">${timeAgo(conv.lastTime)}</span>
-                        </div>
-                        <div class="bc-conv-preview">${conv.lastMessage || 'No messages'}</div>
-                    </div>
-                </div>
-            `).join('')}
-        </div>
-    `;
+    return BC.posts.map(post => renderPost(post)).join('');
 }
 
-function renderChat() {
-    if (BS.isLoading) {
+function renderTrending() {
+    if (BC.trendingPosts.length === 0) {
         return `
-            <div class="bc-chat">
-                <div class="bc-loading" style="flex:1;">
-                    <div class="bc-spinner"></div>
+            <div class="bc-empty">
+                <div class="bc-empty-icon">
+                    <i class="fa-solid fa-fire"></i>
                 </div>
+                <div class="bc-empty-title">No trending posts</div>
+                <div class="bc-empty-text">Super Like posts to make them trend!</div>
             </div>
         `;
     }
     
-    const isSender = (msg) => msg.sender.toLowerCase() === State?.userAddress?.toLowerCase();
+    return `
+        <div style="padding:16px;border-bottom:1px solid rgba(63,63,70,0.5);">
+            <h2 style="color:#f59e0b;font-size:16px;font-weight:700;">
+                <i class="fa-solid fa-fire"></i> Trending by Super Likes
+            </h2>
+            <p style="color:#71717a;font-size:13px;margin-top:4px;">
+                Posts ranked by total ETH from Super Likes
+            </p>
+        </div>
+        ${BC.trendingPosts.map(post => renderPost(post)).join('')}
+    `;
+}
+
+function renderProfile() {
+    if (!State.isConnected) {
+        return `
+            <div class="bc-empty">
+                <div class="bc-empty-icon">
+                    <i class="fa-solid fa-wallet"></i>
+                </div>
+                <div class="bc-empty-title">Connect Wallet</div>
+                <div class="bc-empty-text">Connect your wallet to view your profile and earnings.</div>
+                <button class="bc-btn bc-btn-primary" style="margin-top:20px;" onclick="window.openConnectModal && window.openConnectModal()">
+                    <i class="fa-solid fa-wallet"></i> Connect
+                </button>
+            </div>
+        `;
+    }
     
     return `
-        <div class="bc-chat">
-            <div class="bc-chat-messages" id="bc-messages">
-                ${BS.currentMessages.length === 0 ? `
-                    <div class="bc-empty" style="padding:40px 20px;">
-                        <div class="bc-empty-text">No messages in this conversation yet.</div>
-                    </div>
-                ` : BS.currentMessages.map(msg => `
-                    <div class="bc-message ${isSender(msg) ? 'sent' : 'received'}">
-                        <div>${msg.content}</div>
-                        <div class="bc-message-time">${formatTime(msg.sentAt)}</div>
-                    </div>
-                `).join('')}
+        <div class="bc-profile-card">
+            <div class="bc-profile-header">
+                <div class="bc-profile-avatar ${BC.isBoosted ? 'boosted' : ''}">
+                    ${getInitials(State.userAddress)}
+                </div>
+                <div style="display:flex;gap:8px;">
+                    ${!BC.hasBadge ? `
+                        <button class="bc-btn bc-btn-secondary" onclick="BackchatPage.openBadge()">
+                            <i class="fa-solid fa-circle-check"></i> Get Badge
+                        </button>
+                    ` : ''}
+                    ${!BC.isBoosted ? `
+                        <button class="bc-btn bc-btn-secondary" onclick="BackchatPage.openBoost()">
+                            <i class="fa-solid fa-rocket"></i> Boost
+                        </button>
+                    ` : ''}
+                </div>
             </div>
-            
-            <div class="bc-fee-notice">
-                <i class="fa-solid fa-coins"></i>
-                <span>Each message costs <strong>${MESSAGE_FEE} BKC</strong></span>
+            <div class="bc-profile-info">
+                <div class="bc-profile-name">
+                    ${shortenAddress(State.userAddress)}
+                    ${BC.hasBadge ? '<i class="fa-solid fa-circle-check bc-badge"></i>' : ''}
+                    ${BC.isBoosted ? '<span class="bc-trending-badge"><i class="fa-solid fa-rocket"></i> Boosted</span>' : ''}
+                </div>
+                <div class="bc-profile-handle">
+                    <a href="${EXPLORER_ADDRESS}${State.userAddress}" target="_blank" style="color:#71717a;text-decoration:none;">
+                        View on Explorer <i class="fa-solid fa-arrow-up-right-from-square" style="font-size:10px;"></i>
+                    </a>
+                </div>
             </div>
-            
-            <div class="bc-chat-input">
-                <input type="text" id="bc-msg-input" class="bc-input" placeholder="Write a message..." 
-                    onkeypress="if(event.key==='Enter')BackchatPage.sendMessage()">
-                <button id="bc-send-btn" class="bc-send-btn" onclick="BackchatPage.sendMessage()">
-                    <i class="fa-solid fa-paper-plane"></i>
-                </button>
-            </div>
-        </div>
-    `;
-}
-
-function renderNewMessage() {
-    return `
-        <div class="bc-new-conv">
-            <input type="text" id="bc-new-recipient" class="bc-new-conv-input" 
-                placeholder="Enter wallet address (0x...)"
-                value="${BS.newMessageRecipient}"
-                oninput="BackchatPage.setRecipient(this.value)">
         </div>
         
-        <div class="bc-fee-notice">
-            <i class="fa-solid fa-coins"></i>
-            <span>Each message costs <strong>${MESSAGE_FEE} BKC</strong></span>
-        </div>
-        
-        <div class="bc-chat-input">
-            <input type="text" id="bc-msg-input" class="bc-input" placeholder="Write a message..."
-                onkeypress="if(event.key==='Enter')BackchatPage.sendMessage()">
-            <button id="bc-send-btn" class="bc-send-btn" onclick="BackchatPage.sendMessage()">
-                <i class="fa-solid fa-paper-plane"></i>
-            </button>
-        </div>
-    `;
-}
-
-function renderConnectPrompt() {
-    return `
-        <div class="bc-connect">
-            <img src="${HERO_ICON}" alt="Backchat" class="bc-connect-icon">
-            <div class="bc-empty-title">Welcome to Backchat</div>
-            <div class="bc-empty-text" style="margin-bottom:24px;">
-                Connect your wallet to send and receive private messages on the blockchain.
-            </div>
-            <button class="bc-btn bc-btn-primary" onclick="window.connectWallet && window.connectWallet()">
-                <i class="fa-solid fa-wallet"></i>
-                Connect Wallet
-            </button>
-        </div>
-    `;
-}
-
-function renderUnavailable() {
-    return `
-        <div class="bc-connect">
-            <img src="${HERO_ICON}" alt="Backchat" class="bc-connect-icon" style="opacity:0.5;">
-            <div class="bc-empty-title" style="color:#f59e0b;">
-                <i class="fa-solid fa-tools" style="margin-right:8px;"></i>
-                Coming Soon!
-            </div>
-            <div class="bc-empty-text" style="margin-bottom:24px; max-width:400px;">
-                ${BS.contractError || 'Backchat is currently being deployed. Private messaging on the blockchain will be available soon!'}
-            </div>
-            <div style="display:flex; gap:12px; flex-wrap:wrap; justify-content:center;">
-                <a href="https://x.com/backcoin" target="_blank" class="bc-btn bc-btn-secondary" style="text-decoration:none;">
-                    <i class="fa-brands fa-twitter"></i>
-                    Follow Updates
-                </a>
-                <button class="bc-btn bc-btn-primary" onclick="BackchatPage.refresh()">
-                    <i class="fa-solid fa-rotate"></i>
-                    Retry
+        ${BC.pendingEth > 0n ? `
+            <div class="bc-earnings">
+                <div class="bc-earnings-title">
+                    <i class="fa-solid fa-coins"></i> Pending Earnings
+                </div>
+                <div class="bc-earnings-amount">
+                    ${formatETH(BC.pendingEth)} <span>ETH</span>
+                </div>
+                <button class="bc-btn bc-btn-primary" style="width:100%;margin-top:16px;" onclick="BackchatPage.withdraw()">
+                    <i class="fa-solid fa-wallet"></i> Withdraw Earnings
                 </button>
             </div>
+        ` : ''}
+        
+        <div style="padding:16px;">
+            <h3 style="color:#a1a1aa;font-size:14px;font-weight:600;margin-bottom:12px;">
+                <i class="fa-solid fa-clock-rotate-left"></i> Your Posts
+            </h3>
+            ${BC.posts.filter(p => p.author.toLowerCase() === State.userAddress?.toLowerCase()).length === 0 
+                ? '<p style="color:#52525b;font-size:13px;">No posts yet. Share your first thought!</p>'
+                : BC.posts.filter(p => p.author.toLowerCase() === State.userAddress?.toLowerCase()).map(p => renderPost(p)).join('')
+            }
         </div>
     `;
 }
 
-function renderLoading() {
-    return `
-        <div class="bc-loading" style="min-height:300px;">
-            <div class="bc-spinner"></div>
-        </div>
-    `;
+function renderContent() {
+    const container = document.getElementById('backchat-content');
+    if (!container) return;
+    
+    let content = '';
+    
+    switch (BC.activeTab) {
+        case 'feed':
+            content = renderCompose() + renderFeed();
+            break;
+        case 'trending':
+            content = renderTrending();
+            break;
+        case 'profile':
+            content = renderProfile();
+            break;
+    }
+    
+    container.innerHTML = content;
 }
 
-function renderNewMessageButton() {
-    if (BS.view !== 'list') return '';
+function renderModals() {
     return `
-        <div class="bc-new-msg-btn" onclick="BackchatPage.openNewMessage()">
-            <i class="fa-solid fa-pen-to-square"></i>
+        <!-- Super Like Modal -->
+        <div class="bc-modal" id="modal-superlike">
+            <div class="bc-modal-content">
+                <div class="bc-modal-header">
+                    <span class="bc-modal-title"><i class="fa-solid fa-star" style="color:#f59e0b"></i> Super Like</span>
+                    <button class="bc-modal-close" onclick="BackchatPage.closeModal('superlike')">
+                        <i class="fa-solid fa-xmark"></i>
+                    </button>
+                </div>
+                <div class="bc-modal-body">
+                    <p style="color:#a1a1aa;font-size:14px;margin-bottom:16px;">
+                        Super Likes boost posts to trending. The more ETH, the higher it ranks!
+                    </p>
+                    <div class="bc-input-group">
+                        <label class="bc-input-label">Amount (ETH)</label>
+                        <input type="number" id="superlike-amount" class="bc-input" value="0.001" min="0.0001" step="0.0001">
+                    </div>
+                    <div class="bc-fee">
+                        <span class="bc-fee-label">Minimum</span>
+                        <span class="bc-fee-value">0.0001 ETH</span>
+                    </div>
+                    <button class="bc-btn bc-btn-primary" style="width:100%;margin-top:16px;" onclick="BackchatPage.confirmSuperLike()">
+                        <i class="fa-solid fa-star"></i> Super Like
+                    </button>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Badge Modal -->
+        <div class="bc-modal" id="modal-badge">
+            <div class="bc-modal-content">
+                <div class="bc-modal-header">
+                    <span class="bc-modal-title"><i class="fa-solid fa-circle-check" style="color:#f59e0b"></i> Trust Badge</span>
+                    <button class="bc-modal-close" onclick="BackchatPage.closeModal('badge')">
+                        <i class="fa-solid fa-xmark"></i>
+                    </button>
+                </div>
+                <div class="bc-modal-body">
+                    <p style="color:#a1a1aa;font-size:14px;margin-bottom:16px;">
+                        Get a verified badge for 1 year. Shows you're a trusted member of the community.
+                    </p>
+                    <div class="bc-fee">
+                        <span class="bc-fee-label">Badge Fee</span>
+                        <span class="bc-fee-value">${formatETH(BC.fees.badge)} ETH</span>
+                    </div>
+                    <button class="bc-btn bc-btn-primary" style="width:100%;margin-top:16px;" onclick="BackchatPage.confirmBadge()">
+                        <i class="fa-solid fa-circle-check"></i> Get Badge (1 Year)
+                    </button>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Boost Modal -->
+        <div class="bc-modal" id="modal-boost">
+            <div class="bc-modal-content">
+                <div class="bc-modal-header">
+                    <span class="bc-modal-title"><i class="fa-solid fa-rocket" style="color:#f59e0b"></i> Profile Boost</span>
+                    <button class="bc-modal-close" onclick="BackchatPage.closeModal('boost')">
+                        <i class="fa-solid fa-xmark"></i>
+                    </button>
+                </div>
+                <div class="bc-modal-body">
+                    <p style="color:#a1a1aa;font-size:14px;margin-bottom:16px;">
+                        Boost your profile visibility. 1 day boost per 0.0005 ETH.
+                    </p>
+                    <div class="bc-input-group">
+                        <label class="bc-input-label">Amount (ETH)</label>
+                        <input type="number" id="boost-amount" class="bc-input" value="0.001" min="0.0005" step="0.0005">
+                    </div>
+                    <div class="bc-fee">
+                        <span class="bc-fee-label">Minimum</span>
+                        <span class="bc-fee-value">0.0005 ETH (1 day)</span>
+                    </div>
+                    <button class="bc-btn bc-btn-primary" style="width:100%;margin-top:16px;" onclick="BackchatPage.confirmBoost()">
+                        <i class="fa-solid fa-rocket"></i> Boost Profile
+                    </button>
+                </div>
+            </div>
         </div>
     `;
 }
@@ -1169,99 +1673,111 @@ function renderNewMessageButton() {
 // MAIN RENDER
 // ============================================================================
 
-function getContainer() {
-    let container = document.getElementById('backchat-container');
-    if (container) return container;
-    
-    const section = document.getElementById('backchat');
-    if (section) {
-        container = document.createElement('div');
-        container.id = 'backchat-container';
-        section.innerHTML = '';
-        section.appendChild(container);
-        return container;
-    }
-    
-    console.error('❌ #backchat section not found');
-    return null;
-}
-
 function render() {
-    console.log('🎨 BackchatPage render v1.3');
     injectStyles();
     
-    const container = getContainer();
-    if (!container) return;
+    const section = document.getElementById('backchat');
+    if (!section) return;
     
-    // Contract not available
-    if (!BS.contractAvailable) {
-        container.innerHTML = `
-            <div class="backchat-page">
-                ${renderHeader()}
-                ${renderUnavailable()}
-            </div>
-        `;
-        return;
-    }
-    
-    // Not connected
-    if (!State?.isConnected) {
-        container.innerHTML = `
-            <div class="backchat-page">
-                ${renderHeader()}
-                ${renderConnectPrompt()}
-            </div>
-        `;
-        return;
-    }
-    
-    // Loading
-    if (BS.isLoading && BS.view === 'list') {
-        container.innerHTML = `
-            <div class="backchat-page">
-                ${renderHeader()}
-                ${renderLoading()}
-            </div>
-        `;
-        return;
-    }
-    
-    // Main content
-    let content = '';
-    
-    if (BS.view === 'list') {
-        content = renderStats() + renderConversationList();
-    } else if (BS.view === 'chat') {
-        content = renderChat();
-    } else if (BS.view === 'new') {
-        content = renderNewMessage();
-    }
-    
-    container.innerHTML = `
-        <div class="backchat-page">
+    section.innerHTML = `
+        <div class="bc-container">
             ${renderHeader()}
-            ${content}
-            ${renderNewMessageButton()}
+            <div id="backchat-content"></div>
         </div>
+        ${renderModals()}
     `;
+    
+    renderContent();
 }
 
-async function refresh() {
-    BS.isLoading = true;
-    render();
-    
-    await Promise.all([
-        loadStats(),
-        loadConversations(),
-        checkPublicKey()
-    ]);
-    
-    BS.isLoading = false;
-    render();
+// ============================================================================
+// MODAL HANDLERS
+// ============================================================================
+
+let selectedPostForAction = null;
+
+function openSuperLike(postId) {
+    selectedPostForAction = postId;
+    document.getElementById('modal-superlike').classList.add('active');
 }
 
-function setRecipient(value) {
-    BS.newMessageRecipient = value;
+async function confirmSuperLike() {
+    const amount = document.getElementById('superlike-amount')?.value || '0.001';
+    closeModal('superlike');
+    await superLikePost(selectedPostForAction, amount);
+}
+
+function openBadge() {
+    document.getElementById('modal-badge').classList.add('active');
+}
+
+async function confirmBadge() {
+    closeModal('badge');
+    
+    const contract = getSignedContract();
+    if (!contract) {
+        showToast('Please connect wallet', 'error');
+        return;
+    }
+    
+    try {
+        const tx = await contract.obtainBadge(
+            getOperatorAddress() || ethers.ZeroAddress,
+            { value: BC.fees.badge }
+        );
+        
+        showToast('Getting badge...', 'info');
+        await tx.wait();
+        
+        BC.hasBadge = true;
+        showToast('Badge obtained! ✅', 'success');
+        renderContent();
+        
+    } catch (e) {
+        console.error('Badge error:', e);
+        if (e.code !== 'ACTION_REJECTED') {
+            showToast('Failed: ' + (e.reason || e.message), 'error');
+        }
+    }
+}
+
+function openBoost() {
+    document.getElementById('modal-boost').classList.add('active');
+}
+
+async function confirmBoost() {
+    const amount = document.getElementById('boost-amount')?.value || '0.001';
+    closeModal('boost');
+    
+    const contract = getSignedContract();
+    if (!contract) {
+        showToast('Please connect wallet', 'error');
+        return;
+    }
+    
+    try {
+        const tx = await contract.boostProfile(
+            getOperatorAddress() || ethers.ZeroAddress,
+            { value: ethers.parseEther(amount) }
+        );
+        
+        showToast('Boosting profile...', 'info');
+        await tx.wait();
+        
+        BC.isBoosted = true;
+        showToast('Profile boosted! 🚀', 'success');
+        renderContent();
+        
+    } catch (e) {
+        console.error('Boost error:', e);
+        if (e.code !== 'ACTION_REJECTED') {
+            showToast('Failed: ' + (e.reason || e.message), 'error');
+        }
+    }
+}
+
+function closeModal(name) {
+    document.getElementById(`modal-${name}`)?.classList.remove('active');
 }
 
 // ============================================================================
@@ -1269,20 +1785,61 @@ function setRecipient(value) {
 // ============================================================================
 
 export const BackchatPage = {
-    render(isActive) {
-        console.log('🚀 BackchatPage.render v1.3, isActive:', isActive);
-        if (isActive) {
-            render();
-            refresh();
-        }
+    async render(isActive) {
+        if (!isActive) return;
+        
+        render();
+        
+        await Promise.all([
+            loadFees(),
+            loadUserStatus(),
+            loadPosts()
+        ]);
     },
-    refresh,
-    openConversation,
-    openNewMessage,
-    goBack,
-    sendMessage,
-    registerKey,
-    setRecipient
+    
+    async refresh() {
+        await Promise.all([
+            loadFees(),
+            loadUserStatus(),
+            loadPosts()
+        ]);
+    },
+    
+    setTab(tab) {
+        BC.activeTab = tab;
+        renderContent();
+    },
+    
+    // Actions
+    createPost,
+    like: likePost,
+    openSuperLike,
+    confirmSuperLike,
+    follow: followUser,
+    withdraw: withdrawEarnings,
+    
+    // Modals
+    openBadge,
+    confirmBadge,
+    openBoost,
+    confirmBoost,
+    closeModal,
+    openEarnings() { BC.activeTab = 'profile'; renderContent(); },
+    
+    // Navigation
+    viewProfile(address) {
+        // TODO: Implement profile viewing
+        showToast('Profile view coming soon!', 'info');
+    },
+    openReply(postId) {
+        showToast('Reply coming soon!', 'info');
+    },
+    repost(postId) {
+        showToast('Repost coming soon!', 'info');
+    },
+    openTip(address) {
+        showToast('BKC Tips coming soon!', 'info');
+    }
 };
 
 window.BackchatPage = BackchatPage;

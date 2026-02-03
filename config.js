@@ -250,7 +250,9 @@ export const contractAddresses = {
     decentralizedNotary: null,
     faucet: null,
     miningManager: null,
-    charityPool: null  // ✅ V29: Charity Pool
+    charityPool: null,      // ✅ V29: Charity Pool
+    backchat: null,         // ✅ V6.9: Backchat Social Network
+    operator: null          // ✅ V6.9: Operator for fee distribution
 };
 
 export async function loadAddresses() {
@@ -297,12 +299,24 @@ export async function loadAddresses() {
                                 jsonAddresses.CharityPool ||
                                 null;
 
+        // ✅ V6.9: Backchat Social Network
+        addresses.backchat = jsonAddresses.backchat || 
+                             jsonAddresses.Backchat ||
+                             null;
+        
+        // ✅ V6.9: Operator address (treasury receives operator fees)
+        addresses.operator = jsonAddresses.operator || 
+                             jsonAddresses.treasuryWallet ||
+                             null;
+
         // Also update contractAddresses for compatibility
         Object.assign(contractAddresses, jsonAddresses);
 
         console.log("✅ Contract addresses loaded");
         console.log("   FortunePool V2:", addresses.fortunePoolV2);
         console.log("   CharityPool:", addresses.charityPool);
+        console.log("   Backchat:", addresses.backchat);
+        console.log("   Operator:", addresses.operator);
         return true;
 
     } catch (error) {
