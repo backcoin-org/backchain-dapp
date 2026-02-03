@@ -1,1803 +1,1163 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.28;
 
-// ╔══════════════════════════════════════════════════════════════════════════╗
-// ║                                                                          ║
-// ║     ██████╗  █████╗  ██████╗██╗  ██╗ ██████╗██╗  ██╗ █████╗ ████████╗    ║
-// ║     ██╔══██╗██╔══██╗██╔════╝██║ ██╔╝██╔════╝██║  ██║██╔══██╗╚══██╔══╝    ║
-// ║     ██████╔╝███████║██║     █████╔╝ ██║     ███████║███████║   ██║       ║
-// ║     ██╔══██╗██╔══██║██║     ██╔═██╗ ██║     ██╔══██║██╔══██║   ██║       ║
-// ║     ██████╔╝██║  ██║╚██████╗██║  ██╗╚██████╗██║  ██║██║  ██║   ██║       ║
-// ║     ╚═════╝ ╚═╝  ╚═╝ ╚═════╝╚═╝  ╚═╝ ╚═════╝╚═╝  ╚═╝╚═╝  ╚═╝   ╚═╝       ║
-// ║                                                                          ║
-// ║              Decentralized Social Network - Backchain Protocol           ║
-// ║                                                                          ║
-// ╠══════════════════════════════════════════════════════════════════════════╣
-// ║  Contract: Backchat.sol                                                  ║
-// ║  Version:  1.0.0                                                         ║
-// ║  Network:  Arbitrum One / Arbitrum Sepolia                               ║
-// ║  License:  MIT                                                           ║
-// ╠══════════════════════════════════════════════════════════════════════════╣
-// ║                                                                          ║
-// ║  FEATURES:                                                               ║
-// ║  ├─ Community-Driven Moderation (1 person = 1 vote)                      ║
-// ║  ├─ Score-Based Content Visibility (Safe/Unsafe voting)                  ║
-// ║  ├─ Creator Tips (split: Creator + Mining)                               ║
-// ║  ├─ Community Notes for Fact-Checking                                    ║
-// ║  ├─ E2EE Private Messaging                                               ║
-// ║  ├─ KYC Integration for Withdrawals                                      ║
-// ║  ├─ Post Boosting with ETH                                               ║
-// ║  └─ Inactive Balance Burning                                             ║
-// ║                                                                          ║
-// ║  MODERATION SYSTEM:                                                      ║
-// ║  ├─ Users vote SAFE or UNSAFE on content                                 ║
-// ║  ├─ Score = safeVotes - unsafeVotes                                      ║
-// ║  ├─ Score >= +threshold  → TRUSTED (highlighted)                         ║
-// ║  ├─ Score in neutral     → NORMAL  (default view)                        ║
-// ║  ├─ Score <= -warning    → WARNING (flagged)                             ║
-// ║  └─ Score <= -hidden     → HIDDEN  (collapsed)                           ║
-// ║                                                                          ║
-// ║  TIP DISTRIBUTION:                                                       ║
-// ║  ├─ Creator receives: tipAmount * (100% - tipMiningFeeBips)              ║
-// ║  └─ Mining receives:  tipAmount * tipMiningFeeBips                       ║
-// ║                                                                          ║
-// ║  KYC VERIFICATION:                                                       ║
-// ║  ├─ Optional (can be enabled/disabled)                                   ║
-// ║  ├─ External provider integration                                        ║
-// ║  └─ Required only for reward claims                                      ║
-// ║                                                                          ║
-// ║  ALL PARAMETERS ARE ADJUSTABLE:                                          ║
-// ║  ├─ Fees, thresholds, periods                                            ║
-// ║  ├─ Limits, denominators                                                 ║
-// ║  └─ Service keys, addresses                                              ║
-// ║                                                                          ║
-// ╠══════════════════════════════════════════════════════════════════════════╣
-// ║  Security: dev@backcoin.org | Website: https://backcoin.org              ║
-// ╚══════════════════════════════════════════════════════════════════════════╝
-
-import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
-import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
-import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
-import "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.sol";
-import "@openzeppelin/contracts-upgradeable/security/PausableUpgradeable.sol";
-import "@openzeppelin/contracts-upgradeable/token/ERC20/utils/SafeERC20Upgradeable.sol";
-import "@openzeppelin/contracts-upgradeable/token/ERC20/IERC20Upgradeable.sol";
-
-import "./IInterfaces.sol";
-import "./BKCToken.sol";
-
-/**
- * @title Backchat
- * @author Backchain Protocol
- * @notice Decentralized social network with community-driven moderation
- * @custom:security-contact dev@backcoin.org
+/*
+ * ═══════════════════════════════════════════════════════════════════════════════════
+ *
+ *                             BACKCHAIN PROTOCOL
+ *
+ *             ██████╗  █████╗  ██████╗██╗  ██╗ ██████╗██╗  ██╗ █████╗ ████████╗
+ *             ██╔══██╗██╔══██╗██╔════╝██║ ██╔╝██╔════╝██║  ██║██╔══██╗╚══██╔══╝
+ *             ██████╔╝███████║██║     █████╔╝ ██║     ███████║███████║   ██║
+ *             ██╔══██╗██╔══██║██║     ██╔═██╗ ██║     ██╔══██║██╔══██║   ██║
+ *             ██████╔╝██║  ██║╚██████╗██║  ██╗╚██████╗██║  ██║██║  ██║   ██║
+ *             ╚═════╝ ╚═╝  ╚═╝ ╚═════╝╚═╝  ╚═╝ ╚═════╝╚═╝  ╚═╝╚═╝  ╚═╝   ╚═╝
+ *
+ *                    P E R M I S S I O N L E S S   .   I M M U T A B L E
+ *
+ * ═══════════════════════════════════════════════════════════════════════════════════
+ *  Contract    : Backchat
+ *  Version     : 7.0.0
+ *  Network     : Arbitrum
+ *  License     : MIT
+ *  Solidity    : 0.8.28
+ * ═══════════════════════════════════════════════════════════════════════════════════
+ *
+ *  100% DECENTRALIZED SOCIAL PROTOCOL
+ *
+ *  This contract is part of a fully decentralized, permissionless,
+ *  and UNSTOPPABLE protocol.
+ *
+ *  - NO CENTRAL AUTHORITY    : Code is law
+ *  - NO PERMISSION NEEDED    : Anyone can become an Operator
+ *  - NO SINGLE POINT OF FAILURE : Runs on Arbitrum blockchain
+ *  - CENSORSHIP RESISTANT    : Cannot be stopped or controlled
+ *  - GRACEFUL DEGRADATION    : Works even if ecosystem contracts fail
+ *
+ * ═══════════════════════════════════════════════════════════════════════════════════
+ *
+ *  RESILIENCE DESIGN
+ *
+ *  This contract is designed to NEVER STOP working, even if:
+ *
+ *  ┌─────────────────────────────────────────────────────────────────────────────┐
+ *  │  SCENARIO                        │  BACKCHAT BEHAVIOR                       │
+ *  ├─────────────────────────────────────────────────────────────────────────────┤
+ *  │  Everything works normally       │  Full integration with ecosystem         │
+ *  │  EcosystemManager fails          │  Treasury share → Operator (fallback)    │
+ *  │  MiningManager fails             │  BKC tip → 100% Creator (fallback)       │
+ *  │  BKC token paused                │  ETH works, BKC tips silently skip       │
+ *  │  All external contracts fail     │  ETH distribution continues (basic mode) │
+ *  └─────────────────────────────────────────────────────────────────────────────┘
+ *
+ *  THE PROTOCOL NEVER STOPS. POSTS ARE FOREVER.
+ *
+ * ═══════════════════════════════════════════════════════════════════════════════════
+ *
+ *  BECOME AN OPERATOR
+ *
+ *  Anyone in the world can:
+ *
+ *  1. Build their own frontend, app, bot, or tool for Backchat
+ *  2. Pass their wallet address as the "operator" parameter
+ *  3. Earn ETH from ALL fees + BKC from MiningManager
+ *
+ *  No registration. No approval. No KYC. Just build and earn.
+ *
+ * ═══════════════════════════════════════════════════════════════════════════════════
+ *
+ *  FEE STRUCTURE
+ *
+ *  ┌─────────────────────────────────────────────────────────────────────────────┐
+ *  │                         ETH FEE (20% of gas cost)                           │
+ *  ├─────────────────────────────────────────────────────────────────────────────┤
+ *  │                                                                             │
+ *  │  ACTIONS WITH CREATOR (Reply, Like, Super Like, Follow, Repost):            │
+ *  │  ├── 40% → Creator                                                          │
+ *  │  ├── 30% → Operator                                                         │
+ *  │  └── 30% → Treasury                                                         │
+ *  │                                                                             │
+ *  │  ACTIONS WITHOUT CREATOR (Post, Username, Boost, Badge):                    │
+ *  │  ├── 60% → Operator                                                         │
+ *  │  └── 40% → Treasury                                                         │
+ *  │                                                                             │
+ *  └─────────────────────────────────────────────────────────────────────────────┘
+ *
+ *  ┌─────────────────────────────────────────────────────────────────────────────┐
+ *  │                    BKC TIP (Integrated with Ecosystem)                      │
+ *  ├─────────────────────────────────────────────────────────────────────────────┤
+ *  │                                                                             │
+ *  │  90% → CREATOR (direct, instant)                                            │
+ *  │                                                                             │
+ *  │  10% → MINING MANAGER (feeds entire ecosystem)                              │
+ *  │        ├── Operator rewards (config%)                                       │
+ *  │        ├── Burn (deflationary)                                              │
+ *  │        ├── Mining rewards → Treasury + Delegators                           │
+ *  │        └── Fee distribution → Treasury + Delegators                         │
+ *  │                                                                             │
+ *  │  FALLBACK: If MiningManager fails, 100% goes to Creator                     │
+ *  │                                                                             │
+ *  └─────────────────────────────────────────────────────────────────────────────┘
+ *
+ * ═══════════════════════════════════════════════════════════════════════════════════
+ *
+ *  SUPER LIKE = ORGANIC TRENDING
+ *
+ *  • Anyone can Super Like (minimum 0.0001 ETH)
+ *  • Amount is FREE (can pay 0.0001 or 1 ETH)
+ *  • MULTIPLE Super Likes allowed on same post
+ *  • Frontend sums all and ranks posts by "trending"
+ *  • Community decides what deserves visibility!
+ *
+ * ═══════════════════════════════════════════════════════════════════════════════════
+ *
+ *  PREMIUM FEATURES
+ *
+ *  +------------------+-------------------+----------------------------------------+
+ *  | Feature          | Price             | Effect                                 |
+ *  +------------------+-------------------+----------------------------------------+
+ *  | Username 1 char  | 1 ETH             | Ultra-rare vanity name                 |
+ *  | Username 2 chars | 0.2 ETH           | Very rare vanity name                  |
+ *  | Username 3 chars | 0.03 ETH          | Rare vanity name                       |
+ *  | Username 4 chars | 0.004 ETH         | Premium name                           |
+ *  | Username 5 chars | 0.0005 ETH        | Short name                             |
+ *  | Username 6 chars | 0.0001 ETH        | Nice name                              |
+ *  | Username 7+ char | FREE              | Standard name                          |
+ *  +------------------+-------------------+----------------------------------------+
+ *  | Profile Boost    | ≥0.0005 ETH       | +1 day visibility per 0.0005 ETH       |
+ *  | Trust Badge      | 0.001 ETH         | Verified badge for 1 year              |
+ *  | Super Like       | ≥0.0001 ETH       | Premium engagement + trending          |
+ *  +------------------+-------------------+----------------------------------------+
+ *
+ * ═══════════════════════════════════════════════════════════════════════════════════
+ *  Security Contact : dev@backcoin.org
+ *  Website          : https://backcoin.org
+ *  Documentation    : https://github.com/backcoin-org/backchain-dapp/tree/main/docs
+ * ═══════════════════════════════════════════════════════════════════════════════════
  */
-contract Backchat is
-    Initializable,
-    UUPSUpgradeable,
-    OwnableUpgradeable,
-    ReentrancyGuardUpgradeable,
-    PausableUpgradeable
-{
-    using SafeERC20Upgradeable for BKCToken;
-    using SafeERC20Upgradeable for IERC20Upgradeable;
 
-    // ╔════════════════════════════════════════════════════════════════════════╗
-    // ║                              ENUMS                                      ║
-    // ╚════════════════════════════════════════════════════════════════════════╝
+// ═══════════════════════════════════════════════════════════════════════════════════
+//                                  INTERFACES
+// ═══════════════════════════════════════════════════════════════════════════════════
 
-    /**
-     * @notice Content visibility status based on community voting
-     * @dev Calculated from score = safeVotes - unsafeVotes
-     */
-    enum ContentStatus {
-        Normal,     // Score in neutral range
-        Trusted,    // Score >= thresholdTrusted
-        Warning,    // Score <= -thresholdWarning
-        Hidden      // Score <= -thresholdHidden
-    }
+interface IEcosystemManager {
+    function getTreasuryAddress() external view returns (address);
+    function getMiningManagerAddress() external view returns (address);
+}
 
-    /**
-     * @notice Community note approval status
-     */
-    enum NoteStatus {
-        Pending,    // Under review
-        Approved,   // Accepted by community
-        Rejected    // Rejected by community
-    }
+interface IBKC {
+    function transferFrom(address from, address to, uint256 amount) external returns (bool);
+    function transfer(address to, uint256 amount) external returns (bool);
+    function balanceOf(address account) external view returns (uint256);
+}
 
-    // ╔════════════════════════════════════════════════════════════════════════╗
-    // ║                              STRUCTS                                    ║
-    // ╚════════════════════════════════════════════════════════════════════════╝
+interface IMiningManager {
+    function performPurchaseMiningWithOperator(
+        bytes32 serviceKey,
+        uint256 purchaseAmount,
+        address operator
+    ) external payable;
+}
 
-    /// @notice Public post data
-    struct Post {
-        uint256 id;
-        address author;
-        string content;
-        string ipfsHash;
-        uint256 createdAt;
-        uint256 editedAt;
-        bool exists;
-        bool deleted;
-    }
+// ═══════════════════════════════════════════════════════════════════════════════════
+//                                   CONTRACT
+// ═══════════════════════════════════════════════════════════════════════════════════
 
-    /// @notice Comment with threading support
-    struct Comment {
-        uint256 id;
-        uint256 postId;
-        uint256 parentCommentId;    // 0 = direct reply to post
-        address author;
-        string content;
-        string ipfsHash;
-        uint256 createdAt;
-        bool exists;
-        bool deleted;
-    }
-
-    /// @notice Community note for fact-checking
-    struct CommunityNote {
-        uint256 id;
-        uint256 postId;
-        address author;
-        string content;
-        string ipfsHash;
-        uint256 createdAt;
-        bool exists;
-    }
-
-    /// @notice Private message (E2EE)
-    struct PrivateMessage {
-        uint256 id;
-        uint256 conversationId;
-        uint256 parentMessageId;
-        address sender;
-        address recipient;
-        string encryptedContent;
-        string encryptedIpfsHash;
-        uint256 sentAt;
-        bool exists;
-    }
-
-    /// @notice Voting score for content moderation
-    struct ModerationScore {
-        uint256 safeVotes;
-        uint256 unsafeVotes;
-        uint256 totalVoters;
-    }
-
-    /// @notice Voting score for community notes
-    struct NoteVotingScore {
-        uint256 believeVotes;
-        uint256 dontBelieveVotes;
-        uint256 totalVoters;
-    }
-
-    /// @notice KYC verification data
-    struct KYCData {
-        bool verified;
-        uint8 level;
-        uint256 verifiedAt;
-        uint256 expiresAt;
-    }
-
-    /// @notice Creator statistics
-    struct CreatorStats {
-        uint256 totalPosts;
-        uint256 totalComments;
-        uint256 totalTipsReceived;
-        uint256 totalTipsClaimed;
-        uint256 reputationScore;
-    }
-
-    // ╔════════════════════════════════════════════════════════════════════════╗
-    // ║                         ADJUSTABLE PARAMETERS                           ║
-    // ╚════════════════════════════════════════════════════════════════════════╝
-
-    // --- Core Parameters (all adjustable) ---
+contract Backchat {
     
-    /// @notice Basis points denominator (default: 10000 = 100%)
-    uint256 public bipsDenominator;
-
-    /// @notice Service key for MiningManager
-    bytes32 public serviceKey;
-
-    // --- Fee Parameters ---
-
-    /// @notice Platform fee for actions (posting, voting, etc.)
-    uint256 public platformFee;
-
-    /// @notice Percentage of platform fee to MiningManager (bips)
-    uint256 public platformMiningFeeBips;
-
-    /// @notice Percentage of platform fee to Treasury (bips)
-    uint256 public platformTreasuryFeeBips;
-
-    /// @notice Minimum tip amount
-    uint256 public minTipAmount;
-
-    /// @notice Percentage of tips to MiningManager (bips)
-    /// @dev Creator receives: tip * (bipsDenominator - tipMiningFeeBips) / bipsDenominator
-    uint256 public tipMiningFeeBips;
-
-    // --- Moderation Thresholds ---
-
-    /// @notice Score threshold for TRUSTED status (positive)
-    uint256 public thresholdTrusted;
-
-    /// @notice Score threshold for WARNING status (negative, absolute value)
-    uint256 public thresholdWarning;
-
-    /// @notice Score threshold for HIDDEN status (negative, absolute value)
-    uint256 public thresholdHidden;
-
-    /// @notice Score threshold for note approval
-    uint256 public noteApprovalThreshold;
-
-    /// @notice Score threshold for note rejection (negative)
-    uint256 public noteRejectionThreshold;
-
-    // --- Time Parameters ---
-
-    /// @notice Period of inactivity before balance can be burned
-    uint256 public inactivityBurnPeriod;
-
-    /// @notice Cooldown between posts (anti-spam)
-    uint256 public postCooldown;
-
-    /// @notice Cooldown between comments
-    uint256 public commentCooldown;
-
-    // --- Limits ---
-
-    /// @notice Maximum platform fee allowed
-    uint256 public maxPlatformFee;
-
-    /// @notice Maximum tip mining fee (bips)
-    uint256 public maxTipMiningFeeBips;
-
-    /// @notice Maximum content length (characters)
-    uint256 public maxContentLength;
-
-    /// @notice Maximum IPFS hash length
-    uint256 public maxIpfsHashLength;
-
-    /// @notice Minimum inactivity burn period
-    uint256 public minInactivityBurnPeriod;
-
-    // --- KYC Configuration ---
-
-    /// @notice Whether KYC is required for withdrawals
-    bool public kycRequired;
-
-    /// @notice KYC provider contract address
-    address public kycProvider;
-
-    /// @notice Minimum KYC level required
-    uint8 public kycMinimumLevel;
-
-    /// @notice KYC validity period (0 = never expires)
-    uint256 public kycValidityPeriod;
-
-    // ╔════════════════════════════════════════════════════════════════════════╗
-    // ║                         ECOSYSTEM REFERENCES                            ║
-    // ╚════════════════════════════════════════════════════════════════════════╝
-
-    /// @notice Ecosystem manager contract
-    IEcosystemManager public ecosystemManager;
-
-    /// @notice BKC token contract
-    BKCToken public bkcToken;
-
-    /// @notice Treasury address
-    address public treasury;
-
-    // ╔════════════════════════════════════════════════════════════════════════╗
-    // ║                         STORAGE - POSTS                                 ║
-    // ╚════════════════════════════════════════════════════════════════════════╝
-
-    /// @notice Post ID => Post data
-    mapping(uint256 => Post) internal _posts;
-
-    /// @notice Post ID => Moderation score
-    mapping(uint256 => ModerationScore) internal _postScores;
-
-    /// @notice Post ID => Comment IDs
-    mapping(uint256 => uint256[]) internal _postComments;
-
-    /// @notice Post ID => Note IDs
-    mapping(uint256 => uint256[]) internal _postNotes;
-
-    /// @notice Post ID => Total ETH boost
-    mapping(uint256 => uint256) public postBoostAmount;
-
-    /// @notice Post ID => Total tips received
-    mapping(uint256 => uint256) public postTipsReceived;
-
-    /// @notice Total posts counter
-    uint256 internal _totalPosts;
-
-    // ╔════════════════════════════════════════════════════════════════════════╗
-    // ║                         STORAGE - COMMENTS                              ║
-    // ╚════════════════════════════════════════════════════════════════════════╝
-
-    /// @notice Comment ID => Comment data
-    mapping(uint256 => Comment) internal _comments;
-
-    /// @notice Comment ID => Moderation score
-    mapping(uint256 => ModerationScore) internal _commentScores;
-
-    /// @notice Comment ID => Reply IDs
-    mapping(uint256 => uint256[]) internal _commentReplies;
-
-    /// @notice Total comments counter
-    uint256 internal _totalComments;
-
-    // ╔════════════════════════════════════════════════════════════════════════╗
-    // ║                         STORAGE - NOTES                                 ║
-    // ╚════════════════════════════════════════════════════════════════════════╝
-
-    /// @notice Note ID => Note data
-    mapping(uint256 => CommunityNote) internal _notes;
-
-    /// @notice Note ID => Voting score
-    mapping(uint256 => NoteVotingScore) internal _noteScores;
-
-    /// @notice Total notes counter
-    uint256 internal _totalNotes;
-
-    // ╔════════════════════════════════════════════════════════════════════════╗
-    // ║                         STORAGE - MESSAGES                              ║
-    // ╚════════════════════════════════════════════════════════════════════════╝
-
-    /// @notice Message ID => Message data
-    mapping(uint256 => PrivateMessage) internal _messages;
-
-    /// @notice Conversation ID => Message IDs
-    mapping(uint256 => uint256[]) internal _conversationMessages;
-
-    /// @notice User => Conversation IDs
-    mapping(address => uint256[]) internal _userConversations;
-
-    /// @notice User => E2EE public key
-    mapping(address => bytes) internal _publicKeys;
-
-    /// @notice Total messages counter
-    uint256 internal _totalMessages;
-
-    /// @notice Total conversations counter
-    uint256 internal _totalConversations;
-
-    // ╔════════════════════════════════════════════════════════════════════════╗
-    // ║                         STORAGE - VOTING                                ║
-    // ╚════════════════════════════════════════════════════════════════════════╝
-
-    /// @notice User => Post ID => Has voted
-    mapping(address => mapping(uint256 => bool)) internal _votedOnPost;
-
-    /// @notice User => Comment ID => Has voted
-    mapping(address => mapping(uint256 => bool)) internal _votedOnComment;
-
-    /// @notice User => Note ID => Has voted
-    mapping(address => mapping(uint256 => bool)) internal _votedOnNote;
-
-    // ╔════════════════════════════════════════════════════════════════════════╗
-    // ║                         STORAGE - CREATOR ECONOMY                       ║
-    // ╚════════════════════════════════════════════════════════════════════════╝
-
-    /// @notice Creator => Pending balance (from tips)
-    mapping(address => uint256) public creatorBalance;
-
-    /// @notice Creator => Last activity timestamp
-    mapping(address => uint256) public lastActivity;
-
-    /// @notice Creator => Statistics
-    mapping(address => CreatorStats) internal _creatorStats;
-
-    /// @notice Creator => KYC data (cached from provider)
-    mapping(address => KYCData) internal _kycCache;
-
-    // ╔════════════════════════════════════════════════════════════════════════╗
-    // ║                         STORAGE - AUTHOR TRACKING                       ║
-    // ╚════════════════════════════════════════════════════════════════════════╝
-
-    /// @notice Author => Post IDs
-    mapping(address => uint256[]) internal _authorPosts;
-
-    /// @notice Author => Comment IDs
-    mapping(address => uint256[]) internal _authorComments;
-
-    /// @notice Author => Note IDs
-    mapping(address => uint256[]) internal _authorNotes;
-
-    /// @notice Author => Last post timestamp (for cooldown)
-    mapping(address => uint256) internal _lastPostTime;
-
-    /// @notice Author => Last comment timestamp (for cooldown)
-    mapping(address => uint256) internal _lastCommentTime;
-
-    // ╔════════════════════════════════════════════════════════════════════════╗
-    // ║                         STORAGE - STATISTICS                            ║
-    // ╚════════════════════════════════════════════════════════════════════════╝
-
-    /// @notice Total platform fees collected
-    uint256 public totalPlatformFees;
-
-    /// @notice Total tips processed
-    uint256 public totalTipsProcessed;
-
-    /// @notice Total tips to creators
-    uint256 public totalTipsToCreators;
-
-    /// @notice Total tips to mining
-    uint256 public totalTipsToMining;
-
-    /// @notice Total ETH boost collected
-    uint256 public totalBoostCollected;
-
-    /// @notice Total burned from inactive accounts
-    uint256 public totalBurnedInactive;
-
-    // ╔════════════════════════════════════════════════════════════════════════╗
-    // ║                         STORAGE GAP                                     ║
-    // ╚════════════════════════════════════════════════════════════════════════╝
-
-    /// @notice Reserved for future upgrades
-    uint256[50] private __gap;
-
-    // ╔════════════════════════════════════════════════════════════════════════╗
-    // ║                              EVENTS                                      ║
-    // ╚════════════════════════════════════════════════════════════════════════╝
-
-    // --- Content Events ---
+    // ═══════════════════════════════════════════════════════════════════════════════
+    //                              CONSTANTS
+    // ═══════════════════════════════════════════════════════════════════════════════
+
+    // ─────────────────────────────────────────────────────────────────────────────
+    // Service Key
+    // ─────────────────────────────────────────────────────────────────────────────
+    
+    /// @notice Service key for MiningManager authorization
+    bytes32 public constant SERVICE_KEY = keccak256("BACKCHAT_SERVICE");
+    
+    // ─────────────────────────────────────────────────────────────────────────────
+    // Gas Estimates (for dynamic fee calculation)
+    // ─────────────────────────────────────────────────────────────────────────────
+    
+    uint256 private constant GAS_POST = 50000;
+    uint256 private constant GAS_REPLY = 55000;
+    uint256 private constant GAS_LIKE = 55000;
+    uint256 private constant GAS_FOLLOW = 45000;
+    uint256 private constant GAS_REPOST = 50000;
+    
+    // ─────────────────────────────────────────────────────────────────────────────
+    // Fee Configuration
+    // ─────────────────────────────────────────────────────────────────────────────
+    
+    /// @notice Fee percentage of gas cost (20%)
+    uint256 private constant FEE_PERCENT = 20;
+    
+    /// @notice Basis points denominator
+    uint256 private constant BIPS = 10000;
+    
+    // ETH split WITH creator (40/30/30)
+    uint256 private constant CREATOR_BIPS = 4000;
+    uint256 private constant OPERATOR_BIPS = 3000;
+    uint256 private constant TREASURY_BIPS = 3000;
+    
+    // ETH split WITHOUT creator (60/40)
+    uint256 private constant OPERATOR_NO_CREATOR_BIPS = 6000;
+    uint256 private constant TREASURY_NO_CREATOR_BIPS = 4000;
+    
+    // BKC tip split (90% creator, 10% mining ecosystem)
+    uint256 private constant CREATOR_TIP_BIPS = 9000;
+    uint256 private constant MINING_TIP_BIPS = 1000;
+    
+    // ─────────────────────────────────────────────────────────────────────────────
+    // Premium Features Pricing
+    // ─────────────────────────────────────────────────────────────────────────────
+    
+    uint256 private constant SUPER_LIKE_MIN = 0.0001 ether;
+    uint256 private constant BOOST_MIN = 0.0005 ether;
+    uint256 private constant BOOST_RATE = 1 days;
+    uint256 private constant BADGE_FEE = 0.001 ether;
+    uint256 private constant BADGE_DURATION = 365 days;
+    
+    // Username pricing by length
+    uint256 private constant USERNAME_1_CHAR = 1 ether;
+    uint256 private constant USERNAME_2_CHAR = 0.2 ether;
+    uint256 private constant USERNAME_3_CHAR = 0.03 ether;
+    uint256 private constant USERNAME_4_CHAR = 0.004 ether;
+    uint256 private constant USERNAME_5_CHAR = 0.0005 ether;
+    uint256 private constant USERNAME_6_CHAR = 0.0001 ether;
+    
+    // ─────────────────────────────────────────────────────────────────────────────
+    // Content Limits
+    // ─────────────────────────────────────────────────────────────────────────────
+    
+    uint256 private constant MAX_CONTENT = 500;
+    uint256 private constant MAX_BIO = 160;
+    uint256 private constant MAX_DISPLAY_NAME = 30;
+    uint256 private constant MIN_USERNAME = 1;
+    uint256 private constant MAX_USERNAME = 15;
+    
+    // ═══════════════════════════════════════════════════════════════════════════════
+    //                              IMMUTABLES
+    // ═══════════════════════════════════════════════════════════════════════════════
+    
+    /// @notice BKC token contract address
+    address public immutable bkcToken;
+    
+    /// @notice EcosystemManager contract address
+    address public immutable ecosystemManager;
+    
+    // ═══════════════════════════════════════════════════════════════════════════════
+    //                              STATE VARIABLES
+    // ═══════════════════════════════════════════════════════════════════════════════
+    
+    // ─────────────────────────────────────────────────────────────────────────────
+    // Counters
+    // ─────────────────────────────────────────────────────────────────────────────
+    
+    /// @notice Total posts created
+    uint256 public postCounter;
+    
+    // ─────────────────────────────────────────────────────────────────────────────
+    // Core Mappings
+    // ─────────────────────────────────────────────────────────────────────────────
+    
+    /// @notice Post ID → Author address
+    mapping(uint256 => address) public postAuthor;
+    
+    /// @notice Address → Pending ETH balance for withdrawal
+    mapping(address => uint256) public pendingEth;
+    
+    /// @notice Username hash → Owner address (ensures uniqueness)
+    mapping(bytes32 => address) public usernameOwner;
+    
+    /// @notice Post ID → User → Has liked (limit 1 per post per user)
+    mapping(uint256 => mapping(address => bool)) public hasLiked;
+    
+    // ─────────────────────────────────────────────────────────────────────────────
+    // Premium Features
+    // ─────────────────────────────────────────────────────────────────────────────
+    
+    /// @notice Address → Profile boost expiration timestamp
+    mapping(address => uint256) public boostExpiry;
+    
+    /// @notice Address → Trust badge expiration timestamp
+    mapping(address => uint256) public badgeExpiry;
+    
+    // ═══════════════════════════════════════════════════════════════════════════════
+    //                              EVENTS
+    // ═══════════════════════════════════════════════════════════════════════════════
+    
+    // ─────────────────────────────────────────────────────────────────────────────
+    // Profile Events
+    // ─────────────────────────────────────────────────────────────────────────────
+    
+    event ProfileCreated(
+        address indexed user,
+        bytes32 indexed usernameHash,
+        string username,
+        string displayName,
+        string bio,
+        uint256 ethPaid,
+        address indexed operator
+    );
+    
+    event ProfileUpdated(
+        address indexed user,
+        string displayName,
+        string bio
+    );
+    
+    // ─────────────────────────────────────────────────────────────────────────────
+    // Content Events
+    // ─────────────────────────────────────────────────────────────────────────────
+    
     event PostCreated(
         uint256 indexed postId,
         address indexed author,
         string content,
-        string ipfsHash,
-        uint256 timestamp
+        string mediaCID,
+        address indexed operator
     );
-
-    event PostEdited(
+    
+    event ReplyCreated(
         uint256 indexed postId,
+        uint256 indexed parentId,
         address indexed author,
-        string newContent,
-        string newIpfsHash,
-        uint256 timestamp
+        string content,
+        string mediaCID,
+        uint256 tipBkc,
+        address operator
     );
-
-    event PostDeleted(
+    
+    event RepostCreated(
+        uint256 indexed newPostId,
+        uint256 indexed originalPostId,
+        address indexed reposter,
+        uint256 tipBkc,
+        address operator
+    );
+    
+    // ─────────────────────────────────────────────────────────────────────────────
+    // Engagement Events
+    // ─────────────────────────────────────────────────────────────────────────────
+    
+    event Liked(
         uint256 indexed postId,
-        address indexed author,
-        uint256 timestamp
-    );
-
-    event CommentCreated(
-        uint256 indexed commentId,
-        uint256 indexed postId,
-        uint256 parentCommentId,
-        address indexed author,
-        uint256 timestamp
-    );
-
-    event CommentDeleted(
-        uint256 indexed commentId,
-        address indexed author,
-        uint256 timestamp
-    );
-
-    // --- Moderation Events ---
-    event ContentVoted(
-        uint256 indexed contentId,
-        bool isPost,
-        address indexed voter,
-        bool votedSafe,
-        int256 newScore,
-        ContentStatus newStatus,
-        uint256 timestamp
-    );
-
-    event NoteProposed(
-        uint256 indexed noteId,
-        uint256 indexed postId,
-        address indexed author,
-        uint256 timestamp
-    );
-
-    event NoteVoted(
-        uint256 indexed noteId,
-        address indexed voter,
-        bool believe,
-        int256 newScore,
-        NoteStatus newStatus,
-        uint256 timestamp
-    );
-
-    // --- Tip Events ---
-    event TipSent(
-        address indexed sender,
-        address indexed creator,
-        uint256 indexed postId,
-        uint256 totalAmount,
-        uint256 toCreator,
-        uint256 toMining,
-        uint256 timestamp
-    );
-
-    event RewardsClaimed(
-        address indexed creator,
-        uint256 amount,
-        uint256 timestamp
-    );
-
-    event InactiveBalanceBurned(
-        address indexed creator,
-        uint256 amount,
-        address indexed burnedBy,
-        uint256 timestamp
-    );
-
-    // --- Boost Events ---
-    event PostBoosted(
-        uint256 indexed postId,
-        address indexed booster,
-        uint256 amount,
-        uint256 totalBoost,
-        uint256 timestamp
-    );
-
-    // --- Message Events ---
-    event PublicKeyRegistered(
         address indexed user,
-        uint256 timestamp
+        uint256 tipBkc,
+        address indexed operator
     );
-
-    event PrivateMessageSent(
-        uint256 indexed messageId,
-        uint256 indexed conversationId,
-        address indexed sender,
-        address recipient,
-        uint256 timestamp
-    );
-
-    // --- KYC Events ---
-    event KYCVerified(
+    
+    event SuperLiked(
+        uint256 indexed postId,
         address indexed user,
-        uint8 level,
+        uint256 ethAmount,
+        uint256 tipBkc,
+        address indexed operator
+    );
+    
+    event Followed(
+        address indexed follower,
+        address indexed followed,
+        uint256 tipBkc,
+        address indexed operator
+    );
+    
+    event Unfollowed(
+        address indexed follower,
+        address indexed followed
+    );
+    
+    // ─────────────────────────────────────────────────────────────────────────────
+    // Premium Events
+    // ─────────────────────────────────────────────────────────────────────────────
+    
+    event ProfileBoosted(
+        address indexed user,
+        uint256 amount,
         uint256 expiresAt,
-        uint256 timestamp
+        address indexed operator
     );
-
-    event KYCRevoked(
+    
+    event BadgeObtained(
         address indexed user,
-        uint256 timestamp
+        uint256 expiresAt,
+        address indexed operator
     );
-
-    // --- Config Events ---
-    event ParameterUpdated(
-        string indexed parameter,
-        uint256 oldValue,
-        uint256 newValue,
-        uint256 timestamp
+    
+    // ─────────────────────────────────────────────────────────────────────────────
+    // Financial Events
+    // ─────────────────────────────────────────────────────────────────────────────
+    
+    event Withdrawal(
+        address indexed user,
+        uint256 amount
     );
-
-    event AddressUpdated(
-        string indexed parameter,
-        address oldAddress,
-        address newAddress,
-        uint256 timestamp
+    
+    event TipProcessed(
+        address indexed from,
+        address indexed creator,
+        uint256 totalBkc,
+        uint256 creatorShare,
+        uint256 miningShare,
+        address indexed operator
     );
-
-    // ╔════════════════════════════════════════════════════════════════════════╗
-    // ║                              ERRORS                                      ║
-    // ╚════════════════════════════════════════════════════════════════════════╝
-
-    error ZeroAddress();
-    error ZeroAmount();
-    error EmptyContent();
-    error ContentTooLong();
+    
+    event TipFallback(
+        address indexed from,
+        address indexed creator,
+        uint256 amount,
+        string reason
+    );
+    
+    event EthDistributed(
+        address indexed creator,
+        address indexed operator,
+        address treasury,
+        uint256 creatorShare,
+        uint256 operatorShare,
+        uint256 treasuryShare
+    );
+    
+    event EcosystemCallFailed(
+        string functionName,
+        bytes reason
+    );
+    
+    // ═══════════════════════════════════════════════════════════════════════════════
+    //                              ERRORS
+    // ═══════════════════════════════════════════════════════════════════════════════
+    
+    error InsufficientFee();
     error PostNotFound();
-    error CommentNotFound();
-    error NoteNotFound();
-    error MessageNotFound();
-    error AlreadyVoted();
-    error NotAuthor();
-    error NotParticipant();
-    error NoPublicKey();
-    error CooldownActive();
-    error NoBalance();
-    error BoosterRequired();
-    error KYCNotVerified();
-    error KYCExpired();
-    error AccountNotInactive();
-    error InvalidConfiguration();
-    error ExceedsLimit();
-    error CannotTipSelf();
-    error BelowMinimum();
-
-    // ╔════════════════════════════════════════════════════════════════════════╗
-    // ║                              MODIFIERS                                   ║
-    // ╚════════════════════════════════════════════════════════════════════════╝
-
-    modifier validPost(uint256 _postId) {
-        if (!_posts[_postId].exists || _posts[_postId].deleted) revert PostNotFound();
-        _;
-    }
-
-    modifier validComment(uint256 _commentId) {
-        if (!_comments[_commentId].exists || _comments[_commentId].deleted) revert CommentNotFound();
-        _;
-    }
-
-    modifier validNote(uint256 _noteId) {
-        if (!_notes[_noteId].exists) revert NoteNotFound();
-        _;
-    }
-
-    modifier validContent(string calldata _content, string calldata _ipfsHash) {
-        if (bytes(_content).length == 0 && bytes(_ipfsHash).length == 0) revert EmptyContent();
-        if (bytes(_content).length > maxContentLength) revert ContentTooLong();
-        if (bytes(_ipfsHash).length > maxIpfsHashLength) revert ContentTooLong();
-        _;
-    }
-
-    // ╔════════════════════════════════════════════════════════════════════════╗
-    // ║                           INITIALIZATION                                ║
-    // ╚════════════════════════════════════════════════════════════════════════╝
-
-    /// @custom:oz-upgrades-unsafe-allow constructor
-    constructor() {
-        _disableInitializers();
-    }
-
+    error AlreadyLiked();
+    error InvalidUsername();
+    error UsernameTaken();
+    error ContentTooLong();
+    error NothingToWithdraw();
+    error TransferFailed();
+    error InvalidAddress();
+    error SelfActionNotAllowed();
+    
+    // ═══════════════════════════════════════════════════════════════════════════════
+    //                              CONSTRUCTOR
+    // ═══════════════════════════════════════════════════════════════════════════════
+    
     /**
      * @notice Initializes the Backchat contract
-     * @param _owner Contract owner
-     * @param _ecosystemManager Ecosystem manager address
+     * @param _bkcToken Address of the BKC token contract
+     * @param _ecosystemManager Address of the EcosystemManager contract
      */
-    function initialize(
-        address _owner,
-        address _ecosystemManager
-    ) external initializer {
-        if (_owner == address(0)) revert ZeroAddress();
-        if (_ecosystemManager == address(0)) revert ZeroAddress();
-
-        __Ownable_init();
-        __UUPSUpgradeable_init();
-        __ReentrancyGuard_init();
-        __Pausable_init();
-
-        _transferOwnership(_owner);
-
-        // Ecosystem
-        ecosystemManager = IEcosystemManager(_ecosystemManager);
-        bkcToken = BKCToken(ecosystemManager.getBKCTokenAddress());
-        treasury = ecosystemManager.getTreasuryAddress();
-
-        // Core (adjustable)
-        bipsDenominator = 10_000;
-        serviceKey = keccak256("BACKCHAT_SERVICE");
-
-        // Fees (adjustable)
-        platformFee = 1 ether;                  // 1 BKC
-        platformMiningFeeBips = 3000;           // 30% to mining
-        platformTreasuryFeeBips = 7000;         // 70% to treasury
-        minTipAmount = 1 ether;                 // 1 BKC minimum
-        tipMiningFeeBips = 1000;                // 10% of tip to mining
-
-        // Moderation thresholds (adjustable)
-        thresholdTrusted = 10;                  // +10 for trusted
-        thresholdWarning = 10;                  // -10 for warning
-        thresholdHidden = 50;                   // -50 for hidden
-        noteApprovalThreshold = 10;             // +10 to approve
-        noteRejectionThreshold = 5;             // -5 to reject
-
-        // Time (adjustable)
-        inactivityBurnPeriod = 365 days;        // 1 year
-        postCooldown = 0;                       // No cooldown by default
-        commentCooldown = 0;                    // No cooldown by default
-
-        // Limits (adjustable)
-        maxPlatformFee = 10 ether;              // 10 BKC max
-        maxTipMiningFeeBips = 5000;             // 50% max
-        maxContentLength = 50_000;              // ~50KB
-        maxIpfsHashLength = 100;                // IPFS CID
-        minInactivityBurnPeriod = 30 days;      // 30 days min
-
-        // KYC (adjustable)
-        kycRequired = false;                    // Disabled by default
-        kycMinimumLevel = 1;                    // Level 1 minimum
-        kycValidityPeriod = 365 days;           // 1 year validity
+    constructor(address _bkcToken, address _ecosystemManager) {
+        if (_bkcToken == address(0)) revert InvalidAddress();
+        if (_ecosystemManager == address(0)) revert InvalidAddress();
+        
+        bkcToken = _bkcToken;
+        ecosystemManager = _ecosystemManager;
     }
-
-    function _authorizeUpgrade(address) internal override onlyOwner {}
-
-    // ╔════════════════════════════════════════════════════════════════════════╗
-    // ║                              POSTS                                       ║
-    // ╚════════════════════════════════════════════════════════════════════════╝
-
+    
+    // ═══════════════════════════════════════════════════════════════════════════════
+    //                          FEE CALCULATION
+    // ═══════════════════════════════════════════════════════════════════════════════
+    
     /**
-     * @notice Creates a new public post
-     * @param _content Text content
-     * @param _ipfsHash IPFS hash for media
-     * @return postId Created post ID
+     * @notice Calculates dynamic fee based on current gas price
+     * @param gasEstimate Estimated gas for the operation
+     * @return Fee amount in wei
+     */
+    function calculateFee(uint256 gasEstimate) public view returns (uint256) {
+        return (gasEstimate * tx.gasprice * FEE_PERCENT) / 100;
+    }
+    
+    /**
+     * @notice Returns current fees for all operations
+     * @dev Frontend should call this before each action to show user the cost
+     */
+    function getCurrentFees() external view returns (
+        uint256 postFee,
+        uint256 replyFee,
+        uint256 likeFee,
+        uint256 followFee,
+        uint256 repostFee,
+        uint256 superLikeMin,
+        uint256 boostMin,
+        uint256 badgeFee_
+    ) {
+        postFee = calculateFee(GAS_POST);
+        replyFee = calculateFee(GAS_REPLY);
+        likeFee = calculateFee(GAS_LIKE);
+        followFee = calculateFee(GAS_FOLLOW);
+        repostFee = calculateFee(GAS_REPOST);
+        superLikeMin = SUPER_LIKE_MIN;
+        boostMin = BOOST_MIN;
+        badgeFee_ = BADGE_FEE;
+    }
+    
+    /**
+     * @notice Returns username fee based on length
+     * @param length Number of characters in username
+     * @return Fee in ETH (0 for 7+ characters)
+     */
+    function getUsernameFee(uint256 length) public pure returns (uint256) {
+        if (length == 1) return USERNAME_1_CHAR;
+        if (length == 2) return USERNAME_2_CHAR;
+        if (length == 3) return USERNAME_3_CHAR;
+        if (length == 4) return USERNAME_4_CHAR;
+        if (length == 5) return USERNAME_5_CHAR;
+        if (length == 6) return USERNAME_6_CHAR;
+        return 0;
+    }
+    
+    // ═══════════════════════════════════════════════════════════════════════════════
+    //                          PROFILE FUNCTIONS
+    // ═══════════════════════════════════════════════════════════════════════════════
+    
+    /**
+     * @notice Creates a new user profile with username
+     * @param username Unique username (1-15 chars, lowercase a-z, 0-9, underscore)
+     * @param displayName Display name (max 30 chars)
+     * @param bio User biography (max 160 chars)
+     * @param operator Frontend operator address
+     */
+    function createProfile(
+        string calldata username,
+        string calldata displayName,
+        string calldata bio,
+        address operator
+    ) external payable {
+        bytes memory usernameBytes = bytes(username);
+        uint256 len = usernameBytes.length;
+        
+        // Validate username
+        if (len < MIN_USERNAME || len > MAX_USERNAME) revert InvalidUsername();
+        if (!_validateUsername(usernameBytes)) revert InvalidUsername();
+        
+        // Validate other fields
+        if (bytes(displayName).length > MAX_DISPLAY_NAME) revert ContentTooLong();
+        if (bytes(bio).length > MAX_BIO) revert ContentTooLong();
+        
+        // Check username availability
+        bytes32 usernameHash = keccak256(usernameBytes);
+        if (usernameOwner[usernameHash] != address(0)) revert UsernameTaken();
+        
+        // Check fee
+        uint256 fee = getUsernameFee(len);
+        if (msg.value < fee) revert InsufficientFee();
+        
+        // Register username
+        usernameOwner[usernameHash] = msg.sender;
+        
+        // Distribute fee (if any)
+        if (msg.value > 0) {
+            _distributeNoCreator(msg.value, operator);
+        }
+        
+        emit ProfileCreated(
+            msg.sender,
+            usernameHash,
+            username,
+            displayName,
+            bio,
+            msg.value,
+            operator
+        );
+    }
+    
+    /**
+     * @notice Updates user profile (free, only gas)
+     * @param displayName New display name
+     * @param bio New biography
+     */
+    function updateProfile(
+        string calldata displayName,
+        string calldata bio
+    ) external {
+        if (bytes(displayName).length > MAX_DISPLAY_NAME) revert ContentTooLong();
+        if (bytes(bio).length > MAX_BIO) revert ContentTooLong();
+        
+        emit ProfileUpdated(msg.sender, displayName, bio);
+    }
+    
+    // ═══════════════════════════════════════════════════════════════════════════════
+    //                          CONTENT FUNCTIONS
+    // ═══════════════════════════════════════════════════════════════════════════════
+    
+    /**
+     * @notice Creates a new post
+     * @param content Post content (max 500 chars)
+     * @param mediaCID IPFS CID for media attachment (optional)
+     * @param operator Frontend operator address
+     * @return postId The ID of the created post
      */
     function createPost(
-        string calldata _content,
-        string calldata _ipfsHash
-    ) 
-        external 
-        nonReentrant 
-        whenNotPaused 
-        validContent(_content, _ipfsHash)
-        returns (uint256 postId) 
-    {
-        // Cooldown check
-        if (postCooldown > 0 && block.timestamp < _lastPostTime[msg.sender] + postCooldown) {
-            revert CooldownActive();
-        }
-
-        // Collect fee
-        _collectPlatformFee();
-
-        // Create post
-        postId = ++_totalPosts;
-        _posts[postId] = Post({
-            id: postId,
-            author: msg.sender,
-            content: _content,
-            ipfsHash: _ipfsHash,
-            createdAt: block.timestamp,
-            editedAt: 0,
-            exists: true,
-            deleted: false
-        });
-
-        // Track
-        _authorPosts[msg.sender].push(postId);
-        _lastPostTime[msg.sender] = block.timestamp;
-        _creatorStats[msg.sender].totalPosts++;
-        _updateActivity(msg.sender);
-
-        emit PostCreated(postId, msg.sender, _content, _ipfsHash, block.timestamp);
-    }
-
-    /**
-     * @notice Edits an existing post
-     * @param _postId Post ID to edit
-     * @param _newContent New content
-     * @param _newIpfsHash New IPFS hash
-     */
-    function editPost(
-        uint256 _postId,
-        string calldata _newContent,
-        string calldata _newIpfsHash
-    ) 
-        external 
-        nonReentrant 
-        whenNotPaused 
-        validPost(_postId)
-        validContent(_newContent, _newIpfsHash)
-    {
-        Post storage post = _posts[_postId];
-        if (post.author != msg.sender) revert NotAuthor();
-
-        post.content = _newContent;
-        post.ipfsHash = _newIpfsHash;
-        post.editedAt = block.timestamp;
-
-        _updateActivity(msg.sender);
-
-        emit PostEdited(_postId, msg.sender, _newContent, _newIpfsHash, block.timestamp);
-    }
-
-    /**
-     * @notice Deletes a post (soft delete)
-     * @param _postId Post ID to delete
-     */
-    function deletePost(uint256 _postId) 
-        external 
-        nonReentrant 
-        validPost(_postId) 
-    {
-        Post storage post = _posts[_postId];
-        if (post.author != msg.sender) revert NotAuthor();
-
-        post.deleted = true;
-
-        emit PostDeleted(_postId, msg.sender, block.timestamp);
-    }
-
-    // ╔════════════════════════════════════════════════════════════════════════╗
-    // ║                              COMMENTS                                    ║
-    // ╚════════════════════════════════════════════════════════════════════════╝
-
-    /**
-     * @notice Creates a comment on a post
-     * @param _postId Post to comment on
-     * @param _content Comment content
-     * @param _ipfsHash IPFS hash
-     * @return commentId Created comment ID
-     */
-    function createComment(
-        uint256 _postId,
-        string calldata _content,
-        string calldata _ipfsHash
-    ) 
-        external 
-        nonReentrant 
-        whenNotPaused 
-        validPost(_postId)
-        validContent(_content, _ipfsHash)
-        returns (uint256 commentId) 
-    {
-        // Cooldown check
-        if (commentCooldown > 0 && block.timestamp < _lastCommentTime[msg.sender] + commentCooldown) {
-            revert CooldownActive();
-        }
-
-        _collectPlatformFee();
-
-        commentId = ++_totalComments;
-        _comments[commentId] = Comment({
-            id: commentId,
-            postId: _postId,
-            parentCommentId: 0,
-            author: msg.sender,
-            content: _content,
-            ipfsHash: _ipfsHash,
-            createdAt: block.timestamp,
-            exists: true,
-            deleted: false
-        });
-
-        _postComments[_postId].push(commentId);
-        _authorComments[msg.sender].push(commentId);
-        _lastCommentTime[msg.sender] = block.timestamp;
-        _creatorStats[msg.sender].totalComments++;
-        _updateActivity(msg.sender);
-
-        emit CommentCreated(commentId, _postId, 0, msg.sender, block.timestamp);
-    }
-
-    /**
-     * @notice Replies to a comment (threading)
-     * @param _commentId Comment to reply to
-     * @param _content Reply content
-     * @param _ipfsHash IPFS hash
-     * @return replyId Created reply ID
-     */
-    function replyToComment(
-        uint256 _commentId,
-        string calldata _content,
-        string calldata _ipfsHash
-    ) 
-        external 
-        nonReentrant 
-        whenNotPaused 
-        validComment(_commentId)
-        validContent(_content, _ipfsHash)
-        returns (uint256 replyId) 
-    {
-        if (commentCooldown > 0 && block.timestamp < _lastCommentTime[msg.sender] + commentCooldown) {
-            revert CooldownActive();
-        }
-
-        _collectPlatformFee();
-
-        Comment storage parent = _comments[_commentId];
-
-        replyId = ++_totalComments;
-        _comments[replyId] = Comment({
-            id: replyId,
-            postId: parent.postId,
-            parentCommentId: _commentId,
-            author: msg.sender,
-            content: _content,
-            ipfsHash: _ipfsHash,
-            createdAt: block.timestamp,
-            exists: true,
-            deleted: false
-        });
-
-        _commentReplies[_commentId].push(replyId);
-        _authorComments[msg.sender].push(replyId);
-        _lastCommentTime[msg.sender] = block.timestamp;
-        _creatorStats[msg.sender].totalComments++;
-        _updateActivity(msg.sender);
-
-        emit CommentCreated(replyId, parent.postId, _commentId, msg.sender, block.timestamp);
-    }
-
-    /**
-     * @notice Deletes a comment (soft delete)
-     * @param _commentId Comment to delete
-     */
-    function deleteComment(uint256 _commentId) 
-        external 
-        nonReentrant 
-        validComment(_commentId) 
-    {
-        Comment storage comment = _comments[_commentId];
-        if (comment.author != msg.sender) revert NotAuthor();
-
-        comment.deleted = true;
-
-        emit CommentDeleted(_commentId, msg.sender, block.timestamp);
-    }
-
-    // ╔════════════════════════════════════════════════════════════════════════╗
-    // ║                         MODERATION (VOTING)                             ║
-    // ╚════════════════════════════════════════════════════════════════════════╝
-
-    /**
-     * @notice Votes on a post (SAFE or UNSAFE)
-     * @dev 1 person = 1 vote, determines content visibility
-     * @param _postId Post to vote on
-     * @param _voteSafe True = SAFE, False = UNSAFE
-     */
-    function voteOnPost(
-        uint256 _postId,
-        bool _voteSafe
-    ) 
-        external 
-        nonReentrant 
-        whenNotPaused 
-        validPost(_postId) 
-    {
-        if (_votedOnPost[msg.sender][_postId]) revert AlreadyVoted();
-
-        _collectPlatformFee();
-
-        _votedOnPost[msg.sender][_postId] = true;
-
-        ModerationScore storage score = _postScores[_postId];
-        if (_voteSafe) {
-            score.safeVotes++;
-        } else {
-            score.unsafeVotes++;
-        }
-        score.totalVoters++;
-
-        int256 newScore = _calculateScore(score);
-        ContentStatus newStatus = _determineContentStatus(newScore);
-
-        _updateActivity(msg.sender);
-
-        emit ContentVoted(
-            _postId,
-            true,
-            msg.sender,
-            _voteSafe,
-            newScore,
-            newStatus,
-            block.timestamp
-        );
-    }
-
-    /**
-     * @notice Votes on a comment (SAFE or UNSAFE)
-     * @param _commentId Comment to vote on
-     * @param _voteSafe True = SAFE, False = UNSAFE
-     */
-    function voteOnComment(
-        uint256 _commentId,
-        bool _voteSafe
-    ) 
-        external 
-        nonReentrant 
-        whenNotPaused 
-        validComment(_commentId) 
-    {
-        if (_votedOnComment[msg.sender][_commentId]) revert AlreadyVoted();
-
-        _collectPlatformFee();
-
-        _votedOnComment[msg.sender][_commentId] = true;
-
-        ModerationScore storage score = _commentScores[_commentId];
-        if (_voteSafe) {
-            score.safeVotes++;
-        } else {
-            score.unsafeVotes++;
-        }
-        score.totalVoters++;
-
-        int256 newScore = _calculateScore(score);
-        ContentStatus newStatus = _determineContentStatus(newScore);
-
-        _updateActivity(msg.sender);
-
-        emit ContentVoted(
-            _commentId,
-            false,
-            msg.sender,
-            _voteSafe,
-            newScore,
-            newStatus,
-            block.timestamp
-        );
-    }
-
-    // ╔════════════════════════════════════════════════════════════════════════╗
-    // ║                         COMMUNITY NOTES                                 ║
-    // ╚════════════════════════════════════════════════════════════════════════╝
-
-    /**
-     * @notice Proposes a community note on a post
-     * @param _postId Post to annotate
-     * @param _content Note content (fact-check, context, etc.)
-     * @param _ipfsHash IPFS hash for evidence
-     * @return noteId Created note ID
-     */
-    function proposeNote(
-        uint256 _postId,
-        string calldata _content,
-        string calldata _ipfsHash
-    ) 
-        external 
-        nonReentrant 
-        whenNotPaused 
-        validPost(_postId)
-        returns (uint256 noteId) 
-    {
-        if (bytes(_content).length == 0) revert EmptyContent();
-        if (bytes(_content).length > maxContentLength) revert ContentTooLong();
-
-        _collectPlatformFee();
-
-        noteId = ++_totalNotes;
-        _notes[noteId] = CommunityNote({
-            id: noteId,
-            postId: _postId,
-            author: msg.sender,
-            content: _content,
-            ipfsHash: _ipfsHash,
-            createdAt: block.timestamp,
-            exists: true
-        });
-
-        _postNotes[_postId].push(noteId);
-        _authorNotes[msg.sender].push(noteId);
-        _updateActivity(msg.sender);
-
-        emit NoteProposed(noteId, _postId, msg.sender, block.timestamp);
-    }
-
-    /**
-     * @notice Votes on a community note (BELIEVE or DON'T BELIEVE)
-     * @param _noteId Note to vote on
-     * @param _believe True = believe/helpful, False = don't believe
-     */
-    function voteOnNote(
-        uint256 _noteId,
-        bool _believe
-    ) 
-        external 
-        nonReentrant 
-        whenNotPaused 
-        validNote(_noteId) 
-    {
-        if (_votedOnNote[msg.sender][_noteId]) revert AlreadyVoted();
-
-        _collectPlatformFee();
-
-        _votedOnNote[msg.sender][_noteId] = true;
-
-        NoteVotingScore storage score = _noteScores[_noteId];
-        if (_believe) {
-            score.believeVotes++;
-        } else {
-            score.dontBelieveVotes++;
-        }
-        score.totalVoters++;
-
-        int256 newScore = int256(score.believeVotes) - int256(score.dontBelieveVotes);
-        NoteStatus newStatus = _determineNoteStatus(newScore);
-
-        _updateActivity(msg.sender);
-
-        emit NoteVoted(_noteId, msg.sender, _believe, newScore, newStatus, block.timestamp);
-    }
-
-    // ╔════════════════════════════════════════════════════════════════════════╗
-    // ║                         TIPS (CREATOR ECONOMY)                          ║
-    // ╚════════════════════════════════════════════════════════════════════════╝
-
-    /**
-     * @notice Sends a tip to a creator
-     * @dev Tip is split: creator receives (100% - tipMiningFeeBips), mining receives tipMiningFeeBips
-     * @param _creator Creator to tip
-     * @param _amount Total tip amount in BKC
-     * @param _postId Optional post ID (0 for general tip)
-     *
-     * Example with tipMiningFeeBips = 1000 (10%):
-     * - Tip = 100 BKC
-     * - Creator receives: 100 * (10000 - 1000) / 10000 = 90 BKC
-     * - Mining receives:  100 * 1000 / 10000 = 10 BKC
-     */
-    function sendTip(
-        address _creator,
-        uint256 _amount,
-        uint256 _postId
-    ) 
-        external 
-        nonReentrant 
-        whenNotPaused 
-    {
-        if (_creator == address(0)) revert ZeroAddress();
-        if (_creator == msg.sender) revert CannotTipSelf();
-        if (_amount < minTipAmount) revert BelowMinimum();
-
-        // Validate post if specified
-        if (_postId > 0 && !_posts[_postId].exists) revert PostNotFound();
-
-        // Transfer from sender
-        bkcToken.safeTransferFrom(msg.sender, address(this), _amount);
-
-        // Calculate split
-        uint256 toMining = (_amount * tipMiningFeeBips) / bipsDenominator;
-        uint256 toCreator = _amount - toMining;
-
-        // Send mining portion
-        if (toMining > 0) {
-            _sendToMining(toMining);
-            totalTipsToMining += toMining;
-        }
-
-        // Credit creator
-        creatorBalance[_creator] += toCreator;
-        totalTipsToCreators += toCreator;
-
-        // Stats
-        totalTipsProcessed += _amount;
-        _creatorStats[_creator].totalTipsReceived += toCreator;
-        if (_postId > 0) {
-            postTipsReceived[_postId] += _amount;
-        }
-
-        _updateActivity(msg.sender);
-        _updateActivity(_creator);
-
-        emit TipSent(
-            msg.sender,
-            _creator,
-            _postId,
-            _amount,
-            toCreator,
-            toMining,
-            block.timestamp
-        );
-    }
-
-    // ╔════════════════════════════════════════════════════════════════════════╗
-    // ║                         REWARD CLAIMS                                   ║
-    // ╚════════════════════════════════════════════════════════════════════════╝
-
-    /**
-     * @notice Claims accumulated tip balance
-     * @dev Requirements: positive balance, Booster NFT, KYC (if enabled)
-     */
-    function claimRewards() external nonReentrant whenNotPaused {
-        uint256 balance = creatorBalance[msg.sender];
-        if (balance == 0) revert NoBalance();
-
-        // Check Booster NFT
-        if (!_hasBoosterAccess(msg.sender)) revert BoosterRequired();
-
-        // Check KYC
-        if (kycRequired) {
-            _verifyKYC(msg.sender);
-        }
-
-        // Clear and transfer
-        creatorBalance[msg.sender] = 0;
-        _creatorStats[msg.sender].totalTipsClaimed += balance;
-        _updateActivity(msg.sender);
-
-        bkcToken.safeTransfer(msg.sender, balance);
-
-        emit RewardsClaimed(msg.sender, balance, block.timestamp);
-    }
-
-    // ╔════════════════════════════════════════════════════════════════════════╗
-    // ║                         KYC SYSTEM                                      ║
-    // ╚════════════════════════════════════════════════════════════════════════╝
-
-    /**
-     * @notice Verifies KYC from external provider and caches result
-     * @param _user User to verify
-     */
-    function verifyKYC(address _user) external nonReentrant {
-        if (kycProvider == address(0)) revert ZeroAddress();
-
-        // Call external KYC provider
-        (bool verified, uint8 level) = _fetchKYCFromProvider(_user);
-
-        if (verified && level >= kycMinimumLevel) {
-            uint256 expiresAt = kycValidityPeriod > 0 
-                ? block.timestamp + kycValidityPeriod 
-                : type(uint256).max;
-
-            _kycCache[_user] = KYCData({
-                verified: true,
-                level: level,
-                verifiedAt: block.timestamp,
-                expiresAt: expiresAt
-            });
-
-            emit KYCVerified(_user, level, expiresAt, block.timestamp);
-        }
-    }
-
-    /**
-     * @notice Revokes KYC for a user (admin only)
-     * @param _user User to revoke
-     */
-    function revokeKYC(address _user) external onlyOwner {
-        delete _kycCache[_user];
-        emit KYCRevoked(_user, block.timestamp);
-    }
-
-    /**
-     * @notice Gets KYC status for a user
-     * @param _user User address
-     * @return verified Whether verified
-     * @return level KYC level
-     * @return expiresAt Expiration timestamp
-     */
-    function getKYCStatus(address _user) external view returns (
-        bool verified,
-        uint8 level,
-        uint256 expiresAt
-    ) {
-        KYCData storage kyc = _kycCache[_user];
-        if (!kyc.verified || (kyc.expiresAt > 0 && block.timestamp > kyc.expiresAt)) {
-            return (false, 0, 0);
-        }
-        return (kyc.verified, kyc.level, kyc.expiresAt);
-    }
-
-    // ╔════════════════════════════════════════════════════════════════════════╗
-    // ║                         POST BOOST                                      ║
-    // ╚════════════════════════════════════════════════════════════════════════╝
-
-    /**
-     * @notice Boosts a post with ETH for visibility
-     * @dev 100% of ETH goes to Treasury
-     * @param _postId Post to boost
-     */
-    function boostPost(uint256 _postId) 
-        external 
-        payable 
-        nonReentrant 
-        whenNotPaused 
-        validPost(_postId) 
-    {
-        if (msg.value == 0) revert ZeroAmount();
-
-        postBoostAmount[_postId] += msg.value;
-        totalBoostCollected += msg.value;
-
-        // Send to treasury
-        (bool success, ) = treasury.call{value: msg.value}("");
-        require(success);
-
-        _updateActivity(msg.sender);
-
-        emit PostBoosted(_postId, msg.sender, msg.value, postBoostAmount[_postId], block.timestamp);
-    }
-
-    // ╔════════════════════════════════════════════════════════════════════════╗
-    // ║                         BURN INACTIVE                                   ║
-    // ╚════════════════════════════════════════════════════════════════════════╝
-
-    /**
-     * @notice Burns balance of inactive account
-     * @dev Anyone can call after inactivityBurnPeriod expires
-     * @param _creator Inactive creator address
-     */
-    function burnInactiveBalance(address _creator) external nonReentrant {
-        uint256 balance = creatorBalance[_creator];
-        if (balance == 0) revert NoBalance();
-
-        uint256 inactiveDuration = block.timestamp - lastActivity[_creator];
-        if (inactiveDuration < inactivityBurnPeriod) revert AccountNotInactive();
-
-        creatorBalance[_creator] = 0;
-        totalBurnedInactive += balance;
-
-        bkcToken.burn(balance);
-
-        emit InactiveBalanceBurned(_creator, balance, msg.sender, block.timestamp);
-    }
-
-    // ╔════════════════════════════════════════════════════════════════════════╗
-    // ║                         PRIVATE MESSAGES                                ║
-    // ╚════════════════════════════════════════════════════════════════════════╝
-
-    /**
-     * @notice Registers public key for E2EE messaging
-     * @param _publicKey User's public encryption key
-     */
-    function setPublicKey(bytes calldata _publicKey) external {
-        _publicKeys[msg.sender] = _publicKey;
-        _updateActivity(msg.sender);
-        emit PublicKeyRegistered(msg.sender, block.timestamp);
-    }
-
-    /**
-     * @notice Sends an encrypted private message
-     * @param _to Recipient (must have public key registered)
-     * @param _encryptedContent Encrypted content
-     * @param _encryptedIpfsHash Encrypted IPFS hash
-     * @return messageId Created message ID
-     */
-    function sendPrivateMessage(
-        address _to,
-        string calldata _encryptedContent,
-        string calldata _encryptedIpfsHash
-    ) 
-        external 
-        nonReentrant 
-        whenNotPaused 
-        returns (uint256 messageId) 
-    {
-        if (_to == address(0)) revert ZeroAddress();
-        if (_to == msg.sender) revert CannotTipSelf();
-        if (_publicKeys[_to].length == 0) revert NoPublicKey();
-        if (bytes(_encryptedContent).length == 0) revert EmptyContent();
-
-        _collectPlatformFee();
-
-        uint256 conversationId = ++_totalConversations;
-        messageId = ++_totalMessages;
-
-        _messages[messageId] = PrivateMessage({
-            id: messageId,
-            conversationId: conversationId,
-            parentMessageId: 0,
-            sender: msg.sender,
-            recipient: _to,
-            encryptedContent: _encryptedContent,
-            encryptedIpfsHash: _encryptedIpfsHash,
-            sentAt: block.timestamp,
-            exists: true
-        });
-
-        _conversationMessages[conversationId].push(messageId);
-        _userConversations[msg.sender].push(conversationId);
-        _userConversations[_to].push(conversationId);
-        _updateActivity(msg.sender);
-
-        emit PrivateMessageSent(messageId, conversationId, msg.sender, _to, block.timestamp);
-    }
-
-    /**
-     * @notice Replies to a private message
-     * @param _messageId Message to reply to
-     * @param _encryptedContent Encrypted reply
-     * @param _encryptedIpfsHash Encrypted IPFS hash
-     * @return replyId Created reply ID
-     */
-    function replyToMessage(
-        uint256 _messageId,
-        string calldata _encryptedContent,
-        string calldata _encryptedIpfsHash
-    ) 
-        external 
-        nonReentrant 
-        whenNotPaused 
-        returns (uint256 replyId) 
-    {
-        PrivateMessage storage parent = _messages[_messageId];
-        if (!parent.exists) revert MessageNotFound();
-        if (msg.sender != parent.sender && msg.sender != parent.recipient) revert NotParticipant();
-        if (bytes(_encryptedContent).length == 0) revert EmptyContent();
-
-        _collectPlatformFee();
-
-        address recipient = msg.sender == parent.sender ? parent.recipient : parent.sender;
-
-        replyId = ++_totalMessages;
-        _messages[replyId] = PrivateMessage({
-            id: replyId,
-            conversationId: parent.conversationId,
-            parentMessageId: _messageId,
-            sender: msg.sender,
-            recipient: recipient,
-            encryptedContent: _encryptedContent,
-            encryptedIpfsHash: _encryptedIpfsHash,
-            sentAt: block.timestamp,
-            exists: true
-        });
-
-        _conversationMessages[parent.conversationId].push(replyId);
-        _updateActivity(msg.sender);
-
-        emit PrivateMessageSent(replyId, parent.conversationId, msg.sender, recipient, block.timestamp);
-    }
-
-    // ╔════════════════════════════════════════════════════════════════════════╗
-    // ║                         ADMIN - FEES                                    ║
-    // ╚════════════════════════════════════════════════════════════════════════╝
-
-    function setPlatformFee(uint256 _fee) external onlyOwner {
-        if (_fee > maxPlatformFee) revert ExceedsLimit();
-        emit ParameterUpdated("platformFee", platformFee, _fee, block.timestamp);
-        platformFee = _fee;
-    }
-
-    function setPlatformFeeDistribution(uint256 _miningBips, uint256 _treasuryBips) external onlyOwner {
-        if (_miningBips + _treasuryBips != bipsDenominator) revert InvalidConfiguration();
-        platformMiningFeeBips = _miningBips;
-        platformTreasuryFeeBips = _treasuryBips;
-    }
-
-    function setMinTipAmount(uint256 _amount) external onlyOwner {
-        emit ParameterUpdated("minTipAmount", minTipAmount, _amount, block.timestamp);
-        minTipAmount = _amount;
-    }
-
-    function setTipMiningFeeBips(uint256 _bips) external onlyOwner {
-        if (_bips > maxTipMiningFeeBips) revert ExceedsLimit();
-        emit ParameterUpdated("tipMiningFeeBips", tipMiningFeeBips, _bips, block.timestamp);
-        tipMiningFeeBips = _bips;
-    }
-
-    // ╔════════════════════════════════════════════════════════════════════════╗
-    // ║                         ADMIN - MODERATION                              ║
-    // ╚════════════════════════════════════════════════════════════════════════╝
-
-    function setModerationThresholds(
-        uint256 _trusted,
-        uint256 _warning,
-        uint256 _hidden
-    ) external onlyOwner {
-        if (_warning > _hidden) revert InvalidConfiguration();
-        thresholdTrusted = _trusted;
-        thresholdWarning = _warning;
-        thresholdHidden = _hidden;
-    }
-
-    function setNoteThresholds(uint256 _approval, uint256 _rejection) external onlyOwner {
-        noteApprovalThreshold = _approval;
-        noteRejectionThreshold = _rejection;
-    }
-
-    // ╔════════════════════════════════════════════════════════════════════════╗
-    // ║                         ADMIN - TIMING                                  ║
-    // ╚════════════════════════════════════════════════════════════════════════╝
-
-    function setInactivityBurnPeriod(uint256 _period) external onlyOwner {
-        if (_period < minInactivityBurnPeriod) revert BelowMinimum();
-        emit ParameterUpdated("inactivityBurnPeriod", inactivityBurnPeriod, _period, block.timestamp);
-        inactivityBurnPeriod = _period;
-    }
-
-    function setCooldowns(uint256 _postCooldown, uint256 _commentCooldown) external onlyOwner {
-        postCooldown = _postCooldown;
-        commentCooldown = _commentCooldown;
-    }
-
-    // ╔════════════════════════════════════════════════════════════════════════╗
-    // ║                         ADMIN - LIMITS                                  ║
-    // ╚════════════════════════════════════════════════════════════════════════╝
-
-    function setLimits(
-        uint256 _maxPlatformFee,
-        uint256 _maxTipMiningFeeBips,
-        uint256 _maxContentLength,
-        uint256 _minInactivityBurnPeriod
-    ) external onlyOwner {
-        if (_maxTipMiningFeeBips > bipsDenominator) revert ExceedsLimit();
-        if (_minInactivityBurnPeriod < 7 days) revert BelowMinimum();
+        string calldata content,
+        string calldata mediaCID,
+        address operator
+    ) external payable returns (uint256 postId) {
+        if (bytes(content).length > MAX_CONTENT) revert ContentTooLong();
         
-        maxPlatformFee = _maxPlatformFee;
-        maxTipMiningFeeBips = _maxTipMiningFeeBips;
-        maxContentLength = _maxContentLength;
-        minInactivityBurnPeriod = _minInactivityBurnPeriod;
+        uint256 fee = calculateFee(GAS_POST);
+        if (msg.value < fee) revert InsufficientFee();
+        
+        postId = ++postCounter;
+        postAuthor[postId] = msg.sender;
+        
+        // Original post: no creator, split 60/40
+        _distributeNoCreator(fee, operator);
+        _refundExcess(fee);
+        
+        emit PostCreated(postId, msg.sender, content, mediaCID, operator);
     }
-
-    // ╔════════════════════════════════════════════════════════════════════════╗
-    // ║                         ADMIN - KYC                                     ║
-    // ╚════════════════════════════════════════════════════════════════════════╝
-
-    function setKYCConfig(
-        bool _required,
-        address _provider,
-        uint8 _minimumLevel,
-        uint256 _validityPeriod
-    ) external onlyOwner {
-        kycRequired = _required;
-        kycProvider = _provider;
-        kycMinimumLevel = _minimumLevel;
-        kycValidityPeriod = _validityPeriod;
-    }
-
-    // ╔════════════════════════════════════════════════════════════════════════╗
-    // ║                         ADMIN - CORE                                    ║
-    // ╚════════════════════════════════════════════════════════════════════════╝
-
-    function setBipsDenominator(uint256 _denominator) external onlyOwner {
-        if (_denominator == 0) revert ZeroAmount();
-        emit ParameterUpdated("bipsDenominator", bipsDenominator, _denominator, block.timestamp);
-        bipsDenominator = _denominator;
-    }
-
-    function setServiceKey(bytes32 _key) external onlyOwner {
-        serviceKey = _key;
-    }
-
-    function setTreasury(address _treasury) external onlyOwner {
-        if (_treasury == address(0)) revert ZeroAddress();
-        emit AddressUpdated("treasury", treasury, _treasury, block.timestamp);
-        treasury = _treasury;
-    }
-
-    function setEcosystemManager(address _manager) external onlyOwner {
-        if (_manager == address(0)) revert ZeroAddress();
-        ecosystemManager = IEcosystemManager(_manager);
-    }
-
-    function refreshFromEcosystem() external onlyOwner {
-        bkcToken = BKCToken(ecosystemManager.getBKCTokenAddress());
-        treasury = ecosystemManager.getTreasuryAddress();
-    }
-
-    function pause() external onlyOwner { _pause(); }
-    function unpause() external onlyOwner { _unpause(); }
-
-    // ╔════════════════════════════════════════════════════════════════════════╗
-    // ║                         VIEW FUNCTIONS                                  ║
-    // ╚════════════════════════════════════════════════════════════════════════╝
-
-    function getPost(uint256 _postId) external view returns (Post memory) {
-        return _posts[_postId];
-    }
-
-    function getPostModerationScore(uint256 _postId) external view returns (
-        uint256 safeVotes,
-        uint256 unsafeVotes,
-        int256 score,
-        ContentStatus status
-    ) {
-        ModerationScore storage s = _postScores[_postId];
-        int256 netScore = _calculateScore(s);
-        return (s.safeVotes, s.unsafeVotes, netScore, _determineContentStatus(netScore));
-    }
-
-    function getComment(uint256 _commentId) external view returns (Comment memory) {
-        return _comments[_commentId];
-    }
-
-    function getCommentModerationScore(uint256 _commentId) external view returns (
-        uint256 safeVotes,
-        uint256 unsafeVotes,
-        int256 score,
-        ContentStatus status
-    ) {
-        ModerationScore storage s = _commentScores[_commentId];
-        int256 netScore = _calculateScore(s);
-        return (s.safeVotes, s.unsafeVotes, netScore, _determineContentStatus(netScore));
-    }
-
-    function getNote(uint256 _noteId) external view returns (CommunityNote memory) {
-        return _notes[_noteId];
-    }
-
-    function getNoteVotingScore(uint256 _noteId) external view returns (
-        uint256 believeVotes,
-        uint256 dontBelieveVotes,
-        int256 score,
-        NoteStatus status
-    ) {
-        NoteVotingScore storage s = _noteScores[_noteId];
-        int256 netScore = int256(s.believeVotes) - int256(s.dontBelieveVotes);
-        return (s.believeVotes, s.dontBelieveVotes, netScore, _determineNoteStatus(netScore));
-    }
-
-    function getPostComments(uint256 _postId) external view returns (uint256[] memory) {
-        return _postComments[_postId];
-    }
-
-    function getPostNotes(uint256 _postId) external view returns (uint256[] memory) {
-        return _postNotes[_postId];
-    }
-
-    function getCommentReplies(uint256 _commentId) external view returns (uint256[] memory) {
-        return _commentReplies[_commentId];
-    }
-
-    function getCreatorStats(address _creator) external view returns (CreatorStats memory) {
-        return _creatorStats[_creator];
-    }
-
-    function getAuthorPosts(address _author) external view returns (uint256[] memory) {
-        return _authorPosts[_author];
-    }
-
-    function getPublicKey(address _user) external view returns (bytes memory) {
-        return _publicKeys[_user];
-    }
-
-    function getUserConversations(address _user) external view returns (uint256[] memory) {
-        return _userConversations[_user];
-    }
-
-    function getConversationMessages(uint256 _conversationId) external view returns (uint256[] memory) {
-        return _conversationMessages[_conversationId];
-    }
-
-    function getMessage(uint256 _messageId) external view returns (
-        address sender,
-        address recipient,
-        string memory encryptedContent,
-        string memory encryptedIpfsHash,
-        uint256 sentAt,
-        uint256 conversationId,
-        uint256 parentMessageId
-    ) {
-        PrivateMessage storage m = _messages[_messageId];
-        return (
-            m.sender,
-            m.recipient,
-            m.encryptedContent,
-            m.encryptedIpfsHash,
-            m.sentAt,
-            m.conversationId,
-            m.parentMessageId
-        );
-    }
-
-    function hasVotedOnPost(address _user, uint256 _postId) external view returns (bool) {
-        return _votedOnPost[_user][_postId];
-    }
-
-    function hasVotedOnComment(address _user, uint256 _commentId) external view returns (bool) {
-        return _votedOnComment[_user][_commentId];
-    }
-
-    function hasVotedOnNote(address _user, uint256 _noteId) external view returns (bool) {
-        return _votedOnNote[_user][_noteId];
-    }
-
-    function hasBoosterAccess(address _user) external view returns (bool) {
-        return _hasBoosterAccess(_user);
-    }
-
-    function getTotals() external view returns (
-        uint256 posts,
-        uint256 comments,
-        uint256 notes,
-        uint256 messages,
-        uint256 conversations
-    ) {
-        return (_totalPosts, _totalComments, _totalNotes, _totalMessages, _totalConversations);
-    }
-
-    function getFinancialStats() external view returns (
-        uint256 platformFees,
-        uint256 tipsProcessed,
-        uint256 tipsToCreators,
-        uint256 tipsToMining,
-        uint256 boostCollected,
-        uint256 burnedInactive
-    ) {
-        return (
-            totalPlatformFees,
-            totalTipsProcessed,
-            totalTipsToCreators,
-            totalTipsToMining,
-            totalBoostCollected,
-            totalBurnedInactive
-        );
-    }
-
-    // ╔════════════════════════════════════════════════════════════════════════╗
-    // ║                         INTERNAL FUNCTIONS                              ║
-    // ╚════════════════════════════════════════════════════════════════════════╝
-
-    function _collectPlatformFee() internal {
-        if (platformFee == 0) return;
-
-        bkcToken.safeTransferFrom(msg.sender, address(this), platformFee);
-
-        uint256 toMining = (platformFee * platformMiningFeeBips) / bipsDenominator;
-        uint256 toTreasury = platformFee - toMining;
-
-        if (toMining > 0) _sendToMining(toMining);
-        if (toTreasury > 0 && treasury != address(0)) {
-            bkcToken.safeTransfer(treasury, toTreasury);
+    
+    /**
+     * @notice Creates a reply to an existing post
+     * @param parentId ID of the post being replied to
+     * @param content Reply content (max 500 chars)
+     * @param mediaCID IPFS CID for media attachment (optional)
+     * @param operator Frontend operator address
+     * @param tipBkc Optional BKC tip amount for the original author
+     * @return postId The ID of the created reply
+     */
+    function createReply(
+        uint256 parentId,
+        string calldata content,
+        string calldata mediaCID,
+        address operator,
+        uint256 tipBkc
+    ) external payable returns (uint256 postId) {
+        if (bytes(content).length > MAX_CONTENT) revert ContentTooLong();
+        
+        address creator = postAuthor[parentId];
+        if (creator == address(0)) revert PostNotFound();
+        
+        uint256 fee = calculateFee(GAS_REPLY);
+        if (msg.value < fee) revert InsufficientFee();
+        
+        postId = ++postCounter;
+        postAuthor[postId] = msg.sender;
+        
+        // Distribute ETH fee (40/30/30)
+        _distribute(fee, creator, operator);
+        _refundExcess(fee);
+        
+        // Process BKC tip with graceful degradation
+        if (tipBkc > 0) {
+            _processBkcTip(creator, tipBkc, operator);
         }
-
-        totalPlatformFees += platformFee;
+        
+        emit ReplyCreated(postId, parentId, msg.sender, content, mediaCID, tipBkc, operator);
     }
-
-    function _sendToMining(uint256 _amount) internal {
-        address miningManager = ecosystemManager.getMiningManagerAddress();
-        if (miningManager != address(0) && _amount > 0) {
-            bkcToken.safeTransfer(miningManager, _amount);
-            try IMiningManager(miningManager).performPurchaseMining(serviceKey, _amount) {} catch {}
+    
+    /**
+     * @notice Reposts an existing post
+     * @param originalPostId ID of the post being reposted
+     * @param operator Frontend operator address
+     * @param tipBkc Optional BKC tip amount for the original author
+     * @return postId The ID of the created repost
+     */
+    function createRepost(
+        uint256 originalPostId,
+        address operator,
+        uint256 tipBkc
+    ) external payable returns (uint256 postId) {
+        address creator = postAuthor[originalPostId];
+        if (creator == address(0)) revert PostNotFound();
+        
+        uint256 fee = calculateFee(GAS_REPOST);
+        if (msg.value < fee) revert InsufficientFee();
+        
+        postId = ++postCounter;
+        postAuthor[postId] = msg.sender;
+        
+        // Distribute ETH fee (40/30/30)
+        _distribute(fee, creator, operator);
+        _refundExcess(fee);
+        
+        // Process BKC tip with graceful degradation
+        if (tipBkc > 0) {
+            _processBkcTip(creator, tipBkc, operator);
         }
+        
+        emit RepostCreated(postId, originalPostId, msg.sender, tipBkc, operator);
     }
-
-    function _updateActivity(address _user) internal {
-        lastActivity[_user] = block.timestamp;
-    }
-
-    function _hasBoosterAccess(address _user) internal view returns (bool) {
-        address booster = ecosystemManager.getBoosterAddress();
-        if (booster != address(0)) {
-            try IRewardBoosterNFT(booster).hasBooster(_user) returns (bool has) {
-                if (has) return true;
-            } catch {}
+    
+    // ═══════════════════════════════════════════════════════════════════════════════
+    //                          ENGAGEMENT FUNCTIONS
+    // ═══════════════════════════════════════════════════════════════════════════════
+    
+    /**
+     * @notice Likes a post (limited to one per user per post)
+     * @param postId ID of the post to like
+     * @param operator Frontend operator address
+     * @param tipBkc Optional BKC tip amount for the author
+     */
+    function like(
+        uint256 postId,
+        address operator,
+        uint256 tipBkc
+    ) external payable {
+        address creator = postAuthor[postId];
+        if (creator == address(0)) revert PostNotFound();
+        if (hasLiked[postId][msg.sender]) revert AlreadyLiked();
+        
+        uint256 fee = calculateFee(GAS_LIKE);
+        if (msg.value < fee) revert InsufficientFee();
+        
+        hasLiked[postId][msg.sender] = true;
+        
+        // Distribute ETH fee (40/30/30)
+        _distribute(fee, creator, operator);
+        _refundExcess(fee);
+        
+        // Process BKC tip with graceful degradation
+        if (tipBkc > 0) {
+            _processBkcTip(creator, tipBkc, operator);
         }
-        return false;
+        
+        emit Liked(postId, msg.sender, tipBkc, operator);
     }
-
-    function _verifyKYC(address _user) internal view {
-        KYCData storage kyc = _kycCache[_user];
-        if (!kyc.verified) revert KYCNotVerified();
-        if (kyc.expiresAt > 0 && block.timestamp > kyc.expiresAt) revert KYCExpired();
-        if (kyc.level < kycMinimumLevel) revert KYCNotVerified();
+    
+    /**
+     * @notice Super likes a post (premium engagement, unlimited per user)
+     * @dev Super likes can be given multiple times and act as organic trending
+     * @param postId ID of the post to super like
+     * @param operator Frontend operator address
+     * @param tipBkc Optional BKC tip amount for the author
+     */
+    function superLike(
+        uint256 postId,
+        address operator,
+        uint256 tipBkc
+    ) external payable {
+        address creator = postAuthor[postId];
+        if (creator == address(0)) revert PostNotFound();
+        if (msg.value < SUPER_LIKE_MIN) revert InsufficientFee();
+        
+        // All ETH from Super Like is distributed (acts as promotion)
+        _distribute(msg.value, creator, operator);
+        
+        // Process BKC tip with graceful degradation
+        if (tipBkc > 0) {
+            _processBkcTip(creator, tipBkc, operator);
+        }
+        
+        emit SuperLiked(postId, msg.sender, msg.value, tipBkc, operator);
     }
-
-    function _fetchKYCFromProvider(address _user) internal view returns (bool verified, uint8 level) {
-        if (kycProvider == address(0)) return (false, 0);
-
-        // Try getKYCLevel first
-        try IKYCProvider(kycProvider).getKYCLevel(_user) returns (uint8 _level) {
-            return (_level >= kycMinimumLevel, _level);
-        } catch {}
-
-        // Fallback to isVerified
-        try IKYCProvider(kycProvider).isVerified(_user) returns (bool _verified) {
-            return (_verified, _verified ? 1 : 0);
-        } catch {}
-
-        return (false, 0);
+    
+    /**
+     * @notice Follows a user
+     * @param toFollow Address of the user to follow
+     * @param operator Frontend operator address
+     * @param tipBkc Optional BKC tip amount
+     */
+    function follow(
+        address toFollow,
+        address operator,
+        uint256 tipBkc
+    ) external payable {
+        if (toFollow == address(0)) revert InvalidAddress();
+        if (toFollow == msg.sender) revert SelfActionNotAllowed();
+        
+        uint256 fee = calculateFee(GAS_FOLLOW);
+        if (msg.value < fee) revert InsufficientFee();
+        
+        // Distribute ETH fee (40/30/30)
+        _distribute(fee, toFollow, operator);
+        _refundExcess(fee);
+        
+        // Process BKC tip with graceful degradation
+        if (tipBkc > 0) {
+            _processBkcTip(toFollow, tipBkc, operator);
+        }
+        
+        emit Followed(msg.sender, toFollow, tipBkc, operator);
     }
-
-    function _calculateScore(ModerationScore storage _score) internal view returns (int256) {
-        return int256(_score.safeVotes) - int256(_score.unsafeVotes);
+    
+    /**
+     * @notice Unfollows a user (free, only gas)
+     * @param toUnfollow Address of the user to unfollow
+     */
+    function unfollow(address toUnfollow) external {
+        emit Unfollowed(msg.sender, toUnfollow);
     }
-
-    function _determineContentStatus(int256 _score) internal view returns (ContentStatus) {
-        if (_score >= int256(thresholdTrusted)) return ContentStatus.Trusted;
-        if (_score <= -int256(thresholdHidden)) return ContentStatus.Hidden;
-        if (_score <= -int256(thresholdWarning)) return ContentStatus.Warning;
-        return ContentStatus.Normal;
-    }
-
-    function _determineNoteStatus(int256 _score) internal view returns (NoteStatus) {
-        if (_score >= int256(noteApprovalThreshold)) return NoteStatus.Approved;
-        if (_score <= -int256(noteRejectionThreshold)) return NoteStatus.Rejected;
-        return NoteStatus.Pending;
-    }
-
-    // ╔════════════════════════════════════════════════════════════════════════╗
-    // ║                         EMERGENCY                                       ║
-    // ╚════════════════════════════════════════════════════════════════════════╝
-
-    function recoverTokens(address _token, address _to, uint256 _amount) external onlyOwner {
-        if (_to == address(0)) revert ZeroAddress();
-        if (_token == address(0)) {
-            (bool success, ) = _to.call{value: _amount}("");
-            require(success);
+    
+    // ═══════════════════════════════════════════════════════════════════════════════
+    //                          PREMIUM FUNCTIONS
+    // ═══════════════════════════════════════════════════════════════════════════════
+    
+    /**
+     * @notice Boosts profile visibility for a duration proportional to payment
+     * @dev Duration = (ETH / 0.0005) days
+     * @param operator Frontend operator address
+     */
+    function boostProfile(address operator) external payable {
+        if (msg.value < BOOST_MIN) revert InsufficientFee();
+        
+        // Calculate duration: 1 day per 0.0005 ETH
+        uint256 duration = (msg.value * BOOST_RATE) / BOOST_MIN;
+        
+        // Extend or start boost
+        uint256 currentExpiry = boostExpiry[msg.sender];
+        if (currentExpiry > block.timestamp) {
+            boostExpiry[msg.sender] = currentExpiry + duration;
         } else {
-            IERC20Upgradeable(_token).safeTransfer(_to, _amount);
+            boostExpiry[msg.sender] = block.timestamp + duration;
+        }
+        
+        // Distribute fee (no creator, 60/40)
+        _distributeNoCreator(msg.value, operator);
+        
+        emit ProfileBoosted(msg.sender, msg.value, boostExpiry[msg.sender], operator);
+    }
+    
+    /**
+     * @notice Obtains a trust badge for 1 year
+     * @param operator Frontend operator address
+     */
+    function obtainBadge(address operator) external payable {
+        if (msg.value < BADGE_FEE) revert InsufficientFee();
+        
+        // Set badge expiry to 1 year from now
+        badgeExpiry[msg.sender] = block.timestamp + BADGE_DURATION;
+        
+        // Distribute fee (no creator, 60/40)
+        _distributeNoCreator(msg.value, operator);
+        
+        emit BadgeObtained(msg.sender, badgeExpiry[msg.sender], operator);
+    }
+    
+    // ═══════════════════════════════════════════════════════════════════════════════
+    //                          WITHDRAWAL FUNCTIONS
+    // ═══════════════════════════════════════════════════════════════════════════════
+    
+    /**
+     * @notice Withdraws accumulated ETH earnings
+     * @dev Creators, operators, and treasury can withdraw their accumulated ETH
+     */
+    function withdraw() external {
+        uint256 amount = pendingEth[msg.sender];
+        if (amount == 0) revert NothingToWithdraw();
+        
+        // Clear balance before transfer (reentrancy protection)
+        pendingEth[msg.sender] = 0;
+        
+        // Transfer ETH
+        (bool success, ) = payable(msg.sender).call{value: amount}("");
+        if (!success) revert TransferFailed();
+        
+        emit Withdrawal(msg.sender, amount);
+    }
+    
+    // ═══════════════════════════════════════════════════════════════════════════════
+    //                          VIEW FUNCTIONS
+    // ═══════════════════════════════════════════════════════════════════════════════
+    
+    /**
+     * @notice Checks if a user profile is currently boosted
+     * @param user Address to check
+     * @return True if profile is boosted
+     */
+    function isProfileBoosted(address user) external view returns (bool) {
+        return boostExpiry[user] > block.timestamp;
+    }
+    
+    /**
+     * @notice Checks if a user has a valid trust badge
+     * @param user Address to check
+     * @return True if user has badge
+     */
+    function hasTrustBadge(address user) external view returns (bool) {
+        return badgeExpiry[user] > block.timestamp;
+    }
+    
+    /**
+     * @notice Checks if a user has liked a specific post
+     * @param postId Post ID to check
+     * @param user User address to check
+     * @return True if user has liked the post
+     */
+    function hasUserLiked(uint256 postId, address user) external view returns (bool) {
+        return hasLiked[postId][user];
+    }
+    
+    /**
+     * @notice Returns the pending ETH balance for an address
+     * @param user Address to check
+     * @return Pending ETH amount
+     */
+    function getPendingBalance(address user) external view returns (uint256) {
+        return pendingEth[user];
+    }
+    
+    /**
+     * @notice Checks if a username is available
+     * @param username Username to check
+     * @return True if username is available
+     */
+    function isUsernameAvailable(string calldata username) external view returns (bool) {
+        bytes32 usernameHash = keccak256(bytes(username));
+        return usernameOwner[usernameHash] == address(0);
+    }
+    
+    /**
+     * @notice Returns the owner of a username
+     * @param username Username to lookup
+     * @return Owner address (address(0) if not taken)
+     */
+    function getUsernameOwner(string calldata username) external view returns (address) {
+        bytes32 usernameHash = keccak256(bytes(username));
+        return usernameOwner[usernameHash];
+    }
+    
+    /**
+     * @notice Returns contract version
+     * @return Version string
+     */
+    function version() external pure returns (string memory) {
+        return "7.0.0";
+    }
+    
+    // ═══════════════════════════════════════════════════════════════════════════════
+    //                    INTERNAL FUNCTIONS (WITH GRACEFUL DEGRADATION)
+    // ═══════════════════════════════════════════════════════════════════════════════
+    
+    /**
+     * @dev Safely gets treasury address from EcosystemManager
+     * @return treasury Treasury address or address(0) if call fails
+     */
+    function _getTreasury() internal returns (address treasury) {
+        try IEcosystemManager(ecosystemManager).getTreasuryAddress() returns (address _treasury) {
+            treasury = _treasury;
+        } catch (bytes memory reason) {
+            emit EcosystemCallFailed("getTreasuryAddress", reason);
+            treasury = address(0);
         }
     }
-
+    
+    /**
+     * @dev Safely gets MiningManager address from EcosystemManager
+     * @return miningManager MiningManager address or address(0) if call fails
+     */
+    function _getMiningManager() internal returns (address miningManager) {
+        try IEcosystemManager(ecosystemManager).getMiningManagerAddress() returns (address _miningManager) {
+            miningManager = _miningManager;
+        } catch (bytes memory reason) {
+            emit EcosystemCallFailed("getMiningManagerAddress", reason);
+            miningManager = address(0);
+        }
+    }
+    
+    /**
+     * @dev Distributes ETH fee WITH creator (40/30/30 split)
+     *      Falls back gracefully if treasury lookup fails
+     * @param amount Total ETH to distribute
+     * @param creator Content creator address
+     * @param operator Frontend operator address
+     */
+    function _distribute(
+        uint256 amount,
+        address creator,
+        address operator
+    ) internal {
+        address treasury = _getTreasury();
+        
+        uint256 creatorShare = (amount * CREATOR_BIPS) / BIPS;
+        uint256 operatorShare = (amount * OPERATOR_BIPS) / BIPS;
+        uint256 treasuryShare = amount - creatorShare - operatorShare;
+        
+        // Accumulate for creator
+        pendingEth[creator] += creatorShare;
+        
+        // Accumulate for operator
+        if (operator != address(0)) {
+            pendingEth[operator] += operatorShare;
+        } else {
+            // No operator: add to treasury share
+            treasuryShare += operatorShare;
+            operatorShare = 0;
+        }
+        
+        // Accumulate for treasury (or operator if treasury fails)
+        if (treasury != address(0)) {
+            pendingEth[treasury] += treasuryShare;
+        } else if (operator != address(0)) {
+            // FALLBACK: Treasury failed, give to operator
+            pendingEth[operator] += treasuryShare;
+            operatorShare += treasuryShare;
+            treasuryShare = 0;
+        } else {
+            // FALLBACK: No treasury AND no operator, give to creator
+            pendingEth[creator] += treasuryShare;
+            creatorShare += treasuryShare;
+            treasuryShare = 0;
+        }
+        
+        emit EthDistributed(creator, operator, treasury, creatorShare, operatorShare, treasuryShare);
+    }
+    
+    /**
+     * @dev Distributes ETH fee WITHOUT creator (60/40 split)
+     *      Falls back gracefully if treasury lookup fails
+     * @param amount Total ETH to distribute
+     * @param operator Frontend operator address
+     */
+    function _distributeNoCreator(
+        uint256 amount,
+        address operator
+    ) internal {
+        address treasury = _getTreasury();
+        
+        uint256 operatorShare = (amount * OPERATOR_NO_CREATOR_BIPS) / BIPS;
+        uint256 treasuryShare = amount - operatorShare;
+        
+        // Accumulate for operator
+        if (operator != address(0)) {
+            pendingEth[operator] += operatorShare;
+        } else {
+            // No operator: add to treasury share
+            treasuryShare += operatorShare;
+            operatorShare = 0;
+        }
+        
+        // Accumulate for treasury (or operator if treasury fails)
+        if (treasury != address(0)) {
+            pendingEth[treasury] += treasuryShare;
+        } else if (operator != address(0)) {
+            // FALLBACK: Treasury failed, give all to operator
+            pendingEth[operator] += treasuryShare;
+            operatorShare += treasuryShare;
+            treasuryShare = 0;
+        }
+        // If both treasury and operator are unavailable, ETH stays in contract
+        // (can be recovered by future withdraw if treasury comes back online)
+        
+        emit EthDistributed(address(0), operator, treasury, 0, operatorShare, treasuryShare);
+    }
+    
+    /**
+     * @dev Processes BKC tip with GRACEFUL DEGRADATION
+     *      - Normal: 90% to creator, 10% to MiningManager
+     *      - If MiningManager fails: 100% to creator
+     *      - If BKC transfer fails: silently continue (don't break the tx)
+     * @param creator Content creator address
+     * @param tipAmount Total BKC tip amount
+     * @param operator Frontend operator address
+     */
+    function _processBkcTip(
+        address creator,
+        uint256 tipAmount,
+        address operator
+    ) internal {
+        if (tipAmount == 0) return;
+        
+        // Try to transfer BKC from sender to this contract
+        try IBKC(bkcToken).transferFrom(msg.sender, address(this), tipAmount) returns (bool success) {
+            if (!success) {
+                emit TipFallback(msg.sender, creator, tipAmount, "transferFrom returned false");
+                return;
+            }
+        } catch (bytes memory) {
+            // BKC transfer failed (token paused, insufficient balance, etc.)
+            // Silently continue - don't break the main transaction
+            emit TipFallback(msg.sender, creator, tipAmount, "transferFrom failed");
+            return;
+        }
+        
+        // Calculate split
+        uint256 creatorShare = (tipAmount * CREATOR_TIP_BIPS) / BIPS;
+        uint256 miningShare = tipAmount - creatorShare;
+        
+        // Try to send 90% to creator
+        try IBKC(bkcToken).transfer(creator, creatorShare) returns (bool success) {
+            if (!success) {
+                // Transfer to creator failed, try to return to sender
+                try IBKC(bkcToken).transfer(msg.sender, tipAmount) {} catch {}
+                emit TipFallback(msg.sender, creator, tipAmount, "creator transfer failed");
+                return;
+            }
+        } catch {
+            // Transfer to creator failed, try to return to sender
+            try IBKC(bkcToken).transfer(msg.sender, tipAmount) {} catch {}
+            emit TipFallback(msg.sender, creator, tipAmount, "creator transfer reverted");
+            return;
+        }
+        
+        // Try to send 10% to MiningManager
+        address miningManager = _getMiningManager();
+        
+        if (miningManager != address(0) && miningShare > 0) {
+            // Try to transfer to MiningManager and trigger mining
+            try IBKC(bkcToken).transfer(miningManager, miningShare) returns (bool success) {
+                if (success) {
+                    // Try to trigger mining
+                    try IMiningManager(miningManager).performPurchaseMiningWithOperator(
+                        SERVICE_KEY,
+                        miningShare,
+                        operator
+                    ) {
+                        // Success! Full integration worked
+                        emit TipProcessed(msg.sender, creator, tipAmount, creatorShare, miningShare, operator);
+                        return;
+                    } catch (bytes memory reason) {
+                        // Mining failed, but BKC is already in MiningManager
+                        // That's okay, it will be processed later or stay there
+                        emit EcosystemCallFailed("performPurchaseMiningWithOperator", reason);
+                        emit TipProcessed(msg.sender, creator, tipAmount, creatorShare, miningShare, operator);
+                        return;
+                    }
+                }
+            } catch {}
+            
+            // MiningManager transfer failed, give miningShare to creator instead
+            try IBKC(bkcToken).transfer(creator, miningShare) {} catch {}
+            emit TipFallback(msg.sender, creator, tipAmount, "miningManager failed, 100% to creator");
+            emit TipProcessed(msg.sender, creator, tipAmount, tipAmount, 0, operator);
+        } else {
+            // No MiningManager available, give 100% to creator
+            try IBKC(bkcToken).transfer(creator, miningShare) {} catch {}
+            emit TipFallback(msg.sender, creator, tipAmount, "no miningManager, 100% to creator");
+            emit TipProcessed(msg.sender, creator, tipAmount, tipAmount, 0, operator);
+        }
+    }
+    
+    /**
+     * @dev Refunds excess ETH sent beyond the required fee
+     * @param fee Required fee amount
+     */
+    function _refundExcess(uint256 fee) internal {
+        if (msg.value > fee) {
+            uint256 refund = msg.value - fee;
+            (bool success, ) = payable(msg.sender).call{value: refund}("");
+            if (!success) revert TransferFailed();
+        }
+    }
+    
+    /**
+     * @dev Validates username format (lowercase a-z, 0-9, underscore only)
+     * @param username Username bytes to validate
+     * @return True if valid
+     */
+    function _validateUsername(bytes memory username) internal pure returns (bool) {
+        for (uint256 i; i < username.length; ++i) {
+            bytes1 char = username[i];
+            
+            // Valid: 0-9 (0x30-0x39), a-z (0x61-0x7a), _ (0x5f)
+            bool isDigit = (char >= 0x30 && char <= 0x39);
+            bool isLowercase = (char >= 0x61 && char <= 0x7a);
+            bool isUnderscore = (char == 0x5f);
+            
+            if (!isDigit && !isLowercase && !isUnderscore) {
+                return false;
+            }
+        }
+        return true;
+    }
+    
+    // ═══════════════════════════════════════════════════════════════════════════════
+    //                          RECEIVE FUNCTION
+    // ═══════════════════════════════════════════════════════════════════════════════
+    
+    /// @notice Allows contract to receive ETH
     receive() external payable {}
-}
-
-// ╔════════════════════════════════════════════════════════════════════════════╗
-// ║                         KYC INTERFACE                                       ║
-// ╚════════════════════════════════════════════════════════════════════════════╝
-
-interface IKYCProvider {
-    function isVerified(address user) external view returns (bool);
-    function getKYCLevel(address user) external view returns (uint8);
 }

@@ -320,15 +320,85 @@ export const loadContractAddresses = loadAddresses;
 
 export const FAUCET_AMOUNT_WEI = 20n * 10n**18n;
 
+// ============================================================================
+// ✅ V6.8: NFT BOOST TIERS - Now only 4 tiers with BURN RATE reduction
+// ============================================================================
+// The boost value REDUCES the burn rate on delegation claim rewards:
+// - No NFT: 50% burn → user keeps 50%
+// - Bronze (10%): 40% burn → user keeps 60%
+// - Silver (25%): 25% burn → user keeps 75%
+// - Gold (40%): 10% burn → user keeps 90%
+// - Diamond (50%): 0% burn → user keeps 100%
+
 export const boosterTiers = [
-    { name: "Diamond", boostBips: 7000, color: "text-cyan-400", img: `${ipfsGateway}bafybeicgip72jcqgsirlrhn3tq5cc226vmko6etnndzl6nlhqrktfikafq/diamond_booster.json`, realImg: `${ipfsGateway}bafybeicgip72jcqgsirlrhn3tq5cc226vmko6etnndzl6nlhqrktfikafq`, borderColor: "border-cyan-400/50", glowColor: "bg-cyan-500/10" },
-    { name: "Platinum", boostBips: 6000, color: "text-gray-300", img: `${ipfsGateway}bafybeigc2wgkccckhnjotejve7qyxa2o2z4fsgswfmsxyrbp5ncpc7plei/platinum_booster.json`, realImg: `${ipfsGateway}bafybeigc2wgkccckhnjotejve7qyxa2o2z4fsgswfmsxyrbp5ncpc7plei`, borderColor: "border-gray-300/50", glowColor: "bg-gray-400/10" },
-    { name: "Gold", boostBips: 5000, color: "text-amber-400", img: `${ipfsGateway}bafybeifponccrbicg2pcjrn2hrfoqgc77xhm2r4ld7hdpw6cxxkbsckf44/gold_booster.json`, realImg: `${ipfsGateway}bafybeifponccrbicg2pcjrn2hrfoqgc77xhm2r4ld7hdpw6cxxkbsckf44`, borderColor: "border-amber-400/50", glowColor: "bg-amber-500/10" },
-    { name: "Silver", boostBips: 4000, color: "text-gray-400", img: `${ipfsGateway}bafybeihvi2inujm5zpi7tl667g4srq273536pjkglwyrtbwmgnskmu7jg4/silver_booster.json`, realImg: `${ipfsGateway}bafybeihvi2inujm5zpi7tl667g4srq273536pjkglwyrtbwmgnskmu7jg4`, borderColor: "border-gray-400/50", glowColor: "bg-gray-500/10" },
-    { name: "Bronze", boostBips: 3000, color: "text-yellow-600", img: `${ipfsGateway}bafybeiclqidb67rt3tchhjpsib62s624li7j2bpxnr6b5w5mfp4tomhu7m/bronze_booster.json`, realImg: `${ipfsGateway}bafybeiclqidb67rt3tchhjpsib62s624li7j2bpxnr6b5w5mfp4tomhu7m`, borderColor: "border-yellow-600/50", glowColor: "bg-yellow-600/10" },
-    { name: "Iron", boostBips: 2000, color: "text-slate-500", img: `${ipfsGateway}bafybeiaxhv3ere2hyto4dlb5xqn46ehfglxqf3yzehpy4tvdnifyzpp4wu/iron_booster.json`, realImg: `${ipfsGateway}bafybeiaxhv3ere2hyto4dlb5xqn46ehfglxqf3yzehpy4tvdnifyzpp4wu`, borderColor: "border-slate-500/50", glowColor: "bg-slate-600/10" },
-    { name: "Crystal", boostBips: 1000, color: "text-indigo-300", img: `${ipfsGateway}bafybeib6nacggrhgcp72xksbhsqcofg3lzhfb576kuebj5ioxpk2id5m7u/crystal_booster.json`, realImg: `${ipfsGateway}bafybeib6nacggrhgcp72xksbhsqcofg3lzhfb576kuebj5ioxpk2id5m7u`, borderColor: "border-indigo-300/50", glowColor: "bg-indigo-300/10" }
+    { 
+        name: "Diamond", 
+        boostBips: 5000,  // 50% boost → 0% burn
+        burnRate: 0,
+        keepRate: 100,
+        color: "text-cyan-400", 
+        emoji: "💎",
+        borderColor: "border-cyan-400/50", 
+        glowColor: "bg-cyan-500/10",
+        bgGradient: "from-cyan-500/20 to-blue-500/20"
+    },
+    { 
+        name: "Gold", 
+        boostBips: 4000,  // 40% boost → 10% burn
+        burnRate: 10,
+        keepRate: 90,
+        color: "text-amber-400", 
+        emoji: "🥇",
+        borderColor: "border-amber-400/50", 
+        glowColor: "bg-amber-500/10",
+        bgGradient: "from-amber-500/20 to-yellow-500/20"
+    },
+    { 
+        name: "Silver", 
+        boostBips: 2500,  // 25% boost → 25% burn
+        burnRate: 25,
+        keepRate: 75,
+        color: "text-gray-300", 
+        emoji: "🥈",
+        borderColor: "border-gray-400/50", 
+        glowColor: "bg-gray-500/10",
+        bgGradient: "from-gray-400/20 to-zinc-500/20"
+    },
+    { 
+        name: "Bronze", 
+        boostBips: 1000,  // 10% boost → 40% burn
+        burnRate: 40,
+        keepRate: 60,
+        color: "text-yellow-600", 
+        emoji: "🥉",
+        borderColor: "border-yellow-600/50", 
+        glowColor: "bg-yellow-600/10",
+        bgGradient: "from-yellow-600/20 to-orange-600/20"
+    }
 ];
+
+// Helper function to get tier info by boost value
+export function getTierByBoost(boostBips) {
+    const sorted = [...boosterTiers].sort((a, b) => b.boostBips - a.boostBips);
+    for (const tier of sorted) {
+        if (boostBips >= tier.boostBips) return tier;
+    }
+    return null; // No NFT
+}
+
+// Helper function to calculate burn rate from boost
+export function getBurnRateFromBoost(boostBips) {
+    if (boostBips >= 5000) return 0;   // Diamond: 0% burn
+    if (boostBips >= 4000) return 10;  // Gold: 10% burn
+    if (boostBips >= 2500) return 25;  // Silver: 25% burn
+    if (boostBips >= 1000) return 40;  // Bronze: 40% burn
+    return 50; // No NFT: 50% burn
+}
+
+// Helper to get user's effective keep rate
+export function getKeepRateFromBoost(boostBips) {
+    return 100 - getBurnRateFromBoost(boostBips);
+}
 
 // ============================================================================
 // 7. CONTRACT ABIs
@@ -351,21 +421,35 @@ export const bkcTokenABI = [
     "event Approval(address indexed owner, address indexed spender, uint256 value)"
 ];
 
+// DelegationManager V6.8 ABI - NFT Burn Rate Reduction System
 export const delegationManagerABI = [
+    // Core staking
     "function totalNetworkPStake() view returns (uint256)",
     "function userTotalPStake(address _user) view returns (uint256)",
     "function pendingRewards(address _user) view returns (uint256)",
     "function MIN_LOCK_DURATION() view returns (uint256)",
     "function MAX_LOCK_DURATION() view returns (uint256)",
     "function getDelegationsOf(address _user) view returns (tuple(uint256 amount, uint64 unlockTime, uint64 lockDuration)[])",
-    "function delegate(uint256 _amount, uint256 _lockDuration, uint256 _boosterTokenId) external",
-    "function unstake(uint256 _delegationIndex, uint256 _boosterTokenId) external",
-    "function forceUnstake(uint256 _delegationIndex, uint256 _boosterTokenId) external",
-    "function claimReward(uint256 _boosterTokenId) external",
+    
+    // V6.8: New signature with operator parameter
+    "function delegate(uint256 _amount, uint256 _lockDuration, address _operator) external",
+    "function unstake(uint256 _delegationIndex, address _operator) external",
+    "function forceUnstake(uint256 _delegationIndex, address _operator) external",
+    "function claimReward(address _operator) external",
+    
+    // V6.8: NFT Boost & Burn Rate functions
+    "function getUserBestBoost(address _user) view returns (uint256)",
+    "function getBurnRateForBoost(uint256 _boost) view returns (uint256)",
+    "function previewClaim(address _user) view returns (uint256 totalRewards, uint256 burnAmount, uint256 userReceives, uint256 burnRateBips, uint256 userBoost)",
+    
+    // Penalty
     "function getUnstakePenaltyBips() view returns (uint256)",
-    "event Delegated(address indexed user, uint256 amount, uint256 lockDuration, uint256 pStake)",
-    "event Unstaked(address indexed user, uint256 amount, uint256 pStakeReduced)",
-    "event RewardClaimed(address indexed user, uint256 amount)"
+    
+    // Events V6.8
+    "event Delegated(address indexed user, address indexed operator, uint256 amount, uint256 lockDuration, uint256 pStake)",
+    "event Unstaked(address indexed user, address indexed operator, uint256 amount, uint256 pStakeReduced)",
+    "event ForceUnstaked(address indexed user, address indexed operator, uint256 amount, uint256 penaltyAmount)",
+    "event RewardClaimed(address indexed user, address indexed operator, uint256 grossAmount, uint256 burnedAmount, uint256 userReceived, uint256 boostUsed)"
 ];
 
 export const rewardBoosterABI = [
@@ -438,12 +522,23 @@ export const actionsManagerABI = [
     "event GameFulfilled(uint256 indexed gameId, address indexed player, uint256 prizeWon, uint256[] rolls, uint256[] guesses, bool isCumulative)"
 ];
 
-// FortunePool V2 ABI - Instant resolution with BackchainRandomness
+// FortunePool V6.8 ABI - Commit-Reveal System
 export const fortunePoolV2ABI = [
-    // Main play function - returns results instantly!
-    "function play(uint256 _wagerAmount, uint256[] calldata _guesses, bool _isCumulative) external payable returns (uint256 gameId, uint256[] memory rolls, uint256 prizeWon)",
+    // ===== Commit-Reveal Flow =====
+    // Step 1: Commit your guess (hash only, guess hidden)
+    "function commitPlay(bytes32 _commitmentHash, uint256 _wagerAmount, bool _isCumulative, address _operator) external payable",
+    // Step 2: Reveal your guess after delay (get result)
+    "function revealPlay(uint256 _gameId, uint256[] calldata _guesses, bytes32 _userSecret) external",
+    // Helper to generate commitment hash
+    "function generateCommitmentHash(uint256[] calldata _guesses, bytes32 _userSecret) view returns (bytes32)",
     
-    // Service fee functions (for project funding)
+    // Commitment status
+    "function getCommitmentStatus(uint256 _gameId) view returns (bool exists, bool canReveal, bool isExpired, uint256 blocksUntilReveal)",
+    "function commitmentHashes(uint256 _gameId) view returns (bytes32)",
+    "function revealDelay() view returns (uint256)",
+    "function revealWindow() view returns (uint256)",
+    
+    // Service fee functions
     "function serviceFee() view returns (uint256)",
     "function getRequiredServiceFee(bool _isCumulative) view returns (uint256)",
     
@@ -453,18 +548,19 @@ export const fortunePoolV2ABI = [
     "function activeTierCount() view returns (uint256)",
     "function gameFeeBips() view returns (uint256)",
     "function getExpectedGuessCount(bool _isCumulative) view returns (uint256)",
-    "function getTier(uint256 _tierId) view returns (uint128 maxRange, uint64 multiplierBips, bool active)",
+    "function getTier(uint256 _tierId) view returns (uint256 maxRange, uint256 multiplierBips, bool active)",
     "function getAllTiers() view returns (uint128[] ranges, uint64[] multipliers)",
     "function calculatePotentialWinnings(uint256 _wagerAmount, bool _isCumulative) view returns (uint256 maxPrize, uint256 netWager, uint256 fee)",
-    "function getGameResult(uint256 _gameId) view returns (address player, uint256 wagerAmount, uint256 prizeWon, uint256 timestamp, bool isCumulative, uint256 matchCount)",
-    "function getGameDetails(uint256 _gameId) view returns (address player, uint256 wagerAmount, uint256 prizeWon, uint256[] guesses, uint256[] rolls, bool[] matches, bool isCumulative)",
-    "function getPlayerStats(address _player) view returns (uint256 gamesPlayed, uint256 totalWageredAmount, uint256 totalWonAmount, int256 netProfit)",
+    
+    // Game results
+    "function getGameResult(uint256 _gameId) view returns (address player, uint256 wagerAmount, uint256 prizeWon, uint256[] guesses, uint256[] rolls, bool isCumulative, uint8 matchCount, uint256 timestamp)",
+    "function getPlayerStats(address _player) view returns (uint256 gamesPlayed, uint256 totalWagered, uint256 totalWon, int256 netProfit)",
     "function getPoolStats() view returns (uint256 poolBalance, uint256 gamesPlayed, uint256 wageredAllTime, uint256 paidOutAllTime, uint256 winsAllTime, uint256 currentFee)",
     
-    // Events
-    "event GamePlayed(uint256 indexed gameId, address indexed player, uint256 wagerAmount, uint256 prizeWon, bool isCumulative, uint8 matchCount)",
-    "event GameDetails(uint256 indexed gameId, uint256[] guesses, uint256[] rolls, bool[] matches)",
-    "event JackpotWon(uint256 indexed gameId, address indexed player, uint256 prizeAmount, uint256 tier)"
+    // Events V6.8
+    "event GameCommitted(uint256 indexed gameId, address indexed player, uint256 wagerAmount, bool isCumulative, uint256 commitBlock)",
+    "event GameRevealed(uint256 indexed gameId, address indexed player, uint256 prizeWon, uint8 matchCount, bool isCumulative)",
+    "event CommitmentExpired(uint256 indexed gameId, address indexed player, uint256 wagerRefunded)"
 ];
 
 export const publicSaleABI = [
@@ -477,16 +573,28 @@ export const publicSaleABI = [
     "event NFTSold(address indexed buyer, uint256 indexed tierId, uint256 indexed tokenId, uint256 price)"
 ];
 
+// Notary V6.8 ABI - ETH Service Fee + Operator
 export const decentralizedNotaryABI = [
+    // NFT functions
     "function balanceOf(address owner) view returns (uint256)",
     "function tokenURI(uint256 tokenId) view returns (string)",
     "function ownerOf(uint256 tokenId) view returns (address)",
+    "function tokenOfOwnerByIndex(address owner, uint256 index) view returns (uint256)",
+    "function totalSupply() view returns (uint256)",
+    
+    // Document functions
     "function getDocument(uint256 tokenId) view returns (tuple(string ipfsCid, string description, bytes32 contentHash, uint256 timestamp))",
     "function documents(uint256 tokenId) view returns (string ipfsCid, string description, bytes32 contentHash, uint256 timestamp)",
-    "function getBaseFee() view returns (uint256)",
-    "function calculateFee(uint256 _boosterTokenId) view returns (uint256)",
-    "function notarize(string _ipfsCid, string _description, bytes32 _contentHash, uint256 _boosterTokenId) external returns (uint256)",
-    "event DocumentNotarized(uint256 indexed tokenId, address indexed owner, string ipfsCid, bytes32 indexed contentHash, uint256 feePaid)"
+    
+    // V6.8: Fees - BKC + ETH
+    "function bkcFee() view returns (uint256)",
+    "function ethFee() view returns (uint256)",
+    
+    // V6.8: New notarize with operator (payable for ETH fee)
+    "function notarize(string _ipfsCid, string _description, bytes32 _contentHash, address _operator) external payable returns (uint256)",
+    
+    // Events V6.8
+    "event DocumentNotarized(uint256 indexed tokenId, address indexed owner, address indexed operator, string ipfsCid, bytes32 contentHash, uint256 bkcFeePaid, uint256 ethFeePaid)"
 ];
 
 export const faucetABI = [
@@ -571,6 +679,39 @@ export const charityPoolABI = [
     "event DonationReceived(uint256 indexed campaignId, address indexed donor, uint256 grossAmount, uint256 netAmount, uint256 burnedAmount)",
     "event CampaignCancelled(uint256 indexed campaignId, address indexed creator)",
     "event FundsWithdrawn(uint256 indexed campaignId, address indexed creator, uint256 amount, uint256 burnedAmount, bool goalMet)"
+];
+
+// ============================================================================
+// ✅ V6.8: BACKCHAT ABI - Social Features
+// ============================================================================
+
+export const backchatABI = [
+    // Profile
+    "function createProfile(string _username) external",
+    "function hasProfile(address _user) view returns (bool)",
+    "function getProfile(address _user) view returns (tuple(string username, uint256 postCount, uint256 likeCount, uint256 createdAt))",
+    
+    // Posts V6.8: with operator parameter
+    "function createPost(string _content, string _mediaCID, address _operator) external payable returns (uint256)",
+    "function reply(uint256 _parentId, string _content, string _mediaCID, address _operator) external payable returns (uint256)",
+    "function likePost(uint256 _postId, address _operator) external payable",
+    
+    // View functions
+    "function posts(uint256 _postId) view returns (tuple(address author, string content, string mediaCID, uint256 parentId, uint256 likeCount, uint256 replyCount, uint256 createdAt, bool exists))",
+    "function getPost(uint256 _postId) view returns (tuple(address author, string content, string mediaCID, uint256 parentId, uint256 likeCount, uint256 replyCount, uint256 createdAt, bool exists))",
+    "function hasLiked(address _user, uint256 _postId) view returns (bool)",
+    "function getPostReplies(uint256 _postId) view returns (uint256[])",
+    "function totalPosts() view returns (uint256)",
+    "function totalUsers() view returns (uint256)",
+    
+    // Fees
+    "function postCost() view returns (uint256)",
+    "function likeCost() view returns (uint256)",
+    
+    // Events V6.8
+    "event ProfileCreated(address indexed user, string username)",
+    "event PostCreated(uint256 indexed postId, address indexed author, address indexed operator, string content, uint256 parentId)",
+    "event PostLiked(uint256 indexed postId, address indexed liker, address indexed operator)"
 ];
 
 // Campaign Status Enum

@@ -1,13 +1,36 @@
 {
-  "VERSION": "2.0.0",
-  "DESCRIPTION": "Backchain Ecosystem - Deploy Unificado",
-  "NETWORK": "arbitrum-sepolia",
-  "CREATED_AT": "2025-12-31T20:17:21.440Z",
+  "VERSION": "6.9.0",
+  "DESCRIPTION": "Backchain Ecosystem V6.9 - Backchat V7 (Non-Upgradeable)",
+  "NETWORK": "arbitrumSepolia",
+  "CREATED_AT": "2026-02-02T14:27:08.362Z",
   "externalContracts": {
     "BACKCOIN_ORACLE": "0x16346f5a45f9615f1c894414989f0891c54ef07b"
   },
   "wallets": {
-    "TREASURY": "0xc93030333E3a235c2605BcB7C7330650B600B6D0"
+    "TREASURY": "0xc93030333E3a235c2605BcB7C7330650B600B6D0",
+    "MULTISIG_ADMIN": "DEPLOYER"
+  },
+  "security": {
+    "GOVERNANCE_DEPLOYED": true,
+    "OWNERSHIP_TRANSFERRED": "true",
+    "TIMELOCK_ENABLED": false,
+    "TIMELOCK_DELAY_SECONDS": "172800",
+    "GOVERNANCE_PHASE": 0,
+    "GOVERNANCE_ADDRESS": "0x157e08d5F5a776A530227f548d0f0C47682b7A3E"
+  },
+  "features": {
+    "METAADS_ENABLED": true,
+    "BACKCHAT_ENABLED": true,
+    "BACKCHAT_VERSION": "V7.0.0 (Non-Upgradeable)"
+  },
+  "miningDistribution": {
+    "TREASURY": "3000",
+    "DELEGATOR_POOL": "7000"
+  },
+  "LAST_UPDATED": "2026-02-02T14:35:14.901Z",
+  "feeDistribution": {
+    "TREASURY": "3000",
+    "DELEGATOR_POOL": "7000"
   },
   "serviceFeesBIPS": {
     "DELEGATION_FEE_BIPS": "50",
@@ -19,28 +42,19 @@
     "FORTUNE_POOL_GAME_FEE": "1000",
     "RENTAL_MARKET_TAX_BIPS": "1000"
   },
-  "LAST_UPDATED": "2026-01-12T13:08:45.421Z",
-  "miningDistribution": {
-    "TREASURY": "3000",
-    "DELEGATOR_POOL": "7000"
+  "backchat": {
+    "SERVICE_KEY": "BACKCHAT_SERVICE",
+    "VERSION": "V7.0.0 (Non-Upgradeable)",
+    "CONFIG_TYPE": "HARDCODED_CONSTANTS"
   },
-  "feeDistribution": {
-    "TREASURY": "3000",
-    "DELEGATOR_POOL": "7000"
-  },
-  "boosterDiscounts": {
-    "1000": "1000",
-    "2000": "2000",
-    "3000": "3000",
-    "4000": "4000",
-    "5000": "5000",
-    "6000": "6000",
-    "7000": "7000"
+  "charityPool": {
+    "DONATION_FEE_BIPS": "500",
+    "SERVICE_KEY": "CHARITY_POOL_SERVICE",
+    "VERSION": "V2"
   },
   "rentalManager": {
-    "METAADS_ENABLED": "true",
+    "ENABLED": "true",
     "TREASURY": "0xc93030333E3a235c2605BcB7C7330650B600B6D0",
-    "VERSION": "V2",
-    "UPGRADED_AT": "2026-01-12T13:08:45.421Z"
+    "VERSION": "V3.1"
   }
 }

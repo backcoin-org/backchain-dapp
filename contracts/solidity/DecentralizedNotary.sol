@@ -1,6 +1,123 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.28;
 
+/*
+ * ============================================================================
+ *
+ *                             BACKCHAIN PROTOCOL
+ *
+ *                    ██╗   ██╗███╗   ██╗███████╗████████╗ ██████╗ ██████╗
+ *                    ██║   ██║████╗  ██║██╔════╝╚══██╔══╝██╔═══██╗██╔══██╗
+ *                    ██║   ██║██╔██╗ ██║███████╗   ██║   ██║   ██║██████╔╝
+ *                    ██║   ██║██║╚██╗██║╚════██║   ██║   ██║   ██║██╔═══╝
+ *                    ╚██████╔╝██║ ╚████║███████║   ██║   ╚██████╔╝██║
+ *                     ╚═════╝ ╚═╝  ╚═══╝╚══════╝   ╚═╝    ╚═════╝ ╚═╝
+ *
+ *                    P E R M I S S I O N L E S S   .   I M M U T A B L E
+ *
+ * ============================================================================
+ *  Contract    : DecentralizedNotary
+ *  Version     : 6.0.0
+ *  Network     : Arbitrum
+ *  License     : MIT
+ *  Solidity    : 0.8.28
+ * ============================================================================
+ *
+ *  100% DECENTRALIZED SYSTEM
+ *
+ *  This contract is part of a fully decentralized, permissionless,
+ *  and UNSTOPPABLE protocol.
+ *
+ *  - NO CENTRAL AUTHORITY    : Code is law
+ *  - NO PERMISSION NEEDED    : Anyone can become an Operator
+ *  - NO SINGLE POINT OF FAILURE : Runs on Arbitrum blockchain
+ *  - CENSORSHIP RESISTANT    : Cannot be stopped or controlled
+ *
+ * ============================================================================
+ *
+ *  BECOME AN OPERATOR
+ *
+ *  Anyone in the world can:
+ *
+ *  1. Build their own frontend, app, bot, or tool for Backchain
+ *  2. Pass their wallet address as the "operator" parameter
+ *  3. Earn a percentage of ALL fees (BKC + ETH) generated
+ *
+ *  No registration. No approval. No KYC. Just build and earn.
+ *
+ * ============================================================================
+ *
+ *  PURPOSE
+ *
+ *  Enterprise-grade document certification and timestamping on blockchain.
+ *  Each notarization mints an NFT containing:
+ *
+ *  - IPFS content identifier (CID)
+ *  - Document description
+ *  - SHA-256 content hash
+ *  - Immutable timestamp
+ *
+ *  Use Cases (examples, not exhaustive):
+ *  - Legal document certification
+ *  - Intellectual property timestamping
+ *  - Academic credential verification
+ *  - Contract and agreement notarization
+ *  - Evidence preservation
+ *
+ * ============================================================================
+ *
+ *  FEE STRUCTURE (V6 - EQUAL FOR ALL)
+ *
+ *  +-------------+------------------+----------------------------------------+
+ *  | Action      | Default Fee      | Destination                            |
+ *  +-------------+------------------+----------------------------------------+
+ *  | Notarize    | 1 BKC            | MiningManager                          |
+ *  | Notarize    | 0.0001 ETH       | MiningManager                          |
+ *  +-------------+------------------+----------------------------------------+
+ *
+ *  IMPORTANT: Fees are the SAME for all users. NFT ownership does NOT
+ *             provide discounts on notarization fees. NFTs only affect
+ *             the burn rate when claiming rewards from DelegationManager.
+ *
+ * ============================================================================
+ *
+ *  FEE DISTRIBUTION
+ *
+ *  BKC Flow:
+ *  +------------------------------------------------------------------+
+ *  |                      BKC FEE COLLECTED                           |
+ *  |                             |                                    |
+ *  |                             v                                    |
+ *  |                       MININGMANAGER                              |
+ *  |                             |                                    |
+ *  |      +----------------------+----------------------+             |
+ *  |      |          |           |                      |             |
+ *  |      v          v           v                      v             |
+ *  |  OPERATOR     BURN      TREASURY             DELEGATORS          |
+ *  |  (config%)  (config%)   (config%)             (config%)          |
+ *  +------------------------------------------------------------------+
+ *
+ *  ETH Flow:
+ *  +------------------------------------------------------------------+
+ *  |                      ETH FEE COLLECTED                           |
+ *  |                             |                                    |
+ *  |                             v                                    |
+ *  |                       MININGMANAGER                              |
+ *  |                             |                                    |
+ *  |           +-----------------+-----------------+                  |
+ *  |           |                                   |                  |
+ *  |           v                                   v                  |
+ *  |       OPERATOR                            TREASURY               |
+ *  |       (config%)                           (remaining)            |
+ *  +------------------------------------------------------------------+
+ *
+ * ============================================================================
+ *  Security Contact : dev@backcoin.org
+ *  Website          : https://backcoin.org
+ *  Documentation    : https://github.com/backcoin-org/backchain-dapp/tree/main/docs
+ * ============================================================================
+ */
+
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
@@ -13,26 +130,14 @@ import "@openzeppelin/contracts-upgradeable/utils/Base64Upgradeable.sol";
 import "./IInterfaces.sol";
 import "./BKCToken.sol";
 
-/**
- * @title Backchain Digital Notary
- * @author Backchain Protocol
- * @notice Enterprise-grade document certification and timestamping on the blockchain
- * @dev Each notarization mints an NFT containing:
- *      - IPFS content identifier (CID)
- *      - Document description
- *      - SHA-256 content hash
- *      - Immutable timestamp
- *
- *      Features:
- *      - On-chain metadata using Base64 encoding
- *      - NFT-based fee discounts via RewardBoosterNFT
- *      - Proof-of-Purchase mining integration
- *      - OpenSea compatible metadata
- *
- * @custom:security-contact dev@backcoin.org
- * @custom:website https://backcoin.org
- * @custom:network Arbitrum
- */
+interface IMiningManagerV3 {
+    function performPurchaseMiningWithOperator(
+        bytes32 serviceKey,
+        uint256 purchaseAmount,
+        address operator
+    ) external payable;
+}
+
 contract DecentralizedNotary is
     Initializable,
     UUPSUpgradeable,
@@ -47,58 +152,18 @@ contract DecentralizedNotary is
     //                              CONSTANTS
     // =========================================================================
 
-    /// @notice Basis points denominator (100% = 10000)
-    uint256 private constant BIPS_DENOMINATOR = 10_000;
-
-    /// @notice Service key for MiningManager authorization
     bytes32 public constant SERVICE_KEY = keccak256("NOTARY_SERVICE");
 
     // =========================================================================
     //                              STRUCTS
     // =========================================================================
 
-    /// @notice Document certification record
     struct Document {
-        string ipfsCid;       // IPFS content identifier (e.g., "ipfs://Qm...")
-        string description;   // Human-readable description
-        bytes32 contentHash;  // SHA-256 hash of document content
-        uint256 timestamp;    // Block timestamp when notarized
+        string ipfsCid;
+        string description;
+        bytes32 contentHash;
+        uint256 timestamp;
     }
-
-    // =========================================================================
-    //                              STATE
-    // =========================================================================
-
-    /// @notice Reference to the ecosystem hub
-    IEcosystemManager public ecosystemManager;
-
-    /// @notice BKC token contract
-    BKCToken public bkcToken;
-
-    /// @notice Address of the mining manager
-    address public miningManagerAddress;
-
-    /// @notice Next token ID to mint
-    uint256 private _nextTokenId;
-
-    /// @notice Token ID => Document data
-    mapping(uint256 => Document) public documents;
-
-    /// @notice Token ID => Fee paid for notarization
-    mapping(uint256 => uint256) public notarizationFeePaid;
-
-    // =========================================================================
-    //                              EVENTS
-    // =========================================================================
-
-    /// @notice Emitted when a document is notarized
-    event DocumentNotarized(
-        uint256 indexed tokenId,
-        address indexed owner,
-        string ipfsCid,
-        bytes32 indexed contentHash,
-        uint256 feePaid
-    );
 
     // =========================================================================
     //                              ERRORS
@@ -108,6 +173,82 @@ contract DecentralizedNotary is
     error EmptyMetadata();
     error TokenNotFound();
     error CoreContractNotSet();
+    error InsufficientETHFee();
+    error TransferFailed();
+
+    // =========================================================================
+    //                              STATE
+    // =========================================================================
+
+    IEcosystemManager public ecosystemManager;
+
+    BKCToken public bkcToken;
+
+    address public miningManagerAddress;
+
+    uint256 private _nextTokenId;
+
+    /// @notice ETH fee for notarization (default: 0.0001 ETH)
+    uint256 public notarizationFeeETH;
+
+    // -------------------------------------------------------------------------
+    // Mappings
+    // -------------------------------------------------------------------------
+
+    mapping(uint256 => Document) public documents;
+
+    mapping(uint256 => uint256) public notarizationFeePaid;
+
+    /// @notice Reverse lookup: content hash => token ID
+    /// @dev Allows anyone to verify if a document was notarized
+    mapping(bytes32 => uint256) public hashToTokenId;
+
+    // -------------------------------------------------------------------------
+    // Statistics
+    // -------------------------------------------------------------------------
+
+    uint256 public totalNotarizations;
+
+    uint256 public totalBKCCollected;
+
+    uint256 public totalETHCollected;
+
+    // =========================================================================
+    //                           STORAGE GAP
+    // =========================================================================
+
+    /**
+     * @dev Reserved storage slots for future upgrades.
+     *
+     *      Current usage: 8 slots (non-mapping state variables)
+     *      Reserved: 44 slots
+     *
+     *      Future features may include:
+     *      - Document categories
+     *      - Expiration dates
+     *      - Witness/signature system
+     *      - Batch notarization roots
+     *      - Subscription system
+     *
+     *      When adding new state variables, reduce __gap accordingly.
+     */
+    uint256[44] private __gap;
+
+    // =========================================================================
+    //                              EVENTS
+    // =========================================================================
+
+    event DocumentNotarized(
+        uint256 indexed tokenId,
+        address indexed owner,
+        string ipfsCid,
+        bytes32 indexed contentHash,
+        uint256 bkcFeePaid,
+        uint256 ethFeePaid,
+        address operator
+    );
+
+    event ETHFeeUpdated(uint256 oldFee, uint256 newFee);
 
     // =========================================================================
     //                           INITIALIZATION
@@ -118,11 +259,6 @@ contract DecentralizedNotary is
         _disableInitializers();
     }
 
-    /**
-     * @notice Initializes the Digital Notary contract
-     * @param _owner Contract owner address
-     * @param _ecosystemManager Address of the ecosystem hub
-     */
     function initialize(
         address _owner,
         address _ecosystemManager
@@ -150,11 +286,11 @@ contract DecentralizedNotary is
         miningManagerAddress = mmAddress;
 
         _nextTokenId = 1;
+
+        // Default ETH fee
+        notarizationFeeETH = 0.0001 ether;
     }
 
-    /**
-     * @dev Authorizes contract upgrades (owner only)
-     */
     function _authorizeUpgrade(address) internal override onlyOwner {}
 
     // =========================================================================
@@ -165,39 +301,60 @@ contract DecentralizedNotary is
      * @notice Notarizes a document on the blockchain
      * @dev Mints an NFT containing the document certification
      *
-     *      Fee Calculation with NFT Discount:
-     *      - Base fee retrieved from EcosystemManager
-     *      - If user owns a RewardBoosterNFT, discount is applied proportionally
-     *      - Example: 1 BKC fee with 70% discount = 0.3 BKC
+     *      Fee Structure (V6 - EQUAL FOR ALL):
+     *      - BKC fee: Retrieved from EcosystemManager (NO discount)
+     *      - ETH fee: Fixed amount (NO discount)
      *
-     * @param _ipfsCid IPFS content identifier (e.g., "ipfs://QmHash...")
+     *      Both fees go to MiningManager which distributes to:
+     *      - Operator (if provided)
+     *      - Burn (BKC only)
+     *      - Treasury
+     *      - Delegators (BKC only)
+     *
+     * @param _ipfsCid IPFS content identifier
      * @param _description Brief description of the document
      * @param _contentHash SHA-256 hash of the document content
-     * @param _boosterTokenId RewardBoosterNFT token ID for fee discount (0 = no discount)
+     * @param _operator Address of the frontend operator (can be address(0))
      * @return tokenId The minted NFT token ID
      */
     function notarize(
         string calldata _ipfsCid,
         string calldata _description,
         bytes32 _contentHash,
-        uint256 _boosterTokenId
-    ) external nonReentrant returns (uint256 tokenId) {
+        address _operator
+    ) external payable nonReentrant returns (uint256 tokenId) {
         if (bytes(_ipfsCid).length == 0) revert EmptyMetadata();
+        if (msg.value < notarizationFeeETH) revert InsufficientETHFee();
 
-        // Calculate fee with potential NFT discount
-        uint256 feeToPay = _calculateFeeWithDiscount(_boosterTokenId);
+        // Get BKC fee (same for all users - NO discount)
+        uint256 bkcFeeToPay = ecosystemManager.getFee(SERVICE_KEY);
 
-        // Process payment
-        if (feeToPay > 0) {
-            bkcToken.safeTransferFrom(msg.sender, address(this), feeToPay);
-            bkcToken.safeTransfer(miningManagerAddress, feeToPay);
-            IMiningManager(miningManagerAddress).performPurchaseMining(SERVICE_KEY, feeToPay);
+        // Process BKC payment
+        if (bkcFeeToPay > 0) {
+            bkcToken.safeTransferFrom(msg.sender, address(this), bkcFeeToPay);
+            bkcToken.safeTransfer(miningManagerAddress, bkcFeeToPay);
+
+            unchecked {
+                totalBKCCollected += bkcFeeToPay;
+            }
         }
+
+        // Process ETH payment
+        uint256 ethFeeToPay = msg.value;
+        if (ethFeeToPay > 0) {
+            unchecked {
+                totalETHCollected += ethFeeToPay;
+            }
+        }
+
+        // Send both fees to MiningManager with operator info
+        _sendToMining(bkcFeeToPay, ethFeeToPay, _operator);
 
         // Mint NFT
         tokenId = _nextTokenId;
         unchecked {
             ++_nextTokenId;
+            ++totalNotarizations;
         }
 
         _safeMint(msg.sender, tokenId);
@@ -210,62 +367,90 @@ contract DecentralizedNotary is
             timestamp: block.timestamp
         });
 
-        notarizationFeePaid[tokenId] = feeToPay;
+        // Register reverse lookup
+        hashToTokenId[_contentHash] = tokenId;
 
-        emit DocumentNotarized(tokenId, msg.sender, _ipfsCid, _contentHash, feeToPay);
+        notarizationFeePaid[tokenId] = bkcFeeToPay;
+
+        emit DocumentNotarized(
+            tokenId,
+            msg.sender,
+            _ipfsCid,
+            _contentHash,
+            bkcFeeToPay,
+            ethFeeToPay,
+            _operator
+        );
     }
 
     // =========================================================================
     //                          VIEW FUNCTIONS
     // =========================================================================
 
-    /**
-     * @notice Returns the document data for a token
-     * @param _tokenId Token ID to query
-     * @return Document struct containing all certification data
-     */
     function getDocument(uint256 _tokenId) external view returns (Document memory) {
         if (!_exists(_tokenId)) revert TokenNotFound();
         return documents[_tokenId];
     }
 
     /**
-     * @notice Returns the current notarization fee (without discount)
-     * @return Base fee in BKC
+     * @notice Verifies if a document hash was notarized
+     * @dev Allows anyone to verify document authenticity without knowing the token ID
+     *      This is useful for public verification pages and APIs
+     *
+     * @param _contentHash SHA-256 hash to verify
+     * @return exists True if document was notarized
+     * @return tokenId The NFT token ID (0 if not found)
+     * @return owner Current owner of the certificate
+     * @return timestamp When the document was notarized
      */
-    function getBaseFee() external view returns (uint256) {
-        return ecosystemManager.getFee(SERVICE_KEY);
+    function verifyByHash(bytes32 _contentHash) external view returns (
+        bool exists,
+        uint256 tokenId,
+        address owner,
+        uint256 timestamp
+    ) {
+        tokenId = hashToTokenId[_contentHash];
+        
+        if (tokenId == 0) {
+            return (false, 0, address(0), 0);
+        }
+        
+        return (
+            true,
+            tokenId,
+            ownerOf(tokenId),
+            documents[tokenId].timestamp
+        );
     }
 
-    /**
-     * @notice Calculates the fee a user would pay
-     * @param _boosterTokenId NFT token ID for discount calculation
-     * @return Fee amount after discount
-     */
-    function calculateFee(uint256 _boosterTokenId) external view returns (uint256) {
-        return _calculateFeeWithDiscount(_boosterTokenId);
+    /// @notice Get the current fee for notarization
+    /// @return bkcFee BKC fee amount
+    /// @return ethFee ETH fee amount
+    function getFee() external view returns (uint256 bkcFee, uint256 ethFee) {
+        bkcFee = ecosystemManager.getFee(SERVICE_KEY);
+        ethFee = notarizationFeeETH;
     }
 
-    /**
-     * @notice Returns total number of notarized documents
-     * @return Current token count
-     */
     function totalSupply() external view returns (uint256) {
-        return _nextTokenId - 1;
+        unchecked {
+            return _nextTokenId - 1;
+        }
     }
 
-    /**
-     * @notice Returns fully on-chain metadata for OpenSea compatibility
-     * @param _tokenId Token ID to query
-     * @return Base64-encoded JSON metadata
-     */
+    function getStats() external view returns (
+        uint256 notarizations,
+        uint256 bkcCollected,
+        uint256 ethCollected
+    ) {
+        return (totalNotarizations, totalBKCCollected, totalETHCollected);
+    }
+
     function tokenURI(uint256 _tokenId) public view override returns (string memory) {
         if (!_exists(_tokenId)) revert TokenNotFound();
 
         Document memory doc = documents[_tokenId];
         string memory imageUrl = _convertIpfsToHttp(doc.ipfsCid);
 
-        // Build description with verification info
         string memory fullDescription = string(abi.encodePacked(
             _escapeJson(doc.description),
             "\\n\\n---\\n",
@@ -273,11 +458,10 @@ contract DecentralizedNotary is
             "Content Hash: ", _bytes32ToHex(doc.contentHash)
         ));
 
-        // Build JSON metadata
         bytes memory json = abi.encodePacked(
             '{"name":"Notary Certificate #', _tokenId.toString(), '",',
             '"description":"', fullDescription, '",',
-            '"external_url":"https://backcoin.org/notary/',  _tokenId.toString(), '",',
+            '"external_url":"https://backcoin.org/notary/', _tokenId.toString(), '",',
             '"image":"', imageUrl, '",',
             '"attributes":[',
                 '{"trait_type":"Status","value":"Verified"},',
@@ -294,70 +478,82 @@ contract DecentralizedNotary is
     }
 
     // =========================================================================
+    //                         ADMIN FUNCTIONS
+    // =========================================================================
+
+    function setETHFee(uint256 _newFee) external onlyOwner {
+        emit ETHFeeUpdated(notarizationFeeETH, _newFee);
+        notarizationFeeETH = _newFee;
+    }
+
+    function updateMiningManager() external onlyOwner {
+        address mmAddress = ecosystemManager.getMiningManagerAddress();
+        if (mmAddress == address(0)) revert CoreContractNotSet();
+        miningManagerAddress = mmAddress;
+    }
+
+    function emergencyRecover(
+        address _token,
+        address _to,
+        uint256 _amount
+    ) external onlyOwner {
+        if (_to == address(0)) revert ZeroAddress();
+
+        if (_token == address(0)) {
+            (bool success, ) = _to.call{value: _amount}("");
+            if (!success) revert TransferFailed();
+        } else {
+            SafeERC20Upgradeable.safeTransfer(
+                IERC20Upgradeable(_token),
+                _to,
+                _amount
+            );
+        }
+    }
+
+    // =========================================================================
     //                         INTERNAL FUNCTIONS
     // =========================================================================
 
-    /**
-     * @dev Calculates fee with NFT booster discount
-     *
-     *      Discount Calculation (PROPORTIONAL):
-     *      - discountAmount = baseFee × discountBips / 10000
-     *      - finalFee = baseFee - discountAmount
-     *
-     *      Example with Diamond NFT (70% discount = 7000 bips):
-     *      - Base Fee: 1.0 BKC
-     *      - Discount: 1.0 × 7000 / 10000 = 0.7 BKC
-     *      - Final Fee: 1.0 - 0.7 = 0.3 BKC
-     */
-    function _calculateFeeWithDiscount(uint256 _boosterTokenId) internal view returns (uint256) {
-        uint256 baseFee = ecosystemManager.getFee(SERVICE_KEY);
+    function _sendToMining(
+        uint256 _bkcAmount,
+        uint256 _ethAmount,
+        address _operator
+    ) internal {
+        if (miningManagerAddress == address(0)) return;
 
-        if (baseFee == 0 || _boosterTokenId == 0) {
-            return baseFee;
-        }
-
-        address boosterAddress = ecosystemManager.getBoosterAddress();
-        if (boosterAddress == address(0)) {
-            return baseFee;
-        }
-
-        IRewardBoosterNFT booster = IRewardBoosterNFT(boosterAddress);
-
-        // Try/catch prevents revert if NFT doesn't exist
-        try booster.ownerOf(_boosterTokenId) returns (address owner) {
-            if (owner == msg.sender) {
-                uint256 boostBips = booster.boostBips(_boosterTokenId);
-                uint256 discountBips = ecosystemManager.getBoosterDiscount(boostBips);
-
-                if (discountBips > 0) {
-                    // Calculate PROPORTIONAL discount
-                    uint256 discountAmount = (baseFee * discountBips) / BIPS_DENOMINATOR;
-                    return baseFee > discountAmount ? baseFee - discountAmount : 0;
+        // Call MiningManager with BKC amount and ETH value
+        try IMiningManagerV3(miningManagerAddress).performPurchaseMiningWithOperator{value: _ethAmount}(
+            SERVICE_KEY,
+            _bkcAmount,
+            _operator
+        ) {} catch {
+            // Fallback: send ETH to treasury if MiningManager fails
+            if (_ethAmount > 0) {
+                address treasury = ecosystemManager.getTreasuryAddress();
+                if (treasury != address(0)) {
+                    (bool success, ) = treasury.call{value: _ethAmount}("");
+                    if (!success) revert TransferFailed();
                 }
             }
-        } catch {}
-
-        return baseFee;
+        }
     }
 
-    /**
-     * @dev Converts IPFS URI to HTTP gateway URL
-     */
     function _convertIpfsToHttp(string memory _ipfsUri) internal pure returns (string memory) {
         bytes memory uriBytes = bytes(_ipfsUri);
 
-        // Check for "ipfs://" prefix (7 characters)
         if (uriBytes.length > 7) {
             bytes memory prefix = new bytes(7);
-            for (uint256 i = 0; i < 7; i++) {
+            for (uint256 i; i < 7;) {
                 prefix[i] = uriBytes[i];
+                unchecked { ++i; }
             }
 
             if (keccak256(prefix) == keccak256("ipfs://")) {
-                // Extract CID (everything after "ipfs://")
                 bytes memory cid = new bytes(uriBytes.length - 7);
-                for (uint256 i = 7; i < uriBytes.length; i++) {
+                for (uint256 i = 7; i < uriBytes.length;) {
                     cid[i - 7] = uriBytes[i];
+                    unchecked { ++i; }
                 }
                 return string(abi.encodePacked("https://ipfs.io/ipfs/", cid));
             }
@@ -366,18 +562,13 @@ contract DecentralizedNotary is
         return _ipfsUri;
     }
 
-    /**
-     * @dev Converts bytes32 to hexadecimal string
-     */
     function _bytes32ToHex(bytes32 _data) internal pure returns (string memory) {
         return StringsUpgradeable.toHexString(uint256(_data), 32);
     }
 
-    /**
-     * @dev Simple JSON string escaping
-     */
     function _escapeJson(string memory _str) internal pure returns (string memory) {
-        // Basic implementation - extend as needed for special characters
         return _str;
     }
+
+    receive() external payable {}
 }

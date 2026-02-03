@@ -1,5 +1,7 @@
-// scripts/4_verify_contracts.ts
-// VERSAO V6.5: Backchat + RentalManager V2 (MetaAds + Burn)
+// scripts/verify_contracts.ts
+// ════════════════════════════════════════════════════════════════════════════
+// VERIFICAÇÃO DE CONTRATOS V4.1 - Backchat v2.1 MetaAds
+// ════════════════════════════════════════════════════════════════════════════
 
 import { HardhatRuntimeEnvironment } from "hardhat/types";
 import fs from "fs";
@@ -150,7 +152,8 @@ export async function runScript(hre: HardhatRuntimeEnvironment) {
   const networkName = hre.network.name;
 
   console.log(`\n${"=".repeat(70)}`);
-  console.log(`VERIFICACAO DE CONTRATOS V6.5 - ${networkName.toUpperCase()}`);
+  console.log(`VERIFICAÇÃO DE CONTRATOS V4.1 - ${networkName.toUpperCase()}`);
+  console.log(`Backchat v2.1 MetaAds + RentalManager V2`);
   console.log(`${"=".repeat(70)}`);
   console.log(`Conta: ${deployer.address}`);
 

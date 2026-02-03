@@ -1,31 +1,22 @@
 // js/pages/FortunePool.js
-// ✅ PRODUCTION V4.0 - Fixed for Contract V2
+// ✅ PRODUCTION V6.9 - Commit-Reveal System (Fixed getRequiredServiceFee)
 // ═══════════════════════════════════════════════════════════════════════════════
 //                          BACKCHAIN PROTOCOL
 //                    Fortune Pool - Decentralized Lottery
 // ═══════════════════════════════════════════════════════════════════════════════
 // 
-// V4.0 Changes:
-// - Fixed getRequiredServiceFee call (V2 takes wagerAmount, not boolean)
-// - Added fallback for legacy contract methods
-// - Fixed BigInt serialization in error handling
+// V6.9 Changes:
+// - CRITICAL FIX: getRequiredServiceFee now correctly passes boolean (not wagerAmount)
+// - Contract V6 signature: getRequiredServiceFee(bool _isCumulative)
+// - false = 1x mode (serviceFee), true = 5x mode (serviceFee * 5)
 //
-// V3.0 Changes:
-// - Migrated to use FortuneTx module from transaction engine
-// - Automatic token approval handling
-// - Better error handling with onSuccess/onError callbacks
-//
-// V2.1 Changes:
-// - Service fee (ETH) displayed in mode select and wager screens
-// - Reads tier data and fees from contract
-// - Full BackchainRandomness Oracle integration
-// - Instant game resolution
-//
-// V2.0 Changes:
-// - Integrated with BackchainRandomness Oracle
-// - Games resolve INSTANTLY in the same transaction
-// - No more polling for results
-// - Simplified flow: play() returns results directly
+// V6.8 Changes:
+// - NEW: Commit-Reveal system for fairness (5-block reveal delay)
+// - Step 1: commitPlay() - Submit commitment hash, wager locked
+// - Step 2: Wait 5 blocks (~1.25 seconds on Arbitrum)
+// - Step 3: revealPlay() - Reveal guesses, get result
+// - Added 'waiting' phase with visual countdown
+// - Game cannot be manipulated - guesses hidden until reveal
 //
 // Website: https://backcoin.org
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -107,7 +98,7 @@ const MAX_COMBO_MULTIPLIER = 57; // 2 + 5 + 50
 // ============================================================================
 const Game = {
     mode: null,           // 'jackpot' or 'combo'
-    phase: 'select',      // 'select' | 'pick' | 'wager' | 'processing' | 'result'
+    phase: 'select',      // 'select' | 'pick' | 'wager' | 'processing' | 'waiting' | 'result'
     guess: 50,            // Single guess for jackpot mode
     guesses: [2, 5, 50],  // Array of guesses for combo mode
     comboStep: 0,         // Current step in combo picker (0-2)
@@ -121,8 +112,25 @@ const Game = {
     serviceFee: 0n,       // Base fee in wei
     serviceFee1x: 0n,     // Fee for 1x mode
     serviceFee5x: 0n,     // Fee for 5x mode
-    tiersData: null       // Tier data from contract
+    tiersData: null,      // Tier data from contract
+    // V6.8: Commit-Reveal System
+    commitment: {
+        hash: null,           // Commitment hash sent to contract
+        userSecret: null,     // Secret used to generate hash (bytes32)
+        commitBlock: null,    // Block number when committed
+        commitTxHash: null,   // Transaction hash of commit
+        revealDelay: 5,       // Blocks to wait (default 5 per contract)
+        waitStartTime: null,  // Timestamp when waiting started
+        canReveal: false      // Whether we can reveal now
+    }
 };
+
+// V6.8: Reveal delay polling interval
+let revealCheckInterval = null;
+const REVEAL_CHECK_MS = 3000; // Check every 3 seconds
+// V6.9 FIX: Arbitrum blocks are ~250ms, not 15 seconds
+// Contract DEFAULT_REVEAL_DELAY = 5 blocks = ~1.25 seconds
+const ESTIMATED_BLOCK_TIME = 250; // ~250ms per block on Arbitrum
 
 // ============================================================================
 // STYLES
@@ -301,6 +309,39 @@ function injectStyles() {
             border-radius: 4px;
             font-weight: bold;
         }
+        
+        /* V6.8: Waiting Phase - Countdown Animation */
+        @keyframes countdown-pulse {
+            0%, 100% { transform: scale(1); opacity: 1; }
+            50% { transform: scale(1.05); opacity: 0.8; }
+        }
+        .countdown-pulse { animation: countdown-pulse 1s ease-in-out infinite; }
+        
+        @keyframes waiting-glow {
+            0%, 100% { box-shadow: 0 0 20px rgba(139, 92, 246, 0.3); }
+            50% { box-shadow: 0 0 40px rgba(139, 92, 246, 0.6); }
+        }
+        .waiting-glow { animation: waiting-glow 2s ease-in-out infinite; }
+        
+        @keyframes progress-fill {
+            from { width: 0%; }
+            to { width: 100%; }
+        }
+        
+        @keyframes block-tick {
+            0% { transform: translateY(0); }
+            25% { transform: translateY(-2px); }
+            50% { transform: translateY(0); }
+        }
+        .block-tick { animation: block-tick 0.5s ease-out; }
+        
+        /* Hourglass rotation */
+        @keyframes hourglass-spin {
+            0% { transform: rotate(0deg); }
+            50% { transform: rotate(180deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .hourglass-spin { animation: hourglass-spin 2s ease-in-out infinite; }
     `;
     document.head.appendChild(style);
 }
@@ -396,7 +437,23 @@ function render() {
 }
 
 function cleanup() {
-    // Cleanup any intervals or listeners
+    // V6.8: Cleanup reveal check interval
+    if (revealCheckInterval) {
+        clearInterval(revealCheckInterval);
+        revealCheckInterval = null;
+    }
+    // Reset game state
+    Game.phase = 'select';
+    Game.result = null;
+    Game.commitment = {
+        hash: null,
+        userSecret: null,
+        commitBlock: null,
+        commitTxHash: null,
+        revealDelay: 5,       // Default 5 blocks per contract
+        waitStartTime: null,
+        canReveal: false
+    };
 }
 
 // ============================================================================
@@ -413,6 +470,7 @@ function renderPhase() {
         case 'pick': renderPicker(area); break;
         case 'wager': renderWager(area); break;
         case 'processing': renderProcessing(area); break;
+        case 'waiting': renderWaiting(area); break;  // V6.8: Commit-Reveal waiting phase
         case 'result': renderResult(area); break;
         default: renderModeSelect(area);
     }
@@ -435,6 +493,10 @@ function updateTigerAnimation(phase) {
             break;
         case 'processing':
             tiger.classList.add('tiger-spin');
+            break;
+        case 'waiting':  // V6.8: Waiting phase
+            tiger.classList.add('tiger-float');
+            tiger.style.filter = 'hue-rotate(270deg)'; // Purple tint
             break;
         case 'result':
             if (Game.result?.prizeWon > 0) {
@@ -1063,46 +1125,53 @@ function setupWagerEvents(maxMulti, balanceNum) {
         renderPhase(); 
     });
     
+    // V6.8: Commit-Reveal Flow
     document.getElementById('btn-play')?.addEventListener('click', async () => {
         if (Game.wager < 1) return showToast('Min: 1 BKC', 'warning');
         
-        // Start processing
+        // Start processing (commit phase)
         Game.phase = 'processing';
         renderPhase();
         
         try {
-            // V3: Use FortuneTx.playGame from new transaction module
             const guesses = Game.mode === 'jackpot' ? [Game.guess] : Game.guesses;
             const isCumulative = Game.mode === 'combo';
             const wagerWei = window.ethers.parseEther(Game.wager.toString());
             
-            await FortuneTx.playGame({
+            // V6.8: Use FortuneTx.commitPlay instead of playGame
+            await FortuneTx.commitPlay({
                 wagerAmount: wagerWei,
                 guesses: guesses,
                 isCumulative: isCumulative,
                 button: document.getElementById('btn-play'),
                 
-                onSuccess: (receipt, gameResult) => {
-                    // V3: Results are returned immediately via callback!
-                    Game.gameId = gameResult?.gameId || Date.now();
-                    Game.txHash = receipt.hash;
-                    Game.result = {
-                        rolls: gameResult?.rolls || [],
-                        prizeWon: gameResult?.prizeWon || 0n,
-                        matches: gameResult?.matches || []
+                onSuccess: (receipt, commitData) => {
+                    // V6.8: Commitment successful - now we wait for reveal
+                    Game.gameId = commitData?.gameId || Date.now();
+                    Game.commitment = {
+                        hash: commitData?.commitHash || null,
+                        userSecret: commitData?.userSecret || null,
+                        commitBlock: commitData?.commitBlock || null,
+                        commitTxHash: receipt.hash,
+                        revealDelay: commitData?.revealDelay || 5, // Default 5 blocks per contract
+                        waitStartTime: Date.now(),
+                        canReveal: false
                     };
+                    Game.txHash = receipt.hash;
                     
-                    // Small delay for dramatic effect, then show result
-                    setTimeout(() => {
-                        Game.phase = 'result';
-                        renderPhase();
-                        loadPoolData();
-                    }, 1500);
+                    console.log('🔐 Game committed:', Game.gameId, 'Block:', Game.commitment.commitBlock);
+                    
+                    // Move to waiting phase
+                    Game.phase = 'waiting';
+                    renderPhase();
+                    
+                    // Start checking when we can reveal
+                    startRevealCheck();
                 },
                 
                 onError: (error) => {
                     if (!error.cancelled) {
-                        showToast(error.message || 'Transaction failed', 'error');
+                        showToast(error.message || 'Commit failed', 'error');
                     }
                     Game.phase = 'wager';
                     renderPhase();
@@ -1110,8 +1179,7 @@ function setupWagerEvents(maxMulti, balanceNum) {
             });
             
         } catch (e) {
-            console.error('Play error:', e);
-            // V4: Avoid BigInt in error message - extract just the text
+            console.error('Commit error:', e);
             const errorMsg = e.message || e.reason || 'Transaction failed';
             showToast('Error: ' + errorMsg, 'error');
             Game.phase = 'wager';
@@ -1185,6 +1253,270 @@ function renderProcessing(container) {
         
         setInterval(spin, 80);
     });
+}
+
+// ============================================================================
+// PHASE 4B: WAITING (V6.8 - Commit-Reveal Countdown)
+// ============================================================================
+function renderWaiting(container) {
+    const isJackpot = Game.mode === 'jackpot';
+    const picks = isJackpot ? [Game.guess] : Game.guesses;
+    const tiersToShow = isJackpot ? [TIERS[2]] : TIERS;
+    
+    // Calculate estimated time remaining
+    const elapsed = Date.now() - (Game.commitment.waitStartTime || Date.now());
+    const totalWaitMs = Game.commitment.revealDelay * ESTIMATED_BLOCK_TIME;
+    const remainingMs = Math.max(0, totalWaitMs - elapsed);
+    const remainingSecs = Math.ceil(remainingMs / 1000);
+    
+    container.innerHTML = `
+        <div class="bg-gradient-to-br from-violet-900/30 to-purple-900/20 border border-violet-500/30 rounded-2xl p-6 waiting-glow">
+            
+            <!-- Header -->
+            <div class="text-center mb-6">
+                <div class="w-16 h-16 mx-auto mb-4 rounded-full bg-gradient-to-br from-violet-500/20 to-purple-600/20 border border-violet-500/30 flex items-center justify-center">
+                    <i class="fa-solid fa-hourglass-half text-3xl text-violet-400 hourglass-spin"></i>
+                </div>
+                <h2 class="text-2xl font-bold text-white mb-1">🔐 Commitment Locked</h2>
+                <p class="text-violet-300 text-sm">Waiting for blockchain confirmation...</p>
+            </div>
+            
+            <!-- Countdown Display -->
+            <div class="bg-zinc-900/50 rounded-xl p-4 mb-4 border border-violet-500/20">
+                <div class="text-center">
+                    <p class="text-xs text-zinc-500 uppercase mb-2">Time to Reveal</p>
+                    <div class="flex items-center justify-center gap-2">
+                        <span id="countdown-timer" class="text-4xl font-black text-violet-400 countdown-pulse">~${remainingSecs}s</span>
+                    </div>
+                    <div class="mt-3 w-full bg-zinc-800 rounded-full h-2 overflow-hidden">
+                        <div id="progress-bar" class="h-full bg-gradient-to-r from-violet-500 to-purple-500 rounded-full transition-all duration-1000" 
+                             style="width: ${Math.min(100, (elapsed / totalWaitMs) * 100)}%"></div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Block Info -->
+            <div class="grid grid-cols-2 gap-3 mb-4">
+                <div class="bg-zinc-800/50 rounded-xl p-3 text-center border border-zinc-700/50">
+                    <p class="text-[10px] text-zinc-500 uppercase mb-1">Commit Block</p>
+                    <p class="text-sm font-mono text-white">#${Game.commitment.commitBlock || '...'}</p>
+                </div>
+                <div class="bg-zinc-800/50 rounded-xl p-3 text-center border border-zinc-700/50">
+                    <p class="text-[10px] text-zinc-500 uppercase mb-1">Reveal After</p>
+                    <p class="text-sm font-mono text-violet-400">#${(Game.commitment.commitBlock || 0) + Game.commitment.revealDelay}</p>
+                </div>
+            </div>
+            
+            <!-- Your Locked Numbers -->
+            <div class="border-t border-violet-500/20 pt-4 mb-4">
+                <p class="text-center text-xs text-zinc-500 uppercase mb-3">🔒 Your Locked Numbers</p>
+                <div class="flex justify-center gap-4">
+                    ${tiersToShow.map((tier, idx) => {
+                        const pick = isJackpot ? picks[0] : picks[idx];
+                        return `
+                            <div class="text-center">
+                                <div class="w-14 h-14 rounded-xl bg-gradient-to-br ${tier.bgFrom} ${tier.bgTo} border-2 ${tier.borderColor} flex items-center justify-center relative">
+                                    <span class="text-xl font-black ${tier.textColor}">${pick}</span>
+                                    <div class="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-violet-500 flex items-center justify-center">
+                                        <i class="fa-solid fa-lock text-[8px] text-white"></i>
+                                    </div>
+                                </div>
+                            </div>
+                        `;
+                    }).join('')}
+                </div>
+            </div>
+            
+            <!-- Reveal Button (initially disabled) -->
+            <button id="btn-reveal" 
+                class="w-full py-3 rounded-xl font-bold transition-all ${Game.commitment.canReveal ? 
+                    'bg-gradient-to-r from-emerald-500 to-green-500 text-white hover:shadow-lg hover:shadow-emerald-500/30' : 
+                    'bg-zinc-800 text-zinc-500 cursor-not-allowed'}" 
+                ${Game.commitment.canReveal ? '' : 'disabled'}>
+                <i class="fa-solid ${Game.commitment.canReveal ? 'fa-dice' : 'fa-lock'} mr-2"></i>
+                <span id="reveal-btn-text">${Game.commitment.canReveal ? 'Reveal & Get Result!' : 'Waiting for blocks...'}</span>
+            </button>
+            
+            <!-- Info -->
+            <div class="mt-4 p-3 bg-violet-500/10 rounded-lg border border-violet-500/20">
+                <p class="text-[10px] text-violet-300 text-center">
+                    <i class="fa-solid fa-shield-halved mr-1"></i>
+                    V6.8: Commit-reveal prevents manipulation. Your numbers are hidden until reveal.
+                </p>
+            </div>
+            
+            ${Game.commitment.commitTxHash ? `
+                <div class="text-center mt-3">
+                    <a href="${EXPLORER_TX}${Game.commitment.commitTxHash}" target="_blank" 
+                       class="inline-flex items-center gap-2 text-xs text-zinc-500 hover:text-zinc-400">
+                        <i class="fa-solid fa-external-link"></i>
+                        View Commit TX
+                    </a>
+                </div>
+            ` : ''}
+        </div>
+    `;
+    
+    // Add reveal button handler
+    document.getElementById('btn-reveal')?.addEventListener('click', () => {
+        if (Game.commitment.canReveal) {
+            executeReveal();
+        }
+    });
+    
+    // Start countdown update
+    updateWaitingCountdown();
+}
+
+// V6.8: Update countdown timer in waiting phase
+function updateWaitingCountdown() {
+    if (Game.phase !== 'waiting') return;
+    
+    const timerEl = document.getElementById('countdown-timer');
+    const progressEl = document.getElementById('progress-bar');
+    const btnEl = document.getElementById('btn-reveal');
+    const btnTextEl = document.getElementById('reveal-btn-text');
+    
+    if (!timerEl) return;
+    
+    const elapsed = Date.now() - (Game.commitment.waitStartTime || Date.now());
+    const totalWaitMs = Game.commitment.revealDelay * ESTIMATED_BLOCK_TIME;
+    const remainingMs = Math.max(0, totalWaitMs - elapsed);
+    const remainingSecs = Math.ceil(remainingMs / 1000);
+    
+    timerEl.textContent = remainingSecs > 0 ? `~${remainingSecs}s` : 'Ready!';
+    
+    if (progressEl) {
+        const progress = Math.min(100, (elapsed / totalWaitMs) * 100);
+        progressEl.style.width = `${progress}%`;
+    }
+    
+    // Enable reveal button when ready (based on time estimate)
+    if (remainingSecs <= 0 && !Game.commitment.canReveal) {
+        Game.commitment.canReveal = true;
+        if (btnEl) {
+            btnEl.disabled = false;
+            btnEl.className = 'w-full py-3 rounded-xl font-bold transition-all bg-gradient-to-r from-emerald-500 to-green-500 text-white hover:shadow-lg hover:shadow-emerald-500/30 animate-pulse';
+        }
+        if (btnTextEl) {
+            btnTextEl.textContent = '🎲 Reveal & Get Result!';
+        }
+        showToast('Ready to reveal! Click the button.', 'success');
+    }
+    
+    // Continue updating if still waiting
+    if (Game.phase === 'waiting') {
+        setTimeout(updateWaitingCountdown, 1000);
+    }
+}
+
+// V6.8: Start polling to check if we can reveal
+function startRevealCheck() {
+    if (revealCheckInterval) {
+        clearInterval(revealCheckInterval);
+    }
+    
+    // Initial countdown update
+    setTimeout(updateWaitingCountdown, 100);
+    
+    // Also check contract status periodically
+    revealCheckInterval = setInterval(async () => {
+        if (Game.phase !== 'waiting') {
+            clearInterval(revealCheckInterval);
+            return;
+        }
+        
+        try {
+            // Check if we can reveal from contract
+            const canReveal = await checkCanReveal();
+            if (canReveal && !Game.commitment.canReveal) {
+                Game.commitment.canReveal = true;
+                renderPhase(); // Re-render with enabled button
+            }
+        } catch (e) {
+            console.warn('Reveal check error:', e);
+        }
+    }, REVEAL_CHECK_MS);
+}
+
+// V6.8: Check if we can reveal from contract
+async function checkCanReveal() {
+    if (!State.fortunePoolContractPublic || !Game.gameId) return false;
+    
+    try {
+        const status = await State.fortunePoolContractPublic.getCommitmentStatus(Game.gameId);
+        return status.canReveal === true;
+    } catch (e) {
+        // Fallback: use time-based estimate
+        const elapsed = Date.now() - (Game.commitment.waitStartTime || Date.now());
+        const totalWaitMs = Game.commitment.revealDelay * ESTIMATED_BLOCK_TIME;
+        return elapsed >= totalWaitMs;
+    }
+}
+
+// V6.8: Execute the reveal transaction
+async function executeReveal() {
+    if (!Game.commitment.canReveal) {
+        showToast('Not ready to reveal yet!', 'warning');
+        return;
+    }
+    
+    const btn = document.getElementById('btn-reveal');
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-2"></i>Revealing...';
+    }
+    
+    try {
+        const guesses = Game.mode === 'jackpot' ? [Game.guess] : Game.guesses;
+        
+        await FortuneTx.revealPlay({
+            gameId: Game.gameId,
+            guesses: guesses,
+            userSecret: Game.commitment.userSecret,
+            button: btn,
+            
+            onSuccess: (receipt, gameResult) => {
+                // Stop checking for reveal
+                if (revealCheckInterval) {
+                    clearInterval(revealCheckInterval);
+                }
+                
+                Game.txHash = receipt.hash;
+                Game.result = {
+                    rolls: gameResult?.rolls || [],
+                    prizeWon: gameResult?.prizeWon || 0n,
+                    matches: gameResult?.matches || [],
+                    matchCount: gameResult?.matchCount || 0
+                };
+                
+                console.log('🎲 Game revealed:', Game.result);
+                
+                // Show result
+                Game.phase = 'result';
+                renderPhase();
+                loadPoolData();
+            },
+            
+            onError: (error) => {
+                if (!error.cancelled) {
+                    showToast(error.message || 'Reveal failed', 'error');
+                }
+                if (btn) {
+                    btn.disabled = false;
+                    btn.innerHTML = '<i class="fa-solid fa-dice mr-2"></i>Try Again';
+                }
+            }
+        });
+        
+    } catch (e) {
+        console.error('Reveal error:', e);
+        showToast('Reveal failed: ' + (e.message || 'Unknown error'), 'error');
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fa-solid fa-dice mr-2"></i>Try Again';
+        }
+    }
 }
 
 // ============================================================================
@@ -1595,29 +1927,29 @@ async function getFortunePoolStatus() {
     }
 
     try {
-        // V4: Updated for V2 contract - getRequiredServiceFee takes wagerAmount, not boolean
-        // Use default wager amounts for fee estimation
-        const defaultWager1x = window.ethers.parseEther('10');  // 10 BKC for basic fee
-        const defaultWager5x = window.ethers.parseEther('100'); // 100 BKC for higher fee
-        
         const [prizePool, gameCount, tierCount] = await Promise.all([
             contract.prizePoolBalance().catch(() => 0n),
             contract.gameCounter().catch(() => 0),
             contract.activeTierCount().catch(() => 3)
         ]);
         
-        // Get service fees with wager amounts (V2 signature)
+        // V6.9 FIX: getRequiredServiceFee takes boolean, NOT wagerAmount!
+        // Contract V6 signature: getRequiredServiceFee(bool _isCumulative)
+        // - false = 1x mode (serviceFee)
+        // - true = 5x mode (serviceFee * CUMULATIVE_FEE_MULTIPLIER)
         let fee1x = 0n, fee5x = 0n, baseFee = 0n;
         try {
-            fee1x = await contract.getRequiredServiceFee(defaultWager1x);
-            fee5x = await contract.getRequiredServiceFee(defaultWager5x);
+            fee1x = await contract.getRequiredServiceFee(false);  // Jackpot mode (1x)
+            fee5x = await contract.getRequiredServiceFee(true);   // Combo mode (5x)
             baseFee = fee1x;
+            console.log(`Service fees: 1x=${Number(fee1x)/1e18} ETH, 5x=${Number(fee5x)/1e18} ETH`);
         } catch (e) {
-            // Fallback: try legacy method if V2 method fails
+            // Fallback: try direct serviceFee read
+            console.log("getRequiredServiceFee failed, using fallback:", e.message);
             try {
                 baseFee = await contract.serviceFee();
                 fee1x = baseFee;
-                fee5x = baseFee;
+                fee5x = baseFee * 5n; // CUMULATIVE_FEE_MULTIPLIER = 5
             } catch (e2) {
                 console.log("Could not fetch service fee");
             }

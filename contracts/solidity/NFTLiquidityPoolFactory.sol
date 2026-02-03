@@ -1,6 +1,88 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.28;
 
+/*
+ * ============================================================================
+ *
+ *                             BACKCHAIN PROTOCOL
+ *
+ *                    ██╗   ██╗███╗   ██╗███████╗████████╗ ██████╗ ██████╗
+ *                    ██║   ██║████╗  ██║██╔════╝╚══██╔══╝██╔═══██╗██╔══██╗
+ *                    ██║   ██║██╔██╗ ██║███████╗   ██║   ██║   ██║██████╔╝
+ *                    ██║   ██║██║╚██╗██║╚════██║   ██║   ██║   ██║██╔═══╝
+ *                    ╚██████╔╝██║ ╚████║███████║   ██║   ╚██████╔╝██║
+ *                     ╚═════╝ ╚═╝  ╚═══╝╚══════╝   ╚═╝    ╚═════╝ ╚═╝
+ *
+ *                    P E R M I S S I O N L E S S   .   I M M U T A B L E
+ *
+ * ============================================================================
+ *  Contract    : NFTLiquidityPoolFactory
+ *  Version     : 6.0.0
+ *  Network     : Arbitrum
+ *  License     : MIT
+ *  Solidity    : 0.8.28
+ * ============================================================================
+ *
+ *  100% DECENTRALIZED SYSTEM
+ *
+ *  This contract is part of a fully decentralized, permissionless,
+ *  and UNSTOPPABLE protocol.
+ *
+ *  - NO CENTRAL AUTHORITY    : Code is law
+ *  - NO PERMISSION NEEDED    : Anyone can become an Operator
+ *  - NO SINGLE POINT OF FAILURE : Runs on Arbitrum blockchain
+ *  - CENSORSHIP RESISTANT    : Cannot be stopped or controlled
+ *
+ * ============================================================================
+ *
+ *  PURPOSE
+ *
+ *  Factory for deploying NFT liquidity pools using EIP-1167 minimal proxy
+ *  pattern (Clones) for gas-efficient deployment.
+ *
+ *  ┌─────────────────────────────────────────────────────────────────────────┐
+ *  │                         FACTORY ARCHITECTURE                            │
+ *  ├─────────────────────────────────────────────────────────────────────────┤
+ *  │                                                                         │
+ *  │                      ┌──────────────────────┐                           │
+ *  │                      │  POOL FACTORY        │                           │
+ *  │                      │  (This Contract)     │                           │
+ *  │                      └──────────┬───────────┘                           │
+ *  │                                 │                                       │
+ *  │         ┌───────────────────────┼───────────────────────┐               │
+ *  │         │           │           │           │           │               │
+ *  │         ▼           ▼           ▼           ▼           ▼               │
+ *  │    ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌─────────┐                      │
+ *  │    │ Bronze  │ │ Silver  │ │  Gold   │ │Diamond  │                      │
+ *  │    │  1000   │ │  2500   │ │  4000   │ │  5000   │                      │
+ *  │    │ 40%burn │ │ 25%burn │ │ 10%burn │ │  0%burn │                      │
+ *  │    └─────────┘ └─────────┘ └─────────┘ └─────────┘                      │
+ *  │                                                                         │
+ *  └─────────────────────────────────────────────────────────────────────────┘
+ *
+ *  TIER SYSTEM (4 Tiers):
+ *  ┌──────────┬────────────┬───────────┬─────────────┐
+ *  │ Tier     │ Boost Bips │ Burn Rate │ User Gets   │
+ *  ├──────────┼────────────┼───────────┼─────────────┤
+ *  │ No NFT   │ 0          │ 50%       │ 50%         │
+ *  │ Bronze   │ 1000       │ 40%       │ 60%         │
+ *  │ Silver   │ 2500       │ 25%       │ 75%         │
+ *  │ Gold     │ 4000       │ 10%       │ 90%         │
+ *  │ Diamond  │ 5000       │ 0%        │ 100%        │
+ *  └──────────┴────────────┴───────────┴─────────────┘
+ *
+ *  Clone Pattern Benefits:
+ *  • ~90% gas savings vs full deployment
+ *  • All clones share same implementation
+ *  • Each clone has its own storage
+ *
+ * ============================================================================
+ *  Security Contact : dev@backcoin.org
+ *  Website          : https://backcoin.org
+ *  Documentation    : https://github.com/backcoin-org/backchain-dapp/tree/main/docs
+ * ============================================================================
+ */
+
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
@@ -9,49 +91,6 @@ import "@openzeppelin/contracts/proxy/Clones.sol";
 import "./NFTLiquidityPool.sol";
 import "./IInterfaces.sol";
 
-/**
- * @title NFTLiquidityPoolFactory
- * @author Backchain Protocol
- * @notice Factory for deploying and managing NFT liquidity pools
- * @dev Uses EIP-1167 minimal proxy pattern (Clones) for gas-efficient deployment.
- *
- *      Architecture:
- *      ┌─────────────────────────────────────────────────────────────────┐
- *      │                    FACTORY CONTRACT                             │
- *      │  - Deploys one pool per NFT boost tier                         │
- *      │  - Maintains registry of valid pools                           │
- *      │  - MiningManager uses isPool() for authorization               │
- *      └─────────────────────────────────────────────────────────────────┘
- *                                    │
- *          ┌─────────────────────────┼─────────────────────────┐
- *          ▼                         ▼                         ▼
- *    ┌──────────────┐       ┌──────────────┐       ┌──────────────┐
- *    │ Crystal Pool │       │  Gold Pool   │       │ Diamond Pool │
- *    │ (1000 bips)  │       │ (5000 bips)  │       │ (7000 bips)  │
- *    └──────────────┘       └──────────────┘       └──────────────┘
- *
- *      Clone Pattern Benefits:
- *      - ~90% gas savings vs full deployment
- *      - All clones share same implementation
- *      - Each clone has its own storage
- *
- *      Pool Tiers (typical configuration):
- *      ┌────────────┬────────────┬─────────────────┐
- *      │ Tier       │ Boost Bips │ Fee Discount    │
- *      ├────────────┼────────────┼─────────────────┤
- *      │ Crystal    │ 1000       │ 10%             │
- *      │ Iron       │ 2000       │ 20%             │
- *      │ Bronze     │ 3000       │ 30%             │
- *      │ Silver     │ 4000       │ 40%             │
- *      │ Gold       │ 5000       │ 50%             │
- *      │ Platinum   │ 6000       │ 60%             │
- *      │ Diamond    │ 7000       │ 70%             │
- *      └────────────┴────────────┴─────────────────┘
- *
- * @custom:security-contact security@backcoin.org
- * @custom:website https://backcoin.org
- * @custom:network Arbitrum
- */
 contract NFTLiquidityPoolFactory is
     Initializable,
     UUPSUpgradeable,
@@ -59,54 +98,62 @@ contract NFTLiquidityPoolFactory is
     INFTLiquidityPoolFactory
 {
     // =========================================================================
+    //                              CONSTANTS
+    // =========================================================================
+
+    /// @notice Valid boost values for each tier
+    uint256 public constant BOOST_BRONZE = 1000;   // 40% burn
+    uint256 public constant BOOST_SILVER = 2500;   // 25% burn
+    uint256 public constant BOOST_GOLD = 4000;     // 10% burn
+    uint256 public constant BOOST_DIAMOND = 5000;  // 0% burn
+
+    /// @notice Total number of tiers
+    uint256 public constant TOTAL_TIERS = 4;
+
+    // =========================================================================
     //                              STATE
     // =========================================================================
 
-    /// @notice Address of the pool implementation contract (template for clones)
     address public poolImplementation;
 
-    /// @notice Address of the ecosystem manager
     address public ecosystemManagerAddress;
 
-    /// @notice Pool address => is valid pool (used by MiningManager for auth)
     mapping(address => bool) public isPool;
 
-    /// @notice Boost bips => Pool address
     mapping(uint256 => address) public getPoolAddress;
 
-    /// @notice Array of all deployed boost tiers
     uint256[] public deployedBoostBips;
 
-    /// @notice Total pools deployed
     uint256 public poolCount;
+
+    // =========================================================================
+    //                           STORAGE GAP
+    // =========================================================================
+
+    uint256[43] private __gap;
 
     // =========================================================================
     //                              EVENTS
     // =========================================================================
 
-    /// @notice Emitted when pool implementation is updated
     event PoolImplementationUpdated(
         address indexed previousImplementation,
         address indexed newImplementation
     );
 
-    /// @notice Emitted when ecosystem manager is updated
     event EcosystemManagerUpdated(
         address indexed previousManager,
         address indexed newManager
     );
 
-    /// @notice Emitted when a new pool is deployed
     event PoolDeployed(
         uint256 indexed boostBips,
         address indexed poolAddress,
         uint256 poolIndex
     );
 
-    /// @notice Emitted when a pool is disabled
     event PoolDisabled(address indexed poolAddress);
 
-    /// @notice Emitted when a pool is re-enabled
     event PoolEnabled(address indexed poolAddress);
 
     // =========================================================================
@@ -129,12 +176,6 @@ contract NFTLiquidityPoolFactory is
         _disableInitializers();
     }
 
-    /**
-     * @notice Initializes the factory contract
-     * @param _owner Factory owner address
-     * @param _ecosystemManager Ecosystem manager address
-     * @param _poolImplementation Pool implementation address (template)
-     */
     function initialize(
         address _owner,
         address _ecosystemManager,
@@ -153,19 +194,12 @@ contract NFTLiquidityPoolFactory is
         poolImplementation = _poolImplementation;
     }
 
-    /**
-     * @dev Authorizes contract upgrades (owner only)
-     */
     function _authorizeUpgrade(address) internal override onlyOwner {}
 
     // =========================================================================
     //                         ADMIN FUNCTIONS
     // =========================================================================
 
-    /**
-     * @notice Updates the ecosystem manager address
-     * @param _ecosystemManager New ecosystem manager address
-     */
     function setEcosystemManager(address _ecosystemManager) external onlyOwner {
         if (_ecosystemManager == address(0)) revert ZeroAddress();
 
@@ -175,11 +209,6 @@ contract NFTLiquidityPoolFactory is
         emit EcosystemManagerUpdated(previousManager, _ecosystemManager);
     }
 
-    /**
-     * @notice Updates the pool implementation address
-     * @dev New pools will use this implementation. Existing pools unchanged.
-     * @param _poolImplementation New implementation address
-     */
     function setPoolImplementation(address _poolImplementation) external onlyOwner {
         if (_poolImplementation == address(0)) revert ZeroAddress();
 
@@ -189,11 +218,6 @@ contract NFTLiquidityPoolFactory is
         emit PoolImplementationUpdated(previousImplementation, _poolImplementation);
     }
 
-    /**
-     * @notice Disables a pool (removes from isPool registry)
-     * @dev Pool contract still exists but MiningManager won't authorize it
-     * @param _poolAddress Pool address to disable
-     */
     function disablePool(address _poolAddress) external onlyOwner {
         if (!isPool[_poolAddress]) revert PoolNotFound();
 
@@ -202,14 +226,11 @@ contract NFTLiquidityPoolFactory is
         emit PoolDisabled(_poolAddress);
     }
 
-    /**
-     * @notice Re-enables a previously disabled pool
-     * @param _poolAddress Pool address to enable
-     */
     function enablePool(address _poolAddress) external onlyOwner {
-        // Verify it was a pool we deployed (check if it's in any mapping)
         bool wasDeployed = false;
-        for (uint256 i = 0; i < deployedBoostBips.length;) {
+        uint256 length = deployedBoostBips.length;
+
+        for (uint256 i; i < length;) {
             if (getPoolAddress[deployedBoostBips[i]] == _poolAddress) {
                 wasDeployed = true;
                 break;
@@ -228,28 +249,20 @@ contract NFTLiquidityPoolFactory is
     //                        DEPLOYMENT FUNCTIONS
     // =========================================================================
 
-    /**
-     * @notice Deploys a new liquidity pool for an NFT boost tier
-     * @dev Uses EIP-1167 clone pattern for gas efficiency
-     * @param _boostBips NFT boost tier (e.g., 1000 for Crystal, 7000 for Diamond)
-     * @return poolAddress Address of the deployed pool
-     */
+    /// @notice Deploy a single pool (must be a valid tier)
     function deployPool(uint256 _boostBips) external onlyOwner returns (address poolAddress) {
-        if (_boostBips == 0 || _boostBips > 10000) revert InvalidBoostBips();
+        if (!_isValidTier(_boostBips)) revert InvalidBoostBips();
         if (getPoolAddress[_boostBips] != address(0)) revert PoolAlreadyExists();
         if (poolImplementation == address(0)) revert ImplementationNotSet();
 
-        // Deploy minimal proxy clone
         poolAddress = Clones.clone(poolImplementation);
 
-        // Register pool
         isPool[poolAddress] = true;
         getPoolAddress[_boostBips] = poolAddress;
         deployedBoostBips.push(_boostBips);
         poolCount++;
 
-        // Initialize the clone
-        NFTLiquidityPool(poolAddress).initialize(
+        NFTLiquidityPool(payable(poolAddress)).initialize(
             owner(),
             ecosystemManagerAddress,
             _boostBips
@@ -258,11 +271,7 @@ contract NFTLiquidityPoolFactory is
         emit PoolDeployed(_boostBips, poolAddress, poolCount);
     }
 
-    /**
-     * @notice Deploys multiple pools in a single transaction
-     * @param _boostBipsArray Array of boost tiers to deploy
-     * @return poolAddresses Array of deployed pool addresses
-     */
+    /// @notice Deploy multiple pools at once (all must be valid tiers)
     function deployPoolsBatch(
         uint256[] calldata _boostBipsArray
     ) external onlyOwner returns (address[] memory poolAddresses) {
@@ -271,23 +280,20 @@ contract NFTLiquidityPoolFactory is
 
         if (poolImplementation == address(0)) revert ImplementationNotSet();
 
-        for (uint256 i = 0; i < length;) {
+        for (uint256 i; i < length;) {
             uint256 boostBips = _boostBipsArray[i];
 
-            if (boostBips == 0 || boostBips > 10000) revert InvalidBoostBips();
+            if (!_isValidTier(boostBips)) revert InvalidBoostBips();
             if (getPoolAddress[boostBips] != address(0)) revert PoolAlreadyExists();
 
-            // Deploy clone
             address poolAddress = Clones.clone(poolImplementation);
 
-            // Register
             isPool[poolAddress] = true;
             getPoolAddress[boostBips] = poolAddress;
             deployedBoostBips.push(boostBips);
             poolCount++;
 
-            // Initialize
-            NFTLiquidityPool(poolAddress).initialize(
+            NFTLiquidityPool(payable(poolAddress)).initialize(
                 owner(),
                 ecosystemManagerAddress,
                 boostBips
@@ -301,45 +307,36 @@ contract NFTLiquidityPoolFactory is
         }
     }
 
-    /**
-     * @notice Deploys all standard tier pools (Crystal through Diamond)
-     * @dev Convenience function for initial setup
-     * @return addresses Array of deployed pool addresses [Crystal, Iron, Bronze, Silver, Gold, Platinum, Diamond]
-     */
-    function deployAllStandardPools() external onlyOwner returns (address[7] memory addresses) {
-        uint256[7] memory standardTiers = [
-            uint256(1000),  // Crystal
-            uint256(2000),  // Iron
-            uint256(3000),  // Bronze
-            uint256(4000),  // Silver
-            uint256(5000),  // Gold
-            uint256(6000),  // Platinum
-            uint256(7000)   // Diamond
+    /// @notice Deploy all 4 standard tier pools at once
+    /// @return addresses Array of pool addresses [Bronze, Silver, Gold, Diamond]
+    function deployAllStandardPools() external onlyOwner returns (address[4] memory addresses) {
+        uint256[4] memory standardTiers = [
+            BOOST_BRONZE,   // 1000
+            BOOST_SILVER,   // 2500
+            BOOST_GOLD,     // 4000
+            BOOST_DIAMOND   // 5000
         ];
 
         if (poolImplementation == address(0)) revert ImplementationNotSet();
 
-        for (uint256 i = 0; i < 7;) {
+        for (uint256 i; i < TOTAL_TIERS;) {
             uint256 boostBips = standardTiers[i];
 
-            // Skip if already exists
+            // Skip if already deployed
             if (getPoolAddress[boostBips] != address(0)) {
                 addresses[i] = getPoolAddress[boostBips];
                 unchecked { ++i; }
                 continue;
             }
 
-            // Deploy clone
             address poolAddress = Clones.clone(poolImplementation);
 
-            // Register
             isPool[poolAddress] = true;
             getPoolAddress[boostBips] = poolAddress;
             deployedBoostBips.push(boostBips);
             poolCount++;
 
-            // Initialize
-            NFTLiquidityPool(poolAddress).initialize(
+            NFTLiquidityPool(payable(poolAddress)).initialize(
                 owner(),
                 ecosystemManagerAddress,
                 boostBips
@@ -357,43 +354,24 @@ contract NFTLiquidityPoolFactory is
     //                          VIEW FUNCTIONS
     // =========================================================================
 
-    /**
-     * @notice Returns all deployed boost tiers
-     * @return Array of boost bips values
-     */
     function getDeployedBoostBips() external view override returns (uint256[] memory) {
         return deployedBoostBips;
     }
 
-    /**
-     * @notice Returns number of deployed pools
-     * @return Pool count
-     */
     function getPoolCount() external view override returns (uint256) {
         return poolCount;
     }
 
-    /**
-     * @notice Returns all pool addresses
-     * @return pools Array of pool addresses
-     */
     function getAllPools() external view returns (address[] memory pools) {
         uint256 length = deployedBoostBips.length;
         pools = new address[](length);
 
-        for (uint256 i = 0; i < length;) {
+        for (uint256 i; i < length;) {
             pools[i] = getPoolAddress[deployedBoostBips[i]];
             unchecked { ++i; }
         }
     }
 
-    /**
-     * @notice Returns pool information for a specific tier
-     * @param _boostBips Boost tier to query
-     * @return poolAddress Pool contract address
-     * @return exists Whether pool exists
-     * @return active Whether pool is active (in isPool registry)
-     */
     function getPoolInfo(uint256 _boostBips) external view returns (
         address poolAddress,
         bool exists,
@@ -404,12 +382,6 @@ contract NFTLiquidityPoolFactory is
         active = exists && isPool[poolAddress];
     }
 
-    /**
-     * @notice Returns detailed information for all pools
-     * @return boostTiers Array of boost bips
-     * @return poolAddresses Array of pool addresses
-     * @return activeStatus Array of active status
-     */
     function getAllPoolsInfo() external view returns (
         uint256[] memory boostTiers,
         address[] memory poolAddresses,
@@ -421,7 +393,7 @@ contract NFTLiquidityPoolFactory is
         poolAddresses = new address[](length);
         activeStatus = new bool[](length);
 
-        for (uint256 i = 0; i < length;) {
+        for (uint256 i; i < length;) {
             boostTiers[i] = deployedBoostBips[i];
             poolAddresses[i] = getPoolAddress[deployedBoostBips[i]];
             activeStatus[i] = isPool[poolAddresses[i]];
@@ -429,22 +401,42 @@ contract NFTLiquidityPoolFactory is
         }
     }
 
-    /**
-     * @notice Checks if a tier pool has been deployed
-     * @param _boostBips Boost tier to check
-     * @return True if pool exists
-     */
     function hasPool(uint256 _boostBips) external view returns (bool) {
         return getPoolAddress[_boostBips] != address(0);
     }
 
-    /**
-     * @notice Predicts the address of a pool before deployment
-     * @dev Useful for pre-approvals or UI
-     * @param _salt Unique salt for deterministic address
-     * @return Predicted pool address
-     */
     function predictPoolAddress(bytes32 _salt) external view returns (address) {
         return Clones.predictDeterministicAddress(poolImplementation, _salt);
+    }
+
+    /// @notice Get all valid tier boost values
+    function getValidTiers() external pure returns (uint256[4] memory) {
+        return [BOOST_BRONZE, BOOST_SILVER, BOOST_GOLD, BOOST_DIAMOND];
+    }
+
+    /// @notice Get the tier name for a given boost value
+    function getTierName(uint256 _boostBips) external pure returns (string memory) {
+        if (_boostBips == BOOST_DIAMOND) return "Diamond";
+        if (_boostBips == BOOST_GOLD) return "Gold";
+        if (_boostBips == BOOST_SILVER) return "Silver";
+        if (_boostBips == BOOST_BRONZE) return "Bronze";
+        return "Invalid";
+    }
+
+    /// @notice Check if a boost value is a valid tier
+    function isValidTier(uint256 _boostBips) external pure returns (bool) {
+        return _isValidTier(_boostBips);
+    }
+
+    // =========================================================================
+    //                         INTERNAL FUNCTIONS
+    // =========================================================================
+
+    /// @notice Validates that boost value is one of the valid tiers
+    function _isValidTier(uint256 _boostBips) internal pure returns (bool) {
+        return _boostBips == BOOST_BRONZE ||
+               _boostBips == BOOST_SILVER ||
+               _boostBips == BOOST_GOLD ||
+               _boostBips == BOOST_DIAMOND;
     }
 }

@@ -1,6 +1,141 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.28;
 
+/*
+ * ============================================================================
+ *
+ *                             BACKCHAIN PROTOCOL
+ *
+ *                    ██╗   ██╗███╗   ██╗███████╗████████╗ ██████╗ ██████╗
+ *                    ██║   ██║████╗  ██║██╔════╝╚══██╔══╝██╔═══██╗██╔══██╗
+ *                    ██║   ██║██╔██╗ ██║███████╗   ██║   ██║   ██║██████╔╝
+ *                    ██║   ██║██║╚██╗██║╚════██║   ██║   ██║   ██║██╔═══╝
+ *                    ╚██████╔╝██║ ╚████║███████║   ██║   ╚██████╔╝██║
+ *                     ╚═════╝ ╚═╝  ╚═══╝╚══════╝   ╚═╝    ╚═════╝ ╚═╝
+ *
+ *                    P E R M I S S I O N L E S S   .   I M M U T A B L E
+ *
+ * ============================================================================
+ *  Contract    : MiningManager
+ *  Version     : 3.0.0
+ *  Network     : Arbitrum
+ *  License     : MIT
+ *  Solidity    : 0.8.28
+ * ============================================================================
+ *
+ *  100% DECENTRALIZED SYSTEM
+ *
+ *  This contract is the economic heart of a fully decentralized,
+ *  permissionless, and UNSTOPPABLE protocol.
+ *
+ *  - NO CENTRAL AUTHORITY    : Code is law
+ *  - NO PERMISSION NEEDED    : Anyone can become an Operator
+ *  - NO SINGLE POINT OF FAILURE : Runs on Arbitrum blockchain
+ *  - CENSORSHIP RESISTANT    : Cannot be stopped or controlled
+ *
+ * ============================================================================
+ *
+ *  BECOME AN OPERATOR
+ *
+ *  Anyone in the world can:
+ *
+ *  1. Build their own frontend, app, bot, or tool for Backchain
+ *  2. Pass their wallet address as the "operator" parameter
+ *  3. Earn a percentage of ALL fees (BKC + ETH) generated through their interface
+ *
+ *  No registration. No approval. No KYC. Just build and earn.
+ *
+ *  This creates an open ecosystem where developers worldwide are
+ *  incentivized to build interfaces and applications that interact
+ *  with the Backchain protocol.
+ *
+ * ============================================================================
+ *
+ *  TOKEN ECONOMICS
+ *
+ *  1. PROOF-OF-PURCHASE MINING
+ *     Every fee collected triggers new BKC creation.
+ *     Mining rate decreases linearly as supply approaches max cap.
+ *     Formula: mintAmount = fee x (remainingSupply / 160M)
+ *
+ *  2. DEFLATIONARY BURN
+ *     Configurable percentage of BKC fees is permanently burned.
+ *     Reduces total supply over time, increasing scarcity.
+ *     Note: ETH is not burned, it flows to Treasury.
+ *
+ *  3. OPERATOR REWARDS
+ *     Frontend operators earn percentage of fees they generate.
+ *     Both BKC and ETH are accumulated for gas-efficient claiming.
+ *     Creates permissionless, decentralized frontend ecosystem.
+ *
+ *  4. DELEGATOR REWARDS
+ *     BKC fees distributed to delegators (stakers).
+ *     Incentivizes long-term holding and protocol security.
+ *
+ * ============================================================================
+ *
+ *  FEE DISTRIBUTION (With Operator)
+ *
+ *  BKC Flow:
+ *  +------------------------------------------------------------------+
+ *  |                      BKC FEES RECEIVED                           |
+ *  |                             |                                    |
+ *  |      +----------------------+----------------------+             |
+ *  |      |                      |                      |             |
+ *  |      v                      v                      v             |
+ *  |   OPERATOR               BURN                  REMAINING         |
+ *  |   (config%)             (config%)                  |             |
+ *  |   accumulated           destroyed       +----------+----------+  |
+ *  |                                         v                     v  |
+ *  |                                     TREASURY            DELEGATORS|
+ *  |                                     (config%)           (config%) |
+ *  +------------------------------------------------------------------+
+ *
+ *  ETH Flow:
+ *  +------------------------------------------------------------------+
+ *  |                      ETH FEES RECEIVED                           |
+ *  |                             |                                    |
+ *  |           +-----------------+-----------------+                  |
+ *  |           |                                   |                  |
+ *  |           v                                   v                  |
+ *  |       OPERATOR                            TREASURY               |
+ *  |       (config%)                           (remaining)            |
+ *  |       accumulated                         immediate              |
+ *  +------------------------------------------------------------------+
+ *
+ * ============================================================================
+ *
+ *  LINEAR SCARCITY CURVE
+ *
+ *  +--------------------------------------------------------------------+
+ *  |  Remaining Supply    |  Mining Rate   |  Example                   |
+ *  +----------------------+----------------+----------------------------+
+ *  |  160M (start)        |  100%          |  100 BKC fee -> 100 BKC    |
+ *  |  120M                |  75%           |  100 BKC fee -> 75 BKC     |
+ *  |  80M                 |  50%           |  100 BKC fee -> 50 BKC     |
+ *  |  40M                 |  25%           |  100 BKC fee -> 25 BKC     |
+ *  |  0M (max supply)     |  0%            |  100 BKC fee -> 0 BKC      |
+ *  +--------------------------------------------------------------------+
+ *
+ * ============================================================================
+ *
+ *  AUTHORIZED SERVICES (Examples, may be modified by governance)
+ *
+ *  - Social networks, messaging platforms
+ *  - Gaming and lottery systems
+ *  - NFT trading and rental markets
+ *  - Staking and delegation services
+ *  - Document certification systems
+ *  - Charitable donation platforms
+ *  - And any future ecosystem services
+ *
+ * ============================================================================
+ *  Security Contact : dev@backcoin.org
+ *  Website          : https://backcoin.org
+ *  Documentation    : https://docs.backcoin.org
+ * ============================================================================
+ */
+
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
@@ -10,42 +145,6 @@ import "@openzeppelin/contracts-upgradeable/token/ERC20/utils/SafeERC20Upgradeab
 import "./IInterfaces.sol";
 import "./BKCToken.sol";
 
-/**
- * @title MiningManager
- * @author Backchain Protocol
- * @notice Economic engine implementing Proof-of-Purchase mining with linear scarcity
- * @dev Handles two types of token flow:
- *
- *      1. MINING (New Token Creation):
- *         - When ecosystem services collect fees, new BKC is minted
- *         - Mint rate decreases linearly as supply approaches max
- *         - Formula: mintAmount = purchaseAmount × (remainingSupply / 160M)
- *
- *      2. FEE DISTRIBUTION (Existing Tokens):
- *         - Fees collected are distributed to Treasury and Stakers
- *         - Distribution ratios configured in EcosystemManager
- *
- *      Linear Scarcity Curve:
- *      ┌────────────────────────────────────────────────────────────┐
- *      │  Remaining Supply    │  Mining Rate   │  Example           │
- *      ├──────────────────────┼────────────────┼────────────────────┤
- *      │  160M (start)        │  100%          │  100 BKC → 100 BKC │
- *      │  120M                │  75%           │  100 BKC → 75 BKC  │
- *      │  80M                 │  50%           │  100 BKC → 50 BKC  │
- *      │  40M                 │  25%           │  100 BKC → 25 BKC  │
- *      │  0M (max supply)     │  0%            │  100 BKC → 0 BKC   │
- *      └────────────────────────────────────────────────────────────┘
- *
- *      Authorized Miners:
- *      - DecentralizedNotary (document fees)
- *      - FortunePool (game fees)
- *      - NFTLiquidityPool (trading fees)
- *      - DelegationManager (staking fees)
- *
- * @custom:security-contact security@backcoin.org
- * @custom:website https://backcoin.org
- * @custom:network Arbitrum
- */
 contract MiningManager is
     Initializable,
     UUPSUpgradeable,
@@ -59,21 +158,40 @@ contract MiningManager is
     //                              CONSTANTS
     // =========================================================================
 
-    /// @notice Precision multiplier
+    /// @notice Precision multiplier for calculations
     uint256 private constant PRECISION = 1e18;
 
     /// @notice Basis points denominator (100% = 10000)
     uint256 private constant BIPS_DENOMINATOR = 10_000;
 
-    /// @notice Maximum tokens available for mining (160M)
-    /// @dev This is the denominator for the linear scarcity curve
+    /// @notice Maximum tokens available for mining (160M BKC)
     uint256 public constant MAX_MINTABLE_SUPPLY = 160_000_000 * PRECISION;
+
+    /// @notice Maximum burn rate (50% = 5000 bips)
+    uint256 public constant MAX_BURN_BIPS = 5_000;
 
     /// @notice Distribution pool key for Treasury
     bytes32 public constant POOL_TREASURY = keccak256("TREASURY");
 
-    /// @notice Distribution pool key for Delegators (Stakers)
+    /// @notice Distribution pool key for Delegators
     bytes32 public constant POOL_DELEGATOR = keccak256("DELEGATOR_POOL");
+
+    // =========================================================================
+    //                         PACKED CONFIG (1 slot)
+    // =========================================================================
+
+    /// @notice Operator fee rate in basis points
+    /// @dev Anyone can become an operator - no permission required
+    uint64 public operatorFeeBips;
+
+    /// @notice Burn rate for fee distribution (in basis points)
+    uint64 public burnFeeBips;
+
+    /// @notice Burn rate for newly minted tokens (in basis points)
+    uint64 public burnMiningBips;
+
+    /// @notice Reserved for future config
+    uint64 private __configReserved;
 
     // =========================================================================
     //                              STATE
@@ -94,11 +212,54 @@ contract MiningManager is
     /// @notice Whether TGE (Token Generation Event) has been executed
     bool public tgeCompleted;
 
-    /// @notice Total BKC minted through mining
+    // =========================================================================
+    //                         COUNTERS (256-bit for max range)
+    // =========================================================================
+
+    /// @notice Total BKC minted through mining (all time)
     uint256 public totalMined;
 
-    /// @notice Total fees processed
+    /// @notice Total fees processed (all time)
     uint256 public totalFeesProcessed;
+
+    /// @notice Total BKC burned from fees (all time)
+    uint256 public totalBurnedFromFees;
+
+    /// @notice Total BKC burned from mining (all time)
+    uint256 public totalBurnedFromMining;
+
+    /// @notice Total BKC claimed by operators (all time)
+    uint256 public totalOperatorClaimedBKC;
+
+    /// @notice Total ETH claimed by operators (all time)
+    uint256 public totalOperatorClaimedETH;
+
+    // =========================================================================
+    //                       OPERATOR BALANCES (Packed Struct)
+    // =========================================================================
+
+    /// @notice Packed operator balance for gas efficiency
+    /// @dev Using uint128 allows up to 340 billion tokens (sufficient)
+    struct OperatorBalance {
+        uint128 pendingBKC;
+        uint128 pendingETH;
+    }
+
+    /// @notice Operator address => accumulated earnings
+    mapping(address => OperatorBalance) public operatorBalances;
+
+    /// @notice Operator address => total claimed BKC (historical)
+    mapping(address => uint256) public operatorTotalClaimedBKC;
+
+    /// @notice Operator address => total claimed ETH (historical)
+    mapping(address => uint256) public operatorTotalClaimedETH;
+
+    // =========================================================================
+    //                         STORAGE GAP
+    // =========================================================================
+
+    /// @dev Reserved storage slots for future upgrades
+    uint256[44] private __gap;
 
     // =========================================================================
     //                              EVENTS
@@ -121,20 +282,49 @@ contract MiningManager is
         uint256 toDelegators
     );
 
-    /// @notice Emitted when a miner is authorized
-    event MinerAuthorized(
+    /// @notice Emitted when tokens are burned (deflationary)
+    event TokensBurned(
         bytes32 indexed serviceKey,
-        address indexed minerAddress
+        uint256 amount,
+        string burnType,
+        uint256 totalBurnedAllTime
     );
 
-    /// @notice Emitted when a miner is revoked
+    /// @notice Emitted when burn rates are updated
+    event BurnRatesUpdated(uint64 burnFeeBips, uint64 burnMiningBips);
+
+    /// @notice Emitted when a service is authorized to mine
+    event MinerAuthorized(bytes32 indexed serviceKey, address indexed minerAddress);
+
+    /// @notice Emitted when a service authorization is revoked
     event MinerRevoked(bytes32 indexed serviceKey);
 
     /// @notice Emitted when TGE is completed
     event TGECompleted(address indexed recipient, uint256 amount);
 
     /// @notice Emitted on emergency token recovery
-    event TokensRecovered(address indexed to, uint256 amount);
+    event TokensRecovered(address indexed token, address indexed to, uint256 amount);
+
+    /// @notice Emitted when operator earnings are accumulated
+    event OperatorEarningsAccumulated(
+        bytes32 indexed serviceKey,
+        address indexed operator,
+        uint128 bkcAmount,
+        uint128 ethAmount
+    );
+
+    /// @notice Emitted when operator claims earnings
+    event OperatorClaimed(
+        address indexed operator,
+        uint256 bkcAmount,
+        uint256 ethAmount
+    );
+
+    /// @notice Emitted when operator fee rate is updated
+    event OperatorFeeUpdated(uint64 oldBips, uint64 newBips);
+
+    /// @notice Emitted when ETH is sent to treasury
+    event TreasuryETHReceived(uint256 amount);
 
     // =========================================================================
     //                              ERRORS
@@ -146,6 +336,10 @@ contract MiningManager is
     error TGEAlreadyCompleted();
     error InvalidDistributionConfig();
     error TokenNotConfigured();
+    error BurnRateTooHigh();
+    error NothingToClaim();
+    error ETHTransferFailed();
+    error ArrayLengthMismatch();
 
     // =========================================================================
     //                           INITIALIZATION
@@ -173,6 +367,11 @@ contract MiningManager is
         if (bkcTokenAddress == address(0)) revert TokenNotConfigured();
 
         bkcToken = BKCToken(bkcTokenAddress);
+
+        // Default config (packed in single slot)
+        operatorFeeBips = 1000;  // 10% to operator
+        burnFeeBips = 1000;      // 10% of fees burned
+        burnMiningBips = 0;      // 0% of mined tokens burned
     }
 
     /**
@@ -180,13 +379,47 @@ contract MiningManager is
      */
     function _authorizeUpgrade(address) internal override onlyOwner {}
 
+    /**
+     * @notice Allows contract to receive ETH
+     */
+    receive() external payable {}
+
     // =========================================================================
     //                         ADMIN FUNCTIONS
     // =========================================================================
 
     /**
+     * @notice Sets burn rates for fees and mining
+     * @param _burnFeeBips Percentage of fees to burn (max 50%)
+     * @param _burnMiningBips Percentage of mined tokens to burn (max 50%)
+     */
+    function setBurnRates(
+        uint64 _burnFeeBips,
+        uint64 _burnMiningBips
+    ) external onlyOwner {
+        if (_burnFeeBips > MAX_BURN_BIPS) revert BurnRateTooHigh();
+        if (_burnMiningBips > MAX_BURN_BIPS) revert BurnRateTooHigh();
+
+        burnFeeBips = _burnFeeBips;
+        burnMiningBips = _burnMiningBips;
+
+        emit BurnRatesUpdated(_burnFeeBips, _burnMiningBips);
+    }
+
+    /**
+     * @notice Sets operator fee rate
+     * @dev This controls how much operators earn from fees they generate
+     * @param _operatorFeeBips Percentage in basis points (no max limit)
+     */
+    function setOperatorFee(uint64 _operatorFeeBips) external onlyOwner {
+        uint64 oldBips = operatorFeeBips;
+        operatorFeeBips = _operatorFeeBips;
+
+        emit OperatorFeeUpdated(oldBips, _operatorFeeBips);
+    }
+
+    /**
      * @notice Authorizes a contract to trigger mining
-     * @dev Each service has a unique key (e.g., keccak256("NOTARY_SERVICE"))
      * @param _serviceKey Service identifier
      * @param _minerAddress Contract address to authorize
      */
@@ -212,7 +445,7 @@ contract MiningManager is
     }
 
     /**
-     * @notice Batch authorizes multiple miners
+     * @notice Batch authorizes multiple miners in a single transaction
      * @param _serviceKeys Array of service identifiers
      * @param _minerAddresses Array of miner addresses
      */
@@ -221,51 +454,25 @@ contract MiningManager is
         address[] calldata _minerAddresses
     ) external onlyOwner {
         uint256 length = _serviceKeys.length;
-        require(length == _minerAddresses.length, "Length mismatch");
+        if (length != _minerAddresses.length) revert ArrayLengthMismatch();
 
-        for (uint256 i = 0; i < length;) {
+        for (uint256 i; i < length;) {
             if (_minerAddresses[i] == address(0)) revert ZeroAddress();
 
             authorizedMiners[_serviceKeys[i]] = _minerAddresses[i];
+
             emit MinerAuthorized(_serviceKeys[i], _minerAddresses[i]);
 
             unchecked { ++i; }
         }
     }
 
-    /**
-     * @notice Performs the Token Generation Event (one-time only)
-     * @dev Mints initial supply to specified address (typically Treasury)
-     * @param _to Recipient of TGE tokens
-     * @param _amount Amount to mint
-     */
-    function executeTGE(address _to, uint256 _amount) external onlyOwner {
-        if (tgeCompleted) revert TGEAlreadyCompleted();
-        if (_to == address(0)) revert ZeroAddress();
-        if (_amount == 0) revert ZeroAmount();
-
-        tgeCompleted = true;
-
-        bkcToken.mint(_to, _amount);
-
-        emit TGECompleted(_to, _amount);
-    }
-
     // =========================================================================
-    //                         CORE MINING LOGIC
+    //                         MINING FUNCTIONS
     // =========================================================================
 
     /**
-     * @notice Processes purchase mining and fee distribution
-     * @dev Called by authorized ecosystem contracts when fees are collected.
-     *      The calling contract must transfer fees to this contract BEFORE calling.
-     *
-     *      Flow:
-     *      1. Verify caller is authorized
-     *      2. Calculate and mint new tokens (linear scarcity)
-     *      3. Distribute new tokens to Treasury and Delegators
-     *      4. Distribute original fees to Treasury and Delegators
-     *
+     * @notice Core mining function - backward compatible (no operator)
      * @param _serviceKey Identifier of the calling service
      * @param _purchaseAmount Amount of BKC fees received
      */
@@ -273,6 +480,48 @@ contract MiningManager is
         bytes32 _serviceKey,
         uint256 _purchaseAmount
     ) external nonReentrant override {
+        _performPurchaseMining(_serviceKey, _purchaseAmount, address(0));
+    }
+
+    /**
+     * @notice Core mining function with OPERATOR support
+     *
+     * @dev This is the heart of the decentralized operator system.
+     *
+     *      ANYONE CAN BE AN OPERATOR
+     *
+     *      How it works:
+     *      1. Developer builds a frontend/app for Backchain
+     *      2. Frontend passes developer's wallet as _operator
+     *      3. Developer earns percentage of ALL fees (BKC + ETH)
+     *      4. No registration, no approval, no permission needed
+     *
+     *      This creates an UNSTOPPABLE, permissionless ecosystem where:
+     *      - Developers worldwide can build and earn
+     *      - Multiple competing frontends improve user experience
+     *      - Protocol cannot be shut down (no single point of failure)
+     *      - Censorship resistant by design
+     *
+     * @param _serviceKey Identifier of the calling service
+     * @param _purchaseAmount Amount of BKC fees received
+     * @param _operator Address to receive operator fee (address(0) = no operator)
+     */
+    function performPurchaseMiningWithOperator(
+        bytes32 _serviceKey,
+        uint256 _purchaseAmount,
+        address _operator
+    ) external payable nonReentrant {
+        _performPurchaseMining(_serviceKey, _purchaseAmount, _operator);
+    }
+
+    /**
+     * @dev Internal mining logic with operator support
+     */
+    function _performPurchaseMining(
+        bytes32 _serviceKey,
+        uint256 _purchaseAmount,
+        address _operator
+    ) internal {
         // ─────────────────────────────────────────────────────────────────────
         // 1. AUTHORIZATION CHECK
         // ─────────────────────────────────────────────────────────────────────
@@ -281,22 +530,102 @@ contract MiningManager is
             revert UnauthorizedMiner();
         }
 
-        if (_purchaseAmount == 0) return;
+        // ─────────────────────────────────────────────────────────────────────
+        // 2. CACHE CONFIG (save ~6,300 gas on repeated reads)
+        // ─────────────────────────────────────────────────────────────────────
 
-        // ─────────────────────────────────────────────────────────────────────
-        // 2. CACHE ADDRESSES
-        // ─────────────────────────────────────────────────────────────────────
+        uint256 _operatorFeeBips = operatorFeeBips;
+        uint256 _burnFeeBips = burnFeeBips;
+        uint256 _burnMiningBips = burnMiningBips;
 
         address treasury = ecosystemManager.getTreasuryAddress();
         address delegationManager = ecosystemManager.getDelegationManagerAddress();
 
         // ─────────────────────────────────────────────────────────────────────
-        // 3. MINING: CREATE NEW TOKENS
+        // 3. ETH PROCESSING (if any)
         // ─────────────────────────────────────────────────────────────────────
 
-        uint256 mintAmount = getMintAmount(_purchaseAmount);
+        uint256 ethReceived = msg.value;
+        if (ethReceived > 0) {
+            uint128 ethToOperator;
+            uint256 ethToTreasury;
+
+            if (_operator != address(0) && _operatorFeeBips > 0) {
+                unchecked {
+                    ethToOperator = uint128((ethReceived * _operatorFeeBips) / BIPS_DENOMINATOR);
+                    ethToTreasury = ethReceived - ethToOperator;
+                }
+
+                // Accumulate for operator (gas efficient - no transfer)
+                operatorBalances[_operator].pendingETH += ethToOperator;
+            } else {
+                ethToTreasury = ethReceived;
+            }
+
+            // Transfer ETH to treasury immediately
+            if (ethToTreasury > 0 && treasury != address(0)) {
+                _safeTransferETH(treasury, ethToTreasury);
+                emit TreasuryETHReceived(ethToTreasury);
+            }
+        }
+
+        // ─────────────────────────────────────────────────────────────────────
+        // 4. BKC PROCESSING
+        // ─────────────────────────────────────────────────────────────────────
+
+        if (_purchaseAmount == 0) {
+            // Emit operator event if ETH was processed
+            if (ethReceived > 0 && _operator != address(0) && _operatorFeeBips > 0) {
+                emit OperatorEarningsAccumulated(
+                    _serviceKey,
+                    _operator,
+                    0,
+                    uint128((ethReceived * _operatorFeeBips) / BIPS_DENOMINATOR)
+                );
+            }
+            return;
+        }
+
+        // ─────────────────────────────────────────────────────────────────────
+        // 5. OPERATOR BKC PAYMENT (Accumulated)
+        // ─────────────────────────────────────────────────────────────────────
+
+        uint128 bkcToOperator;
+        uint256 amountAfterOperator = _purchaseAmount;
+
+        if (_operator != address(0) && _operatorFeeBips > 0) {
+            unchecked {
+                bkcToOperator = uint128((_purchaseAmount * _operatorFeeBips) / BIPS_DENOMINATOR);
+                amountAfterOperator = _purchaseAmount - bkcToOperator;
+            }
+
+            // Accumulate for operator (gas efficient - no transfer)
+            operatorBalances[_operator].pendingBKC += bkcToOperator;
+
+            emit OperatorEarningsAccumulated(
+                _serviceKey,
+                _operator,
+                bkcToOperator,
+                ethReceived > 0 ? uint128((ethReceived * _operatorFeeBips) / BIPS_DENOMINATOR) : 0
+            );
+        }
+
+        // ─────────────────────────────────────────────────────────────────────
+        // 6. MINING: CREATE NEW TOKENS (Linear Scarcity)
+        // ─────────────────────────────────────────────────────────────────────
+
+        uint256 mintAmount = getMintAmount(amountAfterOperator);
 
         if (mintAmount > 0) {
+            uint256 mintBurn;
+            uint256 mintAfterBurn;
+
+            unchecked {
+                mintBurn = (mintAmount * _burnMiningBips) / BIPS_DENOMINATOR;
+                mintAfterBurn = mintAmount - mintBurn;
+            }
+
+            // Get distribution ratios
             uint256 miningTreasuryBips = ecosystemManager.getMiningDistributionBips(POOL_TREASURY);
             uint256 miningDelegatorBips = ecosystemManager.getMiningDistributionBips(POOL_DELEGATOR);
 
@@ -304,12 +633,36 @@ contract MiningManager is
                 revert InvalidDistributionConfig();
             }
 
-            uint256 mintToTreasury = (mintAmount * miningTreasuryBips) / BIPS_DENOMINATOR;
-            uint256 mintToDelegators = mintAmount - mintToTreasury;
+            uint256 mintToTreasury;
+            uint256 mintToDelegators;
+
+            unchecked {
+                mintToTreasury = (mintAfterBurn * miningTreasuryBips) / BIPS_DENOMINATOR;
+                mintToDelegators = mintAfterBurn - mintToTreasury;
+            }
 
             // Mint new tokens
             bkcToken.mint(address(this), mintAmount);
-            totalMined += mintAmount;
+
+            unchecked {
+                totalMined += mintAmount;
+            }
+
+            // Burn from mining (if enabled)
+            if (mintBurn > 0) {
+                bkcToken.burn(mintBurn);
+
+                unchecked {
+                    totalBurnedFromMining += mintBurn;
+                }
+
+                emit TokensBurned(
+                    _serviceKey,
+                    mintBurn,
+                    "mining",
+                    totalBurnedFromFees + totalBurnedFromMining
+                );
+            }
 
             // Distribute to Treasury
             if (mintToTreasury > 0 && treasury != address(0)) {
@@ -324,7 +677,7 @@ contract MiningManager is
 
             emit TokensMined(
                 _serviceKey,
-                _purchaseAmount,
+                amountAfterOperator,
                 mintAmount,
                 mintToTreasury,
                 mintToDelegators
@@ -332,7 +685,34 @@ contract MiningManager is
         }
 
         // ─────────────────────────────────────────────────────────────────────
-        // 4. FEE DISTRIBUTION: EXISTING TOKENS
+        // 7. BURN FROM FEES (Deflationary Mechanism)
+        // ─────────────────────────────────────────────────────────────────────
+
+        uint256 feeToBurn;
+        uint256 feeAfterBurn;
+
+        unchecked {
+            feeToBurn = (amountAfterOperator * _burnFeeBips) / BIPS_DENOMINATOR;
+            feeAfterBurn = amountAfterOperator - feeToBurn;
+        }
+
+        if (feeToBurn > 0) {
+            bkcToken.burn(feeToBurn);
+
+            unchecked {
+                totalBurnedFromFees += feeToBurn;
+            }
+
+            emit TokensBurned(
+                _serviceKey,
+                feeToBurn,
+                "fee",
+                totalBurnedFromFees + totalBurnedFromMining
+            );
+        }
+
+        // ─────────────────────────────────────────────────────────────────────
+        // 8. FEE DISTRIBUTION: REMAINING TO TREASURY & DELEGATORS
         // ─────────────────────────────────────────────────────────────────────
 
         uint256 feeTreasuryBips = ecosystemManager.getFeeDistributionBips(POOL_TREASURY);
@@ -342,17 +722,21 @@ contract MiningManager is
             revert InvalidDistributionConfig();
         }
 
-        uint256 feeToTreasury = (_purchaseAmount * feeTreasuryBips) / BIPS_DENOMINATOR;
-        uint256 feeToDelegators = _purchaseAmount - feeToTreasury;
+        uint256 feeToTreasury;
+        uint256 feeToDelegators;
 
-        totalFeesProcessed += _purchaseAmount;
+        unchecked {
+            feeToTreasury = (feeAfterBurn * feeTreasuryBips) / BIPS_DENOMINATOR;
+            feeToDelegators = feeAfterBurn - feeToTreasury;
+            totalFeesProcessed += _purchaseAmount;
+        }
 
-        // Distribute fees to Treasury
+        // Distribute to Treasury
         if (feeToTreasury > 0 && treasury != address(0)) {
             bkcToken.safeTransfer(treasury, feeToTreasury);
         }
 
-        // Distribute fees to Delegators
+        // Distribute to Delegators
         if (feeToDelegators > 0 && delegationManager != address(0)) {
             bkcToken.safeTransfer(delegationManager, feeToDelegators);
             IDelegationManager(delegationManager).depositMiningRewards(feeToDelegators);
@@ -360,10 +744,50 @@ contract MiningManager is
 
         emit FeesDistributed(
             _serviceKey,
-            _purchaseAmount,
+            amountAfterOperator,
             feeToTreasury,
             feeToDelegators
         );
+    }
+
+    // =========================================================================
+    //                       OPERATOR CLAIM FUNCTIONS
+    // =========================================================================
+
+    /**
+     * @notice Operator claims accumulated BKC and ETH earnings
+     * @dev Gas efficient - operator calls once for all accumulated earnings
+     */
+    function claimOperatorEarnings() external override nonReentrant {
+        OperatorBalance storage balance = operatorBalances[msg.sender];
+
+        uint128 bkcAmount = balance.pendingBKC;
+        uint128 ethAmount = balance.pendingETH;
+
+        if (bkcAmount == 0 && ethAmount == 0) revert NothingToClaim();
+
+        // Clear balances first (reentrancy protection)
+        balance.pendingBKC = 0;
+        balance.pendingETH = 0;
+
+        // Update totals
+        if (bkcAmount > 0) {
+            unchecked {
+                totalOperatorClaimedBKC += bkcAmount;
+                operatorTotalClaimedBKC[msg.sender] += bkcAmount;
+            }
+            bkcToken.safeTransfer(msg.sender, bkcAmount);
+        }
+
+        if (ethAmount > 0) {
+            unchecked {
+                totalOperatorClaimedETH += ethAmount;
+                operatorTotalClaimedETH[msg.sender] += ethAmount;
+            }
+            _safeTransferETH(msg.sender, ethAmount);
+        }
+
+        emit OperatorClaimed(msg.sender, bkcAmount, ethAmount);
     }
 
     // =========================================================================
@@ -371,22 +795,14 @@ contract MiningManager is
     // =========================================================================
 
     /**
-     * @notice Calculates mint amount based on linear scarcity
-     * @dev Formula: mintAmount = purchaseAmount × (remainingSupply / 160M)
-     *
-     *      The mining rate decreases linearly as tokens are minted:
-     *      - At 160M remaining: 100% rate (1:1)
-     *      - At 80M remaining: 50% rate (2:1)
-     *      - At 0M remaining: 0% rate (no mining)
-     *
-     * @param _purchaseAmount Amount of BKC spent/fee collected
+     * @notice Calculates mint amount based on linear scarcity curve
+     * @param _purchaseAmount Amount of BKC in fees
      * @return Amount of new BKC to mint
      */
     function getMintAmount(uint256 _purchaseAmount) public view override returns (uint256) {
         uint256 maxSupply = bkcToken.MAX_SUPPLY();
         uint256 currentSupply = bkcToken.totalSupply();
 
-        // No more minting if max supply reached
         if (currentSupply >= maxSupply) {
             return 0;
         }
@@ -396,12 +812,10 @@ contract MiningManager is
             remainingSupply = maxSupply - currentSupply;
         }
 
-        // Cap ratio at 100% if burns caused remaining > 160M
         if (remainingSupply > MAX_MINTABLE_SUPPLY) {
             return _purchaseAmount;
         }
 
-        // Linear calculation: (purchase × remaining) / 160M
         return (_purchaseAmount * remainingSupply) / MAX_MINTABLE_SUPPLY;
     }
 
@@ -423,7 +837,7 @@ contract MiningManager is
         }
 
         if (remainingSupply >= MAX_MINTABLE_SUPPLY) {
-            return BIPS_DENOMINATOR; // 100%
+            return BIPS_DENOMINATOR;
         }
 
         return (remainingSupply * BIPS_DENOMINATOR) / MAX_MINTABLE_SUPPLY;
@@ -441,7 +855,9 @@ contract MiningManager is
             return 0;
         }
 
-        return maxSupply - currentSupply;
+        unchecked {
+            return maxSupply - currentSupply;
+        }
     }
 
     /**
@@ -458,11 +874,7 @@ contract MiningManager is
     }
 
     /**
-     * @notice Returns mining statistics
-     * @return mined Total tokens minted through mining
-     * @return fees Total fees processed
-     * @return rate Current mining rate in bips
-     * @return remaining Remaining mintable supply
+     * @notice Returns comprehensive mining statistics
      */
     function getMiningStats() external view returns (
         uint256 mined,
@@ -480,11 +892,114 @@ contract MiningManager is
             rate = 0;
             remaining = 0;
         } else {
-            remaining = maxSupply - currentSupply;
+            unchecked {
+                remaining = maxSupply - currentSupply;
+            }
             rate = remaining >= MAX_MINTABLE_SUPPLY
                 ? BIPS_DENOMINATOR
                 : (remaining * BIPS_DENOMINATOR) / MAX_MINTABLE_SUPPLY;
         }
+    }
+
+    /**
+     * @notice Returns burn statistics
+     */
+    function getBurnStats() external view returns (
+        uint256 burnedFromFees,
+        uint256 burnedFromMining,
+        uint256 totalBurned,
+        uint256 currentFeeBurnBips,
+        uint256 currentMiningBurnBips
+    ) {
+        burnedFromFees = totalBurnedFromFees;
+        burnedFromMining = totalBurnedFromMining;
+        unchecked {
+            totalBurned = totalBurnedFromFees + totalBurnedFromMining;
+        }
+        currentFeeBurnBips = burnFeeBips;
+        currentMiningBurnBips = burnMiningBips;
+    }
+
+    /**
+     * @notice Returns operator system statistics
+     */
+    function getOperatorStats() external view returns (
+        uint256 totalClaimedBKC,
+        uint256 totalClaimedETH,
+        uint256 currentFeeBips
+    ) {
+        totalClaimedBKC = totalOperatorClaimedBKC;
+        totalClaimedETH = totalOperatorClaimedETH;
+        currentFeeBips = operatorFeeBips;
+    }
+
+    /**
+     * @notice Returns pending earnings for a specific operator
+     * @param _operator Operator address to query
+     */
+    function getOperatorPendingEarnings(address _operator) external view returns (
+        uint256 pendingBKC,
+        uint256 pendingETH
+    ) {
+        OperatorBalance storage balance = operatorBalances[_operator];
+        pendingBKC = balance.pendingBKC;
+        pendingETH = balance.pendingETH;
+    }
+
+    /**
+     * @notice Returns total claimed earnings for a specific operator
+     * @param _operator Operator address to query
+     */
+    function getOperatorClaimedEarnings(address _operator) external view returns (
+        uint256 claimedBKC,
+        uint256 claimedETH
+    ) {
+        claimedBKC = operatorTotalClaimedBKC[_operator];
+        claimedETH = operatorTotalClaimedETH[_operator];
+    }
+
+    /**
+     * @notice Returns operator configuration and totals (IMiningManager interface)
+     * @return bips Operator fee in basis points
+     * @return totalBkc Total BKC claimed by all operators
+     * @return totalEth Total ETH claimed by all operators
+     */
+    function getOperatorConfig() external view override returns (
+        uint256 bips,
+        uint256 totalBkc,
+        uint256 totalEth
+    ) {
+        bips = operatorFeeBips;
+        totalBkc = totalOperatorClaimedBKC;
+        totalEth = totalOperatorClaimedETH;
+    }
+
+    /**
+     * @notice Returns pending earnings for a specific operator (IMiningManager interface)
+     * @param _operator Operator address to query
+     * @return bkcEarnings Pending BKC earnings
+     * @return ethEarnings Pending ETH earnings
+     */
+    function getOperatorEarnings(address _operator) external view override returns (
+        uint256 bkcEarnings,
+        uint256 ethEarnings
+    ) {
+        OperatorBalance storage balance = operatorBalances[_operator];
+        bkcEarnings = balance.pendingBKC;
+        ethEarnings = balance.pendingETH;
+    }
+
+    /**
+     * @notice Returns current config values
+     */
+    function getConfig() external view returns (
+        uint64 _operatorFeeBips,
+        uint64 _burnFeeBips,
+        uint64 _burnMiningBips
+    ) {
+        _operatorFeeBips = operatorFeeBips;
+        _burnFeeBips = burnFeeBips;
+        _burnMiningBips = burnMiningBips;
     }
 
     // =========================================================================
@@ -492,30 +1007,35 @@ contract MiningManager is
     // =========================================================================
 
     /**
-     * @notice Recovers tokens sent to this contract by mistake
+     * @notice Recovers ERC20 tokens sent to this contract by mistake
+     * @param _token Token address to recover
      * @param _to Recipient address
      * @param _amount Amount to recover
      */
-    function recoverTokens(address _to, uint256 _amount) external onlyOwner {
+    function recoverTokens(
+        address _token,
+        address _to,
+        uint256 _amount
+    ) external onlyOwner {
         if (_to == address(0)) revert ZeroAddress();
 
-        bkcToken.safeTransfer(_to, _amount);
+        IERC20Upgradeable(_token).transfer(_to, _amount);
 
-        emit TokensRecovered(_to, _amount);
+        emit TokensRecovered(_token, _to, _amount);
     }
 
     /**
-     * @notice Approves tokens for recovery by external contract
-     * @param _spender Spender address
-     * @param _amount Amount to approve
+     * @notice Recovers ETH sent to this contract by mistake
+     * @dev Only recovers ETH not owed to operators
+     * @param _to Recipient address
+     * @param _amount Amount to recover
      */
-    function approveTokenRecovery(
-        address _spender,
-        uint256 _amount
-    ) external onlyOwner {
-        if (_spender == address(0)) revert ZeroAddress();
+    function recoverETH(address _to, uint256 _amount) external onlyOwner {
+        if (_to == address(0)) revert ZeroAddress();
 
-        bkcToken.safeApprove(_spender, _amount);
+        _safeTransferETH(_to, _amount);
+
+        emit TokensRecovered(address(0), _to, _amount);
     }
 
     // =========================================================================
@@ -548,5 +1068,15 @@ contract MiningManager is
         }
 
         return false;
+    }
+
+    /**
+     * @dev Safe ETH transfer with error handling
+     * @param _to Recipient address
+     * @param _amount Amount to transfer
+     */
+    function _safeTransferETH(address _to, uint256 _amount) internal {
+        (bool success, ) = _to.call{value: _amount}("");
+        if (!success) revert ETHTransferFailed();
     }
 }

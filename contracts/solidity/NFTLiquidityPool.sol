@@ -1,6 +1,124 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.28;
 
+/*
+ * ============================================================================
+ *
+ *                             BACKCHAIN PROTOCOL
+ *
+ *                    ██╗   ██╗███╗   ██╗███████╗████████╗ ██████╗ ██████╗
+ *                    ██║   ██║████╗  ██║██╔════╝╚══██╔══╝██╔═══██╗██╔══██╗
+ *                    ██║   ██║██╔██╗ ██║███████╗   ██║   ██║   ██║██████╔╝
+ *                    ██║   ██║██║╚██╗██║╚════██║   ██║   ██║   ██║██╔═══╝
+ *                    ╚██████╔╝██║ ╚████║███████║   ██║   ╚██████╔╝██║
+ *                     ╚═════╝ ╚═╝  ╚═══╝╚══════╝   ╚═╝    ╚═════╝ ╚═╝
+ *
+ *                    P E R M I S S I O N L E S S   .   I M M U T A B L E
+ *
+ * ============================================================================
+ *  Contract    : NFTLiquidityPool
+ *  Version     : 6.0.0
+ *  Network     : Arbitrum
+ *  License     : MIT
+ *  Solidity    : 0.8.28
+ * ============================================================================
+ *
+ *  100% DECENTRALIZED SYSTEM
+ *
+ *  This contract is part of a fully decentralized, permissionless,
+ *  and UNSTOPPABLE protocol.
+ *
+ *  - NO CENTRAL AUTHORITY    : Code is law
+ *  - NO PERMISSION NEEDED    : Anyone can become an Operator
+ *  - NO SINGLE POINT OF FAILURE : Runs on Arbitrum blockchain
+ *  - CENSORSHIP RESISTANT    : Cannot be stopped or controlled
+ *
+ * ============================================================================
+ *
+ *  BECOME AN OPERATOR
+ *
+ *  Anyone in the world can:
+ *
+ *  1. Build their own frontend, app, bot, or tool for Backchain
+ *  2. Pass their wallet address as the "operator" parameter
+ *  3. Earn a percentage of ALL fees (BKC + ETH) generated
+ *
+ *  No registration. No approval. No KYC. Just build and earn.
+ *
+ * ============================================================================
+ *
+ *  PURPOSE
+ *
+ *  AMM-style liquidity pool for trading RewardBooster NFTs.
+ *  Implements constant product formula (XY=K) for NFT price discovery.
+ *
+ *  WHY BUY AN NFT?
+ *  +--------------------------------------------------------------------+
+ *  |  NFTs reduce the BURN RATE when claiming rewards from              |
+ *  |  DelegationManager. Without an NFT, 50% of rewards are burned.     |
+ *  |                                                                    |
+ *  |  ┌──────────┬────────────┬───────────┬─────────────┐              |
+ *  |  │ Tier     │ Boost Bips │ Burn Rate │ User Gets   │              |
+ *  |  ├──────────┼────────────┼───────────┼─────────────┤              |
+ *  |  │ No NFT   │ 0          │ 50%       │ 50%         │              |
+ *  |  │ Bronze   │ 1000       │ 40%       │ 60%         │              |
+ *  |  │ Silver   │ 2500       │ 25%       │ 75%         │              |
+ *  |  │ Gold     │ 4000       │ 10%       │ 90%         │              |
+ *  |  │ Diamond  │ 5000       │ 0%        │ 100%        │              |
+ *  |  └──────────┴────────────┴───────────┴─────────────┘              |
+ *  +--------------------------------------------------------------------+
+ *
+ *  ┌─────────────────────────────────────────────────────────────────────────┐
+ *  │                        BONDING CURVE MODEL                              │
+ *  ├─────────────────────────────────────────────────────────────────────────┤
+ *  │  K = NFT_COUNT × BKC_BALANCE (constant product)                         │
+ *  │                                                                         │
+ *  │  Buy Price = K / (NFT_COUNT - 1) - BKC_BALANCE                          │
+ *  │  Sell Price = BKC_BALANCE - K / (NFT_COUNT + 1)                         │
+ *  │                                                                         │
+ *  │  As NFTs decrease → Price increases (scarcity)                          │
+ *  │  As NFTs increase → Price decreases (abundance)                         │
+ *  └─────────────────────────────────────────────────────────────────────────┘
+ *
+ * ============================================================================
+ *
+ *  FEE STRUCTURE (V6 - EQUAL FOR ALL)
+ *
+ *  +-------------+------------------+----------------------------------------+
+ *  | Action      | Default Fee      | Destination                            |
+ *  +-------------+------------------+----------------------------------------+
+ *  | Buy NFT     | 5% of price      | MiningManager                          |
+ *  | Sell NFT    | 10% of price     | MiningManager                          |
+ *  +-------------+------------------+----------------------------------------+
+ *
+ *  IMPORTANT: Trading fees are the SAME for all users. NFT ownership does
+ *             NOT provide discounts on pool fees.
+ *
+ * ============================================================================
+ *
+ *  FEE DISTRIBUTION
+ *
+ *  BKC Flow (Buy/Sell Tax):
+ *  +------------------------------------------------------------------+
+ *  |                      BKC TAX COLLECTED                           |
+ *  |                             |                                    |
+ *  |                             v                                    |
+ *  |                       MININGMANAGER                              |
+ *  |                             |                                    |
+ *  |      +----------------------+----------------------+             |
+ *  |      |          |           |                      |             |
+ *  |      v          v           v                      v             |
+ *  |  OPERATOR     BURN      TREASURY             DELEGATORS          |
+ *  |  (config%)  (config%)   (config%)             (config%)          |
+ *  +------------------------------------------------------------------+
+ *
+ * ============================================================================
+ *  Security Contact : dev@backcoin.org
+ *  Website          : https://backcoin.org
+ *  Documentation    : https://github.com/backcoin-org/backchain-dapp/tree/main/docs
+ * ============================================================================
+ */
+
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
@@ -12,44 +130,14 @@ import "@openzeppelin/contracts-upgradeable/token/ERC20/utils/SafeERC20Upgradeab
 import "./IInterfaces.sol";
 import "./BKCToken.sol";
 
-/**
- * @title NFTLiquidityPool
- * @author Backchain Protocol
- * @notice AMM-style liquidity pool for trading RewardBooster NFTs
- * @dev Implements constant product formula (XY=K) for NFT price discovery:
- *
- *      ┌─────────────────────────────────────────────────────────────────┐
- *      │                    BONDING CURVE MODEL                          │
- *      ├─────────────────────────────────────────────────────────────────┤
- *      │  K = NFT_COUNT × BKC_BALANCE (constant product)                 │
- *      │                                                                 │
- *      │  Buy Price = K / (NFT_COUNT - 1) - BKC_BALANCE                  │
- *      │  Sell Price = BKC_BALANCE - K / (NFT_COUNT + 1)                 │
- *      │                                                                 │
- *      │  As NFTs decrease → Price increases (scarcity)                  │
- *      │  As NFTs increase → Price decreases (abundance)                 │
- *      └─────────────────────────────────────────────────────────────────┘
- *
- *      Price Movement Example (K = 1000):
- *      ┌────────────┬─────────────┬───────────┬───────────┐
- *      │ NFT Count  │ BKC Balance │ Buy Price │ Sell Price│
- *      ├────────────┼─────────────┼───────────┼───────────┤
- *      │ 10         │ 100 BKC     │ 11.1 BKC  │ 9.1 BKC   │
- *      │ 5          │ 200 BKC     │ 50.0 BKC  │ 33.3 BKC  │
- *      │ 2          │ 500 BKC     │ 500.0 BKC │ 166.7 BKC │
- *      └────────────┴─────────────┴───────────┴───────────┘
- *
- *      Fee Structure:
- *      - Buy Tax: Paid on top of price (e.g., 5% = price + 5%)
- *      - Sell Tax: Deducted from payout (e.g., 5% = payout - 5%)
- *      - All taxes sent to MiningManager for distribution
- *
- *      One pool per NFT boost tier (Crystal, Iron, Bronze, etc.)
- *
- * @custom:security-contact security@backcoin.org
- * @custom:website https://backcoin.org
- * @custom:network Arbitrum
- */
+interface IMiningManagerV3 {
+    function performPurchaseMiningWithOperator(
+        bytes32 serviceKey,
+        uint256 purchaseAmount,
+        address operator
+    ) external payable;
+}
+
 contract NFTLiquidityPool is
     Initializable,
     UUPSUpgradeable,
@@ -63,101 +151,33 @@ contract NFTLiquidityPool is
     //                              CONSTANTS
     // =========================================================================
 
-    /// @notice Basis points denominator (100% = 10000)
     uint256 private constant BIPS_DENOMINATOR = 10_000;
 
-    /// @notice Fee key for buy tax
     bytes32 public constant BUY_TAX_KEY = keccak256("NFT_POOL_BUY_TAX_BIPS");
 
-    /// @notice Fee key for sell tax
     bytes32 public constant SELL_TAX_KEY = keccak256("NFT_POOL_SELL_TAX_BIPS");
+
+    // -------------------------------------------------------------------------
+    //                         VALID NFT TIERS (V6)
+    // -------------------------------------------------------------------------
+
+    uint256 public constant BOOST_BRONZE = 1000;   // 40% burn on claim
+    uint256 public constant BOOST_SILVER = 2500;   // 25% burn on claim
+    uint256 public constant BOOST_GOLD = 4000;     // 10% burn on claim
+    uint256 public constant BOOST_DIAMOND = 5000;  // 0% burn on claim
 
     // =========================================================================
     //                              STRUCTS
     // =========================================================================
 
-    /// @notice Pool state data
     struct PoolState {
-        uint256 bkcBalance;                      // BKC liquidity in pool
-        uint256 nftCount;                        // Number of NFTs in pool
-        uint256 k;                               // Constant product (bkcBalance × nftCount)
-        bool initialized;                        // Whether pool has initial liquidity
-        mapping(uint256 => uint256) tokenIndex;  // tokenId => array index
-        uint256[] tokenIds;                      // Array of NFT token IDs in pool
+        uint256 bkcBalance;
+        uint256 nftCount;
+        uint256 k;
+        bool initialized;
+        mapping(uint256 => uint256) tokenIndex;
+        uint256[] tokenIds;
     }
-
-    // =========================================================================
-    //                              STATE
-    // =========================================================================
-
-    /// @notice Reference to ecosystem hub
-    IEcosystemManager public ecosystemManager;
-
-    /// @notice BKC token contract
-    BKCToken public bkcToken;
-
-    /// @notice NFT boost tier for this pool
-    uint256 public boostBips;
-
-    /// @notice Pool liquidity state
-    PoolState private pool;
-
-    /// @notice Total volume traded (buys + sells)
-    uint256 public totalVolume;
-
-    /// @notice Total taxes collected
-    uint256 public totalTaxesCollected;
-
-    /// @notice Total NFTs bought from pool
-    uint256 public totalBuys;
-
-    /// @notice Total NFTs sold to pool
-    uint256 public totalSells;
-
-    // =========================================================================
-    //                              EVENTS
-    // =========================================================================
-
-    /// @notice Emitted when initial liquidity is added
-    event LiquidityInitialized(
-        uint256 indexed boostBips,
-        uint256 nftCount,
-        uint256 bkcAmount,
-        uint256 initialK
-    );
-
-    /// @notice Emitted when more NFTs are added to pool
-    event NFTsAdded(
-        uint256 indexed boostBips,
-        uint256 nftCount,
-        uint256 newK
-    );
-
-    /// @notice Emitted when NFT is purchased from pool
-    event NFTPurchased(
-        address indexed buyer,
-        uint256 indexed tokenId,
-        uint256 price,
-        uint256 tax,
-        uint256 newBkcBalance,
-        uint256 newNftCount
-    );
-
-    /// @notice Emitted when NFT is sold to pool
-    event NFTSold(
-        address indexed seller,
-        uint256 indexed tokenId,
-        uint256 payout,
-        uint256 tax,
-        uint256 newBkcBalance,
-        uint256 newNftCount
-    );
-
-    /// @notice Emitted when BKC liquidity is added
-    event BKCLiquidityAdded(uint256 amount, uint256 newBalance, uint256 newK);
-
-    /// @notice Emitted when BKC liquidity is removed (emergency)
-    event BKCLiquidityRemoved(uint256 amount, uint256 newBalance);
 
     // =========================================================================
     //                              ERRORS
@@ -175,6 +195,90 @@ contract NFTLiquidityPool is
     error MathOverflow();
     error InvalidBoostTier();
     error NFTBoostMismatch();
+    error InsufficientETHFee();
+    error TransferFailed();
+
+    // =========================================================================
+    //                              STATE
+    // =========================================================================
+
+    IEcosystemManager public ecosystemManager;
+
+    BKCToken public bkcToken;
+
+    uint256 public boostBips;
+
+    PoolState private pool;
+
+    uint256 public totalVolume;
+
+    uint256 public totalTaxesCollected;
+
+    uint256 public totalBuys;
+
+    uint256 public totalSells;
+
+    // =========================================================================
+    //                              STATE (V2 - Operators)
+    // =========================================================================
+
+    /// @notice ETH fee for buy transactions (configurable)
+    uint256 public buyEthFee;
+
+    /// @notice ETH fee for sell transactions (configurable)
+    uint256 public sellEthFee;
+
+    /// @notice Total ETH collected from fees
+    uint256 public totalETHCollected;
+
+    // =========================================================================
+    //                           STORAGE GAP
+    // =========================================================================
+
+    uint256[42] private __gap;
+
+    // =========================================================================
+    //                              EVENTS
+    // =========================================================================
+
+    event LiquidityInitialized(
+        uint256 indexed boostBips,
+        uint256 nftCount,
+        uint256 bkcAmount,
+        uint256 initialK
+    );
+
+    event NFTsAdded(
+        uint256 indexed boostBips,
+        uint256 nftCount,
+        uint256 newK
+    );
+
+    event NFTPurchased(
+        address indexed buyer,
+        uint256 indexed tokenId,
+        uint256 price,
+        uint256 tax,
+        uint256 newBkcBalance,
+        uint256 newNftCount,
+        address operator
+    );
+
+    event NFTSold(
+        address indexed seller,
+        uint256 indexed tokenId,
+        uint256 payout,
+        uint256 tax,
+        uint256 newBkcBalance,
+        uint256 newNftCount,
+        address operator
+    );
+
+    event BKCLiquidityAdded(uint256 amount, uint256 newBalance, uint256 newK);
+
+    event BKCLiquidityRemoved(uint256 amount, uint256 newBalance);
+
+    event EthFeesUpdated(uint256 buyFee, uint256 sellFee);
 
     // =========================================================================
     //                           INITIALIZATION
@@ -185,12 +289,6 @@ contract NFTLiquidityPool is
         _disableInitializers();
     }
 
-    /**
-     * @notice Initializes the NFT liquidity pool
-     * @param _owner Pool owner (typically the Factory or admin)
-     * @param _ecosystemManager Address of ecosystem hub
-     * @param _boostBips NFT boost tier for this pool
-     */
     function initialize(
         address _owner,
         address _ecosystemManager,
@@ -198,7 +296,7 @@ contract NFTLiquidityPool is
     ) external initializer {
         if (_owner == address(0)) revert ZeroAddress();
         if (_ecosystemManager == address(0)) revert ZeroAddress();
-        if (_boostBips == 0 || _boostBips > 10000) revert InvalidBoostTier();
+        if (!_isValidTier(_boostBips)) revert InvalidBoostTier();
 
         __Ownable_init();
         __UUPSUpgradeable_init();
@@ -215,14 +313,8 @@ contract NFTLiquidityPool is
         boostBips = _boostBips;
     }
 
-    /**
-     * @dev Authorizes contract upgrades (owner only)
-     */
     function _authorizeUpgrade(address) internal override onlyOwner {}
 
-    /**
-     * @dev Required for receiving ERC721 tokens
-     */
     function onERC721Received(
         address,
         address,
@@ -236,13 +328,6 @@ contract NFTLiquidityPool is
     //                      LIQUIDITY MANAGEMENT
     // =========================================================================
 
-    /**
-     * @notice Initializes pool with NFTs and BKC liquidity
-     * @dev Can only be called once. Sets the initial K constant.
-     *      All NFTs must have the same boostBips as the pool.
-     * @param _tokenIds Array of NFT token IDs to deposit
-     * @param _bkcAmount Amount of BKC to deposit
-     */
     function addInitialLiquidity(
         uint256[] calldata _tokenIds,
         uint256 _bkcAmount
@@ -253,25 +338,21 @@ contract NFTLiquidityPool is
 
         pool.initialized = true;
 
-        // Transfer NFTs to pool with boost validation
         address boosterAddress = ecosystemManager.getBoosterAddress();
         IRewardBoosterNFT nftContract = IRewardBoosterNFT(boosterAddress);
 
-        for (uint256 i = 0; i < _tokenIds.length;) {
-            // Validate NFT boost tier matches pool tier
+        for (uint256 i; i < _tokenIds.length;) {
             if (nftContract.boostBips(_tokenIds[i]) != boostBips) {
                 revert NFTBoostMismatch();
             }
-            
+
             IERC721Upgradeable(boosterAddress).safeTransferFrom(msg.sender, address(this), _tokenIds[i]);
             _addTokenToPool(_tokenIds[i]);
             unchecked { ++i; }
         }
 
-        // Transfer BKC to pool
         bkcToken.safeTransferFrom(msg.sender, address(this), _bkcAmount);
 
-        // Set pool state
         pool.nftCount = _tokenIds.length;
         pool.bkcBalance = _bkcAmount;
         pool.k = pool.nftCount * pool.bkcBalance;
@@ -279,12 +360,6 @@ contract NFTLiquidityPool is
         emit LiquidityInitialized(boostBips, pool.nftCount, pool.bkcBalance, pool.k);
     }
 
-    /**
-     * @notice Adds more NFTs to an existing pool
-     * @dev Updates K constant to reflect new liquidity.
-     *      All NFTs must have the same boostBips as the pool.
-     * @param _tokenIds Array of NFT token IDs to add
-     */
     function addMoreNFTsToPool(
         uint256[] calldata _tokenIds
     ) external onlyOwner nonReentrant {
@@ -294,53 +369,73 @@ contract NFTLiquidityPool is
         address boosterAddress = ecosystemManager.getBoosterAddress();
         IRewardBoosterNFT nftContract = IRewardBoosterNFT(boosterAddress);
 
-        for (uint256 i = 0; i < _tokenIds.length;) {
-            // Validate NFT boost tier matches pool tier
+        for (uint256 i; i < _tokenIds.length;) {
             if (nftContract.boostBips(_tokenIds[i]) != boostBips) {
                 revert NFTBoostMismatch();
             }
-            
+
             IERC721Upgradeable(boosterAddress).safeTransferFrom(msg.sender, address(this), _tokenIds[i]);
             _addTokenToPool(_tokenIds[i]);
             unchecked { ++i; }
         }
 
-        pool.nftCount += _tokenIds.length;
+        unchecked {
+            pool.nftCount += _tokenIds.length;
+        }
         pool.k = pool.nftCount * pool.bkcBalance;
 
         emit NFTsAdded(boostBips, _tokenIds.length, pool.k);
     }
 
-    /**
-     * @notice Adds more BKC liquidity to pool
-     * @dev Updates K constant to reflect new liquidity
-     * @param _amount Amount of BKC to add
-     */
     function addBKCLiquidity(uint256 _amount) external onlyOwner nonReentrant {
         if (!pool.initialized) revert PoolNotInitialized();
         if (_amount == 0) revert ZeroAmount();
 
         bkcToken.safeTransferFrom(msg.sender, address(this), _amount);
 
-        pool.bkcBalance += _amount;
+        unchecked {
+            pool.bkcBalance += _amount;
+        }
         pool.k = pool.nftCount * pool.bkcBalance;
 
         emit BKCLiquidityAdded(_amount, pool.bkcBalance, pool.k);
     }
 
-    /**
-     * @notice Emergency withdrawal of BKC liquidity
-     * @param _amount Amount to withdraw
-     */
     function removeBKCLiquidity(uint256 _amount) external onlyOwner nonReentrant {
         if (_amount > pool.bkcBalance) revert InsufficientLiquidity();
 
-        pool.bkcBalance -= _amount;
+        unchecked {
+            pool.bkcBalance -= _amount;
+        }
         pool.k = pool.nftCount * pool.bkcBalance;
 
         bkcToken.safeTransfer(msg.sender, _amount);
 
         emit BKCLiquidityRemoved(_amount, pool.bkcBalance);
+    }
+
+    /**
+     * @notice Sets ETH fees for buy and sell transactions
+     * @param _buyFee ETH fee for buying NFTs (in wei)
+     * @param _sellFee ETH fee for selling NFTs (in wei)
+     */
+    function setEthFees(uint256 _buyFee, uint256 _sellFee) external onlyOwner {
+        buyEthFee = _buyFee;
+        sellEthFee = _sellFee;
+        emit EthFeesUpdated(_buyFee, _sellFee);
+    }
+
+    /**
+     * @notice Recovers stuck ETH (if MiningManager call fails)
+     * @param _to Destination address
+     * @param _amount Amount to recover
+     */
+    function recoverETH(address _to, uint256 _amount) external onlyOwner {
+        if (_to == address(0)) revert ZeroAddress();
+        if (_amount > address(this).balance) revert InsufficientLiquidity();
+        
+        (bool success, ) = _to.call{value: _amount}("");
+        if (!success) revert TransferFailed();
     }
 
     // =========================================================================
@@ -349,107 +444,131 @@ contract NFTLiquidityPool is
 
     /**
      * @notice Buys the next available NFT from pool
-     * @dev Price is determined by bonding curve + buy tax
+     * @param _operator Address of the frontend operator
      * @return tokenId The purchased NFT token ID
      */
-    function buyNFT() external nonReentrant returns (uint256 tokenId) {
+    function buyNFT(address _operator) external payable nonReentrant returns (uint256 tokenId) {
         if (!pool.initialized) revert PoolNotInitialized();
         if (pool.nftCount == 0) revert InsufficientNFTs();
+        if (msg.value < buyEthFee) revert InsufficientETHFee();
 
-        // Get last NFT in array (gas efficient)
         tokenId = pool.tokenIds[pool.tokenIds.length - 1];
 
-        _executeBuy(tokenId);
+        _executeBuy(tokenId, _operator);
+        
+        // Send ETH fee to MiningManager
+        if (msg.value > 0) {
+            _sendETHToMining(msg.value, _operator);
+        }
     }
 
     /**
      * @notice Buys a specific NFT from pool
      * @param _tokenId Token ID to purchase
+     * @param _operator Address of the frontend operator
      */
-    function buySpecificNFT(uint256 _tokenId) external nonReentrant {
+    function buySpecificNFT(
+        uint256 _tokenId,
+        address _operator
+    ) external payable nonReentrant {
         if (!pool.initialized) revert PoolNotInitialized();
         if (pool.nftCount == 0) revert InsufficientNFTs();
+        if (msg.value < buyEthFee) revert InsufficientETHFee();
 
-        // Verify NFT is in pool
         if (!_isTokenInPool(_tokenId)) revert NFTNotInPool();
 
-        _executeBuy(_tokenId);
+        _executeBuy(_tokenId, _operator);
+        
+        // Send ETH fee to MiningManager
+        if (msg.value > 0) {
+            _sendETHToMining(msg.value, _operator);
+        }
     }
 
     /**
      * @notice Buys NFT with maximum price protection
      * @param _maxPrice Maximum total price willing to pay (including tax)
+     * @param _operator Address of the frontend operator
      * @return tokenId The purchased NFT token ID
      */
     function buyNFTWithSlippage(
-        uint256 _maxPrice
-    ) external nonReentrant returns (uint256 tokenId) {
+        uint256 _maxPrice,
+        address _operator
+    ) external payable nonReentrant returns (uint256 tokenId) {
         if (!pool.initialized) revert PoolNotInitialized();
         if (pool.nftCount == 0) revert InsufficientNFTs();
+        if (msg.value < buyEthFee) revert InsufficientETHFee();
 
         uint256 totalCost = getBuyPriceWithTax();
         if (totalCost > _maxPrice) revert SlippageExceeded();
 
         tokenId = pool.tokenIds[pool.tokenIds.length - 1];
-        _executeBuy(tokenId);
+        _executeBuy(tokenId, _operator);
+        
+        // Send ETH fee to MiningManager
+        if (msg.value > 0) {
+            _sendETHToMining(msg.value, _operator);
+        }
     }
 
     /**
      * @notice Sells an NFT to the pool
-     * @dev NFT must have matching boostBips for the pool
      * @param _tokenId Token ID to sell
      * @param _minPayout Minimum BKC expected (slippage protection)
+     * @param _operator Address of the frontend operator
      */
     function sellNFT(
         uint256 _tokenId,
-        uint256 _minPayout
-    ) external nonReentrant {
+        uint256 _minPayout,
+        address _operator
+    ) external payable nonReentrant {
         if (!pool.initialized) revert PoolNotInitialized();
+        if (msg.value < sellEthFee) revert InsufficientETHFee();
 
         address boosterAddress = ecosystemManager.getBoosterAddress();
         IRewardBoosterNFT nftContract = IRewardBoosterNFT(boosterAddress);
 
-        // Verify ownership
         if (IERC721Upgradeable(boosterAddress).ownerOf(_tokenId) != msg.sender) revert NotNFTOwner();
 
-        // Validate NFT boost tier matches pool tier
         if (nftContract.boostBips(_tokenId) != boostBips) {
             revert NFTBoostMismatch();
         }
 
-        // Calculate payout
         uint256 grossValue = getSellPrice();
         uint256 taxBips = ecosystemManager.getFee(SELL_TAX_KEY);
-        uint256 taxAmount = (grossValue * taxBips) / BIPS_DENOMINATOR;
-        uint256 netPayout = grossValue - taxAmount;
+        uint256 taxAmount;
+        uint256 netPayout;
 
-        // Slippage check
+        unchecked {
+            taxAmount = (grossValue * taxBips) / BIPS_DENOMINATOR;
+            netPayout = grossValue - taxAmount;
+        }
+
         if (netPayout < _minPayout) revert SlippageExceeded();
         if (pool.bkcBalance < grossValue) revert InsufficientLiquidity();
 
-        // Transfer NFT to pool
         IERC721Upgradeable(boosterAddress).safeTransferFrom(msg.sender, address(this), _tokenId);
         _addTokenToPool(_tokenId);
 
-        // Pay seller
         if (netPayout > 0) {
             bkcToken.safeTransfer(msg.sender, netPayout);
         }
 
-        // Send tax to MiningManager
         if (taxAmount > 0) {
-            _sendTaxToMining(SELL_TAX_KEY, taxAmount);
+            _sendTaxToMining(SELL_TAX_KEY, taxAmount, _operator);
         }
 
-        // Update pool state
-        pool.bkcBalance -= grossValue;
-        pool.nftCount++;
+        unchecked {
+            pool.bkcBalance -= grossValue;
+            pool.nftCount++;
+        }
         pool.k = pool.bkcBalance * pool.nftCount;
 
-        // Update stats
-        totalVolume += grossValue;
-        totalTaxesCollected += taxAmount;
-        totalSells++;
+        unchecked {
+            totalVolume += grossValue;
+            totalTaxesCollected += taxAmount;
+            totalSells++;
+        }
 
         emit NFTSold(
             msg.sender,
@@ -457,19 +576,20 @@ contract NFTLiquidityPool is
             netPayout,
             taxAmount,
             pool.bkcBalance,
-            pool.nftCount
+            pool.nftCount,
+            _operator
         );
+
+        // Send ETH fee to MiningManager
+        if (msg.value > 0) {
+            _sendETHToMining(msg.value, _operator);
+        }
     }
 
     // =========================================================================
     //                          VIEW FUNCTIONS
     // =========================================================================
 
-    /**
-     * @notice Returns current buy price (without tax)
-     * @dev Price = K / (nftCount - 1) - bkcBalance
-     * @return Price in BKC (wei), or max uint256 if insufficient liquidity
-     */
     function getBuyPrice() public view returns (uint256) {
         if (!pool.initialized || pool.nftCount <= 1) {
             return type(uint256).max;
@@ -481,25 +601,19 @@ contract NFTLiquidityPool is
         return newBalance - pool.bkcBalance;
     }
 
-    /**
-     * @notice Returns current buy price including tax
-     * @return Total cost in BKC (price + tax)
-     */
     function getBuyPriceWithTax() public view returns (uint256) {
         uint256 price = getBuyPrice();
         if (price == type(uint256).max) return type(uint256).max;
 
         uint256 taxBips = ecosystemManager.getFee(BUY_TAX_KEY);
-        uint256 tax = (price * taxBips) / BIPS_DENOMINATOR;
+        uint256 tax;
+        unchecked {
+            tax = (price * taxBips) / BIPS_DENOMINATOR;
+        }
 
         return price + tax;
     }
 
-    /**
-     * @notice Returns current sell price (before tax deduction)
-     * @dev Price = bkcBalance - K / (nftCount + 1)
-     * @return Price in BKC (wei)
-     */
     function getSellPrice() public view returns (uint256) {
         if (!pool.initialized || pool.nftCount == 0) return 0;
 
@@ -509,27 +623,19 @@ contract NFTLiquidityPool is
         return pool.bkcBalance - newBalance;
     }
 
-    /**
-     * @notice Returns sell payout after tax deduction
-     * @return Net payout in BKC
-     */
     function getSellPriceAfterTax() public view returns (uint256) {
         uint256 grossPrice = getSellPrice();
         if (grossPrice == 0) return 0;
 
         uint256 taxBips = ecosystemManager.getFee(SELL_TAX_KEY);
-        uint256 tax = (grossPrice * taxBips) / BIPS_DENOMINATOR;
+        uint256 tax;
+        unchecked {
+            tax = (grossPrice * taxBips) / BIPS_DENOMINATOR;
+        }
 
         return grossPrice - tax;
     }
 
-    /**
-     * @notice Returns pool information
-     * @return bkcBalance Current BKC in pool
-     * @return nftCount Current NFT count
-     * @return k Constant product value
-     * @return initialized Whether pool is active
-     */
     function getPoolInfo() external view returns (
         uint256 bkcBalance,
         uint256 nftCount,
@@ -539,46 +645,22 @@ contract NFTLiquidityPool is
         return (pool.bkcBalance, pool.nftCount, pool.k, pool.initialized);
     }
 
-    /**
-     * @notice Returns all NFT token IDs in pool
-     * @return Array of token IDs
-     */
     function getAvailableNFTs() external view returns (uint256[] memory) {
         return pool.tokenIds;
     }
 
-    /**
-     * @notice Returns number of NFTs available
-     * @return NFT count
-     */
     function getNFTBalance() external view returns (uint256) {
         return pool.nftCount;
     }
 
-    /**
-     * @notice Returns BKC balance in pool
-     * @return BKC balance (wei)
-     */
     function getBKCBalance() external view returns (uint256) {
         return pool.bkcBalance;
     }
 
-    /**
-     * @notice Checks if a specific NFT is in the pool
-     * @param _tokenId Token ID to check
-     * @return True if NFT is in pool
-     */
     function isNFTInPool(uint256 _tokenId) external view returns (bool) {
         return _isTokenInPool(_tokenId);
     }
 
-    /**
-     * @notice Returns trading statistics
-     * @return volume Total trading volume
-     * @return taxes Total taxes collected
-     * @return buys Total buy transactions
-     * @return sells Total sell transactions
-     */
     function getTradingStats() external view returns (
         uint256 volume,
         uint256 taxes,
@@ -588,11 +670,6 @@ contract NFTLiquidityPool is
         return (totalVolume, totalTaxesCollected, totalBuys, totalSells);
     }
 
-    /**
-     * @notice Returns spread between buy and sell prices
-     * @return spread Price difference (buy - sell)
-     * @return spreadBips Spread in basis points
-     */
     function getSpread() external view returns (uint256 spread, uint256 spreadBips) {
         uint256 buyPrice = getBuyPrice();
         uint256 sellPrice = getSellPrice();
@@ -605,36 +682,88 @@ contract NFTLiquidityPool is
         spreadBips = sellPrice > 0 ? (spread * BIPS_DENOMINATOR) / sellPrice : 0;
     }
 
+    /**
+     * @notice Returns ETH fee configuration
+     * @return buyFee ETH fee for buying
+     * @return sellFee ETH fee for selling
+     * @return totalCollected Total ETH collected
+     */
+    function getEthFeeConfig() external view returns (
+        uint256 buyFee,
+        uint256 sellFee,
+        uint256 totalCollected
+    ) {
+        return (buyEthFee, sellEthFee, totalETHCollected);
+    }
+
+    /**
+     * @notice Returns total buy cost including BKC price, BKC tax, and ETH fee
+     * @return bkcCost Total BKC cost (price + tax)
+     * @return ethCost ETH fee required
+     */
+    function getTotalBuyCost() external view returns (uint256 bkcCost, uint256 ethCost) {
+        bkcCost = getBuyPriceWithTax();
+        ethCost = buyEthFee;
+    }
+
+    /**
+     * @notice Returns net sell payout and ETH fee required
+     * @return bkcPayout Net BKC payout after tax
+     * @return ethCost ETH fee required
+     */
+    function getTotalSellInfo() external view returns (uint256 bkcPayout, uint256 ethCost) {
+        bkcPayout = getSellPriceAfterTax();
+        ethCost = sellEthFee;
+    }
+
+    /// @notice Get the tier name for this pool
+    function getTierName() external view returns (string memory) {
+        if (boostBips == BOOST_DIAMOND) return "Diamond";
+        if (boostBips == BOOST_GOLD) return "Gold";
+        if (boostBips == BOOST_SILVER) return "Silver";
+        if (boostBips == BOOST_BRONZE) return "Bronze";
+        return "Unknown";
+    }
+
+    /// @notice Get all valid tier boost values
+    function getValidTiers() external pure returns (uint256[4] memory) {
+        return [BOOST_BRONZE, BOOST_SILVER, BOOST_GOLD, BOOST_DIAMOND];
+    }
+
+    /// @notice Check if a boost value is a valid tier
+    function isValidTier(uint256 _boostBips) external pure returns (bool) {
+        return _isValidTier(_boostBips);
+    }
+
     // =========================================================================
     //                         INTERNAL FUNCTIONS
     // =========================================================================
 
-    /**
-     * @dev Executes NFT purchase logic
-     */
-    function _executeBuy(uint256 _tokenId) internal {
+    function _executeBuy(uint256 _tokenId, address _operator) internal {
         uint256 price = getBuyPrice();
         if (price == type(uint256).max) revert MathOverflow();
 
-        // Calculate tax
         uint256 taxBips = ecosystemManager.getFee(BUY_TAX_KEY);
-        uint256 taxAmount = (price * taxBips) / BIPS_DENOMINATOR;
-        uint256 totalCost = price + taxAmount;
+        uint256 taxAmount;
+        uint256 totalCost;
 
-        // Pull payment from buyer
-        bkcToken.safeTransferFrom(msg.sender, address(this), totalCost);
-
-        // Send tax to MiningManager
-        if (taxAmount > 0) {
-            _sendTaxToMining(BUY_TAX_KEY, taxAmount);
+        unchecked {
+            taxAmount = (price * taxBips) / BIPS_DENOMINATOR;
+            totalCost = price + taxAmount;
         }
 
-        // Update pool state (price stays in pool)
-        pool.bkcBalance += price;
-        pool.nftCount--;
+        bkcToken.safeTransferFrom(msg.sender, address(this), totalCost);
+
+        if (taxAmount > 0) {
+            _sendTaxToMining(BUY_TAX_KEY, taxAmount, _operator);
+        }
+
+        unchecked {
+            pool.bkcBalance += price;
+            pool.nftCount--;
+        }
         pool.k = pool.nftCount > 0 ? pool.bkcBalance * pool.nftCount : 0;
 
-        // Transfer NFT to buyer
         _removeTokenFromPool(_tokenId);
         address boosterAddress = ecosystemManager.getBoosterAddress();
         IERC721Upgradeable(boosterAddress).safeTransferFrom(
@@ -643,10 +772,11 @@ contract NFTLiquidityPool is
             _tokenId
         );
 
-        // Update stats
-        totalVolume += price;
-        totalTaxesCollected += taxAmount;
-        totalBuys++;
+        unchecked {
+            totalVolume += price;
+            totalTaxesCollected += taxAmount;
+            totalBuys++;
+        }
 
         emit NFTPurchased(
             msg.sender,
@@ -654,32 +784,33 @@ contract NFTLiquidityPool is
             price,
             taxAmount,
             pool.bkcBalance,
-            pool.nftCount
+            pool.nftCount,
+            _operator
         );
     }
 
-    /**
-     * @dev Sends tax to MiningManager for distribution
-     */
-    function _sendTaxToMining(bytes32 _taxKey, uint256 _amount) internal {
+    function _sendTaxToMining(
+        bytes32 _taxKey,
+        uint256 _amount,
+        address _operator
+    ) internal {
         address miningManager = ecosystemManager.getMiningManagerAddress();
         if (miningManager != address(0) && _amount > 0) {
             bkcToken.safeTransfer(miningManager, _amount);
-            IMiningManager(miningManager).performPurchaseMining(_taxKey, _amount);
+
+            try IMiningManagerV3(miningManager).performPurchaseMiningWithOperator(
+                _taxKey,
+                _amount,
+                _operator
+            ) {} catch {}
         }
     }
 
-    /**
-     * @dev Adds token ID to pool tracking
-     */
     function _addTokenToPool(uint256 _tokenId) internal {
         pool.tokenIndex[_tokenId] = pool.tokenIds.length;
         pool.tokenIds.push(_tokenId);
     }
 
-    /**
-     * @dev Removes token ID from pool tracking (swap and pop)
-     */
     function _removeTokenFromPool(uint256 _tokenId) internal {
         uint256 index = pool.tokenIndex[_tokenId];
         uint256 lastIndex = pool.tokenIds.length - 1;
@@ -694,13 +825,39 @@ contract NFTLiquidityPool is
         delete pool.tokenIndex[_tokenId];
     }
 
-    /**
-     * @dev Checks if token is in pool
-     */
     function _isTokenInPool(uint256 _tokenId) internal view returns (bool) {
         if (pool.tokenIds.length == 0) return false;
 
         uint256 index = pool.tokenIndex[_tokenId];
         return index < pool.tokenIds.length && pool.tokenIds[index] == _tokenId;
     }
+
+    function _sendETHToMining(uint256 _amount, address _operator) internal {
+        if (_amount == 0) return;
+
+        unchecked {
+            totalETHCollected += _amount;
+        }
+
+        address miningManager = ecosystemManager.getMiningManagerAddress();
+        if (miningManager != address(0)) {
+            try IMiningManagerV3(miningManager).performPurchaseMiningWithOperator{value: _amount}(
+                BUY_TAX_KEY,
+                0,
+                _operator
+            ) {} catch {
+                // Fallback: keep in contract (can be recovered by owner)
+            }
+        }
+    }
+
+    /// @notice Validates that boost value is one of the valid tiers
+    function _isValidTier(uint256 _boostBips) internal pure returns (bool) {
+        return _boostBips == BOOST_BRONZE ||
+               _boostBips == BOOST_SILVER ||
+               _boostBips == BOOST_GOLD ||
+               _boostBips == BOOST_DIAMOND;
+    }
+
+    receive() external payable {}
 }

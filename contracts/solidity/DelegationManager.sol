@@ -1,6 +1,109 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.28;
 
+/*
+ * ============================================================================
+ *
+ *                             BACKCHAIN PROTOCOL
+ *
+ *                    ██╗   ██╗███╗   ██╗███████╗████████╗ ██████╗ ██████╗
+ *                    ██║   ██║████╗  ██║██╔════╝╚══██╔══╝██╔═══██╗██╔══██╗
+ *                    ██║   ██║██╔██╗ ██║███████╗   ██║   ██║   ██║██████╔╝
+ *                    ██║   ██║██║╚██╗██║╚════██║   ██║   ██║   ██║██╔═══╝
+ *                    ╚██████╔╝██║ ╚████║███████║   ██║   ╚██████╔╝██║
+ *                     ╚═════╝ ╚═╝  ╚═══╝╚══════╝   ╚═╝    ╚═════╝ ╚═╝
+ *
+ *                    P E R M I S S I O N L E S S   .   I M M U T A B L E
+ *
+ * ============================================================================
+ *  Contract    : DelegationManager
+ *  Version     : 6.0.0
+ *  Network     : Arbitrum
+ *  License     : MIT
+ *  Solidity    : 0.8.28
+ * ============================================================================
+ *
+ *  100% DECENTRALIZED SYSTEM
+ *
+ *  This contract is part of a fully decentralized, permissionless,
+ *  and UNSTOPPABLE protocol.
+ *
+ *  - NO CENTRAL AUTHORITY    : Code is law
+ *  - NO PERMISSION NEEDED    : Anyone can become an Operator
+ *  - NO SINGLE POINT OF FAILURE : Runs on Arbitrum blockchain
+ *  - CENSORSHIP RESISTANT    : Cannot be stopped or controlled
+ *
+ * ============================================================================
+ *
+ *  BECOME AN OPERATOR
+ *
+ *  Anyone in the world can:
+ *
+ *  1. Build their own frontend, app, bot, or tool for Backchain
+ *  2. Pass their wallet address as the "operator" parameter
+ *  3. Earn a percentage of ALL fees (BKC + ETH) generated
+ *
+ *  No registration. No approval. No KYC. Just build and earn.
+ *
+ * ============================================================================
+ *
+ *  PURPOSE
+ *
+ *  Manages staking, time-locks, and reward distribution for the Backcoin
+ *  ecosystem. Implements weighted staking with:
+ *
+ *  - Flexible lock periods (1 day to 10 years)
+ *  - Proportional reward distribution based on stake weight
+ *  - NFT-based burn reduction on reward claims (OWNED or RENTED)
+ *  - Proof-of-Purchase mining integration
+ *
+ *  Stake Weight Formula:
+ *  pStake = (amount × lockDays) / 1e18
+ *
+ *  Reward Distribution:
+ *  userReward = (userPStake × accRewardPerStake) / 1e18 - rewardDebt
+ *
+ * ============================================================================
+ *
+ *  NFT BURN REDUCTION SYSTEM (V6)
+ *
+ *  When claiming rewards, a percentage is BURNED based on NFT ownership.
+ *  The system automatically checks BOTH owned AND rented NFTs.
+ *
+ *  ┌──────────┬────────────┬───────────┬─────────────┐
+ *  │ Tier     │ Boost Bips │ Burn Rate │ User Gets   │
+ *  ├──────────┼────────────┼───────────┼─────────────┤
+ *  │ No NFT   │ 0          │ 50%       │ 50%         │
+ *  │ Bronze   │ 1000       │ 40%       │ 60%         │
+ *  │ Silver   │ 2500       │ 25%       │ 75%         │
+ *  │ Gold     │ 4000       │ 10%       │ 90%         │
+ *  │ Diamond  │ 5000       │ 0%        │ 100%        │
+ *  └──────────┴────────────┴───────────┴─────────────┘
+ *
+ *  IMPORTANT: Service fees (delegate, unstake, etc) are EQUAL for everyone.
+ *             NFTs ONLY affect the burn rate when claiming rewards.
+ *
+ * ============================================================================
+ *
+ *  FEE STRUCTURE
+ *
+ *  ┌─────────────────┬─────────────┬────────────────────────────────────────┐
+ *  │ Action          │ Fee Type    │ Destination                            │
+ *  ├─────────────────┼─────────────┼────────────────────────────────────────┤
+ *  │ Delegate        │ BKC (bips)  │ MiningManager → Operator/Treasury      │
+ *  │ Unstake         │ BKC (bips)  │ MiningManager → Operator/Treasury      │
+ *  │ Force Unstake   │ BKC (bips)  │ MiningManager → Operator/Treasury      │
+ *  │ Claim Rewards   │ ETH (fixed) │ MiningManager → Operator/Treasury      │
+ *  │ Claim Rewards   │ BKC (burn)  │ BURNED (reduced by NFT tier)           │
+ *  └─────────────────┴─────────────┴────────────────────────────────────────┘
+ *
+ * ============================================================================
+ *  Security Contact : dev@backcoin.org
+ *  Website          : https://backcoin.org
+ *  Documentation    : https://github.com/backcoin-org/backchain-dapp/tree/main/docs
+ * ============================================================================
+ */
+
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
@@ -10,26 +113,6 @@ import "@openzeppelin/contracts-upgradeable/token/ERC20/utils/SafeERC20Upgradeab
 import "./IInterfaces.sol";
 import "./BKCToken.sol";
 
-/**
- * @title DelegationManager
- * @author Backchain Protocol
- * @notice Manages staking, time-locks, and reward distribution for the Backcoin ecosystem
- * @dev Implements weighted staking with:
- *      - Flexible lock periods (1 day to 10 years)
- *      - Proportional reward distribution based on stake weight
- *      - NFT-based fee discounts via RewardBoosterNFT
- *      - Proof-of-Purchase mining integration
- *
- *      Stake Weight Formula:
- *      pStake = (amount × lockDays) / 1e18
- *
- *      Reward Distribution:
- *      userReward = (userPStake × accRewardPerStake) / 1e18 - rewardDebt
- *
- * @custom:security-contact dev@backcoin.org
- * @custom:website https://backcoin.org
- * @custom:network Arbitrum
- */
 contract DelegationManager is
     Initializable,
     UUPSUpgradeable,
@@ -43,85 +126,122 @@ contract DelegationManager is
     //                              CONSTANTS
     // =========================================================================
 
-    /// @notice Minimum lock duration (1 day)
     uint256 public constant MIN_LOCK_DURATION = 1 days;
 
-    /// @notice Maximum lock duration (10 years)
     uint256 public constant MAX_LOCK_DURATION = 3650 days;
 
-    /// @notice Precision multiplier for reward calculations
     uint256 private constant PRECISION = 1e18;
 
-    /// @notice Basis points denominator (100% = 10000)
     uint256 private constant BIPS_DENOMINATOR = 10_000;
 
-    /// @notice Fee key for delegation entry fee
     bytes32 public constant DELEGATION_FEE_KEY = keccak256("DELEGATION_FEE_BIPS");
 
-    /// @notice Fee key for normal unstake fee
     bytes32 public constant UNSTAKE_FEE_KEY = keccak256("UNSTAKE_FEE_BIPS");
 
-    /// @notice Fee key for early unstake penalty
     bytes32 public constant FORCE_UNSTAKE_PENALTY_KEY = keccak256("FORCE_UNSTAKE_PENALTY_BIPS");
 
-    /// @notice Fee key for reward claim fee
     bytes32 public constant CLAIM_REWARD_FEE_KEY = keccak256("CLAIM_REWARD_FEE_BIPS");
+
+    // -------------------------------------------------------------------------
+    //                         NFT BOOST TIERS
+    // -------------------------------------------------------------------------
+
+    uint256 public constant BOOST_BRONZE = 1000;
+    uint256 public constant BOOST_SILVER = 2500;
+    uint256 public constant BOOST_GOLD = 4000;
+    uint256 public constant BOOST_DIAMOND = 5000;
+
+    // -------------------------------------------------------------------------
+    //                    BURN RATES (in bips) - Applied on Claim
+    // -------------------------------------------------------------------------
+
+    uint256 public constant BURN_RATE_NO_NFT = 5000;    // 50% burn
+    uint256 public constant BURN_RATE_BRONZE = 4000;    // 40% burn
+    uint256 public constant BURN_RATE_SILVER = 2500;    // 25% burn
+    uint256 public constant BURN_RATE_GOLD = 1000;      // 10% burn
+    uint256 public constant BURN_RATE_DIAMOND = 0;      // 0% burn
 
     // =========================================================================
     //                              STATE
     // =========================================================================
 
-    /// @notice Reference to the ecosystem hub
     IEcosystemManager public ecosystemManager;
 
-    /// @notice BKC token contract
     BKCToken public bkcToken;
 
-    /// @notice Total weighted stake across all users
     uint256 public totalNetworkPStake;
 
-    /// @notice Accumulated reward per stake unit (scaled by PRECISION)
     uint256 public accRewardPerStake;
 
-    /// @notice Individual delegation record
     struct Delegation {
-        uint256 amount;       // Staked amount (after entry fee)
-        uint64 unlockTime;    // Timestamp when delegation can be withdrawn
-        uint64 lockDuration;  // Original lock duration in seconds
+        uint256 amount;
+        uint64 unlockTime;
+        uint64 lockDuration;
     }
 
-    /// @notice User address => Array of delegations
     mapping(address => Delegation[]) public userDelegations;
 
-    /// @notice User address => Total weighted stake
     mapping(address => uint256) public userTotalPStake;
 
-    /// @notice User address => Reward debt (for accurate reward calculation)
     mapping(address => uint256) public rewardDebt;
 
-    /// @notice User address => Accumulated unclaimed rewards
     mapping(address => uint256) public savedRewards;
+
+    // =========================================================================
+    //                          STATE V2 - Operators & ETH
+    // =========================================================================
+
+    uint256 public claimEthFee;
+
+    uint256 public totalETHCollected;
+
+    uint256 public totalBKCFees;
+
+    // =========================================================================
+    //                          STATE V6 - Burn Tracking
+    // =========================================================================
+
+    /// @notice Total BKC burned on claim (all time)
+    uint256 public totalBurnedOnClaim;
+
+    // =========================================================================
+    //                           STORAGE GAP
+    // =========================================================================
+
+    uint256[39] private __gap;
 
     // =========================================================================
     //                              EVENTS
     // =========================================================================
 
-    /// @notice Emitted when tokens are unstaked
+    // NOTE: Event Delegated is inherited from IDelegationManager interface
+
     event Unstaked(
         address indexed user,
         uint256 indexed delegationIndex,
         uint256 amountReceived,
-        uint256 feePaid
+        uint256 feePaid,
+        address operator
     );
 
-    /// @notice Emitted when mining rewards are deposited
     event RewardsDeposited(uint256 amount, uint256 newAccRewardPerStake);
 
-    /// @notice Emitted when user claims rewards
     event RewardClaimed(
         address indexed user,
         uint256 amountReceived,
-        uint256 feePaid
+        uint256 burnedAmount,
+        uint256 ethFeePaid,
+        uint256 nftBoostUsed,
+        address operator
+    );
+
+    event ClaimEthFeeUpdated(uint256 previousFee, uint256 newFee);
+
+    event TokensBurnedOnClaim(
+        address indexed user,
+        uint256 burnedAmount,
+        uint256 burnRateBips,
+        uint256 totalBurnedAllTime
     );
 
     // =========================================================================
@@ -137,6 +257,8 @@ contract DelegationManager is
     error LockPeriodExpired();
     error TokenNotConfigured();
     error NoRewardsToClaim();
+    error InsufficientETHFee();
+    error TransferFailed();
 
     // =========================================================================
     //                           INITIALIZATION
@@ -147,11 +269,6 @@ contract DelegationManager is
         _disableInitializers();
     }
 
-    /**
-     * @notice Initializes the DelegationManager contract
-     * @param _owner Contract owner address
-     * @param _ecosystemManager Address of the ecosystem hub
-     */
     function initialize(
         address _owner,
         address _ecosystemManager
@@ -173,20 +290,22 @@ contract DelegationManager is
         bkcToken = BKCToken(bkcAddress);
     }
 
-    /**
-     * @dev Authorizes contract upgrades (owner only)
-     */
     function _authorizeUpgrade(address) internal override onlyOwner {}
+
+    // =========================================================================
+    //                         ADMIN FUNCTIONS
+    // =========================================================================
+
+    function setClaimEthFee(uint256 _fee) external onlyOwner {
+        uint256 previousFee = claimEthFee;
+        claimEthFee = _fee;
+        emit ClaimEthFeeUpdated(previousFee, _fee);
+    }
 
     // =========================================================================
     //                         EXTERNAL FUNCTIONS
     // =========================================================================
 
-    /**
-     * @notice Deposits mining rewards into the staking pool
-     * @dev Only callable by MiningManager
-     * @param _amount Amount of BKC to distribute
-     */
     function depositMiningRewards(uint256 _amount) external override {
         if (msg.sender != ecosystemManager.getMiningManagerAddress()) {
             revert UnauthorizedCaller();
@@ -198,44 +317,35 @@ contract DelegationManager is
         }
     }
 
-    /**
-     * @notice Stakes tokens with a time-lock
-     * @dev Applies NFT-based discount on entry fee
-     * @param _amount Total amount to stake (fee deducted from this)
-     * @param _lockDuration Lock period in seconds (min 1 day, max 10 years)
-     * @param _boosterTokenId NFT token ID for fee discount (0 = no discount)
-     */
+    /// @notice Delegate tokens with time-lock
+    /// @dev Fee is the SAME for all users (no NFT discount)
+    /// @param _amount Amount of BKC to delegate
+    /// @param _lockDuration Lock duration in seconds (1 day to 10 years)
+    /// @param _operator Address to receive operator fees
     function delegate(
         uint256 _amount,
         uint256 _lockDuration,
-        uint256 _boosterTokenId
+        address _operator
     ) external nonReentrant {
         if (_amount == 0) revert ZeroAmount();
         if (_lockDuration < MIN_LOCK_DURATION || _lockDuration > MAX_LOCK_DURATION) {
             revert InvalidDuration();
         }
 
-        // Update pending rewards before modifying stake
         _updateUserRewards(msg.sender);
 
-        // Calculate fee with potential NFT discount
-        uint256 baseFeeBips = ecosystemManager.getFee(DELEGATION_FEE_KEY);
-        uint256 finalFeeBips = _applyBoosterDiscount(baseFeeBips, _boosterTokenId);
-
-        uint256 feeAmount = (_amount * finalFeeBips) / BIPS_DENOMINATOR;
+        uint256 feeBips = ecosystemManager.getFee(DELEGATION_FEE_KEY);
+        uint256 feeAmount = (_amount * feeBips) / BIPS_DENOMINATOR;
         uint256 netAmount = _amount - feeAmount;
 
         if (netAmount == 0) revert ZeroAmount();
 
-        // Transfer tokens from user
         bkcToken.safeTransferFrom(msg.sender, address(this), _amount);
 
-        // Process fee
         if (feeAmount > 0) {
-            _sendFeeToMining(DELEGATION_FEE_KEY, feeAmount);
+            _sendFeeToMining(DELEGATION_FEE_KEY, feeAmount, _operator);
         }
 
-        // Create delegation record
         uint256 delegationIndex = userDelegations[msg.sender].length;
         userDelegations[msg.sender].push(Delegation({
             amount: netAmount,
@@ -243,26 +353,22 @@ contract DelegationManager is
             lockDuration: uint64(_lockDuration)
         }));
 
-        // Calculate and update stake weight
         uint256 pStake = _calculatePStake(netAmount, _lockDuration);
         totalNetworkPStake += pStake;
         userTotalPStake[msg.sender] += pStake;
 
-        // Reset reward debt
         rewardDebt[msg.sender] = (userTotalPStake[msg.sender] * accRewardPerStake) / PRECISION;
 
-        emit Delegated(msg.sender, delegationIndex, netAmount, pStake, feeAmount);
+        emit Delegated(msg.sender, delegationIndex, netAmount, pStake, feeAmount, _operator);
     }
 
-    /**
-     * @notice Withdraws staked tokens after lock period expires
-     * @dev Applies NFT-based discount on exit fee
-     * @param _delegationIndex Index of the delegation to withdraw
-     * @param _boosterTokenId NFT token ID for fee discount (0 = no discount)
-     */
+    /// @notice Unstake after lock period expires
+    /// @dev Fee is the SAME for all users (no NFT discount)
+    /// @param _delegationIndex Index of the delegation to unstake
+    /// @param _operator Address to receive operator fees
     function unstake(
         uint256 _delegationIndex,
-        uint256 _boosterTokenId
+        address _operator
     ) external nonReentrant {
         Delegation[] storage delegations = userDelegations[msg.sender];
         if (_delegationIndex >= delegations.length) revert InvalidIndex();
@@ -270,49 +376,38 @@ contract DelegationManager is
         Delegation storage d = delegations[_delegationIndex];
         if (block.timestamp < d.unlockTime) revert LockPeriodActive();
 
-        // Update pending rewards
         _updateUserRewards(msg.sender);
 
         uint256 amount = d.amount;
         uint256 pStakeToRemove = _calculatePStake(amount, d.lockDuration);
 
-        // Calculate fee with potential NFT discount
-        uint256 baseFeeBips = ecosystemManager.getFee(UNSTAKE_FEE_KEY);
-        uint256 finalFeeBips = _applyBoosterDiscount(baseFeeBips, _boosterTokenId);
-
-        uint256 feeAmount = (amount * finalFeeBips) / BIPS_DENOMINATOR;
+        uint256 feeBips = ecosystemManager.getFee(UNSTAKE_FEE_KEY);
+        uint256 feeAmount = (amount * feeBips) / BIPS_DENOMINATOR;
         uint256 amountToUser = amount - feeAmount;
 
-        // Update state
         totalNetworkPStake -= pStakeToRemove;
         userTotalPStake[msg.sender] -= pStakeToRemove;
 
-        // Process fee
         if (feeAmount > 0) {
-            _sendFeeToMining(UNSTAKE_FEE_KEY, feeAmount);
+            _sendFeeToMining(UNSTAKE_FEE_KEY, feeAmount, _operator);
         }
 
-        // Remove delegation (swap and pop)
         _removeDelegation(delegations, _delegationIndex);
 
-        // Transfer tokens to user
         bkcToken.safeTransfer(msg.sender, amountToUser);
 
-        // Update reward debt
         rewardDebt[msg.sender] = (userTotalPStake[msg.sender] * accRewardPerStake) / PRECISION;
 
-        emit Unstaked(msg.sender, _delegationIndex, amountToUser, feeAmount);
+        emit Unstaked(msg.sender, _delegationIndex, amountToUser, feeAmount, _operator);
     }
 
-    /**
-     * @notice Withdraws staked tokens before lock period expires (with penalty)
-     * @dev Applies NFT-based discount on penalty
-     * @param _delegationIndex Index of the delegation to withdraw
-     * @param _boosterTokenId NFT token ID for penalty discount (0 = no discount)
-     */
+    /// @notice Force unstake before lock period (with penalty)
+    /// @dev Penalty fee is the SAME for all users (no NFT discount)
+    /// @param _delegationIndex Index of the delegation to force unstake
+    /// @param _operator Address to receive operator fees
     function forceUnstake(
         uint256 _delegationIndex,
-        uint256 _boosterTokenId
+        address _operator
     ) external nonReentrant {
         Delegation[] storage delegations = userDelegations[msg.sender];
         if (_delegationIndex >= delegations.length) revert InvalidIndex();
@@ -320,66 +415,68 @@ contract DelegationManager is
         Delegation storage d = delegations[_delegationIndex];
         if (block.timestamp >= d.unlockTime) revert LockPeriodExpired();
 
-        // Update pending rewards
         _updateUserRewards(msg.sender);
 
         uint256 amount = d.amount;
         uint256 pStakeToRemove = _calculatePStake(amount, d.lockDuration);
 
-        // Calculate penalty with potential NFT discount
-        uint256 basePenaltyBips = ecosystemManager.getFee(FORCE_UNSTAKE_PENALTY_KEY);
-        uint256 finalPenaltyBips = _applyBoosterDiscount(basePenaltyBips, _boosterTokenId);
-
-        uint256 penaltyAmount = (amount * finalPenaltyBips) / BIPS_DENOMINATOR;
+        uint256 penaltyBips = ecosystemManager.getFee(FORCE_UNSTAKE_PENALTY_KEY);
+        uint256 penaltyAmount = (amount * penaltyBips) / BIPS_DENOMINATOR;
         uint256 amountToUser = amount - penaltyAmount;
 
-        // Update state
         totalNetworkPStake -= pStakeToRemove;
         userTotalPStake[msg.sender] -= pStakeToRemove;
 
-        // Process penalty
         if (penaltyAmount > 0) {
-            _sendFeeToMining(FORCE_UNSTAKE_PENALTY_KEY, penaltyAmount);
+            _sendFeeToMining(FORCE_UNSTAKE_PENALTY_KEY, penaltyAmount, _operator);
         }
 
-        // Remove delegation
         _removeDelegation(delegations, _delegationIndex);
 
-        // Transfer tokens to user
         bkcToken.safeTransfer(msg.sender, amountToUser);
 
-        // Update reward debt
         rewardDebt[msg.sender] = (userTotalPStake[msg.sender] * accRewardPerStake) / PRECISION;
 
-        emit Unstaked(msg.sender, _delegationIndex, amountToUser, penaltyAmount);
+        emit Unstaked(msg.sender, _delegationIndex, amountToUser, penaltyAmount, _operator);
     }
 
-    /**
-     * @notice Claims accumulated staking rewards
-     * @dev Applies NFT-based discount on claim fee
-     * @param _boosterTokenId NFT token ID for fee discount (0 = no discount)
-     */
-    function claimReward(uint256 _boosterTokenId) external nonReentrant {
-        // Update pending rewards
+    /// @notice Claim rewards with NFT-based burn reduction
+    /// @dev Automatically checks BOTH owned AND rented NFTs for best boost
+    /// @param _operator Address to receive operator fees from ETH
+    function claimReward(address _operator) external payable nonReentrant {
+        uint256 _claimEthFee = claimEthFee;
+        if (msg.value < _claimEthFee) revert InsufficientETHFee();
+
         _updateUserRewards(msg.sender);
 
         uint256 totalToClaim = savedRewards[msg.sender];
         if (totalToClaim == 0) revert NoRewardsToClaim();
 
-        // Clear saved rewards (reentrancy protection)
         savedRewards[msg.sender] = 0;
         rewardDebt[msg.sender] = (userTotalPStake[msg.sender] * accRewardPerStake) / PRECISION;
 
-        // Calculate fee with potential NFT discount
-        uint256 baseFeeBips = ecosystemManager.getFee(CLAIM_REWARD_FEE_KEY);
-        uint256 finalFeeBips = _applyBoosterDiscount(baseFeeBips, _boosterTokenId);
+        // Get best NFT boost (checks OWNED and RENTED)
+        uint256 userBoost = _getUserBestBoost(msg.sender);
+        uint256 burnRateBips = _getBurnRate(userBoost);
 
-        uint256 feeAmount = (totalToClaim * finalFeeBips) / BIPS_DENOMINATOR;
-        uint256 amountToUser = totalToClaim - feeAmount;
+        // Calculate burn amount
+        uint256 burnAmount = (totalToClaim * burnRateBips) / BIPS_DENOMINATOR;
+        uint256 amountToUser = totalToClaim - burnAmount;
 
-        // Process fee
-        if (feeAmount > 0) {
-            _sendFeeToMining(CLAIM_REWARD_FEE_KEY, feeAmount);
+        // Burn tokens
+        if (burnAmount > 0) {
+            bkcToken.burn(burnAmount);
+            
+            unchecked {
+                totalBurnedOnClaim += burnAmount;
+            }
+
+            emit TokensBurnedOnClaim(msg.sender, burnAmount, burnRateBips, totalBurnedOnClaim);
+        }
+
+        // Send ETH fee to mining
+        if (msg.value > 0) {
+            _sendETHToMining(msg.value, _operator);
         }
 
         // Transfer rewards to user
@@ -387,18 +484,13 @@ contract DelegationManager is
             bkcToken.safeTransfer(msg.sender, amountToUser);
         }
 
-        emit RewardClaimed(msg.sender, amountToUser, feeAmount);
+        emit RewardClaimed(msg.sender, amountToUser, burnAmount, msg.value, userBoost, _operator);
     }
 
     // =========================================================================
     //                          VIEW FUNCTIONS
     // =========================================================================
 
-    /**
-     * @notice Returns pending rewards for a user
-     * @param _user User address
-     * @return Total claimable rewards
-     */
     function pendingRewards(address _user) public view returns (uint256) {
         uint256 pending = 0;
 
@@ -409,31 +501,73 @@ contract DelegationManager is
         return pending + savedRewards[_user];
     }
 
-    /**
-     * @notice Returns all delegations for a user
-     * @param _user User address
-     * @return Array of delegation records
-     */
     function getDelegationsOf(address _user) external view returns (Delegation[] memory) {
         return userDelegations[_user];
     }
 
-    /**
-     * @notice Returns the number of active delegations for a user
-     * @param _user User address
-     * @return Number of delegations
-     */
     function getDelegationCount(address _user) external view returns (uint256) {
         return userDelegations[_user].length;
+    }
+
+    function getFeeStats() external view returns (
+        uint256 ethCollected,
+        uint256 bkcCollected,
+        uint256 currentEthFee,
+        uint256 totalBurned
+    ) {
+        return (totalETHCollected, totalBKCFees, claimEthFee, totalBurnedOnClaim);
+    }
+
+    /// @notice Get the user's best NFT boost (owned or rented)
+    /// @param _user Address to check
+    /// @return Best boost value in bips (0 if no NFT)
+    function getUserBestBoost(address _user) external view returns (uint256) {
+        return _getUserBestBoost(_user);
+    }
+
+    /// @notice Get the burn rate for a given boost value
+    /// @param _boost Boost value in bips
+    /// @return Burn rate in bips
+    function getBurnRateForBoost(uint256 _boost) external pure returns (uint256) {
+        return _getBurnRate(_boost);
+    }
+
+    /// @notice Preview claim amounts for a user
+    /// @param _user Address to preview
+    /// @return totalRewards Total pending rewards
+    /// @return burnAmount Amount that will be burned
+    /// @return userReceives Amount user will receive
+    /// @return burnRateBips Burn rate in bips
+    /// @return nftBoost NFT boost being used
+    function previewClaim(address _user) external view returns (
+        uint256 totalRewards,
+        uint256 burnAmount,
+        uint256 userReceives,
+        uint256 burnRateBips,
+        uint256 nftBoost
+    ) {
+        totalRewards = pendingRewards(_user);
+        nftBoost = _getUserBestBoost(_user);
+        burnRateBips = _getBurnRate(nftBoost);
+        burnAmount = (totalRewards * burnRateBips) / BIPS_DENOMINATOR;
+        userReceives = totalRewards - burnAmount;
+    }
+
+    /// @notice Get tier name for display
+    /// @param _boost Boost value in bips
+    /// @return Tier name string
+    function getTierName(uint256 _boost) external pure returns (string memory) {
+        if (_boost >= BOOST_DIAMOND) return "Diamond";
+        if (_boost >= BOOST_GOLD) return "Gold";
+        if (_boost >= BOOST_SILVER) return "Silver";
+        if (_boost >= BOOST_BRONZE) return "Bronze";
+        return "None";
     }
 
     // =========================================================================
     //                         INTERNAL FUNCTIONS
     // =========================================================================
 
-    /**
-     * @dev Updates user's pending rewards to savedRewards
-     */
     function _updateUserRewards(address _user) internal {
         if (userTotalPStake[_user] > 0) {
             uint256 pending = (userTotalPStake[_user] * accRewardPerStake / PRECISION) - rewardDebt[_user];
@@ -443,78 +577,103 @@ contract DelegationManager is
         }
     }
 
-    /**
-     * @dev Sends fee to MiningManager for processing
-     */
-    function _sendFeeToMining(bytes32 _serviceKey, uint256 _feeAmount) internal {
+    function _sendFeeToMining(
+        bytes32 _serviceKey,
+        uint256 _feeAmount,
+        address _operator
+    ) internal {
         address miningManager = ecosystemManager.getMiningManagerAddress();
         if (miningManager == address(0)) revert ZeroAddress();
 
+        unchecked {
+            totalBKCFees += _feeAmount;
+        }
+
         bkcToken.safeTransfer(miningManager, _feeAmount);
-        IMiningManager(miningManager).performPurchaseMining(_serviceKey, _feeAmount);
+
+        try IMiningManager(miningManager).performPurchaseMiningWithOperator(
+            _serviceKey,
+            _feeAmount,
+            _operator
+        ) {} catch {
+            try IMiningManager(miningManager).performPurchaseMining(_serviceKey, _feeAmount) {} catch {}
+        }
     }
 
-    /**
-     * @dev Applies proportional NFT booster discount to a fee
-     *
-     *      IMPORTANT: This applies a PROPORTIONAL discount, not direct subtraction.
-     *
-     *      Example with Crystal NFT (10% discount = 1000 bips):
-     *      - Base Fee: 100 bips (1%)
-     *      - Discount: 10% OF the fee (not 10% absolute)
-     *      - Calculation: 100 - (100 × 1000 / 10000) = 100 - 10 = 90 bips
-     *      - Result: 0.9% fee (10% reduction from 1%)
-     *
-     *      Example with Diamond NFT (70% discount = 7000 bips):
-     *      - Base Fee: 100 bips (1%)
-     *      - Discount: 70% OF the fee
-     *      - Calculation: 100 - (100 × 7000 / 10000) = 100 - 70 = 30 bips
-     *      - Result: 0.3% fee (70% reduction from 1%)
-     *
-     * @param _baseFeeBips Original fee in basis points
-     * @param _boosterTokenId NFT token ID (0 = no discount)
-     * @return Discounted fee in basis points
-     */
-    function _applyBoosterDiscount(
-        uint256 _baseFeeBips,
-        uint256 _boosterTokenId
-    ) internal view returns (uint256) {
-        // No fee = no discount needed
-        if (_baseFeeBips == 0) return 0;
+    function _sendETHToMining(uint256 _amount, address _operator) internal {
+        if (_amount == 0) return;
 
-        // No booster = full fee
-        if (_boosterTokenId == 0) return _baseFeeBips;
+        unchecked {
+            totalETHCollected += _amount;
+        }
 
+        address miningManager = ecosystemManager.getMiningManagerAddress();
+        if (miningManager != address(0)) {
+            try IMiningManager(miningManager).performPurchaseMiningWithOperator{value: _amount}(
+                CLAIM_REWARD_FEE_KEY,
+                0,
+                _operator
+            ) {
+                return;
+            } catch {}
+        }
+
+        address treasury = ecosystemManager.getTreasuryAddress();
+        if (treasury != address(0)) {
+            (bool success, ) = treasury.call{value: _amount}("");
+            if (!success) revert TransferFailed();
+        }
+    }
+
+    /// @notice Get user's best NFT boost from OWNED or RENTED NFTs
+    /// @param _user Address to check
+    /// @return bestBoost Highest boost value found
+    function _getUserBestBoost(address _user) internal view returns (uint256 bestBoost) {
         address boosterAddress = ecosystemManager.getBoosterAddress();
-        if (boosterAddress == address(0)) return _baseFeeBips;
+        if (boosterAddress == address(0)) return 0;
 
         IRewardBoosterNFT booster = IRewardBoosterNFT(boosterAddress);
 
-        // Try/catch prevents revert if NFT doesn't exist
-        try booster.ownerOf(_boosterTokenId) returns (address owner) {
-            // Only apply discount if caller owns the NFT
-            if (owner == msg.sender) {
-                uint256 boostBips = booster.boostBips(_boosterTokenId);
-                uint256 discountBips = ecosystemManager.getBoosterDiscount(boostBips);
-
-                if (discountBips > 0) {
-                    // Calculate PROPORTIONAL discount
-                    // discountAmount = baseFeeBips × discountBips / 10000
-                    uint256 discountAmount = (_baseFeeBips * discountBips) / BIPS_DENOMINATOR;
-
-                    // Return reduced fee (minimum 0)
-                    return _baseFeeBips > discountAmount ? _baseFeeBips - discountAmount : 0;
-                }
-            }
+        // =====================================================================
+        // CHECK 1: OWNED NFTs
+        // =====================================================================
+        try booster.getHighestBoostOf(_user) returns (uint256, uint256 ownedBoost) {
+            bestBoost = ownedBoost;
         } catch {}
 
-        return _baseFeeBips;
+        // =====================================================================
+        // CHECK 2: RENTED NFTs
+        // =====================================================================
+        address rentalManager = ecosystemManager.getRentalManagerAddress();
+        if (rentalManager != address(0)) {
+            try IRentalManager(rentalManager).getUserActiveRentals(_user) returns (
+                uint256[] memory rentedTokenIds,
+                uint256[] memory /* endTimes */
+            ) {
+                uint256 length = rentedTokenIds.length;
+                for (uint256 i; i < length;) {
+                    try booster.boostBips(rentedTokenIds[i]) returns (uint256 rentedBoost) {
+                        if (rentedBoost > bestBoost) {
+                            bestBoost = rentedBoost;
+                        }
+                    } catch {}
+                    unchecked { ++i; }
+                }
+            } catch {}
+        }
     }
 
-    /**
-     * @dev Calculates stake weight based on amount and lock duration
-     *      pStake = (amount × lockDays) / 1e18
-     */
+    /// @notice Get burn rate based on NFT boost
+    /// @param _boost Boost value in bips
+    /// @return Burn rate in bips
+    function _getBurnRate(uint256 _boost) internal pure returns (uint256) {
+        if (_boost >= BOOST_DIAMOND) return BURN_RATE_DIAMOND;  // 0%
+        if (_boost >= BOOST_GOLD) return BURN_RATE_GOLD;        // 10%
+        if (_boost >= BOOST_SILVER) return BURN_RATE_SILVER;    // 25%
+        if (_boost >= BOOST_BRONZE) return BURN_RATE_BRONZE;    // 40%
+        return BURN_RATE_NO_NFT;                                 // 50%
+    }
+
     function _calculatePStake(
         uint256 _amount,
         uint256 _lockDuration
@@ -522,9 +681,6 @@ contract DelegationManager is
         return (_amount * (_lockDuration / 1 days)) / PRECISION;
     }
 
-    /**
-     * @dev Removes delegation using swap-and-pop for gas efficiency
-     */
     function _removeDelegation(
         Delegation[] storage _delegations,
         uint256 _index
@@ -537,4 +693,6 @@ contract DelegationManager is
 
         _delegations.pop();
     }
+
+    receive() external payable {}
 }

@@ -1,86 +1,57 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.28;
 
-import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
-import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
-import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
-import "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.sol";
-import "@openzeppelin/contracts-upgradeable/token/ERC20/utils/SafeERC20Upgradeable.sol";
-import "@openzeppelin/contracts-upgradeable/token/ERC20/IERC20Upgradeable.sol";
-
-import "./IInterfaces.sol";
-import "./BKCToken.sol";
-
-/**
- * @title CharityPool
- * @author Backchain Protocol
- * @notice Decentralized charitable crowdfunding for humanitarian and animal causes
- * 
- * @dev CharityPool is one of the crowdfunding modules in the Backchain RWA ecosystem.
- *      It enables transparent, blockchain-based fundraising for CHARITABLE purposes
- *      with built-in burn mechanisms that create deflationary pressure on BKC.
- *
- * ============================================================================
- *                         BACKCOIN RWA ECOSYSTEM
+/*
  * ============================================================================
  *
- *  Backcoin is a comprehensive Real World Asset (RWA) infrastructure that
- *  bridges traditional services with blockchain technology:
+ *                             BACKCHAIN PROTOCOL
  *
- *  Core Services:
- *  - Document notarization and certification on-chain
- *  - NFT-backed utility with tiered fee discounts
- *  - Decentralized staking and delegation rewards
- *  - Charitable crowdfunding (this contract)
- *  - Community project tokenization (upcoming)
- *  - NFT rental marketplace
- *  - Prediction games with on-chain resolution
+ *              ██████╗██╗  ██╗ █████╗ ██████╗ ██╗████████╗██╗   ██╗
+ *             ██╔════╝██║  ██║██╔══██╗██╔══██╗██║╚══██╔══╝╚██╗ ██╔╝
+ *             ██║     ███████║███████║██████╔╝██║   ██║    ╚████╔╝
+ *             ██║     ██╔══██║██╔══██║██╔══██╗██║   ██║     ╚██╔╝
+ *             ╚██████╗██║  ██║██║  ██║██║  ██║██║   ██║      ██║
+ *              ╚═════╝╚═╝  ╚═╝╚═╝  ╚═╝╚═╝  ╚═╝╚═╝   ╚═╝      ╚═╝
  *
- * ============================================================================
- *                         MODULAR ARCHITECTURE
- * ============================================================================
- *
- *  CharityPool follows the Backcoin modular design pattern:
- *
- *  +------------------------------------------------------------------+
- *  |                    ECOSYSTEM MANAGER (Hub)                       |
- *  |              Central configuration and registry                  |
- *  +------------------------------------------------------------------+
- *                                  |
- *          +-----------+-----------+-----------+-----------+
- *          |           |           |           |           |
- *          v           v           v           v           v
- *     +--------+  +--------+  +--------+  +--------+  +--------+
- *     |  BKC   |  | Mining |  |Delegate|  | Notary |  |Fortune |
- *     | Token  |  |Manager |  |Manager |  |        |  | Pool   |
- *     +--------+  +--------+  +--------+  +--------+  +--------+
- *          |           |           |           |           |
- *          +-----------+-----------+-----------+-----------+
- *                                  |
- *                                  v
- *  +------------------------------------------------------------------+
- *  |                      EXTENSION MODULES                           |
- *  +------------------------------------------------------------------+
- *  |                                                                  |
- *  |  +------------------+  +------------------+  +------------------+|
- *  |  |   CharityPool    |  | CommunityFunding |  |  RentalManager   ||
- *  |  |   (this)         |  |    (upcoming)    |  |                  ||
- *  |  +------------------+  +------------------+  +------------------+|
- *  |                                                                  |
- *  +------------------------------------------------------------------+
- *
- *  Module Registration:
- *  - Registered via EcosystemManager.setModule(key, address)
- *  - Query via EcosystemManager.getModule(key)
- *  - No upgrade required to add new modules
+ *                  P E R M I S S I O N L E S S   .   I M M U T A B L E
  *
  * ============================================================================
- *                           CHARITY POOL
+ *  Contract    : CharityPool
+ *  Version     : 6.0.0
+ *  Network     : Arbitrum
+ *  License     : MIT
+ *  Solidity    : 0.8.28
  * ============================================================================
  *
- *  Purpose: Transparent charitable fundraising with deflationary mechanics
+ *  100% DECENTRALIZED SYSTEM
  *
- *  Use Cases:
+ *  This contract is part of a fully decentralized, permissionless,
+ *  and UNSTOPPABLE protocol.
+ *
+ *  - NO CENTRAL AUTHORITY    : Code is law
+ *  - NO PERMISSION NEEDED    : Anyone can become an Operator
+ *  - NO SINGLE POINT OF FAILURE : Runs on Arbitrum blockchain
+ *  - CENSORSHIP RESISTANT    : Cannot be stopped or controlled
+ *
+ * ============================================================================
+ *
+ *  BECOME AN OPERATOR
+ *
+ *  Anyone in the world can:
+ *
+ *  1. Build their own frontend, app, bot, or tool for Backchain
+ *  2. Pass their wallet address as the "operator" parameter
+ *  3. Earn a percentage of ALL fees (BKC + ETH) generated
+ *
+ *  No registration. No approval. No KYC. Just build and earn.
+ *
+ * ============================================================================
+ *
+ *  PURPOSE
+ *
+ *  Transparent charitable fundraising on blockchain.
+ *
+ *  Use Cases (examples, not exhaustive):
  *  - Animal welfare and rescue campaigns
  *  - Humanitarian aid and disaster relief
  *  - Medical expenses and treatments
@@ -90,29 +61,60 @@ import "./BKCToken.sol";
  *  Key Characteristic: DONATIONS (no financial return expected)
  *
  * ============================================================================
- *                         FEE STRUCTURE
+ *
+ *  FEE STRUCTURE (configurable by governance)
+ *
+ *  +-------------+------------------+----------------------------------------+
+ *  | Action      | Default Fee      | Destination                            |
+ *  +-------------+------------------+----------------------------------------+
+ *  | Create      | 1 BKC            | MiningManager                          |
+ *  | Donate      | 5% ETH           | MiningManager (Operator + Treasury)    |
+ *  | Boost       | 0.5 BKC + ETH    | MiningManager                          |
+ *  | Withdraw    | 0.5 BKC          | MiningManager                          |
+ *  +-------------+------------------+----------------------------------------+
+ *
+ *  NO PENALTIES - Creator receives 100% of raised ETH regardless of goal
+ *
  * ============================================================================
  *
- *  All fees are configurable via setFees():
+ *  FEE DISTRIBUTION
  *
- *  +-------------+------------------+--------------------------------+
- *  | Action      | Default Fee      | Destination                    |
- *  +-------------+------------------+--------------------------------+
- *  | Create      | Free             | -                              |
- *  | Donate      | 4% BKC           | MiningManager (PoP trigger)    |
- *  | Donate      | 1% BKC           | Burn (deflationary)            |
- *  | Withdraw    | 0.001 ETH        | Treasury                       |
- *  | Withdraw    | 10% BKC          | Burn (only if goal not met)    |
- *  +-------------+------------------+--------------------------------+
+ *  BKC Flow (Create, Withdraw, Boost):
+ *  +------------------------------------------------------------------+
+ *  |                      BKC FEE COLLECTED                           |
+ *  |                             |                                    |
+ *  |                             v                                    |
+ *  |                       MININGMANAGER                              |
+ *  |                             |                                    |
+ *  |      +----------------------+----------------------+             |
+ *  |      |          |           |                      |             |
+ *  |      v          v           v                      v             |
+ *  |  OPERATOR     BURN      TREASURY             DELEGATORS          |
+ *  |  (config%)  (config%)   (config%)             (config%)          |
+ *  +------------------------------------------------------------------+
+ *
+ *  ETH Flow (Donations, Boost):
+ *  +------------------------------------------------------------------+
+ *  |                      ETH FEE COLLECTED                           |
+ *  |                             |                                    |
+ *  |                             v                                    |
+ *  |                       MININGMANAGER                              |
+ *  |                             |                                    |
+ *  |           +-----------------+-----------------+                  |
+ *  |           |                                   |                  |
+ *  |           v                                   v                  |
+ *  |       OPERATOR                            TREASURY               |
+ *  |       (config%)                           (remaining)            |
+ *  +------------------------------------------------------------------+
  *
  * ============================================================================
- *                       CAMPAIGN LIFECYCLE
- * ============================================================================
  *
- *  1. Creator creates charitable campaign (free) with goal and deadline
- *  2. Donors contribute BKC (fees applied per configuration)
- *  3. After deadline OR cancellation, creator withdraws
- *  4. If goal not met: configurable percentage of funds burned as penalty
+ *  CAMPAIGN LIFECYCLE
+ *
+ *  1. Creator creates campaign (pays BKC) with goal and deadline
+ *  2. Donors contribute ETH (5% fee to protocol, 95% to campaign)
+ *  3. Anyone can boost campaign (pays BKC + ETH)
+ *  4. After deadline OR cancellation, creator withdraws (pays BKC)
  *
  *  Status Flow:
  *  ACTIVE --> COMPLETED (deadline reached) --> WITHDRAWN
@@ -120,445 +122,383 @@ import "./BKCToken.sol";
  *     +--> CANCELLED (by creator) --> WITHDRAWN
  *
  * ============================================================================
- *                       MODULE CHARACTERISTICS
+ *  Security Contact : dev@backcoin.org
+ *  Website          : https://backcoin.org
+ *  Documentation    : https://github.com/backcoin-org/backchain-dapp/tree/main/docs
  * ============================================================================
- *
- *  - 100% modular and plug-and-play
- *  - Reads configuration from EcosystemManager
- *  - Requires no changes to existing contracts
- *  - Deflationary mechanics benefit all BKC holders
- *  - Triggers Proof-of-Purchase mining on donations
- *
- * @custom:security-contact dev@backcoin.org
- * @custom:website https://backcoin.org
- * @custom:network Arbitrum
  */
+
+import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
+import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.sol";
+
+// ============================================================================
+//                              INTERFACES
+// ============================================================================
+
+interface IBKC {
+    function transferFrom(address from, address to, uint256 amount) external returns (bool);
+    function transfer(address to, uint256 amount) external returns (bool);
+    function balanceOf(address account) external view returns (uint256);
+}
+
+interface IMiningManagerV3 {
+    function performPurchaseMiningWithOperator(
+        bytes32 serviceKey,
+        uint256 purchaseAmount,
+        address operator
+    ) external payable;
+}
+
+// ============================================================================
+//                              CONTRACT
+// ============================================================================
+
 contract CharityPool is
     Initializable,
     UUPSUpgradeable,
     OwnableUpgradeable,
     ReentrancyGuardUpgradeable
 {
-    using SafeERC20Upgradeable for IERC20Upgradeable;
-    using SafeERC20Upgradeable for BKCToken;
-
-    // =========================================================================
+    // ========================================================================
     //                              CONSTANTS
-    // =========================================================================
+    // ========================================================================
 
-    /// @notice Basis points denominator (100% = 10000)
-    uint256 public constant BIPS_DENOMINATOR = 10_000;
+    bytes32 private constant SERVICE_KEY = keccak256("CHARITY_POOL_SERVICE");
+    
+    uint256 private constant BIPS = 10_000;
+    
+    uint256 private constant MIN_DURATION = 1 days;
+    uint256 private constant MAX_DURATION = 180 days;
+    
+    uint256 private constant MAX_TITLE = 100;
+    uint256 private constant MAX_DESCRIPTION = 1000;
 
-    /// @notice Service key for MiningManager authorization
-    bytes32 public constant SERVICE_KEY = keccak256("CHARITY_POOL_SERVICE");
-
-    /// @notice Minimum campaign duration (1 day)
-    uint256 public constant MIN_CAMPAIGN_DURATION = 1 days;
-
-    /// @notice Maximum campaign duration (180 days)
-    uint256 public constant MAX_CAMPAIGN_DURATION = 180 days;
-
-    // =========================================================================
+    // ========================================================================
     //                              ENUMS
-    // =========================================================================
+    // ========================================================================
 
-    /// @notice Campaign status
-    enum CampaignStatus {
-        ACTIVE,             // Campaign is accepting donations
-        COMPLETED,          // Deadline reached, awaiting withdrawal
-        CANCELLED,          // Creator cancelled, awaiting withdrawal
-        WITHDRAWN           // Funds have been withdrawn
+    enum Status {
+        ACTIVE,
+        COMPLETED,
+        CANCELLED,
+        WITHDRAWN
     }
 
-    // =========================================================================
+    // ========================================================================
     //                              STRUCTS
-    // =========================================================================
+    // ========================================================================
 
-    /// @notice Campaign data structure
+    /// @notice Campaign data (packed for gas efficiency)
     struct Campaign {
-        address creator;            // Creator and beneficiary
-        string title;               // Campaign title
-        string description;         // Description or IPFS CID
-        uint256 goalAmount;         // Target amount in BKC
-        uint256 raisedAmount;       // Total raised (net, after donation fees)
-        uint256 donationCount;      // Number of donations received
-        uint256 deadline;           // Unix timestamp deadline
-        uint256 createdAt;          // Unix timestamp creation
-        CampaignStatus status;      // Current status
+        address creator;
+        uint96 goalAmount;          // ETH goal (max ~79B ETH)
+        uint96 raisedAmount;        // ETH raised
+        uint32 donationCount;
+        uint64 deadline;
+        uint64 createdAt;
+        uint96 boostAmount;         // Total ETH boosted
+        uint64 boostTime;           // Last boost timestamp
+        Status status;
     }
 
     /// @notice Donation record
     struct Donation {
-        address donor;              // Donor address
-        uint256 campaignId;         // Campaign ID
-        uint256 grossAmount;        // Amount before fees
-        uint256 netAmount;          // Amount after fees (added to campaign)
-        uint256 timestamp;          // Donation timestamp
+        address donor;
+        uint64 campaignId;
+        uint96 grossAmount;         // ETH sent
+        uint96 netAmount;           // ETH to campaign
+        uint64 timestamp;
     }
 
-    // =========================================================================
-    //                              STATE
-    // =========================================================================
-
-    /// @notice Reference to ecosystem configuration hub
-    IEcosystemManager public ecosystemManager;
-
-    /// @notice BKC token contract
-    BKCToken public bkcToken;
-
-    /// @notice Campaign counter (also serves as next campaign ID)
-    uint256 public campaignCounter;
-
-    /// @notice Donation counter
-    uint256 public donationCounter;
-
-    // -------------------------------------------------------------------------
-    // Fee Configuration (in basis points)
-    // -------------------------------------------------------------------------
-
-    /// @notice Fee sent to MiningManager on donation (default: 400 = 4%)
-    uint256 public donationMiningFeeBips;
-
-    /// @notice Fee burned on donation (default: 100 = 1%)
-    uint256 public donationBurnFeeBips;
-
-    /// @notice ETH fee for withdrawal (default: 0.001 ETH)
-    uint256 public withdrawalFeeETH;
-
-    /// @notice Burn penalty if goal not reached (default: 1000 = 10%)
-    uint256 public goalNotMetBurnBips;
-
-    // -------------------------------------------------------------------------
-    // Limits Configuration
-    // -------------------------------------------------------------------------
-
-    /// @notice Minimum donation amount (default: 1 BKC)
-    uint256 public minDonationAmount;
-
-    /// @notice Maximum active campaigns per wallet (default: 3)
-    uint256 public maxActiveCampaignsPerWallet;
-
-    // -------------------------------------------------------------------------
-    // Mappings
-    // -------------------------------------------------------------------------
-
-    /// @notice Campaign ID => Campaign data
-    mapping(uint256 => Campaign) public campaigns;
-
-    /// @notice Donation ID => Donation data
-    mapping(uint256 => Donation) public donations;
-
-    /// @notice User address => Number of active campaigns
-    mapping(address => uint256) public userActiveCampaigns;
-
-    /// @notice Campaign ID => Array of donation IDs
-    mapping(uint256 => uint256[]) public campaignDonations;
-
-    /// @notice User address => Array of donation IDs made by user
-    mapping(address => uint256[]) public userDonations;
-
-    // -------------------------------------------------------------------------
-    // Statistics
-    // -------------------------------------------------------------------------
-
-    /// @notice Total BKC raised across all campaigns (gross)
-    uint256 public totalRaisedAllTime;
-
-    /// @notice Total BKC burned through this contract
-    uint256 public totalBurnedAllTime;
-
-    /// @notice Total campaigns created
-    uint256 public totalCampaignsCreated;
-
-    /// @notice Total successful withdrawals
-    uint256 public totalSuccessfulWithdrawals;
-
-    // =========================================================================
-    //                              EVENTS
-    // =========================================================================
-
-    /// @notice Emitted when a new campaign is created
-    event CampaignCreated(
-        uint256 indexed campaignId,
-        address indexed creator,
-        string title,
-        uint256 goalAmount,
-        uint256 deadline
-    );
-
-    /// @notice Emitted when a donation is made
-    event DonationMade(
-        uint256 indexed campaignId,
-        uint256 indexed donationId,
-        address indexed donor,
-        uint256 grossAmount,
-        uint256 netAmount,
-        uint256 miningFee,
-        uint256 burnedAmount
-    );
-
-    /// @notice Emitted when a campaign is cancelled
-    event CampaignCancelled(
-        uint256 indexed campaignId,
-        address indexed creator,
-        uint256 raisedAmount
-    );
-
-    /// @notice Emitted when funds are withdrawn
-    event FundsWithdrawn(
-        uint256 indexed campaignId,
-        address indexed creator,
-        uint256 grossAmount,
-        uint256 netAmount,
-        uint256 burnedAmount,
-        bool goalReached
-    );
-
-    /// @notice Emitted when tokens are burned
-    event TokensBurned(
-        uint256 indexed campaignId,
-        uint256 amount,
-        string reason
-    );
-
-    /// @notice Emitted when fee configuration is updated
-    event FeesUpdated(
-        uint256 donationMiningFeeBips,
-        uint256 donationBurnFeeBips,
-        uint256 withdrawalFeeETH,
-        uint256 goalNotMetBurnBips
-    );
-
-    /// @notice Emitted when limits are updated
-    event LimitsUpdated(
-        uint256 minDonationAmount,
-        uint256 maxActiveCampaignsPerWallet
-    );
-
-    // =========================================================================
+    // ========================================================================
     //                              ERRORS
-    // =========================================================================
+    // ========================================================================
 
     error ZeroAddress();
     error ZeroAmount();
     error InvalidDuration();
     error InvalidGoal();
+    error EmptyTitle();
+    error TitleTooLong();
+    error DescriptionTooLong();
     error CampaignNotFound();
     error CampaignNotActive();
     error CampaignStillActive();
     error NotCampaignCreator();
-    error MaxActiveCampaignsReached();
-    error DonationTooSmall();
-    error InsufficientETHFee();
-    error InvalidFeeBips();
+    error MaxActiveCampaigns();
+    error InsufficientBkc();
+    error InsufficientEth();
     error TransferFailed();
-    error EmptyTitle();
 
-    // =========================================================================
+    // ========================================================================
+    //                              STORAGE
+    // ========================================================================
+
+    // Addresses
+    address public bkcToken;
+    address public miningManager;
+    address public treasury;
+
+    // Counters
+    uint64 public campaignCounter;
+    uint64 public donationCounter;
+
+    // Fee Configuration (packed in 1 slot)
+    uint96 public createCostBkc;        // BKC to create campaign
+    uint96 public withdrawCostBkc;      // BKC to withdraw
+    uint16 public donationFeeBips;      // ETH fee on donations (e.g., 500 = 5%)
+    
+    // Boost Configuration (packed in 1 slot)
+    uint96 public boostCostBkc;         // BKC for boost
+    uint96 public boostCostEth;         // ETH for boost
+    
+    // Limits
+    uint8 public maxActiveCampaigns;
+
+    // Mappings
+    mapping(uint256 => Campaign) public campaigns;
+    mapping(uint256 => string) public campaignTitles;
+    mapping(uint256 => string) public campaignDescriptions;
+    mapping(uint256 => Donation) public donations;
+    mapping(uint256 => uint256[]) public campaignDonations;
+    mapping(address => uint256[]) public userDonations;
+    mapping(address => uint256[]) public userCampaigns;
+    mapping(address => uint8) public userActiveCampaigns;
+
+    // Statistics
+    uint256 public totalRaisedAllTime;
+    uint256 public totalDonationsAllTime;
+    uint256 public totalFeesCollected;
+
+    // ========================================================================
+    //                           STORAGE GAP
+    // ========================================================================
+
+    uint256[40] private __gap;
+
+    // ========================================================================
+    //                              EVENTS
+    // ========================================================================
+
+    event CampaignCreated(
+        uint256 indexed campaignId,
+        address indexed creator,
+        uint96 goalAmount,
+        uint64 deadline,
+        address operator
+    );
+
+    event DonationMade(
+        uint256 indexed campaignId,
+        uint256 indexed donationId,
+        address indexed donor,
+        uint96 grossAmount,
+        uint96 netAmount,
+        uint96 feeAmount,
+        address operator
+    );
+
+    event CampaignBoosted(
+        uint256 indexed campaignId,
+        address indexed booster,
+        uint96 bkcAmount,
+        uint96 ethAmount,
+        address operator
+    );
+
+    event CampaignCancelled(
+        uint256 indexed campaignId,
+        address indexed creator,
+        uint96 raisedAmount
+    );
+
+    event FundsWithdrawn(
+        uint256 indexed campaignId,
+        address indexed creator,
+        uint96 amount,
+        address operator
+    );
+
+    event ConfigUpdated();
+
+    // ========================================================================
     //                           INITIALIZATION
-    // =========================================================================
+    // ========================================================================
 
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
         _disableInitializers();
     }
 
-    /**
-     * @notice Initializes the CharityPool contract
-     * @param _owner Contract owner address
-     * @param _ecosystemManager Address of the ecosystem configuration hub
-     */
-    function initialize(address _owner, address _ecosystemManager) external initializer {
-        if (_owner == address(0)) revert ZeroAddress();
-        if (_ecosystemManager == address(0)) revert ZeroAddress();
+    function initialize(
+        address _owner,
+        address _bkcToken,
+        address _miningManager,
+        address _treasury
+    ) external initializer {
+        if (_bkcToken == address(0)) revert ZeroAddress();
+        if (_miningManager == address(0)) revert ZeroAddress();
+        if (_treasury == address(0)) revert ZeroAddress();
 
         __Ownable_init();
         __UUPSUpgradeable_init();
         __ReentrancyGuard_init();
 
-        _transferOwnership(_owner);
+        if (_owner != address(0) && _owner != msg.sender) {
+            _transferOwnership(_owner);
+        }
 
-        ecosystemManager = IEcosystemManager(_ecosystemManager);
+        bkcToken = _bkcToken;
+        miningManager = _miningManager;
+        treasury = _treasury;
+
+        // Default fees
+        createCostBkc = 1 ether;        // 1 BKC
+        withdrawCostBkc = 0.5 ether;    // 0.5 BKC
+        donationFeeBips = 500;          // 5%
         
-        // Get BKC token address from ecosystem
-        address bkcAddress = ecosystemManager.getBKCTokenAddress();
-        if (bkcAddress == address(0)) revert ZeroAddress();
-        bkcToken = BKCToken(bkcAddress);
-
-        // Set default fees
-        donationMiningFeeBips = 400;    // 4%
-        donationBurnFeeBips = 100;      // 1%
-        withdrawalFeeETH = 0.001 ether; // 0.001 ETH
-        goalNotMetBurnBips = 1000;      // 10%
-
-        // Set default limits
-        minDonationAmount = 1 * 1e18;   // 1 BKC
-        maxActiveCampaignsPerWallet = 3;
+        boostCostBkc = 0.5 ether;       // 0.5 BKC
+        boostCostEth = 0.001 ether;     // 0.001 ETH
+        
+        maxActiveCampaigns = 3;
     }
 
-    /**
-     * @dev Authorizes contract upgrades (owner only)
-     */
     function _authorizeUpgrade(address) internal override onlyOwner {}
 
-    // =========================================================================
+    // ========================================================================
     //                         CAMPAIGN MANAGEMENT
-    // =========================================================================
+    // ========================================================================
 
-    /**
-     * @notice Creates a new fundraising campaign
-     * @dev Free to create. Creator will be the beneficiary.
-     *
-     * @param _title Campaign title (required)
-     * @param _description Campaign description or IPFS CID
-     * @param _goalAmount Target amount in BKC (wei)
-     * @param _durationInDays Campaign duration in days (1-180)
-     * @return campaignId The ID of the created campaign
-     */
+    /// @notice Create a new fundraising campaign
+    /// @param _title Campaign title
+    /// @param _description Campaign description
+    /// @param _goalAmount ETH goal amount
+    /// @param _durationDays Duration in days
+    /// @param _operator Frontend operator address
     function createCampaign(
         string calldata _title,
         string calldata _description,
-        uint256 _goalAmount,
-        uint256 _durationInDays
-    ) external returns (uint256 campaignId) {
+        uint96 _goalAmount,
+        uint256 _durationDays,
+        address _operator
+    ) external nonReentrant returns (uint256 campaignId) {
         // Validations
         if (bytes(_title).length == 0) revert EmptyTitle();
+        if (bytes(_title).length > MAX_TITLE) revert TitleTooLong();
+        if (bytes(_description).length > MAX_DESCRIPTION) revert DescriptionTooLong();
         if (_goalAmount == 0) revert InvalidGoal();
         
-        uint256 durationInSeconds = _durationInDays * 1 days;
-        if (durationInSeconds < MIN_CAMPAIGN_DURATION || durationInSeconds > MAX_CAMPAIGN_DURATION) {
-            revert InvalidDuration();
-        }
+        uint256 duration = _durationDays * 1 days;
+        if (duration < MIN_DURATION || duration > MAX_DURATION) revert InvalidDuration();
         
-        if (userActiveCampaigns[msg.sender] >= maxActiveCampaignsPerWallet) {
-            revert MaxActiveCampaignsReached();
-        }
+        if (userActiveCampaigns[msg.sender] >= maxActiveCampaigns) revert MaxActiveCampaigns();
+
+        // Collect BKC fee
+        _collectBkcFee(createCostBkc, _operator);
 
         // Create campaign
-        unchecked {
-            ++campaignCounter;
-        }
-        campaignId = campaignCounter;
+        campaignId = ++campaignCounter;
 
         campaigns[campaignId] = Campaign({
             creator: msg.sender,
-            title: _title,
-            description: _description,
             goalAmount: _goalAmount,
             raisedAmount: 0,
             donationCount: 0,
-            deadline: block.timestamp + durationInSeconds,
-            createdAt: block.timestamp,
-            status: CampaignStatus.ACTIVE
+            deadline: uint64(block.timestamp + duration),
+            createdAt: uint64(block.timestamp),
+            boostAmount: 0,
+            boostTime: 0,
+            status: Status.ACTIVE
         });
 
-        // Update counters
+        campaignTitles[campaignId] = _title;
+        campaignDescriptions[campaignId] = _description;
+
+        userCampaigns[msg.sender].push(campaignId);
+        
         unchecked {
-            ++userActiveCampaigns[msg.sender];
-            ++totalCampaignsCreated;
+            userActiveCampaigns[msg.sender]++;
         }
 
         emit CampaignCreated(
             campaignId,
             msg.sender,
-            _title,
             _goalAmount,
-            block.timestamp + durationInSeconds
+            uint64(block.timestamp + duration),
+            _operator
         );
     }
 
-    /**
-     * @notice Cancels an active campaign
-     * @dev Only creator can cancel. Funds can still be withdrawn after cancellation.
-     *
-     * @param _campaignId Campaign ID to cancel
-     */
+    /// @notice Cancel an active campaign
+    /// @param _campaignId Campaign ID to cancel
     function cancelCampaign(uint256 _campaignId) external {
-        Campaign storage campaign = campaigns[_campaignId];
-        
-        if (campaign.creator == address(0)) revert CampaignNotFound();
-        if (campaign.creator != msg.sender) revert NotCampaignCreator();
-        if (campaign.status != CampaignStatus.ACTIVE) revert CampaignNotActive();
+        Campaign storage c = campaigns[_campaignId];
 
-        campaign.status = CampaignStatus.CANCELLED;
+        if (c.creator == address(0)) revert CampaignNotFound();
+        if (c.creator != msg.sender) revert NotCampaignCreator();
+        if (c.status != Status.ACTIVE) revert CampaignNotActive();
 
-        emit CampaignCancelled(_campaignId, msg.sender, campaign.raisedAmount);
+        c.status = Status.CANCELLED;
+
+        emit CampaignCancelled(_campaignId, msg.sender, c.raisedAmount);
     }
 
-    // =========================================================================
-    //                            DONATIONS
-    // =========================================================================
+    // ========================================================================
+    //                              DONATIONS
+    // ========================================================================
 
-    /**
-     * @notice Donates BKC to a campaign
-     * @dev Fee breakdown (default values):
-     *      - 4% goes to MiningManager (triggers PoP mining)
-     *      - 1% is burned immediately (deflationary)
-     *      - 95% goes to campaign
-     *
-     * @param _campaignId Campaign ID to donate to
-     * @param _amount Amount of BKC to donate (gross, before fees)
-     */
+    /// @notice Donate ETH to a campaign
+    /// @param _campaignId Campaign to donate to
+    /// @param _operator Frontend operator address
     function donate(
         uint256 _campaignId,
-        uint256 _amount
-    ) external nonReentrant {
-        Campaign storage campaign = campaigns[_campaignId];
+        address _operator
+    ) external payable nonReentrant {
+        if (msg.value == 0) revert ZeroAmount();
         
-        // Validations
-        if (campaign.creator == address(0)) revert CampaignNotFound();
-        if (campaign.status != CampaignStatus.ACTIVE) revert CampaignNotActive();
-        if (block.timestamp >= campaign.deadline) revert CampaignNotActive();
-        if (_amount < minDonationAmount) revert DonationTooSmall();
+        Campaign storage c = campaigns[_campaignId];
 
-        // Calculate fees
-        uint256 miningFee = (_amount * donationMiningFeeBips) / BIPS_DENOMINATOR;
-        uint256 burnFee = (_amount * donationBurnFeeBips) / BIPS_DENOMINATOR;
-        uint256 netAmount = _amount - miningFee - burnFee;
+        if (c.creator == address(0)) revert CampaignNotFound();
+        if (c.status != Status.ACTIVE) revert CampaignNotActive();
+        if (block.timestamp >= c.deadline) revert CampaignNotActive();
 
-        // Transfer tokens from donor
-        bkcToken.safeTransferFrom(msg.sender, address(this), _amount);
-
-        // Process mining fee
-        if (miningFee > 0) {
-            address miningManager = ecosystemManager.getMiningManagerAddress();
-            if (miningManager != address(0)) {
-                bkcToken.safeTransfer(miningManager, miningFee);
-                IMiningManager(miningManager).performPurchaseMining(SERVICE_KEY, miningFee);
-            }
+        // Calculate fee split
+        uint256 feeAmount;
+        uint256 netAmount;
+        
+        unchecked {
+            feeAmount = (msg.value * donationFeeBips) / BIPS;
+            netAmount = msg.value - feeAmount;
         }
 
-        // Burn tokens (deflationary mechanism)
-        if (burnFee > 0) {
-            bkcToken.burn(burnFee);
-            unchecked {
-                totalBurnedAllTime += burnFee;
-            }
-            emit TokensBurned(_campaignId, burnFee, "donation_fee");
+        // Send fee to MiningManager (Operator + Treasury)
+        if (feeAmount > 0) {
+            _sendEthToMining(feeAmount, _operator);
         }
 
         // Record donation
-        unchecked {
-            ++donationCounter;
-        }
-        uint256 donationId = donationCounter;
+        uint256 donationId = ++donationCounter;
 
         donations[donationId] = Donation({
             donor: msg.sender,
-            campaignId: _campaignId,
-            grossAmount: _amount,
-            netAmount: netAmount,
-            timestamp: block.timestamp
+            campaignId: uint64(_campaignId),
+            grossAmount: uint96(msg.value),
+            netAmount: uint96(netAmount),
+            timestamp: uint64(block.timestamp)
         });
 
         // Update campaign
         unchecked {
-            campaign.raisedAmount += netAmount;
-            campaign.donationCount++;
-            totalRaisedAllTime += _amount;
+            c.raisedAmount += uint96(netAmount);
+            c.donationCount++;
+            
+            totalRaisedAllTime += netAmount;
+            totalDonationsAllTime++;
+            totalFeesCollected += feeAmount;
         }
 
-        // Track donation references
         campaignDonations[_campaignId].push(donationId);
         userDonations[msg.sender].push(donationId);
 
@@ -566,317 +506,260 @@ contract CharityPool is
             _campaignId,
             donationId,
             msg.sender,
-            _amount,
-            netAmount,
-            miningFee,
-            burnFee
+            uint96(msg.value),
+            uint96(netAmount),
+            uint96(feeAmount),
+            _operator
         );
     }
 
-    // =========================================================================
-    //                            WITHDRAWALS
-    // =========================================================================
+    // ========================================================================
+    //                              BOOST
+    // ========================================================================
 
-    /**
-     * @notice Withdraws funds from a completed/cancelled campaign
-     * @dev Requirements:
-     *      - Campaign must be past deadline OR cancelled
-     *      - Only creator can withdraw
-     *      - Requires ETH fee payment
-     *      - If goal not met: penalty percentage of funds burned
-     *
-     * @param _campaignId Campaign ID to withdraw from
-     */
-    function withdraw(uint256 _campaignId) external payable nonReentrant {
-        Campaign storage campaign = campaigns[_campaignId];
-        
-        // Validations
-        if (campaign.creator == address(0)) revert CampaignNotFound();
-        if (campaign.creator != msg.sender) revert NotCampaignCreator();
-        if (campaign.status == CampaignStatus.WITHDRAWN) revert CampaignNotActive();
-        
-        // Must be past deadline or cancelled
-        if (campaign.status == CampaignStatus.ACTIVE) {
-            if (block.timestamp < campaign.deadline) revert CampaignStillActive();
-            campaign.status = CampaignStatus.COMPLETED;
+    /// @notice Boost a campaign for visibility (BKC + ETH)
+    /// @param _campaignId Campaign to boost
+    /// @param _operator Frontend operator address
+    function boostCampaign(
+        uint256 _campaignId,
+        address _operator
+    ) external payable nonReentrant {
+        Campaign storage c = campaigns[_campaignId];
+
+        if (c.creator == address(0)) revert CampaignNotFound();
+        if (c.status != Status.ACTIVE) revert CampaignNotActive();
+        if (msg.value < boostCostEth) revert InsufficientEth();
+
+        // Collect BKC fee
+        _collectBkcFee(boostCostBkc, _operator);
+
+        // Send ETH to MiningManager
+        _sendEthToMining(msg.value, _operator);
+
+        // Update boost info
+        unchecked {
+            c.boostAmount += uint96(msg.value);
+        }
+        c.boostTime = uint64(block.timestamp);
+
+        emit CampaignBoosted(
+            _campaignId,
+            msg.sender,
+            uint96(boostCostBkc),
+            uint96(msg.value),
+            _operator
+        );
+    }
+
+    // ========================================================================
+    //                             WITHDRAW
+    // ========================================================================
+
+    /// @notice Withdraw funds from completed/cancelled campaign
+    /// @param _campaignId Campaign ID
+    /// @param _operator Frontend operator address
+    function withdraw(
+        uint256 _campaignId,
+        address _operator
+    ) external nonReentrant {
+        Campaign storage c = campaigns[_campaignId];
+
+        if (c.creator == address(0)) revert CampaignNotFound();
+        if (c.creator != msg.sender) revert NotCampaignCreator();
+        if (c.status == Status.WITHDRAWN) revert CampaignNotActive();
+
+        // Check if campaign can be withdrawn
+        if (c.status == Status.ACTIVE) {
+            if (block.timestamp < c.deadline) revert CampaignStillActive();
+            c.status = Status.COMPLETED;
         }
 
-        // Check ETH fee
-        if (msg.value < withdrawalFeeETH) revert InsufficientETHFee();
+        // Collect BKC fee
+        _collectBkcFee(withdrawCostBkc, _operator);
 
-        uint256 raisedAmount = campaign.raisedAmount;
-        uint256 burnAmount = 0;
-        uint256 netAmount = raisedAmount;
-        bool goalReached = raisedAmount >= campaign.goalAmount;
+        uint96 amount = c.raisedAmount;
+        c.status = Status.WITHDRAWN;
 
-        // Apply burn penalty if goal not reached
-        if (!goalReached && raisedAmount > 0) {
-            burnAmount = (raisedAmount * goalNotMetBurnBips) / BIPS_DENOMINATOR;
-            netAmount = raisedAmount - burnAmount;
-
-            // Burn tokens (deflationary penalty)
-            if (burnAmount > 0) {
-                bkcToken.burn(burnAmount);
-                unchecked {
-                    totalBurnedAllTime += burnAmount;
-                }
-                emit TokensBurned(_campaignId, burnAmount, "goal_not_met_penalty");
-            }
-        }
-
-        // Update campaign status
-        campaign.status = CampaignStatus.WITHDRAWN;
-        
-        // Decrease active campaigns counter
+        // Decrease active campaigns count
         if (userActiveCampaigns[msg.sender] > 0) {
             unchecked {
-                --userActiveCampaigns[msg.sender];
+                userActiveCampaigns[msg.sender]--;
             }
         }
 
-        // Transfer ETH fee to treasury
-        address treasury = ecosystemManager.getTreasuryAddress();
-        if (treasury != address(0) && msg.value > 0) {
-            (bool success, ) = treasury.call{value: msg.value}("");
+        // Transfer ETH to creator (100% - NO penalty)
+        if (amount > 0) {
+            (bool success, ) = msg.sender.call{value: amount}("");
             if (!success) revert TransferFailed();
         }
 
-        // Transfer BKC to creator
-        if (netAmount > 0) {
-            bkcToken.safeTransfer(msg.sender, netAmount);
-        }
-
-        unchecked {
-            ++totalSuccessfulWithdrawals;
-        }
-
-        emit FundsWithdrawn(
-            _campaignId,
-            msg.sender,
-            raisedAmount,
-            netAmount,
-            burnAmount,
-            goalReached
-        );
+        emit FundsWithdrawn(_campaignId, msg.sender, amount, _operator);
     }
 
-    // =========================================================================
+    // ========================================================================
     //                          VIEW FUNCTIONS
-    // =========================================================================
+    // ========================================================================
 
-    /**
-     * @notice Returns campaign details
-     * @param _campaignId Campaign ID
-     * @return Campaign struct
-     */
-    function getCampaign(uint256 _campaignId) external view returns (Campaign memory) {
-        return campaigns[_campaignId];
+    /// @notice Get campaign details
+    function getCampaign(uint256 _campaignId) external view returns (
+        address creator,
+        string memory title,
+        string memory description,
+        uint96 goalAmount,
+        uint96 raisedAmount,
+        uint32 donationCount,
+        uint64 deadline,
+        uint64 createdAt,
+        uint96 boostAmount,
+        uint64 boostTime,
+        Status status,
+        bool goalReached
+    ) {
+        Campaign storage c = campaigns[_campaignId];
+        
+        creator = c.creator;
+        title = campaignTitles[_campaignId];
+        description = campaignDescriptions[_campaignId];
+        goalAmount = c.goalAmount;
+        raisedAmount = c.raisedAmount;
+        donationCount = c.donationCount;
+        deadline = c.deadline;
+        createdAt = c.createdAt;
+        boostAmount = c.boostAmount;
+        boostTime = c.boostTime;
+        status = c.status;
+        goalReached = c.raisedAmount >= c.goalAmount;
     }
 
-    /**
-     * @notice Returns donation details
-     * @param _donationId Donation ID
-     * @return Donation struct
-     */
+    /// @notice Get donation details
     function getDonation(uint256 _donationId) external view returns (Donation memory) {
         return donations[_donationId];
     }
 
-    /**
-     * @notice Returns all donation IDs for a campaign
-     * @param _campaignId Campaign ID
-     * @return Array of donation IDs
-     */
+    /// @notice Get donations for a campaign
     function getCampaignDonations(uint256 _campaignId) external view returns (uint256[] memory) {
         return campaignDonations[_campaignId];
     }
 
-    /**
-     * @notice Returns all donation IDs made by a user
-     * @param _user User address
-     * @return Array of donation IDs
-     */
+    /// @notice Get donations by user
     function getUserDonations(address _user) external view returns (uint256[] memory) {
         return userDonations[_user];
     }
 
-    /**
-     * @notice Calculates net amount after donation fees
-     * @param _grossAmount Amount before fees
-     * @return netAmount Amount after fees
-     * @return miningFee Fee sent to mining
-     * @return burnFee Fee to be burned
-     */
-    function calculateDonationFees(uint256 _grossAmount) external view returns (
-        uint256 netAmount,
-        uint256 miningFee,
-        uint256 burnFee
-    ) {
-        miningFee = (_grossAmount * donationMiningFeeBips) / BIPS_DENOMINATOR;
-        burnFee = (_grossAmount * donationBurnFeeBips) / BIPS_DENOMINATOR;
-        netAmount = _grossAmount - miningFee - burnFee;
+    /// @notice Get campaigns created by user
+    function getUserCampaigns(address _user) external view returns (uint256[] memory) {
+        return userCampaigns[_user];
     }
 
-    /**
-     * @notice Calculates withdrawal amounts
-     * @param _campaignId Campaign ID
-     * @return grossAmount Total raised
-     * @return netAmount Amount after potential burn
-     * @return burnAmount Amount to be burned (if goal not met)
-     * @return goalReached Whether goal was reached
-     */
-    function calculateWithdrawal(uint256 _campaignId) external view returns (
-        uint256 grossAmount,
-        uint256 netAmount,
-        uint256 burnAmount,
-        bool goalReached
+    /// @notice Preview donation fee
+    function previewDonation(uint256 _amount) external view returns (
+        uint256 netToCampaign,
+        uint256 feeToProtocol
     ) {
-        Campaign memory campaign = campaigns[_campaignId];
-        
-        grossAmount = campaign.raisedAmount;
-        goalReached = grossAmount >= campaign.goalAmount;
-        
-        if (!goalReached && grossAmount > 0) {
-            burnAmount = (grossAmount * goalNotMetBurnBips) / BIPS_DENOMINATOR;
-            netAmount = grossAmount - burnAmount;
-        } else {
-            netAmount = grossAmount;
-            burnAmount = 0;
+        unchecked {
+            feeToProtocol = (_amount * donationFeeBips) / BIPS;
+            netToCampaign = _amount - feeToProtocol;
         }
     }
 
-    /**
-     * @notice Returns whether a campaign can be withdrawn
-     * @param _campaignId Campaign ID
-     * @return canWithdraw_ True if withdrawal is possible
-     * @return reason Explanation string
-     */
+    /// @notice Check if campaign can be withdrawn
     function canWithdraw(uint256 _campaignId) external view returns (
-        bool canWithdraw_,
+        bool allowed,
         string memory reason
     ) {
-        Campaign memory campaign = campaigns[_campaignId];
-        
-        if (campaign.creator == address(0)) {
+        Campaign storage c = campaigns[_campaignId];
+
+        if (c.creator == address(0)) {
             return (false, "Campaign not found");
         }
-        if (campaign.status == CampaignStatus.WITHDRAWN) {
+        if (c.status == Status.WITHDRAWN) {
             return (false, "Already withdrawn");
         }
-        if (campaign.status == CampaignStatus.ACTIVE && block.timestamp < campaign.deadline) {
+        if (c.status == Status.ACTIVE && block.timestamp < c.deadline) {
             return (false, "Campaign still active");
         }
-        
-        return (true, "Ready for withdrawal");
+
+        return (true, "Ready");
     }
 
-    /**
-     * @notice Returns global statistics
-     * @return totalCampaigns Total campaigns created
-     * @return totalRaised Total BKC raised (gross)
-     * @return totalBurned Total BKC burned
-     * @return totalWithdrawals Total successful withdrawals
-     */
-    function getGlobalStats() external view returns (
-        uint256 totalCampaigns,
+    /// @notice Check if campaign is boosted (within 24h)
+    function isBoosted(uint256 _campaignId) external view returns (bool) {
+        Campaign storage c = campaigns[_campaignId];
+        return c.boostTime > 0 && (block.timestamp - c.boostTime) < 1 days;
+    }
+
+    /// @notice Get global statistics
+    function getStats() external view returns (
+        uint64 totalCampaigns,
         uint256 totalRaised,
-        uint256 totalBurned,
-        uint256 totalWithdrawals
+        uint256 totalDonations,
+        uint256 totalFees
     ) {
         return (
-            totalCampaignsCreated,
+            campaignCounter,
             totalRaisedAllTime,
-            totalBurnedAllTime,
-            totalSuccessfulWithdrawals
+            totalDonationsAllTime,
+            totalFeesCollected
         );
     }
 
-    /**
-     * @notice Returns current fee configuration
-     * @return miningFeeBips Mining fee in bips
-     * @return burnFeeBips Burn fee in bips
-     * @return ethFee ETH withdrawal fee
-     * @return penaltyBips Goal not met penalty in bips
-     */
+    /// @notice Get fee configuration
     function getFeeConfig() external view returns (
-        uint256 miningFeeBips,
-        uint256 burnFeeBips,
-        uint256 ethFee,
-        uint256 penaltyBips
+        uint96 createBkc,
+        uint96 withdrawBkc,
+        uint16 donationBips,
+        uint96 boostBkc,
+        uint96 boostEth
     ) {
         return (
-            donationMiningFeeBips,
-            donationBurnFeeBips,
-            withdrawalFeeETH,
-            goalNotMetBurnBips
+            createCostBkc,
+            withdrawCostBkc,
+            donationFeeBips,
+            boostCostBkc,
+            boostCostEth
         );
     }
 
-    // =========================================================================
+    // ========================================================================
     //                         ADMIN FUNCTIONS
-    // =========================================================================
+    // ========================================================================
 
-    /**
-     * @notice Updates fee configuration
-     * @dev Only owner. Total donation fees cannot exceed 20%.
-     *
-     * @param _miningFeeBips Mining fee in basis points
-     * @param _burnFeeBips Burn fee in basis points
-     * @param _withdrawalFeeETH ETH fee for withdrawals
-     * @param _goalNotMetBurnBips Penalty if goal not met
-     */
     function setFees(
-        uint256 _miningFeeBips,
-        uint256 _burnFeeBips,
-        uint256 _withdrawalFeeETH,
-        uint256 _goalNotMetBurnBips
+        uint96 _createBkc,
+        uint96 _withdrawBkc,
+        uint16 _donationBips,
+        uint96 _boostBkc,
+        uint96 _boostEth
     ) external onlyOwner {
-        // Total donation fee cannot exceed 20%
-        if (_miningFeeBips + _burnFeeBips > 2000) revert InvalidFeeBips();
-        // Penalty cannot exceed 50%
-        if (_goalNotMetBurnBips > 5000) revert InvalidFeeBips();
-
-        donationMiningFeeBips = _miningFeeBips;
-        donationBurnFeeBips = _burnFeeBips;
-        withdrawalFeeETH = _withdrawalFeeETH;
-        goalNotMetBurnBips = _goalNotMetBurnBips;
-
-        emit FeesUpdated(
-            _miningFeeBips,
-            _burnFeeBips,
-            _withdrawalFeeETH,
-            _goalNotMetBurnBips
-        );
+        require(_donationBips <= 1000, "Max 10%"); // Cap at 10%
+        
+        createCostBkc = _createBkc;
+        withdrawCostBkc = _withdrawBkc;
+        donationFeeBips = _donationBips;
+        boostCostBkc = _boostBkc;
+        boostCostEth = _boostEth;
+        
+        emit ConfigUpdated();
     }
 
-    /**
-     * @notice Updates limit configuration
-     * @dev Only owner.
-     *
-     * @param _minDonationAmount Minimum donation in BKC (wei)
-     * @param _maxActiveCampaigns Maximum active campaigns per wallet
-     */
-    function setLimits(
-        uint256 _minDonationAmount,
-        uint256 _maxActiveCampaigns
-    ) external onlyOwner {
-        if (_minDonationAmount == 0) revert ZeroAmount();
-        if (_maxActiveCampaigns == 0) revert ZeroAmount();
-
-        minDonationAmount = _minDonationAmount;
-        maxActiveCampaignsPerWallet = _maxActiveCampaigns;
-
-        emit LimitsUpdated(_minDonationAmount, _maxActiveCampaigns);
+    function setMaxActiveCampaigns(uint8 _max) external onlyOwner {
+        require(_max > 0, "Min 1");
+        maxActiveCampaigns = _max;
+        emit ConfigUpdated();
     }
 
-    /**
-     * @notice Emergency function to recover stuck tokens
-     * @dev Only owner. Cannot recover tokens allocated to active campaigns.
-     *
-     * @param _token Token address (address(0) for ETH)
-     * @param _to Recipient address
-     * @param _amount Amount to recover
-     */
+    function setAddresses(
+        address _bkcToken,
+        address _miningManager,
+        address _treasury
+    ) external onlyOwner {
+        if (_bkcToken != address(0)) bkcToken = _bkcToken;
+        if (_miningManager != address(0)) miningManager = _miningManager;
+        if (_treasury != address(0)) treasury = _treasury;
+        emit ConfigUpdated();
+    }
+
+    /// @notice Emergency recover stuck tokens
     function emergencyRecover(
         address _token,
         address _to,
@@ -885,15 +768,57 @@ contract CharityPool is
         if (_to == address(0)) revert ZeroAddress();
 
         if (_token == address(0)) {
+            // Recover ETH (only excess, not campaign funds)
             (bool success, ) = _to.call{value: _amount}("");
             if (!success) revert TransferFailed();
         } else {
-            IERC20Upgradeable(_token).safeTransfer(_to, _amount);
+            IBKC(_token).transfer(_to, _amount);
         }
     }
 
-    /**
-     * @notice Allows contract to receive ETH
-     */
+    // ========================================================================
+    //                       INTERNAL FUNCTIONS
+    // ========================================================================
+
+    /// @dev Collect BKC fee and send to MiningManager
+    function _collectBkcFee(uint256 _amount, address _operator) internal {
+        if (_amount == 0) return;
+        
+        IBKC bkc = IBKC(bkcToken);
+        
+        // Transfer BKC from user to MiningManager
+        bkc.transferFrom(msg.sender, miningManager, _amount);
+        
+        // Notify MiningManager
+        try IMiningManagerV3(miningManager).performPurchaseMiningWithOperator(
+            SERVICE_KEY,
+            _amount,
+            _operator
+        ) {} catch {}
+    }
+
+    /// @dev Send ETH to MiningManager
+    function _sendEthToMining(uint256 _amount, address _operator) internal {
+        if (_amount == 0) return;
+
+        try IMiningManagerV3(miningManager).performPurchaseMiningWithOperator{value: _amount}(
+            SERVICE_KEY,
+            0,
+            _operator
+        ) {} catch {
+            // Fallback to treasury
+            (bool success, ) = treasury.call{value: _amount}("");
+            if (!success) revert TransferFailed();
+        }
+    }
+
+    // ========================================================================
+    //                              UUPS
+    // ========================================================================
+
+    function version() external pure returns (string memory) {
+        return "6.0.0";
+    }
+
     receive() external payable {}
 }

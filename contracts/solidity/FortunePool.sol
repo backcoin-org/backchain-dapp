@@ -1,6 +1,155 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.28;
 
+/*
+ * ============================================================================
+ *
+ *                             BACKCHAIN PROTOCOL
+ *
+ *                    ██╗   ██╗███╗   ██╗███████╗████████╗ ██████╗ ██████╗
+ *                    ██║   ██║████╗  ██║██╔════╝╚══██╔══╝██╔═══██╗██╔══██╗
+ *                    ██║   ██║██╔██╗ ██║███████╗   ██║   ██║   ██║██████╔╝
+ *                    ██║   ██║██║╚██╗██║╚════██║   ██║   ██║   ██║██╔═══╝
+ *                    ╚██████╔╝██║ ╚████║███████║   ██║   ╚██████╔╝██║
+ *                     ╚═════╝ ╚═╝  ╚═══╝╚══════╝   ╚═╝    ╚═════╝ ╚═╝
+ *
+ *                    P E R M I S S I O N L E S S   .   I M M U T A B L E
+ *
+ * ============================================================================
+ *  Contract    : FortunePool
+ *  Version     : 6.0.0
+ *  Network     : Arbitrum
+ *  License     : MIT
+ *  Solidity    : 0.8.28
+ * ============================================================================
+ *
+ *  100% DECENTRALIZED SYSTEM
+ *
+ *  This contract is part of a fully decentralized, permissionless,
+ *  and UNSTOPPABLE protocol.
+ *
+ *  - NO CENTRAL AUTHORITY    : Code is law
+ *  - NO PERMISSION NEEDED    : Anyone can become an Operator
+ *  - NO SINGLE POINT OF FAILURE : Runs on Arbitrum blockchain
+ *  - CENSORSHIP RESISTANT    : Cannot be stopped or controlled
+ *
+ * ============================================================================
+ *
+ *  BECOME AN OPERATOR
+ *
+ *  Anyone in the world can:
+ *
+ *  1. Build their own frontend, app, bot, or tool for Backchain
+ *  2. Pass their wallet address as the "operator" parameter
+ *  3. Earn a percentage of ALL fees (BKC + ETH) generated
+ *
+ *  No registration. No approval. No KYC. Just build and earn.
+ *
+ * ============================================================================
+ *
+ *  SECURITY MODEL: COMMIT-REVEAL (V3.0)
+ *
+ *  This version uses a secure 2-phase commit-reveal pattern that makes
+ *  it IMPOSSIBLE to predict or manipulate game outcomes.
+ *
+ *  ┌─────────────────────────────────────────────────────────────────────────┐
+ *  │  PHASE 1: COMMIT                                                        │
+ *  │  ─────────────────                                                      │
+ *  │  Player submits: hash(guesses + secret)                                 │
+ *  │  - Guesses are HIDDEN (only hash is public)                             │
+ *  │  - Wager and fees are collected                                         │
+ *  │  - Block number is recorded                                             │
+ *  ├─────────────────────────────────────────────────────────────────────────┤
+ *  │  WAIT: 5 BLOCKS (~1.25 seconds on Arbitrum)                             │
+ *  ├─────────────────────────────────────────────────────────────────────────┤
+ *  │  PHASE 2: REVEAL                                                        │
+ *  │  ───────────────                                                        │
+ *  │  Player reveals: guesses + secret                                       │
+ *  │  - Contract verifies hash matches commitment                            │
+ *  │  - Uses blockhash(commitBlock + 5) as entropy                           │
+ *  │  - This block DID NOT EXIST at commit time                              │
+ *  │  - Result is determined and prize paid instantly                        │
+ *  └─────────────────────────────────────────────────────────────────────────┘
+ *
+ *  WHY IS THIS SECURE?
+ *  - At commit time, future blockhash is UNKNOWN
+ *  - Guesses are hidden, so no one can front-run
+ *  - To cheat, attacker would need to control Arbitrum sequencer
+ *  - $18B+ TVL already trusts this assumption
+ *
+ * ============================================================================
+ *
+ *  GAME MODES
+ *
+ *  ╔═══════════════════════════════════════════════════════════════════════╗
+ *  ║  MODE 1x (Jackpot Mode):                                              ║
+ *  ║  - Player competes ONLY for highest tier (hardest, best prize)        ║
+ *  ║  - Requires 1 guess for the jackpot tier                              ║
+ *  ║  - Pays 1x service fee                                                ║
+ *  ╠═══════════════════════════════════════════════════════════════════════╣
+ *  ║  MODE 5x (Cumulative Mode):                                           ║
+ *  ║  - Player competes for ALL active tiers simultaneously                ║
+ *  ║  - Requires N guesses (one per active tier)                           ║
+ *  ║  - Pays 5x service fee                                                ║
+ *  ║  - All matching tiers pay out (cumulative rewards)                    ║
+ *  ╚═══════════════════════════════════════════════════════════════════════╝
+ *
+ * ============================================================================
+ *
+ *  FEE STRUCTURE (V6 - EQUAL FOR ALL)
+ *
+ *  +-------------+------------------+----------------------------------------+
+ *  | Fee Type    | Default          | Destination                            |
+ *  +-------------+------------------+----------------------------------------+
+ *  | Service Fee | 0.0001 ETH (1x)  | MiningManager (operator + treasury)    |
+ *  |             | 0.0005 ETH (5x)  |                                        |
+ *  | Game Fee    | 10% of wager     | MiningManager (operator + burn +       |
+ *  |             |                  | treasury + delegators)                 |
+ *  +-------------+------------------+----------------------------------------+
+ *
+ *  IMPORTANT: Fees are the SAME for all users. NFT ownership does NOT
+ *             provide discounts on FortunePool fees. NFTs only affect
+ *             the burn rate when claiming rewards from DelegationManager.
+ *
+ * ============================================================================
+ *
+ *  FEE DISTRIBUTION
+ *
+ *  BKC Flow (Game Fee):
+ *  +------------------------------------------------------------------+
+ *  |                      BKC FEE COLLECTED                           |
+ *  |                             |                                    |
+ *  |                             v                                    |
+ *  |                       MININGMANAGER                              |
+ *  |                             |                                    |
+ *  |      +----------------------+----------------------+             |
+ *  |      |          |           |                      |             |
+ *  |      v          v           v                      v             |
+ *  |  OPERATOR     BURN      TREASURY             DELEGATORS          |
+ *  |  (config%)  (config%)   (config%)             (config%)          |
+ *  +------------------------------------------------------------------+
+ *
+ *  ETH Flow (Service Fee):
+ *  +------------------------------------------------------------------+
+ *  |                      ETH FEE COLLECTED                           |
+ *  |                             |                                    |
+ *  |                             v                                    |
+ *  |                       MININGMANAGER                              |
+ *  |                             |                                    |
+ *  |           +-----------------+-----------------+                  |
+ *  |           |                                   |                  |
+ *  |           v                                   v                  |
+ *  |       OPERATOR                            TREASURY               |
+ *  |       (config%)                           (remaining)            |
+ *  +------------------------------------------------------------------+
+ *
+ * ============================================================================
+ *  Security Contact : dev@backcoin.org
+ *  Website          : https://backcoin.org
+ *  Documentation    : https://github.com/backcoin-org/backchain-dapp/tree/main/docs
+ * ============================================================================
+ */
+
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
@@ -8,42 +157,16 @@ import "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.
 import "@openzeppelin/contracts-upgradeable/token/ERC20/utils/SafeERC20Upgradeable.sol";
 
 import "./IInterfaces.sol";
-import "./IBackcoinOracle.sol";
 import "./BKCToken.sol";
 
-/**
- * @title Fortune Pool
- * @author Backchain Protocol
- * @notice Strategic prediction game powered by Backcoin ($BKC)
- * @dev Uses Backcoin Oracle (Stylus) for INSTANT on-chain resolution
- *
- *      ╔═══════════════════════════════════════════════════════════════════╗
- *      ║                    GAME MODES                                      ║
- *      ╠═══════════════════════════════════════════════════════════════════╣
- *      ║  MODE 1x (Jackpot Mode):                                          ║
- *      ║  - Player competes ONLY for the highest tier (hardest, best prize)║
- *      ║  - Requires 1 guess for the jackpot tier                          ║
- *      ║  - Pays 1x service fee                                            ║
- *      ║  - Winner takes the highest multiplier                            ║
- *      ╠═══════════════════════════════════════════════════════════════════╣
- *      ║  MODE 5x (Cumulative Mode):                                       ║
- *      ║  - Player competes for ALL active tiers simultaneously            ║
- *      ║  - Requires N guesses (one per active tier)                       ║
- *      ║  - Pays 5x service fee (one per tier)                             ║
- *      ║  - All matching tiers pay out (cumulative rewards)                ║
- *      ╚═══════════════════════════════════════════════════════════════════╝
- *
- *      Tier Structure (default):
- *      - Tier 1: Easy   (1-3 range,   2x multiplier,  ~33% chance)
- *      - Tier 2: Medium (1-10 range,  5x multiplier,  ~10% chance)
- *      - Tier 3: Hard   (1-100 range, 50x multiplier, ~1% chance)
- *
- *      Oracle: Backcoin Oracle (Stylus/Rust) - FREE, instant, secure
- *
- * @custom:security-contact dev@backcoin.org
- * @custom:website https://backcoin.org
- * @custom:network Arbitrum
- */
+interface IMiningManagerV3 {
+    function performPurchaseMiningWithOperator(
+        bytes32 serviceKey,
+        uint256 purchaseAmount,
+        address operator
+    ) external payable;
+}
+
 contract FortunePool is
     Initializable,
     UUPSUpgradeable,
@@ -56,142 +179,65 @@ contract FortunePool is
     //                              CONSTANTS
     // =========================================================================
 
-    /// @notice Basis points denominator (100% = 10000)
-    uint256 public constant BIPS_DENOMINATOR = 10_000;
+    uint256 private constant BIPS_DENOMINATOR = 10_000;
 
-    /// @notice Maximum prize payout as percentage of pool (50%)
     uint256 public constant MAX_PAYOUT_BIPS = 5_000;
 
-    /// @notice Maximum game fee allowed (30%)
     uint256 public constant MAX_GAME_FEE_BIPS = 3_000;
 
-    /// @notice Service key for MiningManager authorization
     bytes32 public constant SERVICE_KEY = keccak256("FORTUNE_POOL_SERVICE");
 
-    /// @notice Service fee multiplier for cumulative mode
     uint256 public constant CUMULATIVE_FEE_MULTIPLIER = 5;
 
+    uint256 public constant MIN_REVEAL_DELAY = 1;
+
+    uint256 public constant MAX_REVEAL_DELAY = 50;
+
+    uint256 public constant DEFAULT_REVEAL_DELAY = 5;
+
+    uint256 public constant DEFAULT_REVEAL_WINDOW = 1000;
+
     // =========================================================================
-    //                              STATE
+    //                              ENUMS
     // =========================================================================
 
-    /// @notice Reference to the ecosystem hub
-    IEcosystemManager public ecosystemManager;
+    enum CommitmentStatus {
+        NONE,
+        COMMITTED,
+        REVEALED,
+        EXPIRED
+    }
 
-    /// @notice BKC token contract
-    BKCToken public bkcToken;
+    // =========================================================================
+    //                              STRUCTS
+    // =========================================================================
 
-    /// @notice Reference to delegation manager for staking integration
-    IDelegationManager public delegationManager;
-
-    /// @notice Backcoin Oracle (Stylus contract)
-    IBackcoinOracle public backcoinOracle;
-
-    /// @notice Address of the mining manager for fee distribution
-    address public miningManagerAddress;
-
-    /// @notice Native fee (ETH) required per game (for project funding)
-    /// @dev This is NOT an oracle fee - the oracle is free. This funds the project.
-    uint256 public serviceFee;
-
-    /// @notice Game fee in basis points (deducted from wager, goes to mining)
-    uint256 public gameFeeBips;
-
-    /// @notice Total games played
-    uint256 public gameCounter;
-
-    /// @notice Current prize pool balance (in BKC)
-    uint256 public prizePoolBalance;
-
-    /// @notice Number of active prize tiers
-    uint256 public activeTierCount;
-
-    /// @notice Total wagered all time
-    uint256 public totalWageredAllTime;
-
-    /// @notice Total paid out all time
-    uint256 public totalPaidOutAllTime;
-
-    /// @notice Total wins all time
-    uint256 public totalWinsAllTime;
-
-    /// @notice Prize tier configuration
     struct PrizeTier {
-        uint128 maxRange;       // Maximum number in range (e.g., 100 = 1-100)
-        uint64 multiplierBips;  // Reward multiplier in bips (e.g., 500000 = 50x)
-        bool active;            // Whether tier is currently playable
+        uint128 maxRange;
+        uint64 multiplierBips;
+        bool active;
     }
 
-    /// @notice Game result data (stored for history)
+    /// @notice Packed commitment struct (2 slots)
+    struct Commitment {
+        address player;
+        uint64 commitBlock;
+        bool isCumulative;
+        CommitmentStatus status;
+        uint128 wagerAmount;
+        uint128 ethPaid;
+    }
+
     struct GameResult {
-        address player;         // Player's address
-        uint256 wagerAmount;    // Net wager after fees
-        uint256 prizeWon;       // Prize won (0 if lost)
-        uint256[] guesses;      // Player's predictions
-        uint256[] rolls;        // Oracle results
-        bool isCumulative;      // true = 5x mode, false = 1x mode
-        uint8 matchCount;       // Number of matching tiers
-        uint256 timestamp;      // Block timestamp
+        address player;
+        uint256 wagerAmount;
+        uint256 prizeWon;
+        uint256[] guesses;
+        uint256[] rolls;
+        bool isCumulative;
+        uint8 matchCount;
+        uint256 timestamp;
     }
-
-    /// @notice Tier ID => Configuration (1-indexed)
-    mapping(uint256 => PrizeTier) public prizeTiers;
-
-    /// @notice Game ID => Result data
-    mapping(uint256 => GameResult) public gameResults;
-
-    // =========================================================================
-    //                              EVENTS
-    // =========================================================================
-
-    /// @notice Emitted when a tier is configured
-    event TierConfigured(
-        uint256 indexed tierId,
-        uint128 maxRange,
-        uint64 multiplierBips,
-        bool active
-    );
-
-    /// @notice Emitted when prize pool receives funds
-    event PrizePoolFunded(uint256 amount, uint256 newBalance);
-
-    /// @notice Emitted when oracle address changes
-    event OracleUpdated(address indexed previousOracle, address indexed newOracle);
-
-    /// @notice Emitted when service fee changes
-    event ServiceFeeUpdated(uint256 previousFee, uint256 newFee);
-
-    /// @notice Emitted when game fee changes
-    event GameFeeUpdated(uint256 previousFeeBips, uint256 newFeeBips);
-
-    /// @notice Emitted when a game is played and resolved (V2: instant)
-    event GamePlayed(
-        uint256 indexed gameId,
-        address indexed player,
-        uint256 wagerAmount,
-        uint256 prizeWon,
-        bool isCumulative,
-        uint8 matchCount
-    );
-
-    /// @notice Emitted with detailed game data (for indexers)
-    event GameDetails(
-        uint256 indexed gameId,
-        uint256[] guesses,
-        uint256[] rolls,
-        bool[] matches
-    );
-
-    /// @notice Emitted on jackpot win (high multiplier tier match)
-    event JackpotWon(
-        uint256 indexed gameId,
-        address indexed player,
-        uint256 prizeAmount,
-        uint256 tier
-    );
-
-    /// @notice Emitted on emergency withdrawal
-    event EmergencyWithdrawal(address indexed to, uint256 amount);
 
     // =========================================================================
     //                              ERRORS
@@ -205,10 +251,136 @@ contract FortunePool is
     error InvalidGuessCount();
     error InvalidGuessRange();
     error InsufficientServiceFee();
-    error ServiceFeeTransferFailed();
+    error TransferFailed();
     error NoActiveTiers();
     error CoreContractNotSet();
-    error OracleNotSet();
+    error InvalidCommitment();
+    error NotCommitmentOwner();
+    error TooEarlyToReveal();
+    error TooLateToReveal();
+    error AlreadyRevealed();
+    error CommitmentNotExpired();
+    error HashMismatch();
+    error InvalidDelay();
+
+    // =========================================================================
+    //                              STATE
+    // =========================================================================
+
+    IEcosystemManager public ecosystemManager;
+
+    BKCToken public bkcToken;
+
+    address public miningManagerAddress;
+
+    uint256 public serviceFee;
+
+    uint256 public gameFeeBips;
+
+    uint256 public gameCounter;
+
+    uint256 public prizePoolBalance;
+
+    uint256 public activeTierCount;
+
+    uint256 public revealDelay;
+
+    uint256 public revealWindow;
+
+    // -------------------------------------------------------------------------
+    // Statistics
+    // -------------------------------------------------------------------------
+
+    uint256 public totalWageredAllTime;
+
+    uint256 public totalPaidOutAllTime;
+
+    uint256 public totalWinsAllTime;
+
+    uint256 public totalETHCollected;
+
+    uint256 public totalBKCFees;
+
+    uint256 public totalExpiredGames;
+
+    // -------------------------------------------------------------------------
+    // Mappings
+    // -------------------------------------------------------------------------
+
+    mapping(uint256 => PrizeTier) public prizeTiers;
+
+    mapping(uint256 => Commitment) public commitments;
+
+    mapping(uint256 => bytes32) public commitmentHashes;
+
+    mapping(uint256 => address) public commitmentOperators;
+
+    mapping(uint256 => GameResult) public gameResults;
+
+    // =========================================================================
+    //                           STORAGE GAP
+    // =========================================================================
+
+    uint256[35] private __gap;
+
+    // =========================================================================
+    //                              EVENTS
+    // =========================================================================
+
+    event TierConfigured(
+        uint256 indexed tierId,
+        uint128 maxRange,
+        uint64 multiplierBips,
+        bool active
+    );
+
+    event PrizePoolFunded(uint256 amount, uint256 newBalance);
+
+    event ServiceFeeUpdated(uint256 previousFee, uint256 newFee);
+
+    event GameFeeUpdated(uint256 previousFeeBips, uint256 newFeeBips);
+
+    event RevealDelayUpdated(uint256 previousDelay, uint256 newDelay);
+
+    event GameCommitted(
+        uint256 indexed gameId,
+        address indexed player,
+        uint256 wagerAmount,
+        bool isCumulative,
+        address operator
+    );
+
+    event GameRevealed(
+        uint256 indexed gameId,
+        address indexed player,
+        uint256 wagerAmount,
+        uint256 prizeWon,
+        bool isCumulative,
+        uint8 matchCount,
+        address operator
+    );
+
+    event GameDetails(
+        uint256 indexed gameId,
+        uint256[] guesses,
+        uint256[] rolls,
+        bool[] matches
+    );
+
+    event JackpotWon(
+        uint256 indexed gameId,
+        address indexed player,
+        uint256 prizeAmount,
+        uint256 tier
+    );
+
+    event GameExpired(
+        uint256 indexed gameId,
+        address indexed player,
+        uint256 forfeitedAmount
+    );
+
+    event EmergencyWithdrawal(address indexed to, uint256 amount);
 
     // =========================================================================
     //                           INITIALIZATION
@@ -219,20 +391,12 @@ contract FortunePool is
         _disableInitializers();
     }
 
-    /**
-     * @notice Initializes the Fortune Pool contract
-     * @param _owner Contract owner address
-     * @param _ecosystemManager Address of the ecosystem hub
-     * @param _backcoinOracle Address of Backcoin Oracle (Stylus)
-     */
     function initialize(
         address _owner,
-        address _ecosystemManager,
-        address _backcoinOracle
+        address _ecosystemManager
     ) external initializer {
         if (_owner == address(0)) revert ZeroAddress();
         if (_ecosystemManager == address(0)) revert ZeroAddress();
-        if (_backcoinOracle == address(0)) revert ZeroAddress();
 
         __Ownable_init();
         __UUPSUpgradeable_init();
@@ -241,79 +405,56 @@ contract FortunePool is
         _transferOwnership(_owner);
 
         ecosystemManager = IEcosystemManager(_ecosystemManager);
-        backcoinOracle = IBackcoinOracle(_backcoinOracle);
 
         address bkcAddress = ecosystemManager.getBKCTokenAddress();
-        address dmAddress = ecosystemManager.getDelegationManagerAddress();
         address mmAddress = ecosystemManager.getMiningManagerAddress();
 
-        if (bkcAddress == address(0) || dmAddress == address(0) || mmAddress == address(0)) {
+        if (bkcAddress == address(0) || mmAddress == address(0)) {
             revert CoreContractNotSet();
         }
 
         bkcToken = BKCToken(bkcAddress);
-        delegationManager = IDelegationManager(dmAddress);
         miningManagerAddress = mmAddress;
 
-        gameFeeBips = 1000; // Default: 10%
+        gameFeeBips = 1000;
+        serviceFee = 0.0001 ether;
+        revealDelay = DEFAULT_REVEAL_DELAY;
+        revealWindow = DEFAULT_REVEAL_WINDOW;
     }
 
-    /**
-     * @dev Authorizes contract upgrades (owner only)
-     */
     function _authorizeUpgrade(address) internal override onlyOwner {}
 
     // =========================================================================
     //                         ADMIN FUNCTIONS
     // =========================================================================
 
-    /**
-     * @notice Sets the Backcoin Oracle address
-     * @param _oracle New oracle address (Backcoin Oracle Stylus contract)
-     */
-    function setOracle(address _oracle) external onlyOwner {
-        if (_oracle == address(0)) revert ZeroAddress();
-
-        address previousOracle = address(backcoinOracle);
-        backcoinOracle = IBackcoinOracle(_oracle);
-
-        emit OracleUpdated(previousOracle, _oracle);
-    }
-
-    /**
-     * @notice Sets the service fee (ETH) for project funding
-     * @dev This is NOT an oracle fee - the oracle is free. This funds the project.
-     * @param _fee Fee amount in wei
-     */
     function setServiceFee(uint256 _fee) external onlyOwner {
         uint256 previousFee = serviceFee;
         serviceFee = _fee;
-
         emit ServiceFeeUpdated(previousFee, _fee);
     }
 
-    /**
-     * @notice Sets the game fee percentage (deducted from wager)
-     * @param _feeBips Fee in basis points (max 3000 = 30%)
-     */
     function setGameFee(uint256 _feeBips) external onlyOwner {
         if (_feeBips > MAX_GAME_FEE_BIPS) revert InvalidFee();
-
         uint256 previousFee = gameFeeBips;
         gameFeeBips = _feeBips;
-
         emit GameFeeUpdated(previousFee, _feeBips);
     }
 
-    /**
-     * @notice Configures a prize tier
-     * @dev Tiers must be set sequentially (1, 2, 3...)
-     *      Lower tiers should be easier (smaller range, lower multiplier)
-     *      Highest tier is the jackpot (largest range, highest multiplier)
-     * @param _tierId Tier identifier (1-based)
-     * @param _maxRange Maximum number in guess range (e.g., 100 for 1-100)
-     * @param _multiplierBips Reward multiplier in bips (10000 = 1x, 500000 = 50x)
-     */
+    function setRevealDelay(uint256 _delay) external onlyOwner {
+        if (_delay < MIN_REVEAL_DELAY || _delay > MAX_REVEAL_DELAY) {
+            revert InvalidDelay();
+        }
+        uint256 previousDelay = revealDelay;
+        revealDelay = _delay;
+        emit RevealDelayUpdated(previousDelay, _delay);
+    }
+
+    function setRevealWindow(uint256 _window) external onlyOwner {
+        if (_window < 100) revert InvalidDelay();
+        revealWindow = _window;
+    }
+
     function configureTier(
         uint256 _tierId,
         uint128 _maxRange,
@@ -336,31 +477,20 @@ contract FortunePool is
         emit TierConfigured(_tierId, _maxRange, _multiplierBips, true);
     }
 
-    /**
-     * @notice Reduces the number of active tiers
-     * @param _newCount New tier count (must be less than current)
-     */
     function reduceTierCount(uint256 _newCount) external onlyOwner {
         if (_newCount >= activeTierCount) revert InvalidTierSequence();
         activeTierCount = _newCount;
     }
 
-    /**
-     * @notice Adds BKC to the prize pool
-     * @param _amount Amount to add
-     */
     function fundPrizePool(uint256 _amount) external onlyOwner {
         if (_amount == 0) revert ZeroAmount();
-
         bkcToken.safeTransferFrom(msg.sender, address(this), _amount);
-        prizePoolBalance += _amount;
-
+        unchecked {
+            prizePoolBalance += _amount;
+        }
         emit PrizePoolFunded(_amount, prizePoolBalance);
     }
 
-    /**
-     * @notice Emergency withdrawal of prize pool to treasury
-     */
     function emergencyWithdraw() external onlyOwner {
         address treasury = ecosystemManager.getTreasuryAddress();
         if (treasury == address(0)) revert CoreContractNotSet();
@@ -375,35 +505,20 @@ contract FortunePool is
         emit EmergencyWithdrawal(treasury, amount);
     }
 
-    /**
-     * @notice Withdraw accumulated service fees to treasury
-     */
-    function withdrawServiceFees() external onlyOwner {
-        address treasury = ecosystemManager.getTreasuryAddress();
-        if (treasury == address(0)) revert CoreContractNotSet();
-
-        uint256 balance = address(this).balance;
-        if (balance > 0) {
-            (bool sent,) = treasury.call{value: balance}("");
-            if (!sent) revert ServiceFeeTransferFailed();
-        }
+    function updateMiningManager() external onlyOwner {
+        address mmAddress = ecosystemManager.getMiningManagerAddress();
+        if (mmAddress == address(0)) revert CoreContractNotSet();
+        miningManagerAddress = mmAddress;
     }
 
     // =========================================================================
     //                          VIEW FUNCTIONS
     // =========================================================================
 
-    /**
-     * @notice Returns the jackpot tier ID (highest active tier)
-     */
     function getJackpotTierId() public view returns (uint256) {
         return activeTierCount;
     }
 
-    /**
-     * @notice Returns a specific tier configuration
-     * @param _tierId Tier identifier (1-based)
-     */
     function getTier(uint256 _tierId) external view returns (
         uint128 maxRange,
         uint64 multiplierBips,
@@ -413,9 +528,6 @@ contract FortunePool is
         return (tier.maxRange, tier.multiplierBips, tier.active);
     }
 
-    /**
-     * @notice Returns jackpot tier configuration
-     */
     function getJackpotTier() external view returns (
         uint256 tierId,
         uint128 maxRange,
@@ -430,9 +542,6 @@ contract FortunePool is
         return (0, 0, 0, false);
     }
 
-    /**
-     * @notice Returns all tier configurations
-     */
     function getAllTiers() external view returns (
         uint128[] memory ranges,
         uint64[] memory multipliers
@@ -441,7 +550,7 @@ contract FortunePool is
         ranges = new uint128[](count);
         multipliers = new uint64[](count);
 
-        for (uint256 i = 0; i < count;) {
+        for (uint256 i; i < count;) {
             PrizeTier storage tier = prizeTiers[i + 1];
             ranges[i] = tier.maxRange;
             multipliers[i] = tier.multiplierBips;
@@ -449,62 +558,99 @@ contract FortunePool is
         }
     }
 
-    /**
-     * @notice Calculates required service fee for a game mode
-     * @param _isCumulative true = 5x mode (pays 5x fee), false = 1x mode (pays 1x fee)
-     * @return Required fee in wei
-     */
     function getRequiredServiceFee(bool _isCumulative) public view returns (uint256) {
-        return _isCumulative ? serviceFee * CUMULATIVE_FEE_MULTIPLIER : serviceFee;
+        unchecked {
+            return _isCumulative ? serviceFee * CUMULATIVE_FEE_MULTIPLIER : serviceFee;
+        }
     }
 
-    /**
-     * @notice Returns expected guess count for a game mode
-     * @param _isCumulative true = 5x mode (N guesses), false = 1x mode (1 guess)
-     */
     function getExpectedGuessCount(bool _isCumulative) public view returns (uint256) {
         return _isCumulative ? activeTierCount : 1;
     }
 
-    /**
-     * @notice Calculates potential winnings
-     * @param _wagerAmount Wager amount in BKC
-     * @param _isCumulative Game mode
-     * @return maxPrize Maximum possible prize
-     * @return netWager Wager after fees
-     */
     function calculatePotentialWinnings(
         uint256 _wagerAmount,
         bool _isCumulative
     ) external view returns (uint256 maxPrize, uint256 netWager) {
-        uint256 fee = (_wagerAmount * gameFeeBips) / BIPS_DENOMINATOR;
-        netWager = _wagerAmount - fee;
+        uint256 fee;
+        unchecked {
+            fee = (_wagerAmount * gameFeeBips) / BIPS_DENOMINATOR;
+            netWager = _wagerAmount - fee;
+        }
 
         uint256 count = activeTierCount;
         if (count == 0) return (0, netWager);
 
         if (_isCumulative) {
-            // 5x mode: sum of all tier multipliers
-            for (uint256 i = 0; i < count;) {
-                maxPrize += (netWager * prizeTiers[i + 1].multiplierBips) / BIPS_DENOMINATOR;
-                unchecked { ++i; }
+            for (uint256 i; i < count;) {
+                unchecked {
+                    maxPrize += (netWager * prizeTiers[i + 1].multiplierBips) / BIPS_DENOMINATOR;
+                    ++i;
+                }
             }
         } else {
-            // 1x mode: only jackpot tier multiplier
-            maxPrize = (netWager * prizeTiers[count].multiplierBips) / BIPS_DENOMINATOR;
+            unchecked {
+                maxPrize = (netWager * prizeTiers[count].multiplierBips) / BIPS_DENOMINATOR;
+            }
         }
 
-        // Apply safety cap (50% of pool)
-        uint256 maxPayout = (prizePoolBalance * MAX_PAYOUT_BIPS) / BIPS_DENOMINATOR;
+        uint256 maxPayout;
+        unchecked {
+            maxPayout = (prizePoolBalance * MAX_PAYOUT_BIPS) / BIPS_DENOMINATOR;
+        }
         if (maxPrize > maxPayout) {
             maxPrize = maxPayout;
         }
     }
 
-    /**
-     * @notice Returns game result
-     * @param _gameId Game identifier
-     */
+    function getCommitment(uint256 _gameId) external view returns (
+        address player,
+        uint64 commitBlock,
+        bool isCumulative,
+        CommitmentStatus status,
+        uint256 wagerAmount,
+        uint256 ethPaid
+    ) {
+        Commitment storage c = commitments[_gameId];
+        return (
+            c.player,
+            c.commitBlock,
+            c.isCumulative,
+            c.status,
+            uint256(c.wagerAmount),
+            uint256(c.ethPaid)
+        );
+    }
+
+    function getCommitmentStatus(uint256 _gameId) external view returns (
+        CommitmentStatus status,
+        bool canReveal,
+        bool isExpired,
+        uint256 blocksUntilReveal,
+        uint256 blocksUntilExpiry
+    ) {
+        Commitment storage c = commitments[_gameId];
+        status = c.status;
+
+        if (status != CommitmentStatus.COMMITTED) {
+            return (status, false, false, 0, 0);
+        }
+
+        uint256 revealBlock = uint256(c.commitBlock) + revealDelay;
+        uint256 expiryBlock = uint256(c.commitBlock) + revealWindow;
+
+        canReveal = block.number >= revealBlock && block.number <= expiryBlock;
+        isExpired = block.number > expiryBlock;
+
+        if (block.number < revealBlock) {
+            blocksUntilReveal = revealBlock - block.number;
+        }
+
+        if (block.number < expiryBlock) {
+            blocksUntilExpiry = expiryBlock - block.number;
+        }
+    }
+
     function getGameResult(uint256 _gameId) external view returns (
         address player,
         uint256 wagerAmount,
@@ -528,16 +674,15 @@ contract FortunePool is
         );
     }
 
-    /**
-     * @notice Returns pool statistics
-     */
     function getPoolStats() external view returns (
         uint256 poolBalance,
         uint256 gamesPlayed,
         uint256 wageredAllTime,
         uint256 paidOutAllTime,
         uint256 winsAllTime,
-        uint256 currentFee
+        uint256 ethCollected,
+        uint256 bkcFees,
+        uint256 expiredGames
     ) {
         return (
             prizePoolBalance,
@@ -545,60 +690,139 @@ contract FortunePool is
             totalWageredAllTime,
             totalPaidOutAllTime,
             totalWinsAllTime,
-            gameFeeBips
+            totalETHCollected,
+            totalBKCFees,
+            totalExpiredGames
         );
     }
 
-    /**
-     * @notice Returns the oracle address
-     */
-    function getOracleAddress() external view returns (address) {
-        return address(backcoinOracle);
-    }
-
     // =========================================================================
-    //                          GAME LOGIC (INSTANT)
+    //                    PHASE 1: COMMIT (Start Game)
     // =========================================================================
 
     /**
-     * @notice Play a Fortune Pool game (INSTANT RESOLUTION)
-     * @dev Results are determined and paid in the same transaction!
-     *      Uses Backcoin Oracle (Stylus) for randomness - FREE!
+     * @notice Commit to play a game (Phase 1 of 2)
+     * @dev Player submits a hash of their guesses + secret.
      *
-     *      Mode 1x (isCumulative = false):
-     *      - Send 1 guess for the JACKPOT tier only
-     *      - Pay 1x service fee
-     *      - Compete for the highest multiplier (e.g., 50x)
+     *      Commitment Hash = keccak256(abi.encodePacked(guesses, userSecret))
      *
-     *      Mode 5x (isCumulative = true):
-     *      - Send N guesses (one per active tier)
-     *      - Pay 5x service fee
-     *      - All matching tiers pay out cumulatively
-     *
+     * @param _commitmentHash Hash of (guesses + userSecret)
      * @param _wagerAmount Amount to wager in BKC
-     * @param _guesses Array of predictions (1 for 1x mode, N for 5x mode)
-     * @param _isCumulative false = 1x mode (jackpot), true = 5x mode (all tiers)
+     * @param _isCumulative false = 1x mode, true = 5x mode
+     * @param _operator Address of the frontend operator
+     * @return gameId The game ID for this commitment
      */
-    function play(
+    function commitPlay(
+        bytes32 _commitmentHash,
         uint256 _wagerAmount,
-        uint256[] calldata _guesses,
-        bool _isCumulative
-    ) external payable nonReentrant {
+        bool _isCumulative,
+        address _operator
+    ) external payable nonReentrant returns (uint256 gameId) {
         if (_wagerAmount == 0) revert ZeroAmount();
-        if (address(backcoinOracle) == address(0)) revert OracleNotSet();
+        if (_commitmentHash == bytes32(0)) revert InvalidCommitment();
 
         uint256 tierCount = activeTierCount;
         if (tierCount == 0) revert NoActiveTiers();
 
-        // ═══════════════════════════════════════════════════════════════════
-        // VALIDATE GUESSES
-        // ═══════════════════════════════════════════════════════════════════
-        
-        if (_isCumulative) {
-            // MODE 5x: Must provide one guess per tier
-            if (_guesses.length != tierCount) revert InvalidGuessCount();
+        uint256 requiredFee = getRequiredServiceFee(_isCumulative);
+        if (msg.value < requiredFee) revert InsufficientServiceFee();
 
-            for (uint256 i = 0; i < tierCount;) {
+        uint256 fee;
+        uint256 netWager;
+        unchecked {
+            fee = (_wagerAmount * gameFeeBips) / BIPS_DENOMINATOR;
+            netWager = _wagerAmount - fee;
+        }
+
+        if (miningManagerAddress == address(0)) revert CoreContractNotSet();
+
+        bkcToken.safeTransferFrom(msg.sender, address(this), _wagerAmount);
+
+        unchecked {
+            prizePoolBalance += netWager;
+            totalETHCollected += msg.value;
+        }
+
+        if (fee > 0) {
+            bkcToken.safeTransfer(miningManagerAddress, fee);
+            unchecked {
+                totalBKCFees += fee;
+            }
+
+            try IMiningManagerV3(miningManagerAddress).performPurchaseMiningWithOperator(
+                SERVICE_KEY,
+                fee,
+                _operator
+            ) {} catch {}
+        }
+
+        _sendETHToMining(msg.value, _operator);
+
+        unchecked {
+            gameId = ++gameCounter;
+        }
+
+        commitments[gameId] = Commitment({
+            player: msg.sender,
+            commitBlock: uint64(block.number),
+            isCumulative: _isCumulative,
+            status: CommitmentStatus.COMMITTED,
+            wagerAmount: uint128(netWager),
+            ethPaid: uint128(msg.value)
+        });
+
+        commitmentHashes[gameId] = _commitmentHash;
+        commitmentOperators[gameId] = _operator;
+
+        unchecked {
+            totalWageredAllTime += netWager;
+        }
+
+        emit GameCommitted(
+            gameId,
+            msg.sender,
+            netWager,
+            _isCumulative,
+            _operator
+        );
+    }
+
+    // =========================================================================
+    //                    PHASE 2: REVEAL (Complete Game)
+    // =========================================================================
+
+    /**
+     * @notice Reveal guesses and complete the game (Phase 2 of 2)
+     * @dev Must wait revealDelay blocks after commit.
+     *
+     * @param _gameId The game ID from commitPlay
+     * @param _guesses Array of predictions
+     * @param _userSecret The secret used in commitment hash
+     * @return prizeWon Amount won (0 if lost)
+     */
+    function revealPlay(
+        uint256 _gameId,
+        uint256[] calldata _guesses,
+        bytes32 _userSecret
+    ) external nonReentrant returns (uint256 prizeWon) {
+        Commitment storage c = commitments[_gameId];
+
+        if (c.status != CommitmentStatus.COMMITTED) revert AlreadyRevealed();
+        if (c.player != msg.sender) revert NotCommitmentOwner();
+
+        uint256 commitBlock = uint256(c.commitBlock);
+        if (block.number < commitBlock + revealDelay) revert TooEarlyToReveal();
+        if (block.number > commitBlock + revealWindow) revert TooLateToReveal();
+
+        bytes32 calculatedHash = keccak256(abi.encodePacked(_guesses, _userSecret));
+        if (calculatedHash != commitmentHashes[_gameId]) revert HashMismatch();
+
+        uint256 tierCount = activeTierCount;
+        bool isCumulative = c.isCumulative;
+
+        if (isCumulative) {
+            if (_guesses.length != tierCount) revert InvalidGuessCount();
+            for (uint256 i; i < tierCount;) {
                 uint256 maxRange = uint256(prizeTiers[i + 1].maxRange);
                 if (_guesses[i] < 1 || _guesses[i] > maxRange) {
                     revert InvalidGuessRange();
@@ -606,148 +830,126 @@ contract FortunePool is
                 unchecked { ++i; }
             }
         } else {
-            // MODE 1x: Must provide exactly 1 guess for jackpot tier
             if (_guesses.length != 1) revert InvalidGuessCount();
-
             uint256 maxRange = uint256(prizeTiers[tierCount].maxRange);
             if (_guesses[0] < 1 || _guesses[0] > maxRange) {
                 revert InvalidGuessRange();
             }
         }
 
-        // ═══════════════════════════════════════════════════════════════════
-        // VALIDATE AND COLLECT SERVICE FEE
-        // ═══════════════════════════════════════════════════════════════════
-        
-        uint256 requiredFee = getRequiredServiceFee(_isCumulative);
-        if (msg.value != requiredFee) revert InsufficientServiceFee();
+        bytes32 blockEntropy = blockhash(commitBlock + revealDelay);
+        if (blockEntropy == bytes32(0)) {
+            blockEntropy = keccak256(abi.encodePacked(
+                commitBlock,
+                block.timestamp,
+                block.prevrandao,
+                _gameId
+            ));
+        }
 
-        // Service fees stay in contract, withdrawn by admin to treasury
+        uint256 netWager = uint256(c.wagerAmount);
+        address operator = commitmentOperators[_gameId];
 
-        // ═══════════════════════════════════════════════════════════════════
-        // PROCESS BKC PAYMENT
-        // ═══════════════════════════════════════════════════════════════════
-        
-        uint256 netWager = _processPayment(_wagerAmount);
-
-        // Increment game counter
-        unchecked { ++gameCounter; }
-        uint256 gameId = gameCounter;
-
-        // Update stats
-        totalWageredAllTime += netWager;
-
-        // ═══════════════════════════════════════════════════════════════════
-        // GET RANDOM NUMBERS FROM BACKCOIN ORACLE (INSTANT - FREE!)
-        // ═══════════════════════════════════════════════════════════════════
-        
         uint256[] memory rolls;
-        uint256 totalPrize;
         uint8 matchCount;
         bool[] memory matches;
 
-        if (_isCumulative) {
-            // ═══════════════════════════════════════════════════════════════
-            // MODE 5x: Get N random numbers (one per tier) using getBatch
-            // ═══════════════════════════════════════════════════════════════
-            uint64[] memory counts = new uint64[](tierCount);
-            uint64[] memory mins = new uint64[](tierCount);
-            uint64[] memory maxs = new uint64[](tierCount);
-            
-            for (uint256 i = 0; i < tierCount;) {
-                counts[i] = 1;  // 1 number per tier
-                mins[i] = 1;
-                maxs[i] = uint64(prizeTiers[i + 1].maxRange);
-                unchecked { ++i; }
-            }
-            
-            // Get all random numbers in one call using getBatch
-            uint256[][] memory batchResults = backcoinOracle.getBatch(counts, mins, maxs);
-            
-            // Flatten batch results to rolls array
+        if (isCumulative) {
             rolls = new uint256[](tierCount);
             matches = new bool[](tierCount);
-            
-            for (uint256 i = 0; i < tierCount;) {
-                rolls[i] = batchResults[i][0];  // Each batch has 1 number
-                
+
+            for (uint256 i; i < tierCount;) {
+                bytes32 tierEntropy = keccak256(abi.encodePacked(
+                    blockEntropy,
+                    _gameId,
+                    i
+                ));
+                uint256 maxRange = uint256(prizeTiers[i + 1].maxRange);
+                rolls[i] = (uint256(tierEntropy) % maxRange) + 1;
+
                 if (_guesses[i] == rolls[i]) {
                     matches[i] = true;
-                    matchCount++;
-                    uint256 tierPrize = (netWager * prizeTiers[i + 1].multiplierBips) / BIPS_DENOMINATOR;
-                    totalPrize += tierPrize;
-                    
-                    // Emit jackpot event for high-multiplier wins (5x or higher)
+                    unchecked {
+                        matchCount++;
+                    }
+                    uint256 tierPrize;
+                    unchecked {
+                        tierPrize = (netWager * prizeTiers[i + 1].multiplierBips) / BIPS_DENOMINATOR;
+                        prizeWon += tierPrize;
+                    }
+
                     if (prizeTiers[i + 1].multiplierBips >= 50000) {
-                        emit JackpotWon(gameId, msg.sender, tierPrize, i + 1);
+                        emit JackpotWon(_gameId, msg.sender, tierPrize, i + 1);
                     }
                 }
                 unchecked { ++i; }
             }
-            
         } else {
-            // ═══════════════════════════════════════════════════════════════
-            // MODE 1x: Get 1 random number for jackpot tier using getNumbers
-            // ═══════════════════════════════════════════════════════════════
-            uint256 jackpotTier = tierCount;
-            uint64 maxRange = uint64(prizeTiers[jackpotTier].maxRange);
-            
+            rolls = new uint256[](1);
             matches = new bool[](1);
-            
-            // Get single random number
-            rolls = backcoinOracle.getNumbers(1, 1, maxRange);
-            
+
+            uint256 jackpotTier = tierCount;
+            uint256 maxRange = uint256(prizeTiers[jackpotTier].maxRange);
+
+            bytes32 tierEntropy = keccak256(abi.encodePacked(
+                blockEntropy,
+                _gameId,
+                uint256(0)
+            ));
+            rolls[0] = (uint256(tierEntropy) % maxRange) + 1;
+
             if (_guesses[0] == rolls[0]) {
                 matches[0] = true;
                 matchCount = 1;
-                totalPrize = (netWager * prizeTiers[jackpotTier].multiplierBips) / BIPS_DENOMINATOR;
-                
-                emit JackpotWon(gameId, msg.sender, totalPrize, jackpotTier);
+                unchecked {
+                    prizeWon = (netWager * prizeTiers[jackpotTier].multiplierBips) / BIPS_DENOMINATOR;
+                }
+                emit JackpotWon(_gameId, msg.sender, prizeWon, jackpotTier);
             }
         }
 
-        // ═══════════════════════════════════════════════════════════════════
-        // APPLY SAFETY CAP AND PAY WINNER
-        // ═══════════════════════════════════════════════════════════════════
-        
-        uint256 maxPayout = (prizePoolBalance * MAX_PAYOUT_BIPS) / BIPS_DENOMINATOR;
-        if (totalPrize > maxPayout) {
-            totalPrize = maxPayout;
+        uint256 maxPayout;
+        unchecked {
+            maxPayout = (prizePoolBalance * MAX_PAYOUT_BIPS) / BIPS_DENOMINATOR;
+        }
+        if (prizeWon > maxPayout) {
+            prizeWon = maxPayout;
         }
 
-        if (totalPrize > 0) {
-            prizePoolBalance -= totalPrize;
-            totalPaidOutAllTime += totalPrize;
-            totalWinsAllTime++;
-            bkcToken.safeTransfer(msg.sender, totalPrize);
+        if (prizeWon > 0) {
+            unchecked {
+                prizePoolBalance -= prizeWon;
+                totalPaidOutAllTime += prizeWon;
+                totalWinsAllTime++;
+            }
+            bkcToken.safeTransfer(msg.sender, prizeWon);
         }
 
-        // ═══════════════════════════════════════════════════════════════════
-        // STORE RESULT AND EMIT EVENTS
-        // ═══════════════════════════════════════════════════════════════════
-        
-        gameResults[gameId] = GameResult({
+        c.status = CommitmentStatus.REVEALED;
+
+        gameResults[_gameId] = GameResult({
             player: msg.sender,
             wagerAmount: netWager,
-            prizeWon: totalPrize,
+            prizeWon: prizeWon,
             guesses: _guesses,
             rolls: rolls,
-            isCumulative: _isCumulative,
+            isCumulative: isCumulative,
             matchCount: matchCount,
             timestamp: block.timestamp
         });
 
-        emit GamePlayed(
-            gameId,
+        emit GameRevealed(
+            _gameId,
             msg.sender,
             netWager,
-            totalPrize,
-            _isCumulative,
-            matchCount
+            prizeWon,
+            isCumulative,
+            matchCount,
+            operator
         );
 
         emit GameDetails(
-            gameId,
+            _gameId,
             _guesses,
             rolls,
             matches
@@ -755,58 +957,66 @@ contract FortunePool is
     }
 
     // =========================================================================
+    //                    EXPIRED GAMES (Forfeit)
+    // =========================================================================
+
+    /**
+     * @notice Claim an expired game (player forfeited)
+     * @param _gameId The game ID that expired
+     */
+    function claimExpiredGame(uint256 _gameId) external {
+        Commitment storage c = commitments[_gameId];
+
+        if (c.status != CommitmentStatus.COMMITTED) revert InvalidCommitment();
+
+        uint256 expiryBlock = uint256(c.commitBlock) + revealWindow;
+        if (block.number <= expiryBlock) revert CommitmentNotExpired();
+
+        c.status = CommitmentStatus.EXPIRED;
+
+        unchecked {
+            totalExpiredGames++;
+        }
+
+        emit GameExpired(_gameId, c.player, uint256(c.wagerAmount));
+    }
+
+    // =========================================================================
     //                         INTERNAL FUNCTIONS
     // =========================================================================
 
-    /**
-     * @dev Processes BKC payment: collects wager, deducts fee, adds to pool
-     */
-    function _processPayment(uint256 _amount) internal returns (uint256 netWager) {
-        uint256 fee = (_amount * gameFeeBips) / BIPS_DENOMINATOR;
-        netWager = _amount - fee;
+    function _sendETHToMining(uint256 _amount, address _operator) internal {
+        if (miningManagerAddress == address(0) || _amount == 0) return;
 
-        if (miningManagerAddress == address(0)) revert CoreContractNotSet();
-
-        bkcToken.safeTransferFrom(msg.sender, address(this), _amount);
-
-        // Add net wager to prize pool
-        prizePoolBalance += netWager;
-
-        // Send fee to mining manager for distribution
-        if (fee > 0) {
-            bkcToken.safeTransfer(miningManagerAddress, fee);
-            IMiningManager(miningManagerAddress).performPurchaseMining(SERVICE_KEY, fee);
+        try IMiningManagerV3(miningManagerAddress).performPurchaseMiningWithOperator{value: _amount}(
+            SERVICE_KEY,
+            0,
+            _operator
+        ) {} catch {
+            address treasury = ecosystemManager.getTreasuryAddress();
+            if (treasury != address(0)) {
+                (bool success, ) = treasury.call{value: _amount}("");
+                if (!success) revert TransferFailed();
+            }
         }
     }
 
-    /**
-     * @dev Allows contract to receive ETH (service fees)
-     */
     receive() external payable {}
 
     // =========================================================================
-    //                      BACKWARDS COMPATIBILITY
+    //                      HELPER FUNCTIONS
     // =========================================================================
 
     /**
-     * @notice Alias for serviceFee (backwards compatibility)
+     * @notice Helper to generate commitment hash
+     * @param _guesses Array of predictions
+     * @param _userSecret Random secret
+     * @return hash The commitment hash
      */
-    function oracleFee() external view returns (uint256) {
-        return serviceFee;
-    }
-
-    /**
-     * @notice Alias for getRequiredServiceFee (backwards compatibility)
-     */
-    function getRequiredOracleFee(bool _isCumulative) external view returns (uint256) {
-        return getRequiredServiceFee(_isCumulative);
-    }
-
-    /**
-     * @notice Alias for backcoinOracle (backwards compatibility)
-     * @dev Returns the oracle address for legacy integrations
-     */
-    function randomnessOracle() external view returns (address) {
-        return address(backcoinOracle);
+    function generateCommitmentHash(
+        uint256[] calldata _guesses,
+        bytes32 _userSecret
+    ) external pure returns (bytes32 hash) {
+        return keccak256(abi.encodePacked(_guesses, _userSecret));
     }
 }

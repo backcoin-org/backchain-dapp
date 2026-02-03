@@ -1,5 +1,5 @@
 // hardhat.config.ts
-// ✅ VERSÃO V3.1: Path corrigido para contracts/solidity
+// ✅ VERSÃO V3.2: Optimizer agressivo para contratos grandes
 
 import { HardhatUserConfig } from "hardhat/config";
 import "@nomicfoundation/hardhat-toolbox";
@@ -22,12 +22,12 @@ const ETHERSCAN_API_KEY = process.env.ETHERSCAN_API_KEY || "";
 const RPC_URLS = {
   // Testnet - Arbitrum Sepolia
   arbitrumSepolia: {
-    primary: "https://sepolia-rollup.arbitrum.io/rpc",  // Arbitrum Official (FREE)
+    primary: "https://sepolia-rollup.arbitrum.io/rpc",
     fallback: ALCHEMY_API_KEY ? `https://arb-sepolia.g.alchemy.com/v2/${ALCHEMY_API_KEY}` : null,
   },
   // Mainnet - Arbitrum One
   arbitrumOne: {
-    primary: "https://arb1.arbitrum.io/rpc",  // Arbitrum Official (FREE)
+    primary: "https://arb1.arbitrum.io/rpc",
     fallback: ALCHEMY_API_KEY ? `https://arb-mainnet.g.alchemy.com/v2/${ALCHEMY_API_KEY}` : null,
   },
 };
@@ -55,13 +55,38 @@ console.log(`🌐 Arbitrum Sepolia RPC: ${RPC_URLS.arbitrumSepolia.primary}`);
 
 const config: HardhatUserConfig = {
   solidity: {
-    version: "0.8.28",
-    settings: {
-      optimizer: {
-        enabled: true,
-        runs: 1,
+    compilers: [
+      {
+        version: "0.8.28",
+        settings: {
+          optimizer: {
+            enabled: true,
+            runs: 1,  // Mínimo = bytecode menor
+          },
+          viaIR: true,  // Otimização via IR
+          evmVersion: "paris",
+          metadata: {
+            bytecodeHash: "none",  // Remove hash do metadata (economiza ~50 bytes)
+          },
+        },
       },
-      viaIR: true,
+    ],
+    // Override específico para Backchat (contrato grande)
+    overrides: {
+      "contracts/solidity/Backchat.sol": {
+        version: "0.8.28",
+        settings: {
+          optimizer: {
+            enabled: true,
+            runs: 1,
+          },
+          viaIR: true,
+          evmVersion: "paris",
+          metadata: {
+            bytecodeHash: "none",
+          },
+        },
+      },
     },
   },
 
@@ -69,6 +94,7 @@ const config: HardhatUserConfig = {
     // Local
     hardhat: {
       chainId: 31337,
+      allowUnlimitedContractSize: true,  // Para testes locais
     },
     localhost: {
       url: "http://127.0.0.1:8545",
@@ -76,17 +102,14 @@ const config: HardhatUserConfig = {
     },
 
     // 🟢 TESTNET: Arbitrum Sepolia
-    // RPC Oficial do Arbitrum (gratuita e estável)
     arbitrumSepolia: {
       url: RPC_URLS.arbitrumSepolia.primary,
       accounts: PRIVATE_KEY ? [PRIVATE_KEY] : [],
       chainId: 421614,
-      // Configurações de timeout para RPC pública
-      timeout: 60000,  // 60 segundos
+      timeout: 60000,
     },
 
     // 🔴 MAINNET: Arbitrum One
-    // RPC Oficial do Arbitrum (gratuita e estável)
     arbitrumOne: {
       url: RPC_URLS.arbitrumOne.primary,
       accounts: PRIVATE_KEY ? [PRIVATE_KEY] : [],
@@ -94,7 +117,7 @@ const config: HardhatUserConfig = {
       timeout: 60000,
     },
 
-    // 🔵 ALTERNATIVA: Arbitrum Sepolia via Alchemy (se configurado)
+    // 🔵 ALTERNATIVA: Arbitrum Sepolia via Alchemy
     arbitrumSepoliaAlchemy: {
       url: RPC_URLS.arbitrumSepolia.fallback || RPC_URLS.arbitrumSepolia.primary,
       accounts: PRIVATE_KEY ? [PRIVATE_KEY] : [],
@@ -103,7 +126,7 @@ const config: HardhatUserConfig = {
   },
 
   // ========================================
-  // 🔍 VERIFICAÇÃO - USA API V1 DO ARBISCAN
+  // 🔍 VERIFICAÇÃO
   // ========================================
   etherscan: {
     apiKey: ETHERSCAN_API_KEY,
@@ -138,10 +161,10 @@ const config: HardhatUserConfig = {
   },
 
   // ========================================
-  // 📁 PATHS - V3.1: Corrigido para contracts/solidity
+  // 📁 PATHS
   // ========================================
   paths: {
-    sources: "./contracts/solidity",  // ✅ CORRIGIDO: Pasta onde estão os .sol
+    sources: "./contracts/solidity",
     tests: "./test",
     cache: "./cache",
     artifacts: "./artifacts",

@@ -1,30 +1,24 @@
 // js/pages/DashboardPage.js
-// ✅ PRODUCTION V12.0 - Promote Activity + Charity Link
+// ✅ PRODUCTION V6.9 - Backchat V7 (Non-Upgradeable) Support
+//
+// V6.9 Changes:
+// - Added Backchat V7 activity icons: SuperLike, Repost, Follow, Profile, Boost, Badge, Tip, Withdraw
+// - Updated event type detection for all Backchat V7 events
+// - Backchat V7 is now a non-upgradeable contract with hardcoded configuration
+//
+// V6.8 Changes:
+// - Updated NFT tiers: Diamond (50%), Gold (40%), Silver (25%), Bronze (10%)
+// - NFT boost now REDUCES burn rate instead of giving fee discount
+// - No NFT = 50% burn, Diamond = 0% burn
+// - Fortune Pool: Commit-Reveal events (GameCommitted, GameRevealed)
+// - Backchat events: PostCreated, PostLiked, ReplyCreated
+// - New helper functions: getTierByBoost, getBurnRateFromBoost, getKeepRateFromBoost
 //
 // V12.0 Changes:
 // - Added RENTAL_PROMOTE activity type with bullhorn icon
 // - Promote/Ads shows value in ETH instead of BKC
 // - Added Charity Pool quick link card in sidebar
 // - Fixed activity type detection for promote events
-//
-// V11.1 Changes:
-// - Updated to read from burn.totalBurned (from burn_stats/global)
-// - Fallback chain: burn.totalBurned → burn.sources.rental.total + burn.sources.charity.total
-//
-// V11.0 Changes:
-// - Replaced "Economic Output" with "Total Burned" metric
-// - Added burn data from rental marketplace (totalBurned)
-// - Updated UI to show fire emoji for burn metric
-//
-// V10.0 Changes:
-// - Fixed: Rewards now load on first visit (retry mechanism for async wallet connection)
-//
-// V9.0 Changes:
-// - Added Charity Pool activity icons and event detection
-// - Support for DONATIONMADE, CAMPAIGNCREATED, CAMPAIGNCANCELLED, FUNDSWITHDRAWN, GOALREACHED
-// - Charity filter option in activity dropdown
-//
-// V8.2: Individual Fallbacks for pStake/TVL + Firebase-first
 
 const ethers = window.ethers;
 
@@ -44,7 +38,7 @@ import {
     renderNoData, renderError
 } from '../utils.js';
 import { showToast, addNftToWallet } from '../ui-feedback.js';
-import { addresses, boosterTiers } from '../config.js';
+import { addresses, boosterTiers, getTierByBoost, getBurnRateFromBoost, getKeepRateFromBoost } from '../config.js';
 
 // --- LOCAL STATE ---
 const DashboardState = {
@@ -88,7 +82,7 @@ const ACTIVITY_ICONS = {
     FORCE_UNSTAKE: { icon: 'fa-bolt', color: '#ef4444', bg: 'rgba(239,68,68,0.15)', label: '⚡ Force Unstaked', emoji: '⚡' },
     CLAIM: { icon: 'fa-coins', color: '#fbbf24', bg: 'rgba(245,158,11,0.15)', label: '🪙 Rewards Claimed', emoji: '🪙' },
     
-    // NFT
+    // NFT - V6.8: Updated for bonding curve pools
     NFT_BUY: { icon: 'fa-bag-shopping', color: '#4ade80', bg: 'rgba(34,197,94,0.15)', label: '🛍️ Bought NFT', emoji: '🛍️' },
     NFT_SELL: { icon: 'fa-hand-holding-dollar', color: '#fb923c', bg: 'rgba(249,115,22,0.15)', label: '💰 Sold NFT', emoji: '💰' },
     NFT_MINT: { icon: 'fa-gem', color: '#fde047', bg: 'rgba(234,179,8,0.15)', label: '💎 Minted Booster', emoji: '💎' },
@@ -100,18 +94,32 @@ const ACTIVITY_ICONS = {
     RENTAL_WITHDRAW: { icon: 'fa-rotate-left', color: '#fb923c', bg: 'rgba(249,115,22,0.15)', label: '↩️ Withdrawn', emoji: '↩️' },
     RENTAL_PROMOTE: { icon: 'fa-bullhorn', color: '#fbbf24', bg: 'rgba(251,191,36,0.2)', label: '📢 Promoted NFT', emoji: '📢' },
     
-    // Fortune - Separado por modo
+    // Fortune V6.8 - Commit-Reveal System
+    FORTUNE_COMMIT: { icon: 'fa-lock', color: '#a855f7', bg: 'rgba(168,85,247,0.2)', label: '🔐 Game Committed', emoji: '🔐' },
+    FORTUNE_REVEAL: { icon: 'fa-dice', color: '#f97316', bg: 'rgba(249,115,22,0.2)', label: '🎲 Game Revealed', emoji: '🎲' },
     FORTUNE_BET: { icon: 'fa-paw', color: '#f97316', bg: 'rgba(249,115,22,0.2)', label: '🐯 Fortune Bet', emoji: '🐯' },
-    FORTUNE_COMBO: { icon: 'fa-rocket', color: '#a855f7', bg: 'rgba(168,85,247,0.2)', label: '🚀 Combo', emoji: '🚀' },
-    FORTUNE_JACKPOT: { icon: 'fa-crown', color: '#f59e0b', bg: 'rgba(245,158,11,0.2)', label: '👑 Jackpot', emoji: '👑' },
-    FORTUNE_ORACLE: { icon: 'fa-eye', color: '#e879f9', bg: 'rgba(232,121,249,0.25)', label: '🔮 Oracle Response', emoji: '🔮' },
+    FORTUNE_COMBO: { icon: 'fa-rocket', color: '#a855f7', bg: 'rgba(168,85,247,0.2)', label: '🚀 Combo Mode', emoji: '🚀' },
+    FORTUNE_JACKPOT: { icon: 'fa-crown', color: '#f59e0b', bg: 'rgba(245,158,11,0.2)', label: '👑 Jackpot Mode', emoji: '👑' },
     FORTUNE_WIN: { icon: 'fa-trophy', color: '#facc15', bg: 'rgba(234,179,8,0.25)', label: '🏆 Winner!', emoji: '🏆' },
     FORTUNE_LOSE: { icon: 'fa-dice', color: '#71717a', bg: 'rgba(39,39,42,0.5)', label: '🎲 No Luck', emoji: '🎲' },
     
-    // Notary - 📜 Document Theme
+    // Notary - V6.8: Now with ETH fee
     NOTARY: { icon: 'fa-stamp', color: '#818cf8', bg: 'rgba(99,102,241,0.15)', label: '📜 Notarized', emoji: '📜' },
     
-    // Charity Pool - V9.0
+    // Backchat V7 - Full Social Features (Non-Upgradeable)
+    BACKCHAT_POST: { icon: 'fa-comment', color: '#22d3ee', bg: 'rgba(6,182,212,0.15)', label: '💬 Posted', emoji: '💬' },
+    BACKCHAT_LIKE: { icon: 'fa-heart', color: '#ec4899', bg: 'rgba(236,72,153,0.15)', label: '❤️ Liked', emoji: '❤️' },
+    BACKCHAT_REPLY: { icon: 'fa-reply', color: '#60a5fa', bg: 'rgba(59,130,246,0.15)', label: '↩️ Replied', emoji: '↩️' },
+    BACKCHAT_SUPERLIKE: { icon: 'fa-star', color: '#fbbf24', bg: 'rgba(251,191,36,0.2)', label: '⭐ Super Liked', emoji: '⭐' },
+    BACKCHAT_REPOST: { icon: 'fa-retweet', color: '#4ade80', bg: 'rgba(34,197,94,0.15)', label: '🔄 Reposted', emoji: '🔄' },
+    BACKCHAT_FOLLOW: { icon: 'fa-user-plus', color: '#a78bfa', bg: 'rgba(167,139,250,0.15)', label: '👥 Followed', emoji: '👥' },
+    BACKCHAT_PROFILE: { icon: 'fa-user', color: '#60a5fa', bg: 'rgba(59,130,246,0.15)', label: '👤 Profile Created', emoji: '👤' },
+    BACKCHAT_BOOST: { icon: 'fa-rocket', color: '#f97316', bg: 'rgba(249,115,22,0.15)', label: '🚀 Profile Boosted', emoji: '🚀' },
+    BACKCHAT_BADGE: { icon: 'fa-circle-check', color: '#10b981', bg: 'rgba(16,185,129,0.15)', label: '✅ Badge Activated', emoji: '✅' },
+    BACKCHAT_TIP: { icon: 'fa-coins', color: '#fbbf24', bg: 'rgba(251,191,36,0.15)', label: '💰 Tipped BKC', emoji: '💰' },
+    BACKCHAT_WITHDRAW: { icon: 'fa-wallet', color: '#8b5cf6', bg: 'rgba(139,92,246,0.15)', label: '💸 ETH Withdrawn', emoji: '💸' },
+    
+    // Charity Pool
     CHARITY_DONATE: { icon: 'fa-heart', color: '#ec4899', bg: 'rgba(236,72,153,0.15)', label: '💝 Donated', emoji: '💝' },
     CHARITY_CREATE: { icon: 'fa-hand-holding-heart', color: '#10b981', bg: 'rgba(16,185,129,0.15)', label: '🌱 Campaign Created', emoji: '🌱' },
     CHARITY_CANCEL: { icon: 'fa-heart-crack', color: '#ef4444', bg: 'rgba(239,68,68,0.15)', label: '💔 Campaign Cancelled', emoji: '💔' },
@@ -225,7 +233,17 @@ function getActivityStyle(type, details = {}) {
         return ACTIVITY_ICONS.RENTAL_WITHDRAW;
     }
     
-    // Fortune - Detectar Combo vs Jackpot
+    // Fortune V6.8 - Commit-Reveal System
+    if (t === 'GAMECOMMITTED' || t.includes('COMMITTED') || t.includes('COMMIT')) {
+        const isCumulative = details?.isCumulative;
+        if (isCumulative === true) return ACTIVITY_ICONS.FORTUNE_COMBO;
+        if (isCumulative === false) return ACTIVITY_ICONS.FORTUNE_JACKPOT;
+        return ACTIVITY_ICONS.FORTUNE_COMMIT;
+    }
+    if (t === 'GAMEREVEALED' || t.includes('REVEALED') || t.includes('REVEAL')) {
+        const isWin = details?.isWin || details?.prizeWon > 0 || details?.matchCount > 0;
+        return isWin ? ACTIVITY_ICONS.FORTUNE_WIN : ACTIVITY_ICONS.FORTUNE_LOSE;
+    }
     if (t === 'GAMEREQUESTED' || t.includes('GAMEREQUESTED') || t.includes('GAME_REQUEST') || t.includes('REQUEST') || t.includes('GAMEPLAYED') || t.includes('FORTUNE') || t.includes('GAME')) {
         // Verificar se é Combo (isCumulative) ou Jackpot
         const isCumulative = details?.isCumulative;
@@ -240,11 +258,46 @@ function getActivityStyle(type, details = {}) {
         return ACTIVITY_ICONS.FORTUNE_BET; // Fallback
     }
     if (t === 'GAMEFULFILLED' || t.includes('FULFILLED') || t.includes('ORACLE')) {
-        return ACTIVITY_ICONS.FORTUNE_ORACLE;
+        return ACTIVITY_ICONS.FORTUNE_REVEAL;
     }
     if (t === 'GAMERESULT' || t.includes('RESULT')) {
         const isWin = details?.isWin || details?.prizeWon > 0;
         return isWin ? ACTIVITY_ICONS.FORTUNE_WIN : ACTIVITY_ICONS.FORTUNE_LOSE;
+    }
+    
+    // Backchat V7 - Full Social Features
+    if (t === 'POSTCREATED' || t === 'POST_CREATED' || (t.includes('POST') && t.includes('CREAT'))) {
+        return ACTIVITY_ICONS.BACKCHAT_POST;
+    }
+    if (t === 'SUPERLIKED' || t === 'SUPER_LIKED' || t.includes('SUPERLIKE')) {
+        return ACTIVITY_ICONS.BACKCHAT_SUPERLIKE;
+    }
+    if (t === 'LIKED' || t === 'POSTLIKED' || t === 'POST_LIKED' || (t.includes('LIKE') && !t.includes('SUPER'))) {
+        return ACTIVITY_ICONS.BACKCHAT_LIKE;
+    }
+    if (t === 'REPLYCREATED' || t === 'REPLY_CREATED' || t.includes('REPLY')) {
+        return ACTIVITY_ICONS.BACKCHAT_REPLY;
+    }
+    if (t === 'REPOSTCREATED' || t === 'REPOST_CREATED' || t.includes('REPOST')) {
+        return ACTIVITY_ICONS.BACKCHAT_REPOST;
+    }
+    if (t === 'FOLLOWED' || t === 'USER_FOLLOWED' || t.includes('FOLLOW')) {
+        return ACTIVITY_ICONS.BACKCHAT_FOLLOW;
+    }
+    if (t === 'PROFILECREATED' || t === 'PROFILE_CREATED' || t.includes('PROFILE') && t.includes('CREAT')) {
+        return ACTIVITY_ICONS.BACKCHAT_PROFILE;
+    }
+    if (t === 'PROFILEBOOSTED' || t === 'PROFILE_BOOSTED' || t === 'BOOSTED' || (t.includes('BOOST') && !t.includes('NFT'))) {
+        return ACTIVITY_ICONS.BACKCHAT_BOOST;
+    }
+    if (t === 'BADGEACTIVATED' || t === 'BADGE_ACTIVATED' || t.includes('BADGE')) {
+        return ACTIVITY_ICONS.BACKCHAT_BADGE;
+    }
+    if (t === 'TIPPROCESSED' || t === 'TIP_PROCESSED' || t === 'TIPPED' || t.includes('TIP')) {
+        return ACTIVITY_ICONS.BACKCHAT_TIP;
+    }
+    if (t === 'ETHWITHDRAWN' || t === 'ETH_WITHDRAWN' || t === 'BACKCHAT_WITHDRAW') {
+        return ACTIVITY_ICONS.BACKCHAT_WITHDRAW;
     }
     
     // Charity Pool - V9.0 (Updated to match Firebase types)
@@ -293,7 +346,8 @@ function animateClaimableRewards(targetNetValue) {
 
     if (displayedRewardValue < 0n) displayedRewardValue = 0n;
 
-    rewardsEl.innerHTML = `${formatBigNumber(displayedRewardValue).toFixed(4)} <span class="text-sm text-amber-500/80">BKC</span>`;
+    // Show in green - this is the NET amount they will receive
+    rewardsEl.innerHTML = `${formatBigNumber(displayedRewardValue).toFixed(4)} <span class="text-sm text-green-500/80">BKC</span>`;
 
     if (displayedRewardValue !== targetNetValue) {
         animationFrameId = requestAnimationFrame(() => animateClaimableRewards(targetNetValue));
@@ -491,21 +545,21 @@ function renderDashboardLayout() {
                             <div class="flex-1 space-y-4">
                                 <div>
                                     <div class="flex items-center gap-2 mb-1">
-                                        <p class="text-zinc-400 text-xs font-medium uppercase tracking-wider">Claimable Rewards</p>
-                                        <span class="text-zinc-600 text-[10px] cursor-help" title="Net value after fees">ⓘ</span>
+                                        <p class="text-zinc-400 text-xs font-medium uppercase tracking-wider">You Will Receive</p>
+                                        <span class="text-green-500 text-[10px]">💰</span>
                                     </div>
-                                    <div id="dash-user-rewards" class="text-3xl md:text-4xl font-bold text-white">--</div>
+                                    <div id="dash-user-rewards" class="text-3xl md:text-4xl font-bold text-green-400">--</div>
                                 </div>
 
-                                <div id="dash-user-gain-area" class="hidden p-2 bg-green-900/20 border border-green-500/20 rounded-lg inline-block">
-                                    <p class="text-[10px] text-green-400 font-bold flex items-center gap-1">
-                                        <i class="fa-solid fa-arrow-up"></i>
-                                        +<span id="dash-user-potential-gain">0</span> BKC with NFT
+                                <div id="dash-user-gain-area" class="hidden p-2 bg-gradient-to-r from-amber-900/20 to-green-900/20 border border-amber-500/30 rounded-lg inline-block">
+                                    <p class="text-[10px] text-amber-400 font-bold flex items-center gap-1">
+                                        <i class="fa-solid fa-rocket"></i>
+                                        Earn +<span id="dash-user-potential-gain">0</span> BKC more with NFT!
                                     </p>
                                 </div>
 
-                                <button id="dashboardClaimBtn" class="bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700 text-white font-bold py-2.5 px-6 rounded-lg shadow-lg transition-all text-sm w-full sm:w-auto disabled:opacity-40 disabled:cursor-not-allowed" disabled>
-                                    <i class="fa-solid fa-gift mr-2"></i> Claim
+                                <button id="dashboardClaimBtn" class="bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white font-bold py-2.5 px-6 rounded-lg shadow-lg transition-all text-sm w-full sm:w-auto disabled:opacity-40 disabled:cursor-not-allowed" disabled>
+                                    <i class="fa-solid fa-coins mr-2"></i> Claim Rewards
                                 </button>
                                 
                                 <div class="flex items-center gap-3 pt-3 border-t border-zinc-700/50">
@@ -1090,16 +1144,21 @@ function updateBoosterDisplay(data, claimDetails) {
     if (!container) return;
 
     const currentBoostBips = data?.highestBoost || 0;
+    const keepRate = getKeepRateFromBoost(currentBoostBips);
+    
+    // Calculate actual BKC values
+    const grossReward = claimDetails?.totalRewards || 0n;
+    const netReward = (grossReward * BigInt(keepRate)) / 100n;
+    const diamondReward = grossReward; // 100% with Diamond
+    const potentialBonus = diamondReward - netReward; // Extra BKC with Diamond
 
     if (currentBoostBips === 0) {
-        const grossReward = claimDetails?.totalRewards || 0n;
-        const potentialGain = (grossReward * 5000n) / 10000n;
-
-        if (potentialGain > 0n) {
+        // NO NFT - Show net reward and potential bonus
+        if (potentialBonus > 0n) {
             const gainArea = document.getElementById('dash-user-gain-area');
             if (gainArea) {
                 gainArea.classList.remove('hidden');
-                document.getElementById('dash-user-potential-gain').innerText = formatBigNumber(potentialGain).toFixed(2);
+                document.getElementById('dash-user-potential-gain').innerText = formatBigNumber(potentialBonus).toFixed(2);
             }
         }
 
@@ -1107,74 +1166,97 @@ function updateBoosterDisplay(data, claimDetails) {
             <div class="text-center space-y-3">
                 <div class="flex items-center justify-center gap-2">
                     <div class="w-10 h-10 bg-amber-500/20 rounded-full flex items-center justify-center">
-                        <i class="fa-solid fa-rocket text-amber-400"></i>
+                        <i class="fa-solid fa-coins text-amber-400"></i>
                     </div>
                     <div class="text-left">
-                        <p class="text-white text-sm font-bold">50% Efficiency</p>
-                        <p class="text-[10px] text-zinc-500">No NFT active</p>
+                        <p class="text-white text-sm font-bold">You receive ${keepRate}%</p>
+                        <p class="text-[10px] text-zinc-500">of your staking rewards</p>
                     </div>
                 </div>
                 
                 <div class="w-full bg-zinc-800 rounded-full h-2 overflow-hidden">
-                    <div class="bg-gradient-to-r from-red-500 to-amber-500 h-full rounded-full" style="width: 50%"></div>
+                    <div class="bg-gradient-to-r from-amber-500 to-green-500 h-full rounded-full" style="width: ${keepRate}%"></div>
                 </div>
                 
-                <button id="open-booster-info" class="text-xs text-amber-400 hover:text-white font-medium">
-                    <i class="fa-solid fa-circle-info mr-1"></i> How to boost?
+                ${grossReward > 0n ? `
+                <div class="bg-zinc-800/50 rounded-lg p-2 text-left space-y-1">
+                    <div class="flex justify-between text-[11px]">
+                        <span class="text-zinc-400">You'll receive:</span>
+                        <span class="text-green-400 font-bold">${formatBigNumber(netReward).toFixed(4)} BKC</span>
+                    </div>
+                    ${potentialBonus > 0n ? `
+                    <div class="flex justify-between text-[11px]">
+                        <span class="text-zinc-500">💎 With Diamond:</span>
+                        <span class="text-cyan-400 font-medium">+${formatBigNumber(potentialBonus).toFixed(4)} BKC</span>
+                    </div>
+                    ` : ''}
+                </div>
+                ` : ''}
+                
+                <p class="text-[10px] text-amber-400">
+                    <i class="fa-solid fa-arrow-up mr-1"></i>Get up to 2x more with an NFT!
+                </p>
+                
+                <button id="open-booster-info" class="text-xs text-zinc-400 hover:text-white font-medium">
+                    <i class="fa-solid fa-circle-info mr-1"></i> How does it work?
                 </button>
                 
                 <div class="flex gap-2 justify-center">
-                    <button class="go-to-store bg-amber-600 hover:bg-amber-500 text-white text-[10px] font-bold py-1.5 px-3 rounded">Buy NFT</button>
-                    <button class="go-to-rental bg-cyan-700 hover:bg-cyan-600 text-white text-[10px] font-bold py-1.5 px-3 rounded">Rent</button>
+                    <button class="go-to-store bg-amber-600 hover:bg-amber-500 text-white text-[10px] font-bold py-1.5 px-3 rounded">
+                        <i class="fa-solid fa-gem mr-1"></i>Buy NFT
+                    </button>
+                    <button class="go-to-rental bg-cyan-700 hover:bg-cyan-600 text-white text-[10px] font-bold py-1.5 px-3 rounded">
+                        <i class="fa-solid fa-clock mr-1"></i>Rent
+                    </button>
                 </div>
             </div>
         `;
         return;
     }
 
+    // HAS NFT - Show tier info and net reward
     const isRented = data.source === 'rented';
     const badgeColor = isRented ? 'bg-cyan-500/20 text-cyan-300' : 'bg-green-500/20 text-green-300';
     const badgeText = isRented ? 'Rented' : 'Owned';
 
-    // Debug: verificar dados recebidos
-    console.log('🎨 Booster Display Data:', { 
-        highestBoost: currentBoostBips, 
-        boostName: data.boostName, 
-        tokenId: data.tokenId,
-        source: data.source 
-    });
-
-    // Buscar tier info baseado no boostBips
-    const tierInfo = boosterTiers.find(t => t.boostBips === currentBoostBips);
-    
-    // Fallback: se não encontrar pelo boostBips exato, usar o nome que veio da API
-    let finalImageUrl = data.imageUrl;
-    if (!finalImageUrl || finalImageUrl.includes('placeholder')) {
-        if (tierInfo && tierInfo.realImg) finalImageUrl = tierInfo.realImg;
-    }
-
-    // Desconto real: boostBips / 100
-    // Diamond 7000 -> 70%, Iron 2000 -> 20%, etc.
-    const discountPercent = currentBoostBips / 100;
-    
-    // Nome do tier - priorizar tierInfo do config, depois o nome da API
+    const tierInfo = getTierByBoost(currentBoostBips);
     const tierName = tierInfo?.name || data.boostName?.replace(' Booster', '').replace('Booster', '').trim() || 'Booster';
+    const tierColor = tierInfo?.color || 'text-amber-400';
+    const tierEmoji = tierInfo?.emoji || '💎';
     
-    console.log('🎨 Calculated:', { discountPercent, tierName, tierInfo });
+    // Calculate bonus vs no NFT
+    const withoutNftReward = (grossReward * 50n) / 100n;
+    const bonusGained = netReward - withoutNftReward;
+    
+    console.log('🎨 V6.8 Booster:', { keepRate, netReward: formatBigNumber(netReward), tierName });
 
     container.innerHTML = `
-        <div class="flex items-center gap-3 bg-zinc-800/40 border border-green-500/20 rounded-lg p-3 nft-clickable-image cursor-pointer" data-address="${addresses.rewardBoosterNFT}" data-tokenid="${data.tokenId}">
+        <div class="flex items-center gap-3 bg-zinc-800/40 border ${tierInfo?.borderColor || 'border-green-500/20'} rounded-lg p-3 nft-clickable-image cursor-pointer" data-address="${addresses.rewardBoosterNFT}" data-tokenid="${data.tokenId}">
             <div class="relative w-14 h-14 flex-shrink-0">
-                <img src="${finalImageUrl}" class="w-full h-full object-cover rounded-lg" onerror="this.src='./assets/bkc_logo_3d.png'">
-                <div class="absolute -top-1 -left-1 bg-green-500 text-black font-black text-[9px] px-1.5 py-0.5 rounded">${discountPercent}%</div>
+                <div class="w-full h-full rounded-lg bg-gradient-to-br ${tierInfo?.bgGradient || 'from-amber-500/20 to-yellow-500/20'} flex items-center justify-center text-2xl">
+                    ${tierEmoji}
+                </div>
+                <div class="absolute -top-1 -left-1 bg-green-500 text-black font-black text-[9px] px-1.5 py-0.5 rounded">${keepRate}%</div>
             </div>
             <div class="flex-1 min-w-0">
                 <div class="flex items-center gap-2 mb-0.5">
                     <span class="text-[9px] font-bold ${badgeColor} px-1.5 py-0.5 rounded uppercase">${badgeText}</span>
                     <span class="text-[9px] text-zinc-600">#${data.tokenId}</span>
                 </div>
-                <h4 class="text-white font-bold text-xs truncate">${tierName} Booster</h4>
-                <p class="text-[10px] text-green-400"><i class="fa-solid fa-check-circle mr-1"></i>${discountPercent}% Fee Discount</p>
+                <h4 class="${tierColor} font-bold text-xs truncate">${tierName} Booster</h4>
+                <p class="text-[10px] text-green-400">
+                    <i class="fa-solid fa-check-circle mr-1"></i>You receive ${keepRate}% of rewards
+                </p>
+                ${grossReward > 0n ? `
+                <p class="text-[10px] text-zinc-400 mt-0.5">
+                    Net: <span class="text-green-400 font-bold">${formatBigNumber(netReward).toFixed(4)} BKC</span>
+                </p>
+                ${bonusGained > 0n ? `
+                <p class="text-[9px] text-emerald-400">
+                    <i class="fa-solid fa-arrow-up mr-1"></i>+${formatBigNumber(bonusGained).toFixed(2)} BKC vs no NFT
+                </p>
+                ` : ''}
+                ` : ''}
             </div>
         </div>
     `;

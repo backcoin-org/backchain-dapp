@@ -1,6 +1,74 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.28;
 
+/*
+ * ============================================================================
+ *
+ *                             BACKCHAIN PROTOCOL
+ *
+ *                    ██╗   ██╗███╗   ██╗███████╗████████╗ ██████╗ ██████╗
+ *                    ██║   ██║████╗  ██║██╔════╝╚══██╔══╝██╔═══██╗██╔══██╗
+ *                    ██║   ██║██╔██╗ ██║███████╗   ██║   ██║   ██║██████╔╝
+ *                    ██║   ██║██║╚██╗██║╚════██║   ██║   ██║   ██║██╔═══╝
+ *                    ╚██████╔╝██║ ╚████║███████║   ██║   ╚██████╔╝██║
+ *                     ╚═════╝ ╚═╝  ╚═══╝╚══════╝   ╚═╝    ╚═════╝ ╚═╝
+ *
+ *                    P E R M I S S I O N L E S S   .   I M M U T A B L E
+ *
+ * ============================================================================
+ *  Contract    : RewardBoosterNFT
+ *  Version     : 6.0.0
+ *  Network     : Arbitrum
+ *  License     : MIT
+ *  Solidity    : 0.8.28
+ * ============================================================================
+ *
+ *  100% DECENTRALIZED SYSTEM
+ *
+ *  This contract is part of a fully decentralized, permissionless,
+ *  and UNSTOPPABLE protocol.
+ *
+ *  - NO CENTRAL AUTHORITY    : Code is law
+ *  - NO PERMISSION NEEDED    : Anyone can become an Operator
+ *  - NO SINGLE POINT OF FAILURE : Runs on Arbitrum blockchain
+ *  - CENSORSHIP RESISTANT    : Cannot be stopped or controlled
+ *
+ * ============================================================================
+ *
+ *  PURPOSE
+ *
+ *  Utility NFTs that reduce the burn rate when claiming mining rewards
+ *  from the DelegationManager. Without an NFT, 50% of rewards are burned.
+ *  Each tier reduces this burn rate progressively.
+ *
+ *  TIER SYSTEM (4 Tiers):
+ *  ┌──────────┬────────────┬───────────┬─────────────┐
+ *  │ Tier     │ Boost Bips │ Burn Rate │ User Gets   │
+ *  ├──────────┼────────────┼───────────┼─────────────┤
+ *  │ No NFT   │ 0          │ 50%       │ 50%         │
+ *  │ Bronze   │ 1000       │ 40%       │ 60%         │
+ *  │ Silver   │ 2500       │ 25%       │ 75%         │
+ *  │ Gold     │ 4000       │ 10%       │ 90%         │
+ *  │ Diamond  │ 5000       │ 0%        │ 100%        │
+ *  └──────────┴────────────┴───────────┴─────────────┘
+ *
+ *  NOTE: NFTs do NOT affect service fees (Fortune, Charity, Notary, etc).
+ *        All users pay the same fees. NFTs only affect mining reward claims.
+ *
+ * ============================================================================
+ *
+ *  MINTING
+ *
+ *  - Owner can mint for giveaways/partnerships via ownerMint()
+ *  - Authorized minters (NFTLiquidityPools) via mintFromSale()
+ *
+ * ============================================================================
+ *  Security Contact : dev@backcoin.org
+ *  Website          : https://backcoin.org
+ *  Documentation    : https://github.com/backcoin-org/backchain-dapp/tree/main/docs
+ * ============================================================================
+ */
+
 import "@openzeppelin/contracts-upgradeable/token/ERC721/ERC721Upgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/token/ERC721/extensions/ERC721EnumerableUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
@@ -10,37 +78,6 @@ import "@openzeppelin/contracts-upgradeable/utils/StringsUpgradeable.sol";
 
 import "./IInterfaces.sol";
 
-/**
- * @title RewardBoosterNFT
- * @author Backchain Protocol
- * @notice Utility NFTs that provide fee discounts across the Backcoin ecosystem
- * @dev Each NFT has a "boost power" (in basis points) that determines the discount tier.
- *
- *      Tier System:
- *      ┌──────────┬────────────┬──────────────┐
- *      │ Tier     │ Boost Bips │ Discount     │
- *      ├──────────┼────────────┼──────────────┤
- *      │ Crystal  │ 1000       │ 10%          │
- *      │ Iron     │ 2000       │ 20%          │
- *      │ Bronze   │ 3000       │ 30%          │
- *      │ Silver   │ 4000       │ 40%          │
- *      │ Gold     │ 5000       │ 50%          │
- *      │ Platinum │ 6000       │ 60%          │
- *      │ Diamond  │ 7000       │ 70%          │
- *      └──────────┴────────────┴──────────────┘
- *
- *      The actual discount percentage is configured in EcosystemManager.
- *      This contract only stores the boost power for each token.
- *
- *      Minting:
- *      - Owner can mint for giveaways/partnerships via ownerMintBatch()
- *      - Authorized minters can mint via mintFromSale()
- *      - NFTLiquidityPools are authorized via Factory integration
- *
- * @custom:security-contact dev@backcoin.org
- * @custom:website https://backcoin.org
- * @custom:network Arbitrum
- */
 contract RewardBoosterNFT is
     Initializable,
     ERC721Upgradeable,
@@ -57,37 +94,47 @@ contract RewardBoosterNFT is
     /// @notice Maximum boost value (100% = 10000 bips)
     uint256 public constant MAX_BOOST_BIPS = 10_000;
 
+    /// @notice Valid boost values for each tier
+    uint256 public constant BOOST_BRONZE = 1000;   // 10% boost → 40% burn
+    uint256 public constant BOOST_SILVER = 2500;   // 25% boost → 25% burn
+    uint256 public constant BOOST_GOLD = 4000;     // 40% boost → 10% burn
+    uint256 public constant BOOST_DIAMOND = 5000;  // 50% boost → 0% burn
+
     // =========================================================================
     //                              STATE
     // =========================================================================
 
-    /// @notice Token ID => Boost power in basis points
+    /// @notice Boost power for each token (in basis points)
     mapping(uint256 => uint256) public boostBips;
 
-    /// @notice Token ID => Metadata file name (e.g., "diamond.json")
+    /// @notice Metadata file for each token
     mapping(uint256 => string) public tokenMetadataFile;
 
-    /// @notice Base URI for metadata (e.g., "https://api.backcoin.org/nft/")
+    /// @notice Base URI for token metadata
     string private _baseTokenURI;
 
     /// @notice Next token ID to mint
     uint256 private _nextTokenId;
 
-    /// @notice Authorized minters mapping (address => authorized)
+    /// @notice Addresses authorized to mint
     mapping(address => bool) public authorizedMinters;
 
-    /// @notice NFTLiquidityPoolFactory address for automatic pool authorization
+    /// @notice NFTLiquidityPoolFactory address
     address public poolFactory;
 
-    /// @notice Legacy: single sale contract (kept for backward compatibility)
-    /// @dev New deployments should use authorizedMinters mapping
+    /// @notice Sale contract address (legacy, can be used for future sales)
     address public saleContract;
+
+    // =========================================================================
+    //                           STORAGE GAP
+    // =========================================================================
+
+    uint256[43] private __gap;
 
     // =========================================================================
     //                              EVENTS
     // =========================================================================
 
-    /// @notice Emitted when a booster NFT is minted
     event BoosterMinted(
         uint256 indexed tokenId,
         address indexed recipient,
@@ -95,22 +142,18 @@ contract RewardBoosterNFT is
         string metadataFile
     );
 
-    /// @notice Emitted when base URI is updated
     event BaseURIUpdated(string previousURI, string newURI);
 
-    /// @notice Emitted when sale contract is updated (legacy)
     event SaleContractUpdated(
         address indexed previousContract,
         address indexed newContract
     );
 
-    /// @notice Emitted when a minter is authorized or revoked
     event MinterAuthorizationChanged(
         address indexed minter,
         bool authorized
     );
 
-    /// @notice Emitted when pool factory is updated
     event PoolFactoryUpdated(
         address indexed previousFactory,
         address indexed newFactory
@@ -135,10 +178,6 @@ contract RewardBoosterNFT is
         _disableInitializers();
     }
 
-    /**
-     * @notice Initializes the RewardBoosterNFT contract
-     * @param _owner Contract owner address
-     */
     function initialize(address _owner) external initializer {
         if (_owner == address(0)) revert ZeroAddress();
 
@@ -151,19 +190,12 @@ contract RewardBoosterNFT is
         _nextTokenId = 1;
     }
 
-    /**
-     * @dev Authorizes contract upgrades (owner only)
-     */
     function _authorizeUpgrade(address) internal override onlyOwner {}
 
     // =========================================================================
     //                         ADMIN FUNCTIONS
     // =========================================================================
 
-    /**
-     * @notice Sets the base URI for token metadata
-     * @param _newBaseURI New base URI (e.g., "https://api.backcoin.org/nft/")
-     */
     function setBaseURI(string calldata _newBaseURI) external onlyOwner {
         string memory previousURI = _baseTokenURI;
         _baseTokenURI = _newBaseURI;
@@ -171,11 +203,6 @@ contract RewardBoosterNFT is
         emit BaseURIUpdated(previousURI, _newBaseURI);
     }
 
-    /**
-     * @notice Sets the authorized sale contract (legacy - single contract)
-     * @dev Kept for backward compatibility. Use setMinterAuthorization for multiple minters.
-     * @param _saleContract Address of the sale contract
-     */
     function setSaleContract(address _saleContract) external onlyOwner {
         address previousContract = saleContract;
         saleContract = _saleContract;
@@ -183,44 +210,28 @@ contract RewardBoosterNFT is
         emit SaleContractUpdated(previousContract, _saleContract);
     }
 
-    /**
-     * @notice Sets authorization for a minter address
-     * @dev Use this for authorizing multiple pools or sale contracts
-     * @param _minter Address to authorize/revoke
-     * @param _authorized True to authorize, false to revoke
-     */
     function setMinterAuthorization(address _minter, bool _authorized) external onlyOwner {
         if (_minter == address(0)) revert ZeroAddress();
-        
+
         authorizedMinters[_minter] = _authorized;
-        
+
         emit MinterAuthorizationChanged(_minter, _authorized);
     }
 
-    /**
-     * @notice Batch authorize multiple minters
-     * @param _minters Array of addresses to authorize
-     * @param _authorized Authorization status for all
-     */
     function setMinterAuthorizationBatch(
         address[] calldata _minters,
         bool _authorized
     ) external onlyOwner {
-        for (uint256 i = 0; i < _minters.length;) {
+        for (uint256 i; i < _minters.length;) {
             if (_minters[i] == address(0)) revert ZeroAddress();
-            
+
             authorizedMinters[_minters[i]] = _authorized;
             emit MinterAuthorizationChanged(_minters[i], _authorized);
-            
+
             unchecked { ++i; }
         }
     }
 
-    /**
-     * @notice Sets the NFTLiquidityPoolFactory address
-     * @dev Pools created by this factory are automatically authorized
-     * @param _factory Address of the pool factory
-     */
     function setPoolFactory(address _factory) external onlyOwner {
         address previousFactory = poolFactory;
         poolFactory = _factory;
@@ -228,82 +239,60 @@ contract RewardBoosterNFT is
         emit PoolFactoryUpdated(previousFactory, _factory);
     }
 
-    /**
-     * @notice Mints multiple NFTs to a recipient (owner only)
-     * @dev Used for giveaways, partnerships, and treasury reserves
-     * @param _to Recipient address
-     * @param _quantity Number of NFTs to mint
-     * @param _boostBips Boost power for all minted NFTs
-     * @param _metadataFile Metadata file name for all minted NFTs
-     */
-    function ownerMintBatch(
-        address _to,
-        uint256 _quantity,
-        uint256 _boostBips,
-        string calldata _metadataFile
-    ) external onlyOwner {
-        if (_to == address(0)) revert ZeroAddress();
-        if (_quantity == 0) revert ZeroQuantity();
-        if (_boostBips == 0 || _boostBips > MAX_BOOST_BIPS) revert InvalidBoostValue();
+    // =========================================================================
+    //                         OWNER MINTING
+    // =========================================================================
 
-        for (uint256 i = 0; i < _quantity;) {
-            _mintBooster(_to, _boostBips, _metadataFile);
-            unchecked { ++i; }
-        }
-    }
-
-    /**
-     * @notice Mints a single NFT to a recipient (owner only)
-     * @param _to Recipient address
-     * @param _boostBips Boost power
-     * @param _metadataFile Metadata file name
-     * @return tokenId The minted token ID
-     */
     function ownerMint(
         address _to,
         uint256 _boostBips,
         string calldata _metadataFile
     ) external onlyOwner returns (uint256) {
         if (_to == address(0)) revert ZeroAddress();
-        if (_boostBips == 0 || _boostBips > MAX_BOOST_BIPS) revert InvalidBoostValue();
+        if (!_isValidBoostTier(_boostBips)) revert InvalidBoostValue();
 
         return _mintBooster(_to, _boostBips, _metadataFile);
+    }
+
+    function ownerMintBatch(
+        address[] calldata _recipients,
+        uint256[] calldata _boostBipsArray,
+        string[] calldata _metadataFiles
+    ) external onlyOwner returns (uint256[] memory tokenIds) {
+        uint256 length = _recipients.length;
+        if (length == 0) revert ZeroQuantity();
+        if (length != _boostBipsArray.length || length != _metadataFiles.length) {
+            revert ZeroQuantity();
+        }
+
+        tokenIds = new uint256[](length);
+
+        for (uint256 i; i < length;) {
+            if (_recipients[i] == address(0)) revert ZeroAddress();
+            if (!_isValidBoostTier(_boostBipsArray[i])) revert InvalidBoostValue();
+
+            tokenIds[i] = _mintBooster(_recipients[i], _boostBipsArray[i], _metadataFiles[i]);
+
+            unchecked { ++i; }
+        }
     }
 
     // =========================================================================
     //                         SALE INTEGRATION
     // =========================================================================
 
-    /**
-     * @notice Mints an NFT from an authorized minter
-     * @dev Called by NFTLiquidityPool during public sales.
-     *      Authorization checked in order:
-     *      1. Legacy saleContract
-     *      2. authorizedMinters mapping
-     *      3. Pool created by poolFactory (via INFTLiquidityPoolFactory.isPool)
-     * @param _to Recipient address
-     * @param _boostBips Boost power for the NFT
-     * @param _metadataFile Metadata file name
-     * @return tokenId The minted token ID
-     */
     function mintFromSale(
         address _to,
         uint256 _boostBips,
         string calldata _metadataFile
     ) external returns (uint256) {
-        // Check authorization
         if (!_isAuthorizedMinter(msg.sender)) revert UnauthorizedMinter();
         if (_to == address(0)) revert ZeroAddress();
-        if (_boostBips == 0 || _boostBips > MAX_BOOST_BIPS) revert InvalidBoostValue();
+        if (!_isValidBoostTier(_boostBips)) revert InvalidBoostValue();
 
         return _mintBooster(_to, _boostBips, _metadataFile);
     }
 
-    /**
-     * @notice Checks if an address is authorized to mint
-     * @param _minter Address to check
-     * @return True if authorized
-     */
     function isAuthorizedMinter(address _minter) external view returns (bool) {
         return _isAuthorizedMinter(_minter);
     }
@@ -312,11 +301,6 @@ contract RewardBoosterNFT is
     //                          VIEW FUNCTIONS
     // =========================================================================
 
-    /**
-     * @notice Returns the metadata URI for a token
-     * @param _tokenId Token ID to query
-     * @return Full metadata URI
-     */
     function tokenURI(uint256 _tokenId)
         public
         view
@@ -335,42 +319,24 @@ contract RewardBoosterNFT is
         return metadataFile;
     }
 
-    /**
-     * @notice Returns the boost power for a token
-     * @param _tokenId Token ID to query
-     * @return Boost power in basis points
-     */
     function getBoostBips(uint256 _tokenId) external view returns (uint256) {
         if (!_exists(_tokenId)) revert TokenNotFound();
         return boostBips[_tokenId];
     }
 
-    /**
-     * @notice Returns the total number of minted NFTs
-     * @return Total supply
-     */
     function totalMinted() external view returns (uint256) {
         return _nextTokenId - 1;
     }
 
-    /**
-     * @notice Returns the next token ID to be minted
-     * @return Next token ID
-     */
     function nextTokenId() external view returns (uint256) {
         return _nextTokenId;
     }
 
-    /**
-     * @notice Returns all tokens owned by an address
-     * @param _owner Owner address
-     * @return Array of token IDs
-     */
     function tokensOfOwner(address _owner) external view returns (uint256[] memory) {
         uint256 balance = balanceOf(_owner);
         uint256[] memory tokens = new uint256[](balance);
 
-        for (uint256 i = 0; i < balance;) {
+        for (uint256 i; i < balance;) {
             tokens[i] = tokenOfOwnerByIndex(_owner, i);
             unchecked { ++i; }
         }
@@ -378,19 +344,17 @@ contract RewardBoosterNFT is
         return tokens;
     }
 
-    /**
-     * @notice Returns the highest boost NFT owned by an address
-     * @param _owner Owner address
-     * @return tokenId Token ID with highest boost (0 if none)
-     * @return boost Boost value in bips (0 if none)
-     */
+    /// @notice Returns the highest boost NFT owned by an address
+    /// @param _owner Address to check
+    /// @return tokenId The token ID with highest boost (0 if none)
+    /// @return boost The boost value in bips (0 if no NFT)
     function getHighestBoostOf(address _owner) external view returns (
         uint256 tokenId,
         uint256 boost
     ) {
         uint256 balance = balanceOf(_owner);
 
-        for (uint256 i = 0; i < balance;) {
+        for (uint256 i; i < balance;) {
             uint256 id = tokenOfOwnerByIndex(_owner, i);
             uint256 tokenBoost = boostBips[id];
 
@@ -403,52 +367,55 @@ contract RewardBoosterNFT is
         }
     }
 
-    /**
-     * @notice Checks if an address owns any booster NFT
-     * @param _owner Address to check
-     * @return True if owner has at least one NFT
-     */
+    /// @notice Check if address owns any booster NFT
     function hasBooster(address _owner) external view returns (bool) {
         return balanceOf(_owner) > 0;
+    }
+
+    /// @notice Get the tier name for a given boost value
+    function getTierName(uint256 _boostBips) external pure returns (string memory) {
+        if (_boostBips >= BOOST_DIAMOND) return "Diamond";
+        if (_boostBips >= BOOST_GOLD) return "Gold";
+        if (_boostBips >= BOOST_SILVER) return "Silver";
+        if (_boostBips >= BOOST_BRONZE) return "Bronze";
+        return "None";
+    }
+
+    /// @notice Get all valid tier boost values
+    function getValidTiers() external pure returns (uint256[4] memory) {
+        return [BOOST_BRONZE, BOOST_SILVER, BOOST_GOLD, BOOST_DIAMOND];
     }
 
     // =========================================================================
     //                         INTERNAL FUNCTIONS
     // =========================================================================
 
-    /**
-     * @dev Checks if an address is authorized to mint
-     *      Authorization hierarchy:
-     *      1. Legacy saleContract (backward compatibility)
-     *      2. authorizedMinters mapping
-     *      3. Valid pool from poolFactory
-     */
     function _isAuthorizedMinter(address _minter) internal view returns (bool) {
-        // Check legacy single sale contract
         if (_minter == saleContract && saleContract != address(0)) {
             return true;
         }
-        
-        // Check authorized minters mapping
+
         if (authorizedMinters[_minter]) {
             return true;
         }
-        
-        // Check if minter is a valid pool from factory
+
         if (poolFactory != address(0)) {
             try INFTLiquidityPoolFactory(poolFactory).isPool(_minter) returns (bool isPool) {
                 if (isPool) return true;
-            } catch {
-                // Factory call failed, continue to return false
-            }
+            } catch {}
         }
-        
+
         return false;
     }
 
-    /**
-     * @dev Internal function to mint a booster NFT
-     */
+    /// @notice Validates that boost value is one of the valid tiers
+    function _isValidBoostTier(uint256 _boostBips) internal pure returns (bool) {
+        return _boostBips == BOOST_BRONZE ||
+               _boostBips == BOOST_SILVER ||
+               _boostBips == BOOST_GOLD ||
+               _boostBips == BOOST_DIAMOND;
+    }
+
     function _mintBooster(
         address _to,
         uint256 _boostBips,
