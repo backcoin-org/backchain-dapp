@@ -1,12 +1,23 @@
-# Backcoin Protocol
+# Backchain Protocol
+
+```
+╔═══════════════════════════════════════════════════════════════════════════════════╗
+║                                                                                   ║
+║   "I may not agree with what you say, but I will defend to the death            ║
+║    your right to say it."                                                         ║
+║                                                                     — Voltaire    ║
+║                                                                                   ║
+╚═══════════════════════════════════════════════════════════════════════════════════╝
+```
 
 | | |
 |---|---|
-| **Project** | Backcoin Protocol |
-| **Description** | Modular DeFi Infrastructure for Real-World Utility |
+| **Project** | Backchain Protocol |
+| **Philosophy** | Unstoppable & Permissionless DeFi Infrastructure |
 | **Network** | Arbitrum One |
 | **Status** | Testnet Live (Arbitrum Sepolia) |
 | **Website** | [backcoin.org](https://backcoin.org) |
+| **Documentation** | [github.com/backcoin-org/backchain-dapp/docs](https://github.com/backcoin-org/backchain-dapp/tree/main/docs) |
 | **X (Twitter)** | [x.com/backcoin](https://x.com/backcoin) |
 | **GitHub** | [github.com/backcoin-org/backchain-dapp](https://github.com/backcoin-org/backchain-dapp) |
 | **YouTube** | [youtube.com/@Backcoin](https://www.youtube.com/@Backcoin) |
@@ -14,15 +25,52 @@
 
 ---
 
-**Document:** Quick Start Guide — Get Started in 5 Minutes  
-**Version:** 1.0  
-**Last Updated:** December 2025  
+**Document:** Quick Start Guide — Join the Unstoppable Ecosystem  
+**Version:** 2.0.0  
+**Last Updated:** February 2026  
+**Full Documentation:** [https://github.com/backcoin-org/backchain-dapp/tree/main/docs](https://github.com/backcoin-org/backchain-dapp/tree/main/docs)
 
 ---
 
 # Quick Start Guide
 
-Get started with Backcoin Protocol on Arbitrum Sepolia testnet in just 5 minutes.
+## Start Using the Unstoppable Protocol in 5 Minutes
+
+```
+╔═══════════════════════════════════════════════════════════════════════════════════╗
+║                                                                                   ║
+║                    NO PERMISSION NEEDED. NO APPROVAL REQUIRED.                    ║
+║                                                                                   ║
+║   Just as Voltaire believed everyone has the right to speak,                     ║
+║   we believe everyone has the right to participate in DeFi.                      ║
+║                                                                                   ║
+║   No KYC. No registration. No waiting.                                           ║
+║   Just connect your wallet and start.                                            ║
+║                                                                                   ║
+╚═══════════════════════════════════════════════════════════════════════════════════╝
+```
+
+---
+
+## 🌍 Two Ways to Participate
+
+```
+╔═══════════════════════════════════════════════════════════════════════════════════╗
+║                                                                                   ║
+║   PATH 1: USE THE PROTOCOL                PATH 2: BUILD & EARN                   ║
+║   ═══════════════════════                 ═══════════════════                    ║
+║                                                                                   ║
+║   • Stake BKC and earn rewards            • Build your own interface             ║
+║   • Play Fortune Pool                     • Pass your address as operator        ║
+║   • Buy/sell NFTs                         • Earn from EVERY transaction          ║
+║   • Notarize documents                    • No registration needed               ║
+║   • Use Backchat social                   • No approval required                 ║
+║   • Donate to charity                     • Just build and earn                  ║
+║                                                                                   ║
+║   Both paths are PERMISSIONLESS. Choose one or both!                             ║
+║                                                                                   ║
+╚═══════════════════════════════════════════════════════════════════════════════════╝
+```
 
 ---
 
@@ -38,7 +86,7 @@ Get started with Backcoin Protocol on Arbitrum Sepolia testnet in just 5 minutes
 
 ## Step 1: Add Arbitrum Sepolia Network
 
-### MetaMask Settings
+### Network Settings
 
 | Field | Value |
 |-------|-------|
@@ -50,15 +98,13 @@ Get started with Backcoin Protocol on Arbitrum Sepolia testnet in just 5 minutes
 
 ### Quick Add
 
-Or visit [chainlist.org](https://chainlist.org) and search for "Arbitrum Sepolia".
+Visit [chainlist.org](https://chainlist.org) and search for "Arbitrum Sepolia" → Click "Add to MetaMask"
 
 ---
 
 ## Step 2: Get Testnet ETH
 
 You need a small amount of ETH for gas fees.
-
-### Faucets
 
 | Faucet | Link |
 |--------|------|
@@ -72,13 +118,13 @@ You need a small amount of ETH for gas fees.
 
 ### Use Our Faucet
 
-**Faucet Address:** `0x9dbf3591239Dd2D2Cc2e93b6E5086E8651e488bb`
+**Faucet Address:** `0x954acE43508AC8Ee1C5509F0ee1Fe65b81C3fc90`
 
-1. Visit the faucet contract on [Arbiscan](https://sepolia.arbiscan.io/address/0x9dbf3591239Dd2D2Cc2e93b6E5086E8651e488bb)
+1. Visit the faucet on [Arbiscan](https://sepolia.arbiscan.io/address/0x954acE43508AC8Ee1C5509F0ee1Fe65b81C3fc90#writeContract)
 2. Connect your wallet
 3. Click "Write Contract"
 4. Call the `claim()` function
-5. Receive test BKC tokens
+5. Receive test BKC tokens!
 
 **Limit:** One claim per address
 
@@ -90,7 +136,7 @@ You need a small amount of ETH for gas fees.
 
 | Field | Value |
 |-------|-------|
-| **Contract** | `0x0Df89f8d4f2d4240054A83638448495e1F4d3A6f` |
+| **Contract** | `0x38DD1898b7B11f07C03e7dBd957fCC8021fB1396` |
 | **Symbol** | BKC |
 | **Decimals** | 18 |
 
@@ -98,182 +144,322 @@ You need a small amount of ETH for gas fees.
 
 1. Open MetaMask
 2. Click "Import tokens"
-3. Paste contract address
+3. Paste contract address: `0x38DD1898b7B11f07C03e7dBd957fCC8021fB1396`
 4. Click "Add Custom Token"
 
 ---
 
-## Step 5: Start Using Backcoin
+## Step 5: Start Using Backchain!
 
 Now you're ready! Here's what you can do:
 
-### 🎮 Play Fortune Pool
+### 🎰 Play Fortune Pool
 
-Test your luck with provably fair games:
+Provably fair games with commit-reveal pattern:
 
-1. Go to Fortune Pool
-2. Choose bet amount
-3. Select game mode
-4. Play and win!
-
-**Contract:** `0x54Bf4B4D239bce58CdaDe8b3645B40f98FdEe631`
+```
+╔═══════════════════════════════════════════════════════════════════════════════════╗
+║   FORTUNE POOL (V6)                                                              ║
+║   ─────────────────                                                              ║
+║   Contract: 0x5B3c7A322eB49805c594Fd948c137b62a09BBfFF                           ║
+║                                                                                   ║
+║   1. Commit your bet → Wait 5 blocks → Reveal and win!                           ║
+║   2. Combo mode: Match 3 tiers for up to 57x                                     ║
+║   3. Jackpot mode: 1 in 100 for 50x                                              ║
+║                                                                                   ║
+║   ⚡ Operators earn from every game played through their interface               ║
+╚═══════════════════════════════════════════════════════════════════════════════════╝
+```
 
 ### 💰 Stake BKC
 
-Lock tokens to earn rewards:
+Lock tokens to earn protocol rewards:
 
-1. Go to Staking
-2. Enter amount
-3. Choose lock period (7-365 days)
-4. Confirm stake
+```
+╔═══════════════════════════════════════════════════════════════════════════════════╗
+║   STAKING (DelegationManager V6)                                                 ║
+║   ──────────────────────────────                                                 ║
+║   Contract: 0x41B1B7940E06318e9b161fc64524FaE7261e8739                           ║
+║                                                                                   ║
+║   1. Choose lock period (7-365 days)                                             ║
+║   2. Longer locks = higher rewards                                               ║
+║   3. Hold NFT = reduced burn on unstake                                          ║
+║                                                                                   ║
+║   ⚡ Operators earn from stake/unstake/claim fees                                ║
+╚═══════════════════════════════════════════════════════════════════════════════════╝
+```
 
-**Contract:** `0xEfDa12B1D1e91FDe57eBCDB7A520cfd1D9aE4701`
+### 📜 Notarize Documents
 
-### 📄 Notarize Documents
+Certify documents on blockchain forever:
 
-Certify documents on blockchain:
+```
+╔═══════════════════════════════════════════════════════════════════════════════════╗
+║   DECENTRALIZED NOTARY (V6)                                                      ║
+║   ─────────────────────────                                                      ║
+║   Contract: 0x2E56650a4f05D0f98787694c6C61603616716b48                           ║
+║                                                                                   ║
+║   1. Upload document (stays local - never uploaded!)                             ║
+║   2. Pay BKC + ETH fee                                                           ║
+║   3. Receive NFT certificate                                                     ║
+║   4. Verification is FREE forever                                                ║
+║                                                                                   ║
+║   ⚡ Operators earn from every notarization                                      ║
+╚═══════════════════════════════════════════════════════════════════════════════════╝
+```
 
-1. Go to Notary
-2. Upload document (stays local)
-3. Pay fee
-4. Receive NFT certificate
+### 💎 Buy Reward Booster NFT
 
-**Contract:** `0x5C9C0a696a555a2a594130014041dc4320Ba7Eb9`
+Reduce burn penalties when unstaking:
 
-### 🛒 Buy Reward Booster NFT
+```
+╔═══════════════════════════════════════════════════════════════════════════════════╗
+║   NFT LIQUIDITY POOLS (V6)                                                       ║
+║   ────────────────────────                                                       ║
+║   Factory: 0x2f63000539AAE2019Cc3d6E357295d903c1fF120                            ║
+║                                                                                   ║
+║   Tier      │ Burn Reduction │ Pool Address                                      ║
+║   ──────────┼────────────────┼─────────────────────────────────────────────      ║
+║   Diamond   │ 0% (no burn)   │ 0x5C5590458689a11731c8bAD8BDf5D8f1D7Ffe020       ║
+║   Gold      │ 25% burn       │ 0x9390e12c910C4d2E0796FA754e5C450969F09886       ║
+║   Silver    │ 35% burn       │ 0x016549ee056442eC30a916335f66ad5183E3fF5b       ║
+║   Bronze    │ 50% burn       │ 0x74eB5CF86B43517cd27f48A06abb8A521aDA63b8       ║
+║                                                                                   ║
+║   ⚡ Operators earn from every buy/sell                                          ║
+╚═══════════════════════════════════════════════════════════════════════════════════╝
+```
 
-Get fee discounts across all services:
+### 💬 Use Backchat
 
-1. Go to NFT Pools
-2. Choose tier
-3. Check price
-4. Buy NFT
+Decentralized, censorship-resistant social network:
 
-**Factory:** `0x0bcaB4cA1Fac9f6eFE3Db1849E8E03e88B3D9423`
+```
+╔═══════════════════════════════════════════════════════════════════════════════════╗
+║   BACKCHAT (V7)                                                                  ║
+║   ─────────────                                                                  ║
+║   Contract: 0x0D8c2862df03F5be4b569C5ffF4D3aaAEE44BDDb                           ║
+║                                                                                   ║
+║   • Post, reply, like, follow - all on-chain                                     ║
+║   • Tip creators in BKC                                                          ║
+║   • Get Trust Badges                                                             ║
+║   • Reserve usernames (shorter = more expensive)                                 ║
+║                                                                                   ║
+║   ⚡ Operators earn from all social interactions                                 ║
+╚═══════════════════════════════════════════════════════════════════════════════════╝
+```
+
+### 💚 Donate to Charity
+
+Transparent, on-chain crowdfunding:
+
+```
+╔═══════════════════════════════════════════════════════════════════════════════════╗
+║   CHARITY POOL (V6)                                                              ║
+║   ─────────────────                                                              ║
+║   Contract: 0x259271F3558bCa03Ddc8D7494CCF833751483Fb1                           ║
+║                                                                                   ║
+║   • Create campaigns for any cause                                               ║
+║   • 100% of donations go to beneficiary (no penalties!)                          ║
+║   • Full transparency on-chain                                                   ║
+║                                                                                   ║
+║   ⚡ Operators earn from donation fees                                           ║
+╚═══════════════════════════════════════════════════════════════════════════════════╝
+```
 
 ---
 
-## Earning Strategies
+## 🌍 Become an Operator (Build & Earn)
 
-### Beginner
+```
+╔═══════════════════════════════════════════════════════════════════════════════════╗
+║                                                                                   ║
+║                    BUILD INTERFACES. EARN COMMISSIONS.                            ║
+║                                                                                   ║
+║   EVERY contract in Backchain supports the operator system.                      ║
+║                                                                                   ║
+║   How it works:                                                                   ║
+║   1. Build your own frontend, app, bot, or tool                                  ║
+║   2. When calling contract functions, pass YOUR address as "operator"            ║
+║   3. Earn BKC + ETH from ALL transactions through your interface                 ║
+║                                                                                   ║
+║   Example (Fortune Pool):                                                         ║
+║   ┌─────────────────────────────────────────────────────────────────────────┐    ║
+║   │  // Your address earns commission from this game!                       │    ║
+║   │  fortunePool.commitPlay(wagerAmount, guesses, YOUR_ADDRESS);            │    ║
+║   └─────────────────────────────────────────────────────────────────────────┘    ║
+║                                                                                   ║
+║   No registration. No approval. No KYC. Just build and earn.                     ║
+║                                                                                   ║
+╚═══════════════════════════════════════════════════════════════════════════════════╝
+```
+
+---
+
+## 📊 Strategies
+
+### Beginner Path
 
 | Strategy | Description | Risk |
 |----------|-------------|------|
 | Get faucet tokens | Free starting capital | None |
 | Stake for 30 days | Learn the system | Low |
-| Buy Crystal NFT | 10% discount, cheap | Low |
+| Try Backchat | Post and interact | Low |
 
-### Intermediate
+### Intermediate Path
 
 | Strategy | Description | Risk |
 |----------|-------------|------|
-| Stake for 180 days | Better pStake multiplier | Medium |
-| Buy Gold NFT | 50% fee discount | Medium |
+| Stake for 180 days | Better rewards | Medium |
+| Buy Gold NFT | 25% burn reduction | Medium |
 | Play Fortune Pool | Entertainment + potential wins | Medium |
+| Create charity campaign | Help others | None |
 
-### Advanced
+### Builder Path (Operators)
 
-| Strategy | Description | Risk |
-|----------|-------------|------|
-| Stake 365 days | Maximum rewards | Higher (locked) |
-| Buy Diamond NFT | 70% discount | Higher (price) |
-| Rent out NFTs | Passive income | Low |
-| Notarize documents | Real-world utility | None |
+| Strategy | Description | Earnings |
+|----------|-------------|----------|
+| Build Fortune Pool frontend | Games interface | % of all bets |
+| Build Notary service | Legal tech tool | % of all notarizations |
+| Build Backchat client | Social app | % of all tips/actions |
+| Build NFT marketplace | Trading platform | % of all trades |
 
 ---
 
-## Quick Reference
+## 📋 Quick Reference - All Contracts
 
 ### Core Contracts
 
+| Contract | Address | Operator |
+|----------|---------|----------|
+| **BKC Token** | `0x38DD1898b7B11f07C03e7dBd957fCC8021fB1396` | — |
+| **Faucet** | `0x954acE43508AC8Ee1C5509F0ee1Fe65b81C3fc90` | — |
+| **EcosystemManager** | `0xF5741c125Db4034640CeEA8f3DDb0C4a8d96E407` | — |
+| **MiningManager** | `0x7755982411244791d2DA96cBa04d08df72Be43C1` | ⚡ Yes |
+| **Treasury** | `0xc93030333E3a235c2605BcB7C7330650B600B6D0` | — |
+
+### DeFi Services (All Support Operators ⚡)
+
 | Contract | Address |
 |----------|---------|
-| BKC Token | `0x0Df89f8d4f2d4240054A83638448495e1F4d3A6f` |
-| Faucet | `0x9dbf3591239Dd2D2Cc2e93b6E5086E8651e488bb` |
-| Staking | `0xEfDa12B1D1e91FDe57eBCDB7A520cfd1D9aE4701` |
-| Fortune Pool | `0x54Bf4B4D239bce58CdaDe8b3645B40f98FdEe631` |
-| Notary | `0x5C9C0a696a555a2a594130014041dc4320Ba7Eb9` |
-| NFT | `0x748b4770D6685629Ed9faf48CFa81e3E4641A341` |
+| **DelegationManager** | `0x41B1B7940E06318e9b161fc64524FaE7261e8739` |
+| **FortunePool** | `0x5B3c7A322eB49805c594Fd948c137b62a09BBfFF` |
+| **CharityPool** | `0x259271F3558bCa03Ddc8D7494CCF833751483Fb1` |
 
-### NFT Pools
+### Utility Services (All Support Operators ⚡)
 
-| Tier | Discount | Pool |
-|------|----------|------|
-| Diamond | 70% | `0xD4393350bd00ef6D4509D43c6dB0E7010bB5c3d9` |
-| Platinum | 60% | `0x76Edd1f3c42f607a92b9354D14F5F25278403808` |
-| Gold | 50% | `0xE9354654c97Fa5CDe3931c53a72aBEdC688ab01B` |
-| Silver | 40% | `0x57Bc7500213DAAfb0176E04B4Cce19cE19E145d4` |
-| Bronze | 30% | `0x9eFB21b279873D04e337c371c90fF00130aB8581` |
-| Iron | 20% | `0x99259cF2cE5158fcC995aCf6282574f6563a048e` |
-| Crystal | 10% | `0xe7Ae6A7B48460b3c581158c80F67E566CC800271` |
+| Contract | Address |
+|----------|---------|
+| **DecentralizedNotary** | `0x2E56650a4f05D0f98787694c6C61603616716b48` |
+| **RentalManager** | `0x593A842d214516F216EB6E6E9A97cC84F42f6821` |
+| **Backchat** | `0x0D8c2862df03F5be4b569C5ffF4D3aaAEE44BDDb` |
+
+### NFT System
+
+| Contract | Address |
+|----------|---------|
+| **RewardBoosterNFT** | `0xf2EA307686267dC674859da28C58CBb7a5866BCf` |
+| **NFT Pool Factory** | `0x2f63000539AAE2019Cc3d6E357295d903c1fF120` |
+
+### NFT Pools (All Support Operators ⚡)
+
+| Tier | Burn Reduction | Pool Address |
+|------|----------------|--------------|
+| Diamond | 0% (no burn) | `0x5C5590458689a11731c8bAD8BDf5D8f1D7Ffe020` |
+| Gold | 25% | `0x9390e12c910C4d2E0796FA754e5C450969F09886` |
+| Silver | 35% | `0x016549ee056442eC30a916335f66ad5183E3fF5b` |
+| Bronze | 50% | `0x74eB5CF86B43517cd27f48A06abb8A521aDA63b8` |
+
+### Randomness (Free!)
+
+| Contract | Address |
+|----------|---------|
+| **Backcoin Oracle** | `0x16346f5a45f9615f1c894414989f0891c54ef07b` |
 
 ---
 
-## Checklist
+## ✅ Checklist
 
 Use this checklist to make sure you're set up:
 
 - [ ] Added Arbitrum Sepolia network to wallet
 - [ ] Got testnet ETH from faucet
-- [ ] Claimed BKC from protocol faucet
-- [ ] Added BKC token to wallet
+- [ ] Claimed BKC from protocol faucet (`0x954acE43508AC8Ee1C5509F0ee1Fe65b81C3fc90`)
+- [ ] Added BKC token to wallet (`0x38DD1898b7B11f07C03e7dBd957fCC8021fB1396`)
 - [ ] Made first transaction (stake, play, or buy NFT)
+- [ ] (Optional) Built an interface and earned as operator
 
 ---
 
-## Troubleshooting
+## 🔧 Troubleshooting
 
 ### "Insufficient funds for gas"
-
 → Get more ETH from Arbitrum Sepolia faucet
 
 ### "Transaction failed"
-
 → Check you have enough BKC for the action
+→ V6 contracts also need small ETH fee
 → Try increasing gas limit
 
 ### "Token not showing in wallet"
-
-→ Manually add token using contract address
+→ Manually add token using: `0x38DD1898b7B11f07C03e7dBd957fCC8021fB1396`
 
 ### "Wrong network"
-
 → Switch to Arbitrum Sepolia (Chain ID: 421614)
+
+### "Commit not ready to reveal"
+→ Fortune Pool V6 requires waiting 5 blocks after commit
 
 ---
 
-## Need Help?
+## 📞 Need Help?
 
 | Resource | Link |
 |----------|------|
-| Documentation | [Full docs](../README.md) |
-| All Contracts | [Contract addresses](../developers/CONTRACTS.md) |
+| Full Documentation | [github.com/backcoin-org/backchain-dapp/docs](https://github.com/backcoin-org/backchain-dapp/tree/main/docs) |
+| All Contracts | [CONTRACTS.md](./CONTRACTS.md) |
 | Email | dev@backcoin.org |
 | X (Twitter) | [x.com/backcoin](https://x.com/backcoin) |
 | GitHub | [github.com/backcoin-org/backchain-dapp](https://github.com/backcoin-org/backchain-dapp) |
 
 ---
 
-## What's Next?
+## 🚀 What's Next?
 
 After getting comfortable with the testnet:
 
 1. **Explore all services** — Try each feature
 2. **Read the docs** — Understand the mechanics
-3. **Join community** — Follow us on X
-4. **Wait for mainnet** — Coming soon!
+3. **Build as operator** — Create interfaces and earn
+4. **Join community** — Follow us on X
+5. **Wait for mainnet** — Coming soon!
 
 ---
 
-## Contact
+## 📄 License
 
-| Channel | Link |
-|---------|------|
-| Email | dev@backcoin.org |
-| X (Twitter) | [x.com/backcoin](https://x.com/backcoin) |
-| GitHub | [github.com/backcoin-org/backchain-dapp](https://github.com/backcoin-org/backchain-dapp) |
-| YouTube | [youtube.com/@Backcoin](https://www.youtube.com/@Backcoin) |
+MIT License — The code is free, just like the protocol.
 
 ---
 
-*This document is part of Backcoin Protocol's public documentation. Welcome to Backcoin!*
+```
+╔═══════════════════════════════════════════════════════════════════════════════════╗
+║                                                                                   ║
+║                        WELCOME TO BACKCHAIN PROTOCOL                              ║
+║                                                                                   ║
+║   You've just joined an ecosystem built on freedom.                              ║
+║                                                                                   ║
+║   Freedom to use without permission.                                              ║
+║   Freedom to build without approval.                                              ║
+║   Freedom to earn without gatekeepers.                                            ║
+║                                                                                   ║
+║   No one can stop you. No one can censor you. No one can exclude you.            ║
+║                                                                                   ║
+║                          THE PROTOCOL IS UNSTOPPABLE.                             ║
+║                         AND NOW, SO ARE YOU.                                      ║
+║                                                                                   ║
+╚═══════════════════════════════════════════════════════════════════════════════════╝
+```
+
+---
+
+*This document is part of Backchain Protocol's public documentation. Welcome to the unstoppable ecosystem!*

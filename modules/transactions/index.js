@@ -1,5 +1,5 @@
 // modules/js/transactions/index.js
-// ✅ PRODUCTION V1.2 - Added BackchatTx
+// ✅ PRODUCTION V2.0 - Added Operator Support
 // 
 // This file re-exports all transaction modules for simplified imports.
 //
@@ -11,8 +11,12 @@
 //
 // Import everything:
 //   import * as Transactions from './transactions/index.js';
-//   Transactions.CharityTx.donate({ ... });
-//   Transactions.BackchatTx.createPost({ ... });
+//   Transactions.CharityTx.donate({ campaignId, amount, operator: '0x...' });
+//
+// OPERATOR USAGE:
+//   - Don't pass operator → Uses default from localStorage
+//   - Pass operator: '0x...' → Uses that operator (for third-party frontends)
+//   - Pass operator: null → No operator (ZeroAddress)
 // ============================================================================
 
 // Charity Pool
@@ -22,9 +26,9 @@ export {
     donate,
     cancelCampaign,
     withdraw,
+    boostCampaign,
     getCampaign,
     getCampaignCount,
-    getUserCampaigns,
     getWithdrawalFee
 } from './charity-tx.js';
 
@@ -60,6 +64,8 @@ export {
 // Fortune Pool
 export { 
     FortuneTx,
+    commitPlay,
+    revealPlay,
     playGame,
     getActiveTiers,
     getTierForWager,
@@ -76,6 +82,7 @@ export {
     rentNft,
     withdrawNft,
     updateListing,
+    spotlightListing,
     endRental,
     getListing,
     getRental,
@@ -99,67 +106,14 @@ export {
     calculateFileHash
 } from './notary-tx.js';
 
-// Faucet (Testnet)
+// Faucet (Testnet) - No operator needed
 export { 
     FaucetTx,
     executeFaucetClaim
 } from './faucet-tx.js';
 
-// Backchat (Social Network) - V1.2
-export { 
-    BackchatTx,
-    // Posts
-    createPost,
-    editPost,
-    deletePost,
-    // Comments
-    createComment,
-    replyToComment,
-    deleteComment,
-    // Moderation
-    voteOnPost,
-    voteOnComment,
-    // Community Notes
-    proposeNote,
-    voteOnNote,
-    // Tips
-    sendTip,
-    claimRewards as claimBackchatRewards,
-    // Boost
-    boostPost,
-    // Private Messages
-    setPublicKey,
-    sendPrivateMessage,
-    replyToMessage,
-    // Read functions
-    getPost,
-    getPostScore,
-    getComment,
-    getNote,
-    getNoteScore,
-    getCreatorStats,
-    getTotals,
-    getFinancialStats,
-    getPlatformFeeAmount,
-    getMinTipAmount,
-    getUserPosts,
-    getPostComments,
-    getPostNotes,
-    getCommentReplies,
-    getUserConversations,
-    getConversationMessages,
-    getMessage,
-    getPublicKey,
-    hasPublicKey,
-    hasVotedOnPost,
-    hasVotedOnComment,
-    hasVotedOnNote,
-    hasBoosterAccess,
-    getKYCStatus,
-    // Enums
-    ContentStatus,
-    NoteStatus
-} from './backchat-tx.js';
+// Backchat (Social Network) - Would need similar updates
+// export { BackchatTx } from './backchat-tx.js';
 
 // ============================================================================
 // CONVENIENCE OBJECT
@@ -175,8 +129,7 @@ export const Transactions = {
     Fortune: (async () => (await import('./fortune-tx.js')).FortuneTx)(),
     Rental: (async () => (await import('./rental-tx.js')).RentalTx)(),
     Notary: (async () => (await import('./notary-tx.js')).NotaryTx)(),
-    Faucet: (async () => (await import('./faucet-tx.js')).FaucetTx)(),
-    Backchat: (async () => (await import('./backchat-tx.js')).BackchatTx)() // V1.2
+    Faucet: (async () => (await import('./faucet-tx.js')).FaucetTx)()
 };
 
 export default Transactions;

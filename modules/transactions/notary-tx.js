@@ -1,24 +1,34 @@
 // modules/js/transactions/notary-tx.js
-// ✅ PRODUCTION V1.4 - FIXED: ABI format and contract instantiation
+// ✅ PRODUCTION V2.0 - Updated for DecentralizedNotary V6 + Operator Support
 // 
-// CHANGES V1.4:
-// - Changed ABI from string format to object format (ethers v6 compatibility)
-// - Added fallback for getContract when signer is not available
-// - Better error handling for contract instantiation
-// - Added debug logging for troubleshooting
-// - Fixed: "Cannot read properties of undefined (reading 'estimateGas')"
+// CHANGES V2.0:
+// - CRITICAL FIX: notarize() signature changed from boosterTokenId to operator
+// - CRITICAL FIX: Added ETH fee support (msg.value required)
+// - REMOVED: getBaseFee(), calculateFee() - don't exist in V6
+// - REMOVED: tokenOfOwnerByIndex() - not in V6 (no ERC721Enumerable)
+// - ADDED: verifyByHash() - public verification by content hash
+// - ADDED: hashToTokenId() - reverse lookup
+// - ADDED: getStats() - notarization statistics
+// - ADDED: getFee() - returns both BKC and ETH fees
+// - ADDED: getNotarizationFeeETH() - ETH fee amount
+// - ADDED: resolveOperator() for hybrid operator system
+// - Backwards compatible (operator is optional)
 //
-// CHANGES V1.3:
-// - Fee is now fetched BEFORE calling txEngine.execute
-// - Approval object is static (not a getter) with pre-fetched fee amount
-// - This fixes "ERC20: insufficient allowance" error
+// ============================================================================
+// V6 FEE STRUCTURE (EQUAL FOR ALL - NO DISCOUNTS):
+// - BKC Fee: Retrieved from EcosystemManager (default ~1 BKC)
+// - ETH Fee: Fixed amount (default 0.0001 ETH)
+// - Both fees go to MiningManager → Operator/Burn/Treasury/Delegators
 //
+// IMPORTANT: NFT ownership does NOT provide fee discounts in V6!
+//            NFTs only affect burn rate in DelegationManager.
 // ============================================================================
 // AVAILABLE TRANSACTIONS:
 // - notarize: Register a document hash on the blockchain (mints NFT)
 // ============================================================================
 
 import { txEngine } from '../core/index.js';
+import { resolveOperator } from '../core/operator.js';
 import { addresses, contractAddresses } from '../../config.js';
 
 // ============================================================================
@@ -45,8 +55,6 @@ function getContracts() {
         throw new Error('Contract addresses not loaded. Please refresh the page.');
     }
     
-    console.log('[NotaryTx] Using addresses:', { notary, bkcToken });
-    
     return {
         NOTARY: notary,
         BKC_TOKEN: bkcToken
@@ -54,103 +62,57 @@ function getContracts() {
 }
 
 /**
- * Notary ABI - DecentralizedNotary contract
- * V1.4: Using OBJECT format instead of string for ethers v6 compatibility
+ * DecentralizedNotary V6 ABI - with Operator support
  */
 const NOTARY_ABI = [
-    // Write functions
-    {
-        name: 'notarize',
-        type: 'function',
-        stateMutability: 'nonpayable',
-        inputs: [
-            { name: '_ipfsCid', type: 'string' },
-            { name: '_description', type: 'string' },
-            { name: '_contentHash', type: 'bytes32' },
-            { name: '_boosterTokenId', type: 'uint256' }
-        ],
-        outputs: [
-            { name: 'tokenId', type: 'uint256' }
-        ]
-    },
+    // ─────────────────────────────────────────────────────────────────────────
+    // WRITE FUNCTION - V6 with Operator (NOT boosterTokenId!)
+    // ─────────────────────────────────────────────────────────────────────────
+    'function notarize(string calldata _ipfsCid, string calldata _description, bytes32 _contentHash, address _operator) external payable returns (uint256 tokenId)',
     
-    // Read functions
-    {
-        name: 'getDocument',
-        type: 'function',
-        stateMutability: 'view',
-        inputs: [{ name: '_tokenId', type: 'uint256' }],
-        outputs: [
-            {
-                name: '',
-                type: 'tuple',
-                components: [
-                    { name: 'ipfsCid', type: 'string' },
-                    { name: 'description', type: 'string' },
-                    { name: 'contentHash', type: 'bytes32' },
-                    { name: 'timestamp', type: 'uint256' }
-                ]
-            }
-        ]
-    },
-    {
-        name: 'getBaseFee',
-        type: 'function',
-        stateMutability: 'view',
-        inputs: [],
-        outputs: [{ name: '', type: 'uint256' }]
-    },
-    {
-        name: 'calculateFee',
-        type: 'function',
-        stateMutability: 'view',
-        inputs: [{ name: '_boosterTokenId', type: 'uint256' }],
-        outputs: [{ name: '', type: 'uint256' }]
-    },
-    {
-        name: 'totalSupply',
-        type: 'function',
-        stateMutability: 'view',
-        inputs: [],
-        outputs: [{ name: '', type: 'uint256' }]
-    },
-    {
-        name: 'ownerOf',
-        type: 'function',
-        stateMutability: 'view',
-        inputs: [{ name: 'tokenId', type: 'uint256' }],
-        outputs: [{ name: '', type: 'address' }]
-    },
-    {
-        name: 'balanceOf',
-        type: 'function',
-        stateMutability: 'view',
-        inputs: [{ name: 'owner', type: 'address' }],
-        outputs: [{ name: '', type: 'uint256' }]
-    },
-    {
-        name: 'tokenOfOwnerByIndex',
-        type: 'function',
-        stateMutability: 'view',
-        inputs: [
-            { name: 'owner', type: 'address' },
-            { name: 'index', type: 'uint256' }
-        ],
-        outputs: [{ name: '', type: 'uint256' }]
-    },
+    // ─────────────────────────────────────────────────────────────────────────
+    // READ FUNCTIONS - Document Data
+    // ─────────────────────────────────────────────────────────────────────────
+    'function documents(uint256 tokenId) view returns (string ipfsCid, string description, bytes32 contentHash, uint256 timestamp)',
+    'function getDocument(uint256 _tokenId) view returns (tuple(string ipfsCid, string description, bytes32 contentHash, uint256 timestamp))',
+    'function notarizationFeePaid(uint256 tokenId) view returns (uint256)',
     
-    // Events
-    {
-        name: 'DocumentNotarized',
-        type: 'event',
-        inputs: [
-            { name: 'tokenId', type: 'uint256', indexed: true },
-            { name: 'owner', type: 'address', indexed: true },
-            { name: 'ipfsCid', type: 'string', indexed: false },
-            { name: 'contentHash', type: 'bytes32', indexed: true },
-            { name: 'feePaid', type: 'uint256', indexed: false }
-        ]
-    }
+    // ─────────────────────────────────────────────────────────────────────────
+    // READ FUNCTIONS - Verification (V6 Feature!)
+    // ─────────────────────────────────────────────────────────────────────────
+    'function verifyByHash(bytes32 _contentHash) view returns (bool exists, uint256 tokenId, address owner, uint256 timestamp)',
+    'function hashToTokenId(bytes32 hash) view returns (uint256)',
+    
+    // ─────────────────────────────────────────────────────────────────────────
+    // READ FUNCTIONS - Fees
+    // ─────────────────────────────────────────────────────────────────────────
+    'function getFee() view returns (uint256 bkcFee, uint256 ethFee)',
+    'function notarizationFeeETH() view returns (uint256)',
+    'function SERVICE_KEY() view returns (bytes32)',
+    
+    // ─────────────────────────────────────────────────────────────────────────
+    // READ FUNCTIONS - Statistics
+    // ─────────────────────────────────────────────────────────────────────────
+    'function totalSupply() view returns (uint256)',
+    'function totalNotarizations() view returns (uint256)',
+    'function totalBKCCollected() view returns (uint256)',
+    'function totalETHCollected() view returns (uint256)',
+    'function getStats() view returns (uint256 notarizations, uint256 bkcCollected, uint256 ethCollected)',
+    
+    // ─────────────────────────────────────────────────────────────────────────
+    // READ FUNCTIONS - ERC721 Standard
+    // ─────────────────────────────────────────────────────────────────────────
+    'function ownerOf(uint256 tokenId) view returns (address)',
+    'function balanceOf(address owner) view returns (uint256)',
+    'function tokenURI(uint256 _tokenId) view returns (string)',
+    'function name() view returns (string)',
+    'function symbol() view returns (string)',
+    
+    // ─────────────────────────────────────────────────────────────────────────
+    // EVENTS - V6 Format
+    // ─────────────────────────────────────────────────────────────────────────
+    'event DocumentNotarized(uint256 indexed tokenId, address indexed owner, string ipfsCid, bytes32 indexed contentHash, uint256 bkcFeePaid, uint256 ethFeePaid, address operator)',
+    'event ETHFeeUpdated(uint256 oldFee, uint256 newFee)'
 ];
 
 // ============================================================================
@@ -159,7 +121,6 @@ const NOTARY_ABI = [
 
 /**
  * Creates Notary contract instance with signer (for write operations)
- * V1.4: Added validation and debug logging
  */
 function getNotaryContract(signer) {
     const ethers = window.ethers;
@@ -173,32 +134,11 @@ function getNotaryContract(signer) {
     }
     
     const contracts = getContracts();
-    
-    console.log('[NotaryTx] Creating contract with signer:', {
-        address: contracts.NOTARY,
-        hasSigner: !!signer
-    });
-    
-    const contract = new ethers.Contract(contracts.NOTARY, NOTARY_ABI, signer);
-    
-    // V1.4: Verify contract has the notarize method
-    if (typeof contract.notarize !== 'function') {
-        console.error('[NotaryTx] Contract missing notarize method!', {
-            contractMethods: Object.keys(contract).filter(k => typeof contract[k] === 'function')
-        });
-        throw new Error('Contract ABI error: notarize method not found');
-    }
-    
-    console.log('[NotaryTx] Contract created successfully, methods:', 
-        Object.keys(contract).filter(k => typeof contract[k] === 'function').slice(0, 10)
-    );
-    
-    return contract;
+    return new ethers.Contract(contracts.NOTARY, NOTARY_ABI, signer);
 }
 
 /**
- * Creates Notary contract instance with Alchemy provider (for read operations)
- * V1.4: Added better error handling and fallback
+ * Creates Notary contract instance with provider (for read operations)
  */
 async function getNotaryContractReadOnly() {
     const ethers = window.ethers;
@@ -207,22 +147,15 @@ async function getNotaryContractReadOnly() {
         throw new Error('ethers.js not loaded');
     }
     
-    try {
-        const { NetworkManager } = await import('../core/index.js');
-        const provider = NetworkManager.getProvider();
-        
-        if (!provider) {
-            throw new Error('Provider not available');
-        }
-        
-        const contracts = getContracts();
-        const contract = new ethers.Contract(contracts.NOTARY, NOTARY_ABI, provider);
-        
-        return contract;
-    } catch (error) {
-        console.warn('[NotaryTx] Failed to get read-only contract:', error.message);
-        throw error;
+    const { NetworkManager } = await import('../core/index.js');
+    const provider = NetworkManager.getProvider();
+    
+    if (!provider) {
+        throw new Error('Provider not available');
     }
+    
+    const contracts = getContracts();
+    return new ethers.Contract(contracts.NOTARY, NOTARY_ABI, provider);
 }
 
 /**
@@ -239,15 +172,16 @@ function isValidBytes32(hash) {
 // ============================================================================
 
 /**
- * Notarizes a document on the blockchain (mints NFT certificate)
+ * Notarizes a document on the blockchain
+ * V6: Fee is EQUAL for all users (no booster discounts!)
  * 
  * @param {Object} params - Notarization parameters
- * @param {string} params.ipfsCid - IPFS CID where document is stored
+ * @param {string} params.ipfsCid - IPFS content identifier
  * @param {string} [params.description] - Document description
- * @param {string} params.contentHash - SHA256 hash of the document content (bytes32)
- * @param {number} [params.boosterTokenId=0] - RewardBoosterNFT token ID for fee discount (0 = no discount)
+ * @param {string} params.contentHash - SHA-256 hash of the document (bytes32)
+ * @param {string} [params.operator] - Operator address (optional - uses default if not provided)
  * @param {HTMLElement} [params.button] - Button element for loading state
- * @param {Function} [params.onSuccess] - Success callback (receives tokenId)
+ * @param {Function} [params.onSuccess] - Success callback (receives receipt, tokenId, feePaid)
  * @param {Function} [params.onError] - Error callback
  * @returns {Promise<Object>} Transaction result
  */
@@ -255,7 +189,7 @@ export async function notarize({
     ipfsCid,
     description = '',
     contentHash,
-    boosterTokenId = 0,
+    operator,
     button = null,
     onSuccess = null,
     onError = null
@@ -263,102 +197,103 @@ export async function notarize({
     const ethers = window.ethers;
     const contracts = getContracts();
     
-    console.log('[NotaryTx] Starting notarize with params:', {
-        ipfsCid,
-        description: description?.substring(0, 50) + '...',
-        contentHash: contentHash?.substring(0, 20) + '...',
-        boosterTokenId
-    });
-    
     // Validate inputs
-    if (!ipfsCid || ipfsCid.trim() === '') {
+    if (!ipfsCid || ipfsCid.trim().length === 0) {
         throw new Error('IPFS CID is required');
     }
     
     if (!contentHash) {
         throw new Error('Content hash is required');
     }
-
-    // Ensure contentHash is properly formatted
+    
+    // Format hash
     const formattedHash = contentHash.startsWith('0x') ? contentHash : `0x${contentHash}`;
     
     if (!isValidBytes32(formattedHash)) {
-        throw new Error('Content hash must be a valid 32-byte hex string');
+        throw new Error('Invalid content hash format. Must be a valid bytes32 (64 hex characters)');
     }
     
-    // Convert boosterTokenId to BigInt
-    const boosterId = BigInt(boosterTokenId || 0);
-    
-    // V1.3 FIX: Get fee BEFORE calling txEngine.execute
-    // This ensures approval amount is known before the transaction starts
-    let feeAmount = 0n;
-    try {
-        const readContract = await getNotaryContractReadOnly();
-        feeAmount = await readContract.calculateFee(boosterId);
-        console.log('[NotaryTx] Fee to pay (pre-fetch):', ethers.formatEther(feeAmount), 'BKC');
-    } catch (e) {
-        console.warn('[NotaryTx] calculateFee failed, trying getBaseFee:', e.message);
-        try {
-            const readContract = await getNotaryContractReadOnly();
-            feeAmount = await readContract.getBaseFee();
-            console.log('[NotaryTx] Base fee (pre-fetch):', ethers.formatEther(feeAmount), 'BKC');
-        } catch (e2) {
-            console.warn('[NotaryTx] Could not pre-fetch fee, will try during validation:', e2.message);
-        }
-    }
+    // Store values for closure
+    let storedOperator = operator;
+    let bkcFeeAmount = 0n;
+    let ethFeeAmount = 0n;
 
     return await txEngine.execute({
         name: 'Notarize',
         button,
         
-        // V1.4 FIX: Added debug logging in getContract
-        getContract: async (signer) => {
-            console.log('[NotaryTx] getContract called with signer:', !!signer);
-            const contract = getNotaryContract(signer);
-            console.log('[NotaryTx] Contract instance created:', !!contract);
-            console.log('[NotaryTx] Contract.notarize exists:', typeof contract.notarize);
-            return contract;
+        getContract: async (signer) => getNotaryContract(signer),
+        method: 'notarize',
+        
+        // V2: Args now include operator instead of boosterTokenId
+        args: () => [ipfsCid, description || '', formattedHash, resolveOperator(storedOperator)],
+        
+        // V2: ETH fee is REQUIRED in V6!
+        get value() { return ethFeeAmount; },
+        
+        // BKC approval for fee
+        get approval() {
+            if (bkcFeeAmount > 0n && contracts.BKC_TOKEN) {
+                return {
+                    token: contracts.BKC_TOKEN,
+                    spender: contracts.NOTARY,
+                    amount: bkcFeeAmount
+                };
+            }
+            return null;
         },
         
-        method: 'notarize',
-        args: [ipfsCid, description || '', formattedHash, boosterId],
-        
-        // V1.3 FIX: Static approval object (not a getter)
-        // feeAmount is already known from pre-fetch above
-        approval: (feeAmount > 0n && contracts.BKC_TOKEN) ? {
-            token: contracts.BKC_TOKEN,
-            spender: contracts.NOTARY,
-            amount: feeAmount
-        } : null,
-        
-        // Validation using Alchemy
         validate: async (signer, userAddress) => {
-            console.log('[NotaryTx] Validating for user:', userAddress);
+            const contract = getNotaryContract(signer);
             
-            // Check user has enough BKC for fee
-            if (feeAmount > 0n && contracts.BKC_TOKEN) {
-                const { NetworkManager } = await import('../core/index.js');
-                const provider = NetworkManager.getProvider();
+            // Get fees from contract
+            try {
+                const [bkcFee, ethFee] = await contract.getFee();
+                bkcFeeAmount = bkcFee;
+                ethFeeAmount = ethFee;
                 
-                const bkcAbi = ['function balanceOf(address) view returns (uint256)'];
-                const bkcContract = new ethers.Contract(contracts.BKC_TOKEN, bkcAbi, provider);
-                const balance = await bkcContract.balanceOf(userAddress);
-                
-                console.log('[NotaryTx] BKC balance:', ethers.formatEther(balance), 'Required:', ethers.formatEther(feeAmount));
-                
-                if (balance < feeAmount) {
-                    throw new Error(`Insufficient BKC balance. Need ${ethers.formatEther(feeAmount)} BKC`);
+                console.log('[NotaryTx] Fees:', {
+                    bkcFee: ethers.formatEther(bkcFee) + ' BKC',
+                    ethFee: ethers.formatEther(ethFee) + ' ETH'
+                });
+            } catch (e) {
+                // Fallback to individual calls
+                try {
+                    ethFeeAmount = await contract.notarizationFeeETH();
+                } catch {
+                    ethFeeAmount = ethers.parseEther('0.0001'); // Default
                 }
+                bkcFeeAmount = ethers.parseEther('1'); // Default
             }
             
-            console.log('[NotaryTx] Validation passed');
+            // Check ETH balance for fee
+            const { NetworkManager } = await import('../core/index.js');
+            const provider = NetworkManager.getProvider();
+            const ethBalance = await provider.getBalance(userAddress);
+            
+            // Need ETH for fee + gas
+            const minEthNeeded = ethFeeAmount + ethers.parseEther('0.001');
+            if (ethBalance < minEthNeeded) {
+                throw new Error(`Insufficient ETH. Need ~${ethers.formatEther(minEthNeeded)} ETH for fee + gas`);
+            }
+            
+            // Check BKC balance for fee
+            if (bkcFeeAmount > 0n && contracts.BKC_TOKEN) {
+                const bkcAbi = ['function balanceOf(address) view returns (uint256)'];
+                const bkcContract = new ethers.Contract(contracts.BKC_TOKEN, bkcAbi, provider);
+                const bkcBalance = await bkcContract.balanceOf(userAddress);
+                
+                if (bkcBalance < bkcFeeAmount) {
+                    throw new Error(`Insufficient BKC. Need ${ethers.formatEther(bkcFeeAmount)} BKC`);
+                }
+            }
         },
         
         onSuccess: async (receipt) => {
-            console.log('[NotaryTx] Transaction successful:', receipt.hash);
-            
-            // Extract tokenId from event
             let tokenId = null;
+            let feePaid = { bkc: 0n, eth: 0n };
+            
+            // Parse event for tokenId and fees
             try {
                 const iface = new ethers.Interface(NOTARY_ABI);
                 for (const log of receipt.logs) {
@@ -366,22 +301,23 @@ export async function notarize({
                         const parsed = iface.parseLog(log);
                         if (parsed && parsed.name === 'DocumentNotarized') {
                             tokenId = Number(parsed.args.tokenId);
-                            console.log('[NotaryTx] Minted token ID:', tokenId);
+                            feePaid = {
+                                bkc: parsed.args.bkcFeePaid,
+                                eth: parsed.args.ethFeePaid
+                            };
                             break;
                         }
                     } catch {}
                 }
-            } catch (e) {
-                console.warn('[NotaryTx] Could not parse event logs:', e.message);
-            }
+            } catch {}
 
             if (onSuccess) {
-                onSuccess(receipt, tokenId);
+                onSuccess(receipt, tokenId, feePaid);
             }
         },
         
         onError: (error) => {
-            console.error('[NotaryTx] Transaction failed:', error);
+            console.error('[NotaryTx] Notarization failed:', error);
             if (onError) {
                 onError(error);
             }
@@ -390,7 +326,7 @@ export async function notarize({
 }
 
 // ============================================================================
-// 4. READ FUNCTIONS (Helpers)
+// 4. READ FUNCTIONS
 // ============================================================================
 
 /**
@@ -404,6 +340,7 @@ export async function getDocument(tokenId) {
     try {
         const doc = await contract.getDocument(tokenId);
         const owner = await contract.ownerOf(tokenId);
+        const feePaid = await contract.notarizationFeePaid(tokenId).catch(() => 0n);
         
         return {
             id: tokenId,
@@ -412,7 +349,8 @@ export async function getDocument(tokenId) {
             description: doc.description,
             contentHash: doc.contentHash,
             timestamp: Number(doc.timestamp),
-            date: new Date(Number(doc.timestamp) * 1000)
+            date: new Date(Number(doc.timestamp) * 1000),
+            feePaid: feePaid
         };
     } catch {
         return null;
@@ -420,22 +358,101 @@ export async function getDocument(tokenId) {
 }
 
 /**
- * Gets base notarization fee (without discount)
- * @returns {Promise<bigint>} Base fee in BKC
+ * Verifies if a document hash was notarized
+ * V6: Allows public verification without knowing token ID
+ * 
+ * @param {string} contentHash - SHA-256 hash to verify (bytes32)
+ * @returns {Promise<Object>} Verification result
  */
-export async function getBaseFee() {
+export async function verifyByHash(contentHash) {
     const contract = await getNotaryContractReadOnly();
-    return await contract.getBaseFee();
+    
+    const formattedHash = contentHash.startsWith('0x') ? contentHash : `0x${contentHash}`;
+    
+    try {
+        const result = await contract.verifyByHash(formattedHash);
+        
+        return {
+            exists: result.exists,
+            tokenId: result.exists ? Number(result.tokenId) : null,
+            owner: result.exists ? result.owner : null,
+            timestamp: result.exists ? Number(result.timestamp) : null,
+            date: result.exists ? new Date(Number(result.timestamp) * 1000) : null
+        };
+    } catch (error) {
+        console.error('[NotaryTx] verifyByHash error:', error);
+        return {
+            exists: false,
+            tokenId: null,
+            owner: null,
+            timestamp: null,
+            date: null
+        };
+    }
 }
 
 /**
- * Calculates fee with booster discount
- * @param {number} boosterTokenId - Booster NFT token ID (0 for no discount)
- * @returns {Promise<bigint>} Fee amount after discount
+ * Gets token ID for a content hash (reverse lookup)
+ * @param {string} contentHash - Content hash (bytes32)
+ * @returns {Promise<number|null>} Token ID or null if not found
  */
-export async function calculateFee(boosterTokenId = 0) {
+export async function getTokenIdByHash(contentHash) {
     const contract = await getNotaryContractReadOnly();
-    return await contract.calculateFee(BigInt(boosterTokenId));
+    
+    const formattedHash = contentHash.startsWith('0x') ? contentHash : `0x${contentHash}`;
+    
+    try {
+        const tokenId = await contract.hashToTokenId(formattedHash);
+        return Number(tokenId) > 0 ? Number(tokenId) : null;
+    } catch {
+        return null;
+    }
+}
+
+/**
+ * Gets current notarization fees
+ * V6: Returns both BKC and ETH fees
+ * 
+ * @returns {Promise<Object>} Fee amounts
+ */
+export async function getFee() {
+    const ethers = window.ethers;
+    const contract = await getNotaryContractReadOnly();
+    
+    try {
+        const [bkcFee, ethFee] = await contract.getFee();
+        
+        return {
+            bkcFee: bkcFee,
+            ethFee: ethFee,
+            bkcFormatted: ethers.formatEther(bkcFee) + ' BKC',
+            ethFormatted: ethers.formatEther(ethFee) + ' ETH',
+            totalInEth: ethFee // BKC is separate token
+        };
+    } catch {
+        // Fallback
+        const ethFee = await contract.notarizationFeeETH().catch(() => ethers.parseEther('0.0001'));
+        return {
+            bkcFee: ethers.parseEther('1'),
+            ethFee: ethFee,
+            bkcFormatted: '1 BKC',
+            ethFormatted: ethers.formatEther(ethFee) + ' ETH',
+            totalInEth: ethFee
+        };
+    }
+}
+
+/**
+ * Gets ETH fee amount
+ * @returns {Promise<bigint>} ETH fee in wei
+ */
+export async function getNotarizationFeeETH() {
+    const contract = await getNotaryContractReadOnly();
+    try {
+        return await contract.notarizationFeeETH();
+    } catch {
+        return window.ethers.parseEther('0.0001');
+    }
 }
 
 /**
@@ -445,6 +462,42 @@ export async function calculateFee(boosterTokenId = 0) {
 export async function getTotalDocuments() {
     const contract = await getNotaryContractReadOnly();
     return Number(await contract.totalSupply());
+}
+
+/**
+ * Gets notarization statistics
+ * @returns {Promise<Object>} Stats
+ */
+export async function getStats() {
+    const ethers = window.ethers;
+    const contract = await getNotaryContractReadOnly();
+    
+    try {
+        const stats = await contract.getStats();
+        
+        return {
+            totalNotarizations: Number(stats.notarizations),
+            totalBKCCollected: stats.bkcCollected,
+            totalBKCFormatted: ethers.formatEther(stats.bkcCollected),
+            totalETHCollected: stats.ethCollected,
+            totalETHFormatted: ethers.formatEther(stats.ethCollected)
+        };
+    } catch {
+        // Fallback to individual calls
+        const [notarizations, bkcCollected, ethCollected] = await Promise.all([
+            contract.totalNotarizations().catch(() => 0n),
+            contract.totalBKCCollected().catch(() => 0n),
+            contract.totalETHCollected().catch(() => 0n)
+        ]);
+        
+        return {
+            totalNotarizations: Number(notarizations),
+            totalBKCCollected: bkcCollected,
+            totalBKCFormatted: ethers.formatEther(bkcCollected),
+            totalETHCollected: ethCollected,
+            totalETHFormatted: ethers.formatEther(ethCollected)
+        };
+    }
 }
 
 /**
@@ -458,25 +511,13 @@ export async function getUserDocumentCount(userAddress) {
 }
 
 /**
- * Gets all document IDs for a user
- * @param {string} userAddress - User address
- * @returns {Promise<number[]>} Array of token IDs
+ * Gets token URI (metadata)
+ * @param {number} tokenId - Token ID
+ * @returns {Promise<string>} Token URI (data URI with base64 JSON)
  */
-export async function getUserDocuments(userAddress) {
+export async function getTokenURI(tokenId) {
     const contract = await getNotaryContractReadOnly();
-    const count = await contract.balanceOf(userAddress);
-    const ids = [];
-    
-    for (let i = 0; i < count; i++) {
-        try {
-            const tokenId = await contract.tokenOfOwnerByIndex(userAddress, i);
-            ids.push(Number(tokenId));
-        } catch {
-            break;
-        }
-    }
-    
-    return ids;
+    return await contract.tokenURI(tokenId);
 }
 
 // ============================================================================
@@ -508,7 +549,7 @@ export async function calculateFileHash(file) {
 
 /**
  * Verifies a document against a stored hash
- * @param {ArrayBuffer|Uint8Array} fileContent - File content to verify
+ * @param {ArrayBuffer|Uint8Array|File|Blob} fileContent - File content to verify
  * @param {string} expectedHash - Expected hash (bytes32)
  * @returns {Promise<boolean>} True if hashes match
  */
@@ -519,22 +560,64 @@ export async function verifyDocumentHash(fileContent, expectedHash) {
     return normalizedExpected === normalizedCalculated;
 }
 
+/**
+ * Verifies a document exists on-chain and matches the expected hash
+ * @param {ArrayBuffer|File|Blob} fileContent - File content
+ * @param {string} [expectedHash] - Optional expected hash (will calculate if not provided)
+ * @returns {Promise<Object>} Verification result with on-chain status
+ */
+export async function verifyDocumentOnChain(fileContent, expectedHash) {
+    // Calculate hash if not provided
+    const hash = expectedHash || await calculateFileHash(fileContent);
+    
+    // Check on-chain
+    const onChainResult = await verifyByHash(hash);
+    
+    // If expectedHash was provided, verify it matches the file
+    let hashMatches = true;
+    if (expectedHash) {
+        hashMatches = await verifyDocumentHash(fileContent, expectedHash);
+    }
+    
+    return {
+        contentHash: hash,
+        hashMatches: hashMatches,
+        existsOnChain: onChainResult.exists,
+        tokenId: onChainResult.tokenId,
+        owner: onChainResult.owner,
+        timestamp: onChainResult.timestamp,
+        date: onChainResult.date,
+        isVerified: hashMatches && onChainResult.exists
+    };
+}
+
 // ============================================================================
 // 6. EXPORT
 // ============================================================================
 
 export const NotaryTx = {
+    // Write function
     notarize,
-    // Read helpers
+    
+    // Read helpers - Documents
     getDocument,
-    getBaseFee,
-    calculateFee,
     getTotalDocuments,
     getUserDocumentCount,
-    getUserDocuments,
+    getTokenURI,
+    
+    // Read helpers - Verification (V6!)
+    verifyByHash,
+    getTokenIdByHash,
+    
+    // Read helpers - Fees & Stats
+    getFee,
+    getNotarizationFeeETH,
+    getStats,
+    
     // Utilities
     calculateFileHash,
-    verifyDocumentHash
+    verifyDocumentHash,
+    verifyDocumentOnChain
 };
 
 export default NotaryTx;

@@ -1,2267 +1,723 @@
 // modules/js/transactions/backchat-tx.js
-// ✅ PRODUCTION V1.0 - Backchat Social Network Transactions
+// ✅ PRODUCTION V2.0 - Rewritten for Backchat V7.0.0
 // 
-// This module handles all Backchat contract transactions:
-// - Posts (create, edit, delete)
-// - Comments (create, reply, delete)
-// - Moderation (vote on posts/comments)
-// - Community Notes (propose, vote)
-// - Tips (send, claim)
-// - Boost (ETH boost for posts)
-// - Private Messages (E2EE)
-// - KYC verification
+// COMPLETE REWRITE - Old module was for different contract!
+// 
+// BACKCHAT V7 FEATURES:
+// - Decentralized Social Protocol (posts, replies, reposts)
+// - Like / Super Like (organic trending)
+// - Follow / Unfollow
+// - Profile (username registration, display name, bio)
+// - Premium (profile boost, trust badge)
+// - BKC Tips (90% creator, 10% mining ecosystem)
+// - ETH distribution (40% creator, 30% operator, 30% treasury)
+// - Graceful degradation (works even if ecosystem contracts fail)
 //
 // ============================================================================
-// TRANSACTION FLOW:
-// All transactions require BKC platform fee (default: 1 BKC)
-// Tip transactions split between creator and mining pool
+// FEE STRUCTURE:
+// - All actions pay ETH fee (20% of gas cost)
+// - With creator (reply, like, follow): 40/30/30 split
+// - Without creator (post, username, boost): 60/40 operator/treasury
+// - BKC tips: 90% creator, 10% MiningManager
 // ============================================================================
 
 import { txEngine } from '../core/index.js';
+import { resolveOperator } from '../core/operator.js';
 import { addresses, contractAddresses } from '../../config.js';
 
 // ============================================================================
 // 1. CONTRACT CONFIGURATION
 // ============================================================================
 
-/**
- * Get contract addresses dynamically from config.js
- */
 function getContracts() {
-    const backchat = addresses?.backchat || 
-                     contractAddresses?.backchat ||
-                     window.contractAddresses?.backchat;
+    const backchat = addresses?.backchat || contractAddresses?.backchat || window.contractAddresses?.backchat;
+    const bkcToken = addresses?.bkcToken || contractAddresses?.bkcToken || window.contractAddresses?.bkcToken;
     
-    const bkcToken = addresses?.bkcToken ||
-                     contractAddresses?.bkcToken ||
-                     window.contractAddresses?.bkcToken;
-    
-    if (!backchat) {
-        console.error('❌ Backchat address not found!', { addresses, contractAddresses });
-        throw new Error('Contract addresses not loaded. Please refresh the page.');
-    }
-    
-    console.log('[BackchatTx] Using addresses:', { backchat, bkcToken });
-    
-    return {
-        BACKCHAT: backchat,
-        BKC_TOKEN: bkcToken
-    };
+    if (!backchat) throw new Error('Backchat contract address not loaded');
+    return { BACKCHAT: backchat, BKC_TOKEN: bkcToken };
 }
 
 /**
- * Backchat ABI - All contract functions
+ * Backchat V7 ABI - Complete rewrite for V7.0.0
  */
 const BACKCHAT_ABI = [
-    // ═══════════════════════════════════════════════════════════════════════════
-    // POSTS
-    // ═══════════════════════════════════════════════════════════════════════════
-    {
-        name: 'createPost',
-        type: 'function',
-        stateMutability: 'nonpayable',
-        inputs: [
-            { name: '_content', type: 'string' },
-            { name: '_ipfsHash', type: 'string' }
-        ],
-        outputs: [{ name: 'postId', type: 'uint256' }]
-    },
-    {
-        name: 'editPost',
-        type: 'function',
-        stateMutability: 'nonpayable',
-        inputs: [
-            { name: '_postId', type: 'uint256' },
-            { name: '_newContent', type: 'string' },
-            { name: '_newIpfsHash', type: 'string' }
-        ],
-        outputs: []
-    },
-    {
-        name: 'deletePost',
-        type: 'function',
-        stateMutability: 'nonpayable',
-        inputs: [{ name: '_postId', type: 'uint256' }],
-        outputs: []
-    },
-    {
-        name: 'getPost',
-        type: 'function',
-        stateMutability: 'view',
-        inputs: [{ name: '_postId', type: 'uint256' }],
-        outputs: [{
-            name: '',
-            type: 'tuple',
-            components: [
-                { name: 'id', type: 'uint256' },
-                { name: 'author', type: 'address' },
-                { name: 'content', type: 'string' },
-                { name: 'ipfsHash', type: 'string' },
-                { name: 'createdAt', type: 'uint256' },
-                { name: 'editedAt', type: 'uint256' },
-                { name: 'exists', type: 'bool' },
-                { name: 'deleted', type: 'bool' }
-            ]
-        }]
-    },
-    {
-        name: 'getPostModerationScore',
-        type: 'function',
-        stateMutability: 'view',
-        inputs: [{ name: '_postId', type: 'uint256' }],
-        outputs: [
-            { name: 'safeVotes', type: 'uint256' },
-            { name: 'unsafeVotes', type: 'uint256' },
-            { name: 'score', type: 'int256' },
-            { name: 'status', type: 'uint8' }
-        ]
-    },
-    {
-        name: 'getAuthorPosts',
-        type: 'function',
-        stateMutability: 'view',
-        inputs: [{ name: '_author', type: 'address' }],
-        outputs: [{ name: '', type: 'uint256[]' }]
-    },
-    {
-        name: 'getPostComments',
-        type: 'function',
-        stateMutability: 'view',
-        inputs: [{ name: '_postId', type: 'uint256' }],
-        outputs: [{ name: '', type: 'uint256[]' }]
-    },
-    {
-        name: 'getPostNotes',
-        type: 'function',
-        stateMutability: 'view',
-        inputs: [{ name: '_postId', type: 'uint256' }],
-        outputs: [{ name: '', type: 'uint256[]' }]
-    },
-
-    // ═══════════════════════════════════════════════════════════════════════════
-    // COMMENTS
-    // ═══════════════════════════════════════════════════════════════════════════
-    {
-        name: 'createComment',
-        type: 'function',
-        stateMutability: 'nonpayable',
-        inputs: [
-            { name: '_postId', type: 'uint256' },
-            { name: '_content', type: 'string' },
-            { name: '_ipfsHash', type: 'string' }
-        ],
-        outputs: [{ name: 'commentId', type: 'uint256' }]
-    },
-    {
-        name: 'replyToComment',
-        type: 'function',
-        stateMutability: 'nonpayable',
-        inputs: [
-            { name: '_commentId', type: 'uint256' },
-            { name: '_content', type: 'string' },
-            { name: '_ipfsHash', type: 'string' }
-        ],
-        outputs: [{ name: 'replyId', type: 'uint256' }]
-    },
-    {
-        name: 'deleteComment',
-        type: 'function',
-        stateMutability: 'nonpayable',
-        inputs: [{ name: '_commentId', type: 'uint256' }],
-        outputs: []
-    },
-    {
-        name: 'getComment',
-        type: 'function',
-        stateMutability: 'view',
-        inputs: [{ name: '_commentId', type: 'uint256' }],
-        outputs: [{
-            name: '',
-            type: 'tuple',
-            components: [
-                { name: 'id', type: 'uint256' },
-                { name: 'postId', type: 'uint256' },
-                { name: 'parentCommentId', type: 'uint256' },
-                { name: 'author', type: 'address' },
-                { name: 'content', type: 'string' },
-                { name: 'ipfsHash', type: 'string' },
-                { name: 'createdAt', type: 'uint256' },
-                { name: 'exists', type: 'bool' },
-                { name: 'deleted', type: 'bool' }
-            ]
-        }]
-    },
-    {
-        name: 'getCommentModerationScore',
-        type: 'function',
-        stateMutability: 'view',
-        inputs: [{ name: '_commentId', type: 'uint256' }],
-        outputs: [
-            { name: 'safeVotes', type: 'uint256' },
-            { name: 'unsafeVotes', type: 'uint256' },
-            { name: 'score', type: 'int256' },
-            { name: 'status', type: 'uint8' }
-        ]
-    },
-    {
-        name: 'getCommentReplies',
-        type: 'function',
-        stateMutability: 'view',
-        inputs: [{ name: '_commentId', type: 'uint256' }],
-        outputs: [{ name: '', type: 'uint256[]' }]
-    },
-
-    // ═══════════════════════════════════════════════════════════════════════════
-    // MODERATION (VOTING)
-    // ═══════════════════════════════════════════════════════════════════════════
-    {
-        name: 'voteOnPost',
-        type: 'function',
-        stateMutability: 'nonpayable',
-        inputs: [
-            { name: '_postId', type: 'uint256' },
-            { name: '_voteSafe', type: 'bool' }
-        ],
-        outputs: []
-    },
-    {
-        name: 'voteOnComment',
-        type: 'function',
-        stateMutability: 'nonpayable',
-        inputs: [
-            { name: '_commentId', type: 'uint256' },
-            { name: '_voteSafe', type: 'bool' }
-        ],
-        outputs: []
-    },
-    {
-        name: 'hasVotedOnPost',
-        type: 'function',
-        stateMutability: 'view',
-        inputs: [
-            { name: '_user', type: 'address' },
-            { name: '_postId', type: 'uint256' }
-        ],
-        outputs: [{ name: '', type: 'bool' }]
-    },
-    {
-        name: 'hasVotedOnComment',
-        type: 'function',
-        stateMutability: 'view',
-        inputs: [
-            { name: '_user', type: 'address' },
-            { name: '_commentId', type: 'uint256' }
-        ],
-        outputs: [{ name: '', type: 'bool' }]
-    },
-
-    // ═══════════════════════════════════════════════════════════════════════════
-    // COMMUNITY NOTES
-    // ═══════════════════════════════════════════════════════════════════════════
-    {
-        name: 'proposeNote',
-        type: 'function',
-        stateMutability: 'nonpayable',
-        inputs: [
-            { name: '_postId', type: 'uint256' },
-            { name: '_content', type: 'string' },
-            { name: '_ipfsHash', type: 'string' }
-        ],
-        outputs: [{ name: 'noteId', type: 'uint256' }]
-    },
-    {
-        name: 'voteOnNote',
-        type: 'function',
-        stateMutability: 'nonpayable',
-        inputs: [
-            { name: '_noteId', type: 'uint256' },
-            { name: '_believe', type: 'bool' }
-        ],
-        outputs: []
-    },
-    {
-        name: 'getNote',
-        type: 'function',
-        stateMutability: 'view',
-        inputs: [{ name: '_noteId', type: 'uint256' }],
-        outputs: [{
-            name: '',
-            type: 'tuple',
-            components: [
-                { name: 'id', type: 'uint256' },
-                { name: 'postId', type: 'uint256' },
-                { name: 'author', type: 'address' },
-                { name: 'content', type: 'string' },
-                { name: 'ipfsHash', type: 'string' },
-                { name: 'createdAt', type: 'uint256' },
-                { name: 'exists', type: 'bool' }
-            ]
-        }]
-    },
-    {
-        name: 'getNoteVotingScore',
-        type: 'function',
-        stateMutability: 'view',
-        inputs: [{ name: '_noteId', type: 'uint256' }],
-        outputs: [
-            { name: 'believeVotes', type: 'uint256' },
-            { name: 'dontBelieveVotes', type: 'uint256' },
-            { name: 'score', type: 'int256' },
-            { name: 'status', type: 'uint8' }
-        ]
-    },
-    {
-        name: 'hasVotedOnNote',
-        type: 'function',
-        stateMutability: 'view',
-        inputs: [
-            { name: '_user', type: 'address' },
-            { name: '_noteId', type: 'uint256' }
-        ],
-        outputs: [{ name: '', type: 'bool' }]
-    },
-
-    // ═══════════════════════════════════════════════════════════════════════════
-    // TIPS (CREATOR ECONOMY)
-    // ═══════════════════════════════════════════════════════════════════════════
-    {
-        name: 'sendTip',
-        type: 'function',
-        stateMutability: 'nonpayable',
-        inputs: [
-            { name: '_creator', type: 'address' },
-            { name: '_amount', type: 'uint256' },
-            { name: '_postId', type: 'uint256' }
-        ],
-        outputs: []
-    },
-    {
-        name: 'claimRewards',
-        type: 'function',
-        stateMutability: 'nonpayable',
-        inputs: [],
-        outputs: []
-    },
-    {
-        name: 'creatorBalance',
-        type: 'function',
-        stateMutability: 'view',
-        inputs: [{ name: '_creator', type: 'address' }],
-        outputs: [{ name: '', type: 'uint256' }]
-    },
-    {
-        name: 'getCreatorStats',
-        type: 'function',
-        stateMutability: 'view',
-        inputs: [{ name: '_creator', type: 'address' }],
-        outputs: [{
-            name: '',
-            type: 'tuple',
-            components: [
-                { name: 'totalPosts', type: 'uint256' },
-                { name: 'totalComments', type: 'uint256' },
-                { name: 'totalTipsReceived', type: 'uint256' },
-                { name: 'totalTipsClaimed', type: 'uint256' },
-                { name: 'reputationScore', type: 'uint256' }
-            ]
-        }]
-    },
-
-    // ═══════════════════════════════════════════════════════════════════════════
-    // POST BOOST (ETH)
-    // ═══════════════════════════════════════════════════════════════════════════
-    {
-        name: 'boostPost',
-        type: 'function',
-        stateMutability: 'payable',
-        inputs: [{ name: '_postId', type: 'uint256' }],
-        outputs: []
-    },
-    {
-        name: 'postBoostAmount',
-        type: 'function',
-        stateMutability: 'view',
-        inputs: [{ name: '_postId', type: 'uint256' }],
-        outputs: [{ name: '', type: 'uint256' }]
-    },
-
-    // ═══════════════════════════════════════════════════════════════════════════
-    // PRIVATE MESSAGES (E2EE)
-    // ═══════════════════════════════════════════════════════════════════════════
-    {
-        name: 'setPublicKey',
-        type: 'function',
-        stateMutability: 'nonpayable',
-        inputs: [{ name: '_publicKey', type: 'bytes' }],
-        outputs: []
-    },
-    {
-        name: 'sendPrivateMessage',
-        type: 'function',
-        stateMutability: 'nonpayable',
-        inputs: [
-            { name: '_to', type: 'address' },
-            { name: '_encryptedContent', type: 'string' },
-            { name: '_encryptedIpfsHash', type: 'string' }
-        ],
-        outputs: [{ name: 'messageId', type: 'uint256' }]
-    },
-    {
-        name: 'replyToMessage',
-        type: 'function',
-        stateMutability: 'nonpayable',
-        inputs: [
-            { name: '_messageId', type: 'uint256' },
-            { name: '_encryptedContent', type: 'string' },
-            { name: '_encryptedIpfsHash', type: 'string' }
-        ],
-        outputs: [{ name: 'replyId', type: 'uint256' }]
-    },
-    {
-        name: 'getPublicKey',
-        type: 'function',
-        stateMutability: 'view',
-        inputs: [{ name: '_user', type: 'address' }],
-        outputs: [{ name: '', type: 'bytes' }]
-    },
-    {
-        name: 'getMessage',
-        type: 'function',
-        stateMutability: 'view',
-        inputs: [{ name: '_messageId', type: 'uint256' }],
-        outputs: [
-            { name: 'sender', type: 'address' },
-            { name: 'recipient', type: 'address' },
-            { name: 'encryptedContent', type: 'string' },
-            { name: 'encryptedIpfsHash', type: 'string' },
-            { name: 'sentAt', type: 'uint256' },
-            { name: 'conversationId', type: 'uint256' },
-            { name: 'parentMessageId', type: 'uint256' }
-        ]
-    },
-    {
-        name: 'getUserConversations',
-        type: 'function',
-        stateMutability: 'view',
-        inputs: [{ name: '_user', type: 'address' }],
-        outputs: [{ name: '', type: 'uint256[]' }]
-    },
-    {
-        name: 'getConversationMessages',
-        type: 'function',
-        stateMutability: 'view',
-        inputs: [{ name: '_conversationId', type: 'uint256' }],
-        outputs: [{ name: '', type: 'uint256[]' }]
-    },
-
-    // ═══════════════════════════════════════════════════════════════════════════
-    // KYC
-    // ═══════════════════════════════════════════════════════════════════════════
-    {
-        name: 'verifyKYC',
-        type: 'function',
-        stateMutability: 'nonpayable',
-        inputs: [{ name: '_user', type: 'address' }],
-        outputs: []
-    },
-    {
-        name: 'getKYCStatus',
-        type: 'function',
-        stateMutability: 'view',
-        inputs: [{ name: '_user', type: 'address' }],
-        outputs: [
-            { name: 'verified', type: 'bool' },
-            { name: 'level', type: 'uint8' },
-            { name: 'expiresAt', type: 'uint256' }
-        ]
-    },
-
-    // ═══════════════════════════════════════════════════════════════════════════
-    // BURN INACTIVE
-    // ═══════════════════════════════════════════════════════════════════════════
-    {
-        name: 'burnInactiveBalance',
-        type: 'function',
-        stateMutability: 'nonpayable',
-        inputs: [{ name: '_creator', type: 'address' }],
-        outputs: []
-    },
-    {
-        name: 'lastActivity',
-        type: 'function',
-        stateMutability: 'view',
-        inputs: [{ name: '_user', type: 'address' }],
-        outputs: [{ name: '', type: 'uint256' }]
-    },
-
-    // ═══════════════════════════════════════════════════════════════════════════
-    // CONFIG & STATS
-    // ═══════════════════════════════════════════════════════════════════════════
-    {
-        name: 'platformFee',
-        type: 'function',
-        stateMutability: 'view',
-        inputs: [],
-        outputs: [{ name: '', type: 'uint256' }]
-    },
-    {
-        name: 'minTipAmount',
-        type: 'function',
-        stateMutability: 'view',
-        inputs: [],
-        outputs: [{ name: '', type: 'uint256' }]
-    },
-    {
-        name: 'tipMiningFeeBips',
-        type: 'function',
-        stateMutability: 'view',
-        inputs: [],
-        outputs: [{ name: '', type: 'uint256' }]
-    },
-    {
-        name: 'bipsDenominator',
-        type: 'function',
-        stateMutability: 'view',
-        inputs: [],
-        outputs: [{ name: '', type: 'uint256' }]
-    },
-    {
-        name: 'kycRequired',
-        type: 'function',
-        stateMutability: 'view',
-        inputs: [],
-        outputs: [{ name: '', type: 'bool' }]
-    },
-    {
-        name: 'hasBoosterAccess',
-        type: 'function',
-        stateMutability: 'view',
-        inputs: [{ name: '_user', type: 'address' }],
-        outputs: [{ name: '', type: 'bool' }]
-    },
-    {
-        name: 'getTotals',
-        type: 'function',
-        stateMutability: 'view',
-        inputs: [],
-        outputs: [
-            { name: 'posts', type: 'uint256' },
-            { name: 'comments', type: 'uint256' },
-            { name: 'notes', type: 'uint256' },
-            { name: 'messages', type: 'uint256' },
-            { name: 'conversations', type: 'uint256' }
-        ]
-    },
-    {
-        name: 'getFinancialStats',
-        type: 'function',
-        stateMutability: 'view',
-        inputs: [],
-        outputs: [
-            { name: 'platformFees', type: 'uint256' },
-            { name: 'tipsProcessed', type: 'uint256' },
-            { name: 'tipsToCreators', type: 'uint256' },
-            { name: 'tipsToMining', type: 'uint256' },
-            { name: 'boostCollected', type: 'uint256' },
-            { name: 'burnedInactive', type: 'uint256' }
-        ]
-    },
-    {
-        name: 'postTipsReceived',
-        type: 'function',
-        stateMutability: 'view',
-        inputs: [{ name: '_postId', type: 'uint256' }],
-        outputs: [{ name: '', type: 'uint256' }]
-    },
-
-    // ═══════════════════════════════════════════════════════════════════════════
+    // ─────────────────────────────────────────────────────────────────────────
+    // PROFILE FUNCTIONS
+    // ─────────────────────────────────────────────────────────────────────────
+    'function createProfile(string username, string displayName, string bio, address operator) external payable',
+    'function updateProfile(string displayName, string bio) external',
+    
+    // ─────────────────────────────────────────────────────────────────────────
+    // CONTENT FUNCTIONS
+    // ─────────────────────────────────────────────────────────────────────────
+    'function createPost(string content, string mediaCID, address operator) external payable returns (uint256 postId)',
+    'function createReply(uint256 parentId, string content, string mediaCID, address operator, uint256 tipBkc) external payable returns (uint256 postId)',
+    'function createRepost(uint256 originalPostId, address operator, uint256 tipBkc) external payable returns (uint256 postId)',
+    
+    // ─────────────────────────────────────────────────────────────────────────
+    // ENGAGEMENT FUNCTIONS
+    // ─────────────────────────────────────────────────────────────────────────
+    'function like(uint256 postId, address operator, uint256 tipBkc) external payable',
+    'function superLike(uint256 postId, address operator, uint256 tipBkc) external payable',
+    'function follow(address toFollow, address operator, uint256 tipBkc) external payable',
+    'function unfollow(address toUnfollow) external',
+    
+    // ─────────────────────────────────────────────────────────────────────────
+    // PREMIUM FUNCTIONS
+    // ─────────────────────────────────────────────────────────────────────────
+    'function boostProfile(address operator) external payable',
+    'function obtainBadge(address operator) external payable',
+    
+    // ─────────────────────────────────────────────────────────────────────────
+    // WITHDRAWAL
+    // ─────────────────────────────────────────────────────────────────────────
+    'function withdraw() external',
+    
+    // ─────────────────────────────────────────────────────────────────────────
+    // VIEW FUNCTIONS - Fees
+    // ─────────────────────────────────────────────────────────────────────────
+    'function calculateFee(uint256 gasEstimate) view returns (uint256)',
+    'function getCurrentFees() view returns (uint256 postFee, uint256 replyFee, uint256 likeFee, uint256 followFee, uint256 repostFee, uint256 superLikeMin, uint256 boostMin, uint256 badgeFee_)',
+    'function getUsernameFee(uint256 length) pure returns (uint256)',
+    
+    // ─────────────────────────────────────────────────────────────────────────
+    // VIEW FUNCTIONS - State
+    // ─────────────────────────────────────────────────────────────────────────
+    'function postCounter() view returns (uint256)',
+    'function postAuthor(uint256 postId) view returns (address)',
+    'function pendingEth(address user) view returns (uint256)',
+    'function usernameOwner(bytes32 usernameHash) view returns (address)',
+    'function hasLiked(uint256 postId, address user) view returns (bool)',
+    'function boostExpiry(address user) view returns (uint256)',
+    'function badgeExpiry(address user) view returns (uint256)',
+    
+    // ─────────────────────────────────────────────────────────────────────────
+    // VIEW FUNCTIONS - Helpers
+    // ─────────────────────────────────────────────────────────────────────────
+    'function isProfileBoosted(address user) view returns (bool)',
+    'function hasTrustBadge(address user) view returns (bool)',
+    'function hasUserLiked(uint256 postId, address user) view returns (bool)',
+    'function getPendingBalance(address user) view returns (uint256)',
+    'function isUsernameAvailable(string username) view returns (bool)',
+    'function getUsernameOwner(string username) view returns (address)',
+    'function version() pure returns (string)',
+    
+    // ─────────────────────────────────────────────────────────────────────────
+    // IMMUTABLES
+    // ─────────────────────────────────────────────────────────────────────────
+    'function bkcToken() view returns (address)',
+    'function ecosystemManager() view returns (address)',
+    
+    // ─────────────────────────────────────────────────────────────────────────
     // EVENTS
-    // ═══════════════════════════════════════════════════════════════════════════
-    {
-        name: 'PostCreated',
-        type: 'event',
-        inputs: [
-            { name: 'postId', type: 'uint256', indexed: true },
-            { name: 'author', type: 'address', indexed: true },
-            { name: 'content', type: 'string', indexed: false },
-            { name: 'ipfsHash', type: 'string', indexed: false },
-            { name: 'timestamp', type: 'uint256', indexed: false }
-        ]
-    },
-    {
-        name: 'CommentCreated',
-        type: 'event',
-        inputs: [
-            { name: 'commentId', type: 'uint256', indexed: true },
-            { name: 'postId', type: 'uint256', indexed: true },
-            { name: 'parentCommentId', type: 'uint256', indexed: false },
-            { name: 'author', type: 'address', indexed: true },
-            { name: 'timestamp', type: 'uint256', indexed: false }
-        ]
-    },
-    {
-        name: 'ContentVoted',
-        type: 'event',
-        inputs: [
-            { name: 'contentId', type: 'uint256', indexed: true },
-            { name: 'isPost', type: 'bool', indexed: false },
-            { name: 'voter', type: 'address', indexed: true },
-            { name: 'votedSafe', type: 'bool', indexed: false },
-            { name: 'newScore', type: 'int256', indexed: false },
-            { name: 'newStatus', type: 'uint8', indexed: false },
-            { name: 'timestamp', type: 'uint256', indexed: false }
-        ]
-    },
-    {
-        name: 'NoteProposed',
-        type: 'event',
-        inputs: [
-            { name: 'noteId', type: 'uint256', indexed: true },
-            { name: 'postId', type: 'uint256', indexed: true },
-            { name: 'author', type: 'address', indexed: true },
-            { name: 'timestamp', type: 'uint256', indexed: false }
-        ]
-    },
-    {
-        name: 'TipSent',
-        type: 'event',
-        inputs: [
-            { name: 'sender', type: 'address', indexed: true },
-            { name: 'creator', type: 'address', indexed: true },
-            { name: 'postId', type: 'uint256', indexed: true },
-            { name: 'totalAmount', type: 'uint256', indexed: false },
-            { name: 'toCreator', type: 'uint256', indexed: false },
-            { name: 'toMining', type: 'uint256', indexed: false },
-            { name: 'timestamp', type: 'uint256', indexed: false }
-        ]
-    },
-    {
-        name: 'RewardsClaimed',
-        type: 'event',
-        inputs: [
-            { name: 'creator', type: 'address', indexed: true },
-            { name: 'amount', type: 'uint256', indexed: false },
-            { name: 'timestamp', type: 'uint256', indexed: false }
-        ]
-    },
-    {
-        name: 'PostBoosted',
-        type: 'event',
-        inputs: [
-            { name: 'postId', type: 'uint256', indexed: true },
-            { name: 'booster', type: 'address', indexed: true },
-            { name: 'amount', type: 'uint256', indexed: false },
-            { name: 'totalBoost', type: 'uint256', indexed: false },
-            { name: 'timestamp', type: 'uint256', indexed: false }
-        ]
-    },
-    {
-        name: 'PrivateMessageSent',
-        type: 'event',
-        inputs: [
-            { name: 'messageId', type: 'uint256', indexed: true },
-            { name: 'conversationId', type: 'uint256', indexed: true },
-            { name: 'sender', type: 'address', indexed: true },
-            { name: 'recipient', type: 'address', indexed: false },
-            { name: 'timestamp', type: 'uint256', indexed: false }
-        ]
-    },
-    {
-        name: 'PublicKeyRegistered',
-        type: 'event',
-        inputs: [
-            { name: 'user', type: 'address', indexed: true },
-            { name: 'timestamp', type: 'uint256', indexed: false }
-        ]
-    }
+    // ─────────────────────────────────────────────────────────────────────────
+    'event ProfileCreated(address indexed user, bytes32 indexed usernameHash, string username, string displayName, string bio, uint256 ethPaid, address indexed operator)',
+    'event ProfileUpdated(address indexed user, string displayName, string bio)',
+    'event PostCreated(uint256 indexed postId, address indexed author, string content, string mediaCID, address indexed operator)',
+    'event ReplyCreated(uint256 indexed postId, uint256 indexed parentId, address indexed author, string content, string mediaCID, uint256 tipBkc, address operator)',
+    'event RepostCreated(uint256 indexed newPostId, uint256 indexed originalPostId, address indexed reposter, uint256 tipBkc, address operator)',
+    'event Liked(uint256 indexed postId, address indexed user, uint256 tipBkc, address indexed operator)',
+    'event SuperLiked(uint256 indexed postId, address indexed user, uint256 ethAmount, uint256 tipBkc, address indexed operator)',
+    'event Followed(address indexed follower, address indexed followed, uint256 tipBkc, address indexed operator)',
+    'event Unfollowed(address indexed follower, address indexed followed)',
+    'event ProfileBoosted(address indexed user, uint256 amount, uint256 expiresAt, address indexed operator)',
+    'event BadgeObtained(address indexed user, uint256 expiresAt, address indexed operator)',
+    'event Withdrawal(address indexed user, uint256 amount)',
+    'event TipProcessed(address indexed from, address indexed creator, uint256 totalBkc, uint256 creatorShare, uint256 miningShare, address indexed operator)'
 ];
 
 // ============================================================================
-// 2. ENUMS (match contract)
+// 2. HELPERS
 // ============================================================================
 
-/**
- * Content visibility status based on community voting
- */
-export const ContentStatus = {
-    Normal: 0,    // Score in neutral range
-    Trusted: 1,   // Score >= thresholdTrusted (highlighted)
-    Warning: 2,   // Score <= -thresholdWarning (flagged)
-    Hidden: 3     // Score <= -thresholdHidden (collapsed)
-};
-
-/**
- * Community note approval status
- */
-export const NoteStatus = {
-    Pending: 0,   // Under review
-    Approved: 1,  // Accepted by community
-    Rejected: 2   // Rejected by community
-};
-
-// ============================================================================
-// 3. HELPER FUNCTIONS
-// ============================================================================
-
-/**
- * Creates Backchat contract instance with signer (for write operations)
- */
 function getBackchatContract(signer) {
-    const ethers = window.ethers;
-    
-    if (!ethers) {
-        throw new Error('ethers.js not loaded');
-    }
-    
-    if (!signer) {
-        throw new Error('Signer is required for write operations');
-    }
-    
-    const contracts = getContracts();
-    
-    console.log('[BackchatTx] Creating contract with signer:', {
-        address: contracts.BACKCHAT,
-        hasSigner: !!signer
-    });
-    
-    const contract = new ethers.Contract(contracts.BACKCHAT, BACKCHAT_ABI, signer);
-    
-    console.log('[BackchatTx] Contract created successfully');
-    
-    return contract;
+    return new window.ethers.Contract(getContracts().BACKCHAT, BACKCHAT_ABI, signer);
 }
 
-/**
- * Creates Backchat contract instance with provider (for read operations)
- */
 async function getBackchatContractReadOnly() {
-    const ethers = window.ethers;
-    
-    if (!ethers) {
-        throw new Error('ethers.js not loaded');
-    }
-    
-    try {
-        const { NetworkManager } = await import('../core/index.js');
-        const provider = NetworkManager.getProvider();
-        
-        if (!provider) {
-            throw new Error('Provider not available');
-        }
-        
-        const contracts = getContracts();
-        const contract = new ethers.Contract(contracts.BACKCHAT, BACKCHAT_ABI, provider);
-        
-        return contract;
-    } catch (error) {
-        console.warn('[BackchatTx] Failed to get read-only contract:', error.message);
-        throw error;
-    }
-}
-
-/**
- * Pre-fetches platform fee for approval
- */
-async function getPlatformFee() {
-    try {
-        const contract = await getBackchatContractReadOnly();
-        const fee = await contract.platformFee();
-        return fee;
-    } catch (e) {
-        console.warn('[BackchatTx] Could not fetch platform fee:', e.message);
-        const ethers = window.ethers;
-        return ethers.parseEther('1'); // Default 1 BKC
-    }
+    const { NetworkManager } = await import('../core/index.js');
+    return new window.ethers.Contract(getContracts().BACKCHAT, BACKCHAT_ABI, NetworkManager.getProvider());
 }
 
 // ============================================================================
-// 4. TRANSACTION FUNCTIONS - POSTS
+// 3. PROFILE TRANSACTIONS
 // ============================================================================
 
 /**
- * Creates a new public post
- * 
- * @param {Object} params - Post parameters
- * @param {string} params.content - Post text content
- * @param {string} [params.ipfsHash] - IPFS hash for media
- * @param {HTMLElement} [params.button] - Button element for loading state
- * @param {Function} [params.onSuccess] - Success callback (receipt, postId)
- * @param {Function} [params.onError] - Error callback
- * @returns {Promise<Object>} Transaction result
+ * Creates a new user profile with username
+ * Fee depends on username length (shorter = more expensive)
  */
-export async function createPost({
-    content,
-    ipfsHash = '',
-    button = null,
-    onSuccess = null,
-    onError = null
+export async function createProfile({
+    username, displayName, bio, operator,
+    button = null, onSuccess = null, onError = null
 }) {
     const ethers = window.ethers;
-    const contracts = getContracts();
-    
-    if (!content && !ipfsHash) {
-        throw new Error('Content or IPFS hash is required');
-    }
-    
-    // Pre-fetch fee for approval
-    const feeAmount = await getPlatformFee();
-    console.log('[BackchatTx] Platform fee:', ethers.formatEther(feeAmount), 'BKC');
+    let storedOperator = operator;
+    let usernameFee = 0n;
 
     return await txEngine.execute({
-        name: 'CreatePost',
-        button,
+        name: 'CreateProfile', button,
+        getContract: async (signer) => getBackchatContract(signer),
+        method: 'createProfile',
+        args: () => [username, displayName || '', bio || '', resolveOperator(storedOperator)],
+        get value() { return usernameFee; },
         
+        validate: async (signer, userAddress) => {
+            const contract = getBackchatContract(signer);
+            
+            // Check username availability
+            const available = await contract.isUsernameAvailable(username);
+            if (!available) throw new Error('Username is already taken');
+            
+            // Check username format (1-15 chars, a-z, 0-9, underscore)
+            if (!username || username.length < 1 || username.length > 15) {
+                throw new Error('Username must be 1-15 characters');
+            }
+            if (!/^[a-z0-9_]+$/.test(username)) {
+                throw new Error('Username can only contain lowercase letters, numbers, and underscores');
+            }
+            
+            // Get username fee
+            usernameFee = await contract.getUsernameFee(username.length);
+            console.log('[Backchat] Username fee:', ethers.formatEther(usernameFee), 'ETH');
+            
+            // Check ETH balance
+            const { NetworkManager } = await import('../core/index.js');
+            const balance = await NetworkManager.getProvider().getBalance(userAddress);
+            if (balance < usernameFee + ethers.parseEther('0.001')) {
+                throw new Error(`Insufficient ETH. Need ~${ethers.formatEther(usernameFee + ethers.parseEther('0.001'))} ETH`);
+            }
+        },
+        onSuccess, onError
+    });
+}
+
+/**
+ * Updates user profile (free, only gas)
+ */
+export async function updateProfile({
+    displayName, bio,
+    button = null, onSuccess = null, onError = null
+}) {
+    return await txEngine.execute({
+        name: 'UpdateProfile', button,
+        getContract: async (signer) => getBackchatContract(signer),
+        method: 'updateProfile',
+        args: [displayName || '', bio || ''],
+        
+        validate: async () => {
+            if (displayName && displayName.length > 30) throw new Error('Display name max 30 chars');
+            if (bio && bio.length > 160) throw new Error('Bio max 160 chars');
+        },
+        onSuccess, onError
+    });
+}
+
+// ============================================================================
+// 4. CONTENT TRANSACTIONS
+// ============================================================================
+
+/**
+ * Creates a new post
+ */
+export async function createPost({
+    content, mediaCID, operator,
+    button = null, onSuccess = null, onError = null
+}) {
+    const ethers = window.ethers;
+    let storedOperator = operator;
+    let postFee = 0n;
+
+    return await txEngine.execute({
+        name: 'CreatePost', button,
         getContract: async (signer) => getBackchatContract(signer),
         method: 'createPost',
-        args: [content || '', ipfsHash || ''],
+        args: () => [content, mediaCID || '', resolveOperator(storedOperator)],
+        get value() { return postFee; },
         
-        // Approval for platform fee
-        approval: (feeAmount > 0n && contracts.BKC_TOKEN) ? {
-            token: contracts.BKC_TOKEN,
-            spender: contracts.BACKCHAT,
-            amount: feeAmount
-        } : null,
+        validate: async (signer, userAddress) => {
+            if (!content || content.length === 0) throw new Error('Content is required');
+            if (content.length > 500) throw new Error('Content max 500 chars');
+            
+            const contract = getBackchatContract(signer);
+            const fees = await contract.getCurrentFees();
+            postFee = fees.postFee;
+            
+            const { NetworkManager } = await import('../core/index.js');
+            const balance = await NetworkManager.getProvider().getBalance(userAddress);
+            if (balance < postFee + ethers.parseEther('0.001')) throw new Error('Insufficient ETH');
+        },
         
         onSuccess: async (receipt) => {
-            console.log('[BackchatTx] Post created:', receipt.hash);
-            
-            // Extract postId from event
             let postId = null;
             try {
                 const iface = new ethers.Interface(BACKCHAT_ABI);
                 for (const log of receipt.logs) {
                     try {
                         const parsed = iface.parseLog(log);
-                        if (parsed && parsed.name === 'PostCreated') {
-                            postId = Number(parsed.args.postId);
-                            console.log('[BackchatTx] Created post ID:', postId);
-                            break;
-                        }
+                        if (parsed?.name === 'PostCreated') { postId = Number(parsed.args.postId); break; }
                     } catch {}
                 }
-            } catch (e) {
-                console.warn('[BackchatTx] Could not parse event logs:', e.message);
-            }
-
-            if (onSuccess) {
-                onSuccess(receipt, postId);
-            }
+            } catch {}
+            if (onSuccess) onSuccess(receipt, postId);
         },
-        
-        onError: (error) => {
-            console.error('[BackchatTx] CreatePost failed:', error);
-            if (onError) {
-                onError(error);
-            }
-        }
-    });
-}
-
-/**
- * Edits an existing post
- * 
- * @param {Object} params - Edit parameters
- * @param {number|bigint} params.postId - Post ID to edit
- * @param {string} params.newContent - New content
- * @param {string} [params.newIpfsHash] - New IPFS hash
- * @param {HTMLElement} [params.button] - Button element
- * @param {Function} [params.onSuccess] - Success callback
- * @param {Function} [params.onError] - Error callback
- */
-export async function editPost({
-    postId,
-    newContent,
-    newIpfsHash = '',
-    button = null,
-    onSuccess = null,
-    onError = null
-}) {
-    if (postId === undefined || postId === null) {
-        throw new Error('Post ID is required');
-    }
-    
-    if (!newContent && !newIpfsHash) {
-        throw new Error('New content or IPFS hash is required');
-    }
-
-    return await txEngine.execute({
-        name: 'EditPost',
-        button,
-        
-        getContract: async (signer) => getBackchatContract(signer),
-        method: 'editPost',
-        args: [BigInt(postId), newContent || '', newIpfsHash || ''],
-        
-        validate: async (signer, userAddress) => {
-            const contract = getBackchatContract(signer);
-            const post = await contract.getPost(postId);
-            
-            if (!post.exists) {
-                throw new Error('Post not found');
-            }
-            
-            if (post.deleted) {
-                throw new Error('Post has been deleted');
-            }
-            
-            if (post.author.toLowerCase() !== userAddress.toLowerCase()) {
-                throw new Error('Only the author can edit this post');
-            }
-        },
-        
-        onSuccess,
         onError
     });
 }
 
 /**
- * Deletes a post (soft delete)
- * 
- * @param {Object} params - Delete parameters
- * @param {number|bigint} params.postId - Post ID to delete
- * @param {HTMLElement} [params.button] - Button element
- * @param {Function} [params.onSuccess] - Success callback
- * @param {Function} [params.onError] - Error callback
+ * Creates a reply to an existing post with optional BKC tip
  */
-export async function deletePost({
-    postId,
-    button = null,
-    onSuccess = null,
-    onError = null
-}) {
-    if (postId === undefined || postId === null) {
-        throw new Error('Post ID is required');
-    }
-
-    return await txEngine.execute({
-        name: 'DeletePost',
-        button,
-        
-        getContract: async (signer) => getBackchatContract(signer),
-        method: 'deletePost',
-        args: [BigInt(postId)],
-        
-        validate: async (signer, userAddress) => {
-            const contract = getBackchatContract(signer);
-            const post = await contract.getPost(postId);
-            
-            if (!post.exists || post.deleted) {
-                throw new Error('Post not found or already deleted');
-            }
-            
-            if (post.author.toLowerCase() !== userAddress.toLowerCase()) {
-                throw new Error('Only the author can delete this post');
-            }
-        },
-        
-        onSuccess,
-        onError
-    });
-}
-
-// ============================================================================
-// 5. TRANSACTION FUNCTIONS - COMMENTS
-// ============================================================================
-
-/**
- * Creates a comment on a post
- * 
- * @param {Object} params - Comment parameters
- * @param {number|bigint} params.postId - Post ID to comment on
- * @param {string} params.content - Comment content
- * @param {string} [params.ipfsHash] - IPFS hash for media
- * @param {HTMLElement} [params.button] - Button element
- * @param {Function} [params.onSuccess] - Success callback (receipt, commentId)
- * @param {Function} [params.onError] - Error callback
- */
-export async function createComment({
-    postId,
-    content,
-    ipfsHash = '',
-    button = null,
-    onSuccess = null,
-    onError = null
+export async function createReply({
+    parentId, content, mediaCID, tipBkc, operator,
+    button = null, onSuccess = null, onError = null
 }) {
     const ethers = window.ethers;
     const contracts = getContracts();
-    
-    if (postId === undefined || postId === null) {
-        throw new Error('Post ID is required');
-    }
-    
-    if (!content && !ipfsHash) {
-        throw new Error('Content or IPFS hash is required');
-    }
-    
-    const feeAmount = await getPlatformFee();
+    let storedOperator = operator;
+    let replyFee = 0n;
+    const tipAmount = tipBkc ? BigInt(tipBkc) : 0n;
 
     return await txEngine.execute({
-        name: 'CreateComment',
-        button,
-        
+        name: 'CreateReply', button,
         getContract: async (signer) => getBackchatContract(signer),
-        method: 'createComment',
-        args: [BigInt(postId), content || '', ipfsHash || ''],
+        method: 'createReply',
+        args: () => [parentId, content, mediaCID || '', resolveOperator(storedOperator), tipAmount],
+        get value() { return replyFee; },
         
-        approval: (feeAmount > 0n && contracts.BKC_TOKEN) ? {
-            token: contracts.BKC_TOKEN,
-            spender: contracts.BACKCHAT,
-            amount: feeAmount
-        } : null,
+        // BKC approval for tip
+        get approval() {
+            if (tipAmount > 0n) {
+                return { token: contracts.BKC_TOKEN, spender: contracts.BACKCHAT, amount: tipAmount };
+            }
+            return null;
+        },
         
-        validate: async (signer) => {
-            const contract = getBackchatContract(signer);
-            const post = await contract.getPost(postId);
+        validate: async (signer, userAddress) => {
+            if (!content) throw new Error('Content is required');
+            if (content.length > 500) throw new Error('Content max 500 chars');
             
-            if (!post.exists || post.deleted) {
-                throw new Error('Post not found or deleted');
+            const contract = getBackchatContract(signer);
+            
+            // Check parent post exists
+            const author = await contract.postAuthor(parentId);
+            if (author === '0x0000000000000000000000000000000000000000') throw new Error('Post not found');
+            
+            const fees = await contract.getCurrentFees();
+            replyFee = fees.replyFee;
+            
+            // Check balances
+            const { NetworkManager } = await import('../core/index.js');
+            const provider = NetworkManager.getProvider();
+            const ethBalance = await provider.getBalance(userAddress);
+            if (ethBalance < replyFee + ethers.parseEther('0.001')) throw new Error('Insufficient ETH');
+            
+            if (tipAmount > 0n) {
+                const bkcContract = new ethers.Contract(contracts.BKC_TOKEN, ['function balanceOf(address) view returns (uint256)'], provider);
+                const bkcBalance = await bkcContract.balanceOf(userAddress);
+                if (bkcBalance < tipAmount) throw new Error('Insufficient BKC for tip');
             }
         },
         
         onSuccess: async (receipt) => {
-            let commentId = null;
+            let postId = null;
             try {
                 const iface = new ethers.Interface(BACKCHAT_ABI);
                 for (const log of receipt.logs) {
                     try {
                         const parsed = iface.parseLog(log);
-                        if (parsed && parsed.name === 'CommentCreated') {
-                            commentId = Number(parsed.args.commentId);
-                            break;
-                        }
+                        if (parsed?.name === 'ReplyCreated') { postId = Number(parsed.args.postId); break; }
                     } catch {}
                 }
             } catch {}
-
-            if (onSuccess) {
-                onSuccess(receipt, commentId);
-            }
+            if (onSuccess) onSuccess(receipt, postId);
         },
         onError
     });
 }
 
 /**
- * Replies to a comment (threading)
- * 
- * @param {Object} params - Reply parameters
- * @param {number|bigint} params.commentId - Comment ID to reply to
- * @param {string} params.content - Reply content
- * @param {string} [params.ipfsHash] - IPFS hash
- * @param {HTMLElement} [params.button] - Button element
- * @param {Function} [params.onSuccess] - Success callback (receipt, replyId)
- * @param {Function} [params.onError] - Error callback
+ * Reposts an existing post with optional BKC tip
  */
-export async function replyToComment({
-    commentId,
-    content,
-    ipfsHash = '',
-    button = null,
-    onSuccess = null,
-    onError = null
+export async function createRepost({
+    originalPostId, tipBkc, operator,
+    button = null, onSuccess = null, onError = null
 }) {
     const ethers = window.ethers;
     const contracts = getContracts();
-    
-    if (commentId === undefined || commentId === null) {
-        throw new Error('Comment ID is required');
-    }
-    
-    if (!content && !ipfsHash) {
-        throw new Error('Content or IPFS hash is required');
-    }
-    
-    const feeAmount = await getPlatformFee();
+    let storedOperator = operator;
+    let repostFee = 0n;
+    const tipAmount = tipBkc ? BigInt(tipBkc) : 0n;
 
     return await txEngine.execute({
-        name: 'ReplyToComment',
-        button,
-        
+        name: 'CreateRepost', button,
         getContract: async (signer) => getBackchatContract(signer),
-        method: 'replyToComment',
-        args: [BigInt(commentId), content || '', ipfsHash || ''],
+        method: 'createRepost',
+        args: () => [originalPostId, resolveOperator(storedOperator), tipAmount],
+        get value() { return repostFee; },
         
-        approval: (feeAmount > 0n && contracts.BKC_TOKEN) ? {
-            token: contracts.BKC_TOKEN,
-            spender: contracts.BACKCHAT,
-            amount: feeAmount
-        } : null,
+        get approval() {
+            if (tipAmount > 0n) {
+                return { token: contracts.BKC_TOKEN, spender: contracts.BACKCHAT, amount: tipAmount };
+            }
+            return null;
+        },
+        
+        validate: async (signer, userAddress) => {
+            const contract = getBackchatContract(signer);
+            const author = await contract.postAuthor(originalPostId);
+            if (author === '0x0000000000000000000000000000000000000000') throw new Error('Post not found');
+            
+            const fees = await contract.getCurrentFees();
+            repostFee = fees.repostFee;
+        },
+        onSuccess, onError
+    });
+}
+
+// ============================================================================
+// 5. ENGAGEMENT TRANSACTIONS
+// ============================================================================
+
+/**
+ * Likes a post (limited to one per user per post)
+ */
+export async function like({
+    postId, tipBkc, operator,
+    button = null, onSuccess = null, onError = null
+}) {
+    const ethers = window.ethers;
+    const contracts = getContracts();
+    let storedOperator = operator;
+    let likeFee = 0n;
+    const tipAmount = tipBkc ? BigInt(tipBkc) : 0n;
+
+    return await txEngine.execute({
+        name: 'Like', button,
+        getContract: async (signer) => getBackchatContract(signer),
+        method: 'like',
+        args: () => [postId, resolveOperator(storedOperator), tipAmount],
+        get value() { return likeFee; },
+        
+        get approval() {
+            if (tipAmount > 0n) {
+                return { token: contracts.BKC_TOKEN, spender: contracts.BACKCHAT, amount: tipAmount };
+            }
+            return null;
+        },
+        
+        validate: async (signer, userAddress) => {
+            const contract = getBackchatContract(signer);
+            
+            const author = await contract.postAuthor(postId);
+            if (author === '0x0000000000000000000000000000000000000000') throw new Error('Post not found');
+            
+            const alreadyLiked = await contract.hasUserLiked(postId, userAddress);
+            if (alreadyLiked) throw new Error('Already liked this post');
+            
+            const fees = await contract.getCurrentFees();
+            likeFee = fees.likeFee;
+        },
+        onSuccess, onError
+    });
+}
+
+/**
+ * Super likes a post (unlimited, contributes to trending)
+ * Minimum 0.0001 ETH, no maximum
+ */
+export async function superLike({
+    postId, ethAmount, tipBkc, operator,
+    button = null, onSuccess = null, onError = null
+}) {
+    const ethers = window.ethers;
+    const contracts = getContracts();
+    let storedOperator = operator;
+    const superLikeAmount = BigInt(ethAmount);
+    const tipAmount = tipBkc ? BigInt(tipBkc) : 0n;
+
+    return await txEngine.execute({
+        name: 'SuperLike', button,
+        getContract: async (signer) => getBackchatContract(signer),
+        method: 'superLike',
+        args: () => [postId, resolveOperator(storedOperator), tipAmount],
+        value: superLikeAmount,
+        
+        get approval() {
+            if (tipAmount > 0n) {
+                return { token: contracts.BKC_TOKEN, spender: contracts.BACKCHAT, amount: tipAmount };
+            }
+            return null;
+        },
+        
+        validate: async (signer, userAddress) => {
+            const contract = getBackchatContract(signer);
+            
+            const author = await contract.postAuthor(postId);
+            if (author === '0x0000000000000000000000000000000000000000') throw new Error('Post not found');
+            
+            const fees = await contract.getCurrentFees();
+            if (superLikeAmount < fees.superLikeMin) {
+                throw new Error(`Minimum super like is ${ethers.formatEther(fees.superLikeMin)} ETH`);
+            }
+        },
+        onSuccess, onError
+    });
+}
+
+/**
+ * Follows a user
+ */
+export async function follow({
+    toFollow, tipBkc, operator,
+    button = null, onSuccess = null, onError = null
+}) {
+    const ethers = window.ethers;
+    const contracts = getContracts();
+    let storedOperator = operator;
+    let followFee = 0n;
+    const tipAmount = tipBkc ? BigInt(tipBkc) : 0n;
+
+    return await txEngine.execute({
+        name: 'Follow', button,
+        getContract: async (signer) => getBackchatContract(signer),
+        method: 'follow',
+        args: () => [toFollow, resolveOperator(storedOperator), tipAmount],
+        get value() { return followFee; },
+        
+        get approval() {
+            if (tipAmount > 0n) {
+                return { token: contracts.BKC_TOKEN, spender: contracts.BACKCHAT, amount: tipAmount };
+            }
+            return null;
+        },
+        
+        validate: async (signer, userAddress) => {
+            if (!toFollow || toFollow === '0x0000000000000000000000000000000000000000') {
+                throw new Error('Invalid address');
+            }
+            if (toFollow.toLowerCase() === userAddress.toLowerCase()) {
+                throw new Error('Cannot follow yourself');
+            }
+            
+            const contract = getBackchatContract(signer);
+            const fees = await contract.getCurrentFees();
+            followFee = fees.followFee;
+        },
+        onSuccess, onError
+    });
+}
+
+/**
+ * Unfollows a user (free, only gas)
+ */
+export async function unfollow({
+    toUnfollow,
+    button = null, onSuccess = null, onError = null
+}) {
+    return await txEngine.execute({
+        name: 'Unfollow', button,
+        getContract: async (signer) => getBackchatContract(signer),
+        method: 'unfollow',
+        args: [toUnfollow],
+        onSuccess, onError
+    });
+}
+
+// ============================================================================
+// 6. PREMIUM TRANSACTIONS
+// ============================================================================
+
+/**
+ * Boosts profile visibility
+ * Duration = (ETH / 0.0005) days
+ */
+export async function boostProfile({
+    ethAmount, operator,
+    button = null, onSuccess = null, onError = null
+}) {
+    const ethers = window.ethers;
+    let storedOperator = operator;
+    const boostAmount = BigInt(ethAmount);
+
+    return await txEngine.execute({
+        name: 'BoostProfile', button,
+        getContract: async (signer) => getBackchatContract(signer),
+        method: 'boostProfile',
+        args: () => [resolveOperator(storedOperator)],
+        value: boostAmount,
         
         validate: async (signer) => {
             const contract = getBackchatContract(signer);
-            const comment = await contract.getComment(commentId);
-            
-            if (!comment.exists || comment.deleted) {
-                throw new Error('Comment not found or deleted');
+            const fees = await contract.getCurrentFees();
+            if (boostAmount < fees.boostMin) {
+                throw new Error(`Minimum boost is ${ethers.formatEther(fees.boostMin)} ETH`);
             }
         },
-        
-        onSuccess: async (receipt) => {
-            let replyId = null;
-            try {
-                const iface = new ethers.Interface(BACKCHAT_ABI);
-                for (const log of receipt.logs) {
-                    try {
-                        const parsed = iface.parseLog(log);
-                        if (parsed && parsed.name === 'CommentCreated') {
-                            replyId = Number(parsed.args.commentId);
-                            break;
-                        }
-                    } catch {}
-                }
-            } catch {}
-
-            if (onSuccess) {
-                onSuccess(receipt, replyId);
-            }
-        },
-        onError
+        onSuccess, onError
     });
 }
 
 /**
- * Deletes a comment (soft delete)
+ * Obtains a trust badge for 1 year
  */
-export async function deleteComment({
-    commentId,
-    button = null,
-    onSuccess = null,
-    onError = null
-}) {
-    if (commentId === undefined || commentId === null) {
-        throw new Error('Comment ID is required');
-    }
-
-    return await txEngine.execute({
-        name: 'DeleteComment',
-        button,
-        
-        getContract: async (signer) => getBackchatContract(signer),
-        method: 'deleteComment',
-        args: [BigInt(commentId)],
-        
-        validate: async (signer, userAddress) => {
-            const contract = getBackchatContract(signer);
-            const comment = await contract.getComment(commentId);
-            
-            if (!comment.exists || comment.deleted) {
-                throw new Error('Comment not found or already deleted');
-            }
-            
-            if (comment.author.toLowerCase() !== userAddress.toLowerCase()) {
-                throw new Error('Only the author can delete this comment');
-            }
-        },
-        
-        onSuccess,
-        onError
-    });
-}
-
-// ============================================================================
-// 6. TRANSACTION FUNCTIONS - MODERATION (VOTING)
-// ============================================================================
-
-/**
- * Votes on a post (SAFE or UNSAFE)
- * 
- * @param {Object} params - Vote parameters
- * @param {number|bigint} params.postId - Post ID
- * @param {boolean} params.voteSafe - true = SAFE, false = UNSAFE
- * @param {HTMLElement} [params.button] - Button element
- * @param {Function} [params.onSuccess] - Success callback
- * @param {Function} [params.onError] - Error callback
- */
-export async function voteOnPost({
-    postId,
-    voteSafe,
-    button = null,
-    onSuccess = null,
-    onError = null
-}) {
-    const contracts = getContracts();
-    
-    if (postId === undefined || postId === null) {
-        throw new Error('Post ID is required');
-    }
-    
-    const feeAmount = await getPlatformFee();
-
-    return await txEngine.execute({
-        name: 'VoteOnPost',
-        button,
-        
-        getContract: async (signer) => getBackchatContract(signer),
-        method: 'voteOnPost',
-        args: [BigInt(postId), voteSafe],
-        
-        approval: (feeAmount > 0n && contracts.BKC_TOKEN) ? {
-            token: contracts.BKC_TOKEN,
-            spender: contracts.BACKCHAT,
-            amount: feeAmount
-        } : null,
-        
-        validate: async (signer, userAddress) => {
-            const contract = getBackchatContract(signer);
-            
-            const post = await contract.getPost(postId);
-            if (!post.exists || post.deleted) {
-                throw new Error('Post not found or deleted');
-            }
-            
-            const hasVoted = await contract.hasVotedOnPost(userAddress, postId);
-            if (hasVoted) {
-                throw new Error('You have already voted on this post');
-            }
-        },
-        
-        onSuccess,
-        onError
-    });
-}
-
-/**
- * Votes on a comment (SAFE or UNSAFE)
- */
-export async function voteOnComment({
-    commentId,
-    voteSafe,
-    button = null,
-    onSuccess = null,
-    onError = null
-}) {
-    const contracts = getContracts();
-    
-    if (commentId === undefined || commentId === null) {
-        throw new Error('Comment ID is required');
-    }
-    
-    const feeAmount = await getPlatformFee();
-
-    return await txEngine.execute({
-        name: 'VoteOnComment',
-        button,
-        
-        getContract: async (signer) => getBackchatContract(signer),
-        method: 'voteOnComment',
-        args: [BigInt(commentId), voteSafe],
-        
-        approval: (feeAmount > 0n && contracts.BKC_TOKEN) ? {
-            token: contracts.BKC_TOKEN,
-            spender: contracts.BACKCHAT,
-            amount: feeAmount
-        } : null,
-        
-        validate: async (signer, userAddress) => {
-            const contract = getBackchatContract(signer);
-            
-            const comment = await contract.getComment(commentId);
-            if (!comment.exists || comment.deleted) {
-                throw new Error('Comment not found or deleted');
-            }
-            
-            const hasVoted = await contract.hasVotedOnComment(userAddress, commentId);
-            if (hasVoted) {
-                throw new Error('You have already voted on this comment');
-            }
-        },
-        
-        onSuccess,
-        onError
-    });
-}
-
-// ============================================================================
-// 7. TRANSACTION FUNCTIONS - COMMUNITY NOTES
-// ============================================================================
-
-/**
- * Proposes a community note on a post
- * 
- * @param {Object} params - Note parameters
- * @param {number|bigint} params.postId - Post ID to annotate
- * @param {string} params.content - Note content (fact-check, context)
- * @param {string} [params.ipfsHash] - IPFS hash for evidence
- * @param {HTMLElement} [params.button] - Button element
- * @param {Function} [params.onSuccess] - Success callback (receipt, noteId)
- * @param {Function} [params.onError] - Error callback
- */
-export async function proposeNote({
-    postId,
-    content,
-    ipfsHash = '',
-    button = null,
-    onSuccess = null,
-    onError = null
+export async function obtainBadge({
+    operator,
+    button = null, onSuccess = null, onError = null
 }) {
     const ethers = window.ethers;
-    const contracts = getContracts();
-    
-    if (postId === undefined || postId === null) {
-        throw new Error('Post ID is required');
-    }
-    
-    if (!content) {
-        throw new Error('Note content is required');
-    }
-    
-    const feeAmount = await getPlatformFee();
+    let storedOperator = operator;
+    let badgeFee = 0n;
 
     return await txEngine.execute({
-        name: 'ProposeNote',
-        button,
-        
+        name: 'ObtainBadge', button,
         getContract: async (signer) => getBackchatContract(signer),
-        method: 'proposeNote',
-        args: [BigInt(postId), content, ipfsHash || ''],
-        
-        approval: (feeAmount > 0n && contracts.BKC_TOKEN) ? {
-            token: contracts.BKC_TOKEN,
-            spender: contracts.BACKCHAT,
-            amount: feeAmount
-        } : null,
+        method: 'obtainBadge',
+        args: () => [resolveOperator(storedOperator)],
+        get value() { return badgeFee; },
         
         validate: async (signer) => {
             const contract = getBackchatContract(signer);
-            const post = await contract.getPost(postId);
-            
-            if (!post.exists || post.deleted) {
-                throw new Error('Post not found or deleted');
-            }
+            const fees = await contract.getCurrentFees();
+            badgeFee = fees.badgeFee_;
         },
-        
-        onSuccess: async (receipt) => {
-            let noteId = null;
-            try {
-                const iface = new ethers.Interface(BACKCHAT_ABI);
-                for (const log of receipt.logs) {
-                    try {
-                        const parsed = iface.parseLog(log);
-                        if (parsed && parsed.name === 'NoteProposed') {
-                            noteId = Number(parsed.args.noteId);
-                            break;
-                        }
-                    } catch {}
-                }
-            } catch {}
-
-            if (onSuccess) {
-                onSuccess(receipt, noteId);
-            }
-        },
-        onError
-    });
-}
-
-/**
- * Votes on a community note (BELIEVE or DON'T BELIEVE)
- */
-export async function voteOnNote({
-    noteId,
-    believe,
-    button = null,
-    onSuccess = null,
-    onError = null
-}) {
-    const contracts = getContracts();
-    
-    if (noteId === undefined || noteId === null) {
-        throw new Error('Note ID is required');
-    }
-    
-    const feeAmount = await getPlatformFee();
-
-    return await txEngine.execute({
-        name: 'VoteOnNote',
-        button,
-        
-        getContract: async (signer) => getBackchatContract(signer),
-        method: 'voteOnNote',
-        args: [BigInt(noteId), believe],
-        
-        approval: (feeAmount > 0n && contracts.BKC_TOKEN) ? {
-            token: contracts.BKC_TOKEN,
-            spender: contracts.BACKCHAT,
-            amount: feeAmount
-        } : null,
-        
-        validate: async (signer, userAddress) => {
-            const contract = getBackchatContract(signer);
-            
-            const note = await contract.getNote(noteId);
-            if (!note.exists) {
-                throw new Error('Note not found');
-            }
-            
-            const hasVoted = await contract.hasVotedOnNote(userAddress, noteId);
-            if (hasVoted) {
-                throw new Error('You have already voted on this note');
-            }
-        },
-        
-        onSuccess,
-        onError
+        onSuccess, onError
     });
 }
 
 // ============================================================================
-// 8. TRANSACTION FUNCTIONS - TIPS
+// 7. WITHDRAWAL
 // ============================================================================
 
 /**
- * Sends a tip to a creator
- * Tip is split: creator receives (100% - tipMiningFeeBips), mining receives rest
- * 
- * @param {Object} params - Tip parameters
- * @param {string} params.creator - Creator address
- * @param {string|bigint} params.amount - Tip amount in BKC (wei)
- * @param {number|bigint} [params.postId=0] - Optional post ID (0 for general tip)
- * @param {HTMLElement} [params.button] - Button element
- * @param {Function} [params.onSuccess] - Success callback
- * @param {Function} [params.onError] - Error callback
+ * Withdraws accumulated ETH earnings
  */
-export async function sendTip({
-    creator,
-    amount,
-    postId = 0,
-    button = null,
-    onSuccess = null,
-    onError = null
+export async function withdraw({
+    button = null, onSuccess = null, onError = null
 }) {
     const ethers = window.ethers;
-    const contracts = getContracts();
-    
-    if (!creator || !ethers.isAddress(creator)) {
-        throw new Error('Valid creator address is required');
-    }
-    
-    const tipAmount = BigInt(amount);
-    if (tipAmount <= 0n) {
-        throw new Error('Tip amount must be greater than 0');
-    }
 
     return await txEngine.execute({
-        name: 'SendTip',
-        button,
-        
+        name: 'Withdraw', button,
         getContract: async (signer) => getBackchatContract(signer),
-        method: 'sendTip',
-        args: [creator, tipAmount, BigInt(postId)],
-        
-        // Approval for tip amount
-        approval: contracts.BKC_TOKEN ? {
-            token: contracts.BKC_TOKEN,
-            spender: contracts.BACKCHAT,
-            amount: tipAmount
-        } : null,
-        
-        validate: async (signer, userAddress) => {
-            if (creator.toLowerCase() === userAddress.toLowerCase()) {
-                throw new Error('Cannot tip yourself');
-            }
-            
-            const contract = getBackchatContract(signer);
-            const minTip = await contract.minTipAmount();
-            
-            if (tipAmount < minTip) {
-                throw new Error(`Minimum tip is ${ethers.formatEther(minTip)} BKC`);
-            }
-            
-            // Validate post if specified
-            if (postId > 0) {
-                const post = await contract.getPost(postId);
-                if (!post.exists) {
-                    throw new Error('Post not found');
-                }
-            }
-        },
-        
-        onSuccess,
-        onError
-    });
-}
-
-/**
- * Claims accumulated tip balance
- * Requires: positive balance, Booster NFT, KYC (if enabled)
- */
-export async function claimRewards({
-    button = null,
-    onSuccess = null,
-    onError = null
-} = {}) {
-    return await txEngine.execute({
-        name: 'ClaimRewards',
-        button,
-        
-        getContract: async (signer) => getBackchatContract(signer),
-        method: 'claimRewards',
+        method: 'withdraw',
         args: [],
         
         validate: async (signer, userAddress) => {
-            const ethers = window.ethers;
             const contract = getBackchatContract(signer);
-            
-            const balance = await contract.creatorBalance(userAddress);
-            if (balance === 0n) {
-                throw new Error('No rewards to claim');
-            }
-            
-            const hasBooster = await contract.hasBoosterAccess(userAddress);
-            if (!hasBooster) {
-                throw new Error('Booster NFT required to claim rewards');
-            }
-            
-            const kycRequired = await contract.kycRequired();
-            if (kycRequired) {
-                const [verified, , expiresAt] = await contract.getKYCStatus(userAddress);
-                const now = Math.floor(Date.now() / 1000);
-                
-                if (!verified || (expiresAt > 0 && now > Number(expiresAt))) {
-                    throw new Error('KYC verification required to claim rewards');
-                }
-            }
-            
-            console.log('[BackchatTx] Claiming rewards:', ethers.formatEther(balance), 'BKC');
+            const pending = await contract.getPendingBalance(userAddress);
+            if (pending === 0n) throw new Error('Nothing to withdraw');
+            console.log('[Backchat] Withdrawing:', ethers.formatEther(pending), 'ETH');
         },
-        
-        onSuccess,
-        onError
+        onSuccess, onError
     });
 }
 
 // ============================================================================
-// 9. TRANSACTION FUNCTIONS - POST BOOST
+// 8. READ FUNCTIONS
 // ============================================================================
 
-/**
- * Boosts a post with ETH for visibility
- * 100% of ETH goes to Treasury
- * 
- * @param {Object} params - Boost parameters
- * @param {number|bigint} params.postId - Post ID to boost
- * @param {string|bigint} params.amount - ETH amount in wei
- * @param {HTMLElement} [params.button] - Button element
- * @param {Function} [params.onSuccess] - Success callback
- * @param {Function} [params.onError] - Error callback
- */
-export async function boostPost({
-    postId,
-    amount,
-    button = null,
-    onSuccess = null,
-    onError = null
-}) {
+export async function getCurrentFees() {
     const ethers = window.ethers;
-    
-    if (postId === undefined || postId === null) {
-        throw new Error('Post ID is required');
-    }
-    
-    const boostAmount = BigInt(amount);
-    if (boostAmount <= 0n) {
-        throw new Error('Boost amount must be greater than 0');
-    }
-
-    return await txEngine.execute({
-        name: 'BoostPost',
-        button,
-        
-        getContract: async (signer) => getBackchatContract(signer),
-        method: 'boostPost',
-        args: [BigInt(postId)],
-        
-        // ETH value
-        value: boostAmount,
-        
-        validate: async (signer, userAddress) => {
-            const contract = getBackchatContract(signer);
-            const post = await contract.getPost(postId);
-            
-            if (!post.exists || post.deleted) {
-                throw new Error('Post not found or deleted');
-            }
-            
-            // Check ETH balance
-            const provider = signer.provider;
-            const balance = await provider.getBalance(userAddress);
-            
-            if (balance < boostAmount) {
-                throw new Error(`Insufficient ETH. Need ${ethers.formatEther(boostAmount)} ETH`);
-            }
-        },
-        
-        onSuccess,
-        onError
-    });
+    const contract = await getBackchatContractReadOnly();
+    const fees = await contract.getCurrentFees();
+    return {
+        postFee: fees.postFee, postFeeFormatted: ethers.formatEther(fees.postFee),
+        replyFee: fees.replyFee, replyFeeFormatted: ethers.formatEther(fees.replyFee),
+        likeFee: fees.likeFee, likeFeeFormatted: ethers.formatEther(fees.likeFee),
+        followFee: fees.followFee, followFeeFormatted: ethers.formatEther(fees.followFee),
+        repostFee: fees.repostFee, repostFeeFormatted: ethers.formatEther(fees.repostFee),
+        superLikeMin: fees.superLikeMin, superLikeMinFormatted: ethers.formatEther(fees.superLikeMin),
+        boostMin: fees.boostMin, boostMinFormatted: ethers.formatEther(fees.boostMin),
+        badgeFee: fees.badgeFee_, badgeFeeFormatted: ethers.formatEther(fees.badgeFee_)
+    };
 }
 
-// ============================================================================
-// 10. TRANSACTION FUNCTIONS - PRIVATE MESSAGES
-// ============================================================================
-
-/**
- * Registers public key for E2EE messaging
- * 
- * @param {Object} params - Key parameters
- * @param {string|Uint8Array} params.publicKey - User's public encryption key
- * @param {HTMLElement} [params.button] - Button element
- * @param {Function} [params.onSuccess] - Success callback
- * @param {Function} [params.onError] - Error callback
- */
-export async function setPublicKey({
-    publicKey,
-    button = null,
-    onSuccess = null,
-    onError = null
-}) {
+export async function getUsernameFee(length) {
     const ethers = window.ethers;
-    
-    if (!publicKey) {
-        throw new Error('Public key is required');
-    }
-    
-    // Convert to bytes if string
-    let keyBytes;
-    if (typeof publicKey === 'string') {
-        keyBytes = ethers.toUtf8Bytes(publicKey);
-    } else {
-        keyBytes = publicKey;
-    }
-
-    return await txEngine.execute({
-        name: 'SetPublicKey',
-        button,
-        
-        getContract: async (signer) => getBackchatContract(signer),
-        method: 'setPublicKey',
-        args: [keyBytes],
-        
-        onSuccess,
-        onError
-    });
+    const contract = await getBackchatContractReadOnly();
+    const fee = await contract.getUsernameFee(length);
+    return { fee, formatted: ethers.formatEther(fee) };
 }
 
-/**
- * Sends an encrypted private message
- * 
- * @param {Object} params - Message parameters
- * @param {string} params.to - Recipient address
- * @param {string} params.encryptedContent - Encrypted message content
- * @param {string} [params.encryptedIpfsHash] - Encrypted IPFS hash
- * @param {HTMLElement} [params.button] - Button element
- * @param {Function} [params.onSuccess] - Success callback (receipt, messageId)
- * @param {Function} [params.onError] - Error callback
- */
-export async function sendPrivateMessage({
-    to,
-    encryptedContent,
-    encryptedIpfsHash = '',
-    button = null,
-    onSuccess = null,
-    onError = null
-}) {
-    const ethers = window.ethers;
-    const contracts = getContracts();
-    
-    if (!to || !ethers.isAddress(to)) {
-        throw new Error('Valid recipient address is required');
-    }
-    
-    if (!encryptedContent) {
-        throw new Error('Message content is required');
-    }
-    
-    const feeAmount = await getPlatformFee();
-
-    return await txEngine.execute({
-        name: 'SendPrivateMessage',
-        button,
-        
-        getContract: async (signer) => getBackchatContract(signer),
-        method: 'sendPrivateMessage',
-        args: [to, encryptedContent, encryptedIpfsHash || ''],
-        
-        approval: (feeAmount > 0n && contracts.BKC_TOKEN) ? {
-            token: contracts.BKC_TOKEN,
-            spender: contracts.BACKCHAT,
-            amount: feeAmount
-        } : null,
-        
-        validate: async (signer, userAddress) => {
-            if (to.toLowerCase() === userAddress.toLowerCase()) {
-                throw new Error('Cannot message yourself');
-            }
-            
-            const contract = getBackchatContract(signer);
-            const recipientKey = await contract.getPublicKey(to);
-            
-            if (!recipientKey || recipientKey.length === 0 || recipientKey === '0x') {
-                throw new Error('Recipient has not registered a public key');
-            }
-        },
-        
-        onSuccess: async (receipt) => {
-            let messageId = null;
-            try {
-                const iface = new ethers.Interface(BACKCHAT_ABI);
-                for (const log of receipt.logs) {
-                    try {
-                        const parsed = iface.parseLog(log);
-                        if (parsed && parsed.name === 'PrivateMessageSent') {
-                            messageId = Number(parsed.args.messageId);
-                            break;
-                        }
-                    } catch {}
-                }
-            } catch {}
-
-            if (onSuccess) {
-                onSuccess(receipt, messageId);
-            }
-        },
-        onError
-    });
+export async function getPostAuthor(postId) {
+    const contract = await getBackchatContractReadOnly();
+    return await contract.postAuthor(postId);
 }
 
-/**
- * Replies to a private message
- */
-export async function replyToMessage({
-    messageId,
-    encryptedContent,
-    encryptedIpfsHash = '',
-    button = null,
-    onSuccess = null,
-    onError = null
-}) {
+export async function getPostCount() {
+    const contract = await getBackchatContractReadOnly();
+    return Number(await contract.postCounter());
+}
+
+export async function getPendingBalance(userAddress) {
     const ethers = window.ethers;
-    const contracts = getContracts();
-    
-    if (messageId === undefined || messageId === null) {
-        throw new Error('Message ID is required');
-    }
-    
-    if (!encryptedContent) {
-        throw new Error('Message content is required');
-    }
-    
-    const feeAmount = await getPlatformFee();
+    const contract = await getBackchatContractReadOnly();
+    const balance = await contract.getPendingBalance(userAddress);
+    return { balance, formatted: ethers.formatEther(balance) };
+}
 
-    return await txEngine.execute({
-        name: 'ReplyToMessage',
-        button,
-        
-        getContract: async (signer) => getBackchatContract(signer),
-        method: 'replyToMessage',
-        args: [BigInt(messageId), encryptedContent, encryptedIpfsHash || ''],
-        
-        approval: (feeAmount > 0n && contracts.BKC_TOKEN) ? {
-            token: contracts.BKC_TOKEN,
-            spender: contracts.BACKCHAT,
-            amount: feeAmount
-        } : null,
-        
-        validate: async (signer, userAddress) => {
-            const contract = getBackchatContract(signer);
-            const msg = await contract.getMessage(messageId);
-            
-            // msg returns tuple: [sender, recipient, ...]
-            const sender = msg[0];
-            const recipient = msg[1];
-            
-            if (sender === '0x0000000000000000000000000000000000000000') {
-                throw new Error('Message not found');
-            }
-            
-            if (sender.toLowerCase() !== userAddress.toLowerCase() && 
-                recipient.toLowerCase() !== userAddress.toLowerCase()) {
-                throw new Error('You are not a participant in this conversation');
-            }
-        },
-        
-        onSuccess: async (receipt) => {
-            let replyId = null;
-            try {
-                const iface = new ethers.Interface(BACKCHAT_ABI);
-                for (const log of receipt.logs) {
-                    try {
-                        const parsed = iface.parseLog(log);
-                        if (parsed && parsed.name === 'PrivateMessageSent') {
-                            replyId = Number(parsed.args.messageId);
-                            break;
-                        }
-                    } catch {}
-                }
-            } catch {}
+export async function isUsernameAvailable(username) {
+    const contract = await getBackchatContractReadOnly();
+    return await contract.isUsernameAvailable(username);
+}
 
-            if (onSuccess) {
-                onSuccess(receipt, replyId);
-            }
-        },
-        onError
-    });
+export async function getUsernameOwner(username) {
+    const contract = await getBackchatContractReadOnly();
+    return await contract.getUsernameOwner(username);
+}
+
+export async function hasUserLiked(postId, userAddress) {
+    const contract = await getBackchatContractReadOnly();
+    return await contract.hasUserLiked(postId, userAddress);
+}
+
+export async function isProfileBoosted(userAddress) {
+    const contract = await getBackchatContractReadOnly();
+    return await contract.isProfileBoosted(userAddress);
+}
+
+export async function hasTrustBadge(userAddress) {
+    const contract = await getBackchatContractReadOnly();
+    return await contract.hasTrustBadge(userAddress);
+}
+
+export async function getBoostExpiry(userAddress) {
+    const contract = await getBackchatContractReadOnly();
+    return Number(await contract.boostExpiry(userAddress));
+}
+
+export async function getBadgeExpiry(userAddress) {
+    const contract = await getBackchatContractReadOnly();
+    return Number(await contract.badgeExpiry(userAddress));
+}
+
+export async function getVersion() {
+    const contract = await getBackchatContractReadOnly();
+    return await contract.version();
 }
 
 // ============================================================================
-// 11. TRANSACTION FUNCTIONS - KYC & BURN
-// ============================================================================
-
-/**
- * Verifies KYC from external provider and caches result
- */
-export async function verifyKYC({
-    userAddress,
-    button = null,
-    onSuccess = null,
-    onError = null
-}) {
-    const ethers = window.ethers;
-    
-    if (!userAddress || !ethers.isAddress(userAddress)) {
-        throw new Error('Valid user address is required');
-    }
-
-    return await txEngine.execute({
-        name: 'VerifyKYC',
-        button,
-        
-        getContract: async (signer) => getBackchatContract(signer),
-        method: 'verifyKYC',
-        args: [userAddress],
-        
-        onSuccess,
-        onError
-    });
-}
-
-/**
- * Burns balance of inactive account
- * Anyone can call after inactivityBurnPeriod expires
- */
-export async function burnInactiveBalance({
-    creatorAddress,
-    button = null,
-    onSuccess = null,
-    onError = null
-}) {
-    const ethers = window.ethers;
-    
-    if (!creatorAddress || !ethers.isAddress(creatorAddress)) {
-        throw new Error('Valid creator address is required');
-    }
-
-    return await txEngine.execute({
-        name: 'BurnInactiveBalance',
-        button,
-        
-        getContract: async (signer) => getBackchatContract(signer),
-        method: 'burnInactiveBalance',
-        args: [creatorAddress],
-        
-        validate: async (signer) => {
-            const contract = getBackchatContract(signer);
-            
-            const balance = await contract.creatorBalance(creatorAddress);
-            if (balance === 0n) {
-                throw new Error('No balance to burn');
-            }
-            
-            // Check inactivity period (would need to fetch inactivityBurnPeriod)
-            // For now, let the contract handle this validation
-        },
-        
-        onSuccess,
-        onError
-    });
-}
-
-// ============================================================================
-// 12. READ FUNCTIONS
-// ============================================================================
-
-/**
- * Gets post by ID
- */
-export async function getPost(postId) {
-    const contract = await getBackchatContractReadOnly();
-    const post = await contract.getPost(postId);
-    
-    return {
-        id: Number(post.id),
-        author: post.author,
-        content: post.content,
-        ipfsHash: post.ipfsHash,
-        createdAt: Number(post.createdAt),
-        editedAt: Number(post.editedAt),
-        exists: post.exists,
-        deleted: post.deleted
-    };
-}
-
-/**
- * Gets post moderation score
- */
-export async function getPostScore(postId) {
-    const contract = await getBackchatContractReadOnly();
-    const [safeVotes, unsafeVotes, score, status] = await contract.getPostModerationScore(postId);
-    
-    return {
-        safeVotes: Number(safeVotes),
-        unsafeVotes: Number(unsafeVotes),
-        score: Number(score),
-        status: Number(status),
-        statusName: ['Normal', 'Trusted', 'Warning', 'Hidden'][Number(status)] || 'Unknown'
-    };
-}
-
-/**
- * Gets comment by ID
- */
-export async function getComment(commentId) {
-    const contract = await getBackchatContractReadOnly();
-    const comment = await contract.getComment(commentId);
-    
-    return {
-        id: Number(comment.id),
-        postId: Number(comment.postId),
-        parentCommentId: Number(comment.parentCommentId),
-        author: comment.author,
-        content: comment.content,
-        ipfsHash: comment.ipfsHash,
-        createdAt: Number(comment.createdAt),
-        exists: comment.exists,
-        deleted: comment.deleted
-    };
-}
-
-/**
- * Gets community note by ID
- */
-export async function getNote(noteId) {
-    const contract = await getBackchatContractReadOnly();
-    const note = await contract.getNote(noteId);
-    
-    return {
-        id: Number(note.id),
-        postId: Number(note.postId),
-        author: note.author,
-        content: note.content,
-        ipfsHash: note.ipfsHash,
-        createdAt: Number(note.createdAt),
-        exists: note.exists
-    };
-}
-
-/**
- * Gets note voting score
- */
-export async function getNoteScore(noteId) {
-    const contract = await getBackchatContractReadOnly();
-    const [believeVotes, dontBelieveVotes, score, status] = await contract.getNoteVotingScore(noteId);
-    
-    return {
-        believeVotes: Number(believeVotes),
-        dontBelieveVotes: Number(dontBelieveVotes),
-        score: Number(score),
-        status: Number(status),
-        statusName: ['Pending', 'Approved', 'Rejected'][Number(status)] || 'Unknown'
-    };
-}
-
-/**
- * Gets creator stats
- */
-export async function getCreatorStats(creatorAddress) {
-    const ethers = window.ethers;
-    const contract = await getBackchatContractReadOnly();
-    const stats = await contract.getCreatorStats(creatorAddress);
-    const balance = await contract.creatorBalance(creatorAddress);
-    
-    return {
-        totalPosts: Number(stats.totalPosts),
-        totalComments: Number(stats.totalComments),
-        totalTipsReceived: stats.totalTipsReceived,
-        totalTipsClaimed: stats.totalTipsClaimed,
-        reputationScore: Number(stats.reputationScore),
-        pendingBalance: balance,
-        pendingBalanceFormatted: ethers.formatEther(balance)
-    };
-}
-
-/**
- * Gets platform totals
- */
-export async function getTotals() {
-    const contract = await getBackchatContractReadOnly();
-    const [posts, comments, notes, messages, conversations] = await contract.getTotals();
-    
-    return {
-        totalPosts: Number(posts),
-        totalComments: Number(comments),
-        totalNotes: Number(notes),
-        totalMessages: Number(messages),
-        totalConversations: Number(conversations)
-    };
-}
-
-/**
- * Gets financial stats
- */
-export async function getFinancialStats() {
-    const ethers = window.ethers;
-    const contract = await getBackchatContractReadOnly();
-    const [platformFees, tipsProcessed, tipsToCreators, tipsToMining, boostCollected, burnedInactive] = 
-        await contract.getFinancialStats();
-    
-    return {
-        platformFees,
-        tipsProcessed,
-        tipsToCreators,
-        tipsToMining,
-        boostCollected,
-        burnedInactive,
-        // Formatted
-        platformFeesFormatted: ethers.formatEther(platformFees),
-        tipsProcessedFormatted: ethers.formatEther(tipsProcessed),
-        tipsToCreatorsFormatted: ethers.formatEther(tipsToCreators),
-        tipsToMiningFormatted: ethers.formatEther(tipsToMining),
-        boostCollectedFormatted: ethers.formatEther(boostCollected),
-        burnedInactiveFormatted: ethers.formatEther(burnedInactive)
-    };
-}
-
-/**
- * Gets platform fee
- */
-export async function getPlatformFeeAmount() {
-    const ethers = window.ethers;
-    const contract = await getBackchatContractReadOnly();
-    const fee = await contract.platformFee();
-    
-    return {
-        raw: fee,
-        formatted: ethers.formatEther(fee)
-    };
-}
-
-/**
- * Gets minimum tip amount
- */
-export async function getMinTipAmount() {
-    const ethers = window.ethers;
-    const contract = await getBackchatContractReadOnly();
-    const minTip = await contract.minTipAmount();
-    
-    return {
-        raw: minTip,
-        formatted: ethers.formatEther(minTip)
-    };
-}
-
-/**
- * Gets user's posts
- */
-export async function getUserPosts(userAddress) {
-    const contract = await getBackchatContractReadOnly();
-    const postIds = await contract.getAuthorPosts(userAddress);
-    return postIds.map(id => Number(id));
-}
-
-/**
- * Gets post comments
- */
-export async function getPostComments(postId) {
-    const contract = await getBackchatContractReadOnly();
-    const commentIds = await contract.getPostComments(postId);
-    return commentIds.map(id => Number(id));
-}
-
-/**
- * Gets post notes
- */
-export async function getPostNotes(postId) {
-    const contract = await getBackchatContractReadOnly();
-    const noteIds = await contract.getPostNotes(postId);
-    return noteIds.map(id => Number(id));
-}
-
-/**
- * Gets comment replies
- */
-export async function getCommentReplies(commentId) {
-    const contract = await getBackchatContractReadOnly();
-    const replyIds = await contract.getCommentReplies(commentId);
-    return replyIds.map(id => Number(id));
-}
-
-/**
- * Gets user conversations
- */
-export async function getUserConversations(userAddress) {
-    const contract = await getBackchatContractReadOnly();
-    const convIds = await contract.getUserConversations(userAddress);
-    return convIds.map(id => Number(id));
-}
-
-/**
- * Gets conversation messages
- */
-export async function getConversationMessages(conversationId) {
-    const contract = await getBackchatContractReadOnly();
-    const msgIds = await contract.getConversationMessages(conversationId);
-    return msgIds.map(id => Number(id));
-}
-
-/**
- * Gets message by ID
- */
-export async function getMessage(messageId) {
-    const contract = await getBackchatContractReadOnly();
-    const msg = await contract.getMessage(messageId);
-    
-    return {
-        sender: msg[0],
-        recipient: msg[1],
-        encryptedContent: msg[2],
-        encryptedIpfsHash: msg[3],
-        sentAt: Number(msg[4]),
-        conversationId: Number(msg[5]),
-        parentMessageId: Number(msg[6])
-    };
-}
-
-/**
- * Gets user's public key
- */
-export async function getPublicKey(userAddress) {
-    const contract = await getBackchatContractReadOnly();
-    return await contract.getPublicKey(userAddress);
-}
-
-/**
- * Checks if user has public key registered
- */
-export async function hasPublicKey(userAddress) {
-    const key = await getPublicKey(userAddress);
-    return key && key.length > 0 && key !== '0x';
-}
-
-/**
- * Checks if user has voted on post
- */
-export async function hasVotedOnPost(userAddress, postId) {
-    const contract = await getBackchatContractReadOnly();
-    return await contract.hasVotedOnPost(userAddress, postId);
-}
-
-/**
- * Checks if user has voted on comment
- */
-export async function hasVotedOnComment(userAddress, commentId) {
-    const contract = await getBackchatContractReadOnly();
-    return await contract.hasVotedOnComment(userAddress, commentId);
-}
-
-/**
- * Checks if user has voted on note
- */
-export async function hasVotedOnNote(userAddress, noteId) {
-    const contract = await getBackchatContractReadOnly();
-    return await contract.hasVotedOnNote(userAddress, noteId);
-}
-
-/**
- * Checks if user has booster access
- */
-export async function hasBoosterAccess(userAddress) {
-    const contract = await getBackchatContractReadOnly();
-    return await contract.hasBoosterAccess(userAddress);
-}
-
-/**
- * Gets KYC status
- */
-export async function getKYCStatus(userAddress) {
-    const contract = await getBackchatContractReadOnly();
-    const [verified, level, expiresAt] = await contract.getKYCStatus(userAddress);
-    
-    return {
-        verified,
-        level: Number(level),
-        expiresAt: Number(expiresAt),
-        isExpired: expiresAt > 0 && Math.floor(Date.now() / 1000) > Number(expiresAt)
-    };
-}
-
-// ============================================================================
-// 13. EXPORT
+// 9. EXPORT
 // ============================================================================
 
 export const BackchatTx = {
-    // Posts
-    createPost,
-    editPost,
-    deletePost,
-    
-    // Comments
-    createComment,
-    replyToComment,
-    deleteComment,
-    
-    // Moderation
-    voteOnPost,
-    voteOnComment,
-    
-    // Community Notes
-    proposeNote,
-    voteOnNote,
-    
-    // Tips
-    sendTip,
-    claimRewards,
-    
-    // Boost
-    boostPost,
-    
-    // Private Messages
-    setPublicKey,
-    sendPrivateMessage,
-    replyToMessage,
-    
-    // KYC & Burn
-    verifyKYC,
-    burnInactiveBalance,
-    
-    // Read functions
-    getPost,
-    getPostScore,
-    getComment,
-    getNote,
-    getNoteScore,
-    getCreatorStats,
-    getTotals,
-    getFinancialStats,
-    getPlatformFeeAmount,
-    getMinTipAmount,
-    getUserPosts,
-    getPostComments,
-    getPostNotes,
-    getCommentReplies,
-    getUserConversations,
-    getConversationMessages,
-    getMessage,
-    getPublicKey,
-    hasPublicKey,
-    hasVotedOnPost,
-    hasVotedOnComment,
-    hasVotedOnNote,
-    hasBoosterAccess,
-    getKYCStatus,
-    
-    // Constants
-    ContentStatus,
-    NoteStatus
+    // Profile
+    createProfile, updateProfile,
+    // Content
+    createPost, createReply, createRepost,
+    // Engagement
+    like, superLike, follow, unfollow,
+    // Premium
+    boostProfile, obtainBadge,
+    // Financial
+    withdraw,
+    // Read
+    getCurrentFees, getUsernameFee,
+    getPostAuthor, getPostCount,
+    getPendingBalance, isUsernameAvailable, getUsernameOwner,
+    hasUserLiked, isProfileBoosted, hasTrustBadge,
+    getBoostExpiry, getBadgeExpiry, getVersion
 };
 
 export default BackchatTx;

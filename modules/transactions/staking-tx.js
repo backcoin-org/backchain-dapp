@@ -1,13 +1,11 @@
-// modules/transactions/staking-tx.js
-// ✅ PRODUCTION V1.3 - FIXED: Correct ABI matching DelegationManager contract
+// modules/js/transactions/staking-tx.js
+// ✅ PRODUCTION V2.0 - Added Operator Support
 // 
-// CHANGES V1.3:
-// - Fixed delegate() to use 3 parameters (amount, lockDuration, boosterTokenId)
-// - Fixed forceUnstake() to use 2 parameters (delegationIndex, boosterTokenId)
-// - Fixed claimReward() - singular with boosterTokenId parameter
-// - Fixed getDelegationsOf() return struct to match contract
-// - Fixed constant names (MIN_LOCK_DURATION, earlyUnstakePenaltyBips)
-// - Removed window.ENV fallbacks (not needed, addresses come from config.js)
+// CHANGES V2.0:
+// - Added operator parameter to all write functions
+// - Uses resolveOperator() for hybrid system
+// - ABI updated for contracts with operator support
+// - Backwards compatible (operator is optional)
 //
 // ============================================================================
 // AVAILABLE TRANSACTIONS:
@@ -18,6 +16,7 @@
 // ============================================================================
 
 import { txEngine, ValidationLayer } from '../core/index.js';
+import { resolveOperator } from '../core/operator.js';
 import { addresses, contractAddresses } from '../../config.js';
 
 // ============================================================================
@@ -26,7 +25,6 @@ import { addresses, contractAddresses } from '../../config.js';
 
 /**
  * Get contract addresses dynamically from config.js
- * Addresses are loaded from deployment-addresses.json at app init
  */
 function getContracts() {
     const delegationManager = addresses?.delegationManager || 
@@ -38,11 +36,7 @@ function getContracts() {
                      window.contractAddresses?.bkcToken;
     
     if (!delegationManager) {
-        console.error('❌ DelegationManager address not found!', {
-            addresses,
-            contractAddresses,
-            windowContractAddresses: window.contractAddresses
-        });
+        console.error('❌ DelegationManager address not found!');
         throw new Error('Contract addresses not loaded. Please refresh the page.');
     }
     
@@ -58,16 +52,16 @@ function getContracts() {
 }
 
 /**
- * DelegationManager ABI - CORRECTED to match actual contract
+ * DelegationManager ABI - V2 with operator support
  */
 const DELEGATION_ABI = [
-    // Write functions - FIXED: correct signatures
-    'function delegate(uint256 amount, uint256 lockDuration, uint256 boosterTokenId) external',
-    'function unstake(uint256 delegationIndex) external',
-    'function forceUnstake(uint256 delegationIndex, uint256 boosterTokenId) external',
-    'function claimReward(uint256 boosterTokenId) external',
+    // Write functions with operator
+    'function delegate(uint256 amount, uint256 lockDuration, address operator) external',
+    'function unstake(uint256 delegationIndex, address operator) external',
+    'function forceUnstake(uint256 delegationIndex, address operator) external',
+    'function claimReward(address operator) external payable',
     
-    // Read functions - FIXED: correct names and return types
+    // Read functions
     'function getDelegationsOf(address user) view returns (tuple(uint256 amount, uint64 unlockTime, uint64 lockDuration)[])',
     'function pendingRewards(address user) view returns (uint256)',
     'function userTotalPStake(address user) view returns (uint256)',
@@ -75,21 +69,13 @@ const DELEGATION_ABI = [
     'function earlyUnstakePenaltyBips() view returns (uint256)',
     'function MIN_LOCK_DURATION() view returns (uint256)',
     'function MAX_LOCK_DURATION() view returns (uint256)',
+    'function claimEthFee() view returns (uint256)',
     
     // Events
-    'event Delegated(address indexed user, uint256 amount, uint256 lockDuration, uint256 pStakeAmount)',
-    'event Unstaked(address indexed user, uint256 delegationIndex, uint256 amount)',
-    'event ForceUnstaked(address indexed user, uint256 delegationIndex, uint256 amount, uint256 penalty)',
-    'event RewardClaimed(address indexed user, uint256 amount)'
-];
-
-/**
- * BKC Token ABI - for approvals
- */
-const BKC_ABI = [
-    'function approve(address spender, uint256 amount) returns (bool)',
-    'function allowance(address owner, address spender) view returns (uint256)',
-    'function balanceOf(address owner) view returns (uint256)'
+    'event Delegated(address indexed user, uint256 amount, uint256 lockDuration, uint256 pStakeAmount, address operator)',
+    'event Unstaked(address indexed user, uint256 delegationIndex, uint256 amount, address operator)',
+    'event ForceUnstaked(address indexed user, uint256 delegationIndex, uint256 amount, uint256 penalty, address operator)',
+    'event RewardClaimed(address indexed user, uint256 amount, address operator)'
 ];
 
 // ============================================================================
@@ -134,7 +120,7 @@ function daysToSeconds(days) {
  * @param {string|bigint} params.amount - Amount to stake (wei)
  * @param {number} [params.lockDays] - Lock period in days (1-3650)
  * @param {number} [params.lockDuration] - Lock period in seconds (alternative)
- * @param {number} [params.boosterTokenId=0] - Booster NFT token ID (0 = no booster)
+ * @param {string} [params.operator] - Operator address (optional - uses default if not provided)
  * @param {HTMLElement} [params.button] - Button element for loading state
  * @param {Function} [params.onSuccess] - Success callback
  * @param {Function} [params.onError] - Error callback
@@ -144,7 +130,7 @@ export async function delegate({
     amount,
     lockDays,
     lockDuration,
-    boosterTokenId = 0,
+    operator,  // NEW: operator parameter
     button = null,
     onSuccess = null,
     onError = null
@@ -165,7 +151,9 @@ export async function delegate({
     }
 
     const stakeAmount = BigInt(amount);
-    const boosterId = BigInt(boosterTokenId || 0);
+    
+    // Store for args function
+    let storedOperator = operator;
 
     return await txEngine.execute({
         name: 'Delegate',
@@ -173,8 +161,8 @@ export async function delegate({
         
         getContract: async (signer) => getDelegationContract(signer),
         method: 'delegate',
-        // FIXED: 3 parameters - amount, lockDuration, boosterTokenId
-        args: [stakeAmount, lockPeriod, boosterId],
+        // Args as function - operator resolved at execution time
+        args: () => [stakeAmount, lockPeriod, resolveOperator(storedOperator)],
         
         // Token approval config
         approval: (() => {
@@ -196,6 +184,7 @@ export async function delegate({
  * 
  * @param {Object} params - Unstake parameters
  * @param {number} params.delegationIndex - Index of the delegation to unstake
+ * @param {string} [params.operator] - Operator address (optional)
  * @param {HTMLElement} [params.button] - Button element for loading state
  * @param {Function} [params.onSuccess] - Success callback
  * @param {Function} [params.onError] - Error callback
@@ -203,11 +192,15 @@ export async function delegate({
  */
 export async function unstake({
     delegationIndex,
+    operator,  // NEW
     button = null,
     onSuccess = null,
     onError = null
 }) {
     ValidationLayer.staking.validateUnstake({ delegationIndex });
+
+    let storedIndex = delegationIndex;
+    let storedOperator = operator;
 
     return await txEngine.execute({
         name: 'Unstake',
@@ -215,21 +208,20 @@ export async function unstake({
         
         getContract: async (signer) => getDelegationContract(signer),
         method: 'unstake',
-        args: [delegationIndex],
+        args: () => [storedIndex, resolveOperator(storedOperator)],
         
         // Custom validation: check lock period ended
         validate: async (signer, userAddress) => {
             const contract = getDelegationContract(signer);
             const delegations = await contract.getDelegationsOf(userAddress);
             
-            if (delegationIndex >= delegations.length) {
+            if (storedIndex >= delegations.length) {
                 throw new Error('Delegation not found');
             }
             
-            const delegation = delegations[delegationIndex];
+            const delegation = delegations[storedIndex];
             const now = Math.floor(Date.now() / 1000);
             
-            // FIXED: using unlockTime instead of lockEnd
             if (Number(delegation.unlockTime) > now) {
                 const daysRemaining = Math.ceil((Number(delegation.unlockTime) - now) / 86400);
                 throw new Error(`Lock period still active. ${daysRemaining} day(s) remaining. Use Force Unstake if needed.`);
@@ -246,7 +238,7 @@ export async function unstake({
  * 
  * @param {Object} params - Force unstake parameters
  * @param {number} params.delegationIndex - Index of the delegation to unstake
- * @param {number} [params.boosterTokenId=0] - Booster NFT token ID (0 = no booster)
+ * @param {string} [params.operator] - Operator address (optional)
  * @param {HTMLElement} [params.button] - Button element for loading state
  * @param {Function} [params.onSuccess] - Success callback
  * @param {Function} [params.onError] - Error callback
@@ -254,14 +246,15 @@ export async function unstake({
  */
 export async function forceUnstake({
     delegationIndex,
-    boosterTokenId = 0,
+    operator,  // NEW
     button = null,
     onSuccess = null,
     onError = null
 }) {
     ValidationLayer.staking.validateUnstake({ delegationIndex });
 
-    const boosterId = BigInt(boosterTokenId || 0);
+    let storedIndex = delegationIndex;
+    let storedOperator = operator;
 
     return await txEngine.execute({
         name: 'ForceUnstake',
@@ -269,22 +262,20 @@ export async function forceUnstake({
         
         getContract: async (signer) => getDelegationContract(signer),
         method: 'forceUnstake',
-        // FIXED: 2 parameters - delegationIndex, boosterTokenId
-        args: [delegationIndex, boosterId],
+        args: () => [storedIndex, resolveOperator(storedOperator)],
         
-        // Custom validation: check delegation exists and is still locked
+        // Custom validation
         validate: async (signer, userAddress) => {
             const contract = getDelegationContract(signer);
             const delegations = await contract.getDelegationsOf(userAddress);
             
-            if (delegationIndex >= delegations.length) {
+            if (storedIndex >= delegations.length) {
                 throw new Error('Delegation not found');
             }
             
-            const delegation = delegations[delegationIndex];
+            const delegation = delegations[storedIndex];
             const now = Math.floor(Date.now() / 1000);
             
-            // Check if already unlocked (should use normal unstake)
             if (Number(delegation.unlockTime) <= now) {
                 throw new Error('Lock period has ended. Use normal Unstake to avoid penalty.');
             }
@@ -299,36 +290,47 @@ export async function forceUnstake({
  * Claims accumulated staking rewards
  * 
  * @param {Object} params - Claim parameters
- * @param {number} [params.boosterTokenId=0] - Booster NFT token ID (0 = no booster)
+ * @param {string} [params.operator] - Operator address (optional)
  * @param {HTMLElement} [params.button] - Button element for loading state
  * @param {Function} [params.onSuccess] - Success callback
  * @param {Function} [params.onError] - Error callback
  * @returns {Promise<Object>} Transaction result
  */
 export async function claimRewards({
-    boosterTokenId = 0,
+    operator,  // NEW
     button = null,
     onSuccess = null,
     onError = null
 } = {}) {
-    const boosterId = BigInt(boosterTokenId || 0);
+    let storedOperator = operator;
+    let ethFee = 0n;
 
     return await txEngine.execute({
         name: 'ClaimRewards',
         button,
         
         getContract: async (signer) => getDelegationContract(signer),
-        // FIXED: claimReward (singular) with boosterTokenId
         method: 'claimReward',
-        args: [boosterId],
+        args: () => [resolveOperator(storedOperator)],
+        
+        // ETH fee for claim
+        get value() { return ethFee; },
         
         // Custom validation: check user has rewards
         validate: async (signer, userAddress) => {
             const contract = getDelegationContract(signer);
-            const rewards = await contract.pendingRewards(userAddress);
             
+            // Get rewards
+            const rewards = await contract.pendingRewards(userAddress);
             if (rewards <= 0n) {
                 throw new Error('No rewards available to claim');
+            }
+            
+            // Get ETH fee
+            try {
+                ethFee = await contract.claimEthFee();
+            } catch {
+                ethFee = 0n;
             }
         },
         
@@ -338,13 +340,11 @@ export async function claimRewards({
 }
 
 // ============================================================================
-// 4. READ FUNCTIONS (Helpers)
+// 4. READ FUNCTIONS (Helpers) - Unchanged
 // ============================================================================
 
 /**
  * Gets user's delegations
- * @param {string} userAddress - User address
- * @returns {Promise<Array>} Array of delegation objects
  */
 export async function getUserDelegations(userAddress) {
     const contract = await getDelegationContractReadOnly();
@@ -354,10 +354,8 @@ export async function getUserDelegations(userAddress) {
     return delegations.map((d, index) => ({
         index,
         amount: d.amount,
-        // FIXED: using correct field names from contract
         unlockTime: Number(d.unlockTime),
         lockDuration: Number(d.lockDuration),
-        // Computed
         isUnlocked: Number(d.unlockTime) <= now,
         daysRemaining: Number(d.unlockTime) > now 
             ? Math.ceil((Number(d.unlockTime) - now) / 86400)
@@ -367,8 +365,6 @@ export async function getUserDelegations(userAddress) {
 
 /**
  * Gets user's pending rewards
- * @param {string} userAddress - User address
- * @returns {Promise<bigint>} Pending rewards in wei
  */
 export async function getPendingRewards(userAddress) {
     const contract = await getDelegationContractReadOnly();
@@ -377,8 +373,6 @@ export async function getPendingRewards(userAddress) {
 
 /**
  * Gets user's total pStake
- * @param {string} userAddress - User address
- * @returns {Promise<bigint>} User's pStake
  */
 export async function getUserPStake(userAddress) {
     const contract = await getDelegationContractReadOnly();
@@ -387,7 +381,6 @@ export async function getUserPStake(userAddress) {
 
 /**
  * Gets network total pStake
- * @returns {Promise<bigint>} Total pStake
  */
 export async function getTotalPStake() {
     const contract = await getDelegationContractReadOnly();
@@ -396,23 +389,19 @@ export async function getTotalPStake() {
 
 /**
  * Gets early unstake penalty percentage
- * @returns {Promise<number>} Penalty percentage (e.g., 10 for 10%)
  */
 export async function getEarlyUnstakePenalty() {
     const contract = await getDelegationContractReadOnly();
-    // FIXED: correct function name
     const penaltyBips = await contract.earlyUnstakePenaltyBips();
-    return Number(penaltyBips) / 100; // Convert bips to percentage
+    return Number(penaltyBips) / 100;
 }
 
 /**
  * Gets staking configuration
- * @returns {Promise<Object>} Config with min/max lock periods and penalty
  */
 export async function getStakingConfig() {
     const contract = await getDelegationContractReadOnly();
     
-    // FIXED: correct constant names
     const [minLock, maxLock, penaltyBips] = await Promise.all([
         contract.MIN_LOCK_DURATION(),
         contract.MAX_LOCK_DURATION(),

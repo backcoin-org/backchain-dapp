@@ -1,12 +1,23 @@
-# Backcoin Protocol
+# Backchain Protocol
+
+```
+╔═══════════════════════════════════════════════════════════════════════════════════╗
+║                                                                                   ║
+║   "I may not agree with what you say, but I will defend to the death            ║
+║    your right to say it."                                                         ║
+║                                                                     — Voltaire    ║
+║                                                                                   ║
+╚═══════════════════════════════════════════════════════════════════════════════════╝
+```
 
 | | |
 |---|---|
-| **Project** | Backcoin Protocol |
-| **Description** | Modular DeFi Infrastructure for Real-World Utility |
+| **Project** | Backchain Protocol |
+| **Philosophy** | Unstoppable & Permissionless DeFi Infrastructure |
 | **Network** | Arbitrum One |
 | **Status** | Testnet Live (Arbitrum Sepolia) |
 | **Website** | [backcoin.org](https://backcoin.org) |
+| **Documentation** | [github.com/backcoin-org/backchain-dapp/docs](https://github.com/backcoin-org/backchain-dapp/tree/main/docs) |
 | **X (Twitter)** | [x.com/backcoin](https://x.com/backcoin) |
 | **GitHub** | [github.com/backcoin-org/backchain-dapp](https://github.com/backcoin-org/backchain-dapp) |
 | **YouTube** | [youtube.com/@Backcoin](https://www.youtube.com/@Backcoin) |
@@ -14,201 +25,307 @@
 
 ---
 
-**Document:** Reward Booster NFT — Utility NFT Collection  
-**Version:** 1.0  
-**Last Updated:** December 2025  
+**Document:** Reward Booster NFT — Protect Your Stake  
+**Version:** 2.0.0 (V6 Burn Reduction System)  
+**Last Updated:** February 2026  
+**Full Documentation:** [https://github.com/backcoin-org/backchain-dapp/tree/main/docs](https://github.com/backcoin-org/backchain-dapp/tree/main/docs)
 
 ---
 
 # Reward Booster NFT
 
-Utility NFTs that provide fee discounts across all Backcoin Protocol services.
+## Your Shield Against Burn Penalties
+
+```
+╔═══════════════════════════════════════════════════════════════════════════════════╗
+║                                                                                   ║
+║                    STAKE. UNSTAKE. KEEP YOUR TOKENS.                              ║
+║                                                                                   ║
+║   Just as Voltaire protected the right to speak freely,                          ║
+║   these NFTs protect your right to unstake freely.                               ║
+║                                                                                   ║
+║   Without NFT: Unstake and lose up to 50% to burn                                ║
+║   With Diamond NFT: Unstake and keep 100% of your tokens                         ║
+║                                                                                   ║
+║   No one can stop you from owning.                                               ║
+║   No one can stop you from trading.                                              ║
+║   No one can stop you from protecting your stake.                                ║
+║                                                                                   ║
+╚═══════════════════════════════════════════════════════════════════════════════════╝
+```
+
+Utility NFTs that **reduce burn penalties** when unstaking from DelegationManager. Own one and keep more of your BKC.
 
 ---
 
-## Contract Information
+## 📍 Contract Information
 
 | Property | Value |
 |----------|-------|
-| **Contract** | `0x748b4770D6685629Ed9faf48CFa81e3E4641A341` |
+| **Contract** | `0xf2EA307686267dC674859da28C58CBb7a5866BCf` |
 | **Network** | Arbitrum Sepolia |
 | **Standard** | ERC-721 |
-| **Tiers** | 7 (Crystal to Diamond) |
+| **Tiers** | 4 (Bronze, Silver, Gold, Diamond) |
+| **Trading** | NFT Liquidity Pools |
 
 ---
 
-## What Are Reward Booster NFTs?
+## 🔥 What Are Reward Booster NFTs?
 
-These are **utility NFTs** that:
+These are **utility NFTs** that provide real, measurable value:
 
-- Provide **fee discounts** on all protocol services
-- Can be **bought/sold** in NFT Liquidity Pools
-- Can be **rented** for temporary utility
-- Have **real value** tied to fee savings
-
----
-
-## NFT Tiers
-
-### 7 Tiers with Different Discounts
-
-| Tier | Discount | Rarity | Color |
-|------|----------|--------|-------|
-| **Diamond** | 70% | Ultra Rare | 💎 Blue |
-| **Platinum** | 60% | Very Rare | ⬜ Silver |
-| **Gold** | 50% | Rare | 🟨 Gold |
-| **Silver** | 40% | Uncommon | ⬜ Light Gray |
-| **Bronze** | 30% | Common | 🟫 Bronze |
-| **Iron** | 20% | Common | ⬛ Dark Gray |
-| **Crystal** | 10% | Starter | 🔷 Cyan |
-
-### Discount Application
-
-Discounts apply to ALL protocol services:
-
-| Service | Base Fee | With Gold (50%) | With Diamond (70%) |
-|---------|----------|-----------------|-------------------|
-| Staking Entry | 100 BKC | 50 BKC | 30 BKC |
-| Staking Exit | 100 BKC | 50 BKC | 30 BKC |
-| Fortune Pool | 100 BKC | 50 BKC | 30 BKC |
-| Notary | 100 BKC | 50 BKC | 30 BKC |
-| NFT Buy | 100 BKC | 50 BKC | 30 BKC |
+| Feature | Description |
+|---------|-------------|
+| **Burn Reduction** | Reduce or eliminate burn penalty when unstaking |
+| **Tradeable** | Buy/sell instantly in NFT Liquidity Pools |
+| **Rentable** | Rent out for passive income via AirBNFT |
+| **Permissionless** | No approval needed to own or trade |
+| **Real Value** | Save thousands of BKC on large unstakes |
 
 ---
 
-## How to Get NFTs
+## 💎 NFT Tiers
 
-### Option 1: Buy from Liquidity Pools
+### 4 Tiers — 4 Levels of Protection
 
-Each tier has its own AMM pool:
+| Tier | Burn When Unstaking | Color | Protection |
+|------|---------------------|-------|------------|
+| **Diamond** | **0%** (no burn!) | 💎 Blue | Maximum |
+| **Gold** | 25% | 🟡 Gold | High |
+| **Silver** | 35% | ⬜ Silver | Medium |
+| **Bronze** | 50% | 🟤 Bronze | Entry |
+| *No NFT* | *50%* | — | *None* |
 
-| Tier | Pool Address |
-|------|--------------|
-| Diamond | `0xD4393350bd00ef6D4509D43c6dB0E7010bB5c3d9` |
-| Platinum | `0x76Edd1f3c42f607a92b9354D14F5F25278403808` |
-| Gold | `0xE9354654c97Fa5CDe3931c53a72aBEdC688ab01B` |
-| Silver | `0x57Bc7500213DAAfb0176E04B4Cce19cE19E145d4` |
-| Bronze | `0x9eFB21b279873D04e337c371c90fF00130aB8581` |
-| Iron | `0x99259cF2cE5158fcC995aCf6282574f6563a048e` |
-| Crystal | `0xe7Ae6A7B48460b3c581158c80F67E566CC800271` |
+### How Burn Reduction Works
 
-**Factory:** `0x0bcaB4cA1Fac9f6eFE3Db1849E8E03e88B3D9423`
+```
+╔═══════════════════════════════════════════════════════════════════════════════════╗
+║                                                                                   ║
+║   UNSTAKING 10,000 BKC                                                           ║
+║   ════════════════════                                                           ║
+║                                                                                   ║
+║   WITHOUT NFT:                                                                   ║
+║   ────────────                                                                   ║
+║   10,000 BKC unstaked                                                            ║
+║   - 5,000 BKC burned (50%)                                                       ║
+║   = 5,000 BKC received                                                           ║
+║                                                                                   ║
+║   WITH DIAMOND NFT:                                                              ║
+║   ─────────────────                                                              ║
+║   10,000 BKC unstaked                                                            ║
+║   - 0 BKC burned (0%)                                                            ║
+║   = 10,000 BKC received                                                          ║
+║                                                                                   ║
+║   SAVINGS: 5,000 BKC! 🎉                                                         ║
+║                                                                                   ║
+╚═══════════════════════════════════════════════════════════════════════════════════╝
+```
 
-### Option 2: Rent from Marketplace
+---
 
-Don't want to buy? Rent for temporary use:
+## 🛒 How to Get NFTs
 
-**Rental Contract:** `0xD387B3Fd06085676e85130fb07ae06D675cb201f`
+### Option 1: Buy from Liquidity Pools ⚡
+
+Each tier has its own AMM pool with instant buy/sell. **All pools support the operator system!**
+
+| Tier | Pool Address | Burn Reduction |
+|------|--------------|----------------|
+| **Diamond** | `0x5C5590458689a11731c8bAD8BDf5D8f1D7Ffe020` | 0% burn |
+| **Gold** | `0x9390e12c910C4d2E0796FA754e5C450969F09886` | 25% burn |
+| **Silver** | `0x016549ee056442eC30a916335f66ad5183E3fF5b` | 35% burn |
+| **Bronze** | `0x74eB5CF86B43517cd27f48A06abb8A521aDA63b8` | 50% burn |
+
+**Factory:** `0x2f63000539AAE2019Cc3d6E357295d903c1fF120`
+
+### Option 2: Rent from AirBNFT
+
+Don't want to buy? Rent for temporary protection:
+
+**Rental Contract:** `0x593A842d214516F216EB6E6E9A97cC84F42f6821`
+
+Rent a Diamond NFT just before a large unstake, save thousands of BKC!
 
 ### Option 3: Secondary Market
 
-Trade on any NFT marketplace that supports Arbitrum.
+Trade on any NFT marketplace that supports Arbitrum Sepolia.
 
 ---
 
-## NFT Utility
-
-### Fee Discounts
-
-The primary utility — automatic fee reduction:
+## 🌍 Become an Operator
 
 ```
-When user interacts with any service:
-    │
-    ▼
-Check wallet for Reward Booster NFT
-    │
-    ├─► Found → Apply highest tier discount
-    │
-    └─► Not found → Full fee applies
+╔═══════════════════════════════════════════════════════════════════════════════════╗
+║                                                                                   ║
+║                    BUILD AN NFT MARKETPLACE. EARN COMMISSIONS.                    ║
+║                                                                                   ║
+║   Anyone can build an interface for NFT trading and earn from:                   ║
+║                                                                                   ║
+║   • Every NFT purchase through your interface                                    ║
+║   • Every NFT sale through your interface                                        ║
+║   • Every rental through your interface                                          ║
+║                                                                                   ║
+║   Just pass your wallet address as the "operator" parameter.                     ║
+║   No registration. No approval. No KYC.                                          ║
+║                                                                                   ║
+╚═══════════════════════════════════════════════════════════════════════════════════╝
 ```
-
-### Multiple NFTs
-
-If you own multiple NFTs:
-- **Highest tier applies** (discounts don't stack)
-- You can sell/rent lower tier NFTs for income
-
-### Rental Utility
-
-NFT owners can rent out for passive income:
-- Set your rental price
-- Earn while keeping ownership
-- Utility transferred to renter during rental period
 
 ---
 
-## Value Proposition
+## 💰 Value Proposition
 
 ### Why NFTs Have Real Value
 
 | Factor | Explanation |
 |--------|-------------|
-| **Utility** | Real fee savings on every transaction |
+| **Utility** | Real BKC savings on every unstake |
 | **Scarcity** | Limited supply in pools |
-| **Demand** | Anyone using protocol benefits from discounts |
-| **Income** | Can generate rental income |
+| **Demand** | Anyone staking benefits from burn reduction |
+| **Income** | Generate rental income via AirBNFT |
 | **Liquidity** | Instant buy/sell in AMM pools |
+| **Permissionless** | No one can stop you from trading |
 
 ### ROI Calculation
 
-**Example:** You buy a Gold NFT (50% discount)
+**Example:** You buy a Diamond NFT
 
-If you pay 1,000 BKC in fees monthly:
-- Without NFT: 1,000 BKC
-- With Gold: 500 BKC
-- **Monthly savings: 500 BKC**
+| Monthly Unstaking | Without NFT | With Diamond | Savings |
+|-------------------|-------------|--------------|---------|
+| 1,000 BKC | 500 BKC received | 1,000 BKC received | 500 BKC |
+| 10,000 BKC | 5,000 BKC received | 10,000 BKC received | 5,000 BKC |
+| 100,000 BKC | 50,000 BKC received | 100,000 BKC received | 50,000 BKC |
 
-NFT pays for itself based on your activity level.
+**The more you stake/unstake, the faster the NFT pays for itself.**
 
 ---
 
-## Smart Contract Interface
+## 🔄 NFT Utility Flow
+
+### Automatic Detection
+
+All protocol contracts automatically check for NFT ownership:
+
+```
+╔═══════════════════════════════════════════════════════════════════════════════════╗
+║                                                                                   ║
+║   HOW BURN REDUCTION IS APPLIED                                                  ║
+║   ═════════════════════════════                                                  ║
+║                                                                                   ║
+║   User calls unstake()                                                           ║
+║           │                                                                       ║
+║           ▼                                                                       ║
+║   DelegationManager checks:                                                      ║
+║   ┌─────────────────────────────────────────────────────────────────────────┐    ║
+║   │  1. Does user OWN a Reward Booster NFT?                                 │    ║
+║   │  2. Does user have an active RENTAL of a Reward Booster NFT?            │    ║
+║   └─────────────────────────────────────────────────────────────────────────┘    ║
+║           │                                                                       ║
+║           ├──► Found Diamond → 0% burn applied                                   ║
+║           ├──► Found Gold → 25% burn applied                                     ║
+║           ├──► Found Silver → 35% burn applied                                   ║
+║           ├──► Found Bronze → 50% burn applied                                   ║
+║           └──► Not found → 50% burn applied (default)                            ║
+║                                                                                   ║
+║   OWNERSHIP AND RENTALS BOTH COUNT!                                              ║
+║                                                                                   ║
+╚═══════════════════════════════════════════════════════════════════════════════════╝
+```
+
+### Multiple NFTs
+
+If you own multiple NFTs:
+- **Highest tier applies** (reductions don't stack)
+- You can sell/rent lower tier NFTs for income
+- Rental utility also counts
+
+---
+
+## 💻 Smart Contract Interface
 
 ### Key Functions
 
 ```solidity
-// View NFT info
-function balanceOf(address owner) external view returns (uint256);
-function ownerOf(uint256 tokenId) external view returns (address);
-function tokenOfOwnerByIndex(address owner, uint256 index) external view returns (uint256);
-
-// Get tier info
-function getTier(uint256 tokenId) external view returns (uint8 tier);
-function getDiscount(uint256 tokenId) external view returns (uint256 discountPercent);
-
-// Get user's best discount
-function getUserDiscount(address user) external view returns (uint256 discountPercent);
+// ═══════════════════════════════════════════════════════════════════════════════
+// VIEW FUNCTIONS
+// ═══════════════════════════════════════════════════════════════════════════════
 
 // Standard ERC-721
-function transferFrom(address from, address to, uint256 tokenId) external;
-function approve(address to, uint256 tokenId) external;
-function setApprovalForAll(address operator, bool approved) external;
+function balanceOf(address _owner) external view returns (uint256);
+function ownerOf(uint256 _tokenId) external view returns (address);
+function tokenOfOwnerByIndex(address _owner, uint256 _index) external view returns (uint256);
+
+// Get tier of a specific token
+function getTier(uint256 _tokenId) external view returns (uint8 tier);
+// Returns: 0=Bronze, 1=Silver, 2=Gold, 3=Diamond
+
+// Get burn reduction percentage for a token
+function getBurnReduction(uint256 _tokenId) external view returns (uint256 reductionPercent);
+// Returns: 0=50% burn, 1=35% burn, 2=25% burn, 3=0% burn
+
+// Get user's best burn reduction (includes rentals!)
+function getUserBurnReduction(address _user) external view returns (uint256 burnPercent);
+// Returns the actual burn % that will be applied
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// TRANSFER FUNCTIONS (Standard ERC-721)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function transferFrom(address _from, address _to, uint256 _tokenId) external;
+function safeTransferFrom(address _from, address _to, uint256 _tokenId) external;
+function approve(address _to, uint256 _tokenId) external;
+function setApprovalForAll(address _operator, bool _approved) external;
 ```
 
-### JavaScript Example
+### Events
+
+```solidity
+// Standard ERC-721 events
+event Transfer(address indexed from, address indexed to, uint256 indexed tokenId);
+event Approval(address indexed owner, address indexed approved, uint256 indexed tokenId);
+event ApprovalForAll(address indexed owner, address indexed operator, bool approved);
+```
+
+---
+
+## 🔧 JavaScript Integration
 
 ```javascript
 import { ethers } from 'ethers';
 
-const NFT_ADDRESS = '0x748b4770D6685629Ed9faf48CFa81e3E4641A341';
+const NFT_ADDRESS = '0xf2EA307686267dC674859da28C58CBb7a5866BCf';
 
-const NFT_ABI = [
+const nftABI = [
     'function balanceOf(address owner) view returns (uint256)',
     'function tokenOfOwnerByIndex(address owner, uint256 index) view returns (uint256)',
     'function getTier(uint256 tokenId) view returns (uint8)',
-    'function getDiscount(uint256 tokenId) view returns (uint256)',
-    'function getUserDiscount(address user) view returns (uint256)'
+    'function getBurnReduction(uint256 tokenId) view returns (uint256)',
+    'function getUserBurnReduction(address user) view returns (uint256)',
+    'function ownerOf(uint256 tokenId) view returns (address)'
 ];
 
 const provider = new ethers.JsonRpcProvider('https://sepolia-rollup.arbitrum.io/rpc');
-const nft = new ethers.Contract(NFT_ADDRESS, NFT_ABI, provider);
+const nft = new ethers.Contract(NFT_ADDRESS, nftABI, provider);
 
-// Check user's discount
-async function checkDiscount(userAddress) {
-    const discount = await nft.getUserDiscount(userAddress);
-    console.log(`Discount: ${discount}%`);
-    return discount;
+// Check user's burn reduction
+async function checkBurnReduction(userAddress) {
+    const burnPercent = await nft.getUserBurnReduction(userAddress);
+    
+    console.log('═══════════════════════════════════════════════');
+    console.log('BURN REDUCTION STATUS');
+    console.log('═══════════════════════════════════════════════');
+    
+    if (burnPercent == 0n) {
+        console.log('🎉 Diamond protection! 0% burn on unstake.');
+    } else if (burnPercent == 25n) {
+        console.log('🟡 Gold protection! 25% burn on unstake.');
+    } else if (burnPercent == 35n) {
+        console.log('⬜ Silver protection! 35% burn on unstake.');
+    } else if (burnPercent == 50n) {
+        console.log('🟤 Bronze/No NFT! 50% burn on unstake.');
+    }
+    
+    return burnPercent;
 }
 
 // List user's NFTs
@@ -216,47 +333,73 @@ async function listUserNFTs(userAddress) {
     const balance = await nft.balanceOf(userAddress);
     console.log(`User owns ${balance} NFTs`);
     
-    const tierNames = ['Crystal', 'Iron', 'Bronze', 'Silver', 'Gold', 'Platinum', 'Diamond'];
+    const tierNames = ['Bronze', 'Silver', 'Gold', 'Diamond'];
+    const burnPercents = [50, 35, 25, 0];
     
     for (let i = 0; i < balance; i++) {
         const tokenId = await nft.tokenOfOwnerByIndex(userAddress, i);
         const tier = await nft.getTier(tokenId);
-        const discount = await nft.getDiscount(tokenId);
         
-        console.log(`Token #${tokenId}: ${tierNames[tier]} (${discount}% discount)`);
+        console.log(`Token #${tokenId}: ${tierNames[tier]} (${burnPercents[tier]}% burn)`);
     }
 }
+
+// Calculate savings from owning an NFT
+function calculateSavings(unstakeAmount, currentBurn, newBurn) {
+    const currentLoss = unstakeAmount * currentBurn / 100;
+    const newLoss = unstakeAmount * newBurn / 100;
+    const savings = currentLoss - newLoss;
+    
+    console.log(`Unstaking ${unstakeAmount} BKC:`);
+    console.log(`  Without upgrade: lose ${currentLoss} BKC (${currentBurn}% burn)`);
+    console.log(`  With upgrade: lose ${newLoss} BKC (${newBurn}% burn)`);
+    console.log(`  SAVINGS: ${savings} BKC`);
+    
+    return savings;
+}
+
+// Example: Calculate savings from upgrading to Diamond
+calculateSavings(10000, 50, 0);
+// Output:
+// Unstaking 10000 BKC:
+//   Without upgrade: lose 5000 BKC (50% burn)
+//   With upgrade: lose 0 BKC (0% burn)
+//   SAVINGS: 5000 BKC
 ```
 
 ---
 
-## NFT Metadata
+## 📊 NFT Metadata
 
 Each NFT contains:
 
 | Field | Description |
 |-------|-------------|
 | **Token ID** | Unique identifier |
-| **Tier** | 0-6 (Crystal to Diamond) |
-| **Discount** | 10-70% |
+| **Tier** | 0-3 (Bronze to Diamond) |
+| **Burn Reduction** | 50%, 35%, 25%, or 0% |
 | **Image** | Tier-specific artwork |
-| **Attributes** | Tier name, discount percentage |
+| **Attributes** | Tier name, burn percentage |
 
 ### Metadata Example
 
 ```json
 {
     "name": "Reward Booster #1234",
-    "description": "Gold tier Reward Booster NFT - 50% fee discount",
+    "description": "Diamond tier Reward Booster NFT - 0% burn penalty on unstake",
     "image": "ipfs://...",
     "attributes": [
         {
             "trait_type": "Tier",
-            "value": "Gold"
+            "value": "Diamond"
         },
         {
-            "trait_type": "Discount",
-            "value": "50%"
+            "trait_type": "Burn Reduction",
+            "value": "0%"
+        },
+        {
+            "trait_type": "Protection Level",
+            "value": "Maximum"
         }
     ]
 }
@@ -264,56 +407,60 @@ Each NFT contains:
 
 ---
 
-## Integration with Protocol
-
-### Automatic Detection
-
-All protocol contracts check for NFT ownership:
-
-```
-┌──────────────┐     ┌───────────────────┐     ┌─────────────┐
-│    User      │────►│  Protocol Service │────►│ NFT Contract│
-│  (has NFT)   │     │  (any service)    │     │  (check)    │
-└──────────────┘     └───────────────────┘     └─────────────┘
-                              │                       │
-                              │◄──────────────────────┘
-                              │    discount = 50%
-                              ▼
-                     Apply discounted fee
-```
-
-### Services That Check NFT
-
-| Service | Contract | Checks NFT |
-|---------|----------|------------|
-| Staking | DelegationManager | ✅ |
-| Gaming | FortunePool | ✅ |
-| Notary | DecentralizedNotary | ✅ |
-| NFT Pools | NFT Pool Factory | ✅ |
-| Rentals | RentalManager | ✅ |
-
----
-
-## Related Contracts
+## 📋 Related Contracts
 
 | Contract | Address | Role |
 |----------|---------|------|
-| RewardBoosterNFT | `0x748b4770D6685629Ed9faf48CFa81e3E4641A341` | NFT contract |
-| NFT Pool Factory | `0x0bcaB4cA1Fac9f6eFE3Db1849E8E03e88B3D9423` | Buy/sell pools |
-| RentalManager | `0xD387B3Fd06085676e85130fb07ae06D675cb201f` | Rent NFTs |
-| EcosystemManager | `0xF7c16C935d70627cf7F94040330C162095b8BEb1` | Configuration |
+| **RewardBoosterNFT** | `0xf2EA307686267dC674859da28C58CBb7a5866BCf` | NFT contract |
+| **NFT Pool Factory** | `0x2f63000539AAE2019Cc3d6E357295d903c1fF120` | Buy/sell pools |
+| **Diamond Pool** | `0x5C5590458689a11731c8bAD8BDf5D8f1D7Ffe020` | 0% burn |
+| **Gold Pool** | `0x9390e12c910C4d2E0796FA754e5C450969F09886` | 25% burn |
+| **Silver Pool** | `0x016549ee056442eC30a916335f66ad5183E3fF5b` | 35% burn |
+| **Bronze Pool** | `0x74eB5CF86B43517cd27f48A06abb8A521aDA63b8` | 50% burn |
+| **RentalManager** | `0x593A842d214516F216EB6E6E9A97cC84F42f6821` | Rent NFTs |
+| **DelegationManager** | `0x41B1B7940E06318e9b161fc64524FaE7261e8739` | Staking (uses NFT) |
+| **EcosystemManager** | `0xF5741c125Db4034640CeEA8f3DDb0C4a8d96E407` | Configuration |
 
 ---
 
-## Contact
+## 📞 Support
 
 | Channel | Link |
 |---------|------|
-| Email | dev@backcoin.org |
-| X (Twitter) | [x.com/backcoin](https://x.com/backcoin) |
-| GitHub | [github.com/backcoin-org/backchain-dapp](https://github.com/backcoin-org/backchain-dapp) |
-| YouTube | [youtube.com/@Backcoin](https://www.youtube.com/@Backcoin) |
+| **Documentation** | [github.com/backcoin-org/backchain-dapp/docs](https://github.com/backcoin-org/backchain-dapp/tree/main/docs) |
+| **GitHub** | [github.com/backcoin-org/backchain-dapp](https://github.com/backcoin-org/backchain-dapp) |
+| **Email** | dev@backcoin.org |
+| **X (Twitter)** | [x.com/backcoin](https://x.com/backcoin) |
 
 ---
 
-*This document is part of Backcoin Protocol's public documentation. All NFT data is verifiable on-chain.*
+## 📄 License
+
+MIT License — The code is free, just like the protocol.
+
+---
+
+```
+╔═══════════════════════════════════════════════════════════════════════════════════╗
+║                                                                                   ║
+║                        BUILT BY BACKCHAIN PROTOCOL                                ║
+║                                                                                   ║
+║   Reward Booster NFTs are not just collectibles. They're protection.             ║
+║                                                                                   ║
+║   Protection for your stake.                                                      ║
+║   Protection for your earnings.                                                   ║
+║   Protection that no one can take away.                                          ║
+║                                                                                   ║
+║   Own a Diamond and unstake freely, without losing a single token.               ║
+║   The NFT is yours. The protection is yours. Forever.                            ║
+║                                                                                   ║
+║   No one can freeze it. No one can censor it. No one can stop it.                ║
+║                                                                                   ║
+║                        THE PROTECTION IS UNSTOPPABLE.                             ║
+║                                                                                   ║
+╚═══════════════════════════════════════════════════════════════════════════════════╝
+```
+
+---
+
+*This document is part of Backchain Protocol's public documentation. All NFT data is verifiable on-chain. Trust the code, not the words.*

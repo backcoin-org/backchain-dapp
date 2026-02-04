@@ -1,12 +1,23 @@
-# Backcoin Protocol
+# Backchain Protocol
+
+```
+╔═══════════════════════════════════════════════════════════════════════════════════╗
+║                                                                                   ║
+║   "I may not agree with what you say, but I will defend to the death            ║
+║    your right to say it."                                                         ║
+║                                                                     — Voltaire    ║
+║                                                                                   ║
+╚═══════════════════════════════════════════════════════════════════════════════════╝
+```
 
 | | |
 |---|---|
-| **Project** | Backcoin Protocol |
-| **Description** | Modular DeFi Infrastructure for Real-World Utility |
+| **Project** | Backchain Protocol |
+| **Philosophy** | Unstoppable & Permissionless DeFi Infrastructure |
 | **Network** | Arbitrum One |
 | **Status** | Testnet Live (Arbitrum Sepolia) |
 | **Website** | [backcoin.org](https://backcoin.org) |
+| **Documentation** | [github.com/backcoin-org/backchain-dapp/docs](https://github.com/backcoin-org/backchain-dapp/tree/main/docs) |
 | **X (Twitter)** | [x.com/backcoin](https://x.com/backcoin) |
 | **GitHub** | [github.com/backcoin-org/backchain-dapp](https://github.com/backcoin-org/backchain-dapp) |
 | **YouTube** | [youtube.com/@Backcoin](https://www.youtube.com/@Backcoin) |
@@ -14,134 +25,175 @@
 
 ---
 
-**Document:** Fees — Complete Fee Structure  
-**Version:** 1.0  
-**Last Updated:** December 2025  
+**Document:** Fees — Transparent, On-Chain, Unstoppable  
+**Version:** 2.0.0  
+**Last Updated:** February 2026  
+**Full Documentation:** [https://github.com/backcoin-org/backchain-dapp/tree/main/docs](https://github.com/backcoin-org/backchain-dapp/tree/main/docs)
 
 ---
 
 # Fee Structure
 
-All fees in Backcoin Protocol are **transparent**, **on-chain**, and **configurable** through the EcosystemManager. This document details every fee across all services.
-
----
-
-## Fee Philosophy
-
-| Principle | Description |
-|-----------|-------------|
-| **Transparent** | All fees visible on-chain before any action |
-| **Configurable** | Adjustable via EcosystemManager without redeployment |
-| **Fair** | Discounts available through Reward Booster NFTs |
-| **Sustainable** | Fees support protocol operations and staker rewards |
-
----
-
-## Fee Distribution
-
-All collected fees flow through MiningManager:
+## Transparent Fees For a Trustless World
 
 ```
-       User Pays Fee
-            │
-            ▼
-    ┌───────────────┐
-    │ MiningManager │
-    └───────┬───────┘
-            │
-      ┌─────┴─────┐
-      ▼           ▼
- ┌─────────┐ ┌─────────┐
- │ Stakers │ │Treasury │
- └─────────┘ └─────────┘
+╔═══════════════════════════════════════════════════════════════════════════════════╗
+║                                                                                   ║
+║                    NO HIDDEN FEES. NO SURPRISES. NO TRICKS.                       ║
+║                                                                                   ║
+║   Every fee in Backchain Protocol is:                                            ║
+║                                                                                   ║
+║   ✅ TRANSPARENT    - Visible on-chain before any action                         ║
+║   ✅ PREDICTABLE    - You know exactly what you'll pay                           ║
+║   ✅ FAIR           - Same rules for everyone                                    ║
+║   ✅ VERIFIABLE     - Check the smart contract yourself                          ║
+║                                                                                   ║
+║   No fine print. No hidden clauses. Just math.                                   ║
+║                                                                                   ║
+╚═══════════════════════════════════════════════════════════════════════════════════╝
 ```
 
-Distribution ratios are configurable and can be adjusted based on ecosystem needs.
+All fees in Backchain Protocol are **transparent**, **on-chain**, and **immutable**. This document details every fee across all services.
 
 ---
 
-## Staking Fees (DelegationManager)
+## 🌍 Become an Operator — Earn From Fees
 
-**Contract:** `0xEfDa12B1D1e91FDe57eBCDB7A520cfd1D9aE4701`
-
-| Action | Fee | Description |
-|--------|-----|-------------|
-| **Stake (Entry)** | Configurable | Fee when locking BKC |
-| **Unstake (Exit)** | Configurable | Fee when unlocking after lock period |
-| **Force Unstake** | Configurable | Penalty for early withdrawal |
-| **Claim Rewards** | Configurable | Fee when claiming staking rewards |
-
-### NFT Discounts on Staking
-
-| NFT Tier | Discount |
-|----------|----------|
-| Diamond | 70% off |
-| Platinum | 60% off |
-| Gold | 50% off |
-| Silver | 40% off |
-| Bronze | 30% off |
-| Iron | 20% off |
-| Crystal | 10% off |
-
----
-
-## Fortune Pool Fees
-
-**Contract:** `0x54Bf4B4D239bce58CdaDe8b3645B40f98FdEe631`
-
-| Action | Fee | Description |
-|--------|-----|-------------|
-| **Play Game** | Configurable | Fee on each bet amount |
-| **Claim Prize** | Configurable | Fee when withdrawing winnings |
-
-### Game Odds
-
-| Game Mode | Win Probability | Multiplier |
-|-----------|-----------------|------------|
-| Conservative | Higher | Lower |
-| Balanced | Medium | Medium |
-| Aggressive | Lower | Higher |
+```
+╔═══════════════════════════════════════════════════════════════════════════════════╗
+║                                                                                   ║
+║                    BUILD INTERFACES. EARN COMMISSIONS.                            ║
+║                                                                                   ║
+║   Every fee collected in the protocol includes an OPERATOR SHARE.                ║
+║                                                                                   ║
+║   How it works:                                                                   ║
+║   1. Build your own frontend, app, bot, or tool                                  ║
+║   2. Pass your wallet address as the "operator" parameter                        ║
+║   3. Earn a percentage of ALL fees from transactions through your interface      ║
+║                                                                                   ║
+║   No registration. No approval. No KYC. Just build and earn.                     ║
+║                                                                                   ║
+║   Example:                                                                        ║
+║   User stakes 1000 BKC through YOUR interface → You earn operator commission     ║
+║   User plays Fortune through YOUR app → You earn operator commission             ║
+║   User notarizes through YOUR tool → You earn operator commission                ║
+║                                                                                   ║
+╚═══════════════════════════════════════════════════════════════════════════════════╝
+```
 
 ---
 
-## Notary Fees (DecentralizedNotary)
+## 💰 Fee Distribution
 
-**Contract:** `0x5C9C0a696a555a2a594130014041dc4320Ba7Eb9`
+All collected fees flow through MiningManager and are distributed transparently:
 
-| Action | Fee | Description |
-|--------|-----|-------------|
-| **Notarize Document** | Configurable | Fee per document certification |
-| **Verify Document** | Free | Anyone can verify at no cost |
+```
+╔═══════════════════════════════════════════════════════════════════════════════════╗
+║                                                                                   ║
+║                              FEE FLOW                                             ║
+║                                                                                   ║
+║                          User Pays Fee                                            ║
+║                               │                                                   ║
+║                               ▼                                                   ║
+║                      ┌─────────────────┐                                         ║
+║                      │  MiningManager  │                                         ║
+║                      └────────┬────────┘                                         ║
+║                               │                                                   ║
+║            ┌──────────────────┼──────────────────┐                               ║
+║            │                  │                  │                               ║
+║            ▼                  ▼                  ▼                               ║
+║     ┌───────────┐      ┌───────────┐      ┌───────────┐                         ║
+║     │ OPERATOR  │      │  STAKERS  │      │ TREASURY  │                         ║
+║     │    ⚡     │      │           │      │           │                         ║
+║     └───────────┘      └───────────┘      └───────────┘                         ║
+║                                                                                   ║
+║   ⚡ OPERATOR = Anyone who builds an interface (could be YOU!)                   ║
+║                                                                                   ║
+╚═══════════════════════════════════════════════════════════════════════════════════╝
+```
+
+---
+
+## 📊 Staking Fees (DelegationManager)
+
+**Contract:** `0x41B1B7940E06318e9b161fc64524FaE7261e8739`
+
+| Action | Fee | Operator Earns | Description |
+|--------|-----|----------------|-------------|
+| **Stake** | ~1-5% | ⚡ Yes | Fee when locking BKC |
+| **Unstake** | ~1-5% | ⚡ Yes | Fee when unlocking after lock period |
+| **Force Unstake** | Higher | ⚡ Yes | Penalty for early withdrawal |
+| **Claim Rewards** | Minimal | ⚡ Yes | Fee when claiming staking rewards |
+
+### NFT Burn Reduction on Unstaking
+
+Holding or renting a Reward Booster NFT **reduces the burn penalty** when unstaking:
+
+| NFT Tier | Burn Reduction |
+|----------|----------------|
+| **Diamond** | 0% burn (no penalty) |
+| **Gold** | 25% of normal burn |
+| **Silver** | 35% of normal burn |
+| **Bronze** | 50% of normal burn |
+| No NFT | 50% burn penalty |
+
+---
+
+## 🎰 Fortune Pool Fees
+
+**Contract:** `0x5B3c7A322eB49805c594Fd948c137b62a09BBfFF`
+
+| Action | Fee | Operator Earns | Description |
+|--------|-----|----------------|-------------|
+| **Commit Play** | Gas only | — | Commit your bet (V6 commit-reveal) |
+| **Reveal Play** | ~5% of bet | ⚡ Yes | Reveal and resolve bet |
+| **Claim Prize** | Minimal | ⚡ Yes | Withdraw winnings |
+
+### Game Tiers
+
+| Tier | Win Probability | Multiplier |
+|------|-----------------|------------|
+| Easy | 33.3% (1 in 3) | 2x |
+| Medium | 10% (1 in 10) | 5x |
+| Hard | 1% (1 in 100) | 50x |
+
+---
+
+## 📜 Notary Fees (DecentralizedNotary)
+
+**Contract:** `0x2E56650a4f05D0f98787694c6C61603616716b48`
+
+| Action | Fee | Operator Earns | Description |
+|--------|-----|----------------|-------------|
+| **Notarize Document** | BKC + ETH | ⚡ Yes | Certify document on-chain |
+| **Verify Document** | **FREE** | — | Anyone can verify at no cost |
 
 ### What You Get
 
-- NFT certificate minted to your wallet
-- Immutable timestamp proof on Arbitrum
-- Permanent blockchain record
-- Verifiable by anyone, anytime
+- ✅ NFT certificate minted to your wallet
+- ✅ Immutable timestamp proof on Arbitrum
+- ✅ Permanent blockchain record
+- ✅ Verifiable by anyone, anytime, forever
 
 ---
 
-## NFT Pool Fees
+## 💎 NFT Pool Fees
 
-**Factory Contract:** `0x0bcaB4cA1Fac9f6eFE3Db1849E8E03e88B3D9423`
+**Factory Contract:** `0x2f63000539AAE2019Cc3d6E357295d903c1fF120`
 
-| Action | Fee | Description |
-|--------|-----|-------------|
-| **Buy NFT** | Configurable | Fee when purchasing from pool |
-| **Sell NFT** | Configurable | Fee when selling back to pool |
+| Action | Fee | Operator Earns | Description |
+|--------|-----|----------------|-------------|
+| **Buy NFT** | ~5% BKC + ETH | ⚡ Yes | Purchase from pool |
+| **Sell NFT** | ~10% BKC + ETH | ⚡ Yes | Sell back to pool |
 
 ### Pool Addresses
 
-| Tier | Discount | Pool Address |
-|------|----------|--------------|
-| Diamond | 70% | `0xD4393350bd00ef6D4509D43c6dB0E7010bB5c3d9` |
-| Platinum | 60% | `0x76Edd1f3c42f607a92b9354D14F5F25278403808` |
-| Gold | 50% | `0xE9354654c97Fa5CDe3931c53a72aBEdC688ab01B` |
-| Silver | 40% | `0x57Bc7500213DAAfb0176E04B4Cce19cE19E145d4` |
-| Bronze | 30% | `0x9eFB21b279873D04e337c371c90fF00130aB8581` |
-| Iron | 20% | `0x99259cF2cE5158fcC995aCf6282574f6563a048e` |
-| Crystal | 10% | `0xe7Ae6A7B48460b3c581158c80F67E566CC800271` |
+| Tier | Burn Reduction | Pool Address | Operator |
+|------|----------------|--------------|----------|
+| **Diamond** | 0% (no burn) | `0x5C5590458689a11731c8bAD8BDf5D8f1D7Ffe020` | ⚡ Yes |
+| **Gold** | 25% burn | `0x9390e12c910C4d2E0796FA754e5C450969F09886` | ⚡ Yes |
+| **Silver** | 35% burn | `0x016549ee056442eC30a916335f66ad5183E3fF5b` | ⚡ Yes |
+| **Bronze** | 50% burn | `0x74eB5CF86B43517cd27f48A06abb8A521aDA63b8` | ⚡ Yes |
 
 ### Bonding Curve Pricing
 
@@ -149,18 +201,19 @@ NFT prices are determined by AMM bonding curve:
 - More NFTs in pool → Lower price
 - Fewer NFTs in pool → Higher price
 - Price adjusts automatically with each trade
+- **No manipulation possible** — math is law
 
 ---
 
-## Rental Fees (RentalManager)
+## 🏠 Rental Fees (RentalManager)
 
-**Contract:** `0xD387B3Fd06085676e85130fb07ae06D675cb201f`
+**Contract:** `0x593A842d214516F216EB6E6E9A97cC84F42f6821`
 
-| Action | Fee | Description |
-|--------|-----|-------------|
-| **List NFT** | Configurable | Fee to list NFT for rental |
-| **Rent NFT** | Configurable | Platform fee on rental price |
-| **Rental Payment** | Set by Owner | Price set by NFT owner |
+| Action | Fee | Operator Earns | Description |
+|--------|-----|----------------|-------------|
+| **List NFT** | Gas only | — | List NFT for rental |
+| **Rent NFT** | Platform % | ⚡ Yes | Fee on rental price |
+| **Spotlight** | Variable | ⚡ Yes | Promote your listing |
 
 ### How Rentals Work
 
@@ -168,116 +221,165 @@ NFT prices are determined by AMM bonding curve:
 2. Renter pays rental fee + platform fee
 3. Owner receives rental payment minus platform fee
 4. Renter gets temporary NFT utility access
+5. **Operator earns commission** on all transactions
 
 ---
 
-## Reward Booster NFT
+## 💬 Backchat Fees
 
-**Contract:** `0x748b4770D6685629Ed9faf48CFa81e3E4641A341`
+**Contract:** `0x0D8c2862df03F5be4b569C5ffF4D3aaAEE44BDDb`
 
-### Fee Discounts by Tier
+| Action | Fee | Operator Earns | Description |
+|--------|-----|----------------|-------------|
+| **Create Post** | ~20% of gas | ⚡ Yes | Dynamic fee based on gas |
+| **Reply** | ~20% of gas | ⚡ Yes | Reply with optional BKC tip |
+| **Like** | ~20% of gas | ⚡ Yes | Like a post |
+| **Super Like** | ≥0.0001 ETH | ⚡ Yes | Premium engagement |
+| **Follow** | ~20% of gas | ⚡ Yes | Follow a user |
+| **Profile Boost** | ≥0.0005 ETH | ⚡ Yes | Visibility boost |
+| **Trust Badge** | 0.001 ETH | ⚡ Yes | Verified badge for 1 year |
+| **Username** | 0-1 ETH | ⚡ Yes | Based on length |
 
-Holding a Reward Booster NFT reduces fees across ALL protocol services:
+### Username Pricing
 
-| Tier | Discount | Rarity |
-|------|----------|--------|
-| **Diamond** | 70% | Ultra Rare |
-| **Platinum** | 60% | Very Rare |
-| **Gold** | 50% | Rare |
-| **Silver** | 40% | Uncommon |
-| **Bronze** | 30% | Common |
-| **Iron** | 20% | Common |
-| **Crystal** | 10% | Starter |
+| Length | Price |
+|--------|-------|
+| 1 char | 1 ETH |
+| 2 chars | 0.2 ETH |
+| 3 chars | 0.03 ETH |
+| 4 chars | 0.004 ETH |
+| 5 chars | 0.0005 ETH |
+| 6 chars | 0.0001 ETH |
+| 7+ chars | **FREE** |
 
-### Discount Example
+### Backchat Fee Distribution
 
-If base fee is 100 BKC:
+| With Creator | Split |
+|--------------|-------|
+| Creator | 40% |
+| Operator | 30% |
+| Treasury | 30% |
 
-| Tier | Discount | You Pay |
-|------|----------|---------|
-| No NFT | 0% | 100 BKC |
-| Crystal | 10% | 90 BKC |
-| Iron | 20% | 80 BKC |
-| Bronze | 30% | 70 BKC |
-| Silver | 40% | 60 BKC |
-| Gold | 50% | 50 BKC |
-| Platinum | 60% | 40 BKC |
-| Diamond | 70% | 30 BKC |
+| Without Creator | Split |
+|-----------------|-------|
+| Operator | 60% |
+| Treasury | 40% |
 
 ---
 
-## Activity Rewards
+## 💚 Charity Pool Fees
 
-**Contract:** `0xAdB6d83Fc7A340a22fbA93304532F0c14C9Cd4fB`
+**Contract:** `0x259271F3558bCa03Ddc8D7494CCF833751483Fb1`
+
+| Action | Fee | Operator Earns | Description |
+|--------|-----|----------------|-------------|
+| **Create Campaign** | Gas only | — | Start a fundraiser |
+| **Donate** | ~5% platform | ⚡ Yes | Donate to campaign |
+| **Withdraw** | **0%** | — | 100% goes to beneficiary |
+
+### Key Feature: 100% Withdrawal
+
+In V6, campaign beneficiaries receive **100% of donations** — no penalties, no waiting periods, no hidden fees. The platform fee is only charged on the donation itself.
+
+---
+
+## 🎁 Activity Rewards
+
+**Contract:** `0x7755982411244791d2DA96cBa04d08df72Be43C1`
 
 When users pay fees, activity rewards are released from the 160M reserve:
 
 ```
-Release Rate = Remaining Reserve / 160,000,000
+╔═══════════════════════════════════════════════════════════════════════════════════╗
+║                                                                                   ║
+║   ACTIVITY REWARDS RELEASE RATE                                                   ║
+║   ═════════════════════════════                                                   ║
+║                                                                                   ║
+║   Release Rate = Remaining Reserve / 160,000,000                                 ║
+║                                                                                   ║
+║   ┌────────────────────┬──────────┬─────────────────────────┐                    ║
+║   │ Reserve Status     │ Rate     │ 100 BKC fee triggers    │                    ║
+║   ├────────────────────┼──────────┼─────────────────────────┤                    ║
+║   │ 160M remaining     │ 100%     │ 100 BKC released        │                    ║
+║   │ 120M remaining     │ 75%      │ 75 BKC released         │                    ║
+║   │ 80M remaining      │ 50%      │ 50 BKC released         │                    ║
+║   │ 40M remaining      │ 25%      │ 25 BKC released         │                    ║
+║   │ 0 remaining        │ 0%       │ 0 BKC released          │                    ║
+║   └────────────────────┴──────────┴─────────────────────────┘                    ║
+║                                                                                   ║
+║   Rewards go to: Operators + Stakers + Treasury                                  ║
+║                                                                                   ║
+╚═══════════════════════════════════════════════════════════════════════════════════╝
 ```
-
-| Reserve Status | Rate | 100 BKC fee triggers |
-|----------------|------|----------------------|
-| 160M remaining | 100% | 100 BKC released |
-| 120M remaining | 75% | 75 BKC released |
-| 80M remaining | 50% | 50 BKC released |
-| 40M remaining | 25% | 25 BKC released |
-| 0 remaining | 0% | 0 BKC released |
 
 ---
 
-## Free Services
+## 🆓 Free Services
 
 | Service | Cost | Notes |
 |---------|------|-------|
-| **Document Verification** | Free | Anyone can verify notarized documents |
-| **Randomness Oracle** | Free | Any Arbitrum developer can use |
-| **View Staking Stats** | Free | Check your position anytime |
-| **View Pool Prices** | Free | Check NFT prices anytime |
+| **Document Verification** | FREE | Anyone can verify notarized documents |
+| **Backcoin Oracle** | FREE | Any Arbitrum developer can use |
+| **View Staking Stats** | FREE | Check your position anytime |
+| **View Pool Prices** | FREE | Check NFT prices anytime |
+| **Unfollow** | FREE | Only gas cost |
+| **Update Profile** | FREE | Only gas cost |
 
 ---
 
-## Fee Configuration
+## 📋 Key Contracts
 
-All fees are managed through EcosystemManager:
-
-**Contract:** `0xF7c16C935d70627cf7F94040330C162095b8BEb1`
-
-### Why Configurable?
-
-| Reason | Benefit |
-|--------|---------|
-| **Market Adaptation** | Adjust to market conditions |
-| **Community Governance** | Future DAO control |
-| **Competitive Positioning** | Stay competitive with other protocols |
-| **Emergency Response** | Quick adjustment if needed |
-
----
-
-## Key Contracts
-
-| Contract | Address | Purpose |
-|----------|---------|---------|
-| EcosystemManager | `0xF7c16C935d70627cf7F94040330C162095b8BEb1` | Fee configuration |
-| MiningManager | `0xAdB6d83Fc7A340a22fbA93304532F0c14C9Cd4fB` | Fee distribution |
-| DelegationManager | `0xEfDa12B1D1e91FDe57eBCDB7A520cfd1D9aE4701` | Staking fees |
-| FortunePool | `0x54Bf4B4D239bce58CdaDe8b3645B40f98FdEe631` | Gaming fees |
-| DecentralizedNotary | `0x5C9C0a696a555a2a594130014041dc4320Ba7Eb9` | Notary fees |
-| RentalManager | `0xD387B3Fd06085676e85130fb07ae06D675cb201f` | Rental fees |
-| RewardBoosterNFT | `0x748b4770D6685629Ed9faf48CFa81e3E4641A341` | Fee discounts |
-| Treasury | `0xc93030333E3a235c2605BcB7C7330650B600B6D0` | Fee recipient |
+| Contract | Address | Operator Support |
+|----------|---------|------------------|
+| **EcosystemManager** | `0xF5741c125Db4034640CeEA8f3DDb0C4a8d96E407` | — |
+| **MiningManager** | `0x7755982411244791d2DA96cBa04d08df72Be43C1` | ⚡ Yes |
+| **DelegationManager** | `0x41B1B7940E06318e9b161fc64524FaE7261e8739` | ⚡ Yes |
+| **FortunePool** | `0x5B3c7A322eB49805c594Fd948c137b62a09BBfFF` | ⚡ Yes |
+| **CharityPool** | `0x259271F3558bCa03Ddc8D7494CCF833751483Fb1` | ⚡ Yes |
+| **DecentralizedNotary** | `0x2E56650a4f05D0f98787694c6C61603616716b48` | ⚡ Yes |
+| **RentalManager** | `0x593A842d214516F216EB6E6E9A97cC84F42f6821` | ⚡ Yes |
+| **Backchat** | `0x0D8c2862df03F5be4b569C5ffF4D3aaAEE44BDDb` | ⚡ Yes |
+| **RewardBoosterNFT** | `0xf2EA307686267dC674859da28C58CBb7a5866BCf` | — |
+| **Treasury** | `0xc93030333E3a235c2605BcB7C7330650B600B6D0` | — |
 
 ---
 
-## Contact
+## 📞 Support
 
 | Channel | Link |
 |---------|------|
-| Email | dev@backcoin.org |
-| X (Twitter) | [x.com/backcoin](https://x.com/backcoin) |
-| GitHub | [github.com/backcoin-org/backchain-dapp](https://github.com/backcoin-org/backchain-dapp) |
-| YouTube | [youtube.com/@Backcoin](https://www.youtube.com/@Backcoin) |
+| **Documentation** | [github.com/backcoin-org/backchain-dapp/docs](https://github.com/backcoin-org/backchain-dapp/tree/main/docs) |
+| **GitHub** | [github.com/backcoin-org/backchain-dapp](https://github.com/backcoin-org/backchain-dapp) |
+| **Email** | dev@backcoin.org |
+| **X (Twitter)** | [x.com/backcoin](https://x.com/backcoin) |
 
 ---
 
-*This document is part of Backcoin Protocol's public documentation. All fees are verifiable on-chain.*
+## 📄 License
+
+MIT License — The code is free, just like the protocol.
+
+---
+
+```
+╔═══════════════════════════════════════════════════════════════════════════════════╗
+║                                                                                   ║
+║                        BUILT BY BACKCHAIN PROTOCOL                                ║
+║                                                                                   ║
+║   Every fee is visible. Every calculation is verifiable.                         ║
+║   Every distribution is transparent. Every rule is immutable.                    ║
+║                                                                                   ║
+║   No hidden fees. No fine print. No surprises.                                   ║
+║   Just math. Just code. Just truth.                                              ║
+║                                                                                   ║
+║   Build interfaces. Earn commissions. No permission needed.                      ║
+║                                                                                   ║
+║                          THE FEES ARE TRANSPARENT.                                ║
+║                          THE PROTOCOL IS UNSTOPPABLE.                             ║
+║                                                                                   ║
+╚═══════════════════════════════════════════════════════════════════════════════════╝
+```
+
+---
+
+*This document is part of Backchain Protocol's public documentation. All fees are verifiable on-chain. Trust the code, not the words.*

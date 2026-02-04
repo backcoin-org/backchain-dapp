@@ -1,12 +1,23 @@
-# Backcoin Protocol
+# Backchain Protocol
+
+```
+╔═══════════════════════════════════════════════════════════════════════════════════╗
+║                                                                                   ║
+║   "I may not agree with what you say, but I will defend to the death            ║
+║    your right to say it."                                                         ║
+║                                                                     — Voltaire    ║
+║                                                                                   ║
+╚═══════════════════════════════════════════════════════════════════════════════════╝
+```
 
 | | |
 |---|---|
-| **Project** | Backcoin Protocol |
-| **Description** | Modular DeFi Infrastructure for Real-World Utility |
+| **Project** | Backchain Protocol |
+| **Philosophy** | Unstoppable & Permissionless DeFi Infrastructure |
 | **Network** | Arbitrum One |
 | **Status** | Testnet Live (Arbitrum Sepolia) |
 | **Website** | [backcoin.org](https://backcoin.org) |
+| **Documentation** | [github.com/backcoin-org/backchain-dapp/docs](https://github.com/backcoin-org/backchain-dapp/tree/main/docs) |
 | **X (Twitter)** | [x.com/backcoin](https://x.com/backcoin) |
 | **GitHub** | [github.com/backcoin-org/backchain-dapp](https://github.com/backcoin-org/backchain-dapp) |
 | **YouTube** | [youtube.com/@Backcoin](https://www.youtube.com/@Backcoin) |
@@ -14,144 +25,157 @@
 
 ---
 
-**Document:** Fortune Pool — Provably Fair Gaming  
-**Version:** 2.0  
-**Last Updated:** December 2025  
+**Document:** Fortune Pool — Provably Fair & Unstoppable Gaming  
+**Version:** 3.0.0 (V6 Commit-Reveal)  
+**Last Updated:** February 2026  
+**Full Documentation:** [https://github.com/backcoin-org/backchain-dapp/tree/main/docs](https://github.com/backcoin-org/backchain-dapp/tree/main/docs)
 
 ---
 
 # Fortune Pool
 
-Provably fair prediction games powered by the **Backcoin Oracle**. Play, win, and verify every result instantly on Arbitrum.
+## Games That Cannot Be Rigged
+
+```
+╔═══════════════════════════════════════════════════════════════════════════════════╗
+║                                                                                   ║
+║                    PROVABLY FAIR. FULLY ON-CHAIN. UNSTOPPABLE.                    ║
+║                                                                                   ║
+║   Just as Voltaire defended the right to free speech,                            ║
+║   we defend the right to fair gaming.                                            ║
+║                                                                                   ║
+║   No one can rig the results.                                                    ║
+║   No one can refuse your bet.                                                    ║
+║   No one can withhold your winnings.                                             ║
+║                                                                                   ║
+║   The math is public. The code is law. The game is fair.                        ║
+║                                                                                   ║
+╚═══════════════════════════════════════════════════════════════════════════════════╝
+```
+
+Fortune Pool is a provably fair prediction game powered by the **Backcoin Oracle**. Every result is verifiable on-chain. No manipulation possible.
 
 ---
 
-## Contract Information
+## 📍 Contract Information
 
 | Property | Value |
 |----------|-------|
-| **Fortune Pool V2** | `0x8093a960b9615330DdbD1B59b1Fc7eB6B6AB1526` |
+| **Fortune Pool V6** | `0x5B3c7A322eB49805c594Fd948c137b62a09BBfFF` |
 | **Backcoin Oracle** | `0x16346f5a45f9615f1c894414989f0891c54ef07b` |
+| **BKC Token** | `0x38DD1898b7B11f07C03e7dBd957fCC8021fB1396` |
 | **Network** | Arbitrum Sepolia |
-| **Resolution** | Instant (single transaction) |
+| **Resolution** | Commit-Reveal (5 blocks) |
 | **Prize Pool** | 2,000,000 BKC (TGE allocation) |
+| **Operator Support** | ⚡ Yes |
 
 ---
 
-## How It Works
-
-### Instant Results in One Transaction
+## 🌍 Become an Operator
 
 ```
-╔═══════════════════════════════════════════════════════════════════════════════╗
-║                                                                               ║
-║   FORTUNE POOL FLOW                                                          ║
-║   ═════════════════                                                          ║
-║                                                                               ║
-║   1. Player calls play() with wager + guesses                                ║
-║           ↓                                                                   ║
-║   2. Contract calls Backcoin Oracle (staticcall)                             ║
-║           ↓                                                                   ║
-║   3. Oracle returns random numbers INSTANTLY                                 ║
-║           ↓                                                                   ║
-║   4. Contract compares guesses vs rolls                                      ║
-║           ↓                                                                   ║
-║   5. Winner? → Prize transferred immediately                                 ║
-║      Loser?  → Wager goes to prize pool                                      ║
-║           ↓                                                                   ║
-║   6. Event emitted with all results                                          ║
-║                                                                               ║
-║   ✅ ALL IN ONE TRANSACTION!                                                 ║
-║                                                                               ║
-╚═══════════════════════════════════════════════════════════════════════════════╝
+╔═══════════════════════════════════════════════════════════════════════════════════╗
+║                                                                                   ║
+║                    BUILD A CASINO. EARN COMMISSIONS.                              ║
+║                                                                                   ║
+║   Anyone in the world can:                                                        ║
+║                                                                                   ║
+║   1. Build their own Fortune Pool frontend, app, or bot                          ║
+║   2. Pass their wallet address as the "operator" parameter                       ║
+║   3. Earn a percentage of ALL fees from games played through their interface     ║
+║                                                                                   ║
+║   No registration. No approval. No KYC.                                          ║
+║   No gambling license needed to BUILD (only to operate in some jurisdictions).   ║
+║                                                                                   ║
+║   The smart contract doesn't care who you are. It just executes.                ║
+║                                                                                   ║
+╚═══════════════════════════════════════════════════════════════════════════════════╝
 ```
 
-### What Makes It Fair?
+---
+
+## ⚡ How It Works: V6 Commit-Reveal
+
+### Maximum Fairness with Commit-Reveal Pattern
+
+V6 introduces a **commit-reveal pattern** that makes manipulation mathematically impossible:
+
+```
+╔═══════════════════════════════════════════════════════════════════════════════════╗
+║                                                                                   ║
+║   V6 COMMIT-REVEAL FLOW                                                          ║
+║   ═════════════════════                                                          ║
+║                                                                                   ║
+║   STEP 1: COMMIT (Player locks bet + guesses)                                    ║
+║   ┌─────────────────────────────────────────────────────────────────────────┐    ║
+║   │  Player calls commitPlay(wager, guesses, operator)                      │    ║
+║   │  → BKC locked in contract                                               │    ║
+║   │  → Guesses hashed and stored                                            │    ║
+║   │  → Commit block recorded                                                │    ║
+║   └─────────────────────────────────────────────────────────────────────────┘    ║
+║                               │                                                   ║
+║                               ▼                                                   ║
+║                        WAIT 5 BLOCKS                                             ║
+║                    (prevents manipulation)                                        ║
+║                               │                                                   ║
+║                               ▼                                                   ║
+║   STEP 2: REVEAL (Player reveals and gets result)                                ║
+║   ┌─────────────────────────────────────────────────────────────────────────┐    ║
+║   │  Player calls revealPlay()                                              │    ║
+║   │  → Oracle generates random numbers using future block data              │    ║
+║   │  → Contract compares guesses vs rolls                                   │    ║
+║   │  → Winner? Prize transferred immediately                                │    ║
+║   │  → Loser? Wager goes to prize pool                                      │    ║
+║   └─────────────────────────────────────────────────────────────────────────┘    ║
+║                                                                                   ║
+║   WHY 5 BLOCKS?                                                                  ║
+║   • Player commits BEFORE the random seed is known                              ║
+║   • Oracle uses block data from AFTER the commit                                ║
+║   • No one can predict or manipulate the outcome                                ║
+║                                                                                   ║
+╚═══════════════════════════════════════════════════════════════════════════════════╝
+```
+
+### Why Commit-Reveal Is Maximally Fair
 
 | Feature | Description |
 |---------|-------------|
-| **On-chain Randomness** | Backcoin Oracle using Arbitrum's block entropy |
-| **Instant Resolution** | Single transaction, no callbacks needed |
-| **Verifiable** | All results logged in contract events |
-| **Transparent Odds** | Multipliers and chances visible in contract |
-| **No Manipulation** | Oracle uses `staticcall` - cannot be influenced |
+| **Unpredictable** | Random seed comes from future block (after commit) |
+| **Unmanipulable** | Player can't change bet after seeing seed |
+| **Verifiable** | All data on-chain, anyone can verify |
+| **Trustless** | No central authority, just math |
+| **Operator Earnings** | Builders earn commissions automatically |
 
 ---
 
-## Game Modes
-
-Fortune Pool offers two distinct game modes:
+## 🎰 Game Modes
 
 ### 🚀 Combo Mode (Cumulative)
 
 Play all 3 tiers in one bet. Match numbers to win multipliers that **stack**.
 
 ```
-╔═══════════════════════════════════════════════════════════════════════════════╗
-║                                                                               ║
-║   COMBO MODE - Stack Your Wins!                                              ║
-║   ═════════════════════════════                                              ║
-║                                                                               ║
-║   Your Guesses:  [2]  [7]  [42]                                              ║
-║                   │    │    │                                                ║
-║                   ▼    ▼    ▼                                                ║
-║   Oracle Rolls:  [2]  [3]  [67]                                              ║
-║                   ✓    ✗    ✗                                                ║
-║                                                                               ║
-║   Tier 1 (Easy):   Match! → 2x multiplier                                   ║
-║   Tier 2 (Medium): Miss                                                      ║
-║   Tier 3 (Hard):   Miss                                                      ║
-║                                                                               ║
-║   Result: Won 2x on wager!                                                   ║
-║                                                                               ║
-╚═══════════════════════════════════════════════════════════════════════════════╝
+╔═══════════════════════════════════════════════════════════════════════════════════╗
+║                                                                                   ║
+║   COMBO MODE - Stack Your Wins!                                                  ║
+║   ═════════════════════════════                                                  ║
+║                                                                                   ║
+║   Your Guesses:  [2]  [7]  [42]                                                  ║
+║                   │    │    │                                                    ║
+║                   ▼    ▼    ▼                                                    ║
+║   Oracle Rolls:  [2]  [3]  [67]                                                  ║
+║                   ✓    ✗    ✗                                                    ║
+║                                                                                   ║
+║   Tier 1 (Easy):   Match! → 2x multiplier                                       ║
+║   Tier 2 (Medium): Miss                                                          ║
+║   Tier 3 (Hard):   Miss                                                          ║
+║                                                                                   ║
+║   Result: Won 2x on wager!                                                       ║
+║                                                                                   ║
+╚═══════════════════════════════════════════════════════════════════════════════════╝
 ```
 
 **Combo Multipliers Stack:**
-- Match Easy only → **2x**
-- Match Easy + Medium → **7x** (2 + 5)
-- Match Easy + Hard → **52x** (2 + 50)
-- Match All Three → **57x** (2 + 5 + 50)
-
----
-
-### 👑 Jackpot Mode (Single Tier)
-
-Go for the big win! Pick one number in the Hard tier (1-100).
-
-```
-╔═══════════════════════════════════════════════════════════════════════════════╗
-║                                                                               ║
-║   JACKPOT MODE - All or Nothing!                                             ║
-║   ══════════════════════════════                                             ║
-║                                                                               ║
-║   Your Guess:    [42]                                                        ║
-║                   │                                                          ║
-║                   ▼                                                          ║
-║   Oracle Roll:   [42]  ← 1 in 100 chance!                                   ║
-║                   ✓                                                          ║
-║                                                                               ║
-║   Result: Won 50x on wager! 🎉                                               ║
-║                                                                               ║
-╚═══════════════════════════════════════════════════════════════════════════════╝
-```
-
-**Jackpot Odds:**
-- Range: 1-100
-- Win Chance: 1%
-- Multiplier: **50x**
-
----
-
-## Prize Tiers
-
-| Tier | Range | Win Chance | Multiplier | House Edge |
-|------|-------|------------|------------|------------|
-| **Easy** | 1-3 | 33.33% | **2x** | ~33% |
-| **Medium** | 1-10 | 10% | **5x** | ~50% |
-| **Hard** | 1-100 | 1% | **50x** | ~50% |
-
-### Maximum Combo Win
 
 | Matches | Multiplier | Example (100 BKC bet) |
 |---------|------------|----------------------|
@@ -165,197 +189,121 @@ Go for the big win! Pick one number in the Hard tier (1-100).
 
 ---
 
-## How Results Are Verified
+### 👑 Jackpot Mode (Single Tier)
 
-Since the Backcoin Oracle uses `view` functions (called via `staticcall`), **events are emitted by the Fortune Pool contract**, not the oracle.
-
-### Finding Your Game Results
-
-1. **Go to the Fortune Pool contract on Arbiscan:**
-   ```
-   https://sepolia.arbiscan.io/address/0x8093a960b9615330DdbD1B59b1Fc7eB6B6AB1526
-   ```
-
-2. **Click "Events" tab**
-
-3. **Find `GamePlayed` event:**
-   ```
-   GamePlayed(
-       gameId: 1234,
-       player: 0xYourAddress,
-       wagerAmount: 10000000000000000000,
-       prizeWon: 20000000000000000000,
-       isCumulative: true,
-       matchCount: 1
-   )
-   ```
-
-4. **Find `GameDetails` event (same transaction):**
-   ```
-   GameDetails(
-       gameId: 1234,
-       guesses: [2, 7, 42],
-       rolls: [2, 3, 67],
-       matches: [true, false, false]
-   )
-   ```
-
-### Why Events Are in Fortune Pool, Not the Oracle
+Go for the big win! Pick one number in the Hard tier (1-100).
 
 ```
-╔═══════════════════════════════════════════════════════════════════════════════╗
-║                                                                               ║
-║   TECHNICAL EXPLANATION                                                       ║
-║   ═════════════════════                                                       ║
-║                                                                               ║
-║   Fortune Pool calls:                                                         ║
-║       oracle.get_batch(counts, mins, maxs)                                   ║
-║                                                                               ║
-║   Solidity internally uses: staticcall                                       ║
-║                                                                               ║
-║   staticcall properties:                                                     ║
-║   • READ-ONLY by EVM design                                                  ║
-║   • Cannot emit events                                                       ║
-║   • Cannot modify state                                                      ║
-║   • Gas efficient                                                            ║
-║                                                                               ║
-║   Therefore:                                                                 ║
-║   • Oracle returns numbers → No events in oracle                             ║
-║   • Fortune Pool emits events → Results logged here                          ║
-║                                                                               ║
-╚═══════════════════════════════════════════════════════════════════════════════╝
+╔═══════════════════════════════════════════════════════════════════════════════════╗
+║                                                                                   ║
+║   JACKPOT MODE - All or Nothing!                                                 ║
+║   ══════════════════════════════                                                 ║
+║                                                                                   ║
+║   Your Guess:    [42]                                                            ║
+║                   │                                                              ║
+║                   ▼                                                              ║
+║   Oracle Roll:   [42]  ← 1 in 100 chance!                                       ║
+║                   ✓                                                              ║
+║                                                                                   ║
+║   Result: Won 50x on wager! 🎉                                                   ║
+║                                                                                   ║
+╚═══════════════════════════════════════════════════════════════════════════════════╝
+```
+
+**Jackpot Odds:**
+- Range: 1-100
+- Win Chance: 1%
+- Multiplier: **50x**
+
+---
+
+## 📊 Prize Tiers
+
+| Tier | Range | Win Chance | Multiplier | House Edge |
+|------|-------|------------|------------|------------|
+| **Easy** | 1-3 | 33.33% | **2x** | ~33% |
+| **Medium** | 1-10 | 10% | **5x** | ~50% |
+| **Hard** | 1-100 | 1% | **50x** | ~50% |
+
+---
+
+## 🔍 How to Verify Results
+
+All game results are stored on-chain and can be verified by anyone:
+
+### Step 1: Find Your Game on Arbiscan
+
+```
+https://sepolia.arbiscan.io/address/0x5B3c7A322eB49805c594Fd948c137b62a09BBfFF#events
+```
+
+### Step 2: Look for Events
+
+**CommitPlayed Event (Step 1):**
+```
+CommitPlayed(
+    commitId: 1234,
+    player: 0xYourAddress,
+    wagerAmount: 10000000000000000000,
+    commitBlock: 12345678
+)
+```
+
+**GameResolved Event (Step 2):**
+```
+GameResolved(
+    commitId: 1234,
+    player: 0xYourAddress,
+    guesses: [2, 7, 42],
+    rolls: [2, 3, 67],
+    matches: [true, false, false],
+    prizeWon: 20000000000000000000,
+    operator: 0xOperatorAddress
+)
 ```
 
 ---
 
-## Playing the Game
+## 💻 Smart Contract Interface
 
-### Requirements
-
-1. BKC tokens in wallet
-2. Connected to Arbitrum Sepolia
-3. Approve BKC spending (first time only)
-
-### Step-by-Step
-
-```
-Step 1: Approve BKC (first time only)
-   └─ Allow FortunePool to spend your BKC
-
-Step 2: Choose Mode
-   └─ 🚀 Combo: Play all 3 tiers
-   └─ 👑 Jackpot: Go for 50x on Hard tier
-
-Step 3: Enter Your Guesses
-   └─ Combo: 3 numbers (Easy 1-3, Medium 1-10, Hard 1-100)
-   └─ Jackpot: 1 number (1-100)
-
-Step 4: Set Wager Amount
-   └─ Minimum: 1 BKC
-   └─ Maximum: Based on prize pool
-
-Step 5: Play!
-   └─ Confirm transaction
-   └─ Result is INSTANT (same transaction)
-
-Step 6: Check Result
-   └─ Win → Prize auto-transferred to wallet
-   └─ Lose → Try again!
-```
-
----
-
-## Fees
-
-### Service Fee
-
-| Mode | Fee |
-|------|-----|
-| **Combo** | ~0.003 ETH (3 random numbers) |
-| **Jackpot** | ~0.001 ETH (1 random number) |
-
-*Service fee covers oracle gas costs and protocol development.*
-
-### NFT Fee Discounts
-
-Reward Booster NFT holders get discounts on service fees:
-
-| Tier | boostBips | Discount |
-|------|-----------|----------|
-| 💠 Diamond | 7000 | **70% off** |
-| ⚪ Platinum | 6000 | **60% off** |
-| 🥇 Gold | 5000 | **50% off** |
-| 🥈 Silver | 4000 | **40% off** |
-| 🥉 Bronze | 3000 | **30% off** |
-| ⚙️ Iron | 2000 | **20% off** |
-| 💎 Crystal | 1000 | **10% off** |
-
----
-
-## Prize Pool
-
-### Initial Allocation
-
-| Source | Amount |
-|--------|--------|
-| TGE Allocation | 2,000,000 BKC |
-| Game Fees | Ongoing |
-
-### Prize Pool Mechanics
-
-```
-Player Loses:
-   └─ Wager → Prize Pool (grows the pool)
-
-Player Wins:
-   └─ Prize ← Prize Pool (paid from pool)
-
-Service Fee:
-   └─ 50% → Protocol Treasury
-   └─ 50% → Prize Pool top-up
-```
-
----
-
-## Smart Contract Interface
-
-### Main Function: `play()`
+### V6 Functions (Commit-Reveal)
 
 ```solidity
-/// @notice Play Fortune Pool
-/// @param _wagerAmount Amount of BKC to wager
-/// @param _guesses Array of guessed numbers
-/// @param _isCumulative true = Combo mode, false = Jackpot mode
-/// @return gameId Unique game identifier
-/// @return rolls The random numbers from oracle
-/// @return prizeWon Amount won (0 if lost)
-function play(
-    uint256 _wagerAmount,
-    uint256[] calldata _guesses,
-    bool _isCumulative
-) external payable returns (
-    uint256 gameId,
-    uint256[] memory rolls,
-    uint256 prizeWon
+// ═══════════════════════════════════════════════════════════════════════════════
+// STEP 1: COMMIT - Lock your bet (requires BKC approval first)
+// ═══════════════════════════════════════════════════════════════════════════════
+function commitPlay(
+    uint256 _wagerAmount,      // How much BKC to bet
+    uint256[] calldata _guesses, // Your number guesses
+    address _operator           // Who gets the commission (could be YOUR address!)
+) external returns (uint256 commitId);
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// STEP 2: REVEAL - Get your result (after 5 blocks)
+// ═══════════════════════════════════════════════════════════════════════════════
+function revealPlay() external returns (
+    uint256[] memory rolls,     // The random numbers
+    uint256 prizeWon           // Your winnings (0 if lost)
 );
-```
 
-### View Functions
+// ═══════════════════════════════════════════════════════════════════════════════
+// VIEW FUNCTIONS
+// ═══════════════════════════════════════════════════════════════════════════════
 
-```solidity
-// Get prize pool balance
-function prizePoolBalance() external view returns (uint256);
+// Check if you can reveal yet
+function canReveal(address _player) external view returns (bool);
 
-// Get game details
-function getGameDetails(uint256 _gameId) external view returns (
-    address player,
+// Get your pending commit
+function getPendingCommit(address _player) external view returns (
+    uint256 commitId,
     uint256 wagerAmount,
-    uint256 prizeWon,
+    uint256 commitBlock,
     uint256[] memory guesses,
-    uint256[] memory rolls,
-    bool[] memory matches,
     bool isCumulative
 );
+
+// Get prize pool balance
+function prizePoolBalance() external view returns (uint256);
 
 // Get player statistics
 function getPlayerStats(address _player) external view returns (
@@ -384,39 +332,34 @@ function calculatePotentialWinnings(
     uint256 netWager,
     uint256 fee
 );
-
-// Get tier information
-function getTier(uint256 _tierId) external view returns (
-    uint128 maxRange,
-    uint64 multiplierBips,
-    bool active
-);
 ```
 
 ### Events
 
 ```solidity
-// Emitted for every game
-event GamePlayed(
-    uint256 indexed gameId,
+// Emitted when player commits
+event CommitPlayed(
+    uint256 indexed commitId,
     address indexed player,
     uint256 wagerAmount,
-    uint256 prizeWon,
-    bool isCumulative,
-    uint8 matchCount
+    uint256 commitBlock,
+    bool isCumulative
 );
 
-// Emitted with detailed results
-event GameDetails(
-    uint256 indexed gameId,
+// Emitted when game resolves
+event GameResolved(
+    uint256 indexed commitId,
+    address indexed player,
     uint256[] guesses,
     uint256[] rolls,
-    bool[] matches
+    bool[] matches,
+    uint256 prizeWon,
+    address indexed operator
 );
 
 // Emitted for big wins
 event JackpotWon(
-    uint256 indexed gameId,
+    uint256 indexed commitId,
     address indexed player,
     uint256 prizeAmount,
     uint256 tier
@@ -425,137 +368,206 @@ event JackpotWon(
 
 ---
 
-## JavaScript Integration
+## 🔧 JavaScript Integration
 
-### Basic Play Example
+### V6 Commit-Reveal Example
 
 ```javascript
 import { ethers } from 'ethers';
 
-const FORTUNE_POOL = '0x8093a960b9615330DdbD1B59b1Fc7eB6B6AB1526';
-const BKC_TOKEN = '0x...'; // BKC Token address
+const FORTUNE_POOL = '0x5B3c7A322eB49805c594Fd948c137b62a09BBfFF';
+const BKC_TOKEN = '0x38DD1898b7B11f07C03e7dBd957fCC8021fB1396';
 
 const fortunePoolABI = [
-    "function play(uint256 _wagerAmount, uint256[] calldata _guesses, bool _isCumulative) external payable returns (uint256 gameId, uint256[] memory rolls, uint256 prizeWon)",
-    "function getRequiredServiceFee(bool _isCumulative) view returns (uint256)",
-    "function calculatePotentialWinnings(uint256 _wagerAmount, bool _isCumulative) view returns (uint256 maxPrize, uint256 netWager, uint256 fee)",
-    "event GamePlayed(uint256 indexed gameId, address indexed player, uint256 wagerAmount, uint256 prizeWon, bool isCumulative, uint8 matchCount)",
-    "event GameDetails(uint256 indexed gameId, uint256[] guesses, uint256[] rolls, bool[] matches)"
+    // Commit-Reveal functions
+    "function commitPlay(uint256 _wagerAmount, uint256[] calldata _guesses, address _operator) external returns (uint256 commitId)",
+    "function revealPlay() external returns (uint256[] memory rolls, uint256 prizeWon)",
+    "function canReveal(address _player) view returns (bool)",
+    "function getPendingCommit(address _player) view returns (uint256, uint256, uint256, uint256[], bool)",
+    // Events
+    "event CommitPlayed(uint256 indexed commitId, address indexed player, uint256 wagerAmount, uint256 commitBlock, bool isCumulative)",
+    "event GameResolved(uint256 indexed commitId, address indexed player, uint256[] guesses, uint256[] rolls, bool[] matches, uint256 prizeWon, address indexed operator)"
 ];
 
-async function playCombo(signer, wagerAmount, guesses) {
+const bkcABI = [
+    "function approve(address spender, uint256 amount) returns (bool)",
+    "function allowance(address owner, address spender) view returns (uint256)"
+];
+
+/**
+ * STEP 1: Commit your bet
+ * @param signer - Your wallet signer
+ * @param wagerBKC - Amount to bet (in BKC, e.g., "100")
+ * @param guesses - Your guesses, e.g., [2, 7, 42] for Combo
+ * @param operator - Operator address (pass YOUR address to earn from YOUR interface!)
+ */
+async function commitPlay(signer, wagerBKC, guesses, operator) {
     const fortunePool = new ethers.Contract(FORTUNE_POOL, fortunePoolABI, signer);
+    const bkc = new ethers.Contract(BKC_TOKEN, bkcABI, signer);
     
-    // Get required service fee
-    const serviceFee = await fortunePool.getRequiredServiceFee(true); // true = Combo
+    const wagerAmount = ethers.parseEther(wagerBKC);
     
-    // Play Combo mode
-    const tx = await fortunePool.play(
-        ethers.parseEther(wagerAmount.toString()),
-        guesses, // [2, 7, 42] for Combo
-        true,    // isCumulative = true for Combo
-        { value: serviceFee }
-    );
+    // Approve BKC if needed
+    const allowance = await bkc.allowance(await signer.getAddress(), FORTUNE_POOL);
+    if (allowance < wagerAmount) {
+        console.log('Approving BKC...');
+        const approveTx = await bkc.approve(FORTUNE_POOL, ethers.MaxUint256);
+        await approveTx.wait();
+    }
     
+    // Commit the play
+    console.log('Committing bet...');
+    const tx = await fortunePool.commitPlay(wagerAmount, guesses, operator);
     const receipt = await tx.wait();
     
-    // Parse events
-    const gamePlayedEvent = receipt.logs
-        .map(log => {
-            try { return fortunePool.interface.parseLog(log); } 
-            catch { return null; }
-        })
-        .find(e => e?.name === 'GamePlayed');
-    
-    const gameDetailsEvent = receipt.logs
-        .map(log => {
-            try { return fortunePool.interface.parseLog(log); } 
-            catch { return null; }
-        })
-        .find(e => e?.name === 'GameDetails');
-    
-    console.log('Game ID:', gamePlayedEvent.args.gameId.toString());
-    console.log('Guesses:', gameDetailsEvent.args.guesses.map(g => g.toString()));
-    console.log('Rolls:', gameDetailsEvent.args.rolls.map(r => r.toString()));
-    console.log('Matches:', gameDetailsEvent.args.matches);
-    console.log('Prize:', ethers.formatEther(gamePlayedEvent.args.prizeWon), 'BKC');
+    // Parse CommitPlayed event
+    const iface = new ethers.Interface(fortunePoolABI);
+    for (const log of receipt.logs) {
+        try {
+            const parsed = iface.parseLog(log);
+            if (parsed?.name === 'CommitPlayed') {
+                console.log('Commit ID:', parsed.args.commitId.toString());
+                console.log('Commit Block:', parsed.args.commitBlock.toString());
+                console.log('Wait 5 blocks, then call revealPlay()');
+                return parsed.args.commitId;
+            }
+        } catch {}
+    }
 }
 
-async function playJackpot(signer, wagerAmount, guess) {
+/**
+ * STEP 2: Reveal and get result (call after 5 blocks)
+ */
+async function revealPlay(signer) {
     const fortunePool = new ethers.Contract(FORTUNE_POOL, fortunePoolABI, signer);
     
-    // Get required service fee
-    const serviceFee = await fortunePool.getRequiredServiceFee(false); // false = Jackpot
+    // Check if we can reveal
+    const canRevealNow = await fortunePool.canReveal(await signer.getAddress());
+    if (!canRevealNow) {
+        throw new Error('Cannot reveal yet. Wait for 5 blocks.');
+    }
     
-    // Play Jackpot mode
-    const tx = await fortunePool.play(
-        ethers.parseEther(wagerAmount.toString()),
-        [guess], // Single number 1-100
-        false,   // isCumulative = false for Jackpot
-        { value: serviceFee }
-    );
-    
+    // Reveal
+    console.log('Revealing...');
+    const tx = await fortunePool.revealPlay();
     const receipt = await tx.wait();
-    // ... parse events same as above
+    
+    // Parse GameResolved event
+    const iface = new ethers.Interface(fortunePoolABI);
+    for (const log of receipt.logs) {
+        try {
+            const parsed = iface.parseLog(log);
+            if (parsed?.name === 'GameResolved') {
+                console.log('Guesses:', parsed.args.guesses.map(g => g.toString()));
+                console.log('Rolls:', parsed.args.rolls.map(r => r.toString()));
+                console.log('Matches:', parsed.args.matches);
+                console.log('Prize Won:', ethers.formatEther(parsed.args.prizeWon), 'BKC');
+                return parsed.args;
+            }
+        } catch {}
+    }
 }
+
+// Example: Play Combo mode as an operator (earn commissions!)
+const MY_OPERATOR_ADDRESS = '0xYourWalletAddress'; // YOUR address!
+await commitPlay(signer, "100", [2, 7, 42], MY_OPERATOR_ADDRESS);
+// Wait 5 blocks...
+await revealPlay(signer);
 ```
 
 ---
 
-## Responsible Gaming
+## ⚠️ Responsible Gaming
 
-Fortune Pool is designed for entertainment. Please:
-
-- ⚠️ Only play with funds you can afford to lose
-- ⚠️ Set personal limits
-- ⚠️ Take breaks
-- ⚠️ Remember: the house has an edge (~33-50%)
+```
+╔═══════════════════════════════════════════════════════════════════════════════════╗
+║                                                                                   ║
+║   PLAY RESPONSIBLY                                                               ║
+║   ════════════════                                                               ║
+║                                                                                   ║
+║   Fortune Pool is designed for entertainment. Please:                            ║
+║                                                                                   ║
+║   ⚠️ Only play with funds you can afford to lose                                 ║
+║   ⚠️ Set personal limits before playing                                          ║
+║   ⚠️ Take breaks regularly                                                        ║
+║   ⚠️ Remember: the house has an edge (~33-50%)                                   ║
+║                                                                                   ║
+║   The code is fair. The math is transparent. But gambling is gambling.          ║
+║                                                                                   ║
+╚═══════════════════════════════════════════════════════════════════════════════════╝
+```
 
 ---
 
-## Related Contracts
+## 📋 Related Contracts
 
 | Contract | Address | Role |
 |----------|---------|------|
-| **Fortune Pool V2** | `0x8093a960b9615330DdbD1B59b1Fc7eB6B6AB1526` | Main game |
-| **Backcoin Oracle** | `0x16346f5a45f9615f1c894414989f0891c54ef07b` | Randomness |
-| **BKC Token** | See deployment-addresses.json | Wagering |
-| **RewardBoosterNFT** | See deployment-addresses.json | Fee discounts |
-| **EcosystemManager** | See deployment-addresses.json | Fee configuration |
+| **Fortune Pool V6** | `0x5B3c7A322eB49805c594Fd948c137b62a09BBfFF` | Main game |
+| **Backcoin Oracle** | `0x16346f5a45f9615f1c894414989f0891c54ef07b` | Free randomness |
+| **BKC Token** | `0x38DD1898b7B11f07C03e7dBd957fCC8021fB1396` | Wagering |
+| **MiningManager** | `0x7755982411244791d2DA96cBa04d08df72Be43C1` | Operator rewards |
+| **RewardBoosterNFT** | `0xf2EA307686267dC674859da28C58CBb7a5866BCf` | Fee discounts |
 
 ---
 
-## FAQ
+## ❓ FAQ
 
-**Q: Why is the result instant?**
-> Fortune Pool V2 uses the Backcoin Oracle which returns random numbers via `view` functions. No callbacks needed!
+**Q: Why commit-reveal instead of instant?**
+> The 5-block delay ensures no one (player, miner, or operator) can predict or manipulate the random numbers. Maximum fairness.
 
-**Q: Where can I see my game results?**
-> In the Fortune Pool contract's events on Arbiscan. Look for `GamePlayed` and `GameDetails` events.
+**Q: Can I cancel my commit?**
+> No. Once committed, the bet is locked. This prevents manipulation.
 
-**Q: Why aren't there events in the Oracle contract?**
-> The oracle uses `view` functions called via `staticcall`, which cannot emit events by EVM design. All results are logged in Fortune Pool's events.
+**Q: What if I don't reveal?**
+> Your bet remains locked. Always reveal to get your result (win or lose).
 
-**Q: What's the maximum I can win?**
-> In Combo mode, matching all 3 tiers gives 57x your wager. In Jackpot mode, a match gives 50x.
+**Q: How do operators earn?**
+> Pass your address as the `operator` parameter. You earn a commission from every game played through your interface.
 
 **Q: Is the randomness truly fair?**
-> Yes! The Backcoin Oracle uses Arbitrum's `block.prevrandao` combined with transaction-specific data. The same trust model as all Arbitrum DeFi.
+> Yes! The Backcoin Oracle uses Arbitrum's `block.prevrandao` from AFTER your commit. No one can know the result when you commit.
 
-**Q: Can I verify the results on-chain?**
-> Absolutely! Every game's guesses, rolls, and matches are stored in contract events.
+**Q: Can I verify results on-chain?**
+> Absolutely! Every game's guesses, rolls, and matches are stored in contract events on Arbiscan.
 
 ---
 
-## Contact
+## 📞 Support
 
 | Channel | Link |
 |---------|------|
-| Email | dev@backcoin.org |
-| X (Twitter) | [x.com/backcoin](https://x.com/backcoin) |
-| GitHub | [github.com/backcoin-org/backchain-dapp](https://github.com/backcoin-org/backchain-dapp) |
-| YouTube | [youtube.com/@Backcoin](https://www.youtube.com/@Backcoin) |
+| **Documentation** | [github.com/backcoin-org/backchain-dapp/docs](https://github.com/backcoin-org/backchain-dapp/tree/main/docs) |
+| **GitHub** | [github.com/backcoin-org/backchain-dapp](https://github.com/backcoin-org/backchain-dapp) |
+| **Email** | dev@backcoin.org |
+| **X (Twitter)** | [x.com/backcoin](https://x.com/backcoin) |
 
 ---
 
-*This document is part of Backcoin Protocol's public documentation. All game results are verifiable on-chain via the Fortune Pool contract events.*
+## 📄 License
+
+MIT License — The code is free, just like the protocol.
+
+---
+
+```
+╔═══════════════════════════════════════════════════════════════════════════════════╗
+║                                                                                   ║
+║                        BUILT BY BACKCHAIN PROTOCOL                                ║
+║                                                                                   ║
+║   Fortune Pool is not just a game. It's a statement.                             ║
+║                                                                                   ║
+║   A statement that fair gaming is a right, not a privilege.                      ║
+║   A statement that results should be verifiable by anyone.                       ║
+║   A statement that the house shouldn't be able to cheat.                         ║
+║                                                                                   ║
+║   No one can rig it. No one can stop it. No one can censor it.                  ║
+║                                                                                   ║
+║                            THE GAME IS UNSTOPPABLE.                               ║
+║                                                                                   ║
+╚═══════════════════════════════════════════════════════════════════════════════════╝
+```
+
+---
+
+*This document is part of Backchain Protocol's public documentation. All game results are verifiable on-chain. Trust the code, not the words.*

@@ -1,12 +1,23 @@
-# Backcoin Protocol
+# Backchain Protocol
+
+```
+╔═══════════════════════════════════════════════════════════════════════════════════╗
+║                                                                                   ║
+║   "I may not agree with what you say, but I will defend to the death            ║
+║    your right to say it."                                                         ║
+║                                                                     — Voltaire    ║
+║                                                                                   ║
+╚═══════════════════════════════════════════════════════════════════════════════════╝
+```
 
 | | |
 |---|---|
-| **Project** | Backcoin Protocol |
-| **Description** | Modular DeFi Infrastructure for Real-World Utility |
+| **Project** | Backchain Protocol |
+| **Philosophy** | Unstoppable & Permissionless DeFi Infrastructure |
 | **Network** | Arbitrum One |
 | **Status** | Testnet Live (Arbitrum Sepolia) |
 | **Website** | [backcoin.org](https://backcoin.org) |
+| **Documentation** | [github.com/backcoin-org/backchain-dapp/docs](https://github.com/backcoin-org/backchain-dapp/tree/main/docs) |
 | **X (Twitter)** | [x.com/backcoin](https://x.com/backcoin) |
 | **GitHub** | [github.com/backcoin-org/backchain-dapp](https://github.com/backcoin-org/backchain-dapp) |
 | **YouTube** | [youtube.com/@Backcoin](https://www.youtube.com/@Backcoin) |
@@ -14,15 +25,38 @@
 
 ---
 
-**Document:** Tokenomics — Complete Economic Model  
-**Version:** 1.0  
-**Last Updated:** December 2025  
+**Document:** Tokenomics — Economics of Freedom  
+**Version:** 2.0.0 (V6 with Operator System)  
+**Last Updated:** February 2026  
+**Full Documentation:** [https://github.com/backcoin-org/backchain-dapp/tree/main/docs](https://github.com/backcoin-org/backchain-dapp/tree/main/docs)
 
 ---
 
 # Tokenomics
 
-## Token Overview
+## Economics Designed for Freedom
+
+```
+╔═══════════════════════════════════════════════════════════════════════════════════╗
+║                                                                                   ║
+║                    FAIR. TRANSPARENT. UNSTOPPABLE.                                ║
+║                                                                                   ║
+║   Just as Voltaire believed in equality of opportunity,                          ║
+║   our tokenomics ensures no one has an unfair advantage.                         ║
+║                                                                                   ║
+║   Zero for team.                                                                  ║
+║   Zero for VCs.                                                                   ║
+║   Zero for private sales.                                                        ║
+║                                                                                   ║
+║   80% goes to users and builders who actually use the protocol.                  ║
+║   Not to insiders. Not to investors. Not to us.                                  ║
+║                                                                                   ║
+╚═══════════════════════════════════════════════════════════════════════════════════╝
+```
+
+---
+
+## 📊 Token Overview
 
 | Property | Value |
 |----------|-------|
@@ -32,46 +66,56 @@
 | **Standard** | ERC-20 |
 | **Decimals** | 18 |
 | **Max Supply** | 200,000,000 BKC (Fixed, Capped Forever) |
-| **Contract** | `0x0Df89f8d4f2d4240054A83638448495e1F4d3A6f` |
+| **Contract** | `0x38DD1898b7B11f07C03e7dBd957fCC8021fB1396` |
+| **Freeze Function** | ❌ None |
+| **Blacklist** | ❌ None |
+| **Pause Function** | ❌ None |
+| **Admin Keys** | ❌ None |
+
+**The token contract is immutable. No one can freeze, pause, or blacklist any address. Ever.**
 
 ---
 
-## Supply Distribution
+## 📈 Supply Distribution
 
 ### Total Supply: 200,000,000 BKC
 
 ```
-┌─────────────────────────────────────────────────────────────────────┐
-│                         TOKEN DISTRIBUTION                           │
-├─────────────────────────────────────────────────────────────────────┤
-│                                                                     │
-│  TGE (Initial):         40,000,000 BKC  (20%)                      │
-│  ████████░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░  │
-│  └─ Available at launch                                            │
-│                                                                     │
-│  Activity Rewards:     160,000,000 BKC  (80%)                      │
-│  ░░░░░░░░████████████████████████████████████████████████████████  │
-│  └─ Released through ecosystem usage (not pre-minted)              │
-│                                                                     │
-└─────────────────────────────────────────────────────────────────────┘
+╔═══════════════════════════════════════════════════════════════════════════════════╗
+║                                                                                   ║
+║   TOKEN DISTRIBUTION                                                              ║
+║   ══════════════════                                                              ║
+║                                                                                   ║
+║   TGE (Initial):         40,000,000 BKC  (20%)                                   ║
+║   ████████░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░  ║
+║   └─ Available at launch                                                          ║
+║                                                                                   ║
+║   Activity Rewards:     160,000,000 BKC  (80%)                                   ║
+║   ░░░░░░░░████████████████████████████████████████████████████████████████████░  ║
+║   └─ Released ONLY through ecosystem usage (NOT pre-minted!)                     ║
+║                                                                                   ║
+║   80% goes to USERS and OPERATORS who actually use the protocol.                 ║
+║   NOT to VCs. NOT to insiders. NOT to team.                                      ║
+║                                                                                   ║
+╚═══════════════════════════════════════════════════════════════════════════════════╝
 ```
 
 ---
 
-## TGE Distribution (40,000,000 BKC)
+## 🎯 TGE Distribution (40,000,000 BKC)
 
 Tokens minted and distributed at Token Generation Event:
 
 | Allocation | Amount | % of TGE | Purpose |
 |------------|--------|----------|---------|
 | **Community Airdrop** | 14,000,000 | 35% | Two-phase community distribution |
-| **NFT Pool Liquidity** | 7,000,000 | 17.5% | 1M per tier (7 pools) |
+| **NFT Pool Liquidity** | 7,000,000 | 17.5% | Liquidity for 4 NFT pools |
 | **DEX Liquidity** | 7,000,000 | 17.5% | Camelot/Uniswap trading pairs |
-| **Strategic Reserve** | 10,000,000 | 25% | Future CEX listings |
+| **Strategic Reserve** | 10,000,000 | 25% | Future growth |
 | **Fortune Pool Prize** | 2,000,000 | 5% | Gaming prize pool |
-| **Developer/Team** | **0** | **0%** | **Nothing** |
-| **Private Sale** | **0** | **0%** | **Nothing** |
-| **VC Allocation** | **0** | **0%** | **Nothing** |
+| **Developer/Team** | **0** | **0%** | **ZERO** |
+| **Private Sale** | **0** | **0%** | **ZERO** |
+| **VC Allocation** | **0** | **0%** | **ZERO** |
 
 ### Visual Breakdown
 
@@ -88,7 +132,7 @@ Developer/Team        ░░░░░░░░░░░░░░░░░░░�
 
 ---
 
-## Community Airdrop (14,000,000 BKC)
+## 👥 Community Airdrop (14,000,000 BKC)
 
 ### Two-Phase Distribution
 
@@ -99,47 +143,60 @@ Developer/Team        ░░░░░░░░░░░░░░░░░░░�
 
 ### Why 35% to Community?
 
-- Ensures wide distribution from day one
-- Rewards early supporters and testers
-- Creates decentralized holder base
-- No insider advantages
+- ✅ Ensures wide distribution from day one
+- ✅ Rewards early supporters and testers
+- ✅ Creates decentralized holder base
+- ✅ No insider advantages
+- ✅ Permissionless participation
 
 ---
 
-## NFT Pool Liquidity (7,000,000 BKC)
+## 💎 NFT Pool Liquidity (7,000,000 BKC)
 
-### Distribution Per Pool
+### Distribution Per Pool (V6 - 4 Tiers)
 
-| Pool | Tier | Amount | Contract |
-|------|------|--------|----------|
-| Diamond | 70% discount | 1,000,000 BKC | `0xD4393350bd00ef6D4509D43c6dB0E7010bB5c3d9` |
-| Platinum | 60% discount | 1,000,000 BKC | `0x76Edd1f3c42f607a92b9354D14F5F25278403808` |
-| Gold | 50% discount | 1,000,000 BKC | `0xE9354654c97Fa5CDe3931c53a72aBEdC688ab01B` |
-| Silver | 40% discount | 1,000,000 BKC | `0x57Bc7500213DAAfb0176E04B4Cce19cE19E145d4` |
-| Bronze | 30% discount | 1,000,000 BKC | `0x9eFB21b279873D04e337c371c90fF00130aB8581` |
-| Iron | 20% discount | 1,000,000 BKC | `0x99259cF2cE5158fcC995aCf6282574f6563a048e` |
-| Crystal | 10% discount | 1,000,000 BKC | `0xe7Ae6A7B48460b3c581158c80F67E566CC800271` |
+| Pool | Burn Reduction | Initial Liquidity | Contract |
+|------|----------------|-------------------|----------|
+| **Diamond** | 0% burn | 1,750,000 BKC | `0x5C5590458689a11731c8bAD8BDf5D8f1D7Ffe020` |
+| **Gold** | 25% burn | 1,750,000 BKC | `0x9390e12c910C4d2E0796FA754e5C450969F09886` |
+| **Silver** | 35% burn | 1,750,000 BKC | `0x016549ee056442eC30a916335f66ad5183E3fF5b` |
+| **Bronze** | 50% burn | 1,750,000 BKC | `0x74eB5CF86B43517cd27f48A06abb8A521aDA63b8` |
+
+**Factory:** `0x2f63000539AAE2019Cc3d6E357295d903c1fF120`
 
 ---
 
-## Activity Rewards (160,000,000 BKC)
+## ⚡ Activity Rewards (160,000,000 BKC)
 
 ### How It Works
 
 These tokens are **NOT pre-minted**. They are released only when users actively use the ecosystem:
 
 ```
-User uses service → Pays fee → Activity rewards released proportionally
+╔═══════════════════════════════════════════════════════════════════════════════════╗
+║                                                                                   ║
+║   THIS IS NOT INFLATION                                                          ║
+║   ═════════════════════                                                          ║
+║                                                                                   ║
+║   Traditional crypto: Tokens printed → Value diluted → Users lose                ║
+║                                                                                   ║
+║   Backchain: Fee paid → Proportional release → Users earn                        ║
+║                                                                                   ║
+║   • No activity = No release                                                     ║
+║   • Release rate DECREASES over time                                             ║
+║   • Maximum cap: 160M BKC (then stops forever)                                   ║
+║   • Not inflation — it's reward distribution                                     ║
+║                                                                                   ║
+╚═══════════════════════════════════════════════════════════════════════════════════╝
 ```
 
-### Release Mechanism
+### Release Mechanism (Linear Scarcity)
 
 The release rate decreases as more tokens enter circulation:
 
 ```
 Release Rate = Remaining Supply / 160,000,000
 
-Example at different stages:
 ┌────────────────────────────────────────────────────────────────┐
 │ Released So Far │ Remaining │ Rate  │ 100 BKC fee releases   │
 ├─────────────────┼───────────┼───────┼────────────────────────┤
@@ -160,62 +217,125 @@ Example at different stages:
 | **No Free Rewards** | Users must pay for actual services |
 | **Self-Limiting** | Cannot release more than 160M ever |
 | **Predictable** | Simple formula, fully transparent |
+| **Fair** | Early users and builders are rewarded most |
 
 ---
 
-## Fee Distribution
+## 🌍 Fee Distribution (V6 with Operators)
 
-All fees collected flow through MiningManager and are distributed:
+### The Operator System
+
+V6 introduces **operators** — anyone who builds an interface earns from every transaction:
 
 ```
-Fee Collected
-      │
-      ▼
-┌─────────────────┐
-│  MiningManager  │
-└────────┬────────┘
-         │
-    ┌────┴────┐
-    ▼         ▼
-┌───────┐ ┌─────────┐
-│Stakers│ │Treasury │
-└───────┘ └─────────┘
+╔═══════════════════════════════════════════════════════════════════════════════════╗
+║                                                                                   ║
+║   FEE DISTRIBUTION (V6)                                                          ║
+║   ═════════════════════                                                          ║
+║                                                                                   ║
+║   User pays fee (any service)                                                    ║
+║           │                                                                       ║
+║           ▼                                                                       ║
+║   MiningManager receives fee                                                     ║
+║           │                                                                       ║
+║           ├──────────────► OPERATOR ⚡ (commission for interface builders)       ║
+║           │                                                                       ║
+║           ├──────────────► STAKERS (proportional to pStake)                      ║
+║           │                                                                       ║
+║           └──────────────► TREASURY (protocol development)                       ║
+║                                                                                   ║
+║   OPERATORS EARN FROM EVERY TRANSACTION THROUGH THEIR INTERFACE!                 ║
+║                                                                                   ║
+╚═══════════════════════════════════════════════════════════════════════════════════╝
 ```
+
+### Who Are Operators?
+
+| Who | What They Build | What They Earn |
+|-----|-----------------|----------------|
+| Frontend developers | Staking dashboards | % of stake/unstake/claim fees |
+| Game developers | Fortune Pool interfaces | % of all bets |
+| Legal tech builders | Notary services | % of all certifications |
+| NFT marketplace builders | Trading interfaces | % of all trades |
+| Social app developers | Backchat clients | % of all tips/actions |
+| Anyone | Any interface | % of all transactions |
+
+**No registration required. No approval needed. Just build and earn.**
 
 ### Distribution Ratios
 
-Current configuration (adjustable via EcosystemManager):
-
 | Recipient | Share | Purpose |
 |-----------|-------|---------|
+| **Operators ⚡** | Configurable | Incentive for builders |
 | **Stakers** | Configurable | Rewards for long-term holders |
 | **Treasury** | Configurable | Operations, development, marketing |
 
-**Note:** Ratios can be adjusted based on ecosystem needs without contract redeployment.
-
 ---
 
-## Why Zero for Developers?
+## ❌ Why Zero for Developers?
 
 ### Our Philosophy
 
-We are a group of crypto enthusiasts building what we believe in. We chose to allocate **zero tokens** to ourselves because:
-
-1. **Trust:** No insider dump risk
-2. **Alignment:** We succeed only if the protocol succeeds
-3. **Fairness:** Same opportunities as any community member
-4. **Credibility:** Actions speak louder than words
+```
+╔═══════════════════════════════════════════════════════════════════════════════════╗
+║                                                                                   ║
+║   WE CHOSE INTEGRITY OVER SHORTCUTS                                              ║
+║   ══════════════════════════════════                                             ║
+║                                                                                   ║
+║   We allocated ZERO tokens to ourselves because:                                 ║
+║                                                                                   ║
+║   1. TRUST      — No insider dump risk                                           ║
+║   2. ALIGNMENT  — We succeed only if the protocol succeeds                       ║
+║   3. FAIRNESS   — Same opportunities as any community member                     ║
+║   4. CREDIBILITY — Actions speak louder than words                               ║
+║                                                                                   ║
+║   We refused all angel investors and VC funding.                                 ║
+║   We refused all private sales.                                                  ║
+║   We refused all advisor allocations.                                            ║
+║                                                                                   ║
+║   Because accepting their money would compromise the protocol.                   ║
+║                                                                                   ║
+╚═══════════════════════════════════════════════════════════════════════════════════╝
+```
 
 ### How We Benefit
 
 - Use the protocol like any other user
 - Earn through staking like everyone else
-- Build reputation through successful delivery
-- Pride in creating something meaningful
+- Build interfaces and earn as operators like everyone else
+- Pride in creating something meaningful and free
 
 ---
 
-## Sustainability
+## 🔥 Token Utility
+
+### Where BKC is Used
+
+| Service | Use Case | Operator ⚡ |
+|---------|----------|-------------|
+| **Staking** | Lock tokens to earn protocol fees | Yes |
+| **Fortune Pool** | Wager on games | Yes |
+| **NFT Pools** | Buy/sell Booster NFTs | Yes |
+| **Notary** | Pay for document certification | Yes |
+| **Rentals** | Pay rental fees | Yes |
+| **Backchat** | Tips, premium features | Yes |
+| **Charity Pool** | Donations | Yes |
+| **Governance** | Vote on proposals | Coming soon |
+
+### Demand Drivers
+
+| Driver | Effect |
+|--------|--------|
+| Staking | Reduces circulating supply |
+| NFT purchases | Continuous demand |
+| Service fees | Constant utility demand |
+| Burn reduction | Incentive to hold/rent NFTs |
+| Building interfaces | Operator earnings drive adoption |
+| Governance | Long-term holding incentive |
+
+---
+
+## 🔄 Sustainability
 
 ### Not a Circular Economy
 
@@ -229,6 +349,8 @@ We are a group of crypto enthusiasts building what we believe in. We chose to al
 | Gaming | Entertainment | Gamers, casual users |
 | NFT Pools | Asset trading | Collectors, traders |
 | Rentals | Asset utilization | Anyone needing temporary access |
+| Backchat | Social networking | Users wanting censorship-resistant social |
+| Charity | Crowdfunding | Donors, causes, transparency |
 | Oracle | Infrastructure | Developers (free public good) |
 
 ### Revenue Sources
@@ -239,7 +361,10 @@ External value enters the ecosystem through:
 2. **Gamers** paying for entertainment
 3. **Traders** paying for NFT transactions
 4. **Renters** paying for temporary NFT access
-5. **New users** buying BKC to access services
+5. **Social users** paying for premium features
+6. **Donors** paying for transparent giving
+7. **New users** buying BKC to access services
+8. **Operators** building interfaces and driving adoption
 
 ### Long-Term Viability
 
@@ -250,56 +375,78 @@ External value enters the ecosystem through:
 | Mature | Low release rate | Stable | Sustainable |
 | Final | Zero release | Primary income | Self-sustaining |
 
-After all 160M activity rewards are released, the protocol continues operating purely on fee redistribution.
+**After all 160M activity rewards are released, the protocol continues operating purely on fee redistribution.**
 
 ---
 
-## Token Utility
+## 📋 Key Addresses
 
-### Where BKC is Used
-
-| Service | Use Case |
-|---------|----------|
-| **Staking** | Lock tokens to earn protocol fees |
-| **Fortune Pool** | Wager on predictions |
-| **NFT Pools** | Buy/sell Booster NFTs |
-| **Notary** | Pay for document certification |
-| **Rentals** | Pay rental fees |
-| **Governance** | Vote on proposals (coming soon) |
-
-### Demand Drivers
-
-| Driver | Effect |
-|--------|--------|
-| Staking | Reduces circulating supply |
-| NFT purchases | Continuous demand |
-| Service fees | Constant utility demand |
-| Fee discounts | Incentive to hold NFTs |
-| Governance | Long-term holding incentive |
-
----
-
-## Key Addresses
+### Core Contracts
 
 | Contract | Address |
 |----------|---------|
-| BKC Token | `0x0Df89f8d4f2d4240054A83638448495e1F4d3A6f` |
-| MiningManager | `0xAdB6d83Fc7A340a22fbA93304532F0c14C9Cd4fB` |
-| DelegationManager | `0xEfDa12B1D1e91FDe57eBCDB7A520cfd1D9aE4701` |
-| EcosystemManager | `0xF7c16C935d70627cf7F94040330C162095b8BEb1` |
-| Treasury | `0xc93030333E3a235c2605BcB7C7330650B600B6D0` |
+| **BKC Token** | `0x38DD1898b7B11f07C03e7dBd957fCC8021fB1396` |
+| **EcosystemManager** | `0xF5741c125Db4034640CeEA8f3DDb0C4a8d96E407` |
+| **MiningManager** | `0x7755982411244791d2DA96cBa04d08df72Be43C1` |
+| **DelegationManager** | `0x41B1B7940E06318e9b161fc64524FaE7261e8739` |
+| **Treasury** | `0xc93030333E3a235c2605BcB7C7330650B600B6D0` |
+| **Governance** | `0x157e08d5F5a776A530227f548d0f0C47682b7A3E` |
+
+### Services (All Support Operators ⚡)
+
+| Contract | Address |
+|----------|---------|
+| **FortunePool** | `0x5B3c7A322eB49805c594Fd948c137b62a09BBfFF` |
+| **CharityPool** | `0x259271F3558bCa03Ddc8D7494CCF833751483Fb1` |
+| **DecentralizedNotary** | `0x2E56650a4f05D0f98787694c6C61603616716b48` |
+| **RentalManager** | `0x593A842d214516F216EB6E6E9A97cC84F42f6821` |
+| **Backchat** | `0x0D8c2862df03F5be4b569C5ffF4D3aaAEE44BDDb` |
+
+### NFT System
+
+| Contract | Address |
+|----------|---------|
+| **RewardBoosterNFT** | `0xf2EA307686267dC674859da28C58CBb7a5866BCf` |
+| **NFT Pool Factory** | `0x2f63000539AAE2019Cc3d6E357295d903c1fF120` |
 
 ---
 
-## Contact
+## 📞 Support
 
 | Channel | Link |
 |---------|------|
-| Email | dev@backcoin.org |
-| X (Twitter) | [x.com/backcoin](https://x.com/backcoin) |
-| GitHub | [github.com/backcoin-org/backchain-dapp](https://github.com/backcoin-org/backchain-dapp) |
-| YouTube | [youtube.com/@Backcoin](https://www.youtube.com/@Backcoin) |
+| **Documentation** | [github.com/backcoin-org/backchain-dapp/docs](https://github.com/backcoin-org/backchain-dapp/tree/main/docs) |
+| **GitHub** | [github.com/backcoin-org/backchain-dapp](https://github.com/backcoin-org/backchain-dapp) |
+| **Email** | dev@backcoin.org |
+| **X (Twitter)** | [x.com/backcoin](https://x.com/backcoin) |
 
 ---
 
-*This document is part of Backcoin Protocol's public documentation. All data is verifiable on-chain.*
+## 📄 License
+
+MIT License — The code is free, just like the protocol.
+
+---
+
+```
+╔═══════════════════════════════════════════════════════════════════════════════════╗
+║                                                                                   ║
+║                        BUILT BY BACKCHAIN PROTOCOL                                ║
+║                                                                                   ║
+║   These tokenomics are not just numbers. They're a commitment.                   ║
+║                                                                                   ║
+║   A commitment to fairness — zero for insiders.                                   ║
+║   A commitment to builders — operators earn from every transaction.              ║
+║   A commitment to users — 80% goes to those who actually use the protocol.       ║
+║   A commitment to freedom — no one can change, freeze, or stop the token.        ║
+║                                                                                   ║
+║   The token is immutable. The distribution is fair. The economics are sound.     ║
+║                                                                                   ║
+║                          THE ECONOMICS ARE UNSTOPPABLE.                           ║
+║                                                                                   ║
+╚═══════════════════════════════════════════════════════════════════════════════════╝
+```
+
+---
+
+*This document is part of Backchain Protocol's public documentation. All data is verifiable on-chain. Trust the code, not the words.*

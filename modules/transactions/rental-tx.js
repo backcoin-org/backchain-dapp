@@ -1,52 +1,45 @@
 // modules/js/transactions/rental-tx.js
-// ✅ PRODUCTION V2.0 - MetaAds Promotion Support
+// ✅ PRODUCTION V2.0 - Updated for RentalManager V6 + Operator Support
 // 
 // CHANGES V2.0:
-// - NEW: promoteListing function for MetaAds (pay ETH to boost visibility)
-// - NEW: getPromotionFee read function
-// - UPDATED: ABI with V2 functions (promoteListing, getPromotionFee)
+// - CRITICAL FIX: rentNFT() and rentNFTSimple() now include operator parameter
+// - RENAMED: promoteListing → spotlightListing (V6 spotlight system)
+// - REMOVED: getPromotionFee(), getPromotionRanking() - don't exist in V6
+// - ADDED: getEffectiveSpotlight() - spotlight decay system
+// - ADDED: getSpotlightConfig() - spotlight configuration
+// - ADDED: getSpotlightedListings() - paginated spotlighted listings
+// - ADDED: getFeeConfig() - fee configuration
+// - ADDED: hasActiveRental() - Backchat integration
+// - ADDED: getUserActiveRentals() - Backchat integration
+// - ADDED: getListingCount() - total listings
+// - FIXED: getMarketplaceStats() - now returns all V6 fields
+// - Uses resolveOperator() for hybrid operator system
+// - Backwards compatible (operator is optional)
 //
-// CHANGES V1.5:
-// - IMPROVED: Use setApprovalForAll instead of individual approve (one-time approval)
-// - IMPROVED: Better error handling during NFT approval with timeout
-// - IMPROVED: Re-check approval status after RPC errors
-// - IMPROVED: Fixed gas limit for approval transactions
-// - IMPROVED: Cleaner error messages for users
-//
-// CHANGES V1.4:
-// - Changed ABI from string format to object format (ethers v6 compatibility)
-// - Fixed: listing.active → listing.isActive (match contract struct)
-// - Fixed: rental.renter → rental.tenant (match contract struct)
-// - Fixed: rental.totalPaid → rental.paidAmount (match contract struct)
-// - Removed non-existent functions: getActiveListings, getUserListings, getUserRentals
-// - Added proper contract method validation
-// - Added debug logging for troubleshooting
-//
-// CHANGES V1.3:
-// - Fixed: listing.active → listing.isActive (match contract)
-// - Fixed: calculateRentalCost → getRentalCost (match contract)
-// - Added: BKC balance check before rent
-// - Added: Better error messages for each failure case
-//
+// ============================================================================
+// V6 SPOTLIGHT SYSTEM:
+// - Owner pays ETH to boost listing visibility
+// - Spotlight decays 1% per day (100 days max)
+// - Frontend sorts by getEffectiveSpotlight() for visibility
+// - ETH goes to MiningManager → Operator/Treasury
 // ============================================================================
 // AVAILABLE TRANSACTIONS:
 // - listNft / list: List an NFT for rent
-// - rentNft / rent: Rent a listed NFT
+// - rentNft / rent: Rent a listed NFT (with operator!)
+// - rentNftSimple: Simple 1-hour rental (with operator!)
 // - withdrawNft / withdraw: Remove NFT from marketplace
 // - updateListing: Update listing price/duration
-// - promoteListing / promote: Pay ETH to boost listing visibility (V2)
+// - spotlightListing / spotlight: Pay ETH to boost visibility (V6)
 // ============================================================================
 
 import { txEngine, ValidationLayer } from '../core/index.js';
+import { resolveOperator } from '../core/operator.js';
 import { addresses, contractAddresses } from '../../config.js';
 
 // ============================================================================
 // 1. CONTRACT CONFIGURATION
 // ============================================================================
 
-/**
- * Get contract addresses dynamically from config.js
- */
 function getContracts() {
     const bkcToken = addresses?.bkcToken || 
                      contractAddresses?.bkcToken ||
@@ -60,22 +53,9 @@ function getContracts() {
                         contractAddresses?.rewardBoosterNFT ||
                         window.contractAddresses?.rewardBoosterNFT;
     
-    if (!bkcToken) {
-        console.error('❌ BKC Token address not found!');
+    if (!bkcToken || !rentalMarketplace || !nftContract) {
         throw new Error('Contract addresses not loaded. Please refresh the page.');
     }
-    
-    if (!rentalMarketplace) {
-        console.error('❌ RentalManager address not found!', { addresses, contractAddresses });
-        throw new Error('Contract addresses not loaded. Please refresh the page.');
-    }
-    
-    if (!nftContract) {
-        console.error('❌ NFT Contract (RewardBoosterNFT) address not found!');
-        throw new Error('Contract addresses not loaded. Please refresh the page.');
-    }
-    
-    console.log('[RentalTx] Using addresses:', { bkcToken, rentalMarketplace, nftContract });
     
     return {
         BKC_TOKEN: bkcToken,
@@ -84,355 +64,62 @@ function getContracts() {
     };
 }
 
-/**
- * Rental Marketplace ABI - RentalManager contract
- * V1.4: Using OBJECT format for ethers v6 compatibility
- */
 const RENTAL_ABI = [
-    // Write functions
-    {
-        name: 'listNFT',
-        type: 'function',
-        stateMutability: 'nonpayable',
-        inputs: [
-            { name: 'tokenId', type: 'uint256' },
-            { name: 'pricePerHour', type: 'uint256' },
-            { name: 'minHours', type: 'uint256' },
-            { name: 'maxHours', type: 'uint256' }
-        ],
-        outputs: []
-    },
-    {
-        name: 'rentNFT',
-        type: 'function',
-        stateMutability: 'nonpayable',
-        inputs: [
-            { name: 'tokenId', type: 'uint256' },
-            { name: 'hours', type: 'uint256' }
-        ],
-        outputs: []
-    },
-    {
-        name: 'rentNFTSimple',
-        type: 'function',
-        stateMutability: 'nonpayable',
-        inputs: [
-            { name: 'tokenId', type: 'uint256' }
-        ],
-        outputs: []
-    },
-    {
-        name: 'withdrawNFT',
-        type: 'function',
-        stateMutability: 'nonpayable',
-        inputs: [
-            { name: 'tokenId', type: 'uint256' }
-        ],
-        outputs: []
-    },
-    {
-        name: 'updateListing',
-        type: 'function',
-        stateMutability: 'nonpayable',
-        inputs: [
-            { name: 'tokenId', type: 'uint256' },
-            { name: 'pricePerHour', type: 'uint256' },
-            { name: 'minHours', type: 'uint256' },
-            { name: 'maxHours', type: 'uint256' }
-        ],
-        outputs: []
-    },
-    
-    // Read functions - V1.4: Match contract struct fields exactly
-    {
-        name: 'getListing',
-        type: 'function',
-        stateMutability: 'view',
-        inputs: [{ name: 'tokenId', type: 'uint256' }],
-        outputs: [
-            { name: 'owner', type: 'address' },
-            { name: 'pricePerHour', type: 'uint256' },
-            { name: 'minHours', type: 'uint256' },
-            { name: 'maxHours', type: 'uint256' },
-            { name: 'isActive', type: 'bool' },
-            { name: 'totalEarnings', type: 'uint256' },
-            { name: 'rentalCount', type: 'uint256' }
-        ]
-    },
-    {
-        name: 'getRental',
-        type: 'function',
-        stateMutability: 'view',
-        inputs: [{ name: 'tokenId', type: 'uint256' }],
-        outputs: [
-            { name: 'tenant', type: 'address' },
-            { name: 'startTime', type: 'uint256' },
-            { name: 'endTime', type: 'uint256' },
-            { name: 'paidAmount', type: 'uint256' }
-        ]
-    },
-    {
-        name: 'getRentalCost',
-        type: 'function',
-        stateMutability: 'view',
-        inputs: [
-            { name: 'tokenId', type: 'uint256' },
-            { name: 'hours', type: 'uint256' }
-        ],
-        outputs: [
-            { name: 'totalCost', type: 'uint256' },
-            { name: 'protocolFee', type: 'uint256' },
-            { name: 'ownerPayout', type: 'uint256' }
-        ]
-    },
-    {
-        name: 'getAllListedTokenIds',
-        type: 'function',
-        stateMutability: 'view',
-        inputs: [],
-        outputs: [{ name: '', type: 'uint256[]' }]
-    },
-    {
-        name: 'isRented',
-        type: 'function',
-        stateMutability: 'view',
-        inputs: [{ name: 'tokenId', type: 'uint256' }],
-        outputs: [{ name: '', type: 'bool' }]
-    },
-    {
-        name: 'hasRentalRights',
-        type: 'function',
-        stateMutability: 'view',
-        inputs: [
-            { name: 'tokenId', type: 'uint256' },
-            { name: 'user', type: 'address' }
-        ],
-        outputs: [{ name: '', type: 'bool' }]
-    },
-    {
-        name: 'getRemainingRentalTime',
-        type: 'function',
-        stateMutability: 'view',
-        inputs: [{ name: 'tokenId', type: 'uint256' }],
-        outputs: [{ name: '', type: 'uint256' }]
-    },
-    {
-        name: 'paused',
-        type: 'function',
-        stateMutability: 'view',
-        inputs: [],
-        outputs: [{ name: '', type: 'bool' }]
-    },
-    // V2.0: MetaAds Promotion Functions
-    {
-        name: 'promoteListing',
-        type: 'function',
-        stateMutability: 'payable',
-        inputs: [
-            { name: 'tokenId', type: 'uint256' }
-        ],
-        outputs: []
-    },
-    {
-        name: 'getPromotionFee',
-        type: 'function',
-        stateMutability: 'view',
-        inputs: [{ name: 'tokenId', type: 'uint256' }],
-        outputs: [{ name: '', type: 'uint256' }]
-    },
-    {
-        name: 'getPromotionRanking',
-        type: 'function',
-        stateMutability: 'view',
-        inputs: [],
-        outputs: [
-            { name: 'tokenIds', type: 'uint256[]' },
-            { name: 'fees', type: 'uint256[]' }
-        ]
-    },
-    {
-        name: 'getListingCount',
-        type: 'function',
-        stateMutability: 'view',
-        inputs: [],
-        outputs: [{ name: '', type: 'uint256' }]
-    },
-    {
-        name: 'getMarketplaceStats',
-        type: 'function',
-        stateMutability: 'view',
-        inputs: [],
-        outputs: [
-            { name: 'activeListings', type: 'uint256' },
-            { name: 'totalVol', type: 'uint256' },
-            { name: 'totalFees', type: 'uint256' },
-            { name: 'rentals', type: 'uint256' }
-        ]
-    },
-    
-    // Events
-    {
-        name: 'NFTListed',
-        type: 'event',
-        inputs: [
-            { name: 'tokenId', type: 'uint256', indexed: true },
-            { name: 'owner', type: 'address', indexed: true },
-            { name: 'pricePerHour', type: 'uint256', indexed: false },
-            { name: 'minHours', type: 'uint256', indexed: false },
-            { name: 'maxHours', type: 'uint256', indexed: false }
-        ]
-    },
-    {
-        name: 'NFTRented',
-        type: 'event',
-        inputs: [
-            { name: 'tokenId', type: 'uint256', indexed: true },
-            { name: 'tenant', type: 'address', indexed: true },
-            { name: 'owner', type: 'address', indexed: true },
-            { name: 'hours_', type: 'uint256', indexed: false },
-            { name: 'totalCost', type: 'uint256', indexed: false },
-            { name: 'protocolFee', type: 'uint256', indexed: false },
-            { name: 'ownerPayout', type: 'uint256', indexed: false },
-            { name: 'endTime', type: 'uint256', indexed: false }
-        ]
-    },
-    {
-        name: 'NFTWithdrawn',
-        type: 'event',
-        inputs: [
-            { name: 'tokenId', type: 'uint256', indexed: true },
-            { name: 'owner', type: 'address', indexed: true }
-        ]
-    },
-    {
-        name: 'ListingUpdated',
-        type: 'event',
-        inputs: [
-            { name: 'tokenId', type: 'uint256', indexed: true },
-            { name: 'newPricePerHour', type: 'uint256', indexed: false },
-            { name: 'newMinHours', type: 'uint256', indexed: false },
-            { name: 'newMaxHours', type: 'uint256', indexed: false }
-        ]
-    },
-    {
-        name: 'RentalExpired',
-        type: 'event',
-        inputs: [
-            { name: 'tokenId', type: 'uint256', indexed: true },
-            { name: 'tenant', type: 'address', indexed: true }
-        ]
-    }
+    // WRITE - Listings
+    'function listNFT(uint256 _tokenId, uint256 _pricePerHour, uint256 _minHours, uint256 _maxHours) external',
+    'function updateListing(uint256 _tokenId, uint256 _pricePerHour, uint256 _minHours, uint256 _maxHours) external',
+    'function withdrawNFT(uint256 _tokenId) external',
+    // WRITE - Rentals (WITH operator!)
+    'function rentNFT(uint256 _tokenId, uint256 _hours, address _operator) external',
+    'function rentNFTSimple(uint256 _tokenId, address _operator) external',
+    // WRITE - Spotlight
+    'function spotlightListing(uint256 _tokenId, address _operator) external payable',
+    // READ - Listings
+    'function getListing(uint256 _tokenId) view returns (tuple(address owner, uint256 pricePerHour, uint256 minHours, uint256 maxHours, bool isActive, uint256 totalEarnings, uint256 rentalCount))',
+    'function getAllListedTokenIds() view returns (uint256[])',
+    'function getListingCount() view returns (uint256)',
+    // READ - Rentals
+    'function getRental(uint256 _tokenId) view returns (tuple(address tenant, uint256 startTime, uint256 endTime, uint256 paidAmount))',
+    'function isRented(uint256 _tokenId) view returns (bool)',
+    'function getRemainingRentalTime(uint256 _tokenId) view returns (uint256)',
+    'function hasRentalRights(uint256 _tokenId, address _user) view returns (bool)',
+    'function getRentalCost(uint256 _tokenId, uint256 _hours) view returns (uint256 totalCost, uint256 protocolFee, uint256 ownerPayout)',
+    // READ - Spotlight
+    'function listingSpotlight(uint256 tokenId) view returns (uint256 totalAmount, uint256 lastSpotlightTime)',
+    'function getEffectiveSpotlight(uint256 _tokenId) view returns (uint256 effectiveAmount, uint256 daysPassed)',
+    'function getSpotlightedListingsPaginated(uint256 _offset, uint256 _limit) view returns (uint256[] tokenIds, uint256[] effectiveSpotlights, uint256 total)',
+    'function getSpotlightConfig() view returns (uint256 decayPerDayBips, uint256 minAmount, uint256 maxDays, uint256 totalSpotlightedListings, uint256 totalCollected)',
+    'function minSpotlightAmount() view returns (uint256)',
+    // READ - Backchat
+    'function hasActiveRental(address _user) view returns (bool)',
+    'function getUserActiveRentals(address _user) view returns (uint256[] tokenIds, uint256[] endTimes)',
+    // READ - Config
+    'function paused() view returns (bool)',
+    'function rentalFeeBips() view returns (uint256)',
+    'function getFeeConfig() view returns (uint256 miningFeeBips, uint256 burnFeeBips, uint256 totalFeeBips)',
+    'function getMarketplaceStats() view returns (uint256 activeListings, uint256 totalVol, uint256 totalFees, uint256 rentals, uint256 spotlightTotal, uint256 ethCollected, uint256 bkcFees)',
+    // EVENTS
+    'event NFTListed(uint256 indexed tokenId, address indexed owner, uint256 pricePerHour, uint256 minHours, uint256 maxHours)',
+    'event NFTRented(uint256 indexed tokenId, address indexed tenant, address indexed owner, uint256 hours_, uint256 totalCost, uint256 protocolFee, uint256 ownerPayout, uint256 endTime, address operator)',
+    'event ListingSpotlighted(uint256 indexed tokenId, address indexed owner, uint256 amount, uint256 newTotal, uint256 timestamp, address operator)'
 ];
 
-/**
- * NFT Contract ABI (RewardBoosterNFT) - Object format
- */
 const NFT_ABI = [
-    {
-        name: 'approve',
-        type: 'function',
-        stateMutability: 'nonpayable',
-        inputs: [
-            { name: 'to', type: 'address' },
-            { name: 'tokenId', type: 'uint256' }
-        ],
-        outputs: []
-    },
-    {
-        name: 'setApprovalForAll',
-        type: 'function',
-        stateMutability: 'nonpayable',
-        inputs: [
-            { name: 'operator', type: 'address' },
-            { name: 'approved', type: 'bool' }
-        ],
-        outputs: []
-    },
-    {
-        name: 'isApprovedForAll',
-        type: 'function',
-        stateMutability: 'view',
-        inputs: [
-            { name: 'owner', type: 'address' },
-            { name: 'operator', type: 'address' }
-        ],
-        outputs: [{ name: '', type: 'bool' }]
-    },
-    {
-        name: 'getApproved',
-        type: 'function',
-        stateMutability: 'view',
-        inputs: [{ name: 'tokenId', type: 'uint256' }],
-        outputs: [{ name: '', type: 'address' }]
-    },
-    {
-        name: 'ownerOf',
-        type: 'function',
-        stateMutability: 'view',
-        inputs: [{ name: 'tokenId', type: 'uint256' }],
-        outputs: [{ name: '', type: 'address' }]
-    }
-];
-
-/**
- * BKC Token ABI - Object format
- */
-const BKC_ABI = [
-    {
-        name: 'approve',
-        type: 'function',
-        stateMutability: 'nonpayable',
-        inputs: [
-            { name: 'spender', type: 'address' },
-            { name: 'amount', type: 'uint256' }
-        ],
-        outputs: [{ name: '', type: 'bool' }]
-    },
-    {
-        name: 'allowance',
-        type: 'function',
-        stateMutability: 'view',
-        inputs: [
-            { name: 'owner', type: 'address' },
-            { name: 'spender', type: 'address' }
-        ],
-        outputs: [{ name: '', type: 'uint256' }]
-    },
-    {
-        name: 'balanceOf',
-        type: 'function',
-        stateMutability: 'view',
-        inputs: [{ name: 'owner', type: 'address' }],
-        outputs: [{ name: '', type: 'uint256' }]
-    }
+    'function setApprovalForAll(address operator, bool approved) external',
+    'function isApprovedForAll(address owner, address operator) view returns (bool)',
+    'function ownerOf(uint256 tokenId) view returns (address)'
 ];
 
 // ============================================================================
 // 2. HELPER FUNCTIONS
 // ============================================================================
 
-/**
- * Creates Rental Marketplace contract instance
- * V1.4: Added validation and debug logging
- */
 function getRentalContract(signer) {
     const ethers = window.ethers;
-    
-    if (!ethers) {
-        throw new Error('ethers.js not loaded');
-    }
-    
     const contracts = getContracts();
-    const contract = new ethers.Contract(contracts.RENTAL_MARKETPLACE, RENTAL_ABI, signer);
-    
-    console.log('[RentalTx] Contract created, checking methods...');
-    
-    return contract;
+    return new ethers.Contract(contracts.RENTAL_MARKETPLACE, RENTAL_ABI, signer);
 }
 
-/**
- * Creates Rental Marketplace contract instance (read-only)
- */
 async function getRentalContractReadOnly() {
     const ethers = window.ethers;
     const { NetworkManager } = await import('../core/index.js');
@@ -441,509 +128,269 @@ async function getRentalContractReadOnly() {
     return new ethers.Contract(contracts.RENTAL_MARKETPLACE, RENTAL_ABI, provider);
 }
 
-/**
- * Creates NFT contract instance
- */
 function getNftContract(signer) {
     const ethers = window.ethers;
     const contracts = getContracts();
     return new ethers.Contract(contracts.NFT_CONTRACT, NFT_ABI, signer);
 }
 
-/**
- * Creates NFT contract instance (read-only)
- */
-async function getNftContractReadOnly() {
-    const ethers = window.ethers;
-    const { NetworkManager } = await import('../core/index.js');
-    const provider = NetworkManager.getProvider();
-    const contracts = getContracts();
-    return new ethers.Contract(contracts.NFT_CONTRACT, NFT_ABI, provider);
-}
-
 // ============================================================================
 // 3. TRANSACTION FUNCTIONS
 // ============================================================================
 
-/**
- * Lists an NFT for rent on the marketplace
- */
 export async function listNft({
-    tokenId,
-    pricePerHour,
-    minHours,
-    maxHours,
-    button = null,
-    onSuccess = null,
-    onError = null
+    tokenId, pricePerHour, minHours, maxHours,
+    button = null, onSuccess = null, onError = null
 }) {
-    console.log('[RentalTx] listNft called with:', { tokenId, pricePerHour, minHours, maxHours });
-    
-    ValidationLayer.rental.validateList({ tokenId, pricePerHour, minHours, maxHours });
-
-    const price = BigInt(pricePerHour);
+    const ethers = window.ethers;
     const contracts = getContracts();
+    const price = BigInt(pricePerHour);
 
     return await txEngine.execute({
         name: 'ListNFT',
         button,
-        
-        getContract: async (signer) => {
-            const contract = getRentalContract(signer);
-            console.log('[RentalTx] Contract.listNFT exists:', typeof contract.listNFT);
-            return contract;
-        },
+        getContract: async (signer) => getRentalContract(signer),
         method: 'listNFT',
-        args: [BigInt(tokenId), price, BigInt(minHours), BigInt(maxHours)],
+        args: [tokenId, price, minHours, maxHours],
         
         validate: async (signer, userAddress) => {
-            console.log('[RentalTx] Validating listNFT for user:', userAddress);
-            
-            const rentalContract = getRentalContract(signer);
             const nftContract = getNftContract(signer);
-            
-            // Check if marketplace is paused
-            try {
-                const isPaused = await rentalContract.paused();
-                console.log('[RentalTx] Marketplace paused:', isPaused);
-                if (isPaused) {
-                    throw new Error('Marketplace is currently paused');
-                }
-            } catch (e) {
-                if (e.message.includes('paused')) throw e;
-            }
-            
-            // Check ownership
             const owner = await nftContract.ownerOf(tokenId);
-            console.log('[RentalTx] NFT owner:', owner);
             if (owner.toLowerCase() !== userAddress.toLowerCase()) {
                 throw new Error('You do not own this NFT');
             }
             
-            // Check if already listed - V1.4: Use isActive (not active)
-            try {
-                const listing = await rentalContract.getListing(tokenId);
-                console.log('[RentalTx] Current listing:', listing);
-                if (listing.isActive) {
-                    throw new Error('This NFT is already listed');
-                }
-            } catch (e) {
-                if (e.message.includes('already listed')) throw e;
+            const rentalContract = getRentalContract(signer);
+            if (await rentalContract.paused()) {
+                throw new Error('Marketplace is currently paused');
             }
             
-            // V1.5: Improved NFT approval handling with better RPC error resilience
-            const isApprovedForAll = await nftContract.isApprovedForAll(userAddress, contracts.RENTAL_MARKETPLACE);
-            console.log('[RentalTx] Is approved for all:', isApprovedForAll);
-            
-            if (!isApprovedForAll) {
-                const approved = await nftContract.getApproved(tokenId);
-                console.log('[RentalTx] Approved address:', approved);
-                
-                if (approved.toLowerCase() !== contracts.RENTAL_MARKETPLACE.toLowerCase()) {
-                    console.log('[RentalTx] Approving NFT for marketplace...');
-                    
-                    // V1.5: Use setApprovalForAll for better UX (one-time approval for all NFTs)
-                    // This avoids needing to approve each NFT individually
-                    try {
-                        const approveTx = await nftContract.setApprovalForAll(
-                            contracts.RENTAL_MARKETPLACE, 
-                            true,
-                            { gasLimit: 100000 } // Fixed gas limit for approval
-                        );
-                        
-                        console.log('[RentalTx] Approval tx submitted:', approveTx.hash);
-                        
-                        // Wait with timeout
-                        const receipt = await Promise.race([
-                            approveTx.wait(),
-                            new Promise((_, reject) => 
-                                setTimeout(() => reject(new Error('Approval timeout - please try again')), 60000)
-                            )
-                        ]);
-                        
-                        console.log('[RentalTx] ✅ NFT approval confirmed in block:', receipt.blockNumber);
-                    } catch (approvalError) {
-                        console.error('[RentalTx] Approval error:', approvalError);
-                        
-                        // Check if approval actually went through despite error
-                        await new Promise(r => setTimeout(r, 2000)); // Wait 2s
-                        const recheckApproval = await nftContract.isApprovedForAll(userAddress, contracts.RENTAL_MARKETPLACE);
-                        
-                        if (recheckApproval) {
-                            console.log('[RentalTx] ✅ Approval confirmed on recheck');
-                        } else {
-                            // Propagate a cleaner error
-                            throw new Error('NFT approval failed. Please check MetaMask and try again.');
-                        }
-                    }
-                }
+            const isApproved = await nftContract.isApprovedForAll(userAddress, contracts.RENTAL_MARKETPLACE);
+            if (!isApproved) {
+                const approveTx = await nftContract.setApprovalForAll(contracts.RENTAL_MARKETPLACE, true);
+                await approveTx.wait();
             }
-            
-            console.log('[RentalTx] ✅ All validations passed for listNFT');
         },
-        
-        onSuccess: async (receipt) => {
-            console.log('[RentalTx] ListNFT successful:', receipt.hash);
-            if (onSuccess) await onSuccess(receipt);
-        },
-        onError: (error) => {
-            console.error('[RentalTx] ListNFT failed:', error);
-            if (onError) onError(error);
-        }
+        onSuccess, onError
     });
 }
 
-/**
- * Rents a listed NFT
- */
 export async function rentNft({
-    tokenId,
-    hours = 1,
-    button = null,
-    onSuccess = null,
-    onError = null
+    tokenId, hours, operator,
+    button = null, onSuccess = null, onError = null
 }) {
-    console.log('[RentalTx] rentNft called with:', { tokenId, hours });
-    
-    ValidationLayer.rental.validateRent({ tokenId, hours });
-    
+    const ethers = window.ethers;
     const contracts = getContracts();
-    
-    // Pre-fetch rental cost for approval
-    let rentalCost = 0n;
-    try {
-        const readContract = await getRentalContractReadOnly();
-        const costData = await readContract.getRentalCost(tokenId, hours);
-        rentalCost = costData.totalCost;
-        console.log('[RentalTx] Pre-fetched rental cost:', window.ethers.formatEther(rentalCost), 'BKC');
-    } catch (e) {
-        console.warn('[RentalTx] Could not pre-fetch rental cost:', e.message);
-    }
+    let storedOperator = operator;
+    let totalCost = 0n;
 
     return await txEngine.execute({
         name: 'RentNFT',
         button,
-        
-        getContract: async (signer) => {
-            const contract = getRentalContract(signer);
-            console.log('[RentalTx] Contract.rentNFT exists:', typeof contract.rentNFT);
-            return contract;
-        },
+        getContract: async (signer) => getRentalContract(signer),
         method: 'rentNFT',
-        args: [BigInt(tokenId), BigInt(hours)],
+        args: () => [tokenId, hours, resolveOperator(storedOperator)],
         
-        // Token approval for rental payment
-        approval: (rentalCost > 0n) ? {
-            token: contracts.BKC_TOKEN,
-            spender: contracts.RENTAL_MARKETPLACE,
-            amount: rentalCost
-        } : null,
+        get approval() {
+            if (totalCost > 0n) {
+                return { token: contracts.BKC_TOKEN, spender: contracts.RENTAL_MARKETPLACE, amount: totalCost };
+            }
+            return null;
+        },
         
         validate: async (signer, userAddress) => {
-            const ethers = window.ethers;
-            console.log('[RentalTx] Validating rent for tokenId:', tokenId, 'hours:', hours);
-            
             const contract = getRentalContract(signer);
+            if (await contract.paused()) throw new Error('Marketplace is currently paused');
             
-            // Check marketplace paused
-            const isPaused = await contract.paused();
-            console.log('[RentalTx] Marketplace paused:', isPaused);
-            if (isPaused) {
-                throw new Error('Marketplace is currently paused');
-            }
-            
-            // Check listing - V1.4: Use isActive (not active)
             const listing = await contract.getListing(tokenId);
-            console.log('[RentalTx] Listing:', listing);
-            
-            if (!listing.isActive) {
-                throw new Error('This NFT is not listed for rent');
+            if (!listing.isActive) throw new Error('NFT is not listed for rent');
+            if (hours < Number(listing.minHours) || hours > Number(listing.maxHours)) {
+                throw new Error(`Hours must be between ${listing.minHours} and ${listing.maxHours}`);
             }
+            if (await contract.isRented(tokenId)) throw new Error('NFT is currently rented');
             
-            // Check hours within bounds
-            const minH = Number(listing.minHours);
-            const maxH = Number(listing.maxHours);
-            if (hours < minH || hours > maxH) {
-                throw new Error(`Rental duration must be between ${minH} and ${maxH} hours`);
-            }
+            const cost = await contract.getRentalCost(tokenId, hours);
+            totalCost = cost.totalCost;
             
-            // Check if currently rented
-            const isCurrentlyRented = await contract.isRented(tokenId);
-            console.log('[RentalTx] Is currently rented:', isCurrentlyRented);
-            if (isCurrentlyRented) {
-                throw new Error('This NFT is currently being rented by someone else');
-            }
-            
-            // Calculate and validate cost
-            const costData = await contract.getRentalCost(tokenId, hours);
-            const totalCost = costData.totalCost;
-            console.log('[RentalTx] Rental cost:', ethers.formatEther(totalCost), 'BKC');
-            
-            // Check user balance
             const { NetworkManager } = await import('../core/index.js');
             const provider = NetworkManager.getProvider();
-            const bkcContract = new ethers.Contract(contracts.BKC_TOKEN, BKC_ABI, provider);
+            const bkcAbi = ['function balanceOf(address) view returns (uint256)'];
+            const bkcContract = new ethers.Contract(contracts.BKC_TOKEN, bkcAbi, provider);
             const balance = await bkcContract.balanceOf(userAddress);
-            console.log('[RentalTx] User BKC balance:', ethers.formatEther(balance), 'BKC');
-            
-            if (balance < totalCost) {
-                throw new Error(`Insufficient BKC balance. Need ${ethers.formatEther(totalCost)} BKC`);
-            }
-            
-            console.log('[RentalTx] ✅ All validations passed');
+            if (balance < totalCost) throw new Error(`Insufficient BKC. Need ${ethers.formatEther(totalCost)} BKC`);
         },
         
         onSuccess: async (receipt) => {
-            console.log('[RentalTx] RentNFT successful:', receipt.hash);
-            if (onSuccess) await onSuccess(receipt);
+            let rentalInfo = null;
+            try {
+                const iface = new ethers.Interface(RENTAL_ABI);
+                for (const log of receipt.logs) {
+                    try {
+                        const parsed = iface.parseLog(log);
+                        if (parsed?.name === 'NFTRented') {
+                            rentalInfo = {
+                                endTime: Number(parsed.args.endTime),
+                                totalCost: parsed.args.totalCost,
+                                protocolFee: parsed.args.protocolFee,
+                                ownerPayout: parsed.args.ownerPayout
+                            };
+                            break;
+                        }
+                    } catch {}
+                }
+            } catch {}
+            if (onSuccess) onSuccess(receipt, rentalInfo);
         },
-        onError: (error) => {
-            console.error('[RentalTx] RentNFT failed:', error);
-            if (onError) onError(error);
-        }
+        onError
     });
 }
 
-/**
- * Withdraws an NFT from the marketplace (de-list)
- */
-export async function withdrawNft({
-    tokenId,
-    button = null,
-    onSuccess = null,
-    onError = null
+export async function rentNftSimple({
+    tokenId, operator,
+    button = null, onSuccess = null, onError = null
 }) {
-    console.log('[RentalTx] withdrawNft called with:', { tokenId });
-    
-    if (tokenId === undefined || tokenId === null) {
-        throw new Error('Token ID is required');
-    }
+    const ethers = window.ethers;
+    const contracts = getContracts();
+    let storedOperator = operator;
+    let totalCost = 0n;
 
+    return await txEngine.execute({
+        name: 'RentNFTSimple',
+        button,
+        getContract: async (signer) => getRentalContract(signer),
+        method: 'rentNFTSimple',
+        args: () => [tokenId, resolveOperator(storedOperator)],
+        
+        get approval() {
+            if (totalCost > 0n) {
+                return { token: contracts.BKC_TOKEN, spender: contracts.RENTAL_MARKETPLACE, amount: totalCost };
+            }
+            return null;
+        },
+        
+        validate: async (signer, userAddress) => {
+            const contract = getRentalContract(signer);
+            if (await contract.paused()) throw new Error('Marketplace is currently paused');
+            
+            const listing = await contract.getListing(tokenId);
+            if (!listing.isActive) throw new Error('NFT is not listed for rent');
+            if (await contract.isRented(tokenId)) throw new Error('NFT is currently rented');
+            
+            totalCost = listing.pricePerHour;
+            
+            const { NetworkManager } = await import('../core/index.js');
+            const provider = NetworkManager.getProvider();
+            const bkcAbi = ['function balanceOf(address) view returns (uint256)'];
+            const bkcContract = new ethers.Contract(contracts.BKC_TOKEN, bkcAbi, provider);
+            const balance = await bkcContract.balanceOf(userAddress);
+            if (balance < totalCost) throw new Error(`Insufficient BKC. Need ${ethers.formatEther(totalCost)} BKC`);
+        },
+        onSuccess, onError
+    });
+}
+
+export async function withdrawNft({
+    tokenId, button = null, onSuccess = null, onError = null
+}) {
     return await txEngine.execute({
         name: 'WithdrawNFT',
         button,
-        
-        getContract: async (signer) => {
-            const contract = getRentalContract(signer);
-            console.log('[RentalTx] Contract.withdrawNFT exists:', typeof contract.withdrawNFT);
-            return contract;
-        },
+        getContract: async (signer) => getRentalContract(signer),
         method: 'withdrawNFT',
-        args: [BigInt(tokenId)],
+        args: [tokenId],
         
         validate: async (signer, userAddress) => {
-            console.log('[RentalTx] Validating withdrawNFT for user:', userAddress);
-            
             const contract = getRentalContract(signer);
-            
-            // V1.4: Use isActive (not active)
             const listing = await contract.getListing(tokenId);
-            console.log('[RentalTx] Listing:', listing);
-            
-            if (!listing.isActive) {
-                throw new Error('This NFT is not listed');
-            }
-            
-            if (listing.owner.toLowerCase() !== userAddress.toLowerCase()) {
-                throw new Error('Only the listing owner can withdraw');
-            }
-            
-            const isRented = await contract.isRented(tokenId);
-            console.log('[RentalTx] Is rented:', isRented);
-            if (isRented) {
-                throw new Error('Cannot withdraw while NFT is being rented');
-            }
-            
-            console.log('[RentalTx] ✅ Validation passed for withdrawNFT');
+            if (!listing.isActive) throw new Error('NFT is not listed');
+            if (listing.owner.toLowerCase() !== userAddress.toLowerCase()) throw new Error('Only the owner can withdraw');
+            if (await contract.isRented(tokenId)) throw new Error('Cannot withdraw while NFT is rented');
         },
-        
-        onSuccess: async (receipt) => {
-            console.log('[RentalTx] WithdrawNFT successful:', receipt.hash);
-            if (onSuccess) await onSuccess(receipt);
-        },
-        onError: (error) => {
-            console.error('[RentalTx] WithdrawNFT failed:', error);
-            if (onError) onError(error);
-        }
+        onSuccess, onError
     });
 }
 
-/**
- * Updates a listing's price and duration parameters
- */
 export async function updateListing({
-    tokenId,
-    pricePerHour,
-    minHours,
-    maxHours,
-    button = null,
-    onSuccess = null,
-    onError = null
+    tokenId, pricePerHour, minHours, maxHours,
+    button = null, onSuccess = null, onError = null
 }) {
-    console.log('[RentalTx] updateListing called with:', { tokenId, pricePerHour, minHours, maxHours });
-    
-    ValidationLayer.rental.validateList({ tokenId, pricePerHour, minHours, maxHours });
-
     const price = BigInt(pricePerHour);
 
     return await txEngine.execute({
         name: 'UpdateListing',
         button,
-        
-        getContract: async (signer) => {
-            const contract = getRentalContract(signer);
-            console.log('[RentalTx] Contract.updateListing exists:', typeof contract.updateListing);
-            return contract;
-        },
+        getContract: async (signer) => getRentalContract(signer),
         method: 'updateListing',
-        args: [BigInt(tokenId), price, BigInt(minHours), BigInt(maxHours)],
+        args: [tokenId, price, minHours, maxHours],
         
         validate: async (signer, userAddress) => {
-            console.log('[RentalTx] Validating updateListing for user:', userAddress);
-            
             const contract = getRentalContract(signer);
-            
-            // V1.4: Use isActive (not active)
             const listing = await contract.getListing(tokenId);
-            console.log('[RentalTx] Listing:', listing);
-            
-            if (!listing.isActive) {
-                throw new Error('This NFT is not listed');
-            }
-            
-            if (listing.owner.toLowerCase() !== userAddress.toLowerCase()) {
-                throw new Error('Only the listing owner can update');
-            }
-            
-            const isRented = await contract.isRented(tokenId);
-            if (isRented) {
-                throw new Error('Cannot update while NFT is being rented');
-            }
-            
-            console.log('[RentalTx] ✅ Validation passed for updateListing');
+            if (!listing.isActive) throw new Error('NFT is not listed');
+            if (listing.owner.toLowerCase() !== userAddress.toLowerCase()) throw new Error('Only the owner can update');
         },
-        
-        onSuccess: async (receipt) => {
-            console.log('[RentalTx] UpdateListing successful:', receipt.hash);
-            if (onSuccess) await onSuccess(receipt);
-        },
-        onError: (error) => {
-            console.error('[RentalTx] UpdateListing failed:', error);
-            if (onError) onError(error);
-        }
+        onSuccess, onError
     });
 }
 
-/**
- * V2.0: Promotes a listing by paying ETH (MetaAds)
- * Higher ETH = higher visibility in marketplace
- */
-export async function promoteListing({
-    tokenId,
-    amountEth,
-    button = null,
-    onSuccess = null,
-    onError = null
+export async function spotlightListing({
+    tokenId, amount, operator,
+    button = null, onSuccess = null, onError = null
 }) {
     const ethers = window.ethers;
-    console.log('[RentalTx] promoteListing called with:', { tokenId, amountEth });
-    
-    if (!tokenId) {
-        throw new Error('Token ID is required');
-    }
-    
-    if (!amountEth || parseFloat(amountEth) <= 0) {
-        throw new Error('Promotion amount must be greater than 0');
-    }
-    
-    const amountWei = ethers.parseEther(amountEth.toString());
-    
+    const amountWei = BigInt(amount);
+    let storedOperator = operator;
+
     return await txEngine.execute({
-        name: 'PromoteListing',
+        name: 'SpotlightListing',
         button,
-        
-        getContract: async (signer) => {
-            const contract = getRentalContract(signer);
-            console.log('[RentalTx] Contract.promoteListing exists:', typeof contract.promoteListing);
-            return contract;
-        },
-        method: 'promoteListing',
-        args: [BigInt(tokenId)],
-        value: amountWei, // Send ETH with the transaction
+        getContract: async (signer) => getRentalContract(signer),
+        method: 'spotlightListing',
+        args: () => [tokenId, resolveOperator(storedOperator)],
+        value: amountWei,
         
         validate: async (signer, userAddress) => {
-            console.log('[RentalTx] Validating promoteListing for user:', userAddress);
-            
             const contract = getRentalContract(signer);
+            if (await contract.paused()) throw new Error('Marketplace is currently paused');
             
-            // Check listing exists and is active
             const listing = await contract.getListing(tokenId);
-            console.log('[RentalTx] Listing:', listing);
+            if (!listing.isActive) throw new Error('NFT is not listed');
             
-            if (!listing.isActive) {
-                throw new Error('This NFT is not listed. List it first before promoting.');
+            try {
+                const minAmount = await contract.minSpotlightAmount();
+                if (amountWei < minAmount) throw new Error(`Minimum spotlight is ${ethers.formatEther(minAmount)} ETH`);
+            } catch (e) { if (e.message.includes('Minimum')) throw e; }
+            
+            const balance = await signer.provider.getBalance(userAddress);
+            if (balance < amountWei + ethers.parseEther('0.001')) {
+                throw new Error(`Insufficient ETH`);
             }
-            
-            if (listing.owner.toLowerCase() !== userAddress.toLowerCase()) {
-                throw new Error('Only the listing owner can promote');
-            }
-            
-            // Check user has enough ETH
-            const provider = signer.provider;
-            const balance = await provider.getBalance(userAddress);
-            console.log('[RentalTx] User ETH balance:', ethers.formatEther(balance));
-            
-            if (balance < amountWei) {
-                throw new Error(`Insufficient ETH. Need ${amountEth} ETH but have ${ethers.formatEther(balance)} ETH`);
-            }
-            
-            console.log('[RentalTx] ✅ Validation passed for promoteListing');
         },
-        
-        onSuccess: async (receipt) => {
-            console.log('[RentalTx] PromoteListing successful:', receipt.hash);
-            if (onSuccess) await onSuccess(receipt);
-        },
-        onError: (error) => {
-            console.error('[RentalTx] PromoteListing failed:', error);
-            if (onError) onError(error);
-        }
+        onSuccess, onError
     });
 }
 
-// Alias for promote
-export const promote = promoteListing;
-
 // ============================================================================
-// 4. READ FUNCTIONS (Helpers)
+// 4. READ FUNCTIONS
 // ============================================================================
 
-/**
- * Gets listing details for a token
- * V1.4: Fixed field names to match contract struct
- */
 export async function getListing(tokenId) {
     const ethers = window.ethers;
     const contract = await getRentalContractReadOnly();
     const listing = await contract.getListing(tokenId);
-    
     return {
         owner: listing.owner,
         pricePerHour: listing.pricePerHour,
         pricePerHourFormatted: ethers.formatEther(listing.pricePerHour),
         minHours: Number(listing.minHours),
         maxHours: Number(listing.maxHours),
-        isActive: listing.isActive,  // V1.4: Correct field name
+        isActive: listing.isActive,
         totalEarnings: listing.totalEarnings,
         totalEarningsFormatted: ethers.formatEther(listing.totalEarnings),
         rentalCount: Number(listing.rentalCount)
     };
 }
 
-/**
- * Gets rental details for a token
- * V1.4: Fixed field names to match contract struct
- */
 export async function getRental(tokenId) {
     const ethers = window.ethers;
     const contract = await getRentalContractReadOnly();
@@ -951,172 +398,164 @@ export async function getRental(tokenId) {
     const now = Math.floor(Date.now() / 1000);
     const endTime = Number(rental.endTime);
     const isActive = endTime > now;
-    
     return {
-        tenant: rental.tenant,  // V1.4: Correct field name (was renter)
+        tenant: rental.tenant,
         startTime: Number(rental.startTime),
-        endTime: endTime,
-        paidAmount: rental.paidAmount,  // V1.4: Correct field name (was totalPaid)
+        endTime, paidAmount: rental.paidAmount,
         paidAmountFormatted: ethers.formatEther(rental.paidAmount),
-        isActive: isActive,
-        hoursRemaining: isActive ? Math.max(0, Math.ceil((endTime - now) / 3600)) : 0,
-        isExpired: !isActive && endTime > 0
+        isActive, hoursRemaining: isActive ? Math.max(0, Math.ceil((endTime - now) / 3600)) : 0
     };
 }
 
-/**
- * Gets all listed token IDs
- */
 export async function getAllListedTokenIds() {
     const contract = await getRentalContractReadOnly();
     const ids = await contract.getAllListedTokenIds();
     return ids.map(id => Number(id));
 }
 
-/**
- * Gets rental cost for specified duration
- */
+export async function getListingCount() {
+    const contract = await getRentalContractReadOnly();
+    return Number(await contract.getListingCount());
+}
+
 export async function getRentalCost(tokenId, hours) {
     const ethers = window.ethers;
     const contract = await getRentalContractReadOnly();
     const cost = await contract.getRentalCost(tokenId, hours);
-    
     return {
-        totalCost: cost.totalCost,
-        totalCostFormatted: ethers.formatEther(cost.totalCost),
-        protocolFee: cost.protocolFee,
-        protocolFeeFormatted: ethers.formatEther(cost.protocolFee),
-        ownerPayout: cost.ownerPayout,
-        ownerPayoutFormatted: ethers.formatEther(cost.ownerPayout)
+        totalCost: cost.totalCost, totalCostFormatted: ethers.formatEther(cost.totalCost),
+        protocolFee: cost.protocolFee, protocolFeeFormatted: ethers.formatEther(cost.protocolFee),
+        ownerPayout: cost.ownerPayout, ownerPayoutFormatted: ethers.formatEther(cost.ownerPayout)
     };
 }
 
-/**
- * Checks if NFT is currently rented
- */
 export async function isRented(tokenId) {
     const contract = await getRentalContractReadOnly();
     return await contract.isRented(tokenId);
 }
 
-/**
- * Gets remaining rental time in seconds
- */
 export async function getRemainingRentalTime(tokenId) {
     const contract = await getRentalContractReadOnly();
     return Number(await contract.getRemainingRentalTime(tokenId));
 }
 
-/**
- * Checks if user has rental rights for an NFT
- */
 export async function hasRentalRights(tokenId, userAddress) {
     const contract = await getRentalContractReadOnly();
     return await contract.hasRentalRights(tokenId, userAddress);
 }
 
-/**
- * Gets marketplace statistics
- */
+export async function getEffectiveSpotlight(tokenId) {
+    const ethers = window.ethers;
+    const contract = await getRentalContractReadOnly();
+    try {
+        const result = await contract.getEffectiveSpotlight(tokenId);
+        return { effectiveAmount: result.effectiveAmount, effectiveAmountFormatted: ethers.formatEther(result.effectiveAmount), daysPassed: Number(result.daysPassed) };
+    } catch { return { effectiveAmount: 0n, effectiveAmountFormatted: '0', daysPassed: 0 }; }
+}
+
+export async function getSpotlightedListings(offset = 0, limit = 20) {
+    const ethers = window.ethers;
+    const contract = await getRentalContractReadOnly();
+    try {
+        const result = await contract.getSpotlightedListingsPaginated(offset, limit);
+        return {
+            tokenIds: result.tokenIds.map(id => Number(id)),
+            effectiveSpotlights: result.effectiveSpotlights.map(s => ({ amount: s, formatted: ethers.formatEther(s) })),
+            total: Number(result.total)
+        };
+    } catch { return { tokenIds: [], effectiveSpotlights: [], total: 0 }; }
+}
+
+export async function getSpotlightConfig() {
+    const ethers = window.ethers;
+    const contract = await getRentalContractReadOnly();
+    try {
+        const config = await contract.getSpotlightConfig();
+        return {
+            decayPerDayBips: Number(config.decayPerDayBips), decayPerDayPercent: Number(config.decayPerDayBips) / 100,
+            minAmount: config.minAmount, minAmountFormatted: ethers.formatEther(config.minAmount),
+            maxDays: Number(config.maxDays), totalSpotlightedListings: Number(config.totalSpotlightedListings),
+            totalCollected: config.totalCollected, totalCollectedFormatted: ethers.formatEther(config.totalCollected)
+        };
+    } catch { return { decayPerDayBips: 100, decayPerDayPercent: 1, minAmount: 0n, minAmountFormatted: '0', maxDays: 100, totalSpotlightedListings: 0, totalCollected: 0n, totalCollectedFormatted: '0' }; }
+}
+
+export async function getFeeConfig() {
+    const contract = await getRentalContractReadOnly();
+    try {
+        const config = await contract.getFeeConfig();
+        return {
+            miningFeeBips: Number(config.miningFeeBips), miningFeePercent: Number(config.miningFeeBips) / 100,
+            burnFeeBips: Number(config.burnFeeBips), burnFeePercent: Number(config.burnFeeBips) / 100,
+            totalFeeBips: Number(config.totalFeeBips), totalFeePercent: Number(config.totalFeeBips) / 100
+        };
+    } catch {
+        const feeBips = await contract.rentalFeeBips().catch(() => 1000);
+        return { miningFeeBips: Number(feeBips), miningFeePercent: Number(feeBips) / 100, burnFeeBips: 0, burnFeePercent: 0, totalFeeBips: Number(feeBips), totalFeePercent: Number(feeBips) / 100 };
+    }
+}
+
 export async function getMarketplaceStats() {
     const ethers = window.ethers;
     const contract = await getRentalContractReadOnly();
-    const stats = await contract.getMarketplaceStats();
-    
-    return {
-        activeListings: Number(stats.activeListings),
-        totalVolume: stats.totalVol,
-        totalVolumeFormatted: ethers.formatEther(stats.totalVol),
-        totalFees: stats.totalFees,
-        totalFeesFormatted: ethers.formatEther(stats.totalFees),
-        totalRentals: Number(stats.rentals)
-    };
+    try {
+        const stats = await contract.getMarketplaceStats();
+        return {
+            activeListings: Number(stats.activeListings),
+            totalVolume: stats.totalVol, totalVolumeFormatted: ethers.formatEther(stats.totalVol),
+            totalFees: stats.totalFees, totalFeesFormatted: ethers.formatEther(stats.totalFees),
+            totalRentals: Number(stats.rentals),
+            totalSpotlight: stats.spotlightTotal, totalSpotlightFormatted: ethers.formatEther(stats.spotlightTotal),
+            totalETHCollected: stats.ethCollected, totalETHFormatted: ethers.formatEther(stats.ethCollected),
+            totalBKCFees: stats.bkcFees, totalBKCFormatted: ethers.formatEther(stats.bkcFees)
+        };
+    } catch { return { activeListings: 0, totalVolume: 0n, totalVolumeFormatted: '0', totalFees: 0n, totalFeesFormatted: '0', totalRentals: 0, totalSpotlight: 0n, totalSpotlightFormatted: '0', totalETHCollected: 0n, totalETHFormatted: '0', totalBKCFees: 0n, totalBKCFormatted: '0' }; }
 }
 
-/**
- * Checks if marketplace is paused
- */
 export async function isMarketplacePaused() {
     const contract = await getRentalContractReadOnly();
     return await contract.paused();
 }
 
-/**
- * V2.0: Gets the promotion fee for a listing
- */
-export async function getPromotionFee(tokenId) {
-    const ethers = window.ethers;
+export async function hasActiveRental(userAddress) {
     const contract = await getRentalContractReadOnly();
-    try {
-        const fee = await contract.getPromotionFee(tokenId);
-        return {
-            fee: fee,
-            feeFormatted: ethers.formatEther(fee)
-        };
-    } catch (e) {
-        // Contract might not have V2 functions
-        console.warn('[RentalTx] getPromotionFee not available:', e.message);
-        return { fee: 0n, feeFormatted: '0' };
-    }
+    try { return await contract.hasActiveRental(userAddress); } catch { return false; }
 }
 
-/**
- * V2.0: Gets the promotion ranking (sorted by highest fee)
- */
-export async function getPromotionRanking() {
-    const ethers = window.ethers;
+export async function getUserActiveRentals(userAddress) {
     const contract = await getRentalContractReadOnly();
     try {
-        const [tokenIds, fees] = await contract.getPromotionRanking();
-        return tokenIds.map((id, i) => ({
-            tokenId: Number(id),
-            fee: fees[i],
-            feeFormatted: ethers.formatEther(fees[i])
+        const result = await contract.getUserActiveRentals(userAddress);
+        return result.tokenIds.map((id, i) => ({
+            tokenId: Number(id), endTime: Number(result.endTimes[i]),
+            hoursRemaining: Math.max(0, Math.ceil((Number(result.endTimes[i]) - Math.floor(Date.now() / 1000)) / 3600))
         }));
-    } catch (e) {
-        // Contract might not have V2 functions
-        console.warn('[RentalTx] getPromotionRanking not available:', e.message);
-        return [];
-    }
+    } catch { return []; }
 }
 
 // ============================================================================
-// 5. ALIASES FOR BACKWARD COMPATIBILITY
+// 5. ALIASES
 // ============================================================================
 
 export const list = listNft;
 export const rent = rentNft;
 export const withdraw = withdrawNft;
-// promote alias is defined above after promoteListing function
+export const spotlight = spotlightListing;
+export const promoteListing = spotlightListing;
+export const promote = spotlightListing;
 
 // ============================================================================
 // 6. EXPORT
 // ============================================================================
 
 export const RentalTx = {
-    // Write functions
-    listNft,
-    rentNft,
-    withdrawNft,
-    updateListing,
-    promoteListing, // V2.0
-    // Aliases
-    list,
-    rent,
-    withdraw,
-    promote, // V2.0
-    // Read helpers
-    getListing,
-    getRental,
-    getAllListedTokenIds,
-    getRentalCost,
-    isRented,
-    getRemainingRentalTime,
-    hasRentalRights,
-    getMarketplaceStats,
-    isMarketplacePaused,
-    getPromotionFee, // V2.0
-    getPromotionRanking // V2.0
+    listNft, rentNft, rentNftSimple, withdrawNft, updateListing, spotlightListing,
+    list, rent, withdraw, spotlight, promote, promoteListing,
+    getListing, getAllListedTokenIds, getListingCount, getRentalCost,
+    getRental, isRented, getRemainingRentalTime, hasRentalRights,
+    getEffectiveSpotlight, getSpotlightedListings, getSpotlightConfig,
+    hasActiveRental, getUserActiveRentals,
+    getFeeConfig, getMarketplaceStats, isMarketplacePaused
 };
 
 export default RentalTx;
