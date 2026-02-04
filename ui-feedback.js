@@ -214,6 +214,37 @@ export const handleRpcError = (error) => {
     showToast(`Error: ${errorMessage.substring(0, 100)}...`, 'error');
 };
 
+// --- ADD NFT TO WALLET ---
+
+export async function addNftToWallet(tokenId, tierName) {
+    if (!window.ethereum) {
+        showToast('MetaMask not detected', 'error');
+        return;
+    }
+
+    try {
+        const wasAdded = await window.ethereum.request({
+            method: 'wallet_watchAsset',
+            params: {
+                type: 'ERC721',
+                options: {
+                    address: '0xf2EA307686267dC674859da28C58CBb7a5866BCf', // RewardBoosterNFT V6
+                    tokenId: tokenId.toString(),
+                },
+            },
+        });
+
+        if (wasAdded) {
+            showToast(`${tierName} NFT #${tokenId} added to wallet!`, 'success');
+        } else {
+            showToast('NFT not added to wallet', 'info');
+        }
+    } catch (error) {
+        console.error('Error adding NFT to wallet:', error);
+        showToast('Failed to add NFT to wallet', 'error');
+    }
+}
+
 // --- SHARE MODAL ---
 
 export function showShareModal() {
