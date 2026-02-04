@@ -1,6 +1,7 @@
 // js/ui-feedback.js
 // ✅ VERSÃO FINAL: Tratamento de Erro -32002 (MetaMask Sync Issue)
 // ✅ ATUALIZADO: Removida lógica de Presale
+// ✅ ATUALIZADO: Welcome Modal com mensagem CEO/Unstoppable
 
 import { DOMElements } from './dom-elements.js';
 // Se State não for usado aqui, pode remover a importação, mas mantive para compatibilidade
@@ -90,6 +91,12 @@ export const openModal = (content, maxWidth = 'max-w-md', allowCloseOnBackdrop =
             '.animate-fade-out-down { animation: fade-out-down 0.3s ease-in forwards; }' +
             '.pulse-gold { animation: pulse-gold 2s infinite; }' +
             '@keyframes pulse-gold { 0% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.7); } 70% { box-shadow: 0 0 0 10px rgba(245, 158, 11, 0); } 100% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0); } }' +
+            '@keyframes glow { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }' +
+            '.animate-glow { animation: glow 2s ease-in-out infinite; }' +
+            '@keyframes float { 0%, 100% { transform: translateY(0px); } 50% { transform: translateY(-5px); } }' +
+            '.animate-float { animation: float 3s ease-in-out infinite; }' +
+            '@keyframes shimmer { 0% { background-position: -200% 0; } 100% { background-position: 200% 0; } }' +
+            '.animate-shimmer { background: linear-gradient(90deg, transparent, rgba(255,255,255,0.1), transparent); background-size: 200% 100%; animation: shimmer 2s infinite; }' +
         '</style>';
 
     const modalHTML = `
@@ -158,8 +165,9 @@ const updateAllTimers = () => {
                 <span class="text-amber-400">${String(minutes).padStart(2, '0')}m</span>
                 <span class="text-zinc-500">:</span>
                 <span class="text-amber-400">${String(seconds).padStart(2, '0')}s</span>
-            </div>`;
-        return true; 
+            </div>
+        `;
+        return true;
     });
 
     if (activeTimerElements.length === 0 && globalTimerInterval) {
@@ -168,161 +176,78 @@ const updateAllTimers = () => {
     }
 };
 
-export const startCountdownTimers = (elements) => {
-    elements.forEach(el => {
-        if(!activeTimerElements.includes(el)) activeTimerElements.push(el);
-    });
-    if (!globalTimerInterval && activeTimerElements.length > 0) {
-        updateAllTimers();
+export const registerTimerElement = (element) => {
+    if (!element || activeTimerElements.includes(element)) return;
+    activeTimerElements.push(element);
+    if (!globalTimerInterval) {
         globalTimerInterval = setInterval(updateAllTimers, 1000);
     }
+    updateAllTimers();
 };
 
-// --- WALLET HELPERS (CORRIGIDO PARA O ERRO -32002) ---
+// --- EXTERNAL SERVICES ERROR HANDLING ---
 
-export async function addNftToWallet(contractAddress, tokenId) {
-    if (!tokenId || !window.ethereum) {
-        showToast('No wallet detected.', 'error');
+export const handleRpcError = (error) => {
+    console.error("RPC Error caught:", error);
+    
+    const errorCode = error.code || error?.data?.code;
+    const errorMessage = error.message || error?.data?.message || String(error);
+
+    if (errorCode === -32002 || errorMessage.includes('-32002')) {
+        showToast(
+            'MetaMask has a pending request. Please open your MetaMask wallet extension and complete or reject any pending actions.',
+            'warning'
+        );
         return;
     }
-    try {
-        showToast(`Requesting wallet to track NFT #${tokenId}...`, 'info');
-        
-        const wasAdded = await window.ethereum.request({ 
-            method: 'wallet_watchAsset', 
-            params: { 
-                type: 'ERC721', 
-                options: { address: contractAddress, tokenId: tokenId.toString() } 
-            } 
-        });
 
-        if(wasAdded) {
-            showToast(`NFT #${tokenId} added successfully!`, 'success');
-        } else {
-            showToast('Action cancelled by user.', 'warning');
-        }
-
-    } catch (error) { 
-        console.error("Add NFT Error:", error); 
-        
-        // 🛠️ AQUI ESTÁ A CORREÇÃO:
-        // Captura o erro específico da MetaMask e mostra um aviso amigável
-        if (error.code === -32002 || (error.message && error.message.includes("not owned"))) {
-            showToast(`MetaMask cannot sync this NFT on Testnet yet. Please add manually.`, 'warning');
-        } else {
-            showToast(`Error: ${error.message}`, 'error');
-        }
+    if (errorCode === 4001 || errorMessage.toLowerCase().includes('user rejected') || errorMessage.toLowerCase().includes('user denied')) {
+        showToast('Transaction cancelled by user.', 'info');
+        return;
     }
-}
+
+    if (errorMessage.toLowerCase().includes('insufficient funds')) {
+        showToast('Insufficient funds in your wallet.', 'error');
+        return;
+    }
+
+    showToast(`Error: ${errorMessage.substring(0, 100)}...`, 'error');
+};
 
 // --- SHARE MODAL ---
-export function showShareModal(userAddress) {
+
+export function showShareModal() {
     const projectUrl = window.location.origin;
-    const shareText = "🚀 Discover Backcoin - The next generation of crypto mining! Proof-of-Purchase, NFT Boosters, Fortune Pool & more. Join the revolution!";
-    const shareTextEncoded = encodeURIComponent(shareText);
-    const urlEncoded = encodeURIComponent(projectUrl);
-    
-    // Share URLs for each platform
-    const shareLinks = {
-        twitter: `https://twitter.com/intent/tweet?text=${shareTextEncoded}&url=${urlEncoded}`,
-        telegram: `https://t.me/share/url?url=${urlEncoded}&text=${shareTextEncoded}`,
-        whatsapp: `https://wa.me/?text=${shareTextEncoded}%20${urlEncoded}`,
-        facebook: `https://www.facebook.com/sharer/sharer.php?u=${urlEncoded}`,
-        linkedin: `https://www.linkedin.com/sharing/share-offsite/?url=${urlEncoded}`,
-        reddit: `https://reddit.com/submit?url=${urlEncoded}&title=${encodeURIComponent("Backcoin - Next Generation Crypto Mining")}`,
-        instagram: `https://www.instagram.com/`,
-        tiktok: `https://www.tiktok.com/`
-    };
+    const shareText = encodeURIComponent("Check out Backcoin - The Unstoppable DeFi Protocol on Arbitrum! Build your own business. Be Your Own CEO. 🚀 #Backcoin #DeFi #Arbitrum #BeYourOwnCEO");
 
     const content = `
-        <div class="text-center">
-            <!-- Header with Image -->
-            <div class="mb-5">
-                <img src="./assets/share.png" alt="Share Backcoin" class="w-32 h-32 mx-auto mb-4 object-contain">
-                <h3 class="text-2xl font-bold text-white mb-2">Share Backcoin</h3>
-                <p class="text-zinc-400 text-sm">Help us grow! Share with your friends and community</p>
+        <div class="text-center py-2">
+            <div class="mb-4">
+                <div class="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-amber-500/20 to-orange-500/20 rounded-full mb-3">
+                    <i class="fa-solid fa-share-nodes text-3xl text-amber-400"></i>
+                </div>
+                <h2 class="text-2xl font-bold text-white mb-1">Spread the Word</h2>
+                <p class="text-zinc-400 text-sm">Help us grow the unstoppable community!</p>
             </div>
 
-            <!-- Social Media Buttons -->
-            <div class="grid grid-cols-4 gap-2 mb-5">
-                <!-- Twitter/X -->
-                <button onclick="window.open('${shareLinks.twitter}', '_blank', 'width=600,height=400')" 
-                        class="group flex flex-col items-center gap-1.5 p-3 bg-zinc-800/50 hover:bg-[#000000]/30 border border-zinc-700 hover:border-zinc-500 rounded-xl transition-all duration-300 hover:scale-105">
-                    <div class="w-10 h-10 flex items-center justify-center rounded-full bg-zinc-700 group-hover:bg-[#000000] transition-colors">
-                        <i class="fa-brands fa-x-twitter text-lg text-zinc-300 group-hover:text-white"></i>
-                    </div>
-                    <span class="text-[10px] font-semibold text-zinc-500 group-hover:text-white">Twitter</span>
-                </button>
-
-                <!-- Facebook -->
-                <button onclick="window.open('${shareLinks.facebook}', '_blank', 'width=600,height=400')" 
-                        class="group flex flex-col items-center gap-1.5 p-3 bg-zinc-800/50 hover:bg-[#1877F2]/20 border border-zinc-700 hover:border-[#1877F2] rounded-xl transition-all duration-300 hover:scale-105">
-                    <div class="w-10 h-10 flex items-center justify-center rounded-full bg-zinc-700 group-hover:bg-[#1877F2] transition-colors">
-                        <i class="fa-brands fa-facebook-f text-lg text-zinc-300 group-hover:text-white"></i>
-                    </div>
-                    <span class="text-[10px] font-semibold text-zinc-500 group-hover:text-white">Facebook</span>
-                </button>
-
-                <!-- Instagram -->
-                <button onclick="window.open('${shareLinks.instagram}', '_blank')" 
-                        class="group flex flex-col items-center gap-1.5 p-3 bg-zinc-800/50 hover:bg-gradient-to-br hover:from-[#833AB4]/20 hover:via-[#FD1D1D]/20 hover:to-[#F77737]/20 border border-zinc-700 hover:border-[#E1306C] rounded-xl transition-all duration-300 hover:scale-105">
-                    <div class="w-10 h-10 flex items-center justify-center rounded-full bg-zinc-700 group-hover:bg-gradient-to-br group-hover:from-[#833AB4] group-hover:via-[#FD1D1D] group-hover:to-[#F77737] transition-all">
-                        <i class="fa-brands fa-instagram text-lg text-zinc-300 group-hover:text-white"></i>
-                    </div>
-                    <span class="text-[10px] font-semibold text-zinc-500 group-hover:text-white">Instagram</span>
-                </button>
-
-                <!-- TikTok -->
-                <button onclick="window.open('${shareLinks.tiktok}', '_blank')" 
-                        class="group flex flex-col items-center gap-1.5 p-3 bg-zinc-800/50 hover:bg-[#000000]/30 border border-zinc-700 hover:border-[#69C9D0] rounded-xl transition-all duration-300 hover:scale-105">
-                    <div class="w-10 h-10 flex items-center justify-center rounded-full bg-zinc-700 group-hover:bg-[#000000] transition-colors">
-                        <i class="fa-brands fa-tiktok text-lg text-zinc-300 group-hover:text-white"></i>
-                    </div>
-                    <span class="text-[10px] font-semibold text-zinc-500 group-hover:text-white">TikTok</span>
-                </button>
-
-                <!-- YouTube -->
-                <button onclick="window.open('https://www.youtube.com/@Backcoin', '_blank')" 
-                        class="group flex flex-col items-center gap-1.5 p-3 bg-zinc-800/50 hover:bg-[#FF0000]/20 border border-zinc-700 hover:border-[#FF0000] rounded-xl transition-all duration-300 hover:scale-105">
-                    <div class="w-10 h-10 flex items-center justify-center rounded-full bg-zinc-700 group-hover:bg-[#FF0000] transition-colors">
-                        <i class="fa-brands fa-youtube text-lg text-zinc-300 group-hover:text-white"></i>
-                    </div>
-                    <span class="text-[10px] font-semibold text-zinc-500 group-hover:text-white">YouTube</span>
-                </button>
-
-                <!-- LinkedIn -->
-                <button onclick="window.open('${shareLinks.linkedin}', '_blank', 'width=600,height=400')" 
-                        class="group flex flex-col items-center gap-1.5 p-3 bg-zinc-800/50 hover:bg-[#0A66C2]/20 border border-zinc-700 hover:border-[#0A66C2] rounded-xl transition-all duration-300 hover:scale-105">
-                    <div class="w-10 h-10 flex items-center justify-center rounded-full bg-zinc-700 group-hover:bg-[#0A66C2] transition-colors">
-                        <i class="fa-brands fa-linkedin-in text-lg text-zinc-300 group-hover:text-white"></i>
-                    </div>
-                    <span class="text-[10px] font-semibold text-zinc-500 group-hover:text-white">LinkedIn</span>
-                </button>
-
-                <!-- Telegram -->
-                <button onclick="window.open('${shareLinks.telegram}', '_blank', 'width=600,height=400')" 
-                        class="group flex flex-col items-center gap-1.5 p-3 bg-zinc-800/50 hover:bg-[#0088cc]/20 border border-zinc-700 hover:border-[#0088cc] rounded-xl transition-all duration-300 hover:scale-105">
-                    <div class="w-10 h-10 flex items-center justify-center rounded-full bg-zinc-700 group-hover:bg-[#0088cc] transition-colors">
-                        <i class="fa-brands fa-telegram text-lg text-zinc-300 group-hover:text-white"></i>
-                    </div>
-                    <span class="text-[10px] font-semibold text-zinc-500 group-hover:text-white">Telegram</span>
-                </button>
-
-                <!-- WhatsApp -->
-                <button onclick="window.open('${shareLinks.whatsapp}', '_blank', 'width=600,height=400')" 
-                        class="group flex flex-col items-center gap-1.5 p-3 bg-zinc-800/50 hover:bg-[#25D366]/20 border border-zinc-700 hover:border-[#25D366] rounded-xl transition-all duration-300 hover:scale-105">
-                    <div class="w-10 h-10 flex items-center justify-center rounded-full bg-zinc-700 group-hover:bg-[#25D366] transition-colors">
-                        <i class="fa-brands fa-whatsapp text-lg text-zinc-300 group-hover:text-white"></i>
-                    </div>
-                    <span class="text-[10px] font-semibold text-zinc-500 group-hover:text-white">WhatsApp</span>
-                </button>
-            </div>
-
-            <!-- Divider -->
-            <div class="flex items-center gap-3 mb-4">
-                <div class="flex-1 h-px bg-zinc-700"></div>
-                <span class="text-[10px] text-zinc-500 font-medium uppercase">Or copy link</span>
-                <div class="flex-1 h-px bg-zinc-700"></div>
+            <!-- Social Share Grid -->
+            <div class="grid grid-cols-4 gap-3 mb-5">
+                <a href="https://twitter.com/intent/tweet?text=${shareText}&url=${encodeURIComponent(projectUrl)}" target="_blank" class="flex flex-col items-center justify-center bg-zinc-800 hover:bg-sky-600 border border-zinc-700 hover:border-sky-500 rounded-xl p-3 transition-all duration-300 group">
+                    <i class="fa-brands fa-x-twitter text-xl text-zinc-400 group-hover:text-white transition-colors mb-1"></i>
+                    <span class="text-[10px] text-zinc-500 group-hover:text-white">Twitter</span>
+                </a>
+                <a href="https://t.me/share/url?url=${encodeURIComponent(projectUrl)}&text=${shareText}" target="_blank" class="flex flex-col items-center justify-center bg-zinc-800 hover:bg-blue-600 border border-zinc-700 hover:border-blue-500 rounded-xl p-3 transition-all duration-300 group">
+                    <i class="fa-brands fa-telegram text-xl text-zinc-400 group-hover:text-white transition-colors mb-1"></i>
+                    <span class="text-[10px] text-zinc-500 group-hover:text-white">Telegram</span>
+                </a>
+                <a href="https://www.linkedin.com/shareArticle?mini=true&url=${encodeURIComponent(projectUrl)}&title=Backcoin%20Protocol&summary=${shareText}" target="_blank" class="flex flex-col items-center justify-center bg-zinc-800 hover:bg-blue-700 border border-zinc-700 hover:border-blue-600 rounded-xl p-3 transition-all duration-300 group">
+                    <i class="fa-brands fa-linkedin-in text-xl text-zinc-400 group-hover:text-white transition-colors mb-1"></i>
+                    <span class="text-[10px] text-zinc-500 group-hover:text-white">LinkedIn</span>
+                </a>
+                <a href="https://wa.me/?text=${shareText}%20${encodeURIComponent(projectUrl)}" target="_blank" class="flex flex-col items-center justify-center bg-zinc-800 hover:bg-green-600 border border-zinc-700 hover:border-green-500 rounded-xl p-3 transition-all duration-300 group">
+                    <i class="fa-brands fa-whatsapp text-xl text-zinc-400 group-hover:text-white transition-colors mb-1"></i>
+                    <span class="text-[10px] text-zinc-500 group-hover:text-white">WhatsApp</span>
+                </a>
             </div>
 
             <!-- Copy Link Section -->
@@ -356,7 +281,7 @@ export function showShareModal(userAddress) {
     openModal(content, 'max-w-md');
 }
 
-// --- WELCOME MODAL (SEM PRESALE) ---
+// --- WELCOME MODAL (UNSTOPPABLE + CEO) ---
 
 const navigateAndClose = (target) => {
     if (window.navigateTo) {
@@ -377,7 +302,17 @@ export function showWelcomeModal() {
     const content = `
         <div class="text-center pt-2 pb-4">
             
-            <div class="inline-flex items-center gap-2 bg-zinc-800 border border-zinc-700 rounded-full px-4 py-1.5 mb-6 shadow-sm">
+            <!-- Voltaire Quote Banner -->
+            <div class="relative bg-gradient-to-r from-zinc-800/80 via-zinc-900 to-zinc-800/80 border border-zinc-700/50 rounded-xl p-3 mb-5 overflow-hidden">
+                <div class="absolute inset-0 animate-shimmer"></div>
+                <p class="text-[11px] text-zinc-400 italic relative z-10">
+                    "I may not agree with what you say, but I will defend to the death your right to say it."
+                </p>
+                <p class="text-[10px] text-amber-500/80 font-semibold mt-1 relative z-10">— Voltaire</p>
+            </div>
+
+            <!-- Network Badge -->
+            <div class="inline-flex items-center gap-2 bg-zinc-800 border border-zinc-700 rounded-full px-4 py-1.5 mb-5 shadow-sm">
                 <span class="relative flex h-3 w-3">
                   <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
                   <span class="relative inline-flex rounded-full h-3 w-3 bg-emerald-500"></span>
@@ -385,50 +320,97 @@ export function showWelcomeModal() {
                 <span class="text-xs font-mono text-zinc-400 uppercase tracking-wider">NETWORK: <span class="text-emerald-400 font-bold">ARBITRUM SEPOLIA</span></span>
             </div>
 
-            <div class="mb-4 relative inline-block">
-                <div class="absolute inset-0 bg-amber-500/20 rounded-full blur-xl"></div>
-                <img src="/assets/bkc_logo_3d.png" alt="Backcoin Logo" class="h-24 w-24 mx-auto rounded-full relative z-10 shadow-2xl">
+            <!-- Logo with Glow -->
+            <div class="mb-4 relative inline-block animate-float">
+                <div class="absolute inset-0 bg-amber-500/30 rounded-full blur-2xl animate-glow"></div>
+                <img src="/assets/bkc_logo_3d.png" alt="Backcoin Logo" class="h-24 w-24 mx-auto rounded-full relative z-10 shadow-2xl ring-2 ring-amber-500/30">
             </div>
             
-            <h2 class="text-3xl font-black text-white mb-2 uppercase tracking-wide">
-                Welcome to Backcoin
-            </h2> 
+            <!-- Title -->
+            <h2 class="text-3xl font-black text-white mb-1 uppercase tracking-wide">
+                Backchain Protocol
+            </h2>
             
-            <p class="text-zinc-300 mb-6 text-sm leading-relaxed px-4">
-                A <strong class="text-amber-400">community-driven</strong> modular RWA/Web3 platform on <strong>Arbitrum</strong>. 
-                Explore our ecosystem: Staking, Fortune Pool, NFT Rentals, Decentralized Notary & more.
+            <!-- Unstoppable Badge -->
+            <div class="inline-flex items-center gap-2 bg-gradient-to-r from-red-600/20 via-amber-600/20 to-red-600/20 border border-amber-500/30 rounded-full px-4 py-1.5 mb-4">
+                <i class="fa-solid fa-shield-halved text-amber-400 text-sm"></i>
+                <span class="text-[11px] font-black text-transparent bg-clip-text bg-gradient-to-r from-amber-400 to-orange-400 uppercase tracking-wider">UNSTOPPABLE • PERMISSIONLESS • IMMUTABLE</span>
+            </div>
+
+            <!-- Main Description -->
+            <p class="text-zinc-300 mb-4 text-sm leading-relaxed px-2">
+                DeFi infrastructure that <strong class="text-amber-400">no one can stop</strong>. 
+                No admin keys. No pause functions. No blacklists.
             </p>
 
+            <!-- CEO Box -->
+            <div class="bg-gradient-to-br from-amber-600/10 via-zinc-800/50 to-orange-600/10 border border-amber-500/20 rounded-xl p-4 mb-5">
+                <div class="flex items-center justify-center gap-2 mb-2">
+                    <i class="fa-solid fa-crown text-amber-400"></i>
+                    <span class="text-base font-black text-white uppercase tracking-wide">Be Your Own CEO</span>
+                </div>
+                <p class="text-xs text-zinc-400 leading-relaxed mb-3">
+                    Build an interface to Backchain and <strong class="text-amber-400">earn commissions</strong> from every transaction. 
+                    No permission needed. No registration. <strong class="text-white">You are the CEO.</strong>
+                </p>
+                <div class="grid grid-cols-3 gap-2 text-center">
+                    <div class="bg-black/30 rounded-lg p-2">
+                        <i class="fa-solid fa-code text-purple-400 text-lg mb-1"></i>
+                        <p class="text-[10px] text-zinc-500">Build</p>
+                    </div>
+                    <div class="bg-black/30 rounded-lg p-2">
+                        <i class="fa-solid fa-users text-blue-400 text-lg mb-1"></i>
+                        <p class="text-[10px] text-zinc-500">Attract Users</p>
+                    </div>
+                    <div class="bg-black/30 rounded-lg p-2">
+                        <i class="fa-solid fa-coins text-amber-400 text-lg mb-1"></i>
+                        <p class="text-[10px] text-zinc-500">Earn BKC+ETH</p>
+                    </div>
+                </div>
+            </div>
+
             <!-- Community Badge -->
-            <div class="inline-flex items-center gap-2 bg-gradient-to-r from-amber-600/20 to-orange-600/20 border border-amber-500/30 rounded-full px-4 py-2 mb-6">
-                <i class="fa-solid fa-users text-amber-400"></i>
-                <span class="text-xs font-semibold text-amber-400 uppercase tracking-wider">100% Community-Driven • No VCs • No Presale</span>
+            <div class="inline-flex items-center gap-2 bg-zinc-800/70 border border-zinc-700 rounded-full px-4 py-2 mb-5">
+                <i class="fa-solid fa-users text-zinc-500"></i>
+                <span class="text-[10px] font-semibold text-zinc-500 uppercase tracking-wider">100% Community • 0% VCs • 0% Team Allocation</span>
             </div>
 
             <div class="flex flex-col gap-3">
+                
                 <!-- Airdrop Button (Principal) -->
                 <button id="btnAirdrop" class="group relative w-full bg-gradient-to-r from-amber-600 via-orange-500 to-amber-600 bg-[length:200%_auto] hover:bg-right transition-all duration-500 text-white font-black py-4 px-5 rounded-xl text-lg shadow-xl shadow-amber-500/20 pulse-gold border border-amber-400/50 flex items-center justify-center gap-3 overflow-hidden transform hover:scale-[1.02]">
                     <div class="absolute inset-0 bg-white/10 group-hover:bg-transparent transition-colors"></div>
-                    <i class="fa-solid fa-parachute-box text-2xl animate-pulse"></i> 
+                    <i class="fa-solid fa-gift text-2xl"></i> 
                     <div class="flex flex-col items-start leading-none z-10">
-                        <span class="text-[10px] font-bold opacity-80 uppercase tracking-wider mb-0.5">Free Tokens</span>
-                        <span class="text-lg">JOIN AIRDROP</span>
+                        <span class="text-[10px] font-bold opacity-80 uppercase tracking-wider mb-0.5">Phase 1 Active</span>
+                        <span class="text-lg">CLAIM FREE AIRDROP</span>
                     </div>
-                    <i class="fa-solid fa-chevron-right ml-auto text-white/50 text-base group-hover:translate-x-1 transition-transform"></i>
+                    <div class="ml-auto flex items-center gap-1 bg-black/20 px-2 py-1 rounded-lg">
+                        <span class="text-xs font-bold">7M BKC</span>
+                    </div>
                 </button>
 
-                <!-- Explore dApp Button -->
-                <button id="btnExplore" class="w-full bg-zinc-800 hover:bg-zinc-700 border border-zinc-600 hover:border-amber-500 text-white font-bold py-3.5 px-5 rounded-xl text-base transition-all duration-300 transform hover:translate-y-[-1px] shadow-lg flex items-center justify-center gap-3 group">
-                    <i class="fa-solid fa-compass text-amber-500 text-lg group-hover:rotate-12 transition-transform"></i>
-                    <span>Explore dApp</span>
-                </button>
+                <!-- Two columns: Explore & Be CEO -->
+                <div class="grid grid-cols-2 gap-3">
+                    <!-- Explore dApp Button -->
+                    <button id="btnExplore" class="bg-zinc-800 hover:bg-zinc-700 border border-zinc-600 hover:border-emerald-500 text-white font-bold py-3 px-4 rounded-xl text-sm transition-all duration-300 flex items-center justify-center gap-2 group">
+                        <i class="fa-solid fa-compass text-emerald-400 group-hover:rotate-12 transition-transform"></i>
+                        <span>Explore dApp</span>
+                    </button>
+
+                    <!-- Be a CEO Button -->
+                    <button id="btnCEO" class="bg-zinc-800 hover:bg-zinc-700 border border-zinc-600 hover:border-amber-500 text-white font-bold py-3 px-4 rounded-xl text-sm transition-all duration-300 flex items-center justify-center gap-2 group">
+                        <i class="fa-solid fa-crown text-amber-400 group-hover:scale-110 transition-transform"></i>
+                        <span>Be a CEO</span>
+                    </button>
+                </div>
 
                 <!-- Two columns: Docs & Telegram -->
                 <div class="grid grid-cols-2 gap-3">
                     <!-- Docs Button -->
                     <button id="btnDocs" class="bg-zinc-800/70 hover:bg-zinc-700 border border-zinc-700 hover:border-purple-500 text-white font-semibold py-3 px-4 rounded-xl text-sm transition-all duration-300 flex items-center justify-center gap-2 group">
                         <i class="fa-solid fa-book text-purple-400 group-hover:scale-110 transition-transform"></i>
-                        <span>Documentation</span>
+                        <span>Docs</span>
                     </button>
 
                     <!-- Telegram Button -->
@@ -445,8 +427,19 @@ export function showWelcomeModal() {
                 </button>
             </div>
             
-            <div class="mt-6 text-[10px] text-zinc-600 uppercase tracking-widest">
-                Built by the Community • For the Community • On Arbitrum
+            <!-- Footer with Unstoppable Message -->
+            <div class="mt-5 pt-4 border-t border-zinc-800">
+                <div class="flex items-center justify-center gap-2 mb-2">
+                    <div class="h-px flex-1 bg-gradient-to-r from-transparent to-amber-500/30"></div>
+                    <i class="fa-solid fa-infinity text-amber-500/50 text-xs"></i>
+                    <div class="h-px flex-1 bg-gradient-to-l from-transparent to-amber-500/30"></div>
+                </div>
+                <p class="text-[10px] text-zinc-600 uppercase tracking-widest mb-1">
+                    No one can freeze it • No one can censor it • No one can stop it
+                </p>
+                <p class="text-[9px] text-zinc-700 font-mono">
+                    THE PROTOCOL IS UNSTOPPABLE
+                </p>
             </div>
         </div>
     `;
@@ -462,6 +455,10 @@ export function showWelcomeModal() {
 
     modalContent.querySelector('#btnExplore')?.addEventListener('click', () => {
         closeModal();
+    });
+
+    modalContent.querySelector('#btnCEO')?.addEventListener('click', () => {
+        window.open(DOCS_URL + '/blob/main/docs/BE_YOUR_OWN_CEO.md', '_blank');
     });
 
     modalContent.querySelector('#btnDocs')?.addEventListener('click', () => {
