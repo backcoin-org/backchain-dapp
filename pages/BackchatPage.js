@@ -1,18 +1,22 @@
 // js/pages/BackchatPage.js
-// ✅ PRODUCTION V6.9 - Complete Decentralized Social Network
+// ✅ PRODUCTION V7.0 - Complete Decentralized Social Network — UI Redesign
 // ═══════════════════════════════════════════════════════════════════════════════
 //                          BACKCHAIN PROTOCOL
 //                    BACKCHAT - Unstoppable Social Network
 // ═══════════════════════════════════════════════════════════════════════════════
 //
-// V6.9 Changes:
-// - COMPLETE REDESIGN as full social network (not just DMs)
-// - Feed with posts, replies, reposts
-// - Trending by Super Likes (organic ranking)
-// - Profile system with usernames, badges, boosts
-// - Full engagement: like, super like, follow, tip
-// - Modern V6.9 UI consistent with other pages
-// - Event-based data loading from blockchain
+// V7.0 Changes:
+// - COMPLETE UI REDESIGN — Professional layout aligned with system design
+// - CSS Variables for theming consistency with other pages
+// - Glassmorphism cards with depth and layered backgrounds
+// - Improved visual hierarchy: better spacing, typography, contrast
+// - Refined compose box with character counter
+// - Polished post cards with hover depth
+// - Better profile section with stats grid
+// - Upgraded modals with better form design
+// - Micro-interactions and smooth transitions
+// - Responsive 3-column concept (sidebar-friendly)
+// - All V6.9 functionality preserved
 //
 // Features:
 // - 📝 Posts (max 500 chars + IPFS media)
@@ -123,7 +127,7 @@ const bkcABI = [
 
 const BC = {
     // UI State
-    activeTab: 'feed',       // feed | trending | profile | messages | notifications
+    activeTab: 'feed',       // feed | trending | profile
     view: 'feed',            // feed | post | compose | profile | settings
     
     // Data
@@ -164,244 +168,337 @@ const BC = {
 };
 
 // ============================================================================
-// STYLES
+// STYLES — V7.0 Professional Redesign
 // ============================================================================
 
 function injectStyles() {
-    if (document.getElementById('backchat-styles-v69')) return;
+    if (document.getElementById('backchat-styles-v70')) return;
+    
+    // Remove old styles
+    const old = document.getElementById('backchat-styles-v69');
+    if (old) old.remove();
+    
     const style = document.createElement('style');
-    style.id = 'backchat-styles-v69';
+    style.id = 'backchat-styles-v70';
     style.textContent = `
         /* ═══════════════════════════════════════════════════════════════════
-           V6.9 Backchat - Decentralized Social Network Styles
+           V7.0 Backchat — Decentralized Social Network
+           Professional UI aligned with Backchain system design
            ═══════════════════════════════════════════════════════════════════ */
         
-        @keyframes float { 
-            0%, 100% { transform: translateY(0); } 
-            50% { transform: translateY(-6px); } 
+        :root {
+            --bc-bg:        #0c0c0e;
+            --bc-bg2:       #141417;
+            --bc-bg3:       #1c1c21;
+            --bc-surface:   #222228;
+            --bc-border:    rgba(255,255,255,0.06);
+            --bc-border-h:  rgba(255,255,255,0.1);
+            --bc-text:      #f0f0f2;
+            --bc-text-2:    #a0a0ab;
+            --bc-text-3:    #5c5c68;
+            --bc-accent:    #f59e0b;
+            --bc-accent-2:  #d97706;
+            --bc-accent-glow: rgba(245,158,11,0.15);
+            --bc-red:       #ef4444;
+            --bc-green:     #22c55e;
+            --bc-blue:      #3b82f6;
+            --bc-purple:    #8b5cf6;
+            --bc-radius:    14px;
+            --bc-radius-sm: 10px;
+            --bc-radius-lg: 20px;
+            --bc-transition: 0.2s cubic-bezier(0.4, 0, 0.2, 1);
         }
-        @keyframes pulse-glow { 
-            0%, 100% { box-shadow: 0 0 15px rgba(245,158,11,0.2); } 
-            50% { box-shadow: 0 0 30px rgba(245,158,11,0.4); } 
+        
+        /* Animations */
+        @keyframes bc-fadeIn {
+            from { opacity: 0; transform: translateY(12px); }
+            to   { opacity: 1; transform: translateY(0); }
         }
-        @keyframes like-pop {
-            0% { transform: scale(1); }
-            50% { transform: scale(1.3); }
+        @keyframes bc-scaleIn {
+            from { opacity: 0; transform: scale(0.95); }
+            to   { opacity: 1; transform: scale(1); }
+        }
+        @keyframes bc-spin {
+            to { transform: rotate(360deg); }
+        }
+        @keyframes bc-shimmer {
+            0%   { background-position: -200% 0; }
+            100% { background-position: 200% 0; }
+        }
+        @keyframes bc-like-pop {
+            0%   { transform: scale(1); }
+            40%  { transform: scale(1.35); }
             100% { transform: scale(1); }
         }
-        @keyframes slide-up {
-            from { opacity: 0; transform: translateY(20px); }
-            to { opacity: 1; transform: translateY(0); }
+        @keyframes bc-pulse-ring {
+            0%   { box-shadow: 0 0 0 0 rgba(245,158,11,0.4); }
+            70%  { box-shadow: 0 0 0 8px rgba(245,158,11,0); }
+            100% { box-shadow: 0 0 0 0 rgba(245,158,11,0); }
         }
         
-        .float-animation { animation: float 3s ease-in-out infinite; }
-        .like-pop { animation: like-pop 0.3s ease-out; }
-        .slide-up { animation: slide-up 0.3s ease-out; }
-        
-        /* Layout */
-        .bc-container {
-            max-width: 600px;
+        /* ─── Layout ─── */
+        .bc-shell {
+            max-width: 640px;
             margin: 0 auto;
             min-height: 100vh;
-            background: #18181b;
-            border-left: 1px solid rgba(63,63,70,0.5);
-            border-right: 1px solid rgba(63,63,70,0.5);
+            background: var(--bc-bg);
+            position: relative;
         }
         
-        /* Header */
+        /* ─── Header ─── */
         .bc-header {
             position: sticky;
             top: 0;
-            z-index: 100;
-            background: rgba(24,24,27,0.9);
-            backdrop-filter: blur(12px);
-            border-bottom: 1px solid rgba(63,63,70,0.5);
-            padding: 12px 16px;
+            z-index: 200;
+            background: rgba(12,12,14,0.82);
+            backdrop-filter: blur(20px) saturate(1.4);
+            -webkit-backdrop-filter: blur(20px) saturate(1.4);
+            border-bottom: 1px solid var(--bc-border);
         }
         
-        .bc-header-top {
+        .bc-header-bar {
             display: flex;
             align-items: center;
             justify-content: space-between;
-            margin-bottom: 12px;
+            padding: 14px 20px;
         }
         
-        .bc-logo {
+        .bc-brand {
             display: flex;
             align-items: center;
-            gap: 12px;
+            gap: 10px;
         }
         
-        .bc-logo-icon {
-            width: 36px;
-            height: 36px;
+        .bc-brand-icon {
+            width: 34px;
+            height: 34px;
             border-radius: 10px;
+            object-fit: contain;
         }
         
-        .bc-logo-text {
-            font-size: 20px;
+        .bc-brand-name {
+            font-size: 19px;
             font-weight: 800;
-            background: linear-gradient(135deg, #f59e0b, #fbbf24);
+            letter-spacing: -0.3px;
+            background: linear-gradient(135deg, #fbbf24, #f59e0b, #d97706);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
+            background-clip: text;
         }
         
-        .bc-header-actions {
+        .bc-header-right {
             display: flex;
-            gap: 8px;
+            align-items: center;
+            gap: 6px;
         }
         
         .bc-icon-btn {
             width: 36px;
             height: 36px;
             border-radius: 50%;
-            background: rgba(63,63,70,0.5);
-            border: none;
-            color: #a1a1aa;
+            background: transparent;
+            border: 1px solid var(--bc-border);
+            color: var(--bc-text-2);
             cursor: pointer;
             display: flex;
             align-items: center;
             justify-content: center;
-            transition: all 0.2s;
+            font-size: 14px;
+            transition: all var(--bc-transition);
+            position: relative;
         }
-        
         .bc-icon-btn:hover {
-            background: rgba(63,63,70,0.8);
-            color: #fff;
+            background: var(--bc-bg3);
+            border-color: var(--bc-border-h);
+            color: var(--bc-text);
+        }
+        .bc-icon-btn.earnings-btn {
+            border-color: rgba(34,197,94,0.3);
+            color: var(--bc-green);
+        }
+        .bc-icon-btn.earnings-btn:hover {
+            background: rgba(34,197,94,0.1);
         }
         
-        .bc-icon-btn.has-notification::after {
-            content: '';
-            position: absolute;
-            top: 6px;
-            right: 6px;
-            width: 8px;
-            height: 8px;
-            background: #ef4444;
+        /* ─── Tabs ─── */
+        .bc-nav {
+            display: flex;
+            padding: 0 20px;
+        }
+        
+        .bc-nav-item {
+            flex: 1;
+            padding: 12px 0;
+            background: none;
+            border: none;
+            border-bottom: 2px solid transparent;
+            color: var(--bc-text-3);
+            font-size: 13px;
+            font-weight: 600;
+            letter-spacing: 0.02em;
+            cursor: pointer;
+            transition: all var(--bc-transition);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 7px;
+        }
+        .bc-nav-item:hover {
+            color: var(--bc-text-2);
+        }
+        .bc-nav-item.active {
+            color: var(--bc-accent);
+            border-bottom-color: var(--bc-accent);
+        }
+        .bc-nav-item i {
+            font-size: 14px;
+        }
+        
+        /* ─── Compose ─── */
+        .bc-compose {
+            padding: 20px;
+            border-bottom: 1px solid var(--bc-border);
+            background: var(--bc-bg2);
+        }
+        
+        .bc-compose-row {
+            display: flex;
+            gap: 14px;
+        }
+        
+        .bc-compose-avatar {
+            width: 42px;
+            height: 42px;
             border-radius: 50%;
+            background: linear-gradient(135deg, var(--bc-accent), #fbbf24);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            color: #000;
+            font-size: 15px;
+            flex-shrink: 0;
         }
         
-        /* Tabs */
-        .bc-tabs {
+        .bc-compose-body {
+            flex: 1;
+            min-width: 0;
+        }
+        
+        .bc-compose-textarea {
+            width: 100%;
+            min-height: 72px;
+            max-height: 240px;
+            background: transparent;
+            border: none;
+            color: var(--bc-text);
+            font-size: 16px;
+            line-height: 1.5;
+            resize: none;
+            outline: none;
+            font-family: inherit;
+        }
+        .bc-compose-textarea::placeholder {
+            color: var(--bc-text-3);
+        }
+        
+        .bc-compose-divider {
+            height: 1px;
+            background: var(--bc-border);
+            margin: 12px 0;
+        }
+        
+        .bc-compose-bottom {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        
+        .bc-compose-tools {
             display: flex;
             gap: 4px;
         }
         
-        .bc-tab {
-            flex: 1;
-            padding: 10px 8px;
+        .bc-compose-tool {
+            width: 34px;
+            height: 34px;
+            border-radius: 50%;
             background: none;
             border: none;
-            color: #71717a;
-            font-size: 13px;
-            font-weight: 600;
+            color: var(--bc-accent);
             cursor: pointer;
-            border-bottom: 2px solid transparent;
-            transition: all 0.2s;
-        }
-        
-        .bc-tab:hover {
-            color: #a1a1aa;
-        }
-        
-        .bc-tab.active {
-            color: #f59e0b;
-            border-bottom-color: #f59e0b;
-        }
-        
-        /* Compose Box */
-        .bc-compose {
-            padding: 16px;
-            border-bottom: 1px solid rgba(63,63,70,0.5);
-            background: rgba(24,24,27,0.5);
-        }
-        
-        .bc-compose-input {
-            width: 100%;
-            min-height: 80px;
-            background: rgba(39,39,42,0.5);
-            border: 1px solid rgba(63,63,70,0.5);
-            border-radius: 12px;
-            padding: 12px;
-            color: #fafafa;
-            font-size: 15px;
-            resize: none;
-            outline: none;
-            transition: border-color 0.2s;
-        }
-        
-        .bc-compose-input:focus {
-            border-color: rgba(245,158,11,0.5);
-        }
-        
-        .bc-compose-input::placeholder {
-            color: #71717a;
-        }
-        
-        .bc-compose-footer {
             display: flex;
-            justify-content: space-between;
             align-items: center;
-            margin-top: 12px;
+            justify-content: center;
+            font-size: 15px;
+            transition: background var(--bc-transition);
+        }
+        .bc-compose-tool:hover:not(:disabled) {
+            background: var(--bc-accent-glow);
+        }
+        .bc-compose-tool:disabled {
+            color: var(--bc-text-3);
+            cursor: not-allowed;
         }
         
-        .bc-compose-actions {
+        .bc-compose-right {
             display: flex;
-            gap: 8px;
+            align-items: center;
+            gap: 14px;
         }
         
-        .bc-compose-btn {
-            width: 36px;
-            height: 36px;
-            border-radius: 50%;
-            background: rgba(63,63,70,0.3);
-            border: none;
-            color: #f59e0b;
-            cursor: pointer;
-            transition: all 0.2s;
+        .bc-char-count {
+            font-size: 12px;
+            color: var(--bc-text-3);
+            font-variant-numeric: tabular-nums;
         }
+        .bc-char-count.warn { color: var(--bc-accent); }
+        .bc-char-count.danger { color: var(--bc-red); }
         
-        .bc-compose-btn:hover {
-            background: rgba(245,158,11,0.2);
+        .bc-compose-fee {
+            font-size: 11px;
+            color: var(--bc-text-3);
+            background: var(--bc-bg3);
+            padding: 4px 10px;
+            border-radius: 20px;
         }
         
         .bc-post-btn {
-            padding: 10px 20px;
+            padding: 9px 22px;
             background: linear-gradient(135deg, #f59e0b, #d97706);
             border: none;
-            border-radius: 20px;
+            border-radius: 24px;
             color: #000;
             font-weight: 700;
             font-size: 14px;
             cursor: pointer;
-            transition: all 0.2s;
+            transition: all var(--bc-transition);
+            letter-spacing: 0.01em;
         }
-        
         .bc-post-btn:hover:not(:disabled) {
+            box-shadow: 0 4px 20px rgba(245,158,11,0.35);
             transform: translateY(-1px);
-            box-shadow: 0 4px 15px rgba(245,158,11,0.4);
         }
-        
         .bc-post-btn:disabled {
-            opacity: 0.5;
+            opacity: 0.4;
             cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
         }
         
-        /* Post Card */
+        /* ─── Post Card ─── */
         .bc-post {
-            padding: 16px;
-            border-bottom: 1px solid rgba(63,63,70,0.3);
-            transition: background 0.2s;
-            cursor: pointer;
+            padding: 18px 20px;
+            border-bottom: 1px solid var(--bc-border);
+            transition: background var(--bc-transition);
+            animation: bc-fadeIn 0.35s ease-out both;
         }
-        
         .bc-post:hover {
-            background: rgba(39,39,42,0.3);
+            background: rgba(255,255,255,0.015);
         }
         
-        .bc-post-header {
+        .bc-post-top {
             display: flex;
-            align-items: flex-start;
             gap: 12px;
         }
         
@@ -409,463 +506,594 @@ function injectStyles() {
             width: 44px;
             height: 44px;
             border-radius: 50%;
-            background: linear-gradient(135deg, #f59e0b 0%, #fbbf24 100%);
+            background: linear-gradient(135deg, var(--bc-accent) 0%, #fbbf24 100%);
             display: flex;
             align-items: center;
             justify-content: center;
             font-weight: 700;
             color: #000;
-            font-size: 16px;
+            font-size: 15px;
             flex-shrink: 0;
+            cursor: pointer;
+            transition: transform var(--bc-transition);
         }
-        
+        .bc-avatar:hover {
+            transform: scale(1.06);
+        }
         .bc-avatar.boosted {
-            box-shadow: 0 0 0 2px #18181b, 0 0 0 4px #f59e0b;
+            box-shadow: 0 0 0 2.5px var(--bc-bg), 0 0 0 4.5px var(--bc-accent);
+            animation: bc-pulse-ring 2s infinite;
         }
         
-        .bc-post-meta {
+        .bc-post-head {
             flex: 1;
             min-width: 0;
         }
         
-        .bc-post-author {
+        .bc-post-author-row {
             display: flex;
             align-items: center;
             gap: 6px;
             flex-wrap: wrap;
         }
         
-        .bc-username {
+        .bc-author-name {
             font-weight: 700;
-            color: #fafafa;
+            color: var(--bc-text);
             font-size: 15px;
+            cursor: pointer;
+            transition: color var(--bc-transition);
+        }
+        .bc-author-name:hover {
+            color: var(--bc-accent);
         }
         
-        .bc-badge {
-            color: #f59e0b;
-            font-size: 14px;
-        }
-        
-        .bc-handle {
-            color: #71717a;
-            font-size: 14px;
-        }
-        
-        .bc-time {
-            color: #52525b;
+        .bc-verified-icon {
+            color: var(--bc-accent);
             font-size: 13px;
         }
         
-        .bc-post-content {
-            margin-top: 8px;
+        .bc-post-time {
+            color: var(--bc-text-3);
+            font-size: 13px;
+        }
+        
+        .bc-post-context {
+            color: var(--bc-text-3);
+            font-size: 13px;
+            margin-top: 1px;
+        }
+        
+        .bc-trending-tag {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 2px 9px;
+            background: var(--bc-accent-glow);
+            border: 1px solid rgba(245,158,11,0.2);
+            border-radius: 20px;
+            color: var(--bc-accent);
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 0.02em;
+        }
+        .bc-trending-tag i { font-size: 9px; }
+        
+        .bc-post-body {
+            margin-top: 10px;
             margin-left: 56px;
-            color: #e4e4e7;
+            color: var(--bc-text);
             font-size: 15px;
-            line-height: 1.5;
+            line-height: 1.6;
             white-space: pre-wrap;
             word-break: break-word;
         }
         
         .bc-post-media {
-            margin-top: 12px;
+            margin-top: 14px;
             margin-left: 56px;
-            border-radius: 16px;
+            border-radius: var(--bc-radius);
             overflow: hidden;
-            border: 1px solid rgba(63,63,70,0.5);
+            border: 1px solid var(--bc-border);
         }
-        
         .bc-post-media img {
             width: 100%;
-            max-height: 400px;
+            max-height: 420px;
             object-fit: cover;
+            display: block;
         }
         
-        /* Engagement Bar */
-        .bc-engagement {
+        /* ─── Engagement Bar ─── */
+        .bc-actions {
             display: flex;
-            justify-content: space-between;
+            gap: 2px;
             margin-top: 12px;
             margin-left: 56px;
-            max-width: 400px;
+            max-width: 420px;
+            justify-content: space-between;
         }
         
-        .bc-engage-btn {
+        .bc-action {
             display: flex;
             align-items: center;
             gap: 6px;
-            padding: 6px 12px;
+            padding: 7px 12px;
             background: none;
             border: none;
-            border-radius: 20px;
-            color: #71717a;
+            border-radius: 24px;
+            color: var(--bc-text-3);
             font-size: 13px;
             cursor: pointer;
-            transition: all 0.2s;
+            transition: all var(--bc-transition);
+        }
+        .bc-action i { font-size: 15px; transition: transform 0.2s; }
+        
+        .bc-action.act-reply:hover    { color: var(--bc-blue);   background: rgba(59,130,246,0.08); }
+        .bc-action.act-repost:hover   { color: var(--bc-green);  background: rgba(34,197,94,0.08); }
+        .bc-action.act-like:hover     { color: var(--bc-red);    background: rgba(239,68,68,0.08); }
+        .bc-action.act-like:hover i   { transform: scale(1.2); }
+        .bc-action.act-like.liked     { color: var(--bc-red); }
+        .bc-action.act-like.liked i   { animation: bc-like-pop 0.3s ease-out; }
+        .bc-action.act-super:hover    { color: var(--bc-accent); background: var(--bc-accent-glow); }
+        .bc-action.act-super:hover i  { transform: scale(1.2) rotate(15deg); }
+        .bc-action.act-tip:hover      { color: var(--bc-purple); background: rgba(139,92,246,0.08); }
+        
+        /* ─── Profile ─── */
+        .bc-profile-section {
+            animation: bc-fadeIn 0.4s ease-out;
         }
         
-        .bc-engage-btn:hover {
-            background: rgba(63,63,70,0.3);
+        .bc-profile-banner {
+            height: 120px;
+            background: linear-gradient(135deg, rgba(245,158,11,0.2), rgba(217,119,6,0.08), rgba(12,12,14,0));
+            position: relative;
         }
         
-        .bc-engage-btn.reply:hover { color: #3b82f6; background: rgba(59,130,246,0.1); }
-        .bc-engage-btn.repost:hover { color: #22c55e; background: rgba(34,197,94,0.1); }
-        .bc-engage-btn.like:hover { color: #ef4444; background: rgba(239,68,68,0.1); }
-        .bc-engage-btn.like.liked { color: #ef4444; }
-        .bc-engage-btn.super:hover { color: #f59e0b; background: rgba(245,158,11,0.1); }
-        .bc-engage-btn.tip:hover { color: #8b5cf6; background: rgba(139,92,246,0.1); }
-        
-        /* Trending Badge */
-        .bc-trending-badge {
-            display: inline-flex;
-            align-items: center;
-            gap: 4px;
-            padding: 2px 8px;
-            background: rgba(245,158,11,0.15);
-            border: 1px solid rgba(245,158,11,0.3);
-            border-radius: 12px;
-            color: #f59e0b;
-            font-size: 11px;
-            font-weight: 600;
+        .bc-profile-main {
+            padding: 0 20px 20px;
+            margin-top: -40px;
+            position: relative;
         }
         
-        /* Profile Card */
-        .bc-profile-card {
-            padding: 20px 16px;
-            border-bottom: 1px solid rgba(63,63,70,0.5);
-        }
-        
-        .bc-profile-header {
+        .bc-profile-top-row {
             display: flex;
+            align-items: flex-end;
             justify-content: space-between;
-            align-items: flex-start;
+            margin-bottom: 16px;
         }
         
-        .bc-profile-avatar {
+        .bc-profile-pic {
             width: 80px;
             height: 80px;
             border-radius: 50%;
-            background: linear-gradient(135deg, #f59e0b, #fbbf24);
+            background: linear-gradient(135deg, var(--bc-accent), #fbbf24);
             display: flex;
             align-items: center;
             justify-content: center;
             font-size: 28px;
-            font-weight: 700;
+            font-weight: 800;
             color: #000;
+            border: 4px solid var(--bc-bg);
+        }
+        .bc-profile-pic.boosted {
+            box-shadow: 0 0 0 3px var(--bc-bg), 0 0 0 5px var(--bc-accent);
         }
         
-        .bc-profile-avatar.boosted {
-            box-shadow: 0 0 0 3px #18181b, 0 0 0 6px #f59e0b;
+        .bc-profile-actions {
+            display: flex;
+            gap: 8px;
+            padding-bottom: 6px;
         }
         
-        .bc-profile-info {
-            margin-top: 16px;
+        .bc-profile-name-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
         }
         
         .bc-profile-name {
-            font-size: 20px;
+            font-size: 22px;
             font-weight: 800;
-            color: #fafafa;
-            display: flex;
+            color: var(--bc-text);
+            letter-spacing: -0.3px;
+        }
+        
+        .bc-profile-badge {
+            color: var(--bc-accent);
+            font-size: 16px;
+        }
+        
+        .bc-boosted-tag {
+            display: inline-flex;
             align-items: center;
-            gap: 6px;
+            gap: 4px;
+            padding: 3px 10px;
+            background: var(--bc-accent-glow);
+            border: 1px solid rgba(245,158,11,0.2);
+            border-radius: 20px;
+            color: var(--bc-accent);
+            font-size: 11px;
+            font-weight: 700;
         }
         
         .bc-profile-handle {
-            color: #71717a;
-            font-size: 14px;
-            margin-top: 2px;
+            margin-top: 4px;
         }
-        
-        .bc-profile-bio {
-            color: #a1a1aa;
-            font-size: 14px;
-            margin-top: 12px;
-            line-height: 1.5;
+        .bc-profile-handle a {
+            color: var(--bc-text-3);
+            text-decoration: none;
+            font-size: 13px;
+            transition: color var(--bc-transition);
         }
+        .bc-profile-handle a:hover { color: var(--bc-accent); }
+        .bc-profile-handle a i { font-size: 10px; margin-left: 4px; }
         
         .bc-profile-stats {
-            display: flex;
-            gap: 20px;
-            margin-top: 16px;
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 1px;
+            margin-top: 20px;
+            background: var(--bc-border);
+            border-radius: var(--bc-radius);
+            overflow: hidden;
         }
         
-        .bc-profile-stat {
+        .bc-stat-cell {
+            background: var(--bc-bg2);
+            padding: 16px 12px;
+            text-align: center;
+        }
+        .bc-stat-cell:first-child { border-radius: var(--bc-radius) 0 0 var(--bc-radius); }
+        .bc-stat-cell:last-child  { border-radius: 0 var(--bc-radius) var(--bc-radius) 0; }
+        
+        .bc-stat-value {
+            font-size: 20px;
+            font-weight: 800;
+            color: var(--bc-text);
+        }
+        .bc-stat-label {
+            font-size: 12px;
+            color: var(--bc-text-3);
+            margin-top: 2px;
+            font-weight: 500;
+        }
+        
+        /* ─── Earnings ─── */
+        .bc-earnings-card {
+            margin: 20px;
+            padding: 20px;
+            background: linear-gradient(145deg, rgba(34,197,94,0.1), rgba(16,185,129,0.05));
+            border: 1px solid rgba(34,197,94,0.2);
+            border-radius: var(--bc-radius-lg);
+            animation: bc-fadeIn 0.4s ease-out 0.1s both;
+        }
+        
+        .bc-earnings-header {
             display: flex;
-            gap: 4px;
+            align-items: center;
+            gap: 8px;
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--bc-green);
+            margin-bottom: 12px;
+        }
+        
+        .bc-earnings-value {
+            font-size: 32px;
+            font-weight: 800;
+            color: var(--bc-text);
+            letter-spacing: -0.5px;
+        }
+        .bc-earnings-value small {
+            font-size: 16px;
+            color: var(--bc-text-3);
+            font-weight: 600;
+        }
+        
+        /* ─── Section Header ─── */
+        .bc-section-head {
+            padding: 16px 20px;
+            border-bottom: 1px solid var(--bc-border);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        
+        .bc-section-title {
+            font-size: 15px;
+            font-weight: 700;
+            color: var(--bc-text);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .bc-section-title i {
+            color: var(--bc-accent);
             font-size: 14px;
         }
         
-        .bc-profile-stat-value {
-            font-weight: 700;
-            color: #fafafa;
+        .bc-section-subtitle {
+            font-size: 13px;
+            color: var(--bc-text-3);
         }
         
-        .bc-profile-stat-label {
-            color: #71717a;
+        /* ─── Trending Header ─── */
+        .bc-trending-header {
+            padding: 24px 20px;
+            border-bottom: 1px solid var(--bc-border);
+            background: linear-gradient(180deg, rgba(245,158,11,0.06), transparent);
+        }
+        .bc-trending-header h2 {
+            font-size: 18px;
+            font-weight: 800;
+            color: var(--bc-text);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin: 0;
+        }
+        .bc-trending-header h2 i { color: var(--bc-accent); }
+        .bc-trending-header p {
+            margin: 4px 0 0;
+            font-size: 13px;
+            color: var(--bc-text-3);
         }
         
-        /* Buttons */
+        /* ─── Buttons ─── */
         .bc-btn {
-            padding: 10px 20px;
-            border-radius: 20px;
+            padding: 9px 18px;
+            border-radius: 24px;
             font-weight: 700;
-            font-size: 14px;
+            font-size: 13px;
             cursor: pointer;
-            transition: all 0.2s;
+            transition: all var(--bc-transition);
             border: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            letter-spacing: 0.01em;
         }
         
         .bc-btn-primary {
             background: linear-gradient(135deg, #f59e0b, #d97706);
             color: #000;
         }
-        
         .bc-btn-primary:hover {
-            box-shadow: 0 4px 15px rgba(245,158,11,0.4);
+            box-shadow: 0 4px 16px rgba(245,158,11,0.3);
+            transform: translateY(-1px);
         }
         
-        .bc-btn-secondary {
+        .bc-btn-outline {
             background: transparent;
-            border: 1px solid rgba(63,63,70,0.8);
-            color: #fafafa;
+            border: 1px solid var(--bc-border-h);
+            color: var(--bc-text);
         }
-        
-        .bc-btn-secondary:hover {
-            background: rgba(63,63,70,0.5);
+        .bc-btn-outline:hover {
+            background: var(--bc-bg3);
+            border-color: rgba(255,255,255,0.15);
         }
         
         .bc-btn-follow {
-            background: #fafafa;
-            color: #000;
+            background: var(--bc-text);
+            color: var(--bc-bg);
         }
+        .bc-btn-follow:hover { opacity: 0.9; }
         
-        .bc-btn-following {
-            background: transparent;
-            border: 1px solid rgba(63,63,70,0.8);
-            color: #fafafa;
-        }
-        
-        /* Modal */
-        .bc-modal {
-            display: none;
-            position: fixed;
-            inset: 0;
-            z-index: 9999;
-            background: rgba(0,0,0,0.8);
-            backdrop-filter: blur(8px);
-            align-items: center;
-            justify-content: center;
-            padding: 16px;
-        }
-        
-        .bc-modal.active {
-            display: flex;
-        }
-        
-        .bc-modal-content {
-            background: linear-gradient(145deg, rgba(39,39,42,0.98), rgba(24,24,27,0.99));
-            border: 1px solid rgba(63,63,70,0.5);
-            border-radius: 20px;
-            width: 100%;
-            max-width: 500px;
-            max-height: 90vh;
-            overflow-y: auto;
-        }
-        
-        .bc-modal-header {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            padding: 16px;
-            border-bottom: 1px solid rgba(63,63,70,0.5);
-        }
-        
-        .bc-modal-title {
-            font-size: 18px;
-            font-weight: 700;
-            color: #fafafa;
-        }
-        
-        .bc-modal-close {
-            width: 32px;
-            height: 32px;
-            border-radius: 50%;
-            background: rgba(63,63,70,0.5);
-            border: none;
-            color: #a1a1aa;
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-        
-        .bc-modal-close:hover {
-            background: rgba(63,63,70,0.8);
-            color: #fff;
-        }
-        
-        .bc-modal-body {
-            padding: 16px;
-        }
-        
-        /* Input */
-        .bc-input {
-            width: 100%;
-            padding: 12px 16px;
-            background: rgba(39,39,42,0.5);
-            border: 1px solid rgba(63,63,70,0.5);
-            border-radius: 12px;
-            color: #fafafa;
-            font-size: 14px;
-            outline: none;
-            transition: border-color 0.2s;
-        }
-        
-        .bc-input:focus {
-            border-color: rgba(245,158,11,0.5);
-        }
-        
-        .bc-input-group {
-            margin-bottom: 16px;
-        }
-        
-        .bc-input-label {
-            display: block;
-            margin-bottom: 8px;
-            color: #a1a1aa;
-            font-size: 13px;
-            font-weight: 600;
-        }
-        
-        /* Fee Display */
-        .bc-fee {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            padding: 12px;
-            background: rgba(245,158,11,0.1);
-            border: 1px solid rgba(245,158,11,0.2);
-            border-radius: 12px;
-            margin-top: 16px;
-        }
-        
-        .bc-fee-label {
-            color: #f59e0b;
-            font-size: 13px;
-        }
-        
-        .bc-fee-value {
-            color: #fafafa;
-            font-weight: 700;
-            font-size: 14px;
-        }
-        
-        /* Empty State */
+        /* ─── Empty State ─── */
         .bc-empty {
             display: flex;
             flex-direction: column;
             align-items: center;
             justify-content: center;
-            padding: 60px 20px;
+            padding: 72px 24px;
             text-align: center;
+            animation: bc-fadeIn 0.5s ease-out;
         }
         
-        .bc-empty-icon {
-            width: 80px;
-            height: 80px;
+        .bc-empty-glyph {
+            width: 72px;
+            height: 72px;
             border-radius: 50%;
-            background: rgba(63,63,70,0.3);
+            background: var(--bc-bg3);
             display: flex;
             align-items: center;
             justify-content: center;
-            margin-bottom: 16px;
+            margin-bottom: 20px;
         }
-        
-        .bc-empty-icon i {
-            font-size: 32px;
-            color: #52525b;
+        .bc-empty-glyph i {
+            font-size: 28px;
+            color: var(--bc-text-3);
+        }
+        .bc-empty-glyph.accent {
+            background: var(--bc-accent-glow);
+        }
+        .bc-empty-glyph.accent i {
+            color: var(--bc-accent);
         }
         
         .bc-empty-title {
             font-size: 18px;
             font-weight: 700;
-            color: #fafafa;
+            color: var(--bc-text);
             margin-bottom: 8px;
         }
         
         .bc-empty-text {
-            color: #71717a;
+            color: var(--bc-text-3);
             font-size: 14px;
-            max-width: 300px;
+            max-width: 280px;
+            line-height: 1.5;
         }
         
-        /* Earnings Card */
-        .bc-earnings {
-            margin: 16px;
-            padding: 16px;
-            background: linear-gradient(145deg, rgba(34,197,94,0.15), rgba(16,185,129,0.1));
-            border: 1px solid rgba(34,197,94,0.3);
-            border-radius: 16px;
-        }
-        
-        .bc-earnings-title {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            color: #22c55e;
-            font-size: 14px;
-            font-weight: 600;
-            margin-bottom: 12px;
-        }
-        
-        .bc-earnings-amount {
-            font-size: 28px;
-            font-weight: 800;
-            color: #fafafa;
-        }
-        
-        .bc-earnings-amount span {
-            font-size: 16px;
-            color: #71717a;
-        }
-        
-        /* Loading */
+        /* ─── Loading ─── */
         .bc-loading {
             display: flex;
             flex-direction: column;
             align-items: center;
             justify-content: center;
-            padding: 40px;
+            padding: 56px;
+            gap: 16px;
         }
         
         .bc-spinner {
-            width: 40px;
-            height: 40px;
-            border: 3px solid rgba(63,63,70,0.5);
-            border-top-color: #f59e0b;
+            width: 36px;
+            height: 36px;
+            border: 3px solid var(--bc-bg3);
+            border-top-color: var(--bc-accent);
             border-radius: 50%;
-            animation: spin 1s linear infinite;
+            animation: bc-spin 0.8s linear infinite;
         }
         
-        @keyframes spin {
-            to { transform: rotate(360deg); }
+        .bc-loading-text {
+            font-size: 13px;
+            color: var(--bc-text-3);
         }
         
-        /* Responsive */
+        /* ─── Modal ─── */
+        .bc-modal-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            z-index: 9999;
+            background: rgba(0,0,0,0.75);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        .bc-modal-overlay.active {
+            display: flex;
+        }
+        
+        .bc-modal-box {
+            background: var(--bc-bg2);
+            border: 1px solid var(--bc-border-h);
+            border-radius: var(--bc-radius-lg);
+            width: 100%;
+            max-width: 440px;
+            max-height: 90vh;
+            overflow-y: auto;
+            animation: bc-scaleIn 0.25s ease-out;
+        }
+        
+        .bc-modal-top {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 18px 20px;
+            border-bottom: 1px solid var(--bc-border);
+        }
+        
+        .bc-modal-title {
+            font-size: 17px;
+            font-weight: 700;
+            color: var(--bc-text);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .bc-modal-x {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            background: var(--bc-bg3);
+            border: none;
+            color: var(--bc-text-2);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 14px;
+            transition: all var(--bc-transition);
+        }
+        .bc-modal-x:hover {
+            background: var(--bc-surface);
+            color: var(--bc-text);
+        }
+        
+        .bc-modal-inner {
+            padding: 20px;
+        }
+        
+        .bc-modal-desc {
+            color: var(--bc-text-2);
+            font-size: 14px;
+            line-height: 1.5;
+            margin-bottom: 20px;
+        }
+        
+        /* ─── Form Fields ─── */
+        .bc-field {
+            margin-bottom: 18px;
+        }
+        
+        .bc-label {
+            display: block;
+            margin-bottom: 8px;
+            color: var(--bc-text-2);
+            font-size: 13px;
+            font-weight: 600;
+        }
+        
+        .bc-input {
+            width: 100%;
+            padding: 12px 16px;
+            background: var(--bc-bg3);
+            border: 1px solid var(--bc-border-h);
+            border-radius: var(--bc-radius-sm);
+            color: var(--bc-text);
+            font-size: 15px;
+            outline: none;
+            transition: border-color var(--bc-transition);
+            font-family: inherit;
+        }
+        .bc-input:focus {
+            border-color: rgba(245,158,11,0.5);
+        }
+        
+        .bc-fee-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 12px 14px;
+            background: var(--bc-accent-glow);
+            border: 1px solid rgba(245,158,11,0.15);
+            border-radius: var(--bc-radius-sm);
+        }
+        
+        .bc-fee-label {
+            font-size: 13px;
+            color: var(--bc-accent);
+            font-weight: 500;
+        }
+        
+        .bc-fee-val {
+            font-size: 14px;
+            font-weight: 700;
+            color: var(--bc-text);
+        }
+        
+        /* ─── Responsive ─── */
         @media (max-width: 640px) {
-            .bc-container {
-                border: none;
+            .bc-shell {
+                max-width: 100%;
             }
-            .bc-engagement {
+            .bc-actions {
                 margin-left: 0;
-                margin-top: 16px;
+                margin-top: 14px;
             }
-            .bc-post-content {
+            .bc-post-body {
                 margin-left: 0;
                 margin-top: 12px;
             }
             .bc-post-media {
                 margin-left: 0;
+            }
+            .bc-compose-avatar {
+                display: none;
             }
         }
     `;
@@ -908,23 +1136,26 @@ function getInitials(address) {
     return address.slice(2, 4).toUpperCase();
 }
 
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
 // ============================================================================
 // CONTRACT INTERACTION
 // ============================================================================
 
 function getContract() {
-    // First check if contract exists in State (initialized by app.js)
     if (State.backchatContract) return State.backchatContract;
     if (State.backchatContractPublic) return State.backchatContractPublic;
     
-    // Otherwise try to create from address
     const backchatAddress = getBackchatAddress();
     if (!backchatAddress) {
         console.warn('Backchat address not found in deployment-addresses.json');
         return null;
     }
     
-    // Use public provider if available
     if (State.publicProvider) {
         return new ethers.Contract(backchatAddress, backchatABI, State.publicProvider);
     }
@@ -933,10 +1164,8 @@ function getContract() {
 }
 
 function getSignedContract() {
-    // First check State
     if (State.backchatContract) return State.backchatContract;
     
-    // Try to create signed contract
     const backchatAddress = getBackchatAddress();
     if (!backchatAddress || !State.signer) return null;
     
@@ -1024,15 +1253,12 @@ async function loadPosts() {
         const filter = contract.filters.PostCreated();
         const events = await contract.queryFilter(filter, -10000);
         
-        // Also load replies
         const replyFilter = contract.filters.ReplyCreated();
         const replyEvents = await contract.queryFilter(replyFilter, -10000);
         
-        // Also load reposts
         const repostFilter = contract.filters.RepostCreated();
         const repostEvents = await contract.queryFilter(repostFilter, -10000);
         
-        // Also load super likes for trending
         const superLikeFilter = contract.filters.SuperLiked();
         const superLikeEvents = await contract.queryFilter(superLikeFilter, -10000);
         
@@ -1062,7 +1288,6 @@ async function loadPosts() {
             });
         }
         
-        // Process replies
         for (const event of replyEvents.slice(-30)) {
             const block = await event.getBlock();
             posts.push({
@@ -1079,7 +1304,6 @@ async function loadPosts() {
             });
         }
         
-        // Process reposts
         for (const event of repostEvents.slice(-20)) {
             const block = await event.getBlock();
             posts.push({
@@ -1092,11 +1316,9 @@ async function loadPosts() {
             });
         }
         
-        // Sort by timestamp (newest first)
         posts.sort((a, b) => b.timestamp - a.timestamp);
         BC.posts = posts;
         
-        // Build trending list
         BC.trendingPosts = [...posts]
             .filter(p => p.superLikes > 0n)
             .sort((a, b) => {
@@ -1146,7 +1368,7 @@ async function createPost() {
         
         const tx = await contract.createPost(
             content,
-            '', // mediaCID - empty for now
+            '',
             getOperatorAddress() || ethers.ZeroAddress,
             { value: fee }
         );
@@ -1157,7 +1379,6 @@ async function createPost() {
         showToast('Post created! 🎉', 'success');
         input.value = '';
         
-        // Reload posts
         await loadPosts();
         
     } catch (e) {
@@ -1184,7 +1405,7 @@ async function likePost(postId) {
         const tx = await contract.like(
             postId,
             getOperatorAddress() || ethers.ZeroAddress,
-            0, // tipBkc
+            0,
             { value: fee }
         );
         
@@ -1218,7 +1439,7 @@ async function superLikePost(postId, amount) {
         const tx = await contract.superLike(
             postId,
             getOperatorAddress() || ethers.ZeroAddress,
-            0, // tipBkc
+            0,
             { value: ethAmount }
         );
         
@@ -1249,7 +1470,7 @@ async function followUser(address) {
         const tx = await contract.follow(
             address,
             getOperatorAddress() || ethers.ZeroAddress,
-            0, // tipBkc
+            0,
             { value: fee }
         );
         
@@ -1305,30 +1526,30 @@ async function withdrawEarnings() {
 function renderHeader() {
     return `
         <div class="bc-header">
-            <div class="bc-header-top">
-                <div class="bc-logo">
-                    <img src="assets/backchat.png" alt="Backchat" class="bc-logo-icon" onerror="this.style.display='none'">
-                    <span class="bc-logo-text">Backchat</span>
+            <div class="bc-header-bar">
+                <div class="bc-brand">
+                    <img src="assets/backchat.png" alt="Backchat" class="bc-brand-icon" onerror="this.style.display='none'">
+                    <span class="bc-brand-name">Backchat</span>
                 </div>
-                <div class="bc-header-actions">
+                <div class="bc-header-right">
                     ${State.isConnected && BC.pendingEth > 0n ? `
-                        <button class="bc-icon-btn" onclick="BackchatPage.openEarnings()" title="Earnings: ${formatETH(BC.pendingEth)} ETH">
-                            <i class="fa-solid fa-coins" style="color:#22c55e"></i>
+                        <button class="bc-icon-btn earnings-btn" onclick="BackchatPage.openEarnings()" title="Earnings: ${formatETH(BC.pendingEth)} ETH">
+                            <i class="fa-solid fa-coins"></i>
                         </button>
                     ` : ''}
-                    <button class="bc-icon-btn" onclick="BackchatPage.refresh()">
-                        <i class="fa-solid fa-rotate"></i>
+                    <button class="bc-icon-btn" onclick="BackchatPage.refresh()" title="Refresh">
+                        <i class="fa-solid fa-arrows-rotate"></i>
                     </button>
                 </div>
             </div>
-            <div class="bc-tabs">
-                <button class="bc-tab ${BC.activeTab === 'feed' ? 'active' : ''}" onclick="BackchatPage.setTab('feed')">
+            <div class="bc-nav">
+                <button class="bc-nav-item ${BC.activeTab === 'feed' ? 'active' : ''}" onclick="BackchatPage.setTab('feed')">
                     <i class="fa-solid fa-house"></i> Feed
                 </button>
-                <button class="bc-tab ${BC.activeTab === 'trending' ? 'active' : ''}" onclick="BackchatPage.setTab('trending')">
+                <button class="bc-nav-item ${BC.activeTab === 'trending' ? 'active' : ''}" onclick="BackchatPage.setTab('trending')">
                     <i class="fa-solid fa-fire"></i> Trending
                 </button>
-                <button class="bc-tab ${BC.activeTab === 'profile' ? 'active' : ''}" onclick="BackchatPage.setTab('profile')">
+                <button class="bc-nav-item ${BC.activeTab === 'profile' ? 'active' : ''}" onclick="BackchatPage.setTab('profile')">
                     <i class="fa-solid fa-user"></i> Profile
                 </button>
             </div>
@@ -1343,17 +1564,35 @@ function renderCompose() {
     
     return `
         <div class="bc-compose">
-            <textarea id="bc-compose-input" class="bc-compose-input" placeholder="What's happening?" maxlength="500"></textarea>
-            <div class="bc-compose-footer">
-                <div class="bc-compose-actions">
-                    <button class="bc-compose-btn" title="Add image (coming soon)" disabled>
+            <div class="bc-compose-row">
+                <div class="bc-compose-avatar">
+                    ${getInitials(State.userAddress)}
+                </div>
+                <div class="bc-compose-body">
+                    <textarea 
+                        id="bc-compose-input" 
+                        class="bc-compose-textarea" 
+                        placeholder="What's happening on-chain?" 
+                        maxlength="500"
+                        oninput="BackchatPage._updateCharCount(this)"
+                    ></textarea>
+                </div>
+            </div>
+            <div class="bc-compose-divider"></div>
+            <div class="bc-compose-bottom">
+                <div class="bc-compose-tools">
+                    <button class="bc-compose-tool" title="Add image (coming soon)" disabled>
                         <i class="fa-solid fa-image"></i>
                     </button>
+                    <button class="bc-compose-tool" title="Add GIF (coming soon)" disabled>
+                        <i class="fa-solid fa-face-smile"></i>
+                    </button>
                 </div>
-                <div style="display:flex;align-items:center;gap:12px;">
-                    <span style="color:#71717a;font-size:12px;">${fee} ETH fee</span>
+                <div class="bc-compose-right">
+                    <span class="bc-char-count" id="bc-char-counter">0/500</span>
+                    <span class="bc-compose-fee">${fee} ETH</span>
                     <button class="bc-post-btn" onclick="BackchatPage.createPost()" ${BC.isPosting ? 'disabled' : ''}>
-                        ${BC.isPosting ? '<i class="fa-solid fa-spinner fa-spin"></i>' : 'Post'}
+                        ${BC.isPosting ? '<i class="fa-solid fa-spinner fa-spin"></i> Posting' : 'Post'}
                     </button>
                 </div>
             </div>
@@ -1361,32 +1600,30 @@ function renderCompose() {
     `;
 }
 
-function renderPost(post) {
-    const isBoosted = false; // Would need to check from contract
-    const hasBadge = false;  // Would need to check from contract
+function renderPost(post, index = 0) {
+    const isBoosted = false;
+    const hasBadge = false;
     const superLikesETH = formatETH(post.superLikes);
     
     return `
-        <div class="bc-post slide-up" data-post-id="${post.id}">
-            <div class="bc-post-header">
+        <div class="bc-post" data-post-id="${post.id}" style="animation-delay:${Math.min(index * 0.04, 0.4)}s">
+            <div class="bc-post-top">
                 <div class="bc-avatar ${isBoosted ? 'boosted' : ''}" onclick="BackchatPage.viewProfile('${post.author}')">
                     ${getInitials(post.author)}
                 </div>
-                <div class="bc-post-meta">
-                    <div class="bc-post-author">
-                        <span class="bc-username">${shortenAddress(post.author)}</span>
-                        ${hasBadge ? '<i class="fa-solid fa-circle-check bc-badge" title="Verified"></i>' : ''}
-                        ${post.superLikes > 0n ? `<span class="bc-trending-badge"><i class="fa-solid fa-fire"></i> ${superLikesETH} ETH</span>` : ''}
+                <div class="bc-post-head">
+                    <div class="bc-post-author-row">
+                        <span class="bc-author-name" onclick="BackchatPage.viewProfile('${post.author}')">${shortenAddress(post.author)}</span>
+                        ${hasBadge ? '<i class="fa-solid fa-circle-check bc-verified-icon" title="Verified"></i>' : ''}
+                        <span class="bc-post-time">· ${formatTimeAgo(post.timestamp)}</span>
+                        ${post.superLikes > 0n ? `<span class="bc-trending-tag"><i class="fa-solid fa-bolt"></i> ${superLikesETH} ETH</span>` : ''}
                     </div>
-                    <div class="bc-handle">
-                        <span class="bc-time">${formatTimeAgo(post.timestamp)}</span>
-                        ${post.type === 'reply' ? `<span style="margin-left:4px;">· Replying to #${post.parentId}</span>` : ''}
-                        ${post.type === 'repost' ? `<span style="margin-left:4px;">· Reposted #${post.originalPostId}</span>` : ''}
-                    </div>
+                    ${post.type === 'reply' ? `<div class="bc-post-context">Replying to post #${post.parentId}</div>` : ''}
+                    ${post.type === 'repost' ? `<div class="bc-post-context"><i class="fa-solid fa-retweet" style="margin-right:4px;"></i> Reposted #${post.originalPostId}</div>` : ''}
                 </div>
             </div>
             
-            ${post.content ? `<div class="bc-post-content">${escapeHtml(post.content)}</div>` : ''}
+            ${post.content ? `<div class="bc-post-body">${escapeHtml(post.content)}</div>` : ''}
             
             ${post.mediaCID ? `
                 <div class="bc-post-media">
@@ -1394,20 +1631,20 @@ function renderPost(post) {
                 </div>
             ` : ''}
             
-            <div class="bc-engagement">
-                <button class="bc-engage-btn reply" onclick="BackchatPage.openReply('${post.id}')">
+            <div class="bc-actions">
+                <button class="bc-action act-reply" onclick="BackchatPage.openReply('${post.id}')" title="Reply">
                     <i class="fa-regular fa-comment"></i>
                 </button>
-                <button class="bc-engage-btn repost" onclick="BackchatPage.repost('${post.id}')">
+                <button class="bc-action act-repost" onclick="BackchatPage.repost('${post.id}')" title="Repost">
                     <i class="fa-solid fa-retweet"></i>
                 </button>
-                <button class="bc-engage-btn like" onclick="BackchatPage.like('${post.id}')">
+                <button class="bc-action act-like" onclick="BackchatPage.like('${post.id}')" title="Like">
                     <i class="fa-regular fa-heart"></i>
                 </button>
-                <button class="bc-engage-btn super" onclick="BackchatPage.openSuperLike('${post.id}')" title="Super Like">
+                <button class="bc-action act-super" onclick="BackchatPage.openSuperLike('${post.id}')" title="Super Like">
                     <i class="fa-solid fa-star"></i>
                 </button>
-                <button class="bc-engage-btn tip" onclick="BackchatPage.openTip('${post.author}')" title="Tip BKC">
+                <button class="bc-action act-tip" onclick="BackchatPage.openTip('${post.author}')" title="Tip BKC">
                     <i class="fa-solid fa-gift"></i>
                 </button>
             </div>
@@ -1415,26 +1652,19 @@ function renderPost(post) {
     `;
 }
 
-function escapeHtml(text) {
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
-}
-
 function renderFeed() {
-    // Contract not available - show coming soon
     if (!BC.contractAvailable) {
         return `
             <div class="bc-empty">
-                <div class="bc-empty-icon" style="background:rgba(245,158,11,0.2);">
-                    <i class="fa-solid fa-rocket" style="color:#f59e0b;"></i>
+                <div class="bc-empty-glyph accent">
+                    <i class="fa-solid fa-rocket"></i>
                 </div>
                 <div class="bc-empty-title">Coming Soon!</div>
                 <div class="bc-empty-text">
                     ${BC.error || 'Backchat is being deployed. The unstoppable social network will be live soon!'}
                 </div>
-                <button class="bc-btn bc-btn-secondary" style="margin-top:20px;" onclick="BackchatPage.refresh()">
-                    <i class="fa-solid fa-rotate"></i> Retry
+                <button class="bc-btn bc-btn-outline" style="margin-top:24px;" onclick="BackchatPage.refresh()">
+                    <i class="fa-solid fa-arrows-rotate"></i> Retry
                 </button>
             </div>
         `;
@@ -1444,6 +1674,7 @@ function renderFeed() {
         return `
             <div class="bc-loading">
                 <div class="bc-spinner"></div>
+                <span class="bc-loading-text">Loading feed...</span>
             </div>
         `;
     }
@@ -1451,41 +1682,37 @@ function renderFeed() {
     if (BC.posts.length === 0) {
         return `
             <div class="bc-empty">
-                <div class="bc-empty-icon">
-                    <i class="fa-solid fa-message"></i>
+                <div class="bc-empty-glyph">
+                    <i class="fa-regular fa-comment-dots"></i>
                 </div>
                 <div class="bc-empty-title">No posts yet</div>
-                <div class="bc-empty-text">Be the first to post on Backchat!</div>
+                <div class="bc-empty-text">Be the first to post on the unstoppable social network!</div>
             </div>
         `;
     }
     
-    return BC.posts.map(post => renderPost(post)).join('');
+    return BC.posts.map((post, i) => renderPost(post, i)).join('');
 }
 
 function renderTrending() {
     if (BC.trendingPosts.length === 0) {
         return `
             <div class="bc-empty">
-                <div class="bc-empty-icon">
+                <div class="bc-empty-glyph accent">
                     <i class="fa-solid fa-fire"></i>
                 </div>
                 <div class="bc-empty-title">No trending posts</div>
-                <div class="bc-empty-text">Super Like posts to make them trend!</div>
+                <div class="bc-empty-text">Super Like posts to make them trend! Ranking is 100% organic, based on ETH spent.</div>
             </div>
         `;
     }
     
     return `
-        <div style="padding:16px;border-bottom:1px solid rgba(63,63,70,0.5);">
-            <h2 style="color:#f59e0b;font-size:16px;font-weight:700;">
-                <i class="fa-solid fa-fire"></i> Trending by Super Likes
-            </h2>
-            <p style="color:#71717a;font-size:13px;margin-top:4px;">
-                Posts ranked by total ETH from Super Likes
-            </p>
+        <div class="bc-trending-header">
+            <h2><i class="fa-solid fa-fire"></i> Trending</h2>
+            <p>Ranked by Super Like value — pure organic discovery</p>
         </div>
-        ${BC.trendingPosts.map(post => renderPost(post)).join('')}
+        ${BC.trendingPosts.map((post, i) => renderPost(post, i)).join('')}
     `;
 }
 
@@ -1493,72 +1720,94 @@ function renderProfile() {
     if (!State.isConnected) {
         return `
             <div class="bc-empty">
-                <div class="bc-empty-icon">
+                <div class="bc-empty-glyph">
                     <i class="fa-solid fa-wallet"></i>
                 </div>
                 <div class="bc-empty-title">Connect Wallet</div>
-                <div class="bc-empty-text">Connect your wallet to view your profile and earnings.</div>
-                <button class="bc-btn bc-btn-primary" style="margin-top:20px;" onclick="window.openConnectModal && window.openConnectModal()">
-                    <i class="fa-solid fa-wallet"></i> Connect
+                <div class="bc-empty-text">Connect your wallet to view your profile and manage earnings.</div>
+                <button class="bc-btn bc-btn-primary" style="margin-top:24px;" onclick="window.openConnectModal && window.openConnectModal()">
+                    <i class="fa-solid fa-wallet"></i> Connect Wallet
                 </button>
             </div>
         `;
     }
     
+    const userPosts = BC.posts.filter(p => p.author.toLowerCase() === State.userAddress?.toLowerCase());
+    
     return `
-        <div class="bc-profile-card">
-            <div class="bc-profile-header">
-                <div class="bc-profile-avatar ${BC.isBoosted ? 'boosted' : ''}">
-                    ${getInitials(State.userAddress)}
+        <div class="bc-profile-section">
+            <div class="bc-profile-banner"></div>
+            <div class="bc-profile-main">
+                <div class="bc-profile-top-row">
+                    <div class="bc-profile-pic ${BC.isBoosted ? 'boosted' : ''}">
+                        ${getInitials(State.userAddress)}
+                    </div>
+                    <div class="bc-profile-actions">
+                        ${!BC.hasBadge ? `
+                            <button class="bc-btn bc-btn-outline" onclick="BackchatPage.openBadge()">
+                                <i class="fa-solid fa-circle-check"></i> Badge
+                            </button>
+                        ` : ''}
+                        ${!BC.isBoosted ? `
+                            <button class="bc-btn bc-btn-outline" onclick="BackchatPage.openBoost()">
+                                <i class="fa-solid fa-rocket"></i> Boost
+                            </button>
+                        ` : ''}
+                    </div>
                 </div>
-                <div style="display:flex;gap:8px;">
-                    ${!BC.hasBadge ? `
-                        <button class="bc-btn bc-btn-secondary" onclick="BackchatPage.openBadge()">
-                            <i class="fa-solid fa-circle-check"></i> Get Badge
-                        </button>
-                    ` : ''}
-                    ${!BC.isBoosted ? `
-                        <button class="bc-btn bc-btn-secondary" onclick="BackchatPage.openBoost()">
-                            <i class="fa-solid fa-rocket"></i> Boost
-                        </button>
-                    ` : ''}
+                
+                <div class="bc-profile-name-row">
+                    <span class="bc-profile-name">${shortenAddress(State.userAddress)}</span>
+                    ${BC.hasBadge ? '<i class="fa-solid fa-circle-check bc-profile-badge"></i>' : ''}
+                    ${BC.isBoosted ? '<span class="bc-boosted-tag"><i class="fa-solid fa-rocket"></i> Boosted</span>' : ''}
                 </div>
-            </div>
-            <div class="bc-profile-info">
-                <div class="bc-profile-name">
-                    ${shortenAddress(State.userAddress)}
-                    ${BC.hasBadge ? '<i class="fa-solid fa-circle-check bc-badge"></i>' : ''}
-                    ${BC.isBoosted ? '<span class="bc-trending-badge"><i class="fa-solid fa-rocket"></i> Boosted</span>' : ''}
-                </div>
+                
                 <div class="bc-profile-handle">
-                    <a href="${EXPLORER_ADDRESS}${State.userAddress}" target="_blank" style="color:#71717a;text-decoration:none;">
-                        View on Explorer <i class="fa-solid fa-arrow-up-right-from-square" style="font-size:10px;"></i>
+                    <a href="${EXPLORER_ADDRESS}${State.userAddress}" target="_blank" rel="noopener">
+                        View on Explorer <i class="fa-solid fa-arrow-up-right-from-square"></i>
                     </a>
                 </div>
-            </div>
-        </div>
-        
-        ${BC.pendingEth > 0n ? `
-            <div class="bc-earnings">
-                <div class="bc-earnings-title">
-                    <i class="fa-solid fa-coins"></i> Pending Earnings
+                
+                <div class="bc-profile-stats">
+                    <div class="bc-stat-cell">
+                        <div class="bc-stat-value">${userPosts.length}</div>
+                        <div class="bc-stat-label">Posts</div>
+                    </div>
+                    <div class="bc-stat-cell">
+                        <div class="bc-stat-value">${BC.following.size}</div>
+                        <div class="bc-stat-label">Following</div>
+                    </div>
+                    <div class="bc-stat-cell">
+                        <div class="bc-stat-value">${formatETH(BC.pendingEth)}</div>
+                        <div class="bc-stat-label">Earned (ETH)</div>
+                    </div>
                 </div>
-                <div class="bc-earnings-amount">
-                    ${formatETH(BC.pendingEth)} <span>ETH</span>
-                </div>
-                <button class="bc-btn bc-btn-primary" style="width:100%;margin-top:16px;" onclick="BackchatPage.withdraw()">
-                    <i class="fa-solid fa-wallet"></i> Withdraw Earnings
-                </button>
             </div>
-        ` : ''}
-        
-        <div style="padding:16px;">
-            <h3 style="color:#a1a1aa;font-size:14px;font-weight:600;margin-bottom:12px;">
-                <i class="fa-solid fa-clock-rotate-left"></i> Your Posts
-            </h3>
-            ${BC.posts.filter(p => p.author.toLowerCase() === State.userAddress?.toLowerCase()).length === 0 
-                ? '<p style="color:#52525b;font-size:13px;">No posts yet. Share your first thought!</p>'
-                : BC.posts.filter(p => p.author.toLowerCase() === State.userAddress?.toLowerCase()).map(p => renderPost(p)).join('')
+            
+            ${BC.pendingEth > 0n ? `
+                <div class="bc-earnings-card">
+                    <div class="bc-earnings-header">
+                        <i class="fa-solid fa-coins"></i> Pending Earnings
+                    </div>
+                    <div class="bc-earnings-value">
+                        ${formatETH(BC.pendingEth)} <small>ETH</small>
+                    </div>
+                    <button class="bc-btn bc-btn-primary" style="width:100%;margin-top:16px;" onclick="BackchatPage.withdraw()">
+                        <i class="fa-solid fa-wallet"></i> Withdraw Earnings
+                    </button>
+                </div>
+            ` : ''}
+            
+            <div class="bc-section-head">
+                <span class="bc-section-title"><i class="fa-solid fa-clock-rotate-left"></i> Your Posts</span>
+                <span class="bc-section-subtitle">${userPosts.length} total</span>
+            </div>
+            
+            ${userPosts.length === 0 
+                ? `<div class="bc-empty" style="padding:40px 20px;">
+                    <div class="bc-empty-text">No posts yet — share your first thought!</div>
+                  </div>`
+                : userPosts.map((p, i) => renderPost(p, i)).join('')
             }
         </div>
     `;
@@ -1588,27 +1837,27 @@ function renderContent() {
 function renderModals() {
     return `
         <!-- Super Like Modal -->
-        <div class="bc-modal" id="modal-superlike">
-            <div class="bc-modal-content">
-                <div class="bc-modal-header">
-                    <span class="bc-modal-title"><i class="fa-solid fa-star" style="color:#f59e0b"></i> Super Like</span>
-                    <button class="bc-modal-close" onclick="BackchatPage.closeModal('superlike')">
+        <div class="bc-modal-overlay" id="modal-superlike">
+            <div class="bc-modal-box">
+                <div class="bc-modal-top">
+                    <span class="bc-modal-title"><i class="fa-solid fa-star" style="color:var(--bc-accent)"></i> Super Like</span>
+                    <button class="bc-modal-x" onclick="BackchatPage.closeModal('superlike')">
                         <i class="fa-solid fa-xmark"></i>
                     </button>
                 </div>
-                <div class="bc-modal-body">
-                    <p style="color:#a1a1aa;font-size:14px;margin-bottom:16px;">
-                        Super Likes boost posts to trending. The more ETH, the higher it ranks!
+                <div class="bc-modal-inner">
+                    <p class="bc-modal-desc">
+                        Super Likes boost posts to trending. The more ETH you contribute, the higher it ranks — a fully organic discovery system.
                     </p>
-                    <div class="bc-input-group">
-                        <label class="bc-input-label">Amount (ETH)</label>
+                    <div class="bc-field">
+                        <label class="bc-label">Amount (ETH)</label>
                         <input type="number" id="superlike-amount" class="bc-input" value="0.001" min="0.0001" step="0.0001">
                     </div>
-                    <div class="bc-fee">
+                    <div class="bc-fee-row">
                         <span class="bc-fee-label">Minimum</span>
-                        <span class="bc-fee-value">0.0001 ETH</span>
+                        <span class="bc-fee-val">0.0001 ETH</span>
                     </div>
-                    <button class="bc-btn bc-btn-primary" style="width:100%;margin-top:16px;" onclick="BackchatPage.confirmSuperLike()">
+                    <button class="bc-btn bc-btn-primary" style="width:100%;margin-top:20px;justify-content:center;" onclick="BackchatPage.confirmSuperLike()">
                         <i class="fa-solid fa-star"></i> Super Like
                     </button>
                 </div>
@@ -1616,23 +1865,23 @@ function renderModals() {
         </div>
         
         <!-- Badge Modal -->
-        <div class="bc-modal" id="modal-badge">
-            <div class="bc-modal-content">
-                <div class="bc-modal-header">
-                    <span class="bc-modal-title"><i class="fa-solid fa-circle-check" style="color:#f59e0b"></i> Trust Badge</span>
-                    <button class="bc-modal-close" onclick="BackchatPage.closeModal('badge')">
+        <div class="bc-modal-overlay" id="modal-badge">
+            <div class="bc-modal-box">
+                <div class="bc-modal-top">
+                    <span class="bc-modal-title"><i class="fa-solid fa-circle-check" style="color:var(--bc-accent)"></i> Trust Badge</span>
+                    <button class="bc-modal-x" onclick="BackchatPage.closeModal('badge')">
                         <i class="fa-solid fa-xmark"></i>
                     </button>
                 </div>
-                <div class="bc-modal-body">
-                    <p style="color:#a1a1aa;font-size:14px;margin-bottom:16px;">
-                        Get a verified badge for 1 year. Shows you're a trusted member of the community.
+                <div class="bc-modal-inner">
+                    <p class="bc-modal-desc">
+                        Get a verified trust badge for 1 year. Show the community you're a committed, trusted member.
                     </p>
-                    <div class="bc-fee">
+                    <div class="bc-fee-row">
                         <span class="bc-fee-label">Badge Fee</span>
-                        <span class="bc-fee-value">${formatETH(BC.fees.badge)} ETH</span>
+                        <span class="bc-fee-val">${formatETH(BC.fees.badge)} ETH</span>
                     </div>
-                    <button class="bc-btn bc-btn-primary" style="width:100%;margin-top:16px;" onclick="BackchatPage.confirmBadge()">
+                    <button class="bc-btn bc-btn-primary" style="width:100%;margin-top:20px;justify-content:center;" onclick="BackchatPage.confirmBadge()">
                         <i class="fa-solid fa-circle-check"></i> Get Badge (1 Year)
                     </button>
                 </div>
@@ -1640,27 +1889,27 @@ function renderModals() {
         </div>
         
         <!-- Boost Modal -->
-        <div class="bc-modal" id="modal-boost">
-            <div class="bc-modal-content">
-                <div class="bc-modal-header">
-                    <span class="bc-modal-title"><i class="fa-solid fa-rocket" style="color:#f59e0b"></i> Profile Boost</span>
-                    <button class="bc-modal-close" onclick="BackchatPage.closeModal('boost')">
+        <div class="bc-modal-overlay" id="modal-boost">
+            <div class="bc-modal-box">
+                <div class="bc-modal-top">
+                    <span class="bc-modal-title"><i class="fa-solid fa-rocket" style="color:var(--bc-accent)"></i> Profile Boost</span>
+                    <button class="bc-modal-x" onclick="BackchatPage.closeModal('boost')">
                         <i class="fa-solid fa-xmark"></i>
                     </button>
                 </div>
-                <div class="bc-modal-body">
-                    <p style="color:#a1a1aa;font-size:14px;margin-bottom:16px;">
-                        Boost your profile visibility. 1 day boost per 0.0005 ETH.
+                <div class="bc-modal-inner">
+                    <p class="bc-modal-desc">
+                        Boost your profile visibility for increased exposure. Each 0.0005 ETH gives you 1 day of boost.
                     </p>
-                    <div class="bc-input-group">
-                        <label class="bc-input-label">Amount (ETH)</label>
+                    <div class="bc-field">
+                        <label class="bc-label">Amount (ETH)</label>
                         <input type="number" id="boost-amount" class="bc-input" value="0.001" min="0.0005" step="0.0005">
                     </div>
-                    <div class="bc-fee">
+                    <div class="bc-fee-row">
                         <span class="bc-fee-label">Minimum</span>
-                        <span class="bc-fee-value">0.0005 ETH (1 day)</span>
+                        <span class="bc-fee-val">0.0005 ETH (1 day)</span>
                     </div>
-                    <button class="bc-btn bc-btn-primary" style="width:100%;margin-top:16px;" onclick="BackchatPage.confirmBoost()">
+                    <button class="bc-btn bc-btn-primary" style="width:100%;margin-top:20px;justify-content:center;" onclick="BackchatPage.confirmBoost()">
                         <i class="fa-solid fa-rocket"></i> Boost Profile
                     </button>
                 </div>
@@ -1680,7 +1929,7 @@ function render() {
     if (!section) return;
     
     section.innerHTML = `
-        <div class="bc-container">
+        <div class="bc-shell">
             ${renderHeader()}
             <div id="backchat-content"></div>
         </div>
@@ -1781,6 +2030,20 @@ function closeModal(name) {
 }
 
 // ============================================================================
+// INTERNAL HELPERS
+// ============================================================================
+
+function _updateCharCount(textarea) {
+    const counter = document.getElementById('bc-char-counter');
+    if (!counter) return;
+    const len = textarea.value.length;
+    counter.textContent = `${len}/500`;
+    counter.className = 'bc-char-count';
+    if (len > 450) counter.classList.add('danger');
+    else if (len > 350) counter.classList.add('warn');
+}
+
+// ============================================================================
 // EXPORT
 // ============================================================================
 
@@ -1826,9 +2089,11 @@ export const BackchatPage = {
     closeModal,
     openEarnings() { BC.activeTab = 'profile'; renderContent(); },
     
+    // Internal
+    _updateCharCount,
+    
     // Navigation
     viewProfile(address) {
-        // TODO: Implement profile viewing
         showToast('Profile view coming soon!', 'info');
     },
     openReply(postId) {
