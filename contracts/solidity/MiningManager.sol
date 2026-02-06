@@ -269,11 +269,18 @@ contract MiningManager is
     uint256 public totalPendingOperatorETH;
 
     // =========================================================================
+    //                     STATE V3.2 - Gas Optimization
+    // =========================================================================
+
+    /// @notice Cached MAX_SUPPLY from BKCToken (immutable after TGE, saves external call)
+    uint256 public cachedMaxSupply;
+
+    // =========================================================================
     //                         STORAGE GAP
     // =========================================================================
 
     /// @dev Reserved storage slots for future upgrades
-    uint256[42] private __gap;
+    uint256[41] private __gap;
 
     // =========================================================================
     //                              EVENTS
@@ -383,6 +390,7 @@ contract MiningManager is
         if (bkcTokenAddress == address(0)) revert TokenNotConfigured();
 
         bkcToken = BKCToken(bkcTokenAddress);
+        cachedMaxSupply = bkcToken.MAX_SUPPLY();
 
         // Default config (packed in single slot)
         operatorFeeBips = 1000;  // 10% to operator
@@ -546,15 +554,7 @@ contract MiningManager is
         address _operator
     ) internal {
         // ─────────────────────────────────────────────────────────────────────
-        // 1. AUTHORIZATION CHECK
-        // ─────────────────────────────────────────────────────────────────────
-
-        if (!_isAuthorizedMiner(_serviceKey, msg.sender)) {
-            revert UnauthorizedMiner();
-        }
-
-        // ─────────────────────────────────────────────────────────────────────
-        // 2. CACHE CONFIG (save ~6,300 gas on repeated reads)
+        // 1. CACHE CONFIG (save ~16,900 gas on repeated external reads)
         // ─────────────────────────────────────────────────────────────────────
 
         uint256 _operatorFeeBips = operatorFeeBips;
@@ -563,6 +563,20 @@ contract MiningManager is
 
         address treasury = ecosystemManager.getTreasuryAddress();
         address delegationManager = ecosystemManager.getDelegationManagerAddress();
+
+        // G-01: Cache all 4 distribution bips reads at top (saves ~10,400 gas)
+        uint256 miningTreasuryBips = ecosystemManager.getMiningDistributionBips(POOL_TREASURY);
+        uint256 miningDelegatorBips = ecosystemManager.getMiningDistributionBips(POOL_DELEGATOR);
+        uint256 feeTreasuryBips = ecosystemManager.getFeeDistributionBips(POOL_TREASURY);
+        uint256 feeDelegatorBips = ecosystemManager.getFeeDistributionBips(POOL_DELEGATOR);
+
+        // ─────────────────────────────────────────────────────────────────────
+        // 2. AUTHORIZATION CHECK (G-05: pass cached delegationManager)
+        // ─────────────────────────────────────────────────────────────────────
+
+        if (!_isAuthorizedMiner(_serviceKey, msg.sender, delegationManager)) {
+            revert UnauthorizedMiner();
+        }
 
         // ─────────────────────────────────────────────────────────────────────
         // 3. ETH PROCESSING (if any)
@@ -637,9 +651,10 @@ contract MiningManager is
 
         // ─────────────────────────────────────────────────────────────────────
         // 6. MINING: CREATE NEW TOKENS (Linear Scarcity)
+        //    G-02: Inline mint calc with cached maxSupply (saves ~4,200 gas)
         // ─────────────────────────────────────────────────────────────────────
 
-        uint256 mintAmount = getMintAmount(amountAfterOperator);
+        uint256 mintAmount = _calcMintAmount(amountAfterOperator, cachedMaxSupply);
 
         if (mintAmount > 0) {
             uint256 mintBurn;
@@ -650,10 +665,7 @@ contract MiningManager is
                 mintAfterBurn = mintAmount - mintBurn;
             }
 
-            // Get distribution ratios
-            uint256 miningTreasuryBips = ecosystemManager.getMiningDistributionBips(POOL_TREASURY);
-            uint256 miningDelegatorBips = ecosystemManager.getMiningDistributionBips(POOL_DELEGATOR);
-
+            // Validate distribution ratios (cached at function start — G-01)
             if (miningTreasuryBips + miningDelegatorBips != BIPS_DENOMINATOR) {
                 revert InvalidDistributionConfig();
             }
@@ -732,10 +744,8 @@ contract MiningManager is
 
         // ─────────────────────────────────────────────────────────────────────
         // 8. FEE DISTRIBUTION: REMAINING TO TREASURY & DELEGATORS
+        //    (distribution bips cached at function start — G-01)
         // ─────────────────────────────────────────────────────────────────────
-
-        uint256 feeTreasuryBips = ecosystemManager.getFeeDistributionBips(POOL_TREASURY);
-        uint256 feeDelegatorBips = ecosystemManager.getFeeDistributionBips(POOL_DELEGATOR);
 
         if (feeTreasuryBips + feeDelegatorBips != BIPS_DENOMINATOR) {
             revert InvalidDistributionConfig();
@@ -819,16 +829,29 @@ contract MiningManager is
      * @return Amount of new BKC to mint
      */
     function getMintAmount(uint256 _purchaseAmount) public view override returns (uint256) {
-        uint256 maxSupply = bkcToken.MAX_SUPPLY();
+        uint256 maxSupply = cachedMaxSupply;
+        if (maxSupply == 0) {
+            maxSupply = bkcToken.MAX_SUPPLY();
+        }
+        return _calcMintAmount(_purchaseAmount, maxSupply);
+    }
+
+    /**
+     * @dev Internal mint calculation — single totalSupply() call (G-02)
+     * @param _purchaseAmount Amount of BKC in fees
+     * @param _maxSupply Cached max supply
+     * @return Amount of new BKC to mint
+     */
+    function _calcMintAmount(uint256 _purchaseAmount, uint256 _maxSupply) internal view returns (uint256) {
         uint256 currentSupply = bkcToken.totalSupply();
 
-        if (currentSupply >= maxSupply) {
+        if (currentSupply >= _maxSupply) {
             return 0;
         }
 
         uint256 remainingSupply;
         unchecked {
-            remainingSupply = maxSupply - currentSupply;
+            remainingSupply = _maxSupply - currentSupply;
         }
 
         if (remainingSupply > MAX_MINTABLE_SUPPLY) {
@@ -843,7 +866,8 @@ contract MiningManager is
      * @return Mining rate (10000 = 100%, 5000 = 50%, etc.)
      */
     function getCurrentMiningRate() external view returns (uint256) {
-        uint256 maxSupply = bkcToken.MAX_SUPPLY();
+        uint256 maxSupply = cachedMaxSupply;
+        if (maxSupply == 0) maxSupply = bkcToken.MAX_SUPPLY();
         uint256 currentSupply = bkcToken.totalSupply();
 
         if (currentSupply >= maxSupply) {
@@ -867,7 +891,8 @@ contract MiningManager is
      * @return Tokens remaining until max supply
      */
     function getRemainingMintableSupply() external view returns (uint256) {
-        uint256 maxSupply = bkcToken.MAX_SUPPLY();
+        uint256 maxSupply = cachedMaxSupply;
+        if (maxSupply == 0) maxSupply = bkcToken.MAX_SUPPLY();
         uint256 currentSupply = bkcToken.totalSupply();
 
         if (currentSupply >= maxSupply) {
@@ -889,7 +914,7 @@ contract MiningManager is
         bytes32 _serviceKey,
         address _address
     ) external view returns (bool) {
-        return _isAuthorizedMiner(_serviceKey, _address);
+        return _isAuthorizedMiner(_serviceKey, _address, ecosystemManager.getDelegationManagerAddress());
     }
 
     /**
@@ -901,7 +926,8 @@ contract MiningManager is
         uint256 rate,
         uint256 remaining
     ) {
-        uint256 maxSupply = bkcToken.MAX_SUPPLY();
+        uint256 maxSupply = cachedMaxSupply;
+        if (maxSupply == 0) maxSupply = bkcToken.MAX_SUPPLY();
         uint256 currentSupply = bkcToken.totalSupply();
 
         mined = totalMined;
@@ -1075,12 +1101,14 @@ contract MiningManager is
 
     /**
      * @dev Checks if caller is authorized to trigger mining
+     *      G-05: Accepts cached delegationManager to avoid redundant external call
      */
     function _isAuthorizedMiner(
         bytes32 _serviceKey,
-        address _caller
+        address _caller,
+        address _delegationManager
     ) internal view returns (bool) {
-        // Check 1: Direct authorization
+        // Check 1: Direct authorization (~90% of cases)
         if (authorizedMiners[_serviceKey] == _caller) {
             return true;
         }
@@ -1093,8 +1121,8 @@ contract MiningManager is
             } catch {}
         }
 
-        // Check 3: DelegationManager
-        if (_caller == ecosystemManager.getDelegationManagerAddress()) {
+        // Check 3: DelegationManager (uses cached address — G-05)
+        if (_caller == _delegationManager) {
             return true;
         }
 

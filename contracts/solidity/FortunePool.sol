@@ -323,21 +323,25 @@ contract FortunePool is
 
     mapping(uint256 => Commitment) public commitments;
 
-    mapping(uint256 => bytes32) public commitmentHashes;
-
-    mapping(uint256 => address) public commitmentOperators;
+    /// @dev G-10: Consolidated commitment metadata (was 3 separate mappings)
+    ///      Saves ~20,000 gas per commitPlay (2 fewer cold SSTORE)
+    struct CommitmentMeta {
+        bytes32 hash;          // slot 0
+        address operator;      // slot 1 (20 bytes)
+        uint96 tierNonce;      // slot 1 (12 bytes, packed with address)
+    }
+    mapping(uint256 => CommitmentMeta) public commitmentMeta;
 
     mapping(uint256 => GameResult) public gameResults;
 
     uint256 public tierConfigNonce;
 
-    mapping(uint256 => uint256) public commitmentTierNonces;
-
     // =========================================================================
     //                           STORAGE GAP
     // =========================================================================
 
-    uint256[33] private __gap;
+    /// @dev Gap adjusted: removed 3 mappings, added 1 mapping = net -2 slots
+    uint256[35] private __gap;
 
     // =========================================================================
     //                              EVENTS
@@ -759,7 +763,9 @@ contract FortunePool is
             netWager = _wagerAmount - fee;
         }
 
-        if (miningManagerAddress == address(0)) revert CoreContractNotSet();
+        // G-07: Cache miningManagerAddress once, pass to _sendETHToMining
+        address _miningManager = miningManagerAddress;
+        if (_miningManager == address(0)) revert CoreContractNotSet();
 
         bkcToken.safeTransferFrom(msg.sender, address(this), _wagerAmount);
 
@@ -767,17 +773,17 @@ contract FortunePool is
         totalETHCollected += msg.value;
 
         if (fee > 0) {
-            bkcToken.safeTransfer(miningManagerAddress, fee);
+            bkcToken.safeTransfer(_miningManager, fee);
             totalBKCFees += fee;
 
-            IMiningManagerV3(miningManagerAddress).performPurchaseMiningWithOperator(
+            IMiningManagerV3(_miningManager).performPurchaseMiningWithOperator(
                 SERVICE_KEY,
                 fee,
                 _operator
             );
         }
 
-        _sendETHToMining(msg.value, _operator);
+        _sendETHToMining(_miningManager, msg.value, _operator);
 
         unchecked {
             gameId = ++gameCounter;
@@ -795,9 +801,12 @@ contract FortunePool is
             ethPaid: uint128(msg.value)
         });
 
-        commitmentHashes[gameId] = _commitmentHash;
-        commitmentOperators[gameId] = _operator;
-        commitmentTierNonces[gameId] = tierConfigNonce;
+        // G-10: Single struct write (1 mapping = 2 slots) instead of 3 separate mappings
+        commitmentMeta[gameId] = CommitmentMeta({
+            hash: _commitmentHash,
+            operator: _operator,
+            tierNonce: uint96(tierConfigNonce)
+        });
 
         totalWageredAllTime += netWager;
 
@@ -830,16 +839,19 @@ contract FortunePool is
     ) external nonReentrant returns (uint256 prizeWon) {
         Commitment storage c = commitments[_gameId];
 
+        // G-10: Read from consolidated struct instead of 3 separate mappings
+        CommitmentMeta storage meta = commitmentMeta[_gameId];
+
         if (c.status != CommitmentStatus.COMMITTED) revert AlreadyRevealed();
         if (c.player != msg.sender) revert NotCommitmentOwner();
-        if (commitmentTierNonces[_gameId] != tierConfigNonce) revert TierConfigChanged();
+        if (uint256(meta.tierNonce) != tierConfigNonce) revert TierConfigChanged();
 
         uint256 commitBlock = uint256(c.commitBlock);
         if (block.number < commitBlock + revealDelay) revert TooEarlyToReveal();
         if (block.number > commitBlock + revealWindow) revert TooLateToReveal();
 
         bytes32 calculatedHash = keccak256(abi.encodePacked(_guesses, _userSecret));
-        if (calculatedHash != commitmentHashes[_gameId]) revert HashMismatch();
+        if (calculatedHash != meta.hash) revert HashMismatch();
 
         uint256 tierCount = activeTierCount;
         bool isCumulative = c.isCumulative;
@@ -867,7 +879,7 @@ contract FortunePool is
         }
 
         uint256 netWager = uint256(c.wagerAmount);
-        address operator = commitmentOperators[_gameId];
+        address operator = meta.operator;
 
         uint256[] memory rolls;
         uint8 matchCount;
@@ -883,7 +895,11 @@ contract FortunePool is
                     _gameId,
                     i
                 ));
-                uint256 maxRange = uint256(prizeTiers[i + 1].maxRange);
+                // G-06: Cache tier struct fields once per iteration
+                PrizeTier storage tier = prizeTiers[i + 1];
+                uint256 maxRange = uint256(tier.maxRange);
+                uint64 multiplierBips = tier.multiplierBips;
+
                 rolls[i] = (uint256(tierEntropy) % maxRange) + 1;
 
                 if (_guesses[i] == rolls[i]) {
@@ -893,11 +909,11 @@ contract FortunePool is
                     }
                     uint256 tierPrize;
                     unchecked {
-                        tierPrize = (netWager * prizeTiers[i + 1].multiplierBips) / BIPS_DENOMINATOR;
+                        tierPrize = (netWager * multiplierBips) / BIPS_DENOMINATOR;
                         prizeWon += tierPrize;
                     }
 
-                    if (prizeTiers[i + 1].multiplierBips >= 50000) {
+                    if (multiplierBips >= 50000) {
                         emit JackpotWon(_gameId, msg.sender, tierPrize, i + 1);
                     }
                 }
@@ -1000,11 +1016,11 @@ contract FortunePool is
     //                         INTERNAL FUNCTIONS
     // =========================================================================
 
-    function _sendETHToMining(uint256 _amount, address _operator) internal {
+    /// @dev G-07: Accept pre-fetched miningManager address to avoid redundant storage read
+    function _sendETHToMining(address _miningManager, uint256 _amount, address _operator) internal {
         if (_amount == 0) return;
-        if (miningManagerAddress == address(0)) revert CoreContractNotSet();
 
-        IMiningManagerV3(miningManagerAddress).performPurchaseMiningWithOperator{value: _amount}(
+        IMiningManagerV3(_miningManager).performPurchaseMiningWithOperator{value: _amount}(
             SERVICE_KEY,
             0,
             _operator

@@ -471,14 +471,19 @@ contract NFTLiquidityPool is
         if (pool.nftCount == 0) revert InsufficientNFTs();
         if (msg.value < buyEthFee) revert InsufficientETHFee();
 
+        // G-08: Compute price once, reuse for slippage check and _executeBuy
+        uint256 price = getBuyPrice();
+        if (price == type(uint256).max) revert MathOverflow();
+
         if (_maxPrice > 0) {
-            uint256 totalCost = getBuyPriceWithTax();
+            uint256 taxBips = ecosystemManager.getFee(BUY_TAX_KEY);
+            uint256 totalCost = price + (price * taxBips) / BIPS_DENOMINATOR;
             if (totalCost > _maxPrice) revert SlippageExceeded();
         }
 
         tokenId = pool.tokenIds[pool.tokenIds.length - 1];
 
-        _executeBuy(tokenId, _operator);
+        _executeBuy(tokenId, _operator, price);
         
         // Send ETH fee to MiningManager
         if (msg.value > 0) {
@@ -500,14 +505,19 @@ contract NFTLiquidityPool is
         if (pool.nftCount == 0) revert InsufficientNFTs();
         if (msg.value < buyEthFee) revert InsufficientETHFee();
 
+        // G-08: Compute price once, reuse for slippage check and _executeBuy
+        uint256 price = getBuyPrice();
+        if (price == type(uint256).max) revert MathOverflow();
+
         if (_maxPrice > 0) {
-            uint256 totalCost = getBuyPriceWithTax();
+            uint256 taxBips = ecosystemManager.getFee(BUY_TAX_KEY);
+            uint256 totalCost = price + (price * taxBips) / BIPS_DENOMINATOR;
             if (totalCost > _maxPrice) revert SlippageExceeded();
         }
 
         if (!_isTokenInPool(_tokenId)) revert NFTNotInPool();
 
-        _executeBuy(_tokenId, _operator);
+        _executeBuy(_tokenId, _operator, price);
         
         // Send ETH fee to MiningManager
         if (msg.value > 0) {
@@ -529,11 +539,16 @@ contract NFTLiquidityPool is
         if (pool.nftCount == 0) revert InsufficientNFTs();
         if (msg.value < buyEthFee) revert InsufficientETHFee();
 
-        uint256 totalCost = getBuyPriceWithTax();
+        // G-08: Compute price once, reuse for slippage check and _executeBuy
+        uint256 price = getBuyPrice();
+        if (price == type(uint256).max) revert MathOverflow();
+
+        uint256 taxBips = ecosystemManager.getFee(BUY_TAX_KEY);
+        uint256 totalCost = price + (price * taxBips) / BIPS_DENOMINATOR;
         if (totalCost > _maxPrice) revert SlippageExceeded();
 
         tokenId = pool.tokenIds[pool.tokenIds.length - 1];
-        _executeBuy(tokenId, _operator);
+        _executeBuy(tokenId, _operator, price);
         
         // Send ETH fee to MiningManager
         if (msg.value > 0) {
@@ -564,7 +579,20 @@ contract NFTLiquidityPool is
             revert NFTBoostMismatch();
         }
 
-        uint256 grossValue = getSellPrice();
+        // G-09: Cache pool state to avoid re-reading storage
+        uint256 _bkcBalance = pool.bkcBalance;
+        uint256 _nftCount = pool.nftCount;
+        uint256 _k = pool.k;
+
+        // Inline sell price calc with cached values (saves ~2,100 gas)
+        uint256 grossValue;
+        if (_nftCount > 0) {
+            uint256 newBalance = _k / (_nftCount + 1);
+            if (_bkcBalance > newBalance) {
+                grossValue = _bkcBalance - newBalance;
+            }
+        }
+
         uint256 taxBips = ecosystemManager.getFee(SELL_TAX_KEY);
 
         // Checked arithmetic: grossValue * taxBips could overflow with extreme fee values
@@ -572,7 +600,7 @@ contract NFTLiquidityPool is
         uint256 netPayout = grossValue - taxAmount;
 
         if (netPayout < _minPayout) revert SlippageExceeded();
-        if (pool.bkcBalance < grossValue) revert InsufficientLiquidity();
+        if (_bkcBalance < grossValue) revert InsufficientLiquidity();
 
         IERC721Upgradeable(boosterAddress).safeTransferFrom(msg.sender, address(this), _tokenId);
         _addTokenToPool(_tokenId);
@@ -585,10 +613,12 @@ contract NFTLiquidityPool is
             _sendTaxToMining(SELL_TAX_KEY, taxAmount, _operator);
         }
 
-        // Safe: pool.bkcBalance >= grossValue checked above (InsufficientLiquidity)
-        pool.bkcBalance -= grossValue;
-        pool.nftCount++;
-        pool.k = pool.bkcBalance * pool.nftCount;
+        // Update pool state
+        uint256 newBkcBalance = _bkcBalance - grossValue;
+        uint256 newNftCount = _nftCount + 1;
+        pool.bkcBalance = newBkcBalance;
+        pool.nftCount = newNftCount;
+        pool.k = newBkcBalance * newNftCount;
 
         totalVolume += grossValue;
         totalTaxesCollected += taxAmount;
@@ -599,8 +629,8 @@ contract NFTLiquidityPool is
             _tokenId,
             netPayout,
             taxAmount,
-            pool.bkcBalance,
-            pool.nftCount,
+            newBkcBalance,
+            newNftCount,
             _operator
         );
 
@@ -757,10 +787,8 @@ contract NFTLiquidityPool is
     //                         INTERNAL FUNCTIONS
     // =========================================================================
 
-    function _executeBuy(uint256 _tokenId, address _operator) internal {
-        uint256 price = getBuyPrice();
-        if (price == type(uint256).max) revert MathOverflow();
-
+    /// @dev G-08: Accept pre-computed price to avoid double pool state reads
+    function _executeBuy(uint256 _tokenId, address _operator, uint256 price) internal {
         uint256 taxBips = ecosystemManager.getFee(BUY_TAX_KEY);
 
         // Checked arithmetic: price * taxBips could overflow with extreme fee values

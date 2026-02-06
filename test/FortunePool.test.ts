@@ -658,8 +658,9 @@ describe("FortunePool", function () {
         fortune, bkc, user1, guesses, wager, true, operator.address
       );
 
-      // The commitment hash is on-chain
-      const storedHash = await fortune.commitmentHashes(gameId);
+      // The commitment hash is on-chain (G-10: consolidated into commitmentMeta struct)
+      const meta = await fortune.commitmentMeta(gameId);
+      const storedHash = meta.hash;
       // But it doesn't reveal the guesses — it's a keccak256 hash
       expect(storedHash).to.not.equal(ethers.ZeroHash);
 

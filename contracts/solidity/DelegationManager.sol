@@ -486,9 +486,11 @@ contract DelegationManager is
             emit TokensBurnedOnClaim(msg.sender, burnAmount, burnRateBips, totalBurnedOnClaim);
         }
 
-        // Send ETH fee to mining
+        // Send ETH fee to mining (G-03: cache address to avoid duplicate external call)
         if (msg.value > 0) {
-            _sendETHToMining(msg.value, _operator);
+            address miningManager = ecosystemManager.getMiningManagerAddress();
+            if (miningManager == address(0)) revert ZeroAddress();
+            _sendETHToMining(miningManager, msg.value, _operator);
         }
 
         // Transfer rewards to user
@@ -608,13 +610,11 @@ contract DelegationManager is
         );
     }
 
-    function _sendETHToMining(uint256 _amount, address _operator) internal {
+    /// @dev G-03: Accept pre-fetched miningManager address to avoid redundant external call
+    function _sendETHToMining(address miningManager, uint256 _amount, address _operator) internal {
         if (_amount == 0) return;
 
         totalETHCollected += _amount;
-
-        address miningManager = ecosystemManager.getMiningManagerAddress();
-        if (miningManager == address(0)) revert ZeroAddress();
 
         IMiningManager(miningManager).performPurchaseMiningWithOperator{value: _amount}(
             CLAIM_REWARD_FEE_KEY,
@@ -639,6 +639,9 @@ contract DelegationManager is
             bestBoost = ownedBoost;
         } catch {}
 
+        // G-04: Diamond (5000) is max boost — skip rental check if already found
+        if (bestBoost >= BOOST_DIAMOND) return bestBoost;
+
         // =====================================================================
         // CHECK 2: RENTED NFTs
         // =====================================================================
@@ -653,6 +656,8 @@ contract DelegationManager is
                     try booster.boostBips(rentedTokenIds[i]) returns (uint256 rentedBoost) {
                         if (rentedBoost > bestBoost) {
                             bestBoost = rentedBoost;
+                            // G-04: Early exit — Diamond is max, no point iterating further
+                            if (bestBoost >= BOOST_DIAMOND) break;
                         }
                     } catch {}
                     unchecked { ++i; }

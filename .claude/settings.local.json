@@ -1,0 +1,31 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx hardhat compile:*)",
+      "Bash(npx hardhat test:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(node -e:*)",
+      "Bash(python3:*)",
+      "Bash(python:*)",
+      "Bash(git -C \"D:\\\\backcoin\\\\Aplicativos\\\\backchain\" diff contracts/solidity/CharityPool.sol)",
+      "Bash(git -C \"D:\\\\backcoin\\\\Aplicativos\\\\backchain\" diff)",
+      "Bash(git -C \"D:\\\\backcoin\\\\Aplicativos\\\\backchain\" add contracts/solidity/CharityPool.sol)",
+      "Bash(git -C \"D:\\\\backcoin\\\\Aplicativos\\\\backchain\" commit -m \"$\\(cat <<''EOF''\nfix\\(CharityPool\\): add overflow checks for packed uint96/uint32 fields \\(C-03\\)\n\nPrevent silent overflow of raisedAmount \\(uint96\\), donationCount \\(uint32\\),\nand boostAmount \\(uint96\\) in unchecked blocks. Add AmountTooLarge error\nand validate all downcasts before accumulation. Move global stats\n\\(totalRaisedAllTime, etc.\\) out of unchecked blocks.\n\nCo-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>\nEOF\n\\)\")",
+      "Bash(git -C \"D:\\\\backcoin\\\\Aplicativos\\\\backchain\" status --short)",
+      "Bash(git -C \"D:\\\\backcoin\\\\Aplicativos\\\\backchain\" add \"contracts/solidity/Charitypool.sol\")",
+      "Bash(git -C \"D:\\\\backcoin\\\\Aplicativos\\\\backchain\" add contracts/solidity/BackchainGovernance.sol)",
+      "Bash(git -C \"D:\\\\backcoin\\\\Aplicativos\\\\backchain\" commit -m \"$\\(cat <<''EOF''\nfix\\(BackchainGovernance\\): make timelock irreversible, restrict executeDirectly \\(C-04/C-05\\)\n\nRemove setTimelockEnabled\\(\\) — timelock now activates irreversibly via\nadvancePhase\\(\\) when reaching Timelock phase. Replace all timelockEnabled\nchecks with phase-based isTimelockActive\\(\\). executeDirectly\\(\\) now reverts\nwith TimelockActive once governance reaches Timelock or DAO phase,\npreventing admin from bypassing timelock for arbitrary calls.\n\nCo-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>\nEOF\n\\)\")",
+      "Bash(git -C \"D:\\\\backcoin\\\\Aplicativos\\\\backchain\" add contracts/solidity/NFTLiquidityPool.sol)",
+      "Bash(git -C \"D:\\\\backcoin\\\\Aplicativos\\\\backchain\" commit -m \"$\\(cat <<''EOF''\nfix\\(NFTLiquidityPool\\): propagate MiningManager call failures \\(C-06\\)\n\nReplace silent try/catch in _sendTaxToMining and _sendETHToMining with\ndirect calls that propagate reverts. Prevents BKC being sent to\nMiningManager without distribution accounting, and ETH being silently\nstuck in pool contract. Add MiningManagerCallFailed error and require\nminingManager != address\\(0\\).\n\nCo-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>\nEOF\n\\)\")",
+      "Bash(git -C \"D:\\\\backcoin\\\\Aplicativos\\\\backchain\" commit -m \"$\\(cat <<''EOF''\nfix\\(NFTLiquidityPool\\): remove unsafe unchecked arithmetic blocks \\(C-07\\)\n\nRemove unchecked blocks from price/tax calculations in _executeBuy and\nsellNFT where price * taxBips could overflow. Also remove unchecked from\npool balance/count updates and stats tracking in addBKCLiquidity,\naddMoreNFTsToPool, removeBKCLiquidity. View functions getBuyPriceWithTax\nand getSellPriceAfterTax also use checked math now.\n\nCo-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>\nEOF\n\\)\")",
+      "Bash(git -C \"D:\\\\backcoin\\\\Aplicativos\\\\backchain\" add contracts/solidity/RentalManager.sol)",
+      "Bash(git -C \"D:\\\\backcoin\\\\Aplicativos\\\\backchain\" commit -m \"$\\(cat <<''EOF''\nfix\\(RentalManager\\): enforce minHours in rentNFTSimple \\(C-08\\)\n\nAdd validation that listing.minHours <= 1 before allowing 1-hour simple\nrental. Previously rentNFTSimple bypassed the listing owner''s minHours\nconstraint, allowing rentals shorter than the owner specified.\n\nCo-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>\nEOF\n\\)\")",
+      "Bash(git -C \"D:\\\\backcoin\\\\Aplicativos\\\\backchain\" log --oneline -10)",
+      "Bash(powershell -Command:*)",
+      "Bash(cd:*)",
+      "Bash(npm run compile:*)",
+      "Bash(npm run test:*)"
+    ]
+  }
+}
