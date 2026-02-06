@@ -189,11 +189,15 @@ describe("FortunePool", function () {
       expect(await fortune.gameFeeBips()).to.equal(3000);
     });
 
-    it("setServiceFee has no upper bound (M-01 finding)", async function () {
+    it("setServiceFee capped at MAX_SERVICE_FEE (0.1 ETH)", async function () {
       const { fortune } = await loadFixture(deployEcosystem);
-      // Owner can set absurdly high fee — this is the M-01 finding
-      await fortune.setServiceFee(ethers.parseEther("100"));
-      expect(await fortune.serviceFee()).to.equal(ethers.parseEther("100"));
+      // Should succeed at the cap
+      await fortune.setServiceFee(ethers.parseEther("0.1"));
+      expect(await fortune.serviceFee()).to.equal(ethers.parseEther("0.1"));
+      // Should revert above the cap
+      await expect(
+        fortune.setServiceFee(ethers.parseEther("0.2"))
+      ).to.be.revertedWithCustomError(fortune, "InvalidFee");
     });
 
     it("emergencyWithdraw sends to treasury", async function () {

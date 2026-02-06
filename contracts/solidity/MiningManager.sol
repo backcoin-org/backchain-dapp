@@ -172,6 +172,8 @@ contract MiningManager is
     /// @notice Maximum burn rate (50% = 5000 bips)
     uint256 public constant MAX_BURN_BIPS = 5_000;
 
+    uint256 public constant MAX_OPERATOR_FEE_BIPS = 5_000;
+
     /// @notice Distribution pool key for Treasury
     bytes32 public constant POOL_TREASURY = keccak256("TREASURY");
 
@@ -353,6 +355,7 @@ contract MiningManager is
     error ETHTransferFailed();
     error ArrayLengthMismatch();
     error InsufficientRecoverable();
+    error OperatorFeeTooHigh();
 
     // =========================================================================
     //                           INITIALIZATION
@@ -431,6 +434,7 @@ contract MiningManager is
      * @param _operatorFeeBips Percentage in basis points (no max limit)
      */
     function setOperatorFee(uint64 _operatorFeeBips) external onlyOwner {
+        if (_operatorFeeBips > MAX_OPERATOR_FEE_BIPS) revert OperatorFeeTooHigh();
         uint64 oldBips = operatorFeeBips;
         operatorFeeBips = _operatorFeeBips;
 

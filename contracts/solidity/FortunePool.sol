@@ -203,6 +203,8 @@ contract FortunePool is
 
     uint64 public constant MAX_MULTIPLIER_BIPS = 100_000;
 
+    uint256 public constant MAX_SERVICE_FEE = 0.1 ether;
+
     // =========================================================================
     //                              ENUMS
     // =========================================================================
@@ -449,6 +451,7 @@ contract FortunePool is
     // =========================================================================
 
     function setServiceFee(uint256 _fee) external onlyOwner {
+        if (_fee > MAX_SERVICE_FEE) revert InvalidFee();
         uint256 previousFee = serviceFee;
         serviceFee = _fee;
         emit ServiceFeeUpdated(previousFee, _fee);

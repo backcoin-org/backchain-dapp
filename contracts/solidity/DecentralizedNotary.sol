@@ -156,6 +156,8 @@ contract DecentralizedNotary is
 
     bytes32 public constant SERVICE_KEY = keccak256("NOTARY_SERVICE");
 
+    uint256 public constant MAX_ETH_FEE = 0.1 ether;
+
     // =========================================================================
     //                              STRUCTS
     // =========================================================================
@@ -178,6 +180,7 @@ contract DecentralizedNotary is
     error InsufficientETHFee();
     error TransferFailed();
     error HashAlreadyExists();
+    error FeeTooHigh();
 
     // =========================================================================
     //                              STATE
@@ -494,6 +497,7 @@ contract DecentralizedNotary is
     // =========================================================================
 
     function setETHFee(uint256 _newFee) external onlyOwner {
+        if (_newFee > MAX_ETH_FEE) revert FeeTooHigh();
         emit ETHFeeUpdated(notarizationFeeETH, _newFee);
         notarizationFeeETH = _newFee;
     }

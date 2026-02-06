@@ -132,6 +132,8 @@ contract DelegationManager is
 
     uint256 public constant MAX_LOCK_DURATION = 3650 days;
 
+    uint256 public constant MAX_CLAIM_ETH_FEE = 0.1 ether;
+
     uint256 private constant PRECISION = 1e18;
 
     uint256 private constant BIPS_DENOMINATOR = 10_000;
@@ -261,6 +263,7 @@ contract DelegationManager is
     error NoRewardsToClaim();
     error InsufficientETHFee();
     error TransferFailed();
+    error FeeTooHigh();
 
     // =========================================================================
     //                           INITIALIZATION
@@ -305,6 +308,7 @@ contract DelegationManager is
     // =========================================================================
 
     function setClaimEthFee(uint256 _fee) external onlyOwner {
+        if (_fee > MAX_CLAIM_ETH_FEE) revert FeeTooHigh();
         uint256 previousFee = claimEthFee;
         claimEthFee = _fee;
         emit ClaimEthFeeUpdated(previousFee, _fee);

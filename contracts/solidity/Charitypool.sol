@@ -177,6 +177,9 @@ contract CharityPool is
     uint256 private constant MAX_TITLE = 100;
     uint256 private constant MAX_DESCRIPTION = 1000;
 
+    uint96 private constant MAX_BKC_FEE = 10_000e18;
+    uint96 private constant MAX_ETH_FEE = 1 ether;
+
     // ========================================================================
     //                              ENUMS
     // ========================================================================
@@ -757,14 +760,18 @@ contract CharityPool is
         uint96 _boostBkc,
         uint96 _boostEth
     ) external onlyOwner {
-        require(_donationBips <= 1000, "Max 10%"); // Cap at 10%
-        
+        require(_donationBips <= 1000, "Max 10%");
+        require(_createBkc <= MAX_BKC_FEE, "Create fee too high");
+        require(_withdrawBkc <= MAX_BKC_FEE, "Withdraw fee too high");
+        require(_boostBkc <= MAX_BKC_FEE, "Boost BKC fee too high");
+        require(_boostEth <= MAX_ETH_FEE, "Boost ETH fee too high");
+
         createCostBkc = _createBkc;
         withdrawCostBkc = _withdrawBkc;
         donationFeeBips = _donationBips;
         boostCostBkc = _boostBkc;
         boostCostEth = _boostEth;
-        
+
         emit ConfigUpdated();
     }
 

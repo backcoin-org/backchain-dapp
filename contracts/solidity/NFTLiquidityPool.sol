@@ -168,6 +168,8 @@ contract NFTLiquidityPool is
     uint256 public constant BOOST_GOLD = 4000;     // 10% burn on claim
     uint256 public constant BOOST_DIAMOND = 5000;  // 0% burn on claim
 
+    uint256 public constant MAX_ETH_FEE = 0.1 ether;
+
     // =========================================================================
     //                              STRUCTS
     // =========================================================================
@@ -201,6 +203,7 @@ contract NFTLiquidityPool is
     error TransferFailed();
     error MiningManagerCallFailed();
     error CloneCannotUpgrade();
+    error FeeTooHigh();
 
     // =========================================================================
     //                              STATE
@@ -435,6 +438,7 @@ contract NFTLiquidityPool is
      * @param _sellFee ETH fee for selling NFTs (in wei)
      */
     function setEthFees(uint256 _buyFee, uint256 _sellFee) external onlyOwner {
+        if (_buyFee > MAX_ETH_FEE || _sellFee > MAX_ETH_FEE) revert FeeTooHigh();
         buyEthFee = _buyFee;
         sellEthFee = _sellFee;
         emit EthFeesUpdated(_buyFee, _sellFee);
