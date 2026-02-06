@@ -192,6 +192,9 @@ contract Backchat {
     
     /// @notice Fee percentage of gas cost (20%)
     uint256 private constant FEE_PERCENT = 20;
+
+    /// @notice Maximum fee cap per operation (0.01 ETH)
+    uint256 private constant MAX_FEE_WEI = 0.01 ether;
     
     /// @notice Basis points denominator
     uint256 private constant BIPS = 10000;
@@ -439,6 +442,7 @@ contract Backchat {
     error TransferFailed();
     error InvalidAddress();
     error SelfActionNotAllowed();
+    error NoRecipientAvailable();
     
     // ═══════════════════════════════════════════════════════════════════════════════
     //                              CONSTRUCTOR
@@ -467,7 +471,8 @@ contract Backchat {
      * @return Fee amount in wei
      */
     function calculateFee(uint256 gasEstimate) public view returns (uint256) {
-        return (gasEstimate * tx.gasprice * FEE_PERCENT) / 100;
+        uint256 fee = (gasEstimate * tx.gasprice * FEE_PERCENT) / 100;
+        return fee > MAX_FEE_WEI ? MAX_FEE_WEI : fee;
     }
     
     /**
@@ -1028,9 +1033,10 @@ contract Backchat {
             pendingEth[operator] += treasuryShare;
             operatorShare += treasuryShare;
             treasuryShare = 0;
+        } else {
+            // Both unavailable: revert to prevent locking user's ETH
+            revert NoRecipientAvailable();
         }
-        // If both treasury and operator are unavailable, ETH stays in contract
-        // (can be recovered by future withdraw if treasury comes back online)
         
         emit EthDistributed(address(0), operator, treasury, 0, operatorShare, treasuryShare);
     }
