@@ -132,6 +132,7 @@ import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.sol";
+import "./TimelockUpgradeable.sol";
 
 // ============================================================================
 //                              INTERFACES
@@ -159,7 +160,8 @@ contract CharityPool is
     Initializable,
     UUPSUpgradeable,
     OwnableUpgradeable,
-    ReentrancyGuardUpgradeable
+    ReentrancyGuardUpgradeable,
+    TimelockUpgradeable
 {
     // ========================================================================
     //                              CONSTANTS
@@ -373,7 +375,13 @@ contract CharityPool is
         maxActiveCampaigns = 3;
     }
 
-    function _authorizeUpgrade(address) internal override onlyOwner {}
+    function _authorizeUpgrade(address newImplementation) internal override onlyOwner {
+        _checkTimelock(newImplementation);
+    }
+
+    function _requireUpgradeAccess() internal view override {
+        _checkOwner();
+    }
 
     // ========================================================================
     //                         CAMPAIGN MANAGEMENT

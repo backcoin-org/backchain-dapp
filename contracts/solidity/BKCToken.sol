@@ -86,12 +86,14 @@ import "@openzeppelin/contracts-upgradeable/token/ERC20/ERC20Upgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
+import "./TimelockUpgradeable.sol";
 
 contract BKCToken is
     Initializable,
     ERC20Upgradeable,
     OwnableUpgradeable,
-    UUPSUpgradeable
+    UUPSUpgradeable,
+    TimelockUpgradeable
 {
     // =========================================================================
     //                              CONSTANTS
@@ -163,7 +165,13 @@ contract BKCToken is
         _transferOwnership(_owner);
     }
 
-    function _authorizeUpgrade(address) internal override onlyOwner {}
+    function _authorizeUpgrade(address newImplementation) internal override onlyOwner {
+        _checkTimelock(newImplementation);
+    }
+
+    function _requireUpgradeAccess() internal view override {
+        _checkOwner();
+    }
 
     // =========================================================================
     //                         MINT FUNCTIONS

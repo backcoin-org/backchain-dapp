@@ -90,12 +90,14 @@ import "@openzeppelin/contracts/proxy/Clones.sol";
 
 import "./NFTLiquidityPool.sol";
 import "./IInterfaces.sol";
+import "./TimelockUpgradeable.sol";
 
 contract NFTLiquidityPoolFactory is
     Initializable,
     UUPSUpgradeable,
     OwnableUpgradeable,
-    INFTLiquidityPoolFactory
+    INFTLiquidityPoolFactory,
+    TimelockUpgradeable
 {
     // =========================================================================
     //                              CONSTANTS
@@ -194,7 +196,13 @@ contract NFTLiquidityPoolFactory is
         poolImplementation = _poolImplementation;
     }
 
-    function _authorizeUpgrade(address) internal override onlyOwner {}
+    function _authorizeUpgrade(address newImplementation) internal override onlyOwner {
+        _checkTimelock(newImplementation);
+    }
+
+    function _requireUpgradeAccess() internal view override {
+        _checkOwner();
+    }
 
     // =========================================================================
     //                         ADMIN FUNCTIONS

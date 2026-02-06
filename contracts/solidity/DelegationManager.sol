@@ -112,13 +112,15 @@ import "@openzeppelin/contracts-upgradeable/token/ERC20/utils/SafeERC20Upgradeab
 
 import "./IInterfaces.sol";
 import "./BKCToken.sol";
+import "./TimelockUpgradeable.sol";
 
 contract DelegationManager is
     Initializable,
     UUPSUpgradeable,
     OwnableUpgradeable,
     ReentrancyGuardUpgradeable,
-    IDelegationManager
+    IDelegationManager,
+    TimelockUpgradeable
 {
     using SafeERC20Upgradeable for BKCToken;
 
@@ -290,7 +292,13 @@ contract DelegationManager is
         bkcToken = BKCToken(bkcAddress);
     }
 
-    function _authorizeUpgrade(address) internal override onlyOwner {}
+    function _authorizeUpgrade(address newImplementation) internal override onlyOwner {
+        _checkTimelock(newImplementation);
+    }
+
+    function _requireUpgradeAccess() internal view override {
+        _checkOwner();
+    }
 
     // =========================================================================
     //                         ADMIN FUNCTIONS

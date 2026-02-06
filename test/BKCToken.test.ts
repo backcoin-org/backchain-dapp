@@ -1,6 +1,6 @@
 import { expect } from "chai";
 import { ethers, upgrades } from "hardhat";
-import { loadFixture } from "@nomicfoundation/hardhat-network-helpers";
+import { loadFixture, time } from "@nomicfoundation/hardhat-network-helpers";
 
 describe("BKCToken", function () {
   const MAX_SUPPLY = ethers.parseEther("200000000"); // 200M
@@ -48,6 +48,127 @@ describe("BKCToken", function () {
       await expect(bkc.initialize(owner.address)).to.be.revertedWith(
         "Initializable: contract is already initialized"
       );
+    });
+  });
+
+  // ===========================================================================
+  //  UPGRADE TIMELOCK (A-01)
+  // ===========================================================================
+
+  describe("Upgrade Timelock (A-01)", function () {
+    it("UPGRADE_TIMELOCK is 48 hours", async function () {
+      const { bkc } = await loadFixture(deployFixture);
+      expect(await bkc.UPGRADE_TIMELOCK()).to.equal(48n * 60n * 60n);
+    });
+
+    it("owner can schedule an upgrade", async function () {
+      const { bkc, owner } = await loadFixture(deployFixture);
+      const fakeImpl = ethers.Wallet.createRandom().address;
+
+      await expect(bkc.scheduleUpgrade(fakeImpl))
+        .to.emit(bkc, "UpgradeScheduled")
+        .withArgs(fakeImpl, (await time.latest()) + 48 * 3600 + 1);
+
+      const pending = await bkc.pendingUpgrade();
+      expect(pending.implementation).to.equal(fakeImpl);
+    });
+
+    it("non-owner cannot schedule an upgrade", async function () {
+      const { bkc, attacker } = await loadFixture(deployFixture);
+      const fakeImpl = ethers.Wallet.createRandom().address;
+
+      await expect(
+        bkc.connect(attacker).scheduleUpgrade(fakeImpl)
+      ).to.be.revertedWith("Ownable: caller is not the owner");
+    });
+
+    it("cannot schedule zero address", async function () {
+      const { bkc } = await loadFixture(deployFixture);
+      await expect(
+        bkc.scheduleUpgrade(ethers.ZeroAddress)
+      ).to.be.revertedWithCustomError(bkc, "ZeroImplementation");
+    });
+
+    it("owner can cancel a pending upgrade", async function () {
+      const { bkc } = await loadFixture(deployFixture);
+      const fakeImpl = ethers.Wallet.createRandom().address;
+
+      await bkc.scheduleUpgrade(fakeImpl);
+      await expect(bkc.cancelUpgrade())
+        .to.emit(bkc, "UpgradeCancelled")
+        .withArgs(fakeImpl);
+
+      const pending = await bkc.pendingUpgrade();
+      expect(pending.implementation).to.equal(ethers.ZeroAddress);
+    });
+
+    it("upgrade reverts without scheduling first", async function () {
+      const { bkc, owner } = await loadFixture(deployFixture);
+
+      // Deploy a new implementation
+      const BKCTokenV2 = await ethers.getContractFactory("BKCToken");
+      const v2Impl = await BKCTokenV2.deploy();
+      await v2Impl.waitForDeployment();
+
+      await expect(
+        upgrades.upgradeProxy(bkc, BKCTokenV2)
+      ).to.be.revertedWithCustomError(bkc, "UpgradeNotScheduled");
+    });
+
+    it("upgrade reverts before timelock elapsed", async function () {
+      const { bkc, owner } = await loadFixture(deployFixture);
+
+      const BKCTokenV2 = await ethers.getContractFactory("BKCToken");
+      const v2Impl = await BKCTokenV2.deploy();
+      await v2Impl.waitForDeployment();
+      const v2Addr = await v2Impl.getAddress();
+
+      await bkc.scheduleUpgrade(v2Addr);
+
+      // Try immediately via direct upgradeTo — should fail
+      await expect(
+        bkc.upgradeTo(v2Addr)
+      ).to.be.revertedWithCustomError(bkc, "UpgradeTimelockNotElapsed");
+    });
+
+    it("upgrade succeeds after 48h timelock", async function () {
+      const { bkc, owner } = await loadFixture(deployFixture);
+
+      const BKCTokenV2 = await ethers.getContractFactory("BKCToken");
+      const v2Impl = await BKCTokenV2.deploy();
+      await v2Impl.waitForDeployment();
+      const v2Addr = await v2Impl.getAddress();
+
+      await bkc.scheduleUpgrade(v2Addr);
+
+      // Advance time by 48 hours
+      await time.increase(48 * 3600);
+
+      // Upgrade should succeed via direct upgradeTo
+      await bkc.upgradeTo(v2Addr);
+
+      // Verify contract still works after upgrade
+      expect(await bkc.name()).to.equal("Backcoin");
+
+      // Verify pending upgrade was cleared
+      const pending = await bkc.pendingUpgrade();
+      expect(pending.implementation).to.equal(ethers.ZeroAddress);
+    });
+
+    it("upgrade reverts on implementation mismatch", async function () {
+      const { bkc, owner } = await loadFixture(deployFixture);
+
+      const fakeImpl = ethers.Wallet.createRandom().address;
+      await bkc.scheduleUpgrade(fakeImpl);
+
+      await time.increase(48 * 3600);
+
+      // Deploy a different implementation than what was scheduled
+      const BKCTokenV2 = await ethers.getContractFactory("BKCToken");
+
+      await expect(
+        upgrades.upgradeProxy(bkc, BKCTokenV2)
+      ).to.be.revertedWithCustomError(bkc, "UpgradeImplementationMismatch");
     });
   });
 

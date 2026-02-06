@@ -158,6 +158,7 @@ import "@openzeppelin/contracts-upgradeable/token/ERC20/utils/SafeERC20Upgradeab
 
 import "./IInterfaces.sol";
 import "./BKCToken.sol";
+import "./TimelockUpgradeable.sol";
 
 interface IMiningManagerV3 {
     function performPurchaseMiningWithOperator(
@@ -171,7 +172,8 @@ contract FortunePool is
     Initializable,
     UUPSUpgradeable,
     OwnableUpgradeable,
-    ReentrancyGuardUpgradeable
+    ReentrancyGuardUpgradeable,
+    TimelockUpgradeable
 {
     using SafeERC20Upgradeable for BKCToken;
 
@@ -425,7 +427,13 @@ contract FortunePool is
         revealWindow = DEFAULT_REVEAL_WINDOW;
     }
 
-    function _authorizeUpgrade(address) internal override onlyOwner {}
+    function _authorizeUpgrade(address newImplementation) internal override onlyOwner {
+        _checkTimelock(newImplementation);
+    }
+
+    function _requireUpgradeAccess() internal view override {
+        _checkOwner();
+    }
 
     // =========================================================================
     //                         ADMIN FUNCTIONS

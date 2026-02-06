@@ -129,6 +129,7 @@ import "@openzeppelin/contracts-upgradeable/token/ERC20/utils/SafeERC20Upgradeab
 
 import "./IInterfaces.sol";
 import "./BKCToken.sol";
+import "./TimelockUpgradeable.sol";
 
 interface IMiningManagerV3 {
     function performPurchaseMiningWithOperator(
@@ -143,7 +144,8 @@ contract NFTLiquidityPool is
     UUPSUpgradeable,
     OwnableUpgradeable,
     ReentrancyGuardUpgradeable,
-    IERC721ReceiverUpgradeable
+    IERC721ReceiverUpgradeable,
+    TimelockUpgradeable
 {
     using SafeERC20Upgradeable for BKCToken;
 
@@ -313,7 +315,13 @@ contract NFTLiquidityPool is
         boostBips = _boostBips;
     }
 
-    function _authorizeUpgrade(address) internal override onlyOwner {}
+    function _authorizeUpgrade(address newImplementation) internal override onlyOwner {
+        _checkTimelock(newImplementation);
+    }
+
+    function _requireUpgradeAccess() internal view override {
+        _checkOwner();
+    }
 
     function onERC721Received(
         address,

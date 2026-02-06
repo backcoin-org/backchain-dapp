@@ -144,13 +144,15 @@ import "@openzeppelin/contracts-upgradeable/token/ERC20/utils/SafeERC20Upgradeab
 
 import "./IInterfaces.sol";
 import "./BKCToken.sol";
+import "./TimelockUpgradeable.sol";
 
 contract MiningManager is
     Initializable,
     UUPSUpgradeable,
     OwnableUpgradeable,
     ReentrancyGuardUpgradeable,
-    IMiningManager
+    IMiningManager,
+    TimelockUpgradeable
 {
     using SafeERC20Upgradeable for BKCToken;
 
@@ -388,7 +390,13 @@ contract MiningManager is
     /**
      * @dev Authorizes contract upgrades (owner only)
      */
-    function _authorizeUpgrade(address) internal override onlyOwner {}
+    function _authorizeUpgrade(address newImplementation) internal override onlyOwner {
+        _checkTimelock(newImplementation);
+    }
+
+    function _requireUpgradeAccess() internal view override {
+        _checkOwner();
+    }
 
     /**
      * @notice Allows contract to receive ETH

@@ -89,12 +89,14 @@ import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/security/PausableUpgradeable.sol";
+import "./TimelockUpgradeable.sol";
 
 contract BackchainGovernance is
     Initializable,
     UUPSUpgradeable,
     ReentrancyGuardUpgradeable,
-    PausableUpgradeable
+    PausableUpgradeable,
+    TimelockUpgradeable
 {
     // =========================================================================
     //                              CONSTANTS
@@ -302,7 +304,13 @@ contract BackchainGovernance is
         }
     }
 
-    function _authorizeUpgrade(address) internal override onlyAdmin {}
+    function _authorizeUpgrade(address newImplementation) internal override onlyAdmin {
+        _checkTimelock(newImplementation);
+    }
+
+    function _requireUpgradeAccess() internal view override {
+        if (msg.sender != admin) revert Unauthorized();
+    }
 
     // =========================================================================
     //                    MANAGED CONTRACTS SETUP

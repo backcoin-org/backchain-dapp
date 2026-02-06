@@ -132,12 +132,14 @@ import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 
 import "./IInterfaces.sol";
+import "./TimelockUpgradeable.sol";
 
 contract EcosystemManager is
     Initializable,
     UUPSUpgradeable,
     OwnableUpgradeable,
-    IEcosystemManager
+    IEcosystemManager,
+    TimelockUpgradeable
 {
     // =========================================================================
     //                              CONSTANTS
@@ -270,7 +272,13 @@ contract EcosystemManager is
         _transferOwnership(_owner);
     }
 
-    function _authorizeUpgrade(address) internal override onlyOwner {}
+    function _authorizeUpgrade(address newImplementation) internal override onlyOwner {
+        _checkTimelock(newImplementation);
+    }
+
+    function _requireUpgradeAccess() internal view override {
+        _checkOwner();
+    }
 
     // =========================================================================
     //                      CORE ADDRESS CONFIGURATION

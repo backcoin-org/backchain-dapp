@@ -77,13 +77,15 @@ import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/utils/StringsUpgradeable.sol";
 
 import "./IInterfaces.sol";
+import "./TimelockUpgradeable.sol";
 
 contract RewardBoosterNFT is
     Initializable,
     ERC721Upgradeable,
     ERC721EnumerableUpgradeable,
     OwnableUpgradeable,
-    UUPSUpgradeable
+    UUPSUpgradeable,
+    TimelockUpgradeable
 {
     using StringsUpgradeable for uint256;
 
@@ -190,7 +192,13 @@ contract RewardBoosterNFT is
         _nextTokenId = 1;
     }
 
-    function _authorizeUpgrade(address) internal override onlyOwner {}
+    function _authorizeUpgrade(address newImplementation) internal override onlyOwner {
+        _checkTimelock(newImplementation);
+    }
+
+    function _requireUpgradeAccess() internal view override {
+        _checkOwner();
+    }
 
     // =========================================================================
     //                         ADMIN FUNCTIONS

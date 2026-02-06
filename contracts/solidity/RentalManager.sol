@@ -146,6 +146,7 @@ import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 
 import "./IInterfaces.sol";
 import "./BKCToken.sol";
+import "./TimelockUpgradeable.sol";
 
 interface IMiningManagerV3 {
     function performPurchaseMiningWithOperator(
@@ -160,7 +161,8 @@ contract RentalManager is
     OwnableUpgradeable,
     ReentrancyGuardUpgradeable,
     ERC721HolderUpgradeable,
-    UUPSUpgradeable
+    UUPSUpgradeable,
+    TimelockUpgradeable
 {
     using SafeERC20Upgradeable for IERC20Upgradeable;
     using SafeERC20Upgradeable for BKCToken;
@@ -408,7 +410,13 @@ contract RentalManager is
         emit TreasuryUpdated(address(0), _treasury);
     }
 
-    function _authorizeUpgrade(address) internal override onlyOwner {}
+    function _authorizeUpgrade(address newImplementation) internal override onlyOwner {
+        _checkTimelock(newImplementation);
+    }
+
+    function _requireUpgradeAccess() internal view override {
+        _checkOwner();
+    }
 
     // ========================================================================
     //                         SPOTLIGHT FUNCTIONS

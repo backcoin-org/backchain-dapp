@@ -59,12 +59,14 @@ import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
+import "./TimelockUpgradeable.sol";
 
 contract SimpleBKCFaucet is
     Initializable,
     OwnableUpgradeable,
     ReentrancyGuardUpgradeable,
-    UUPSUpgradeable
+    UUPSUpgradeable,
+    TimelockUpgradeable
 {
     using SafeERC20Upgradeable for IERC20Upgradeable;
 
@@ -188,7 +190,13 @@ contract SimpleBKCFaucet is
         cooldownPeriod = 1 hours;
     }
 
-    function _authorizeUpgrade(address) internal override onlyOwner {}
+    function _authorizeUpgrade(address newImplementation) internal override onlyOwner {
+        _checkTimelock(newImplementation);
+    }
+
+    function _requireUpgradeAccess() internal view override {
+        _checkOwner();
+    }
 
     // =========================================================================
     //                        DISTRIBUTION FUNCTIONS

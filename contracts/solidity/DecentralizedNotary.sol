@@ -128,6 +128,7 @@ import "@openzeppelin/contracts-upgradeable/utils/StringsUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/utils/Base64Upgradeable.sol";
 
 import "./IInterfaces.sol";
+import "./TimelockUpgradeable.sol";
 import "./BKCToken.sol";
 
 interface IMiningManagerV3 {
@@ -143,7 +144,8 @@ contract DecentralizedNotary is
     UUPSUpgradeable,
     OwnableUpgradeable,
     ERC721Upgradeable,
-    ReentrancyGuardUpgradeable
+    ReentrancyGuardUpgradeable,
+    TimelockUpgradeable
 {
     using SafeERC20Upgradeable for BKCToken;
     using StringsUpgradeable for uint256;
@@ -291,7 +293,13 @@ contract DecentralizedNotary is
         notarizationFeeETH = 0.0001 ether;
     }
 
-    function _authorizeUpgrade(address) internal override onlyOwner {}
+    function _authorizeUpgrade(address newImplementation) internal override onlyOwner {
+        _checkTimelock(newImplementation);
+    }
+
+    function _requireUpgradeAccess() internal view override {
+        _checkOwner();
+    }
 
     // =========================================================================
     //                         CORE FUNCTIONS
