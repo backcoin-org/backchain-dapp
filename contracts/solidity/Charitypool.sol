@@ -238,6 +238,7 @@ contract CharityPool is
     error TransferFailed();
     error ExceedsRecoverable();
     error AmountTooLarge();
+    error MiningManagerNotSet();
 
     // ========================================================================
     //                              STORAGE
@@ -819,33 +820,31 @@ contract CharityPool is
     /// @dev Collect BKC fee and send to MiningManager
     function _collectBkcFee(uint256 _amount, address _operator) internal {
         if (_amount == 0) return;
-        
+        if (miningManager == address(0)) revert MiningManagerNotSet();
+
         IBKC bkc = IBKC(bkcToken);
-        
+
         // Transfer BKC from user to MiningManager
         bkc.transferFrom(msg.sender, miningManager, _amount);
-        
+
         // Notify MiningManager
-        try IMiningManagerV3(miningManager).performPurchaseMiningWithOperator(
+        IMiningManagerV3(miningManager).performPurchaseMiningWithOperator(
             SERVICE_KEY,
             _amount,
             _operator
-        ) {} catch {}
+        );
     }
 
     /// @dev Send ETH to MiningManager
     function _sendEthToMining(uint256 _amount, address _operator) internal {
         if (_amount == 0) return;
+        if (miningManager == address(0)) revert MiningManagerNotSet();
 
-        try IMiningManagerV3(miningManager).performPurchaseMiningWithOperator{value: _amount}(
+        IMiningManagerV3(miningManager).performPurchaseMiningWithOperator{value: _amount}(
             SERVICE_KEY,
             0,
             _operator
-        ) {} catch {
-            // Fallback to treasury
-            (bool success, ) = treasury.call{value: _amount}("");
-            if (!success) revert TransferFailed();
-        }
+        );
     }
 
     // ========================================================================

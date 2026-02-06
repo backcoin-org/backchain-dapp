@@ -371,6 +371,7 @@ contract RentalManager is
     error InvalidFeeBips();
     error SpotlightAmountTooLow();
     error TransferFailed();
+    error MiningManagerNotSet();
 
     // ========================================================================
     //                            INITIALIZATION
@@ -965,33 +966,29 @@ contract RentalManager is
     // ========================================================================
 
     function _sendToMining(uint256 _amount, address _operator) internal {
+        if (_amount == 0) return;
         address miningManager = ecosystemManager.getMiningManagerAddress();
-        if (miningManager != address(0) && _amount > 0) {
-            bkcToken.safeTransfer(miningManager, _amount);
+        if (miningManager == address(0)) revert MiningManagerNotSet();
 
-            try IMiningManagerV3(miningManager).performPurchaseMiningWithOperator(
-                SERVICE_KEY,
-                _amount,
-                _operator
-            ) {} catch {}
-        }
+        bkcToken.safeTransfer(miningManager, _amount);
+
+        IMiningManagerV3(miningManager).performPurchaseMiningWithOperator(
+            SERVICE_KEY,
+            _amount,
+            _operator
+        );
     }
 
     function _sendETHToMining(uint256 _amount, address _operator) internal {
+        if (_amount == 0) return;
         address miningManager = ecosystemManager.getMiningManagerAddress();
-        if (miningManager != address(0) && _amount > 0) {
-            try IMiningManagerV3(miningManager).performPurchaseMiningWithOperator{value: _amount}(
-                SERVICE_KEY,
-                0,
-                _operator
-            ) {} catch {
-                // Fallback to treasury
-                if (treasury != address(0)) {
-                    (bool success, ) = treasury.call{value: _amount}("");
-                    if (!success) revert TransferFailed();
-                }
-            }
-        }
+        if (miningManager == address(0)) revert MiningManagerNotSet();
+
+        IMiningManagerV3(miningManager).performPurchaseMiningWithOperator{value: _amount}(
+            SERVICE_KEY,
+            0,
+            _operator
+        );
     }
 
     function _addToListedArray(uint256 _tokenId) internal {

@@ -776,11 +776,11 @@ contract FortunePool is
                 totalBKCFees += fee;
             }
 
-            try IMiningManagerV3(miningManagerAddress).performPurchaseMiningWithOperator(
+            IMiningManagerV3(miningManagerAddress).performPurchaseMiningWithOperator(
                 SERVICE_KEY,
                 fee,
                 _operator
-            ) {} catch {}
+            );
         }
 
         _sendETHToMining(msg.value, _operator);
@@ -1013,19 +1013,14 @@ contract FortunePool is
     // =========================================================================
 
     function _sendETHToMining(uint256 _amount, address _operator) internal {
-        if (miningManagerAddress == address(0) || _amount == 0) return;
+        if (_amount == 0) return;
+        if (miningManagerAddress == address(0)) revert CoreContractNotSet();
 
-        try IMiningManagerV3(miningManagerAddress).performPurchaseMiningWithOperator{value: _amount}(
+        IMiningManagerV3(miningManagerAddress).performPurchaseMiningWithOperator{value: _amount}(
             SERVICE_KEY,
             0,
             _operator
-        ) {} catch {
-            address treasury = ecosystemManager.getTreasuryAddress();
-            if (treasury != address(0)) {
-                (bool success, ) = treasury.call{value: _amount}("");
-                if (!success) revert TransferFailed();
-            }
-        }
+        );
     }
 
     receive() external payable {}

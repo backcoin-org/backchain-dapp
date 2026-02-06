@@ -603,13 +603,11 @@ contract DelegationManager is
 
         bkcToken.safeTransfer(miningManager, _feeAmount);
 
-        try IMiningManager(miningManager).performPurchaseMiningWithOperator(
+        IMiningManager(miningManager).performPurchaseMiningWithOperator(
             _serviceKey,
             _feeAmount,
             _operator
-        ) {} catch {
-            try IMiningManager(miningManager).performPurchaseMining(_serviceKey, _feeAmount) {} catch {}
-        }
+        );
     }
 
     function _sendETHToMining(uint256 _amount, address _operator) internal {
@@ -620,21 +618,13 @@ contract DelegationManager is
         }
 
         address miningManager = ecosystemManager.getMiningManagerAddress();
-        if (miningManager != address(0)) {
-            try IMiningManager(miningManager).performPurchaseMiningWithOperator{value: _amount}(
-                CLAIM_REWARD_FEE_KEY,
-                0,
-                _operator
-            ) {
-                return;
-            } catch {}
-        }
+        if (miningManager == address(0)) revert ZeroAddress();
 
-        address treasury = ecosystemManager.getTreasuryAddress();
-        if (treasury != address(0)) {
-            (bool success, ) = treasury.call{value: _amount}("");
-            if (!success) revert TransferFailed();
-        }
+        IMiningManager(miningManager).performPurchaseMiningWithOperator{value: _amount}(
+            CLAIM_REWARD_FEE_KEY,
+            0,
+            _operator
+        );
     }
 
     /// @notice Get user's best NFT boost from OWNED or RENTED NFTs

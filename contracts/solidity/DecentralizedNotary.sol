@@ -536,23 +536,13 @@ contract DecentralizedNotary is
         uint256 _ethAmount,
         address _operator
     ) internal {
-        if (miningManagerAddress == address(0)) return;
+        if (miningManagerAddress == address(0)) revert CoreContractNotSet();
 
-        // Call MiningManager with BKC amount and ETH value
-        try IMiningManagerV3(miningManagerAddress).performPurchaseMiningWithOperator{value: _ethAmount}(
+        IMiningManagerV3(miningManagerAddress).performPurchaseMiningWithOperator{value: _ethAmount}(
             SERVICE_KEY,
             _bkcAmount,
             _operator
-        ) {} catch {
-            // Fallback: send ETH to treasury if MiningManager fails
-            if (_ethAmount > 0) {
-                address treasury = ecosystemManager.getTreasuryAddress();
-                if (treasury != address(0)) {
-                    (bool success, ) = treasury.call{value: _ethAmount}("");
-                    if (!success) revert TransferFailed();
-                }
-            }
-        }
+        );
     }
 
     function _convertIpfsToHttp(string memory _ipfsUri) internal pure returns (string memory) {
