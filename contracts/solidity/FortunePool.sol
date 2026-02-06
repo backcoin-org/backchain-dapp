@@ -195,7 +195,9 @@ contract FortunePool is
 
     uint256 public constant DEFAULT_REVEAL_DELAY = 5;
 
-    uint256 public constant DEFAULT_REVEAL_WINDOW = 1000;
+    uint256 public constant DEFAULT_REVEAL_WINDOW = 251;
+
+    uint256 public constant MAX_REVEAL_WINDOW = 251;
 
     // =========================================================================
     //                              ENUMS
@@ -262,6 +264,7 @@ contract FortunePool is
     error CommitmentNotExpired();
     error HashMismatch();
     error InvalidDelay();
+    error BlockhashUnavailable();
 
     // =========================================================================
     //                              STATE
@@ -451,7 +454,7 @@ contract FortunePool is
     }
 
     function setRevealWindow(uint256 _window) external onlyOwner {
-        if (_window < 100) revert InvalidDelay();
+        if (_window < 100 || _window > MAX_REVEAL_WINDOW) revert InvalidDelay();
         revealWindow = _window;
     }
 
@@ -839,12 +842,7 @@ contract FortunePool is
 
         bytes32 blockEntropy = blockhash(commitBlock + revealDelay);
         if (blockEntropy == bytes32(0)) {
-            blockEntropy = keccak256(abi.encodePacked(
-                commitBlock,
-                block.timestamp,
-                block.prevrandao,
-                _gameId
-            ));
+            revert BlockhashUnavailable();
         }
 
         uint256 netWager = uint256(c.wagerAmount);
