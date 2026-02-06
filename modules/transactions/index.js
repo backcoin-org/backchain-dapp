@@ -112,8 +112,30 @@ export {
     executeFaucetClaim
 } from './faucet-tx.js';
 
-// Backchat (Social Network) - Would need similar updates
-// export { BackchatTx } from './backchat-tx.js';
+// Backchat (Social Network) - V8.0.0 Viral Referral
+export {
+    BackchatTx,
+    createProfile,
+    updateProfile,
+    createPost,
+    createReply,
+    createRepost,
+    like,
+    superLike,
+    follow,
+    unfollow,
+    boostProfile,
+    obtainBadge,
+    withdraw as backchatWithdraw,
+    setReferrer,
+    getReferralStats,
+    getReferredBy,
+    getCurrentFees as backchatGetCurrentFees,
+    getPostCount,
+    getPendingBalance as backchatGetPendingBalance,
+    isUsernameAvailable,
+    getVersion as backchatGetVersion
+} from './backchat-tx.js';
 
 // ============================================================================
 // CONVENIENCE OBJECT
@@ -129,7 +151,8 @@ export const Transactions = {
     Fortune: (async () => (await import('./fortune-tx.js')).FortuneTx)(),
     Rental: (async () => (await import('./rental-tx.js')).RentalTx)(),
     Notary: (async () => (await import('./notary-tx.js')).NotaryTx)(),
-    Faucet: (async () => (await import('./faucet-tx.js')).FaucetTx)()
+    Faucet: (async () => (await import('./faucet-tx.js')).FaucetTx)(),
+    Backchat: (async () => (await import('./backchat-tx.js')).BackchatTx)()
 };
 
 export default Transactions;

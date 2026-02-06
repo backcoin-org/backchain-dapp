@@ -1,29 +1,28 @@
 // modules/js/transactions/backchat-tx.js
-// ✅ PRODUCTION V2.0 - Rewritten for Backchat V7.0.0
-// 
-// COMPLETE REWRITE - Old module was for different contract!
-// 
-// BACKCHAT V7 FEATURES:
+// ✅ PRODUCTION V3.0 - Updated for Backchat V8.0.0 (Viral Referral)
+//
+// BACKCHAT V8 FEATURES:
 // - Decentralized Social Protocol (posts, replies, reposts)
 // - Like / Super Like (organic trending)
 // - Follow / Unfollow
 // - Profile (username registration, display name, bio)
 // - Premium (profile boost, trust badge)
 // - BKC Tips (90% creator, 10% mining ecosystem)
-// - ETH distribution (40% creator, 30% operator, 30% treasury)
+// - Viral Referral System (setReferrer, getReferralStats)
 // - Graceful degradation (works even if ecosystem contracts fail)
 //
 // ============================================================================
-// FEE STRUCTURE:
+// FEE STRUCTURE (V8 Viral Model):
 // - All actions pay ETH fee (20% of gas cost)
-// - With creator (reply, like, follow): 40/30/30 split
-// - Without creator (post, username, boost): 60/40 operator/treasury
+// - With operator + referrer: 50/30/20 (operator/referrer/protocol)
+// - With operator, no referrer: 80/20 (operator/protocol)
+// - Without operator: 100% protocol
 // - BKC tips: 90% creator, 10% MiningManager
 // ============================================================================
 
 import { txEngine } from '../core/index.js';
 import { resolveOperator } from '../core/operator.js';
-import { addresses, contractAddresses } from '../../config.js';
+import { addresses, contractAddresses, backchatABI } from '../../config.js';
 
 // ============================================================================
 // 1. CONTRACT CONFIGURATION
@@ -38,93 +37,9 @@ function getContracts() {
 }
 
 /**
- * Backchat V7 ABI - Complete rewrite for V7.0.0
+ * Backchat V8 ABI — imported from config.js (single source of truth)
  */
-const BACKCHAT_ABI = [
-    // ─────────────────────────────────────────────────────────────────────────
-    // PROFILE FUNCTIONS
-    // ─────────────────────────────────────────────────────────────────────────
-    'function createProfile(string username, string displayName, string bio, address operator) external payable',
-    'function updateProfile(string displayName, string bio) external',
-    
-    // ─────────────────────────────────────────────────────────────────────────
-    // CONTENT FUNCTIONS
-    // ─────────────────────────────────────────────────────────────────────────
-    'function createPost(string content, string mediaCID, address operator) external payable returns (uint256 postId)',
-    'function createReply(uint256 parentId, string content, string mediaCID, address operator, uint256 tipBkc) external payable returns (uint256 postId)',
-    'function createRepost(uint256 originalPostId, address operator, uint256 tipBkc) external payable returns (uint256 postId)',
-    
-    // ─────────────────────────────────────────────────────────────────────────
-    // ENGAGEMENT FUNCTIONS
-    // ─────────────────────────────────────────────────────────────────────────
-    'function like(uint256 postId, address operator, uint256 tipBkc) external payable',
-    'function superLike(uint256 postId, address operator, uint256 tipBkc) external payable',
-    'function follow(address toFollow, address operator, uint256 tipBkc) external payable',
-    'function unfollow(address toUnfollow) external',
-    
-    // ─────────────────────────────────────────────────────────────────────────
-    // PREMIUM FUNCTIONS
-    // ─────────────────────────────────────────────────────────────────────────
-    'function boostProfile(address operator) external payable',
-    'function obtainBadge(address operator) external payable',
-    
-    // ─────────────────────────────────────────────────────────────────────────
-    // WITHDRAWAL
-    // ─────────────────────────────────────────────────────────────────────────
-    'function withdraw() external',
-    
-    // ─────────────────────────────────────────────────────────────────────────
-    // VIEW FUNCTIONS - Fees
-    // ─────────────────────────────────────────────────────────────────────────
-    'function calculateFee(uint256 gasEstimate) view returns (uint256)',
-    'function getCurrentFees() view returns (uint256 postFee, uint256 replyFee, uint256 likeFee, uint256 followFee, uint256 repostFee, uint256 superLikeMin, uint256 boostMin, uint256 badgeFee_)',
-    'function getUsernameFee(uint256 length) pure returns (uint256)',
-    
-    // ─────────────────────────────────────────────────────────────────────────
-    // VIEW FUNCTIONS - State
-    // ─────────────────────────────────────────────────────────────────────────
-    'function postCounter() view returns (uint256)',
-    'function postAuthor(uint256 postId) view returns (address)',
-    'function pendingEth(address user) view returns (uint256)',
-    'function usernameOwner(bytes32 usernameHash) view returns (address)',
-    'function hasLiked(uint256 postId, address user) view returns (bool)',
-    'function boostExpiry(address user) view returns (uint256)',
-    'function badgeExpiry(address user) view returns (uint256)',
-    
-    // ─────────────────────────────────────────────────────────────────────────
-    // VIEW FUNCTIONS - Helpers
-    // ─────────────────────────────────────────────────────────────────────────
-    'function isProfileBoosted(address user) view returns (bool)',
-    'function hasTrustBadge(address user) view returns (bool)',
-    'function hasUserLiked(uint256 postId, address user) view returns (bool)',
-    'function getPendingBalance(address user) view returns (uint256)',
-    'function isUsernameAvailable(string username) view returns (bool)',
-    'function getUsernameOwner(string username) view returns (address)',
-    'function version() pure returns (string)',
-    
-    // ─────────────────────────────────────────────────────────────────────────
-    // IMMUTABLES
-    // ─────────────────────────────────────────────────────────────────────────
-    'function bkcToken() view returns (address)',
-    'function ecosystemManager() view returns (address)',
-    
-    // ─────────────────────────────────────────────────────────────────────────
-    // EVENTS
-    // ─────────────────────────────────────────────────────────────────────────
-    'event ProfileCreated(address indexed user, bytes32 indexed usernameHash, string username, string displayName, string bio, uint256 ethPaid, address indexed operator)',
-    'event ProfileUpdated(address indexed user, string displayName, string bio)',
-    'event PostCreated(uint256 indexed postId, address indexed author, string content, string mediaCID, address indexed operator)',
-    'event ReplyCreated(uint256 indexed postId, uint256 indexed parentId, address indexed author, string content, string mediaCID, uint256 tipBkc, address operator)',
-    'event RepostCreated(uint256 indexed newPostId, uint256 indexed originalPostId, address indexed reposter, uint256 tipBkc, address operator)',
-    'event Liked(uint256 indexed postId, address indexed user, uint256 tipBkc, address indexed operator)',
-    'event SuperLiked(uint256 indexed postId, address indexed user, uint256 ethAmount, uint256 tipBkc, address indexed operator)',
-    'event Followed(address indexed follower, address indexed followed, uint256 tipBkc, address indexed operator)',
-    'event Unfollowed(address indexed follower, address indexed followed)',
-    'event ProfileBoosted(address indexed user, uint256 amount, uint256 expiresAt, address indexed operator)',
-    'event BadgeObtained(address indexed user, uint256 expiresAt, address indexed operator)',
-    'event Withdrawal(address indexed user, uint256 amount)',
-    'event TipProcessed(address indexed from, address indexed creator, uint256 totalBkc, uint256 creatorShare, uint256 miningShare, address indexed operator)'
-];
+const BACKCHAT_ABI = backchatABI;
 
 // ============================================================================
 // 2. HELPERS
@@ -614,7 +529,66 @@ export async function withdraw({
 }
 
 // ============================================================================
-// 8. READ FUNCTIONS
+// 8. REFERRAL FUNCTIONS (V8 NEW)
+// ============================================================================
+
+/**
+ * Sets the referrer for the current user (ONE TIME ONLY — immutable)
+ * Creates the viral loop: referrers earn 30% of fees from referred users
+ */
+export async function setReferrer({
+    referrer,
+    button = null, onSuccess = null, onError = null
+}) {
+    return await txEngine.execute({
+        name: 'SetReferrer', button,
+        getContract: async (signer) => getBackchatContract(signer),
+        method: 'setReferrer',
+        args: [referrer],
+
+        validate: async (signer, userAddress) => {
+            if (!referrer || referrer === '0x0000000000000000000000000000000000000000') {
+                throw new Error('Invalid referrer address');
+            }
+            if (referrer.toLowerCase() === userAddress.toLowerCase()) {
+                throw new Error('Cannot refer yourself');
+            }
+
+            const contract = getBackchatContract(signer);
+            const existing = await contract.referredBy(userAddress);
+            if (existing !== '0x0000000000000000000000000000000000000000') {
+                throw new Error('Referrer already set (immutable)');
+            }
+        },
+        onSuccess, onError
+    });
+}
+
+/**
+ * Gets referral statistics for an address
+ * @returns {{ totalReferred: number, totalEarned: BigInt, totalEarnedFormatted: string }}
+ */
+export async function getReferralStats(referrerAddress) {
+    const ethers = window.ethers;
+    const contract = await getBackchatContractReadOnly();
+    const stats = await contract.getReferralStats(referrerAddress);
+    return {
+        totalReferred: Number(stats.totalReferred),
+        totalEarned: stats.totalEarned,
+        totalEarnedFormatted: ethers.formatEther(stats.totalEarned)
+    };
+}
+
+/**
+ * Gets who referred a specific user (address(0) if none)
+ */
+export async function getReferredBy(userAddress) {
+    const contract = await getBackchatContractReadOnly();
+    return await contract.referredBy(userAddress);
+}
+
+// ============================================================================
+// 9. READ FUNCTIONS
 // ============================================================================
 
 export async function getCurrentFees() {
@@ -698,7 +672,7 @@ export async function getVersion() {
 }
 
 // ============================================================================
-// 9. EXPORT
+// 10. EXPORT
 // ============================================================================
 
 export const BackchatTx = {
@@ -712,6 +686,8 @@ export const BackchatTx = {
     boostProfile, obtainBadge,
     // Financial
     withdraw,
+    // Referral (V8)
+    setReferrer, getReferralStats, getReferredBy,
     // Read
     getCurrentFees, getUsernameFee,
     getPostAuthor, getPostCount,

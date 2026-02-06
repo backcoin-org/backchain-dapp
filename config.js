@@ -696,36 +696,83 @@ export const charityPoolABI = [
 ];
 
 // ============================================================================
-// ✅ V6.8: BACKCHAT ABI - Social Features
+// ✅ V8.0.0: BACKCHAT ABI - Viral Referral Social Protocol
 // ============================================================================
+// CANONICAL ABI — All files should import from here, not define their own.
+// Fee model: 50/30/20 (operator/referrer/protocol) with viral referral system.
 
 export const backchatABI = [
-    // Profile
-    "function createProfile(string _username) external",
-    "function hasProfile(address _user) view returns (bool)",
-    "function getProfile(address _user) view returns (tuple(string username, uint256 postCount, uint256 likeCount, uint256 createdAt))",
-    
-    // Posts V6.8: with operator parameter
-    "function createPost(string _content, string _mediaCID, address _operator) external payable returns (uint256)",
-    "function reply(uint256 _parentId, string _content, string _mediaCID, address _operator) external payable returns (uint256)",
-    "function likePost(uint256 _postId, address _operator) external payable",
-    
-    // View functions
-    "function posts(uint256 _postId) view returns (tuple(address author, string content, string mediaCID, uint256 parentId, uint256 likeCount, uint256 replyCount, uint256 createdAt, bool exists))",
-    "function getPost(uint256 _postId) view returns (tuple(address author, string content, string mediaCID, uint256 parentId, uint256 likeCount, uint256 replyCount, uint256 createdAt, bool exists))",
-    "function hasLiked(address _user, uint256 _postId) view returns (bool)",
-    "function getPostReplies(uint256 _postId) view returns (uint256[])",
-    "function totalPosts() view returns (uint256)",
-    "function totalUsers() view returns (uint256)",
-    
-    // Fees
-    "function postCost() view returns (uint256)",
-    "function likeCost() view returns (uint256)",
-    
-    // Events V6.8
-    "event ProfileCreated(address indexed user, string username)",
-    "event PostCreated(uint256 indexed postId, address indexed author, address indexed operator, string content, uint256 parentId)",
-    "event PostLiked(uint256 indexed postId, address indexed liker, address indexed operator)"
+    // ── Profile ──────────────────────────────────────────────────────────────
+    "function createProfile(string username, string displayName, string bio, address operator) external payable",
+    "function updateProfile(string displayName, string bio) external",
+
+    // ── Content ──────────────────────────────────────────────────────────────
+    "function createPost(string content, string mediaCID, address operator) external payable returns (uint256 postId)",
+    "function createReply(uint256 parentId, string content, string mediaCID, address operator, uint256 tipBkc) external payable returns (uint256 postId)",
+    "function createRepost(uint256 originalPostId, address operator, uint256 tipBkc) external payable returns (uint256 postId)",
+
+    // ── Engagement ───────────────────────────────────────────────────────────
+    "function like(uint256 postId, address operator, uint256 tipBkc) external payable",
+    "function superLike(uint256 postId, address operator, uint256 tipBkc) external payable",
+    "function follow(address toFollow, address operator, uint256 tipBkc) external payable",
+    "function unfollow(address toUnfollow) external",
+
+    // ── Premium ──────────────────────────────────────────────────────────────
+    "function boostProfile(address operator) external payable",
+    "function obtainBadge(address operator) external payable",
+
+    // ── Referral (V8 NEW) ────────────────────────────────────────────────────
+    "function setReferrer(address _referrer) external",
+    "function getReferralStats(address referrer) external view returns (uint256 totalReferred, uint256 totalEarned)",
+    "function referredBy(address user) external view returns (address)",
+    "function referralCount(address referrer) external view returns (uint256)",
+    "function referralEarnings(address referrer) external view returns (uint256)",
+
+    // ── Withdrawal ───────────────────────────────────────────────────────────
+    "function withdraw() external",
+
+    // ── View: Fees ───────────────────────────────────────────────────────────
+    "function calculateFee(uint256 gasEstimate) view returns (uint256)",
+    "function getCurrentFees() view returns (uint256 postFee, uint256 replyFee, uint256 likeFee, uint256 followFee, uint256 repostFee, uint256 superLikeMin, uint256 boostMin, uint256 badgeFee_)",
+    "function getUsernameFee(uint256 length) pure returns (uint256)",
+
+    // ── View: State ──────────────────────────────────────────────────────────
+    "function postCounter() view returns (uint256)",
+    "function postAuthor(uint256 postId) view returns (address)",
+    "function pendingEth(address user) view returns (uint256)",
+    "function usernameOwner(bytes32 usernameHash) view returns (address)",
+    "function hasLiked(uint256 postId, address user) view returns (bool)",
+    "function boostExpiry(address user) view returns (uint256)",
+    "function badgeExpiry(address user) view returns (uint256)",
+
+    // ── View: Helpers ────────────────────────────────────────────────────────
+    "function isProfileBoosted(address user) view returns (bool)",
+    "function hasTrustBadge(address user) view returns (bool)",
+    "function hasUserLiked(uint256 postId, address user) view returns (bool)",
+    "function getPendingBalance(address user) view returns (uint256)",
+    "function isUsernameAvailable(string username) view returns (bool)",
+    "function getUsernameOwner(string username) view returns (address)",
+    "function version() pure returns (string)",
+
+    // ── Immutables ───────────────────────────────────────────────────────────
+    "function bkcToken() view returns (address)",
+    "function ecosystemManager() view returns (address)",
+
+    // ── Events ───────────────────────────────────────────────────────────────
+    "event ProfileCreated(address indexed user, bytes32 indexed usernameHash, string username, string displayName, string bio, uint256 ethPaid, address indexed operator)",
+    "event ProfileUpdated(address indexed user, string displayName, string bio)",
+    "event PostCreated(uint256 indexed postId, address indexed author, string content, string mediaCID, address indexed operator)",
+    "event ReplyCreated(uint256 indexed postId, uint256 indexed parentId, address indexed author, string content, string mediaCID, uint256 tipBkc, address operator)",
+    "event RepostCreated(uint256 indexed newPostId, uint256 indexed originalPostId, address indexed reposter, uint256 tipBkc, address operator)",
+    "event Liked(uint256 indexed postId, address indexed user, uint256 tipBkc, address indexed operator)",
+    "event SuperLiked(uint256 indexed postId, address indexed user, uint256 ethAmount, uint256 tipBkc, address indexed operator)",
+    "event Followed(address indexed follower, address indexed followed, uint256 tipBkc, address indexed operator)",
+    "event Unfollowed(address indexed follower, address indexed followed)",
+    "event ProfileBoosted(address indexed user, uint256 amount, uint256 expiresAt, address indexed operator)",
+    "event BadgeObtained(address indexed user, uint256 expiresAt, address indexed operator)",
+    "event Withdrawal(address indexed user, uint256 amount)",
+    "event TipProcessed(address indexed from, address indexed creator, uint256 totalBkc, uint256 creatorShare, uint256 miningShare, address indexed operator)",
+    "event ReferrerSet(address indexed user, address indexed referrer)"
 ];
 
 // Campaign Status Enum

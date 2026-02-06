@@ -25,6 +25,7 @@ import { State } from '../state.js';
 import { loadUserData, API_ENDPOINTS } from '../modules/data.js';
 import { formatBigNumber } from '../utils.js';
 import { showToast, openModal, closeModal } from '../ui-feedback.js';
+import { addresses } from '../config.js';
 
 // V3: Import new transaction module
 import { FortuneTx } from '../modules/transactions/index.js';
@@ -35,7 +36,7 @@ import { FortuneTx } from '../modules/transactions/index.js';
 const EXPLORER_TX = "https://sepolia.arbiscan.io/tx/";
 const EXPLORER_ADDRESS = "https://sepolia.arbiscan.io/address/";
 const ORACLE_ADDRESS = "0x16346f5a45f9615f1c894414989f0891c54ef07b"; // BackchainRandomness Oracle
-const FORTUNE_POOL_ADDRESS = "0x8093a960b9615330DdbD1B59b1Fc7eB6B6AB1526"; // Fortune Pool Contract
+const FORTUNE_POOL_ADDRESS = addresses?.fortunePool || "0x277dB00d533Bbc0fc267bbD954640aDA38ee6B37"; // Fortune Pool Contract (from deployment-addresses.json)
 const TIGER_IMAGE = "./assets/fortune.png";
 const SHARE_POINTS = 1000;
 

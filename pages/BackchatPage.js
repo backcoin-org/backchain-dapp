@@ -1,5 +1,5 @@
 // js/pages/BackchatPage.js
-// ✅ PRODUCTION V7.0 - Complete Decentralized Social Network — UI Redesign
+// ✅ PRODUCTION V8.0 - Complete Decentralized Social Network — Viral Referral
 // ═══════════════════════════════════════════════════════════════════════════════
 //                          BACKCHAIN PROTOCOL
 //                    BACKCHAT - Unstoppable Social Network
@@ -39,7 +39,7 @@ const ethers = window.ethers;
 
 import { State } from '../state.js';
 import { showToast } from '../ui-feedback.js';
-import { addresses, ipfsGateway } from '../config.js';
+import { addresses, ipfsGateway, backchatABI } from '../config.js';
 import { formatBigNumber } from '../utils.js';
 
 // ============================================================================
@@ -61,59 +61,8 @@ function getOperatorAddress() {
 }
 
 // ============================================================================
-// ABI - Backchat V7.0.0
+// ABI - Backchat V8.0.0 (imported from config.js — single source of truth)
 // ============================================================================
-
-const backchatABI = [
-    // Profile
-    "function createProfile(string calldata username, string calldata displayName, string calldata bio, address operator) external payable",
-    "function updateProfile(string calldata displayName, string calldata bio) external",
-    "function getUsernameFee(uint256 length) public pure returns (uint256)",
-    "function isUsernameAvailable(string calldata username) external view returns (bool)",
-    "function getUsernameOwner(string calldata username) external view returns (address)",
-    
-    // Content
-    "function createPost(string calldata content, string calldata mediaCID, address operator) external payable returns (uint256 postId)",
-    "function createReply(uint256 parentId, string calldata content, string calldata mediaCID, address operator, uint256 tipBkc) external payable returns (uint256 postId)",
-    "function createRepost(uint256 originalPostId, address operator, uint256 tipBkc) external payable returns (uint256 postId)",
-    
-    // Engagement
-    "function like(uint256 postId, address operator, uint256 tipBkc) external payable",
-    "function superLike(uint256 postId, address operator, uint256 tipBkc) external payable",
-    "function follow(address toFollow, address operator, uint256 tipBkc) external payable",
-    "function unfollow(address toUnfollow) external",
-    
-    // Premium
-    "function boostProfile(address operator) external payable",
-    "function obtainBadge(address operator) external payable",
-    
-    // View
-    "function getCurrentFees() external view returns (uint256 postFee, uint256 replyFee, uint256 likeFee, uint256 followFee, uint256 repostFee, uint256 superLikeMin, uint256 boostMin, uint256 badgeFee_)",
-    "function isProfileBoosted(address user) external view returns (bool)",
-    "function hasTrustBadge(address user) external view returns (bool)",
-    "function hasUserLiked(uint256 postId, address user) external view returns (bool)",
-    "function getPendingBalance(address user) external view returns (uint256)",
-    "function postAuthor(uint256 postId) external view returns (address)",
-    "function postCounter() external view returns (uint256)",
-    "function boostExpiry(address user) external view returns (uint256)",
-    "function badgeExpiry(address user) external view returns (uint256)",
-    
-    // Withdrawal
-    "function withdraw() external",
-    "function pendingEth(address user) external view returns (uint256)",
-    
-    // Events
-    "event ProfileCreated(address indexed user, bytes32 indexed usernameHash, string username, string displayName, string bio, uint256 ethPaid, address indexed operator)",
-    "event PostCreated(uint256 indexed postId, address indexed author, string content, string mediaCID, address indexed operator)",
-    "event ReplyCreated(uint256 indexed postId, uint256 indexed parentId, address indexed author, string content, string mediaCID, uint256 tipBkc, address operator)",
-    "event RepostCreated(uint256 indexed newPostId, uint256 indexed originalPostId, address indexed reposter, uint256 tipBkc, address operator)",
-    "event Liked(uint256 indexed postId, address indexed user, uint256 tipBkc, address indexed operator)",
-    "event SuperLiked(uint256 indexed postId, address indexed user, uint256 ethAmount, uint256 tipBkc, address indexed operator)",
-    "event Followed(address indexed follower, address indexed followed, uint256 tipBkc, address indexed operator)",
-    "event Unfollowed(address indexed follower, address indexed followed)",
-    "event ProfileBoosted(address indexed user, uint256 amount, uint256 expiresAt, address indexed operator)",
-    "event BadgeObtained(address indexed user, uint256 expiresAt, address indexed operator)"
-];
 
 const bkcABI = [
     "function balanceOf(address) view returns (uint256)",
@@ -160,6 +109,10 @@ const BC = {
     boostExpiry: 0,
     badgeExpiry: 0,
     
+    // Referral (V8)
+    referralStats: null,     // { totalReferred, totalEarned, totalEarnedFormatted }
+    referredBy: null,        // address or null (address(0) means none)
+
     // Loading
     isLoading: false,
     isPosting: false,
@@ -731,7 +684,7 @@ function injectStyles() {
         
         .bc-profile-stats {
             display: grid;
-            grid-template-columns: repeat(3, 1fr);
+            grid-template-columns: repeat(auto-fit, minmax(0, 1fr));
             gap: 1px;
             margin-top: 20px;
             background: var(--bc-border);
@@ -791,6 +744,88 @@ function injectStyles() {
             font-weight: 600;
         }
         
+        /* ─── Referral Card (V8) ─── */
+        .bc-referral-card {
+            margin: 20px;
+            padding: 20px;
+            background: linear-gradient(145deg, rgba(139,92,246,0.1), rgba(59,130,246,0.05));
+            border: 1px solid rgba(139,92,246,0.2);
+            border-radius: var(--bc-radius-lg);
+            animation: bc-fadeIn 0.4s ease-out 0.15s both;
+        }
+        .bc-referral-header {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--bc-purple);
+            margin-bottom: 16px;
+        }
+        .bc-referral-link-box {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            background: var(--bc-bg);
+            border: 1px solid var(--bc-border);
+            border-radius: var(--bc-radius-sm);
+            padding: 10px 12px;
+            margin-bottom: 16px;
+        }
+        .bc-referral-link-text {
+            flex: 1;
+            font-size: 12px;
+            color: var(--bc-text-2);
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            font-family: monospace;
+        }
+        .bc-referral-link-box button {
+            flex-shrink: 0;
+            background: var(--bc-surface);
+            border: 1px solid var(--bc-border);
+            color: var(--bc-text);
+            padding: 6px 12px;
+            border-radius: var(--bc-radius-sm);
+            font-size: 12px;
+            cursor: pointer;
+            transition: all var(--bc-transition);
+        }
+        .bc-referral-link-box button:hover {
+            background: var(--bc-accent);
+            color: #000;
+            border-color: var(--bc-accent);
+        }
+        .bc-referral-stats-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+            margin-bottom: 16px;
+        }
+        .bc-referral-stat {
+            background: var(--bc-bg2);
+            border-radius: var(--bc-radius-sm);
+            padding: 12px;
+            text-align: center;
+        }
+        .bc-referral-stat-value {
+            font-size: 22px;
+            font-weight: 800;
+            color: var(--bc-text);
+        }
+        .bc-referral-stat-label {
+            font-size: 11px;
+            color: var(--bc-text-3);
+            margin-top: 2px;
+        }
+        .bc-referral-info {
+            font-size: 12px;
+            color: var(--bc-text-3);
+            line-height: 1.5;
+            text-align: center;
+        }
+
         /* ─── Section Header ─── */
         .bc-section-head {
             padding: 16px 20px;
@@ -1195,26 +1230,76 @@ async function loadFees() {
 
 async function loadUserStatus() {
     if (!State.isConnected || !State.userAddress) return;
-    
+
     try {
         const contract = getContract();
         if (!contract) return;
-        
-        const [pending, hasBadge, isBoosted, boostExp, badgeExp] = await Promise.all([
+
+        const [pending, hasBadge, isBoosted, boostExp, badgeExp, referredBy, referralStats] = await Promise.all([
             contract.getPendingBalance(State.userAddress).catch(() => 0n),
             contract.hasTrustBadge(State.userAddress).catch(() => false),
             contract.isProfileBoosted(State.userAddress).catch(() => false),
             contract.boostExpiry(State.userAddress).catch(() => 0),
-            contract.badgeExpiry(State.userAddress).catch(() => 0)
+            contract.badgeExpiry(State.userAddress).catch(() => 0),
+            contract.referredBy(State.userAddress).catch(() => ethers.ZeroAddress),
+            contract.getReferralStats(State.userAddress).catch(() => ({ totalReferred: 0n, totalEarned: 0n }))
         ]);
-        
+
         BC.pendingEth = pending;
         BC.hasBadge = hasBadge;
         BC.isBoosted = isBoosted;
         BC.boostExpiry = Number(boostExp);
         BC.badgeExpiry = Number(badgeExp);
+        BC.referredBy = (referredBy && referredBy !== ethers.ZeroAddress) ? referredBy : null;
+        BC.referralStats = {
+            totalReferred: Number(referralStats.totalReferred),
+            totalEarned: referralStats.totalEarned,
+            totalEarnedFormatted: ethers.formatEther(referralStats.totalEarned)
+        };
     } catch (e) {
         console.warn('Failed to load user status:', e.message);
+    }
+
+    // V8: Auto-set referrer from URL param (stored in localStorage by app.js)
+    await tryAutoSetReferrer();
+}
+
+/**
+ * V8: If the user arrived via a referral link, auto-register the referrer on-chain.
+ * Only runs once per user (contract enforces immutability).
+ */
+async function tryAutoSetReferrer() {
+    try {
+        if (!State.isConnected || !State.userAddress) return;
+        if (BC.referredBy) return; // already has a referrer on-chain
+
+        const storedRef = localStorage.getItem('backchain_referrer');
+        if (!storedRef) return;
+
+        // Don't self-refer
+        if (storedRef.toLowerCase() === State.userAddress.toLowerCase()) {
+            localStorage.removeItem('backchain_referrer');
+            return;
+        }
+
+        const contract = getSignedContract();
+        if (!contract) return;
+
+        console.log('[Referral] Auto-setting referrer:', storedRef);
+        const tx = await contract.setReferrer(storedRef);
+        showToast('Setting your referrer...', 'info');
+        await tx.wait();
+
+        BC.referredBy = storedRef;
+        localStorage.removeItem('backchain_referrer');
+        showToast('Referrer registered! They earn 30% of your fees.', 'success');
+        renderContent();
+    } catch (e) {
+        console.warn('[Referral] Auto-set failed:', e.message);
+        // If it reverted (already set), clean up localStorage
+        if (e.message?.includes('ReferrerAlreadySet') || e.message?.includes('already set')) {
+            localStorage.removeItem('backchain_referrer');
+        }
     }
 }
 
@@ -1781,9 +1866,13 @@ function renderProfile() {
                         <div class="bc-stat-value">${formatETH(BC.pendingEth)}</div>
                         <div class="bc-stat-label">Earned (ETH)</div>
                     </div>
+                    <div class="bc-stat-cell">
+                        <div class="bc-stat-value">${BC.referralStats?.totalReferred || 0}</div>
+                        <div class="bc-stat-label">Referrals</div>
+                    </div>
                 </div>
             </div>
-            
+
             ${BC.pendingEth > 0n ? `
                 <div class="bc-earnings-card">
                     <div class="bc-earnings-header">
@@ -1797,6 +1886,8 @@ function renderProfile() {
                     </button>
                 </div>
             ` : ''}
+
+            ${renderReferralCard()}
             
             <div class="bc-section-head">
                 <span class="bc-section-title"><i class="fa-solid fa-clock-rotate-left"></i> Your Posts</span>
@@ -1809,6 +1900,45 @@ function renderProfile() {
                   </div>`
                 : userPosts.map((p, i) => renderPost(p, i)).join('')
             }
+        </div>
+    `;
+}
+
+function renderReferralCard() {
+    if (!State.isConnected) return '';
+
+    const refLink = `${window.location.origin}/#backchat?ref=${State.userAddress}`;
+    const referred = BC.referralStats?.totalReferred || 0;
+    const earned = BC.referralStats?.totalEarnedFormatted || '0.0';
+
+    return `
+        <div class="bc-referral-card">
+            <div class="bc-referral-header">
+                <i class="fa-solid fa-link"></i> Viral Referral
+            </div>
+            <div class="bc-referral-link-box">
+                <span class="bc-referral-link-text" id="referral-link-text">${refLink}</span>
+                <button onclick="BackchatPage.copyReferralLink()">
+                    <i class="fa-solid fa-copy"></i> Copy
+                </button>
+            </div>
+            <div class="bc-referral-stats-row">
+                <div class="bc-referral-stat">
+                    <div class="bc-referral-stat-value">${referred}</div>
+                    <div class="bc-referral-stat-label">Referred</div>
+                </div>
+                <div class="bc-referral-stat">
+                    <div class="bc-referral-stat-value">${earned}</div>
+                    <div class="bc-referral-stat-label">ETH Earned</div>
+                </div>
+            </div>
+            <button class="bc-btn bc-btn-primary" style="width:100%;justify-content:center;" onclick="BackchatPage.shareReferral()">
+                <i class="fa-solid fa-share-nodes"></i> Share Referral Link
+            </button>
+            <div class="bc-referral-info" style="margin-top:12px;">
+                Earn 30% of all fees from users who join through your link.
+                ${BC.referredBy ? `<br>You were referred by <code style="font-size:11px;color:var(--bc-accent);">${shortenAddress(BC.referredBy)}</code>` : ''}
+            </div>
         </div>
     `;
 }
@@ -2092,6 +2222,27 @@ export const BackchatPage = {
     // Internal
     _updateCharCount,
     
+    // Referral (V8)
+    copyReferralLink() {
+        const link = `${window.location.origin}/#backchat?ref=${State.userAddress}`;
+        navigator.clipboard.writeText(link).then(
+            () => showToast('Referral link copied!', 'success'),
+            () => showToast('Failed to copy', 'error')
+        );
+    },
+    shareReferral() {
+        const link = `${window.location.origin}/#backchat?ref=${State.userAddress}`;
+        const text = 'Join Backchat — earn crypto by posting, liking, and referring friends! 30% referral rewards.';
+        if (navigator.share) {
+            navigator.share({ title: 'Backchat Referral', text, url: link }).catch(() => {});
+        } else {
+            navigator.clipboard.writeText(`${text}\n${link}`).then(
+                () => showToast('Referral message copied!', 'success'),
+                () => showToast('Failed to copy', 'error')
+            );
+        }
+    },
+
     // Navigation
     viewProfile(address) {
         showToast('Profile view coming soon!', 'info');

@@ -405,21 +405,48 @@ function setupGlobalListeners() {
  * Supports formats like:
  * - #charity
  * - #charity/campaign/6
+ * - #backchat?ref=0xABC...123  (viral referral)
  * - #dashboard
  */
 function getInitialPageFromHash() {
     const hash = window.location.hash.replace('#', '');
     if (!hash) return 'dashboard';
-    
-    // Get the base route (first part before any /)
-    const baseRoute = hash.split('/')[0];
-    
+
+    // Get the base route (first part before any / or ?)
+    const baseRoute = hash.split(/[/?]/)[0];
+
     // Check if it's a valid route
     if (routes[baseRoute]) {
         return baseRoute;
     }
-    
+
     return 'dashboard';
+}
+
+/**
+ * ✅ V8: Capture referral param from URL hash (?ref=0x...)
+ * Stores in localStorage for deferred execution (wallet may not be connected yet).
+ * The BackchatPage will consume it via setReferrer() when the user connects.
+ */
+function captureReferralParam() {
+    try {
+        const hash = window.location.hash;
+        const qIndex = hash.indexOf('?');
+        if (qIndex === -1) return;
+
+        const params = new URLSearchParams(hash.substring(qIndex));
+        const ref = params.get('ref');
+
+        if (ref && /^0x[a-fA-F0-9]{40}$/.test(ref)) {
+            const existing = localStorage.getItem('backchain_referrer');
+            if (!existing) {
+                localStorage.setItem('backchain_referrer', ref);
+                console.log('[Referral] Captured referrer from URL:', ref);
+            }
+        }
+    } catch (e) {
+        console.warn('[Referral] Failed to parse referral param:', e.message);
+    }
 }
 
 window.addEventListener('load', async () => {
@@ -448,6 +475,9 @@ window.addEventListener('load', async () => {
     const preloader = document.getElementById('preloader');
     if(preloader) preloader.style.display = 'none';
     
+    // ✅ V8: Capture referral param before navigation
+    captureReferralParam();
+
     // ✅ FIX: Navigate to the page specified in URL hash, or dashboard if none
     const initialPage = getInitialPageFromHash();
     console.log("📍 Initial page from URL:", initialPage, "Hash:", window.location.hash);
@@ -458,6 +488,7 @@ window.addEventListener('load', async () => {
 
 // ✅ FIX: Listen for hash changes (browser back/forward, direct URL changes)
 window.addEventListener('hashchange', () => {
+    captureReferralParam();
     const newPage = getInitialPageFromHash();
     const currentHash = window.location.hash;
     
