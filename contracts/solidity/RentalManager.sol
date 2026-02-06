@@ -927,10 +927,27 @@ contract RentalManager is
         uint256[] memory tokenIds,
         uint256[] memory endTimes
     ) {
-        uint256 length = listedTokenIds.length;
-        uint256 count;
+        return getUserActiveRentalsPaginated(_user, 0, 500);
+    }
 
-        for (uint256 i; i < length;) {
+    function getUserActiveRentalsPaginated(
+        address _user,
+        uint256 _offset,
+        uint256 _limit
+    ) public view returns (
+        uint256[] memory tokenIds,
+        uint256[] memory endTimes
+    ) {
+        uint256 length = listedTokenIds.length;
+        if (_offset >= length) {
+            return (new uint256[](0), new uint256[](0));
+        }
+
+        uint256 end = _offset + _limit;
+        if (end > length) end = length;
+
+        uint256 count;
+        for (uint256 i = _offset; i < end;) {
             uint256 tokenId = listedTokenIds[i];
             Rental storage rental = activeRentals[tokenId];
             if (rental.tenant == _user && rental.endTime > block.timestamp) {
@@ -943,7 +960,7 @@ contract RentalManager is
         endTimes = new uint256[](count);
 
         uint256 index;
-        for (uint256 i; i < length && index < count;) {
+        for (uint256 i = _offset; i < end && index < count;) {
             uint256 tokenId = listedTokenIds[i];
             Rental storage rental = activeRentals[tokenId];
             if (rental.tenant == _user && rental.endTime > block.timestamp) {
