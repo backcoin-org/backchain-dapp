@@ -156,7 +156,9 @@ contract BackchainGovernance is
 
     uint256 public timelockDelay;
 
-    bool public timelockEnabled;
+    /// @dev Deprecated: timelock is now determined by currentPhase >= Timelock.
+    /// Kept for storage layout compatibility with deployed proxy.
+    bool private __deprecated_timelockEnabled;
 
     uint256 public proposalCount;
 
@@ -208,8 +210,6 @@ contract BackchainGovernance is
 
     event TimelockDelayUpdated(uint256 previousDelay, uint256 newDelay);
 
-    event TimelockStatusChanged(bool enabled);
-
     event DAOEnabled(address indexed daoAddress);
 
     event ProposalCreated(
@@ -237,7 +237,7 @@ contract BackchainGovernance is
     error ZeroAddress();
     error InvalidPhase();
     error InvalidDelay();
-    error TimelockNotEnabled();
+    error TimelockActive();
     error ProposalNotReady();
     error ProposalAlreadyExecuted();
     error ProposalCancelledOrExpired();
@@ -297,10 +297,8 @@ contract BackchainGovernance is
                 revert InvalidDelay();
             }
             timelockDelay = _timelockDelay;
-            timelockEnabled = false;
         } else {
             timelockDelay = 48 hours;
-            timelockEnabled = false;
         }
     }
 
@@ -414,7 +412,6 @@ contract BackchainGovernance is
             currentPhase = GovernancePhase.Multisig;
         } else if (currentPhase == GovernancePhase.Multisig) {
             currentPhase = GovernancePhase.Timelock;
-            timelockEnabled = true;
         } else if (currentPhase == GovernancePhase.Timelock) {
             if (dao == address(0)) revert DAONotEnabled();
             currentPhase = GovernancePhase.DAO;
@@ -444,10 +441,10 @@ contract BackchainGovernance is
         emit TimelockDelayUpdated(previousDelay, _newDelay);
     }
 
-    function setTimelockEnabled(bool _enabled) external onlyAdmin {
-        timelockEnabled = _enabled;
-        
-        emit TimelockStatusChanged(_enabled);
+    /// @notice Timelock is now controlled by governance phase (irreversible).
+    /// Use advancePhase() to enable timelock. Cannot be disabled once active.
+    function isTimelockActive() public view returns (bool) {
+        return currentPhase >= GovernancePhase.Timelock;
     }
 
     // =========================================================================
@@ -547,13 +544,15 @@ contract BackchainGovernance is
     //                    DIRECT EXECUTION (NO TIMELOCK)
     // =========================================================================
 
+    /// @notice Direct execution only available in AdminOnly or Multisig phases.
+    /// Once timelock phase is reached, all actions must go through proposals.
     function executeDirectly(
         address _target,
         bytes calldata _data,
         uint256 _value
     ) external onlyGovernance nonReentrant returns (bytes memory) {
-        if (timelockEnabled && currentPhase >= GovernancePhase.Timelock) {
-            revert TimelockNotEnabled();
+        if (currentPhase >= GovernancePhase.Timelock) {
+            revert TimelockActive();
         }
 
         (bool success, bytes memory returnData) = _target.call{value: _value}(_data);
@@ -576,7 +575,7 @@ contract BackchainGovernance is
             _burnMiningBips
         );
 
-        if (timelockEnabled) {
+        if (isTimelockActive()) {
             _queueAndEmit(miningManager, data, 0, "Set burn rates");
         } else {
             (bool success, ) = miningManager.call(data);
@@ -594,7 +593,7 @@ contract BackchainGovernance is
             _bips
         );
 
-        if (timelockEnabled) {
+        if (isTimelockActive()) {
             _queueAndEmit(ecosystemManager, data, 0, "Set service fee");
         } else {
             (bool success, ) = ecosystemManager.call(data);
@@ -608,7 +607,7 @@ contract BackchainGovernance is
             _bips
         );
 
-        if (timelockEnabled) {
+        if (isTimelockActive()) {
             _queueAndEmit(miningManager, data, 0, "Set operator bips");
         } else {
             (bool success, ) = miningManager.call(data);
@@ -628,7 +627,7 @@ contract BackchainGovernance is
     function unpauseContract(address _contract) external onlyGovernance {
         bytes memory data = abi.encodeWithSignature("unpause()");
 
-        if (timelockEnabled) {
+        if (isTimelockActive()) {
             _queueAndEmit(_contract, data, 0, "Unpause contract");
         } else {
             (bool success, ) = _contract.call(data);
@@ -660,7 +659,7 @@ contract BackchainGovernance is
             _newOwner
         );
 
-        if (timelockEnabled) {
+        if (isTimelockActive()) {
             _queueAndEmit(_contract, data, 0, "Transfer contract ownership");
         } else {
             (bool success, ) = _contract.call(data);
@@ -715,7 +714,7 @@ contract BackchainGovernance is
             dao,
             currentPhase,
             timelockDelay,
-            timelockEnabled,
+            isTimelockActive(),
             proposalCount
         );
     }
