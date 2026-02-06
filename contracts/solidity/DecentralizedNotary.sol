@@ -177,6 +177,7 @@ contract DecentralizedNotary is
     error CoreContractNotSet();
     error InsufficientETHFee();
     error TransferFailed();
+    error HashAlreadyExists();
 
     // =========================================================================
     //                              STATE
@@ -375,7 +376,10 @@ contract DecentralizedNotary is
             timestamp: block.timestamp
         });
 
-        // Register reverse lookup
+        // Register reverse lookup (prevent duplicate content hashes)
+        if (_contentHash != bytes32(0) && hashToTokenId[_contentHash] != 0) {
+            revert HashAlreadyExists();
+        }
         hashToTokenId[_contentHash] = tokenId;
 
         notarizationFeePaid[tokenId] = bkcFeeToPay;
