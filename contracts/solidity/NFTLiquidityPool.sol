@@ -199,6 +199,7 @@ contract NFTLiquidityPool is
     error NFTBoostMismatch();
     error InsufficientETHFee();
     error TransferFailed();
+    error MiningManagerCallFailed();
 
     // =========================================================================
     //                              STATE
@@ -803,15 +804,18 @@ contract NFTLiquidityPool is
         address _operator
     ) internal {
         address miningManager = ecosystemManager.getMiningManagerAddress();
-        if (miningManager != address(0) && _amount > 0) {
-            bkcToken.safeTransfer(miningManager, _amount);
+        if (miningManager == address(0)) revert ZeroAddress();
+        if (_amount == 0) return;
 
-            try IMiningManagerV3(miningManager).performPurchaseMiningWithOperator(
-                _taxKey,
-                _amount,
-                _operator
-            ) {} catch {}
-        }
+        bkcToken.safeTransfer(miningManager, _amount);
+
+        // Propagate revert: if MiningManager rejects, the entire tx reverts
+        // preventing BKC from being sent without proper distribution accounting
+        IMiningManagerV3(miningManager).performPurchaseMiningWithOperator(
+            _taxKey,
+            _amount,
+            _operator
+        );
     }
 
     function _addTokenToPool(uint256 _tokenId) internal {
@@ -843,20 +847,18 @@ contract NFTLiquidityPool is
     function _sendETHToMining(uint256 _amount, address _operator) internal {
         if (_amount == 0) return;
 
-        unchecked {
-            totalETHCollected += _amount;
-        }
+        totalETHCollected += _amount;
 
         address miningManager = ecosystemManager.getMiningManagerAddress();
-        if (miningManager != address(0)) {
-            try IMiningManagerV3(miningManager).performPurchaseMiningWithOperator{value: _amount}(
-                BUY_TAX_KEY,
-                0,
-                _operator
-            ) {} catch {
-                // Fallback: keep in contract (can be recovered by owner)
-            }
-        }
+        if (miningManager == address(0)) revert ZeroAddress();
+
+        // Propagate revert: if MiningManager rejects, entire tx reverts
+        // preventing ETH from being stuck in pool without accounting
+        IMiningManagerV3(miningManager).performPurchaseMiningWithOperator{value: _amount}(
+            BUY_TAX_KEY,
+            0,
+            _operator
+        );
     }
 
     /// @notice Validates that boost value is one of the valid tiers
