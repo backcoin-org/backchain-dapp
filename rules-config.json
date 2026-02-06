@@ -1,8 +1,8 @@
 {
-  "VERSION": "6.9.0",
-  "DESCRIPTION": "Backchain Ecosystem V6.9 - Backchat V7 (Non-Upgradeable)",
+  "VERSION": "7.0.0",
+  "DESCRIPTION": "Backchain Ecosystem V7.0 - Backchat V8 (Viral Referral)",
   "NETWORK": "arbitrumSepolia",
-  "CREATED_AT": "2026-02-02T14:27:08.362Z",
+  "CREATED_AT": "2026-02-06T20:33:47.166Z",
   "externalContracts": {
     "BACKCOIN_ORACLE": "0x16346f5a45f9615f1c894414989f0891c54ef07b"
   },
@@ -16,18 +16,18 @@
     "TIMELOCK_ENABLED": false,
     "TIMELOCK_DELAY_SECONDS": "172800",
     "GOVERNANCE_PHASE": 0,
-    "GOVERNANCE_ADDRESS": "0x157e08d5F5a776A530227f548d0f0C47682b7A3E"
+    "GOVERNANCE_ADDRESS": "0x9500ea3241D8fc7Ac4a6cA35721351a601C1D21f"
   },
   "features": {
     "METAADS_ENABLED": true,
     "BACKCHAT_ENABLED": true,
-    "BACKCHAT_VERSION": "V7.0.0 (Non-Upgradeable)"
+    "BACKCHAT_VERSION": "V8.0.0 (Non-Upgradeable, Viral Referral)"
   },
   "miningDistribution": {
     "TREASURY": "3000",
     "DELEGATOR_POOL": "7000"
   },
-  "LAST_UPDATED": "2026-02-02T14:35:14.901Z",
+  "LAST_UPDATED": "2026-02-06T20:43:02.513Z",
   "feeDistribution": {
     "TREASURY": "3000",
     "DELEGATOR_POOL": "7000"
@@ -44,7 +44,7 @@
   },
   "backchat": {
     "SERVICE_KEY": "BACKCHAT_SERVICE",
-    "VERSION": "V7.0.0 (Non-Upgradeable)",
+    "VERSION": "V8.0.0 (Non-Upgradeable, Viral Referral)",
     "CONFIG_TYPE": "HARDCODED_CONSTANTS"
   },
   "charityPool": {
