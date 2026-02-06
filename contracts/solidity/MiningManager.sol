@@ -255,11 +255,21 @@ contract MiningManager is
     mapping(address => uint256) public operatorTotalClaimedETH;
 
     // =========================================================================
+    //                     STATE V3.1 - Pending Operator Totals
+    // =========================================================================
+
+    /// @notice Total BKC pending across all operators (protects recoverTokens)
+    uint256 public totalPendingOperatorBKC;
+
+    /// @notice Total ETH pending across all operators (protects recoverETH)
+    uint256 public totalPendingOperatorETH;
+
+    // =========================================================================
     //                         STORAGE GAP
     // =========================================================================
 
     /// @dev Reserved storage slots for future upgrades
-    uint256[44] private __gap;
+    uint256[42] private __gap;
 
     // =========================================================================
     //                              EVENTS
@@ -340,6 +350,7 @@ contract MiningManager is
     error NothingToClaim();
     error ETHTransferFailed();
     error ArrayLengthMismatch();
+    error InsufficientRecoverable();
 
     // =========================================================================
     //                           INITIALIZATION
@@ -558,6 +569,7 @@ contract MiningManager is
 
                 // Accumulate for operator (gas efficient - no transfer)
                 operatorBalances[_operator].pendingETH += ethToOperator;
+                totalPendingOperatorETH += ethToOperator;
             } else {
                 ethToTreasury = ethReceived;
             }
@@ -601,6 +613,7 @@ contract MiningManager is
 
             // Accumulate for operator (gas efficient - no transfer)
             operatorBalances[_operator].pendingBKC += bkcToOperator;
+            totalPendingOperatorBKC += bkcToOperator;
 
             emit OperatorEarningsAccumulated(
                 _serviceKey,
@@ -769,6 +782,10 @@ contract MiningManager is
         // Clear balances first (reentrancy protection)
         balance.pendingBKC = 0;
         balance.pendingETH = 0;
+
+        // Decrement pending totals
+        totalPendingOperatorBKC -= bkcAmount;
+        totalPendingOperatorETH -= ethAmount;
 
         // Update totals
         if (bkcAmount > 0) {
@@ -1019,6 +1036,14 @@ contract MiningManager is
     ) external onlyOwner {
         if (_to == address(0)) revert ZeroAddress();
 
+        // Protect operator pending BKC earnings
+        if (_token == bkcTokenAddress) {
+            uint256 balance = IERC20Upgradeable(_token).balanceOf(address(this));
+            if (_amount > balance - totalPendingOperatorBKC) {
+                revert InsufficientRecoverable();
+            }
+        }
+
         IERC20Upgradeable(_token).transfer(_to, _amount);
 
         emit TokensRecovered(_token, _to, _amount);
@@ -1032,6 +1057,10 @@ contract MiningManager is
      */
     function recoverETH(address _to, uint256 _amount) external onlyOwner {
         if (_to == address(0)) revert ZeroAddress();
+
+        // Protect operator pending ETH earnings
+        uint256 available = address(this).balance - totalPendingOperatorETH;
+        if (_amount > available) revert InsufficientRecoverable();
 
         _safeTransferETH(_to, _amount);
 
