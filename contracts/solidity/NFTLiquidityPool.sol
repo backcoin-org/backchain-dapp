@@ -409,8 +409,10 @@ contract NFTLiquidityPool is
     function removeBKCLiquidity(uint256 _amount) external onlyOwner nonReentrant {
         if (_amount > pool.bkcBalance) revert InsufficientLiquidity();
 
-        // Safe: _amount <= pool.bkcBalance checked above
-        pool.bkcBalance -= _amount;
+        uint256 newBalance = pool.bkcBalance - _amount;
+        if (pool.nftCount > 0 && newBalance == 0) revert InsufficientLiquidity();
+
+        pool.bkcBalance = newBalance;
         pool.k = pool.nftCount * pool.bkcBalance;
 
         bkcToken.safeTransfer(msg.sender, _amount);
@@ -451,10 +453,15 @@ contract NFTLiquidityPool is
      * @param _operator Address of the frontend operator
      * @return tokenId The purchased NFT token ID
      */
-    function buyNFT(address _operator) external payable nonReentrant returns (uint256 tokenId) {
+    function buyNFT(uint256 _maxPrice, address _operator) external payable nonReentrant returns (uint256 tokenId) {
         if (!pool.initialized) revert PoolNotInitialized();
         if (pool.nftCount == 0) revert InsufficientNFTs();
         if (msg.value < buyEthFee) revert InsufficientETHFee();
+
+        if (_maxPrice > 0) {
+            uint256 totalCost = getBuyPriceWithTax();
+            if (totalCost > _maxPrice) revert SlippageExceeded();
+        }
 
         tokenId = pool.tokenIds[pool.tokenIds.length - 1];
 
@@ -473,11 +480,17 @@ contract NFTLiquidityPool is
      */
     function buySpecificNFT(
         uint256 _tokenId,
+        uint256 _maxPrice,
         address _operator
     ) external payable nonReentrant {
         if (!pool.initialized) revert PoolNotInitialized();
         if (pool.nftCount == 0) revert InsufficientNFTs();
         if (msg.value < buyEthFee) revert InsufficientETHFee();
+
+        if (_maxPrice > 0) {
+            uint256 totalCost = getBuyPriceWithTax();
+            if (totalCost > _maxPrice) revert SlippageExceeded();
+        }
 
         if (!_isTokenInPool(_tokenId)) revert NFTNotInPool();
 

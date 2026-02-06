@@ -289,8 +289,8 @@ interface INFTLiquidityPool {
     function removeBKCLiquidity(uint256 _amount) external;
 
     // Trading Functions (V2 with operators)
-    function buyNFT(address _operator) external payable returns (uint256 tokenId);
-    function buySpecificNFT(uint256 _tokenId, address _operator) external payable;
+    function buyNFT(uint256 _maxPrice, address _operator) external payable returns (uint256 tokenId);
+    function buySpecificNFT(uint256 _tokenId, uint256 _maxPrice, address _operator) external payable;
     function buyNFTWithSlippage(uint256 _maxPrice, address _operator) external payable returns (uint256 tokenId);
     function sellNFT(uint256 _tokenId, uint256 _minPayout, address _operator) external payable;
 
