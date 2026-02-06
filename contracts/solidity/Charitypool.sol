@@ -179,6 +179,7 @@ contract CharityPool is
 
     uint96 private constant MAX_BKC_FEE = 10_000e18;
     uint96 private constant MAX_ETH_FEE = 1 ether;
+    uint96 public constant MAX_GOAL_AMOUNT = 1_000 ether;
 
     // ========================================================================
     //                              ENUMS
@@ -409,7 +410,7 @@ contract CharityPool is
         if (bytes(_title).length == 0) revert EmptyTitle();
         if (bytes(_title).length > MAX_TITLE) revert TitleTooLong();
         if (bytes(_description).length > MAX_DESCRIPTION) revert DescriptionTooLong();
-        if (_goalAmount == 0) revert InvalidGoal();
+        if (_goalAmount == 0 || _goalAmount > MAX_GOAL_AMOUNT) revert InvalidGoal();
         
         uint256 duration = _durationDays * 1 days;
         if (duration < MIN_DURATION || duration > MAX_DURATION) revert InvalidDuration();

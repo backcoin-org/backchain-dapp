@@ -365,6 +365,7 @@ contract EcosystemManager is
     // =========================================================================
 
     function setModule(bytes32 _moduleKey, address _moduleAddress) external onlyOwner {
+        if (_moduleAddress == address(0)) revert ZeroAddress();
         address previousAddress = moduleRegistry[_moduleKey];
         moduleRegistry[_moduleKey] = _moduleAddress;
 

@@ -338,6 +338,11 @@ contract DecentralizedNotary is
         if (bytes(_ipfsCid).length == 0) revert EmptyMetadata();
         if (msg.value < notarizationFeeETH) revert InsufficientETHFee();
 
+        // Validate content hash uniqueness BEFORE minting
+        if (_contentHash != bytes32(0) && hashToTokenId[_contentHash] != 0) {
+            revert HashAlreadyExists();
+        }
+
         // Get BKC fee (same for all users - NO discount)
         uint256 bkcFeeToPay = ecosystemManager.getFee(SERVICE_KEY);
 
@@ -372,11 +377,6 @@ contract DecentralizedNotary is
             contentHash: _contentHash,
             timestamp: block.timestamp
         });
-
-        // Register reverse lookup (prevent duplicate content hashes)
-        if (_contentHash != bytes32(0) && hashToTokenId[_contentHash] != 0) {
-            revert HashAlreadyExists();
-        }
         hashToTokenId[_contentHash] = tokenId;
 
         notarizationFeePaid[tokenId] = bkcFeeToPay;
