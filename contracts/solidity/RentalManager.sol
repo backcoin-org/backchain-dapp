@@ -689,6 +689,9 @@ contract RentalManager is
         Listing storage listing = listings[_tokenId];
         if (!listing.isActive) revert NFTNotListed();
 
+        // Enforce listing's minHours constraint (renting for 1 hour)
+        if (listing.minHours > 1) revert InvalidHoursRange();
+
         if (activeRentals[_tokenId].endTime > block.timestamp) {
             revert RentalStillActive();
         }
