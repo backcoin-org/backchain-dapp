@@ -1,1 +1,4368 @@
-{}
+{
+  "manifestVersion": "3.2",
+  "proxies": [
+    {
+      "address": "0x00a813030eC30A428CBA87990633609304A54c73",
+      "txHash": "0xf3f47ce98ea159431fb1ff66fb6f44178b035599dc9f7cc90cc3505cf08d0ca4",
+      "kind": "uups"
+    },
+    {
+      "address": "0x29206246e907f4FEDb52ad78c6926C7408a55a2e",
+      "txHash": "0x305a02413951847dc04245172542331038a701b9be65ff5ed6b89a5b819b9205",
+      "kind": "uups"
+    },
+    {
+      "address": "0x4cc003A50515F5067be52CA8DD8EDF4a5B864d04",
+      "txHash": "0x9392eef1a2d093b2546929336f8d6d99028e75b1a7f94a07dfe2330af0d4794a",
+      "kind": "uups"
+    },
+    {
+      "address": "0x7A2Fd3AbC9A7472e06Fa76B0Fbc80a80b8cfDC94",
+      "txHash": "0xb2f566faec59462140c39a2a26cc67d6214558ab3bd9a87dad6b6df0c25973a8",
+      "kind": "uups"
+    },
+    {
+      "address": "0xA12327b33a0D6ea2c7668C006d7059B756aa515D",
+      "txHash": "0x419591f569876890840cb0bed0f70454143bc836be633edcf55054d4b0d83a26",
+      "kind": "uups"
+    },
+    {
+      "address": "0x57eA60516D49FF30c743a35070815903A1E85043",
+      "txHash": "0x369cab709a27ca78cf8125690c9ef2c23d32cd24f0be3886d655f8a63de5d2b5",
+      "kind": "uups"
+    },
+    {
+      "address": "0x3a076C61A45E4Bb58d27BFF4dA0dAfD2c12C0DB3",
+      "txHash": "0xb0821a53c47d346f001fc5bede3e66168319a36940a9f1f9def34fa4cff6aaf9",
+      "kind": "uups"
+    },
+    {
+      "address": "0x277dB00d533Bbc0fc267bbD954640aDA38ee6B37",
+      "txHash": "0xb6cc048189f7ba40d4c4c54bef28a2aca6a56c00ee21c75b39cf2e88105f61e2",
+      "kind": "uups"
+    },
+    {
+      "address": "0x60454B1F4404cF12D20cb0CC9372C6FE1e87B8D2",
+      "txHash": "0xba3d7b61fe5d65710d852ac02d539000e56f8cd12e7a7eae69c6feb027553449",
+      "kind": "uups"
+    },
+    {
+      "address": "0x792D836770Cb78Ed93c3e2A3a7f2017E5e3e0739",
+      "txHash": "0x2eadbc14997287410aada896d4f503a8d6466f9bfea87894784bd4d2d58e303a",
+      "kind": "uups"
+    },
+    {
+      "address": "0x7fDE800497693caB0cBde8bc734604b8f3e7c1E7",
+      "txHash": "0xe67f235d64c2f99c8cc271144d62e4386549c4f0443ff733e48c63286f6fbd5c",
+      "kind": "uups"
+    },
+    {
+      "address": "0x6C66363FA6b0dbE198F03b91244FE810e45AAeaB",
+      "txHash": "0x218a6706671332d93908b66c24bdf396bd589b6975c84e462f14620bb80264b7",
+      "kind": "uups"
+    },
+    {
+      "address": "0x0C3bfE0344175D792ab4bbB438BE98EB1297AE2B",
+      "txHash": "0x115ebd63b19f578e84f493eef07b764ec2340fda64dd954d750270d83f608c3f",
+      "kind": "uups"
+    }
+  ],
+  "impls": {
+    "f04b13863bbc8e963bbfcf7d7b941b221c8b5e5d05bbad9d54cb6bf5c1bc4319": {
+      "address": "0x4Cd05014b37BfaCa8622F9ce3454B44fDC1be2c0",
+      "txHash": "0x381c05c188f8c4e560674e0570f6f8b2a072c8097342ca14d3767e0a68818aff",
+      "layout": {
+        "solcVersion": "0.8.28",
+        "storage": [
+          {
+            "label": "_initialized",
+            "offset": 0,
+            "slot": "0",
+            "type": "t_uint8",
+            "contract": "Initializable",
+            "src": "@openzeppelin\\contracts-upgradeable\\proxy\\utils\\Initializable.sol:63",
+            "retypedFrom": "bool"
+          },
+          {
+            "label": "_initializing",
+            "offset": 1,
+            "slot": "0",
+            "type": "t_bool",
+            "contract": "Initializable",
+            "src": "@openzeppelin\\contracts-upgradeable\\proxy\\utils\\Initializable.sol:68"
+          },
+          {
+            "label": "__gap",
+            "offset": 0,
+            "slot": "1",
+            "type": "t_array(t_uint256)50_storage",
+            "contract": "ContextUpgradeable",
+            "src": "@openzeppelin\\contracts-upgradeable\\utils\\ContextUpgradeable.sol:36"
+          },
+          {
+            "label": "_balances",
+            "offset": 0,
+            "slot": "51",
+            "type": "t_mapping(t_address,t_uint256)",
+            "contract": "ERC20Upgradeable",
+            "src": "@openzeppelin\\contracts-upgradeable\\token\\ERC20\\ERC20Upgradeable.sol:40"
+          },
+          {
+            "label": "_allowances",
+            "offset": 0,
+            "slot": "52",
+            "type": "t_mapping(t_address,t_mapping(t_address,t_uint256))",
+            "contract": "ERC20Upgradeable",
+            "src": "@openzeppelin\\contracts-upgradeable\\token\\ERC20\\ERC20Upgradeable.sol:42"
+          },
+          {
+            "label": "_totalSupply",
+            "offset": 0,
+            "slot": "53",
+            "type": "t_uint256",
+            "contract": "ERC20Upgradeable",
+            "src": "@openzeppelin\\contracts-upgradeable\\token\\ERC20\\ERC20Upgradeable.sol:44"
+          },
+          {
+            "label": "_name",
+            "offset": 0,
+            "slot": "54",
+            "type": "t_string_storage",
+            "contract": "ERC20Upgradeable",
+            "src": "@openzeppelin\\contracts-upgradeable\\token\\ERC20\\ERC20Upgradeable.sol:46"
+          },
+          {
+            "label": "_symbol",
+            "offset": 0,
+            "slot": "55",
+            "type": "t_string_storage",
+            "contract": "ERC20Upgradeable",
+            "src": "@openzeppelin\\contracts-upgradeable\\token\\ERC20\\ERC20Upgradeable.sol:47"
+          },
+          {
+            "label": "__gap",
+            "offset": 0,
+            "slot": "56",
+            "type": "t_array(t_uint256)45_storage",
+            "contract": "ERC20Upgradeable",
+            "src": "@openzeppelin\\contracts-upgradeable\\token\\ERC20\\ERC20Upgradeable.sol:376"
+          },
+          {
+            "label": "_owner",
+            "offset": 0,
+            "slot": "101",
+            "type": "t_address",
+            "contract": "OwnableUpgradeable",
+            "src": "@openzeppelin\\contracts-upgradeable\\access\\OwnableUpgradeable.sol:22"
+          },
+          {
+            "label": "__gap",
+            "offset": 0,
+            "slot": "102",
+            "type": "t_array(t_uint256)49_storage",
+            "contract": "OwnableUpgradeable",
+            "src": "@openzeppelin\\contracts-upgradeable\\access\\OwnableUpgradeable.sol:94"
+          },
+          {
+            "label": "__gap",
+            "offset": 0,
+            "slot": "151",
+            "type": "t_array(t_uint256)50_storage",
+            "contract": "ERC1967UpgradeUpgradeable",
+            "src": "@openzeppelin\\contracts-upgradeable\\proxy\\ERC1967\\ERC1967UpgradeUpgradeable.sol:169"
+          },
+          {
+            "label": "__gap",
+            "offset": 0,
+            "slot": "201",
+            "type": "t_array(t_uint256)50_storage",
+            "contract": "UUPSUpgradeable",
+            "src": "@openzeppelin\\contracts-upgradeable\\proxy\\utils\\UUPSUpgradeable.sol:111"
+          },
+          {
+            "label": "__deprecated_slot_blacklisted",
+            "offset": 0,
+            "slot": "251",
+            "type": "t_uint256",
+            "contract": "BKCToken",
+            "src": "contracts\\solidity\\BKCToken.sol:140"
+          },
+          {
+            "label": "totalBurned",
+            "offset": 0,
+            "slot": "252",
+            "type": "t_uint256",
+            "contract": "BKCToken",
+            "src": "contracts\\solidity\\BKCToken.sol:142"
+          },
+          {
+            "label": "__gap",
+            "offset": 0,
+            "slot": "253",
+            "type": "t_array(t_uint256)48_storage",
+            "contract": "BKCToken",
+            "src": "contracts\\solidity\\BKCToken.sol:147"
+          }
+        ],
+        "types": {
+          "t_address": {
+            "label": "address",
+            "numberOfBytes": "20"
+          },
+          "t_struct(TimelockStorage)8105_storage": {
+            "label": "struct TimelockUpgradeable.TimelockStorage",
+            "members": [
+              {
+                "label": "pendingImplementation",
+                "type": "t_address",
+                "offset": 0,
+                "slot": "0"
+              },
+              {
+                "label": "upgradeReadyAt",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "1"
+              }
+            ],
+            "numberOfBytes": "64"
+          },
+          "t_uint256": {
+            "label": "uint256",
+            "numberOfBytes": "32"
+          },
+          "t_array(t_uint256)45_storage": {
+            "label": "uint256[45]",
+            "numberOfBytes": "1440"
+          },
+          "t_array(t_uint256)48_storage": {
+            "label": "uint256[48]",
+            "numberOfBytes": "1536"
+          },
+          "t_array(t_uint256)49_storage": {
+            "label": "uint256[49]",
+            "numberOfBytes": "1568"
+          },
+          "t_array(t_uint256)50_storage": {
+            "label": "uint256[50]",
+            "numberOfBytes": "1600"
+          },
+          "t_bool": {
+            "label": "bool",
+            "numberOfBytes": "1"
+          },
+          "t_mapping(t_address,t_mapping(t_address,t_uint256))": {
+            "label": "mapping(address => mapping(address => uint256))",
+            "numberOfBytes": "32"
+          },
+          "t_mapping(t_address,t_uint256)": {
+            "label": "mapping(address => uint256)",
+            "numberOfBytes": "32"
+          },
+          "t_string_storage": {
+            "label": "string",
+            "numberOfBytes": "32"
+          },
+          "t_uint8": {
+            "label": "uint8",
+            "numberOfBytes": "1"
+          }
+        },
+        "namespaces": {
+          "erc7201:backchain.storage.TimelockUpgradeable": [
+            {
+              "contract": "TimelockUpgradeable",
+              "label": "pendingImplementation",
+              "type": "t_address",
+              "src": "contracts\\solidity\\TimelockUpgradeable.sol:65",
+              "offset": 0,
+              "slot": "0"
+            },
+            {
+              "contract": "TimelockUpgradeable",
+              "label": "upgradeReadyAt",
+              "type": "t_uint256",
+              "src": "contracts\\solidity\\TimelockUpgradeable.sol:66",
+              "offset": 0,
+              "slot": "1"
+            }
+          ]
+        }
+      }
+    },
+    "b25c46884f74c0add0f2f7feb2a07587863e3c4849d47859e2c93ed5cf19ecf6": {
+      "address": "0xa1edF764d7ba4Cd82d6C75188386Fb5927578b95",
+      "txHash": "0x31830fe7fba7d8e691264131d9690fb3239005ff30b3bc57f671c437749bd260",
+      "layout": {
+        "solcVersion": "0.8.28",
+        "storage": [
+          {
+            "label": "_initialized",
+            "offset": 0,
+            "slot": "0",
+            "type": "t_uint8",
+            "contract": "Initializable",
+            "src": "@openzeppelin\\contracts-upgradeable\\proxy\\utils\\Initializable.sol:63",
+            "retypedFrom": "bool"
+          },
+          {
+            "label": "_initializing",
+            "offset": 1,
+            "slot": "0",
+            "type": "t_bool",
+            "contract": "Initializable",
+            "src": "@openzeppelin\\contracts-upgradeable\\proxy\\utils\\Initializable.sol:68"
+          },
+          {
+            "label": "__gap",
+            "offset": 0,
+            "slot": "1",
+            "type": "t_array(t_uint256)50_storage",
+            "contract": "ERC1967UpgradeUpgradeable",
+            "src": "@openzeppelin\\contracts-upgradeable\\proxy\\ERC1967\\ERC1967UpgradeUpgradeable.sol:169"
+          },
+          {
+            "label": "__gap",
+            "offset": 0,
+            "slot": "51",
+            "type": "t_array(t_uint256)50_storage",
+            "contract": "UUPSUpgradeable",
+            "src": "@openzeppelin\\contracts-upgradeable\\proxy\\utils\\UUPSUpgradeable.sol:111"
+          },
+          {
+            "label": "__gap",
+            "offset": 0,
+            "slot": "101",
+            "type": "t_array(t_uint256)50_storage",
+            "contract": "ContextUpgradeable",
+            "src": "@openzeppelin\\contracts-upgradeable\\utils\\ContextUpgradeable.sol:36"
+          },
+          {
+            "label": "_owner",
+            "offset": 0,
+            "slot": "151",
+            "type": "t_address",
+            "contract": "OwnableUpgradeable",
+            "src": "@openzeppelin\\contracts-upgradeable\\access\\OwnableUpgradeable.sol:22"
+          },
+          {
+            "label": "__gap",
+            "offset": 0,
+            "slot": "152",
+            "type": "t_array(t_uint256)49_storage",
+            "contract": "OwnableUpgradeable",
+            "src": "@openzeppelin\\contracts-upgradeable\\access\\OwnableUpgradeable.sol:94"
+          },
+          {
+            "label": "bkcTokenAddress",
+            "offset": 0,
+            "slot": "201",
+            "type": "t_address",
+            "contract": "EcosystemManager",
+            "src": "contracts\\solidity\\EcosystemManager.sol:284"
+          },
+          {
+            "label": "treasuryWallet",
+            "offset": 0,
+            "slot": "202",
+            "type": "t_address",
+            "contract": "EcosystemManager",
+            "src": "contracts\\solidity\\EcosystemManager.sol:284"
+          },
+          {
+            "label": "delegationManagerAddress",
+            "offset": 0,
+            "slot": "203",
+            "type": "t_address",
+            "contract": "EcosystemManager",
+            "src": "contracts\\solidity\\EcosystemManager.sol:285"
+          },
+          {
+            "label": "rewardBoosterAddress",
+            "offset": 0,
+            "slot": "204",
+            "type": "t_address",
+            "contract": "EcosystemManager",
+            "src": "contracts\\solidity\\EcosystemManager.sol:286"
+          },
+          {
+            "label": "miningManagerAddress",
+            "offset": 0,
+            "slot": "205",
+            "type": "t_address",
+            "contract": "EcosystemManager",
+            "src": "contracts\\solidity\\EcosystemManager.sol:286"
+          },
+          {
+            "label": "decentralizedNotaryAddress",
+            "offset": 0,
+            "slot": "206",
+            "type": "t_address",
+            "contract": "EcosystemManager",
+            "src": "contracts\\solidity\\EcosystemManager.sol:288"
+          },
+          {
+            "label": "fortunePoolAddress",
+            "offset": 0,
+            "slot": "207",
+            "type": "t_address",
+            "contract": "EcosystemManager",
+            "src": "contracts\\solidity\\EcosystemManager.sol:290"
+          },
+          {
+            "label": "nftLiquidityPoolFactoryAddress",
+            "offset": 0,
+            "slot": "208",
+            "type": "t_address",
+            "contract": "EcosystemManager",
+            "src": "contracts\\solidity\\EcosystemManager.sol:291"
+          },
+          {
+            "label": "rentalManagerAddress",
+            "offset": 0,
+            "slot": "209",
+            "type": "t_address",
+            "contract": "EcosystemManager",
+            "src": "contracts\\solidity\\EcosystemManager.sol:293"
+          },
+          {
+            "label": "moduleRegistry",
+            "offset": 0,
+            "slot": "210",
+            "type": "t_mapping(t_bytes32,t_address)",
+            "contract": "EcosystemManager",
+            "src": "contracts\\solidity\\EcosystemManager.sol:308"
+          },
+          {
+            "label": "serviceFees",
+            "offset": 0,
+            "slot": "211",
+            "type": "t_mapping(t_bytes32,t_uint256)",
+            "contract": "EcosystemManager",
+            "src": "contracts\\solidity\\EcosystemManager.sol:323"
+          },
+          {
+            "label": "miningDistributionBips",
+            "offset": 0,
+            "slot": "212",
+            "type": "t_mapping(t_bytes32,t_uint256)",
+            "contract": "EcosystemManager",
+            "src": "contracts\\solidity\\EcosystemManager.sol:324"
+          },
+          {
+            "label": "feeDistributionBips",
+            "offset": 0,
+            "slot": "213",
+            "type": "t_mapping(t_bytes32,t_uint256)",
+            "contract": "EcosystemManager",
+            "src": "contracts\\solidity\\EcosystemManager.sol:327"
+          },
+          {
+            "label": "__gap",
+            "offset": 0,
+            "slot": "214",
+            "type": "t_array(t_uint256)41_storage",
+            "contract": "EcosystemManager",
+            "src": "contracts\\solidity\\EcosystemManager.sol:332"
+          }
+        ],
+        "types": {
+          "t_address": {
+            "label": "address",
+            "numberOfBytes": "20"
+          },
+          "t_struct(TimelockStorage)8105_storage": {
+            "label": "struct TimelockUpgradeable.TimelockStorage",
+            "members": [
+              {
+                "label": "pendingImplementation",
+                "type": "t_address",
+                "offset": 0,
+                "slot": "0"
+              },
+              {
+                "label": "upgradeReadyAt",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "1"
+              }
+            ],
+            "numberOfBytes": "64"
+          },
+          "t_uint256": {
+            "label": "uint256",
+            "numberOfBytes": "32"
+          },
+          "t_array(t_uint256)41_storage": {
+            "label": "uint256[41]",
+            "numberOfBytes": "1312"
+          },
+          "t_array(t_uint256)49_storage": {
+            "label": "uint256[49]",
+            "numberOfBytes": "1568"
+          },
+          "t_array(t_uint256)50_storage": {
+            "label": "uint256[50]",
+            "numberOfBytes": "1600"
+          },
+          "t_bool": {
+            "label": "bool",
+            "numberOfBytes": "1"
+          },
+          "t_bytes32": {
+            "label": "bytes32",
+            "numberOfBytes": "32"
+          },
+          "t_mapping(t_bytes32,t_address)": {
+            "label": "mapping(bytes32 => address)",
+            "numberOfBytes": "32"
+          },
+          "t_mapping(t_bytes32,t_uint256)": {
+            "label": "mapping(bytes32 => uint256)",
+            "numberOfBytes": "32"
+          },
+          "t_uint8": {
+            "label": "uint8",
+            "numberOfBytes": "1"
+          }
+        },
+        "namespaces": {
+          "erc7201:backchain.storage.TimelockUpgradeable": [
+            {
+              "contract": "TimelockUpgradeable",
+              "label": "pendingImplementation",
+              "type": "t_address",
+              "src": "contracts\\solidity\\TimelockUpgradeable.sol:65",
+              "offset": 0,
+              "slot": "0"
+            },
+            {
+              "contract": "TimelockUpgradeable",
+              "label": "upgradeReadyAt",
+              "type": "t_uint256",
+              "src": "contracts\\solidity\\TimelockUpgradeable.sol:66",
+              "offset": 0,
+              "slot": "1"
+            }
+          ]
+        }
+      }
+    },
+    "35661c1913a520d5ed0edcd8169c9cde876536ee7c7e7b21eb50bcfe148bada5": {
+      "address": "0xeF0A069E217Cc5638d8Dec7c6f4De212FDE06821",
+      "txHash": "0x1f9dbc89fe5b9ae1899142b7ebb3faac15c2de826cfc17c36466e23e0f9c25d8",
+      "layout": {
+        "solcVersion": "0.8.28",
+        "storage": [
+          {
+            "label": "_initialized",
+            "offset": 0,
+            "slot": "0",
+            "type": "t_uint8",
+            "contract": "Initializable",
+            "src": "@openzeppelin\\contracts-upgradeable\\proxy\\utils\\Initializable.sol:63",
+            "retypedFrom": "bool"
+          },
+          {
+            "label": "_initializing",
+            "offset": 1,
+            "slot": "0",
+            "type": "t_bool",
+            "contract": "Initializable",
+            "src": "@openzeppelin\\contracts-upgradeable\\proxy\\utils\\Initializable.sol:68"
+          },
+          {
+            "label": "__gap",
+            "offset": 0,
+            "slot": "1",
+            "type": "t_array(t_uint256)50_storage",
+            "contract": "ERC1967UpgradeUpgradeable",
+            "src": "@openzeppelin\\contracts-upgradeable\\proxy\\ERC1967\\ERC1967UpgradeUpgradeable.sol:169"
+          },
+          {
+            "label": "__gap",
+            "offset": 0,
+            "slot": "51",
+            "type": "t_array(t_uint256)50_storage",
+            "contract": "UUPSUpgradeable",
+            "src": "@openzeppelin\\contracts-upgradeable\\proxy\\utils\\UUPSUpgradeable.sol:111"
+          },
+          {
+            "label": "__gap",
+            "offset": 0,
+            "slot": "101",
+            "type": "t_array(t_uint256)50_storage",
+            "contract": "ContextUpgradeable",
+            "src": "@openzeppelin\\contracts-upgradeable\\utils\\ContextUpgradeable.sol:36"
+          },
+          {
+            "label": "_owner",
+            "offset": 0,
+            "slot": "151",
+            "type": "t_address",
+            "contract": "OwnableUpgradeable",
+            "src": "@openzeppelin\\contracts-upgradeable\\access\\OwnableUpgradeable.sol:22"
+          },
+          {
+            "label": "__gap",
+            "offset": 0,
+            "slot": "152",
+            "type": "t_array(t_uint256)49_storage",
+            "contract": "OwnableUpgradeable",
+            "src": "@openzeppelin\\contracts-upgradeable\\access\\OwnableUpgradeable.sol:94"
+          },
+          {
+            "label": "_status",
+            "offset": 0,
+            "slot": "201",
+            "type": "t_uint256",
+            "contract": "ReentrancyGuardUpgradeable",
+            "src": "@openzeppelin\\contracts-upgradeable\\security\\ReentrancyGuardUpgradeable.sol:38"
+          },
+          {
+            "label": "__gap",
+            "offset": 0,
+            "slot": "202",
+            "type": "t_array(t_uint256)49_storage",
+            "contract": "ReentrancyGuardUpgradeable",
+            "src": "@openzeppelin\\contracts-upgradeable\\security\\ReentrancyGuardUpgradeable.sol:88"
+          },
+          {
+            "label": "operatorFeeBips",
+            "offset": 0,
+            "slot": "251",
+            "type": "t_uint64",
+            "contract": "MiningManager",
+            "src": "contracts\\solidity\\MiningManager.sol:202"
+          },
+          {
+            "label": "burnFeeBips",
+            "offset": 8,
+            "slot": "251",
+            "type": "t_uint64",
+            "contract": "MiningManager",
+            "src": "contracts\\solidity\\MiningManager.sol:205"
+          },
+          {
+            "label": "burnMiningBips",
+            "offset": 16,
+            "slot": "251",
+            "type": "t_uint64",
+            "contract": "MiningManager",
+            "src": "contracts\\solidity\\MiningManager.sol:210"
+          },
+          {
+            "label": "__configReserved",
+            "offset": 24,
+            "slot": "251",
+            "type": "t_uint64",
+            "contract": "MiningManager",
+            "src": "contracts\\solidity\\MiningManager.sol:211"
+          },
+          {
+            "label": "ecosystemManager",
+            "offset": 0,
+            "slot": "252",
+            "type": "t_contract(IEcosystemManager)15397",
+            "contract": "MiningManager",
+            "src": "contracts\\solidity\\MiningManager.sol:219"
+          },
+          {
+            "label": "bkcToken",
+            "offset": 0,
+            "slot": "253",
+            "type": "t_contract(BKCToken)6118",
+            "contract": "MiningManager",
+            "src": "contracts\\solidity\\MiningManager.sol:220"
+          },
+          {
+            "label": "bkcTokenAddress",
+            "offset": 0,
+            "slot": "254",
+            "type": "t_address",
+            "contract": "MiningManager",
+            "src": "contracts\\solidity\\MiningManager.sol:223"
+          },
+          {
+            "label": "authorizedMiners",
+            "offset": 0,
+            "slot": "255",
+            "type": "t_mapping(t_bytes32,t_address)",
+            "contract": "MiningManager",
+            "src": "contracts\\solidity\\MiningManager.sol:226"
+          },
+          {
+            "label": "tgeCompleted",
+            "offset": 0,
+            "slot": "256",
+            "type": "t_bool",
+            "contract": "MiningManager",
+            "src": "contracts\\solidity\\MiningManager.sol:229"
+          },
+          {
+            "label": "totalMined",
+            "offset": 0,
+            "slot": "257",
+            "type": "t_uint256",
+            "contract": "MiningManager",
+            "src": "contracts\\solidity\\MiningManager.sol:239"
+          },
+          {
+            "label": "totalFeesProcessed",
+            "offset": 0,
+            "slot": "258",
+            "type": "t_uint256",
+            "contract": "MiningManager",
+            "src": "contracts\\solidity\\MiningManager.sol:241"
+          },
+          {
+            "label": "totalBurnedFromFees",
+            "offset": 0,
+            "slot": "259",
+            "type": "t_uint256",
+            "contract": "MiningManager",
+            "src": "contracts\\solidity\\MiningManager.sol:242"
+          },
+          {
+            "label": "totalBurnedFromMining",
+            "offset": 0,
+            "slot": "260",
+            "type": "t_uint256",
+            "contract": "MiningManager",
+            "src": "contracts\\solidity\\MiningManager.sol:245"
+          },
+          {
+            "label": "totalOperatorClaimedBKC",
+            "offset": 0,
+            "slot": "261",
+            "type": "t_uint256",
+            "contract": "MiningManager",
+            "src": "contracts\\solidity\\MiningManager.sol:246"
+          },
+          {
+            "label": "totalOperatorClaimedETH",
+            "offset": 0,
+            "slot": "262",
+            "type": "t_uint256",
+            "contract": "MiningManager",
+            "src": "contracts\\solidity\\MiningManager.sol:250"
+          },
+          {
+            "label": "operatorBalances",
+            "offset": 0,
+            "slot": "263",
+            "type": "t_mapping(t_address,t_struct(OperatorBalance)17034_storage)",
+            "contract": "MiningManager",
+            "src": "contracts\\solidity\\MiningManager.sol:263"
+          },
+          {
+            "label": "operatorTotalClaimedBKC",
+            "offset": 0,
+            "slot": "264",
+            "type": "t_mapping(t_address,t_uint256)",
+            "contract": "MiningManager",
+            "src": "contracts\\solidity\\MiningManager.sol:265"
+          },
+          {
+            "label": "operatorTotalClaimedETH",
+            "offset": 0,
+            "slot": "265",
+            "type": "t_mapping(t_address,t_uint256)",
+            "contract": "MiningManager",
+            "src": "contracts\\solidity\\MiningManager.sol:268"
+          },
+          {
+            "label": "totalPendingOperatorBKC",
+            "offset": 0,
+            "slot": "266",
+            "type": "t_uint256",
+            "contract": "MiningManager",
+            "src": "contracts\\solidity\\MiningManager.sol:276"
+          },
+          {
+            "label": "totalPendingOperatorETH",
+            "offset": 0,
+            "slot": "267",
+            "type": "t_uint256",
+            "contract": "MiningManager",
+            "src": "contracts\\solidity\\MiningManager.sol:279"
+          },
+          {
+            "label": "cachedMaxSupply",
+            "offset": 0,
+            "slot": "268",
+            "type": "t_uint256",
+            "contract": "MiningManager",
+            "src": "contracts\\solidity\\MiningManager.sol:287"
+          },
+          {
+            "label": "__gap",
+            "offset": 0,
+            "slot": "269",
+            "type": "t_array(t_uint256)41_storage",
+            "contract": "MiningManager",
+            "src": "contracts\\solidity\\MiningManager.sol:298"
+          }
+        ],
+        "types": {
+          "t_address": {
+            "label": "address",
+            "numberOfBytes": "20"
+          },
+          "t_struct(TimelockStorage)8105_storage": {
+            "label": "struct TimelockUpgradeable.TimelockStorage",
+            "members": [
+              {
+                "label": "pendingImplementation",
+                "type": "t_address",
+                "offset": 0,
+                "slot": "0"
+              },
+              {
+                "label": "upgradeReadyAt",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "1"
+              }
+            ],
+            "numberOfBytes": "64"
+          },
+          "t_uint256": {
+            "label": "uint256",
+            "numberOfBytes": "32"
+          },
+          "t_array(t_uint256)41_storage": {
+            "label": "uint256[41]",
+            "numberOfBytes": "1312"
+          },
+          "t_array(t_uint256)49_storage": {
+            "label": "uint256[49]",
+            "numberOfBytes": "1568"
+          },
+          "t_array(t_uint256)50_storage": {
+            "label": "uint256[50]",
+            "numberOfBytes": "1600"
+          },
+          "t_bool": {
+            "label": "bool",
+            "numberOfBytes": "1"
+          },
+          "t_bytes32": {
+            "label": "bytes32",
+            "numberOfBytes": "32"
+          },
+          "t_contract(BKCToken)6118": {
+            "label": "contract BKCToken",
+            "numberOfBytes": "20"
+          },
+          "t_contract(IEcosystemManager)15397": {
+            "label": "contract IEcosystemManager",
+            "numberOfBytes": "20"
+          },
+          "t_mapping(t_address,t_struct(OperatorBalance)17034_storage)": {
+            "label": "mapping(address => struct MiningManager.OperatorBalance)",
+            "numberOfBytes": "32"
+          },
+          "t_mapping(t_address,t_uint256)": {
+            "label": "mapping(address => uint256)",
+            "numberOfBytes": "32"
+          },
+          "t_mapping(t_bytes32,t_address)": {
+            "label": "mapping(bytes32 => address)",
+            "numberOfBytes": "32"
+          },
+          "t_struct(OperatorBalance)17034_storage": {
+            "label": "struct MiningManager.OperatorBalance",
+            "members": [
+              {
+                "label": "pendingBKC",
+                "type": "t_uint128",
+                "offset": 0,
+                "slot": "0"
+              },
+              {
+                "label": "pendingETH",
+                "type": "t_uint128",
+                "offset": 16,
+                "slot": "0"
+              }
+            ],
+            "numberOfBytes": "32"
+          },
+          "t_uint128": {
+            "label": "uint128",
+            "numberOfBytes": "16"
+          },
+          "t_uint64": {
+            "label": "uint64",
+            "numberOfBytes": "8"
+          },
+          "t_uint8": {
+            "label": "uint8",
+            "numberOfBytes": "1"
+          }
+        },
+        "namespaces": {
+          "erc7201:backchain.storage.TimelockUpgradeable": [
+            {
+              "contract": "TimelockUpgradeable",
+              "label": "pendingImplementation",
+              "type": "t_address",
+              "src": "contracts\\solidity\\TimelockUpgradeable.sol:65",
+              "offset": 0,
+              "slot": "0"
+            },
+            {
+              "contract": "TimelockUpgradeable",
+              "label": "upgradeReadyAt",
+              "type": "t_uint256",
+              "src": "contracts\\solidity\\TimelockUpgradeable.sol:66",
+              "offset": 0,
+              "slot": "1"
+            }
+          ]
+        }
+      }
+    },
+    "00bbb3caa071bb52e5da2c3f50219a580e90e1fa87cea491e881c290d435391b": {
+      "address": "0xeA88078a17Fe74115c3Ede4EAff187495a5F90E4",
+      "txHash": "0x92f63bf593c3eb5522f5edaa85042343c2eb009f0ef73745b62188ed74b25988",
+      "layout": {
+        "solcVersion": "0.8.28",
+        "storage": [
+          {
+            "label": "_initialized",
+            "offset": 0,
+            "slot": "0",
+            "type": "t_uint8",
+            "contract": "Initializable",
+            "src": "@openzeppelin\\contracts-upgradeable\\proxy\\utils\\Initializable.sol:63",
+            "retypedFrom": "bool"
+          },
+          {
+            "label": "_initializing",
+            "offset": 1,
+            "slot": "0",
+            "type": "t_bool",
+            "contract": "Initializable",
+            "src": "@openzeppelin\\contracts-upgradeable\\proxy\\utils\\Initializable.sol:68"
+          },
+          {
+            "label": "__gap",
+            "offset": 0,
+            "slot": "1",
+            "type": "t_array(t_uint256)50_storage",
+            "contract": "ContextUpgradeable",
+            "src": "@openzeppelin\\contracts-upgradeable\\utils\\ContextUpgradeable.sol:36"
+          },
+          {
+            "label": "__gap",
+            "offset": 0,
+            "slot": "51",
+            "type": "t_array(t_uint256)50_storage",
+            "contract": "ERC165Upgradeable",
+            "src": "@openzeppelin\\contracts-upgradeable\\utils\\introspection\\ERC165Upgradeable.sol:41"
+          },
+          {
+            "label": "_name",
+            "offset": 0,
+            "slot": "101",
+            "type": "t_string_storage",
+            "contract": "ERC721Upgradeable",
+            "src": "@openzeppelin\\contracts-upgradeable\\token\\ERC721\\ERC721Upgradeable.sol:25"
+          },
+          {
+            "label": "_symbol",
+            "offset": 0,
+            "slot": "102",
+            "type": "t_string_storage",
+            "contract": "ERC721Upgradeable",
+            "src": "@openzeppelin\\contracts-upgradeable\\token\\ERC721\\ERC721Upgradeable.sol:28"
+          },
+          {
+            "label": "_owners",
+            "offset": 0,
+            "slot": "103",
+            "type": "t_mapping(t_uint256,t_address)",
+            "contract": "ERC721Upgradeable",
+            "src": "@openzeppelin\\contracts-upgradeable\\token\\ERC721\\ERC721Upgradeable.sol:31"
+          },
+          {
+            "label": "_balances",
+            "offset": 0,
+            "slot": "104",
+            "type": "t_mapping(t_address,t_uint256)",
+            "contract": "ERC721Upgradeable",
+            "src": "@openzeppelin\\contracts-upgradeable\\token\\ERC721\\ERC721Upgradeable.sol:34"
+          },
+          {
+            "label": "_tokenApprovals",
+            "offset": 0,
+            "slot": "105",
+            "type": "t_mapping(t_uint256,t_address)",
+            "contract": "ERC721Upgradeable",
+            "src": "@openzeppelin\\contracts-upgradeable\\token\\ERC721\\ERC721Upgradeable.sol:37"
+          },
+          {
+            "label": "_operatorApprovals",
+            "offset": 0,
+            "slot": "106",
+            "type": "t_mapping(t_address,t_mapping(t_address,t_bool))",
+            "contract": "ERC721Upgradeable",
+            "src": "@openzeppelin\\contracts-upgradeable\\token\\ERC721\\ERC721Upgradeable.sol:40"
+          },
+          {
+            "label": "__gap",
+            "offset": 0,
+            "slot": "107",
+            "type": "t_array(t_uint256)44_storage",
+            "contract": "ERC721Upgradeable",
+            "src": "@openzeppelin\\contracts-upgradeable\\token\\ERC721\\ERC721Upgradeable.sol:477"
+          },
+          {
+            "label": "_ownedTokens",
+            "offset": 0,
+            "slot": "151",
+            "type": "t_mapping(t_address,t_mapping(t_uint256,t_uint256))",
+            "contract": "ERC721EnumerableUpgradeable",
+            "src": "@openzeppelin\\contracts-upgradeable\\token\\ERC721\\extensions\\ERC721EnumerableUpgradeable.sol:22"
+          },
+          {
+            "label": "_ownedTokensIndex",
+            "offset": 0,
+            "slot": "152",
+            "type": "t_mapping(t_uint256,t_uint256)",
+            "contract": "ERC721EnumerableUpgradeable",
+            "src": "@openzeppelin\\contracts-upgradeable\\token\\ERC721\\extensions\\ERC721EnumerableUpgradeable.sol:25"
+          },
+          {
+            "label": "_allTokens",
+            "offset": 0,
+            "slot": "153",
+            "type": "t_array(t_uint256)dyn_storage",
+            "contract": "ERC721EnumerableUpgradeable",
+            "src": "@openzeppelin\\contracts-upgradeable\\token\\ERC721\\extensions\\ERC721EnumerableUpgradeable.sol:28"
+          },
+          {
+            "label": "_allTokensIndex",
+            "offset": 0,
+            "slot": "154",
+            "type": "t_mapping(t_uint256,t_uint256)",
+            "contract": "ERC721EnumerableUpgradeable",
+            "src": "@openzeppelin\\contracts-upgradeable\\token\\ERC721\\extensions\\ERC721EnumerableUpgradeable.sol:31"
+          },
+          {
+            "label": "__gap",
+            "offset": 0,
+            "slot": "155",
+            "type": "t_array(t_uint256)46_storage",
+            "contract": "ERC721EnumerableUpgradeable",
+            "src": "@openzeppelin\\contracts-upgradeable\\token\\ERC721\\extensions\\ERC721EnumerableUpgradeable.sol:171"
+          },
+          {
+            "label": "_owner",
+            "offset": 0,
+            "slot": "201",
+            "type": "t_address",
+            "contract": "OwnableUpgradeable",
+            "src": "@openzeppelin\\contracts-upgradeable\\access\\OwnableUpgradeable.sol:22"
+          },
+          {
+            "label": "__gap",
+            "offset": 0,
+            "slot": "202",
+            "type": "t_array(t_uint256)49_storage",
+            "contract": "OwnableUpgradeable",
+            "src": "@openzeppelin\\contracts-upgradeable\\access\\OwnableUpgradeable.sol:94"
+          },
+          {
+            "label": "__gap",
+            "offset": 0,
+            "slot": "251",
+            "type": "t_array(t_uint256)50_storage",
+            "contract": "ERC1967UpgradeUpgradeable",
+            "src": "@openzeppelin\\contracts-upgradeable\\proxy\\ERC1967\\ERC1967UpgradeUpgradeable.sol:169"
+          },
+          {
+            "label": "__gap",
+            "offset": 0,
+            "slot": "301",
+            "type": "t_array(t_uint256)50_storage",
+            "contract": "UUPSUpgradeable",
+            "src": "@openzeppelin\\contracts-upgradeable\\proxy\\utils\\UUPSUpgradeable.sol:111"
+          },
+          {
+            "label": "boostBips",
+            "offset": 0,
+            "slot": "351",
+            "type": "t_mapping(t_uint256,t_uint256)",
+            "contract": "RewardBoosterNFT",
+            "src": "contracts\\solidity\\RewardBoosterNFT.sol:136"
+          },
+          {
+            "label": "tokenMetadataFile",
+            "offset": 0,
+            "slot": "352",
+            "type": "t_mapping(t_uint256,t_string_storage)",
+            "contract": "RewardBoosterNFT",
+            "src": "contracts\\solidity\\RewardBoosterNFT.sol:137"
+          },
+          {
+            "label": "_baseTokenURI",
+            "offset": 0,
+            "slot": "353",
+            "type": "t_string_storage",
+            "contract": "RewardBoosterNFT",
+            "src": "contracts\\solidity\\RewardBoosterNFT.sol:140"
+          },
+          {
+            "label": "_nextTokenId",
+            "offset": 0,
+            "slot": "354",
+            "type": "t_uint256",
+            "contract": "RewardBoosterNFT",
+            "src": "contracts\\solidity\\RewardBoosterNFT.sol:142"
+          },
+          {
+            "label": "authorizedMinters",
+            "offset": 0,
+            "slot": "355",
+            "type": "t_mapping(t_address,t_bool)",
+            "contract": "RewardBoosterNFT",
+            "src": "contracts\\solidity\\RewardBoosterNFT.sol:147"
+          },
+          {
+            "label": "poolFactory",
+            "offset": 0,
+            "slot": "356",
+            "type": "t_address",
+            "contract": "RewardBoosterNFT",
+            "src": "contracts\\solidity\\RewardBoosterNFT.sol:150"
+          },
+          {
+            "label": "saleContract",
+            "offset": 0,
+            "slot": "357",
+            "type": "t_address",
+            "contract": "RewardBoosterNFT",
+            "src": "contracts\\solidity\\RewardBoosterNFT.sol:154"
+          },
+          {
+            "label": "__gap",
+            "offset": 0,
+            "slot": "358",
+            "type": "t_array(t_uint256)43_storage",
+            "contract": "RewardBoosterNFT",
+            "src": "contracts\\solidity\\RewardBoosterNFT.sol:164"
+          }
+        ],
+        "types": {
+          "t_address": {
+            "label": "address",
+            "numberOfBytes": "20"
+          },
+          "t_struct(TimelockStorage)8105_storage": {
+            "label": "struct TimelockUpgradeable.TimelockStorage",
+            "members": [
+              {
+                "label": "pendingImplementation",
+                "type": "t_address",
+                "offset": 0,
+                "slot": "0"
+              },
+              {
+                "label": "upgradeReadyAt",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "1"
+              }
+            ],
+            "numberOfBytes": "64"
+          },
+          "t_uint256": {
+            "label": "uint256",
+            "numberOfBytes": "32"
+          },
+          "t_array(t_uint256)43_storage": {
+            "label": "uint256[43]",
+            "numberOfBytes": "1376"
+          },
+          "t_array(t_uint256)44_storage": {
+            "label": "uint256[44]",
+            "numberOfBytes": "1408"
+          },
+          "t_array(t_uint256)46_storage": {
+            "label": "uint256[46]",
+            "numberOfBytes": "1472"
+          },
+          "t_array(t_uint256)49_storage": {
+            "label": "uint256[49]",
+            "numberOfBytes": "1568"
+          },
+          "t_array(t_uint256)50_storage": {
+            "label": "uint256[50]",
+            "numberOfBytes": "1600"
+          },
+          "t_array(t_uint256)dyn_storage": {
+            "label": "uint256[]",
+            "numberOfBytes": "32"
+          },
+          "t_bool": {
+            "label": "bool",
+            "numberOfBytes": "1"
+          },
+          "t_mapping(t_address,t_bool)": {
+            "label": "mapping(address => bool)",
+            "numberOfBytes": "32"
+          },
+          "t_mapping(t_address,t_mapping(t_address,t_bool))": {
+            "label": "mapping(address => mapping(address => bool))",
+            "numberOfBytes": "32"
+          },
+          "t_mapping(t_address,t_mapping(t_uint256,t_uint256))": {
+            "label": "mapping(address => mapping(uint256 => uint256))",
+            "numberOfBytes": "32"
+          },
+          "t_mapping(t_address,t_uint256)": {
+            "label": "mapping(address => uint256)",
+            "numberOfBytes": "32"
+          },
+          "t_mapping(t_uint256,t_address)": {
+            "label": "mapping(uint256 => address)",
+            "numberOfBytes": "32"
+          },
+          "t_mapping(t_uint256,t_string_storage)": {
+            "label": "mapping(uint256 => string)",
+            "numberOfBytes": "32"
+          },
+          "t_mapping(t_uint256,t_uint256)": {
+            "label": "mapping(uint256 => uint256)",
+            "numberOfBytes": "32"
+          },
+          "t_string_storage": {
+            "label": "string",
+            "numberOfBytes": "32"
+          },
+          "t_uint8": {
+            "label": "uint8",
+            "numberOfBytes": "1"
+          }
+        },
+        "namespaces": {
+          "erc7201:backchain.storage.TimelockUpgradeable": [
+            {
+              "contract": "TimelockUpgradeable",
+              "label": "pendingImplementation",
+              "type": "t_address",
+              "src": "contracts\\solidity\\TimelockUpgradeable.sol:65",
+              "offset": 0,
+              "slot": "0"
+            },
+            {
+              "contract": "TimelockUpgradeable",
+              "label": "upgradeReadyAt",
+              "type": "t_uint256",
+              "src": "contracts\\solidity\\TimelockUpgradeable.sol:66",
+              "offset": 0,
+              "slot": "1"
+            }
+          ]
+        }
+      }
+    },
+    "f038e77207f723e6753e310a80cb2090d43e8106bb67c98a8c2c1d627a397e15": {
+      "address": "0xaC9AC0f78003Ae18E5782848Dc7D6DEc8496a9ec",
+      "txHash": "0xd762d5c10ebf8b85db11724a35ebb2b17b643929aed19315a1ff3f327f12e655",
+      "layout": {
+        "solcVersion": "0.8.28",
+        "storage": [
+          {
+            "label": "_initialized",
+            "offset": 0,
+            "slot": "0",
+            "type": "t_uint8",
+            "contract": "Initializable",
+            "src": "@openzeppelin\\contracts-upgradeable\\proxy\\utils\\Initializable.sol:63",
+            "retypedFrom": "bool"
+          },
+          {
+            "label": "_initializing",
+            "offset": 1,
+            "slot": "0",
+            "type": "t_bool",
+            "contract": "Initializable",
+            "src": "@openzeppelin\\contracts-upgradeable\\proxy\\utils\\Initializable.sol:68"
+          },
+          {
+            "label": "__gap",
+            "offset": 0,
+            "slot": "1",
+            "type": "t_array(t_uint256)50_storage",
+            "contract": "ERC1967UpgradeUpgradeable",
+            "src": "@openzeppelin\\contracts-upgradeable\\proxy\\ERC1967\\ERC1967UpgradeUpgradeable.sol:169"
+          },
+          {
+            "label": "__gap",
+            "offset": 0,
+            "slot": "51",
+            "type": "t_array(t_uint256)50_storage",
+            "contract": "UUPSUpgradeable",
+            "src": "@openzeppelin\\contracts-upgradeable\\proxy\\utils\\UUPSUpgradeable.sol:111"
+          },
+          {
+            "label": "__gap",
+            "offset": 0,
+            "slot": "101",
+            "type": "t_array(t_uint256)50_storage",
+            "contract": "ContextUpgradeable",
+            "src": "@openzeppelin\\contracts-upgradeable\\utils\\ContextUpgradeable.sol:36"
+          },
+          {
+            "label": "_owner",
+            "offset": 0,
+            "slot": "151",
+            "type": "t_address",
+            "contract": "OwnableUpgradeable",
+            "src": "@openzeppelin\\contracts-upgradeable\\access\\OwnableUpgradeable.sol:22"
+          },
+          {
+            "label": "__gap",
+            "offset": 0,
+            "slot": "152",
+            "type": "t_array(t_uint256)49_storage",
+            "contract": "OwnableUpgradeable",
+            "src": "@openzeppelin\\contracts-upgradeable\\access\\OwnableUpgradeable.sol:94"
+          },
+          {
+            "label": "_status",
+            "offset": 0,
+            "slot": "201",
+            "type": "t_uint256",
+            "contract": "ReentrancyGuardUpgradeable",
+            "src": "@openzeppelin\\contracts-upgradeable\\security\\ReentrancyGuardUpgradeable.sol:38"
+          },
+          {
+            "label": "__gap",
+            "offset": 0,
+            "slot": "202",
+            "type": "t_array(t_uint256)49_storage",
+            "contract": "ReentrancyGuardUpgradeable",
+            "src": "@openzeppelin\\contracts-upgradeable\\security\\ReentrancyGuardUpgradeable.sol:88"
+          },
+          {
+            "label": "ecosystemManager",
+            "offset": 0,
+            "slot": "251",
+            "type": "t_contract(IEcosystemManager)15397",
+            "contract": "DelegationManager",
+            "src": "contracts\\solidity\\DelegationManager.sol:213"
+          },
+          {
+            "label": "bkcToken",
+            "offset": 0,
+            "slot": "252",
+            "type": "t_contract(BKCToken)6118",
+            "contract": "DelegationManager",
+            "src": "contracts\\solidity\\DelegationManager.sol:217"
+          },
+          {
+            "label": "totalNetworkPStake",
+            "offset": 0,
+            "slot": "253",
+            "type": "t_uint256",
+            "contract": "DelegationManager",
+            "src": "contracts\\solidity\\DelegationManager.sol:217"
+          },
+          {
+            "label": "accRewardPerStake",
+            "offset": 0,
+            "slot": "254",
+            "type": "t_uint256",
+            "contract": "DelegationManager",
+            "src": "contracts\\solidity\\DelegationManager.sol:217"
+          },
+          {
+            "label": "userDelegations",
+            "offset": 0,
+            "slot": "255",
+            "type": "t_mapping(t_address,t_array(t_struct(Delegation)10484_storage)dyn_storage)",
+            "contract": "DelegationManager",
+            "src": "contracts\\solidity\\DelegationManager.sol:221"
+          },
+          {
+            "label": "userTotalPStake",
+            "offset": 0,
+            "slot": "256",
+            "type": "t_mapping(t_address,t_uint256)",
+            "contract": "DelegationManager",
+            "src": "contracts\\solidity\\DelegationManager.sol:223"
+          },
+          {
+            "label": "rewardDebt",
+            "offset": 0,
+            "slot": "257",
+            "type": "t_mapping(t_address,t_uint256)",
+            "contract": "DelegationManager",
+            "src": "contracts\\solidity\\DelegationManager.sol:225"
+          },
+          {
+            "label": "savedRewards",
+            "offset": 0,
+            "slot": "258",
+            "type": "t_mapping(t_address,t_uint256)",
+            "contract": "DelegationManager",
+            "src": "contracts\\solidity\\DelegationManager.sol:226"
+          },
+          {
+            "label": "claimEthFee",
+            "offset": 0,
+            "slot": "259",
+            "type": "t_uint256",
+            "contract": "DelegationManager",
+            "src": "contracts\\solidity\\DelegationManager.sol:237"
+          },
+          {
+            "label": "totalETHCollected",
+            "offset": 0,
+            "slot": "260",
+            "type": "t_uint256",
+            "contract": "DelegationManager",
+            "src": "contracts\\solidity\\DelegationManager.sol:238"
+          },
+          {
+            "label": "totalBKCFees",
+            "offset": 0,
+            "slot": "261",
+            "type": "t_uint256",
+            "contract": "DelegationManager",
+            "src": "contracts\\solidity\\DelegationManager.sol:240"
+          },
+          {
+            "label": "totalBurnedOnClaim",
+            "offset": 0,
+            "slot": "262",
+            "type": "t_uint256",
+            "contract": "DelegationManager",
+            "src": "contracts\\solidity\\DelegationManager.sol:251"
+          },
+          {
+            "label": "__gap",
+            "offset": 0,
+            "slot": "263",
+            "type": "t_array(t_uint256)39_storage",
+            "contract": "DelegationManager",
+            "src": "contracts\\solidity\\DelegationManager.sol:259"
+          }
+        ],
+        "types": {
+          "t_address": {
+            "label": "address",
+            "numberOfBytes": "20"
+          },
+          "t_struct(TimelockStorage)8105_storage": {
+            "label": "struct TimelockUpgradeable.TimelockStorage",
+            "members": [
+              {
+                "label": "pendingImplementation",
+                "type": "t_address",
+                "offset": 0,
+                "slot": "0"
+              },
+              {
+                "label": "upgradeReadyAt",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "1"
+              }
+            ],
+            "numberOfBytes": "64"
+          },
+          "t_uint256": {
+            "label": "uint256",
+            "numberOfBytes": "32"
+          },
+          "t_array(t_struct(Delegation)10484_storage)dyn_storage": {
+            "label": "struct DelegationManager.Delegation[]",
+            "numberOfBytes": "32"
+          },
+          "t_array(t_uint256)39_storage": {
+            "label": "uint256[39]",
+            "numberOfBytes": "1248"
+          },
+          "t_array(t_uint256)49_storage": {
+            "label": "uint256[49]",
+            "numberOfBytes": "1568"
+          },
+          "t_array(t_uint256)50_storage": {
+            "label": "uint256[50]",
+            "numberOfBytes": "1600"
+          },
+          "t_bool": {
+            "label": "bool",
+            "numberOfBytes": "1"
+          },
+          "t_contract(BKCToken)6118": {
+            "label": "contract BKCToken",
+            "numberOfBytes": "20"
+          },
+          "t_contract(IEcosystemManager)15397": {
+            "label": "contract IEcosystemManager",
+            "numberOfBytes": "20"
+          },
+          "t_mapping(t_address,t_array(t_struct(Delegation)10484_storage)dyn_storage)": {
+            "label": "mapping(address => struct DelegationManager.Delegation[])",
+            "numberOfBytes": "32"
+          },
+          "t_mapping(t_address,t_uint256)": {
+            "label": "mapping(address => uint256)",
+            "numberOfBytes": "32"
+          },
+          "t_struct(Delegation)10484_storage": {
+            "label": "struct DelegationManager.Delegation",
+            "members": [
+              {
+                "label": "amount",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "0"
+              },
+              {
+                "label": "unlockTime",
+                "type": "t_uint64",
+                "offset": 0,
+                "slot": "1"
+              },
+              {
+                "label": "lockDuration",
+                "type": "t_uint64",
+                "offset": 8,
+                "slot": "1"
+              }
+            ],
+            "numberOfBytes": "64"
+          },
+          "t_uint64": {
+            "label": "uint64",
+            "numberOfBytes": "8"
+          },
+          "t_uint8": {
+            "label": "uint8",
+            "numberOfBytes": "1"
+          }
+        },
+        "namespaces": {
+          "erc7201:backchain.storage.TimelockUpgradeable": [
+            {
+              "contract": "TimelockUpgradeable",
+              "label": "pendingImplementation",
+              "type": "t_address",
+              "src": "contracts\\solidity\\TimelockUpgradeable.sol:65",
+              "offset": 0,
+              "slot": "0"
+            },
+            {
+              "contract": "TimelockUpgradeable",
+              "label": "upgradeReadyAt",
+              "type": "t_uint256",
+              "src": "contracts\\solidity\\TimelockUpgradeable.sol:66",
+              "offset": 0,
+              "slot": "1"
+            }
+          ]
+        }
+      }
+    },
+    "12aa6eb3bb838d0febdde1576a1c2b4f222b6af8edf911498052b866bdc819f8": {
+      "address": "0x6565D5264ad0eD2574cEF0994Fe25327540F4205",
+      "txHash": "0xffecd5ba36dbbf4f5c7de006e4efe0ef1dcae29fea1a7007d7e57d68899299b7",
+      "layout": {
+        "solcVersion": "0.8.28",
+        "storage": [
+          {
+            "label": "_initialized",
+            "offset": 0,
+            "slot": "0",
+            "type": "t_uint8",
+            "contract": "Initializable",
+            "src": "@openzeppelin\\contracts-upgradeable\\proxy\\utils\\Initializable.sol:63",
+            "retypedFrom": "bool"
+          },
+          {
+            "label": "_initializing",
+            "offset": 1,
+            "slot": "0",
+            "type": "t_bool",
+            "contract": "Initializable",
+            "src": "@openzeppelin\\contracts-upgradeable\\proxy\\utils\\Initializable.sol:68"
+          },
+          {
+            "label": "__gap",
+            "offset": 0,
+            "slot": "1",
+            "type": "t_array(t_uint256)50_storage",
+            "contract": "ERC1967UpgradeUpgradeable",
+            "src": "@openzeppelin\\contracts-upgradeable\\proxy\\ERC1967\\ERC1967UpgradeUpgradeable.sol:169"
+          },
+          {
+            "label": "__gap",
+            "offset": 0,
+            "slot": "51",
+            "type": "t_array(t_uint256)50_storage",
+            "contract": "UUPSUpgradeable",
+            "src": "@openzeppelin\\contracts-upgradeable\\proxy\\utils\\UUPSUpgradeable.sol:111"
+          },
+          {
+            "label": "__gap",
+            "offset": 0,
+            "slot": "101",
+            "type": "t_array(t_uint256)50_storage",
+            "contract": "ContextUpgradeable",
+            "src": "@openzeppelin\\contracts-upgradeable\\utils\\ContextUpgradeable.sol:36"
+          },
+          {
+            "label": "_owner",
+            "offset": 0,
+            "slot": "151",
+            "type": "t_address",
+            "contract": "OwnableUpgradeable",
+            "src": "@openzeppelin\\contracts-upgradeable\\access\\OwnableUpgradeable.sol:22"
+          },
+          {
+            "label": "__gap",
+            "offset": 0,
+            "slot": "152",
+            "type": "t_array(t_uint256)49_storage",
+            "contract": "OwnableUpgradeable",
+            "src": "@openzeppelin\\contracts-upgradeable\\access\\OwnableUpgradeable.sol:94"
+          },
+          {
+            "label": "__gap",
+            "offset": 0,
+            "slot": "201",
+            "type": "t_array(t_uint256)50_storage",
+            "contract": "ERC165Upgradeable",
+            "src": "@openzeppelin\\contracts-upgradeable\\utils\\introspection\\ERC165Upgradeable.sol:41"
+          },
+          {
+            "label": "_name",
+            "offset": 0,
+            "slot": "251",
+            "type": "t_string_storage",
+            "contract": "ERC721Upgradeable",
+            "src": "@openzeppelin\\contracts-upgradeable\\token\\ERC721\\ERC721Upgradeable.sol:25"
+          },
+          {
+            "label": "_symbol",
+            "offset": 0,
+            "slot": "252",
+            "type": "t_string_storage",
+            "contract": "ERC721Upgradeable",
+            "src": "@openzeppelin\\contracts-upgradeable\\token\\ERC721\\ERC721Upgradeable.sol:28"
+          },
+          {
+            "label": "_owners",
+            "offset": 0,
+            "slot": "253",
+            "type": "t_mapping(t_uint256,t_address)",
+            "contract": "ERC721Upgradeable",
+            "src": "@openzeppelin\\contracts-upgradeable\\token\\ERC721\\ERC721Upgradeable.sol:31"
+          },
+          {
+            "label": "_balances",
+            "offset": 0,
+            "slot": "254",
+            "type": "t_mapping(t_address,t_uint256)",
+            "contract": "ERC721Upgradeable",
+            "src": "@openzeppelin\\contracts-upgradeable\\token\\ERC721\\ERC721Upgradeable.sol:34"
+          },
+          {
+            "label": "_tokenApprovals",
+            "offset": 0,
+            "slot": "255",
+            "type": "t_mapping(t_uint256,t_address)",
+            "contract": "ERC721Upgradeable",
+            "src": "@openzeppelin\\contracts-upgradeable\\token\\ERC721\\ERC721Upgradeable.sol:37"
+          },
+          {
+            "label": "_operatorApprovals",
+            "offset": 0,
+            "slot": "256",
+            "type": "t_mapping(t_address,t_mapping(t_address,t_bool))",
+            "contract": "ERC721Upgradeable",
+            "src": "@openzeppelin\\contracts-upgradeable\\token\\ERC721\\ERC721Upgradeable.sol:40"
+          },
+          {
+            "label": "__gap",
+            "offset": 0,
+            "slot": "257",
+            "type": "t_array(t_uint256)44_storage",
+            "contract": "ERC721Upgradeable",
+            "src": "@openzeppelin\\contracts-upgradeable\\token\\ERC721\\ERC721Upgradeable.sol:477"
+          },
+          {
+            "label": "_status",
+            "offset": 0,
+            "slot": "301",
+            "type": "t_uint256",
+            "contract": "ReentrancyGuardUpgradeable",
+            "src": "@openzeppelin\\contracts-upgradeable\\security\\ReentrancyGuardUpgradeable.sol:38"
+          },
+          {
+            "label": "__gap",
+            "offset": 0,
+            "slot": "302",
+            "type": "t_array(t_uint256)49_storage",
+            "contract": "ReentrancyGuardUpgradeable",
+            "src": "@openzeppelin\\contracts-upgradeable\\security\\ReentrancyGuardUpgradeable.sol:88"
+          },
+          {
+            "label": "ecosystemManager",
+            "offset": 0,
+            "slot": "351",
+            "type": "t_contract(IEcosystemManager)15397",
+            "contract": "DecentralizedNotary",
+            "src": "contracts\\solidity\\DecentralizedNotary.sol:204"
+          },
+          {
+            "label": "bkcToken",
+            "offset": 0,
+            "slot": "352",
+            "type": "t_contract(BKCToken)6118",
+            "contract": "DecentralizedNotary",
+            "src": "contracts\\solidity\\DecentralizedNotary.sol:206"
+          },
+          {
+            "label": "miningManagerAddress",
+            "offset": 0,
+            "slot": "353",
+            "type": "t_address",
+            "contract": "DecentralizedNotary",
+            "src": "contracts\\solidity\\DecentralizedNotary.sol:208"
+          },
+          {
+            "label": "_nextTokenId",
+            "offset": 0,
+            "slot": "354",
+            "type": "t_uint256",
+            "contract": "DecentralizedNotary",
+            "src": "contracts\\solidity\\DecentralizedNotary.sol:209"
+          },
+          {
+            "label": "notarizationFeeETH",
+            "offset": 0,
+            "slot": "355",
+            "type": "t_uint256",
+            "contract": "DecentralizedNotary",
+            "src": "contracts\\solidity\\DecentralizedNotary.sol:210"
+          },
+          {
+            "label": "documents",
+            "offset": 0,
+            "slot": "356",
+            "type": "t_mapping(t_uint256,t_struct(Document)9533_storage)",
+            "contract": "DecentralizedNotary",
+            "src": "contracts\\solidity\\DecentralizedNotary.sol:216"
+          },
+          {
+            "label": "notarizationFeePaid",
+            "offset": 0,
+            "slot": "357",
+            "type": "t_mapping(t_uint256,t_uint256)",
+            "contract": "DecentralizedNotary",
+            "src": "contracts\\solidity\\DecentralizedNotary.sol:218"
+          },
+          {
+            "label": "hashToTokenId",
+            "offset": 0,
+            "slot": "358",
+            "type": "t_mapping(t_bytes32,t_uint256)",
+            "contract": "DecentralizedNotary",
+            "src": "contracts\\solidity\\DecentralizedNotary.sol:224"
+          },
+          {
+            "label": "totalNotarizations",
+            "offset": 0,
+            "slot": "359",
+            "type": "t_uint256",
+            "contract": "DecentralizedNotary",
+            "src": "contracts\\solidity\\DecentralizedNotary.sol:230"
+          },
+          {
+            "label": "totalBKCCollected",
+            "offset": 0,
+            "slot": "360",
+            "type": "t_uint256",
+            "contract": "DecentralizedNotary",
+            "src": "contracts\\solidity\\DecentralizedNotary.sol:232"
+          },
+          {
+            "label": "totalETHCollected",
+            "offset": 0,
+            "slot": "361",
+            "type": "t_uint256",
+            "contract": "DecentralizedNotary",
+            "src": "contracts\\solidity\\DecentralizedNotary.sol:233"
+          },
+          {
+            "label": "__gap",
+            "offset": 0,
+            "slot": "362",
+            "type": "t_array(t_uint256)44_storage",
+            "contract": "DecentralizedNotary",
+            "src": "contracts\\solidity\\DecentralizedNotary.sol:257"
+          }
+        ],
+        "types": {
+          "t_address": {
+            "label": "address",
+            "numberOfBytes": "20"
+          },
+          "t_struct(TimelockStorage)8105_storage": {
+            "label": "struct TimelockUpgradeable.TimelockStorage",
+            "members": [
+              {
+                "label": "pendingImplementation",
+                "type": "t_address",
+                "offset": 0,
+                "slot": "0"
+              },
+              {
+                "label": "upgradeReadyAt",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "1"
+              }
+            ],
+            "numberOfBytes": "64"
+          },
+          "t_uint256": {
+            "label": "uint256",
+            "numberOfBytes": "32"
+          },
+          "t_array(t_uint256)44_storage": {
+            "label": "uint256[44]",
+            "numberOfBytes": "1408"
+          },
+          "t_array(t_uint256)49_storage": {
+            "label": "uint256[49]",
+            "numberOfBytes": "1568"
+          },
+          "t_array(t_uint256)50_storage": {
+            "label": "uint256[50]",
+            "numberOfBytes": "1600"
+          },
+          "t_bool": {
+            "label": "bool",
+            "numberOfBytes": "1"
+          },
+          "t_bytes32": {
+            "label": "bytes32",
+            "numberOfBytes": "32"
+          },
+          "t_contract(BKCToken)6118": {
+            "label": "contract BKCToken",
+            "numberOfBytes": "20"
+          },
+          "t_contract(IEcosystemManager)15397": {
+            "label": "contract IEcosystemManager",
+            "numberOfBytes": "20"
+          },
+          "t_mapping(t_address,t_bool)": {
+            "label": "mapping(address => bool)",
+            "numberOfBytes": "32"
+          },
+          "t_mapping(t_address,t_mapping(t_address,t_bool))": {
+            "label": "mapping(address => mapping(address => bool))",
+            "numberOfBytes": "32"
+          },
+          "t_mapping(t_address,t_uint256)": {
+            "label": "mapping(address => uint256)",
+            "numberOfBytes": "32"
+          },
+          "t_mapping(t_bytes32,t_uint256)": {
+            "label": "mapping(bytes32 => uint256)",
+            "numberOfBytes": "32"
+          },
+          "t_mapping(t_uint256,t_address)": {
+            "label": "mapping(uint256 => address)",
+            "numberOfBytes": "32"
+          },
+          "t_mapping(t_uint256,t_struct(Document)9533_storage)": {
+            "label": "mapping(uint256 => struct DecentralizedNotary.Document)",
+            "numberOfBytes": "32"
+          },
+          "t_mapping(t_uint256,t_uint256)": {
+            "label": "mapping(uint256 => uint256)",
+            "numberOfBytes": "32"
+          },
+          "t_string_storage": {
+            "label": "string",
+            "numberOfBytes": "32"
+          },
+          "t_struct(Document)9533_storage": {
+            "label": "struct DecentralizedNotary.Document",
+            "members": [
+              {
+                "label": "ipfsCid",
+                "type": "t_string_storage",
+                "offset": 0,
+                "slot": "0"
+              },
+              {
+                "label": "description",
+                "type": "t_string_storage",
+                "offset": 0,
+                "slot": "1"
+              },
+              {
+                "label": "contentHash",
+                "type": "t_bytes32",
+                "offset": 0,
+                "slot": "2"
+              },
+              {
+                "label": "timestamp",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "3"
+              }
+            ],
+            "numberOfBytes": "128"
+          },
+          "t_uint8": {
+            "label": "uint8",
+            "numberOfBytes": "1"
+          }
+        },
+        "namespaces": {
+          "erc7201:backchain.storage.TimelockUpgradeable": [
+            {
+              "contract": "TimelockUpgradeable",
+              "label": "pendingImplementation",
+              "type": "t_address",
+              "src": "contracts\\solidity\\TimelockUpgradeable.sol:65",
+              "offset": 0,
+              "slot": "0"
+            },
+            {
+              "contract": "TimelockUpgradeable",
+              "label": "upgradeReadyAt",
+              "type": "t_uint256",
+              "src": "contracts\\solidity\\TimelockUpgradeable.sol:66",
+              "offset": 0,
+              "slot": "1"
+            }
+          ]
+        }
+      }
+    },
+    "bd945ec199cc818c0453316390a1ddb73f682d03c8ff629baba7c065e2f05519": {
+      "address": "0x73377F7E0EebCbbdb2bBF2DeF0Bc9258009110f1",
+      "txHash": "0x5042b18d3e4af568c991deaf8052bc2499b50258f75e1bf584b74e8ad324edce",
+      "layout": {
+        "solcVersion": "0.8.28",
+        "storage": [
+          {
+            "label": "_initialized",
+            "offset": 0,
+            "slot": "0",
+            "type": "t_uint8",
+            "contract": "Initializable",
+            "src": "@openzeppelin\\contracts-upgradeable\\proxy\\utils\\Initializable.sol:63",
+            "retypedFrom": "bool"
+          },
+          {
+            "label": "_initializing",
+            "offset": 1,
+            "slot": "0",
+            "type": "t_bool",
+            "contract": "Initializable",
+            "src": "@openzeppelin\\contracts-upgradeable\\proxy\\utils\\Initializable.sol:68"
+          },
+          {
+            "label": "__gap",
+            "offset": 0,
+            "slot": "1",
+            "type": "t_array(t_uint256)50_storage",
+            "contract": "ERC1967UpgradeUpgradeable",
+            "src": "@openzeppelin\\contracts-upgradeable\\proxy\\ERC1967\\ERC1967UpgradeUpgradeable.sol:169"
+          },
+          {
+            "label": "__gap",
+            "offset": 0,
+            "slot": "51",
+            "type": "t_array(t_uint256)50_storage",
+            "contract": "UUPSUpgradeable",
+            "src": "@openzeppelin\\contracts-upgradeable\\proxy\\utils\\UUPSUpgradeable.sol:111"
+          },
+          {
+            "label": "__gap",
+            "offset": 0,
+            "slot": "101",
+            "type": "t_array(t_uint256)50_storage",
+            "contract": "ContextUpgradeable",
+            "src": "@openzeppelin\\contracts-upgradeable\\utils\\ContextUpgradeable.sol:36"
+          },
+          {
+            "label": "_owner",
+            "offset": 0,
+            "slot": "151",
+            "type": "t_address",
+            "contract": "OwnableUpgradeable",
+            "src": "@openzeppelin\\contracts-upgradeable\\access\\OwnableUpgradeable.sol:22"
+          },
+          {
+            "label": "__gap",
+            "offset": 0,
+            "slot": "152",
+            "type": "t_array(t_uint256)49_storage",
+            "contract": "OwnableUpgradeable",
+            "src": "@openzeppelin\\contracts-upgradeable\\access\\OwnableUpgradeable.sol:94"
+          },
+          {
+            "label": "_status",
+            "offset": 0,
+            "slot": "201",
+            "type": "t_uint256",
+            "contract": "ReentrancyGuardUpgradeable",
+            "src": "@openzeppelin\\contracts-upgradeable\\security\\ReentrancyGuardUpgradeable.sol:38"
+          },
+          {
+            "label": "__gap",
+            "offset": 0,
+            "slot": "202",
+            "type": "t_array(t_uint256)49_storage",
+            "contract": "ReentrancyGuardUpgradeable",
+            "src": "@openzeppelin\\contracts-upgradeable\\security\\ReentrancyGuardUpgradeable.sol:88"
+          },
+          {
+            "label": "ecosystemManager",
+            "offset": 0,
+            "slot": "251",
+            "type": "t_contract(IEcosystemManager)15397",
+            "contract": "FortunePool",
+            "src": "contracts\\solidity\\FortunePool.sol:341"
+          },
+          {
+            "label": "bkcToken",
+            "offset": 0,
+            "slot": "252",
+            "type": "t_contract(BKCToken)6118",
+            "contract": "FortunePool",
+            "src": "contracts\\solidity\\FortunePool.sol:341"
+          },
+          {
+            "label": "miningManagerAddress",
+            "offset": 0,
+            "slot": "253",
+            "type": "t_address",
+            "contract": "FortunePool",
+            "src": "contracts\\solidity\\FortunePool.sol:343"
+          },
+          {
+            "label": "serviceFee",
+            "offset": 0,
+            "slot": "254",
+            "type": "t_uint256",
+            "contract": "FortunePool",
+            "src": "contracts\\solidity\\FortunePool.sol:343"
+          },
+          {
+            "label": "gameFeeBips",
+            "offset": 0,
+            "slot": "255",
+            "type": "t_uint256",
+            "contract": "FortunePool",
+            "src": "contracts\\solidity\\FortunePool.sol:343"
+          },
+          {
+            "label": "gameCounter",
+            "offset": 0,
+            "slot": "256",
+            "type": "t_uint256",
+            "contract": "FortunePool",
+            "src": "contracts\\solidity\\FortunePool.sol:345"
+          },
+          {
+            "label": "prizePoolBalance",
+            "offset": 0,
+            "slot": "257",
+            "type": "t_uint256",
+            "contract": "FortunePool",
+            "src": "contracts\\solidity\\FortunePool.sol:346"
+          },
+          {
+            "label": "activeTierCount",
+            "offset": 0,
+            "slot": "258",
+            "type": "t_uint256",
+            "contract": "FortunePool",
+            "src": "contracts\\solidity\\FortunePool.sol:346"
+          },
+          {
+            "label": "revealDelay",
+            "offset": 0,
+            "slot": "259",
+            "type": "t_uint256",
+            "contract": "FortunePool",
+            "src": "contracts\\solidity\\FortunePool.sol:347"
+          },
+          {
+            "label": "revealWindow",
+            "offset": 0,
+            "slot": "260",
+            "type": "t_uint256",
+            "contract": "FortunePool",
+            "src": "contracts\\solidity\\FortunePool.sol:348"
+          },
+          {
+            "label": "totalWageredAllTime",
+            "offset": 0,
+            "slot": "261",
+            "type": "t_uint256",
+            "contract": "FortunePool",
+            "src": "contracts\\solidity\\FortunePool.sol:357"
+          },
+          {
+            "label": "totalPaidOutAllTime",
+            "offset": 0,
+            "slot": "262",
+            "type": "t_uint256",
+            "contract": "FortunePool",
+            "src": "contracts\\solidity\\FortunePool.sol:357"
+          },
+          {
+            "label": "totalWinsAllTime",
+            "offset": 0,
+            "slot": "263",
+            "type": "t_uint256",
+            "contract": "FortunePool",
+            "src": "contracts\\solidity\\FortunePool.sol:359"
+          },
+          {
+            "label": "totalETHCollected",
+            "offset": 0,
+            "slot": "264",
+            "type": "t_uint256",
+            "contract": "FortunePool",
+            "src": "contracts\\solidity\\FortunePool.sol:359"
+          },
+          {
+            "label": "totalBKCFees",
+            "offset": 0,
+            "slot": "265",
+            "type": "t_uint256",
+            "contract": "FortunePool",
+            "src": "contracts\\solidity\\FortunePool.sol:361"
+          },
+          {
+            "label": "totalExpiredGames",
+            "offset": 0,
+            "slot": "266",
+            "type": "t_uint256",
+            "contract": "FortunePool",
+            "src": "contracts\\solidity\\FortunePool.sol:361"
+          },
+          {
+            "label": "prizeTiers",
+            "offset": 0,
+            "slot": "267",
+            "type": "t_mapping(t_uint256,t_struct(PrizeTier)13021_storage)",
+            "contract": "FortunePool",
+            "src": "contracts\\solidity\\FortunePool.sol:369"
+          },
+          {
+            "label": "commitments",
+            "offset": 0,
+            "slot": "268",
+            "type": "t_mapping(t_uint256,t_struct(Commitment)13036_storage)",
+            "contract": "FortunePool",
+            "src": "contracts\\solidity\\FortunePool.sol:373"
+          },
+          {
+            "label": "commitmentMeta",
+            "offset": 0,
+            "slot": "269",
+            "type": "t_mapping(t_uint256,t_struct(CommitmentMeta)13153_storage)",
+            "contract": "FortunePool",
+            "src": "contracts\\solidity\\FortunePool.sol:391"
+          },
+          {
+            "label": "gameResults",
+            "offset": 0,
+            "slot": "270",
+            "type": "t_mapping(t_uint256,t_struct(GameResult)13055_storage)",
+            "contract": "FortunePool",
+            "src": "contracts\\solidity\\FortunePool.sol:394"
+          },
+          {
+            "label": "tierConfigNonce",
+            "offset": 0,
+            "slot": "271",
+            "type": "t_uint256",
+            "contract": "FortunePool",
+            "src": "contracts\\solidity\\FortunePool.sol:398"
+          },
+          {
+            "label": "__gap",
+            "offset": 0,
+            "slot": "272",
+            "type": "t_array(t_uint256)35_storage",
+            "contract": "FortunePool",
+            "src": "contracts\\solidity\\FortunePool.sol:407"
+          }
+        ],
+        "types": {
+          "t_address": {
+            "label": "address",
+            "numberOfBytes": "20"
+          },
+          "t_struct(TimelockStorage)8105_storage": {
+            "label": "struct TimelockUpgradeable.TimelockStorage",
+            "members": [
+              {
+                "label": "pendingImplementation",
+                "type": "t_address",
+                "offset": 0,
+                "slot": "0"
+              },
+              {
+                "label": "upgradeReadyAt",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "1"
+              }
+            ],
+            "numberOfBytes": "64"
+          },
+          "t_uint256": {
+            "label": "uint256",
+            "numberOfBytes": "32"
+          },
+          "t_array(t_uint256)35_storage": {
+            "label": "uint256[35]",
+            "numberOfBytes": "1120"
+          },
+          "t_array(t_uint256)49_storage": {
+            "label": "uint256[49]",
+            "numberOfBytes": "1568"
+          },
+          "t_array(t_uint256)50_storage": {
+            "label": "uint256[50]",
+            "numberOfBytes": "1600"
+          },
+          "t_array(t_uint256)dyn_storage": {
+            "label": "uint256[]",
+            "numberOfBytes": "32"
+          },
+          "t_bool": {
+            "label": "bool",
+            "numberOfBytes": "1"
+          },
+          "t_bytes32": {
+            "label": "bytes32",
+            "numberOfBytes": "32"
+          },
+          "t_contract(BKCToken)6118": {
+            "label": "contract BKCToken",
+            "numberOfBytes": "20"
+          },
+          "t_contract(IEcosystemManager)15397": {
+            "label": "contract IEcosystemManager",
+            "numberOfBytes": "20"
+          },
+          "t_enum(CommitmentStatus)13014": {
+            "label": "enum FortunePool.CommitmentStatus",
+            "members": [
+              "NONE",
+              "COMMITTED",
+              "REVEALED",
+              "EXPIRED"
+            ],
+            "numberOfBytes": "1"
+          },
+          "t_mapping(t_uint256,t_struct(Commitment)13036_storage)": {
+            "label": "mapping(uint256 => struct FortunePool.Commitment)",
+            "numberOfBytes": "32"
+          },
+          "t_mapping(t_uint256,t_struct(CommitmentMeta)13153_storage)": {
+            "label": "mapping(uint256 => struct FortunePool.CommitmentMeta)",
+            "numberOfBytes": "32"
+          },
+          "t_mapping(t_uint256,t_struct(GameResult)13055_storage)": {
+            "label": "mapping(uint256 => struct FortunePool.GameResult)",
+            "numberOfBytes": "32"
+          },
+          "t_mapping(t_uint256,t_struct(PrizeTier)13021_storage)": {
+            "label": "mapping(uint256 => struct FortunePool.PrizeTier)",
+            "numberOfBytes": "32"
+          },
+          "t_struct(Commitment)13036_storage": {
+            "label": "struct FortunePool.Commitment",
+            "members": [
+              {
+                "label": "player",
+                "type": "t_address",
+                "offset": 0,
+                "slot": "0"
+              },
+              {
+                "label": "commitBlock",
+                "type": "t_uint64",
+                "offset": 20,
+                "slot": "0"
+              },
+              {
+                "label": "isCumulative",
+                "type": "t_bool",
+                "offset": 28,
+                "slot": "0"
+              },
+              {
+                "label": "status",
+                "type": "t_enum(CommitmentStatus)13014",
+                "offset": 29,
+                "slot": "0"
+              },
+              {
+                "label": "wagerAmount",
+                "type": "t_uint128",
+                "offset": 0,
+                "slot": "1"
+              },
+              {
+                "label": "ethPaid",
+                "type": "t_uint128",
+                "offset": 16,
+                "slot": "1"
+              }
+            ],
+            "numberOfBytes": "64"
+          },
+          "t_struct(CommitmentMeta)13153_storage": {
+            "label": "struct FortunePool.CommitmentMeta",
+            "members": [
+              {
+                "label": "hash",
+                "type": "t_bytes32",
+                "offset": 0,
+                "slot": "0"
+              },
+              {
+                "label": "operator",
+                "type": "t_address",
+                "offset": 0,
+                "slot": "1"
+              },
+              {
+                "label": "tierNonce",
+                "type": "t_uint96",
+                "offset": 20,
+                "slot": "1"
+              }
+            ],
+            "numberOfBytes": "64"
+          },
+          "t_struct(GameResult)13055_storage": {
+            "label": "struct FortunePool.GameResult",
+            "members": [
+              {
+                "label": "player",
+                "type": "t_address",
+                "offset": 0,
+                "slot": "0"
+              },
+              {
+                "label": "wagerAmount",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "1"
+              },
+              {
+                "label": "prizeWon",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "2"
+              },
+              {
+                "label": "guesses",
+                "type": "t_array(t_uint256)dyn_storage",
+                "offset": 0,
+                "slot": "3"
+              },
+              {
+                "label": "rolls",
+                "type": "t_array(t_uint256)dyn_storage",
+                "offset": 0,
+                "slot": "4"
+              },
+              {
+                "label": "isCumulative",
+                "type": "t_bool",
+                "offset": 0,
+                "slot": "5"
+              },
+              {
+                "label": "matchCount",
+                "type": "t_uint8",
+                "offset": 1,
+                "slot": "5"
+              },
+              {
+                "label": "timestamp",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "6"
+              }
+            ],
+            "numberOfBytes": "224"
+          },
+          "t_struct(PrizeTier)13021_storage": {
+            "label": "struct FortunePool.PrizeTier",
+            "members": [
+              {
+                "label": "maxRange",
+                "type": "t_uint128",
+                "offset": 0,
+                "slot": "0"
+              },
+              {
+                "label": "multiplierBips",
+                "type": "t_uint64",
+                "offset": 16,
+                "slot": "0"
+              },
+              {
+                "label": "active",
+                "type": "t_bool",
+                "offset": 24,
+                "slot": "0"
+              }
+            ],
+            "numberOfBytes": "32"
+          },
+          "t_uint128": {
+            "label": "uint128",
+            "numberOfBytes": "16"
+          },
+          "t_uint64": {
+            "label": "uint64",
+            "numberOfBytes": "8"
+          },
+          "t_uint8": {
+            "label": "uint8",
+            "numberOfBytes": "1"
+          },
+          "t_uint96": {
+            "label": "uint96",
+            "numberOfBytes": "12"
+          }
+        },
+        "namespaces": {
+          "erc7201:backchain.storage.TimelockUpgradeable": [
+            {
+              "contract": "TimelockUpgradeable",
+              "label": "pendingImplementation",
+              "type": "t_address",
+              "src": "contracts\\solidity\\TimelockUpgradeable.sol:65",
+              "offset": 0,
+              "slot": "0"
+            },
+            {
+              "contract": "TimelockUpgradeable",
+              "label": "upgradeReadyAt",
+              "type": "t_uint256",
+              "src": "contracts\\solidity\\TimelockUpgradeable.sol:66",
+              "offset": 0,
+              "slot": "1"
+            }
+          ]
+        }
+      }
+    },
+    "43c913f7a0a8896b8eb105ee051efd5469e01369887c05f5eefe706719c59211": {
+      "address": "0x9C10e6857AEd38f45a1012998BeD07135E73E89F",
+      "txHash": "0x547274cca487cdcf8d7d46d30c6345f1269a5c88737653a1f38d53a8e6fe9e0f",
+      "layout": {
+        "solcVersion": "0.8.28",
+        "storage": [
+          {
+            "label": "_initialized",
+            "offset": 0,
+            "slot": "0",
+            "type": "t_uint8",
+            "contract": "Initializable",
+            "src": "@openzeppelin\\contracts-upgradeable\\proxy\\utils\\Initializable.sol:63",
+            "retypedFrom": "bool"
+          },
+          {
+            "label": "_initializing",
+            "offset": 1,
+            "slot": "0",
+            "type": "t_bool",
+            "contract": "Initializable",
+            "src": "@openzeppelin\\contracts-upgradeable\\proxy\\utils\\Initializable.sol:68"
+          },
+          {
+            "label": "__gap",
+            "offset": 0,
+            "slot": "1",
+            "type": "t_array(t_uint256)50_storage",
+            "contract": "ERC1967UpgradeUpgradeable",
+            "src": "@openzeppelin\\contracts-upgradeable\\proxy\\ERC1967\\ERC1967UpgradeUpgradeable.sol:169"
+          },
+          {
+            "label": "__gap",
+            "offset": 0,
+            "slot": "51",
+            "type": "t_array(t_uint256)50_storage",
+            "contract": "UUPSUpgradeable",
+            "src": "@openzeppelin\\contracts-upgradeable\\proxy\\utils\\UUPSUpgradeable.sol:111"
+          },
+          {
+            "label": "__gap",
+            "offset": 0,
+            "slot": "101",
+            "type": "t_array(t_uint256)50_storage",
+            "contract": "ContextUpgradeable",
+            "src": "@openzeppelin\\contracts-upgradeable\\utils\\ContextUpgradeable.sol:36"
+          },
+          {
+            "label": "_owner",
+            "offset": 0,
+            "slot": "151",
+            "type": "t_address",
+            "contract": "OwnableUpgradeable",
+            "src": "@openzeppelin\\contracts-upgradeable\\access\\OwnableUpgradeable.sol:22"
+          },
+          {
+            "label": "__gap",
+            "offset": 0,
+            "slot": "152",
+            "type": "t_array(t_uint256)49_storage",
+            "contract": "OwnableUpgradeable",
+            "src": "@openzeppelin\\contracts-upgradeable\\access\\OwnableUpgradeable.sol:94"
+          },
+          {
+            "label": "poolImplementation",
+            "offset": 0,
+            "slot": "201",
+            "type": "t_address",
+            "contract": "NFTLiquidityPoolFactory",
+            "src": "contracts\\solidity\\NFTLiquidityPoolFactory.sol:174"
+          },
+          {
+            "label": "ecosystemManagerAddress",
+            "offset": 0,
+            "slot": "202",
+            "type": "t_address",
+            "contract": "NFTLiquidityPoolFactory",
+            "src": "contracts\\solidity\\NFTLiquidityPoolFactory.sol:176"
+          },
+          {
+            "label": "isPool",
+            "offset": 0,
+            "slot": "203",
+            "type": "t_mapping(t_address,t_bool)",
+            "contract": "NFTLiquidityPoolFactory",
+            "src": "contracts\\solidity\\NFTLiquidityPoolFactory.sol:178"
+          },
+          {
+            "label": "getPoolAddress",
+            "offset": 0,
+            "slot": "204",
+            "type": "t_mapping(t_uint256,t_address)",
+            "contract": "NFTLiquidityPoolFactory",
+            "src": "contracts\\solidity\\NFTLiquidityPoolFactory.sol:181"
+          },
+          {
+            "label": "deployedBoostBips",
+            "offset": 0,
+            "slot": "205",
+            "type": "t_array(t_uint256)dyn_storage",
+            "contract": "NFTLiquidityPoolFactory",
+            "src": "contracts\\solidity\\NFTLiquidityPoolFactory.sol:183"
+          },
+          {
+            "label": "poolCount",
+            "offset": 0,
+            "slot": "206",
+            "type": "t_uint256",
+            "contract": "NFTLiquidityPoolFactory",
+            "src": "contracts\\solidity\\NFTLiquidityPoolFactory.sol:184"
+          },
+          {
+            "label": "__gap",
+            "offset": 0,
+            "slot": "207",
+            "type": "t_array(t_uint256)43_storage",
+            "contract": "NFTLiquidityPoolFactory",
+            "src": "contracts\\solidity\\NFTLiquidityPoolFactory.sol:190"
+          }
+        ],
+        "types": {
+          "t_address": {
+            "label": "address",
+            "numberOfBytes": "20"
+          },
+          "t_struct(TimelockStorage)8105_storage": {
+            "label": "struct TimelockUpgradeable.TimelockStorage",
+            "members": [
+              {
+                "label": "pendingImplementation",
+                "type": "t_address",
+                "offset": 0,
+                "slot": "0"
+              },
+              {
+                "label": "upgradeReadyAt",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "1"
+              }
+            ],
+            "numberOfBytes": "64"
+          },
+          "t_uint256": {
+            "label": "uint256",
+            "numberOfBytes": "32"
+          },
+          "t_array(t_uint256)43_storage": {
+            "label": "uint256[43]",
+            "numberOfBytes": "1376"
+          },
+          "t_array(t_uint256)49_storage": {
+            "label": "uint256[49]",
+            "numberOfBytes": "1568"
+          },
+          "t_array(t_uint256)50_storage": {
+            "label": "uint256[50]",
+            "numberOfBytes": "1600"
+          },
+          "t_array(t_uint256)dyn_storage": {
+            "label": "uint256[]",
+            "numberOfBytes": "32"
+          },
+          "t_bool": {
+            "label": "bool",
+            "numberOfBytes": "1"
+          },
+          "t_mapping(t_address,t_bool)": {
+            "label": "mapping(address => bool)",
+            "numberOfBytes": "32"
+          },
+          "t_mapping(t_uint256,t_address)": {
+            "label": "mapping(uint256 => address)",
+            "numberOfBytes": "32"
+          },
+          "t_uint8": {
+            "label": "uint8",
+            "numberOfBytes": "1"
+          }
+        },
+        "namespaces": {
+          "erc7201:backchain.storage.TimelockUpgradeable": [
+            {
+              "contract": "TimelockUpgradeable",
+              "label": "pendingImplementation",
+              "type": "t_address",
+              "src": "contracts\\solidity\\TimelockUpgradeable.sol:65",
+              "offset": 0,
+              "slot": "0"
+            },
+            {
+              "contract": "TimelockUpgradeable",
+              "label": "upgradeReadyAt",
+              "type": "t_uint256",
+              "src": "contracts\\solidity\\TimelockUpgradeable.sol:66",
+              "offset": 0,
+              "slot": "1"
+            }
+          ]
+        }
+      }
+    },
+    "a0ffce13172ca4c5c6b27fb4eb57704abcab3af8d163263a43f87f824276f4de": {
+      "address": "0x64B9f1C143885F43483EF3D633C7F7953f165132",
+      "txHash": "0x1c82e0b3b03026c8048cc9c1bf814edefe322bfa2488945407a8d1f08db378db",
+      "layout": {
+        "solcVersion": "0.8.28",
+        "storage": [
+          {
+            "label": "_initialized",
+            "offset": 0,
+            "slot": "0",
+            "type": "t_uint8",
+            "contract": "Initializable",
+            "src": "@openzeppelin\\contracts-upgradeable\\proxy\\utils\\Initializable.sol:63",
+            "retypedFrom": "bool"
+          },
+          {
+            "label": "_initializing",
+            "offset": 1,
+            "slot": "0",
+            "type": "t_bool",
+            "contract": "Initializable",
+            "src": "@openzeppelin\\contracts-upgradeable\\proxy\\utils\\Initializable.sol:68"
+          },
+          {
+            "label": "__gap",
+            "offset": 0,
+            "slot": "1",
+            "type": "t_array(t_uint256)50_storage",
+            "contract": "ContextUpgradeable",
+            "src": "@openzeppelin\\contracts-upgradeable\\utils\\ContextUpgradeable.sol:36"
+          },
+          {
+            "label": "_owner",
+            "offset": 0,
+            "slot": "51",
+            "type": "t_address",
+            "contract": "OwnableUpgradeable",
+            "src": "@openzeppelin\\contracts-upgradeable\\access\\OwnableUpgradeable.sol:22"
+          },
+          {
+            "label": "__gap",
+            "offset": 0,
+            "slot": "52",
+            "type": "t_array(t_uint256)49_storage",
+            "contract": "OwnableUpgradeable",
+            "src": "@openzeppelin\\contracts-upgradeable\\access\\OwnableUpgradeable.sol:94"
+          },
+          {
+            "label": "_status",
+            "offset": 0,
+            "slot": "101",
+            "type": "t_uint256",
+            "contract": "ReentrancyGuardUpgradeable",
+            "src": "@openzeppelin\\contracts-upgradeable\\security\\ReentrancyGuardUpgradeable.sol:38"
+          },
+          {
+            "label": "__gap",
+            "offset": 0,
+            "slot": "102",
+            "type": "t_array(t_uint256)49_storage",
+            "contract": "ReentrancyGuardUpgradeable",
+            "src": "@openzeppelin\\contracts-upgradeable\\security\\ReentrancyGuardUpgradeable.sol:88"
+          },
+          {
+            "label": "__gap",
+            "offset": 0,
+            "slot": "151",
+            "type": "t_array(t_uint256)50_storage",
+            "contract": "ERC721HolderUpgradeable",
+            "src": "@openzeppelin\\contracts-upgradeable\\token\\ERC721\\utils\\ERC721HolderUpgradeable.sol:35"
+          },
+          {
+            "label": "__gap",
+            "offset": 0,
+            "slot": "201",
+            "type": "t_array(t_uint256)50_storage",
+            "contract": "ERC1967UpgradeUpgradeable",
+            "src": "@openzeppelin\\contracts-upgradeable\\proxy\\ERC1967\\ERC1967UpgradeUpgradeable.sol:169"
+          },
+          {
+            "label": "__gap",
+            "offset": 0,
+            "slot": "251",
+            "type": "t_array(t_uint256)50_storage",
+            "contract": "UUPSUpgradeable",
+            "src": "@openzeppelin\\contracts-upgradeable\\proxy\\utils\\UUPSUpgradeable.sol:111"
+          },
+          {
+            "label": "ecosystemManager",
+            "offset": 0,
+            "slot": "301",
+            "type": "t_contract(IEcosystemManager)15397",
+            "contract": "RentalManager",
+            "src": "contracts\\solidity\\RentalManager.sol:236"
+          },
+          {
+            "label": "bkcToken",
+            "offset": 0,
+            "slot": "302",
+            "type": "t_contract(BKCToken)6118",
+            "contract": "RentalManager",
+            "src": "contracts\\solidity\\RentalManager.sol:238"
+          },
+          {
+            "label": "nftContract",
+            "offset": 0,
+            "slot": "303",
+            "type": "t_contract(IERC721Upgradeable)3225",
+            "contract": "RentalManager",
+            "src": "contracts\\solidity\\RentalManager.sol:238"
+          },
+          {
+            "label": "listings",
+            "offset": 0,
+            "slot": "304",
+            "type": "t_mapping(t_uint256,t_struct(Listing)22155_storage)",
+            "contract": "RentalManager",
+            "src": "contracts\\solidity\\RentalManager.sol:239"
+          },
+          {
+            "label": "activeRentals",
+            "offset": 0,
+            "slot": "305",
+            "type": "t_mapping(t_uint256,t_struct(Rental)22164_storage)",
+            "contract": "RentalManager",
+            "src": "contracts\\solidity\\RentalManager.sol:240"
+          },
+          {
+            "label": "listedTokenIds",
+            "offset": 0,
+            "slot": "306",
+            "type": "t_array(t_uint256)dyn_storage",
+            "contract": "RentalManager",
+            "src": "contracts\\solidity\\RentalManager.sol:242"
+          },
+          {
+            "label": "_tokenIndex",
+            "offset": 0,
+            "slot": "307",
+            "type": "t_mapping(t_uint256,t_uint256)",
+            "contract": "RentalManager",
+            "src": "contracts\\solidity\\RentalManager.sol:242"
+          },
+          {
+            "label": "totalFeesCollected",
+            "offset": 0,
+            "slot": "308",
+            "type": "t_uint256",
+            "contract": "RentalManager",
+            "src": "contracts\\solidity\\RentalManager.sol:246"
+          },
+          {
+            "label": "totalVolume",
+            "offset": 0,
+            "slot": "309",
+            "type": "t_uint256",
+            "contract": "RentalManager",
+            "src": "contracts\\solidity\\RentalManager.sol:247"
+          },
+          {
+            "label": "totalRentals",
+            "offset": 0,
+            "slot": "310",
+            "type": "t_uint256",
+            "contract": "RentalManager",
+            "src": "contracts\\solidity\\RentalManager.sol:248"
+          },
+          {
+            "label": "paused",
+            "offset": 0,
+            "slot": "311",
+            "type": "t_bool",
+            "contract": "RentalManager",
+            "src": "contracts\\solidity\\RentalManager.sol:250"
+          },
+          {
+            "label": "globalRentalDuration",
+            "offset": 0,
+            "slot": "312",
+            "type": "t_uint256",
+            "contract": "RentalManager",
+            "src": "contracts\\solidity\\RentalManager.sol:252"
+          },
+          {
+            "label": "promotionFees",
+            "offset": 0,
+            "slot": "313",
+            "type": "t_mapping(t_uint256,t_uint256)",
+            "contract": "RentalManager",
+            "src": "contracts\\solidity\\RentalManager.sol:258"
+          },
+          {
+            "label": "treasury",
+            "offset": 0,
+            "slot": "314",
+            "type": "t_address",
+            "contract": "RentalManager",
+            "src": "contracts\\solidity\\RentalManager.sol:260"
+          },
+          {
+            "label": "totalPromotionFeesCollected",
+            "offset": 0,
+            "slot": "315",
+            "type": "t_uint256",
+            "contract": "RentalManager",
+            "src": "contracts\\solidity\\RentalManager.sol:260"
+          },
+          {
+            "label": "rentalMiningFeeBips",
+            "offset": 0,
+            "slot": "316",
+            "type": "t_uint256",
+            "contract": "RentalManager",
+            "src": "contracts\\solidity\\RentalManager.sol:262"
+          },
+          {
+            "label": "rentalBurnFeeBips",
+            "offset": 0,
+            "slot": "317",
+            "type": "t_uint256",
+            "contract": "RentalManager",
+            "src": "contracts\\solidity\\RentalManager.sol:264"
+          },
+          {
+            "label": "totalBurnedAllTime",
+            "offset": 0,
+            "slot": "318",
+            "type": "t_uint256",
+            "contract": "RentalManager",
+            "src": "contracts\\solidity\\RentalManager.sol:266"
+          },
+          {
+            "label": "listingSpotlight",
+            "offset": 0,
+            "slot": "319",
+            "type": "t_mapping(t_uint256,t_struct(SpotlightInfo)22169_storage)",
+            "contract": "RentalManager",
+            "src": "contracts\\solidity\\RentalManager.sol:275"
+          },
+          {
+            "label": "totalSpotlightCollected",
+            "offset": 0,
+            "slot": "320",
+            "type": "t_uint256",
+            "contract": "RentalManager",
+            "src": "contracts\\solidity\\RentalManager.sol:276"
+          },
+          {
+            "label": "_spotlightedTokenIds",
+            "offset": 0,
+            "slot": "321",
+            "type": "t_array(t_uint256)dyn_storage",
+            "contract": "RentalManager",
+            "src": "contracts\\solidity\\RentalManager.sol:276"
+          },
+          {
+            "label": "_spotlightedIndex",
+            "offset": 0,
+            "slot": "322",
+            "type": "t_mapping(t_uint256,t_uint256)",
+            "contract": "RentalManager",
+            "src": "contracts\\solidity\\RentalManager.sol:278"
+          },
+          {
+            "label": "_isSpotlighted",
+            "offset": 0,
+            "slot": "323",
+            "type": "t_mapping(t_uint256,t_bool)",
+            "contract": "RentalManager",
+            "src": "contracts\\solidity\\RentalManager.sol:282"
+          },
+          {
+            "label": "spotlightDecayPerDayBips",
+            "offset": 0,
+            "slot": "324",
+            "type": "t_uint256",
+            "contract": "RentalManager",
+            "src": "contracts\\solidity\\RentalManager.sol:282"
+          },
+          {
+            "label": "minSpotlightAmount",
+            "offset": 0,
+            "slot": "325",
+            "type": "t_uint256",
+            "contract": "RentalManager",
+            "src": "contracts\\solidity\\RentalManager.sol:283"
+          },
+          {
+            "label": "rentalFeeBips",
+            "offset": 0,
+            "slot": "326",
+            "type": "t_uint256",
+            "contract": "RentalManager",
+            "src": "contracts\\solidity\\RentalManager.sol:284"
+          },
+          {
+            "label": "totalETHCollected",
+            "offset": 0,
+            "slot": "327",
+            "type": "t_uint256",
+            "contract": "RentalManager",
+            "src": "contracts\\solidity\\RentalManager.sol:290"
+          },
+          {
+            "label": "totalBKCFees",
+            "offset": 0,
+            "slot": "328",
+            "type": "t_uint256",
+            "contract": "RentalManager",
+            "src": "contracts\\solidity\\RentalManager.sol:292"
+          },
+          {
+            "label": "__gap",
+            "offset": 0,
+            "slot": "329",
+            "type": "t_array(t_uint256)40_storage",
+            "contract": "RentalManager",
+            "src": "contracts\\solidity\\RentalManager.sol:302"
+          }
+        ],
+        "types": {
+          "t_address": {
+            "label": "address",
+            "numberOfBytes": "20"
+          },
+          "t_struct(TimelockStorage)8105_storage": {
+            "label": "struct TimelockUpgradeable.TimelockStorage",
+            "members": [
+              {
+                "label": "pendingImplementation",
+                "type": "t_address",
+                "offset": 0,
+                "slot": "0"
+              },
+              {
+                "label": "upgradeReadyAt",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "1"
+              }
+            ],
+            "numberOfBytes": "64"
+          },
+          "t_uint256": {
+            "label": "uint256",
+            "numberOfBytes": "32"
+          },
+          "t_array(t_uint256)40_storage": {
+            "label": "uint256[40]",
+            "numberOfBytes": "1280"
+          },
+          "t_array(t_uint256)49_storage": {
+            "label": "uint256[49]",
+            "numberOfBytes": "1568"
+          },
+          "t_array(t_uint256)50_storage": {
+            "label": "uint256[50]",
+            "numberOfBytes": "1600"
+          },
+          "t_array(t_uint256)dyn_storage": {
+            "label": "uint256[]",
+            "numberOfBytes": "32"
+          },
+          "t_bool": {
+            "label": "bool",
+            "numberOfBytes": "1"
+          },
+          "t_contract(BKCToken)6118": {
+            "label": "contract BKCToken",
+            "numberOfBytes": "20"
+          },
+          "t_contract(IERC721Upgradeable)3225": {
+            "label": "contract IERC721Upgradeable",
+            "numberOfBytes": "20"
+          },
+          "t_contract(IEcosystemManager)15397": {
+            "label": "contract IEcosystemManager",
+            "numberOfBytes": "20"
+          },
+          "t_mapping(t_uint256,t_bool)": {
+            "label": "mapping(uint256 => bool)",
+            "numberOfBytes": "32"
+          },
+          "t_mapping(t_uint256,t_struct(Listing)22155_storage)": {
+            "label": "mapping(uint256 => struct RentalManager.Listing)",
+            "numberOfBytes": "32"
+          },
+          "t_mapping(t_uint256,t_struct(Rental)22164_storage)": {
+            "label": "mapping(uint256 => struct RentalManager.Rental)",
+            "numberOfBytes": "32"
+          },
+          "t_mapping(t_uint256,t_struct(SpotlightInfo)22169_storage)": {
+            "label": "mapping(uint256 => struct RentalManager.SpotlightInfo)",
+            "numberOfBytes": "32"
+          },
+          "t_mapping(t_uint256,t_uint256)": {
+            "label": "mapping(uint256 => uint256)",
+            "numberOfBytes": "32"
+          },
+          "t_struct(Listing)22155_storage": {
+            "label": "struct RentalManager.Listing",
+            "members": [
+              {
+                "label": "owner",
+                "type": "t_address",
+                "offset": 0,
+                "slot": "0"
+              },
+              {
+                "label": "pricePerHour",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "1"
+              },
+              {
+                "label": "minHours",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "2"
+              },
+              {
+                "label": "maxHours",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "3"
+              },
+              {
+                "label": "isActive",
+                "type": "t_bool",
+                "offset": 0,
+                "slot": "4"
+              },
+              {
+                "label": "totalEarnings",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "5"
+              },
+              {
+                "label": "rentalCount",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "6"
+              }
+            ],
+            "numberOfBytes": "224"
+          },
+          "t_struct(Rental)22164_storage": {
+            "label": "struct RentalManager.Rental",
+            "members": [
+              {
+                "label": "tenant",
+                "type": "t_address",
+                "offset": 0,
+                "slot": "0"
+              },
+              {
+                "label": "startTime",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "1"
+              },
+              {
+                "label": "endTime",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "2"
+              },
+              {
+                "label": "paidAmount",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "3"
+              }
+            ],
+            "numberOfBytes": "128"
+          },
+          "t_struct(SpotlightInfo)22169_storage": {
+            "label": "struct RentalManager.SpotlightInfo",
+            "members": [
+              {
+                "label": "totalAmount",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "0"
+              },
+              {
+                "label": "lastSpotlightTime",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "1"
+              }
+            ],
+            "numberOfBytes": "64"
+          },
+          "t_uint8": {
+            "label": "uint8",
+            "numberOfBytes": "1"
+          }
+        },
+        "namespaces": {
+          "erc7201:backchain.storage.TimelockUpgradeable": [
+            {
+              "contract": "TimelockUpgradeable",
+              "label": "pendingImplementation",
+              "type": "t_address",
+              "src": "contracts\\solidity\\TimelockUpgradeable.sol:65",
+              "offset": 0,
+              "slot": "0"
+            },
+            {
+              "contract": "TimelockUpgradeable",
+              "label": "upgradeReadyAt",
+              "type": "t_uint256",
+              "src": "contracts\\solidity\\TimelockUpgradeable.sol:66",
+              "offset": 0,
+              "slot": "1"
+            }
+          ]
+        }
+      }
+    },
+    "a2fad481a5ce6378343bfc94ba1c8f03a080177cae644dfb4be2c6e4969e72cf": {
+      "address": "0x6fCf3A124fF612336dF63F674fD43820463E8181",
+      "txHash": "0x6ff224633d23fec093d0c9af6ff3029e0a385024a721ac43d75080df19339e6b",
+      "layout": {
+        "solcVersion": "0.8.28",
+        "storage": [
+          {
+            "label": "_initialized",
+            "offset": 0,
+            "slot": "0",
+            "type": "t_uint8",
+            "contract": "Initializable",
+            "src": "@openzeppelin\\contracts-upgradeable\\proxy\\utils\\Initializable.sol:63",
+            "retypedFrom": "bool"
+          },
+          {
+            "label": "_initializing",
+            "offset": 1,
+            "slot": "0",
+            "type": "t_bool",
+            "contract": "Initializable",
+            "src": "@openzeppelin\\contracts-upgradeable\\proxy\\utils\\Initializable.sol:68"
+          },
+          {
+            "label": "__gap",
+            "offset": 0,
+            "slot": "1",
+            "type": "t_array(t_uint256)50_storage",
+            "contract": "ERC1967UpgradeUpgradeable",
+            "src": "@openzeppelin\\contracts-upgradeable\\proxy\\ERC1967\\ERC1967UpgradeUpgradeable.sol:169"
+          },
+          {
+            "label": "__gap",
+            "offset": 0,
+            "slot": "51",
+            "type": "t_array(t_uint256)50_storage",
+            "contract": "UUPSUpgradeable",
+            "src": "@openzeppelin\\contracts-upgradeable\\proxy\\utils\\UUPSUpgradeable.sol:111"
+          },
+          {
+            "label": "__gap",
+            "offset": 0,
+            "slot": "101",
+            "type": "t_array(t_uint256)50_storage",
+            "contract": "ContextUpgradeable",
+            "src": "@openzeppelin\\contracts-upgradeable\\utils\\ContextUpgradeable.sol:36"
+          },
+          {
+            "label": "_owner",
+            "offset": 0,
+            "slot": "151",
+            "type": "t_address",
+            "contract": "OwnableUpgradeable",
+            "src": "@openzeppelin\\contracts-upgradeable\\access\\OwnableUpgradeable.sol:22"
+          },
+          {
+            "label": "__gap",
+            "offset": 0,
+            "slot": "152",
+            "type": "t_array(t_uint256)49_storage",
+            "contract": "OwnableUpgradeable",
+            "src": "@openzeppelin\\contracts-upgradeable\\access\\OwnableUpgradeable.sol:94"
+          },
+          {
+            "label": "_status",
+            "offset": 0,
+            "slot": "201",
+            "type": "t_uint256",
+            "contract": "ReentrancyGuardUpgradeable",
+            "src": "@openzeppelin\\contracts-upgradeable\\security\\ReentrancyGuardUpgradeable.sol:38"
+          },
+          {
+            "label": "__gap",
+            "offset": 0,
+            "slot": "202",
+            "type": "t_array(t_uint256)49_storage",
+            "contract": "ReentrancyGuardUpgradeable",
+            "src": "@openzeppelin\\contracts-upgradeable\\security\\ReentrancyGuardUpgradeable.sol:88"
+          },
+          {
+            "label": "bkcToken",
+            "offset": 0,
+            "slot": "251",
+            "type": "t_address",
+            "contract": "CharityPool",
+            "src": "contracts\\solidity\\CharityPool.sol:262"
+          },
+          {
+            "label": "miningManager",
+            "offset": 0,
+            "slot": "252",
+            "type": "t_address",
+            "contract": "CharityPool",
+            "src": "contracts\\solidity\\CharityPool.sol:263"
+          },
+          {
+            "label": "treasury",
+            "offset": 0,
+            "slot": "253",
+            "type": "t_address",
+            "contract": "CharityPool",
+            "src": "contracts\\solidity\\CharityPool.sol:263"
+          },
+          {
+            "label": "campaignCounter",
+            "offset": 20,
+            "slot": "253",
+            "type": "t_uint64",
+            "contract": "CharityPool",
+            "src": "contracts\\solidity\\CharityPool.sol:264"
+          },
+          {
+            "label": "donationCounter",
+            "offset": 0,
+            "slot": "254",
+            "type": "t_uint64",
+            "contract": "CharityPool",
+            "src": "contracts\\solidity\\CharityPool.sol:267"
+          },
+          {
+            "label": "createCostBkc",
+            "offset": 8,
+            "slot": "254",
+            "type": "t_uint96",
+            "contract": "CharityPool",
+            "src": "contracts\\solidity\\CharityPool.sol:270"
+          },
+          {
+            "label": "withdrawCostBkc",
+            "offset": 20,
+            "slot": "254",
+            "type": "t_uint96",
+            "contract": "CharityPool",
+            "src": "contracts\\solidity\\CharityPool.sol:271"
+          },
+          {
+            "label": "donationFeeBips",
+            "offset": 0,
+            "slot": "255",
+            "type": "t_uint16",
+            "contract": "CharityPool",
+            "src": "contracts\\solidity\\CharityPool.sol:272"
+          },
+          {
+            "label": "boostCostBkc",
+            "offset": 2,
+            "slot": "255",
+            "type": "t_uint96",
+            "contract": "CharityPool",
+            "src": "contracts\\solidity\\CharityPool.sol:275"
+          },
+          {
+            "label": "boostCostEth",
+            "offset": 14,
+            "slot": "255",
+            "type": "t_uint96",
+            "contract": "CharityPool",
+            "src": "contracts\\solidity\\CharityPool.sol:276"
+          },
+          {
+            "label": "maxActiveCampaigns",
+            "offset": 26,
+            "slot": "255",
+            "type": "t_uint8",
+            "contract": "CharityPool",
+            "src": "contracts\\solidity\\CharityPool.sol:277"
+          },
+          {
+            "label": "campaigns",
+            "offset": 0,
+            "slot": "256",
+            "type": "t_mapping(t_uint256,t_struct(Campaign)7813_storage)",
+            "contract": "CharityPool",
+            "src": "contracts\\solidity\\CharityPool.sol:280"
+          },
+          {
+            "label": "campaignTitles",
+            "offset": 0,
+            "slot": "257",
+            "type": "t_mapping(t_uint256,t_string_storage)",
+            "contract": "CharityPool",
+            "src": "contracts\\solidity\\CharityPool.sol:281"
+          },
+          {
+            "label": "campaignDescriptions",
+            "offset": 0,
+            "slot": "258",
+            "type": "t_mapping(t_uint256,t_string_storage)",
+            "contract": "CharityPool",
+            "src": "contracts\\solidity\\CharityPool.sol:282"
+          },
+          {
+            "label": "donations",
+            "offset": 0,
+            "slot": "259",
+            "type": "t_mapping(t_uint256,t_struct(Donation)7825_storage)",
+            "contract": "CharityPool",
+            "src": "contracts\\solidity\\CharityPool.sol:284"
+          },
+          {
+            "label": "campaignDonations",
+            "offset": 0,
+            "slot": "260",
+            "type": "t_mapping(t_uint256,t_array(t_uint256)dyn_storage)",
+            "contract": "CharityPool",
+            "src": "contracts\\solidity\\CharityPool.sol:285"
+          },
+          {
+            "label": "userDonations",
+            "offset": 0,
+            "slot": "261",
+            "type": "t_mapping(t_address,t_array(t_uint256)dyn_storage)",
+            "contract": "CharityPool",
+            "src": "contracts\\solidity\\CharityPool.sol:286"
+          },
+          {
+            "label": "userCampaigns",
+            "offset": 0,
+            "slot": "262",
+            "type": "t_mapping(t_address,t_array(t_uint256)dyn_storage)",
+            "contract": "CharityPool",
+            "src": "contracts\\solidity\\CharityPool.sol:286"
+          },
+          {
+            "label": "userActiveCampaigns",
+            "offset": 0,
+            "slot": "263",
+            "type": "t_mapping(t_address,t_uint8)",
+            "contract": "CharityPool",
+            "src": "contracts\\solidity\\CharityPool.sol:288"
+          },
+          {
+            "label": "totalRaisedAllTime",
+            "offset": 0,
+            "slot": "264",
+            "type": "t_uint256",
+            "contract": "CharityPool",
+            "src": "contracts\\solidity\\CharityPool.sol:290"
+          },
+          {
+            "label": "totalDonationsAllTime",
+            "offset": 0,
+            "slot": "265",
+            "type": "t_uint256",
+            "contract": "CharityPool",
+            "src": "contracts\\solidity\\CharityPool.sol:291"
+          },
+          {
+            "label": "totalFeesCollected",
+            "offset": 0,
+            "slot": "266",
+            "type": "t_uint256",
+            "contract": "CharityPool",
+            "src": "contracts\\solidity\\CharityPool.sol:292"
+          },
+          {
+            "label": "totalReservedETH",
+            "offset": 0,
+            "slot": "267",
+            "type": "t_uint256",
+            "contract": "CharityPool",
+            "src": "contracts\\solidity\\CharityPool.sol:299"
+          },
+          {
+            "label": "__gap",
+            "offset": 0,
+            "slot": "268",
+            "type": "t_array(t_uint256)39_storage",
+            "contract": "CharityPool",
+            "src": "contracts\\solidity\\CharityPool.sol:310"
+          }
+        ],
+        "types": {
+          "t_address": {
+            "label": "address",
+            "numberOfBytes": "20"
+          },
+          "t_struct(TimelockStorage)8105_storage": {
+            "label": "struct TimelockUpgradeable.TimelockStorage",
+            "members": [
+              {
+                "label": "pendingImplementation",
+                "type": "t_address",
+                "offset": 0,
+                "slot": "0"
+              },
+              {
+                "label": "upgradeReadyAt",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "1"
+              }
+            ],
+            "numberOfBytes": "64"
+          },
+          "t_uint256": {
+            "label": "uint256",
+            "numberOfBytes": "32"
+          },
+          "t_array(t_uint256)39_storage": {
+            "label": "uint256[39]",
+            "numberOfBytes": "1248"
+          },
+          "t_array(t_uint256)49_storage": {
+            "label": "uint256[49]",
+            "numberOfBytes": "1568"
+          },
+          "t_array(t_uint256)50_storage": {
+            "label": "uint256[50]",
+            "numberOfBytes": "1600"
+          },
+          "t_array(t_uint256)dyn_storage": {
+            "label": "uint256[]",
+            "numberOfBytes": "32"
+          },
+          "t_bool": {
+            "label": "bool",
+            "numberOfBytes": "1"
+          },
+          "t_enum(Status)7792": {
+            "label": "enum CharityPool.Status",
+            "members": [
+              "ACTIVE",
+              "COMPLETED",
+              "CANCELLED",
+              "WITHDRAWN"
+            ],
+            "numberOfBytes": "1"
+          },
+          "t_mapping(t_address,t_array(t_uint256)dyn_storage)": {
+            "label": "mapping(address => uint256[])",
+            "numberOfBytes": "32"
+          },
+          "t_mapping(t_address,t_uint8)": {
+            "label": "mapping(address => uint8)",
+            "numberOfBytes": "32"
+          },
+          "t_mapping(t_uint256,t_array(t_uint256)dyn_storage)": {
+            "label": "mapping(uint256 => uint256[])",
+            "numberOfBytes": "32"
+          },
+          "t_mapping(t_uint256,t_string_storage)": {
+            "label": "mapping(uint256 => string)",
+            "numberOfBytes": "32"
+          },
+          "t_mapping(t_uint256,t_struct(Campaign)7813_storage)": {
+            "label": "mapping(uint256 => struct CharityPool.Campaign)",
+            "numberOfBytes": "32"
+          },
+          "t_mapping(t_uint256,t_struct(Donation)7825_storage)": {
+            "label": "mapping(uint256 => struct CharityPool.Donation)",
+            "numberOfBytes": "32"
+          },
+          "t_string_storage": {
+            "label": "string",
+            "numberOfBytes": "32"
+          },
+          "t_struct(Campaign)7813_storage": {
+            "label": "struct CharityPool.Campaign",
+            "members": [
+              {
+                "label": "creator",
+                "type": "t_address",
+                "offset": 0,
+                "slot": "0"
+              },
+              {
+                "label": "goalAmount",
+                "type": "t_uint96",
+                "offset": 20,
+                "slot": "0"
+              },
+              {
+                "label": "raisedAmount",
+                "type": "t_uint96",
+                "offset": 0,
+                "slot": "1"
+              },
+              {
+                "label": "donationCount",
+                "type": "t_uint32",
+                "offset": 12,
+                "slot": "1"
+              },
+              {
+                "label": "deadline",
+                "type": "t_uint64",
+                "offset": 16,
+                "slot": "1"
+              },
+              {
+                "label": "createdAt",
+                "type": "t_uint64",
+                "offset": 24,
+                "slot": "1"
+              },
+              {
+                "label": "boostAmount",
+                "type": "t_uint96",
+                "offset": 0,
+                "slot": "2"
+              },
+              {
+                "label": "boostTime",
+                "type": "t_uint64",
+                "offset": 12,
+                "slot": "2"
+              },
+              {
+                "label": "status",
+                "type": "t_enum(Status)7792",
+                "offset": 20,
+                "slot": "2"
+              }
+            ],
+            "numberOfBytes": "96"
+          },
+          "t_struct(Donation)7825_storage": {
+            "label": "struct CharityPool.Donation",
+            "members": [
+              {
+                "label": "donor",
+                "type": "t_address",
+                "offset": 0,
+                "slot": "0"
+              },
+              {
+                "label": "campaignId",
+                "type": "t_uint64",
+                "offset": 20,
+                "slot": "0"
+              },
+              {
+                "label": "grossAmount",
+                "type": "t_uint96",
+                "offset": 0,
+                "slot": "1"
+              },
+              {
+                "label": "netAmount",
+                "type": "t_uint96",
+                "offset": 12,
+                "slot": "1"
+              },
+              {
+                "label": "timestamp",
+                "type": "t_uint64",
+                "offset": 24,
+                "slot": "1"
+              }
+            ],
+            "numberOfBytes": "64"
+          },
+          "t_uint16": {
+            "label": "uint16",
+            "numberOfBytes": "2"
+          },
+          "t_uint32": {
+            "label": "uint32",
+            "numberOfBytes": "4"
+          },
+          "t_uint64": {
+            "label": "uint64",
+            "numberOfBytes": "8"
+          },
+          "t_uint8": {
+            "label": "uint8",
+            "numberOfBytes": "1"
+          },
+          "t_uint96": {
+            "label": "uint96",
+            "numberOfBytes": "12"
+          }
+        },
+        "namespaces": {
+          "erc7201:backchain.storage.TimelockUpgradeable": [
+            {
+              "contract": "TimelockUpgradeable",
+              "label": "pendingImplementation",
+              "type": "t_address",
+              "src": "contracts\\solidity\\TimelockUpgradeable.sol:65",
+              "offset": 0,
+              "slot": "0"
+            },
+            {
+              "contract": "TimelockUpgradeable",
+              "label": "upgradeReadyAt",
+              "type": "t_uint256",
+              "src": "contracts\\solidity\\TimelockUpgradeable.sol:66",
+              "offset": 0,
+              "slot": "1"
+            }
+          ]
+        }
+      }
+    },
+    "e6f7bbaf58f6b51655c8d6470676514bbba2ad3808213f4564af64009ac5c9c6": {
+      "address": "0xF885aE24DE1ac7F60b2bAc07c29d77A0dBe1A3B4",
+      "txHash": "0x56ba4d6f5515919c8729d91cae24881ae2e90c5d153a33fbc3391a64d490f7f2",
+      "layout": {
+        "solcVersion": "0.8.28",
+        "storage": [
+          {
+            "label": "_initialized",
+            "offset": 0,
+            "slot": "0",
+            "type": "t_uint8",
+            "contract": "Initializable",
+            "src": "@openzeppelin\\contracts-upgradeable\\proxy\\utils\\Initializable.sol:63",
+            "retypedFrom": "bool"
+          },
+          {
+            "label": "_initializing",
+            "offset": 1,
+            "slot": "0",
+            "type": "t_bool",
+            "contract": "Initializable",
+            "src": "@openzeppelin\\contracts-upgradeable\\proxy\\utils\\Initializable.sol:68"
+          },
+          {
+            "label": "__gap",
+            "offset": 0,
+            "slot": "1",
+            "type": "t_array(t_uint256)50_storage",
+            "contract": "ContextUpgradeable",
+            "src": "@openzeppelin\\contracts-upgradeable\\utils\\ContextUpgradeable.sol:36"
+          },
+          {
+            "label": "_owner",
+            "offset": 0,
+            "slot": "51",
+            "type": "t_address",
+            "contract": "OwnableUpgradeable",
+            "src": "@openzeppelin\\contracts-upgradeable\\access\\OwnableUpgradeable.sol:22"
+          },
+          {
+            "label": "__gap",
+            "offset": 0,
+            "slot": "52",
+            "type": "t_array(t_uint256)49_storage",
+            "contract": "OwnableUpgradeable",
+            "src": "@openzeppelin\\contracts-upgradeable\\access\\OwnableUpgradeable.sol:94"
+          },
+          {
+            "label": "_status",
+            "offset": 0,
+            "slot": "101",
+            "type": "t_uint256",
+            "contract": "ReentrancyGuardUpgradeable",
+            "src": "@openzeppelin\\contracts-upgradeable\\security\\ReentrancyGuardUpgradeable.sol:38"
+          },
+          {
+            "label": "__gap",
+            "offset": 0,
+            "slot": "102",
+            "type": "t_array(t_uint256)49_storage",
+            "contract": "ReentrancyGuardUpgradeable",
+            "src": "@openzeppelin\\contracts-upgradeable\\security\\ReentrancyGuardUpgradeable.sol:88"
+          },
+          {
+            "label": "__gap",
+            "offset": 0,
+            "slot": "151",
+            "type": "t_array(t_uint256)50_storage",
+            "contract": "ERC1967UpgradeUpgradeable",
+            "src": "@openzeppelin\\contracts-upgradeable\\proxy\\ERC1967\\ERC1967UpgradeUpgradeable.sol:169"
+          },
+          {
+            "label": "__gap",
+            "offset": 0,
+            "slot": "201",
+            "type": "t_array(t_uint256)50_storage",
+            "contract": "UUPSUpgradeable",
+            "src": "@openzeppelin\\contracts-upgradeable\\proxy\\utils\\UUPSUpgradeable.sol:111"
+          },
+          {
+            "label": "bkcToken",
+            "offset": 0,
+            "slot": "251",
+            "type": "t_contract(IERC20Upgradeable)1702",
+            "contract": "SimpleBKCFaucet",
+            "src": "contracts\\solidity\\SimpleBKCFaucet.sol:99"
+          },
+          {
+            "label": "relayerAddress",
+            "offset": 0,
+            "slot": "252",
+            "type": "t_address",
+            "contract": "SimpleBKCFaucet",
+            "src": "contracts\\solidity\\SimpleBKCFaucet.sol:101"
+          },
+          {
+            "label": "tokensPerRequest",
+            "offset": 0,
+            "slot": "253",
+            "type": "t_uint256",
+            "contract": "SimpleBKCFaucet",
+            "src": "contracts\\solidity\\SimpleBKCFaucet.sol:101"
+          },
+          {
+            "label": "ethPerRequest",
+            "offset": 0,
+            "slot": "254",
+            "type": "t_uint256",
+            "contract": "SimpleBKCFaucet",
+            "src": "contracts\\solidity\\SimpleBKCFaucet.sol:102"
+          },
+          {
+            "label": "cooldownPeriod",
+            "offset": 0,
+            "slot": "255",
+            "type": "t_uint256",
+            "contract": "SimpleBKCFaucet",
+            "src": "contracts\\solidity\\SimpleBKCFaucet.sol:103"
+          },
+          {
+            "label": "lastRequestTime",
+            "offset": 0,
+            "slot": "256",
+            "type": "t_mapping(t_address,t_uint256)",
+            "contract": "SimpleBKCFaucet",
+            "src": "contracts\\solidity\\SimpleBKCFaucet.sol:103"
+          },
+          {
+            "label": "userClaimCount",
+            "offset": 0,
+            "slot": "257",
+            "type": "t_mapping(t_address,t_uint256)",
+            "contract": "SimpleBKCFaucet",
+            "src": "contracts\\solidity\\SimpleBKCFaucet.sol:107"
+          },
+          {
+            "label": "totalTokensDistributed",
+            "offset": 0,
+            "slot": "258",
+            "type": "t_uint256",
+            "contract": "SimpleBKCFaucet",
+            "src": "contracts\\solidity\\SimpleBKCFaucet.sol:107"
+          },
+          {
+            "label": "totalEthDistributed",
+            "offset": 0,
+            "slot": "259",
+            "type": "t_uint256",
+            "contract": "SimpleBKCFaucet",
+            "src": "contracts\\solidity\\SimpleBKCFaucet.sol:108"
+          },
+          {
+            "label": "totalUniqueUsers",
+            "offset": 0,
+            "slot": "260",
+            "type": "t_uint256",
+            "contract": "SimpleBKCFaucet",
+            "src": "contracts\\solidity\\SimpleBKCFaucet.sol:109"
+          },
+          {
+            "label": "totalDistributions",
+            "offset": 0,
+            "slot": "261",
+            "type": "t_uint256",
+            "contract": "SimpleBKCFaucet",
+            "src": "contracts\\solidity\\SimpleBKCFaucet.sol:109"
+          },
+          {
+            "label": "paused",
+            "offset": 0,
+            "slot": "262",
+            "type": "t_bool",
+            "contract": "SimpleBKCFaucet",
+            "src": "contracts\\solidity\\SimpleBKCFaucet.sol:111"
+          },
+          {
+            "label": "__gap",
+            "offset": 0,
+            "slot": "263",
+            "type": "t_array(t_uint256)40_storage",
+            "contract": "SimpleBKCFaucet",
+            "src": "contracts\\solidity\\SimpleBKCFaucet.sol:120"
+          }
+        ],
+        "types": {
+          "t_address": {
+            "label": "address",
+            "numberOfBytes": "20"
+          },
+          "t_struct(TimelockStorage)8105_storage": {
+            "label": "struct TimelockUpgradeable.TimelockStorage",
+            "members": [
+              {
+                "label": "pendingImplementation",
+                "type": "t_address",
+                "offset": 0,
+                "slot": "0"
+              },
+              {
+                "label": "upgradeReadyAt",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "1"
+              }
+            ],
+            "numberOfBytes": "64"
+          },
+          "t_uint256": {
+            "label": "uint256",
+            "numberOfBytes": "32"
+          },
+          "t_array(t_uint256)40_storage": {
+            "label": "uint256[40]",
+            "numberOfBytes": "1280"
+          },
+          "t_array(t_uint256)49_storage": {
+            "label": "uint256[49]",
+            "numberOfBytes": "1568"
+          },
+          "t_array(t_uint256)50_storage": {
+            "label": "uint256[50]",
+            "numberOfBytes": "1600"
+          },
+          "t_bool": {
+            "label": "bool",
+            "numberOfBytes": "1"
+          },
+          "t_contract(IERC20Upgradeable)1702": {
+            "label": "contract IERC20Upgradeable",
+            "numberOfBytes": "20"
+          },
+          "t_mapping(t_address,t_uint256)": {
+            "label": "mapping(address => uint256)",
+            "numberOfBytes": "32"
+          },
+          "t_uint8": {
+            "label": "uint8",
+            "numberOfBytes": "1"
+          }
+        },
+        "namespaces": {
+          "erc7201:backchain.storage.TimelockUpgradeable": [
+            {
+              "contract": "TimelockUpgradeable",
+              "label": "pendingImplementation",
+              "type": "t_address",
+              "src": "contracts\\solidity\\TimelockUpgradeable.sol:65",
+              "offset": 0,
+              "slot": "0"
+            },
+            {
+              "contract": "TimelockUpgradeable",
+              "label": "upgradeReadyAt",
+              "type": "t_uint256",
+              "src": "contracts\\solidity\\TimelockUpgradeable.sol:66",
+              "offset": 0,
+              "slot": "1"
+            }
+          ]
+        }
+      }
+    },
+    "274a704bd4b1b09a5d1b52ff398ca0086ed10ba0a23719e8176e084f7f703db0": {
+      "address": "0x0636452F9a5b371DA4C0Aa7E21D43A8487754EF5",
+      "txHash": "0xe31e7658e4a9632ff427e8d9b5bf3b2dfc0bb481ba5b118636e6446e3f01907d",
+      "layout": {
+        "solcVersion": "0.8.28",
+        "storage": [
+          {
+            "label": "_initialized",
+            "offset": 0,
+            "slot": "0",
+            "type": "t_uint8",
+            "contract": "Initializable",
+            "src": "@openzeppelin\\contracts-upgradeable\\proxy\\utils\\Initializable.sol:63",
+            "retypedFrom": "bool"
+          },
+          {
+            "label": "_initializing",
+            "offset": 1,
+            "slot": "0",
+            "type": "t_bool",
+            "contract": "Initializable",
+            "src": "@openzeppelin\\contracts-upgradeable\\proxy\\utils\\Initializable.sol:68"
+          },
+          {
+            "label": "__gap",
+            "offset": 0,
+            "slot": "1",
+            "type": "t_array(t_uint256)50_storage",
+            "contract": "ERC1967UpgradeUpgradeable",
+            "src": "@openzeppelin\\contracts-upgradeable\\proxy\\ERC1967\\ERC1967UpgradeUpgradeable.sol:169"
+          },
+          {
+            "label": "__gap",
+            "offset": 0,
+            "slot": "51",
+            "type": "t_array(t_uint256)50_storage",
+            "contract": "UUPSUpgradeable",
+            "src": "@openzeppelin\\contracts-upgradeable\\proxy\\utils\\UUPSUpgradeable.sol:111"
+          },
+          {
+            "label": "_status",
+            "offset": 0,
+            "slot": "101",
+            "type": "t_uint256",
+            "contract": "ReentrancyGuardUpgradeable",
+            "src": "@openzeppelin\\contracts-upgradeable\\security\\ReentrancyGuardUpgradeable.sol:38"
+          },
+          {
+            "label": "__gap",
+            "offset": 0,
+            "slot": "102",
+            "type": "t_array(t_uint256)49_storage",
+            "contract": "ReentrancyGuardUpgradeable",
+            "src": "@openzeppelin\\contracts-upgradeable\\security\\ReentrancyGuardUpgradeable.sol:88"
+          },
+          {
+            "label": "__gap",
+            "offset": 0,
+            "slot": "151",
+            "type": "t_array(t_uint256)50_storage",
+            "contract": "ContextUpgradeable",
+            "src": "@openzeppelin\\contracts-upgradeable\\utils\\ContextUpgradeable.sol:36"
+          },
+          {
+            "label": "_paused",
+            "offset": 0,
+            "slot": "201",
+            "type": "t_bool",
+            "contract": "PausableUpgradeable",
+            "src": "@openzeppelin\\contracts-upgradeable\\security\\PausableUpgradeable.sol:29"
+          },
+          {
+            "label": "__gap",
+            "offset": 0,
+            "slot": "202",
+            "type": "t_array(t_uint256)49_storage",
+            "contract": "PausableUpgradeable",
+            "src": "@openzeppelin\\contracts-upgradeable\\security\\PausableUpgradeable.sol:116"
+          },
+          {
+            "label": "admin",
+            "offset": 0,
+            "slot": "251",
+            "type": "t_address",
+            "contract": "BackchainGovernance",
+            "src": "contracts\\solidity\\BackchainGovernance.sol:224"
+          },
+          {
+            "label": "pendingAdmin",
+            "offset": 0,
+            "slot": "252",
+            "type": "t_address",
+            "contract": "BackchainGovernance",
+            "src": "contracts\\solidity\\BackchainGovernance.sol:224"
+          },
+          {
+            "label": "dao",
+            "offset": 0,
+            "slot": "253",
+            "type": "t_address",
+            "contract": "BackchainGovernance",
+            "src": "contracts\\solidity\\BackchainGovernance.sol:226"
+          },
+          {
+            "label": "currentPhase",
+            "offset": 20,
+            "slot": "253",
+            "type": "t_enum(GovernancePhase)6149",
+            "contract": "BackchainGovernance",
+            "src": "contracts\\solidity\\BackchainGovernance.sol:226"
+          },
+          {
+            "label": "timelockDelay",
+            "offset": 0,
+            "slot": "254",
+            "type": "t_uint256",
+            "contract": "BackchainGovernance",
+            "src": "contracts\\solidity\\BackchainGovernance.sol:228"
+          },
+          {
+            "label": "__deprecated_timelockEnabled",
+            "offset": 0,
+            "slot": "255",
+            "type": "t_bool",
+            "contract": "BackchainGovernance",
+            "src": "contracts\\solidity\\BackchainGovernance.sol:232"
+          },
+          {
+            "label": "proposalCount",
+            "offset": 0,
+            "slot": "256",
+            "type": "t_uint256",
+            "contract": "BackchainGovernance",
+            "src": "contracts\\solidity\\BackchainGovernance.sol:233"
+          },
+          {
+            "label": "proposals",
+            "offset": 0,
+            "slot": "257",
+            "type": "t_mapping(t_uint256,t_struct(Proposal)6172_storage)",
+            "contract": "BackchainGovernance",
+            "src": "contracts\\solidity\\BackchainGovernance.sol:234"
+          },
+          {
+            "label": "queuedTransactions",
+            "offset": 0,
+            "slot": "258",
+            "type": "t_mapping(t_bytes32,t_bool)",
+            "contract": "BackchainGovernance",
+            "src": "contracts\\solidity\\BackchainGovernance.sol:234"
+          },
+          {
+            "label": "ecosystemManager",
+            "offset": 0,
+            "slot": "259",
+            "type": "t_address",
+            "contract": "BackchainGovernance",
+            "src": "contracts\\solidity\\BackchainGovernance.sol:252"
+          },
+          {
+            "label": "miningManager",
+            "offset": 0,
+            "slot": "260",
+            "type": "t_address",
+            "contract": "BackchainGovernance",
+            "src": "contracts\\solidity\\BackchainGovernance.sol:252"
+          },
+          {
+            "label": "delegationManager",
+            "offset": 0,
+            "slot": "261",
+            "type": "t_address",
+            "contract": "BackchainGovernance",
+            "src": "contracts\\solidity\\BackchainGovernance.sol:253"
+          },
+          {
+            "label": "bkcToken",
+            "offset": 0,
+            "slot": "262",
+            "type": "t_address",
+            "contract": "BackchainGovernance",
+            "src": "contracts\\solidity\\BackchainGovernance.sol:255"
+          },
+          {
+            "label": "rewardBoosterNFT",
+            "offset": 0,
+            "slot": "263",
+            "type": "t_address",
+            "contract": "BackchainGovernance",
+            "src": "contracts\\solidity\\BackchainGovernance.sol:255"
+          },
+          {
+            "label": "backchat",
+            "offset": 0,
+            "slot": "264",
+            "type": "t_address",
+            "contract": "BackchainGovernance",
+            "src": "contracts\\solidity\\BackchainGovernance.sol:256"
+          },
+          {
+            "label": "fortunePool",
+            "offset": 0,
+            "slot": "265",
+            "type": "t_address",
+            "contract": "BackchainGovernance",
+            "src": "contracts\\solidity\\BackchainGovernance.sol:256"
+          },
+          {
+            "label": "charityPool",
+            "offset": 0,
+            "slot": "266",
+            "type": "t_address",
+            "contract": "BackchainGovernance",
+            "src": "contracts\\solidity\\BackchainGovernance.sol:258"
+          },
+          {
+            "label": "rentalManager",
+            "offset": 0,
+            "slot": "267",
+            "type": "t_address",
+            "contract": "BackchainGovernance",
+            "src": "contracts\\solidity\\BackchainGovernance.sol:258"
+          },
+          {
+            "label": "decentralizedNotary",
+            "offset": 0,
+            "slot": "268",
+            "type": "t_address",
+            "contract": "BackchainGovernance",
+            "src": "contracts\\solidity\\BackchainGovernance.sol:261"
+          },
+          {
+            "label": "nftPoolFactory",
+            "offset": 0,
+            "slot": "269",
+            "type": "t_address",
+            "contract": "BackchainGovernance",
+            "src": "contracts\\solidity\\BackchainGovernance.sol:264"
+          },
+          {
+            "label": "__gap",
+            "offset": 0,
+            "slot": "270",
+            "type": "t_array(t_uint256)40_storage",
+            "contract": "BackchainGovernance",
+            "src": "contracts\\solidity\\BackchainGovernance.sol:273"
+          }
+        ],
+        "types": {
+          "t_address": {
+            "label": "address",
+            "numberOfBytes": "20"
+          },
+          "t_struct(TimelockStorage)8105_storage": {
+            "label": "struct TimelockUpgradeable.TimelockStorage",
+            "members": [
+              {
+                "label": "pendingImplementation",
+                "type": "t_address",
+                "offset": 0,
+                "slot": "0"
+              },
+              {
+                "label": "upgradeReadyAt",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "1"
+              }
+            ],
+            "numberOfBytes": "64"
+          },
+          "t_uint256": {
+            "label": "uint256",
+            "numberOfBytes": "32"
+          },
+          "t_array(t_uint256)40_storage": {
+            "label": "uint256[40]",
+            "numberOfBytes": "1280"
+          },
+          "t_array(t_uint256)49_storage": {
+            "label": "uint256[49]",
+            "numberOfBytes": "1568"
+          },
+          "t_array(t_uint256)50_storage": {
+            "label": "uint256[50]",
+            "numberOfBytes": "1600"
+          },
+          "t_bool": {
+            "label": "bool",
+            "numberOfBytes": "1"
+          },
+          "t_bytes32": {
+            "label": "bytes32",
+            "numberOfBytes": "32"
+          },
+          "t_bytes_storage": {
+            "label": "bytes",
+            "numberOfBytes": "32"
+          },
+          "t_enum(GovernancePhase)6149": {
+            "label": "enum BackchainGovernance.GovernancePhase",
+            "members": [
+              "AdminOnly",
+              "Multisig",
+              "Timelock",
+              "DAO"
+            ],
+            "numberOfBytes": "1"
+          },
+          "t_mapping(t_bytes32,t_bool)": {
+            "label": "mapping(bytes32 => bool)",
+            "numberOfBytes": "32"
+          },
+          "t_mapping(t_uint256,t_struct(Proposal)6172_storage)": {
+            "label": "mapping(uint256 => struct BackchainGovernance.Proposal)",
+            "numberOfBytes": "32"
+          },
+          "t_string_storage": {
+            "label": "string",
+            "numberOfBytes": "32"
+          },
+          "t_struct(Proposal)6172_storage": {
+            "label": "struct BackchainGovernance.Proposal",
+            "members": [
+              {
+                "label": "id",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "0"
+              },
+              {
+                "label": "target",
+                "type": "t_address",
+                "offset": 0,
+                "slot": "1"
+              },
+              {
+                "label": "data",
+                "type": "t_bytes_storage",
+                "offset": 0,
+                "slot": "2"
+              },
+              {
+                "label": "value",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "3"
+              },
+              {
+                "label": "eta",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "4"
+              },
+              {
+                "label": "executed",
+                "type": "t_bool",
+                "offset": 0,
+                "slot": "5"
+              },
+              {
+                "label": "cancelled",
+                "type": "t_bool",
+                "offset": 1,
+                "slot": "5"
+              },
+              {
+                "label": "description",
+                "type": "t_string_storage",
+                "offset": 0,
+                "slot": "6"
+              }
+            ],
+            "numberOfBytes": "224"
+          },
+          "t_uint8": {
+            "label": "uint8",
+            "numberOfBytes": "1"
+          }
+        },
+        "namespaces": {
+          "erc7201:backchain.storage.TimelockUpgradeable": [
+            {
+              "contract": "TimelockUpgradeable",
+              "label": "pendingImplementation",
+              "type": "t_address",
+              "src": "contracts\\solidity\\TimelockUpgradeable.sol:65",
+              "offset": 0,
+              "slot": "0"
+            },
+            {
+              "contract": "TimelockUpgradeable",
+              "label": "upgradeReadyAt",
+              "type": "t_uint256",
+              "src": "contracts\\solidity\\TimelockUpgradeable.sol:66",
+              "offset": 0,
+              "slot": "1"
+            }
+          ]
+        }
+      }
+    }
+  }
+}

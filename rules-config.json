@@ -2,7 +2,7 @@
   "VERSION": "7.0.0",
   "DESCRIPTION": "Backchain Ecosystem V7.0 - Backchat V8 (Viral Referral)",
   "NETWORK": "arbitrumSepolia",
-  "CREATED_AT": "2026-02-06T20:33:47.166Z",
+  "CREATED_AT": "2026-02-06T21:25:01.351Z",
   "externalContracts": {
     "BACKCOIN_ORACLE": "0x16346f5a45f9615f1c894414989f0891c54ef07b"
   },
@@ -16,7 +16,7 @@
     "TIMELOCK_ENABLED": false,
     "TIMELOCK_DELAY_SECONDS": "172800",
     "GOVERNANCE_PHASE": 0,
-    "GOVERNANCE_ADDRESS": "0x9500ea3241D8fc7Ac4a6cA35721351a601C1D21f"
+    "GOVERNANCE_ADDRESS": "0x0C3bfE0344175D792ab4bbB438BE98EB1297AE2B"
   },
   "features": {
     "METAADS_ENABLED": true,
@@ -27,7 +27,7 @@
     "TREASURY": "3000",
     "DELEGATOR_POOL": "7000"
   },
-  "LAST_UPDATED": "2026-02-06T20:43:02.513Z",
+  "LAST_UPDATED": "2026-02-06T21:33:45.062Z",
   "feeDistribution": {
     "TREASURY": "3000",
     "DELEGATOR_POOL": "7000"
