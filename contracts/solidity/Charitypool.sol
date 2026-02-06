@@ -234,6 +234,7 @@ contract CharityPool is
     error InsufficientEth();
     error TransferFailed();
     error ExceedsRecoverable();
+    error AmountTooLarge();
 
     // ========================================================================
     //                              STORAGE
@@ -480,14 +481,16 @@ contract CharityPool is
         if (c.status != Status.ACTIVE) revert CampaignNotActive();
         if (block.timestamp >= c.deadline) revert CampaignNotActive();
 
-        // Calculate fee split
-        uint256 feeAmount;
-        uint256 netAmount;
-        
-        unchecked {
-            feeAmount = (msg.value * donationFeeBips) / BIPS;
-            netAmount = msg.value - feeAmount;
-        }
+        // Validate msg.value fits in uint96 (safe downcasts below)
+        if (msg.value > type(uint96).max) revert AmountTooLarge();
+
+        // Calculate fee split (safe: donationFeeBips <= 1000, msg.value <= uint96.max)
+        uint256 feeAmount = (msg.value * donationFeeBips) / BIPS;
+        uint256 netAmount = msg.value - feeAmount;
+
+        // Validate accumulation won't overflow packed struct fields
+        if (uint256(c.raisedAmount) + netAmount > type(uint96).max) revert AmountTooLarge();
+        if (uint256(c.donationCount) + 1 > type(uint32).max) revert AmountTooLarge();
 
         // Send fee to MiningManager (Operator + Treasury)
         if (feeAmount > 0) {
@@ -505,15 +508,14 @@ contract CharityPool is
             timestamp: uint64(block.timestamp)
         });
 
-        // Update campaign
+        // Update campaign (safe: overflow checked above)
         unchecked {
             c.raisedAmount += uint96(netAmount);
             c.donationCount++;
-
-            totalRaisedAllTime += netAmount;
-            totalDonationsAllTime++;
-            totalFeesCollected += feeAmount;
         }
+        totalRaisedAllTime += netAmount;
+        totalDonationsAllTime++;
+        totalFeesCollected += feeAmount;
 
         // Track reserved ETH for campaign fund protection
         totalReservedETH += netAmount;
@@ -549,13 +551,17 @@ contract CharityPool is
         if (c.status != Status.ACTIVE) revert CampaignNotActive();
         if (msg.value < boostCostEth) revert InsufficientEth();
 
+        // Validate msg.value fits in uint96
+        if (msg.value > type(uint96).max) revert AmountTooLarge();
+        if (uint256(c.boostAmount) + msg.value > type(uint96).max) revert AmountTooLarge();
+
         // Collect BKC fee
         _collectBkcFee(boostCostBkc, _operator);
 
         // Send ETH to MiningManager
         _sendEthToMining(msg.value, _operator);
 
-        // Update boost info
+        // Update boost info (safe: overflow checked above)
         unchecked {
             c.boostAmount += uint96(msg.value);
         }
@@ -678,10 +684,8 @@ contract CharityPool is
         uint256 netToCampaign,
         uint256 feeToProtocol
     ) {
-        unchecked {
-            feeToProtocol = (_amount * donationFeeBips) / BIPS;
-            netToCampaign = _amount - feeToProtocol;
-        }
+        feeToProtocol = (_amount * donationFeeBips) / BIPS;
+        netToCampaign = _amount - feeToProtocol;
     }
 
     /// @notice Check if campaign can be withdrawn
