@@ -270,11 +270,9 @@ contract NFTLiquidityPoolFactory is
         deployedBoostBips.push(_boostBips);
         poolCount++;
 
-        NFTLiquidityPool(payable(poolAddress)).initialize(
-            owner(),
-            ecosystemManagerAddress,
-            _boostBips
-        );
+        NFTLiquidityPool pool_ = NFTLiquidityPool(payable(poolAddress));
+        pool_.initialize(owner(), ecosystemManagerAddress, _boostBips);
+        pool_.markAsClone();
 
         emit PoolDeployed(_boostBips, poolAddress, poolCount);
     }
@@ -301,11 +299,9 @@ contract NFTLiquidityPoolFactory is
             deployedBoostBips.push(boostBips);
             poolCount++;
 
-            NFTLiquidityPool(payable(poolAddress)).initialize(
-                owner(),
-                ecosystemManagerAddress,
-                boostBips
-            );
+            NFTLiquidityPool pool_ = NFTLiquidityPool(payable(poolAddress));
+            pool_.initialize(owner(), ecosystemManagerAddress, boostBips);
+            pool_.markAsClone();
 
             poolAddresses[i] = poolAddress;
 
@@ -344,11 +340,9 @@ contract NFTLiquidityPoolFactory is
             deployedBoostBips.push(boostBips);
             poolCount++;
 
-            NFTLiquidityPool(payable(poolAddress)).initialize(
-                owner(),
-                ecosystemManagerAddress,
-                boostBips
-            );
+            NFTLiquidityPool pool_ = NFTLiquidityPool(payable(poolAddress));
+            pool_.initialize(owner(), ecosystemManagerAddress, boostBips);
+            pool_.markAsClone();
 
             addresses[i] = poolAddress;
 

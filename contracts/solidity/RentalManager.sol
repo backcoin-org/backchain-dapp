@@ -641,10 +641,7 @@ contract RentalManager is
             bkcToken.safeTransfer(listing.owner, ownerPayout);
         }
 
-        uint256 duration = globalRentalDuration > 0
-            ? globalRentalDuration
-            : _hours * 1 hours;
-        uint256 endTime = block.timestamp + duration;
+        uint256 endTime = block.timestamp + (_hours * 1 hours);
 
         activeRentals[_tokenId] = Rental({
             tenant: msg.sender,
@@ -787,6 +784,11 @@ contract RentalManager is
             revert RentalStillActive();
         }
 
+        Listing storage listing = listings[_tokenId];
+
+        // Only send to the NFT's original owner, not arbitrary address
+        address recipient = listing.isActive ? listing.owner : _to;
+
         delete listings[_tokenId];
         delete activeRentals[_tokenId];
         delete listingSpotlight[_tokenId];
@@ -797,7 +799,7 @@ contract RentalManager is
 
         _removeFromListedArray(_tokenId);
 
-        nftContract.safeTransferFrom(address(this), _to, _tokenId);
+        nftContract.safeTransferFrom(address(this), recipient, _tokenId);
     }
 
     function recoverTokens(address _token, address _to, uint256 _amount) external onlyOwner {

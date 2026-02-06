@@ -200,6 +200,7 @@ contract NFTLiquidityPool is
     error InsufficientETHFee();
     error TransferFailed();
     error MiningManagerCallFailed();
+    error CloneCannotUpgrade();
 
     // =========================================================================
     //                              STATE
@@ -234,11 +235,14 @@ contract NFTLiquidityPool is
     /// @notice Total ETH collected from fees
     uint256 public totalETHCollected;
 
+    /// @notice True if deployed as an EIP-1167 clone (UUPS upgrades disabled)
+    bool public isClone;
+
     // =========================================================================
     //                           STORAGE GAP
     // =========================================================================
 
-    uint256[42] private __gap;
+    uint256[41] private __gap;
 
     // =========================================================================
     //                              EVENTS
@@ -317,11 +321,16 @@ contract NFTLiquidityPool is
     }
 
     function _authorizeUpgrade(address newImplementation) internal override onlyOwner {
+        if (isClone) revert CloneCannotUpgrade();
         _checkTimelock(newImplementation);
     }
 
     function _requireUpgradeAccess() internal view override {
         _checkOwner();
+    }
+
+    function markAsClone() external onlyOwner {
+        isClone = true;
     }
 
     function onERC721Received(
