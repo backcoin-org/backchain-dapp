@@ -201,6 +201,8 @@ contract FortunePool is
 
     uint256 public constant MAX_REVEAL_WINDOW = 251;
 
+    uint64 public constant MAX_MULTIPLIER_BIPS = 100_000;
+
     // =========================================================================
     //                              ENUMS
     // =========================================================================
@@ -267,6 +269,9 @@ contract FortunePool is
     error HashMismatch();
     error InvalidDelay();
     error BlockhashUnavailable();
+    error AmountTooLarge();
+    error TierConfigChanged();
+    error MultiplierTooHigh();
 
     // =========================================================================
     //                              STATE
@@ -322,11 +327,15 @@ contract FortunePool is
 
     mapping(uint256 => GameResult) public gameResults;
 
+    uint256 public tierConfigNonce;
+
+    mapping(uint256 => uint256) public commitmentTierNonces;
+
     // =========================================================================
     //                           STORAGE GAP
     // =========================================================================
 
-    uint256[35] private __gap;
+    uint256[33] private __gap;
 
     // =========================================================================
     //                              EVENTS
@@ -473,6 +482,7 @@ contract FortunePool is
     ) external onlyOwner {
         if (_tierId == 0) revert InvalidTierId();
         if (_maxRange == 0) revert ZeroAmount();
+        if (_multiplierBips > MAX_MULTIPLIER_BIPS) revert MultiplierTooHigh();
         if (_tierId > activeTierCount + 1) revert InvalidTierSequence();
 
         if (_tierId > activeTierCount) {
@@ -485,12 +495,15 @@ contract FortunePool is
             active: true
         });
 
+        ++tierConfigNonce;
+
         emit TierConfigured(_tierId, _maxRange, _multiplierBips, true);
     }
 
     function reduceTierCount(uint256 _newCount) external onlyOwner {
         if (_newCount >= activeTierCount) revert InvalidTierSequence();
         activeTierCount = _newCount;
+        ++tierConfigNonce;
     }
 
     function fundPrizePool(uint256 _amount) external onlyOwner {
@@ -773,6 +786,9 @@ contract FortunePool is
             gameId = ++gameCounter;
         }
 
+        if (netWager > type(uint128).max) revert AmountTooLarge();
+        if (msg.value > type(uint128).max) revert AmountTooLarge();
+
         commitments[gameId] = Commitment({
             player: msg.sender,
             commitBlock: uint64(block.number),
@@ -784,6 +800,7 @@ contract FortunePool is
 
         commitmentHashes[gameId] = _commitmentHash;
         commitmentOperators[gameId] = _operator;
+        commitmentTierNonces[gameId] = tierConfigNonce;
 
         unchecked {
             totalWageredAllTime += netWager;
@@ -820,6 +837,7 @@ contract FortunePool is
 
         if (c.status != CommitmentStatus.COMMITTED) revert AlreadyRevealed();
         if (c.player != msg.sender) revert NotCommitmentOwner();
+        if (commitmentTierNonces[_gameId] != tierConfigNonce) revert TierConfigChanged();
 
         uint256 commitBlock = uint256(c.commitBlock);
         if (block.number < commitBlock + revealDelay) revert TooEarlyToReveal();
