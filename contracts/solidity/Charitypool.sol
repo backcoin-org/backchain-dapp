@@ -231,6 +231,7 @@ contract CharityPool is
     error InsufficientBkc();
     error InsufficientEth();
     error TransferFailed();
+    error ExceedsRecoverable();
 
     // ========================================================================
     //                              STORAGE
@@ -273,10 +274,17 @@ contract CharityPool is
     uint256 public totalFeesCollected;
 
     // ========================================================================
+    //                  STATE V6.1 - Campaign Fund Protection
+    // ========================================================================
+
+    /// @notice Total ETH reserved for active/completed campaigns (protects emergencyRecover)
+    uint256 public totalReservedETH;
+
+    // ========================================================================
     //                           STORAGE GAP
     // ========================================================================
 
-    uint256[40] private __gap;
+    uint256[39] private __gap;
 
     // ========================================================================
     //                              EVENTS
@@ -493,11 +501,14 @@ contract CharityPool is
         unchecked {
             c.raisedAmount += uint96(netAmount);
             c.donationCount++;
-            
+
             totalRaisedAllTime += netAmount;
             totalDonationsAllTime++;
             totalFeesCollected += feeAmount;
         }
+
+        // Track reserved ETH for campaign fund protection
+        totalReservedETH += netAmount;
 
         campaignDonations[_campaignId].push(donationId);
         userDonations[msg.sender].push(donationId);
@@ -587,8 +598,11 @@ contract CharityPool is
             }
         }
 
-        // Transfer ETH to creator (100% - NO penalty)
+        // Release reserved ETH
         if (amount > 0) {
+            totalReservedETH -= amount;
+
+            // Transfer ETH to creator (100% - NO penalty)
             (bool success, ) = msg.sender.call{value: amount}("");
             if (!success) revert TransferFailed();
         }
@@ -768,7 +782,10 @@ contract CharityPool is
         if (_to == address(0)) revert ZeroAddress();
 
         if (_token == address(0)) {
-            // Recover ETH (only excess, not campaign funds)
+            // Protect campaign funds - only allow recovering excess ETH
+            uint256 available = address(this).balance - totalReservedETH;
+            if (_amount > available) revert ExceedsRecoverable();
+
             (bool success, ) = _to.call{value: _amount}("");
             if (!success) revert TransferFailed();
         } else {
