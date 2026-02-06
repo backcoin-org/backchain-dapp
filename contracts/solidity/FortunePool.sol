@@ -512,9 +512,7 @@ contract FortunePool is
     function fundPrizePool(uint256 _amount) external onlyOwner {
         if (_amount == 0) revert ZeroAmount();
         bkcToken.safeTransferFrom(msg.sender, address(this), _amount);
-        unchecked {
-            prizePoolBalance += _amount;
-        }
+        prizePoolBalance += _amount;
         emit PrizePoolFunded(_amount, prizePoolBalance);
     }
 
@@ -765,16 +763,12 @@ contract FortunePool is
 
         bkcToken.safeTransferFrom(msg.sender, address(this), _wagerAmount);
 
-        unchecked {
-            prizePoolBalance += netWager;
-            totalETHCollected += msg.value;
-        }
+        prizePoolBalance += netWager;
+        totalETHCollected += msg.value;
 
         if (fee > 0) {
             bkcToken.safeTransfer(miningManagerAddress, fee);
-            unchecked {
-                totalBKCFees += fee;
-            }
+            totalBKCFees += fee;
 
             IMiningManagerV3(miningManagerAddress).performPurchaseMiningWithOperator(
                 SERVICE_KEY,
@@ -805,9 +799,7 @@ contract FortunePool is
         commitmentOperators[gameId] = _operator;
         commitmentTierNonces[gameId] = tierConfigNonce;
 
-        unchecked {
-            totalWageredAllTime += netWager;
-        }
+        totalWageredAllTime += netWager;
 
         emit GameCommitted(
             gameId,
@@ -944,11 +936,9 @@ contract FortunePool is
         }
 
         if (prizeWon > 0) {
-            unchecked {
-                prizePoolBalance -= prizeWon;
-                totalPaidOutAllTime += prizeWon;
-                totalWinsAllTime++;
-            }
+            prizePoolBalance -= prizeWon;
+            totalPaidOutAllTime += prizeWon;
+            totalWinsAllTime++;
             bkcToken.safeTransfer(msg.sender, prizeWon);
         }
 
@@ -1001,9 +991,7 @@ contract FortunePool is
 
         c.status = CommitmentStatus.EXPIRED;
 
-        unchecked {
-            totalExpiredGames++;
-        }
+        totalExpiredGames++;
 
         emit GameExpired(_gameId, c.player, uint256(c.wagerAmount));
     }

@@ -451,10 +451,8 @@ contract RentalManager is
         spotlight.totalAmount += msg.value;
         spotlight.lastSpotlightTime = block.timestamp;
 
-        unchecked {
-            totalSpotlightCollected += msg.value;
-            totalETHCollected += msg.value;
-        }
+        totalSpotlightCollected += msg.value;
+        totalETHCollected += msg.value;
 
         // Send ETH to MiningManager with operator info
         _sendETHToMining(msg.value, _operator);
@@ -651,14 +649,12 @@ contract RentalManager is
             paidAmount: totalCost
         });
 
-        unchecked {
-            listing.totalEarnings += ownerPayout;
-            listing.rentalCount++;
-            totalFeesCollected += protocolFee;
-            totalVolume += totalCost;
-            totalRentals++;
-            totalBKCFees += protocolFee;
-        }
+        listing.totalEarnings += ownerPayout;
+        listing.rentalCount++;
+        totalFeesCollected += protocolFee;
+        totalVolume += totalCost;
+        totalRentals++;
+        totalBKCFees += protocolFee;
 
         emit NFTRented(
             _tokenId,
@@ -722,14 +718,12 @@ contract RentalManager is
             paidAmount: totalCost
         });
 
-        unchecked {
-            listing.totalEarnings += ownerPayout;
-            listing.rentalCount++;
-            totalFeesCollected += protocolFee;
-            totalVolume += totalCost;
-            totalRentals++;
-            totalBKCFees += protocolFee;
-        }
+        listing.totalEarnings += ownerPayout;
+        listing.rentalCount++;
+        totalFeesCollected += protocolFee;
+        totalVolume += totalCost;
+        totalRentals++;
+        totalBKCFees += protocolFee;
 
         emit NFTRented(
             _tokenId,

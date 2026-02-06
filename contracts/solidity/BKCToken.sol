@@ -233,9 +233,7 @@ contract BKCToken is
 
         _burn(msg.sender, _amount);
         
-        unchecked {
-            totalBurned += _amount;
-        }
+        totalBurned += _amount;
 
         emit TokensBurned(msg.sender, _amount, totalSupply(), totalBurned);
     }
@@ -257,9 +255,7 @@ contract BKCToken is
         _spendAllowance(_from, msg.sender, _amount);
         _burn(_from, _amount);
         
-        unchecked {
-            totalBurned += _amount;
-        }
+        totalBurned += _amount;
 
         emit TokensBurned(_from, _amount, totalSupply(), totalBurned);
     }

@@ -346,17 +346,13 @@ contract DecentralizedNotary is
             bkcToken.safeTransferFrom(msg.sender, address(this), bkcFeeToPay);
             bkcToken.safeTransfer(miningManagerAddress, bkcFeeToPay);
 
-            unchecked {
-                totalBKCCollected += bkcFeeToPay;
-            }
+            totalBKCCollected += bkcFeeToPay;
         }
 
         // Process ETH payment
         uint256 ethFeeToPay = msg.value;
         if (ethFeeToPay > 0) {
-            unchecked {
-                totalETHCollected += ethFeeToPay;
-            }
+            totalETHCollected += ethFeeToPay;
         }
 
         // Send both fees to MiningManager with operator info
@@ -364,10 +360,8 @@ contract DecentralizedNotary is
 
         // Mint NFT
         tokenId = _nextTokenId;
-        unchecked {
-            ++_nextTokenId;
-            ++totalNotarizations;
-        }
+        ++_nextTokenId;
+        ++totalNotarizations;
 
         _safeMint(msg.sender, tokenId);
 

@@ -669,17 +669,13 @@ contract MiningManager is
             // Mint new tokens
             bkcToken.mint(address(this), mintAmount);
 
-            unchecked {
-                totalMined += mintAmount;
-            }
+            totalMined += mintAmount;
 
             // Burn from mining (if enabled)
             if (mintBurn > 0) {
                 bkcToken.burn(mintBurn);
 
-                unchecked {
-                    totalBurnedFromMining += mintBurn;
-                }
+                totalBurnedFromMining += mintBurn;
 
                 emit TokensBurned(
                     _serviceKey,
@@ -724,9 +720,7 @@ contract MiningManager is
         if (feeToBurn > 0) {
             bkcToken.burn(feeToBurn);
 
-            unchecked {
-                totalBurnedFromFees += feeToBurn;
-            }
+            totalBurnedFromFees += feeToBurn;
 
             emit TokensBurned(
                 _serviceKey,
@@ -753,8 +747,8 @@ contract MiningManager is
         unchecked {
             feeToTreasury = (feeAfterBurn * feeTreasuryBips) / BIPS_DENOMINATOR;
             feeToDelegators = feeAfterBurn - feeToTreasury;
-            totalFeesProcessed += _purchaseAmount;
         }
+        totalFeesProcessed += _purchaseAmount;
 
         // Distribute to Treasury
         if (feeToTreasury > 0 && treasury != address(0)) {
@@ -801,18 +795,14 @@ contract MiningManager is
 
         // Update totals
         if (bkcAmount > 0) {
-            unchecked {
-                totalOperatorClaimedBKC += bkcAmount;
-                operatorTotalClaimedBKC[msg.sender] += bkcAmount;
-            }
+            totalOperatorClaimedBKC += bkcAmount;
+            operatorTotalClaimedBKC[msg.sender] += bkcAmount;
             bkcToken.safeTransfer(msg.sender, bkcAmount);
         }
 
         if (ethAmount > 0) {
-            unchecked {
-                totalOperatorClaimedETH += ethAmount;
-                operatorTotalClaimedETH[msg.sender] += ethAmount;
-            }
+            totalOperatorClaimedETH += ethAmount;
+            operatorTotalClaimedETH[msg.sender] += ethAmount;
             _safeTransferETH(msg.sender, ethAmount);
         }
 

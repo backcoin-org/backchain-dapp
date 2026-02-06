@@ -597,9 +597,7 @@ contract DelegationManager is
         address miningManager = ecosystemManager.getMiningManagerAddress();
         if (miningManager == address(0)) revert ZeroAddress();
 
-        unchecked {
-            totalBKCFees += _feeAmount;
-        }
+        totalBKCFees += _feeAmount;
 
         bkcToken.safeTransfer(miningManager, _feeAmount);
 
@@ -613,9 +611,7 @@ contract DelegationManager is
     function _sendETHToMining(uint256 _amount, address _operator) internal {
         if (_amount == 0) return;
 
-        unchecked {
-            totalETHCollected += _amount;
-        }
+        totalETHCollected += _amount;
 
         address miningManager = ecosystemManager.getMiningManagerAddress();
         if (miningManager == address(0)) revert ZeroAddress();
