@@ -105,7 +105,8 @@ contract BKCToken is
     //                              STATE
     // =========================================================================
 
-    mapping(address => bool) private _blacklisted;
+    /// @dev Deprecated: blacklist removed (A-02). Slot preserved for upgrade safety.
+    uint256 private __deprecated_slot_blacklisted;
 
     uint256 public totalBurned;
 
@@ -118,12 +119,6 @@ contract BKCToken is
     // =========================================================================
     //                              EVENTS
     // =========================================================================
-
-    event BlacklistUpdated(
-        address indexed account,
-        bool indexed isBlacklisted,
-        address indexed updatedBy
-    );
 
     event TokensMinted(
         address indexed to,
@@ -145,7 +140,6 @@ contract BKCToken is
     error ZeroAddress();
     error ZeroAmount();
     error MaxSupplyExceeded(uint256 requested, uint256 available);
-    error AddressBlacklisted(address account);
     error ArrayLengthMismatch();
     error InsufficientBalance(uint256 requested, uint256 available);
     error InsufficientAllowance(uint256 requested, uint256 available);
@@ -263,37 +257,6 @@ contract BKCToken is
     }
 
     // =========================================================================
-    //                       BLACKLIST MANAGEMENT
-    // =========================================================================
-
-    function setBlacklist(address _account, bool _isBlacklisted) external onlyOwner {
-        if (_account == address(0)) revert ZeroAddress();
-
-        _blacklisted[_account] = _isBlacklisted;
-
-        emit BlacklistUpdated(_account, _isBlacklisted, msg.sender);
-    }
-
-    function setBlacklistBatch(
-        address[] calldata _accounts,
-        bool _isBlacklisted
-    ) external onlyOwner {
-        uint256 length = _accounts.length;
-
-        for (uint256 i; i < length;) {
-            if (_accounts[i] != address(0)) {
-                _blacklisted[_accounts[i]] = _isBlacklisted;
-                emit BlacklistUpdated(_accounts[i], _isBlacklisted, msg.sender);
-            }
-            unchecked { ++i; }
-        }
-    }
-
-    function isBlacklisted(address _account) external view returns (bool) {
-        return _blacklisted[_account];
-    }
-
-    // =========================================================================
     //                          VIEW FUNCTIONS
     // =========================================================================
 
@@ -336,23 +299,4 @@ contract BKCToken is
             : 0;
     }
 
-    // =========================================================================
-    //                         INTERNAL FUNCTIONS
-    // =========================================================================
-
-    function _beforeTokenTransfer(
-        address from,
-        address to,
-        uint256 amount
-    ) internal override {
-        super._beforeTokenTransfer(from, to, amount);
-
-        if (from != address(0) && _blacklisted[from]) {
-            revert AddressBlacklisted(from);
-        }
-
-        if (to != address(0) && _blacklisted[to]) {
-            revert AddressBlacklisted(to);
-        }
-    }
 }
