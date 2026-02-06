@@ -1,7 +1,14 @@
 // scripts/deploy_ecosystem.ts
 // ════════════════════════════════════════════════════════════════════════════
-// 🚀 BACKCHAIN ECOSYSTEM - DEPLOY COMPLETO UNIFICADO V6.9 (BACKCHAT V7)
+// 🚀 BACKCHAIN ECOSYSTEM - DEPLOY COMPLETO UNIFICADO V7.0 (BACKCHAT V8)
 // ════════════════════════════════════════════════════════════════════════════
+//
+// CHANGELOG V7.0:
+// - Backchat V8: viral referral system (50/30/20 operator/referrer/protocol)
+// - Gas optimizations G-01..G-10 across DelegationManager, FortunePool,
+//   MiningManager, NFTLiquidityPool
+// - FortunePool: commitmentMeta struct (3 mappings → 1)
+// - MiningManager: cachedMaxSupply, batched distribution bips reads
 //
 // CHANGELOG V6.9:
 // - BREAKING: Backchat V7 agora é contrato NÃO-UPGRADEABLE (sem proxy)
@@ -70,7 +77,7 @@ let currentPhase = "INIT";
 
 function initTransactionLog(network: string, chainId: number, deployer: string) {
     txLog = {
-        version: "6.9.0",
+        version: "7.0.0",
         network,
         chainId,
         deployer,
@@ -238,17 +245,14 @@ const CHARITY_CONFIG = {
 };
 
 // ════════════════════════════════════════════════════════════════════════════
-//                    💬 BACKCHAT V7 CONFIG (MINIMAL - HARDCODED NO CONTRATO)
+//                    💬 BACKCHAT V8 CONFIG (MINIMAL - HARDCODED NO CONTRATO)
 // ════════════════════════════════════════════════════════════════════════════
 //
-// NOTA V6.9: Backchat V7 tem TODAS as configurações hardcoded como constants:
-// - FEE_PERCENT = 20% do gas
-// - CREATOR_BIPS = 4000 (40%)
-// - OPERATOR_BIPS = 3000 (30%)
-// - TREASURY_BIPS = 3000 (30%)
-// - CREATOR_TIP_BIPS = 9000 (90%)
-// - MINING_TIP_BIPS = 1000 (10%)
-// - etc.
+// Backchat V8 viral referral model:
+// - With operator + referrer: 50% operator / 30% referrer / 20% protocol
+// - With operator, no referrer: 80% operator / 20% protocol
+// - Without operator: 100% protocol
+// - BKC tips: 90% creator / 10% MiningManager
 //
 // Não há mais funções de configuração pós-deploy!
 //
@@ -305,7 +309,7 @@ const BOOSTER_DISCOUNTS = [
 const FORTUNE_TIERS = [
     { tierId: 1, name: "Easy",   range: 3,   multiplierBips: 20000 },
     { tierId: 2, name: "Medium", range: 10,  multiplierBips: 50000 },
-    { tierId: 3, name: "Hard",   range: 100, multiplierBips: 500000 }
+    { tierId: 3, name: "Hard",   range: 100, multiplierBips: 100000 }
 ];
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -392,8 +396,8 @@ function clearConfigFiles(networkName: string) {
     fs.writeFileSync(addressesFilePath, JSON.stringify({}, null, 2));
     
     const defaultRules = {
-        VERSION: "6.9.0",
-        DESCRIPTION: "Backchain Ecosystem V6.9 - Backchat V7 (Non-Upgradeable)",
+        VERSION: "7.0.0",
+        DESCRIPTION: "Backchain Ecosystem V7.0 - Backchat V8 (Viral Referral)",
         NETWORK: networkName,
         CREATED_AT: new Date().toISOString(),
         externalContracts: { BACKCOIN_ORACLE: EXTERNAL_CONTRACTS.BACKCOIN_ORACLE },
@@ -411,7 +415,7 @@ function clearConfigFiles(networkName: string) {
         features: {
             METAADS_ENABLED: RENTAL_CONFIG.ENABLE_METAADS,
             BACKCHAT_ENABLED: true,
-            BACKCHAT_VERSION: "V7.0.0 (Non-Upgradeable)",
+            BACKCHAT_VERSION: "V8.0.0 (Non-Upgradeable, Viral Referral)",
         }
     };
     fs.writeFileSync(rulesFilePath, JSON.stringify(defaultRules, null, 2));
@@ -575,7 +579,7 @@ async function deployProxyWithRetry(
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-//                    🔨 DEPLOY REGULAR CONTRACT HELPER (V6.9 - NEW!)
+//                    🔨 DEPLOY REGULAR CONTRACT HELPER
 // ════════════════════════════════════════════════════════════════════════════
 
 async function deployContractWithRetry(
@@ -861,7 +865,7 @@ async function main() {
     initTransactionLog(networkName, chainId, deployer.address);
 
     console.log("\n\n════════════════════════════════════════════════════════════════════════════");
-    console.log("               🚀 BACKCHAIN ECOSYSTEM DEPLOY V6.9 (BACKCHAT V7)");
+    console.log("               🚀 BACKCHAIN ECOSYSTEM DEPLOY V7.0 (BACKCHAT V8)");
     console.log("════════════════════════════════════════════════════════════════════════════");
     console.log(`   Network:     ${networkName} (chainId: ${chainId})`);
     console.log(`   Deployer:    ${deployer.address}`);
@@ -869,7 +873,7 @@ async function main() {
     console.log(`   Treasury:    ${SYSTEM_WALLETS.TREASURY}`);
     console.log(`   Mode:        ${isMainnet ? '🔴 MAINNET' : '🟢 TESTNET'}`);
     console.log("════════════════════════════════════════════════════════════════════════════");
-    console.log("   ⚠️  NOTA: Backchat V7 é NÃO-UPGRADEABLE (deploy direto, sem proxy)");
+    console.log("   ⚠️  NOTA: Backchat V8 é NÃO-UPGRADEABLE (deploy direto, sem proxy)");
     console.log("════════════════════════════════════════════════════════════════════════════\n");
 
     const oracleAddr = EXTERNAL_CONTRACTS.BACKCOIN_ORACLE;
@@ -912,25 +916,22 @@ async function main() {
         updateAddressJSON("treasuryWallet", SYSTEM_WALLETS.TREASURY);
 
         // ══════════════════════════════════════════════════════════════════════
-        // FASE 1B: Pre-configure EcosystemManager with BKCToken address
+        // FASE 1B: Pre-configure EcosystemManager with BKCToken + Treasury
+        // V7.0: setAddresses() requires all non-zero, use setAddress() for
+        // incremental setup. MiningManager.initialize() needs bkcToken.
         // ══════════════════════════════════════════════════════════════════════
         setCurrentPhase("FASE 1B: Pre-configure EcosystemManager");
         console.log("\n═══════════════════════════════════════════════════════════════════════");
-        console.log("   FASE 1B: Pre-configure EcosystemManager (BKC Token Address)");
+        console.log("   FASE 1B: Pre-configure EcosystemManager (BKC Token + Treasury)");
         console.log("═══════════════════════════════════════════════════════════════════════");
 
         await sendTxWithRetry(
-            async () => await eco.setAddresses(
-                bkcAddr,
-                SYSTEM_WALLETS.TREASURY,
-                ethers.ZeroAddress,
-                ethers.ZeroAddress,
-                ethers.ZeroAddress,
-                ethers.ZeroAddress,
-                ethers.ZeroAddress,
-                ethers.ZeroAddress
-            ),
-            "Pre-configure EcosystemManager with BKCToken"
+            async () => await eco.setAddress("bkcToken", bkcAddr),
+            "EcosystemManager.setAddress('bkcToken')"
+        );
+        await sendTxWithRetry(
+            async () => await eco.setAddress("treasury", SYSTEM_WALLETS.TREASURY),
+            "EcosystemManager.setAddress('treasury')"
         );
 
         // ══════════════════════════════════════════════════════════════════════
@@ -950,6 +951,7 @@ async function main() {
 
         // ══════════════════════════════════════════════════════════════════════
         // FASE 1D: Update EcosystemManager with MiningManager
+        // V7.0: Using setAddress() (singular) for incremental setup
         // ══════════════════════════════════════════════════════════════════════
         setCurrentPhase("FASE 1D: Update EcosystemManager");
         console.log("\n═══════════════════════════════════════════════════════════════════════");
@@ -957,17 +959,8 @@ async function main() {
         console.log("═══════════════════════════════════════════════════════════════════════");
 
         await sendTxWithRetry(
-            async () => await eco.setAddresses(
-                bkcAddr,
-                SYSTEM_WALLETS.TREASURY,
-                ethers.ZeroAddress,
-                ethers.ZeroAddress,
-                miningAddr,
-                ethers.ZeroAddress,
-                ethers.ZeroAddress,
-                ethers.ZeroAddress
-            ),
-            "Update EcosystemManager with MiningManager"
+            async () => await eco.setAddress("miningManager", miningAddr),
+            "EcosystemManager.setAddress('miningManager')"
         );
 
         // ══════════════════════════════════════════════════════════════════════
@@ -1030,23 +1023,23 @@ async function main() {
         updateAddressJSON("rentalManager", rentalAddr);
 
         // ═══════════════════════════════════════════════════════════════════════
-        // 💬 BACKCHAT V7 - DEPLOY DIRETO (NÃO-UPGRADEABLE) - V6.9 CHANGE!
+        // 💬 BACKCHAT V8 - DEPLOY DIRETO (NÃO-UPGRADEABLE)
         // ═══════════════════════════════════════════════════════════════════════
-        console.log("\n   💬 BACKCHAT V7 - Non-Upgradeable Deploy");
+        console.log("\n   💬 BACKCHAT V8 - Non-Upgradeable Deploy");
         console.log("   ────────────────────────────────────────────────────────────");
-        
+
         const Backchat = await ethers.getContractFactory("Backchat");
-        // V7 constructor: (address _bkcToken, address _ecosystemManager)
+        // V8 constructor: (address _bkcToken, address _ecosystemManager)
         const { contract: backchat, address: backchatAddr } = await deployContractWithRetry(
-            Backchat, 
-            [bkcAddr, ecoAddr],  // MUDANÇA V6.9: parâmetros diferentes!
-            "Backchat V7"
+            Backchat,
+            [bkcAddr, ecoAddr],
+            "Backchat V8"
         );
         addresses.backchat = backchatAddr;
         updateAddressJSON("backchat", backchatAddr);
-        
-        console.log("   ℹ️  Backchat V7: Todas as configurações são hardcoded no contrato");
-        console.log("   ℹ️  Não há funções setDistribution, setBadgeRequirements, etc.");
+
+        console.log("   ℹ️  Backchat V8: Viral referral system + hardcoded constants");
+        console.log("   ℹ️  Não há funções de configuração pós-deploy");
 
         // CharityPool (ainda usa proxy)
         const CharityPool = await ethers.getContractFactory("CharityPool");
@@ -1121,12 +1114,12 @@ async function main() {
             `Burn: ${Number(MINING_MANAGER_CONFIG.FEE_BURN_RATE_BIPS)/100}%`
         );
 
-        // Autorizar serviços (incluindo Backchat V7!)
+        // Autorizar serviços (incluindo Backchat V8!)
         const servicesToAuthorize = [
             { key: "FORTUNE_POOL_SERVICE", addr: fortuneAddr, name: "FortunePool" },
             { key: "RENTAL_MARKET_TAX_BIPS", addr: rentalAddr, name: "RentalManager" },
             { key: "NOTARY_SERVICE", addr: notaryAddr, name: "Notary" },
-            { key: BACKCHAT_CONFIG.SERVICE_KEY, addr: backchatAddr, name: "Backchat V7" },  // Ainda precisa autorizar!
+            { key: BACKCHAT_CONFIG.SERVICE_KEY, addr: backchatAddr, name: "Backchat V8" },  // Ainda precisa autorizar!
             { key: CHARITY_CONFIG.SERVICE_KEY, addr: charityAddr, name: "CharityPool" },
         ];
 
@@ -1192,33 +1185,27 @@ async function main() {
         console.log("═══════════════════════════════════════════════════════════════════════");
 
         // ═══════════════════════════════════════════════════════════════════════
-        // V6.9: BACKCHAT V7 NÃO PRECISA DE CONFIGURAÇÃO!
-        // Todas as configurações são hardcoded como constants no contrato:
-        // - FEE_PERCENT = 20
-        // - CREATOR_BIPS = 4000 (40%)
-        // - OPERATOR_BIPS = 3000 (30%)
-        // - TREASURY_BIPS = 3000 (30%)
-        // - CREATOR_TIP_BIPS = 9000 (90%)
-        // - MINING_TIP_BIPS = 1000 (10%)
-        // - SUPER_LIKE_MIN = 0.0001 ether
-        // - BOOST_MIN = 0.0005 ether
-        // - BADGE_FEE = 0.001 ether
-        // - etc.
+        // BACKCHAT V8 NÃO PRECISA DE CONFIGURAÇÃO!
+        // Viral referral model (hardcoded constants):
+        // - With operator + referrer: 50% operator / 30% referrer / 20% protocol
+        // - With operator, no referrer: 80% operator / 20% protocol
+        // - Without operator: 100% protocol
+        // - BKC tips: 90% creator / 10% MiningManager
         // ═══════════════════════════════════════════════════════════════════════
-        console.log("\n💬 Backchat V7");
+        console.log("\n💬 Backchat V8");
         console.log("────────────────────────────────────────────────────────────────");
-        console.log("   ✅ Backchat V7 não requer configuração pós-deploy!");
-        console.log("   ℹ️  Todas as configurações são constants hardcoded:");
-        console.log("      • ETH Fee: 20% do gas");
-        console.log("      • Com Creator: 40% creator / 30% operator / 30% treasury");
-        console.log("      • Sem Creator: 60% operator / 40% treasury");
+        console.log("   ✅ Backchat V8 não requer configuração pós-deploy!");
+        console.log("   ℹ️  Viral referral model (hardcoded constants):");
+        console.log("      • With operator + referrer: 50% operator / 30% referrer / 20% protocol");
+        console.log("      • With operator, no referrer: 80% operator / 20% protocol");
+        console.log("      • Without operator: 100% protocol");
         console.log("      • BKC Tip: 90% creator / 10% MiningManager");
         console.log("      • Super Like Min: 0.0001 ETH");
         console.log("      • Boost Min: 0.0005 ETH");
         console.log("      • Badge Fee: 0.001 ETH");
-        
+
         updateRulesJSON("backchat", "SERVICE_KEY", BACKCHAT_CONFIG.SERVICE_KEY);
-        updateRulesJSON("backchat", "VERSION", "V7.0.0 (Non-Upgradeable)");
+        updateRulesJSON("backchat", "VERSION", "V8.0.0 (Non-Upgradeable, Viral Referral)");
         updateRulesJSON("backchat", "CONFIG_TYPE", "HARDCODED_CONSTANTS");
 
         // Configure CharityPool
@@ -1470,7 +1457,7 @@ async function main() {
             console.log("   FASE 14: Transfer Ownership to Governance");
             console.log("═══════════════════════════════════════════════════════════════════════");
 
-            // NOTA V6.9: Backchat V7 NÃO tem owner - é imutável!
+            // Backchat V8 NÃO tem owner - é imutável!
             const contractsToTransfer = [
                 { contract: eco, name: "EcosystemManager" },
                 { contract: mining, name: "MiningManager" },
@@ -1479,11 +1466,11 @@ async function main() {
                 { contract: fortune, name: "FortunePool" },
                 { contract: rental, name: "RentalManager" },
                 { contract: charity, name: "CharityPool" },
-                // { contract: backchat, name: "Backchat" },  // V6.9: REMOVIDO - V7 não tem owner!
+                // { contract: backchat, name: "Backchat" },  // REMOVIDO - V8 não tem owner!
                 { contract: factory, name: "NFTLiquidityPoolFactory" },
             ];
 
-            console.log("   ℹ️  Backchat V7 não tem owner - é um contrato imutável");
+            console.log("   ℹ️  Backchat V8 não tem owner - é um contrato imutável");
 
             for (const { contract, name } of contractsToTransfer) {
                 await transferOwnershipSafe(contract, governanceAddr, name, deployer.address);
@@ -1497,7 +1484,7 @@ async function main() {
         // RESUMO FINAL
         // ══════════════════════════════════════════════════════════════════════
         console.log("\n════════════════════════════════════════════════════════════════════════════");
-        console.log("                         📊 DEPLOY CONCLUÍDO V6.9!");
+        console.log("                         📊 DEPLOY CONCLUÍDO V7.0!");
         console.log("════════════════════════════════════════════════════════════════════════════");
 
         console.log("\n📋 CONTRATOS IMPLANTADOS:");
@@ -1505,7 +1492,7 @@ async function main() {
         for (const [key, addr] of Object.entries(addresses)) {
             if (addr && addr.startsWith("0x")) {
                 const isBackchat = key === "backchat";
-                const suffix = isBackchat ? " (V7 Non-Upgradeable)" : "";
+                const suffix = isBackchat ? " (V8 Non-Upgradeable)" : "";
                 console.log(`   ${key}: ${addr}${suffix}`);
             }
         }
@@ -1536,9 +1523,9 @@ async function main() {
         printTransactionSummary();
 
         console.log("\n────────────────────────────────────────────────────────────────");
-        console.log(`   🎉 BACKCHAIN V6.9 IMPLANTADO COM SUCESSO!`);
+        console.log(`   🎉 BACKCHAIN V7.0 IMPLANTADO COM SUCESSO!`);
         console.log(`   📡 Rede: ${networkName} ${isMainnet ? '(MAINNET)' : '(TESTNET)'}`);
-        console.log(`   💬 Backchat: V7.0.0 (Non-Upgradeable)`);
+        console.log(`   💬 Backchat: V8.0.0 (Non-Upgradeable, Viral Referral)`);
         console.log("────────────────────────────────────────────────────────────────\n");
 
     } catch (error: any) {

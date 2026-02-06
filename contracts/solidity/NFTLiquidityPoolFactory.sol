@@ -271,8 +271,9 @@ contract NFTLiquidityPoolFactory is
         poolCount++;
 
         NFTLiquidityPool pool_ = NFTLiquidityPool(payable(poolAddress));
-        pool_.initialize(owner(), ecosystemManagerAddress, _boostBips);
+        pool_.initialize(address(this), ecosystemManagerAddress, _boostBips);
         pool_.markAsClone();
+        pool_.transferOwnership(owner());
 
         emit PoolDeployed(_boostBips, poolAddress, poolCount);
     }
@@ -286,6 +287,7 @@ contract NFTLiquidityPoolFactory is
 
         if (poolImplementation == address(0)) revert ImplementationNotSet();
 
+        address factoryOwner = owner();
         for (uint256 i; i < length;) {
             uint256 boostBips = _boostBipsArray[i];
 
@@ -300,8 +302,9 @@ contract NFTLiquidityPoolFactory is
             poolCount++;
 
             NFTLiquidityPool pool_ = NFTLiquidityPool(payable(poolAddress));
-            pool_.initialize(owner(), ecosystemManagerAddress, boostBips);
+            pool_.initialize(address(this), ecosystemManagerAddress, boostBips);
             pool_.markAsClone();
+            pool_.transferOwnership(factoryOwner);
 
             poolAddresses[i] = poolAddress;
 
@@ -323,6 +326,7 @@ contract NFTLiquidityPoolFactory is
 
         if (poolImplementation == address(0)) revert ImplementationNotSet();
 
+        address factoryOwner = owner();
         for (uint256 i; i < TOTAL_TIERS;) {
             uint256 boostBips = standardTiers[i];
 
@@ -341,8 +345,9 @@ contract NFTLiquidityPoolFactory is
             poolCount++;
 
             NFTLiquidityPool pool_ = NFTLiquidityPool(payable(poolAddress));
-            pool_.initialize(owner(), ecosystemManagerAddress, boostBips);
+            pool_.initialize(address(this), ecosystemManagerAddress, boostBips);
             pool_.markAsClone();
+            pool_.transferOwnership(factoryOwner);
 
             addresses[i] = poolAddress;
 
