@@ -17,7 +17,7 @@ pragma solidity 0.8.28;
  *
  * ═══════════════════════════════════════════════════════════════════════════════════
  *  Contract    : Backchat
- *  Version     : 7.0.0
+ *  Version     : 8.0.0
  *  Network     : Arbitrum
  *  License     : MIT
  *  Solidity    : 0.8.28
@@ -66,20 +66,26 @@ pragma solidity 0.8.28;
  *
  * ═══════════════════════════════════════════════════════════════════════════════════
  *
- *  FEE STRUCTURE
+ *  VIRAL REFERRAL SYSTEM (V8)
+ *
+ *  Users set a referrer ONCE (immutable). Every social action distributes
+ *  20% of gas cost as fees:
  *
  *  ┌─────────────────────────────────────────────────────────────────────────────┐
- *  │                         ETH FEE (20% of gas cost)                           │
+ *  │                    SOCIAL ACTIONS (20% of gas cost)                          │
  *  ├─────────────────────────────────────────────────────────────────────────────┤
  *  │                                                                             │
- *  │  ACTIONS WITH CREATOR (Reply, Like, Super Like, Follow, Repost):            │
- *  │  ├── 40% → Creator                                                          │
- *  │  ├── 30% → Operator                                                         │
- *  │  └── 30% → Treasury                                                         │
+ *  │  WITH OPERATOR + REFERRER:                                                  │
+ *  │  ├── 50% → Operator (frontend/app builder)                                  │
+ *  │  ├── 30% → Referrer (influencer who invited the user)                       │
+ *  │  └── 20% → Protocol (treasury)                                              │
  *  │                                                                             │
- *  │  ACTIONS WITHOUT CREATOR (Post, Username, Boost, Badge):                    │
- *  │  ├── 60% → Operator                                                         │
- *  │  └── 40% → Treasury                                                         │
+ *  │  WITH OPERATOR, NO REFERRER:                                                │
+ *  │  ├── 80% → Operator                                                         │
+ *  │  └── 20% → Protocol                                                         │
+ *  │                                                                             │
+ *  │  WITHOUT OPERATOR:                                                          │
+ *  │  └── 100% → Protocol                                                        │
  *  │                                                                             │
  *  └─────────────────────────────────────────────────────────────────────────────┘
  *
@@ -124,9 +130,9 @@ pragma solidity 0.8.28;
  *  | Username 6 chars | 0.0001 ETH        | Nice name                              |
  *  | Username 7+ char | FREE              | Standard name                          |
  *  +------------------+-------------------+----------------------------------------+
- *  | Profile Boost    | ≥0.0005 ETH       | +1 day visibility per 0.0005 ETH       |
+ *  | Profile Boost    | >=0.0005 ETH      | +1 day visibility per 0.0005 ETH       |
  *  | Trust Badge      | 0.001 ETH         | Verified badge for 1 year              |
- *  | Super Like       | ≥0.0001 ETH       | Premium engagement + trending          |
+ *  | Super Like       | >=0.0001 ETH      | Premium engagement + trending          |
  *  +------------------+-------------------+----------------------------------------+
  *
  * ═══════════════════════════════════════════════════════════════════════════════════
@@ -164,7 +170,7 @@ interface IMiningManager {
 // ═══════════════════════════════════════════════════════════════════════════════════
 
 contract Backchat {
-    
+
     // ═══════════════════════════════════════════════════════════════════════════════
     //                              CONSTANTS
     // ═══════════════════════════════════════════════════════════════════════════════
@@ -172,56 +178,66 @@ contract Backchat {
     // ─────────────────────────────────────────────────────────────────────────────
     // Service Key
     // ─────────────────────────────────────────────────────────────────────────────
-    
+
     /// @notice Service key for MiningManager authorization
     bytes32 public constant SERVICE_KEY = keccak256("BACKCHAT_SERVICE");
-    
+
     // ─────────────────────────────────────────────────────────────────────────────
     // Gas Estimates (for dynamic fee calculation)
     // ─────────────────────────────────────────────────────────────────────────────
-    
-    uint256 private constant GAS_POST = 50000;
-    uint256 private constant GAS_REPLY = 55000;
-    uint256 private constant GAS_LIKE = 55000;
-    uint256 private constant GAS_FOLLOW = 45000;
-    uint256 private constant GAS_REPOST = 50000;
-    
+
+    uint256 private constant POST_GAS = 80000;
+    uint256 private constant REPLY_GAS = 90000;
+    uint256 private constant LIKE_GAS = 50000;
+    uint256 private constant FOLLOW_GAS = 60000;
+    uint256 private constant REPOST_GAS = 80000;
+
     // ─────────────────────────────────────────────────────────────────────────────
     // Fee Configuration
     // ─────────────────────────────────────────────────────────────────────────────
-    
-    /// @notice Fee percentage of gas cost (20%)
-    uint256 private constant FEE_PERCENT = 20;
+
+    /// @notice Fee as basis points of gas cost (20%)
+    uint256 private constant FEE_BASIS_POINTS = 2000;
 
     /// @notice Maximum fee cap per operation (0.01 ETH)
     uint256 private constant MAX_FEE_WEI = 0.01 ether;
-    
+
     /// @notice Basis points denominator
     uint256 private constant BIPS = 10000;
-    
-    // ETH split WITH creator (40/30/30)
-    uint256 private constant CREATOR_BIPS = 4000;
-    uint256 private constant OPERATOR_BIPS = 3000;
-    uint256 private constant TREASURY_BIPS = 3000;
-    
-    // ETH split WITHOUT creator (60/40)
-    uint256 private constant OPERATOR_NO_CREATOR_BIPS = 6000;
-    uint256 private constant TREASURY_NO_CREATOR_BIPS = 4000;
-    
+
+    // ─────────────────────────────────────────────────────────────────────────────
+    // Viral Fee Distribution (Social Actions)
+    // ─────────────────────────────────────────────────────────────────────────────
+
+    // With referrer: 50% operator / 30% referrer / 20% protocol
+    uint256 private constant OPERATOR_SHARE = 5000;
+    uint256 private constant REFERRER_SHARE = 3000;
+    uint256 private constant PROTOCOL_SHARE = 2000;
+
+    // Without referrer: 80% operator / 20% protocol
+    uint256 private constant OPERATOR_NO_REFERRER_SHARE = 8000;
+
+    // ─────────────────────────────────────────────────────────────────────────────
+    // Premium Feature Distribution (Username, Badge, Boost)
+    // ─────────────────────────────────────────────────────────────────────────────
+
+    uint256 private constant PREMIUM_OPERATOR_BIPS = 6000;
+    uint256 private constant PREMIUM_PROTOCOL_BIPS = 4000;
+
     // BKC tip split (90% creator, 10% mining ecosystem)
     uint256 private constant CREATOR_TIP_BIPS = 9000;
     uint256 private constant MINING_TIP_BIPS = 1000;
-    
+
     // ─────────────────────────────────────────────────────────────────────────────
     // Premium Features Pricing
     // ─────────────────────────────────────────────────────────────────────────────
-    
+
     uint256 private constant SUPER_LIKE_MIN = 0.0001 ether;
     uint256 private constant BOOST_MIN = 0.0005 ether;
     uint256 private constant BOOST_RATE = 1 days;
     uint256 private constant BADGE_FEE = 0.001 ether;
     uint256 private constant BADGE_DURATION = 365 days;
-    
+
     // Username pricing by length
     uint256 private constant USERNAME_1_CHAR = 1 ether;
     uint256 private constant USERNAME_2_CHAR = 0.2 ether;
@@ -229,72 +245,85 @@ contract Backchat {
     uint256 private constant USERNAME_4_CHAR = 0.004 ether;
     uint256 private constant USERNAME_5_CHAR = 0.0005 ether;
     uint256 private constant USERNAME_6_CHAR = 0.0001 ether;
-    
+
     // ─────────────────────────────────────────────────────────────────────────────
     // Content Limits
     // ─────────────────────────────────────────────────────────────────────────────
-    
+
     uint256 private constant MAX_CONTENT = 500;
     uint256 private constant MAX_BIO = 160;
     uint256 private constant MAX_DISPLAY_NAME = 30;
     uint256 private constant MIN_USERNAME = 1;
     uint256 private constant MAX_USERNAME = 15;
-    
+
     // ═══════════════════════════════════════════════════════════════════════════════
     //                              IMMUTABLES
     // ═══════════════════════════════════════════════════════════════════════════════
-    
+
     /// @notice BKC token contract address
     address public immutable bkcToken;
-    
+
     /// @notice EcosystemManager contract address
     address public immutable ecosystemManager;
-    
+
     // ═══════════════════════════════════════════════════════════════════════════════
     //                              STATE VARIABLES
     // ═══════════════════════════════════════════════════════════════════════════════
-    
+
     // ─────────────────────────────────────────────────────────────────────────────
     // Counters
     // ─────────────────────────────────────────────────────────────────────────────
-    
+
     /// @notice Total posts created
     uint256 public postCounter;
-    
+
     // ─────────────────────────────────────────────────────────────────────────────
     // Core Mappings
     // ─────────────────────────────────────────────────────────────────────────────
-    
-    /// @notice Post ID → Author address
+
+    /// @notice Post ID -> Author address
     mapping(uint256 => address) public postAuthor;
-    
-    /// @notice Address → Pending ETH balance for withdrawal
+
+    /// @notice Address -> Pending ETH balance for withdrawal
     mapping(address => uint256) public pendingEth;
-    
-    /// @notice Username hash → Owner address (ensures uniqueness)
+
+    /// @notice Username hash -> Owner address (ensures uniqueness)
     mapping(bytes32 => address) public usernameOwner;
-    
-    /// @notice Post ID → User → Has liked (limit 1 per post per user)
+
+    /// @notice Post ID -> User -> Has liked (limit 1 per post per user)
     mapping(uint256 => mapping(address => bool)) public hasLiked;
-    
+
     // ─────────────────────────────────────────────────────────────────────────────
     // Premium Features
     // ─────────────────────────────────────────────────────────────────────────────
-    
-    /// @notice Address → Profile boost expiration timestamp
+
+    /// @notice Address -> Profile boost expiration timestamp
     mapping(address => uint256) public boostExpiry;
-    
-    /// @notice Address → Trust badge expiration timestamp
+
+    /// @notice Address -> Trust badge expiration timestamp
     mapping(address => uint256) public badgeExpiry;
-    
+
+    // ─────────────────────────────────────────────────────────────────────────────
+    // Viral Referral System (V8)
+    // ─────────────────────────────────────────────────────────────────────────────
+
+    /// @notice User -> Who referred them (immutable once set)
+    mapping(address => address) public referredBy;
+
+    /// @notice Referrer -> Total users referred
+    mapping(address => uint256) public referralCount;
+
+    /// @notice Referrer -> Total ETH earned from referrals
+    mapping(address => uint256) public referralEarnings;
+
     // ═══════════════════════════════════════════════════════════════════════════════
     //                              EVENTS
     // ═══════════════════════════════════════════════════════════════════════════════
-    
+
     // ─────────────────────────────────────────────────────────────────────────────
     // Profile Events
     // ─────────────────────────────────────────────────────────────────────────────
-    
+
     event ProfileCreated(
         address indexed user,
         bytes32 indexed usernameHash,
@@ -304,17 +333,17 @@ contract Backchat {
         uint256 ethPaid,
         address indexed operator
     );
-    
+
     event ProfileUpdated(
         address indexed user,
         string displayName,
         string bio
     );
-    
+
     // ─────────────────────────────────────────────────────────────────────────────
     // Content Events
     // ─────────────────────────────────────────────────────────────────────────────
-    
+
     event PostCreated(
         uint256 indexed postId,
         address indexed author,
@@ -322,7 +351,7 @@ contract Backchat {
         string mediaCID,
         address indexed operator
     );
-    
+
     event ReplyCreated(
         uint256 indexed postId,
         uint256 indexed parentId,
@@ -332,7 +361,7 @@ contract Backchat {
         uint256 tipBkc,
         address operator
     );
-    
+
     event RepostCreated(
         uint256 indexed newPostId,
         uint256 indexed originalPostId,
@@ -340,18 +369,18 @@ contract Backchat {
         uint256 tipBkc,
         address operator
     );
-    
+
     // ─────────────────────────────────────────────────────────────────────────────
     // Engagement Events
     // ─────────────────────────────────────────────────────────────────────────────
-    
+
     event Liked(
         uint256 indexed postId,
         address indexed user,
         uint256 tipBkc,
         address indexed operator
     );
-    
+
     event SuperLiked(
         uint256 indexed postId,
         address indexed user,
@@ -359,45 +388,53 @@ contract Backchat {
         uint256 tipBkc,
         address indexed operator
     );
-    
+
     event Followed(
         address indexed follower,
         address indexed followed,
         uint256 tipBkc,
         address indexed operator
     );
-    
+
     event Unfollowed(
         address indexed follower,
         address indexed followed
     );
-    
+
     // ─────────────────────────────────────────────────────────────────────────────
     // Premium Events
     // ─────────────────────────────────────────────────────────────────────────────
-    
+
     event ProfileBoosted(
         address indexed user,
         uint256 amount,
         uint256 expiresAt,
         address indexed operator
     );
-    
+
     event BadgeObtained(
         address indexed user,
         uint256 expiresAt,
         address indexed operator
     );
-    
+
     // ─────────────────────────────────────────────────────────────────────────────
     // Financial Events
     // ─────────────────────────────────────────────────────────────────────────────
-    
-    event Withdrawal(
+
+    event EarningsWithdrawn(
         address indexed user,
         uint256 amount
     );
-    
+
+    event ActionFeeCollected(
+        address indexed user,
+        address indexed operator,
+        address referrer,
+        uint256 fee,
+        string actionType
+    );
+
     event TipProcessed(
         address indexed from,
         address indexed creator,
@@ -406,14 +443,14 @@ contract Backchat {
         uint256 miningShare,
         address indexed operator
     );
-    
+
     event TipFallback(
         address indexed from,
         address indexed creator,
         uint256 amount,
         string reason
     );
-    
+
     event EthDistributed(
         address indexed creator,
         address indexed operator,
@@ -422,16 +459,25 @@ contract Backchat {
         uint256 operatorShare,
         uint256 treasuryShare
     );
-    
+
     event EcosystemCallFailed(
         string functionName,
         bytes reason
     );
-    
+
+    // ─────────────────────────────────────────────────────────────────────────────
+    // Referral Events
+    // ─────────────────────────────────────────────────────────────────────────────
+
+    event ReferrerSet(
+        address indexed user,
+        address indexed referrer
+    );
+
     // ═══════════════════════════════════════════════════════════════════════════════
     //                              ERRORS
     // ═══════════════════════════════════════════════════════════════════════════════
-    
+
     error InsufficientFee();
     error PostNotFound();
     error AlreadyLiked();
@@ -443,11 +489,13 @@ contract Backchat {
     error InvalidAddress();
     error SelfActionNotAllowed();
     error NoRecipientAvailable();
-    
+    error ReferrerAlreadySet();
+    error CannotReferSelf();
+
     // ═══════════════════════════════════════════════════════════════════════════════
     //                              CONSTRUCTOR
     // ═══════════════════════════════════════════════════════════════════════════════
-    
+
     /**
      * @notice Initializes the Backchat contract
      * @param _bkcToken Address of the BKC token contract
@@ -456,25 +504,55 @@ contract Backchat {
     constructor(address _bkcToken, address _ecosystemManager) {
         if (_bkcToken == address(0)) revert InvalidAddress();
         if (_ecosystemManager == address(0)) revert InvalidAddress();
-        
+
         bkcToken = _bkcToken;
         ecosystemManager = _ecosystemManager;
     }
-    
+
+    // ═══════════════════════════════════════════════════════════════════════════════
+    //                          REFERRAL SYSTEM
+    // ═══════════════════════════════════════════════════════════════════════════════
+
+    /**
+     * @notice Sets the referrer for msg.sender (ONE TIME ONLY, immutable)
+     * @dev This creates the viral loop: referrers earn 30% of all fees
+     *      generated by the users they invite.
+     * @param _referrer Address of the person who referred this user
+     */
+    function setReferrer(address _referrer) external {
+        if (_referrer == address(0)) revert InvalidAddress();
+        if (_referrer == msg.sender) revert CannotReferSelf();
+        if (referredBy[msg.sender] != address(0)) revert ReferrerAlreadySet();
+
+        referredBy[msg.sender] = _referrer;
+        referralCount[_referrer]++;
+
+        emit ReferrerSet(msg.sender, _referrer);
+    }
+
     // ═══════════════════════════════════════════════════════════════════════════════
     //                          FEE CALCULATION
     // ═══════════════════════════════════════════════════════════════════════════════
-    
+
     /**
      * @notice Calculates dynamic fee based on current gas price
      * @param gasEstimate Estimated gas for the operation
-     * @return Fee amount in wei
+     * @return Fee amount in wei (20% of gas cost, capped at 0.01 ETH)
      */
     function calculateFee(uint256 gasEstimate) public view returns (uint256) {
-        uint256 fee = (gasEstimate * tx.gasprice * FEE_PERCENT) / 100;
+        uint256 fee = (gasEstimate * tx.gasprice * FEE_BASIS_POINTS) / BIPS;
         return fee > MAX_FEE_WEI ? MAX_FEE_WEI : fee;
     }
-    
+
+    /**
+     * @notice Returns estimated fee for an average social action
+     * @dev Uses average gas across post/reply/like/follow
+     * @return Estimated fee in wei
+     */
+    function calculateActionFee() public view returns (uint256) {
+        return calculateFee((POST_GAS + REPLY_GAS + LIKE_GAS + FOLLOW_GAS) / 4);
+    }
+
     /**
      * @notice Returns current fees for all operations
      * @dev Frontend should call this before each action to show user the cost
@@ -489,16 +567,16 @@ contract Backchat {
         uint256 boostMin,
         uint256 badgeFee_
     ) {
-        postFee = calculateFee(GAS_POST);
-        replyFee = calculateFee(GAS_REPLY);
-        likeFee = calculateFee(GAS_LIKE);
-        followFee = calculateFee(GAS_FOLLOW);
-        repostFee = calculateFee(GAS_REPOST);
+        postFee = calculateFee(POST_GAS);
+        replyFee = calculateFee(REPLY_GAS);
+        likeFee = calculateFee(LIKE_GAS);
+        followFee = calculateFee(FOLLOW_GAS);
+        repostFee = calculateFee(REPOST_GAS);
         superLikeMin = SUPER_LIKE_MIN;
         boostMin = BOOST_MIN;
         badgeFee_ = BADGE_FEE;
     }
-    
+
     /**
      * @notice Returns username fee based on length
      * @param length Number of characters in username
@@ -513,11 +591,11 @@ contract Backchat {
         if (length == 6) return USERNAME_6_CHAR;
         return 0;
     }
-    
+
     // ═══════════════════════════════════════════════════════════════════════════════
     //                          PROFILE FUNCTIONS
     // ═══════════════════════════════════════════════════════════════════════════════
-    
+
     /**
      * @notice Creates a new user profile with username
      * @param username Unique username (1-15 chars, lowercase a-z, 0-9, underscore)
@@ -533,31 +611,31 @@ contract Backchat {
     ) external payable {
         bytes memory usernameBytes = bytes(username);
         uint256 len = usernameBytes.length;
-        
+
         // Validate username
         if (len < MIN_USERNAME || len > MAX_USERNAME) revert InvalidUsername();
         if (!_validateUsername(usernameBytes)) revert InvalidUsername();
-        
+
         // Validate other fields
         if (bytes(displayName).length > MAX_DISPLAY_NAME) revert ContentTooLong();
         if (bytes(bio).length > MAX_BIO) revert ContentTooLong();
-        
+
         // Check username availability
         bytes32 usernameHash = keccak256(usernameBytes);
         if (usernameOwner[usernameHash] != address(0)) revert UsernameTaken();
-        
+
         // Check fee
         uint256 fee = getUsernameFee(len);
         if (msg.value < fee) revert InsufficientFee();
-        
+
         // Register username
         usernameOwner[usernameHash] = msg.sender;
-        
-        // Distribute fee (if any)
+
+        // Distribute fee (premium feature: 60/40 operator/protocol)
         if (msg.value > 0) {
-            _distributeNoCreator(msg.value, operator);
+            _distributePremium(msg.value, operator);
         }
-        
+
         emit ProfileCreated(
             msg.sender,
             usernameHash,
@@ -568,7 +646,7 @@ contract Backchat {
             operator
         );
     }
-    
+
     /**
      * @notice Updates user profile (free, only gas)
      * @param displayName New display name
@@ -580,14 +658,14 @@ contract Backchat {
     ) external {
         if (bytes(displayName).length > MAX_DISPLAY_NAME) revert ContentTooLong();
         if (bytes(bio).length > MAX_BIO) revert ContentTooLong();
-        
+
         emit ProfileUpdated(msg.sender, displayName, bio);
     }
-    
+
     // ═══════════════════════════════════════════════════════════════════════════════
     //                          CONTENT FUNCTIONS
     // ═══════════════════════════════════════════════════════════════════════════════
-    
+
     /**
      * @notice Creates a new post
      * @param content Post content (max 500 chars)
@@ -601,20 +679,20 @@ contract Backchat {
         address operator
     ) external payable returns (uint256 postId) {
         if (bytes(content).length > MAX_CONTENT) revert ContentTooLong();
-        
-        uint256 fee = calculateFee(GAS_POST);
+
+        uint256 fee = calculateFee(POST_GAS);
         if (msg.value < fee) revert InsufficientFee();
-        
+
         postId = ++postCounter;
         postAuthor[postId] = msg.sender;
-        
-        // Original post: no creator, split 60/40
-        _distributeNoCreator(fee, operator);
+
+        // Viral distribution: 50/30/20 or 80/20 or 100% protocol
+        _distributeViralFee(fee, operator, "post");
         _refundExcess(fee);
-        
+
         emit PostCreated(postId, msg.sender, content, mediaCID, operator);
     }
-    
+
     /**
      * @notice Creates a reply to an existing post
      * @param parentId ID of the post being replied to
@@ -632,28 +710,28 @@ contract Backchat {
         uint256 tipBkc
     ) external payable returns (uint256 postId) {
         if (bytes(content).length > MAX_CONTENT) revert ContentTooLong();
-        
+
         address creator = postAuthor[parentId];
         if (creator == address(0)) revert PostNotFound();
-        
-        uint256 fee = calculateFee(GAS_REPLY);
+
+        uint256 fee = calculateFee(REPLY_GAS);
         if (msg.value < fee) revert InsufficientFee();
-        
+
         postId = ++postCounter;
         postAuthor[postId] = msg.sender;
-        
-        // Distribute ETH fee (40/30/30)
-        _distribute(fee, creator, operator);
+
+        // Viral distribution: 50/30/20 or 80/20 or 100% protocol
+        _distributeViralFee(fee, operator, "reply");
         _refundExcess(fee);
-        
+
         // Process BKC tip with graceful degradation
         if (tipBkc > 0) {
             _processBkcTip(creator, tipBkc, operator);
         }
-        
+
         emit ReplyCreated(postId, parentId, msg.sender, content, mediaCID, tipBkc, operator);
     }
-    
+
     /**
      * @notice Reposts an existing post
      * @param originalPostId ID of the post being reposted
@@ -668,29 +746,29 @@ contract Backchat {
     ) external payable returns (uint256 postId) {
         address creator = postAuthor[originalPostId];
         if (creator == address(0)) revert PostNotFound();
-        
-        uint256 fee = calculateFee(GAS_REPOST);
+
+        uint256 fee = calculateFee(REPOST_GAS);
         if (msg.value < fee) revert InsufficientFee();
-        
+
         postId = ++postCounter;
         postAuthor[postId] = msg.sender;
-        
-        // Distribute ETH fee (40/30/30)
-        _distribute(fee, creator, operator);
+
+        // Viral distribution: 50/30/20 or 80/20 or 100% protocol
+        _distributeViralFee(fee, operator, "repost");
         _refundExcess(fee);
-        
+
         // Process BKC tip with graceful degradation
         if (tipBkc > 0) {
             _processBkcTip(creator, tipBkc, operator);
         }
-        
+
         emit RepostCreated(postId, originalPostId, msg.sender, tipBkc, operator);
     }
-    
+
     // ═══════════════════════════════════════════════════════════════════════════════
     //                          ENGAGEMENT FUNCTIONS
     // ═══════════════════════════════════════════════════════════════════════════════
-    
+
     /**
      * @notice Likes a post (limited to one per user per post)
      * @param postId ID of the post to like
@@ -705,27 +783,28 @@ contract Backchat {
         address creator = postAuthor[postId];
         if (creator == address(0)) revert PostNotFound();
         if (hasLiked[postId][msg.sender]) revert AlreadyLiked();
-        
-        uint256 fee = calculateFee(GAS_LIKE);
+
+        uint256 fee = calculateFee(LIKE_GAS);
         if (msg.value < fee) revert InsufficientFee();
-        
+
         hasLiked[postId][msg.sender] = true;
-        
-        // Distribute ETH fee (40/30/30)
-        _distribute(fee, creator, operator);
+
+        // Viral distribution: 50/30/20 or 80/20 or 100% protocol
+        _distributeViralFee(fee, operator, "like");
         _refundExcess(fee);
-        
+
         // Process BKC tip with graceful degradation
         if (tipBkc > 0) {
             _processBkcTip(creator, tipBkc, operator);
         }
-        
+
         emit Liked(postId, msg.sender, tipBkc, operator);
     }
-    
+
     /**
      * @notice Super likes a post (premium engagement, unlimited per user)
-     * @dev Super likes can be given multiple times and act as organic trending
+     * @dev Super likes can be given multiple times and act as organic trending.
+     *      ALL ETH is distributed with viral split (no refund).
      * @param postId ID of the post to super like
      * @param operator Frontend operator address
      * @param tipBkc Optional BKC tip amount for the author
@@ -738,18 +817,18 @@ contract Backchat {
         address creator = postAuthor[postId];
         if (creator == address(0)) revert PostNotFound();
         if (msg.value < SUPER_LIKE_MIN) revert InsufficientFee();
-        
-        // All ETH from Super Like is distributed (acts as promotion)
-        _distribute(msg.value, creator, operator);
-        
+
+        // All ETH distributed with viral split (no refund — acts as promotion)
+        _distributeViralFee(msg.value, operator, "superlike");
+
         // Process BKC tip with graceful degradation
         if (tipBkc > 0) {
             _processBkcTip(creator, tipBkc, operator);
         }
-        
+
         emit SuperLiked(postId, msg.sender, msg.value, tipBkc, operator);
     }
-    
+
     /**
      * @notice Follows a user
      * @param toFollow Address of the user to follow
@@ -763,22 +842,22 @@ contract Backchat {
     ) external payable {
         if (toFollow == address(0)) revert InvalidAddress();
         if (toFollow == msg.sender) revert SelfActionNotAllowed();
-        
-        uint256 fee = calculateFee(GAS_FOLLOW);
+
+        uint256 fee = calculateFee(FOLLOW_GAS);
         if (msg.value < fee) revert InsufficientFee();
-        
-        // Distribute ETH fee (40/30/30)
-        _distribute(fee, toFollow, operator);
+
+        // Viral distribution: 50/30/20 or 80/20 or 100% protocol
+        _distributeViralFee(fee, operator, "follow");
         _refundExcess(fee);
-        
+
         // Process BKC tip with graceful degradation
         if (tipBkc > 0) {
             _processBkcTip(toFollow, tipBkc, operator);
         }
-        
+
         emit Followed(msg.sender, toFollow, tipBkc, operator);
     }
-    
+
     /**
      * @notice Unfollows a user (free, only gas)
      * @param toUnfollow Address of the user to unfollow
@@ -786,11 +865,11 @@ contract Backchat {
     function unfollow(address toUnfollow) external {
         emit Unfollowed(msg.sender, toUnfollow);
     }
-    
+
     // ═══════════════════════════════════════════════════════════════════════════════
     //                          PREMIUM FUNCTIONS
     // ═══════════════════════════════════════════════════════════════════════════════
-    
+
     /**
      * @notice Boosts profile visibility for a duration proportional to payment
      * @dev Duration = (ETH / 0.0005) days
@@ -798,10 +877,10 @@ contract Backchat {
      */
     function boostProfile(address operator) external payable {
         if (msg.value < BOOST_MIN) revert InsufficientFee();
-        
+
         // Calculate duration: 1 day per 0.0005 ETH
         uint256 duration = (msg.value * BOOST_RATE) / BOOST_MIN;
-        
+
         // Extend or start boost
         uint256 currentExpiry = boostExpiry[msg.sender];
         if (currentExpiry > block.timestamp) {
@@ -809,55 +888,55 @@ contract Backchat {
         } else {
             boostExpiry[msg.sender] = block.timestamp + duration;
         }
-        
-        // Distribute fee (no creator, 60/40)
-        _distributeNoCreator(msg.value, operator);
-        
+
+        // Premium distribution: 60/40 operator/protocol
+        _distributePremium(msg.value, operator);
+
         emit ProfileBoosted(msg.sender, msg.value, boostExpiry[msg.sender], operator);
     }
-    
+
     /**
      * @notice Obtains a trust badge for 1 year
      * @param operator Frontend operator address
      */
     function obtainBadge(address operator) external payable {
         if (msg.value < BADGE_FEE) revert InsufficientFee();
-        
+
         // Set badge expiry to 1 year from now
         badgeExpiry[msg.sender] = block.timestamp + BADGE_DURATION;
-        
-        // Distribute fee (no creator, 60/40)
-        _distributeNoCreator(msg.value, operator);
-        
+
+        // Premium distribution: 60/40 operator/protocol
+        _distributePremium(msg.value, operator);
+
         emit BadgeObtained(msg.sender, badgeExpiry[msg.sender], operator);
     }
-    
+
     // ═══════════════════════════════════════════════════════════════════════════════
     //                          WITHDRAWAL FUNCTIONS
     // ═══════════════════════════════════════════════════════════════════════════════
-    
+
     /**
      * @notice Withdraws accumulated ETH earnings
-     * @dev Creators, operators, and treasury can withdraw their accumulated ETH
+     * @dev Operators, referrers, and treasury can withdraw accumulated ETH
      */
     function withdraw() external {
         uint256 amount = pendingEth[msg.sender];
         if (amount == 0) revert NothingToWithdraw();
-        
+
         // Clear balance before transfer (reentrancy protection)
         pendingEth[msg.sender] = 0;
-        
+
         // Transfer ETH
         (bool success, ) = payable(msg.sender).call{value: amount}("");
         if (!success) revert TransferFailed();
-        
-        emit Withdrawal(msg.sender, amount);
+
+        emit EarningsWithdrawn(msg.sender, amount);
     }
-    
+
     // ═══════════════════════════════════════════════════════════════════════════════
     //                          VIEW FUNCTIONS
     // ═══════════════════════════════════════════════════════════════════════════════
-    
+
     /**
      * @notice Checks if a user profile is currently boosted
      * @param user Address to check
@@ -866,7 +945,7 @@ contract Backchat {
     function isProfileBoosted(address user) external view returns (bool) {
         return boostExpiry[user] > block.timestamp;
     }
-    
+
     /**
      * @notice Checks if a user has a valid trust badge
      * @param user Address to check
@@ -875,7 +954,7 @@ contract Backchat {
     function hasTrustBadge(address user) external view returns (bool) {
         return badgeExpiry[user] > block.timestamp;
     }
-    
+
     /**
      * @notice Checks if a user has liked a specific post
      * @param postId Post ID to check
@@ -885,7 +964,7 @@ contract Backchat {
     function hasUserLiked(uint256 postId, address user) external view returns (bool) {
         return hasLiked[postId][user];
     }
-    
+
     /**
      * @notice Returns the pending ETH balance for an address
      * @param user Address to check
@@ -894,7 +973,30 @@ contract Backchat {
     function getPendingBalance(address user) external view returns (uint256) {
         return pendingEth[user];
     }
-    
+
+    /**
+     * @notice Returns pending ETH earnings for an address (alias for frontend)
+     * @param user Address to check
+     * @return Pending ETH amount
+     */
+    function getEarnings(address user) external view returns (uint256) {
+        return pendingEth[user];
+    }
+
+    /**
+     * @notice Returns referral statistics for a referrer
+     * @param referrer Address to check
+     * @return totalReferred Number of users this address has referred
+     * @return totalEarned Total ETH earned from referral fees
+     */
+    function getReferralStats(address referrer) external view returns (
+        uint256 totalReferred,
+        uint256 totalEarned
+    ) {
+        totalReferred = referralCount[referrer];
+        totalEarned = referralEarnings[referrer];
+    }
+
     /**
      * @notice Checks if a username is available
      * @param username Username to check
@@ -904,7 +1006,7 @@ contract Backchat {
         bytes32 usernameHash = keccak256(bytes(username));
         return usernameOwner[usernameHash] == address(0);
     }
-    
+
     /**
      * @notice Returns the owner of a username
      * @param username Username to lookup
@@ -914,19 +1016,19 @@ contract Backchat {
         bytes32 usernameHash = keccak256(bytes(username));
         return usernameOwner[usernameHash];
     }
-    
+
     /**
      * @notice Returns contract version
      * @return Version string
      */
     function version() external pure returns (string memory) {
-        return "7.0.0";
+        return "8.0.0";
     }
-    
+
     // ═══════════════════════════════════════════════════════════════════════════════
     //                    INTERNAL FUNCTIONS (WITH GRACEFUL DEGRADATION)
     // ═══════════════════════════════════════════════════════════════════════════════
-    
+
     /**
      * @dev Safely gets treasury address from EcosystemManager
      * @return treasury Treasury address or address(0) if call fails
@@ -939,7 +1041,7 @@ contract Backchat {
             treasury = address(0);
         }
     }
-    
+
     /**
      * @dev Safely gets MiningManager address from EcosystemManager
      * @return miningManager MiningManager address or address(0) if call fails
@@ -952,70 +1054,85 @@ contract Backchat {
             miningManager = address(0);
         }
     }
-    
+
     /**
-     * @dev Distributes ETH fee WITH creator (40/30/30 split)
+     * @dev Distributes ETH fee using the VIRAL REFERRAL model
+     *      - With operator + referrer: 50% operator / 30% referrer / 20% protocol
+     *      - With operator, no referrer: 80% operator / 20% protocol
+     *      - Without operator: 100% protocol
      *      Falls back gracefully if treasury lookup fails
-     * @param amount Total ETH to distribute
-     * @param creator Content creator address
+     * @param amount Total ETH fee to distribute
      * @param operator Frontend operator address
+     * @param actionType Action type string for event tracking
      */
-    function _distribute(
+    function _distributeViralFee(
         uint256 amount,
-        address creator,
-        address operator
+        address operator,
+        string memory actionType
     ) internal {
         address treasury = _getTreasury();
-        
-        uint256 creatorShare = (amount * CREATOR_BIPS) / BIPS;
-        uint256 operatorShare = (amount * OPERATOR_BIPS) / BIPS;
-        uint256 treasuryShare = amount - creatorShare - operatorShare;
-        
-        // Accumulate for creator
-        pendingEth[creator] += creatorShare;
-        
-        // Accumulate for operator
+        address referrer = referredBy[msg.sender];
+
+        uint256 operatorShare;
+        uint256 referrerAmount;
+        uint256 protocolShare;
+
         if (operator != address(0)) {
+            if (referrer != address(0)) {
+                // Full viral split: 50/30/20
+                operatorShare = (amount * OPERATOR_SHARE) / BIPS;
+                referrerAmount = (amount * REFERRER_SHARE) / BIPS;
+                protocolShare = amount - operatorShare - referrerAmount;
+            } else {
+                // No referrer: 80/20
+                operatorShare = (amount * OPERATOR_NO_REFERRER_SHARE) / BIPS;
+                protocolShare = amount - operatorShare;
+            }
+        } else {
+            // No operator: 100% protocol
+            protocolShare = amount;
+        }
+
+        // Accumulate earnings
+        if (operatorShare > 0) {
             pendingEth[operator] += operatorShare;
-        } else {
-            // No operator: add to treasury share
-            treasuryShare += operatorShare;
-            operatorShare = 0;
         }
-        
-        // Accumulate for treasury (or operator if treasury fails)
-        if (treasury != address(0)) {
-            pendingEth[treasury] += treasuryShare;
-        } else if (operator != address(0)) {
-            // FALLBACK: Treasury failed, give to operator
-            pendingEth[operator] += treasuryShare;
-            operatorShare += treasuryShare;
-            treasuryShare = 0;
-        } else {
-            // FALLBACK: No treasury AND no operator, give to creator
-            pendingEth[creator] += treasuryShare;
-            creatorShare += treasuryShare;
-            treasuryShare = 0;
+
+        if (referrerAmount > 0) {
+            pendingEth[referrer] += referrerAmount;
+            referralEarnings[referrer] += referrerAmount;
         }
-        
-        emit EthDistributed(creator, operator, treasury, creatorShare, operatorShare, treasuryShare);
+
+        // Protocol share to treasury
+        if (protocolShare > 0) {
+            if (treasury != address(0)) {
+                pendingEth[treasury] += protocolShare;
+            } else if (operator != address(0)) {
+                // FALLBACK: Treasury unavailable, give to operator
+                pendingEth[operator] += protocolShare;
+            }
+            // If both unavailable, ETH stays in contract (recoverable)
+        }
+
+        emit ActionFeeCollected(msg.sender, operator, referrer, amount, actionType);
     }
-    
+
     /**
-     * @dev Distributes ETH fee WITHOUT creator (60/40 split)
+     * @dev Distributes ETH fee for PREMIUM features (60/40 operator/protocol)
+     *      Used by: createProfile, boostProfile, obtainBadge
      *      Falls back gracefully if treasury lookup fails
      * @param amount Total ETH to distribute
      * @param operator Frontend operator address
      */
-    function _distributeNoCreator(
+    function _distributePremium(
         uint256 amount,
         address operator
     ) internal {
         address treasury = _getTreasury();
-        
-        uint256 operatorShare = (amount * OPERATOR_NO_CREATOR_BIPS) / BIPS;
+
+        uint256 operatorShare = (amount * PREMIUM_OPERATOR_BIPS) / BIPS;
         uint256 treasuryShare = amount - operatorShare;
-        
+
         // Accumulate for operator
         if (operator != address(0)) {
             pendingEth[operator] += operatorShare;
@@ -1024,7 +1141,7 @@ contract Backchat {
             treasuryShare += operatorShare;
             operatorShare = 0;
         }
-        
+
         // Accumulate for treasury (or operator if treasury fails)
         if (treasury != address(0)) {
             pendingEth[treasury] += treasuryShare;
@@ -1037,10 +1154,10 @@ contract Backchat {
             // Both unavailable: revert to prevent locking user's ETH
             revert NoRecipientAvailable();
         }
-        
+
         emit EthDistributed(address(0), operator, treasury, 0, operatorShare, treasuryShare);
     }
-    
+
     /**
      * @dev Processes BKC tip with GRACEFUL DEGRADATION
      *      - Normal: 90% to creator, 10% to MiningManager
@@ -1056,7 +1173,7 @@ contract Backchat {
         address operator
     ) internal {
         if (tipAmount == 0) return;
-        
+
         // Try to transfer BKC from sender to this contract
         try IBKC(bkcToken).transferFrom(msg.sender, address(this), tipAmount) returns (bool success) {
             if (!success) {
@@ -1069,11 +1186,11 @@ contract Backchat {
             emit TipFallback(msg.sender, creator, tipAmount, "transferFrom failed");
             return;
         }
-        
+
         // Calculate split
         uint256 creatorShare = (tipAmount * CREATOR_TIP_BIPS) / BIPS;
         uint256 miningShare = tipAmount - creatorShare;
-        
+
         // Try to send 90% to creator
         try IBKC(bkcToken).transfer(creator, creatorShare) returns (bool success) {
             if (!success) {
@@ -1088,10 +1205,10 @@ contract Backchat {
             emit TipFallback(msg.sender, creator, tipAmount, "creator transfer reverted");
             return;
         }
-        
+
         // Try to send 10% to MiningManager
         address miningManager = _getMiningManager();
-        
+
         if (miningManager != address(0) && miningShare > 0) {
             // Try to transfer to MiningManager and trigger mining
             try IBKC(bkcToken).transfer(miningManager, miningShare) returns (bool success) {
@@ -1114,7 +1231,7 @@ contract Backchat {
                     }
                 }
             } catch {}
-            
+
             // MiningManager transfer failed, give miningShare to creator instead
             try IBKC(bkcToken).transfer(creator, miningShare) {} catch {}
             emit TipFallback(msg.sender, creator, tipAmount, "miningManager failed, 100% to creator");
@@ -1126,7 +1243,7 @@ contract Backchat {
             emit TipProcessed(msg.sender, creator, tipAmount, tipAmount, 0, operator);
         }
     }
-    
+
     /**
      * @dev Refunds excess ETH sent beyond the required fee
      * @param fee Required fee amount
@@ -1138,32 +1255,33 @@ contract Backchat {
             if (!success) revert TransferFailed();
         }
     }
-    
+
     /**
      * @dev Validates username format (lowercase a-z, 0-9, underscore only)
      * @param username Username bytes to validate
      * @return True if valid
      */
     function _validateUsername(bytes memory username) internal pure returns (bool) {
-        for (uint256 i; i < username.length; ++i) {
+        for (uint256 i; i < username.length;) {
             bytes1 char = username[i];
-            
+
             // Valid: 0-9 (0x30-0x39), a-z (0x61-0x7a), _ (0x5f)
             bool isDigit = (char >= 0x30 && char <= 0x39);
             bool isLowercase = (char >= 0x61 && char <= 0x7a);
             bool isUnderscore = (char == 0x5f);
-            
+
             if (!isDigit && !isLowercase && !isUnderscore) {
                 return false;
             }
+            unchecked { ++i; }
         }
         return true;
     }
-    
+
     // ═══════════════════════════════════════════════════════════════════════════════
     //                          RECEIVE FUNCTION
     // ═══════════════════════════════════════════════════════════════════════════════
-    
+
     /// @notice Allows contract to receive ETH
     receive() external payable {}
 }
