@@ -388,9 +388,7 @@ contract NFTLiquidityPool is
             unchecked { ++i; }
         }
 
-        unchecked {
-            pool.nftCount += _tokenIds.length;
-        }
+        pool.nftCount += _tokenIds.length;
         pool.k = pool.nftCount * pool.bkcBalance;
 
         emit NFTsAdded(boostBips, _tokenIds.length, pool.k);
@@ -402,9 +400,7 @@ contract NFTLiquidityPool is
 
         bkcToken.safeTransferFrom(msg.sender, address(this), _amount);
 
-        unchecked {
-            pool.bkcBalance += _amount;
-        }
+        pool.bkcBalance += _amount;
         pool.k = pool.nftCount * pool.bkcBalance;
 
         emit BKCLiquidityAdded(_amount, pool.bkcBalance, pool.k);
@@ -413,9 +409,8 @@ contract NFTLiquidityPool is
     function removeBKCLiquidity(uint256 _amount) external onlyOwner nonReentrant {
         if (_amount > pool.bkcBalance) revert InsufficientLiquidity();
 
-        unchecked {
-            pool.bkcBalance -= _amount;
-        }
+        // Safe: _amount <= pool.bkcBalance checked above
+        pool.bkcBalance -= _amount;
         pool.k = pool.nftCount * pool.bkcBalance;
 
         bkcToken.safeTransfer(msg.sender, _amount);
@@ -545,13 +540,10 @@ contract NFTLiquidityPool is
 
         uint256 grossValue = getSellPrice();
         uint256 taxBips = ecosystemManager.getFee(SELL_TAX_KEY);
-        uint256 taxAmount;
-        uint256 netPayout;
 
-        unchecked {
-            taxAmount = (grossValue * taxBips) / BIPS_DENOMINATOR;
-            netPayout = grossValue - taxAmount;
-        }
+        // Checked arithmetic: grossValue * taxBips could overflow with extreme fee values
+        uint256 taxAmount = (grossValue * taxBips) / BIPS_DENOMINATOR;
+        uint256 netPayout = grossValue - taxAmount;
 
         if (netPayout < _minPayout) revert SlippageExceeded();
         if (pool.bkcBalance < grossValue) revert InsufficientLiquidity();
@@ -567,17 +559,14 @@ contract NFTLiquidityPool is
             _sendTaxToMining(SELL_TAX_KEY, taxAmount, _operator);
         }
 
-        unchecked {
-            pool.bkcBalance -= grossValue;
-            pool.nftCount++;
-        }
+        // Safe: pool.bkcBalance >= grossValue checked above (InsufficientLiquidity)
+        pool.bkcBalance -= grossValue;
+        pool.nftCount++;
         pool.k = pool.bkcBalance * pool.nftCount;
 
-        unchecked {
-            totalVolume += grossValue;
-            totalTaxesCollected += taxAmount;
-            totalSells++;
-        }
+        totalVolume += grossValue;
+        totalTaxesCollected += taxAmount;
+        totalSells++;
 
         emit NFTSold(
             msg.sender,
@@ -615,10 +604,7 @@ contract NFTLiquidityPool is
         if (price == type(uint256).max) return type(uint256).max;
 
         uint256 taxBips = ecosystemManager.getFee(BUY_TAX_KEY);
-        uint256 tax;
-        unchecked {
-            tax = (price * taxBips) / BIPS_DENOMINATOR;
-        }
+        uint256 tax = (price * taxBips) / BIPS_DENOMINATOR;
 
         return price + tax;
     }
@@ -637,10 +623,7 @@ contract NFTLiquidityPool is
         if (grossPrice == 0) return 0;
 
         uint256 taxBips = ecosystemManager.getFee(SELL_TAX_KEY);
-        uint256 tax;
-        unchecked {
-            tax = (grossPrice * taxBips) / BIPS_DENOMINATOR;
-        }
+        uint256 tax = (grossPrice * taxBips) / BIPS_DENOMINATOR;
 
         return grossPrice - tax;
     }
@@ -753,13 +736,10 @@ contract NFTLiquidityPool is
         if (price == type(uint256).max) revert MathOverflow();
 
         uint256 taxBips = ecosystemManager.getFee(BUY_TAX_KEY);
-        uint256 taxAmount;
-        uint256 totalCost;
 
-        unchecked {
-            taxAmount = (price * taxBips) / BIPS_DENOMINATOR;
-            totalCost = price + taxAmount;
-        }
+        // Checked arithmetic: price * taxBips could overflow with extreme fee values
+        uint256 taxAmount = (price * taxBips) / BIPS_DENOMINATOR;
+        uint256 totalCost = price + taxAmount;
 
         bkcToken.safeTransferFrom(msg.sender, address(this), totalCost);
 
@@ -767,10 +747,9 @@ contract NFTLiquidityPool is
             _sendTaxToMining(BUY_TAX_KEY, taxAmount, _operator);
         }
 
-        unchecked {
-            pool.bkcBalance += price;
-            pool.nftCount--;
-        }
+        // Safe: pool.nftCount > 0 checked at function entry (InsufficientNFTs)
+        pool.bkcBalance += price;
+        pool.nftCount--;
         pool.k = pool.nftCount > 0 ? pool.bkcBalance * pool.nftCount : 0;
 
         _removeTokenFromPool(_tokenId);
@@ -781,11 +760,9 @@ contract NFTLiquidityPool is
             _tokenId
         );
 
-        unchecked {
-            totalVolume += price;
-            totalTaxesCollected += taxAmount;
-            totalBuys++;
-        }
+        totalVolume += price;
+        totalTaxesCollected += taxAmount;
+        totalBuys++;
 
         emit NFTPurchased(
             msg.sender,
