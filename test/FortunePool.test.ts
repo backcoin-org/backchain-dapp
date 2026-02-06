@@ -26,12 +26,8 @@ describe("FortunePool", function () {
     });
 
     // 3. Register BKCToken + treasury (MiningManager init reads BKCToken)
-    await eco.setAddresses(
-      bkc.target, treasury.address,
-      ethers.ZeroAddress, ethers.ZeroAddress,
-      ethers.ZeroAddress, ethers.ZeroAddress,
-      ethers.ZeroAddress, ethers.ZeroAddress
-    );
+    await eco.setAddress("bkcToken", bkc.target);
+    await eco.setAddress("treasury", treasury.address);
 
     // 4. MiningManager
     const MMFactory = await ethers.getContractFactory("MiningManager");
@@ -40,12 +36,7 @@ describe("FortunePool", function () {
     });
 
     // 5. Register MiningManager (FortunePool init reads it)
-    await eco.setAddresses(
-      bkc.target, treasury.address,
-      ethers.ZeroAddress, ethers.ZeroAddress,
-      mining.target, ethers.ZeroAddress,
-      ethers.ZeroAddress, ethers.ZeroAddress
-    );
+    await eco.setAddress("miningManager", mining.target);
 
     // 6. DelegationManager (needed for mining distribution)
     const DelFactory = await ethers.getContractFactory("DelegationManager");
@@ -64,12 +55,8 @@ describe("FortunePool", function () {
     );
 
     // 8. Full wiring
-    await eco.setAddresses(
-      bkc.target, treasury.address,
-      delegation.target, ethers.ZeroAddress,
-      mining.target, ethers.ZeroAddress,
-      fortune.target, ethers.ZeroAddress
-    );
+    await eco.setAddress("delegationManager", delegation.target);
+    await eco.setAddress("fortunePool", fortune.target);
 
     // 9. Mint initial supply (owner is still BKCToken owner)
     const INITIAL = ethers.parseEther("10000000");

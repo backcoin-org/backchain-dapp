@@ -253,6 +253,7 @@ contract EcosystemManager is
     error ZeroAddress();
     error InvalidBips();
     error LengthMismatch();
+    error UnrecognizedKey();
 
     // =========================================================================
     //                           INITIALIZATION
@@ -294,7 +295,16 @@ contract EcosystemManager is
         address _fortunePool,
         address _nftPoolFactory
     ) external onlyOwner {
-        if (_bkcToken == address(0) || _treasury == address(0)) {
+        if (
+            _bkcToken == address(0) ||
+            _treasury == address(0) ||
+            _delegationManager == address(0) ||
+            _rewardBooster == address(0) ||
+            _miningManager == address(0) ||
+            _notary == address(0) ||
+            _fortunePool == address(0) ||
+            _nftPoolFactory == address(0)
+        ) {
             revert ZeroAddress();
         }
 
@@ -343,6 +353,8 @@ contract EcosystemManager is
         } else if (keyHash == keccak256("rentalManager")) {
             previousAddress = rentalManagerAddress;
             rentalManagerAddress = _newAddress;
+        } else {
+            revert UnrecognizedKey();
         }
 
         emit AddressUpdated(_key, previousAddress, _newAddress);
