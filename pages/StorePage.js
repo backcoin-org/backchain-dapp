@@ -368,9 +368,9 @@ export const StorePage = {
                     <!-- Header with NFT Icon -->
                     <div class="flex justify-between items-center mb-6">
                         <div class="flex items-center gap-3">
-                            <div class="w-14 h-14 rounded-2xl flex items-center justify-center text-3xl"
+                            <div class="w-14 h-14 rounded-2xl flex items-center justify-center overflow-hidden"
                                  id="trade-mascot">
-                                💎
+                                <img src="${TIER_CONFIG['Diamond'].image}" alt="NFT" class="w-full h-full object-contain" onerror="this.outerHTML='<span class=\\'text-3xl\\'>💎</span>'">
                             </div>
                             <div>
                                 <h1 class="text-lg font-semibold text-white">NFT Market</h1>
@@ -607,13 +607,15 @@ function renderTierChips() {
         
         return `
             <button class="tier-chip flex flex-col items-center gap-1 p-2 rounded-xl border transition-all
-                ${isFirst 
-                    ? `bg-gradient-to-br ${style.gradient} ${style.border} ${style.text} active` 
+                ${isFirst
+                    ? `bg-gradient-to-br ${style.gradient} ${style.border} ${style.text} active`
                     : 'bg-zinc-800/50 border-zinc-700/50 text-zinc-400 hover:border-zinc-600'
-                }" 
-                data-boost="${tier.boostBips}" 
+                }"
+                data-boost="${tier.boostBips}"
                 data-tier="${tier.name}">
-                <span class="text-2xl">${emoji}</span>
+                <div class="w-8 h-8 flex items-center justify-center">
+                    ${style.image ? `<img src="${style.image}" alt="${tier.name}" class="w-full h-full object-contain rounded" onerror="this.outerHTML='<span class=\\'text-2xl\\'>${emoji}</span>'">` : `<span class="text-2xl">${emoji}</span>`}
+                </div>
                 <span class="text-[10px] font-medium truncate w-full text-center">${tier.name}</span>
                 <span class="text-[9px] ${keepRate === 100 ? 'text-green-400 font-bold' : 'opacity-70'}">Keep ${keepRate}%</span>
             </button>
@@ -665,8 +667,9 @@ function renderSwapInterface() {
             : `<span class="${noNFTtoSell ? 'text-red-400' : 'text-zinc-400'}">${TradeState.userBalanceOfSelectedNFT}</span>`)
         : '';
 
-    // V6.8: Get tier emoji for display
+    // V6.8: Get tier image/emoji for display
     const tierEmoji = style.icon || tier?.emoji || '💎';
+    const tierImage = style.image || '';
     const keepRate = getKeepRateFromBoost(tier?.boostBips || 0);
 
     el.innerHTML = `
@@ -689,9 +692,9 @@ function renderSwapInterface() {
                         ${!isBuy && TradeState.firstAvailableTokenId ? `<span class="text-sm text-amber-400 ml-2">#${TradeState.firstAvailableTokenId.toString()}</span>` : ''}
                     </span>
                     <div class="token-selector flex items-center gap-2 px-3 py-2 rounded-xl cursor-default">
-                        ${isBuy 
+                        ${isBuy
                             ? `<img src="./assets/bkc_logo_3d.png" class="w-6 h-6 rounded">`
-                            : `<span class="text-xl">${tierEmoji}</span>`
+                            : (tierImage ? `<img src="${tierImage}" alt="${tier?.name}" class="w-6 h-6 object-contain rounded" onerror="this.outerHTML='<span class=\\'text-xl\\'>${tierEmoji}</span>'">` : `<span class="text-xl">${tierEmoji}</span>`)
                         }
                         <span class="text-white text-sm font-medium">${isBuy ? 'BKC' : tier?.name || 'NFT'}</span>
                     </div>
@@ -719,8 +722,8 @@ function renderSwapInterface() {
                 <div class="flex justify-between items-center">
                     <span class="text-2xl font-semibold text-white">${isBuy ? '1' : formatBigNumber(TradeState.netSellPrice).toFixed(2)}</span>
                     <div class="token-selector flex items-center gap-2 px-3 py-2 rounded-xl cursor-default">
-                        ${isBuy 
-                            ? `<span class="text-xl">${tierEmoji}</span>`
+                        ${isBuy
+                            ? (tierImage ? `<img src="${tierImage}" alt="${tier?.name}" class="w-6 h-6 object-contain rounded" onerror="this.outerHTML='<span class=\\'text-xl\\'>${tierEmoji}</span>'">` : `<span class="text-xl">${tierEmoji}</span>`)
                             : `<img src="./assets/bkc_logo_3d.png" class="w-6 h-6 rounded">`
                         }
                         <span class="text-white text-sm font-medium">${isBuy ? tier?.name || 'NFT' : 'BKC'}</span>
@@ -731,7 +734,7 @@ function renderSwapInterface() {
             <!-- Pool Info - V6.8 -->
             <div class="flex justify-between items-center text-[10px] text-zinc-600 mb-4 px-1">
                 <span class="flex items-center gap-1">
-                    <span>${style.icon || '💎'}</span>
+                    ${tierImage ? `<img src="${tierImage}" alt="${tier?.name}" class="w-4 h-4 object-contain" onerror="this.outerHTML='<span>${tierEmoji}</span>'">` : `<span>${tierEmoji}</span>`}
                     <span>${tier?.name || 'Unknown'} Pool</span>
                 </span>
                 <span class="text-green-400">Keep ${getKeepRateFromBoost(tier?.boostBips || 0)}% of rewards</span>
@@ -799,8 +802,7 @@ function renderExecuteButton(isBuy, soldOut, noNFTtoSell, insufficientBalance, h
 function updateMascotAnimation(isBuy) {
     const mascot = document.getElementById('trade-mascot');
     if (mascot) {
-        // V6.8: Animation classes work on the div containing emoji
-        mascot.className = `w-14 h-14 rounded-2xl flex items-center justify-center text-3xl ${isBuy ? 'trade-buy' : 'trade-sell'}`;
+        mascot.className = `w-14 h-14 rounded-2xl flex items-center justify-center overflow-hidden ${isBuy ? 'trade-buy' : 'trade-sell'}`;
     }
 }
 
@@ -1245,7 +1247,7 @@ function setupEventListeners() {
             // V12.2: Don't manually set button state — txEngine handles it via setPhase()
 
             // Animate mascot
-            if (mascot) mascot.className = 'w-14 h-14 object-contain trade-spin';
+            if (mascot) mascot.className = 'w-14 h-14 rounded-2xl flex items-center justify-center overflow-hidden trade-spin';
 
             try {
                 if (TradeState.tradeDirection === 'buy') {
@@ -1255,7 +1257,7 @@ function setupEventListeners() {
                         button: executeBtn,
                         
                         onSuccess: async (receipt) => {
-                            if (mascot) mascot.className = 'w-14 h-14 object-contain trade-success';
+                            if (mascot) mascot.className = 'w-14 h-14 rounded-2xl flex items-center justify-center overflow-hidden trade-success';
                             showToast("🟢 NFT Purchased!", "success");
                             
                             // Invalidate cache and reload
@@ -1289,7 +1291,7 @@ function setupEventListeners() {
                         button: executeBtn,
                         
                         onSuccess: async (receipt) => {
-                            if (mascot) mascot.className = 'w-14 h-14 object-contain trade-success';
+                            if (mascot) mascot.className = 'w-14 h-14 rounded-2xl flex items-center justify-center overflow-hidden trade-success';
                             showToast("🔴 NFT Sold!", "success");
                             
                             // Invalidate cache and reload
@@ -1330,7 +1332,7 @@ function setupEventListeners() {
                 if (mascot) {
                     setTimeout(() => {
                         const isBuy = TradeState.tradeDirection === 'buy';
-                        mascot.className = `w-14 h-14 object-contain ${isBuy ? 'trade-buy' : 'trade-sell'}`;
+                        mascot.className = `w-14 h-14 rounded-2xl flex items-center justify-center overflow-hidden ${isBuy ? 'trade-buy' : 'trade-sell'}`;
                     }, 800);
                 }
             }
