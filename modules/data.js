@@ -590,7 +590,7 @@ export async function getHighestBoosterBoostFromAPI(forceRefresh = false) {
     }
 
     const tier = boosterTiers.find(t => t.boostBips === maxBoost);
-    const imageUrl = tier?.realImg || tier?.img || 'assets/bkc_logo_3d.png';
+    const imageUrl = tier?.image || tier?.realImg || tier?.img || 'assets/bkc_logo_3d.png';
     const nftName = tier?.name ? `${tier.name} Booster` : (source !== 'none' ? 'Booster NFT' : 'None');
 
     cachedBoosterResult = {

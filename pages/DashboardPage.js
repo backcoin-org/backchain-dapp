@@ -828,7 +828,7 @@ function renderDashboardLayout() {
                     </div>
                     <div class="dash-action-text">
                         <h4>Backchat</h4>
-                        <p>Social on-chain</p>
+                        <p>Post & earn BKC tips</p>
                     </div>
                     <i class="fa-solid fa-chevron-right dash-action-arrow"></i>
                 </div>
@@ -839,7 +839,7 @@ function renderDashboardLayout() {
                     </div>
                     <div class="dash-action-text">
                         <h4>Stake BKC</h4>
-                        <p>Earn passive yield</p>
+                        <p>Earn while you sleep</p>
                     </div>
                     <i class="fa-solid fa-chevron-right dash-action-arrow"></i>
                 </div>
@@ -850,7 +850,7 @@ function renderDashboardLayout() {
                     </div>
                     <div class="dash-action-text">
                         <h4>Fortune Pool</h4>
-                        <p id="dash-fortune-prize-text">Play to win</p>
+                        <p id="dash-fortune-prize-text">Win up to 100x</p>
                     </div>
                     <i class="fa-solid fa-chevron-right dash-action-arrow"></i>
                 </div>
@@ -861,7 +861,7 @@ function renderDashboardLayout() {
                     </div>
                     <div class="dash-action-text">
                         <h4>Notarize</h4>
-                        <p id="dash-notary-count-text">Certify documents</p>
+                        <p id="dash-notary-count-text">Certify on blockchain</p>
                     </div>
                     <i class="fa-solid fa-chevron-right dash-action-arrow"></i>
                 </div>
@@ -872,7 +872,7 @@ function renderDashboardLayout() {
                     </div>
                     <div class="dash-action-text">
                         <h4>Charity Pool</h4>
-                        <p>Support causes</p>
+                        <p>Donate & burn tokens</p>
                     </div>
                     <i class="fa-solid fa-chevron-right dash-action-arrow"></i>
                 </div>
@@ -883,9 +883,20 @@ function renderDashboardLayout() {
                     </div>
                     <div class="dash-action-text">
                         <h4>NFT Market</h4>
-                        <p>Buy & Trade</p>
+                        <p>2x your rewards</p>
                     </div>
                     <i class="fa-solid fa-chevron-right dash-action-arrow"></i>
+                </div>
+            </div>
+
+            <!-- VIRAL BANNER -->
+            <div id="dash-viral-banner" style="display:flex;align-items:center;gap:12px;padding:12px 16px;background:linear-gradient(135deg,rgba(245,158,11,0.08),rgba(239,68,68,0.05));border:1px solid rgba(245,158,11,0.15);border-radius:var(--dash-radius-sm);margin-bottom:14px;animation:dash-fadeIn 0.6s ease-out 0.2s both">
+                <div style="width:36px;height:36px;background:rgba(245,158,11,0.15);border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;animation:dash-glow 3s infinite">
+                    <i class="fa-solid fa-fire-flame-curved" style="color:#f59e0b;font-size:16px"></i>
+                </div>
+                <div style="flex:1;min-width:0">
+                    <p style="font-size:12px;font-weight:700;color:var(--dash-text);margin:0">Every claim without an NFT burns your BKC forever</p>
+                    <p style="font-size:10px;color:var(--dash-text-3);margin:2px 0 0">Diamond holders keep 100% — Others lose up to 50%. <span style="color:var(--dash-accent);cursor:pointer" class="go-to-store">Get your NFT now</span></p>
                 </div>
             </div>
 
@@ -1105,8 +1116,11 @@ async function updateGlobalMetrics() {
             if (ecoData.economy?.fortunePoolBalance) fortunePoolBalance = BigInt(ecoData.economy.fortunePoolBalance);
             if (ecoData.stats?.notarizedDocuments) notaryCount = ecoData.stats.notarizedDocuments;
 
-            if (ecoData.burn?.totalBurned) {
+            // Burned: try multiple paths (backend may store in different locations)
+            if (ecoData.burn?.totalBurned && BigInt(ecoData.burn.totalBurned) > 0n) {
                 totalBurned = BigInt(ecoData.burn.totalBurned);
+            } else if (ecoData.economy?.totalBurned && BigInt(ecoData.economy.totalBurned) > 0n) {
+                totalBurned = BigInt(ecoData.economy.totalBurned);
             } else if (ecoData.burn?.sources) {
                 let sum = 0n;
                 for (const source of Object.values(ecoData.burn.sources)) {
@@ -1115,6 +1129,15 @@ async function updateGlobalMetrics() {
                 totalBurned = sum;
             } else if (ecoData.rental?.totalBurned) {
                 totalBurned = BigInt(ecoData.rental.totalBurned);
+            }
+            // Last resort: sum burns from all known sources
+            if (totalBurned === 0n) {
+                let fallbackBurn = 0n;
+                if (ecoData.rental?.totalBurned) fallbackBurn += BigInt(ecoData.rental.totalBurned);
+                if (ecoData.charity?.totalBurned) fallbackBurn += BigInt(ecoData.charity.totalBurned);
+                if (ecoData.fortune?.totalBurned) fallbackBurn += BigInt(ecoData.fortune.totalBurned);
+                if (ecoData.staking?.totalBurned) fallbackBurn += BigInt(ecoData.staking.totalBurned);
+                if (fallbackBurn > 0n) totalBurned = fallbackBurn;
             }
         }
 
@@ -1282,7 +1305,17 @@ function updateBoosterDisplay(data, claimDetails) {
     const diamondReward = grossReward;
     const potentialBonus = diamondReward - netReward;
 
+    // NFT image: from data.imageUrl (fixed in data.js), or tierInfo.image, or fallback
+    const tierInfo = getTierByBoost(currentBoostBips);
+    const nftImageUrl = data?.imageUrl || tierInfo?.image || './assets/bkc_logo_3d.png';
+    // Diamond tier image for upsell
+    const diamondTier = boosterTiers.find(t => t.name === 'Diamond');
+    const diamondImage = diamondTier?.image || './assets/bkc_logo_3d.png';
+
     if (currentBoostBips === 0) {
+        // Calculate what they're LOSING every day without an NFT
+        const lossPerClaim = potentialBonus;
+
         if (potentialBonus > 0n) {
             const gainArea = document.getElementById('dash-user-gain-area');
             if (gainArea) {
@@ -1292,65 +1325,86 @@ function updateBoosterDisplay(data, claimDetails) {
         }
         container.innerHTML = `
             <div style="text-align:center;width:100%">
-                <div style="display:flex;align-items:center;justify-content:center;gap:8px;margin-bottom:8px">
-                    <div style="width:36px;height:36px;background:rgba(245,158,11,0.15);border-radius:50%;display:flex;align-items:center;justify-content:center">
-                        <i class="fa-solid fa-coins" style="color:var(--dash-accent)"></i>
-                    </div>
-                    <div style="text-align:left">
-                        <p style="color:var(--dash-text);font-size:13px;font-weight:700;margin:0">You receive ${keepRate}%</p>
-                        <p style="font-size:10px;color:var(--dash-text-3);margin:0">of your staking rewards</p>
-                    </div>
+                <!-- Diamond NFT preview image -->
+                <div style="position:relative;margin:0 auto 10px;width:72px;height:72px">
+                    <div style="position:absolute;inset:-4px;background:linear-gradient(135deg,rgba(6,182,212,0.3),rgba(99,102,241,0.3));border-radius:14px;animation:dash-glow 3s infinite"></div>
+                    <img src="${diamondImage}" style="position:relative;width:72px;height:72px;border-radius:12px;object-fit:cover;border:2px solid rgba(6,182,212,0.4)" alt="Diamond NFT" onerror="this.src='./assets/bkc_logo_3d.png'">
                 </div>
-                <div style="width:100%;background:var(--dash-surface-2);border-radius:20px;height:6px;overflow:hidden;margin-bottom:8px">
-                    <div style="background:linear-gradient(90deg,var(--dash-accent),var(--dash-green));height:100%;border-radius:20px;width:${keepRate}%"></div>
+
+                <p style="color:#ef4444;font-size:12px;font-weight:800;margin:0 0 4px">
+                    <i class="fa-solid fa-fire" style="margin-right:3px"></i>You're losing ${keepRate === 50 ? '50%' : (100 - keepRate) + '%'} of your rewards!
+                </p>
+
+                <div style="width:100%;background:var(--dash-surface-2);border-radius:20px;height:8px;overflow:hidden;margin-bottom:6px;position:relative">
+                    <div style="background:linear-gradient(90deg,#ef4444,#f59e0b);height:100%;border-radius:20px;width:${keepRate}%"></div>
+                    <div style="position:absolute;right:0;top:0;height:100%;width:${100 - keepRate}%;background:repeating-linear-gradient(45deg,transparent,transparent 3px,rgba(239,68,68,0.15) 3px,rgba(239,68,68,0.15) 6px);border-radius:0 20px 20px 0"></div>
                 </div>
+                <p style="font-size:10px;color:var(--dash-text-3);margin-bottom:8px">
+                    You keep <span style="color:var(--dash-accent);font-weight:700">${keepRate}%</span> — Diamond holders keep <span style="color:var(--dash-green);font-weight:700">100%</span>
+                </p>
+
                 ${grossReward > 0n ? `
-                <div style="background:var(--dash-surface-2);border-radius:8px;padding:8px;text-align:left;margin-bottom:8px">
+                <div style="background:linear-gradient(135deg,rgba(239,68,68,0.08),rgba(245,158,11,0.08));border:1px solid rgba(239,68,68,0.2);border-radius:8px;padding:8px;text-align:left;margin-bottom:8px">
                     <div style="display:flex;justify-content:space-between;font-size:11px">
                         <span style="color:var(--dash-text-2)">You'll receive:</span>
-                        <span style="color:var(--dash-green);font-weight:700">${formatBigNumber(netReward).toFixed(4)} BKC</span>
+                        <span style="color:var(--dash-accent);font-weight:700">${formatBigNumber(netReward).toFixed(4)} BKC</span>
                     </div>
-                    ${potentialBonus > 0n ? `<div style="display:flex;justify-content:space-between;font-size:11px;margin-top:3px">
-                        <span style="color:var(--dash-text-3)">With Diamond:</span>
-                        <span style="color:var(--dash-cyan);font-weight:600">+${formatBigNumber(potentialBonus).toFixed(4)} BKC</span>
-                    </div>` : ''}
+                    ${lossPerClaim > 0n ? `
+                    <div style="display:flex;justify-content:space-between;font-size:11px;margin-top:3px">
+                        <span style="color:#ef4444;font-weight:600"><i class="fa-solid fa-fire" style="margin-right:2px"></i>Burned forever:</span>
+                        <span style="color:#ef4444;font-weight:700">-${formatBigNumber(lossPerClaim).toFixed(4)} BKC</span>
+                    </div>
+                    <div style="display:flex;justify-content:space-between;font-size:11px;margin-top:3px">
+                        <span style="color:var(--dash-green)"><i class="fa-solid fa-diamond" style="margin-right:2px"></i>With Diamond:</span>
+                        <span style="color:var(--dash-green);font-weight:700">${formatBigNumber(grossReward).toFixed(4)} BKC</span>
+                    </div>
+                    ` : ''}
                 </div>` : ''}
-                <p style="font-size:10px;color:var(--dash-accent);margin-bottom:8px"><i class="fa-solid fa-arrow-up" style="margin-right:3px"></i>Get up to 2x more with an NFT!</p>
-                <button id="open-booster-info" style="font-size:11px;color:var(--dash-text-3);background:none;border:none;cursor:pointer;margin-bottom:8px"><i class="fa-solid fa-circle-info" style="margin-right:3px"></i> How does it work?</button>
+
+                <p style="font-size:11px;font-weight:700;color:var(--dash-cyan);margin-bottom:8px;animation:dash-glow 2s infinite">
+                    <i class="fa-solid fa-bolt" style="margin-right:3px"></i>Stop burning BKC — Get an NFT now!
+                </p>
+
                 <div style="display:flex;gap:6px;justify-content:center">
-                    <button class="dash-btn-primary go-to-store" style="background:linear-gradient(135deg,#d97706,#b45309);font-size:10px;padding:6px 12px"><i class="fa-solid fa-gem" style="margin-right:3px"></i>Buy NFT</button>
-                    <button class="dash-btn-primary go-to-rental" style="background:linear-gradient(135deg,#06b6d4,#0891b2);font-size:10px;padding:6px 12px"><i class="fa-solid fa-clock" style="margin-right:3px"></i>Rent</button>
+                    <button class="dash-btn-primary go-to-store" style="background:linear-gradient(135deg,#d97706,#b45309);font-size:11px;padding:8px 14px;flex:1">
+                        <i class="fa-solid fa-gem" style="margin-right:3px"></i>Buy NFT
+                    </button>
+                    <button class="dash-btn-primary go-to-rental" style="background:linear-gradient(135deg,#06b6d4,#0891b2);font-size:11px;padding:8px 14px;flex:1">
+                        <i class="fa-solid fa-clock" style="margin-right:3px"></i>Rent by Hour
+                    </button>
                 </div>
+                <button id="open-booster-info" style="font-size:10px;color:var(--dash-text-3);background:none;border:none;cursor:pointer;margin-top:6px"><i class="fa-solid fa-circle-info" style="margin-right:3px"></i> How does it work?</button>
             </div>
         `;
         return;
     }
 
+    // HAS NFT — show real image
     const isRented = data.source === 'rented';
     const badgeColor = isRented ? 'background:rgba(6,182,212,0.15);color:#67e8f9' : 'background:rgba(74,222,128,0.15);color:#86efac';
     const badgeText = isRented ? 'Rented' : 'Owned';
-    const tierInfo = getTierByBoost(currentBoostBips);
     const tierName = tierInfo?.name || data.boostName?.replace(' Booster', '').replace('Booster', '').trim() || 'Booster';
     const tierColor = tierInfo?.color || 'color:var(--dash-accent)';
-    const tierEmoji = tierInfo?.emoji || '💎';
     const withoutNftReward = (grossReward * 50n) / 100n;
     const bonusGained = netReward - withoutNftReward;
+    const borderCol = tierInfo?.borderColor?.replace('border-', '').replace('/50', '') || 'rgba(74,222,128,0.3)';
 
     container.innerHTML = `
-        <div class="nft-clickable-image" data-address="${addresses.rewardBoosterNFT}" data-tokenid="${data.tokenId}" style="display:flex;align-items:center;gap:12px;background:var(--dash-surface-2);border:1px solid ${tierInfo?.borderColor || 'rgba(74,222,128,0.2)'};border-radius:10px;padding:12px;cursor:pointer;transition:all 0.2s;width:100%">
-            <div style="position:relative;width:48px;height:48px;flex-shrink:0">
-                <div style="width:100%;height:100%;border-radius:10px;background:${tierInfo?.bgGradient ? `linear-gradient(135deg,${tierInfo.bgGradient})` : 'rgba(245,158,11,0.15)'};display:flex;align-items:center;justify-content:center;font-size:22px">${tierEmoji}</div>
-                <div style="position:absolute;top:-4px;left:-4px;background:var(--dash-green);color:#000;font-weight:800;font-size:9px;padding:1px 5px;border-radius:4px">${keepRate}%</div>
+        <div class="nft-clickable-image" data-address="${addresses.rewardBoosterNFT}" data-tokenid="${data.tokenId}" style="display:flex;align-items:center;gap:12px;background:var(--dash-surface-2);border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:12px;cursor:pointer;transition:all 0.2s;width:100%">
+            <div style="position:relative;width:56px;height:56px;flex-shrink:0">
+                <img src="${nftImageUrl}" style="width:56px;height:56px;border-radius:10px;object-fit:cover;border:2px solid rgba(255,255,255,0.1)" alt="${tierName}" onerror="this.src='./assets/bkc_logo_3d.png'">
+                <div style="position:absolute;top:-5px;left:-5px;background:var(--dash-green);color:#000;font-weight:800;font-size:9px;padding:2px 6px;border-radius:5px">${keepRate}%</div>
             </div>
             <div style="flex:1;min-width:0">
                 <div style="display:flex;align-items:center;gap:6px;margin-bottom:2px">
                     <span style="font-size:9px;font-weight:700;${badgeColor};padding:1px 6px;border-radius:4px;text-transform:uppercase">${badgeText}</span>
                     <span style="font-size:9px;color:var(--dash-text-3)">#${data.tokenId}</span>
                 </div>
-                <h4 style="${tierColor};font-weight:700;font-size:12px;margin:0">${tierName} Booster</h4>
-                <p style="font-size:10px;color:var(--dash-green);margin:2px 0 0"><i class="fa-solid fa-check-circle" style="margin-right:3px"></i>You receive ${keepRate}% of rewards</p>
-                ${grossReward > 0n ? `<p style="font-size:10px;color:var(--dash-text-2);margin:2px 0 0">Net: <span style="color:var(--dash-green);font-weight:700">${formatBigNumber(netReward).toFixed(4)} BKC</span></p>` : ''}
-                ${bonusGained > 0n ? `<p style="font-size:9px;color:#34d399;margin:1px 0 0"><i class="fa-solid fa-arrow-up" style="margin-right:2px"></i>+${formatBigNumber(bonusGained).toFixed(2)} BKC vs no NFT</p>` : ''}
+                <h4 style="${tierColor};font-weight:700;font-size:13px;margin:0">${tierName} Booster</h4>
+                <p style="font-size:10px;color:var(--dash-green);margin:2px 0 0"><i class="fa-solid fa-shield-check" style="margin-right:3px"></i>Keeping ${keepRate}% of rewards</p>
+                ${grossReward > 0n ? `<p style="font-size:11px;color:var(--dash-text);margin:3px 0 0;font-weight:600">Net: <span style="color:var(--dash-green);font-weight:700">${formatBigNumber(netReward).toFixed(4)} BKC</span></p>` : ''}
+                ${bonusGained > 0n ? `<p style="font-size:9px;color:#34d399;margin:2px 0 0"><i class="fa-solid fa-arrow-trend-up" style="margin-right:2px"></i>+${formatBigNumber(bonusGained).toFixed(2)} BKC saved vs no NFT</p>` : ''}
+                ${keepRate < 100 ? `<p style="font-size:9px;color:var(--dash-accent);margin:2px 0 0"><i class="fa-solid fa-arrow-up" style="margin-right:2px"></i>Upgrade to Diamond for 100%!</p>` : ''}
             </div>
         </div>
     `;
