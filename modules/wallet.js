@@ -49,7 +49,7 @@ let lastBalanceUpdate = 0;
 let balanceErrorCount = 0;
 const BALANCE_UPDATE_THROTTLE_MS = 5000;  // Mínimo 5s entre updates de UI
 const MAX_BALANCE_ERRORS = 3;              // Para de tentar após 3 erros
-const POLLING_INTERVAL_MS = 10000;         // 10s entre checks
+const POLLING_INTERVAL_MS = 30000;         // 30s entre checks (reduced from 10s to lower RPC load)
 
 // 🔥 V7.0: Variáveis para controle de RPC
 let rpcRetryCount = 0;
@@ -343,7 +343,7 @@ function startBalancePolling() {
     // Inicia polling com intervalo de 10s
     balancePollingInterval = setInterval(checkBalance, POLLING_INTERVAL_MS);
     
-    console.log("✅ Balance polling started (10s interval)");
+    console.log("✅ Balance polling started (30s interval)");
 }
 
 // 🔥 V7.0: Check balance com suporte a multi-RPC

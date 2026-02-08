@@ -72,19 +72,24 @@ const initialState = {
 
 const handler = {
     set(target, property, value) {
+        const oldValue = target[property];
+
         // Atualiza o valor
         target[property] = value;
 
         // Lista de propriedades que devem disparar atualização visual imediata
         const uiTriggers = [
-            'currentUserBalance', 
-            'isConnected', 
+            'currentUserBalance',
+            'isConnected',
             'userTotalPStake',
             'totalNetworkPStake'
         ];
 
         // Se a propriedade alterada for importante, avisa o app.js
         if (uiTriggers.includes(property)) {
+            // Skip UI update if value didn't actually change (avoids 0n → 0n spam)
+            if (oldValue === value) return true;
+
             if (window.updateUIState) {
                 window.updateUIState();
             }
