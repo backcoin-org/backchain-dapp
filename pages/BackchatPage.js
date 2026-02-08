@@ -1342,7 +1342,20 @@ async function loadFees() {
         if (!contract) return;
         
         const fees = await contract.getCurrentFees();
-        const calcFee = (gas) => contract.calculateFee(gas).catch(() => 0n);
+        // getCurrentFees returns 0 in view calls (tx.gasprice=0).
+        // Pass real gasPrice override to calculateFee for accurate display.
+        const calcFee = async (gas) => {
+            try {
+                const provider = contract.runner?.provider;
+                if (provider) {
+                    const feeData = await provider.getFeeData();
+                    const gasPrice = feeData.gasPrice || feeData.maxFeePerGas || 100000000n;
+                    const fee = await contract.calculateFee(gas, { gasPrice });
+                    if (fee && fee > 0n) return fee;
+                }
+            } catch(e) {}
+            return window.ethers.parseEther('0.0001');
+        };
         BC.fees = {
             post: fees.postFee || await calcFee(100000),
             reply: fees.replyFee || await calcFee(120000),

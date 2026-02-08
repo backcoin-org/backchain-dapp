@@ -54,6 +54,28 @@ async function getBackchatContractReadOnly() {
     return new window.ethers.Contract(getContracts().BACKCHAT, BACKCHAT_ABI, NetworkManager.getProvider());
 }
 
+/**
+ * Gets actual fee by passing real gasPrice to calculateFee.
+ * getCurrentFees() and calculateFee() return 0 in view calls because tx.gasprice=0.
+ * Fix: pass gasPrice override so the contract sees a real gas price.
+ */
+async function getActualFee(contract, gasEstimate) {
+    const ethers = window.ethers;
+    try {
+        const provider = contract.runner?.provider;
+        if (provider) {
+            const feeData = await provider.getFeeData();
+            const gasPrice = feeData.gasPrice || feeData.maxFeePerGas || 100000000n;
+            const fee = await contract.calculateFee(gasEstimate, { gasPrice });
+            if (fee && fee > 0n) return fee;
+        }
+    } catch (e) {
+        console.warn('[Backchat] Fee estimation fallback:', e.message);
+    }
+    // Last resort: hardcoded minimum
+    return ethers.parseEther('0.0001');
+}
+
 // ============================================================================
 // 3. PROFILE TRANSACTIONS
 // ============================================================================
@@ -158,9 +180,9 @@ export async function createPost({
             const fees = await contract.getCurrentFees();
             postFee = fees.postFee;
 
-            // Fallback: if getCurrentFees returns 0 (view call gas price issue), use calculateFee
+            // Fallback: getCurrentFees returns 0 in view calls (tx.gasprice=0)
             if (!postFee || postFee === 0n) {
-                postFee = await contract.calculateFee(100000).catch(() => ethers.parseEther('0.0001'));
+                postFee = await getActualFee(contract, 100000);
             }
 
             const { NetworkManager } = await import('../core/index.js');
@@ -226,7 +248,7 @@ export async function createReply({
             const fees = await contract.getCurrentFees();
             replyFee = fees.replyFee;
             if (!replyFee || replyFee === 0n) {
-                replyFee = await contract.calculateFee(120000).catch(() => ethers.parseEther('0.0001'));
+                replyFee = await getActualFee(contract, 120000);
             }
 
             // Check balances
@@ -294,7 +316,7 @@ export async function createRepost({
             const fees = await contract.getCurrentFees();
             repostFee = fees.repostFee;
             if (!repostFee || repostFee === 0n) {
-                repostFee = await contract.calculateFee(80000).catch(() => ethers.parseEther('0.0001'));
+                repostFee = await getActualFee(contract, 80000);
             }
         },
         onSuccess, onError
@@ -344,7 +366,7 @@ export async function like({
             const fees = await contract.getCurrentFees();
             likeFee = fees.likeFee;
             if (!likeFee || likeFee === 0n) {
-                likeFee = await contract.calculateFee(55000).catch(() => ethers.parseEther('0.0001'));
+                likeFee = await getActualFee(contract, 55000);
             }
         },
         onSuccess, onError
@@ -433,7 +455,7 @@ export async function follow({
             const fees = await contract.getCurrentFees();
             followFee = fees.followFee;
             if (!followFee || followFee === 0n) {
-                followFee = await contract.calculateFee(45000).catch(() => ethers.parseEther('0.0001'));
+                followFee = await getActualFee(contract, 45000);
             }
         },
         onSuccess, onError
@@ -513,7 +535,7 @@ export async function obtainBadge({
             const fees = await contract.getCurrentFees();
             badgeFee = fees.badgeFee_;
             if (!badgeFee || badgeFee === 0n) {
-                badgeFee = await contract.calculateFee(200000).catch(() => ethers.parseEther('0.001'));
+                badgeFee = await getActualFee(contract, 200000);
             }
         },
         onSuccess, onError
