@@ -441,6 +441,16 @@ export class TransactionEngine {
 
             const gasLimit = GasManager.addSafetyMargin(gasEstimate);
             const finalTxOptions = { ...txOptions, gasLimit };
+
+            // V1.6: Bump maxFeePerGas to avoid "baseFee exceeds maxFeePerGas" on Arbitrum
+            try {
+                const feeData = await signer.provider.getFeeData();
+                if (feeData.maxFeePerGas) {
+                    finalTxOptions.maxFeePerGas = feeData.maxFeePerGas * 120n / 100n;
+                    finalTxOptions.maxPriorityFeePerGas = feeData.maxPriorityFeePerGas || 0n;
+                }
+            } catch {}
+
             
             // Re-resolve args for execution (values may have been updated)
             const executionArgs = this._resolveArgs(args);
