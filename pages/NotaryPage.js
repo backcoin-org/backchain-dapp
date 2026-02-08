@@ -72,7 +72,7 @@ const NT = {
     wizDuplicateCheck: null,
     wizIsHashing: false,
     wizIpfsCid: null,
-    wizUploadData: null,
+    wizUploadDate: null,
 
     // Fees
     bkcFee: 0n,
@@ -140,18 +140,18 @@ function formatTimestamp(ts) {
     const diffHours = Math.floor(diffMs / 3600000);
     const diffDays = Math.floor(diffMs / 86400000);
 
-    if (diffMins < 1) return 'Agora';
+    if (diffMins < 1) return 'Just now';
     if (diffMins < 60) return `${diffMins}m`;
     if (diffHours < 24) return `${diffHours}h`;
     if (diffDays < 7) return `${diffDays}d`;
-    return date.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: date.getFullYear() !== now.getFullYear() ? 'numeric' : undefined });
+    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: date.getFullYear() !== now.getFullYear() ? 'numeric' : undefined });
 }
 
 function formatDateFull(ts) {
     if (!ts) return '';
     const date = typeof ts === 'number' ? new Date(ts > 1e12 ? ts : ts * 1000) : new Date(ts);
     if (isNaN(date.getTime())) return '';
-    return date.toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+    return date.toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' });
 }
 
 function shortenAddress(addr) {
@@ -657,8 +657,8 @@ function renderHeader() {
                     <i class="fa-solid fa-arrow-left"></i>
                 </button>
                 <div>
-                    <div style="font-size:15px;font-weight:700;color:var(--nt-text)">Certificado #${NT.selectedCert?.id || ''}</div>
-                    <div style="font-size:11px;color:var(--nt-text-3)">Detalhes do documento</div>
+                    <div style="font-size:15px;font-weight:700;color:var(--nt-text)">Certificate #${NT.selectedCert?.id || ''}</div>
+                    <div style="font-size:11px;color:var(--nt-text-3)">Document details</div>
                 </div>
             </div>
         `;
@@ -671,19 +671,19 @@ function renderHeader() {
                 <div class="nt-brand-icon"><i class="fa-solid fa-stamp"></i></div>
                 <div>
                     <div class="nt-brand-name">Decentralized Notary</div>
-                    <div class="nt-brand-sub">Certificacao blockchain permanente</div>
+                    <div class="nt-brand-sub">Permanent blockchain certification</div>
                 </div>
             </div>
         </div>
         <nav class="nt-nav">
             <button class="nt-nav-item ${NT.activeTab === 'documents' ? 'active' : ''}" onclick="NotaryPage.setTab('documents')">
-                <i class="fa-solid fa-certificate"></i><span>Documentos</span>
+                <i class="fa-solid fa-certificate"></i><span>Documents</span>
             </button>
             <button class="nt-nav-item ${NT.activeTab === 'notarize' ? 'active' : ''}" onclick="NotaryPage.setTab('notarize')">
-                <i class="fa-solid fa-stamp"></i><span>Notarizar</span>
+                <i class="fa-solid fa-stamp"></i><span>Notarize</span>
             </button>
             <button class="nt-nav-item ${NT.activeTab === 'verify' ? 'active' : ''}" onclick="NotaryPage.setTab('verify')">
-                <i class="fa-solid fa-shield-check"></i><span>Verificar</span>
+                <i class="fa-solid fa-shield-check"></i><span>Verify</span>
             </button>
             <button class="nt-nav-item ${NT.activeTab === 'stats' ? 'active' : ''}" onclick="NotaryPage.setTab('stats')">
                 <i class="fa-solid fa-chart-simple"></i><span>Stats</span>
@@ -719,10 +719,10 @@ function renderDocuments(el) {
                 <div style="width:56px;height:56px;border-radius:var(--nt-radius);background:var(--nt-bg3);display:inline-flex;align-items:center;justify-content:center;margin-bottom:16px">
                     <i class="fa-solid fa-wallet" style="font-size:24px;color:var(--nt-text-3)"></i>
                 </div>
-                <div style="font-size:16px;font-weight:700;color:var(--nt-text);margin-bottom:8px">Conecte sua Wallet</div>
-                <div style="font-size:13px;color:var(--nt-text-3);margin-bottom:20px">Conecte para visualizar seus certificados</div>
+                <div style="font-size:16px;font-weight:700;color:var(--nt-text);margin-bottom:8px">Connect Wallet</div>
+                <div style="font-size:13px;color:var(--nt-text-3);margin-bottom:20px">Connect to view your certificates</div>
                 <button class="nt-btn-primary" onclick="window.openConnectModal && window.openConnectModal()">
-                    <i class="fa-solid fa-wallet" style="margin-right:8px"></i>Conectar Wallet
+                    <i class="fa-solid fa-wallet" style="margin-right:8px"></i>Connect Wallet
                 </button>
             </div>
         `;
@@ -752,10 +752,10 @@ function renderDocuments(el) {
                 <div style="width:56px;height:56px;border-radius:var(--nt-radius);background:var(--nt-accent-glow);display:inline-flex;align-items:center;justify-content:center;margin-bottom:16px">
                     <i class="fa-solid fa-stamp" style="font-size:24px;color:var(--nt-accent);opacity:0.5"></i>
                 </div>
-                <div style="font-size:16px;font-weight:700;color:var(--nt-text);margin-bottom:8px">Nenhum certificado</div>
-                <div style="font-size:13px;color:var(--nt-text-3);margin-bottom:20px">Notarize um documento para criar seu primeiro certificado</div>
+                <div style="font-size:16px;font-weight:700;color:var(--nt-text);margin-bottom:8px">No Certificates</div>
+                <div style="font-size:13px;color:var(--nt-text-3);margin-bottom:20px">Notarize a document to create your first certificate</div>
                 <button class="nt-btn-primary" onclick="NotaryPage.setTab('notarize')">
-                    <i class="fa-solid fa-plus" style="margin-right:8px"></i>Notarizar Documento
+                    <i class="fa-solid fa-plus" style="margin-right:8px"></i>Notarize Document
                 </button>
             </div>
         `;
@@ -764,8 +764,8 @@ function renderDocuments(el) {
 
     el.innerHTML = `
         <div style="display:flex;align-items:center;justify-content:space-between;margin-top:16px;margin-bottom:4px">
-            <div style="font-size:13px;color:var(--nt-text-2)">${NT.certificates.length} certificado${NT.certificates.length > 1 ? 's' : ''}</div>
-            <button class="nt-btn-icon" onclick="NotaryPage.refreshHistory()" title="Atualizar">
+            <div style="font-size:13px;color:var(--nt-text-2)">${NT.certificates.length} certificate${NT.certificates.length > 1 ? 's' : ''}</div>
+            <button class="nt-btn-icon" onclick="NotaryPage.refreshHistory()" title="Refresh">
                 <i class="fa-solid fa-rotate-right" style="font-size:12px"></i>
             </button>
         </div>
@@ -779,7 +779,7 @@ function renderCertCard(cert) {
     const ipfsUrl = resolveIpfsUrl(cert.ipfs);
     const fileInfo = getFileTypeInfo(cert.mimeType || '', cert.description || cert.fileName || '');
     const timeAgo = formatTimestamp(cert.timestamp);
-    const desc = cert.description?.split('---')[0].trim().split('\n')[0].trim() || 'Documento Notarizado';
+    const desc = cert.description?.split('---')[0].trim().split('\n')[0].trim() || 'Notarized Document';
 
     return `
         <div class="nt-cert-card" onclick="NotaryPage.viewCert(${cert.id})">
@@ -813,10 +813,10 @@ function renderNotarize(el) {
                 <div style="width:56px;height:56px;border-radius:var(--nt-radius);background:var(--nt-bg3);display:inline-flex;align-items:center;justify-content:center;margin-bottom:16px">
                     <i class="fa-solid fa-wallet" style="font-size:24px;color:var(--nt-text-3)"></i>
                 </div>
-                <div style="font-size:16px;font-weight:700;color:var(--nt-text);margin-bottom:8px">Conecte sua Wallet</div>
-                <div style="font-size:13px;color:var(--nt-text-3);margin-bottom:20px">Conecte para notarizar documentos na blockchain</div>
+                <div style="font-size:16px;font-weight:700;color:var(--nt-text);margin-bottom:8px">Connect Wallet</div>
+                <div style="font-size:13px;color:var(--nt-text-3);margin-bottom:20px">Connect to notarize documents on the blockchain</div>
                 <button class="nt-btn-primary" onclick="window.openConnectModal && window.openConnectModal()">
-                    <i class="fa-solid fa-wallet" style="margin-right:8px"></i>Conectar Wallet
+                    <i class="fa-solid fa-wallet" style="margin-right:8px"></i>Connect Wallet
                 </button>
             </div>
         `;
@@ -863,8 +863,8 @@ function renderWizStep1(panel) {
 
         panel.innerHTML = `
             <div style="text-align:center;margin-bottom:20px">
-                <div style="font-size:16px;font-weight:700;color:var(--nt-text)">Arquivo Selecionado</div>
-                <div style="font-size:12px;color:var(--nt-text-3);margin-top:4px">Hash SHA-256 calculado no seu navegador</div>
+                <div style="font-size:16px;font-weight:700;color:var(--nt-text)">File Selected</div>
+                <div style="font-size:12px;color:var(--nt-text-3);margin-top:4px">SHA-256 hash computed in your browser</div>
             </div>
 
             <div style="background:var(--nt-bg3);border:1px solid var(--nt-border);border-radius:var(--nt-radius);padding:16px;margin-bottom:16px">
@@ -876,7 +876,7 @@ function renderWizStep1(panel) {
                         <div style="font-size:13px;font-weight:600;color:var(--nt-text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${file.name}</div>
                         <div style="font-size:11px;color:var(--nt-text-3)">${formatFileSize(file.size)} &bull; ${fileInfo.label}</div>
                     </div>
-                    <button class="nt-btn-icon" onclick="NotaryPage.wizRemoveFile()" title="Remover">
+                    <button class="nt-btn-icon" onclick="NotaryPage.wizRemoveFile()" title="Remove">
                         <i class="fa-solid fa-xmark" style="color:var(--nt-red)"></i>
                     </button>
                 </div>
@@ -886,7 +886,7 @@ function renderWizStep1(panel) {
                 <div style="font-size:11px;font-weight:600;color:var(--nt-text-3);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:6px">
                     <i class="fa-solid fa-fingerprint" style="margin-right:4px;color:var(--nt-accent)"></i>SHA-256 Hash
                 </div>
-                <div class="nt-hash-display" onclick="NotaryPage.copyHash('${NT.wizFileHash}')" title="Clique para copiar">
+                <div class="nt-hash-display" onclick="NotaryPage.copyHash('${NT.wizFileHash}')" title="Click to copy">
                     ${NT.wizFileHash}
                     <i class="fa-regular fa-copy" style="float:right;margin-top:2px;color:var(--nt-accent)"></i>
                 </div>
@@ -894,19 +894,19 @@ function renderWizStep1(panel) {
 
             ${dupCheck === null ? `
                 <div style="text-align:center;padding:12px;color:var(--nt-text-3);font-size:12px">
-                    <i class="fa-solid fa-spinner fa-spin" style="margin-right:6px;color:var(--nt-accent)"></i>Verificando duplicatas...
+                    <i class="fa-solid fa-spinner fa-spin" style="margin-right:6px;color:var(--nt-accent)"></i>Checking for duplicates...
                 </div>
             ` : dupCheck?.exists ? `
                 <div class="nt-duplicate-warn" style="margin-bottom:16px">
                     <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
                         <i class="fa-solid fa-triangle-exclamation" style="color:#fbbf24;font-size:16px"></i>
-                        <span style="font-size:13px;font-weight:700;color:#fbbf24">Documento ja notarizado!</span>
+                        <span style="font-size:13px;font-weight:700;color:#fbbf24">Document already notarized!</span>
                     </div>
                     <div style="font-size:12px;color:var(--nt-text-2);line-height:1.5">
-                        Este hash ja existe na blockchain.<br>
+                        This hash already exists on the blockchain.<br>
                         Token ID: <strong style="color:var(--nt-accent)">#${dupCheck.tokenId}</strong><br>
-                        Dono: <span style="font-family:monospace;font-size:11px">${shortenAddress(dupCheck.owner)}</span><br>
-                        Data: ${formatDateFull(dupCheck.timestamp)}
+                        Owner: <span style="font-family:monospace;font-size:11px">${shortenAddress(dupCheck.owner)}</span><br>
+                        Date: ${formatDateFull(dupCheck.timestamp)}
                     </div>
                 </div>
             ` : `
@@ -918,10 +918,10 @@ function renderWizStep1(panel) {
 
             <div style="display:flex;gap:10px;margin-top:8px">
                 <button class="nt-btn-secondary" style="flex:1" onclick="NotaryPage.wizRemoveFile()">
-                    <i class="fa-solid fa-arrow-left" style="margin-right:6px"></i>Trocar Arquivo
+                    <i class="fa-solid fa-arrow-left" style="margin-right:6px"></i>Change File
                 </button>
                 <button class="nt-btn-primary" style="flex:2" ${dupCheck?.exists ? 'disabled' : ''} onclick="NotaryPage.wizNext()">
-                    Continuar<i class="fa-solid fa-arrow-right" style="margin-left:6px"></i>
+                    Continue<i class="fa-solid fa-arrow-right" style="margin-left:6px"></i>
                 </button>
             </div>
         `;
@@ -934,8 +934,8 @@ function renderWizStep1(panel) {
                 <div style="width:56px;height:56px;border-radius:50%;background:var(--nt-accent-glow);display:inline-flex;align-items:center;justify-content:center;margin-bottom:16px">
                     <i class="fa-solid fa-fingerprint fa-spin" style="font-size:24px;color:var(--nt-accent)"></i>
                 </div>
-                <div style="font-size:14px;font-weight:600;color:var(--nt-text)">Calculando SHA-256...</div>
-                <div style="font-size:12px;color:var(--nt-text-3);margin-top:6px">Hash sendo gerado localmente no seu navegador</div>
+                <div style="font-size:14px;font-weight:600;color:var(--nt-text)">Computing SHA-256...</div>
+                <div style="font-size:12px;color:var(--nt-text-3);margin-top:6px">Hash being computed locally in your browser</div>
             </div>
         `;
         return;
@@ -944,8 +944,8 @@ function renderWizStep1(panel) {
     // Dropzone
     panel.innerHTML = `
         <div style="text-align:center;margin-bottom:20px">
-            <div style="font-size:16px;font-weight:700;color:var(--nt-text)">Upload de Documento</div>
-            <div style="font-size:12px;color:var(--nt-text-3);margin-top:4px">Selecione um arquivo para certificar permanentemente na blockchain</div>
+            <div style="font-size:16px;font-weight:700;color:var(--nt-text)">Upload Document</div>
+            <div style="font-size:12px;color:var(--nt-text-3);margin-top:4px">Select a file to certify permanently on the blockchain</div>
         </div>
 
         <div class="nt-dropzone" id="nt-wiz-dropzone">
@@ -953,14 +953,14 @@ function renderWizStep1(panel) {
             <div style="width:56px;height:56px;border-radius:var(--nt-radius);background:var(--nt-accent-glow);display:inline-flex;align-items:center;justify-content:center;margin-bottom:14px">
                 <i class="fa-solid fa-cloud-arrow-up" style="font-size:24px;color:var(--nt-accent)"></i>
             </div>
-            <div style="font-size:14px;font-weight:600;color:var(--nt-text);margin-bottom:4px">Clique ou arraste aqui</div>
-            <div style="font-size:11px;color:var(--nt-text-3)">Max 5MB &bull; Qualquer formato</div>
+            <div style="font-size:14px;font-weight:600;color:var(--nt-text);margin-bottom:4px">Click or drag file here</div>
+            <div style="font-size:11px;color:var(--nt-text-3)">Max 5MB &bull; Any format</div>
         </div>
 
         <div style="display:flex;align-items:center;justify-content:center;gap:20px;margin-top:16px;font-size:11px;color:var(--nt-text-3)">
-            <span><i class="fa-solid fa-shield-halved" style="color:var(--nt-green);margin-right:4px"></i>Hash local</span>
+            <span><i class="fa-solid fa-shield-halved" style="color:var(--nt-green);margin-right:4px"></i>Local hash</span>
             <span><i class="fa-solid fa-database" style="color:var(--nt-blue);margin-right:4px"></i>IPFS</span>
-            <span><i class="fa-solid fa-infinity" style="color:var(--nt-accent);margin-right:4px"></i>Permanente</span>
+            <span><i class="fa-solid fa-infinity" style="color:var(--nt-accent);margin-right:4px"></i>Permanent</span>
         </div>
     `;
 
@@ -990,7 +990,7 @@ function initWizDropzone() {
 async function handleWizFileSelect(file) {
     if (!file) return;
     if (file.size > MAX_FILE_SIZE) {
-        showToast('Arquivo muito grande (max 5MB)', 'error');
+        showToast('File too large (max 5MB)', 'error');
         return;
     }
 
@@ -1016,7 +1016,7 @@ async function handleWizFileSelect(file) {
         console.error('[NotaryPage] Hash error:', err);
         NT.wizIsHashing = false;
         NT.wizFile = null;
-        showToast('Erro ao calcular hash do arquivo', 'error');
+        showToast('Error computing file hash', 'error');
         renderContent();
     }
 }
@@ -1038,8 +1038,8 @@ function renderWizStep2(panel) {
     panel.innerHTML = `
         <div style="max-width:420px;margin:0 auto">
             <div style="text-align:center;margin-bottom:20px">
-                <div style="font-size:16px;font-weight:700;color:var(--nt-text)">Detalhes & Taxas</div>
-                <div style="font-size:12px;color:var(--nt-text-3);margin-top:4px">Descreva o documento e confira as taxas</div>
+                <div style="font-size:16px;font-weight:700;color:var(--nt-text)">Details & Fees</div>
+                <div style="font-size:12px;color:var(--nt-text-3);margin-top:4px">Describe your document and review the fees</div>
             </div>
 
             <div style="background:var(--nt-bg3);border:1px solid var(--nt-border);border-radius:var(--nt-radius);padding:12px;margin-bottom:16px;display:flex;align-items:center;gap:12px">
@@ -1047,44 +1047,44 @@ function renderWizStep2(panel) {
                     <i class="${fileInfo.icon}" style="font-size:16px;color:${fileInfo.color}"></i>
                 </div>
                 <div style="flex:1;min-width:0">
-                    <div style="font-size:12px;font-weight:600;color:var(--nt-text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${file?.name || 'Arquivo'}</div>
+                    <div style="font-size:12px;font-weight:600;color:var(--nt-text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${file?.name || 'File'}</div>
                     <div style="font-size:10px;color:var(--nt-text-3)">${formatFileSize(file?.size || 0)}</div>
                 </div>
             </div>
 
             <div style="margin-bottom:16px">
                 <label style="font-size:11px;font-weight:600;color:var(--nt-text-3);text-transform:uppercase;letter-spacing:0.05em;display:block;margin-bottom:6px">
-                    Descricao <span style="font-weight:400;text-transform:none">(opcional)</span>
+                    Description <span style="font-weight:400;text-transform:none">(optional)</span>
                 </label>
                 <textarea id="nt-wiz-desc" rows="3"
                     style="width:100%;background:var(--nt-bg3);border:1px solid var(--nt-border);border-radius:var(--nt-radius-sm);padding:12px;font-size:13px;color:var(--nt-text);resize:none;outline:none;font-family:inherit;transition:border-color var(--nt-transition)"
                     onfocus="this.style.borderColor='rgba(245,158,11,0.4)'"
                     onblur="this.style.borderColor='var(--nt-border)'"
-                    placeholder="Ex: Escritura assinada em Jan 2025...">${NT.wizDescription}</textarea>
+                    placeholder="E.g., Property deed signed Jan 2025...">${NT.wizDescription}</textarea>
             </div>
 
             <div class="nt-fee-box" style="margin-bottom:16px">
                 <div style="font-size:11px;font-weight:700;color:var(--nt-text-3);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:8px">
-                    <i class="fa-solid fa-coins" style="color:var(--nt-accent);margin-right:4px"></i>Taxas do Servico
+                    <i class="fa-solid fa-coins" style="color:var(--nt-accent);margin-right:4px"></i>Service Fees
                 </div>
                 <div class="nt-fee-row">
-                    <span style="font-size:13px;color:var(--nt-text-2)">Taxa BKC</span>
+                    <span style="font-size:13px;color:var(--nt-text-2)">BKC Fee</span>
                     <span style="font-size:14px;font-weight:700;color:var(--nt-accent);font-family:monospace">${bkcFmt} BKC</span>
                 </div>
                 <div class="nt-fee-row">
-                    <span style="font-size:13px;color:var(--nt-text-2)">Taxa ETH (gas fee)</span>
+                    <span style="font-size:13px;color:var(--nt-text-2)">ETH Fee (gas fee)</span>
                     <span style="font-size:14px;font-weight:700;color:var(--nt-blue);font-family:monospace">${ethFmt} ETH</span>
                 </div>
-                ${!hasBkc ? `<div style="font-size:11px;color:var(--nt-red);margin-top:8px"><i class="fa-solid fa-circle-xmark" style="margin-right:4px"></i>Saldo BKC insuficiente (${formatBigNumber(bkcBalance)} BKC)</div>` : ''}
-                ${!hasEth ? `<div style="font-size:11px;color:var(--nt-red);margin-top:4px"><i class="fa-solid fa-circle-xmark" style="margin-right:4px"></i>Saldo ETH insuficiente para taxa + gas</div>` : ''}
+                ${!hasBkc ? `<div style="font-size:11px;color:var(--nt-red);margin-top:8px"><i class="fa-solid fa-circle-xmark" style="margin-right:4px"></i>Insufficient BKC balance (${formatBigNumber(bkcBalance)} BKC)</div>` : ''}
+                ${!hasEth ? `<div style="font-size:11px;color:var(--nt-red);margin-top:4px"><i class="fa-solid fa-circle-xmark" style="margin-right:4px"></i>Insufficient ETH for fee + gas</div>` : ''}
             </div>
 
             <div style="display:flex;gap:10px">
                 <button class="nt-btn-secondary" style="flex:1" onclick="NotaryPage.wizBack()">
-                    <i class="fa-solid fa-arrow-left" style="margin-right:6px"></i>Voltar
+                    <i class="fa-solid fa-arrow-left" style="margin-right:6px"></i>Back
                 </button>
                 <button class="nt-btn-primary" style="flex:2" ${!canProceed ? 'disabled' : ''} onclick="NotaryPage.wizToStep3()">
-                    Revisar<i class="fa-solid fa-arrow-right" style="margin-left:6px"></i>
+                    Review<i class="fa-solid fa-arrow-right" style="margin-left:6px"></i>
                 </button>
             </div>
         </div>
@@ -1095,15 +1095,15 @@ function renderWizStep2(panel) {
 function renderWizStep3(panel) {
     const file = NT.wizFile;
     const fileInfo = getFileTypeInfo(file?.type || '', file?.name || '');
-    const desc = NT.wizDescription || 'Sem descricao';
+    const desc = NT.wizDescription || 'No description';
 
     const bkcFmt = ethers ? ethers.formatEther(NT.bkcFee) : '1';
     const ethFmt = ethers ? ethers.formatEther(NT.ethFee) : '0.0001';
 
     panel.innerHTML = `
         <div style="max-width:420px;margin:0 auto;text-align:center">
-            <div style="font-size:16px;font-weight:700;color:var(--nt-text);margin-bottom:4px">Confirmar & Mintar</div>
-            <div style="font-size:12px;color:var(--nt-text-3);margin-bottom:20px">Revise e assine para criar seu certificado NFT</div>
+            <div style="font-size:16px;font-weight:700;color:var(--nt-text);margin-bottom:4px">Confirm & Mint</div>
+            <div style="font-size:12px;color:var(--nt-text-3);margin-bottom:20px">Review and sign to create your NFT certificate</div>
 
             <div style="background:var(--nt-bg3);border:1px solid var(--nt-border);border-radius:var(--nt-radius);padding:16px;text-align:left;margin-bottom:16px">
                 <div style="display:flex;align-items:center;gap:12px;padding-bottom:12px;border-bottom:1px solid var(--nt-border);margin-bottom:12px">
@@ -1123,21 +1123,21 @@ function renderWizStep3(panel) {
 
             <div class="nt-fee-box" style="margin-bottom:20px">
                 <div class="nt-fee-row">
-                    <span style="font-size:13px;color:var(--nt-text-2)">Taxa BKC</span>
+                    <span style="font-size:13px;color:var(--nt-text-2)">BKC Fee</span>
                     <span style="font-size:14px;font-weight:700;color:var(--nt-accent);font-family:monospace">${bkcFmt} BKC</span>
                 </div>
                 <div class="nt-fee-row">
-                    <span style="font-size:13px;color:var(--nt-text-2)">Taxa ETH</span>
+                    <span style="font-size:13px;color:var(--nt-text-2)">ETH Fee</span>
                     <span style="font-size:14px;font-weight:700;color:var(--nt-blue);font-family:monospace">${ethFmt} ETH</span>
                 </div>
             </div>
 
             <div style="display:flex;gap:10px">
                 <button class="nt-btn-secondary" style="flex:1" onclick="NotaryPage.wizBack()">
-                    <i class="fa-solid fa-arrow-left" style="margin-right:6px"></i>Voltar
+                    <i class="fa-solid fa-arrow-left" style="margin-right:6px"></i>Back
                 </button>
                 <button class="nt-btn-primary" style="flex:2" id="nt-btn-mint" onclick="NotaryPage.handleMint()">
-                    <i class="fa-solid fa-stamp" style="margin-right:6px"></i>Assinar & Mintar
+                    <i class="fa-solid fa-stamp" style="margin-right:6px"></i>Sign & Mint
                 </button>
             </div>
         </div>
@@ -1153,7 +1153,7 @@ async function handleMint() {
     NT.processStep = 'SIGNING';
 
     const btn = document.getElementById('nt-btn-mint');
-    if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin" style="margin-right:6px"></i>Assinando...'; }
+    if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin" style="margin-right:6px"></i>Signing...'; }
 
     const overlay = document.getElementById('nt-overlay');
     showOverlay('signing');
@@ -1172,7 +1172,7 @@ async function handleMint() {
         formData.append('file', NT.wizFile);
         formData.append('signature', signature);
         formData.append('address', State.userAddress);
-        formData.append('description', NT.wizDescription || 'Sem descricao');
+        formData.append('description', NT.wizDescription || 'No description');
 
         const uploadUrl = API_ENDPOINTS.uploadFileToIPFS || '/api/upload';
         const res = await fetch(uploadUrl, {
@@ -1182,17 +1182,17 @@ async function handleMint() {
         });
 
         if (!res.ok) {
-            if (res.status === 413) throw new Error('Arquivo muito grande (max 5MB)');
-            if (res.status === 401) throw new Error('Verificacao de assinatura falhou');
-            throw new Error(`Upload falhou (${res.status})`);
+            if (res.status === 413) throw new Error('File too large (max 5MB)');
+            if (res.status === 401) throw new Error('Signature verification failed');
+            throw new Error(`Upload failed (${res.status})`);
         }
 
         const data = await res.json();
         const ipfsCid = data.ipfsUri || data.metadataUri;
         const contentHash = data.contentHash || NT.wizFileHash;
 
-        if (!ipfsCid) throw new Error('Nenhum IPFS URI retornado');
-        if (!contentHash) throw new Error('Nenhum hash de conteudo');
+        if (!ipfsCid) throw new Error('No IPFS URI returned');
+        if (!contentHash) throw new Error('No content hash returned');
 
         // 3. Mint on blockchain
         NT.processStep = 'MINTING';
@@ -1201,7 +1201,7 @@ async function handleMint() {
         await NotaryTx.notarize({
             ipfsCid,
             contentHash,
-            description: NT.wizDescription || 'Sem descricao',
+            description: NT.wizDescription || 'No description',
             operator: resolveOperator(),
             button: btn,
 
@@ -1225,7 +1225,7 @@ async function handleMint() {
                     renderContent();
                     loadCertificates();
 
-                    showToast('Documento notarizado com sucesso!', 'success');
+                    showToast('Document notarized successfully!', 'success');
                 }, 3000);
             },
 
@@ -1233,7 +1233,7 @@ async function handleMint() {
                 if (error.cancelled || error.type === 'user_rejected') {
                     NT.isProcessing = false;
                     hideOverlay();
-                    if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fa-solid fa-stamp" style="margin-right:6px"></i>Assinar & Mintar'; }
+                    if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fa-solid fa-stamp" style="margin-right:6px"></i>Sign & Mint'; }
                     return;
                 }
                 throw error;
@@ -1244,9 +1244,9 @@ async function handleMint() {
         console.error('[NotaryPage] Mint error:', e);
         hideOverlay();
         NT.isProcessing = false;
-        if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fa-solid fa-stamp" style="margin-right:6px"></i>Assinar & Mintar'; }
+        if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fa-solid fa-stamp" style="margin-right:6px"></i>Sign & Mint'; }
         if (e.code !== 4001 && e.code !== 'ACTION_REJECTED') {
-            showToast(e.message || 'Notarizacao falhou', 'error');
+            showToast(e.message || 'Notarization failed', 'error');
         }
     }
 }
@@ -1260,10 +1260,10 @@ function showOverlay(step, tokenId) {
     overlay.classList.add('active');
 
     const configs = {
-        signing: { icon: 'fa-solid fa-signature', text: 'Assinando mensagem...', sub: 'Confirme no MetaMask', pct: 10 },
-        uploading: { icon: 'fa-solid fa-cloud-arrow-up', text: 'Enviando para IPFS...', sub: 'Armazenamento descentralizado', pct: 35 },
-        minting: { icon: 'fa-solid fa-stamp', text: 'Mintando na Blockchain...', sub: 'Aguarde a confirmacao', pct: 65, animate: true },
-        success: { icon: 'fa-solid fa-check', text: 'Notarizado!', sub: tokenId ? `Token ID #${tokenId}` : 'Certificado criado', pct: 100, success: true }
+        signing: { icon: 'fa-solid fa-signature', text: 'Signing message...', sub: 'Confirm in MetaMask', pct: 10 },
+        uploading: { icon: 'fa-solid fa-cloud-arrow-up', text: 'Uploading to IPFS...', sub: 'Decentralized storage', pct: 35 },
+        minting: { icon: 'fa-solid fa-stamp', text: 'Minting on Blockchain...', sub: 'Waiting for confirmation', pct: 65, animate: true },
+        success: { icon: 'fa-solid fa-check', text: 'Notarized!', sub: tokenId ? `Token ID #${tokenId}` : 'Certificate created', pct: 100, success: true }
     };
 
     const cfg = configs[step] || configs.signing;
@@ -1283,7 +1283,7 @@ function showOverlay(step, tokenId) {
             <div style="width:100%;height:4px;background:var(--nt-bg3);border-radius:2px;overflow:hidden">
                 <div style="height:100%;width:${cfg.pct}%;background:linear-gradient(90deg,var(--nt-accent),${cfg.success ? 'var(--nt-green)' : '#fbbf24'});border-radius:2px;transition:width 0.5s ease"></div>
             </div>
-            ${!cfg.success ? '<div style="font-size:10px;color:var(--nt-text-3);margin-top:12px">Nao feche esta janela</div>' : ''}
+            ${!cfg.success ? '<div style="font-size:10px;color:var(--nt-text-3);margin-top:12px">Do not close this window</div>' : ''}
         </div>
     `;
 
@@ -1311,9 +1311,9 @@ function renderVerify(el) {
                 <div style="width:48px;height:48px;border-radius:50%;background:rgba(34,197,94,0.1);display:inline-flex;align-items:center;justify-content:center;margin-bottom:12px">
                     <i class="fa-solid fa-shield-check" style="font-size:22px;color:var(--nt-green)"></i>
                 </div>
-                <div style="font-size:16px;font-weight:700;color:var(--nt-text)">Verificacao Publica</div>
+                <div style="font-size:16px;font-weight:700;color:var(--nt-text)">Public Verification</div>
                 <div style="font-size:12px;color:var(--nt-text-3);margin-top:4px;max-width:380px;margin-left:auto;margin-right:auto">
-                    Verifique se um documento foi notarizado na blockchain. <strong style="color:var(--nt-green)">Nao precisa de wallet.</strong>
+                    Verify if a document was notarized on the blockchain. <strong style="color:var(--nt-green)">No wallet needed.</strong>
                 </div>
             </div>
 
@@ -1322,8 +1322,8 @@ function renderVerify(el) {
                 <div style="width:48px;height:48px;border-radius:var(--nt-radius);background:rgba(34,197,94,0.1);display:inline-flex;align-items:center;justify-content:center;margin-bottom:12px">
                     <i class="fa-solid fa-magnifying-glass" style="font-size:20px;color:var(--nt-green)"></i>
                 </div>
-                <div style="font-size:14px;font-weight:600;color:var(--nt-text);margin-bottom:4px">Arraste um arquivo para verificar</div>
-                <div style="font-size:11px;color:var(--nt-text-3)">O hash SHA-256 sera calculado localmente</div>
+                <div style="font-size:14px;font-weight:600;color:var(--nt-text);margin-bottom:4px">Drag a file to verify</div>
+                <div style="font-size:11px;color:var(--nt-text-3)">The SHA-256 hash will be computed locally</div>
             </div>
 
             <div id="nt-verify-result"></div>
@@ -1365,7 +1365,7 @@ async function handleVerifyFile(file) {
     if (resultEl) {
         resultEl.innerHTML = `
             <div style="text-align:center;padding:20px;color:var(--nt-text-3);font-size:13px">
-                <i class="fa-solid fa-spinner fa-spin" style="margin-right:6px;color:var(--nt-accent)"></i>Calculando hash e verificando...
+                <i class="fa-solid fa-spinner fa-spin" style="margin-right:6px;color:var(--nt-accent)"></i>Computing hash and verifying...
             </div>
         `;
     }
@@ -1385,7 +1385,7 @@ async function handleVerifyFile(file) {
             resultEl.innerHTML = `
                 <div class="nt-not-found" style="text-align:center">
                     <i class="fa-solid fa-circle-xmark" style="font-size:20px;color:var(--nt-red);margin-bottom:8px"></i>
-                    <div style="font-size:13px;color:var(--nt-red)">Erro na verificacao: ${err.message}</div>
+                    <div style="font-size:13px;color:var(--nt-red)">Verification error: ${err.message}</div>
                 </div>
             `;
         }
@@ -1407,8 +1407,8 @@ function renderVerifyResult() {
                         <i class="fa-solid fa-shield-check" style="font-size:18px;color:var(--nt-green)"></i>
                     </div>
                     <div>
-                        <div style="font-size:15px;font-weight:700;color:var(--nt-green)">Documento Verificado!</div>
-                        <div style="font-size:11px;color:var(--nt-text-3)">Este documento foi notarizado na blockchain</div>
+                        <div style="font-size:15px;font-weight:700;color:var(--nt-green)">Document Verified!</div>
+                        <div style="font-size:11px;color:var(--nt-text-3)">This document was notarized on the blockchain</div>
                     </div>
                 </div>
 
@@ -1424,7 +1424,7 @@ function renderVerifyResult() {
                 </div>
 
                 <div style="background:rgba(0,0,0,0.2);border-radius:var(--nt-radius-sm);padding:10px;margin-bottom:12px">
-                    <div style="font-size:10px;color:var(--nt-text-3);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:4px">Dono</div>
+                    <div style="font-size:10px;color:var(--nt-text-3);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:4px">Owner</div>
                     <div style="font-size:12px;font-family:monospace;color:var(--nt-text-2);word-break:break-all">${r.owner}</div>
                 </div>
 
@@ -1437,7 +1437,7 @@ function renderVerifyResult() {
 
                 <div style="margin-top:12px;display:flex;gap:8px">
                     <a href="${EXPLORER_TOKEN}${addresses?.decentralizedNotary}?a=${r.tokenId}" target="_blank" class="nt-btn-secondary" style="font-size:12px;padding:8px 14px;text-decoration:none;display:inline-flex;align-items:center;gap:6px">
-                        <i class="fa-solid fa-arrow-up-right-from-square"></i>Ver no Arbiscan
+                        <i class="fa-solid fa-arrow-up-right-from-square"></i>View on Arbiscan
                     </a>
                 </div>
             </div>
@@ -1450,12 +1450,12 @@ function renderVerifyResult() {
                         <i class="fa-solid fa-circle-xmark" style="font-size:18px;color:var(--nt-red)"></i>
                     </div>
                     <div>
-                        <div style="font-size:15px;font-weight:700;color:var(--nt-red)">Nao Encontrado</div>
-                        <div style="font-size:11px;color:var(--nt-text-3)">Este documento nao foi notarizado na blockchain</div>
+                        <div style="font-size:15px;font-weight:700;color:var(--nt-red)">Not Found</div>
+                        <div style="font-size:11px;color:var(--nt-text-3)">This document was not notarized on the blockchain</div>
                     </div>
                 </div>
 
-                ${file ? `<div style="font-size:12px;color:var(--nt-text-3);margin-bottom:8px">Arquivo: <strong style="color:var(--nt-text-2)">${file.name}</strong></div>` : ''}
+                ${file ? `<div style="font-size:12px;color:var(--nt-text-3);margin-bottom:8px">File: <strong style="color:var(--nt-text-2)">${file.name}</strong></div>` : ''}
                 ${NT.verifyHash ? `
                     <div style="background:rgba(0,0,0,0.2);border-radius:var(--nt-radius-sm);padding:10px">
                         <div style="font-size:10px;color:var(--nt-text-3);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:4px">SHA-256 Hash</div>
@@ -1491,28 +1491,28 @@ function renderStats(el) {
                         <i class="fa-solid fa-stamp" style="font-size:16px;color:var(--nt-accent)"></i>
                     </div>
                     <div class="nt-stat-value">${stats?.totalNotarizations ?? '—'}</div>
-                    <div style="font-size:11px;color:var(--nt-text-3);margin-top:4px">Notarizacoes</div>
+                    <div style="font-size:11px;color:var(--nt-text-3);margin-top:4px">Notarizations</div>
                 </div>
                 <div class="nt-stat-card">
                     <div style="width:36px;height:36px;border-radius:50%;background:rgba(34,197,94,0.1);display:inline-flex;align-items:center;justify-content:center;margin-bottom:10px">
                         <i class="fa-solid fa-certificate" style="font-size:16px;color:var(--nt-green)"></i>
                     </div>
                     <div class="nt-stat-value">${supply ?? '—'}</div>
-                    <div style="font-size:11px;color:var(--nt-text-3);margin-top:4px">Certificados</div>
+                    <div style="font-size:11px;color:var(--nt-text-3);margin-top:4px">Certificates</div>
                 </div>
                 <div class="nt-stat-card">
                     <div style="width:36px;height:36px;border-radius:50%;background:rgba(251,191,36,0.1);display:inline-flex;align-items:center;justify-content:center;margin-bottom:10px">
                         <i class="fa-solid fa-coins" style="font-size:16px;color:#fbbf24"></i>
                     </div>
                     <div class="nt-stat-value" style="font-size:18px">${stats?.totalBKCFormatted ?? '—'}</div>
-                    <div style="font-size:11px;color:var(--nt-text-3);margin-top:4px">BKC Coletado</div>
+                    <div style="font-size:11px;color:var(--nt-text-3);margin-top:4px">BKC Collected</div>
                 </div>
                 <div class="nt-stat-card">
                     <div style="width:36px;height:36px;border-radius:50%;background:rgba(96,165,250,0.1);display:inline-flex;align-items:center;justify-content:center;margin-bottom:10px">
                         <i class="fa-brands fa-ethereum" style="font-size:16px;color:var(--nt-blue)"></i>
                     </div>
                     <div class="nt-stat-value" style="font-size:18px">${stats?.totalETHFormatted ?? '—'}</div>
-                    <div style="font-size:11px;color:var(--nt-text-3);margin-top:4px">ETH Coletado</div>
+                    <div style="font-size:11px;color:var(--nt-text-3);margin-top:4px">ETH Collected</div>
                 </div>
             </div>
 
@@ -1520,13 +1520,13 @@ function renderStats(el) {
             <div class="nt-card" style="margin-top:16px;padding:0;overflow:hidden">
                 <div style="padding:16px 20px;border-bottom:1px solid var(--nt-border)">
                     <div style="font-size:13px;font-weight:700;color:var(--nt-text)">
-                        <i class="fa-solid fa-clock-rotate-left" style="color:var(--nt-accent);margin-right:6px"></i>Notarizacoes Recentes
+                        <i class="fa-solid fa-clock-rotate-left" style="color:var(--nt-accent);margin-right:6px"></i>Recent Notarizations
                     </div>
                 </div>
                 <div id="nt-recent-feed">
                     ${NT.recentNotarizations.length === 0 ? `
                         <div style="text-align:center;padding:32px 20px;color:var(--nt-text-3);font-size:13px">
-                            ${NT.statsLoading ? '<i class="fa-solid fa-spinner fa-spin" style="margin-right:6px"></i>Carregando...' : 'Nenhuma notarizacao recente encontrada'}
+                            ${NT.statsLoading ? '<i class="fa-solid fa-spinner fa-spin" style="margin-right:6px"></i>Loading...' : 'No recent notarizations found'}
                         </div>
                     ` : NT.recentNotarizations.map(item => `
                         <div class="nt-recent-item">
@@ -1534,7 +1534,7 @@ function renderStats(el) {
                                 <i class="fa-solid fa-stamp" style="font-size:14px;color:var(--nt-accent)"></i>
                             </div>
                             <div style="flex:1;min-width:0">
-                                <div style="font-size:12px;font-weight:600;color:var(--nt-text)">Certificado #${item.tokenId}</div>
+                                <div style="font-size:12px;font-weight:600;color:var(--nt-text)">Certificate #${item.tokenId}</div>
                                 <div style="font-size:11px;color:var(--nt-text-3)">${shortenAddress(item.owner)}</div>
                             </div>
                             <div style="text-align:right;flex-shrink:0">
@@ -1547,7 +1547,7 @@ function renderStats(el) {
 
             <div style="text-align:center;margin-top:16px">
                 <a href="${EXPLORER_TOKEN}${addresses?.decentralizedNotary}" target="_blank" class="nt-btn-secondary" style="font-size:12px;padding:10px 20px;text-decoration:none;display:inline-flex;align-items:center;gap:6px">
-                    <i class="fa-solid fa-arrow-up-right-from-square"></i>Ver Contrato no Arbiscan
+                    <i class="fa-solid fa-arrow-up-right-from-square"></i>View Contract on Arbiscan
                 </a>
             </div>
         </div>
@@ -1563,27 +1563,44 @@ function renderCertDetail(el) {
 
     const ipfsUrl = resolveIpfsUrl(cert.ipfs);
     const fileInfo = getFileTypeInfo(cert.mimeType || '', cert.description || '');
+    const isImage = (cert.mimeType || '').includes('image') || /\.(jpg|jpeg|png|gif|webp|svg|bmp)$/i.test(cert.fileName || cert.description || '');
 
     el.innerHTML = `
         <div class="nt-detail" style="margin-top:8px">
-            <!-- Preview -->
-            <div style="height:180px;background:var(--nt-bg3);border-radius:var(--nt-radius);display:flex;align-items:center;justify-content:center;position:relative;overflow:hidden;margin-bottom:16px">
-                ${ipfsUrl ? `
-                    <img src="${ipfsUrl}" style="width:100%;height:100%;object-fit:cover;opacity:0.8" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'" alt="">
-                    <div style="display:none;flex-direction:column;align-items:center;justify-content:center;position:absolute;inset:0;background:var(--nt-bg3)">
-                        <i class="${fileInfo.icon}" style="font-size:40px;color:${fileInfo.color}"></i>
+            <!-- Image Preview (large, clickable) -->
+            ${ipfsUrl ? `
+                <a href="${ipfsUrl}" target="_blank" style="display:block;text-decoration:none;margin-bottom:16px">
+                    <div style="min-height:240px;max-height:400px;background:var(--nt-bg3);border-radius:var(--nt-radius);display:flex;align-items:center;justify-content:center;position:relative;overflow:hidden;border:1px solid var(--nt-border);cursor:pointer;transition:border-color var(--nt-transition)" onmouseover="this.style.borderColor='rgba(245,158,11,0.3)'" onmouseout="this.style.borderColor='var(--nt-border)'">
+                        <img src="${ipfsUrl}" style="width:100%;height:100%;object-fit:contain;max-height:400px" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'" alt="Certificate #${cert.id}">
+                        <div style="display:none;flex-direction:column;align-items:center;justify-content:center;width:100%;height:240px;position:absolute;inset:0;background:var(--nt-bg3)">
+                            <i class="${fileInfo.icon}" style="font-size:48px;color:${fileInfo.color};margin-bottom:8px"></i>
+                            <span style="font-size:12px;color:var(--nt-text-3)">${fileInfo.label} file</span>
+                        </div>
+                        <div style="position:absolute;top:12px;right:12px;background:rgba(0,0,0,0.85);padding:4px 12px;border-radius:20px;font-size:12px;font-weight:700;color:var(--nt-accent);font-family:monospace">#${cert.id}</div>
+                        <div style="position:absolute;bottom:12px;right:12px;background:rgba(0,0,0,0.75);padding:4px 10px;border-radius:8px;font-size:10px;color:var(--nt-text-2)">
+                            <i class="fa-solid fa-expand" style="margin-right:4px"></i>Click to view full size
+                        </div>
                     </div>
-                ` : `
-                    <i class="${fileInfo.icon}" style="font-size:40px;color:${fileInfo.color}"></i>
-                `}
-                <div style="position:absolute;top:12px;right:12px;background:rgba(0,0,0,0.85);padding:4px 12px;border-radius:20px;font-size:12px;font-weight:700;color:var(--nt-accent);font-family:monospace">#${cert.id}</div>
-                <div style="position:absolute;bottom:0;left:0;right:0;height:60px;background:linear-gradient(transparent,var(--nt-bg))"></div>
-            </div>
+                </a>
+            ` : `
+                <div style="height:200px;background:var(--nt-bg3);border-radius:var(--nt-radius);display:flex;align-items:center;justify-content:center;position:relative;overflow:hidden;margin-bottom:16px;border:1px solid var(--nt-border)">
+                    <div style="text-align:center">
+                        <i class="${fileInfo.icon}" style="font-size:48px;color:${fileInfo.color};margin-bottom:8px"></i>
+                        <div style="font-size:12px;color:var(--nt-text-3)">${fileInfo.label} file</div>
+                    </div>
+                    <div style="position:absolute;top:12px;right:12px;background:rgba(0,0,0,0.85);padding:4px 12px;border-radius:20px;font-size:12px;font-weight:700;color:var(--nt-accent);font-family:monospace">#${cert.id}</div>
+                </div>
+            `}
+
+            <!-- Add to Wallet — Primary Action -->
+            <button class="nt-btn-primary" style="width:100%;padding:14px;font-size:15px;margin-bottom:16px;display:flex;align-items:center;justify-content:center;gap:8px" onclick="NotaryPage.addToWallet('${cert.id}', '${ipfsUrl}')">
+                <i class="fa-solid fa-wallet"></i>Add Certificate to Wallet
+            </button>
 
             <!-- Description -->
             <div class="nt-card" style="margin-bottom:12px">
-                <div style="font-size:11px;font-weight:600;color:var(--nt-text-3);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:8px">Descricao</div>
-                <div style="font-size:14px;color:var(--nt-text);line-height:1.5">${cert.description?.split('---')[0].trim() || 'Documento Notarizado'}</div>
+                <div style="font-size:11px;font-weight:600;color:var(--nt-text-3);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:8px">Description</div>
+                <div style="font-size:14px;color:var(--nt-text);line-height:1.5">${cert.description?.split('---')[0].trim() || 'Notarized Document'}</div>
             </div>
 
             <!-- Content Hash -->
@@ -1591,7 +1608,7 @@ function renderCertDetail(el) {
                 <div style="font-size:11px;font-weight:600;color:var(--nt-text-3);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:8px">
                     <i class="fa-solid fa-fingerprint" style="color:var(--nt-accent);margin-right:4px"></i>Content Hash (SHA-256)
                 </div>
-                <div class="nt-hash-display" onclick="NotaryPage.copyHash('${cert.hash}')" title="Clique para copiar">
+                <div class="nt-hash-display" onclick="NotaryPage.copyHash('${cert.hash}')" title="Click to copy">
                     ${cert.hash || 'N/A'}
                     <i class="fa-regular fa-copy" style="float:right;margin-top:2px;color:var(--nt-accent)"></i>
                 </div>
@@ -1600,11 +1617,11 @@ function renderCertDetail(el) {
             <!-- Metadata grid -->
             <div class="nt-detail-meta" style="margin-bottom:12px">
                 <div class="nt-card" style="padding:14px">
-                    <div style="font-size:10px;color:var(--nt-text-3);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:4px">Data</div>
+                    <div style="font-size:10px;color:var(--nt-text-3);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:4px">Date</div>
                     <div style="font-size:13px;font-weight:600;color:var(--nt-text)">${formatDateFull(cert.timestamp) || 'N/A'}</div>
                 </div>
                 <div class="nt-card" style="padding:14px">
-                    <div style="font-size:10px;color:var(--nt-text-3);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:4px">Dono</div>
+                    <div style="font-size:10px;color:var(--nt-text-3);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:4px">Owner</div>
                     <div style="font-size:12px;font-family:monospace;color:var(--nt-text-2)">${shortenAddress(cert.owner || State.userAddress)}</div>
                 </div>
             </div>
@@ -1616,24 +1633,21 @@ function renderCertDetail(el) {
                 </div>
             ` : ''}
 
-            <!-- Actions -->
-            <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:16px">
+            <!-- Secondary Actions -->
+            <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px">
                 ${ipfsUrl ? `
-                    <a href="${ipfsUrl}" target="_blank" class="nt-btn-primary" style="text-decoration:none;display:inline-flex;align-items:center;gap:6px;font-size:13px;padding:10px 18px">
-                        <i class="fa-solid fa-download"></i>Download IPFS
+                    <a href="${ipfsUrl}" target="_blank" class="nt-btn-secondary" style="text-decoration:none;display:inline-flex;align-items:center;gap:6px;font-size:12px">
+                        <i class="fa-solid fa-download"></i>Download from IPFS
                     </a>
                 ` : ''}
                 <a href="${EXPLORER_TOKEN}${addresses?.decentralizedNotary}?a=${cert.id}" target="_blank" class="nt-btn-secondary" style="text-decoration:none;display:inline-flex;align-items:center;gap:6px;font-size:12px">
-                    <i class="fa-solid fa-arrow-up-right-from-square"></i>Arbiscan
+                    <i class="fa-solid fa-arrow-up-right-from-square"></i>View on Arbiscan
                 </a>
                 ${cert.txHash ? `
                     <a href="${EXPLORER_TX}${cert.txHash}" target="_blank" class="nt-btn-secondary" style="text-decoration:none;display:inline-flex;align-items:center;gap:6px;font-size:12px">
-                        <i class="fa-solid fa-receipt"></i>Transacao
+                        <i class="fa-solid fa-receipt"></i>Transaction
                     </a>
                 ` : ''}
-                <button class="nt-btn-secondary" style="font-size:12px" onclick="NotaryPage.addToWallet('${cert.id}', '${ipfsUrl}')">
-                    <i class="fa-solid fa-wallet" style="margin-right:6px"></i>Add to Wallet
-                </button>
             </div>
         </div>
     `;
@@ -1828,11 +1842,11 @@ async function addToWallet(tokenId, imageUrl) {
             (State.decentralizedNotaryContract?.getAddress ? await State.decentralizedNotaryContract.getAddress() : null);
 
         if (!contractAddress) {
-            showToast('Endereco do contrato nao encontrado', 'error');
+            showToast('Contract address not found', 'error');
             return;
         }
 
-        showToast(`Adicionando NFT #${tokenId} a wallet...`, 'info');
+        showToast(`Adding NFT #${tokenId} to wallet...`, 'info');
 
         const wasAdded = await window.ethereum.request({
             method: 'wallet_watchAsset',
@@ -1843,11 +1857,11 @@ async function addToWallet(tokenId, imageUrl) {
         });
 
         if (wasAdded) {
-            showToast(`NFT #${tokenId} adicionado a wallet!`, 'success');
+            showToast(`NFT #${tokenId} added to wallet!`, 'success');
         }
     } catch (error) {
         if (error.code === 4001) return;
-        showToast('Nao foi possivel adicionar NFT', 'error');
+        showToast('Could not add NFT', 'error');
     }
 }
 
@@ -1857,9 +1871,9 @@ async function addToWallet(tokenId, imageUrl) {
 function copyHash(hash) {
     if (!hash) return;
     navigator.clipboard.writeText(hash).then(() => {
-        showToast('Hash copiado!', 'success');
+        showToast('Hash copied!', 'success');
     }).catch(() => {
-        showToast('Erro ao copiar', 'error');
+        showToast('Failed to copy', 'error');
     });
 }
 
