@@ -702,35 +702,38 @@ export const nftPoolFactoryABI = [
 
 export const charityPoolABI = [
     // Read Functions
-    "function campaigns(uint256 campaignId) view returns (address creator, string title, string description, uint256 goalAmount, uint256 raisedAmount, uint256 deadline, uint8 status, uint256 donationCount, uint256 createdAt)",
-    "function donations(uint256 donationId) view returns (address donor, uint256 campaignId, uint256 grossAmount, uint256 netAmount, uint256 timestamp)",
-    "function campaignCounter() view returns (uint256)",
-    "function donationCounter() view returns (uint256)",
-    "function userActiveCampaigns(address user) view returns (uint256)",
-    "function maxActiveCampaignsPerWallet() view returns (uint256)",
-    "function minDonationAmount() view returns (uint256)",
-    "function donationMiningFeeBips() view returns (uint256)",
-    "function donationBurnFeeBips() view returns (uint256)",
-    "function withdrawalFeeETH() view returns (uint256)",
-    "function goalNotMetBurnBips() view returns (uint256)",
+    "function getCampaign(uint256 _campaignId) view returns (address creator, string title, string description, uint96 goalAmount, uint96 raisedAmount, uint32 donationCount, uint64 deadline, uint64 createdAt, uint96 boostAmount, uint64 boostTime, uint8 status, bool goalReached)",
+    "function campaigns(uint256 campaignId) view returns (address creator, uint96 goalAmount, uint96 raisedAmount, uint32 donationCount, uint64 deadline, uint64 createdAt, uint96 boostAmount, uint64 boostTime, uint8 status)",
+    "function campaignTitles(uint256 campaignId) view returns (string)",
+    "function campaignDescriptions(uint256 campaignId) view returns (string)",
+    "function donations(uint256 donationId) view returns (address donor, uint64 campaignId, uint96 grossAmount, uint96 netAmount, uint64 timestamp)",
+    "function campaignCounter() view returns (uint64)",
+    "function donationCounter() view returns (uint64)",
+    "function userActiveCampaigns(address user) view returns (uint8)",
+    "function maxActiveCampaigns() view returns (uint8)",
+    "function donationFeeBips() view returns (uint16)",
     "function totalRaisedAllTime() view returns (uint256)",
-    "function totalBurnedAllTime() view returns (uint256)",
-    "function totalCampaignsCreated() view returns (uint256)",
-    "function totalSuccessfulWithdrawals() view returns (uint256)",
-    "function getCampaignDonations(uint256 campaignId, uint256 offset, uint256 limit) view returns (uint256[])",
-    "function getUserCampaignIds(address user) view returns (uint256[])",
-    
+    "function totalFeesCollected() view returns (uint256)",
+    "function getCampaignDonations(uint256 _campaignId) view returns (uint256[])",
+    "function getUserCampaigns(address _user) view returns (uint256[])",
+    "function getUserDonations(address _user) view returns (uint256[])",
+    "function getStats() view returns (uint64 totalCampaigns, uint256 totalRaised, uint256 totalDonations, uint256 totalFees)",
+    "function previewDonation(uint256 _amount) view returns (uint256 netToCampaign, uint256 feeToProtocol)",
+    "function canWithdraw(uint256 _campaignId) view returns (bool allowed, string reason)",
+    "function getFeeConfig() view returns (uint96 createBkc, uint96 withdrawBkc, uint16 donationBips, uint96 boostBkc, uint96 boostEth)",
+
     // Write Functions
-    "function createCampaign(string _title, string _description, uint256 _goalAmount, uint256 _durationDays) external returns (uint256)",
-    "function donate(uint256 _campaignId, uint256 _amount) external",
+    "function createCampaign(string _title, string _description, uint96 _goalAmount, uint256 _durationDays, address _operator) external returns (uint256)",
+    "function donate(uint256 _campaignId, address _operator) external payable",
     "function cancelCampaign(uint256 _campaignId) external",
-    "function withdraw(uint256 _campaignId) external payable",
-    
+    "function withdraw(uint256 _campaignId, address _operator) external",
+    "function boostCampaign(uint256 _campaignId, address _operator) external payable",
+
     // Events
-    "event CampaignCreated(uint256 indexed campaignId, address indexed creator, string title, uint256 goalAmount, uint256 deadline)",
-    "event DonationReceived(uint256 indexed campaignId, address indexed donor, uint256 grossAmount, uint256 netAmount, uint256 burnedAmount)",
-    "event CampaignCancelled(uint256 indexed campaignId, address indexed creator)",
-    "event FundsWithdrawn(uint256 indexed campaignId, address indexed creator, uint256 amount, uint256 burnedAmount, bool goalMet)"
+    "event CampaignCreated(uint256 indexed campaignId, address indexed creator, uint96 goalAmount, uint64 deadline, address operator)",
+    "event DonationMade(uint256 indexed campaignId, uint256 indexed donationId, address indexed donor, uint96 grossAmount, uint96 netAmount, uint96 feeAmount, address operator)",
+    "event CampaignCancelled(uint256 indexed campaignId, address indexed creator, uint96 raisedAmount)",
+    "event FundsWithdrawn(uint256 indexed campaignId, address indexed creator, uint96 amount, address operator)"
 ];
 
 // ============================================================================

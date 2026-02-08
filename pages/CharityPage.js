@@ -48,12 +48,9 @@ const normalizeStatus = (status) => {
 const isCampaignActive = (c) => normalizeStatus(c.status) === 0 && Number(c.deadline) > Math.floor(Date.now() / 1000);
 
 const charityPoolABI = [
-    "function campaigns(uint256) view returns (address creator, string title, string description, uint256 goalAmount, uint256 raisedAmount, uint256 donationCount, uint256 deadline, uint256 createdAt, uint8 status)",
-    "function campaignCounter() view returns (uint256)",
-    "function totalRaisedAllTime() view returns (uint256)",
-    "function totalBurnedAllTime() view returns (uint256)",
-    "function totalCampaignsCreated() view returns (uint256)",
-    "function totalSuccessfulWithdrawals() view returns (uint256)"
+    "function getCampaign(uint256 _campaignId) view returns (address creator, string title, string description, uint96 goalAmount, uint96 raisedAmount, uint32 donationCount, uint64 deadline, uint64 createdAt, uint96 boostAmount, uint64 boostTime, uint8 status, bool goalReached)",
+    "function campaignCounter() view returns (uint64)",
+    "function getStats() view returns (uint64 totalCampaigns, uint256 totalRaised, uint256 totalDonations, uint256 totalFees)"
 ];
 
 const CHARITY_API = { 
@@ -569,19 +566,19 @@ async function loadData() {
             const onChainCampaigns = await Promise.all(
                 Array.from({ length: total }, (_, i) => i + 1).map(async (id) => {
                     try {
-                        const data = await contract.campaigns(id);
+                        const data = await contract.getCampaign(id);
                         const apiData = apiCampaigns.find(c => String(c.id) === String(id));
                         return {
                             id: String(id),
-                            creator: data[0],
-                            title: apiData?.title || data[1] || `Campaign #${id}`,
-                            description: apiData?.description || data[2] || '',
-                            goalAmount: BigInt(data[3].toString()),
-                            raisedAmount: BigInt(data[4].toString()),
-                            donationCount: Number(data[5]),
-                            deadline: Number(data[6]),
-                            createdAt: Number(data[7]),
-                            status: Number(data[8]),
+                            creator: data.creator || data[0],
+                            title: apiData?.title || data.title || data[1] || `Campaign #${id}`,
+                            description: apiData?.description || data.description || data[2] || '',
+                            goalAmount: BigInt((data.goalAmount || data[3]).toString()),
+                            raisedAmount: BigInt((data.raisedAmount || data[4]).toString()),
+                            donationCount: Number(data.donationCount || data[5]),
+                            deadline: Number(data.deadline || data[6]),
+                            createdAt: Number(data.createdAt || data[7]),
+                            status: Number(data.status || data[10]),
                             category: apiData?.category || 'humanitarian',
                             imageUrl: apiData?.imageUrl || null
                         };
@@ -606,16 +603,16 @@ async function loadStats() {
     try {
         const provider = State?.publicProvider;
         if (!provider) return null;
-        
+
         const contract = new ethers.Contract(addresses.charityPool, charityPoolABI, provider);
-        const [raised, burned, created, withdrawals] = await Promise.all([
-            contract.totalRaisedAllTime(),
-            contract.totalBurnedAllTime(),
-            contract.totalCampaignsCreated(),
-            contract.totalSuccessfulWithdrawals()
-        ]);
-        
-        return { raised, burned, created: Number(created), withdrawals: Number(withdrawals) };
+        const stats = await contract.getStats();
+
+        return {
+            raised: stats.totalRaised ?? stats[1],
+            fees: stats.totalFees ?? stats[3],
+            created: Number(stats.totalCampaigns ?? stats[0]),
+            donations: Number(stats.totalDonations ?? stats[2])
+        };
     } catch (e) {
         return null;
     }
@@ -791,7 +788,7 @@ const renderMain = () => {
                     <p class="text-[10px] text-zinc-500 uppercase mt-1">Total Raised</p>
                 </div>
                 <div class="cp-stat-card">
-                    <p class="text-2xl font-bold text-blue-400 font-mono">${CS.stats ? fmt(CS.stats.burned) : '--'}</p>
+                    <p class="text-2xl font-bold text-blue-400 font-mono">${CS.stats ? fmt(CS.stats.fees) : '--'}</p>
                     <p class="text-[10px] text-zinc-500 uppercase mt-1">Platform Fees</p>
                 </div>
                 <div class="cp-stat-card">
@@ -799,8 +796,8 @@ const renderMain = () => {
                     <p class="text-[10px] text-zinc-500 uppercase mt-1">Campaigns</p>
                 </div>
                 <div class="cp-stat-card">
-                    <p class="text-2xl font-bold text-purple-400 font-mono">${CS.stats?.withdrawals ?? '--'}</p>
-                    <p class="text-[10px] text-zinc-500 uppercase mt-1">Completed</p>
+                    <p class="text-2xl font-bold text-purple-400 font-mono">${CS.stats?.donations ?? '--'}</p>
+                    <p class="text-[10px] text-zinc-500 uppercase mt-1">Donations</p>
                 </div>
             </div>
             
@@ -1440,7 +1437,7 @@ async function cancel(id) {
     if (!State?.isConnected) return showToast('Connect wallet', 'warning');
     if (!confirm('Cancel this campaign? This cannot be undone.')) return;
     
-    await CharityTx.cancel({
+    await CharityTx.cancelCampaign({
         campaignId: id,
         button: document.getElementById('btn-cancel'),
         
@@ -1588,12 +1585,19 @@ async function loadDetail(id) {
             const provider = State?.publicProvider;
             if (provider) {
                 const contract = new ethers.Contract(addresses.charityPool, charityPoolABI, provider);
-                const data = await contract.campaigns(id);
+                const data = await contract.getCampaign(id);
                 c = {
-                    id: String(id), creator: data[0], title: data[1], description: data[2],
-                    goalAmount: BigInt(data[3].toString()), raisedAmount: BigInt(data[4].toString()),
-                    donationCount: Number(data[5]), deadline: Number(data[6]), createdAt: Number(data[7]),
-                    status: Number(data[8]), category: 'humanitarian', imageUrl: null
+                    id: String(id),
+                    creator: data.creator || data[0],
+                    title: data.title || data[1] || `Campaign #${id}`,
+                    description: data.description || data[2] || '',
+                    goalAmount: BigInt((data.goalAmount || data[3]).toString()),
+                    raisedAmount: BigInt((data.raisedAmount || data[4]).toString()),
+                    donationCount: Number(data.donationCount || data[5]),
+                    deadline: Number(data.deadline || data[6]),
+                    createdAt: Number(data.createdAt || data[7]),
+                    status: Number(data.status || data[10]),
+                    category: 'humanitarian', imageUrl: null
                 };
             }
         }
