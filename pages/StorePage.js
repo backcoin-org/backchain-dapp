@@ -1238,10 +1238,8 @@ function setupEventListeners() {
             }
 
             isTransactionInProgress = true;
-            executeBtn.disabled = true;
-            const originalHTML = executeBtn.innerHTML;
-            executeBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Processing...';
-            
+            // V12.2: Don't manually set button state — txEngine handles it via setPhase()
+
             // Animate mascot
             if (mascot) mascot.className = 'w-14 h-14 object-contain trade-spin';
 
@@ -1277,8 +1275,6 @@ function setupEventListeners() {
                     if (!TradeState.firstAvailableTokenId) {
                         showToast("No NFT selected for sale", "error");
                         isTransactionInProgress = false;
-                        executeBtn.disabled = false;
-                        executeBtn.innerHTML = originalHTML;
                         return;
                     }
                     
@@ -1311,9 +1307,7 @@ function setupEventListeners() {
                 }
             } finally {
                 isTransactionInProgress = false;
-                executeBtn.disabled = false;
-                executeBtn.innerHTML = originalHTML;
-                
+
                 // V12.1: Always refresh data after transaction attempt
                 // This ensures UI is updated even if callback failed
                 setTimeout(async () => {

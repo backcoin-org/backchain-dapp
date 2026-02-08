@@ -500,9 +500,9 @@ export const rentalManagerABI = [
 
 // NFT Liquidity Pool V6 ABI - With Operator + ETH Fees
 export const nftPoolABI = [
-    // WRITE - V6 with operator + payable
-    "function buyNFT(address _operator) external payable returns (uint256 tokenId)",
-    "function buySpecificNFT(uint256 _tokenId, address _operator) external payable",
+    // WRITE - V6 with operator + payable + slippage protection
+    "function buyNFT(uint256 _maxPrice, address _operator) external payable returns (uint256 tokenId)",
+    "function buySpecificNFT(uint256 _tokenId, uint256 _maxPrice, address _operator) external payable",
     "function buyNFTWithSlippage(uint256 _maxPrice, address _operator) external payable returns (uint256 tokenId)",
     "function sellNFT(uint256 _tokenId, uint256 _minPayout, address _operator) external payable",
     // READ - Prices
