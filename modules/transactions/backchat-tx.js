@@ -100,12 +100,9 @@ export async function createProfile({
         get value() { return usernameFee; },
         
         validate: async (signer, userAddress) => {
-            const contract = getBackchatContract(signer);
-            
-            // Check username availability
-            const available = await contract.isUsernameAvailable(username);
-            if (!available) throw new Error('Username is already taken');
-            
+            // Use read-only provider (Alchemy) to avoid MetaMask RPC rate limits
+            const contract = await getBackchatContractReadOnly();
+
             // Check username format (1-15 chars, a-z, 0-9, underscore)
             if (!username || username.length < 1 || username.length > 15) {
                 throw new Error('Username must be 1-15 characters');
@@ -113,11 +110,15 @@ export async function createProfile({
             if (!/^[a-z0-9_]+$/.test(username)) {
                 throw new Error('Username can only contain lowercase letters, numbers, and underscores');
             }
-            
+
+            // Check username availability
+            const available = await contract.isUsernameAvailable(username);
+            if (!available) throw new Error('Username is already taken');
+
             // Get username fee
             usernameFee = await contract.getUsernameFee(username.length);
             console.log('[Backchat] Username fee:', ethers.formatEther(usernameFee), 'ETH');
-            
+
             // Check ETH balance
             const { NetworkManager } = await import('../core/index.js');
             const balance = await NetworkManager.getProvider().getBalance(userAddress);
@@ -176,7 +177,8 @@ export async function createPost({
             if (!content || content.length === 0) throw new Error('Content is required');
             if (content.length > 500) throw new Error('Content max 500 chars');
 
-            const contract = getBackchatContract(signer);
+            // Use read-only provider (Alchemy) to avoid MetaMask RPC rate limits
+            const contract = await getBackchatContractReadOnly();
             const fees = await contract.getCurrentFees();
             postFee = fees.postFee;
 
@@ -185,8 +187,7 @@ export async function createPost({
                 postFee = await getActualFee(contract, 100000);
             }
 
-            const { NetworkManager } = await import('../core/index.js');
-            const balance = await NetworkManager.getProvider().getBalance(userAddress);
+            const balance = await contract.runner.provider.getBalance(userAddress);
             if (balance < postFee + ethers.parseEther('0.001')) throw new Error('Insufficient ETH');
         },
         
@@ -238,13 +239,15 @@ export async function createReply({
         validate: async (signer, userAddress) => {
             if (!content) throw new Error('Content is required');
             if (content.length > 500) throw new Error('Content max 500 chars');
-            
-            const contract = getBackchatContract(signer);
-            
+
+            // Use read-only provider (Alchemy) to avoid MetaMask RPC rate limits
+            const contract = await getBackchatContractReadOnly();
+            const provider = contract.runner.provider;
+
             // Check parent post exists
             const author = await contract.postAuthor(parentId);
             if (author === '0x0000000000000000000000000000000000000000') throw new Error('Post not found');
-            
+
             const fees = await contract.getCurrentFees();
             replyFee = fees.replyFee;
             if (!replyFee || replyFee === 0n) {
@@ -252,11 +255,9 @@ export async function createReply({
             }
 
             // Check balances
-            const { NetworkManager } = await import('../core/index.js');
-            const provider = NetworkManager.getProvider();
             const ethBalance = await provider.getBalance(userAddress);
             if (ethBalance < replyFee + ethers.parseEther('0.001')) throw new Error('Insufficient ETH');
-            
+
             if (tipAmount > 0n) {
                 const bkcContract = new ethers.Contract(contracts.BKC_TOKEN, ['function balanceOf(address) view returns (uint256)'], provider);
                 const bkcBalance = await bkcContract.balanceOf(userAddress);
@@ -309,7 +310,8 @@ export async function createRepost({
         },
         
         validate: async (signer, userAddress) => {
-            const contract = getBackchatContract(signer);
+            // Use read-only provider (Alchemy) to avoid MetaMask RPC rate limits
+            const contract = await getBackchatContractReadOnly();
             const author = await contract.postAuthor(originalPostId);
             if (author === '0x0000000000000000000000000000000000000000') throw new Error('Post not found');
 
@@ -355,14 +357,15 @@ export async function like({
         },
         
         validate: async (signer, userAddress) => {
-            const contract = getBackchatContract(signer);
-            
+            // Use read-only provider (Alchemy) to avoid MetaMask RPC rate limits
+            const contract = await getBackchatContractReadOnly();
+
             const author = await contract.postAuthor(postId);
             if (author === '0x0000000000000000000000000000000000000000') throw new Error('Post not found');
-            
+
             const alreadyLiked = await contract.hasUserLiked(postId, userAddress);
             if (alreadyLiked) throw new Error('Already liked this post');
-            
+
             const fees = await contract.getCurrentFees();
             likeFee = fees.likeFee;
             if (!likeFee || likeFee === 0n) {
@@ -402,11 +405,12 @@ export async function superLike({
         },
         
         validate: async (signer, userAddress) => {
-            const contract = getBackchatContract(signer);
-            
+            // Use read-only provider (Alchemy) to avoid MetaMask RPC rate limits
+            const contract = await getBackchatContractReadOnly();
+
             const author = await contract.postAuthor(postId);
             if (author === '0x0000000000000000000000000000000000000000') throw new Error('Post not found');
-            
+
             const fees = await contract.getCurrentFees();
             if (superLikeAmount < fees.superLikeMin) {
                 throw new Error(`Minimum super like is ${ethers.formatEther(fees.superLikeMin)} ETH`);
@@ -450,8 +454,9 @@ export async function follow({
             if (toFollow.toLowerCase() === userAddress.toLowerCase()) {
                 throw new Error('Cannot follow yourself');
             }
-            
-            const contract = getBackchatContract(signer);
+
+            // Use read-only provider (Alchemy) to avoid MetaMask RPC rate limits
+            const contract = await getBackchatContractReadOnly();
             const fees = await contract.getCurrentFees();
             followFee = fees.followFee;
             if (!followFee || followFee === 0n) {
@@ -502,7 +507,8 @@ export async function boostProfile({
         value: boostAmount,
         
         validate: async (signer) => {
-            const contract = getBackchatContract(signer);
+            // Use read-only provider (Alchemy) to avoid MetaMask RPC rate limits
+            const contract = await getBackchatContractReadOnly();
             const fees = await contract.getCurrentFees();
             if (boostAmount < fees.boostMin) {
                 throw new Error(`Minimum boost is ${ethers.formatEther(fees.boostMin)} ETH`);
@@ -531,7 +537,8 @@ export async function obtainBadge({
         get value() { return badgeFee; },
         
         validate: async (signer) => {
-            const contract = getBackchatContract(signer);
+            // Use read-only provider (Alchemy) to avoid MetaMask RPC rate limits
+            const contract = await getBackchatContractReadOnly();
             const fees = await contract.getCurrentFees();
             badgeFee = fees.badgeFee_;
             if (!badgeFee || badgeFee === 0n) {
@@ -561,7 +568,8 @@ export async function withdraw({
         args: [],
         
         validate: async (signer, userAddress) => {
-            const contract = getBackchatContract(signer);
+            // Use read-only provider (Alchemy) to avoid MetaMask RPC rate limits
+            const contract = await getBackchatContractReadOnly();
             const pending = await contract.getPendingBalance(userAddress);
             if (pending === 0n) throw new Error('Nothing to withdraw');
             console.log('[Backchat] Withdrawing:', ethers.formatEther(pending), 'ETH');
@@ -596,7 +604,8 @@ export async function setReferrer({
                 throw new Error('Cannot refer yourself');
             }
 
-            const contract = getBackchatContract(signer);
+            // Use read-only provider (Alchemy) to avoid MetaMask RPC rate limits
+            const contract = await getBackchatContractReadOnly();
             const existing = await contract.referredBy(userAddress);
             if (existing !== '0x0000000000000000000000000000000000000000') {
                 throw new Error('Referrer already set (immutable)');
