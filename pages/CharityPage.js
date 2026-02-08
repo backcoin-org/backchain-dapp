@@ -645,6 +645,20 @@ const clearUrl = () => { if (window.location.hash.startsWith('#charity/')) windo
 const canWithdraw = (c) => { const status = normalizeStatus(c.status); const ended = Number(c.deadline) <= Math.floor(Date.now() / 1000); return (status === 0 || status === 1) && ended && !c.withdrawn && BigInt(c.raisedAmount || 0) > 0n; };
 
 // ============================================================================
+// LOCAL METADATA STORAGE (fallback for unreliable Firebase API)
+// ============================================================================
+
+const META_PREFIX = 'charity-meta-';
+
+function saveLocalMeta(id, meta) {
+    try { localStorage.setItem(`${META_PREFIX}${id}`, JSON.stringify(meta)); } catch {}
+}
+
+function getLocalMeta(id) {
+    try { return JSON.parse(localStorage.getItem(`${META_PREFIX}${id}`) || 'null'); } catch { return null; }
+}
+
+// ============================================================================
 // DATA LOADING
 // ============================================================================
 
@@ -655,20 +669,22 @@ async function loadData() {
             fetch(CHARITY_API.getCampaigns).then(r => r.json()).catch(() => ({ campaigns: [] })),
             loadStats()
         ]);
-        
+
         const apiCampaigns = apiRes?.campaigns || [];
         const provider = State?.publicProvider;
-        
+
         if (provider) {
             const contract = new ethers.Contract(addresses.charityPool, charityPoolABI, provider);
             const counter = await contract.campaignCounter();
             const total = Number(counter);
-            
+
             const onChainCampaigns = await Promise.all(
                 Array.from({ length: total }, (_, i) => i + 1).map(async (id) => {
                     try {
                         const data = await contract.getCampaign(id);
                         const apiData = apiCampaigns.find(c => String(c.id) === String(id));
+                        const localMeta = getLocalMeta(id);
+
                         return {
                             id: String(id),
                             creator: data.creator || data[0],
@@ -680,18 +696,18 @@ async function loadData() {
                             deadline: Number(data.deadline || data[6]),
                             createdAt: Number(data.createdAt || data[7]),
                             status: Number(data.status || data[10]),
-                            category: apiData?.category || 'humanitarian',
-                            imageUrl: apiData?.imageUrl || null
+                            category: apiData?.category || localMeta?.category || 'humanitarian',
+                            imageUrl: apiData?.imageUrl || localMeta?.imageUrl || null
                         };
                     } catch (e) {
                         return null;
                     }
                 })
             );
-            
+
             CS.campaigns = onChainCampaigns.filter(Boolean);
         }
-        
+
         CS.stats = stats;
     } catch (e) {
         console.error('Load data:', e);
@@ -1718,6 +1734,8 @@ async function wizardLaunch() {
 
         onSuccess: async (receipt, campaignId) => {
             if (campaignId) {
+                // Save metadata locally (reliable) + Firebase API (backup)
+                saveLocalMeta(campaignId, { imageUrl, category, title, description: desc });
                 try {
                     await fetch(CHARITY_API.saveCampaign, {
                         method: 'POST',
@@ -1915,6 +1933,7 @@ async function create() {
         
         onSuccess: async (receipt, campaignId) => {
             if (campaignId) {
+                saveLocalMeta(campaignId, { imageUrl, category, title, description: desc });
                 try {
                     await fetch(CHARITY_API.saveCampaign, {
                         method: 'POST',
@@ -1923,8 +1942,8 @@ async function create() {
                     });
                 } catch (e) {}
             }
-            
-            showToast('🎉 Campaign created!', 'success');
+
+            showToast('Campaign created!', 'success');
             closeModal('create');
             CS.pendingImageFile = null;
             await loadData();
@@ -2074,13 +2093,14 @@ async function saveEdit() {
     if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Saving...'; }
     
     try {
+        saveLocalMeta(id, { imageUrl, category, title, description: desc });
         await fetch(CHARITY_API.saveCampaign, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ id, title, description: desc, category, imageUrl, creator: State.userAddress })
         });
-        
-        showToast('✅ Campaign updated!', 'success');
+
+        showToast('Campaign updated!', 'success');
         closeModal('edit');
         CS.pendingImageFile = null;
         await loadData();
@@ -2148,6 +2168,7 @@ async function loadDetail(id) {
             if (provider) {
                 const contract = new ethers.Contract(addresses.charityPool, charityPoolABI, provider);
                 const data = await contract.getCampaign(id);
+                const localMeta = getLocalMeta(id);
                 c = {
                     id: String(id),
                     creator: data.creator || data[0],
@@ -2159,7 +2180,8 @@ async function loadDetail(id) {
                     deadline: Number(data.deadline || data[6]),
                     createdAt: Number(data.createdAt || data[7]),
                     status: Number(data.status || data[10]),
-                    category: 'humanitarian', imageUrl: null
+                    category: localMeta?.category || 'humanitarian',
+                    imageUrl: localMeta?.imageUrl || null
                 };
             }
         }
