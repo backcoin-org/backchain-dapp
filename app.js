@@ -22,7 +22,7 @@ import { executeFaucetClaim } from './modules/transactions/faucet-tx.js';
 import { DashboardPage } from './pages/DashboardPage.js';
 import { EarnPage } from './pages/networkstaking.js'; 
 import { StorePage } from './pages/StorePage.js';
-import { RewardsPage } from './pages/RewardsPage.js';
+// RewardsPage removed — merged into EarnPage (Stake & Earn)
 import { FortunePoolPage } from './pages/FortunePool.js'; 
 import { AboutPage } from './pages/AboutPage.js';
 import { AirdropPage } from './pages/AirdropPage.js';
@@ -59,7 +59,7 @@ const routes = {
     'dashboard': DashboardPage,
     'mine': EarnPage, 
     'store': StorePage,
-    'rewards': RewardsPage,
+    'rewards': EarnPage, // redirects old #rewards URLs to unified page
     'actions': FortunePoolPage, 
     'charity': CharityPage,
     'backchat': BackchatPage,
@@ -105,6 +105,12 @@ function navigateTo(pageId, forceUpdate = false) {
     if (!pageContainer) {
         console.error('❌ Page container not found');
         return;
+    }
+
+    // ✅ Redirect merged routes to their new home
+    if (pageId === 'rewards') {
+        pageId = 'mine';
+        window.location.hash = 'mine';
     }
 
     // ✅ FIX: Always process navigation when coming from a deep link

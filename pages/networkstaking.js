@@ -1,29 +1,16 @@
-// pages/NetworkStakingPage.js
-// ✅ PRODUCTION V6.9 - Complete Redesign with Burn Rate System
+// pages/networkstaking.js
+// ✅ PRODUCTION V10.0 — Unified Staking & Rewards Page
 // ═══════════════════════════════════════════════════════════════════════════════
 //                          BACKCHAIN PROTOCOL
-//                    Network Staking - Delegate & Earn
+//                    Stake & Earn — Unified Hub
 // ═══════════════════════════════════════════════════════════════════════════════
 //
-// V6.9 Changes:
-// - COMPLETE UI REDESIGN - Modern, clean, functional layout
-// - NEW: Burn Rate Display - Shows NFT tier and burn reduction
-// - NEW: Claim Preview - Exact breakdown of rewards vs burn
-// - NEW: NFT Status Card - Shows if boost is from owned/rented NFT
-// - NEW: previewClaim() integration from DelegationManager V6
-// - Improved animations and visual feedback
-// - Better mobile responsiveness
-//
-// Burn Rate System (V6):
-// ┌──────────┬────────────┬───────────┬─────────────┐
-// │ Tier     │ Boost Bips │ Burn Rate │ User Gets   │
-// ├──────────┼────────────┼───────────┼─────────────┤
-// │ No NFT   │ 0          │ 50%       │ 50%         │
-// │ Bronze   │ 1000       │ 40%       │ 60%         │
-// │ Silver   │ 2500       │ 25%       │ 75%         │
-// │ Gold     │ 4000       │ 10%       │ 90%         │
-// │ Diamond  │ 5000       │ 0%        │ 100%        │
-// └──────────┴────────────┴───────────┴─────────────┘
+// V10.0 Changes:
+// - MERGED EarnPage + RewardsPage into single unified page
+// - Complete visual redesign with CSS injection (stk-styles-v10)
+// - Hero rewards card with animated amount + NFT boost panel
+// - Full-width layout, mobile-first responsive design
+// - Removed duplicate code (BURN_TIERS, NFT load, claim preview)
 //
 // Website: https://backcoin.org
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -31,14 +18,10 @@
 const ethers = window.ethers;
 
 import { State } from '../state.js';
-import { 
-    formatBigNumber, 
-    formatPStake, 
-    renderLoading
-} from '../utils.js';
-import { 
-    loadPublicData, 
-    loadUserData, 
+import { formatBigNumber, formatPStake, renderLoading } from '../utils.js';
+import {
+    loadPublicData,
+    loadUserData,
     calculateUserTotalRewards,
     loadUserDelegations,
     getHighestBoosterBoostFromAPI,
@@ -53,13 +36,12 @@ import { StakingTx } from '../modules/transactions/index.js';
 // ============================================================================
 const EXPLORER_TX = "https://sepolia.arbiscan.io/tx/";
 
-// V6 Burn Rate Constants (matching contract)
 const BURN_TIERS = {
-    NONE:    { boost: 0,    burnRate: 50, userGets: 50,  color: '#71717a', name: 'None',    icon: '○' },
-    BRONZE:  { boost: 1000, burnRate: 40, userGets: 60,  color: '#cd7f32', name: 'Bronze',  icon: '🥉' },
-    SILVER:  { boost: 2500, burnRate: 25, userGets: 75,  color: '#c0c0c0', name: 'Silver',  icon: '🥈' },
-    GOLD:    { boost: 4000, burnRate: 10, userGets: 90,  color: '#ffd700', name: 'Gold',    icon: '🥇' },
-    DIAMOND: { boost: 5000, burnRate: 0,  userGets: 100, color: '#b9f2ff', name: 'Diamond', icon: '💎' }
+    NONE:    { boost: 0,    burnRate: 50, keepRate: 50,  color: '#71717a', name: 'None',    icon: '○',  class: 'stk-tier-none' },
+    BRONZE:  { boost: 1000, burnRate: 40, keepRate: 60,  color: '#cd7f32', name: 'Bronze',  icon: '🥉', class: 'stk-tier-bronze' },
+    SILVER:  { boost: 2500, burnRate: 25, keepRate: 75,  color: '#c0c0c0', name: 'Silver',  icon: '🥈', class: 'stk-tier-silver' },
+    GOLD:    { boost: 4000, burnRate: 10, keepRate: 90,  color: '#ffd700', name: 'Gold',    icon: '🥇', class: 'stk-tier-gold' },
+    DIAMOND: { boost: 5000, burnRate: 0,  keepRate: 100, color: '#b9f2ff', name: 'Diamond', icon: '💎', class: 'stk-tier-diamond' }
 };
 
 // ============================================================================
@@ -74,585 +56,561 @@ let totalNetworkPStake = 0n;
 let countdownInterval = null;
 let currentHistoryFilter = 'ALL';
 
-// V6: NFT Boost State
+// NFT Boost State
 let userNftBoost = 0;
 let userBurnRate = 50;
-let nftSource = 'none'; // 'owned', 'rented', or 'none'
+let nftSource = 'none';
 let claimPreview = null;
+let claimEthFee = 0n;
+
+// Rewards split
+let stakingRewardsAmount = 0n;
+let minerRewardsAmount = 0n;
 
 // ============================================================================
 // HELPERS
 // ============================================================================
 function formatTimeRemaining(seconds) {
     if (seconds <= 0) return 'Ready';
-    const d = Math.floor(seconds / 86400);
-    const h = Math.floor((seconds % 86400) / 3600);
-    const m = Math.floor((seconds % 3600) / 60);
-    
-    if (d > 365) {
-        const years = Math.floor(d / 365);
-        const remainingDays = d % 365;
-        return `${years}y ${remainingDays}d`;
-    }
-    if (d > 0) return `${d}d ${h}h`;
-    if (h > 0) return `${h}h ${m}m`;
-    return `${m}m`;
+    const days = Math.floor(seconds / 86400);
+    const hours = Math.floor((seconds % 86400) / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    if (days > 365) return `${Math.floor(days / 365)}y ${Math.floor((days % 365) / 30)}mo`;
+    if (days > 30) return `${Math.floor(days / 30)}mo ${days % 30}d`;
+    if (days > 0) return `${days}d ${hours}h`;
+    if (hours > 0) return `${hours}h ${minutes}m`;
+    return `${minutes}m`;
 }
 
 function formatDuration(days) {
     if (days >= 365) {
-        const years = days / 365;
-        return years >= 2 ? `${Math.floor(years)} Years` : `${years.toFixed(1)} Year`;
+        const years = Math.floor(days / 365);
+        return years === 1 ? '1 Year' : `${years} Years`;
     }
-    if (days >= 30) return `${Math.floor(days/30)} Month${days >= 60 ? 's' : ''}`;
-    return `${days} Day${days > 1 ? 's' : ''}`;
+    if (days >= 30) return `${Math.floor(days / 30)} Month(s)`;
+    return `${days} Day(s)`;
 }
 
 function calculatePStake(amount, durationSec) {
-    try {
-        const amountBig = BigInt(amount);
-        const durationBig = BigInt(durationSec);
-        return (amountBig * (durationBig / 86400n)) / (10n**18n);
-    } catch { return 0n; }
+    if (amount <= 0n || durationSec <= 0n) return 0n;
+    const days = durationSec / 86400n;
+    return (amount * days) / (10n ** 18n);
 }
 
 function formatDate(timestamp) {
-    if (!timestamp) return '';
+    if (!timestamp) return 'Recent';
     try {
         const secs = timestamp.seconds || timestamp._seconds || (new Date(timestamp).getTime() / 1000);
-        return new Date(secs * 1000).toLocaleString('en-US', { 
-            month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' 
-        });
-    } catch { return ''; }
+        return new Date(secs * 1000).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+    } catch { return 'Recent'; }
 }
 
-// V6: Get tier info from boost value
 function getTierFromBoost(boost) {
-    if (boost >= 5000) return BURN_TIERS.DIAMOND;
-    if (boost >= 4000) return BURN_TIERS.GOLD;
-    if (boost >= 2500) return BURN_TIERS.SILVER;
-    if (boost >= 1000) return BURN_TIERS.BRONZE;
+    const b = Number(boost);
+    if (b >= 5000) return BURN_TIERS.DIAMOND;
+    if (b >= 4000) return BURN_TIERS.GOLD;
+    if (b >= 2500) return BURN_TIERS.SILVER;
+    if (b >= 1000) return BURN_TIERS.BRONZE;
     return BURN_TIERS.NONE;
 }
 
 // ============================================================================
-// STYLES
+// CSS INJECTION
 // ============================================================================
 function injectStyles() {
-    if (document.getElementById('staking-styles-v6')) return;
-    
+    if (document.getElementById('stk-styles-v10')) return;
     const style = document.createElement('style');
-    style.id = 'staking-styles-v6';
+    style.id = 'stk-styles-v10';
     style.textContent = `
-        /* ═══════════════════════════════════════════════════════════════════
-           V6.9 Network Staking Styles - Clean & Functional
-           ═══════════════════════════════════════════════════════════════════ */
-        
-        @keyframes float { 
-            0%, 100% { transform: translateY(0); } 
-            50% { transform: translateY(-6px); } 
+        .stk-shell {
+            --stk-bg: #0c0c0e;
+            --stk-surface: #141417;
+            --stk-surface-2: #1c1c21;
+            --stk-surface-3: #222228;
+            --stk-border: rgba(255,255,255,0.06);
+            --stk-border-h: rgba(255,255,255,0.12);
+            --stk-text: #f0f0f2;
+            --stk-text-2: #a0a0ab;
+            --stk-text-3: #5c5c68;
+            --stk-accent: #f59e0b;
+            --stk-green: #4ade80;
+            --stk-purple: #a78bfa;
+            --stk-cyan: #22d3ee;
+            --stk-red: #ef4444;
+            --stk-radius: 16px;
+            --stk-radius-sm: 10px;
+            --stk-tr: 0.2s cubic-bezier(0.4, 0, 0.2, 1);
         }
-        @keyframes pulse-glow { 
-            0%, 100% { box-shadow: 0 0 20px rgba(139,92,246,0.2); } 
-            50% { box-shadow: 0 0 40px rgba(139,92,246,0.4); } 
+
+        @keyframes stk-fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes stk-scaleIn { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
+        @keyframes stk-shimmer { 0% { background-position: -200% 0; } 100% { background-position: 200% 0; } }
+        @keyframes stk-float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }
+        @keyframes stk-glow { 0%, 100% { opacity: 0.4; } 50% { opacity: 0.8; } }
+
+        .stk-shell { max-width: 960px; margin: 0 auto; padding: 0 16px 40px; animation: stk-fadeIn 0.4s ease-out; }
+
+        /* ── Header ── */
+        .stk-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; }
+        .stk-header-left { display: flex; align-items: center; gap: 14px; }
+        .stk-header-icon {
+            width: 48px; height: 48px; border-radius: var(--stk-radius);
+            background: linear-gradient(135deg, rgba(167,139,250,0.15), rgba(139,92,246,0.1));
+            border: 1px solid rgba(167,139,250,0.2);
+            display: flex; align-items: center; justify-content: center;
+            animation: stk-float 4s ease-in-out infinite;
         }
-        @keyframes shimmer {
-            0% { background-position: -200% 0; }
-            100% { background-position: 200% 0; }
+        .stk-header-icon i { font-size: 20px; color: var(--stk-purple); }
+        .stk-header-title { font-size: 20px; font-weight: 800; color: var(--stk-text); }
+        .stk-header-sub { font-size: 11px; color: var(--stk-text-3); }
+        .stk-refresh-btn {
+            width: 40px; height: 40px; border-radius: var(--stk-radius-sm);
+            background: var(--stk-surface); border: 1px solid var(--stk-border);
+            display: flex; align-items: center; justify-content: center;
+            cursor: pointer; transition: all var(--stk-tr); color: var(--stk-text-3);
         }
-        @keyframes burn-pulse {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.6; }
+        .stk-refresh-btn:hover { color: var(--stk-text); border-color: var(--stk-border-h); }
+
+        /* ── Hero Card ── */
+        .stk-hero {
+            position: relative; overflow: hidden;
+            background: linear-gradient(135deg, rgba(20,20,23,0.95), rgba(12,12,14,0.98));
+            border: 1px solid var(--stk-border);
+            border-radius: var(--stk-radius);
+            padding: 28px 24px;
+            margin-bottom: 14px;
+            animation: stk-scaleIn 0.5s ease-out;
         }
-        
-        .float-animation { animation: float 4s ease-in-out infinite; }
-        .pulse-glow { animation: pulse-glow 3s ease-in-out infinite; }
-        
-        .card-base {
-            background: linear-gradient(145deg, rgba(39,39,42,0.9) 0%, rgba(24,24,27,0.95) 100%);
-            border: 1px solid rgba(63,63,70,0.5);
-            border-radius: 16px;
-            transition: all 0.3s ease;
+        .stk-hero::before {
+            content: '';
+            position: absolute; top: -50%; right: -20%;
+            width: 400px; height: 400px;
+            background: radial-gradient(circle, rgba(74,222,128,0.05) 0%, transparent 70%);
+            pointer-events: none; animation: stk-glow 4s ease-in-out infinite;
         }
-        .card-base:hover { 
-            border-color: rgba(139,92,246,0.3);
-            transform: translateY(-2px);
+        .stk-hero::after {
+            content: '';
+            position: absolute; inset: 0;
+            border-radius: var(--stk-radius); padding: 1px;
+            background: linear-gradient(135deg, rgba(74,222,128,0.2), rgba(167,139,250,0.15), rgba(245,158,11,0.1));
+            -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+            mask-composite: exclude; -webkit-mask-composite: xor;
+            pointer-events: none; opacity: 0.5;
         }
-        
-        .stat-card {
-            background: linear-gradient(145deg, rgba(39,39,42,0.7) 0%, rgba(24,24,27,0.8) 100%);
-            border: 1px solid rgba(63,63,70,0.4);
-            border-radius: 12px;
+        .stk-hero-inner { display: flex; gap: 24px; position: relative; z-index: 1; }
+        .stk-hero-left { flex: 1.2; min-width: 0; }
+        .stk-hero-right { flex: 1; min-width: 0; display: flex; flex-direction: column; justify-content: center; }
+
+        .stk-hero-label { font-size: 11px; color: var(--stk-text-3); text-transform: uppercase; letter-spacing: 0.1em; font-weight: 700; margin-bottom: 4px; }
+        .stk-reward-value {
+            font-size: clamp(28px, 5vw, 40px); font-weight: 800;
+            color: var(--stk-green); font-variant-numeric: tabular-nums;
+            line-height: 1.1; text-shadow: 0 0 30px rgba(74,222,128,0.2);
         }
-        
-        /* Duration Chips */
-        .duration-chip {
-            transition: all 0.2s ease;
-            cursor: pointer;
+        .stk-reward-suffix { font-size: 14px; color: rgba(74,222,128,0.6); font-weight: 600; }
+
+        .stk-claim-btn {
+            display: inline-flex; align-items: center; gap: 8px;
+            margin-top: 16px; padding: 10px 24px;
+            background: linear-gradient(135deg, #22c55e, #10b981);
+            color: white; font-weight: 700; font-size: 14px;
+            border-radius: var(--stk-radius-sm); border: none; cursor: pointer;
+            transition: all var(--stk-tr); box-shadow: 0 4px 20px rgba(34,197,94,0.25);
         }
-        .duration-chip:hover { 
-            transform: scale(1.02);
-            border-color: rgba(139,92,246,0.5);
+        .stk-claim-btn:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 6px 28px rgba(34,197,94,0.35); }
+        .stk-claim-btn:disabled { opacity: 0.35; cursor: not-allowed; transform: none; box-shadow: none; }
+        .stk-claim-btn:not(:disabled) {
+            background-size: 200% 100%;
+            background-image: linear-gradient(90deg, #22c55e 0%, #34d399 25%, #22c55e 50%, #10b981 100%);
+            animation: stk-shimmer 3s linear infinite;
         }
-        .duration-chip.selected {
-            background: linear-gradient(135deg, #7c3aed 0%, #6d28d9 100%) !important;
-            border-color: #8b5cf6 !important;
-            color: white !important;
-            box-shadow: 0 4px 15px rgba(124,58,237,0.3);
+        .stk-eth-fee { font-size: 10px; color: var(--stk-text-3); margin-top: 6px; }
+
+        .stk-breakdown { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--stk-border); }
+        .stk-breakdown-row { display: flex; justify-content: space-between; align-items: center; font-size: 12px; padding: 3px 0; }
+        .stk-breakdown-label { color: var(--stk-text-3); display: flex; align-items: center; gap: 4px; }
+        .stk-breakdown-val { font-weight: 700; font-family: 'SF Mono', monospace; }
+
+        /* ── NFT Boost Panel ── */
+        .stk-boost-panel {
+            background: var(--stk-surface-2); border: 1px solid var(--stk-border);
+            border-radius: var(--stk-radius-sm); padding: 16px;
         }
-        .duration-chip.recommended::before {
-            content: '★';
-            position: absolute;
-            top: -8px;
-            right: -8px;
+        .stk-tier-badge {
+            display: inline-flex; align-items: center; gap: 6px;
+            padding: 6px 12px; border-radius: 20px;
+            font-weight: 700; font-size: 12px; border: 1px solid;
+        }
+        .stk-tier-none { background: rgba(113,113,122,0.1); border-color: rgba(113,113,122,0.2); color: #a1a1aa; }
+        .stk-tier-bronze { background: rgba(205,127,50,0.1); border-color: rgba(205,127,50,0.3); color: #cd7f32; }
+        .stk-tier-silver { background: rgba(192,192,192,0.1); border-color: rgba(192,192,192,0.3); color: #e5e5e5; }
+        .stk-tier-gold { background: rgba(255,215,0,0.1); border-color: rgba(255,215,0,0.3); color: #ffd700; }
+        .stk-tier-diamond { background: rgba(185,242,255,0.1); border-color: rgba(185,242,255,0.3); color: #b9f2ff; }
+
+        .stk-burn-bar { height: 8px; background: rgba(239,68,68,0.15); border-radius: 4px; overflow: hidden; position: relative; margin: 10px 0 6px; }
+        .stk-burn-fill { position: absolute; left: 0; top: 0; height: 100%; background: linear-gradient(90deg, #ef4444, #f87171); border-radius: 4px; transition: width 0.5s ease; }
+        .stk-keep-fill { position: absolute; right: 0; top: 0; height: 100%; background: linear-gradient(90deg, #22c55e, #4ade80); border-radius: 4px; transition: width 0.5s ease; }
+
+        .stk-boost-cta {
+            display: inline-flex; align-items: center; gap: 6px;
+            margin-top: 10px; padding: 7px 14px; font-size: 11px; font-weight: 700;
+            border-radius: 8px; border: none; cursor: pointer;
+            transition: all var(--stk-tr); color: #000;
             background: linear-gradient(135deg, #f59e0b, #d97706);
-            color: white;
-            font-size: 10px;
-            width: 18px;
-            height: 18px;
+        }
+        .stk-boost-cta:hover { filter: brightness(1.1); transform: translateY(-1px); }
+
+        /* ── Stats Row ── */
+        .stk-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 14px; }
+        .stk-stat {
+            display: flex; flex-direction: column; gap: 2px;
+            padding: 10px 12px; background: var(--stk-surface);
+            border: 1px solid var(--stk-border); border-radius: var(--stk-radius-sm);
+            transition: border-color var(--stk-tr);
+        }
+        .stk-stat:hover { border-color: var(--stk-border-h); }
+        .stk-stat-label { font-size: 9px; color: var(--stk-text-3); text-transform: uppercase; letter-spacing: 0.08em; font-weight: 700; display: flex; align-items: center; gap: 4px; }
+        .stk-stat-label i { font-size: 9px; }
+        .stk-stat-value { font-size: 14px; font-weight: 700; color: var(--stk-text); font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+        /* ── Card Base ── */
+        .stk-card {
+            background: var(--stk-surface); border: 1px solid var(--stk-border);
+            border-radius: var(--stk-radius); padding: 18px;
+            margin-bottom: 14px; animation: stk-fadeIn 0.5s ease-out both;
+        }
+        .stk-card-title { font-size: 14px; font-weight: 700; color: var(--stk-text); margin-bottom: 14px; display: flex; align-items: center; gap: 8px; }
+        .stk-card-title i { color: var(--stk-text-3); font-size: 12px; }
+
+        /* ── Stake Form ── */
+        .stk-input-wrap { position: relative; margin-bottom: 12px; }
+        .stk-amount-input {
+            width: 100%; padding: 14px 70px 14px 16px;
+            background: var(--stk-surface-2); border: 1px solid var(--stk-border-h);
+            border-radius: var(--stk-radius-sm); color: var(--stk-text);
+            font-size: 20px; font-weight: 700; font-family: 'SF Mono', 'JetBrains Mono', monospace;
+            outline: none; transition: border-color var(--stk-tr);
+        }
+        .stk-amount-input::placeholder { color: var(--stk-text-3); font-weight: 400; }
+        .stk-amount-input:focus { border-color: rgba(167,139,250,0.4); }
+        .stk-amount-input.error { border-color: rgba(239,68,68,0.5); }
+        .stk-max-btn {
+            position: absolute; right: 10px; top: 50%; transform: translateY(-50%);
+            padding: 4px 10px; font-size: 10px; font-weight: 800;
+            background: rgba(167,139,250,0.15); color: var(--stk-purple);
+            border: 1px solid rgba(167,139,250,0.3); border-radius: 6px;
+            cursor: pointer; transition: all var(--stk-tr);
+        }
+        .stk-max-btn:hover { background: rgba(167,139,250,0.25); }
+        .stk-balance-row { display: flex; justify-content: space-between; align-items: center; font-size: 11px; color: var(--stk-text-3); margin-bottom: 14px; }
+
+        /* Duration Chips */
+        .stk-duration-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 14px; }
+        .stk-duration-chip {
+            padding: 10px 8px; text-align: center;
+            background: var(--stk-surface-2); border: 1px solid var(--stk-border);
+            border-radius: var(--stk-radius-sm); cursor: pointer;
+            transition: all var(--stk-tr); position: relative;
+        }
+        .stk-duration-chip:hover { border-color: var(--stk-border-h); }
+        .stk-duration-chip.selected {
+            background: linear-gradient(135deg, rgba(167,139,250,0.12), rgba(139,92,246,0.08));
+            border-color: rgba(167,139,250,0.4);
+            box-shadow: 0 0 16px rgba(167,139,250,0.1);
+        }
+        .stk-duration-chip .stk-chip-label { font-size: 14px; font-weight: 700; color: var(--stk-text); }
+        .stk-duration-chip .stk-chip-sub { font-size: 9px; color: var(--stk-text-3); margin-top: 2px; }
+        .stk-duration-chip.selected .stk-chip-label { color: var(--stk-purple); }
+        .stk-duration-chip.recommended::after {
+            content: '\\2605'; position: absolute; top: -6px; right: -4px;
+            width: 16px; height: 16px; font-size: 9px; line-height: 16px; text-align: center;
+            background: linear-gradient(135deg, #f59e0b, #d97706); color: #000;
             border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            box-shadow: 0 2px 8px rgba(245,158,11,0.4);
         }
-        
-        /* NFT Tier Badge */
-        .nft-tier-badge {
-            display: inline-flex;
-            align-items: center;
-            gap: 6px;
-            padding: 6px 12px;
-            border-radius: 20px;
-            font-weight: 600;
-            font-size: 12px;
-            border: 1px solid;
-            transition: all 0.3s ease;
+
+        .stk-preview-row { display: flex; justify-content: space-between; align-items: center; font-size: 12px; padding: 6px 0; }
+        .stk-preview-label { color: var(--stk-text-3); }
+        .stk-preview-val { color: var(--stk-text); font-weight: 700; font-family: 'SF Mono', monospace; }
+
+        .stk-delegate-btn {
+            width: 100%; padding: 12px; margin-top: 14px;
+            background: linear-gradient(135deg, #8b5cf6, #7c3aed);
+            color: white; font-weight: 700; font-size: 14px;
+            border-radius: var(--stk-radius-sm); border: none; cursor: pointer;
+            transition: all var(--stk-tr); box-shadow: 0 4px 20px rgba(139,92,246,0.2);
         }
-        .nft-tier-badge:hover { transform: scale(1.05); }
-        
-        .tier-none { background: rgba(113,113,122,0.15); border-color: rgba(113,113,122,0.3); color: #a1a1aa; }
-        .tier-bronze { background: rgba(205,127,50,0.15); border-color: rgba(205,127,50,0.4); color: #cd7f32; }
-        .tier-silver { background: rgba(192,192,192,0.15); border-color: rgba(192,192,192,0.4); color: #e5e5e5; }
-        .tier-gold { background: rgba(255,215,0,0.15); border-color: rgba(255,215,0,0.4); color: #ffd700; }
-        .tier-diamond { background: rgba(185,242,255,0.15); border-color: rgba(185,242,255,0.4); color: #b9f2ff; }
-        
-        /* Burn Rate Indicator */
-        .burn-indicator {
-            position: relative;
-            height: 8px;
-            background: rgba(239,68,68,0.2);
-            border-radius: 4px;
-            overflow: hidden;
+        .stk-delegate-btn:hover:not(:disabled) { filter: brightness(1.1); transform: translateY(-1px); box-shadow: 0 6px 28px rgba(139,92,246,0.3); }
+        .stk-delegate-btn:disabled { opacity: 0.35; cursor: not-allowed; transform: none; box-shadow: none; }
+
+        /* ── Delegations ── */
+        .stk-deleg-list { display: flex; flex-direction: column; gap: 6px; max-height: 350px; overflow-y: auto; }
+        .stk-deleg-list::-webkit-scrollbar { width: 4px; }
+        .stk-deleg-list::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); border-radius: 4px; }
+        .stk-deleg-item {
+            display: flex; align-items: center; justify-content: space-between; gap: 10px;
+            padding: 10px 12px; background: var(--stk-surface-2);
+            border: 1px solid transparent; border-radius: 8px;
+            transition: all var(--stk-tr);
         }
-        .burn-fill {
-            position: absolute;
-            left: 0;
-            top: 0;
-            height: 100%;
-            background: linear-gradient(90deg, #ef4444, #f87171);
-            border-radius: 4px;
-            transition: width 0.5s ease;
+        .stk-deleg-item:hover { background: var(--stk-surface-3); border-color: var(--stk-border-h); transform: translateX(3px); }
+        .stk-deleg-icon {
+            width: 36px; height: 36px; border-radius: 8px;
+            display: flex; align-items: center; justify-content: center; flex-shrink: 0;
         }
-        .receive-fill {
-            position: absolute;
-            right: 0;
-            top: 0;
-            height: 100%;
-            background: linear-gradient(90deg, #22c55e, #4ade80);
-            border-radius: 4px;
-            transition: width 0.5s ease;
+        .stk-deleg-info { flex: 1; min-width: 0; }
+        .stk-deleg-amount { font-size: 13px; font-weight: 700; color: var(--stk-text); }
+        .stk-deleg-meta { font-size: 10px; color: var(--stk-text-3); margin-top: 1px; display: flex; align-items: center; gap: 6px; }
+        .stk-countdown { font-size: 11px; font-weight: 700; color: #fbbf24; font-family: 'SF Mono', monospace; }
+        .stk-unstake-btn {
+            padding: 5px 10px; font-size: 10px; font-weight: 700;
+            border-radius: 6px; cursor: pointer; transition: all var(--stk-tr); border: none;
         }
-        
-        /* Claim Preview Card */
-        .claim-preview {
-            background: linear-gradient(145deg, rgba(22,163,74,0.1) 0%, rgba(21,128,61,0.05) 100%);
-            border: 1px solid rgba(34,197,94,0.3);
-            border-radius: 12px;
+        .stk-unstake-ready { background: rgba(255,255,255,0.1); color: var(--stk-text); }
+        .stk-unstake-ready:hover { background: rgba(255,255,255,0.2); }
+        .stk-unstake-force { background: rgba(239,68,68,0.1); color: var(--stk-red); }
+        .stk-unstake-force:hover { background: rgba(239,68,68,0.2); }
+
+        /* ── History ── */
+        .stk-tabs { display: flex; gap: 6px; margin-bottom: 12px; }
+        .stk-tab {
+            padding: 4px 10px; font-size: 10px; font-weight: 600;
+            color: var(--stk-text-3); background: var(--stk-surface-2);
+            border: 1px solid var(--stk-border); border-radius: 20px;
+            cursor: pointer; transition: all var(--stk-tr); white-space: nowrap;
         }
-        .claim-preview.has-burn {
-            background: linear-gradient(145deg, rgba(245,158,11,0.1) 0%, rgba(217,119,6,0.05) 100%);
-            border-color: rgba(245,158,11,0.3);
+        .stk-tab:hover { color: var(--stk-text-2); border-color: var(--stk-border-h); }
+        .stk-tab.active { color: var(--stk-purple); background: rgba(167,139,250,0.1); border-color: rgba(167,139,250,0.3); }
+
+        .stk-history-list { display: flex; flex-direction: column; gap: 4px; max-height: 400px; overflow-y: auto; }
+        .stk-history-list::-webkit-scrollbar { width: 4px; }
+        .stk-history-list::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); border-radius: 4px; }
+        .stk-history-item {
+            display: flex; align-items: center; justify-content: space-between; gap: 10px;
+            padding: 8px 10px; background: var(--stk-surface-2);
+            border: 1px solid transparent; border-radius: 8px;
+            transition: all var(--stk-tr); text-decoration: none;
         }
-        
-        /* Delegation Item */
-        .delegation-item {
-            background: rgba(39,39,42,0.5);
-            border: 1px solid rgba(63,63,70,0.3);
-            border-radius: 12px;
-            transition: all 0.2s ease;
+        .stk-history-item:hover { background: var(--stk-surface-3); border-color: var(--stk-border-h); }
+        .stk-history-icon {
+            width: 32px; height: 32px; border-radius: 8px;
+            display: flex; align-items: center; justify-content: center; flex-shrink: 0; font-size: 12px;
         }
-        .delegation-item:hover { 
-            background: rgba(63,63,70,0.4);
-            transform: translateX(4px);
-            border-color: rgba(139,92,246,0.3);
+        .stk-history-info { flex: 1; min-width: 0; }
+        .stk-history-label { font-size: 12px; font-weight: 600; color: var(--stk-text); display: flex; align-items: center; gap: 6px; }
+        .stk-history-date { font-size: 10px; color: var(--stk-text-3); margin-top: 1px; }
+        .stk-history-amount { font-size: 12px; font-weight: 600; color: var(--stk-text); font-family: 'SF Mono', monospace; text-align: right; white-space: nowrap; }
+        .stk-history-link { font-size: 9px; color: var(--stk-text-3); transition: color var(--stk-tr); }
+        .stk-history-item:hover .stk-history-link { color: var(--stk-purple); }
+
+        /* ── Empty / Loading ── */
+        .stk-empty { text-align: center; padding: 32px 16px; }
+        .stk-empty i { font-size: 24px; color: var(--stk-text-3); margin-bottom: 8px; display: block; }
+        .stk-empty p { font-size: 12px; color: var(--stk-text-3); }
+        .stk-loading { display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 32px; }
+        .stk-loading-icon { width: 36px; height: 36px; opacity: 0.3; animation: stk-float 2s ease-in-out infinite; }
+
+        /* ── Not Connected ── */
+        .stk-connect-card {
+            text-align: center; padding: 48px 24px;
+            background: var(--stk-surface); border: 1px solid var(--stk-border);
+            border-radius: var(--stk-radius);
         }
-        
-        /* Buttons */
-        .btn-primary {
-            background: linear-gradient(135deg, #7c3aed 0%, #6d28d9 100%);
-            color: white;
-            font-weight: 600;
-            border: none;
-            border-radius: 12px;
-            transition: all 0.2s ease;
-            cursor: pointer;
+        .stk-connect-btn {
+            display: inline-flex; align-items: center; gap: 8px;
+            padding: 10px 24px; margin-top: 16px;
+            background: linear-gradient(135deg, #8b5cf6, #7c3aed);
+            color: white; font-weight: 700; font-size: 14px;
+            border-radius: var(--stk-radius-sm); border: none; cursor: pointer;
+            transition: all var(--stk-tr);
         }
-        .btn-primary:hover:not(:disabled) {
-            background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);
-            transform: translateY(-2px);
-            box-shadow: 0 8px 25px rgba(124,58,237,0.3);
+        .stk-connect-btn:hover { filter: brightness(1.1); }
+
+        /* ── Responsive ── */
+        @media (max-width: 640px) {
+            .stk-shell { padding: 0 10px 30px; }
+            .stk-hero { padding: 20px 16px; }
+            .stk-hero-inner { flex-direction: column; gap: 16px; }
+            .stk-hero-right { border-top: 1px solid var(--stk-border); padding-top: 16px; }
+            .stk-stats { grid-template-columns: repeat(2, 1fr); }
+            .stk-reward-value { font-size: 28px; }
+            .stk-duration-grid { grid-template-columns: repeat(2, 1fr); }
+            .stk-tabs { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+            .stk-tabs::-webkit-scrollbar { display: none; }
         }
-        .btn-primary:disabled { 
-            opacity: 0.5; 
-            cursor: not-allowed;
-            transform: none;
-        }
-        
-        .btn-claim {
-            background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
-            color: #000;
-        }
-        .btn-claim:hover:not(:disabled) {
-            background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%);
-            box-shadow: 0 8px 25px rgba(245,158,11,0.3);
-        }
-        
-        /* History Tabs */
-        .history-tab {
-            padding: 6px 12px;
-            border-radius: 8px;
-            font-size: 11px;
-            font-weight: 500;
-            border: 1px solid rgba(63,63,70,0.5);
-            background: rgba(39,39,42,0.5);
-            color: #a1a1aa;
-            cursor: pointer;
-            transition: all 0.2s ease;
-        }
-        .history-tab:hover { background: rgba(63,63,70,0.6); }
-        .history-tab.active {
-            background: rgba(139,92,246,0.2);
-            border-color: rgba(139,92,246,0.5);
-            color: #a78bfa;
-        }
-        
-        /* Input Styling */
-        .input-amount {
-            background: rgba(0,0,0,0.4);
-            border: 2px solid rgba(63,63,70,0.5);
-            border-radius: 12px;
-            color: white;
-            font-size: 24px;
-            font-family: 'JetBrains Mono', monospace;
-            padding: 16px;
-            width: 100%;
-            outline: none;
-            transition: all 0.2s ease;
-        }
-        .input-amount:focus {
-            border-color: rgba(139,92,246,0.6);
-            box-shadow: 0 0 20px rgba(139,92,246,0.1);
-        }
-        .input-amount.error { border-color: rgba(239,68,68,0.6); }
-        
-        /* Scrollbar */
-        .custom-scrollbar::-webkit-scrollbar { width: 6px; }
-        .custom-scrollbar::-webkit-scrollbar-track { background: rgba(39,39,42,0.5); border-radius: 3px; }
-        .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(113,113,122,0.5); border-radius: 3px; }
-        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: rgba(139,92,246,0.5); }
     `;
     document.head.appendChild(style);
 }
 
 // ============================================================================
-// MAIN RENDER
+// RENDER
 // ============================================================================
-export function render() {
+function render() {
     const container = document.getElementById('mine');
     if (!container) return;
-
     injectStyles();
-    
+
     container.innerHTML = `
-        <div class="max-w-5xl mx-auto px-4 py-6">
-            
-            <!-- ═══════════════════════════════════════════════════════════════
-                 HEADER
-                 ═══════════════════════════════════════════════════════════════ -->
-            <div class="flex items-center justify-between mb-6">
-                <div class="flex items-center gap-4">
-                    <div class="w-14 h-14 rounded-2xl bg-gradient-to-br from-purple-500/20 to-violet-600/20 border border-purple-500/30 flex items-center justify-center float-animation">
-                        <i class="fa-solid fa-layer-group text-2xl text-purple-400"></i>
-                    </div>
+        <div class="stk-shell">
+
+            <!-- HEADER -->
+            <div class="stk-header">
+                <div class="stk-header-left">
+                    <div class="stk-header-icon"><i class="fa-solid fa-layer-group"></i></div>
                     <div>
-                        <h1 class="text-2xl font-bold text-white">Network Staking</h1>
-                        <p class="text-sm text-zinc-500">Delegate BKC • Earn Rewards • Reduce Burn</p>
+                        <div class="stk-header-title">Stake & Earn</div>
+                        <div class="stk-header-sub">Delegate BKC, earn rewards, reduce burn</div>
                     </div>
                 </div>
-                <button id="refresh-btn" class="w-10 h-10 rounded-xl bg-zinc-800/50 hover:bg-zinc-700 border border-zinc-700/50 flex items-center justify-center transition-all hover:scale-105">
-                    <i class="fa-solid fa-rotate text-zinc-400"></i>
+                <button id="stk-refresh-btn" class="stk-refresh-btn"><i class="fa-solid fa-rotate"></i></button>
+            </div>
+
+            <!-- HERO REWARDS -->
+            <div class="stk-hero">
+                <div class="stk-hero-inner">
+                    <div class="stk-hero-left">
+                        <div class="stk-hero-label">You Will Receive</div>
+                        <div id="stk-reward-value" class="stk-reward-value">-- <span class="stk-reward-suffix">BKC</span></div>
+
+                        <div id="stk-breakdown" class="stk-breakdown" style="display:none">
+                            <div class="stk-breakdown-row">
+                                <span class="stk-breakdown-label"><i class="fa-solid fa-layer-group" style="color:var(--stk-purple)"></i> Staking</span>
+                                <span id="stk-break-staking" class="stk-breakdown-val" style="color:var(--stk-text)">0</span>
+                            </div>
+                            <div class="stk-breakdown-row">
+                                <span class="stk-breakdown-label"><i class="fa-solid fa-coins" style="color:var(--stk-accent)"></i> Mining</span>
+                                <span id="stk-break-mining" class="stk-breakdown-val" style="color:var(--stk-text)">0</span>
+                            </div>
+                            <div class="stk-breakdown-row">
+                                <span class="stk-breakdown-label"><i class="fa-solid fa-fire" style="color:var(--stk-red)"></i> Burned</span>
+                                <span id="stk-break-burned" class="stk-breakdown-val" style="color:var(--stk-red)">0</span>
+                            </div>
+                        </div>
+
+                        <button id="stk-claim-btn" class="stk-claim-btn" disabled>
+                            <i class="fa-solid fa-hand-holding-dollar"></i> <span>Claim Rewards</span>
+                        </button>
+                        <div id="stk-eth-fee" class="stk-eth-fee"></div>
+                    </div>
+
+                    <div class="stk-hero-right">
+                        <div id="stk-boost-panel">
+                            <div style="text-align:center">
+                                <img src="./assets/bkc_logo_3d.png" style="width:32px;height:32px;opacity:0.3;animation:stk-float 2s infinite" alt="">
+                                <p style="font-size:11px;color:var(--stk-text-3);margin-top:8px">Loading boost...</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- STATS ROW -->
+            <div class="stk-stats">
+                <div class="stk-stat">
+                    <div class="stk-stat-label"><i class="fa-solid fa-globe" style="color:var(--stk-purple)"></i> Network pStake</div>
+                    <div id="stk-stat-network" class="stk-stat-value">--</div>
+                </div>
+                <div class="stk-stat">
+                    <div class="stk-stat-label"><i class="fa-solid fa-bolt" style="color:var(--stk-cyan)"></i> Your Power</div>
+                    <div id="stk-stat-power" class="stk-stat-value">--</div>
+                </div>
+                <div class="stk-stat">
+                    <div class="stk-stat-label"><i class="fa-solid fa-gift" style="color:var(--stk-green)"></i> Pending</div>
+                    <div id="stk-stat-rewards" class="stk-stat-value">--</div>
+                </div>
+                <div class="stk-stat">
+                    <div class="stk-stat-label"><i class="fa-solid fa-lock" style="color:var(--stk-accent)"></i> Active Locks</div>
+                    <div id="stk-stat-locks" class="stk-stat-value">--</div>
+                </div>
+            </div>
+
+            <!-- STAKE FORM -->
+            <div class="stk-card" style="animation-delay:0.1s">
+                <div class="stk-card-title"><i class="fa-solid fa-arrow-right-to-bracket"></i> Delegate BKC</div>
+
+                <div class="stk-input-wrap">
+                    <input type="number" id="stk-amount-input" class="stk-amount-input" placeholder="0.00" step="any" min="0">
+                    <button id="stk-max-btn" class="stk-max-btn">MAX</button>
+                </div>
+
+                <div class="stk-balance-row">
+                    <span>Available</span>
+                    <span id="stk-balance-display">-- BKC</span>
+                </div>
+
+                <div class="stk-duration-grid">
+                    <div class="stk-duration-chip" data-days="30">
+                        <div class="stk-chip-label">1M</div>
+                        <div class="stk-chip-sub">30 days</div>
+                    </div>
+                    <div class="stk-duration-chip" data-days="365">
+                        <div class="stk-chip-label">1Y</div>
+                        <div class="stk-chip-sub">365 days</div>
+                    </div>
+                    <div class="stk-duration-chip" data-days="1825">
+                        <div class="stk-chip-label">5Y</div>
+                        <div class="stk-chip-sub">1,825 days</div>
+                    </div>
+                    <div class="stk-duration-chip selected recommended" data-days="3650">
+                        <div class="stk-chip-label">10Y</div>
+                        <div class="stk-chip-sub">3,650 days</div>
+                    </div>
+                </div>
+
+                <div style="background:var(--stk-surface-2);border-radius:8px;padding:10px 12px;margin-bottom:4px">
+                    <div class="stk-preview-row">
+                        <span class="stk-preview-label">pStake Power</span>
+                        <span id="stk-preview-pstake" class="stk-preview-val" style="color:var(--stk-purple)">0</span>
+                    </div>
+                    <div class="stk-preview-row">
+                        <span class="stk-preview-label">Net Amount</span>
+                        <span id="stk-preview-net" class="stk-preview-val">0.00 BKC</span>
+                    </div>
+                    <div class="stk-preview-row">
+                        <span class="stk-preview-label">Fee</span>
+                        <span id="stk-fee-info" class="stk-preview-val" style="color:var(--stk-text-3);font-size:11px">0.5%</span>
+                    </div>
+                </div>
+
+                <button id="stk-delegate-btn" class="stk-delegate-btn" disabled>
+                    <i class="fa-solid fa-lock" style="margin-right:6px"></i> Delegate BKC
                 </button>
             </div>
 
-            <!-- ═══════════════════════════════════════════════════════════════
-                 NFT BOOST STATUS CARD (V6 Feature)
-                 ═══════════════════════════════════════════════════════════════ -->
-            <div id="nft-boost-card" class="card-base p-4 mb-6">
-                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                    <div class="flex items-center gap-4">
-                        <div id="nft-tier-icon" class="w-12 h-12 rounded-xl bg-zinc-800 flex items-center justify-center text-2xl">
-                            ○
-                        </div>
-                        <div>
-                            <div class="flex items-center gap-2 mb-1">
-                                <span id="nft-tier-badge" class="nft-tier-badge tier-none">
-                                    <span>No NFT</span>
-                                </span>
-                                <span id="nft-source" class="text-[10px] text-zinc-600 bg-zinc-800 px-2 py-0.5 rounded hidden">
-                                    owned
-                                </span>
-                            </div>
-                            <p class="text-xs text-zinc-500">
-                                <span id="burn-rate-text">50% of rewards will be burned on claim</span>
-                            </p>
-                        </div>
-                    </div>
-                    <div class="flex items-center gap-6">
-                        <div class="text-center">
-                            <p class="text-[10px] text-zinc-500 uppercase mb-1">Burn Rate</p>
-                            <p id="burn-rate-value" class="text-xl font-bold text-red-400 font-mono">50%</p>
-                        </div>
-                        <div class="text-center">
-                            <p class="text-[10px] text-zinc-500 uppercase mb-1">You Keep</p>
-                            <p id="keep-rate-value" class="text-xl font-bold text-green-400 font-mono">50%</p>
-                        </div>
-                        <a href="#/marketplace" class="text-xs text-purple-400 hover:text-purple-300 flex items-center gap-1 transition-colors">
-                            <i class="fa-solid fa-store"></i>
-                            <span>Get NFT</span>
-                        </a>
-                    </div>
+            <!-- ACTIVE DELEGATIONS -->
+            <div class="stk-card" style="animation-delay:0.15s">
+                <div class="stk-card-title">
+                    <i class="fa-solid fa-list-check"></i> Active Delegations
+                    <span id="stk-deleg-count" style="font-size:10px;color:var(--stk-text-3);margin-left:auto">0</span>
                 </div>
-                <!-- Burn Rate Bar -->
-                <div class="mt-4">
-                    <div class="burn-indicator">
-                        <div id="burn-fill" class="burn-fill" style="width: 50%"></div>
-                        <div id="receive-fill" class="receive-fill" style="width: 50%"></div>
-                    </div>
-                    <div class="flex justify-between mt-1">
-                        <span class="text-[9px] text-red-400/70">🔥 Burned</span>
-                        <span class="text-[9px] text-green-400/70">✓ You Receive</span>
+                <div id="stk-deleg-list" class="stk-deleg-list">
+                    <div class="stk-empty"><i class="fa-solid fa-inbox"></i><p>No active delegations</p></div>
+                </div>
+            </div>
+
+            <!-- HISTORY -->
+            <div class="stk-card" style="animation-delay:0.2s">
+                <div class="stk-card-title"><i class="fa-solid fa-clock-rotate-left"></i> History</div>
+                <div class="stk-tabs">
+                    <button class="stk-tab active" data-filter="ALL">All</button>
+                    <button class="stk-tab" data-filter="STAKE">Stakes</button>
+                    <button class="stk-tab" data-filter="UNSTAKE">Unstakes</button>
+                    <button class="stk-tab" data-filter="CLAIM">Claims</button>
+                </div>
+                <div id="stk-history-list" class="stk-history-list">
+                    <div class="stk-loading">
+                        <img src="./assets/bkc_logo_3d.png" class="stk-loading-icon" alt="">
+                        <span style="font-size:11px;color:var(--stk-text-3)">Loading history...</span>
                     </div>
                 </div>
             </div>
 
-            <!-- ═══════════════════════════════════════════════════════════════
-                 STATS ROW
-                 ═══════════════════════════════════════════════════════════════ -->
-            <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
-                <div class="stat-card p-4">
-                    <div class="flex items-center gap-2 mb-2">
-                        <i class="fa-solid fa-globe text-purple-400 text-sm"></i>
-                        <span class="text-[10px] text-zinc-500 uppercase">Network</span>
-                    </div>
-                    <p id="stat-network" class="text-lg font-bold text-white font-mono">--</p>
-                    <p class="text-[10px] text-zinc-600">Total pStake</p>
-                </div>
-                
-                <div class="stat-card p-4">
-                    <div class="flex items-center gap-2 mb-2">
-                        <i class="fa-solid fa-lock text-blue-400 text-sm"></i>
-                        <span class="text-[10px] text-zinc-500 uppercase">Your Power</span>
-                    </div>
-                    <p id="stat-pstake" class="text-lg font-bold text-white font-mono">--</p>
-                    <p id="stat-pstake-percent" class="text-[10px] text-zinc-600">--% of network</p>
-                </div>
-                
-                <div class="stat-card p-4">
-                    <div class="flex items-center gap-2 mb-2">
-                        <i class="fa-solid fa-coins text-amber-400 text-sm"></i>
-                        <span class="text-[10px] text-zinc-500 uppercase">Pending</span>
-                    </div>
-                    <p id="stat-rewards" class="text-lg font-bold text-amber-400 font-mono">--</p>
-                    <p class="text-[10px] text-zinc-600">BKC Rewards</p>
-                </div>
-                
-                <div class="stat-card p-4">
-                    <div class="flex items-center gap-2 mb-2">
-                        <i class="fa-solid fa-layer-group text-green-400 text-sm"></i>
-                        <span class="text-[10px] text-zinc-500 uppercase">Delegations</span>
-                    </div>
-                    <p id="stat-delegations" class="text-lg font-bold text-white font-mono">0</p>
-                    <p class="text-[10px] text-zinc-600">Active Locks</p>
-                </div>
-            </div>
-
-            <!-- ═══════════════════════════════════════════════════════════════
-                 CLAIM REWARDS SECTION (V6 with Burn Preview)
-                 ═══════════════════════════════════════════════════════════════ -->
-            <div id="claim-section" class="claim-preview p-4 mb-6 hidden">
-                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                    <div class="flex-1">
-                        <h3 class="text-sm font-bold text-white mb-3 flex items-center gap-2">
-                            <i class="fa-solid fa-gift text-amber-400"></i>
-                            Claim Your Rewards
-                        </h3>
-                        <div class="grid grid-cols-3 gap-4">
-                            <div>
-                                <p class="text-[10px] text-zinc-500 uppercase mb-1">Total Earned</p>
-                                <p id="claim-total" class="text-lg font-bold text-white font-mono">0.00</p>
-                            </div>
-                            <div>
-                                <p class="text-[10px] text-red-400 uppercase mb-1">🔥 Burned</p>
-                                <p id="claim-burn" class="text-lg font-bold text-red-400 font-mono">0.00</p>
-                            </div>
-                            <div>
-                                <p class="text-[10px] text-green-400 uppercase mb-1">✓ You Get</p>
-                                <p id="claim-receive" class="text-lg font-bold text-green-400 font-mono">0.00</p>
-                            </div>
-                        </div>
-                    </div>
-                    <button id="claim-btn" class="btn-primary btn-claim px-6 py-3 text-sm font-bold flex items-center gap-2">
-                        <i class="fa-solid fa-hand-holding-dollar"></i>
-                        <span>Claim Rewards</span>
-                    </button>
-                </div>
-            </div>
-
-            <!-- ═══════════════════════════════════════════════════════════════
-                 MAIN CONTENT GRID
-                 ═══════════════════════════════════════════════════════════════ -->
-            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                
-                <!-- DELEGATE CARD -->
-                <div class="card-base p-5">
-                    <div class="flex items-center gap-3 mb-5">
-                        <div class="w-10 h-10 rounded-xl bg-purple-500/20 flex items-center justify-center">
-                            <i class="fa-solid fa-plus text-purple-400"></i>
-                        </div>
-                        <div>
-                            <h2 class="text-lg font-bold text-white">Delegate BKC</h2>
-                            <p class="text-xs text-zinc-500">Lock tokens to earn network rewards</p>
-                        </div>
-                    </div>
-
-                    <!-- Amount Input -->
-                    <div class="mb-5">
-                        <div class="flex justify-between items-center mb-2">
-                            <label class="text-xs text-zinc-400 font-medium">Amount</label>
-                            <span class="text-xs text-zinc-500">
-                                Balance: <span id="balance-display" class="text-white font-mono">0.00</span> BKC
-                            </span>
-                        </div>
-                        <div class="relative">
-                            <input type="number" id="amount-input" placeholder="0.00" 
-                                   class="input-amount pr-20">
-                            <button id="max-btn" class="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold bg-purple-500/20 hover:bg-purple-500/30 text-purple-400 px-3 py-1.5 rounded-lg transition-colors">
-                                MAX
-                            </button>
-                        </div>
-                    </div>
-
-                    <!-- Lock Duration -->
-                    <div class="mb-5">
-                        <div class="flex justify-between items-center mb-3">
-                            <label class="text-xs text-zinc-400 font-medium">Lock Duration</label>
-                            <span class="text-[10px] text-amber-400 flex items-center gap-1">
-                                <i class="fa-solid fa-star"></i> 10Y = Maximum Rewards
-                            </span>
-                        </div>
-                        <div class="grid grid-cols-4 gap-2">
-                            <button class="duration-chip relative py-3 bg-zinc-800/80 border border-zinc-700 rounded-xl text-sm font-bold text-zinc-400" data-days="30">
-                                1M
-                            </button>
-                            <button class="duration-chip relative py-3 bg-zinc-800/80 border border-zinc-700 rounded-xl text-sm font-bold text-zinc-400" data-days="365">
-                                1Y
-                            </button>
-                            <button class="duration-chip relative py-3 bg-zinc-800/80 border border-zinc-700 rounded-xl text-sm font-bold text-zinc-400" data-days="1825">
-                                5Y
-                            </button>
-                            <button class="duration-chip recommended relative py-3 bg-zinc-800/80 border border-zinc-700 rounded-xl text-sm font-bold text-zinc-400 selected" data-days="3650">
-                                10Y
-                            </button>
-                        </div>
-                    </div>
-
-                    <!-- Preview -->
-                    <div class="bg-black/30 rounded-xl p-4 mb-5 border border-zinc-800">
-                        <div class="flex justify-between items-center">
-                            <div>
-                                <p class="text-[10px] text-zinc-500 uppercase mb-1">You'll Generate</p>
-                                <p id="preview-pstake" class="text-2xl font-bold text-purple-400 font-mono">0</p>
-                                <p class="text-[10px] text-zinc-500">pStake Power</p>
-                            </div>
-                            <div class="text-right">
-                                <p class="text-[10px] text-zinc-500 uppercase mb-1">After Fee</p>
-                                <p id="preview-net" class="text-sm text-white font-mono">0.00 BKC</p>
-                                <p id="fee-info" class="text-[10px] text-zinc-600">0.5% protocol fee</p>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Delegate Button -->
-                    <button id="stake-btn" disabled class="btn-primary w-full py-4 text-base flex items-center justify-center gap-2">
-                        <span id="stake-btn-text">Delegate BKC</span>
-                        <i id="stake-btn-icon" class="fa-solid fa-lock"></i>
-                    </button>
-                </div>
-
-                <!-- ACTIVE DELEGATIONS -->
-                <div class="card-base p-5">
-                    <div class="flex items-center justify-between mb-5">
-                        <div class="flex items-center gap-3">
-                            <div class="w-10 h-10 rounded-xl bg-zinc-700/50 flex items-center justify-center">
-                                <i class="fa-solid fa-list text-zinc-400"></i>
-                            </div>
-                            <div>
-                                <h2 class="text-lg font-bold text-white">Active Delegations</h2>
-                                <p class="text-xs text-zinc-500">Your locked positions</p>
-                            </div>
-                        </div>
-                        <span id="delegation-count" class="text-xs text-zinc-500 bg-zinc-800 px-3 py-1 rounded-lg font-mono">0</span>
-                    </div>
-
-                    <div id="delegations-list" class="space-y-2 max-h-[350px] overflow-y-auto custom-scrollbar pr-1">
-                        ${renderLoading()}
-                    </div>
-                </div>
-            </div>
-
-            <!-- ═══════════════════════════════════════════════════════════════
-                 STAKING HISTORY
-                 ═══════════════════════════════════════════════════════════════ -->
-            <div class="card-base p-5 mt-6">
-                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5">
-                    <div class="flex items-center gap-3">
-                        <div class="w-10 h-10 rounded-xl bg-purple-500/10 flex items-center justify-center">
-                            <i class="fa-solid fa-clock-rotate-left text-purple-400"></i>
-                        </div>
-                        <h2 class="text-lg font-bold text-white">Staking History</h2>
-                    </div>
-                    <div class="flex gap-2">
-                        <button class="history-tab active" data-filter="ALL">All</button>
-                        <button class="history-tab" data-filter="STAKE">Stakes</button>
-                        <button class="history-tab" data-filter="UNSTAKE">Unstakes</button>
-                        <button class="history-tab" data-filter="CLAIM">Claims</button>
-                    </div>
-                </div>
-                <div id="staking-history-list" class="space-y-2 max-h-[400px] overflow-y-auto custom-scrollbar pr-1">
-                    <div class="text-center py-8">
-                        <i class="fa-solid fa-spinner fa-spin text-2xl text-zinc-600 mb-3"></i>
-                        <p class="text-zinc-600 text-sm">Loading history...</p>
-                    </div>
-                </div>
-            </div>
         </div>
     `;
 
     setupListeners();
-    
+
     if (State.isConnected) {
-        loadData(true);
+        loadData();
     } else {
         resetUI();
     }
@@ -662,420 +620,312 @@ export function render() {
 // DATA LOADING
 // ============================================================================
 async function loadData(force = false) {
-    if (!State.isConnected) {
-        resetUI();
-        return;
-    }
-
+    if (isLoading) return;
     const now = Date.now();
-    if (!force && isLoading) return;
-    if (!force && (now - lastFetch < 10000)) return;
-    
+    if (!force && now - lastFetch < 10000) return;
+
     isLoading = true;
     lastFetch = now;
 
     try {
-        // V6: Load NFT boost info
         await loadNftBoostData();
 
-        // Load network pStake from Firebase first
-        try {
-            const systemResponse = await fetch('https://getsystemdata-4wvdcuoouq-uc.a.run.app');
-            if (systemResponse.ok) {
-                const systemData = await systemResponse.json();
-                if (systemData?.economy?.totalPStake) {
-                    totalNetworkPStake = BigInt(systemData.economy.totalPStake);
-                }
-            }
-        } catch (e) {
-            console.log('Firebase unavailable, using blockchain');
-        }
-        
-        // Fallback to blockchain
-        if (totalNetworkPStake === 0n) {
-            const contract = State.delegationManagerContractPublic || State.delegationManagerContract;
-            if (contract) {
-                totalNetworkPStake = await safeContractCall(contract, 'totalNetworkPStake', [], 0n);
-            }
-        }
-
-        await Promise.all([
-            loadUserData(true),
-            loadUserDelegations(true),
-            loadPublicData()
+        const [, , delegations] = await Promise.all([
+            loadUserData(),
+            loadPublicData(),
+            loadUserDelegations()
         ]);
 
-        // V6: Load claim preview from contract
+        totalNetworkPStake = State.totalNetworkPStake || 0n;
         await loadClaimPreview();
 
-        updateUI();
-        renderDelegations();
-        updatePreview();
-        loadStakingHistory();
+        const { stakingRewards, minerRewards } = await calculateUserTotalRewards();
+        stakingRewardsAmount = stakingRewards || 0n;
+        minerRewardsAmount = minerRewards || 0n;
 
+        updateHeroRewards();
+        updateNftBoostPanel();
+        updateStats();
+        renderDelegations();
+        loadStakingHistory();
+        updatePreview();
     } catch (e) {
-        console.error("Staking load error:", e);
+        console.error('Staking data load error:', e);
     } finally {
         isLoading = false;
     }
 }
 
-// V6: Load NFT boost data
 async function loadNftBoostData() {
+    if (!State.userAddress) return;
     try {
-        // Try to get boost from contract first (includes rented NFTs)
-        const contract = State.delegationManagerContract || State.delegationManagerContractPublic;
-        if (contract && State.userAddress) {
-            try {
-                const boost = await contract.getUserBestBoost(State.userAddress);
-                userNftBoost = Number(boost);
-            } catch {
-                // Fallback to API
-                const boosterData = await getHighestBoosterBoostFromAPI();
-                userNftBoost = boosterData?.boost || 0;
+        if (State.delegationManagerContractPublic) {
+            const boost = await safeContractCall(State.delegationManagerContractPublic, 'getUserBestBoost', [State.userAddress], 0n);
+            userNftBoost = Number(boost);
+        }
+        if (userNftBoost === 0) {
+            const data = await getHighestBoosterBoostFromAPI();
+            if (data && data.highestBoost > 0) {
+                userNftBoost = data.highestBoost;
+                nftSource = data.source || 'api';
             }
         } else {
-            const boosterData = await getHighestBoosterBoostFromAPI();
-            userNftBoost = boosterData?.boost || 0;
+            nftSource = 'active';
         }
-
-        // Calculate burn rate from boost
         const tier = getTierFromBoost(userNftBoost);
         userBurnRate = tier.burnRate;
-
-        // Determine source (owned vs rented) - simplified
-        nftSource = userNftBoost > 0 ? 'active' : 'none';
-
-        updateNftBoostUI();
     } catch (e) {
-        console.error('Error loading NFT boost:', e);
-        userNftBoost = 0;
-        userBurnRate = 50;
+        console.error('NFT boost load error:', e);
     }
 }
 
-// V6: Load claim preview from contract
 async function loadClaimPreview() {
+    if (!State.userAddress || !State.delegationManagerContractPublic) return;
     try {
-        const contract = State.delegationManagerContract || State.delegationManagerContractPublic;
-        if (contract && State.userAddress) {
-            try {
-                const preview = await contract.previewClaim(State.userAddress);
-                claimPreview = {
-                    totalRewards: preview.totalRewards || preview[0],
-                    burnAmount: preview.burnAmount || preview[1],
-                    userReceives: preview.userReceives || preview[2],
-                    burnRateBips: preview.burnRateBips || preview[3],
-                    nftBoost: preview.nftBoost || preview[4]
-                };
-            } catch {
-                // Contract doesn't have previewClaim, calculate manually
-                const { stakingRewards, minerRewards } = await calculateUserTotalRewards();
-                const total = stakingRewards + minerRewards;
-                const burnAmount = (total * BigInt(userBurnRate)) / 100n;
-                claimPreview = {
-                    totalRewards: total,
-                    burnAmount: burnAmount,
-                    userReceives: total - burnAmount,
-                    burnRateBips: BigInt(userBurnRate * 100),
-                    nftBoost: BigInt(userNftBoost)
-                };
-            }
+        const preview = await safeContractCall(State.delegationManagerContractPublic, 'previewClaim', [State.userAddress], null);
+        if (preview) {
+            claimPreview = {
+                totalRewards: preview.totalRewards || preview[0] || 0n,
+                burnAmount: preview.burnAmount || preview[1] || 0n,
+                userReceives: preview.userReceives || preview[2] || 0n,
+                burnRateBips: preview.burnRateBips || preview[3] || 0n,
+                nftBoost: preview.nftBoost || preview[4] || 0n
+            };
         }
+        claimEthFee = await safeContractCall(State.delegationManagerContractPublic, 'claimEthFee', [], 0n);
     } catch (e) {
-        console.error('Error loading claim preview:', e);
+        console.error('Claim preview error:', e);
+        // Fallback: manual calculation
+        const total = stakingRewardsAmount + minerRewardsAmount;
+        const burnAmount = (total * BigInt(userBurnRate)) / 100n;
+        claimPreview = { totalRewards: total, burnAmount, userReceives: total - burnAmount, burnRateBips: BigInt(userBurnRate * 100), nftBoost: BigInt(userNftBoost) };
     }
 }
 
-// V6: Update NFT Boost UI
-function updateNftBoostUI() {
+// ============================================================================
+// UI UPDATES
+// ============================================================================
+function updateHeroRewards() {
+    const rewardEl = document.getElementById('stk-reward-value');
+    const claimBtn = document.getElementById('stk-claim-btn');
+    const breakdownEl = document.getElementById('stk-breakdown');
+    const ethFeeEl = document.getElementById('stk-eth-fee');
+
+    const receiveAmount = claimPreview?.userReceives || 0n;
+    const totalAmount = claimPreview?.totalRewards || 0n;
+    const burnAmount = claimPreview?.burnAmount || 0n;
+    const hasRewards = receiveAmount > 0n;
+
+    if (rewardEl) {
+        const num = formatBigNumber(receiveAmount);
+        rewardEl.innerHTML = `${num.toFixed(4)} <span class="stk-reward-suffix">BKC</span>`;
+    }
+    if (claimBtn) {
+        claimBtn.disabled = !hasRewards;
+        const btnSpan = claimBtn.querySelector('span');
+        if (btnSpan) btnSpan.textContent = hasRewards ? 'Claim Rewards' : 'No Rewards Yet';
+    }
+
+    if (breakdownEl && hasRewards) {
+        breakdownEl.style.display = '';
+        const stakNum = formatBigNumber(stakingRewardsAmount).toFixed(4);
+        const minNum = formatBigNumber(minerRewardsAmount).toFixed(4);
+        const burnNum = formatBigNumber(burnAmount).toFixed(4);
+        document.getElementById('stk-break-staking').textContent = `${stakNum} BKC`;
+        document.getElementById('stk-break-mining').textContent = `${minNum} BKC`;
+        document.getElementById('stk-break-burned').textContent = burnAmount > 0n ? `-${burnNum} BKC` : 'None';
+        document.getElementById('stk-break-burned').style.color = burnAmount > 0n ? 'var(--stk-red)' : 'var(--stk-green)';
+    } else if (breakdownEl) {
+        breakdownEl.style.display = 'none';
+    }
+
+    if (ethFeeEl) {
+        if (hasRewards && claimEthFee > 0n) {
+            const feeEth = parseFloat(ethers.formatEther(claimEthFee)).toFixed(6);
+            ethFeeEl.innerHTML = `<i class="fa-brands fa-ethereum" style="margin-right:3px"></i>Claim fee: ${feeEth} ETH`;
+        } else {
+            ethFeeEl.textContent = '';
+        }
+    }
+}
+
+function updateNftBoostPanel() {
+    const panel = document.getElementById('stk-boost-panel');
+    if (!panel) return;
+
     const tier = getTierFromBoost(userNftBoost);
-    
-    // Update tier icon
-    const iconEl = document.getElementById('nft-tier-icon');
-    if (iconEl) {
-        iconEl.textContent = tier.icon;
-        iconEl.style.background = `${tier.color}20`;
-    }
-    
-    // Update tier badge
-    const badgeEl = document.getElementById('nft-tier-badge');
-    if (badgeEl) {
-        badgeEl.className = `nft-tier-badge tier-${tier.name.toLowerCase()}`;
-        badgeEl.innerHTML = `<span>${tier.icon} ${tier.name}</span>`;
-    }
-    
-    // Update source indicator
-    const sourceEl = document.getElementById('nft-source');
-    if (sourceEl) {
-        if (userNftBoost > 0) {
-            sourceEl.classList.remove('hidden');
-            sourceEl.textContent = nftSource;
-        } else {
-            sourceEl.classList.add('hidden');
-        }
-    }
-    
-    // Update burn rate text
-    const burnTextEl = document.getElementById('burn-rate-text');
-    if (burnTextEl) {
-        if (tier.burnRate === 0) {
-            burnTextEl.innerHTML = `<span class="text-green-400">No burn! You keep 100% of rewards</span>`;
-        } else {
-            burnTextEl.textContent = `${tier.burnRate}% of rewards will be burned on claim`;
-        }
-    }
-    
-    // Update burn rate values
-    const burnValueEl = document.getElementById('burn-rate-value');
-    const keepValueEl = document.getElementById('keep-rate-value');
-    if (burnValueEl) burnValueEl.textContent = `${tier.burnRate}%`;
-    if (keepValueEl) keepValueEl.textContent = `${tier.userGets}%`;
-    
-    // Update burn rate bar
-    const burnFillEl = document.getElementById('burn-fill');
-    const receiveFillEl = document.getElementById('receive-fill');
-    if (burnFillEl) burnFillEl.style.width = `${tier.burnRate}%`;
-    if (receiveFillEl) receiveFillEl.style.width = `${tier.userGets}%`;
+    const hasNft = userNftBoost > 0;
+
+    panel.innerHTML = `
+        <div class="stk-boost-panel">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+                <div class="stk-tier-badge ${tier.class}">
+                    <span style="font-size:16px">${tier.icon}</span>
+                    <span>${tier.name}</span>
+                    <span style="opacity:0.5">|</span>
+                    <span>Keep ${tier.keepRate}%</span>
+                </div>
+                ${hasNft ? `<span style="font-size:9px;color:var(--stk-green);font-weight:700"><i class="fa-solid fa-check" style="margin-right:3px"></i>ACTIVE</span>` : ''}
+            </div>
+
+            <div class="stk-burn-bar">
+                <div class="stk-burn-fill" style="width:${tier.burnRate}%"></div>
+                <div class="stk-keep-fill" style="width:${tier.keepRate}%"></div>
+            </div>
+            <div style="display:flex;justify-content:space-between;font-size:10px">
+                <span style="color:rgba(239,68,68,0.7)"><i class="fa-solid fa-fire" style="margin-right:3px"></i>Burn ${tier.burnRate}%</span>
+                <span style="color:rgba(74,222,128,0.7)"><i class="fa-solid fa-check" style="margin-right:3px"></i>Keep ${tier.keepRate}%</span>
+            </div>
+
+            ${!hasNft ? `
+                <div style="margin-top:12px;padding:8px 10px;background:rgba(239,68,68,0.06);border:1px solid rgba(239,68,68,0.15);border-radius:8px">
+                    <p style="font-size:11px;color:var(--stk-red);font-weight:600;margin:0">You're losing ${tier.burnRate}% of your rewards!</p>
+                    <p style="font-size:10px;color:var(--stk-text-3);margin:4px 0 0">Diamond holders keep 100%</p>
+                </div>
+                <button class="stk-boost-cta go-to-store"><i class="fa-solid fa-gem" style="font-size:10px"></i> Get an NFT</button>
+            ` : userNftBoost < 5000 ? `
+                <p style="font-size:10px;color:var(--stk-text-3);margin-top:10px">
+                    <i class="fa-solid fa-arrow-up" style="color:var(--stk-cyan);margin-right:3px"></i>
+                    Upgrade to ${BURN_TIERS.DIAMOND.icon} Diamond to keep 100%
+                    <span class="go-to-store" style="color:var(--stk-accent);cursor:pointer;margin-left:4px">Upgrade</span>
+                </p>
+            ` : ''}
+        </div>
+    `;
 }
 
-// Update main stats UI
-function updateUI() {
-    const setText = (id, val) => {
-        const el = document.getElementById(id);
-        if (el) el.textContent = val;
-    };
+function updateStats() {
+    const setEl = (id, html) => { const el = document.getElementById(id); if (el) el.innerHTML = html; };
 
-    setText('stat-network', formatPStake(totalNetworkPStake || State.totalNetworkPStake || 0n));
-    setText('stat-pstake', formatPStake(State.userTotalPStake || 0n));
-    setText('balance-display', formatBigNumber(State.currentUserBalance || 0n).toFixed(2));
-    setText('stat-delegations', (State.userDelegations || []).length.toString());
+    setEl('stk-stat-network', formatPStake(totalNetworkPStake));
 
-    // Calculate user percentage
-    const userPStake = State.userTotalPStake || 0n;
-    const networkPStake = totalNetworkPStake || State.totalNetworkPStake || 0n;
-    let userPercent = 0;
-    if (networkPStake > 0n && userPStake > 0n) {
-        userPercent = Number((userPStake * 10000n) / networkPStake) / 100;
-    }
-    setText('stat-pstake-percent', userPercent > 0 ? `${userPercent.toFixed(2)}% of network` : '0% of network');
+    const userPStake = State.userData?.pStake || State.userData?.userTotalPStake || State.userTotalPStake || 0n;
+    const pct = totalNetworkPStake > 0n ? Number((userPStake * 10000n) / totalNetworkPStake) / 100 : 0;
+    setEl('stk-stat-power', `${formatPStake(userPStake)} <span style="font-size:10px;color:var(--stk-text-3)">(${pct.toFixed(2)}%)</span>`);
 
-    // Fee info
+    const totalRewards = claimPreview?.userReceives || 0n;
+    const rewardsNum = formatBigNumber(totalRewards);
+    setEl('stk-stat-rewards', rewardsNum > 0 ? `<span style="color:var(--stk-green)">${rewardsNum.toFixed(2)}</span> <span style="font-size:10px;color:var(--stk-text-3)">BKC</span>` : `<span style="color:var(--stk-text-3)">0 BKC</span>`);
+
+    const delegCount = State.userDelegations?.length || 0;
+    setEl('stk-stat-locks', `${delegCount}`);
+
+    // Balance
+    const balance = State.currentUserBalance || 0n;
+    const balEl = document.getElementById('stk-balance-display');
+    if (balEl) balEl.textContent = balance > 0n ? `${formatBigNumber(balance).toFixed(2)} BKC` : '0.00 BKC';
+
+    // Fee
     const feeBips = State.systemFees?.["DELEGATION_FEE_BIPS"] || 50n;
-    const feePercent = Number(feeBips) / 100;
-    setText('fee-info', `${feePercent}% protocol fee`);
-
-    // Update rewards and claim section
-    updateClaimSection();
-}
-
-// Update claim section with V6 burn preview
-async function updateClaimSection() {
-    const claimSection = document.getElementById('claim-section');
-    if (!claimSection) return;
-
-    const { stakingRewards, minerRewards } = await calculateUserTotalRewards();
-    const totalRewards = stakingRewards + minerRewards;
-
-    const setText = (id, val) => {
-        const el = document.getElementById(id);
-        if (el) el.textContent = val;
-    };
-
-    setText('stat-rewards', formatBigNumber(totalRewards).toFixed(4));
-
-    if (totalRewards > 0n) {
-        claimSection.classList.remove('hidden');
-        
-        // Use contract preview if available, otherwise calculate
-        let burnAmount, userReceives;
-        if (claimPreview && claimPreview.totalRewards > 0n) {
-            burnAmount = claimPreview.burnAmount;
-            userReceives = claimPreview.userReceives;
-        } else {
-            burnAmount = (totalRewards * BigInt(userBurnRate)) / 100n;
-            userReceives = totalRewards - burnAmount;
-        }
-
-        setText('claim-total', formatBigNumber(totalRewards).toFixed(4));
-        setText('claim-burn', formatBigNumber(burnAmount).toFixed(4));
-        setText('claim-receive', formatBigNumber(userReceives).toFixed(4));
-
-        // Add has-burn class if burn > 0
-        if (burnAmount > 0n) {
-            claimSection.classList.add('has-burn');
-        } else {
-            claimSection.classList.remove('has-burn');
-        }
-
-        // Setup claim button
-        const claimBtn = document.getElementById('claim-btn');
-        if (claimBtn) {
-            claimBtn.onclick = () => handleClaim(stakingRewards, minerRewards, claimBtn);
-        }
-    } else {
-        claimSection.classList.add('hidden');
-    }
+    const feeEl = document.getElementById('stk-fee-info');
+    if (feeEl) feeEl.textContent = `${Number(feeBips) / 100}%`;
 }
 
 function resetUI() {
-    const setText = (id, val) => {
-        const el = document.getElementById(id);
-        if (el) el.textContent = val;
-    };
+    const setEl = (id, html) => { const el = document.getElementById(id); if (el) el.innerHTML = html; };
+    setEl('stk-reward-value', `-- <span class="stk-reward-suffix">BKC</span>`);
+    setEl('stk-stat-network', '--');
+    setEl('stk-stat-power', '--');
+    setEl('stk-stat-rewards', '--');
+    setEl('stk-stat-locks', '--');
+    setEl('stk-balance-display', '-- BKC');
 
-    setText('stat-network', '--');
-    setText('stat-pstake', '--');
-    setText('stat-rewards', '--');
-    setText('stat-delegations', '0');
-    setText('balance-display', '0.00');
-    setText('stat-pstake-percent', '--% of network');
+    const claimBtn = document.getElementById('stk-claim-btn');
+    if (claimBtn) claimBtn.disabled = true;
 
-    const list = document.getElementById('delegations-list');
-    if (list) {
-        list.innerHTML = `
-            <div class="text-center py-12">
-                <div class="w-14 h-14 bg-zinc-800/50 rounded-2xl flex items-center justify-center mx-auto mb-3">
-                    <i class="fa-solid fa-wallet text-xl text-zinc-600"></i>
-                </div>
-                <p class="text-zinc-500 text-sm">Connect wallet to view</p>
-            </div>
-        `;
-    }
+    const breakdownEl = document.getElementById('stk-breakdown');
+    if (breakdownEl) breakdownEl.style.display = 'none';
 
-    const historyList = document.getElementById('staking-history-list');
-    if (historyList) {
-        historyList.innerHTML = `
-            <div class="text-center py-12">
-                <i class="fa-solid fa-clock-rotate-left text-2xl text-zinc-700 mb-3"></i>
-                <p class="text-zinc-500 text-sm">Connect wallet to view history</p>
-            </div>
-        `;
-    }
+    const delegList = document.getElementById('stk-deleg-list');
+    if (delegList) delegList.innerHTML = '<div class="stk-empty"><i class="fa-solid fa-wallet"></i><p>Connect wallet to view</p></div>';
 
-    const claimSection = document.getElementById('claim-section');
-    if (claimSection) claimSection.classList.add('hidden');
+    const histList = document.getElementById('stk-history-list');
+    if (histList) histList.innerHTML = '<div class="stk-empty"><i class="fa-solid fa-wallet"></i><p>Connect wallet to view</p></div>';
+
+    const panel = document.getElementById('stk-boost-panel');
+    if (panel) panel.innerHTML = '<div class="stk-empty"><i class="fa-solid fa-wallet"></i><p>Connect wallet</p></div>';
 }
 
 // ============================================================================
-// DELEGATIONS LIST
+// DELEGATIONS
 // ============================================================================
 function renderDelegations() {
-    const container = document.getElementById('delegations-list');
+    const container = document.getElementById('stk-deleg-list');
+    const countEl = document.getElementById('stk-deleg-count');
     if (!container) return;
 
-    if (countdownInterval) {
-        clearInterval(countdownInterval);
-        countdownInterval = null;
-    }
-
     const delegations = State.userDelegations || [];
-    
-    const countEl = document.getElementById('delegation-count');
-    if (countEl) countEl.textContent = delegations.length.toString();
-    
-    const statEl = document.getElementById('stat-delegations');
-    if (statEl) statEl.textContent = delegations.length.toString();
+    if (countEl) countEl.textContent = delegations.length;
 
     if (delegations.length === 0) {
-        container.innerHTML = `
-            <div class="text-center py-12">
-                <div class="w-14 h-14 bg-purple-500/10 rounded-2xl flex items-center justify-center mx-auto mb-3">
-                    <i class="fa-solid fa-layer-group text-xl text-purple-400/50"></i>
-                </div>
-                <p class="text-zinc-500 text-sm mb-1">No active delegations</p>
-                <p class="text-zinc-600 text-xs">Delegate BKC to start earning rewards</p>
-            </div>
-        `;
+        container.innerHTML = '<div class="stk-empty"><i class="fa-solid fa-inbox"></i><p>No active delegations</p></div>';
         return;
     }
 
-    const sorted = [...delegations].sort((a, b) => Number(a.unlockTime) - Number(b.unlockTime));
-    container.innerHTML = sorted.map(d => renderDelegationItem(d)).join('');
+    if (countdownInterval) { clearInterval(countdownInterval); countdownInterval = null; }
 
-    updateCountdowns();
+    const sorted = [...delegations].sort((a, b) => Number(a.unlockTime) - Number(b.unlockTime));
+    container.innerHTML = sorted.map((d, i) => renderDelegationItem(d, i)).join('');
+
     countdownInterval = setInterval(updateCountdowns, 60000);
 
-    // Setup button listeners
-    container.querySelectorAll('.unstake-btn').forEach(btn => {
-        btn.addEventListener('click', () => handleUnstake(btn.dataset.index, false));
-    });
-    container.querySelectorAll('.force-unstake-btn').forEach(btn => {
-        btn.addEventListener('click', () => {
-            if (confirm('⚠️ Force Unstake will apply a 50% penalty!\n\nAre you sure?')) {
-                handleUnstake(btn.dataset.index, true);
-            }
-        });
+    // Attach unstake handlers
+    container.querySelectorAll('.stk-unstake-btn').forEach(btn => {
+        btn.addEventListener('click', () => handleUnstake(parseInt(btn.dataset.index), btn.classList.contains('stk-unstake-force')));
     });
 }
 
-function renderDelegationItem(d) {
-    const amount = formatBigNumber(d.amount).toFixed(2);
-    const pStake = formatPStake(calculatePStake(d.amount, d.lockDuration));
-    const unlockTime = Number(d.unlockTime);
+function renderDelegationItem(d, originalIndex) {
+    const amount = formatBigNumber(d.amount || 0n);
+    const lockDurationDays = Number(d.lockDuration || 0n) / 86400;
+    const unlockTimestamp = Number(d.unlockTime || 0n);
     const now = Math.floor(Date.now() / 1000);
-    const isLocked = unlockTime > now;
-    const remaining = isLocked ? unlockTime - now : 0;
-    const lockDays = Math.floor(Number(d.lockDuration) / 86400);
+    const isLocked = unlockTimestamp > now;
+    const remaining = isLocked ? unlockTimestamp - now : 0;
+    const durationSec = d.lockDuration || 0n;
+    const pStake = calculatePStake(d.amount || 0n, durationSec);
 
     return `
-        <div class="delegation-item p-3">
-            <div class="flex items-center justify-between gap-3">
-                <div class="flex items-center gap-3 min-w-0">
-                    <div class="w-11 h-11 rounded-xl ${isLocked ? 'bg-amber-500/10 border border-amber-500/20' : 'bg-green-500/10 border border-green-500/20'} flex items-center justify-center flex-shrink-0">
-                        <i class="fa-solid ${isLocked ? 'fa-lock text-amber-400' : 'fa-lock-open text-green-400'}"></i>
-                    </div>
-                    <div class="min-w-0">
-                        <p class="text-white font-bold text-sm">${amount} <span class="text-zinc-500 text-xs font-normal">BKC</span></p>
-                        <div class="flex items-center gap-2 mt-0.5">
-                            <span class="text-purple-400 text-[10px] font-mono">${pStake} pS</span>
-                            <span class="text-zinc-600 text-[10px]">•</span>
-                            <span class="text-zinc-500 text-[10px]">${formatDuration(lockDays)}</span>
-                        </div>
-                    </div>
+        <div class="stk-deleg-item">
+            <div class="stk-deleg-icon" style="background:${isLocked ? 'rgba(251,191,36,0.1)' : 'rgba(74,222,128,0.1)'}">
+                <i class="fa-solid ${isLocked ? 'fa-lock' : 'fa-lock-open'}" style="color:${isLocked ? '#fbbf24' : 'var(--stk-green)'}; font-size:14px"></i>
+            </div>
+            <div class="stk-deleg-info">
+                <div class="stk-deleg-amount">${amount.toFixed(2)} BKC</div>
+                <div class="stk-deleg-meta">
+                    <span style="color:var(--stk-purple)">${formatPStake(pStake)} pS</span>
+                    <span style="color:var(--stk-text-3)">|</span>
+                    <span>${formatDuration(lockDurationDays)}</span>
                 </div>
-
-                <div class="flex items-center gap-2 flex-shrink-0">
-                    ${isLocked ? `
-                        <div class="countdown-timer text-[10px] font-mono bg-amber-500/10 text-amber-400 px-2.5 py-1.5 rounded-lg border border-amber-500/20" 
-                             data-unlock-time="${unlockTime}">
-                            ${formatTimeRemaining(remaining)}
-                        </div>
-                        <button class="force-unstake-btn w-9 h-9 rounded-lg bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 flex items-center justify-center transition-all hover:scale-105" 
-                                data-index="${d.index}" title="Force unstake (50% penalty)">
-                            <i class="fa-solid fa-bolt text-red-400 text-xs"></i>
-                        </button>
-                    ` : `
-                        <span class="text-[10px] font-mono bg-green-500/10 text-green-400 px-2.5 py-1.5 rounded-lg border border-green-500/20">
-                            ✓ Ready
-                        </span>
-                        <button class="unstake-btn bg-white hover:bg-zinc-100 text-black text-[10px] font-bold px-4 py-2 rounded-lg transition-all hover:scale-105" 
-                                data-index="${d.index}">
-                            Unstake
-                        </button>
-                    `}
-                </div>
+            </div>
+            <div style="display:flex;align-items:center;gap:8px">
+                ${isLocked ? `
+                    <span class="stk-countdown" data-unlock-time="${unlockTimestamp}">${formatTimeRemaining(remaining)}</span>
+                    <button class="stk-unstake-btn stk-unstake-force" data-index="${d.index !== undefined ? d.index : originalIndex}" title="Force unstake (50% penalty)">
+                        <i class="fa-solid fa-bolt" style="font-size:10px"></i>
+                    </button>
+                ` : `
+                    <span style="font-size:10px;color:var(--stk-green);font-weight:700"><i class="fa-solid fa-check" style="margin-right:3px"></i>Ready</span>
+                    <button class="stk-unstake-btn stk-unstake-ready" data-index="${d.index !== undefined ? d.index : originalIndex}">Unstake</button>
+                `}
             </div>
         </div>
     `;
 }
 
 function updateCountdowns() {
-    const timers = document.querySelectorAll('.countdown-timer');
-    const now = Math.floor(Date.now() / 1000);
-    
-    timers.forEach(timer => {
-        const unlockTime = parseInt(timer.dataset.unlockTime);
-        timer.textContent = formatTimeRemaining(unlockTime - now);
+    document.querySelectorAll('.stk-countdown').forEach(el => {
+        const unlockTime = parseInt(el.dataset.unlockTime);
+        const now = Math.floor(Date.now() / 1000);
+        el.textContent = formatTimeRemaining(unlockTime - now);
     });
 }
 
 // ============================================================================
-// STAKING HISTORY
+// HISTORY
 // ============================================================================
 async function loadStakingHistory() {
     if (!State.userAddress) return;
-    
     try {
         const endpoint = API_ENDPOINTS.getHistory || 'https://gethistory-4wvdcuoouq-uc.a.run.app';
         const response = await fetch(`${endpoint}/${State.userAddress}`);
@@ -1083,8 +933,8 @@ async function loadStakingHistory() {
             const data = await response.json();
             stakingHistory = (data || []).filter(item => {
                 const t = (item.type || '').toUpperCase();
-                return t.includes('DELEGAT') || t.includes('STAKE') || 
-                       t.includes('UNDELEGAT') || t.includes('CLAIM') || 
+                return t.includes('DELEGAT') || t.includes('STAKE') ||
+                       t.includes('UNDELEGAT') || t.includes('CLAIM') ||
                        t.includes('REWARD') || t.includes('FORCE');
             });
             renderStakingHistory();
@@ -1095,102 +945,68 @@ async function loadStakingHistory() {
 }
 
 function renderStakingHistory() {
-    const container = document.getElementById('staking-history-list');
+    const container = document.getElementById('stk-history-list');
     if (!container) return;
 
-    let filteredHistory = stakingHistory;
+    let filtered = stakingHistory;
     if (currentHistoryFilter !== 'ALL') {
-        filteredHistory = stakingHistory.filter(item => {
+        filtered = stakingHistory.filter(item => {
             const t = (item.type || '').toUpperCase();
-            switch(currentHistoryFilter) {
-                case 'STAKE':
-                    return (t.includes('DELEGAT') || t.includes('STAKE')) && 
-                           !t.includes('UNSTAKE') && !t.includes('UNDELEGAT') && !t.includes('FORCE');
-                case 'UNSTAKE':
-                    return t.includes('UNSTAKE') || t.includes('UNDELEGAT') || t.includes('FORCE');
-                case 'CLAIM':
-                    return t.includes('CLAIM') || t.includes('REWARD');
-                default:
-                    return true;
+            switch (currentHistoryFilter) {
+                case 'STAKE': return (t.includes('DELEGAT') || t.includes('STAKE')) && !t.includes('UNSTAKE') && !t.includes('UNDELEGAT') && !t.includes('FORCE');
+                case 'UNSTAKE': return t.includes('UNSTAKE') || t.includes('UNDELEGAT') || t.includes('FORCE');
+                case 'CLAIM': return t.includes('CLAIM') || t.includes('REWARD');
+                default: return true;
             }
         });
     }
 
-    if (filteredHistory.length === 0) {
-        container.innerHTML = `
-            <div class="text-center py-12">
-                <i class="fa-solid fa-inbox text-3xl text-zinc-700 mb-3"></i>
-                <p class="text-zinc-500 text-sm">No ${currentHistoryFilter === 'ALL' ? 'staking' : currentHistoryFilter.toLowerCase()} history yet</p>
-            </div>
-        `;
+    if (filtered.length === 0) {
+        container.innerHTML = `<div class="stk-empty"><i class="fa-solid fa-inbox"></i><p>No ${currentHistoryFilter === 'ALL' ? '' : currentHistoryFilter.toLowerCase() + ' '}history yet</p></div>`;
         return;
     }
 
-    container.innerHTML = filteredHistory.slice(0, 25).map(item => {
+    container.innerHTML = filtered.slice(0, 25).map(item => {
         const t = (item.type || '').toUpperCase();
         const details = item.details || {};
         const dateStr = formatDate(item.timestamp || item.createdAt);
-        
+
         let icon, iconBg, iconColor, label, extraInfo = '';
-        
+
         if (t.includes('FORCE')) {
-            icon = 'fa-bolt';
-            iconBg = 'bg-red-500/15';
-            iconColor = 'text-red-400';
-            label = 'Force Unstaked';
-            if (details.feePaid && BigInt(details.feePaid) > 0n) {
-                extraInfo = `<span class="text-red-400">-${formatBigNumber(BigInt(details.feePaid)).toFixed(2)} penalty</span>`;
-            }
+            icon = 'fa-bolt'; iconBg = 'rgba(239,68,68,0.12)'; iconColor = '#ef4444'; label = 'Force Unstaked';
+            if (details.feePaid && BigInt(details.feePaid) > 0n) extraInfo = `<span style="color:#ef4444">-${formatBigNumber(BigInt(details.feePaid)).toFixed(2)}</span>`;
         } else if ((t.includes('DELEGAT') || t.includes('STAKE')) && !t.includes('UNSTAKE')) {
-            icon = 'fa-lock';
-            iconBg = 'bg-green-500/15';
-            iconColor = 'text-green-400';
-            label = 'Delegated';
-            if (details.pStakeGenerated) {
-                extraInfo = `<span class="text-purple-400">+${formatBigNumber(BigInt(details.pStakeGenerated)).toFixed(0)} pS</span>`;
-            }
+            icon = 'fa-lock'; iconBg = 'rgba(74,222,128,0.12)'; iconColor = '#4ade80'; label = 'Delegated';
+            if (details.pStakeGenerated) extraInfo = `<span style="color:var(--stk-purple)">+${formatBigNumber(BigInt(details.pStakeGenerated)).toFixed(0)} pS</span>`;
         } else if (t.includes('UNSTAKE') || t.includes('UNDELEGAT')) {
-            icon = 'fa-unlock';
-            iconBg = 'bg-orange-500/15';
-            iconColor = 'text-orange-400';
-            label = 'Unstaked';
+            icon = 'fa-unlock'; iconBg = 'rgba(249,115,22,0.12)'; iconColor = '#f97316'; label = 'Unstaked';
         } else if (t.includes('CLAIM') || t.includes('REWARD')) {
-            icon = 'fa-coins';
-            iconBg = 'bg-amber-500/15';
-            iconColor = 'text-amber-400';
-            label = 'Claimed';
-            if (details.amountReceived && BigInt(details.amountReceived) > 0n) {
-                extraInfo = `<span class="text-green-400">+${formatBigNumber(BigInt(details.amountReceived)).toFixed(2)}</span>`;
-            }
+            icon = 'fa-coins'; iconBg = 'rgba(251,191,36,0.12)'; iconColor = '#fbbf24'; label = 'Claimed';
+            if (details.amountReceived && BigInt(details.amountReceived) > 0n) extraInfo = `<span style="color:var(--stk-green)">+${formatBigNumber(BigInt(details.amountReceived)).toFixed(2)}</span>`;
+            if (details.burnedAmount && BigInt(details.burnedAmount) > 0n) extraInfo += ` <span style="font-size:9px;color:rgba(239,68,68,0.6)">🔥-${formatBigNumber(BigInt(details.burnedAmount)).toFixed(2)}</span>`;
         } else {
-            icon = 'fa-circle';
-            iconBg = 'bg-zinc-500/15';
-            iconColor = 'text-zinc-400';
-            label = item.type || 'Activity';
+            icon = 'fa-circle'; iconBg = 'rgba(113,113,122,0.12)'; iconColor = '#71717a'; label = item.type || 'Activity';
         }
 
         const txLink = item.txHash ? `${EXPLORER_TX}${item.txHash}` : '#';
         const rawAmount = item.amount || details.amount || details.amountReceived || "0";
-        const amountNum = formatBigNumber(BigInt(rawAmount));
+        let amountNum = 0;
+        try { amountNum = formatBigNumber(BigInt(rawAmount)); } catch {}
         const amountDisplay = amountNum > 0.001 ? amountNum.toFixed(2) : '';
 
         return `
-            <a href="${txLink}" target="_blank" class="delegation-item flex items-center justify-between p-3 group">
-                <div class="flex items-center gap-3">
-                    <div class="w-9 h-9 rounded-lg ${iconBg} flex items-center justify-center">
-                        <i class="fa-solid ${icon} text-sm ${iconColor}"></i>
-                    </div>
-                    <div>
-                        <div class="flex items-center gap-2">
-                            <p class="text-white text-xs font-medium">${label}</p>
-                            ${extraInfo ? `<span class="text-[10px]">${extraInfo}</span>` : ''}
-                        </div>
-                        <p class="text-zinc-600 text-[10px]">${dateStr}</p>
-                    </div>
+            <a href="${txLink}" target="_blank" class="stk-history-item">
+                <div class="stk-history-icon" style="background:${iconBg}">
+                    <i class="fa-solid ${icon}" style="color:${iconColor}"></i>
                 </div>
-                <div class="flex items-center gap-2">
-                    ${amountDisplay ? `<span class="text-xs font-mono font-medium text-white">${amountDisplay} <span class="text-zinc-500">BKC</span></span>` : ''}
-                    <i class="fa-solid fa-arrow-up-right-from-square text-zinc-600 group-hover:text-purple-400 text-[10px] transition-colors"></i>
+                <div class="stk-history-info">
+                    <div class="stk-history-label">${label} ${extraInfo ? `<span style="font-size:10px">${extraInfo}</span>` : ''}</div>
+                    <div class="stk-history-date">${dateStr}</div>
+                </div>
+                <div style="display:flex;align-items:center;gap:6px">
+                    ${amountDisplay ? `<span class="stk-history-amount">${amountDisplay} <span style="font-size:10px;color:var(--stk-text-3)">BKC</span></span>` : ''}
+                    <i class="fa-solid fa-arrow-up-right-from-square stk-history-link"></i>
                 </div>
             </a>
         `;
@@ -1198,19 +1014,17 @@ function renderStakingHistory() {
 }
 
 // ============================================================================
-// PREVIEW CALCULATION
+// STAKE FORM PREVIEW
 // ============================================================================
 function updatePreview() {
-    const amountInput = document.getElementById('amount-input');
-    const stakeBtn = document.getElementById('stake-btn');
-    
+    const amountInput = document.getElementById('stk-amount-input');
+    const stakeBtn = document.getElementById('stk-delegate-btn');
     if (!amountInput) return;
 
     const val = amountInput.value;
-    
     if (!val || parseFloat(val) <= 0) {
-        document.getElementById('preview-pstake').textContent = '0';
-        document.getElementById('preview-net').textContent = '0.00 BKC';
+        const pEl = document.getElementById('stk-preview-pstake'); if (pEl) pEl.textContent = '0';
+        const nEl = document.getElementById('stk-preview-net'); if (nEl) nEl.textContent = '0.00 BKC';
         if (stakeBtn) stakeBtn.disabled = true;
         return;
     }
@@ -1220,12 +1034,11 @@ function updatePreview() {
         const feeBips = State.systemFees?.["DELEGATION_FEE_BIPS"] || 50n;
         const feeWei = (amountWei * BigInt(feeBips)) / 10000n;
         const netWei = amountWei - feeWei;
-        
         const durationSec = BigInt(lockDays) * 86400n;
         const pStake = calculatePStake(netWei, durationSec);
 
-        document.getElementById('preview-pstake').textContent = formatPStake(pStake);
-        document.getElementById('preview-net').textContent = `${formatBigNumber(netWei).toFixed(4)} BKC`;
+        const pEl = document.getElementById('stk-preview-pstake'); if (pEl) pEl.textContent = formatPStake(pStake);
+        const nEl = document.getElementById('stk-preview-net'); if (nEl) nEl.textContent = `${formatBigNumber(netWei).toFixed(4)} BKC`;
 
         const balance = State.currentUserBalance || 0n;
         if (amountWei > balance) {
@@ -1245,70 +1058,42 @@ function updatePreview() {
 // ============================================================================
 async function handleStake() {
     if (isProcessing) return;
-    
-    const amountInput = document.getElementById('amount-input');
-    const stakeBtn = document.getElementById('stake-btn');
-    const btnText = document.getElementById('stake-btn-text');
-    const btnIcon = document.getElementById('stake-btn-icon');
-    
+    const amountInput = document.getElementById('stk-amount-input');
+    const stakeBtn = document.getElementById('stk-delegate-btn');
     if (!amountInput || !stakeBtn) return;
-    
+
     const val = amountInput.value;
-    if (!val || parseFloat(val) <= 0) {
-        showToast('Enter an amount', 'warning');
-        return;
-    }
+    if (!val || parseFloat(val) <= 0) return showToast('Enter an amount', 'warning');
 
     const balance = State.currentUserBalance || 0n;
     let amountWei;
     try {
         amountWei = ethers.parseUnits(val, 18);
-        if (amountWei > balance) {
-            showToast('Insufficient BKC balance', 'error');
-            return;
-        }
-    } catch {
-        showToast('Invalid amount', 'error');
-        return;
-    }
+        if (amountWei > balance) return showToast('Insufficient BKC balance', 'error');
+    } catch { return showToast('Invalid amount', 'error'); }
 
-    // Check ETH for gas
     try {
         const provider = new ethers.BrowserProvider(window.ethereum);
         const ethBalance = await provider.getBalance(State.userAddress);
-        if (ethBalance < ethers.parseEther("0.001")) {
-            showToast('Insufficient ETH for gas', 'error');
-            return;
-        }
+        if (ethBalance < ethers.parseEther("0.001")) return showToast('Insufficient ETH for gas', 'error');
     } catch {}
 
     isProcessing = true;
     const durationSec = BigInt(lockDays) * 86400n;
-
-    // V6.10: Don't manually set button state — txEngine handles it via setPhase()
-    // Setting innerHTML here corrupts txEngine's originalContent capture
 
     try {
         await StakingTx.delegate({
             amount: amountWei,
             lockDuration: durationSec,
             button: stakeBtn,
-            
             onSuccess: async () => {
                 amountInput.value = '';
-                showToast('🔒 Delegation successful!', 'success');
-                isLoading = false;
-                lastFetch = 0;
+                showToast('Delegation successful!', 'success');
+                isLoading = false; lastFetch = 0;
                 await loadData(true);
             },
-            
-            onError: (error) => {
-                if (!error.cancelled) {
-                    showToast('Delegation failed: ' + (error.reason || error.message || 'Unknown error'), 'error');
-                }
-            }
+            onError: (error) => { if (!error.cancelled) showToast('Delegation failed: ' + (error.reason || error.message || 'Unknown error'), 'error'); }
         });
-
     } catch (e) {
         showToast('Delegation failed: ' + (e.reason || e.message || 'Unknown error'), 'error');
     } finally {
@@ -1319,69 +1104,47 @@ async function handleStake() {
 
 async function handleUnstake(index, isForce) {
     if (isProcessing) return;
-    
-    const btn = document.querySelector(isForce 
-        ? `.force-unstake-btn[data-index='${index}']`
-        : `.unstake-btn[data-index='${index}']`
-    );
-    
-    // V6.10: Don't manually set button state — txEngine handles it
+
+    if (isForce && !confirm('Force unstake will incur a 50% penalty. Continue?')) return;
+
+    const btn = document.querySelector(`.stk-unstake-btn[data-index='${index}']`);
     isProcessing = true;
 
     try {
-        const delegationIndex = BigInt(index);
         const txMethod = isForce ? StakingTx.forceUnstake : StakingTx.unstake;
-        
         await txMethod({
-            delegationIndex: delegationIndex,
+            delegationIndex: BigInt(index),
             button: btn,
-            
             onSuccess: async () => {
-                showToast(isForce ? '⚡ Force unstaked (50% penalty applied)' : '🔓 Unstaked successfully!', isForce ? 'warning' : 'success');
-                isLoading = false;
-                lastFetch = 0;
+                showToast(isForce ? 'Force unstaked (50% penalty)' : 'Unstaked successfully!', isForce ? 'warning' : 'success');
+                isLoading = false; lastFetch = 0;
                 await loadData(true);
             },
-            
-            onError: (error) => {
-                if (!error.cancelled) {
-                    showToast('Unstake failed: ' + (error.reason || error.message || 'Unknown error'), 'error');
-                }
-            }
+            onError: (error) => { if (!error.cancelled) showToast('Unstake failed: ' + (error.reason || error.message || 'Unknown error'), 'error'); }
         });
-        
     } catch (e) {
         showToast('Unstake failed: ' + (e.reason || e.message || 'Unknown error'), 'error');
     } finally {
         isProcessing = false;
-        renderDelegations();
     }
 }
 
-async function handleClaim(stakingRewards, minerRewards, btn) {
+async function handleClaim() {
     if (isProcessing) return;
+    const btn = document.getElementById('stk-claim-btn');
     isProcessing = true;
-
-    // V6.10: Don't manually set button state — txEngine handles it
 
     try {
         await StakingTx.claimRewards({
             button: btn,
-            
             onSuccess: async () => {
-                showToast('🪙 Rewards claimed!', 'success');
-                isLoading = false;
-                lastFetch = 0;
+                showToast('Rewards claimed!', 'success');
+                isLoading = false; lastFetch = 0;
+                stakingHistory = [];
                 await loadData(true);
             },
-            
-            onError: (error) => {
-                if (!error.cancelled) {
-                    showToast('Claim failed: ' + (error.reason || error.message || 'Unknown error'), 'error');
-                }
-            }
+            onError: (error) => { if (!error.cancelled) showToast('Claim failed: ' + (error.reason || error.message || 'Unknown error'), 'error'); }
         });
-        
     } catch (e) {
         showToast('Claim failed: ' + (e.reason || e.message || 'Unknown error'), 'error');
     } finally {
@@ -1393,21 +1156,21 @@ async function handleClaim(stakingRewards, minerRewards, btn) {
 // EVENT LISTENERS
 // ============================================================================
 function setupListeners() {
-    const amountInput = document.getElementById('amount-input');
-    const maxBtn = document.getElementById('max-btn');
-    const stakeBtn = document.getElementById('stake-btn');
-    const refreshBtn = document.getElementById('refresh-btn');
-    const durationChips = document.querySelectorAll('.duration-chip');
-    const historyTabs = document.querySelectorAll('.history-tab');
+    const container = document.getElementById('mine');
+    if (!container) return;
+
+    const amountInput = document.getElementById('stk-amount-input');
+    const maxBtn = document.getElementById('stk-max-btn');
+    const stakeBtn = document.getElementById('stk-delegate-btn');
+    const refreshBtn = document.getElementById('stk-refresh-btn');
+    const durationChips = document.querySelectorAll('.stk-duration-chip');
+    const historyTabs = document.querySelectorAll('.stk-tab');
 
     amountInput?.addEventListener('input', updatePreview);
 
     maxBtn?.addEventListener('click', () => {
         const balance = State.currentUserBalance || 0n;
-        if (amountInput) {
-            amountInput.value = ethers.formatUnits(balance, 18);
-            updatePreview();
-        }
+        if (amountInput) { amountInput.value = ethers.formatUnits(balance, 18); updatePreview(); }
     });
 
     durationChips.forEach(chip => {
@@ -1433,9 +1196,16 @@ function setupListeners() {
     refreshBtn?.addEventListener('click', () => {
         const icon = refreshBtn.querySelector('i');
         icon?.classList.add('fa-spin');
-        loadData(true).then(() => {
-            setTimeout(() => icon?.classList.remove('fa-spin'), 500);
-        });
+        loadData(true).then(() => { setTimeout(() => icon?.classList.remove('fa-spin'), 500); });
+    });
+
+    // Claim button
+    document.getElementById('stk-claim-btn')?.addEventListener('click', handleClaim);
+
+    // Navigation via event delegation
+    container.addEventListener('click', (e) => {
+        if (e.target.closest('.go-to-store')) { e.preventDefault(); window.navigateTo('store'); }
+        if (e.target.closest('.go-to-rental')) { e.preventDefault(); window.navigateTo('rental'); }
     });
 }
 
@@ -1443,22 +1213,11 @@ function setupListeners() {
 // EXPORTS
 // ============================================================================
 export function cleanup() {
-    if (countdownInterval) {
-        clearInterval(countdownInterval);
-        countdownInterval = null;
-    }
+    if (countdownInterval) { clearInterval(countdownInterval); countdownInterval = null; }
 }
 
 export function update(isConnected) {
-    if (isConnected) {
-        loadData();
-    } else {
-        resetUI();
-    }
+    if (isConnected) { loadData(); } else { resetUI(); }
 }
 
-export const EarnPage = {
-    render,
-    update,
-    cleanup
-};
+export const EarnPage = { render, update, cleanup };
