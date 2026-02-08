@@ -94,6 +94,7 @@ export async function createProfile({
 
     return await txEngine.execute({
         name: 'CreateProfile', button,
+        skipSimulation: true, fixedGasLimit: 300000n,
         getContract: async (signer) => getBackchatContract(signer),
         method: 'createProfile',
         args: () => [username, displayName || '', bio || '', resolveOperator(storedOperator)],
@@ -139,6 +140,7 @@ export async function updateProfile({
 }) {
     return await txEngine.execute({
         name: 'UpdateProfile', button,
+        skipSimulation: true, fixedGasLimit: 200000n,
         getContract: async (signer) => getBackchatContract(signer),
         method: 'updateProfile',
         args: [displayName || '', bio || ''],
@@ -168,6 +170,7 @@ export async function createPost({
 
     return await txEngine.execute({
         name: 'CreatePost', button,
+        skipSimulation: true, fixedGasLimit: 300000n,
         getContract: async (signer) => getBackchatContract(signer),
         method: 'createPost',
         args: () => [content, mediaCID || '', resolveOperator(storedOperator)],
@@ -223,6 +226,7 @@ export async function createReply({
 
     return await txEngine.execute({
         name: 'CreateReply', button,
+        skipSimulation: true, fixedGasLimit: 350000n,
         getContract: async (signer) => getBackchatContract(signer),
         method: 'createReply',
         args: () => [parentId, content, mediaCID || '', resolveOperator(storedOperator), tipAmount],
@@ -297,6 +301,7 @@ export async function createRepost({
 
     return await txEngine.execute({
         name: 'CreateRepost', button,
+        skipSimulation: true, fixedGasLimit: 250000n,
         getContract: async (signer) => getBackchatContract(signer),
         method: 'createRepost',
         args: () => [originalPostId, resolveOperator(storedOperator), tipAmount],
@@ -344,6 +349,7 @@ export async function like({
 
     return await txEngine.execute({
         name: 'Like', button,
+        skipSimulation: true, fixedGasLimit: 200000n,
         getContract: async (signer) => getBackchatContract(signer),
         method: 'like',
         args: () => [postId, resolveOperator(storedOperator), tipAmount],
@@ -392,6 +398,7 @@ export async function superLike({
 
     return await txEngine.execute({
         name: 'SuperLike', button,
+        skipSimulation: true, fixedGasLimit: 250000n,
         getContract: async (signer) => getBackchatContract(signer),
         method: 'superLike',
         args: () => [postId, resolveOperator(storedOperator), tipAmount],
@@ -435,6 +442,7 @@ export async function follow({
 
     return await txEngine.execute({
         name: 'Follow', button,
+        skipSimulation: true, fixedGasLimit: 200000n,
         getContract: async (signer) => getBackchatContract(signer),
         method: 'follow',
         args: () => [toFollow, resolveOperator(storedOperator), tipAmount],
@@ -476,6 +484,7 @@ export async function unfollow({
 }) {
     return await txEngine.execute({
         name: 'Unfollow', button,
+        skipSimulation: true, fixedGasLimit: 150000n,
         getContract: async (signer) => getBackchatContract(signer),
         method: 'unfollow',
         args: [toUnfollow],
@@ -501,6 +510,7 @@ export async function boostProfile({
 
     return await txEngine.execute({
         name: 'BoostProfile', button,
+        skipSimulation: true, fixedGasLimit: 200000n,
         getContract: async (signer) => getBackchatContract(signer),
         method: 'boostProfile',
         args: () => [resolveOperator(storedOperator)],
@@ -531,6 +541,7 @@ export async function obtainBadge({
 
     return await txEngine.execute({
         name: 'ObtainBadge', button,
+        skipSimulation: true, fixedGasLimit: 250000n,
         getContract: async (signer) => getBackchatContract(signer),
         method: 'obtainBadge',
         args: () => [resolveOperator(storedOperator)],
@@ -563,6 +574,7 @@ export async function withdraw({
 
     return await txEngine.execute({
         name: 'Withdraw', button,
+        skipSimulation: true, fixedGasLimit: 200000n,
         getContract: async (signer) => getBackchatContract(signer),
         method: 'withdraw',
         args: [],
@@ -592,6 +604,7 @@ export async function setReferrer({
 }) {
     return await txEngine.execute({
         name: 'SetReferrer', button,
+        skipSimulation: true, fixedGasLimit: 150000n,
         getContract: async (signer) => getBackchatContract(signer),
         method: 'setReferrer',
         args: [referrer],
