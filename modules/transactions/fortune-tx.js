@@ -371,37 +371,36 @@ export async function revealPlay({
         
         // Validation
         validate: async (signer, userAddress) => {
+            const ethers = window.ethers;
             const readContract = await getFortuneContractReadOnly();
 
-            // Check commitment status (may fail if RPC is lagging)
-            let status;
-            try {
-                status = await readContract.getCommitmentStatus(gameId);
-            } catch (e) {
-                throw new Error('Game not ready yet — please wait a few more seconds and try again.');
-            }
-
-            if (status.isExpired) {
-                throw new Error('Game has expired. You can no longer reveal.');
-            }
-
-            if (!status.canReveal) {
-                if (status.blocksUntilReveal > 0) {
-                    throw new Error(`Must wait ${status.blocksUntilReveal} more blocks before reveal`);
-                }
-                throw new Error('Cannot reveal this game');
-            }
-            
-            // Verify hash matches
+            // V2.1: Use getCommitment() + block number (more reliable than getCommitmentStatus)
             const commitment = await readContract.getCommitment(gameId);
+
+            if (commitment.player === ethers.ZeroAddress) {
+                throw new Error('Game not found — invalid game ID');
+            }
+
             if (commitment.player.toLowerCase() !== userAddress.toLowerCase()) {
                 throw new Error('You are not the owner of this game');
             }
-            
+
+            // Check if enough blocks have passed
+            const commitBlock = Number(commitment.commitBlock);
+            const provider = readContract.runner?.provider;
+            if (provider) {
+                const currentBlock = await provider.getBlockNumber();
+                const revealDelay = 5; // contract default
+                if (currentBlock < commitBlock + revealDelay) {
+                    const remaining = commitBlock + revealDelay - currentBlock;
+                    throw new Error(`Must wait ${remaining} more blocks before reveal`);
+                }
+            }
+
             // Verify hash
             const expectedHash = await readContract.commitmentHashes(gameId);
             const calculatedHash = generateCommitmentHashLocal(guesses, userSecret);
-            
+
             if (expectedHash.toLowerCase() !== calculatedHash.toLowerCase()) {
                 throw new Error('Hash mismatch - guesses or secret do not match commitment');
             }

@@ -1385,24 +1385,19 @@ function updateWaitingCountdown() {
     const remainingMs = Math.max(0, totalWaitMs - elapsed);
     const remainingSecs = Math.ceil(remainingMs / 1000);
     
-    timerEl.textContent = remainingSecs > 0 ? `~${remainingSecs}s` : 'Ready!';
-    
+    // V6.10: Countdown is visual-only. Button enabling is handled exclusively
+    // by checkCanReveal() which queries the contract to confirm readiness.
+    if (remainingSecs > 0) {
+        timerEl.textContent = `~${remainingSecs}s`;
+    } else if (!Game.commitment.canReveal) {
+        timerEl.textContent = 'Verifying on chain...';
+    } else {
+        timerEl.textContent = 'Ready!';
+    }
+
     if (progressEl) {
         const progress = Math.min(100, (elapsed / totalWaitMs) * 100);
         progressEl.style.width = `${progress}%`;
-    }
-    
-    // Enable reveal button when ready (based on time estimate)
-    if (remainingSecs <= 0 && !Game.commitment.canReveal) {
-        Game.commitment.canReveal = true;
-        if (btnEl) {
-            btnEl.disabled = false;
-            btnEl.className = 'w-full py-3 rounded-xl font-bold transition-all bg-gradient-to-r from-emerald-500 to-green-500 text-white hover:shadow-lg hover:shadow-emerald-500/30 animate-pulse';
-        }
-        if (btnTextEl) {
-            btnTextEl.textContent = '🎲 Reveal & Get Result!';
-        }
-        showToast('Ready to reveal! Click the button.', 'success');
     }
     
     // Continue updating if still waiting
@@ -1440,17 +1435,24 @@ function startRevealCheck() {
     }, REVEAL_CHECK_MS);
 }
 
-// V6.10: Check if we can reveal — trust contract, generous fallback
+// V6.10: Check if we can reveal — use getCommitment + block number
 async function checkCanReveal() {
     if (!State.fortunePoolContractPublic || !Game.gameId) return false;
 
     try {
-        const status = await State.fortunePoolContractPublic.getCommitmentStatus(Game.gameId);
-        return status.canReveal === true;
+        // Primary: use getCommitment() to read commitBlock, compare to current block
+        const commitment = await State.fortunePoolContractPublic.getCommitment(Game.gameId);
+        const commitBlock = Number(commitment.commitBlock);
+        if (commitBlock === 0) return false; // Commitment not found
+
+        const provider = State.fortunePoolContractPublic.runner?.provider;
+        if (!provider) return false;
+
+        const currentBlock = await provider.getBlockNumber();
+        const delay = Game.commitment.revealDelay || 5;
+        return currentBlock >= commitBlock + delay;
     } catch (e) {
-        // Contract call failed (RPC lag, network issue, etc.)
-        // Use generous time-based fallback — only as last resort
-        // 30s is way more than 5 blocks (~1.25s) to ensure RPC has synced
+        // All contract calls failed — generous time-based fallback
         const elapsed = Date.now() - (Game.commitment.waitStartTime || Date.now());
         return elapsed >= 30000;
     }
