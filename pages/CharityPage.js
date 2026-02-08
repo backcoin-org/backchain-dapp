@@ -1345,10 +1345,9 @@ async function create() {
     }
     
     const goalWei = ethers.parseEther(goal);
-    const durationSec = parseInt(duration) * 86400;
-    
+
     await CharityTx.createCampaign({
-        title, description: desc, goalAmount: goalWei, duration: durationSec,
+        title, description: desc, goalAmount: goalWei, durationDays: parseInt(duration),
         button: document.getElementById('btn-create'),
         
         onSuccess: async (receipt, campaignId) => {
