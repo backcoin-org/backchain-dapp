@@ -457,9 +457,6 @@ export const delegationManagerABI = [
     "function getBurnRateForBoost(uint256 _boost) view returns (uint256)",
     "function previewClaim(address _user) view returns (uint256 totalRewards, uint256 burnAmount, uint256 userReceives, uint256 burnRateBips, uint256 userBoost)",
     
-    // Penalty
-    "function getUnstakePenaltyBips() view returns (uint256)",
-    
     // Events V6.8
     "event Delegated(address indexed user, address indexed operator, uint256 amount, uint256 lockDuration, uint256 pStake)",
     "event Unstaked(address indexed user, address indexed operator, uint256 amount, uint256 pStakeReduced)",

@@ -60,22 +60,25 @@ const DELEGATION_ABI = [
     'function unstake(uint256 delegationIndex, address operator) external',
     'function forceUnstake(uint256 delegationIndex, address operator) external',
     'function claimReward(address operator) external payable',
-    
+
     // Read functions
     'function getDelegationsOf(address user) view returns (tuple(uint256 amount, uint64 unlockTime, uint64 lockDuration)[])',
     'function pendingRewards(address user) view returns (uint256)',
     'function userTotalPStake(address user) view returns (uint256)',
-    'function totalPStake() view returns (uint256)',
-    'function earlyUnstakePenaltyBips() view returns (uint256)',
+    'function totalNetworkPStake() view returns (uint256)',
     'function MIN_LOCK_DURATION() view returns (uint256)',
     'function MAX_LOCK_DURATION() view returns (uint256)',
     'function claimEthFee() view returns (uint256)',
-    
-    // Events
-    'event Delegated(address indexed user, uint256 amount, uint256 lockDuration, uint256 pStakeAmount, address operator)',
-    'event Unstaked(address indexed user, uint256 delegationIndex, uint256 amount, address operator)',
-    'event ForceUnstaked(address indexed user, uint256 delegationIndex, uint256 amount, uint256 penalty, address operator)',
-    'event RewardClaimed(address indexed user, uint256 amount, address operator)'
+
+    // V6: NFT Boost & Preview
+    'function getUserBestBoost(address user) view returns (uint256)',
+    'function getBurnRateForBoost(uint256 boost) view returns (uint256)',
+    'function previewClaim(address user) view returns (uint256 totalRewards, uint256 burnAmount, uint256 userReceives, uint256 burnRateBips, uint256 nftBoost)',
+
+    // Events (matching deployed contract)
+    'event Delegated(address indexed user, uint256 indexed delegationIndex, uint256 amount, uint256 pStake, uint256 feePaid, address operator)',
+    'event Unstaked(address indexed user, uint256 indexed delegationIndex, uint256 amountReceived, uint256 feePaid, address operator)',
+    'event RewardClaimed(address indexed user, uint256 amountReceived, uint256 burnedAmount, uint256 ethFeePaid, uint256 nftBoostUsed, address operator)'
 ];
 
 // ============================================================================
@@ -384,16 +387,16 @@ export async function getUserPStake(userAddress) {
  */
 export async function getTotalPStake() {
     const contract = await getDelegationContractReadOnly();
-    return await contract.totalPStake();
+    return await contract.totalNetworkPStake();
 }
 
 /**
  * Gets early unstake penalty percentage
+ * Note: Penalty is configured in EcosystemManager (FORCE_UNSTAKE_PENALTY_KEY), not DelegationManager
  */
 export async function getEarlyUnstakePenalty() {
-    const contract = await getDelegationContractReadOnly();
-    const penaltyBips = await contract.earlyUnstakePenaltyBips();
-    return Number(penaltyBips) / 100;
+    // Penalty bips are managed by EcosystemManager, default is 5000 (50%)
+    return 50;
 }
 
 /**
@@ -401,20 +404,19 @@ export async function getEarlyUnstakePenalty() {
  */
 export async function getStakingConfig() {
     const contract = await getDelegationContractReadOnly();
-    
-    const [minLock, maxLock, penaltyBips] = await Promise.all([
+
+    const [minLock, maxLock] = await Promise.all([
         contract.MIN_LOCK_DURATION(),
-        contract.MAX_LOCK_DURATION(),
-        contract.earlyUnstakePenaltyBips()
+        contract.MAX_LOCK_DURATION()
     ]);
-    
+
     return {
         minLockDays: Number(minLock) / 86400,
         maxLockDays: Number(maxLock) / 86400,
         minLockSeconds: Number(minLock),
         maxLockSeconds: Number(maxLock),
-        penaltyPercent: Number(penaltyBips) / 100,
-        penaltyBips: Number(penaltyBips)
+        penaltyPercent: 50,   // Managed by EcosystemManager (5000 bips default)
+        penaltyBips: 5000
     };
 }
 

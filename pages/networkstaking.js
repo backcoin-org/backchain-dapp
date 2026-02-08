@@ -1376,8 +1376,6 @@ async function handleClaim(stakingRewards, minerRewards, btn) {
 
     try {
         await StakingTx.claimRewards({
-            stakingRewards: stakingRewards,
-            minerRewards: minerRewards,
             button: btn,
             
             onSuccess: async () => {
