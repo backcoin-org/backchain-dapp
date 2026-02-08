@@ -87,16 +87,26 @@ const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp
 // STATE
 // ============================================================================
 
-const CS = { 
-    campaigns: [], 
-    stats: null, 
-    currentView: 'main', 
-    currentCampaign: null, 
-    selectedCategory: null, 
-    isLoading: false, 
+const CS = {
+    campaigns: [],
+    stats: null,
+    currentView: 'main',
+    currentCampaign: null,
+    selectedCategory: null,
+    isLoading: false,
     pendingImage: null,
     pendingImageFile: null,
-    editingCampaign: null
+    editingCampaign: null,
+    // Wizard state
+    createStep: 1,
+    createCategory: null,
+    createTitle: '',
+    createDesc: '',
+    createGoal: '',
+    createDuration: '',
+    createImageFile: null,
+    createImageUrl: '',
+    createImagePreview: null
 };
 
 // ============================================================================
@@ -516,6 +526,96 @@ function injectStyles() {
         .cp-scrollbar::-webkit-scrollbar-track { background: rgba(39,39,42,0.5); border-radius: 3px; }
         .cp-scrollbar::-webkit-scrollbar-thumb { background: rgba(113,113,122,0.5); border-radius: 3px; }
         
+        /* Step Wizard */
+        .cp-step-container {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            position: relative;
+            padding: 0 1rem;
+        }
+        .cp-step-item {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            z-index: 1;
+        }
+        .cp-step-dot {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 14px;
+            font-weight: 700;
+            transition: all 0.3s ease;
+        }
+        .cp-step-dot.pending {
+            background: rgba(39,39,42,0.8);
+            color: #71717a;
+            border: 2px solid rgba(63,63,70,0.8);
+        }
+        .cp-step-dot.active {
+            background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+            color: #000;
+            box-shadow: 0 0 20px rgba(245,158,11,0.4);
+        }
+        .cp-step-dot.done {
+            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+            color: #fff;
+        }
+        .cp-step-line {
+            position: absolute;
+            top: 20px;
+            height: 3px;
+            background: rgba(63,63,70,0.5);
+            transition: all 0.5s ease;
+        }
+        .cp-step-line.ln-1 { left: 14%; width: 22%; }
+        .cp-step-line.ln-2 { left: 39%; width: 22%; }
+        .cp-step-line.ln-3 { left: 64%; width: 22%; }
+        .cp-step-line.active { background: linear-gradient(90deg, #10b981, #f59e0b); }
+        .cp-step-line.done { background: #10b981; }
+
+        /* Wizard Cards */
+        .cp-wiz-cat-card {
+            background: linear-gradient(145deg, rgba(39,39,42,0.9) 0%, rgba(24,24,27,0.95) 100%);
+            border: 2px solid rgba(63,63,70,0.5);
+            border-radius: 16px;
+            padding: 2rem 1.5rem;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-align: center;
+        }
+        .cp-wiz-cat-card:hover { transform: translateY(-4px); box-shadow: 0 20px 40px rgba(0,0,0,0.3); }
+        .cp-wiz-cat-card.animal:hover, .cp-wiz-cat-card.animal.selected { border-color: #10b981; }
+        .cp-wiz-cat-card.humanitarian:hover, .cp-wiz-cat-card.humanitarian.selected { border-color: #ec4899; }
+        .cp-wiz-cat-card.selected { transform: translateY(-4px); box-shadow: 0 12px 30px rgba(0,0,0,0.3); }
+
+        .cp-wiz-char-count {
+            text-align: right;
+            font-size: 11px;
+            color: #71717a;
+            margin-top: 4px;
+        }
+        .cp-wiz-char-count.warn { color: #f59e0b; }
+        .cp-wiz-char-count.danger { color: #ef4444; }
+
+        .cp-wiz-summary {
+            background: rgba(0,0,0,0.3);
+            border: 1px solid rgba(63,63,70,0.5);
+            border-radius: 12px;
+            padding: 1rem;
+        }
+        .cp-wiz-summary-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 6px 0;
+            font-size: 13px;
+        }
+        .cp-wiz-summary-row + .cp-wiz-summary-row { border-top: 1px solid rgba(63,63,70,0.3); }
+
         /* Responsive */
         @media(max-width:768px) {
             .cp-stats-grid { grid-template-columns: repeat(2, 1fr) !important; }
@@ -523,6 +623,7 @@ function injectStyles() {
             .cp-detail-content { grid-template-columns: 1fr; }
             .cp-detail-sidebar { order: -1; }
             .cp-form-row { grid-template-columns: 1fr; }
+            .cp-wiz-cats-grid { grid-template-columns: 1fr !important; }
         }
     `;
     document.head.appendChild(s);
@@ -753,7 +854,6 @@ const renderMain = () => {
     
     return `
         <div class="charity-page">
-            ${renderCreateModal()}
             ${renderMyCampaignsModal()}
             ${renderEditModal()}
             ${renderDonateModal()}
@@ -1179,26 +1279,486 @@ const renderEditModal = () => `
 `;
 
 // ============================================================================
+// CREATE WIZARD (4-step)
+// ============================================================================
+
+const renderCreateWizard = () => `
+    <div class="charity-page">
+        ${renderDonateModal()}
+        <!-- Header -->
+        <div class="flex items-center gap-4 mb-6">
+            <button class="cp-btn cp-btn-secondary" onclick="CharityPage.cancelCreate()">
+                <i class="fa-solid fa-arrow-left"></i>
+            </button>
+            <div>
+                <h1 class="text-xl font-bold text-white">Create Campaign</h1>
+                <p class="text-sm text-zinc-500">Step ${CS.createStep} of 4</p>
+            </div>
+        </div>
+
+        <!-- Step Indicator -->
+        <div class="cp-card-base p-5 mb-6">
+            <div class="cp-step-container">
+                <div class="cp-step-line ln-1" id="cp-ln-1"></div>
+                <div class="cp-step-line ln-2" id="cp-ln-2"></div>
+                <div class="cp-step-line ln-3" id="cp-ln-3"></div>
+                <div class="cp-step-item">
+                    <div class="cp-step-dot active" id="cp-step-1">1</div>
+                    <span class="text-[10px] text-zinc-500 mt-2">Category</span>
+                </div>
+                <div class="cp-step-item">
+                    <div class="cp-step-dot pending" id="cp-step-2">2</div>
+                    <span class="text-[10px] text-zinc-500 mt-2">Details</span>
+                </div>
+                <div class="cp-step-item">
+                    <div class="cp-step-dot pending" id="cp-step-3">3</div>
+                    <span class="text-[10px] text-zinc-500 mt-2">Image</span>
+                </div>
+                <div class="cp-step-item">
+                    <div class="cp-step-dot pending" id="cp-step-4">4</div>
+                    <span class="text-[10px] text-zinc-500 mt-2">Confirm</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Step Content -->
+        <div class="cp-card-base p-6" id="cp-wiz-panel"></div>
+    </div>
+`;
+
+function updateCreateStepIndicators() {
+    [1, 2, 3, 4].forEach(i => {
+        const dot = document.getElementById(`cp-step-${i}`);
+        if (!dot) return;
+        if (i < CS.createStep) {
+            dot.className = 'cp-step-dot done';
+            dot.innerHTML = '<i class="fa-solid fa-check text-sm"></i>';
+        } else if (i === CS.createStep) {
+            dot.className = 'cp-step-dot active';
+            dot.textContent = i;
+        } else {
+            dot.className = 'cp-step-dot pending';
+            dot.textContent = i;
+        }
+    });
+    [1, 2, 3].forEach(i => {
+        const line = document.getElementById(`cp-ln-${i}`);
+        if (line) line.className = `cp-step-line ln-${i} ${CS.createStep > i ? 'done' : CS.createStep === i ? 'active' : ''}`;
+    });
+    // Update subtitle
+    const subtitle = document.querySelector('.charity-page .text-sm.text-zinc-500');
+    if (subtitle) subtitle.textContent = `Step ${CS.createStep} of 4`;
+}
+
+function renderCreateStepContent() {
+    const panel = document.getElementById('cp-wiz-panel');
+    if (!panel) return;
+    updateCreateStepIndicators();
+    switch (CS.createStep) {
+        case 1: renderCreateStep1(panel); break;
+        case 2: renderCreateStep2(panel); break;
+        case 3: renderCreateStep3(panel); break;
+        case 4: renderCreateStep4(panel); break;
+    }
+}
+
+function renderCreateStep1(panel) {
+    panel.innerHTML = `
+        <h2 class="text-lg font-bold text-white mb-2">Choose a Category</h2>
+        <p class="text-sm text-zinc-500 mb-6">Select what type of cause your campaign supports</p>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 cp-wiz-cats-grid">
+            <div class="cp-wiz-cat-card animal ${CS.createCategory === 'animal' ? 'selected' : ''}" onclick="CharityPage.wizardSelectCategory('animal')">
+                <div class="w-16 h-16 rounded-full bg-emerald-500/15 flex items-center justify-center mx-auto mb-3">
+                    <span class="text-3xl">🐾</span>
+                </div>
+                <h3 class="text-lg font-bold text-white mb-1">Animal Welfare</h3>
+                <p class="text-xs text-zinc-500">Rescue, shelter, and protection of animals</p>
+            </div>
+            <div class="cp-wiz-cat-card humanitarian ${CS.createCategory === 'humanitarian' ? 'selected' : ''}" onclick="CharityPage.wizardSelectCategory('humanitarian')">
+                <div class="w-16 h-16 rounded-full bg-pink-500/15 flex items-center justify-center mx-auto mb-3">
+                    <span class="text-3xl">💗</span>
+                </div>
+                <h3 class="text-lg font-bold text-white mb-1">Humanitarian Aid</h3>
+                <p class="text-xs text-zinc-500">Help communities and people in need</p>
+            </div>
+        </div>
+        <div class="flex justify-end mt-6">
+            <button class="cp-btn cp-btn-primary ${!CS.createCategory ? 'opacity-50 cursor-not-allowed' : ''}"
+                    onclick="CharityPage.wizardNext()" ${!CS.createCategory ? 'disabled' : ''}>
+                Next <i class="fa-solid fa-arrow-right"></i>
+            </button>
+        </div>
+    `;
+}
+
+function renderCreateStep2(panel) {
+    const titleLen = CS.createTitle.length;
+    const descLen = CS.createDesc.length;
+    panel.innerHTML = `
+        <h2 class="text-lg font-bold text-white mb-2">Campaign Details</h2>
+        <p class="text-sm text-zinc-500 mb-6">Tell your story — what is this campaign about?</p>
+        <div class="cp-form-group">
+            <label class="cp-form-label">Title *</label>
+            <input type="text" id="wiz-title" class="cp-form-input" placeholder="Give your campaign a clear title" maxlength="100"
+                   value="${CS.createTitle.replace(/"/g, '&quot;')}" oninput="CharityPage.wizardUpdateCharCount('title', this)">
+            <div class="cp-wiz-char-count ${titleLen > 80 ? (titleLen > 95 ? 'danger' : 'warn') : ''}" id="wiz-title-count">${titleLen}/100</div>
+        </div>
+        <div class="cp-form-group">
+            <label class="cp-form-label">Description *</label>
+            <textarea id="wiz-desc" class="cp-form-input cp-form-textarea" placeholder="Describe the cause, how funds will be used, and why it matters..."
+                      maxlength="2000" style="min-height:140px" oninput="CharityPage.wizardUpdateCharCount('desc', this)">${CS.createDesc}</textarea>
+            <div class="cp-wiz-char-count ${descLen > 1800 ? (descLen > 1950 ? 'danger' : 'warn') : ''}" id="wiz-desc-count">${descLen}/2000</div>
+        </div>
+        <div class="flex justify-between mt-6">
+            <button class="cp-btn cp-btn-secondary" onclick="CharityPage.wizardBack()">
+                <i class="fa-solid fa-arrow-left"></i> Back
+            </button>
+            <button class="cp-btn cp-btn-primary" onclick="CharityPage.wizardNext()">
+                Next <i class="fa-solid fa-arrow-right"></i>
+            </button>
+        </div>
+    `;
+}
+
+function renderCreateStep3(panel) {
+    const hasImage = CS.createImagePreview || CS.createImageUrl;
+    panel.innerHTML = `
+        <h2 class="text-lg font-bold text-white mb-2">Campaign Image</h2>
+        <p class="text-sm text-zinc-500 mb-6">Add a cover image to attract more donors <span class="text-zinc-600">(optional)</span></p>
+        <div class="cp-tabs mb-4" id="wiz-image-tabs">
+            <button type="button" class="cp-tab active" data-tab="upload" onclick="CharityPage.switchImageTab('upload','wiz')">
+                <i class="fa-solid fa-cloud-arrow-up mr-1"></i> Upload
+            </button>
+            <button type="button" class="cp-tab" data-tab="url" onclick="CharityPage.switchImageTab('url','wiz')">
+                <i class="fa-solid fa-link mr-1"></i> URL
+            </button>
+        </div>
+        <div id="wiz-image-upload" class="cp-image-upload" onclick="document.getElementById('wiz-image-file').click()">
+            <input type="file" id="wiz-image-file" accept="image/*" onchange="CharityPage.handleWizardImageSelect(event)">
+            <div id="wiz-image-preview">
+                ${CS.createImagePreview ? `
+                    <img src="${CS.createImagePreview}" class="cp-image-preview">
+                    <button type="button" class="cp-image-remove" onclick="event.stopPropagation();CharityPage.removeWizardImage()">
+                        <i class="fa-solid fa-xmark"></i> Remove
+                    </button>
+                ` : `
+                    <div class="cp-image-upload-icon"><i class="fa-solid fa-cloud-arrow-up"></i></div>
+                    <div class="cp-image-upload-text"><span>Click to upload</span> or drag and drop<br><small>PNG, JPG, GIF, WebP — max 5MB</small></div>
+                `}
+            </div>
+        </div>
+        <div id="wiz-image-url-wrap" style="display:none">
+            <input type="url" id="wiz-image-url" class="cp-form-input" placeholder="https://example.com/image.jpg"
+                   value="${CS.createImageUrl.replace(/"/g, '&quot;')}">
+        </div>
+        <div class="flex justify-between mt-6">
+            <button class="cp-btn cp-btn-secondary" onclick="CharityPage.wizardBack()">
+                <i class="fa-solid fa-arrow-left"></i> Back
+            </button>
+            <div class="flex gap-2">
+                <button class="cp-btn cp-btn-secondary" onclick="CharityPage.wizardSkipImage()">
+                    Skip <i class="fa-solid fa-forward"></i>
+                </button>
+                <button class="cp-btn cp-btn-primary" onclick="CharityPage.wizardNext()">
+                    Next <i class="fa-solid fa-arrow-right"></i>
+                </button>
+            </div>
+        </div>
+    `;
+}
+
+function renderCreateStep4(panel) {
+    const cat = CATEGORIES[CS.createCategory] || CATEGORIES.humanitarian;
+    panel.innerHTML = `
+        <h2 class="text-lg font-bold text-white mb-2">Confirm & Launch</h2>
+        <p class="text-sm text-zinc-500 mb-6">Set your goal, duration and review before launching</p>
+        <div class="cp-form-row mb-4">
+            <div class="cp-form-group">
+                <label class="cp-form-label">Goal (ETH) *</label>
+                <input type="number" id="wiz-goal" class="cp-form-input" placeholder="1.0" min="0.01" step="0.01"
+                       value="${CS.createGoal}">
+            </div>
+            <div class="cp-form-group">
+                <label class="cp-form-label">Duration (Days) * <span>1-180</span></label>
+                <input type="number" id="wiz-duration" class="cp-form-input" placeholder="30" min="1" max="180"
+                       value="${CS.createDuration}">
+            </div>
+        </div>
+
+        <!-- Summary -->
+        <div class="cp-wiz-summary mb-4">
+            <h4 class="text-sm font-bold text-white mb-3"><i class="fa-solid fa-clipboard-list text-amber-500 mr-2"></i>Summary</h4>
+            <div class="cp-wiz-summary-row">
+                <span class="text-zinc-500">Category</span>
+                <span class="text-white">${cat.emoji} ${cat.name}</span>
+            </div>
+            <div class="cp-wiz-summary-row">
+                <span class="text-zinc-500">Title</span>
+                <span class="text-white truncate ml-4" style="max-width:200px">${CS.createTitle || '—'}</span>
+            </div>
+            <div class="cp-wiz-summary-row">
+                <span class="text-zinc-500">Description</span>
+                <span class="text-white">${CS.createDesc ? `${CS.createDesc.length} chars` : '—'}</span>
+            </div>
+            <div class="cp-wiz-summary-row">
+                <span class="text-zinc-500">Image</span>
+                <span class="text-white">${CS.createImagePreview || CS.createImageUrl ? '<i class="fa-solid fa-check text-emerald-400"></i> Added' : '<span class="text-zinc-600">None</span>'}</span>
+            </div>
+        </div>
+
+        <!-- Cost Info -->
+        <div class="text-center text-xs text-zinc-500 p-3 bg-zinc-800/50 rounded-xl mb-4">
+            <i class="fa-solid fa-coins text-amber-400 mr-1"></i>
+            Campaign creation costs <strong class="text-amber-400">1 BKC</strong> token
+        </div>
+
+        <div class="flex justify-between mt-6">
+            <button class="cp-btn cp-btn-secondary" onclick="CharityPage.wizardBack()">
+                <i class="fa-solid fa-arrow-left"></i> Back
+            </button>
+            <button id="btn-wizard-launch" class="cp-btn cp-btn-primary" onclick="CharityPage.wizardLaunch()">
+                <i class="fa-solid fa-rocket"></i> Launch Campaign
+            </button>
+        </div>
+    `;
+}
+
+// Wizard navigation
+function wizardSelectCategory(cat) {
+    CS.createCategory = cat;
+    renderCreateStepContent();
+}
+
+function wizardNext() {
+    // Save current step data before advancing
+    switch (CS.createStep) {
+        case 1:
+            if (!CS.createCategory) return showToast('Select a category', 'error');
+            break;
+        case 2: {
+            const title = document.getElementById('wiz-title')?.value?.trim() || '';
+            const desc = document.getElementById('wiz-desc')?.value?.trim() || '';
+            CS.createTitle = title;
+            CS.createDesc = desc;
+            if (!title) return showToast('Enter a title', 'error');
+            if (!desc) return showToast('Enter a description', 'error');
+            break;
+        }
+        case 3: {
+            const url = document.getElementById('wiz-image-url')?.value?.trim() || '';
+            if (url) CS.createImageUrl = url;
+            break;
+        }
+    }
+    CS.createStep = Math.min(4, CS.createStep + 1);
+    renderCreateStepContent();
+}
+
+function wizardBack() {
+    // Save current data
+    saveWizardStepData();
+    CS.createStep = Math.max(1, CS.createStep - 1);
+    renderCreateStepContent();
+}
+
+function wizardSkipImage() {
+    CS.createImageFile = null;
+    CS.createImageUrl = '';
+    CS.createImagePreview = null;
+    CS.pendingImageFile = null;
+    CS.createStep = 4;
+    renderCreateStepContent();
+}
+
+function cancelCreate() {
+    CS.currentView = 'main';
+    CS.createStep = 1;
+    CS.createCategory = null;
+    CS.createTitle = '';
+    CS.createDesc = '';
+    CS.createGoal = '';
+    CS.createDuration = '';
+    CS.createImageFile = null;
+    CS.createImageUrl = '';
+    CS.createImagePreview = null;
+    CS.pendingImageFile = null;
+    render();
+}
+
+function saveWizardStepData() {
+    switch (CS.createStep) {
+        case 2: {
+            const t = document.getElementById('wiz-title');
+            const d = document.getElementById('wiz-desc');
+            if (t) CS.createTitle = t.value;
+            if (d) CS.createDesc = d.value;
+            break;
+        }
+        case 3: {
+            const u = document.getElementById('wiz-image-url');
+            if (u) CS.createImageUrl = u.value.trim();
+            break;
+        }
+        case 4: {
+            const g = document.getElementById('wiz-goal');
+            const dur = document.getElementById('wiz-duration');
+            if (g) CS.createGoal = g.value;
+            if (dur) CS.createDuration = dur.value;
+            break;
+        }
+    }
+}
+
+function wizardUpdateCharCount(field, input) {
+    const len = input.value.length;
+    const max = field === 'title' ? 100 : 2000;
+    const warnAt = field === 'title' ? 80 : 1800;
+    const dangerAt = field === 'title' ? 95 : 1950;
+    const el = document.getElementById(`wiz-${field}-count`);
+    if (el) {
+        el.textContent = `${len}/${max}`;
+        el.className = `cp-wiz-char-count ${len > dangerAt ? 'danger' : len > warnAt ? 'warn' : ''}`;
+    }
+}
+
+function handleWizardImageSelect(event) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    if (!ALLOWED_IMAGE_TYPES.includes(file.type)) {
+        showToast('Please select a valid image (JPG, PNG, GIF, WebP)', 'error');
+        return;
+    }
+    if (file.size > MAX_IMAGE_SIZE) {
+        showToast('Image must be less than 5MB', 'error');
+        return;
+    }
+
+    CS.createImageFile = file;
+    CS.pendingImageFile = file;
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        CS.createImagePreview = e.target.result;
+        const preview = document.getElementById('wiz-image-preview');
+        if (preview) {
+            preview.innerHTML = `
+                <img src="${e.target.result}" class="cp-image-preview">
+                <button type="button" class="cp-image-remove" onclick="event.stopPropagation();CharityPage.removeWizardImage()">
+                    <i class="fa-solid fa-xmark"></i> Remove
+                </button>
+            `;
+        }
+    };
+    reader.readAsDataURL(file);
+}
+
+function removeWizardImage() {
+    CS.createImageFile = null;
+    CS.createImagePreview = null;
+    CS.createImageUrl = '';
+    CS.pendingImageFile = null;
+    const preview = document.getElementById('wiz-image-preview');
+    if (preview) {
+        preview.innerHTML = `
+            <div class="cp-image-upload-icon"><i class="fa-solid fa-cloud-arrow-up"></i></div>
+            <div class="cp-image-upload-text"><span>Click to upload</span> or drag and drop<br><small>PNG, JPG, GIF, WebP — max 5MB</small></div>
+        `;
+    }
+    const fileInput = document.getElementById('wiz-image-file');
+    if (fileInput) fileInput.value = '';
+}
+
+async function wizardLaunch() {
+    if (!State?.isConnected) return showToast('Connect wallet', 'warning');
+
+    // Read final values from inputs
+    const goal = document.getElementById('wiz-goal')?.value;
+    const duration = document.getElementById('wiz-duration')?.value;
+    CS.createGoal = goal || '';
+    CS.createDuration = duration || '';
+
+    // Validate
+    if (!CS.createCategory) return showToast('Select a category', 'error');
+    if (!CS.createTitle) return showToast('Enter a title', 'error');
+    if (!CS.createDesc) return showToast('Enter a description', 'error');
+    if (!goal || parseFloat(goal) < 0.01) return showToast('Goal must be at least 0.01 ETH', 'error');
+    if (!duration || parseInt(duration) < 1 || parseInt(duration) > 180) return showToast('Duration must be 1-180 days', 'error');
+
+    let imageUrl = CS.createImageUrl || '';
+
+    // Upload image if file selected
+    if (CS.createImageFile) {
+        try {
+            showToast('Uploading image...', 'info');
+            imageUrl = await uploadImageToServer(CS.createImageFile);
+        } catch (e) {
+            console.error('Image upload failed:', e);
+        }
+    }
+
+    const goalWei = ethers.parseEther(goal);
+
+    await CharityTx.createCampaign({
+        title: CS.createTitle,
+        description: CS.createDesc,
+        goalAmount: goalWei,
+        durationDays: parseInt(duration),
+        button: document.getElementById('btn-wizard-launch'),
+
+        onSuccess: async (receipt, campaignId) => {
+            if (campaignId) {
+                try {
+                    await fetch(CHARITY_API.saveCampaign, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            id: campaignId,
+                            title: CS.createTitle,
+                            description: CS.createDesc,
+                            category: CS.createCategory,
+                            imageUrl,
+                            creator: State.userAddress
+                        })
+                    });
+                } catch (e) {}
+            }
+
+            showToast('Campaign created!', 'success');
+            cancelCreate(); // Reset and go back to main
+            await loadData();
+            render();
+        },
+
+        onError: (error) => {
+            if (!error.cancelled && error.type !== 'user_rejected') {
+                showToast(error.message?.slice(0, 80) || 'Failed', 'error');
+            }
+        }
+    });
+}
+
+// ============================================================================
 // MODAL HANDLERS
 // ============================================================================
 
 function openModal(id) { document.getElementById(`modal-${id}`)?.classList.add('active'); }
 function closeModal(id) { document.getElementById(`modal-${id}`)?.classList.remove('active'); }
 
-function openCreate(category = 'humanitarian') {
-    CS.pendingImage = null;
+function openCreate(category = null) {
+    // Reset wizard state
+    CS.createStep = category ? 2 : 1;
+    CS.createCategory = category;
+    CS.createTitle = '';
+    CS.createDesc = '';
+    CS.createGoal = '';
+    CS.createDuration = '';
+    CS.createImageFile = null;
+    CS.createImageUrl = '';
+    CS.createImagePreview = null;
     CS.pendingImageFile = null;
-    removeImage('create');
-    
-    document.querySelectorAll('#modal-create .cp-cat-option').forEach(el => el.classList.remove('selected'));
-    document.getElementById(`opt-${category}`)?.classList.add('selected');
-    
-    ['campaign-title', 'campaign-desc', 'campaign-goal', 'campaign-duration', 'campaign-image-url'].forEach(id => {
-        const el = document.getElementById(id);
-        if (el) el.value = '';
-    });
-    
-    openModal('create');
+    CS.currentView = 'create';
+    render();
 }
 
 function openDonate(id) {
@@ -1631,10 +2191,16 @@ function getContainer() {
 
 function render() {
     injectStyles();
-    
+
     const container = getContainer();
     if (!container) return;
-    
+
+    if (CS.currentView === 'create') {
+        container.innerHTML = renderCreateWizard();
+        renderCreateStepContent();
+        return;
+    }
+
     const id = getIdFromUrl();
     if (id) {
         loadDetail(id);
@@ -1683,7 +2249,10 @@ export const CharityPage = {
     refresh, openModal, closeModal, openCreate, openDonate, openMyCampaigns, openEdit,
     create, donate, donateDetail, cancel, withdraw, saveEdit,
     selCatOpt, setAmt, goBack, viewCampaign, selectCat, clearCat, share, copyLink,
-    handleImageSelect, removeImage, switchImageTab
+    handleImageSelect, removeImage, switchImageTab,
+    // Wizard
+    wizardSelectCategory, wizardNext, wizardBack, wizardSkipImage, cancelCreate,
+    wizardUpdateCharCount, handleWizardImageSelect, removeWizardImage, wizardLaunch
 };
 
 window.CharityPage = CharityPage;
