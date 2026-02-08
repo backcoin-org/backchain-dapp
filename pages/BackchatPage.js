@@ -1342,15 +1342,16 @@ async function loadFees() {
         if (!contract) return;
         
         const fees = await contract.getCurrentFees();
+        const calcFee = (gas) => contract.calculateFee(gas).catch(() => 0n);
         BC.fees = {
-            post: fees.postFee,
-            reply: fees.replyFee,
-            like: fees.likeFee,
-            follow: fees.followFee,
-            repost: fees.repostFee,
-            superLikeMin: fees.superLikeMin,
-            boostMin: fees.boostMin,
-            badge: fees.badgeFee_
+            post: fees.postFee || await calcFee(100000),
+            reply: fees.replyFee || await calcFee(120000),
+            like: fees.likeFee || await calcFee(55000),
+            follow: fees.followFee || await calcFee(45000),
+            repost: fees.repostFee || await calcFee(80000),
+            superLikeMin: fees.superLikeMin || await calcFee(60000),
+            boostMin: fees.boostMin || await calcFee(50000),
+            badge: fees.badgeFee_ || await calcFee(200000)
         };
     } catch (e) {
         console.warn('Failed to load fees:', e.message);

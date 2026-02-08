@@ -153,11 +153,16 @@ export async function createPost({
         validate: async (signer, userAddress) => {
             if (!content || content.length === 0) throw new Error('Content is required');
             if (content.length > 500) throw new Error('Content max 500 chars');
-            
+
             const contract = getBackchatContract(signer);
             const fees = await contract.getCurrentFees();
             postFee = fees.postFee;
-            
+
+            // Fallback: if getCurrentFees returns 0 (view call gas price issue), use calculateFee
+            if (!postFee || postFee === 0n) {
+                postFee = await contract.calculateFee(100000).catch(() => ethers.parseEther('0.0001'));
+            }
+
             const { NetworkManager } = await import('../core/index.js');
             const balance = await NetworkManager.getProvider().getBalance(userAddress);
             if (balance < postFee + ethers.parseEther('0.001')) throw new Error('Insufficient ETH');
@@ -220,7 +225,10 @@ export async function createReply({
             
             const fees = await contract.getCurrentFees();
             replyFee = fees.replyFee;
-            
+            if (!replyFee || replyFee === 0n) {
+                replyFee = await contract.calculateFee(120000).catch(() => ethers.parseEther('0.0001'));
+            }
+
             // Check balances
             const { NetworkManager } = await import('../core/index.js');
             const provider = NetworkManager.getProvider();
@@ -282,9 +290,12 @@ export async function createRepost({
             const contract = getBackchatContract(signer);
             const author = await contract.postAuthor(originalPostId);
             if (author === '0x0000000000000000000000000000000000000000') throw new Error('Post not found');
-            
+
             const fees = await contract.getCurrentFees();
             repostFee = fees.repostFee;
+            if (!repostFee || repostFee === 0n) {
+                repostFee = await contract.calculateFee(80000).catch(() => ethers.parseEther('0.0001'));
+            }
         },
         onSuccess, onError
     });
@@ -332,6 +343,9 @@ export async function like({
             
             const fees = await contract.getCurrentFees();
             likeFee = fees.likeFee;
+            if (!likeFee || likeFee === 0n) {
+                likeFee = await contract.calculateFee(55000).catch(() => ethers.parseEther('0.0001'));
+            }
         },
         onSuccess, onError
     });
@@ -418,6 +432,9 @@ export async function follow({
             const contract = getBackchatContract(signer);
             const fees = await contract.getCurrentFees();
             followFee = fees.followFee;
+            if (!followFee || followFee === 0n) {
+                followFee = await contract.calculateFee(45000).catch(() => ethers.parseEther('0.0001'));
+            }
         },
         onSuccess, onError
     });
@@ -495,6 +512,9 @@ export async function obtainBadge({
             const contract = getBackchatContract(signer);
             const fees = await contract.getCurrentFees();
             badgeFee = fees.badgeFee_;
+            if (!badgeFee || badgeFee === 0n) {
+                badgeFee = await contract.calculateFee(200000).catch(() => ethers.parseEther('0.001'));
+            }
         },
         onSuccess, onError
     });
