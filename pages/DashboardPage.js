@@ -1,18 +1,16 @@
 // js/pages/DashboardPage.js
-// ✅ PRODUCTION V69.0 — Complete Visual Redesign
+// ✅ PRODUCTION V69.1 — Visual Overhaul
 // ═══════════════════════════════════════════════════════════════════════════════
 //                          BACKCHAIN PROTOCOL
 //                    Dashboard — Command Center
 // ═══════════════════════════════════════════════════════════════════════════════
 //
-// V69.0 Changes:
-// - COMPLETE VISUAL REDESIGN — Hero section, Quick Actions grid, compact metrics
-// - Injected CSS with CSS variables (dash-styles-v69, dash-* prefix)
-// - Backchat shortcut prominently placed in Quick Actions
-// - Filter chips replace dropdown for activity feed
-// - Glassmorphic design with glow effects and animations
-// - Timeline-style activity items
-// - Mobile-first responsive layout
+// V69.1 Changes:
+// - Removed sidebar (Network Status, AirBNFT, Portfolio Stats)
+// - Activity feed now full-width
+// - Faucet always visible with prominent design (BKC + ETH)
+// - Enhanced mobile experience (filter chips scroll, better breakpoints)
+// - Visual polish (hero gradient border, claim shimmer, faucet glow)
 //
 // Website: https://backcoin.org
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -65,13 +63,11 @@ const DashboardState = {
 // CONFIG
 // ============================================================================
 const EXPLORER_BASE_URL = "https://sepolia.arbiscan.io/tx/";
-const CONTRACT_EXPLORER_URL = "https://sepolia.arbiscan.io/address/";
 const FAUCET_API_URL = "https://faucet-4wvdcuoouq-uc.a.run.app";
 const NETWORK_ACTIVITY_API = "https://getrecentactivity-4wvdcuoouq-uc.a.run.app";
 const SYSTEM_DATA_API = "https://getsystemdata-4wvdcuoouq-uc.a.run.app";
 const FAUCET_BKC_AMOUNT = "1,000";
 const FAUCET_ETH_AMOUNT = "0.01";
-const FAUCET_BALANCE_THRESHOLD = ethers.parseUnits("100", 18);
 
 // ============================================================================
 // ACTIVITY ICONS — All 76+ types preserved
@@ -279,46 +275,38 @@ async function requestSmartFaucet(btnElement) {
     }
 }
 
-function shouldShowFaucet() {
-    if (!State.isConnected) return false;
-    return (State.currentUserBalance || State.bkcBalance || 0n) < FAUCET_BALANCE_THRESHOLD;
-}
-
 function updateFaucetWidget() {
     const widget = document.getElementById('dashboard-faucet-widget');
     if (!widget) return;
-    if (!shouldShowFaucet()) { widget.classList.add('hidden'); return; }
-    widget.classList.remove('hidden');
-
-    const bkcBalance = State.currentUserBalance || State.bkcBalance || 0n;
-    const isNewUser = bkcBalance === 0n;
-    const cooldownTime = formatCooldownTime(DashboardState.faucet.cooldownEnd);
-    const canClaim = DashboardState.faucet.canClaim && !cooldownTime;
 
     const titleEl = document.getElementById('faucet-title');
     const descEl = document.getElementById('faucet-desc');
     const statusEl = document.getElementById('faucet-status');
     const btn = document.getElementById('faucet-action-btn');
 
+    if (!State.isConnected) {
+        widget.style.opacity = '0.5';
+        if (titleEl) titleEl.innerText = "Get Free Testnet Tokens";
+        if (descEl) descEl.innerText = "Connect your wallet to claim BKC + ETH for gas";
+        if (statusEl) statusEl.classList.add('hidden');
+        if (btn) { btn.className = 'dash-btn-secondary'; btn.innerHTML = '<i class="fa-solid fa-wallet"></i> Connect Wallet'; btn.disabled = true; }
+        return;
+    }
+    widget.style.opacity = '1';
+
+    const cooldownTime = formatCooldownTime(DashboardState.faucet.cooldownEnd);
+    const canClaim = DashboardState.faucet.canClaim && !cooldownTime;
+
     if (!canClaim && cooldownTime) {
-        widget.className = 'dash-faucet-banner dash-faucet-cooldown';
         if (titleEl) titleEl.innerText = "Faucet Cooldown";
         if (descEl) descEl.innerText = "Come back when the timer ends";
-        if (statusEl) { statusEl.classList.remove('hidden'); statusEl.innerHTML = `<i class="fa-solid fa-clock mr-1"></i> ${cooldownTime} remaining`; }
-        if (btn) { btn.className = 'dash-btn-secondary'; btn.innerHTML = '<i class="fa-solid fa-hourglass-half mr-2"></i> On Cooldown'; btn.disabled = true; }
-    } else if (isNewUser) {
-        widget.className = 'dash-faucet-banner dash-faucet-welcome';
-        if (titleEl) titleEl.innerText = "Welcome to BackCoin!";
-        if (descEl) descEl.innerText = `Claim your free starter pack: ${FAUCET_BKC_AMOUNT} BKC + ${FAUCET_ETH_AMOUNT} ETH for gas`;
-        if (statusEl) statusEl.classList.add('hidden');
-        if (btn) { btn.className = 'dash-btn-primary dash-btn-green'; btn.innerHTML = '<i class="fa-solid fa-gift mr-2"></i> Claim Starter Pack'; btn.disabled = false; }
+        if (statusEl) { statusEl.classList.remove('hidden'); statusEl.innerHTML = `<i class="fa-solid fa-clock" style="margin-right:4px"></i>${cooldownTime} remaining`; }
+        if (btn) { btn.className = 'dash-btn-secondary'; btn.innerHTML = '<i class="fa-solid fa-hourglass-half"></i> On Cooldown'; btn.disabled = true; }
     } else {
-        const balanceNum = formatBigNumber(bkcBalance).toFixed(2);
-        widget.className = 'dash-faucet-banner dash-faucet-refill';
-        if (titleEl) titleEl.innerText = "Need More BKC?";
-        if (descEl) descEl.innerText = `Balance: ${balanceNum} BKC — Get ${FAUCET_BKC_AMOUNT} BKC + ${FAUCET_ETH_AMOUNT} ETH`;
+        if (titleEl) titleEl.innerText = "Get Free Testnet Tokens";
+        if (descEl) descEl.innerText = "Claim BKC tokens and ETH for gas — free every hour";
         if (statusEl) statusEl.classList.add('hidden');
-        if (btn) { btn.className = 'dash-btn-primary dash-btn-cyan'; btn.innerHTML = '<i class="fa-solid fa-faucet mr-2"></i> Request Tokens'; btn.disabled = false; }
+        if (btn) { btn.className = 'dash-btn-primary dash-btn-cyan'; btn.innerHTML = '<i class="fa-solid fa-faucet"></i> Claim Free Tokens'; btn.disabled = false; }
     }
 }
 
@@ -460,25 +448,53 @@ function injectStyles() {
         }
         .dash-gain-area.visible { display: inline-block; }
 
-        /* ── Faucet Banner ── */
-        .dash-faucet-banner {
+        /* ── Faucet Section ── */
+        .dash-faucet-section {
+            position: relative;
             display: flex;
-            flex-wrap: wrap;
             align-items: center;
-            justify-content: space-between;
-            gap: 12px;
-            padding: 14px 18px;
-            border-radius: var(--dash-radius-sm);
-            border: 1px solid var(--dash-border);
-            background: var(--dash-surface);
-            animation: dash-fadeIn 0.4s ease-out;
+            gap: 16px;
+            padding: 18px 22px;
+            background: linear-gradient(135deg, rgba(6,182,212,0.06), rgba(34,197,94,0.04));
+            border: 1px solid rgba(6,182,212,0.15);
+            border-radius: var(--dash-radius);
+            overflow: hidden;
+            animation: dash-scaleIn 0.5s ease-out 0.1s both;
+            transition: opacity var(--dash-tr);
         }
-        .dash-faucet-welcome { border-left: 3px solid #22c55e; }
-        .dash-faucet-refill { border-left: 3px solid var(--dash-cyan); }
-        .dash-faucet-cooldown { border-left: 3px solid #71717a; }
-        .dash-faucet-banner h3 { font-size: 13px; font-weight: 700; color: var(--dash-text); margin: 0; }
-        .dash-faucet-banner p { font-size: 11px; color: var(--dash-text-2); margin: 2px 0 0; }
-        .dash-faucet-banner .faucet-status-text { font-size: 11px; color: var(--dash-accent); font-family: monospace; }
+        .dash-faucet-section::before {
+            content: '';
+            position: absolute;
+            top: -60%; left: -15%;
+            width: 280px; height: 280px;
+            background: radial-gradient(circle, rgba(6,182,212,0.05) 0%, transparent 70%);
+            pointer-events: none;
+            animation: dash-glow 5s ease-in-out infinite;
+        }
+        .dash-faucet-icon {
+            width: 48px; height: 48px;
+            border-radius: 14px;
+            background: linear-gradient(135deg, rgba(6,182,212,0.15), rgba(34,197,94,0.1));
+            display: flex; align-items: center; justify-content: center;
+            font-size: 20px; color: #22d3ee;
+            flex-shrink: 0;
+            animation: dash-float 4s ease-in-out infinite;
+            position: relative; z-index: 1;
+        }
+        .dash-faucet-info { flex: 1; min-width: 0; position: relative; z-index: 1; }
+        .dash-faucet-info h3 { font-size: 14px; font-weight: 800; color: var(--dash-text); margin: 0 0 2px; }
+        .dash-faucet-info p { font-size: 11px; color: var(--dash-text-2); margin: 0; }
+        .dash-faucet-amounts { display: flex; gap: 10px; margin-top: 8px; }
+        .dash-faucet-badge {
+            font-size: 11px; font-weight: 700;
+            padding: 3px 10px;
+            border-radius: 20px;
+            background: rgba(255,255,255,0.04);
+            border: 1px solid var(--dash-border);
+            display: inline-flex; align-items: center; gap: 4px;
+        }
+        .dash-faucet-info .faucet-status-text { font-size: 12px; color: var(--dash-accent); font-family: 'SF Mono', monospace; margin-top: 6px; }
+        .dash-faucet-actions { position: relative; z-index: 1; flex-shrink: 0; }
 
         /* ── Quick Actions Grid ── */
         .dash-actions-grid {
@@ -556,9 +572,6 @@ function injectStyles() {
         .dash-metric-pill-label { font-size: 9px; color: var(--dash-text-3); text-transform: uppercase; letter-spacing: 0.08em; font-weight: 700; display: flex; align-items: center; gap: 4px; }
         .dash-metric-pill-label i { font-size: 9px; }
         .dash-metric-pill-value { font-size: 14px; font-weight: 700; color: var(--dash-text); font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-
-        /* ── Content Layout ── */
-        .dash-content { display: grid; grid-template-columns: 1fr 300px; gap: 16px; }
 
         /* ── Activity Panel ── */
         .dash-activity-panel {
@@ -656,27 +669,7 @@ function injectStyles() {
         .dash-page-btn:disabled { opacity: 0.3; cursor: not-allowed; }
         .dash-page-indicator { font-size: 10px; color: var(--dash-text-3); font-family: monospace; }
 
-        /* ── Sidebar ── */
-        .dash-sidebar { display: flex; flex-direction: column; gap: 12px; animation: dash-fadeIn 0.5s ease-out 0.15s both; }
-        .dash-sidebar-card {
-            background: var(--dash-surface);
-            border: 1px solid var(--dash-border);
-            border-radius: var(--dash-radius-sm);
-            padding: 14px;
-            transition: border-color var(--dash-tr);
-        }
-        .dash-sidebar-card:hover { border-color: var(--dash-border-h); }
-        .dash-sidebar-card h3 { font-size: 13px; font-weight: 700; color: var(--dash-text); margin: 0 0 8px; }
-        .dash-sidebar-row { display: flex; justify-content: space-between; align-items: center; font-size: 11px; padding: 3px 0; }
-        .dash-sidebar-row-label { color: var(--dash-text-3); }
-        .dash-sidebar-row-value { color: var(--dash-text); font-weight: 600; }
-        .dash-network-badge {
-            font-size: 9px; padding: 2px 8px;
-            background: rgba(74,222,128,0.1); color: var(--dash-green);
-            border: 1px solid rgba(74,222,128,0.2); border-radius: 20px;
-            display: flex; align-items: center; gap: 4px;
-        }
-        .dash-network-dot { width: 5px; height: 5px; background: var(--dash-green); border-radius: 50%; animation: dash-glow 2s infinite; }
+        /* ── (sidebar removed in V69.1) ── */
 
         /* ── Buttons ── */
         .dash-btn-primary {
@@ -701,12 +694,12 @@ function injectStyles() {
         }
         .dash-btn-secondary:hover:not(:disabled) { color: var(--dash-text); border-color: var(--dash-border-h); }
         .dash-btn-secondary:disabled { opacity: 0.35; cursor: not-allowed; }
-        .dash-sidebar-action-btn {
+        .dash-modal-action-btn {
             width: 100%; padding: 9px; font-size: 12px; font-weight: 700;
             border-radius: 8px; border: none; cursor: pointer;
             transition: all var(--dash-tr); color: white; text-align: center;
         }
-        .dash-sidebar-action-btn:hover { filter: brightness(1.1); transform: translateY(-1px); }
+        .dash-modal-action-btn:hover { filter: brightness(1.1); transform: translateY(-1px); }
 
         /* ── Modals ── */
         .dash-modal-overlay {
@@ -724,15 +717,6 @@ function injectStyles() {
         }
         .dash-modal-overlay.visible .dash-modal { transform: scale(1); }
 
-        /* ── Portfolio ── */
-        .dash-portfolio-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-        .dash-portfolio-item {
-            background: var(--dash-surface-2); border-radius: 8px; padding: 8px;
-            border: 1px solid var(--dash-border);
-        }
-        .dash-portfolio-item-label { font-size: 9px; color: var(--dash-text-3); text-transform: uppercase; }
-        .dash-portfolio-item-value { font-size: 13px; font-weight: 700; color: var(--dash-text); }
-
         /* ── Loading / Empty ── */
         .dash-loading {
             display: flex; flex-direction: column; align-items: center; justify-content: center;
@@ -742,9 +726,29 @@ function injectStyles() {
         .dash-loading-text { font-size: 11px; color: var(--dash-text-3); }
         .dash-empty-text { font-size: 12px; color: var(--dash-text-3); text-align: center; padding: 24px 16px; }
 
+        /* ── Hero gradient border ── */
+        .dash-hero::after {
+            content: '';
+            position: absolute; inset: 0;
+            border-radius: var(--dash-radius);
+            padding: 1px;
+            background: linear-gradient(135deg, rgba(245,158,11,0.25), rgba(74,222,128,0.15), rgba(167,139,250,0.15));
+            -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+            mask-composite: exclude;
+            -webkit-mask-composite: xor;
+            pointer-events: none;
+            opacity: 0.6;
+        }
+
+        /* ── Claim button shimmer when active ── */
+        .dash-claim-btn:not(:disabled) {
+            background-size: 200% 100%;
+            background-image: linear-gradient(90deg, #22c55e 0%, #34d399 25%, #22c55e 50%, #10b981 100%);
+            animation: dash-shimmer 3s linear infinite;
+        }
+
         /* ── Responsive ── */
         @media (max-width: 900px) {
-            .dash-content { grid-template-columns: 1fr; }
             .dash-metrics-bar { grid-template-columns: repeat(3, 1fr); }
         }
         @media (max-width: 640px) {
@@ -755,6 +759,28 @@ function injectStyles() {
             .dash-actions-grid { grid-template-columns: repeat(2, 1fr); }
             .dash-metrics-bar { grid-template-columns: repeat(2, 1fr); }
             .dash-reward-value { font-size: 28px; }
+
+            /* Faucet stacks vertically */
+            .dash-faucet-section { flex-direction: column; text-align: center; padding: 16px; }
+            .dash-faucet-actions { width: 100%; }
+            .dash-faucet-actions button { width: 100%; justify-content: center; }
+            .dash-faucet-amounts { justify-content: center; }
+
+            /* Filter chips horizontal scroll */
+            .dash-filter-chips {
+                flex-wrap: nowrap;
+                overflow-x: auto;
+                -webkit-overflow-scrolling: touch;
+                scrollbar-width: none;
+                padding-bottom: 4px;
+            }
+            .dash-filter-chips::-webkit-scrollbar { display: none; }
+
+            /* Tighter activity items */
+            .dash-activity-item { padding: 8px; gap: 8px; }
+        }
+        @media (max-width: 380px) {
+            .dash-actions-grid { grid-template-columns: 1fr; }
         }
     `;
     document.head.appendChild(style);
@@ -766,9 +792,6 @@ function injectStyles() {
 function renderDashboardLayout() {
     if (!DOMElements.dashboard) return;
     injectStyles();
-
-    const ecosystemAddr = addresses.ecosystemManager || '';
-    const explorerLink = ecosystemAddr ? `${CONTRACT_EXPLORER_URL}${ecosystemAddr}` : '#';
 
     DOMElements.dashboard.innerHTML = `
         <div class="dash-shell">
@@ -810,14 +833,29 @@ function renderDashboardLayout() {
                 </div>
             </div>
 
-            <!-- FAUCET WIDGET -->
-            <div id="dashboard-faucet-widget" class="dash-faucet-banner hidden" style="margin-bottom: 14px;">
-                <div style="flex:1; min-width: 200px;">
-                    <h3 id="faucet-title"></h3>
-                    <p id="faucet-desc"></p>
+            <!-- FAUCET SECTION — Always Visible -->
+            <div id="dashboard-faucet-widget" class="dash-faucet-section" style="margin-bottom: 14px;">
+                <div class="dash-faucet-icon">
+                    <i class="fa-solid fa-droplet"></i>
+                </div>
+                <div class="dash-faucet-info">
+                    <h3 id="faucet-title">Get Free Testnet Tokens</h3>
+                    <p id="faucet-desc">Claim BKC tokens and ETH for gas — free every hour</p>
+                    <div class="dash-faucet-amounts">
+                        <span class="dash-faucet-badge" style="color:#22d3ee">
+                            <i class="fa-solid fa-coins" style="font-size:10px"></i>${FAUCET_BKC_AMOUNT} BKC
+                        </span>
+                        <span class="dash-faucet-badge" style="color:#4ade80">
+                            <i class="fa-brands fa-ethereum" style="font-size:10px"></i>${FAUCET_ETH_AMOUNT} ETH
+                        </span>
+                    </div>
                     <p id="faucet-status" class="faucet-status-text hidden"></p>
                 </div>
-                <button id="faucet-action-btn" class="dash-btn-primary dash-btn-green"></button>
+                <div class="dash-faucet-actions">
+                    <button id="faucet-action-btn" class="dash-btn-primary dash-btn-cyan">
+                        <i class="fa-solid fa-faucet"></i> Claim Free Tokens
+                    </button>
+                </div>
             </div>
 
             <!-- QUICK ACTIONS GRID -->
@@ -928,101 +966,46 @@ function renderDashboardLayout() {
                 </div>
             </div>
 
-            <!-- MAIN CONTENT: Activity + Sidebar -->
-            <div class="dash-content">
-
-                <!-- ACTIVITY PANEL -->
-                <div class="dash-activity-panel">
-                    <div class="dash-activity-header">
-                        <div class="dash-activity-title">
-                            <i class="fa-solid fa-clock-rotate-left"></i>
-                            <span id="activity-title">Activity</span>
-                        </div>
-                        <div style="display:flex; gap:6px; align-items:center;">
-                            <button id="manual-refresh-btn" class="dash-sort-btn" title="Sync">
-                                <i class="fa-solid fa-rotate"></i>
-                            </button>
-                            <button id="activity-sort-toggle" class="dash-sort-btn" title="Sort">
-                                <i class="fa-solid fa-arrow-down-wide-short"></i>
-                            </button>
-                        </div>
+            <!-- ACTIVITY FEED — Full Width -->
+            <div class="dash-activity-panel">
+                <div class="dash-activity-header">
+                    <div class="dash-activity-title">
+                        <i class="fa-solid fa-clock-rotate-left"></i>
+                        <span id="activity-title">Activity</span>
                     </div>
-
-                    <div class="dash-filter-chips">
-                        <button class="dash-chip active" data-filter="ALL">All</button>
-                        <button class="dash-chip" data-filter="STAKE">Staking</button>
-                        <button class="dash-chip" data-filter="CLAIM">Claims</button>
-                        <button class="dash-chip" data-filter="NFT">NFT</button>
-                        <button class="dash-chip" data-filter="GAME">Fortune</button>
-                        <button class="dash-chip" data-filter="CHARITY">Charity</button>
-                        <button class="dash-chip" data-filter="NOTARY">Notary</button>
-                        <button class="dash-chip" data-filter="BACKCHAT">Backchat</button>
-                        <button class="dash-chip" data-filter="FAUCET">Faucet</button>
-                    </div>
-
-                    <div id="dash-activity-list" class="dash-activity-list">
-                        <div class="dash-loading">
-                            <img src="./assets/bkc_logo_3d.png" class="dash-loading-logo" alt="">
-                            <span class="dash-loading-text">Loading activity...</span>
-                        </div>
-                    </div>
-
-                    <div id="dash-pagination-controls" class="dash-pagination" style="display:none">
-                        <button class="dash-page-btn" id="page-prev"><i class="fa-solid fa-chevron-left"></i> Prev</button>
-                        <span class="dash-page-indicator" id="page-indicator">1/1</span>
-                        <button class="dash-page-btn" id="page-next">Next <i class="fa-solid fa-chevron-right"></i></button>
+                    <div style="display:flex; gap:6px; align-items:center;">
+                        <button id="manual-refresh-btn" class="dash-sort-btn" title="Sync">
+                            <i class="fa-solid fa-rotate"></i>
+                        </button>
+                        <button id="activity-sort-toggle" class="dash-sort-btn" title="Sort">
+                            <i class="fa-solid fa-arrow-down-wide-short"></i>
+                        </button>
                     </div>
                 </div>
 
-                <!-- SIDEBAR -->
-                <div class="dash-sidebar">
+                <div class="dash-filter-chips">
+                    <button class="dash-chip active" data-filter="ALL">All</button>
+                    <button class="dash-chip" data-filter="STAKE">Staking</button>
+                    <button class="dash-chip" data-filter="CLAIM">Claims</button>
+                    <button class="dash-chip" data-filter="NFT">NFT</button>
+                    <button class="dash-chip" data-filter="GAME">Fortune</button>
+                    <button class="dash-chip" data-filter="CHARITY">Charity</button>
+                    <button class="dash-chip" data-filter="NOTARY">Notary</button>
+                    <button class="dash-chip" data-filter="BACKCHAT">Backchat</button>
+                    <button class="dash-chip" data-filter="FAUCET">Faucet</button>
+                </div>
 
-                    <!-- Network Status -->
-                    <div class="dash-sidebar-card">
-                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
-                            <h3 style="margin:0">Network</h3>
-                            <span class="dash-network-badge"><span class="dash-network-dot"></span> Live</span>
-                        </div>
-                        <div class="dash-sidebar-row">
-                            <span class="dash-sidebar-row-label">Chain</span>
-                            <span class="dash-sidebar-row-value" style="font-family:monospace; font-size:11px">Arbitrum Sepolia</span>
-                        </div>
-                        <div class="dash-sidebar-row">
-                            <span class="dash-sidebar-row-label">Contracts</span>
-                            <span style="color:var(--dash-green); font-size:11px; font-weight:600">Synced</span>
-                        </div>
-                        <a href="${explorerLink}" target="_blank" class="dash-sidebar-row" style="text-decoration:none; margin-top:4px; padding:4px 0; border-radius:4px;">
-                            <span class="dash-sidebar-row-label">Main Contract</span>
-                            <span style="color:#60a5fa; font-size:11px; display:flex; align-items:center; gap:4px;">View <i class="fa-solid fa-external-link" style="font-size:8px"></i></span>
-                        </a>
+                <div id="dash-activity-list" class="dash-activity-list">
+                    <div class="dash-loading">
+                        <img src="./assets/bkc_logo_3d.png" class="dash-loading-logo" alt="">
+                        <span class="dash-loading-text">Loading activity...</span>
                     </div>
+                </div>
 
-                    <!-- Boost Rewards -->
-                    <div class="dash-sidebar-card">
-                        <h3><i class="fa-solid fa-rocket" style="color:var(--dash-cyan); margin-right:6px; font-size:12px"></i>Boost Rewards</h3>
-                        <p style="font-size:11px; color:var(--dash-text-3); margin-bottom:10px">Rent an NFT by the hour</p>
-                        <button class="dash-sidebar-action-btn go-to-rental" style="background:linear-gradient(135deg, #06b6d4, #0891b2)">
-                            AirBNFT Market <i class="fa-solid fa-arrow-right" style="margin-left:6px"></i>
-                        </button>
-                    </div>
-
-                    <!-- Portfolio Stats -->
-                    <div id="dash-presale-stats" class="dash-sidebar-card hidden" style="border-color: rgba(245,158,11,0.15);">
-                        <h3 style="font-size:11px; color:var(--dash-accent); text-transform:uppercase; letter-spacing:0.05em;">
-                            <i class="fa-solid fa-wallet" style="margin-right:4px"></i> Portfolio
-                        </h3>
-                        <div class="dash-portfolio-grid">
-                            <div class="dash-portfolio-item">
-                                <div class="dash-portfolio-item-label">Spent</div>
-                                <div id="stats-total-spent" class="dash-portfolio-item-value">0 ETH</div>
-                            </div>
-                            <div class="dash-portfolio-item">
-                                <div class="dash-portfolio-item-label">NFTs</div>
-                                <div id="stats-total-boosters" class="dash-portfolio-item-value">0</div>
-                            </div>
-                        </div>
-                        <div id="stats-tier-badges" style="display:flex; gap:4px; flex-wrap:wrap; margin-top:8px"></div>
-                    </div>
+                <div id="dash-pagination-controls" class="dash-pagination" style="display:none">
+                    <button class="dash-page-btn" id="page-prev"><i class="fa-solid fa-chevron-left"></i> Prev</button>
+                    <span class="dash-page-indicator" id="page-indicator">1/1</span>
+                    <button class="dash-page-btn" id="page-next">Next <i class="fa-solid fa-chevron-right"></i></button>
                 </div>
             </div>
         </div>
@@ -1055,8 +1038,8 @@ function renderBoosterModal() {
                     <div style="display:flex;justify-content:space-between;font-size:12px"><span style="color:var(--dash-accent)">Diamond:</span><span style="color:var(--dash-green);font-weight:700">100%</span></div>
                 </div>
                 <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:14px">
-                    <button class="dash-sidebar-action-btn go-to-store" style="background:linear-gradient(135deg,#d97706,#b45309)">Buy NFT</button>
-                    <button class="dash-sidebar-action-btn go-to-rental" style="background:linear-gradient(135deg,#06b6d4,#0891b2)">Rent NFT</button>
+                    <button class="dash-modal-action-btn go-to-store" style="background:linear-gradient(135deg,#d97706,#b45309)">Buy NFT</button>
+                    <button class="dash-modal-action-btn go-to-rental" style="background:linear-gradient(135deg,#06b6d4,#0891b2)">Rent NFT</button>
                 </div>
             </div>
         </div>
@@ -1198,30 +1181,8 @@ async function fetchUserProfile() {
         const response = await fetch(`https://getuserprofile-4wvdcuoouq-uc.a.run.app/${State.userAddress}`);
         if (response.ok) {
             DashboardState.userProfile = await response.json();
-            renderPresaleStats(DashboardState.userProfile);
         }
     } catch (e) { }
-}
-
-function renderPresaleStats(profile) {
-    const statsDiv = document.getElementById('dash-presale-stats');
-    if (!statsDiv || !profile || !profile.presale) return;
-    if (!profile.presale.totalBoosters || profile.presale.totalBoosters === 0) return;
-    statsDiv.classList.remove('hidden');
-    const spentWei = profile.presale.totalSpentWei || 0;
-    const spentEth = parseFloat(ethers.formatEther(BigInt(spentWei))).toFixed(4);
-    document.getElementById('stats-total-spent').innerText = `${spentEth} ETH`;
-    document.getElementById('stats-total-boosters').innerText = profile.presale.totalBoosters || 0;
-    const badgesContainer = document.getElementById('stats-tier-badges');
-    if (badgesContainer && profile.presale.tiersOwned) {
-        let html = '';
-        Object.entries(profile.presale.tiersOwned).forEach(([tierId, count]) => {
-            const tierConfig = boosterTiers[Number(tierId) - 1];
-            const name = tierConfig ? tierConfig.name : `T${tierId}`;
-            html += `<span style="font-size:9px;background:var(--dash-surface-2);color:var(--dash-text-2);padding:2px 6px;border-radius:4px">${count}x ${name}</span>`;
-        });
-        if (html) badgesContainer.innerHTML = html;
-    }
 }
 
 async function updateUserHub(forceRefresh = false) {
