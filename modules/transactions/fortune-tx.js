@@ -13,7 +13,7 @@
 //
 // 1. COMMIT: User submits hash(guesses + secret) + wager + operator
 //    → Receives gameId
-//    → Must wait 5 blocks
+//    → Must wait revealDelay blocks (default 2)
 //
 // 2. REVEAL: User reveals guesses + secret
 //    → Contract verifies hash matches

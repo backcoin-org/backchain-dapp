@@ -120,7 +120,7 @@ const Game = {
         userSecret: null,     // Secret used to generate hash (bytes32)
         commitBlock: null,    // Block number when committed
         commitTxHash: null,   // Transaction hash of commit
-        revealDelay: 5,       // Blocks to wait (default 5 per contract)
+        revealDelay: 2,       // Blocks to wait (fetched from contract on load)
         waitStartTime: null,  // Timestamp when waiting started
         canReveal: false      // Whether we can reveal now
     }
@@ -130,7 +130,7 @@ const Game = {
 let revealCheckInterval = null;
 const REVEAL_CHECK_MS = 3000; // Check every 3 seconds
 // V6.9 FIX: Arbitrum blocks are ~250ms, not 15 seconds
-// Contract DEFAULT_REVEAL_DELAY = 5 blocks = ~1.25 seconds
+// Contract revealDelay = 2 blocks = ~0.5 seconds (fetched dynamically)
 const ESTIMATED_BLOCK_TIME = 250; // ~250ms per block on Arbitrum
 
 // ============================================================================
@@ -451,7 +451,7 @@ function cleanup() {
         userSecret: null,
         commitBlock: null,
         commitTxHash: null,
-        revealDelay: 5,       // Default 5 blocks per contract
+        revealDelay: Game.commitment.revealDelay || 2,
         waitStartTime: null,
         canReveal: false
     };
@@ -1154,7 +1154,7 @@ function setupWagerEvents(maxMulti, balanceNum) {
                         userSecret: commitData?.userSecret || null,
                         commitBlock: commitData?.commitBlock || null,
                         commitTxHash: commitData?.txHash || null,
-                        revealDelay: 5,
+                        revealDelay: Game.commitment.revealDelay || 2,
                         waitStartTime: Date.now(),
                         canReveal: false
                     };
@@ -1334,15 +1334,15 @@ function renderWaiting(container) {
                     'bg-gradient-to-r from-emerald-500 to-green-500 text-white hover:shadow-lg hover:shadow-emerald-500/30' : 
                     'bg-zinc-800 text-zinc-500 cursor-not-allowed'}" 
                 ${Game.commitment.canReveal ? '' : 'disabled'}>
-                <i class="fa-solid ${Game.commitment.canReveal ? 'fa-dice' : 'fa-lock'} mr-2"></i>
-                <span id="reveal-btn-text">${Game.commitment.canReveal ? 'Reveal & Get Result!' : 'Waiting for blocks...'}</span>
+                <i class="fa-solid ${Game.commitment.canReveal ? 'fa-spinner fa-spin' : 'fa-lock'} mr-2"></i>
+                <span id="reveal-btn-text">${Game.commitment.canReveal ? 'Auto-revealing...' : 'Waiting for blocks...'}</span>
             </button>
             
             <!-- Info -->
             <div class="mt-4 p-3 bg-violet-500/10 rounded-lg border border-violet-500/20">
                 <p class="text-[10px] text-violet-300 text-center">
                     <i class="fa-solid fa-shield-halved mr-1"></i>
-                    V6.8: Commit-reveal prevents manipulation. Your numbers are hidden until reveal.
+                    Commit-reveal prevents manipulation. Reveal triggers automatically.
                 </p>
             </div>
             
@@ -1406,33 +1406,114 @@ function updateWaitingCountdown() {
     }
 }
 
-// V6.8: Start polling to check if we can reveal
+// V6.13: Start polling to check if we can reveal — auto-reveal when ready
 function startRevealCheck() {
     if (revealCheckInterval) {
         clearInterval(revealCheckInterval);
     }
-    
+
     // Initial countdown update
     setTimeout(updateWaitingCountdown, 100);
-    
-    // Also check contract status periodically
+
+    // Poll contract status and auto-reveal when ready
     revealCheckInterval = setInterval(async () => {
         if (Game.phase !== 'waiting') {
             clearInterval(revealCheckInterval);
             return;
         }
-        
+
         try {
-            // Check if we can reveal from contract
             const canReveal = await checkCanReveal();
             if (canReveal && !Game.commitment.canReveal) {
                 Game.commitment.canReveal = true;
-                renderPhase(); // Re-render with enabled button
+                clearInterval(revealCheckInterval);
+                revealCheckInterval = null;
+
+                // V6.13: Auto-reveal — pre-simulate via public RPC then trigger
+                console.log('[FortunePool] canReveal=true, starting auto-reveal...');
+                autoRevealWithPreSim();
             }
         } catch (e) {
             console.warn('Reveal check error:', e);
         }
     }, REVEAL_CHECK_MS);
+}
+
+// V6.13: Auto-reveal with pre-simulation to avoid BlockhashUnavailable
+async function autoRevealWithPreSim() {
+    if (Game.phase !== 'waiting') return;
+
+    // Update UI to show auto-reveal in progress
+    const timerEl = document.getElementById('countdown-timer');
+    const btnEl = document.getElementById('btn-reveal');
+    const btnTextEl = document.getElementById('reveal-btn-text');
+    if (timerEl) timerEl.textContent = 'Revealing...';
+    if (btnEl) {
+        btnEl.disabled = true;
+        btnEl.classList.remove('bg-zinc-800', 'text-zinc-500', 'cursor-not-allowed');
+        btnEl.classList.add('bg-gradient-to-r', 'from-amber-500', 'to-yellow-500', 'text-white');
+    }
+    if (btnTextEl) btnTextEl.textContent = 'Auto-revealing...';
+
+    const guesses = Game.mode === 'jackpot' ? [Game.guess] : Game.guesses;
+    const maxRetries = 5;
+    const retryDelay = 2000; // 2s between retries
+
+    // Wait initial 3s for block propagation across RPCs
+    await new Promise(r => setTimeout(r, 3000));
+
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        if (Game.phase !== 'waiting') return; // User navigated away
+
+        try {
+            // Pre-simulate via public RPC (NOT MetaMask) to verify blockhash is available
+            const readContract = State.fortunePoolContractPublic;
+            if (readContract) {
+                await readContract.revealPlay.staticCall(
+                    Game.gameId, guesses, Game.commitment.userSecret,
+                    { from: State.userAddress }
+                );
+            }
+
+            console.log(`[FortunePool] Pre-simulation passed (attempt ${attempt})`);
+            // Pre-sim succeeded — trigger the real reveal
+            executeReveal();
+            return;
+        } catch (e) {
+            const msg = e.message || '';
+            const isBlockhash = msg.includes('0x92555c0e') || msg.includes('BlockhashUnavailable');
+
+            if (isBlockhash && attempt < maxRetries) {
+                console.log(`[FortunePool] BlockhashUnavailable, retry in ${retryDelay}ms (${attempt}/${maxRetries})`);
+                if (timerEl) timerEl.textContent = `Syncing block data...`;
+                await new Promise(r => setTimeout(r, retryDelay));
+            } else if (isBlockhash) {
+                // All retries exhausted — fall back to manual button
+                console.warn('[FortunePool] Pre-sim retries exhausted, enabling manual button');
+                enableManualRevealButton();
+                return;
+            } else {
+                // Non-blockhash error — just try executeReveal directly
+                console.log('[FortunePool] Pre-sim error (non-blockhash), trying direct reveal:', msg);
+                executeReveal();
+                return;
+            }
+        }
+    }
+}
+
+// V6.13: Enable manual reveal button as fallback
+function enableManualRevealButton() {
+    const btnEl = document.getElementById('btn-reveal');
+    const btnTextEl = document.getElementById('reveal-btn-text');
+    const timerEl = document.getElementById('countdown-timer');
+    if (timerEl) timerEl.textContent = 'Ready!';
+    if (btnEl) {
+        btnEl.disabled = false;
+        btnEl.classList.remove('bg-zinc-800', 'text-zinc-500', 'cursor-not-allowed', 'from-amber-500', 'to-yellow-500');
+        btnEl.classList.add('bg-gradient-to-r', 'from-emerald-500', 'to-green-500', 'text-white');
+    }
+    if (btnTextEl) btnTextEl.textContent = 'Reveal & Get Result!';
 }
 
 // V6.11: Check if we can reveal — use getCommitmentStatus (confirmed on-chain)
@@ -1501,7 +1582,13 @@ async function executeReveal() {
             
             onError: (error) => {
                 if (!error.cancelled) {
-                    showToast(error.message || 'Reveal failed', 'error');
+                    // V6.12: Detect BlockhashUnavailable (0x92555c0e) — RPC not synced yet
+                    const msg = error.message || '';
+                    if (msg.includes('0x92555c0e') || msg.includes('BlockhashUnavailable')) {
+                        showToast('Block data not available yet. RPC will retry automatically.', 'warning');
+                    } else {
+                        showToast(msg || 'Reveal failed', 'error');
+                    }
                 }
                 if (btn) {
                     btn.disabled = false;
@@ -1961,6 +2048,15 @@ async function getFortunePoolStatus() {
         Game.serviceFee1x = fee1x;
         Game.serviceFee5x = fee5x;
         
+        // Fetch revealDelay from contract (default 2 blocks)
+        try {
+            const delay = await contract.revealDelay();
+            Game.commitment.revealDelay = Number(delay) || 2;
+            console.log("revealDelay from contract:", Game.commitment.revealDelay);
+        } catch (e) {
+            console.log("Using default revealDelay:", Game.commitment.revealDelay);
+        }
+
         // Try to get tier data
         try {
             const [ranges, multipliers] = await contract.getAllTiers();
