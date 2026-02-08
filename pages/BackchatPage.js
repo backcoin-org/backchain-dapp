@@ -2025,17 +2025,23 @@ function onWizUsernameInput(value) {
 
 function renderWizardStatus() {
     const row = document.getElementById('wiz-username-status');
-    if (!row) return;
+    if (row) {
+        if (BC.wizChecking) {
+            row.innerHTML = '<span class="bc-username-checking"><i class="fa-solid fa-spinner fa-spin"></i> Checking...</span>';
+        } else if (BC.wizUsernameOk === true) {
+            row.innerHTML = `<span class="bc-username-ok"><i class="fa-solid fa-check"></i> Available</span>
+                ${BC.wizFee && BC.wizFee !== '0.0' ? `<span class="bc-username-fee">${BC.wizFee} ETH</span>` : '<span class="bc-username-fee">FREE</span>'}`;
+        } else if (BC.wizUsernameOk === false) {
+            row.innerHTML = '<span class="bc-username-taken"><i class="fa-solid fa-xmark"></i> Taken</span>';
+        } else {
+            row.innerHTML = '';
+        }
+    }
 
-    if (BC.wizChecking) {
-        row.innerHTML = '<span class="bc-username-checking"><i class="fa-solid fa-spinner fa-spin"></i> Checking...</span>';
-    } else if (BC.wizUsernameOk === true) {
-        row.innerHTML = `<span class="bc-username-ok"><i class="fa-solid fa-check"></i> Available</span>
-            ${BC.wizFee && BC.wizFee !== '0.0' ? `<span class="bc-username-fee">${BC.wizFee} ETH</span>` : '<span class="bc-username-fee">FREE</span>'}`;
-    } else if (BC.wizUsernameOk === false) {
-        row.innerHTML = '<span class="bc-username-taken"><i class="fa-solid fa-xmark"></i> Taken</span>';
-    } else {
-        row.innerHTML = '';
+    // Update Next button disabled state (it was rendered with disabled, need to re-enable)
+    const nextBtn = document.querySelector('.bc-wizard-nav .bc-btn-primary');
+    if (nextBtn && BC.wizStep === 1) {
+        nextBtn.disabled = !BC.wizUsernameOk;
     }
 }
 
