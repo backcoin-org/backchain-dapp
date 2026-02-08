@@ -710,7 +710,7 @@ function renderContent(data) {
                     </div>
                     
                     ${userNftBoost === 0 ? `
-                    <a href="#marketplace" onclick="window.navigateTo('marketplace')" 
+                    <a href="#store" onclick="window.navigateTo('store')"
                        class="px-4 py-2 text-xs font-bold bg-gradient-to-r from-amber-500 to-orange-500 text-black rounded-lg hover:shadow-lg hover:shadow-amber-500/25 transition-all">
                         Get NFT
                     </a>
@@ -795,65 +795,39 @@ function renderClaimHistory() {
 // ============================================================================
 async function handleClaim() {
     if (isProcessing) return;
-    
+
     const btn = document.getElementById('claim-btn');
-    const btnText = document.getElementById('claim-btn-text');
-    const btnIcon = document.getElementById('claim-btn-icon');
     if (!btn) return;
 
     isProcessing = true;
-    btn.disabled = true;
-    btn.className = 'claim-btn w-full py-4 text-base flex items-center justify-center gap-2';
-    btn.style.background = 'rgba(63,63,70,0.8)';
-    btnText.textContent = 'Processing...';
-    btnIcon.className = 'fa-solid fa-spinner fa-spin';
 
     try {
         await StakingTx.claimRewards({
             button: btn,
-            
+
             onSuccess: (receipt) => {
-                btn.style.background = 'linear-gradient(135deg, #22c55e 0%, #16a34a 100%)';
-                btn.className = 'claim-btn w-full py-4 text-base flex items-center justify-center gap-2 celebrate';
-                btnText.textContent = '🎉 Claimed Successfully!';
-                btnIcon.className = 'fa-solid fa-check';
                 showToast('🎁 Rewards claimed successfully!', 'success');
-                
-                setTimeout(() => { 
+
+                setTimeout(() => {
                     RewardsPage.clearCache();
                     claimHistory = [];
-                    RewardsPage.update(true); 
+                    RewardsPage.update(true);
                 }, 2500);
             },
-            
+
             onError: (error) => {
                 if (error && !error.cancelled && error.type !== 'user_rejected') {
                     showToast(error.message || 'Claim failed', 'error');
                 }
-                resetClaimButton();
             }
         });
 
     } catch (e) {
         console.error('Claim error:', e);
         showToast(e.message || 'Claim failed', 'error');
-        resetClaimButton();
     } finally {
         isProcessing = false;
     }
-}
-
-function resetClaimButton() {
-    const btn = document.getElementById('claim-btn');
-    const btnText = document.getElementById('claim-btn-text');
-    const btnIcon = document.getElementById('claim-btn-icon');
-    
-    if (!btn) return;
-    btn.disabled = false;
-    btn.style.background = '';
-    btn.className = 'claim-btn w-full py-4 text-base flex items-center justify-center gap-2';
-    if (btnText) btnText.textContent = 'Claim Rewards';
-    if (btnIcon) btnIcon.className = 'fa-solid fa-hand-holding-dollar';
 }
 
 window.RewardsPage = RewardsPage;

@@ -309,7 +309,7 @@ export async function claimRewards({
     let ethFee = 0n;
 
     return await txEngine.execute({
-        name: 'ClaimRewards',
+        name: 'ClaimReward',
         button,
         
         getContract: async (signer) => getDelegationContract(signer),
