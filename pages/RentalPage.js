@@ -37,12 +37,12 @@ import { RentalTx } from '../modules/transactions/index.js';
 const EXPLORER_TX = "https://sepolia.arbiscan.io/tx/";
 const COOLDOWN_PERIOD = 24 * 60 * 60; // 24 hours
 
-// Tier configurations with colors and keep rates
+// Tier configurations with colors, keep rates, and real IPFS images
 const TIER_CONFIG = {
-    'Diamond': { emoji: '💎', color: '#22d3ee', bg: 'rgba(34,211,238,0.15)', border: 'rgba(34,211,238,0.3)', keepRate: 100 },
-    'Gold': { emoji: '🥇', color: '#fbbf24', bg: 'rgba(251,191,36,0.15)', border: 'rgba(251,191,36,0.3)', keepRate: 90 },
-    'Silver': { emoji: '🥈', color: '#9ca3af', bg: 'rgba(156,163,175,0.15)', border: 'rgba(156,163,175,0.3)', keepRate: 75 },
-    'Bronze': { emoji: '🥉', color: '#fb923c', bg: 'rgba(251,146,60,0.15)', border: 'rgba(251,146,60,0.3)', keepRate: 60 }
+    'Diamond': { emoji: '💎', color: '#22d3ee', bg: 'rgba(34,211,238,0.15)', border: 'rgba(34,211,238,0.3)', keepRate: 100, image: 'https://white-defensive-eel-240.mypinata.cloud/ipfs/bafybeicgip72jcqgsirlrhn3tq5cc226vmko6etnndzl6nlhqrktfikafq' },
+    'Gold': { emoji: '🥇', color: '#fbbf24', bg: 'rgba(251,191,36,0.15)', border: 'rgba(251,191,36,0.3)', keepRate: 90, image: 'https://white-defensive-eel-240.mypinata.cloud/ipfs/bafybeifponccrbicg2pcjrn2hrfoqgc77xhm2r4ld7hdpw6cxxkbsckf44' },
+    'Silver': { emoji: '🥈', color: '#9ca3af', bg: 'rgba(156,163,175,0.15)', border: 'rgba(156,163,175,0.3)', keepRate: 75, image: 'https://white-defensive-eel-240.mypinata.cloud/ipfs/bafybeihvi2inujm5zpi7tl667g4srq273536pjkglwyrtbwmgnskmu7jg4' },
+    'Bronze': { emoji: '🥉', color: '#fb923c', bg: 'rgba(251,146,60,0.15)', border: 'rgba(251,146,60,0.3)', keepRate: 60, image: 'https://white-defensive-eel-240.mypinata.cloud/ipfs/bafybeiclqidb67rt3tchhjpsib62s624li7j2bpxnr6b5w5mfp4tomhu7m' }
 };
 
 // ============================================================================
@@ -638,9 +638,9 @@ function renderNFTCard(listing, idx) {
             
             <!-- NFT Display -->
             <div class="relative aspect-square flex items-center justify-center p-6">
-                <div class="absolute inset-0 rounded-2xl opacity-50" 
+                <div class="absolute inset-0 rounded-2xl opacity-50"
                      style="background: radial-gradient(circle at center, ${config.color}15 0%, transparent 70%);"></div>
-                <div class="text-7xl float-animation">${config.emoji}</div>
+                <img src="${config.image}" alt="${tier.name} Booster" class="w-4/5 h-4/5 object-contain float-animation rounded-xl" onerror="this.outerHTML='<div class=\\'text-7xl float-animation\\'>${config.emoji}</div>'">
                 
                 ${isOwner ? `
                     <div class="absolute bottom-4 left-1/2 -translate-x-1/2 px-3 py-1.5 rounded-full bg-blue-500/20 border border-blue-500/30 text-blue-400 text-[10px] font-bold">
@@ -815,9 +815,9 @@ function renderRentalCard(rental, idx) {
             </div>
             
             <div class="flex items-center gap-4 mb-4">
-                <div class="w-16 h-16 rounded-xl flex items-center justify-center text-4xl" 
+                <div class="w-16 h-16 rounded-xl flex items-center justify-center overflow-hidden"
                      style="background:${config.bg}">
-                    ${config.emoji}
+                    <img src="${config.image}" alt="${tier.name}" class="w-full h-full object-contain" onerror="this.outerHTML='<span class=\\'text-4xl\\'>${config.emoji}</span>'">
                 </div>
                 <div>
                     <h3 class="text-lg font-bold text-white">${tier.name} Booster</h3>
@@ -1061,7 +1061,7 @@ function openRentModal(tokenId) {
     
     document.getElementById('rent-modal-content').innerHTML = `
         <div class="flex items-center gap-4 mb-5 p-4 rounded-xl" style="background:${config.bg}">
-            <div class="text-5xl">${config.emoji}</div>
+            <img src="${config.image}" alt="${tier.name}" class="w-16 h-16 object-contain rounded-lg" onerror="this.outerHTML='<div class=\\'text-5xl\\'>${config.emoji}</div>'">
             <div>
                 <h3 class="text-lg font-bold text-white">${tier.name} Booster #${tokenId}</h3>
                 <p class="text-sm" style="color:${config.color}">Keep ${keepRate}% of rewards</p>

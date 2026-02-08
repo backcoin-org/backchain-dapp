@@ -345,47 +345,51 @@ export const FAUCET_AMOUNT_WEI = 20n * 10n**18n;
 // - Diamond (50%): 0% burn → user keeps 100%
 
 export const boosterTiers = [
-    { 
-        name: "Diamond", 
+    {
+        name: "Diamond",
         boostBips: 5000,  // 50% boost → 0% burn
         burnRate: 0,
         keepRate: 100,
-        color: "text-cyan-400", 
+        color: "text-cyan-400",
         emoji: "💎",
-        borderColor: "border-cyan-400/50", 
+        image: "https://white-defensive-eel-240.mypinata.cloud/ipfs/bafybeicgip72jcqgsirlrhn3tq5cc226vmko6etnndzl6nlhqrktfikafq",
+        borderColor: "border-cyan-400/50",
         glowColor: "bg-cyan-500/10",
         bgGradient: "from-cyan-500/20 to-blue-500/20"
     },
-    { 
-        name: "Gold", 
+    {
+        name: "Gold",
         boostBips: 4000,  // 40% boost → 10% burn
         burnRate: 10,
         keepRate: 90,
-        color: "text-amber-400", 
+        color: "text-amber-400",
         emoji: "🥇",
-        borderColor: "border-amber-400/50", 
+        image: "https://white-defensive-eel-240.mypinata.cloud/ipfs/bafybeifponccrbicg2pcjrn2hrfoqgc77xhm2r4ld7hdpw6cxxkbsckf44",
+        borderColor: "border-amber-400/50",
         glowColor: "bg-amber-500/10",
         bgGradient: "from-amber-500/20 to-yellow-500/20"
     },
-    { 
-        name: "Silver", 
+    {
+        name: "Silver",
         boostBips: 2500,  // 25% boost → 25% burn
         burnRate: 25,
         keepRate: 75,
-        color: "text-gray-300", 
+        color: "text-gray-300",
         emoji: "🥈",
-        borderColor: "border-gray-400/50", 
+        image: "https://white-defensive-eel-240.mypinata.cloud/ipfs/bafybeihvi2inujm5zpi7tl667g4srq273536pjkglwyrtbwmgnskmu7jg4",
+        borderColor: "border-gray-400/50",
         glowColor: "bg-gray-500/10",
         bgGradient: "from-gray-400/20 to-zinc-500/20"
     },
-    { 
-        name: "Bronze", 
+    {
+        name: "Bronze",
         boostBips: 1000,  // 10% boost → 40% burn
         burnRate: 40,
         keepRate: 60,
-        color: "text-yellow-600", 
+        color: "text-yellow-600",
         emoji: "🥉",
-        borderColor: "border-yellow-600/50", 
+        image: "https://white-defensive-eel-240.mypinata.cloud/ipfs/bafybeiclqidb67rt3tchhjpsib62s624li7j2bpxnr6b5w5mfp4tomhu7m",
+        borderColor: "border-yellow-600/50",
         glowColor: "bg-yellow-600/10",
         bgGradient: "from-yellow-600/20 to-orange-600/20"
     }

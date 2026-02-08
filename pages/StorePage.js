@@ -36,43 +36,47 @@ const POOL_CACHE_TTL = 30000; // V12: 30 seconds cache for pool data
 // TIER CONFIGURATION - V6.8 (4 TIERS)
 // ============================================================================
 const TIER_CONFIG = {
-    'Diamond': { 
+    'Diamond': {
         color: '#22d3ee',
         gradient: 'from-cyan-500/20 to-blue-500/20',
         border: 'border-cyan-500/40',
         text: 'text-cyan-400',
         glow: 'shadow-cyan-500/30',
         icon: '💎',
+        image: 'https://white-defensive-eel-240.mypinata.cloud/ipfs/bafybeicgip72jcqgsirlrhn3tq5cc226vmko6etnndzl6nlhqrktfikafq',
         keepRate: 100,
         burnRate: 0
     },
-    'Gold': { 
+    'Gold': {
         color: '#fbbf24',
         gradient: 'from-yellow-500/20 to-amber-500/20',
         border: 'border-yellow-500/40',
         text: 'text-yellow-400',
         glow: 'shadow-yellow-500/30',
         icon: '🥇',
+        image: 'https://white-defensive-eel-240.mypinata.cloud/ipfs/bafybeifponccrbicg2pcjrn2hrfoqgc77xhm2r4ld7hdpw6cxxkbsckf44',
         keepRate: 90,
         burnRate: 10
     },
-    'Silver': { 
+    'Silver': {
         color: '#9ca3af',
         gradient: 'from-gray-400/20 to-slate-400/20',
         border: 'border-gray-400/40',
         text: 'text-gray-300',
         glow: 'shadow-gray-400/30',
         icon: '🥈',
+        image: 'https://white-defensive-eel-240.mypinata.cloud/ipfs/bafybeihvi2inujm5zpi7tl667g4srq273536pjkglwyrtbwmgnskmu7jg4',
         keepRate: 75,
         burnRate: 25
     },
-    'Bronze': { 
+    'Bronze': {
         color: '#f97316',
         gradient: 'from-orange-600/20 to-amber-700/20',
         border: 'border-orange-600/40',
         text: 'text-orange-400',
         glow: 'shadow-orange-500/30',
         icon: '🥉',
+        image: 'https://white-defensive-eel-240.mypinata.cloud/ipfs/bafybeiclqidb67rt3tchhjpsib62s624li7j2bpxnr6b5w5mfp4tomhu7m',
         keepRate: 60,
         burnRate: 40
     }
@@ -860,8 +864,8 @@ function renderInventory() {
                  data-tokenid="${nft.tokenId}"
                  data-unavailable="${isUnavailable}">
                 ${statusBadge}
-                <div class="w-full aspect-square rounded-lg bg-gradient-to-br ${style.gradient} border ${style.border} flex items-center justify-center ${isUnavailable ? 'grayscale' : ''}">
-                    <span class="text-3xl">${emoji}</span>
+                <div class="w-full aspect-square rounded-lg bg-gradient-to-br ${style.gradient} border ${style.border} flex items-center justify-center overflow-hidden ${isUnavailable ? 'grayscale' : ''}">
+                    ${style.image ? `<img src="${style.image}" alt="${tier?.name}" class="w-full h-full object-contain p-1" onerror="this.outerHTML='<span class=\\'text-3xl\\'>${emoji}</span>'">` : `<span class="text-3xl">${emoji}</span>`}
                 </div>
                 <p class="text-[9px] text-center mt-1 ${style.text} truncate">${tier?.name || 'NFT'}</p>
                 <p class="text-[8px] text-center ${keepRate === 100 ? 'text-green-400' : 'text-zinc-500'}">Keep ${keepRate}%</p>
