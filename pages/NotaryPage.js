@@ -1663,7 +1663,7 @@ async function loadCertificates() {
 
     try {
         // Primary: Firebase API
-        const baseUrl = API_ENDPOINTS.getNotaryHistory || 'https://getnotaryhistory-4wvdcuoouq-uc.a.run.app';
+        const baseUrl = API_ENDPOINTS.getNotarizedDocuments || 'https://getnotarizeddocuments-4wvdcuoouq-uc.a.run.app';
         const response = await fetch(`${baseUrl}/${State.userAddress}`);
 
         if (!response.ok) throw new Error(`API ${response.status}`);
