@@ -1147,14 +1147,14 @@ function setupWagerEvents(maxMulti, balanceNum) {
                 button: document.getElementById('btn-play'),
 
                 onSuccess: (commitData) => {
-                    // V6.9: playGame returns { gameId, txHash, guesses, userSecret, isCumulative }
+                    // V6.11: playGame returns { gameId, txHash, commitBlock, guesses, userSecret, isCumulative }
                     Game.gameId = commitData?.gameId || Date.now();
                     Game.commitment = {
                         hash: null,
                         userSecret: commitData?.userSecret || null,
-                        commitBlock: null,
+                        commitBlock: commitData?.commitBlock || null,
                         commitTxHash: commitData?.txHash || null,
-                        revealDelay: 5, // Default 5 blocks per contract
+                        revealDelay: 5,
                         waitStartTime: Date.now(),
                         canReveal: false
                     };
@@ -1435,24 +1435,23 @@ function startRevealCheck() {
     }, REVEAL_CHECK_MS);
 }
 
-// V6.10: Check if we can reveal — use getCommitment + block number
+// V6.11: Check if we can reveal — use getCommitmentStatus (confirmed on-chain)
 async function checkCanReveal() {
     if (!State.fortunePoolContractPublic || !Game.gameId) return false;
 
     try {
-        // Primary: use getCommitment() to read commitBlock, compare to current block
-        const commitment = await State.fortunePoolContractPublic.getCommitment(Game.gameId);
-        const commitBlock = Number(commitment.commitBlock);
-        if (commitBlock === 0) return false; // Commitment not found
-
-        const provider = State.fortunePoolContractPublic.runner?.provider;
-        if (!provider) return false;
-
-        const currentBlock = await provider.getBlockNumber();
-        const delay = Game.commitment.revealDelay || 5;
-        return currentBlock >= commitBlock + delay;
+        const status = await State.fortunePoolContractPublic.getCommitmentStatus(Game.gameId);
+        // Also populate commitBlock for display if missing
+        if (!Game.commitment.commitBlock) {
+            try {
+                const c = await State.fortunePoolContractPublic.getCommitment(Game.gameId);
+                const block = Number(c.commitBlock);
+                if (block > 0) Game.commitment.commitBlock = block;
+            } catch {}
+        }
+        return status.canReveal === true;
     } catch (e) {
-        // All contract calls failed — generous time-based fallback
+        // Generous time-based fallback
         const elapsed = Date.now() - (Game.commitment.waitStartTime || Date.now());
         return elapsed >= 30000;
     }

@@ -110,8 +110,8 @@ const FORTUNE_ABI = [
     // Commitment queries
     'function getCommitment(uint256 _gameId) view returns (address player, uint64 commitBlock, bool isCumulative, uint8 status, uint256 wagerAmount, uint256 ethPaid)',
     'function getCommitmentStatus(uint256 _gameId) view returns (uint8 status, bool canReveal, bool isExpired, uint256 blocksUntilReveal, uint256 blocksUntilExpiry)',
-    'function commitmentHashes(uint256 _gameId) view returns (bytes32)',
-    'function commitmentOperators(uint256 _gameId) view returns (address)',
+    // V2.1: G-10 consolidated 3 mappings into CommitmentMeta struct
+    'function commitmentMeta(uint256 _gameId) view returns (bytes32 hash, address operator, uint96 tierNonce)',
     
     // Game results
     'function getGameResult(uint256 _gameId) view returns (address player, uint256 wagerAmount, uint256 prizeWon, uint256[] guesses, uint256[] rolls, bool isCumulative, uint8 matchCount, uint256 timestamp)',
@@ -329,7 +329,7 @@ export async function commitPlay({
             } catch {}
 
             if (onSuccess) {
-                onSuccess({ gameId, txHash: receipt.hash });
+                onSuccess({ gameId, txHash: receipt.hash, commitBlock: receipt.blockNumber });
             }
         },
         onError
@@ -374,34 +374,31 @@ export async function revealPlay({
             const ethers = window.ethers;
             const readContract = await getFortuneContractReadOnly();
 
-            // V2.1: Use getCommitment() + block number (more reliable than getCommitmentStatus)
-            const commitment = await readContract.getCommitment(gameId);
+            // Check commitment status (readiness + expiry)
+            const status = await readContract.getCommitmentStatus(gameId);
 
-            if (commitment.player === ethers.ZeroAddress) {
-                throw new Error('Game not found — invalid game ID');
+            if (status.isExpired) {
+                throw new Error('Game has expired. You can no longer reveal.');
             }
 
+            if (!status.canReveal) {
+                if (status.blocksUntilReveal > 0) {
+                    throw new Error(`Must wait ${status.blocksUntilReveal} more blocks before reveal`);
+                }
+                throw new Error('Cannot reveal this game');
+            }
+
+            // Verify ownership
+            const commitment = await readContract.getCommitment(gameId);
             if (commitment.player.toLowerCase() !== userAddress.toLowerCase()) {
                 throw new Error('You are not the owner of this game');
             }
 
-            // Check if enough blocks have passed
-            const commitBlock = Number(commitment.commitBlock);
-            const provider = readContract.runner?.provider;
-            if (provider) {
-                const currentBlock = await provider.getBlockNumber();
-                const revealDelay = 5; // contract default
-                if (currentBlock < commitBlock + revealDelay) {
-                    const remaining = commitBlock + revealDelay - currentBlock;
-                    throw new Error(`Must wait ${remaining} more blocks before reveal`);
-                }
-            }
-
-            // Verify hash
-            const expectedHash = await readContract.commitmentHashes(gameId);
+            // V2.1: Verify hash via commitmentMeta (G-10 consolidated struct)
+            const meta = await readContract.commitmentMeta(gameId);
             const calculatedHash = generateCommitmentHashLocal(guesses, userSecret);
 
-            if (expectedHash.toLowerCase() !== calculatedHash.toLowerCase()) {
+            if (meta.hash.toLowerCase() !== calculatedHash.toLowerCase()) {
                 throw new Error('Hash mismatch - guesses or secret do not match commitment');
             }
         },

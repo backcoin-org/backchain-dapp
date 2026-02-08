@@ -572,8 +572,7 @@ export const fortunePoolV2ABI = [
     // ===== Commitment Queries =====
     "function getCommitmentStatus(uint256 _gameId) view returns (uint8 status, bool canReveal, bool isExpired, uint256 blocksUntilReveal, uint256 blocksUntilExpiry)",
     "function getCommitment(uint256 _gameId) view returns (address player, uint64 commitBlock, bool isCumulative, uint8 status, uint256 wagerAmount, uint256 ethPaid)",
-    "function commitmentHashes(uint256 _gameId) view returns (bytes32)",
-    "function commitmentOperators(uint256 _gameId) view returns (address)",
+    "function commitmentMeta(uint256 _gameId) view returns (bytes32 hash, address operator, uint96 tierNonce)",
     "function revealDelay() view returns (uint256)",
     "function revealWindow() view returns (uint256)",
 
