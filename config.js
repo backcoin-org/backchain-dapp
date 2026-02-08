@@ -449,8 +449,9 @@ export const delegationManagerABI = [
     "function delegate(uint256 _amount, uint256 _lockDuration, address _operator) external",
     "function unstake(uint256 _delegationIndex, address _operator) external",
     "function forceUnstake(uint256 _delegationIndex, address _operator) external",
-    "function claimReward(address _operator) external",
-    
+    "function claimReward(address _operator) external payable",
+    "function claimEthFee() view returns (uint256)",
+
     // V6.8: NFT Boost & Burn Rate functions
     "function getUserBestBoost(address _user) view returns (uint256)",
     "function getBurnRateForBoost(uint256 _boost) view returns (uint256)",
@@ -500,20 +501,44 @@ export const rentalManagerABI = [
     "event RentalExpired(uint256 indexed tokenId, address indexed tenant)"
 ];
 
+// NFT Liquidity Pool V6 ABI - With Operator + ETH Fees
 export const nftPoolABI = [
+    // WRITE - V6 with operator + payable
+    "function buyNFT(address _operator) external payable returns (uint256 tokenId)",
+    "function buySpecificNFT(uint256 _tokenId, address _operator) external payable",
+    "function buyNFTWithSlippage(uint256 _maxPrice, address _operator) external payable returns (uint256 tokenId)",
+    "function sellNFT(uint256 _tokenId, uint256 _minPayout, address _operator) external payable",
+    // READ - Prices
     "function getBuyPrice() view returns (uint256)",
-    "function getSellPrice() view returns (uint256)",
     "function getBuyPriceWithTax() view returns (uint256)",
+    "function getSellPrice() view returns (uint256)",
     "function getSellPriceAfterTax() view returns (uint256)",
-    "function buyNFT() external payable returns (uint256)",
-    "function buySpecificNFT(uint256 _tokenId) external payable",
-    "function buyNFTWithSlippage(uint256 _maxPrice) external payable returns (uint256)",
-    "function sellNFT(uint256 _tokenId, uint256 _minPayout) external",
-    "function getPoolInfo() view returns (uint256 tokenBalance, uint256 nftCount, uint256 k, bool isInitialized)",
+    "function getTotalBuyCost() view returns (uint256 bkcCost, uint256 ethCost)",
+    "function getTotalSellInfo() view returns (uint256 bkcPayout, uint256 ethCost)",
+    "function getSpread() view returns (uint256 spread, uint256 spreadBips)",
+    // READ - Pool State
+    "function getPoolInfo() view returns (uint256 bkcBalance, uint256 nftCount, uint256 k, bool initialized)",
     "function getAvailableNFTs() view returns (uint256[])",
+    "function getNFTBalance() view returns (uint256)",
+    "function getBKCBalance() view returns (uint256)",
+    "function isNFTInPool(uint256 _tokenId) view returns (bool)",
+    // READ - Tier
     "function boostBips() view returns (uint256)",
-    "event NFTPurchased(address indexed buyer, uint256 indexed tokenId, uint256 price, uint256 tax, uint256 newBkcBalance, uint256 newNftCount)",
-    "event NFTSold(address indexed seller, uint256 indexed tokenId, uint256 payout, uint256 tax, uint256 newBkcBalance, uint256 newNftCount)"
+    "function getTierName() view returns (string)",
+    // READ - ETH Fees
+    "function buyEthFee() view returns (uint256)",
+    "function sellEthFee() view returns (uint256)",
+    "function getEthFeeConfig() view returns (uint256 buyFee, uint256 sellFee, uint256 totalCollected)",
+    "function totalETHCollected() view returns (uint256)",
+    // READ - Stats
+    "function getTradingStats() view returns (uint256 volume, uint256 taxes, uint256 buys, uint256 sells)",
+    "function totalVolume() view returns (uint256)",
+    "function totalTaxesCollected() view returns (uint256)",
+    "function totalBuys() view returns (uint256)",
+    "function totalSells() view returns (uint256)",
+    // Events V6
+    "event NFTPurchased(address indexed buyer, uint256 indexed tokenId, uint256 price, uint256 tax, uint256 newBkcBalance, uint256 newNftCount, address operator)",
+    "event NFTSold(address indexed seller, uint256 indexed tokenId, uint256 payout, uint256 tax, uint256 newBkcBalance, uint256 newNftCount, address operator)"
 ];
 
 export const actionsManagerABI = [
@@ -536,45 +561,58 @@ export const actionsManagerABI = [
     "event GameFulfilled(uint256 indexed gameId, address indexed player, uint256 prizeWon, uint256[] rolls, uint256[] guesses, bool isCumulative)"
 ];
 
-// FortunePool V6.8 ABI - Commit-Reveal System
+// FortunePool V6.9 ABI - Commit-Reveal System (Aligned with fortune-tx.js)
 export const fortunePoolV2ABI = [
-    // ===== Commit-Reveal Flow =====
-    // Step 1: Commit your guess (hash only, guess hidden)
+    // ===== Write Functions =====
     "function commitPlay(bytes32 _commitmentHash, uint256 _wagerAmount, bool _isCumulative, address _operator) external payable",
-    // Step 2: Reveal your guess after delay (get result)
-    "function revealPlay(uint256 _gameId, uint256[] calldata _guesses, bytes32 _userSecret) external",
-    // Helper to generate commitment hash
-    "function generateCommitmentHash(uint256[] calldata _guesses, bytes32 _userSecret) view returns (bytes32)",
-    
-    // Commitment status
-    "function getCommitmentStatus(uint256 _gameId) view returns (bool exists, bool canReveal, bool isExpired, uint256 blocksUntilReveal)",
+    "function revealPlay(uint256 _gameId, uint256[] calldata _guesses, bytes32 _userSecret) external returns (uint256 prizeWon)",
+    "function generateCommitmentHash(uint256[] calldata _guesses, bytes32 _userSecret) external pure returns (bytes32 hash)",
+    "function claimExpiredGame(uint256 _gameId) external",
+
+    // ===== Commitment Queries =====
+    "function getCommitmentStatus(uint256 _gameId) view returns (uint8 status, bool canReveal, bool isExpired, uint256 blocksUntilReveal, uint256 blocksUntilExpiry)",
+    "function getCommitment(uint256 _gameId) view returns (address player, uint64 commitBlock, bool isCumulative, uint8 status, uint256 wagerAmount, uint256 ethPaid)",
     "function commitmentHashes(uint256 _gameId) view returns (bytes32)",
+    "function commitmentOperators(uint256 _gameId) view returns (address)",
     "function revealDelay() view returns (uint256)",
     "function revealWindow() view returns (uint256)",
-    
-    // Service fee functions
+
+    // ===== Fees =====
     "function serviceFee() view returns (uint256)",
     "function getRequiredServiceFee(bool _isCumulative) view returns (uint256)",
-    
-    // View functions
-    "function prizePoolBalance() view returns (uint256)",
-    "function gameCounter() view returns (uint256)",
-    "function activeTierCount() view returns (uint256)",
     "function gameFeeBips() view returns (uint256)",
-    "function getExpectedGuessCount(bool _isCumulative) view returns (uint256)",
+
+    // ===== Tiers =====
+    "function activeTierCount() view returns (uint256)",
+    "function prizeTiers(uint256 tierId) view returns (uint128 maxRange, uint64 multiplierBips, bool active)",
     "function getTier(uint256 _tierId) view returns (uint256 maxRange, uint256 multiplierBips, bool active)",
     "function getAllTiers() view returns (uint128[] ranges, uint64[] multipliers)",
-    "function calculatePotentialWinnings(uint256 _wagerAmount, bool _isCumulative) view returns (uint256 maxPrize, uint256 netWager, uint256 fee)",
-    
-    // Game results
+    "function getExpectedGuessCount(bool _isCumulative) view returns (uint256)",
+    "function calculatePotentialWinnings(uint256 _wagerAmount, bool _isCumulative) view returns (uint256 maxPrize, uint256 netWager)",
+
+    // ===== Game State =====
+    "function gameCounter() view returns (uint256)",
+    "function prizePoolBalance() view returns (uint256)",
+
+    // ===== Game Results =====
     "function getGameResult(uint256 _gameId) view returns (address player, uint256 wagerAmount, uint256 prizeWon, uint256[] guesses, uint256[] rolls, bool isCumulative, uint8 matchCount, uint256 timestamp)",
     "function getPlayerStats(address _player) view returns (uint256 gamesPlayed, uint256 totalWagered, uint256 totalWon, int256 netProfit)",
-    "function getPoolStats() view returns (uint256 poolBalance, uint256 gamesPlayed, uint256 wageredAllTime, uint256 paidOutAllTime, uint256 winsAllTime, uint256 currentFee)",
-    
-    // Events V6.8
-    "event GameCommitted(uint256 indexed gameId, address indexed player, uint256 wagerAmount, bool isCumulative, uint256 commitBlock)",
-    "event GameRevealed(uint256 indexed gameId, address indexed player, uint256 prizeWon, uint8 matchCount, bool isCumulative)",
-    "event CommitmentExpired(uint256 indexed gameId, address indexed player, uint256 wagerRefunded)"
+    "function getPoolStats() view returns (uint256 poolBalance, uint256 gamesPlayed, uint256 wageredAllTime, uint256 paidOutAllTime, uint256 winsAllTime, uint256 ethCollected, uint256 bkcFees, uint256 expiredGames)",
+
+    // ===== Statistics =====
+    "function totalWageredAllTime() view returns (uint256)",
+    "function totalPaidOutAllTime() view returns (uint256)",
+    "function totalWinsAllTime() view returns (uint256)",
+    "function totalETHCollected() view returns (uint256)",
+    "function totalBKCFees() view returns (uint256)",
+    "function totalExpiredGames() view returns (uint256)",
+
+    // ===== Events =====
+    "event GameCommitted(uint256 indexed gameId, address indexed player, uint256 wagerAmount, bool isCumulative, address operator)",
+    "event GameRevealed(uint256 indexed gameId, address indexed player, uint256 wagerAmount, uint256 prizeWon, bool isCumulative, uint8 matchCount, address operator)",
+    "event GameDetails(uint256 indexed gameId, uint256[] guesses, uint256[] rolls, bool[] matches)",
+    "event JackpotWon(uint256 indexed gameId, address indexed player, uint256 prizeAmount, uint256 tier)",
+    "event GameExpired(uint256 indexed gameId, address indexed player, uint256 forfeitedAmount)"
 ];
 
 export const publicSaleABI = [

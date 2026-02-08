@@ -1250,7 +1250,6 @@ function setupEventListeners() {
                     // V12: Buy NFT with cache invalidation
                     await NftTx.buyFromPool({
                         poolAddress: poolAddress,
-                        maxPrice: TradeState.buyPrice,
                         button: executeBtn,
                         
                         onSuccess: async (receipt) => {

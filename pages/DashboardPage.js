@@ -1708,9 +1708,6 @@ function attachDashboardListeners() {
                 const { stakingRewards, minerRewards } = await calculateUserTotalRewards();
                 if (stakingRewards > 0n || minerRewards > 0n) {
                     await StakingTx.claimRewards({
-                        stakingRewards: stakingRewards,
-                        minerRewards: minerRewards,
-                        boosterTokenId: null,
                         button: claimBtn,
                         onSuccess: async () => {
                             showToast("Rewards claimed!", "success");

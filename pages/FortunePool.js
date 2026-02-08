@@ -1139,26 +1139,26 @@ function setupWagerEvents(maxMulti, balanceNum) {
             const isCumulative = Game.mode === 'combo';
             const wagerWei = window.ethers.parseEther(Game.wager.toString());
             
-            // V6.8: Use FortuneTx.commitPlay instead of playGame
-            await FortuneTx.commitPlay({
+            // V6.9: Use FortuneTx.playGame — handles secret generation + commitment hash + localStorage
+            await FortuneTx.playGame({
                 wagerAmount: wagerWei,
                 guesses: guesses,
                 isCumulative: isCumulative,
                 button: document.getElementById('btn-play'),
-                
-                onSuccess: (receipt, commitData) => {
-                    // V6.8: Commitment successful - now we wait for reveal
+
+                onSuccess: (commitData) => {
+                    // V6.9: playGame returns { gameId, txHash, guesses, userSecret, isCumulative }
                     Game.gameId = commitData?.gameId || Date.now();
                     Game.commitment = {
-                        hash: commitData?.commitHash || null,
+                        hash: null,
                         userSecret: commitData?.userSecret || null,
-                        commitBlock: commitData?.commitBlock || null,
-                        commitTxHash: receipt.hash,
-                        revealDelay: commitData?.revealDelay || 5, // Default 5 blocks per contract
+                        commitBlock: null,
+                        commitTxHash: commitData?.txHash || null,
+                        revealDelay: 5, // Default 5 blocks per contract
                         waitStartTime: Date.now(),
                         canReveal: false
                     };
-                    Game.txHash = receipt.hash;
+                    Game.txHash = commitData?.txHash || null;
                     
                     console.log('🔐 Game committed:', Game.gameId, 'Block:', Game.commitment.commitBlock);
                     
