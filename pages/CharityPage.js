@@ -53,10 +53,10 @@ const charityPoolABI = [
     "function getStats() view returns (uint64 totalCampaigns, uint256 totalRaised, uint256 totalDonations, uint256 totalFees)"
 ];
 
-const CHARITY_API = { 
-    getCampaigns: 'https://getcharitycampaigns-4wvdcuoouq-uc.a.run.app', 
+const CHARITY_API = {
+    getCampaigns: 'https://getcharitycampaigns-4wvdcuoouq-uc.a.run.app',
     saveCampaign: 'https://savecharitycampaign-4wvdcuoouq-uc.a.run.app',
-    uploadImage: 'https://uploadcharityimage-4wvdcuoouq-uc.a.run.app'
+    uploadImage: '/api/upload-image'
 };
 
 const EXPLORER_ADDRESS = "https://sepolia.arbiscan.io/address/";
@@ -787,13 +787,17 @@ function switchImageTab(tab, context = 'create') {
 async function uploadImageToServer(file) {
     const formData = new FormData();
     formData.append('image', file);
-    
+
     const response = await fetch(CHARITY_API.uploadImage, {
         method: 'POST',
-        body: formData
+        body: formData,
+        signal: AbortSignal.timeout(60000)
     });
-    
-    if (!response.ok) throw new Error('Upload failed');
+
+    if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        throw new Error(err.error || `Upload failed (${response.status})`);
+    }
     const data = await response.json();
     return data.imageUrl;
 }
@@ -1690,20 +1694,26 @@ async function wizardLaunch() {
     // Upload image if file selected
     if (CS.createImageFile) {
         try {
-            showToast('Uploading image...', 'info');
+            showToast('Uploading image to IPFS...', 'info');
             imageUrl = await uploadImageToServer(CS.createImageFile);
+            showToast('Image uploaded!', 'success');
         } catch (e) {
             console.error('Image upload failed:', e);
+            showToast('Image upload failed — campaign will be created without image', 'warning');
         }
     }
 
+    // Capture values locally before async operations can reset state
+    const title = CS.createTitle;
+    const desc = CS.createDesc;
+    const category = CS.createCategory;
     const goalWei = ethers.parseEther(goal);
+    const durationDays = parseInt(duration);
 
     await CharityTx.createCampaign({
-        title: CS.createTitle,
-        description: CS.createDesc,
+        title, description: desc,
         goalAmount: goalWei,
-        durationDays: parseInt(duration),
+        durationDays,
         button: document.getElementById('btn-wizard-launch'),
 
         onSuccess: async (receipt, campaignId) => {
@@ -1712,20 +1722,13 @@ async function wizardLaunch() {
                     await fetch(CHARITY_API.saveCampaign, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            id: campaignId,
-                            title: CS.createTitle,
-                            description: CS.createDesc,
-                            category: CS.createCategory,
-                            imageUrl,
-                            creator: State.userAddress
-                        })
+                        body: JSON.stringify({ id: campaignId, title, description: desc, category, imageUrl, creator: State.userAddress })
                     });
                 } catch (e) {}
             }
 
             showToast('Campaign created!', 'success');
-            cancelCreate(); // Reset and go back to main
+            cancelCreate();
             await loadData();
             render();
         },
