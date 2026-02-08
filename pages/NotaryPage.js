@@ -1,32 +1,32 @@
 // js/pages/NotaryPage.js
-// ✅ PRODUCTION V6.9 - Complete Redesign
+// ✅ PRODUCTION V10.0 — Complete Redesign
 // ═══════════════════════════════════════════════════════════════════════════════
 //                          BACKCHAIN PROTOCOL
-//                  Decentralized Notary - Blockchain Certification
+//                  Decentralized Notary — Blockchain Certification
 // ═══════════════════════════════════════════════════════════════════════════════
 //
-// V6.9 Changes:
-// - COMPLETE UI REDESIGN - Modern, clean, consistent with other pages
-// - Improved step progress indicator
-// - Better file preview and upload experience
-// - Enhanced certificate cards with animations
-// - Smoother transitions and micro-interactions
-// - Consistent styling with NetworkStakingPage, RewardsPage, CharityPage
-//
-// V11.0 Features (maintained):
-// - NotaryTx module integration
-// - IPFS upload with signature verification
-// - Firebase-based certificate history
-// - Add to wallet functionality
+// V10.0 Changes:
+// - COMPLETE REDESIGN — 4-tab navigation (Documents, Notarize, Verify, Stats)
+// - Client-side SHA-256 hash calculation (transparency — user sees hash)
+// - Duplicate detection before minting (verifyByHash)
+// - Public verification tool (no wallet needed)
+// - Statistics dashboard (getStats + totalSupply + recent events)
+// - Both BKC + ETH fees displayed
+// - Certificate detail view with metadata + actions
+// - On-chain event fallback for certificates
+// - Operator system via resolveOperator()
+// - 3-step notarize wizard with fee breakdown
 //
 // Website: https://backcoin.org
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import { State } from '../state.js';
 import { formatBigNumber } from '../utils.js';
-import { safeContractCall, API_ENDPOINTS, loadPublicData, loadUserData } from '../modules/data.js';
+import { API_ENDPOINTS } from '../modules/data.js';
 import { showToast } from '../ui-feedback.js';
 import { NotaryTx } from '../modules/transactions/index.js';
+import { resolveOperator } from '../modules/core/operator.js';
+import { ipfsGateway, IPFS_GATEWAYS, addresses } from '../config.js';
 
 const ethers = window.ethers;
 
@@ -34,79 +34,85 @@ const ethers = window.ethers;
 // CONSTANTS
 // ============================================================================
 const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
-const EXPLORER_TX = "https://sepolia.arbiscan.io/tx/";
-const IPFS_GATEWAY = "https://gateway.pinata.cloud/ipfs/";
+const EXPLORER_BASE = 'https://sepolia.arbiscan.io';
+const EXPLORER_TX = `${EXPLORER_BASE}/tx/`;
+const EXPLORER_ADDR = `${EXPLORER_BASE}/address/`;
+const EXPLORER_TOKEN = `${EXPLORER_BASE}/token/`;
 
-// File type configurations
+const NOTARY_ABI_EVENTS = [
+    'event DocumentNotarized(uint256 indexed tokenId, address indexed owner, string ipfsCid, bytes32 indexed contentHash, uint256 bkcFeePaid, uint256 ethFeePaid, address operator)'
+];
+
 const FILE_TYPES = {
-    image: { icon: 'fa-regular fa-image', color: 'text-emerald-400', bg: 'bg-emerald-500/15', label: 'Image' },
-    pdf: { icon: 'fa-regular fa-file-pdf', color: 'text-red-400', bg: 'bg-red-500/15', label: 'PDF' },
-    audio: { icon: 'fa-solid fa-music', color: 'text-purple-400', bg: 'bg-purple-500/15', label: 'Audio' },
-    video: { icon: 'fa-regular fa-file-video', color: 'text-blue-400', bg: 'bg-blue-500/15', label: 'Video' },
-    document: { icon: 'fa-regular fa-file-word', color: 'text-blue-400', bg: 'bg-blue-500/15', label: 'Document' },
-    spreadsheet: { icon: 'fa-regular fa-file-excel', color: 'text-green-400', bg: 'bg-green-500/15', label: 'Spreadsheet' },
-    code: { icon: 'fa-solid fa-code', color: 'text-cyan-400', bg: 'bg-cyan-500/15', label: 'Code' },
-    archive: { icon: 'fa-regular fa-file-zipper', color: 'text-yellow-400', bg: 'bg-yellow-500/15', label: 'Archive' },
-    default: { icon: 'fa-regular fa-file', color: 'text-amber-400', bg: 'bg-amber-500/15', label: 'File' }
+    image:       { icon: 'fa-regular fa-image',       color: '#34d399', bg: 'rgba(52,211,153,0.12)', label: 'Image' },
+    pdf:         { icon: 'fa-regular fa-file-pdf',     color: '#f87171', bg: 'rgba(248,113,113,0.12)', label: 'PDF' },
+    audio:       { icon: 'fa-solid fa-music',          color: '#a78bfa', bg: 'rgba(167,139,250,0.12)', label: 'Audio' },
+    video:       { icon: 'fa-regular fa-file-video',   color: '#60a5fa', bg: 'rgba(96,165,250,0.12)', label: 'Video' },
+    document:    { icon: 'fa-regular fa-file-word',    color: '#60a5fa', bg: 'rgba(96,165,250,0.12)', label: 'Document' },
+    spreadsheet: { icon: 'fa-regular fa-file-excel',   color: '#4ade80', bg: 'rgba(74,222,128,0.12)', label: 'Spreadsheet' },
+    code:        { icon: 'fa-solid fa-code',           color: '#22d3ee', bg: 'rgba(34,211,238,0.12)', label: 'Code' },
+    archive:     { icon: 'fa-regular fa-file-zipper',  color: '#facc15', bg: 'rgba(250,204,21,0.12)', label: 'Archive' },
+    default:     { icon: 'fa-regular fa-file',         color: '#fbbf24', bg: 'rgba(251,191,36,0.12)', label: 'File' }
 };
 
 // ============================================================================
 // STATE
 // ============================================================================
-const Notary = {
-    step: 1,
-    file: null,
-    description: '',
-    hash: null,
-    isProcessing: false,
+const NT = {
+    // View routing
+    view: 'documents',
+    activeTab: 'documents',
+    viewHistory: [],
+
+    // Wizard (notarize flow)
+    wizStep: 1,
+    wizFile: null,
+    wizFileHash: null,
+    wizDescription: '',
+    wizDuplicateCheck: null,
+    wizIsHashing: false,
+    wizIpfsCid: null,
+    wizUploadData: null,
+
+    // Fees
+    bkcFee: 0n,
+    ethFee: 0n,
+    feesLoaded: false,
+
+    // Certificates (My Documents)
     certificates: [],
-    lastFetch: 0
+    certsLoading: false,
+
+    // Certificate detail
+    selectedCert: null,
+
+    // Verify tab
+    verifyFile: null,
+    verifyHash: null,
+    verifyResult: null,
+    verifyIsChecking: false,
+
+    // Stats tab
+    stats: null,
+    totalSupply: 0,
+    recentNotarizations: [],
+    statsLoading: false,
+
+    // Processing
+    isProcessing: false,
+    processStep: '',
+
+    // General
+    isLoading: false,
+    contractAvailable: true
 };
 
 // ============================================================================
 // HELPERS
 // ============================================================================
-function formatTimestamp(timestamp) {
-    if (!timestamp) return '';
-    
-    let date;
-    if (typeof timestamp === 'number') {
-        date = new Date(timestamp > 1e12 ? timestamp : timestamp * 1000);
-    } else if (typeof timestamp === 'string') {
-        date = new Date(timestamp);
-    } else if (timestamp?.toDate) {
-        date = timestamp.toDate();
-    } else if (timestamp?.seconds) {
-        date = new Date(timestamp.seconds * 1000);
-    } else {
-        return '';
-    }
-    
-    if (isNaN(date.getTime())) return '';
-    
-    const now = new Date();
-    const diffMs = now - date;
-    const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
-    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-    
-    if (diffHours < 1) {
-        const diffMins = Math.floor(diffMs / (1000 * 60));
-        return diffMins < 1 ? 'Just now' : `${diffMins}m ago`;
-    }
-    if (diffHours < 24) return `${diffHours}h ago`;
-    if (diffDays < 7) return `${diffDays}d ago`;
-    
-    return date.toLocaleDateString('en-US', { 
-        month: 'short', 
-        day: 'numeric',
-        year: date.getFullYear() !== now.getFullYear() ? 'numeric' : undefined
-    });
-}
-
 function getFileTypeInfo(mimeType = '', fileName = '') {
     const mime = mimeType.toLowerCase();
     const name = fileName.toLowerCase();
-    
     if (mime.includes('image') || /\.(jpg|jpeg|png|gif|webp|svg|bmp|ico)$/.test(name)) return FILE_TYPES.image;
     if (mime.includes('pdf') || name.endsWith('.pdf')) return FILE_TYPES.pdf;
     if (mime.includes('audio') || /\.(mp3|wav|ogg|flac|aac|m4a)$/.test(name)) return FILE_TYPES.audio;
@@ -115,536 +121,855 @@ function getFileTypeInfo(mimeType = '', fileName = '') {
     if (mime.includes('sheet') || mime.includes('excel') || /\.(xls|xlsx|csv|ods)$/.test(name)) return FILE_TYPES.spreadsheet;
     if (/\.(js|ts|py|java|cpp|c|h|html|css|json|xml|sol|rs|go|php|rb)$/.test(name)) return FILE_TYPES.code;
     if (mime.includes('zip') || mime.includes('archive') || /\.(zip|rar|7z|tar|gz)$/.test(name)) return FILE_TYPES.archive;
-    
     return FILE_TYPES.default;
 }
 
+function formatTimestamp(ts) {
+    if (!ts) return '';
+    let date;
+    if (typeof ts === 'number') date = new Date(ts > 1e12 ? ts : ts * 1000);
+    else if (typeof ts === 'string') date = new Date(ts);
+    else if (ts?.toDate) date = ts.toDate();
+    else if (ts?.seconds) date = new Date(ts.seconds * 1000);
+    else return '';
+    if (isNaN(date.getTime())) return '';
+
+    const now = new Date();
+    const diffMs = now - date;
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMs / 3600000);
+    const diffDays = Math.floor(diffMs / 86400000);
+
+    if (diffMins < 1) return 'Agora';
+    if (diffMins < 60) return `${diffMins}m`;
+    if (diffHours < 24) return `${diffHours}h`;
+    if (diffDays < 7) return `${diffDays}d`;
+    return date.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: date.getFullYear() !== now.getFullYear() ? 'numeric' : undefined });
+}
+
+function formatDateFull(ts) {
+    if (!ts) return '';
+    const date = typeof ts === 'number' ? new Date(ts > 1e12 ? ts : ts * 1000) : new Date(ts);
+    if (isNaN(date.getTime())) return '';
+    return date.toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+}
+
+function shortenAddress(addr) {
+    if (!addr) return '';
+    return `${addr.slice(0, 6)}...${addr.slice(-4)}`;
+}
+
+function shortenHash(hash) {
+    if (!hash) return '';
+    return `${hash.slice(0, 10)}...${hash.slice(-8)}`;
+}
+
+function resolveIpfsUrl(cid) {
+    if (!cid) return '';
+    if (cid.startsWith('https://')) return cid;
+    if (cid.startsWith('ipfs://')) return `${IPFS_GATEWAYS[0]}${cid.replace('ipfs://', '')}`;
+    return `${IPFS_GATEWAYS[0]}${cid}`;
+}
+
+function formatFileSize(bytes) {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1048576) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / 1048576).toFixed(2)} MB`;
+}
+
 // ============================================================================
-// STYLES
+// NAVIGATION
+// ============================================================================
+function navigateView(view, data) {
+    NT.viewHistory.push({ view: NT.view, data: NT.selectedCert });
+    NT.view = view;
+    if (view !== 'cert-detail') NT.activeTab = view;
+    if (data) NT.selectedCert = data;
+    renderContent();
+    renderHeader();
+}
+
+function goBack() {
+    const prev = NT.viewHistory.pop();
+    if (prev) {
+        NT.view = prev.view;
+        NT.activeTab = prev.view === 'cert-detail' ? 'documents' : prev.view;
+        NT.selectedCert = prev.data;
+    } else {
+        NT.view = 'documents';
+        NT.activeTab = 'documents';
+    }
+    renderContent();
+    renderHeader();
+}
+
+function setTab(tab) {
+    if (NT.activeTab === tab && NT.view === tab) return;
+    NT.viewHistory = [];
+    NT.view = tab;
+    NT.activeTab = tab;
+    renderContent();
+    renderHeader();
+}
+
+// ============================================================================
+// CSS INJECTION
 // ============================================================================
 function injectStyles() {
-    if (document.getElementById('notary-styles-v6')) return;
-    
+    if (document.getElementById('notary-styles-v10')) return;
     const style = document.createElement('style');
-    style.id = 'notary-styles-v6';
+    style.id = 'notary-styles-v10';
     style.textContent = `
-        /* ═══════════════════════════════════════════════════════════════════
-           V6.9 Notary Page Styles - Modern & Clean
-           ═══════════════════════════════════════════════════════════════════ */
-        
-        @keyframes float { 
-            0%, 100% { transform: translateY(0); } 
-            50% { transform: translateY(-8px); } 
+        :root {
+            --nt-bg:       #0c0c0e;
+            --nt-bg2:      #141417;
+            --nt-bg3:      #1c1c21;
+            --nt-surface:  #222228;
+            --nt-border:   rgba(255,255,255,0.06);
+            --nt-border-h: rgba(255,255,255,0.1);
+            --nt-text:     #f0f0f2;
+            --nt-text-2:   #a0a0ab;
+            --nt-text-3:   #5c5c68;
+            --nt-accent:   #f59e0b;
+            --nt-accent-2: #d97706;
+            --nt-accent-glow: rgba(245,158,11,0.15);
+            --nt-red:      #ef4444;
+            --nt-green:    #22c55e;
+            --nt-blue:     #3b82f6;
+            --nt-radius:   14px;
+            --nt-radius-sm: 10px;
+            --nt-radius-lg: 20px;
+            --nt-transition: 0.2s cubic-bezier(0.4, 0, 0.2, 1);
         }
-        @keyframes pulse-glow { 
-            0%, 100% { box-shadow: 0 0 20px rgba(245,158,11,0.2); } 
-            50% { box-shadow: 0 0 40px rgba(245,158,11,0.4); } 
+
+        @keyframes nt-fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+        @keyframes nt-scaleIn { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: none; } }
+        @keyframes nt-shimmer { 0% { background-position: -200% 0; } 100% { background-position: 200% 0; } }
+        @keyframes nt-stamp { 0% { transform: scale(1) rotate(0); } 25% { transform: scale(1.2) rotate(-5deg); } 50% { transform: scale(0.9) rotate(5deg); } 100% { transform: scale(1) rotate(0); } }
+        @keyframes nt-float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }
+        @keyframes nt-scan { 0% { top: 0; opacity: 1; } 50% { opacity: 0.5; } 100% { top: 100%; opacity: 1; } }
+        @keyframes nt-pulse-ring { 0% { box-shadow: 0 0 0 0 rgba(245,158,11,0.4); } 100% { box-shadow: 0 0 0 15px rgba(245,158,11,0); } }
+
+        .nt-shell {
+            max-width: 960px;
+            margin: 0 auto;
+            padding: 0 16px 32px;
+            min-height: 100vh;
+            background: var(--nt-bg);
         }
-        @keyframes stamp {
-            0% { transform: scale(1) rotate(0deg); }
-            25% { transform: scale(1.2) rotate(-5deg); }
-            50% { transform: scale(0.9) rotate(5deg); }
-            75% { transform: scale(1.1) rotate(-2deg); }
-            100% { transform: scale(1) rotate(0deg); }
+        .nt-header {
+            position: sticky;
+            top: 0;
+            z-index: 50;
+            padding: 12px 0 0;
+            background: var(--nt-bg);
         }
-        @keyframes success-bounce {
-            0% { transform: scale(0.8); opacity: 0; }
-            50% { transform: scale(1.1); }
-            100% { transform: scale(1); opacity: 1; }
-        }
-        @keyframes scan {
-            0% { top: 0; opacity: 1; }
-            50% { opacity: 0.5; }
-            100% { top: 100%; opacity: 1; }
-        }
-        
-        .float-animation { animation: float 4s ease-in-out infinite; }
-        .pulse-glow { animation: pulse-glow 2s ease-in-out infinite; }
-        .stamp-animation { animation: stamp 0.6s ease-out; }
-        .success-bounce { animation: success-bounce 0.5s ease-out; }
-        
-        /* Cards */
-        .notary-card {
-            background: linear-gradient(145deg, rgba(39,39,42,0.9) 0%, rgba(24,24,27,0.95) 100%);
-            border: 1px solid rgba(63,63,70,0.5);
-            border-radius: 16px;
-            transition: all 0.3s ease;
-        }
-        .notary-card:hover {
-            border-color: rgba(245,158,11,0.3);
-        }
-        
-        /* Step Progress */
-        .step-container {
+        .nt-header-bar {
             display: flex;
             align-items: center;
             justify-content: space-between;
-            position: relative;
+            padding: 12px 0;
         }
-        .step-item {
+        .nt-brand {
             display: flex;
-            flex-direction: column;
             align-items: center;
-            z-index: 1;
+            gap: 12px;
         }
-        .step-dot {
-            width: 40px;
-            height: 40px;
-            border-radius: 50%;
+        .nt-brand-icon {
+            width: 44px; height: 44px;
+            border-radius: var(--nt-radius);
+            background: var(--nt-accent-glow);
+            border: 1px solid rgba(245,158,11,0.2);
+            display: flex; align-items: center; justify-content: center;
+            color: var(--nt-accent);
+            font-size: 20px;
+            animation: nt-float 4s ease-in-out infinite;
+        }
+        .nt-brand-name {
+            font-size: 18px;
+            font-weight: 800;
+            color: var(--nt-text);
+            letter-spacing: -0.02em;
+        }
+        .nt-brand-sub {
+            font-size: 11px;
+            color: var(--nt-text-3);
+        }
+
+        /* Navigation */
+        .nt-nav {
+            display: flex;
+            gap: 2px;
+            padding: 4px;
+            background: var(--nt-bg2);
+            border-radius: var(--nt-radius);
+            border: 1px solid var(--nt-border);
+            margin-top: 8px;
+        }
+        .nt-nav-item {
+            flex: 1;
+            padding: 10px 6px;
+            text-align: center;
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--nt-text-3);
+            border-radius: var(--nt-radius-sm);
+            cursor: pointer;
+            transition: all var(--nt-transition);
+            border: none;
+            background: none;
+        }
+        .nt-nav-item:hover { color: var(--nt-text-2); background: var(--nt-bg3); }
+        .nt-nav-item.active {
+            color: var(--nt-text);
+            background: var(--nt-surface);
+            box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+        }
+        .nt-nav-item i { margin-right: 6px; }
+
+        /* Back header */
+        .nt-back-header {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px 0;
+        }
+        .nt-back-btn {
+            width: 36px; height: 36px;
+            border-radius: var(--nt-radius-sm);
+            background: var(--nt-bg3);
+            border: 1px solid var(--nt-border);
+            color: var(--nt-text-2);
+            display: flex; align-items: center; justify-content: center;
+            cursor: pointer;
+            transition: all var(--nt-transition);
+        }
+        .nt-back-btn:hover { background: var(--nt-surface); color: var(--nt-text); }
+
+        /* Card */
+        .nt-card {
+            background: var(--nt-bg2);
+            border: 1px solid var(--nt-border);
+            border-radius: var(--nt-radius);
+            padding: 20px;
+            animation: nt-fadeIn 0.3s ease;
+        }
+
+        /* Certificate grid */
+        .nt-cert-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 12px;
+            margin-top: 16px;
+        }
+        @media (max-width: 640px) {
+            .nt-cert-grid { grid-template-columns: 1fr; }
+        }
+        .nt-cert-card {
+            background: var(--nt-bg2);
+            border: 1px solid var(--nt-border);
+            border-radius: var(--nt-radius);
+            overflow: hidden;
+            cursor: pointer;
+            transition: all var(--nt-transition);
+        }
+        .nt-cert-card:hover {
+            border-color: var(--nt-border-h);
+            transform: translateY(-2px);
+            box-shadow: 0 12px 32px rgba(0,0,0,0.3);
+        }
+        .nt-cert-thumb {
+            height: 120px;
+            background: var(--nt-bg3);
+            display: flex; align-items: center; justify-content: center;
+            position: relative;
+            overflow: hidden;
+        }
+        .nt-cert-thumb img {
+            width: 100%; height: 100%; object-fit: cover; opacity: 0.8;
+        }
+        .nt-cert-info {
+            padding: 14px;
+        }
+
+        /* Dropzone */
+        .nt-dropzone {
+            border: 2px dashed var(--nt-border-h);
+            border-radius: var(--nt-radius-lg);
+            padding: 48px 24px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            background: rgba(0,0,0,0.15);
+        }
+        .nt-dropzone:hover {
+            border-color: rgba(245,158,11,0.4);
+            background: var(--nt-accent-glow);
+        }
+        .nt-dropzone.drag-over {
+            border-color: var(--nt-accent);
+            background: var(--nt-accent-glow);
+            transform: scale(1.01);
+        }
+
+        /* Wizard steps */
+        .nt-steps {
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 14px;
-            font-weight: 700;
+            gap: 0;
+            margin-bottom: 28px;
+        }
+        .nt-step-dot {
+            width: 36px; height: 36px;
+            border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 13px; font-weight: 700;
             transition: all 0.3s ease;
+            flex-shrink: 0;
         }
-        .step-dot.pending {
-            background: rgba(39,39,42,0.8);
-            color: #71717a;
-            border: 2px solid rgba(63,63,70,0.8);
+        .nt-step-dot.pending {
+            background: var(--nt-bg3);
+            color: var(--nt-text-3);
+            border: 2px solid var(--nt-border);
         }
-        .step-dot.active {
-            background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+        .nt-step-dot.active {
+            background: linear-gradient(135deg, #f59e0b, #d97706);
             color: #000;
-            box-shadow: 0 0 20px rgba(245,158,11,0.4);
+            box-shadow: 0 0 20px rgba(245,158,11,0.3);
         }
-        .step-dot.done {
-            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+        .nt-step-dot.done {
+            background: linear-gradient(135deg, #22c55e, #16a34a);
             color: #fff;
         }
-        .step-line {
-            position: absolute;
-            top: 20px;
-            height: 3px;
-            background: rgba(63,63,70,0.5);
-            transition: all 0.5s ease;
+        .nt-step-line {
+            width: 60px; height: 3px;
+            background: var(--nt-border);
+            border-radius: 2px;
+            transition: all 0.4s ease;
         }
-        .step-line.line-1 { left: 20%; width: 30%; }
-        .step-line.line-2 { left: 50%; width: 30%; }
-        .step-line.active {
-            background: linear-gradient(90deg, #10b981, #f59e0b);
+        .nt-step-line.done { background: var(--nt-green); }
+        .nt-step-line.active { background: linear-gradient(90deg, var(--nt-green), var(--nt-accent)); }
+
+        /* Fee box */
+        .nt-fee-box {
+            background: rgba(245,158,11,0.06);
+            border: 1px solid rgba(245,158,11,0.15);
+            border-radius: var(--nt-radius);
+            padding: 16px;
         }
-        .step-line.done {
-            background: #10b981;
+        .nt-fee-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px 0;
         }
-        
-        /* Dropzone */
-        .dropzone {
-            border: 2px dashed rgba(63,63,70,0.8);
-            border-radius: 16px;
-            transition: all 0.3s ease;
+        .nt-fee-row + .nt-fee-row {
+            border-top: 1px solid var(--nt-border);
+        }
+
+        /* Verify */
+        .nt-verified {
+            background: rgba(34,197,94,0.08);
+            border: 1px solid rgba(34,197,94,0.2);
+            border-radius: var(--nt-radius);
+            padding: 20px;
+        }
+        .nt-not-found {
+            background: rgba(239,68,68,0.08);
+            border: 1px solid rgba(239,68,68,0.2);
+            border-radius: var(--nt-radius);
+            padding: 20px;
+        }
+
+        /* Stats */
+        .nt-stat-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 12px;
+        }
+        @media (min-width: 640px) {
+            .nt-stat-grid { grid-template-columns: repeat(4, 1fr); }
+        }
+        .nt-stat-card {
+            background: var(--nt-bg2);
+            border: 1px solid var(--nt-border);
+            border-radius: var(--nt-radius);
+            padding: 16px;
+            text-align: center;
+            animation: nt-fadeIn 0.3s ease;
+        }
+        .nt-stat-value {
+            font-size: 24px;
+            font-weight: 800;
+            color: var(--nt-text);
+            font-family: monospace;
+        }
+        .nt-recent-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px;
+            border-bottom: 1px solid var(--nt-border);
+            transition: background var(--nt-transition);
+        }
+        .nt-recent-item:hover { background: var(--nt-bg3); }
+        .nt-recent-item:last-child { border-bottom: none; }
+
+        /* Detail */
+        .nt-detail { animation: nt-fadeIn 0.3s ease; }
+        .nt-detail-meta {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+        }
+        @media (max-width: 640px) {
+            .nt-detail-meta { grid-template-columns: 1fr; }
+        }
+        .nt-hash-display {
+            font-family: monospace;
+            font-size: 11px;
+            color: var(--nt-text-2);
+            background: var(--nt-bg3);
+            padding: 12px;
+            border-radius: var(--nt-radius-sm);
+            word-break: break-all;
             cursor: pointer;
-            background: rgba(0,0,0,0.2);
+            border: 1px solid var(--nt-border);
+            transition: border-color var(--nt-transition);
         }
-        .dropzone:hover {
-            border-color: rgba(245,158,11,0.5);
-            background: rgba(245,158,11,0.05);
-        }
-        .dropzone.drag-over {
-            border-color: #f59e0b;
-            background: rgba(245,158,11,0.1);
-            transform: scale(1.02);
-        }
-        
-        /* Certificate Cards */
-        .cert-card {
-            background: linear-gradient(145deg, rgba(39,39,42,0.9) 0%, rgba(24,24,27,0.95) 100%);
-            border: 1px solid rgba(63,63,70,0.5);
-            border-radius: 16px;
-            overflow: hidden;
-            transition: all 0.3s ease;
-        }
-        .cert-card:hover {
-            transform: translateY(-4px);
-            border-color: rgba(245,158,11,0.4);
-            box-shadow: 0 20px 40px rgba(0,0,0,0.3);
-        }
-        
+        .nt-hash-display:hover { border-color: var(--nt-accent); }
+
         /* Buttons */
-        .btn-primary {
-            background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+        .nt-btn-primary {
+            background: linear-gradient(135deg, #f59e0b, #d97706);
             color: #000;
             font-weight: 700;
             border: none;
-            border-radius: 12px;
-            transition: all 0.2s ease;
+            border-radius: var(--nt-radius-sm);
+            padding: 12px 24px;
             cursor: pointer;
+            transition: all var(--nt-transition);
+            font-size: 14px;
         }
-        .btn-primary:hover:not(:disabled) {
-            transform: translateY(-2px);
-            box-shadow: 0 10px 25px rgba(245,158,11,0.3);
+        .nt-btn-primary:hover:not(:disabled) {
+            transform: translateY(-1px);
+            box-shadow: 0 8px 24px rgba(245,158,11,0.3);
         }
-        .btn-primary:disabled {
-            opacity: 0.5;
-            cursor: not-allowed;
-        }
-        
-        .btn-secondary {
-            background: rgba(63,63,70,0.8);
-            color: #fafafa;
+        .nt-btn-primary:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+        .nt-btn-secondary {
+            background: var(--nt-bg3);
+            color: var(--nt-text-2);
             font-weight: 600;
-            border: 1px solid rgba(63,63,70,0.8);
-            border-radius: 12px;
-            transition: all 0.2s ease;
+            border: 1px solid var(--nt-border);
+            border-radius: var(--nt-radius-sm);
+            padding: 10px 20px;
             cursor: pointer;
+            transition: all var(--nt-transition);
+            font-size: 13px;
         }
-        .btn-secondary:hover {
-            background: rgba(63,63,70,1);
+        .nt-btn-secondary:hover { background: var(--nt-surface); color: var(--nt-text); }
+        .nt-btn-icon {
+            width: 36px; height: 36px;
+            border-radius: var(--nt-radius-sm);
+            background: var(--nt-bg3);
+            border: 1px solid var(--nt-border);
+            color: var(--nt-text-2);
+            display: inline-flex; align-items: center; justify-content: center;
+            cursor: pointer;
+            transition: all var(--nt-transition);
         }
-        
-        /* Processing Overlay */
-        .processing-overlay {
-            position: fixed;
-            inset: 0;
+        .nt-btn-icon:hover { background: var(--nt-surface); color: var(--nt-text); }
+
+        /* Overlay */
+        .nt-overlay {
+            position: fixed; inset: 0;
             z-index: 9999;
-            background: rgba(0,0,0,0.95);
-            backdrop-filter: blur(10px);
+            background: rgba(0,0,0,0.92);
+            backdrop-filter: blur(8px);
             display: none;
-            align-items: center;
-            justify-content: center;
+            align-items: center; justify-content: center;
         }
-        .processing-overlay.active {
-            display: flex;
+        .nt-overlay.active { display: flex; }
+
+        /* Shimmer loading */
+        .nt-shimmer {
+            background: linear-gradient(90deg, var(--nt-bg3) 25%, var(--nt-surface) 50%, var(--nt-bg3) 75%);
+            background-size: 200% 100%;
+            animation: nt-shimmer 1.5s ease infinite;
+            border-radius: var(--nt-radius-sm);
         }
-        
-        /* Scrollbar */
-        .custom-scrollbar::-webkit-scrollbar { width: 5px; }
-        .custom-scrollbar::-webkit-scrollbar-track { background: rgba(39,39,42,0.5); border-radius: 3px; }
-        .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(113,113,122,0.5); border-radius: 3px; }
-        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: rgba(245,158,11,0.5); }
-        
-        /* Responsive */
-        @media (max-width: 768px) {
-            .notary-grid { grid-template-columns: 1fr !important; }
-            .step-dot { width: 36px; height: 36px; font-size: 12px; }
+
+        /* Duplicate warning */
+        .nt-duplicate-warn {
+            background: rgba(251,191,36,0.08);
+            border: 1px solid rgba(251,191,36,0.25);
+            border-radius: var(--nt-radius);
+            padding: 16px;
         }
     `;
     document.head.appendChild(style);
+
+    // Remove old styles
+    const old = document.getElementById('notary-styles-v6');
+    if (old) old.remove();
 }
 
 // ============================================================================
-// MAIN RENDER
+// RENDER
 // ============================================================================
-function render() {
+function render(isActive) {
     const container = document.getElementById('notary');
     if (!container) return;
-    
+
     injectStyles();
-    
+
     container.innerHTML = `
-        <div class="max-w-5xl mx-auto px-4 py-6">
-            
-            <!-- Header -->
-            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
-                <div class="flex items-center gap-4">
-                    <div class="w-14 h-14 rounded-2xl bg-gradient-to-br from-amber-500/20 to-orange-600/20 border border-amber-500/30 flex items-center justify-center float-animation">
-                        <i class="fa-solid fa-stamp text-2xl text-amber-400"></i>
-                    </div>
-                    <div>
-                        <h1 class="text-2xl font-bold text-white">Decentralized Notary</h1>
-                        <p class="text-sm text-zinc-500">Permanent blockchain certification</p>
-                    </div>
-                </div>
-                <div id="status-badge" class="flex items-center gap-2 px-4 py-2 rounded-full bg-zinc-800/50 text-sm">
-                    <span class="w-2 h-2 rounded-full bg-zinc-600"></span>
-                    <span class="text-zinc-400">Checking...</span>
-                </div>
-            </div>
-            
-            <!-- Main Grid -->
-            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 notary-grid">
-                
-                <!-- Left: Action Panel -->
-                <div class="lg:col-span-2 space-y-4">
-                    
-                    <!-- Step Progress -->
-                    <div class="notary-card p-5">
-                        <div class="step-container">
-                            <div class="step-line line-1" id="line-1"></div>
-                            <div class="step-line line-2" id="line-2"></div>
-                            
-                            <div class="step-item">
-                                <div class="step-dot active" id="step-1">1</div>
-                                <span class="text-[10px] text-zinc-500 mt-2">Upload</span>
-                            </div>
-                            <div class="step-item">
-                                <div class="step-dot pending" id="step-2">2</div>
-                                <span class="text-[10px] text-zinc-500 mt-2">Details</span>
-                            </div>
-                            <div class="step-item">
-                                <div class="step-dot pending" id="step-3">3</div>
-                                <span class="text-[10px] text-zinc-500 mt-2">Mint</span>
-                            </div>
-                        </div>
-                    </div>
-                    
-                    <!-- Action Panel -->
-                    <div id="action-panel" class="notary-card p-6 min-h-[350px]">
-                        <!-- Step content renders here -->
-                    </div>
-                </div>
-                
-                <!-- Right: Sidebar -->
-                <div class="space-y-4">
-                    
-                    <!-- Cost Card -->
-                    <div class="notary-card p-5 border-amber-500/20">
-                        <div class="flex items-center gap-2 mb-4">
-                            <div class="w-10 h-10 rounded-xl bg-amber-500/15 flex items-center justify-center">
-                                <i class="fa-solid fa-coins text-amber-400"></i>
-                            </div>
-                            <div>
-                                <p class="text-xs text-zinc-500">Service Cost</p>
-                                <p id="fee-amount" class="text-lg font-bold text-amber-400 font-mono">-- BKC</p>
-                            </div>
-                        </div>
-                        <div class="flex items-center justify-between pt-3 border-t border-zinc-800">
-                            <span class="text-sm text-zinc-500">Your Balance</span>
-                            <span id="user-balance" class="font-mono font-bold">-- BKC</span>
-                        </div>
-                    </div>
-                    
-                    <!-- How It Works -->
-                    <div class="notary-card p-5">
-                        <h3 class="text-xs font-bold text-zinc-400 uppercase tracking-wider mb-4 flex items-center gap-2">
-                            <i class="fa-solid fa-circle-info text-blue-400"></i> How It Works
-                        </h3>
-                        <div class="space-y-3">
-                            <div class="flex items-start gap-3">
-                                <div class="w-7 h-7 rounded-full bg-amber-500/15 flex items-center justify-center flex-shrink-0">
-                                    <span class="text-amber-400 text-xs font-bold">1</span>
-                                </div>
-                                <p class="text-xs text-zinc-400">Upload any document (max 5MB)</p>
-                            </div>
-                            <div class="flex items-start gap-3">
-                                <div class="w-7 h-7 rounded-full bg-amber-500/15 flex items-center justify-center flex-shrink-0">
-                                    <span class="text-amber-400 text-xs font-bold">2</span>
-                                </div>
-                                <p class="text-xs text-zinc-400">Add description for your records</p>
-                            </div>
-                            <div class="flex items-start gap-3">
-                                <div class="w-7 h-7 rounded-full bg-amber-500/15 flex items-center justify-center flex-shrink-0">
-                                    <span class="text-amber-400 text-xs font-bold">3</span>
-                                </div>
-                                <p class="text-xs text-zinc-400">Sign & mint NFT certificate</p>
-                            </div>
-                        </div>
-                        <div class="flex items-center gap-2 mt-4 pt-4 border-t border-zinc-800 text-xs text-zinc-500">
-                            <i class="fa-solid fa-shield-check text-emerald-400"></i>
-                            <span>Hash stored permanently on-chain</span>
-                        </div>
-                    </div>
-                    
-                    <!-- Features -->
-                    <div class="grid grid-cols-2 gap-3">
-                        <div class="notary-card p-4 text-center">
-                            <i class="fa-solid fa-shield-halved text-emerald-400 text-xl mb-2"></i>
-                            <p class="text-[10px] text-zinc-500">Tamper-Proof</p>
-                        </div>
-                        <div class="notary-card p-4 text-center">
-                            <i class="fa-solid fa-infinity text-amber-400 text-xl mb-2"></i>
-                            <p class="text-[10px] text-zinc-500">Permanent</p>
-                        </div>
-                    </div>
-                </div>
-            </div>
-            
-            <!-- Certificates History -->
-            <div class="mt-8">
-                <div class="flex items-center justify-between mb-4">
-                    <h2 class="text-lg font-bold text-white flex items-center gap-2">
-                        <i class="fa-solid fa-certificate text-amber-400"></i>
-                        Your Certificates
-                    </h2>
-                    <button onclick="NotaryPage.refreshHistory()" class="text-xs text-amber-400 hover:text-amber-300 transition-colors flex items-center gap-1">
-                        <i class="fa-solid fa-rotate"></i> Refresh
-                    </button>
-                </div>
-                <div id="certificates-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                    <div class="col-span-full text-center py-8 text-zinc-500">
-                        <i class="fa-solid fa-spinner fa-spin text-amber-400 text-2xl mb-3"></i>
-                        <p class="text-sm">Loading certificates...</p>
-                    </div>
-                </div>
-            </div>
-        </div>
-        
-        <!-- Processing Overlay -->
-        <div id="processing-overlay" class="processing-overlay">
-            <div class="text-center p-6 max-w-sm">
-                <div class="w-28 h-28 mx-auto mb-6 relative">
-                    <div class="absolute inset-[-4px] rounded-full border-4 border-transparent border-t-amber-400 border-r-amber-500/50 animate-spin"></div>
-                    <div class="absolute inset-0 rounded-full bg-amber-500/20 animate-ping"></div>
-                    <div class="relative w-full h-full rounded-full bg-gradient-to-br from-zinc-800 to-zinc-900 flex items-center justify-center shadow-xl shadow-amber-500/20 border-2 border-amber-500/30">
-                        <i id="overlay-icon" class="fa-solid fa-stamp text-4xl text-amber-400"></i>
-                    </div>
-                </div>
-                <h3 class="text-xl font-bold text-white mb-2">Notarizing Document</h3>
-                <p id="process-status" class="text-amber-400 text-sm font-mono mb-4">PREPARING...</p>
-                <div class="w-full h-2 bg-zinc-800 rounded-full overflow-hidden">
-                    <div id="process-bar" class="h-full bg-gradient-to-r from-amber-500 to-yellow-500 rounded-full transition-all duration-500" style="width: 0%"></div>
-                </div>
-                <p class="text-[10px] text-zinc-600 mt-3">Do not close this window</p>
-            </div>
+        <div class="nt-shell">
+            <div class="nt-header" id="nt-header"></div>
+            <div id="nt-content"></div>
+            <div id="nt-overlay" class="nt-overlay"></div>
         </div>
     `;
 
-    updateStatusBadges();
-    renderStepContent();
-    loadCertificates();
+    renderHeader();
+    renderContent();
+
+    // Load data
+    Promise.all([
+        loadFees(),
+        loadCertificates(),
+        loadStats()
+    ]).catch(() => {});
 }
 
 // ============================================================================
-// STATUS BADGES
+// HEADER
 // ============================================================================
-function updateStatusBadges() {
-    const badge = document.getElementById('status-badge');
-    const feeEl = document.getElementById('fee-amount');
-    const balEl = document.getElementById('user-balance');
+function renderHeader() {
+    const el = document.getElementById('nt-header');
+    if (!el) return;
 
-    const fee = State.notaryFee || 0n;
-    const balance = State.currentUserBalance || 0n;
-
-    if (feeEl) feeEl.textContent = `${formatBigNumber(fee)} BKC`;
-    if (balEl) {
-        balEl.textContent = `${formatBigNumber(balance)} BKC`;
-        balEl.className = `font-mono font-bold ${balance >= fee ? 'text-emerald-400' : 'text-red-400'}`;
-    }
-
-    if (badge) {
-        if (State.isConnected) {
-            if (balance >= fee) {
-                badge.innerHTML = `
-                    <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                    <span class="text-emerald-400">Ready to Notarize</span>
-                `;
-                badge.className = 'flex items-center gap-2 px-4 py-2 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-sm';
-            } else {
-                badge.innerHTML = `
-                    <span class="w-2 h-2 rounded-full bg-red-500"></span>
-                    <span class="text-red-400">Insufficient Balance</span>
-                `;
-                badge.className = 'flex items-center gap-2 px-4 py-2 rounded-full bg-red-500/10 border border-red-500/20 text-sm';
-            }
-        } else {
-            badge.innerHTML = `
-                <span class="w-2 h-2 rounded-full bg-zinc-600"></span>
-                <span class="text-zinc-400">Connect Wallet</span>
-            `;
-            badge.className = 'flex items-center gap-2 px-4 py-2 rounded-full bg-zinc-800/50 text-sm';
-        }
-    }
-}
-
-// ============================================================================
-// STEP INDICATORS
-// ============================================================================
-function updateStepIndicators() {
-    [1, 2, 3].forEach(i => {
-        const dot = document.getElementById(`step-${i}`);
-        if (!dot) return;
-        
-        if (i < Notary.step) {
-            dot.className = 'step-dot done';
-            dot.innerHTML = '<i class="fa-solid fa-check text-sm"></i>';
-        } else if (i === Notary.step) {
-            dot.className = 'step-dot active';
-            dot.textContent = i;
-        } else {
-            dot.className = 'step-dot pending';
-            dot.textContent = i;
-        }
-    });
-
-    const line1 = document.getElementById('line-1');
-    const line2 = document.getElementById('line-2');
-    
-    if (line1) line1.className = `step-line line-1 ${Notary.step > 1 ? 'done' : ''}`;
-    if (line2) line2.className = `step-line line-2 ${Notary.step > 2 ? 'done' : ''}`;
-}
-
-// ============================================================================
-// STEP CONTENT
-// ============================================================================
-function renderStepContent() {
-    const panel = document.getElementById('action-panel');
-    if (!panel) return;
-
-    updateStepIndicators();
-
-    if (!State.isConnected) {
-        panel.innerHTML = `
-            <div class="flex flex-col items-center justify-center h-full py-12">
-                <div class="w-20 h-20 rounded-2xl bg-zinc-800/50 flex items-center justify-center mb-4">
-                    <i class="fa-solid fa-wallet text-3xl text-zinc-500"></i>
+    if (NT.view === 'cert-detail') {
+        el.innerHTML = `
+            <div class="nt-back-header">
+                <button class="nt-back-btn" onclick="NotaryPage.goBack()">
+                    <i class="fa-solid fa-arrow-left"></i>
+                </button>
+                <div>
+                    <div style="font-size:15px;font-weight:700;color:var(--nt-text)">Certificado #${NT.selectedCert?.id || ''}</div>
+                    <div style="font-size:11px;color:var(--nt-text-3)">Detalhes do documento</div>
                 </div>
-                <h3 class="text-xl font-bold text-white mb-2">Connect Wallet</h3>
-                <p class="text-zinc-500 text-sm mb-6 text-center max-w-xs">Connect your wallet to start notarizing documents on the blockchain</p>
-                <button onclick="window.openConnectModal && window.openConnectModal()" 
-                    class="btn-primary px-8 py-3 text-base">
-                    <i class="fa-solid fa-wallet mr-2"></i>Connect Wallet
+            </div>
+        `;
+        return;
+    }
+
+    el.innerHTML = `
+        <div class="nt-header-bar">
+            <div class="nt-brand">
+                <div class="nt-brand-icon"><i class="fa-solid fa-stamp"></i></div>
+                <div>
+                    <div class="nt-brand-name">Decentralized Notary</div>
+                    <div class="nt-brand-sub">Certificacao blockchain permanente</div>
+                </div>
+            </div>
+        </div>
+        <nav class="nt-nav">
+            <button class="nt-nav-item ${NT.activeTab === 'documents' ? 'active' : ''}" onclick="NotaryPage.setTab('documents')">
+                <i class="fa-solid fa-certificate"></i><span>Documentos</span>
+            </button>
+            <button class="nt-nav-item ${NT.activeTab === 'notarize' ? 'active' : ''}" onclick="NotaryPage.setTab('notarize')">
+                <i class="fa-solid fa-stamp"></i><span>Notarizar</span>
+            </button>
+            <button class="nt-nav-item ${NT.activeTab === 'verify' ? 'active' : ''}" onclick="NotaryPage.setTab('verify')">
+                <i class="fa-solid fa-shield-check"></i><span>Verificar</span>
+            </button>
+            <button class="nt-nav-item ${NT.activeTab === 'stats' ? 'active' : ''}" onclick="NotaryPage.setTab('stats')">
+                <i class="fa-solid fa-chart-simple"></i><span>Stats</span>
+            </button>
+        </nav>
+    `;
+}
+
+// ============================================================================
+// CONTENT DISPATCHER
+// ============================================================================
+function renderContent() {
+    const el = document.getElementById('nt-content');
+    if (!el) return;
+
+    switch (NT.view) {
+        case 'documents':   renderDocuments(el);  break;
+        case 'notarize':    renderNotarize(el);   break;
+        case 'verify':      renderVerify(el);     break;
+        case 'stats':       renderStats(el);      break;
+        case 'cert-detail': renderCertDetail(el); break;
+        default:            renderDocuments(el);
+    }
+}
+
+// ============================================================================
+// DOCUMENTS TAB
+// ============================================================================
+function renderDocuments(el) {
+    if (!State.isConnected) {
+        el.innerHTML = `
+            <div class="nt-card" style="margin-top:16px;text-align:center;padding:48px 20px">
+                <div style="width:56px;height:56px;border-radius:var(--nt-radius);background:var(--nt-bg3);display:inline-flex;align-items:center;justify-content:center;margin-bottom:16px">
+                    <i class="fa-solid fa-wallet" style="font-size:24px;color:var(--nt-text-3)"></i>
+                </div>
+                <div style="font-size:16px;font-weight:700;color:var(--nt-text);margin-bottom:8px">Conecte sua Wallet</div>
+                <div style="font-size:13px;color:var(--nt-text-3);margin-bottom:20px">Conecte para visualizar seus certificados</div>
+                <button class="nt-btn-primary" onclick="window.openConnectModal && window.openConnectModal()">
+                    <i class="fa-solid fa-wallet" style="margin-right:8px"></i>Conectar Wallet
                 </button>
             </div>
         `;
         return;
     }
 
-    const fee = State.notaryFee || ethers.parseEther("1");
-    const balance = State.currentUserBalance || 0n;
-    
-    if (balance < fee) {
-        panel.innerHTML = `
-            <div class="flex flex-col items-center justify-center h-full py-12">
-                <div class="w-20 h-20 rounded-2xl bg-red-500/10 flex items-center justify-center mb-4">
-                    <i class="fa-solid fa-coins text-3xl text-red-400"></i>
-                </div>
-                <h3 class="text-xl font-bold text-white mb-2">Insufficient Balance</h3>
-                <p class="text-zinc-500 text-sm text-center mb-2">You need at least <span class="text-amber-400 font-bold">${formatBigNumber(fee)} BKC</span> to notarize</p>
-                <p class="text-zinc-600 text-xs">Current balance: ${formatBigNumber(balance)} BKC</p>
+    if (NT.certsLoading) {
+        el.innerHTML = `
+            <div class="nt-cert-grid" style="margin-top:16px">
+                ${Array(4).fill('').map(() => `
+                    <div class="nt-cert-card">
+                        <div class="nt-shimmer" style="height:120px"></div>
+                        <div style="padding:14px">
+                            <div class="nt-shimmer" style="height:16px;width:70%;margin-bottom:8px"></div>
+                            <div class="nt-shimmer" style="height:12px;width:50%"></div>
+                        </div>
+                    </div>
+                `).join('')}
             </div>
         `;
         return;
     }
 
-    switch (Notary.step) {
-        case 1: renderStep1(panel); break;
-        case 2: renderStep2(panel); break;
-        case 3: renderStep3(panel); break;
+    if (!NT.certificates.length) {
+        el.innerHTML = `
+            <div class="nt-card" style="margin-top:16px;text-align:center;padding:48px 20px">
+                <div style="width:56px;height:56px;border-radius:var(--nt-radius);background:var(--nt-accent-glow);display:inline-flex;align-items:center;justify-content:center;margin-bottom:16px">
+                    <i class="fa-solid fa-stamp" style="font-size:24px;color:var(--nt-accent);opacity:0.5"></i>
+                </div>
+                <div style="font-size:16px;font-weight:700;color:var(--nt-text);margin-bottom:8px">Nenhum certificado</div>
+                <div style="font-size:13px;color:var(--nt-text-3);margin-bottom:20px">Notarize um documento para criar seu primeiro certificado</div>
+                <button class="nt-btn-primary" onclick="NotaryPage.setTab('notarize')">
+                    <i class="fa-solid fa-plus" style="margin-right:8px"></i>Notarizar Documento
+                </button>
+            </div>
+        `;
+        return;
     }
+
+    el.innerHTML = `
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-top:16px;margin-bottom:4px">
+            <div style="font-size:13px;color:var(--nt-text-2)">${NT.certificates.length} certificado${NT.certificates.length > 1 ? 's' : ''}</div>
+            <button class="nt-btn-icon" onclick="NotaryPage.refreshHistory()" title="Atualizar">
+                <i class="fa-solid fa-rotate-right" style="font-size:12px"></i>
+            </button>
+        </div>
+        <div class="nt-cert-grid">
+            ${NT.certificates.map(cert => renderCertCard(cert)).join('')}
+        </div>
+    `;
 }
 
-// ============================================================================
-// STEP 1: FILE UPLOAD
-// ============================================================================
-function renderStep1(panel) {
-    panel.innerHTML = `
-        <div class="flex flex-col items-center justify-center h-full py-8">
-            <h3 class="text-xl font-bold text-white mb-2">Upload Document</h3>
-            <p class="text-zinc-500 text-sm mb-6 text-center">Select any file to certify permanently on the blockchain</p>
-            
-            <div id="dropzone" class="dropzone w-full max-w-md p-10 text-center">
-                <input type="file" id="file-input" class="hidden">
-                <div class="w-20 h-20 mx-auto mb-4 rounded-2xl bg-amber-500/15 flex items-center justify-center">
-                    <i class="fa-solid fa-cloud-arrow-up text-3xl text-amber-400"></i>
-                </div>
-                <p class="text-white font-semibold mb-1">Click or drag file here</p>
-                <p class="text-xs text-zinc-600">Max 5MB • Any format supported</p>
-            </div>
+function renderCertCard(cert) {
+    const ipfsUrl = resolveIpfsUrl(cert.ipfs);
+    const fileInfo = getFileTypeInfo(cert.mimeType || '', cert.description || cert.fileName || '');
+    const timeAgo = formatTimestamp(cert.timestamp);
+    const desc = cert.description?.split('---')[0].trim().split('\n')[0].trim() || 'Documento Notarizado';
 
-            <div class="flex items-center gap-6 mt-6 text-xs text-zinc-600">
-                <span class="flex items-center gap-1"><i class="fa-solid fa-lock text-emerald-500"></i> Encrypted</span>
-                <span class="flex items-center gap-1"><i class="fa-solid fa-database text-blue-400"></i> IPFS Storage</span>
-                <span class="flex items-center gap-1"><i class="fa-solid fa-shield text-purple-400"></i> Tamper-proof</span>
+    return `
+        <div class="nt-cert-card" onclick="NotaryPage.viewCert(${cert.id})">
+            <div class="nt-cert-thumb">
+                ${ipfsUrl ? `
+                    <img src="${ipfsUrl}" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'" alt="">
+                    <div style="display:none;flex-direction:column;align-items:center;justify-content:center;width:100%;height:100%;position:absolute;inset:0;background:var(--nt-bg3)">
+                        <i class="${fileInfo.icon}" style="font-size:28px;color:${fileInfo.color}"></i>
+                    </div>
+                ` : `
+                    <i class="${fileInfo.icon}" style="font-size:28px;color:${fileInfo.color}"></i>
+                `}
+                <span style="position:absolute;top:8px;right:8px;font-size:10px;font-family:monospace;color:var(--nt-accent);background:rgba(0,0,0,0.8);padding:2px 8px;border-radius:20px;font-weight:700">#${cert.id}</span>
+                ${timeAgo ? `<span style="position:absolute;top:8px;left:8px;font-size:10px;color:var(--nt-text-3);background:rgba(0,0,0,0.8);padding:2px 8px;border-radius:20px"><i class="fa-regular fa-clock" style="margin-right:4px"></i>${timeAgo}</span>` : ''}
+            </div>
+            <div class="nt-cert-info">
+                <div style="font-size:13px;font-weight:600;color:var(--nt-text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:4px">${desc}</div>
+                <div style="font-size:10px;font-family:monospace;color:var(--nt-text-3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">SHA-256: ${cert.hash?.slice(0, 18) || '...'}...</div>
             </div>
         </div>
     `;
-
-    initDropzone();
 }
 
-function initDropzone() {
-    const dropzone = document.getElementById('dropzone');
-    const fileInput = document.getElementById('file-input');
+// ============================================================================
+// NOTARIZE TAB (3-Step Wizard)
+// ============================================================================
+function renderNotarize(el) {
+    if (!State.isConnected) {
+        el.innerHTML = `
+            <div class="nt-card" style="margin-top:16px;text-align:center;padding:48px 20px">
+                <div style="width:56px;height:56px;border-radius:var(--nt-radius);background:var(--nt-bg3);display:inline-flex;align-items:center;justify-content:center;margin-bottom:16px">
+                    <i class="fa-solid fa-wallet" style="font-size:24px;color:var(--nt-text-3)"></i>
+                </div>
+                <div style="font-size:16px;font-weight:700;color:var(--nt-text);margin-bottom:8px">Conecte sua Wallet</div>
+                <div style="font-size:13px;color:var(--nt-text-3);margin-bottom:20px">Conecte para notarizar documentos na blockchain</div>
+                <button class="nt-btn-primary" onclick="window.openConnectModal && window.openConnectModal()">
+                    <i class="fa-solid fa-wallet" style="margin-right:8px"></i>Conectar Wallet
+                </button>
+            </div>
+        `;
+        return;
+    }
+
+    el.innerHTML = `
+        <div class="nt-card" style="margin-top:16px">
+            ${renderStepProgress()}
+            <div id="nt-wiz-panel"></div>
+        </div>
+    `;
+
+    const panel = document.getElementById('nt-wiz-panel');
+    if (!panel) return;
+
+    switch (NT.wizStep) {
+        case 1: renderWizStep1(panel); break;
+        case 2: renderWizStep2(panel); break;
+        case 3: renderWizStep3(panel); break;
+    }
+}
+
+function renderStepProgress() {
+    const s = NT.wizStep;
+    return `
+        <div class="nt-steps">
+            <div class="nt-step-dot ${s > 1 ? 'done' : s === 1 ? 'active' : 'pending'}">${s > 1 ? '<i class="fa-solid fa-check" style="font-size:12px"></i>' : '1'}</div>
+            <div class="nt-step-line ${s > 1 ? 'done' : s === 1 ? '' : ''}"></div>
+            <div class="nt-step-dot ${s > 2 ? 'done' : s === 2 ? 'active' : 'pending'}">${s > 2 ? '<i class="fa-solid fa-check" style="font-size:12px"></i>' : '2'}</div>
+            <div class="nt-step-line ${s > 2 ? 'done' : s === 2 ? 'active' : ''}"></div>
+            <div class="nt-step-dot ${s === 3 ? 'active' : 'pending'}">3</div>
+        </div>
+    `;
+}
+
+// ── Step 1: Upload + Hash + Duplicate Check ──
+function renderWizStep1(panel) {
+    if (NT.wizFile && NT.wizFileHash) {
+        // File selected, show hash + duplicate check
+        const file = NT.wizFile;
+        const fileInfo = getFileTypeInfo(file.type, file.name);
+        const dupCheck = NT.wizDuplicateCheck;
+
+        panel.innerHTML = `
+            <div style="text-align:center;margin-bottom:20px">
+                <div style="font-size:16px;font-weight:700;color:var(--nt-text)">Arquivo Selecionado</div>
+                <div style="font-size:12px;color:var(--nt-text-3);margin-top:4px">Hash SHA-256 calculado no seu navegador</div>
+            </div>
+
+            <div style="background:var(--nt-bg3);border:1px solid var(--nt-border);border-radius:var(--nt-radius);padding:16px;margin-bottom:16px">
+                <div style="display:flex;align-items:center;gap:14px">
+                    <div style="width:48px;height:48px;border-radius:var(--nt-radius-sm);background:${fileInfo.bg};display:flex;align-items:center;justify-content:center;flex-shrink:0">
+                        <i class="${fileInfo.icon}" style="font-size:20px;color:${fileInfo.color}"></i>
+                    </div>
+                    <div style="flex:1;min-width:0">
+                        <div style="font-size:13px;font-weight:600;color:var(--nt-text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${file.name}</div>
+                        <div style="font-size:11px;color:var(--nt-text-3)">${formatFileSize(file.size)} &bull; ${fileInfo.label}</div>
+                    </div>
+                    <button class="nt-btn-icon" onclick="NotaryPage.wizRemoveFile()" title="Remover">
+                        <i class="fa-solid fa-xmark" style="color:var(--nt-red)"></i>
+                    </button>
+                </div>
+            </div>
+
+            <div style="margin-bottom:16px">
+                <div style="font-size:11px;font-weight:600;color:var(--nt-text-3);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:6px">
+                    <i class="fa-solid fa-fingerprint" style="margin-right:4px;color:var(--nt-accent)"></i>SHA-256 Hash
+                </div>
+                <div class="nt-hash-display" onclick="NotaryPage.copyHash('${NT.wizFileHash}')" title="Clique para copiar">
+                    ${NT.wizFileHash}
+                    <i class="fa-regular fa-copy" style="float:right;margin-top:2px;color:var(--nt-accent)"></i>
+                </div>
+            </div>
+
+            ${dupCheck === null ? `
+                <div style="text-align:center;padding:12px;color:var(--nt-text-3);font-size:12px">
+                    <i class="fa-solid fa-spinner fa-spin" style="margin-right:6px;color:var(--nt-accent)"></i>Verificando duplicatas...
+                </div>
+            ` : dupCheck?.exists ? `
+                <div class="nt-duplicate-warn" style="margin-bottom:16px">
+                    <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+                        <i class="fa-solid fa-triangle-exclamation" style="color:#fbbf24;font-size:16px"></i>
+                        <span style="font-size:13px;font-weight:700;color:#fbbf24">Documento ja notarizado!</span>
+                    </div>
+                    <div style="font-size:12px;color:var(--nt-text-2);line-height:1.5">
+                        Este hash ja existe na blockchain.<br>
+                        Token ID: <strong style="color:var(--nt-accent)">#${dupCheck.tokenId}</strong><br>
+                        Dono: <span style="font-family:monospace;font-size:11px">${shortenAddress(dupCheck.owner)}</span><br>
+                        Data: ${formatDateFull(dupCheck.timestamp)}
+                    </div>
+                </div>
+            ` : `
+                <div style="background:rgba(34,197,94,0.08);border:1px solid rgba(34,197,94,0.2);border-radius:var(--nt-radius);padding:12px;margin-bottom:16px;display:flex;align-items:center;gap:8px">
+                    <i class="fa-solid fa-circle-check" style="color:var(--nt-green)"></i>
+                    <span style="font-size:12px;color:var(--nt-green);font-weight:600">Hash unico — pronto para notarizar</span>
+                </div>
+            `}
+
+            <div style="display:flex;gap:10px;margin-top:8px">
+                <button class="nt-btn-secondary" style="flex:1" onclick="NotaryPage.wizRemoveFile()">
+                    <i class="fa-solid fa-arrow-left" style="margin-right:6px"></i>Trocar Arquivo
+                </button>
+                <button class="nt-btn-primary" style="flex:2" ${dupCheck?.exists ? 'disabled' : ''} onclick="NotaryPage.wizNext()">
+                    Continuar<i class="fa-solid fa-arrow-right" style="margin-left:6px"></i>
+                </button>
+            </div>
+        `;
+        return;
+    }
+
+    if (NT.wizIsHashing) {
+        panel.innerHTML = `
+            <div style="text-align:center;padding:40px 20px">
+                <div style="width:56px;height:56px;border-radius:50%;background:var(--nt-accent-glow);display:inline-flex;align-items:center;justify-content:center;margin-bottom:16px">
+                    <i class="fa-solid fa-fingerprint fa-spin" style="font-size:24px;color:var(--nt-accent)"></i>
+                </div>
+                <div style="font-size:14px;font-weight:600;color:var(--nt-text)">Calculando SHA-256...</div>
+                <div style="font-size:12px;color:var(--nt-text-3);margin-top:6px">Hash sendo gerado localmente no seu navegador</div>
+            </div>
+        `;
+        return;
+    }
+
+    // Dropzone
+    panel.innerHTML = `
+        <div style="text-align:center;margin-bottom:20px">
+            <div style="font-size:16px;font-weight:700;color:var(--nt-text)">Upload de Documento</div>
+            <div style="font-size:12px;color:var(--nt-text-3);margin-top:4px">Selecione um arquivo para certificar permanentemente na blockchain</div>
+        </div>
+
+        <div class="nt-dropzone" id="nt-wiz-dropzone">
+            <input type="file" id="nt-wiz-file-input" style="display:none">
+            <div style="width:56px;height:56px;border-radius:var(--nt-radius);background:var(--nt-accent-glow);display:inline-flex;align-items:center;justify-content:center;margin-bottom:14px">
+                <i class="fa-solid fa-cloud-arrow-up" style="font-size:24px;color:var(--nt-accent)"></i>
+            </div>
+            <div style="font-size:14px;font-weight:600;color:var(--nt-text);margin-bottom:4px">Clique ou arraste aqui</div>
+            <div style="font-size:11px;color:var(--nt-text-3)">Max 5MB &bull; Qualquer formato</div>
+        </div>
+
+        <div style="display:flex;align-items:center;justify-content:center;gap:20px;margin-top:16px;font-size:11px;color:var(--nt-text-3)">
+            <span><i class="fa-solid fa-shield-halved" style="color:var(--nt-green);margin-right:4px"></i>Hash local</span>
+            <span><i class="fa-solid fa-database" style="color:var(--nt-blue);margin-right:4px"></i>IPFS</span>
+            <span><i class="fa-solid fa-infinity" style="color:var(--nt-accent);margin-right:4px"></i>Permanente</span>
+        </div>
+    `;
+
+    initWizDropzone();
+}
+
+function initWizDropzone() {
+    const dropzone = document.getElementById('nt-wiz-dropzone');
+    const fileInput = document.getElementById('nt-wiz-file-input');
     if (!dropzone || !fileInput) return;
 
     dropzone.onclick = () => fileInput.click();
@@ -652,190 +977,204 @@ function initDropzone() {
     ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(e => {
         dropzone.addEventListener(e, ev => { ev.preventDefault(); ev.stopPropagation(); });
     });
-
     dropzone.addEventListener('dragenter', () => dropzone.classList.add('drag-over'));
-    dropzone.addEventListener('dragover', () => dropzone.classList.add('drag-over'));
+    dropzone.addEventListener('dragover',  () => dropzone.classList.add('drag-over'));
     dropzone.addEventListener('dragleave', () => dropzone.classList.remove('drag-over'));
     dropzone.addEventListener('drop', e => {
         dropzone.classList.remove('drag-over');
-        handleFileSelect(e.dataTransfer?.files?.[0]);
+        handleWizFileSelect(e.dataTransfer?.files?.[0]);
     });
-
-    fileInput.addEventListener('change', e => handleFileSelect(e.target.files?.[0]));
+    fileInput.addEventListener('change', e => handleWizFileSelect(e.target.files?.[0]));
 }
 
-function handleFileSelect(file) {
+async function handleWizFileSelect(file) {
     if (!file) return;
-
     if (file.size > MAX_FILE_SIZE) {
-        showToast('File too large (max 5MB)', 'error');
+        showToast('Arquivo muito grande (max 5MB)', 'error');
         return;
     }
 
-    Notary.file = file;
-    Notary.step = 2;
-    renderStepContent();
-}
-
-// ============================================================================
-// STEP 2: DETAILS
-// ============================================================================
-function renderStep2(panel) {
-    const file = Notary.file;
-    const fileSize = file ? (file.size / 1024).toFixed(1) : '0';
-    const fileInfo = getFileTypeInfo(file?.type || '', file?.name || '');
-
-    panel.innerHTML = `
-        <div class="max-w-md mx-auto py-4">
-            <h3 class="text-xl font-bold text-white mb-2 text-center">Add Details</h3>
-            <p class="text-zinc-500 text-sm mb-6 text-center">Describe your document for easy reference</p>
-
-            <div class="notary-card p-4 mb-4">
-                <div class="flex items-center gap-4">
-                    <div class="w-14 h-14 rounded-xl ${fileInfo.bg} flex items-center justify-center flex-shrink-0">
-                        <i class="${fileInfo.icon} text-2xl ${fileInfo.color}"></i>
-                    </div>
-                    <div class="flex-1 min-w-0">
-                        <p class="text-white font-semibold truncate">${file?.name || 'Unknown'}</p>
-                        <p class="text-xs text-zinc-500">${fileSize} KB • ${fileInfo.label}</p>
-                    </div>
-                    <button id="btn-remove" class="w-10 h-10 rounded-xl bg-red-500/10 hover:bg-red-500/20 flex items-center justify-center transition-colors">
-                        <i class="fa-solid fa-trash text-red-400"></i>
-                    </button>
-                </div>
-            </div>
-
-            <div class="mb-6">
-                <label class="text-xs font-bold text-zinc-400 uppercase tracking-wider block mb-2">
-                    Description <span class="text-zinc-600 font-normal">(optional)</span>
-                </label>
-                <textarea id="desc-input" rows="3" 
-                    class="w-full bg-black/40 border-2 border-zinc-700/50 rounded-xl p-4 text-sm text-white focus:border-amber-500/50 focus:outline-none placeholder-zinc-600 resize-none transition-colors"
-                    placeholder="E.g., Property deed signed on Jan 2025...">${Notary.description}</textarea>
-            </div>
-
-            <div class="flex gap-3">
-                <button id="btn-back" class="btn-secondary flex-1 py-3.5 text-sm">
-                    <i class="fa-solid fa-arrow-left mr-2"></i>Back
-                </button>
-                <button id="btn-next" class="btn-primary flex-[2] py-3.5 text-sm">
-                    Continue<i class="fa-solid fa-arrow-right ml-2"></i>
-                </button>
-            </div>
-        </div>
-    `;
-
-    document.getElementById('btn-remove')?.addEventListener('click', () => {
-        Notary.file = null;
-        Notary.description = '';
-        Notary.step = 1;
-        renderStepContent();
-    });
-
-    document.getElementById('btn-back')?.addEventListener('click', () => {
-        Notary.step = 1;
-        renderStepContent();
-    });
-
-    document.getElementById('btn-next')?.addEventListener('click', () => {
-        Notary.description = document.getElementById('desc-input')?.value || '';
-        Notary.step = 3;
-        renderStepContent();
-    });
-}
-
-// ============================================================================
-// STEP 3: CONFIRM & MINT
-// ============================================================================
-function renderStep3(panel) {
-    const file = Notary.file;
-    const desc = Notary.description || 'No description';
-    const fee = State.notaryFee || ethers.parseEther("1");
-    const fileInfo = getFileTypeInfo(file?.type || '', file?.name || '');
-
-    panel.innerHTML = `
-        <div class="max-w-md mx-auto py-4 text-center">
-            <h3 class="text-xl font-bold text-white mb-2">Confirm & Mint</h3>
-            <p class="text-zinc-500 text-sm mb-6">Review and sign to create your NFT certificate</p>
-
-            <div class="notary-card p-4 mb-4 text-left">
-                <div class="flex items-center gap-4 pb-4 border-b border-zinc-800/50 mb-3">
-                    <div class="w-12 h-12 rounded-xl ${fileInfo.bg} flex items-center justify-center">
-                        <i class="${fileInfo.icon} text-xl ${fileInfo.color}"></i>
-                    </div>
-                    <div class="flex-1 min-w-0">
-                        <p class="text-white font-semibold truncate text-sm">${file?.name}</p>
-                        <p class="text-xs text-zinc-500">${(file?.size / 1024).toFixed(1)} KB</p>
-                    </div>
-                </div>
-                <p class="text-sm text-zinc-400 italic">"${desc}"</p>
-            </div>
-
-            <div class="bg-amber-500/10 border border-amber-500/20 rounded-xl p-4 mb-6">
-                <div class="flex justify-between items-center">
-                    <span class="text-zinc-400">Total Cost</span>
-                    <span class="text-amber-400 font-bold text-lg">${formatBigNumber(fee)} BKC</span>
-                </div>
-            </div>
-
-            <div class="flex gap-3">
-                <button id="btn-back" class="btn-secondary flex-1 py-3.5 text-sm">
-                    <i class="fa-solid fa-arrow-left mr-2"></i>Back
-                </button>
-                <button id="btn-mint" class="btn-primary flex-[2] py-3.5 text-sm pulse-glow">
-                    <i class="fa-solid fa-stamp mr-2"></i>Sign & Mint
-                </button>
-            </div>
-        </div>
-    `;
-
-    document.getElementById('btn-back')?.addEventListener('click', () => {
-        Notary.step = 2;
-        renderStepContent();
-    });
-
-    document.getElementById('btn-mint')?.addEventListener('click', handleMint);
-}
-
-// ============================================================================
-// MINT PROCESS
-// ============================================================================
-async function handleMint() {
-    if (Notary.isProcessing) return;
-    Notary.isProcessing = true;
-
-    const btn = document.getElementById('btn-mint');
-    if (btn) {
-        btn.disabled = true;
-        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-2"></i>Signing...';
-    }
-
-    const overlay = document.getElementById('processing-overlay');
-    const statusEl = document.getElementById('process-status');
-    const barEl = document.getElementById('process-bar');
-    const iconEl = document.getElementById('overlay-icon');
-
-    const setProgress = (percent, text) => {
-        if (barEl) barEl.style.width = `${percent}%`;
-        if (statusEl) statusEl.textContent = text;
-    };
+    NT.wizFile = file;
+    NT.wizFileHash = null;
+    NT.wizDuplicateCheck = null;
+    NT.wizIsHashing = true;
+    renderContent();
 
     try {
+        const hash = await NotaryTx.calculateFileHash(file);
+        NT.wizFileHash = hash;
+        NT.wizIsHashing = false;
+        renderContent();
+
+        // Check for duplicates
+        NT.wizDuplicateCheck = null;
+        renderContent();
+        const dupResult = await NotaryTx.verifyByHash(hash);
+        NT.wizDuplicateCheck = dupResult;
+        renderContent();
+    } catch (err) {
+        console.error('[NotaryPage] Hash error:', err);
+        NT.wizIsHashing = false;
+        NT.wizFile = null;
+        showToast('Erro ao calcular hash do arquivo', 'error');
+        renderContent();
+    }
+}
+
+// ── Step 2: Description + Fee Breakdown ──
+function renderWizStep2(panel) {
+    const file = NT.wizFile;
+    const fileInfo = getFileTypeInfo(file?.type || '', file?.name || '');
+
+    const bkcFmt = NT.feesLoaded ? (ethers ? ethers.formatEther(NT.bkcFee) : '1') : '...';
+    const ethFmt = NT.feesLoaded ? (ethers ? ethers.formatEther(NT.ethFee) : '0.0001') : '...';
+
+    const bkcBalance = State.currentUserBalance || 0n;
+    const ethBalance = State.currentUserNativeBalance || 0n;
+    const hasBkc = NT.feesLoaded ? bkcBalance >= NT.bkcFee : true;
+    const hasEth = NT.feesLoaded ? ethBalance >= (NT.ethFee + (ethers?.parseEther('0.001') || 0n)) : true;
+    const canProceed = hasBkc && hasEth;
+
+    panel.innerHTML = `
+        <div style="max-width:420px;margin:0 auto">
+            <div style="text-align:center;margin-bottom:20px">
+                <div style="font-size:16px;font-weight:700;color:var(--nt-text)">Detalhes & Taxas</div>
+                <div style="font-size:12px;color:var(--nt-text-3);margin-top:4px">Descreva o documento e confira as taxas</div>
+            </div>
+
+            <div style="background:var(--nt-bg3);border:1px solid var(--nt-border);border-radius:var(--nt-radius);padding:12px;margin-bottom:16px;display:flex;align-items:center;gap:12px">
+                <div style="width:40px;height:40px;border-radius:var(--nt-radius-sm);background:${fileInfo.bg};display:flex;align-items:center;justify-content:center;flex-shrink:0">
+                    <i class="${fileInfo.icon}" style="font-size:16px;color:${fileInfo.color}"></i>
+                </div>
+                <div style="flex:1;min-width:0">
+                    <div style="font-size:12px;font-weight:600;color:var(--nt-text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${file?.name || 'Arquivo'}</div>
+                    <div style="font-size:10px;color:var(--nt-text-3)">${formatFileSize(file?.size || 0)}</div>
+                </div>
+            </div>
+
+            <div style="margin-bottom:16px">
+                <label style="font-size:11px;font-weight:600;color:var(--nt-text-3);text-transform:uppercase;letter-spacing:0.05em;display:block;margin-bottom:6px">
+                    Descricao <span style="font-weight:400;text-transform:none">(opcional)</span>
+                </label>
+                <textarea id="nt-wiz-desc" rows="3"
+                    style="width:100%;background:var(--nt-bg3);border:1px solid var(--nt-border);border-radius:var(--nt-radius-sm);padding:12px;font-size:13px;color:var(--nt-text);resize:none;outline:none;font-family:inherit;transition:border-color var(--nt-transition)"
+                    onfocus="this.style.borderColor='rgba(245,158,11,0.4)'"
+                    onblur="this.style.borderColor='var(--nt-border)'"
+                    placeholder="Ex: Escritura assinada em Jan 2025...">${NT.wizDescription}</textarea>
+            </div>
+
+            <div class="nt-fee-box" style="margin-bottom:16px">
+                <div style="font-size:11px;font-weight:700;color:var(--nt-text-3);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:8px">
+                    <i class="fa-solid fa-coins" style="color:var(--nt-accent);margin-right:4px"></i>Taxas do Servico
+                </div>
+                <div class="nt-fee-row">
+                    <span style="font-size:13px;color:var(--nt-text-2)">Taxa BKC</span>
+                    <span style="font-size:14px;font-weight:700;color:var(--nt-accent);font-family:monospace">${bkcFmt} BKC</span>
+                </div>
+                <div class="nt-fee-row">
+                    <span style="font-size:13px;color:var(--nt-text-2)">Taxa ETH (gas fee)</span>
+                    <span style="font-size:14px;font-weight:700;color:var(--nt-blue);font-family:monospace">${ethFmt} ETH</span>
+                </div>
+                ${!hasBkc ? `<div style="font-size:11px;color:var(--nt-red);margin-top:8px"><i class="fa-solid fa-circle-xmark" style="margin-right:4px"></i>Saldo BKC insuficiente (${formatBigNumber(bkcBalance)} BKC)</div>` : ''}
+                ${!hasEth ? `<div style="font-size:11px;color:var(--nt-red);margin-top:4px"><i class="fa-solid fa-circle-xmark" style="margin-right:4px"></i>Saldo ETH insuficiente para taxa + gas</div>` : ''}
+            </div>
+
+            <div style="display:flex;gap:10px">
+                <button class="nt-btn-secondary" style="flex:1" onclick="NotaryPage.wizBack()">
+                    <i class="fa-solid fa-arrow-left" style="margin-right:6px"></i>Voltar
+                </button>
+                <button class="nt-btn-primary" style="flex:2" ${!canProceed ? 'disabled' : ''} onclick="NotaryPage.wizToStep3()">
+                    Revisar<i class="fa-solid fa-arrow-right" style="margin-left:6px"></i>
+                </button>
+            </div>
+        </div>
+    `;
+}
+
+// ── Step 3: Confirm & Mint ──
+function renderWizStep3(panel) {
+    const file = NT.wizFile;
+    const fileInfo = getFileTypeInfo(file?.type || '', file?.name || '');
+    const desc = NT.wizDescription || 'Sem descricao';
+
+    const bkcFmt = ethers ? ethers.formatEther(NT.bkcFee) : '1';
+    const ethFmt = ethers ? ethers.formatEther(NT.ethFee) : '0.0001';
+
+    panel.innerHTML = `
+        <div style="max-width:420px;margin:0 auto;text-align:center">
+            <div style="font-size:16px;font-weight:700;color:var(--nt-text);margin-bottom:4px">Confirmar & Mintar</div>
+            <div style="font-size:12px;color:var(--nt-text-3);margin-bottom:20px">Revise e assine para criar seu certificado NFT</div>
+
+            <div style="background:var(--nt-bg3);border:1px solid var(--nt-border);border-radius:var(--nt-radius);padding:16px;text-align:left;margin-bottom:16px">
+                <div style="display:flex;align-items:center;gap:12px;padding-bottom:12px;border-bottom:1px solid var(--nt-border);margin-bottom:12px">
+                    <div style="width:44px;height:44px;border-radius:var(--nt-radius-sm);background:${fileInfo.bg};display:flex;align-items:center;justify-content:center;flex-shrink:0">
+                        <i class="${fileInfo.icon}" style="font-size:18px;color:${fileInfo.color}"></i>
+                    </div>
+                    <div style="flex:1;min-width:0">
+                        <div style="font-size:13px;font-weight:600;color:var(--nt-text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${file?.name}</div>
+                        <div style="font-size:11px;color:var(--nt-text-3)">${formatFileSize(file?.size || 0)}</div>
+                    </div>
+                </div>
+                <div style="font-size:12px;color:var(--nt-text-2);font-style:italic">"${desc}"</div>
+                <div style="font-size:10px;font-family:monospace;color:var(--nt-text-3);margin-top:8px;word-break:break-all">
+                    <i class="fa-solid fa-fingerprint" style="color:var(--nt-accent);margin-right:4px"></i>${NT.wizFileHash}
+                </div>
+            </div>
+
+            <div class="nt-fee-box" style="margin-bottom:20px">
+                <div class="nt-fee-row">
+                    <span style="font-size:13px;color:var(--nt-text-2)">Taxa BKC</span>
+                    <span style="font-size:14px;font-weight:700;color:var(--nt-accent);font-family:monospace">${bkcFmt} BKC</span>
+                </div>
+                <div class="nt-fee-row">
+                    <span style="font-size:13px;color:var(--nt-text-2)">Taxa ETH</span>
+                    <span style="font-size:14px;font-weight:700;color:var(--nt-blue);font-family:monospace">${ethFmt} ETH</span>
+                </div>
+            </div>
+
+            <div style="display:flex;gap:10px">
+                <button class="nt-btn-secondary" style="flex:1" onclick="NotaryPage.wizBack()">
+                    <i class="fa-solid fa-arrow-left" style="margin-right:6px"></i>Voltar
+                </button>
+                <button class="nt-btn-primary" style="flex:2" id="nt-btn-mint" onclick="NotaryPage.handleMint()">
+                    <i class="fa-solid fa-stamp" style="margin-right:6px"></i>Assinar & Mintar
+                </button>
+            </div>
+        </div>
+    `;
+}
+
+// ============================================================================
+// MINT HANDLER
+// ============================================================================
+async function handleMint() {
+    if (NT.isProcessing) return;
+    NT.isProcessing = true;
+    NT.processStep = 'SIGNING';
+
+    const btn = document.getElementById('nt-btn-mint');
+    if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin" style="margin-right:6px"></i>Assinando...'; }
+
+    const overlay = document.getElementById('nt-overlay');
+    showOverlay('signing');
+
+    try {
+        // 1. Sign message
         const signer = await State.provider.getSigner();
-        const message = "I am signing to authenticate my file for notarization on Backchain.";
+        const message = 'I am signing to authenticate my file for notarization on Backchain.';
         const signature = await signer.signMessage(message);
 
-        if (overlay) overlay.classList.add('active');
-
-        setProgress(10, 'UPLOADING TO IPFS...');
+        // 2. Upload to IPFS
+        NT.processStep = 'UPLOADING';
+        showOverlay('uploading');
 
         const formData = new FormData();
-        formData.append('file', Notary.file);
+        formData.append('file', NT.wizFile);
         formData.append('signature', signature);
         formData.append('address', State.userAddress);
-        formData.append('description', Notary.description || 'No description');
+        formData.append('description', NT.wizDescription || 'Sem descricao');
 
-        const uploadUrl = API_ENDPOINTS.uploadFileToIPFS || "/api/upload";
+        const uploadUrl = API_ENDPOINTS.uploadFileToIPFS || '/api/upload';
         const res = await fetch(uploadUrl, {
             method: 'POST',
             body: formData,
@@ -843,73 +1182,58 @@ async function handleMint() {
         });
 
         if (!res.ok) {
-            if (res.status === 413) throw new Error('File too large. Maximum size is 5MB.');
-            if (res.status === 401) throw new Error('Signature verification failed.');
-            throw new Error(`Upload failed (${res.status})`);
+            if (res.status === 413) throw new Error('Arquivo muito grande (max 5MB)');
+            if (res.status === 401) throw new Error('Verificacao de assinatura falhou');
+            throw new Error(`Upload falhou (${res.status})`);
         }
+
         const data = await res.json();
-
         const ipfsCid = data.ipfsUri || data.metadataUri;
-        const contentHash = data.contentHash;
-        
-        if (!ipfsCid) throw new Error('No IPFS URI returned');
-        if (!contentHash) throw new Error('No content hash returned');
+        const contentHash = data.contentHash || NT.wizFileHash;
 
-        setProgress(50, 'MINTING ON BLOCKCHAIN...');
-        if (iconEl) iconEl.className = 'fa-solid fa-stamp text-4xl text-amber-400 stamp-animation';
+        if (!ipfsCid) throw new Error('Nenhum IPFS URI retornado');
+        if (!contentHash) throw new Error('Nenhum hash de conteudo');
+
+        // 3. Mint on blockchain
+        NT.processStep = 'MINTING';
+        showOverlay('minting');
 
         await NotaryTx.notarize({
             ipfsCid,
             contentHash,
-            description: Notary.description || 'No description',
+            description: NT.wizDescription || 'Sem descricao',
+            operator: resolveOperator(),
             button: btn,
-            
-            onSuccess: (receipt) => {
-                setProgress(100, 'SUCCESS!');
-                
-                if (overlay) {
-                    overlay.innerHTML = `
-                        <div class="text-center p-6 max-w-sm success-bounce">
-                            <div class="w-32 h-32 mx-auto mb-6 relative">
-                                <div class="absolute inset-0 rounded-full bg-emerald-500/30 animate-pulse"></div>
-                                <div class="relative w-full h-full rounded-full bg-gradient-to-br from-emerald-900/50 to-green-900/50 flex items-center justify-center border-2 border-emerald-400">
-                                    <i class="fa-solid fa-check text-5xl text-emerald-400"></i>
-                                </div>
-                            </div>
-                            <h3 class="text-2xl font-bold text-white mb-2">🎉 Notarized!</h3>
-                            <p class="text-emerald-400 text-sm mb-4">Your document is now permanently certified</p>
-                            <div class="flex items-center justify-center gap-2 text-zinc-500 text-xs">
-                                <i class="fa-solid fa-shield-check text-emerald-400"></i>
-                                <span>Immutable • Verifiable • Permanent</span>
-                            </div>
-                        </div>
-                    `;
-                }
-                
+
+            onSuccess: (receipt, tokenId, feePaid) => {
+                NT.processStep = 'SUCCESS';
+                showOverlay('success', tokenId);
+
                 setTimeout(() => {
-                    if (overlay) overlay.classList.remove('active');
-                    
-                    Notary.file = null;
-                    Notary.description = '';
-                    Notary.step = 1;
-                    Notary.isProcessing = false;
-                    
-                    renderStepContent();
+                    hideOverlay();
+                    NT.wizFile = null;
+                    NT.wizFileHash = null;
+                    NT.wizDescription = '';
+                    NT.wizDuplicateCheck = null;
+                    NT.wizStep = 1;
+                    NT.isProcessing = false;
+
+                    // Switch to documents tab and reload
+                    NT.view = 'documents';
+                    NT.activeTab = 'documents';
+                    renderHeader();
+                    renderContent();
                     loadCertificates();
-                    loadUserData(true);
-                    
-                    showToast('📜 Document notarized successfully!', 'success');
+
+                    showToast('Documento notarizado com sucesso!', 'success');
                 }, 3000);
             },
-            
+
             onError: (error) => {
                 if (error.cancelled || error.type === 'user_rejected') {
-                    Notary.isProcessing = false;
-                    if (overlay) overlay.classList.remove('active');
-                    if (btn) {
-                        btn.disabled = false;
-                        btn.innerHTML = '<i class="fa-solid fa-stamp mr-2"></i>Sign & Mint';
-                    }
+                    NT.isProcessing = false;
+                    hideOverlay();
+                    if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fa-solid fa-stamp" style="margin-right:6px"></i>Assinar & Mintar'; }
                     return;
                 }
                 throw error;
@@ -917,182 +1241,560 @@ async function handleMint() {
         });
 
     } catch (e) {
-        console.error('Notary Error:', e);
-        
-        if (overlay) overlay.classList.remove('active');
-        if (btn) {
-            btn.disabled = false;
-            btn.innerHTML = '<i class="fa-solid fa-stamp mr-2"></i>Sign & Mint';
+        console.error('[NotaryPage] Mint error:', e);
+        hideOverlay();
+        NT.isProcessing = false;
+        if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fa-solid fa-stamp" style="margin-right:6px"></i>Assinar & Mintar'; }
+        if (e.code !== 4001 && e.code !== 'ACTION_REJECTED') {
+            showToast(e.message || 'Notarizacao falhou', 'error');
         }
-        
-        Notary.isProcessing = false;
-        showToast(e.message || 'Notarization failed', 'error');
     }
 }
 
 // ============================================================================
-// CERTIFICATES HISTORY
+// PROCESSING OVERLAY
 // ============================================================================
-async function loadCertificates() {
-    const grid = document.getElementById('certificates-grid');
-    if (!grid) return;
+function showOverlay(step, tokenId) {
+    const overlay = document.getElementById('nt-overlay');
+    if (!overlay) return;
+    overlay.classList.add('active');
 
-    if (!State.isConnected) {
-        grid.innerHTML = `
-            <div class="col-span-full text-center py-8">
-                <p class="text-zinc-500 text-sm">Connect wallet to view certificates</p>
+    const configs = {
+        signing: { icon: 'fa-solid fa-signature', text: 'Assinando mensagem...', sub: 'Confirme no MetaMask', pct: 10 },
+        uploading: { icon: 'fa-solid fa-cloud-arrow-up', text: 'Enviando para IPFS...', sub: 'Armazenamento descentralizado', pct: 35 },
+        minting: { icon: 'fa-solid fa-stamp', text: 'Mintando na Blockchain...', sub: 'Aguarde a confirmacao', pct: 65, animate: true },
+        success: { icon: 'fa-solid fa-check', text: 'Notarizado!', sub: tokenId ? `Token ID #${tokenId}` : 'Certificado criado', pct: 100, success: true }
+    };
+
+    const cfg = configs[step] || configs.signing;
+
+    overlay.innerHTML = `
+        <div style="text-align:center;padding:24px;max-width:360px">
+            <div style="width:100px;height:100px;margin:0 auto 24px;position:relative">
+                ${!cfg.success ? `
+                    <div style="position:absolute;inset:-4px;border-radius:50%;border:3px solid transparent;border-top-color:var(--nt-accent);border-right-color:rgba(245,158,11,0.3);animation:nt-spin 1s linear infinite"></div>
+                ` : ''}
+                <div style="width:100%;height:100%;border-radius:50%;background:${cfg.success ? 'rgba(34,197,94,0.15)' : 'var(--nt-bg3)'};display:flex;align-items:center;justify-content:center;border:2px solid ${cfg.success ? 'var(--nt-green)' : 'rgba(245,158,11,0.2)'}">
+                    <i class="${cfg.icon}" style="font-size:36px;color:${cfg.success ? 'var(--nt-green)' : 'var(--nt-accent)'};${cfg.animate ? 'animation:nt-stamp 0.6s ease' : ''}"></i>
+                </div>
+            </div>
+            <div style="font-size:18px;font-weight:700;color:var(--nt-text);margin-bottom:6px">${cfg.text}</div>
+            <div style="font-size:12px;color:${cfg.success ? 'var(--nt-green)' : 'var(--nt-accent)'};font-family:monospace;margin-bottom:16px">${cfg.sub}</div>
+            <div style="width:100%;height:4px;background:var(--nt-bg3);border-radius:2px;overflow:hidden">
+                <div style="height:100%;width:${cfg.pct}%;background:linear-gradient(90deg,var(--nt-accent),${cfg.success ? 'var(--nt-green)' : '#fbbf24'});border-radius:2px;transition:width 0.5s ease"></div>
+            </div>
+            ${!cfg.success ? '<div style="font-size:10px;color:var(--nt-text-3);margin-top:12px">Nao feche esta janela</div>' : ''}
+        </div>
+    `;
+
+    // Add spin keyframe if not present
+    if (!document.getElementById('nt-spin-kf')) {
+        const s = document.createElement('style');
+        s.id = 'nt-spin-kf';
+        s.textContent = '@keyframes nt-spin { to { transform: rotate(360deg); } }';
+        document.head.appendChild(s);
+    }
+}
+
+function hideOverlay() {
+    const overlay = document.getElementById('nt-overlay');
+    if (overlay) overlay.classList.remove('active');
+}
+
+// ============================================================================
+// VERIFY TAB (Public — No wallet needed)
+// ============================================================================
+function renderVerify(el) {
+    el.innerHTML = `
+        <div class="nt-card" style="margin-top:16px">
+            <div style="text-align:center;margin-bottom:20px">
+                <div style="width:48px;height:48px;border-radius:50%;background:rgba(34,197,94,0.1);display:inline-flex;align-items:center;justify-content:center;margin-bottom:12px">
+                    <i class="fa-solid fa-shield-check" style="font-size:22px;color:var(--nt-green)"></i>
+                </div>
+                <div style="font-size:16px;font-weight:700;color:var(--nt-text)">Verificacao Publica</div>
+                <div style="font-size:12px;color:var(--nt-text-3);margin-top:4px;max-width:380px;margin-left:auto;margin-right:auto">
+                    Verifique se um documento foi notarizado na blockchain. <strong style="color:var(--nt-green)">Nao precisa de wallet.</strong>
+                </div>
+            </div>
+
+            <div class="nt-dropzone" id="nt-verify-dropzone" style="margin-bottom:16px">
+                <input type="file" id="nt-verify-file-input" style="display:none">
+                <div style="width:48px;height:48px;border-radius:var(--nt-radius);background:rgba(34,197,94,0.1);display:inline-flex;align-items:center;justify-content:center;margin-bottom:12px">
+                    <i class="fa-solid fa-magnifying-glass" style="font-size:20px;color:var(--nt-green)"></i>
+                </div>
+                <div style="font-size:14px;font-weight:600;color:var(--nt-text);margin-bottom:4px">Arraste um arquivo para verificar</div>
+                <div style="font-size:11px;color:var(--nt-text-3)">O hash SHA-256 sera calculado localmente</div>
+            </div>
+
+            <div id="nt-verify-result"></div>
+        </div>
+    `;
+
+    initVerifyDropzone();
+    if (NT.verifyResult) renderVerifyResult();
+}
+
+function initVerifyDropzone() {
+    const dropzone = document.getElementById('nt-verify-dropzone');
+    const fileInput = document.getElementById('nt-verify-file-input');
+    if (!dropzone || !fileInput) return;
+
+    dropzone.onclick = () => fileInput.click();
+
+    ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(e => {
+        dropzone.addEventListener(e, ev => { ev.preventDefault(); ev.stopPropagation(); });
+    });
+    dropzone.addEventListener('dragenter', () => dropzone.classList.add('drag-over'));
+    dropzone.addEventListener('dragover',  () => dropzone.classList.add('drag-over'));
+    dropzone.addEventListener('dragleave', () => dropzone.classList.remove('drag-over'));
+    dropzone.addEventListener('drop', e => {
+        dropzone.classList.remove('drag-over');
+        handleVerifyFile(e.dataTransfer?.files?.[0]);
+    });
+    fileInput.addEventListener('change', e => handleVerifyFile(e.target.files?.[0]));
+}
+
+async function handleVerifyFile(file) {
+    if (!file) return;
+    NT.verifyFile = file;
+    NT.verifyHash = null;
+    NT.verifyResult = null;
+    NT.verifyIsChecking = true;
+
+    const resultEl = document.getElementById('nt-verify-result');
+    if (resultEl) {
+        resultEl.innerHTML = `
+            <div style="text-align:center;padding:20px;color:var(--nt-text-3);font-size:13px">
+                <i class="fa-solid fa-spinner fa-spin" style="margin-right:6px;color:var(--nt-accent)"></i>Calculando hash e verificando...
+            </div>
+        `;
+    }
+
+    try {
+        const hash = await NotaryTx.calculateFileHash(file);
+        NT.verifyHash = hash;
+
+        const result = await NotaryTx.verifyByHash(hash);
+        NT.verifyResult = result;
+        NT.verifyIsChecking = false;
+        renderVerifyResult();
+    } catch (err) {
+        console.error('[NotaryPage] Verify error:', err);
+        NT.verifyIsChecking = false;
+        if (resultEl) {
+            resultEl.innerHTML = `
+                <div class="nt-not-found" style="text-align:center">
+                    <i class="fa-solid fa-circle-xmark" style="font-size:20px;color:var(--nt-red);margin-bottom:8px"></i>
+                    <div style="font-size:13px;color:var(--nt-red)">Erro na verificacao: ${err.message}</div>
+                </div>
+            `;
+        }
+    }
+}
+
+function renderVerifyResult() {
+    const resultEl = document.getElementById('nt-verify-result');
+    if (!resultEl || !NT.verifyResult) return;
+
+    const r = NT.verifyResult;
+    const file = NT.verifyFile;
+
+    if (r.exists) {
+        resultEl.innerHTML = `
+            <div class="nt-verified">
+                <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
+                    <div style="width:40px;height:40px;border-radius:50%;background:rgba(34,197,94,0.15);display:flex;align-items:center;justify-content:center;flex-shrink:0">
+                        <i class="fa-solid fa-shield-check" style="font-size:18px;color:var(--nt-green)"></i>
+                    </div>
+                    <div>
+                        <div style="font-size:15px;font-weight:700;color:var(--nt-green)">Documento Verificado!</div>
+                        <div style="font-size:11px;color:var(--nt-text-3)">Este documento foi notarizado na blockchain</div>
+                    </div>
+                </div>
+
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
+                    <div style="background:rgba(0,0,0,0.2);border-radius:var(--nt-radius-sm);padding:10px">
+                        <div style="font-size:10px;color:var(--nt-text-3);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:4px">Token ID</div>
+                        <div style="font-size:16px;font-weight:700;color:var(--nt-accent);font-family:monospace">#${r.tokenId}</div>
+                    </div>
+                    <div style="background:rgba(0,0,0,0.2);border-radius:var(--nt-radius-sm);padding:10px">
+                        <div style="font-size:10px;color:var(--nt-text-3);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:4px">Data</div>
+                        <div style="font-size:13px;font-weight:600;color:var(--nt-text)">${formatDateFull(r.timestamp)}</div>
+                    </div>
+                </div>
+
+                <div style="background:rgba(0,0,0,0.2);border-radius:var(--nt-radius-sm);padding:10px;margin-bottom:12px">
+                    <div style="font-size:10px;color:var(--nt-text-3);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:4px">Dono</div>
+                    <div style="font-size:12px;font-family:monospace;color:var(--nt-text-2);word-break:break-all">${r.owner}</div>
+                </div>
+
+                ${NT.verifyHash ? `
+                    <div style="background:rgba(0,0,0,0.2);border-radius:var(--nt-radius-sm);padding:10px">
+                        <div style="font-size:10px;color:var(--nt-text-3);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:4px">SHA-256 Hash</div>
+                        <div style="font-size:10px;font-family:monospace;color:var(--nt-text-2);word-break:break-all">${NT.verifyHash}</div>
+                    </div>
+                ` : ''}
+
+                <div style="margin-top:12px;display:flex;gap:8px">
+                    <a href="${EXPLORER_TOKEN}${addresses?.decentralizedNotary}?a=${r.tokenId}" target="_blank" class="nt-btn-secondary" style="font-size:12px;padding:8px 14px;text-decoration:none;display:inline-flex;align-items:center;gap:6px">
+                        <i class="fa-solid fa-arrow-up-right-from-square"></i>Ver no Arbiscan
+                    </a>
+                </div>
+            </div>
+        `;
+    } else {
+        resultEl.innerHTML = `
+            <div class="nt-not-found">
+                <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
+                    <div style="width:40px;height:40px;border-radius:50%;background:rgba(239,68,68,0.15);display:flex;align-items:center;justify-content:center;flex-shrink:0">
+                        <i class="fa-solid fa-circle-xmark" style="font-size:18px;color:var(--nt-red)"></i>
+                    </div>
+                    <div>
+                        <div style="font-size:15px;font-weight:700;color:var(--nt-red)">Nao Encontrado</div>
+                        <div style="font-size:11px;color:var(--nt-text-3)">Este documento nao foi notarizado na blockchain</div>
+                    </div>
+                </div>
+
+                ${file ? `<div style="font-size:12px;color:var(--nt-text-3);margin-bottom:8px">Arquivo: <strong style="color:var(--nt-text-2)">${file.name}</strong></div>` : ''}
+                ${NT.verifyHash ? `
+                    <div style="background:rgba(0,0,0,0.2);border-radius:var(--nt-radius-sm);padding:10px">
+                        <div style="font-size:10px;color:var(--nt-text-3);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:4px">SHA-256 Hash</div>
+                        <div style="font-size:10px;font-family:monospace;color:var(--nt-text-2);word-break:break-all">${NT.verifyHash}</div>
+                    </div>
+                ` : ''}
+            </div>
+        `;
+    }
+}
+
+// ============================================================================
+// STATS TAB
+// ============================================================================
+function renderStats(el) {
+    if (NT.statsLoading && !NT.stats) {
+        el.innerHTML = `
+            <div class="nt-stat-grid" style="margin-top:16px">
+                ${Array(4).fill('').map(() => '<div class="nt-stat-card"><div class="nt-shimmer" style="height:32px;width:60%;margin:0 auto 8px"></div><div class="nt-shimmer" style="height:12px;width:40%;margin:0 auto"></div></div>').join('')}
             </div>
         `;
         return;
     }
 
-    grid.innerHTML = `
-        <div class="col-span-full text-center py-8">
-            <i class="fa-solid fa-spinner fa-spin text-amber-400 text-2xl mb-3"></i>
-            <p class="text-zinc-500 text-sm">Loading certificates...</p>
+    const stats = NT.stats;
+    const supply = NT.totalSupply;
+
+    el.innerHTML = `
+        <div style="margin-top:16px">
+            <div class="nt-stat-grid">
+                <div class="nt-stat-card">
+                    <div style="width:36px;height:36px;border-radius:50%;background:var(--nt-accent-glow);display:inline-flex;align-items:center;justify-content:center;margin-bottom:10px">
+                        <i class="fa-solid fa-stamp" style="font-size:16px;color:var(--nt-accent)"></i>
+                    </div>
+                    <div class="nt-stat-value">${stats?.totalNotarizations ?? '—'}</div>
+                    <div style="font-size:11px;color:var(--nt-text-3);margin-top:4px">Notarizacoes</div>
+                </div>
+                <div class="nt-stat-card">
+                    <div style="width:36px;height:36px;border-radius:50%;background:rgba(34,197,94,0.1);display:inline-flex;align-items:center;justify-content:center;margin-bottom:10px">
+                        <i class="fa-solid fa-certificate" style="font-size:16px;color:var(--nt-green)"></i>
+                    </div>
+                    <div class="nt-stat-value">${supply ?? '—'}</div>
+                    <div style="font-size:11px;color:var(--nt-text-3);margin-top:4px">Certificados</div>
+                </div>
+                <div class="nt-stat-card">
+                    <div style="width:36px;height:36px;border-radius:50%;background:rgba(251,191,36,0.1);display:inline-flex;align-items:center;justify-content:center;margin-bottom:10px">
+                        <i class="fa-solid fa-coins" style="font-size:16px;color:#fbbf24"></i>
+                    </div>
+                    <div class="nt-stat-value" style="font-size:18px">${stats?.totalBKCFormatted ?? '—'}</div>
+                    <div style="font-size:11px;color:var(--nt-text-3);margin-top:4px">BKC Coletado</div>
+                </div>
+                <div class="nt-stat-card">
+                    <div style="width:36px;height:36px;border-radius:50%;background:rgba(96,165,250,0.1);display:inline-flex;align-items:center;justify-content:center;margin-bottom:10px">
+                        <i class="fa-brands fa-ethereum" style="font-size:16px;color:var(--nt-blue)"></i>
+                    </div>
+                    <div class="nt-stat-value" style="font-size:18px">${stats?.totalETHFormatted ?? '—'}</div>
+                    <div style="font-size:11px;color:var(--nt-text-3);margin-top:4px">ETH Coletado</div>
+                </div>
+            </div>
+
+            <!-- Recent notarizations -->
+            <div class="nt-card" style="margin-top:16px;padding:0;overflow:hidden">
+                <div style="padding:16px 20px;border-bottom:1px solid var(--nt-border)">
+                    <div style="font-size:13px;font-weight:700;color:var(--nt-text)">
+                        <i class="fa-solid fa-clock-rotate-left" style="color:var(--nt-accent);margin-right:6px"></i>Notarizacoes Recentes
+                    </div>
+                </div>
+                <div id="nt-recent-feed">
+                    ${NT.recentNotarizations.length === 0 ? `
+                        <div style="text-align:center;padding:32px 20px;color:var(--nt-text-3);font-size:13px">
+                            ${NT.statsLoading ? '<i class="fa-solid fa-spinner fa-spin" style="margin-right:6px"></i>Carregando...' : 'Nenhuma notarizacao recente encontrada'}
+                        </div>
+                    ` : NT.recentNotarizations.map(item => `
+                        <div class="nt-recent-item">
+                            <div style="width:36px;height:36px;border-radius:50%;background:var(--nt-accent-glow);display:flex;align-items:center;justify-content:center;flex-shrink:0">
+                                <i class="fa-solid fa-stamp" style="font-size:14px;color:var(--nt-accent)"></i>
+                            </div>
+                            <div style="flex:1;min-width:0">
+                                <div style="font-size:12px;font-weight:600;color:var(--nt-text)">Certificado #${item.tokenId}</div>
+                                <div style="font-size:11px;color:var(--nt-text-3)">${shortenAddress(item.owner)}</div>
+                            </div>
+                            <div style="text-align:right;flex-shrink:0">
+                                <div style="font-size:11px;color:var(--nt-text-3)">${formatTimestamp(item.timestamp)}</div>
+                            </div>
+                        </div>
+                    `).join('')}
+                </div>
+            </div>
+
+            <div style="text-align:center;margin-top:16px">
+                <a href="${EXPLORER_TOKEN}${addresses?.decentralizedNotary}" target="_blank" class="nt-btn-secondary" style="font-size:12px;padding:10px 20px;text-decoration:none;display:inline-flex;align-items:center;gap:6px">
+                    <i class="fa-solid fa-arrow-up-right-from-square"></i>Ver Contrato no Arbiscan
+                </a>
+            </div>
         </div>
     `;
+}
 
-    try {
-        const baseUrl = API_ENDPOINTS.getNotarizedDocuments || 'https://getnotarizeddocuments-4wvdcuoouq-uc.a.run.app';
-        const response = await fetch(`${baseUrl}/${State.userAddress}`);
-        
-        if (!response.ok) throw new Error(`API returned ${response.status}`);
-        
-        const data = await response.json();
-        
-        if (!Array.isArray(data) || data.length === 0) {
-            grid.innerHTML = `
-                <div class="col-span-full text-center py-12">
-                    <div class="w-16 h-16 rounded-2xl bg-amber-500/10 flex items-center justify-center mx-auto mb-4">
-                        <i class="fa-solid fa-stamp text-2xl text-amber-400/50"></i>
+// ============================================================================
+// CERTIFICATE DETAIL VIEW
+// ============================================================================
+function renderCertDetail(el) {
+    const cert = NT.selectedCert;
+    if (!cert) { goBack(); return; }
+
+    const ipfsUrl = resolveIpfsUrl(cert.ipfs);
+    const fileInfo = getFileTypeInfo(cert.mimeType || '', cert.description || '');
+
+    el.innerHTML = `
+        <div class="nt-detail" style="margin-top:8px">
+            <!-- Preview -->
+            <div style="height:180px;background:var(--nt-bg3);border-radius:var(--nt-radius);display:flex;align-items:center;justify-content:center;position:relative;overflow:hidden;margin-bottom:16px">
+                ${ipfsUrl ? `
+                    <img src="${ipfsUrl}" style="width:100%;height:100%;object-fit:cover;opacity:0.8" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'" alt="">
+                    <div style="display:none;flex-direction:column;align-items:center;justify-content:center;position:absolute;inset:0;background:var(--nt-bg3)">
+                        <i class="${fileInfo.icon}" style="font-size:40px;color:${fileInfo.color}"></i>
                     </div>
-                    <p class="text-zinc-500 text-sm mb-1">No certificates yet</p>
-                    <p class="text-zinc-600 text-xs">Upload a document to get started</p>
-                </div>
-            `;
-            return;
-        }
-
-        const certs = data.map(doc => ({
-            id: doc.tokenId || '?',
-            ipfs: doc.ipfsCid || '',
-            description: doc.description || '',
-            hash: doc.contentHash || '',
-            timestamp: doc.createdAt || doc.timestamp || '',
-            txHash: doc.txHash || ''
-        })).sort((a, b) => parseInt(b.id) - parseInt(a.id));
-
-        grid.innerHTML = certs.map(cert => {
-            let ipfsUrl = '';
-            const ipfsData = cert.ipfs || '';
-            
-            if (ipfsData.startsWith('ipfs://')) {
-                ipfsUrl = `${IPFS_GATEWAY}${ipfsData.replace('ipfs://', '')}`;
-            } else if (ipfsData.startsWith('https://')) {
-                ipfsUrl = ipfsData;
-            } else if (ipfsData.length > 0) {
-                ipfsUrl = `${IPFS_GATEWAY}${ipfsData}`;
-            }
-            
-            let cleanDesc = cert.description?.split('---')[0].trim().split('\n')[0].trim() || 'Notarized Document';
-            const fileInfo = getFileTypeInfo('', cleanDesc);
-            const timeAgo = formatTimestamp(cert.timestamp);
-
-            return `
-                <div class="cert-card">
-                    <div class="h-32 bg-gradient-to-br from-zinc-800/50 to-zinc-900/50 flex items-center justify-center relative overflow-hidden">
-                        ${ipfsUrl ? `
-                            <img src="${ipfsUrl}" class="absolute inset-0 w-full h-full object-cover opacity-80"
-                                 onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
-                            <div class="hidden flex-col items-center justify-center h-full absolute inset-0 bg-zinc-900">
-                                <div class="w-14 h-14 rounded-xl ${fileInfo.bg} flex items-center justify-center">
-                                    <i class="${fileInfo.icon} text-2xl ${fileInfo.color}"></i>
-                                </div>
-                            </div>
-                        ` : `
-                            <div class="flex flex-col items-center justify-center">
-                                <div class="w-16 h-16 rounded-xl ${fileInfo.bg} flex items-center justify-center mb-2">
-                                    <i class="${fileInfo.icon} text-3xl ${fileInfo.color}"></i>
-                                </div>
-                            </div>
-                        `}
-                        <span class="absolute top-2 right-2 text-[10px] font-mono text-amber-400 bg-black/80 px-2 py-1 rounded-full font-bold">#${cert.id}</span>
-                        ${timeAgo ? `
-                            <span class="absolute top-2 left-2 text-[10px] text-zinc-400 bg-black/80 px-2 py-1 rounded-full flex items-center gap-1">
-                                <i class="fa-regular fa-clock"></i> ${timeAgo}
-                            </span>
-                        ` : ''}
-                    </div>
-                    
-                    <div class="p-4">
-                        <p class="text-sm text-white font-semibold truncate mb-1" title="${cleanDesc}">
-                            ${cleanDesc}
-                        </p>
-                        <p class="text-[10px] font-mono text-zinc-600 truncate mb-3" title="${cert.hash}">
-                            SHA-256: ${cert.hash?.slice(0, 16) || '...'}...
-                        </p>
-                        
-                        <div class="flex items-center justify-between pt-3 border-t border-zinc-800/50">
-                            <div class="flex gap-3">
-                                ${ipfsUrl ? `
-                                    <a href="${ipfsUrl}" target="_blank" 
-                                       class="text-[11px] text-amber-400 hover:text-amber-300 font-semibold transition-colors flex items-center gap-1">
-                                        <i class="fa-solid fa-download"></i> Download
-                                    </a>
-                                ` : ''}
-                                <button onclick="NotaryPage.addToWallet('${cert.id}', '${ipfsUrl}')" 
-                                    class="text-[11px] text-zinc-500 hover:text-amber-400 transition-colors flex items-center gap-1">
-                                    <i class="fa-solid fa-wallet"></i> Wallet
-                                </button>
-                            </div>
-                            ${cert.txHash ? `
-                                <a href="${EXPLORER_TX}${cert.txHash}" target="_blank" 
-                                   class="text-zinc-600 hover:text-white transition-colors" title="View on Explorer">
-                                    <i class="fa-solid fa-arrow-up-right-from-square text-xs"></i>
-                                </a>
-                            ` : ''}
-                        </div>
-                    </div>
-                </div>
-            `;
-        }).join('');
-
-    } catch (e) {
-        console.error('Error loading certificates:', e);
-        grid.innerHTML = `
-            <div class="col-span-full text-center py-8">
-                <p class="text-red-400 text-sm"><i class="fa-solid fa-exclamation-circle mr-2"></i>Failed to load</p>
-                <button onclick="NotaryPage.refreshHistory()" class="mt-2 text-amber-400 text-xs hover:underline">Try again</button>
+                ` : `
+                    <i class="${fileInfo.icon}" style="font-size:40px;color:${fileInfo.color}"></i>
+                `}
+                <div style="position:absolute;top:12px;right:12px;background:rgba(0,0,0,0.85);padding:4px 12px;border-radius:20px;font-size:12px;font-weight:700;color:var(--nt-accent);font-family:monospace">#${cert.id}</div>
+                <div style="position:absolute;bottom:0;left:0;right:0;height:60px;background:linear-gradient(transparent,var(--nt-bg))"></div>
             </div>
-        `;
-    }
+
+            <!-- Description -->
+            <div class="nt-card" style="margin-bottom:12px">
+                <div style="font-size:11px;font-weight:600;color:var(--nt-text-3);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:8px">Descricao</div>
+                <div style="font-size:14px;color:var(--nt-text);line-height:1.5">${cert.description?.split('---')[0].trim() || 'Documento Notarizado'}</div>
+            </div>
+
+            <!-- Content Hash -->
+            <div class="nt-card" style="margin-bottom:12px">
+                <div style="font-size:11px;font-weight:600;color:var(--nt-text-3);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:8px">
+                    <i class="fa-solid fa-fingerprint" style="color:var(--nt-accent);margin-right:4px"></i>Content Hash (SHA-256)
+                </div>
+                <div class="nt-hash-display" onclick="NotaryPage.copyHash('${cert.hash}')" title="Clique para copiar">
+                    ${cert.hash || 'N/A'}
+                    <i class="fa-regular fa-copy" style="float:right;margin-top:2px;color:var(--nt-accent)"></i>
+                </div>
+            </div>
+
+            <!-- Metadata grid -->
+            <div class="nt-detail-meta" style="margin-bottom:12px">
+                <div class="nt-card" style="padding:14px">
+                    <div style="font-size:10px;color:var(--nt-text-3);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:4px">Data</div>
+                    <div style="font-size:13px;font-weight:600;color:var(--nt-text)">${formatDateFull(cert.timestamp) || 'N/A'}</div>
+                </div>
+                <div class="nt-card" style="padding:14px">
+                    <div style="font-size:10px;color:var(--nt-text-3);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:4px">Dono</div>
+                    <div style="font-size:12px;font-family:monospace;color:var(--nt-text-2)">${shortenAddress(cert.owner || State.userAddress)}</div>
+                </div>
+            </div>
+
+            ${cert.ipfs ? `
+                <div class="nt-card" style="margin-bottom:12px;padding:14px">
+                    <div style="font-size:10px;color:var(--nt-text-3);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:4px">IPFS CID</div>
+                    <div style="font-size:11px;font-family:monospace;color:var(--nt-text-2);word-break:break-all">${cert.ipfs}</div>
+                </div>
+            ` : ''}
+
+            <!-- Actions -->
+            <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:16px">
+                ${ipfsUrl ? `
+                    <a href="${ipfsUrl}" target="_blank" class="nt-btn-primary" style="text-decoration:none;display:inline-flex;align-items:center;gap:6px;font-size:13px;padding:10px 18px">
+                        <i class="fa-solid fa-download"></i>Download IPFS
+                    </a>
+                ` : ''}
+                <a href="${EXPLORER_TOKEN}${addresses?.decentralizedNotary}?a=${cert.id}" target="_blank" class="nt-btn-secondary" style="text-decoration:none;display:inline-flex;align-items:center;gap:6px;font-size:12px">
+                    <i class="fa-solid fa-arrow-up-right-from-square"></i>Arbiscan
+                </a>
+                ${cert.txHash ? `
+                    <a href="${EXPLORER_TX}${cert.txHash}" target="_blank" class="nt-btn-secondary" style="text-decoration:none;display:inline-flex;align-items:center;gap:6px;font-size:12px">
+                        <i class="fa-solid fa-receipt"></i>Transacao
+                    </a>
+                ` : ''}
+                <button class="nt-btn-secondary" style="font-size:12px" onclick="NotaryPage.addToWallet('${cert.id}', '${ipfsUrl}')">
+                    <i class="fa-solid fa-wallet" style="margin-right:6px"></i>Add to Wallet
+                </button>
+            </div>
+        </div>
+    `;
 }
 
 // ============================================================================
 // DATA LOADING
 // ============================================================================
-async function loadNotaryData() {
+async function loadFees() {
     try {
-        await loadPublicData();
-        
-        if (State.isConnected && State.userAddress) {
-            try {
-                if (State.bkcTokenContract || State.bkcTokenContractPublic) {
-                    const token = State.bkcTokenContract || State.bkcTokenContractPublic;
-                    const balance = await safeContractCall(token, 'balanceOf', [State.userAddress], 0n);
-                    if (balance > 0n) State.currentUserBalance = balance;
-                }
-            } catch (e) {}
+        const fees = await NotaryTx.getFee();
+        NT.bkcFee = fees.bkcFee;
+        NT.ethFee = fees.ethFee;
+        NT.feesLoaded = true;
+    } catch {
+        NT.bkcFee = ethers?.parseEther('1') || 0n;
+        NT.ethFee = ethers?.parseEther('0.0001') || 0n;
+        NT.feesLoaded = true;
+    }
+}
+
+async function loadCertificates() {
+    if (!State.isConnected || !State.userAddress) return;
+
+    NT.certsLoading = true;
+    renderContent();
+
+    try {
+        // Primary: Firebase API
+        const baseUrl = API_ENDPOINTS.getNotaryHistory || 'https://getnotaryhistory-4wvdcuoouq-uc.a.run.app';
+        const response = await fetch(`${baseUrl}/${State.userAddress}`);
+
+        if (!response.ok) throw new Error(`API ${response.status}`);
+
+        const data = await response.json();
+
+        if (Array.isArray(data) && data.length > 0) {
+            NT.certificates = data.map(doc => ({
+                id: doc.tokenId || doc.id || '?',
+                ipfs: doc.ipfsCid || '',
+                description: doc.description || '',
+                hash: doc.contentHash || '',
+                timestamp: doc.createdAt || doc.timestamp || '',
+                txHash: doc.txHash || '',
+                owner: doc.owner || State.userAddress,
+                mimeType: doc.mimeType || '',
+                fileName: doc.fileName || ''
+            })).sort((a, b) => parseInt(b.id) - parseInt(a.id));
+        } else {
+            NT.certificates = [];
         }
-        
-        updateStatusBadges();
-        
-    } catch (e) {
-        if (!State.notaryFee || State.notaryFee === 0n) {
-            State.notaryFee = ethers.parseEther("1");
+    } catch (apiErr) {
+        console.warn('[NotaryPage] API fallback, trying on-chain events:', apiErr.message);
+
+        // Fallback: On-chain events
+        try {
+            const certs = await loadCertificatesFromChain();
+            NT.certificates = certs;
+        } catch (chainErr) {
+            console.error('[NotaryPage] Chain fallback also failed:', chainErr);
+            NT.certificates = [];
         }
     }
+
+    NT.certsLoading = false;
+    renderContent();
+}
+
+async function loadCertificatesFromChain() {
+    if (!ethers || !addresses?.decentralizedNotary) return [];
+
+    const { NetworkManager } = await import('../modules/core/index.js');
+    const provider = NetworkManager.getProvider();
+    if (!provider) return [];
+
+    const contract = new ethers.Contract(addresses.decentralizedNotary, NOTARY_ABI_EVENTS, provider);
+    const filter = contract.filters.DocumentNotarized(null, State.userAddress);
+
+    const currentBlock = await provider.getBlockNumber();
+    const fromBlock = Math.max(0, currentBlock - 500000);
+
+    const events = await contract.queryFilter(filter, fromBlock, currentBlock);
+
+    return events.map(ev => ({
+        id: Number(ev.args.tokenId),
+        ipfs: ev.args.ipfsCid || '',
+        description: '',
+        hash: ev.args.contentHash || '',
+        timestamp: null,
+        txHash: ev.transactionHash,
+        owner: ev.args.owner
+    })).sort((a, b) => b.id - a.id);
+}
+
+async function loadStats() {
+    NT.statsLoading = true;
+
+    try {
+        const [stats, supply] = await Promise.all([
+            NotaryTx.getStats(),
+            NotaryTx.getTotalDocuments()
+        ]);
+
+        NT.stats = stats;
+        NT.totalSupply = supply;
+    } catch (err) {
+        console.warn('[NotaryPage] Stats load error:', err);
+    }
+
+    // Load recent notarizations from events
+    try {
+        await loadRecentNotarizations();
+    } catch {}
+
+    NT.statsLoading = false;
+
+    // Re-render if on stats tab
+    if (NT.view === 'stats') renderContent();
+}
+
+async function loadRecentNotarizations() {
+    if (!ethers || !addresses?.decentralizedNotary) return;
+
+    const { NetworkManager } = await import('../modules/core/index.js');
+    const provider = NetworkManager.getProvider();
+    if (!provider) return;
+
+    const contract = new ethers.Contract(addresses.decentralizedNotary, NOTARY_ABI_EVENTS, provider);
+    const filter = contract.filters.DocumentNotarized();
+
+    const currentBlock = await provider.getBlockNumber();
+    const fromBlock = Math.max(0, currentBlock - 50000);
+
+    const events = await contract.queryFilter(filter, fromBlock, currentBlock);
+
+    // Get 20 most recent
+    const recent = events.slice(-20).reverse();
+
+    NT.recentNotarizations = recent.map(ev => ({
+        tokenId: Number(ev.args.tokenId),
+        owner: ev.args.owner,
+        hash: ev.args.contentHash,
+        timestamp: null,
+        blockNumber: ev.blockNumber
+    }));
+
+    // Try to get timestamps from blocks (batch)
+    try {
+        const uniqueBlocks = [...new Set(recent.map(e => e.blockNumber))];
+        const blockData = {};
+        await Promise.all(uniqueBlocks.slice(0, 10).map(async bn => {
+            const block = await provider.getBlock(bn);
+            if (block) blockData[bn] = block.timestamp;
+        }));
+
+        NT.recentNotarizations.forEach(item => {
+            if (blockData[item.blockNumber]) {
+                item.timestamp = blockData[item.blockNumber];
+            }
+        });
+    } catch {}
 }
 
 // ============================================================================
@@ -1100,30 +1802,17 @@ async function loadNotaryData() {
 // ============================================================================
 async function addToWallet(tokenId, imageUrl) {
     try {
-        const IPFS_GATEWAYS = [
-            'https://dweb.link/ipfs/',
-            'https://w3s.link/ipfs/',
-            'https://gateway.pinata.cloud/ipfs/',
-            'https://ipfs.io/ipfs/'
-        ];
-        
-        const extractCid = (url) => {
-            if (!url) return '';
-            if (url.startsWith('ipfs://')) return url.replace('ipfs://', '').split('?')[0];
-            if (url.includes('/ipfs/')) return url.split('/ipfs/')[1].split('?')[0];
-            if (url.match(/^Qm[a-zA-Z0-9]{44}/) || url.match(/^bafy[a-zA-Z0-9]+/)) return url;
-            return '';
-        };
-        
         const toHttpsUrl = (url) => {
             if (!url) return '';
             if (url.startsWith('https://') && !url.includes('/ipfs/')) return url;
-            const cid = extractCid(url);
+            const cid = url.startsWith('ipfs://') ? url.replace('ipfs://', '') :
+                        url.includes('/ipfs/') ? url.split('/ipfs/')[1]?.split('?')[0] : '';
             return cid ? `${IPFS_GATEWAYS[0]}${cid}` : url;
         };
-        
+
         let finalImageUrl = toHttpsUrl(imageUrl || '');
-        
+
+        // Try to get image from token URI
         if (State.decentralizedNotaryContract) {
             try {
                 const uri = await State.decentralizedNotaryContract.tokenURI(tokenId);
@@ -1131,19 +1820,20 @@ async function addToWallet(tokenId, imageUrl) {
                     const metadata = JSON.parse(atob(uri.replace('data:application/json;base64,', '')));
                     if (metadata.image) finalImageUrl = toHttpsUrl(metadata.image);
                 }
-            } catch (e) {}
+            } catch {}
         }
-        
-        const contractAddress = State.decentralizedNotaryContract?.target || 
+
+        const contractAddress = addresses?.decentralizedNotary ||
+            State.decentralizedNotaryContract?.target ||
             (State.decentralizedNotaryContract?.getAddress ? await State.decentralizedNotaryContract.getAddress() : null);
-        
+
         if (!contractAddress) {
-            showToast('Contract address not found', 'error');
+            showToast('Endereco do contrato nao encontrado', 'error');
             return;
         }
-        
-        showToast(`Adding NFT #${tokenId} to wallet...`, 'info');
-        
+
+        showToast(`Adicionando NFT #${tokenId} a wallet...`, 'info');
+
         const wasAdded = await window.ethereum.request({
             method: 'wallet_watchAsset',
             params: {
@@ -1151,13 +1841,66 @@ async function addToWallet(tokenId, imageUrl) {
                 options: { address: contractAddress, tokenId: String(tokenId), image: finalImageUrl }
             }
         });
-        
+
         if (wasAdded) {
-            showToast(`📜 NFT #${tokenId} added to wallet!`, 'success');
+            showToast(`NFT #${tokenId} adicionado a wallet!`, 'success');
         }
     } catch (error) {
         if (error.code === 4001) return;
-        showToast('Could not add NFT', 'error');
+        showToast('Nao foi possivel adicionar NFT', 'error');
+    }
+}
+
+// ============================================================================
+// CLIPBOARD
+// ============================================================================
+function copyHash(hash) {
+    if (!hash) return;
+    navigator.clipboard.writeText(hash).then(() => {
+        showToast('Hash copiado!', 'success');
+    }).catch(() => {
+        showToast('Erro ao copiar', 'error');
+    });
+}
+
+// ============================================================================
+// WIZARD NAVIGATION HANDLERS
+// ============================================================================
+function wizNext() {
+    if (NT.wizStep === 1 && NT.wizFileHash && !NT.wizDuplicateCheck?.exists) {
+        NT.wizStep = 2;
+    } else if (NT.wizStep === 2) {
+        NT.wizStep = 3;
+    }
+    renderContent();
+}
+
+function wizBack() {
+    if (NT.wizStep > 1) {
+        NT.wizStep--;
+        renderContent();
+    }
+}
+
+function wizToStep3() {
+    const descInput = document.getElementById('nt-wiz-desc');
+    if (descInput) NT.wizDescription = descInput.value || '';
+    NT.wizStep = 3;
+    renderContent();
+}
+
+function wizRemoveFile() {
+    NT.wizFile = null;
+    NT.wizFileHash = null;
+    NT.wizDuplicateCheck = null;
+    NT.wizStep = 1;
+    renderContent();
+}
+
+function viewCert(id) {
+    const cert = NT.certificates.find(c => String(c.id) === String(id));
+    if (cert) {
+        navigateView('cert-detail', cert);
     }
 }
 
@@ -1167,30 +1910,44 @@ async function addToWallet(tokenId, imageUrl) {
 export const NotaryPage = {
     async render(isActive) {
         if (!isActive) return;
-        render();
-        await loadNotaryData();
-        if (State.isConnected) await loadUserData();
-        updateStatusBadges();
-        renderStepContent();
+        render(isActive);
     },
 
     reset() {
-        Notary.file = null;
-        Notary.description = '';
-        Notary.step = 1;
-        renderStepContent();
+        NT.wizFile = null;
+        NT.wizFileHash = null;
+        NT.wizDescription = '';
+        NT.wizDuplicateCheck = null;
+        NT.wizStep = 1;
+        NT.view = 'documents';
+        NT.activeTab = 'documents';
+        NT.viewHistory = [];
+        renderContent();
+        renderHeader();
     },
 
     update() {
-        updateStatusBadges();
-        if (!Notary.isProcessing) renderStepContent();
+        if (!NT.isProcessing && NT.view === 'notarize') {
+            const panel = document.getElementById('nt-wiz-panel');
+            if (panel && NT.wizStep === 2) renderWizStep2(panel);
+        }
     },
 
     refreshHistory() {
         loadCertificates();
     },
 
-    addToWallet
+    // Public API for onclick handlers
+    setTab,
+    goBack,
+    viewCert,
+    handleMint,
+    addToWallet,
+    copyHash,
+    wizNext,
+    wizBack,
+    wizToStep3,
+    wizRemoveFile
 };
 
 window.NotaryPage = NotaryPage;

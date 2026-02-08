@@ -205,8 +205,21 @@ export async function runScript(hre: HardhatRuntimeEnvironment) {
     { name: "PublicSale", proxy: addresses.publicSale, path: "contracts/solidity/PublicSale.sol:PublicSale" },
     { name: "NFTLiquidityPoolFactory", proxy: addresses.nftLiquidityPoolFactory, path: "contracts/solidity/NFTLiquidityPoolFactory.sol:NFTLiquidityPoolFactory" },
     { name: "CharityPool", proxy: addresses.charityPool, path: "contracts/solidity/CharityPool.sol:CharityPool" },
-    { name: "Backchat", proxy: addresses.backchat, path: "contracts/solidity/Backchat.sol:Backchat" },
   ];
+
+  // Backchat V8 is NON-UPGRADEABLE (deployed directly, no proxy)
+  // Constructor: constructor(address _bkcToken, address _ecosystemManager)
+  if (addresses.backchat) {
+    const result = await verifyContract(
+      hre,
+      "Backchat (Non-Upgradeable)",
+      addresses.backchat,
+      "contracts/solidity/Backchat.sol:Backchat",
+      [addresses.bkcToken, addresses.ecosystemManager]
+    );
+    results.push(result);
+    await sleep(3000);
+  }
 
   for (const c of serviceContracts) {
     if (c.proxy) {
