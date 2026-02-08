@@ -525,8 +525,8 @@ export class TransactionEngine {
                 handled = ErrorHandler.handle(error, name);
             }
             
-            // Show brief error indication
-            if (handled.type !== ErrorTypes.USER_REJECTED && button) {
+            // Show brief error indication (only when no onError callback handles button)
+            if (handled.type !== ErrorTypes.USER_REJECTED && button && !onError) {
                 const savedContent = ui.originalContent;
                 button.innerHTML = `<span style="display:flex;align-items:center;justify-content:center;gap:8px"><span>❌</span><span>Failed</span></span>`;
                 setTimeout(() => {

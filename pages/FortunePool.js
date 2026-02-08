@@ -1463,11 +1463,9 @@ async function executeReveal() {
     }
     
     const btn = document.getElementById('btn-reveal');
-    if (btn) {
-        btn.disabled = true;
-        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-2"></i>Revealing...';
-    }
-    
+    // V6.10: Don't manually set button state — txEngine handles it via setPhase()
+    // Setting innerHTML here corrupts txEngine's originalContent capture
+
     try {
         const guesses = Game.mode === 'jackpot' ? [Game.guess] : Game.guesses;
         
