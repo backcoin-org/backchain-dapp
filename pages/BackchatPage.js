@@ -1,5 +1,5 @@
 // js/pages/BackchatPage.js
-// ✅ PRODUCTION V8.0 - Complete Decentralized Social Network — Viral Referral
+// ✅ PRODUCTION V9.0 — Full Social Network Redesign (Profiles, Threads, Reposts, Images)
 // ═══════════════════════════════════════════════════════════════════════════════
 //                          BACKCHAIN PROTOCOL
 //                    BACKCHAT - Unstoppable Social Network
@@ -41,6 +41,7 @@ import { State } from '../state.js';
 import { showToast } from '../ui-feedback.js';
 import { addresses, ipfsGateway, backchatABI } from '../config.js';
 import { formatBigNumber } from '../utils.js';
+import { BackchatTx } from '../modules/transactions/index.js';
 
 // ============================================================================
 // CONSTANTS
@@ -49,6 +50,7 @@ import { formatBigNumber } from '../utils.js';
 const EXPLORER_ADDRESS = "https://sepolia.arbiscan.io/address/";
 const EXPLORER_TX = "https://sepolia.arbiscan.io/tx/";
 const IPFS_GATEWAY = ipfsGateway || "https://gateway.pinata.cloud/ipfs/";
+const MAX_CONTENT = 500;
 
 // Get addresses from config (loaded from deployment-addresses.json)
 function getBackchatAddress() {
@@ -75,43 +77,62 @@ const bkcABI = [
 // ============================================================================
 
 const BC = {
-    // UI State
-    activeTab: 'feed',       // feed | trending | profile
-    view: 'feed',            // feed | post | compose | profile | settings
-    
+    // View routing
+    view: 'feed',            // feed | trending | profile | post-detail | user-profile | profile-setup
+    activeTab: 'feed',       // feed | trending | profile (for tab highlight)
+    viewHistory: [],         // Stack for back navigation
+
     // Data
-    posts: [],               // All loaded posts
+    posts: [],               // Top-level posts (no replies) for feed
     trendingPosts: [],       // Posts sorted by super likes
-    userProfile: null,       // Current user's profile
-    profiles: new Map(),     // address → profile cache
-    following: new Set(),    // Set of addresses user follows
-    
+    allItems: [],            // All items (posts + replies + reposts) raw
+    replies: new Map(),      // postId → [reply1, reply2, ...]
+    likesMap: new Map(),     // postId → Set<address>
+    replyCountMap: new Map(),// postId → count
+    repostCountMap: new Map(),// postId → count
+    postsById: new Map(),    // postId → post object (for repost lookup)
+
+    // Profiles
+    userProfile: null,       // { username, displayName, bio, address }
+    profiles: new Map(),     // address → { username, displayName, bio }
+    hasProfile: null,        // null=not checked, true/false
+
+    // Social graph
+    following: new Set(),    // Set of addresses (lowercase) user follows
+    followers: new Set(),    // Set of addresses (lowercase) following user
+    followCounts: new Map(), // address → { followers, following }
+
+    // Image upload
+    pendingImage: null,      // File object
+    pendingImagePreview: null, // data URL for preview
+    isUploadingImage: false,
+
     // Selected
     selectedPost: null,      // For viewing single post with replies
-    selectedProfile: null,   // For viewing other user's profile
-    
+    selectedProfile: null,   // For viewing other user's profile (address)
+
+    // Profile wizard
+    wizStep: 1,
+    wizUsername: '',
+    wizDisplayName: '',
+    wizBio: '',
+    wizUsernameOk: null,     // null=unchecked, true/false
+    wizFee: null,            // formatted string like "0.01"
+    wizChecking: false,      // debounce check in progress
+
     // Fees
-    fees: {
-        post: 0n,
-        reply: 0n,
-        like: 0n,
-        follow: 0n,
-        repost: 0n,
-        superLikeMin: 0n,
-        boostMin: 0n,
-        badge: 0n
-    },
-    
+    fees: { post: 0n, reply: 0n, like: 0n, follow: 0n, repost: 0n, superLikeMin: 0n, boostMin: 0n, badge: 0n },
+
     // User stats
     pendingEth: 0n,
     hasBadge: false,
     isBoosted: false,
     boostExpiry: 0,
     badgeExpiry: 0,
-    
+
     // Referral (V8)
-    referralStats: null,     // { totalReferred, totalEarned, totalEarnedFormatted }
-    referredBy: null,        // address or null (address(0) means none)
+    referralStats: null,
+    referredBy: null,
 
     // Loading
     isLoading: false,
@@ -1111,6 +1132,67 @@ function injectStyles() {
             color: var(--bc-text);
         }
         
+        /* ─── Back Header ─── */
+        .bc-back-header { display:flex; align-items:center; gap:12px; padding:14px 20px; }
+        .bc-back-btn { width:34px; height:34px; border-radius:50%; background:transparent; border:1px solid var(--bc-border); color:var(--bc-text); cursor:pointer; display:flex; align-items:center; justify-content:center; font-size:14px; transition:all var(--bc-transition); }
+        .bc-back-btn:hover { background:var(--bc-bg3); border-color:var(--bc-border-h); }
+        .bc-back-title { font-size:17px; font-weight:700; color:var(--bc-text); }
+
+        /* ─── Profile Wizard ─── */
+        .bc-wizard { padding:24px 20px; animation:bc-fadeIn 0.4s ease-out; }
+        .bc-wizard-title { font-size:22px; font-weight:800; color:var(--bc-text); margin-bottom:6px; }
+        .bc-wizard-desc { font-size:14px; color:var(--bc-text-3); margin-bottom:24px; line-height:1.5; }
+        .bc-wizard-dots { display:flex; align-items:center; justify-content:center; gap:8px; margin-bottom:28px; }
+        .bc-wizard-dot { width:10px; height:10px; border-radius:50%; background:var(--bc-bg3); transition:all var(--bc-transition); }
+        .bc-wizard-dot.active { background:var(--bc-accent); width:28px; border-radius:10px; }
+        .bc-wizard-dot.done { background:var(--bc-green); }
+        .bc-wizard-card { background:var(--bc-bg2); border:1px solid var(--bc-border); border-radius:var(--bc-radius-lg); padding:24px; margin-bottom:20px; }
+        .bc-username-row { display:flex; align-items:center; gap:8px; margin-top:8px; min-height:24px; }
+        .bc-username-ok { color:var(--bc-green); font-size:13px; display:flex; align-items:center; gap:4px; }
+        .bc-username-taken { color:var(--bc-red); font-size:13px; display:flex; align-items:center; gap:4px; }
+        .bc-username-checking { color:var(--bc-text-3); font-size:13px; }
+        .bc-username-fee { display:inline-flex; align-items:center; gap:4px; padding:3px 10px; background:var(--bc-accent-glow); border:1px solid rgba(245,158,11,0.15); border-radius:20px; color:var(--bc-accent); font-size:12px; font-weight:600; margin-left:8px; }
+        .bc-wizard-nav { display:flex; gap:12px; margin-top:20px; }
+        .bc-wizard-nav .bc-btn { flex:1; justify-content:center; }
+
+        /* ─── Thread View ─── */
+        .bc-thread-parent { border-bottom:1px solid var(--bc-border); }
+        .bc-thread-divider { padding:12px 20px; font-size:13px; font-weight:700; color:var(--bc-text-2); border-bottom:1px solid var(--bc-border); background:var(--bc-bg2); }
+        .bc-thread-reply { position:relative; padding-left:36px; }
+        .bc-thread-reply::before { content:''; position:absolute; left:40px; top:0; bottom:0; width:2px; background:var(--bc-border); }
+        .bc-thread-reply:last-child::before { bottom:50%; }
+        .bc-reply-compose { padding:16px 20px; border-top:1px solid var(--bc-border); background:var(--bc-bg2); }
+        .bc-reply-label { font-size:13px; color:var(--bc-text-3); margin-bottom:8px; }
+        .bc-reply-row { display:flex; gap:12px; align-items:flex-start; }
+        .bc-reply-input { flex:1; min-height:48px; max-height:160px; background:var(--bc-bg3); border:1px solid var(--bc-border-h); border-radius:var(--bc-radius-sm); color:var(--bc-text); font-size:14px; padding:10px 14px; resize:none; outline:none; font-family:inherit; }
+        .bc-reply-input:focus { border-color:rgba(245,158,11,0.5); }
+        .bc-reply-send { padding:10px 18px; }
+
+        /* ─── Repost Banner ─── */
+        .bc-repost-banner { display:flex; align-items:center; gap:6px; padding:8px 20px 0 68px; font-size:13px; color:var(--bc-green); font-weight:600; }
+        .bc-repost-banner i { font-size:12px; }
+
+        /* ─── Image Upload ─── */
+        .bc-image-preview { position:relative; margin-top:12px; border-radius:var(--bc-radius); overflow:hidden; border:1px solid var(--bc-border); max-height:200px; }
+        .bc-image-preview img { width:100%; max-height:200px; object-fit:cover; display:block; }
+        .bc-image-remove { position:absolute; top:8px; right:8px; width:28px; height:28px; border-radius:50%; background:rgba(0,0,0,0.7); border:none; color:#fff; cursor:pointer; display:flex; align-items:center; justify-content:center; font-size:14px; }
+        .bc-image-remove:hover { background:var(--bc-red); }
+        .bc-uploading-badge { display:inline-flex; align-items:center; gap:6px; padding:4px 12px; background:rgba(245,158,11,0.1); border:1px solid rgba(245,158,11,0.2); border-radius:20px; color:var(--bc-accent); font-size:12px; margin-top:8px; }
+
+        /* ─── User Profile Page ─── */
+        .bc-profile-bio { margin-top:8px; font-size:14px; color:var(--bc-text-2); line-height:1.5; }
+        .bc-profile-username { color:var(--bc-text-3); font-size:14px; margin-top:2px; }
+        .bc-follow-toggle { padding:8px 20px; border-radius:24px; font-weight:700; font-size:13px; cursor:pointer; transition:all var(--bc-transition); border:none; }
+        .bc-follow-toggle.do-follow { background:var(--bc-text); color:var(--bc-bg); }
+        .bc-follow-toggle.do-follow:hover { opacity:0.9; }
+        .bc-follow-toggle.do-unfollow { background:transparent; border:1px solid var(--bc-border-h); color:var(--bc-text); }
+        .bc-follow-toggle.do-unfollow:hover { border-color:var(--bc-red); color:var(--bc-red); background:rgba(239,68,68,0.08); }
+        .bc-profile-create-banner { margin:16px 20px; padding:16px; background:var(--bc-accent-glow); border:1px solid rgba(245,158,11,0.2); border-radius:var(--bc-radius); text-align:center; animation:bc-fadeIn 0.4s ease-out; }
+        .bc-profile-create-banner p { font-size:13px; color:var(--bc-text-2); margin-bottom:12px; }
+
+        /* ─── Engagement Count ─── */
+        .bc-action .count { font-variant-numeric:tabular-nums; }
+
         /* ─── Responsive ─── */
         @media (max-width: 640px) {
             .bc-shell {
@@ -1177,6 +1259,62 @@ function escapeHtml(text) {
     return div.innerHTML;
 }
 
+function getProfileName(address) {
+    if (!address) return '?';
+    const profile = BC.profiles.get(address.toLowerCase());
+    if (profile?.displayName) return profile.displayName;
+    if (profile?.username) return `@${profile.username}`;
+    return shortenAddress(address);
+}
+
+function getProfileUsername(address) {
+    if (!address) return null;
+    const profile = BC.profiles.get(address.toLowerCase());
+    return profile?.username || null;
+}
+
+function isUserBoosted(address) {
+    // For now return false for other users; could cache from events
+    if (address?.toLowerCase() === State.userAddress?.toLowerCase()) return BC.isBoosted;
+    return false;
+}
+
+function isUserBadged(address) {
+    if (address?.toLowerCase() === State.userAddress?.toLowerCase()) return BC.hasBadge;
+    return false;
+}
+
+// ============================================================================
+// NAVIGATION
+// ============================================================================
+
+function navigateView(view, data) {
+    BC.viewHistory.push({
+        view: BC.view,
+        activeTab: BC.activeTab,
+        selectedPost: BC.selectedPost,
+        selectedProfile: BC.selectedProfile
+    });
+    BC.view = view;
+    if (data?.post) BC.selectedPost = data.post;
+    if (data?.profile) BC.selectedProfile = data.profile;
+    render();
+}
+
+function goBack() {
+    if (BC.viewHistory.length > 0) {
+        const prev = BC.viewHistory.pop();
+        BC.view = prev.view;
+        BC.activeTab = prev.activeTab || BC.view;
+        BC.selectedPost = prev.selectedPost;
+        BC.selectedProfile = prev.selectedProfile;
+    } else {
+        BC.view = 'feed';
+        BC.activeTab = 'feed';
+    }
+    render();
+}
+
 // ============================================================================
 // CONTRACT INTERACTION
 // ============================================================================
@@ -1196,15 +1334,6 @@ function getContract() {
     }
     
     return null;
-}
-
-function getSignedContract() {
-    if (State.backchatContract) return State.backchatContract;
-    
-    const backchatAddress = getBackchatAddress();
-    if (!backchatAddress || !State.signer) return null;
-    
-    return new ethers.Contract(backchatAddress, backchatABI, State.signer);
 }
 
 async function loadFees() {
@@ -1264,6 +1393,109 @@ async function loadUserStatus() {
     await tryAutoSetReferrer();
 }
 
+// ============================================================================
+// PROFILE + SOCIAL LOADING
+// ============================================================================
+
+async function loadProfiles() {
+    try {
+        const contract = getContract();
+        if (!contract) return;
+
+        const [createEvents, updateEvents] = await Promise.all([
+            contract.queryFilter(contract.filters.ProfileCreated(), -500000).catch(() => []),
+            contract.queryFilter(contract.filters.ProfileUpdated(), -500000).catch(() => [])
+        ]);
+
+        // Build profiles map from creation events
+        for (const ev of createEvents) {
+            const addr = ev.args.user.toLowerCase();
+            BC.profiles.set(addr, {
+                username: ev.args.username,
+                displayName: ev.args.displayName || '',
+                bio: ev.args.bio || ''
+            });
+        }
+
+        // Apply updates (overwrite displayName/bio)
+        for (const ev of updateEvents) {
+            const addr = ev.args.user.toLowerCase();
+            const existing = BC.profiles.get(addr);
+            if (existing) {
+                existing.displayName = ev.args.displayName || existing.displayName;
+                existing.bio = ev.args.bio || existing.bio;
+            }
+        }
+
+        // Check if current user has a profile
+        if (State.isConnected && State.userAddress) {
+            const myAddr = State.userAddress.toLowerCase();
+            const myProfile = BC.profiles.get(myAddr);
+            if (myProfile) {
+                BC.userProfile = { ...myProfile, address: State.userAddress };
+                BC.hasProfile = true;
+            } else {
+                BC.hasProfile = false;
+                BC.userProfile = null;
+            }
+        }
+    } catch (e) {
+        console.warn('Failed to load profiles:', e.message);
+    }
+}
+
+async function loadSocialGraph() {
+    if (!State.isConnected || !State.userAddress) return;
+
+    try {
+        const contract = getContract();
+        if (!contract) return;
+
+        const [followEvents, unfollowEvents] = await Promise.all([
+            contract.queryFilter(contract.filters.Followed(), -500000).catch(() => []),
+            contract.queryFilter(contract.filters.Unfollowed(), -500000).catch(() => [])
+        ]);
+
+        // Build follow maps
+        const followMap = new Map(); // follower → Set<followed>
+        for (const ev of followEvents) {
+            const follower = ev.args.follower.toLowerCase();
+            const followed = ev.args.followed.toLowerCase();
+            if (!followMap.has(follower)) followMap.set(follower, new Set());
+            followMap.get(follower).add(followed);
+        }
+        // Remove unfollows
+        for (const ev of unfollowEvents) {
+            const follower = ev.args.follower.toLowerCase();
+            const followed = ev.args.followed.toLowerCase();
+            followMap.get(follower)?.delete(followed);
+        }
+
+        // Current user's following set
+        const myAddr = State.userAddress.toLowerCase();
+        BC.following = followMap.get(myAddr) || new Set();
+
+        // Count followers for current user
+        BC.followers = new Set();
+        for (const [follower, followedSet] of followMap) {
+            if (followedSet.has(myAddr)) BC.followers.add(follower);
+        }
+
+        // Build follow counts for all addresses
+        BC.followCounts = new Map();
+        for (const [follower, followedSet] of followMap) {
+            for (const followed of followedSet) {
+                if (!BC.followCounts.has(followed)) BC.followCounts.set(followed, { followers: 0, following: 0 });
+                BC.followCounts.get(followed).followers++;
+            }
+            if (!BC.followCounts.has(follower)) BC.followCounts.set(follower, { followers: 0, following: 0 });
+            BC.followCounts.get(follower).following = followedSet.size;
+        }
+    } catch (e) {
+        console.warn('Failed to load social graph:', e.message);
+    }
+}
+
 /**
  * V8: If the user arrived via a referral link, auto-register the referrer on-chain.
  * Only runs once per user (contract enforces immutability).
@@ -1306,112 +1538,134 @@ async function tryAutoSetReferrer() {
 async function loadPosts() {
     BC.isLoading = true;
     renderContent();
-    
+
     try {
         const backchatAddress = getBackchatAddress();
-        
         if (!backchatAddress) {
             BC.contractAvailable = false;
-            BC.error = 'Backchat contract not deployed yet. Add "backchat" to deployment-addresses.json';
-            console.warn('⚠️ Backchat address not found in config');
+            BC.error = 'Backchat contract not deployed yet.';
             return;
         }
-        
+
         const contract = getContract();
         if (!contract) {
             BC.contractAvailable = false;
             BC.error = 'Could not connect to Backchat contract';
             return;
         }
-        
+
         BC.contractAvailable = true;
-        
-        const postCount = await contract.postCounter();
-        const count = Number(postCount);
-        
-        if (count === 0) {
-            BC.posts = [];
-            return;
+
+        // Query all content events in parallel
+        const [postEvents, replyEvents, repostEvents, likeEvents, superLikeEvents] = await Promise.all([
+            contract.queryFilter(contract.filters.PostCreated(), -100000).catch(() => []),
+            contract.queryFilter(contract.filters.ReplyCreated(), -100000).catch(() => []),
+            contract.queryFilter(contract.filters.RepostCreated(), -100000).catch(() => []),
+            contract.queryFilter(contract.filters.Liked(), -100000).catch(() => []),
+            contract.queryFilter(contract.filters.SuperLiked(), -100000).catch(() => [])
+        ]);
+
+        // Build likes map: postId → Set<address>
+        BC.likesMap = new Map();
+        for (const ev of likeEvents) {
+            const pid = ev.args.postId.toString();
+            if (!BC.likesMap.has(pid)) BC.likesMap.set(pid, new Set());
+            BC.likesMap.get(pid).add(ev.args.user.toLowerCase());
         }
-        
-        // Load last 50 posts via events
-        const filter = contract.filters.PostCreated();
-        const events = await contract.queryFilter(filter, -10000);
-        
-        const replyFilter = contract.filters.ReplyCreated();
-        const replyEvents = await contract.queryFilter(replyFilter, -10000);
-        
-        const repostFilter = contract.filters.RepostCreated();
-        const repostEvents = await contract.queryFilter(repostFilter, -10000);
-        
-        const superLikeFilter = contract.filters.SuperLiked();
-        const superLikeEvents = await contract.queryFilter(superLikeFilter, -10000);
-        
-        // Build super likes map
+
+        // Build super likes map: postId → totalETH
         const superLikesMap = new Map();
-        for (const event of superLikeEvents) {
-            const postId = event.args.postId.toString();
-            const amount = event.args.ethAmount;
-            const current = superLikesMap.get(postId) || 0n;
-            superLikesMap.set(postId, current + amount);
+        for (const ev of superLikeEvents) {
+            const pid = ev.args.postId.toString();
+            superLikesMap.set(pid, (superLikesMap.get(pid) || 0n) + ev.args.ethAmount);
         }
-        
-        // Process posts
-        const posts = [];
-        
-        for (const event of events.slice(-50)) {
-            const block = await event.getBlock();
-            posts.push({
-                id: event.args.postId.toString(),
+
+        // Process posts (top-level)
+        const allItems = [];
+        const feedPosts = [];
+        BC.postsById = new Map();
+        BC.replies = new Map();
+        BC.replyCountMap = new Map();
+        BC.repostCountMap = new Map();
+
+        for (const ev of postEvents.slice(-80)) {
+            const block = await ev.getBlock();
+            const post = {
+                id: ev.args.postId.toString(),
                 type: 'post',
-                author: event.args.author,
-                content: event.args.content,
-                mediaCID: event.args.mediaCID,
+                author: ev.args.author,
+                content: ev.args.content,
+                mediaCID: ev.args.mediaCID,
                 timestamp: block.timestamp,
-                superLikes: superLikesMap.get(event.args.postId.toString()) || 0n,
-                txHash: event.transactionHash
-            });
+                superLikes: superLikesMap.get(ev.args.postId.toString()) || 0n,
+                txHash: ev.transactionHash
+            };
+            allItems.push(post);
+            feedPosts.push(post);
+            BC.postsById.set(post.id, post);
         }
-        
-        for (const event of replyEvents.slice(-30)) {
-            const block = await event.getBlock();
-            posts.push({
-                id: event.args.postId.toString(),
+
+        // Process replies → build replies map
+        for (const ev of replyEvents.slice(-60)) {
+            const block = await ev.getBlock();
+            const reply = {
+                id: ev.args.postId.toString(),
                 type: 'reply',
-                parentId: event.args.parentId.toString(),
-                author: event.args.author,
-                content: event.args.content,
-                mediaCID: event.args.mediaCID,
-                tipBkc: event.args.tipBkc,
+                parentId: ev.args.parentId.toString(),
+                author: ev.args.author,
+                content: ev.args.content,
+                mediaCID: ev.args.mediaCID,
+                tipBkc: ev.args.tipBkc,
                 timestamp: block.timestamp,
-                superLikes: superLikesMap.get(event.args.postId.toString()) || 0n,
-                txHash: event.transactionHash
-            });
+                superLikes: superLikesMap.get(ev.args.postId.toString()) || 0n,
+                txHash: ev.transactionHash
+            };
+            allItems.push(reply);
+            BC.postsById.set(reply.id, reply);
+
+            // Add to replies map
+            const parentId = reply.parentId;
+            if (!BC.replies.has(parentId)) BC.replies.set(parentId, []);
+            BC.replies.get(parentId).push(reply);
+
+            // Count
+            BC.replyCountMap.set(parentId, (BC.replyCountMap.get(parentId) || 0) + 1);
         }
-        
-        for (const event of repostEvents.slice(-20)) {
-            const block = await event.getBlock();
-            posts.push({
-                id: event.args.newPostId.toString(),
+
+        // Process reposts
+        for (const ev of repostEvents.slice(-30)) {
+            const block = await ev.getBlock();
+            const repost = {
+                id: ev.args.newPostId.toString(),
                 type: 'repost',
-                originalPostId: event.args.originalPostId.toString(),
-                author: event.args.reposter,
+                originalPostId: ev.args.originalPostId.toString(),
+                author: ev.args.reposter,
                 timestamp: block.timestamp,
-                txHash: event.transactionHash
-            });
+                txHash: ev.transactionHash
+            };
+            allItems.push(repost);
+            feedPosts.push(repost);
+            BC.postsById.set(repost.id, repost);
+
+            // Count reposts on original
+            const oid = repost.originalPostId;
+            BC.repostCountMap.set(oid, (BC.repostCountMap.get(oid) || 0) + 1);
         }
-        
-        posts.sort((a, b) => b.timestamp - a.timestamp);
-        BC.posts = posts;
-        
-        BC.trendingPosts = [...posts]
-            .filter(p => p.superLikes > 0n)
+
+        // Sort
+        feedPosts.sort((a, b) => b.timestamp - a.timestamp);
+        BC.posts = feedPosts;
+        BC.allItems = allItems;
+
+        // Trending: posts with super likes, sorted by value
+        BC.trendingPosts = [...allItems]
+            .filter(p => p.type !== 'repost' && p.superLikes > 0n)
             .sort((a, b) => {
                 const aVal = BigInt(a.superLikes || 0);
                 const bVal = BigInt(b.superLikes || 0);
                 return bVal > aVal ? 1 : bVal < aVal ? -1 : 0;
             });
-        
+
     } catch (e) {
         console.error('Failed to load posts:', e);
         BC.error = e.message;
@@ -1422,185 +1676,356 @@ async function loadPosts() {
 }
 
 // ============================================================================
-// ACTIONS
+// ACTIONS (via BackchatTx — txEngine pattern)
 // ============================================================================
 
-async function createPost() {
+async function doCreatePost() {
     const input = document.getElementById('bc-compose-input');
     const content = input?.value?.trim();
-    
-    if (!content) {
-        showToast('Please write something', 'error');
-        return;
-    }
-    
-    if (content.length > 500) {
-        showToast('Post too long (max 500 chars)', 'error');
-        return;
-    }
-    
-    const contract = getSignedContract();
-    if (!contract) {
-        showToast('Please connect wallet', 'error');
-        return;
-    }
-    
+    if (!content) { showToast('Please write something', 'error'); return; }
+    if (content.length > MAX_CONTENT) { showToast(`Post too long (max ${MAX_CONTENT} chars)`, 'error'); return; }
+
     BC.isPosting = true;
     renderContent();
-    
-    try {
-        const fee = BC.fees.post || await contract.calculateFee(50000);
-        
-        const tx = await contract.createPost(
-            content,
-            '',
-            getOperatorAddress() || ethers.ZeroAddress,
-            { value: fee }
-        );
-        
-        showToast('Posting...', 'info');
-        await tx.wait();
-        
-        showToast('Post created! 🎉', 'success');
-        input.value = '';
-        
-        await loadPosts();
-        
-    } catch (e) {
-        console.error('Post error:', e);
-        if (e.code !== 'ACTION_REJECTED') {
-            showToast('Failed: ' + (e.reason || e.message), 'error');
+
+    let mediaCID = '';
+
+    // Upload image first if pending
+    if (BC.pendingImage) {
+        try {
+            BC.isUploadingImage = true;
+            renderContent();
+            const result = await uploadImageToIPFS(BC.pendingImage);
+            mediaCID = result.ipfsHash || '';
+        } catch (e) {
+            showToast('Image upload failed: ' + e.message, 'error');
+            BC.isPosting = false;
+            BC.isUploadingImage = false;
+            renderContent();
+            return;
+        } finally {
+            BC.isUploadingImage = false;
         }
-    } finally {
-        BC.isPosting = false;
+    }
+
+    const capturedContent = content;
+    const btn = document.getElementById('bc-post-btn');
+
+    await BackchatTx.createPost({
+        content: capturedContent,
+        mediaCID,
+        operator: getOperatorAddress(),
+        button: btn,
+        onSuccess: async () => {
+            if (input) input.value = '';
+            BC.pendingImage = null;
+            BC.pendingImagePreview = null;
+            BC.isPosting = false;
+            showToast('Post created!', 'success');
+            await loadPosts();
+        },
+        onError: (e) => {
+            BC.isPosting = false;
+            renderContent();
+        }
+    });
+
+    BC.isPosting = false;
+    renderContent();
+}
+
+async function doCreateReply(parentId) {
+    const input = document.getElementById('bc-reply-input');
+    const content = input?.value?.trim();
+    if (!content) { showToast('Please write a reply', 'error'); return; }
+
+    const btn = document.getElementById('bc-reply-btn');
+
+    await BackchatTx.createReply({
+        parentId,
+        content,
+        mediaCID: '',
+        tipBkc: 0,
+        operator: getOperatorAddress(),
+        button: btn,
+        onSuccess: async () => {
+            if (input) input.value = '';
+            showToast('Reply posted!', 'success');
+            await loadPosts();
+            renderContent();
+        }
+    });
+}
+
+async function doRepost(originalPostId) {
+    const btn = document.getElementById('bc-repost-confirm-btn');
+
+    await BackchatTx.createRepost({
+        originalPostId,
+        tipBkc: 0,
+        operator: getOperatorAddress(),
+        button: btn,
+        onSuccess: async () => {
+            closeModal('repost');
+            showToast('Reposted!', 'success');
+            await loadPosts();
+        }
+    });
+}
+
+async function doLike(postId) {
+    // Optimistic UI update
+    const myAddr = State.userAddress?.toLowerCase();
+    if (myAddr) {
+        if (!BC.likesMap.has(postId)) BC.likesMap.set(postId, new Set());
+        BC.likesMap.get(postId).add(myAddr);
         renderContent();
+    }
+
+    await BackchatTx.like({
+        postId,
+        tipBkc: 0,
+        operator: getOperatorAddress(),
+        onSuccess: () => {
+            showToast('Liked!', 'success');
+        },
+        onError: () => {
+            // Revert optimistic update
+            BC.likesMap.get(postId)?.delete(myAddr);
+            renderContent();
+        }
+    });
+}
+
+async function doSuperLike(postId, amount) {
+    const ethAmount = ethers.parseEther(amount || '0.001');
+
+    await BackchatTx.superLike({
+        postId,
+        ethAmount,
+        tipBkc: 0,
+        operator: getOperatorAddress(),
+        onSuccess: async () => {
+            showToast('Super Liked!', 'success');
+            await loadPosts();
+        }
+    });
+}
+
+async function doFollow(address) {
+    await BackchatTx.follow({
+        toFollow: address,
+        tipBkc: 0,
+        operator: getOperatorAddress(),
+        onSuccess: () => {
+            BC.following.add(address.toLowerCase());
+            showToast('Followed!', 'success');
+            renderContent();
+        }
+    });
+}
+
+async function doUnfollow(address) {
+    await BackchatTx.unfollow({
+        toUnfollow: address,
+        onSuccess: () => {
+            BC.following.delete(address.toLowerCase());
+            showToast('Unfollowed', 'success');
+            renderContent();
+        }
+    });
+}
+
+async function doWithdraw() {
+    if (BC.pendingEth === 0n) { showToast('No earnings to withdraw', 'warning'); return; }
+
+    await BackchatTx.withdraw({
+        onSuccess: () => {
+            showToast(`Withdrawn ${formatETH(BC.pendingEth)} ETH!`, 'success');
+            BC.pendingEth = 0n;
+            renderContent();
+        }
+    });
+}
+
+async function doCreateProfile() {
+    const btn = document.getElementById('bc-wizard-confirm-btn');
+
+    await BackchatTx.createProfile({
+        username: BC.wizUsername,
+        displayName: BC.wizDisplayName,
+        bio: BC.wizBio,
+        operator: getOperatorAddress(),
+        button: btn,
+        onSuccess: async () => {
+            showToast('Profile created!', 'success');
+            BC.hasProfile = true;
+            BC.userProfile = { username: BC.wizUsername, displayName: BC.wizDisplayName, bio: BC.wizBio, address: State.userAddress };
+            BC.profiles.set(State.userAddress.toLowerCase(), { username: BC.wizUsername, displayName: BC.wizDisplayName, bio: BC.wizBio });
+            // Reset wizard
+            BC.wizStep = 1; BC.wizUsername = ''; BC.wizDisplayName = ''; BC.wizBio = '';
+            BC.view = 'profile';
+            BC.activeTab = 'profile';
+            render();
+        }
+    });
+}
+
+async function doUpdateProfile() {
+    const displayName = document.getElementById('edit-displayname')?.value?.trim() || '';
+    const bio = document.getElementById('edit-bio')?.value?.trim() || '';
+    const btn = document.getElementById('bc-edit-profile-btn');
+
+    await BackchatTx.updateProfile({
+        displayName,
+        bio,
+        button: btn,
+        onSuccess: () => {
+            BC.userProfile.displayName = displayName;
+            BC.userProfile.bio = bio;
+            BC.profiles.set(State.userAddress.toLowerCase(), { ...BC.profiles.get(State.userAddress.toLowerCase()), displayName, bio });
+            closeModal('edit-profile');
+            showToast('Profile updated!', 'success');
+            renderContent();
+        }
+    });
+}
+
+async function doObtainBadge() {
+    await BackchatTx.obtainBadge({
+        operator: getOperatorAddress(),
+        onSuccess: () => {
+            BC.hasBadge = true;
+            closeModal('badge');
+            showToast('Badge obtained!', 'success');
+            renderContent();
+        }
+    });
+}
+
+async function doBoostProfile(amount) {
+    const ethAmount = ethers.parseEther(amount || '0.001');
+
+    await BackchatTx.boostProfile({
+        ethAmount,
+        operator: getOperatorAddress(),
+        onSuccess: () => {
+            BC.isBoosted = true;
+            closeModal('boost');
+            showToast('Profile boosted!', 'success');
+            renderContent();
+        }
+    });
+}
+
+// ============================================================================
+// IMAGE UPLOAD
+// ============================================================================
+
+async function uploadImageToIPFS(file) {
+    const formData = new FormData();
+    formData.append('image', file);
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 60000);
+
+    try {
+        const resp = await fetch('/api/upload-image', {
+            method: 'POST',
+            body: formData,
+            signal: controller.signal
+        });
+        clearTimeout(timeout);
+        if (!resp.ok) {
+            const data = await resp.json().catch(() => ({}));
+            throw new Error(data.error || `Upload failed (${resp.status})`);
+        }
+        return await resp.json();
+    } catch (e) {
+        clearTimeout(timeout);
+        throw e;
     }
 }
 
-async function likePost(postId) {
-    const contract = getSignedContract();
-    if (!contract) {
-        showToast('Please connect wallet', 'error');
+function handleImageSelect(e) {
+    const file = e.target?.files?.[0];
+    if (!file) return;
+
+    if (file.size > 5 * 1024 * 1024) {
+        showToast('Image too large. Maximum 5MB.', 'error');
         return;
     }
-    
-    try {
-        const fee = BC.fees.like || await contract.calculateFee(55000);
-        
-        const tx = await contract.like(
-            postId,
-            getOperatorAddress() || ethers.ZeroAddress,
-            0,
-            { value: fee }
-        );
-        
-        showToast('Liking...', 'info');
-        await tx.wait();
-        
-        showToast('Liked! ❤️', 'success');
-        
-    } catch (e) {
-        console.error('Like error:', e);
-        if (e.code !== 'ACTION_REJECTED') {
-            if (e.message?.includes('AlreadyLiked')) {
-                showToast('Already liked this post', 'warning');
-            } else {
-                showToast('Failed: ' + (e.reason || e.message), 'error');
+    if (!['image/jpeg', 'image/png', 'image/gif', 'image/webp'].includes(file.type)) {
+        showToast('Invalid image type. Use JPG, PNG, GIF, or WebP.', 'error');
+        return;
+    }
+
+    BC.pendingImage = file;
+
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+        BC.pendingImagePreview = ev.target.result;
+        renderContent();
+    };
+    reader.readAsDataURL(file);
+}
+
+function removeImage() {
+    BC.pendingImage = null;
+    BC.pendingImagePreview = null;
+    const input = document.getElementById('bc-image-input');
+    if (input) input.value = '';
+    renderContent();
+}
+
+// Username check debounce
+let _usernameTimer = null;
+function onWizUsernameInput(value) {
+    BC.wizUsername = value.toLowerCase().replace(/[^a-z0-9_]/g, '');
+    BC.wizUsernameOk = null;
+    BC.wizFee = null;
+
+    clearTimeout(_usernameTimer);
+    const input = document.getElementById('wiz-username-input');
+    if (input) input.value = BC.wizUsername;
+
+    if (BC.wizUsername.length >= 1 && BC.wizUsername.length <= 15) {
+        BC.wizChecking = true;
+        renderWizardStatus();
+
+        _usernameTimer = setTimeout(async () => {
+            try {
+                const [available, feeData] = await Promise.all([
+                    BackchatTx.isUsernameAvailable(BC.wizUsername),
+                    BackchatTx.getUsernameFee(BC.wizUsername.length)
+                ]);
+                BC.wizUsernameOk = available;
+                BC.wizFee = feeData.formatted;
+            } catch (e) {
+                console.warn('Username check failed:', e);
             }
-        }
+            BC.wizChecking = false;
+            renderWizardStatus();
+        }, 600);
+    } else {
+        BC.wizChecking = false;
+        renderWizardStatus();
     }
 }
 
-async function superLikePost(postId, amount) {
-    const contract = getSignedContract();
-    if (!contract) {
-        showToast('Please connect wallet', 'error');
-        return;
-    }
-    
-    const ethAmount = ethers.parseEther(amount || '0.0001');
-    
-    try {
-        const tx = await contract.superLike(
-            postId,
-            getOperatorAddress() || ethers.ZeroAddress,
-            0,
-            { value: ethAmount }
-        );
-        
-        showToast('Super liking...', 'info');
-        await tx.wait();
-        
-        showToast('Super Liked! ⭐', 'success');
-        await loadPosts();
-        
-    } catch (e) {
-        console.error('Super like error:', e);
-        if (e.code !== 'ACTION_REJECTED') {
-            showToast('Failed: ' + (e.reason || e.message), 'error');
-        }
-    }
-}
+function renderWizardStatus() {
+    const row = document.getElementById('wiz-username-status');
+    if (!row) return;
 
-async function followUser(address) {
-    const contract = getSignedContract();
-    if (!contract) {
-        showToast('Please connect wallet', 'error');
-        return;
-    }
-    
-    try {
-        const fee = BC.fees.follow || await contract.calculateFee(45000);
-        
-        const tx = await contract.follow(
-            address,
-            getOperatorAddress() || ethers.ZeroAddress,
-            0,
-            { value: fee }
-        );
-        
-        showToast('Following...', 'info');
-        await tx.wait();
-        
-        BC.following.add(address.toLowerCase());
-        showToast('Followed! 👥', 'success');
-        renderContent();
-        
-    } catch (e) {
-        console.error('Follow error:', e);
-        if (e.code !== 'ACTION_REJECTED') {
-            showToast('Failed: ' + (e.reason || e.message), 'error');
-        }
-    }
-}
-
-async function withdrawEarnings() {
-    const contract = getSignedContract();
-    if (!contract) {
-        showToast('Please connect wallet', 'error');
-        return;
-    }
-    
-    if (BC.pendingEth === 0n) {
-        showToast('No earnings to withdraw', 'warning');
-        return;
-    }
-    
-    try {
-        const tx = await contract.withdraw();
-        
-        showToast('Withdrawing...', 'info');
-        await tx.wait();
-        
-        showToast(`Withdrawn ${formatETH(BC.pendingEth)} ETH! 💰`, 'success');
-        BC.pendingEth = 0n;
-        renderContent();
-        
-    } catch (e) {
-        console.error('Withdraw error:', e);
-        if (e.code !== 'ACTION_REJECTED') {
-            showToast('Failed: ' + (e.reason || e.message), 'error');
-        }
+    if (BC.wizChecking) {
+        row.innerHTML = '<span class="bc-username-checking"><i class="fa-solid fa-spinner fa-spin"></i> Checking...</span>';
+    } else if (BC.wizUsernameOk === true) {
+        row.innerHTML = `<span class="bc-username-ok"><i class="fa-solid fa-check"></i> Available</span>
+            ${BC.wizFee && BC.wizFee !== '0.0' ? `<span class="bc-username-fee">${BC.wizFee} ETH</span>` : '<span class="bc-username-fee">FREE</span>'}`;
+    } else if (BC.wizUsernameOk === false) {
+        row.innerHTML = '<span class="bc-username-taken"><i class="fa-solid fa-xmark"></i> Taken</span>';
+    } else {
+        row.innerHTML = '';
     }
 }
 
@@ -1609,6 +2034,25 @@ async function withdrawEarnings() {
 // ============================================================================
 
 function renderHeader() {
+    const isDetailView = ['post-detail', 'user-profile', 'profile-setup'].includes(BC.view);
+
+    if (isDetailView) {
+        let title = 'Post';
+        if (BC.view === 'user-profile') title = getProfileName(BC.selectedProfile);
+        if (BC.view === 'profile-setup') title = 'Create Profile';
+
+        return `
+            <div class="bc-header">
+                <div class="bc-back-header">
+                    <button class="bc-back-btn" onclick="BackchatPage.goBack()">
+                        <i class="fa-solid fa-arrow-left"></i>
+                    </button>
+                    <span class="bc-back-title">${title}</span>
+                </div>
+            </div>
+        `;
+    }
+
     return `
         <div class="bc-header">
             <div class="bc-header-bar">
@@ -1644,39 +2088,52 @@ function renderHeader() {
 
 function renderCompose() {
     if (!State.isConnected) return '';
-    
+
     const fee = formatETH(BC.fees.post);
-    
+    const profileBanner = (BC.hasProfile === false) ? `
+        <div class="bc-profile-create-banner">
+            <p>Create your profile to get a username and bio</p>
+            <button class="bc-btn bc-btn-primary" onclick="BackchatPage.openProfileSetup()">
+                <i class="fa-solid fa-user-plus"></i> Create Profile
+            </button>
+        </div>` : '';
+
     return `
+        ${profileBanner}
         <div class="bc-compose">
             <div class="bc-compose-row">
                 <div class="bc-compose-avatar">
-                    ${getInitials(State.userAddress)}
+                    ${BC.userProfile?.username ? BC.userProfile.username.charAt(0).toUpperCase() : getInitials(State.userAddress)}
                 </div>
                 <div class="bc-compose-body">
-                    <textarea 
-                        id="bc-compose-input" 
-                        class="bc-compose-textarea" 
-                        placeholder="What's happening on-chain?" 
-                        maxlength="500"
+                    <textarea
+                        id="bc-compose-input"
+                        class="bc-compose-textarea"
+                        placeholder="What's happening on-chain?"
+                        maxlength="${MAX_CONTENT}"
                         oninput="BackchatPage._updateCharCount(this)"
                     ></textarea>
+                    ${BC.pendingImagePreview ? `
+                        <div class="bc-image-preview">
+                            <img src="${BC.pendingImagePreview}" alt="Preview">
+                            <button class="bc-image-remove" onclick="BackchatPage.removeImage()"><i class="fa-solid fa-xmark"></i></button>
+                        </div>
+                    ` : ''}
+                    ${BC.isUploadingImage ? '<div class="bc-uploading-badge"><i class="fa-solid fa-spinner fa-spin"></i> Uploading image...</div>' : ''}
                 </div>
             </div>
             <div class="bc-compose-divider"></div>
             <div class="bc-compose-bottom">
                 <div class="bc-compose-tools">
-                    <button class="bc-compose-tool" title="Add image (coming soon)" disabled>
+                    <button class="bc-compose-tool" title="Add image" onclick="document.getElementById('bc-image-input').click()">
                         <i class="fa-solid fa-image"></i>
                     </button>
-                    <button class="bc-compose-tool" title="Add GIF (coming soon)" disabled>
-                        <i class="fa-solid fa-face-smile"></i>
-                    </button>
+                    <input type="file" id="bc-image-input" hidden accept="image/jpeg,image/png,image/gif,image/webp" onchange="BackchatPage.handleImageSelect(event)">
                 </div>
                 <div class="bc-compose-right">
-                    <span class="bc-char-count" id="bc-char-counter">0/500</span>
+                    <span class="bc-char-count" id="bc-char-counter">0/${MAX_CONTENT}</span>
                     <span class="bc-compose-fee">${fee} ETH</span>
-                    <button class="bc-post-btn" onclick="BackchatPage.createPost()" ${BC.isPosting ? 'disabled' : ''}>
+                    <button id="bc-post-btn" class="bc-post-btn" onclick="BackchatPage.createPost()" ${BC.isPosting ? 'disabled' : ''}>
                         ${BC.isPosting ? '<i class="fa-solid fa-spinner fa-spin"></i> Posting' : 'Post'}
                     </button>
                 </div>
@@ -1685,52 +2142,75 @@ function renderCompose() {
     `;
 }
 
-function renderPost(post, index = 0) {
-    const isBoosted = false;
-    const hasBadge = false;
+function renderPost(post, index = 0, options = {}) {
+    // Handle repost wrapper
+    if (post.type === 'repost' && !options.isRepostContent) {
+        const originalPost = BC.postsById.get(post.originalPostId);
+        return `
+            <div class="bc-post" data-post-id="${post.id}" style="animation-delay:${Math.min(index * 0.04, 0.4)}s">
+                <div class="bc-repost-banner">
+                    <i class="fa-solid fa-retweet"></i>
+                    <span>${getProfileName(post.author)} reposted</span>
+                </div>
+                ${originalPost ? renderPost(originalPost, index, { isRepostContent: true, noAnimation: true }) : `
+                    <div class="bc-post-body" style="padding:16px 20px;color:var(--bc-text-3);">Original post not found</div>
+                `}
+            </div>
+        `;
+    }
+
+    const authorName = getProfileName(post.author);
+    const username = getProfileUsername(post.author);
+    const boosted = isUserBoosted(post.author);
+    const badged = isUserBadged(post.author);
     const superLikesETH = formatETH(post.superLikes);
-    
+    const replyCount = BC.replyCountMap.get(post.id) || 0;
+    const repostCount = BC.repostCountMap.get(post.id) || 0;
+    const likeCount = BC.likesMap.get(post.id)?.size || 0;
+    const isLiked = BC.likesMap.get(post.id)?.has(State.userAddress?.toLowerCase()) || false;
+    const animStyle = options.noAnimation ? '' : `style="animation-delay:${Math.min(index * 0.04, 0.4)}s"`;
+
     return `
-        <div class="bc-post" data-post-id="${post.id}" style="animation-delay:${Math.min(index * 0.04, 0.4)}s">
+        <div class="bc-post" data-post-id="${post.id}" ${animStyle} onclick="BackchatPage.viewPost('${post.id}')">
             <div class="bc-post-top">
-                <div class="bc-avatar ${isBoosted ? 'boosted' : ''}" onclick="BackchatPage.viewProfile('${post.author}')">
-                    ${getInitials(post.author)}
+                <div class="bc-avatar ${boosted ? 'boosted' : ''}" onclick="event.stopPropagation(); BackchatPage.viewProfile('${post.author}')">
+                    ${username ? username.charAt(0).toUpperCase() : getInitials(post.author)}
                 </div>
                 <div class="bc-post-head">
                     <div class="bc-post-author-row">
-                        <span class="bc-author-name" onclick="BackchatPage.viewProfile('${post.author}')">${shortenAddress(post.author)}</span>
-                        ${hasBadge ? '<i class="fa-solid fa-circle-check bc-verified-icon" title="Verified"></i>' : ''}
-                        <span class="bc-post-time">· ${formatTimeAgo(post.timestamp)}</span>
-                        ${post.superLikes > 0n ? `<span class="bc-trending-tag"><i class="fa-solid fa-bolt"></i> ${superLikesETH} ETH</span>` : ''}
+                        <span class="bc-author-name" onclick="event.stopPropagation(); BackchatPage.viewProfile('${post.author}')">${authorName}</span>
+                        ${badged ? '<i class="fa-solid fa-circle-check bc-verified-icon" title="Verified"></i>' : ''}
+                        ${username ? `<span class="bc-post-time">@${username}</span>` : ''}
+                        <span class="bc-post-time">&middot; ${formatTimeAgo(post.timestamp)}</span>
+                        ${post.superLikes > 0n ? `<span class="bc-trending-tag"><i class="fa-solid fa-bolt"></i> ${superLikesETH}</span>` : ''}
                     </div>
-                    ${post.type === 'reply' ? `<div class="bc-post-context">Replying to post #${post.parentId}</div>` : ''}
-                    ${post.type === 'repost' ? `<div class="bc-post-context"><i class="fa-solid fa-retweet" style="margin-right:4px;"></i> Reposted #${post.originalPostId}</div>` : ''}
+                    ${post.type === 'reply' ? `<div class="bc-post-context">Replying to ${getProfileName(BC.postsById.get(post.parentId)?.author)}</div>` : ''}
                 </div>
             </div>
-            
+
             ${post.content ? `<div class="bc-post-body">${escapeHtml(post.content)}</div>` : ''}
-            
+
             ${post.mediaCID ? `
                 <div class="bc-post-media">
-                    <img src="${IPFS_GATEWAY}${post.mediaCID}" alt="Media" loading="lazy">
+                    <img src="${IPFS_GATEWAY}${post.mediaCID}" alt="Media" loading="lazy" onerror="this.style.display='none'">
                 </div>
             ` : ''}
-            
-            <div class="bc-actions">
+
+            <div class="bc-actions" onclick="event.stopPropagation()">
                 <button class="bc-action act-reply" onclick="BackchatPage.openReply('${post.id}')" title="Reply">
                     <i class="fa-regular fa-comment"></i>
+                    ${replyCount > 0 ? `<span class="count">${replyCount}</span>` : ''}
                 </button>
-                <button class="bc-action act-repost" onclick="BackchatPage.repost('${post.id}')" title="Repost">
+                <button class="bc-action act-repost" onclick="BackchatPage.openRepostConfirm('${post.id}')" title="Repost">
                     <i class="fa-solid fa-retweet"></i>
+                    ${repostCount > 0 ? `<span class="count">${repostCount}</span>` : ''}
                 </button>
-                <button class="bc-action act-like" onclick="BackchatPage.like('${post.id}')" title="Like">
-                    <i class="fa-regular fa-heart"></i>
+                <button class="bc-action act-like ${isLiked ? 'liked' : ''}" onclick="BackchatPage.like('${post.id}')" title="Like">
+                    <i class="${isLiked ? 'fa-solid' : 'fa-regular'} fa-heart"></i>
+                    ${likeCount > 0 ? `<span class="count">${likeCount}</span>` : ''}
                 </button>
                 <button class="bc-action act-super" onclick="BackchatPage.openSuperLike('${post.id}')" title="Super Like">
                     <i class="fa-solid fa-star"></i>
-                </button>
-                <button class="bc-action act-tip" onclick="BackchatPage.openTip('${post.author}')" title="Tip BKC">
-                    <i class="fa-solid fa-gift"></i>
                 </button>
             </div>
         </div>
@@ -1805,9 +2285,7 @@ function renderProfile() {
     if (!State.isConnected) {
         return `
             <div class="bc-empty">
-                <div class="bc-empty-glyph">
-                    <i class="fa-solid fa-wallet"></i>
-                </div>
+                <div class="bc-empty-glyph"><i class="fa-solid fa-wallet"></i></div>
                 <div class="bc-empty-title">Connect Wallet</div>
                 <div class="bc-empty-text">Connect your wallet to view your profile and manage earnings.</div>
                 <button class="bc-btn bc-btn-primary" style="margin-top:24px;" onclick="window.openConnectModal && window.openConnectModal()">
@@ -1816,71 +2294,73 @@ function renderProfile() {
             </div>
         `;
     }
-    
-    const userPosts = BC.posts.filter(p => p.author.toLowerCase() === State.userAddress?.toLowerCase());
-    
+
+    const myAddr = State.userAddress?.toLowerCase();
+    const userPosts = BC.allItems.filter(p => p.author?.toLowerCase() === myAddr && p.type !== 'repost');
+    const followersCount = BC.followers.size;
+    const followingCount = BC.following.size;
+    const displayName = BC.userProfile?.displayName || BC.userProfile?.username || shortenAddress(State.userAddress);
+    const avatarChar = BC.userProfile?.username ? BC.userProfile.username.charAt(0).toUpperCase() : getInitials(State.userAddress);
+
     return `
         <div class="bc-profile-section">
             <div class="bc-profile-banner"></div>
             <div class="bc-profile-main">
                 <div class="bc-profile-top-row">
-                    <div class="bc-profile-pic ${BC.isBoosted ? 'boosted' : ''}">
-                        ${getInitials(State.userAddress)}
-                    </div>
+                    <div class="bc-profile-pic ${BC.isBoosted ? 'boosted' : ''}">${avatarChar}</div>
                     <div class="bc-profile-actions">
-                        ${!BC.hasBadge ? `
-                            <button class="bc-btn bc-btn-outline" onclick="BackchatPage.openBadge()">
-                                <i class="fa-solid fa-circle-check"></i> Badge
+                        ${BC.hasProfile ? `
+                            <button class="bc-btn bc-btn-outline" onclick="BackchatPage.openEditProfile()">
+                                <i class="fa-solid fa-pen"></i> Edit
                             </button>
-                        ` : ''}
-                        ${!BC.isBoosted ? `
-                            <button class="bc-btn bc-btn-outline" onclick="BackchatPage.openBoost()">
-                                <i class="fa-solid fa-rocket"></i> Boost
+                        ` : `
+                            <button class="bc-btn bc-btn-primary" onclick="BackchatPage.openProfileSetup()">
+                                <i class="fa-solid fa-user-plus"></i> Create Profile
                             </button>
-                        ` : ''}
+                        `}
+                        ${!BC.hasBadge ? `<button class="bc-btn bc-btn-outline" onclick="BackchatPage.openBadge()"><i class="fa-solid fa-circle-check"></i> Badge</button>` : ''}
+                        ${!BC.isBoosted ? `<button class="bc-btn bc-btn-outline" onclick="BackchatPage.openBoost()"><i class="fa-solid fa-rocket"></i> Boost</button>` : ''}
                     </div>
                 </div>
-                
+
                 <div class="bc-profile-name-row">
-                    <span class="bc-profile-name">${shortenAddress(State.userAddress)}</span>
+                    <span class="bc-profile-name">${escapeHtml(displayName)}</span>
                     ${BC.hasBadge ? '<i class="fa-solid fa-circle-check bc-profile-badge"></i>' : ''}
                     ${BC.isBoosted ? '<span class="bc-boosted-tag"><i class="fa-solid fa-rocket"></i> Boosted</span>' : ''}
                 </div>
-                
+                ${BC.userProfile?.username ? `<div class="bc-profile-username">@${BC.userProfile.username}</div>` : ''}
+                ${BC.userProfile?.bio ? `<div class="bc-profile-bio">${escapeHtml(BC.userProfile.bio)}</div>` : ''}
+
                 <div class="bc-profile-handle">
                     <a href="${EXPLORER_ADDRESS}${State.userAddress}" target="_blank" rel="noopener">
                         View on Explorer <i class="fa-solid fa-arrow-up-right-from-square"></i>
                     </a>
                 </div>
-                
+
                 <div class="bc-profile-stats">
                     <div class="bc-stat-cell">
                         <div class="bc-stat-value">${userPosts.length}</div>
                         <div class="bc-stat-label">Posts</div>
                     </div>
                     <div class="bc-stat-cell">
-                        <div class="bc-stat-value">${BC.following.size}</div>
+                        <div class="bc-stat-value">${followersCount}</div>
+                        <div class="bc-stat-label">Followers</div>
+                    </div>
+                    <div class="bc-stat-cell">
+                        <div class="bc-stat-value">${followingCount}</div>
                         <div class="bc-stat-label">Following</div>
                     </div>
                     <div class="bc-stat-cell">
                         <div class="bc-stat-value">${formatETH(BC.pendingEth)}</div>
-                        <div class="bc-stat-label">Earned (ETH)</div>
-                    </div>
-                    <div class="bc-stat-cell">
-                        <div class="bc-stat-value">${BC.referralStats?.totalReferred || 0}</div>
-                        <div class="bc-stat-label">Referrals</div>
+                        <div class="bc-stat-label">Earned</div>
                     </div>
                 </div>
             </div>
 
             ${BC.pendingEth > 0n ? `
                 <div class="bc-earnings-card">
-                    <div class="bc-earnings-header">
-                        <i class="fa-solid fa-coins"></i> Pending Earnings
-                    </div>
-                    <div class="bc-earnings-value">
-                        ${formatETH(BC.pendingEth)} <small>ETH</small>
-                    </div>
+                    <div class="bc-earnings-header"><i class="fa-solid fa-coins"></i> Pending Earnings</div>
+                    <div class="bc-earnings-value">${formatETH(BC.pendingEth)} <small>ETH</small></div>
                     <button class="bc-btn bc-btn-primary" style="width:100%;margin-top:16px;" onclick="BackchatPage.withdraw()">
                         <i class="fa-solid fa-wallet"></i> Withdraw Earnings
                     </button>
@@ -1888,16 +2368,14 @@ function renderProfile() {
             ` : ''}
 
             ${renderReferralCard()}
-            
+
             <div class="bc-section-head">
                 <span class="bc-section-title"><i class="fa-solid fa-clock-rotate-left"></i> Your Posts</span>
                 <span class="bc-section-subtitle">${userPosts.length} total</span>
             </div>
-            
-            ${userPosts.length === 0 
-                ? `<div class="bc-empty" style="padding:40px 20px;">
-                    <div class="bc-empty-text">No posts yet — share your first thought!</div>
-                  </div>`
+
+            ${userPosts.length === 0
+                ? `<div class="bc-empty" style="padding:40px 20px;"><div class="bc-empty-text">No posts yet — share your first thought!</div></div>`
                 : userPosts.map((p, i) => renderPost(p, i)).join('')
             }
         </div>
@@ -1946,10 +2424,10 @@ function renderReferralCard() {
 function renderContent() {
     const container = document.getElementById('backchat-content');
     if (!container) return;
-    
+
     let content = '';
-    
-    switch (BC.activeTab) {
+
+    switch (BC.view) {
         case 'feed':
             content = renderCompose() + renderFeed();
             break;
@@ -1957,11 +2435,214 @@ function renderContent() {
             content = renderTrending();
             break;
         case 'profile':
-            content = renderProfile();
+            content = (BC.hasProfile === false && State.isConnected) ? renderProfileSetup() : renderProfile();
             break;
+        case 'post-detail':
+            content = renderPostDetail();
+            break;
+        case 'user-profile':
+            content = renderUserProfile();
+            break;
+        case 'profile-setup':
+            content = renderProfileSetup();
+            break;
+        default:
+            content = renderCompose() + renderFeed();
     }
-    
+
     container.innerHTML = content;
+}
+
+// ============================================================================
+// NEW VIEW RENDERERS
+// ============================================================================
+
+function renderPostDetail() {
+    const post = BC.selectedPost ? BC.postsById.get(BC.selectedPost) : null;
+    if (!post) {
+        return `<div class="bc-empty"><div class="bc-empty-title">Post not found</div></div>`;
+    }
+
+    const replies = BC.replies.get(post.id) || [];
+    replies.sort((a, b) => a.timestamp - b.timestamp);
+    const parentAuthor = getProfileName(post.author);
+
+    return `
+        <div class="bc-thread-parent">
+            ${renderPost(post, 0, { noAnimation: true })}
+        </div>
+        <div class="bc-thread-divider">
+            Replies ${replies.length > 0 ? `(${replies.length})` : ''}
+        </div>
+        ${replies.length === 0 ? `
+            <div class="bc-empty" style="padding:40px 20px;">
+                <div class="bc-empty-text">No replies yet. Be the first!</div>
+            </div>
+        ` : replies.map((r, i) => `
+            <div class="bc-thread-reply">
+                ${renderPost(r, i, { noAnimation: true })}
+            </div>
+        `).join('')}
+        ${State.isConnected ? `
+            <div class="bc-reply-compose">
+                <div class="bc-reply-label">Replying to ${parentAuthor}</div>
+                <div class="bc-reply-row">
+                    <textarea id="bc-reply-input" class="bc-reply-input" placeholder="Write a reply..." maxlength="${MAX_CONTENT}"></textarea>
+                    <button id="bc-reply-btn" class="bc-btn bc-btn-primary bc-reply-send" onclick="BackchatPage.submitReply('${post.id}')">
+                        Reply
+                    </button>
+                </div>
+                <div style="font-size:11px;color:var(--bc-text-3);margin-top:6px;">Fee: ${formatETH(BC.fees.reply)} ETH</div>
+            </div>
+        ` : ''}
+    `;
+}
+
+function renderUserProfile() {
+    const addr = BC.selectedProfile;
+    if (!addr) return `<div class="bc-empty"><div class="bc-empty-title">User not found</div></div>`;
+
+    const addrLower = addr.toLowerCase();
+    const profile = BC.profiles.get(addrLower);
+    const displayName = profile?.displayName || profile?.username || shortenAddress(addr);
+    const username = profile?.username;
+    const bio = profile?.bio;
+    const avatarChar = username ? username.charAt(0).toUpperCase() : getInitials(addr);
+    const isMe = addrLower === State.userAddress?.toLowerCase();
+    const isFollowing = BC.following.has(addrLower);
+    const counts = BC.followCounts.get(addrLower) || { followers: 0, following: 0 };
+    const userPosts = BC.allItems.filter(p => p.author?.toLowerCase() === addrLower && p.type !== 'repost');
+
+    return `
+        <div class="bc-profile-section">
+            <div class="bc-profile-banner"></div>
+            <div class="bc-profile-main">
+                <div class="bc-profile-top-row">
+                    <div class="bc-profile-pic">${avatarChar}</div>
+                    <div class="bc-profile-actions">
+                        ${!isMe && State.isConnected ? `
+                            <button class="bc-follow-toggle ${isFollowing ? 'do-unfollow' : 'do-follow'}"
+                                onclick="BackchatPage.${isFollowing ? 'unfollow' : 'follow'}('${addr}')">
+                                ${isFollowing ? 'Following' : 'Follow'}
+                            </button>
+                        ` : ''}
+                    </div>
+                </div>
+
+                <div class="bc-profile-name-row">
+                    <span class="bc-profile-name">${escapeHtml(displayName)}</span>
+                </div>
+                ${username ? `<div class="bc-profile-username">@${username}</div>` : ''}
+                ${bio ? `<div class="bc-profile-bio">${escapeHtml(bio)}</div>` : ''}
+
+                <div class="bc-profile-handle">
+                    <a href="${EXPLORER_ADDRESS}${addr}" target="_blank" rel="noopener">
+                        ${shortenAddress(addr)} <i class="fa-solid fa-arrow-up-right-from-square"></i>
+                    </a>
+                </div>
+
+                <div class="bc-profile-stats">
+                    <div class="bc-stat-cell">
+                        <div class="bc-stat-value">${userPosts.length}</div>
+                        <div class="bc-stat-label">Posts</div>
+                    </div>
+                    <div class="bc-stat-cell">
+                        <div class="bc-stat-value">${counts.followers}</div>
+                        <div class="bc-stat-label">Followers</div>
+                    </div>
+                    <div class="bc-stat-cell">
+                        <div class="bc-stat-value">${counts.following}</div>
+                        <div class="bc-stat-label">Following</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="bc-section-head">
+                <span class="bc-section-title"><i class="fa-solid fa-clock-rotate-left"></i> Posts</span>
+                <span class="bc-section-subtitle">${userPosts.length}</span>
+            </div>
+            ${userPosts.length === 0
+                ? `<div class="bc-empty" style="padding:40px 20px;"><div class="bc-empty-text">No posts yet</div></div>`
+                : userPosts.sort((a, b) => b.timestamp - a.timestamp).map((p, i) => renderPost(p, i)).join('')
+            }
+        </div>
+    `;
+}
+
+function renderProfileSetup() {
+    if (!State.isConnected) {
+        return `
+            <div class="bc-empty">
+                <div class="bc-empty-glyph"><i class="fa-solid fa-wallet"></i></div>
+                <div class="bc-empty-title">Connect Wallet</div>
+                <div class="bc-empty-text">Connect your wallet to create your profile.</div>
+            </div>
+        `;
+    }
+
+    const step = BC.wizStep;
+
+    return `
+        <div class="bc-wizard">
+            <div class="bc-wizard-title">Create Your Profile</div>
+            <div class="bc-wizard-desc">Set up your on-chain identity in ${step === 3 ? 'one last step' : 'a few steps'}</div>
+
+            <div class="bc-wizard-dots">
+                <div class="bc-wizard-dot ${step === 1 ? 'active' : step > 1 ? 'done' : ''}"></div>
+                <div class="bc-wizard-dot ${step === 2 ? 'active' : step > 2 ? 'done' : ''}"></div>
+                <div class="bc-wizard-dot ${step === 3 ? 'active' : ''}"></div>
+            </div>
+
+            <div class="bc-wizard-card">
+                ${step === 1 ? `
+                    <div class="bc-field">
+                        <label class="bc-label">Choose a Username</label>
+                        <input type="text" id="wiz-username-input" class="bc-input" placeholder="e.g. satoshi"
+                            value="${BC.wizUsername}" maxlength="15"
+                            oninput="BackchatPage.onWizUsernameInput(this.value)">
+                        <div id="wiz-username-status" class="bc-username-row"></div>
+                        <div style="font-size:12px;color:var(--bc-text-3);margin-top:8px;">1-15 chars: lowercase letters, numbers, underscores. Shorter usernames cost more ETH.</div>
+                    </div>
+                ` : step === 2 ? `
+                    <div class="bc-field">
+                        <label class="bc-label">Display Name</label>
+                        <input type="text" id="wiz-displayname-input" class="bc-input" placeholder="Your public name" value="${escapeHtml(BC.wizDisplayName)}" maxlength="30"
+                            oninput="BackchatPage._wizSave()">
+                    </div>
+                    <div class="bc-field">
+                        <label class="bc-label">Bio</label>
+                        <textarea id="wiz-bio-input" class="bc-input" placeholder="Tell the world about yourself..." maxlength="160" rows="3"
+                            oninput="BackchatPage._wizSave()" style="resize:none;">${escapeHtml(BC.wizBio)}</textarea>
+                    </div>
+                ` : `
+                    <div style="text-align:center;">
+                        <div style="font-size:48px; margin-bottom:16px;">${BC.wizUsername.charAt(0).toUpperCase()}</div>
+                        <div style="font-size:18px; font-weight:700; color:var(--bc-text);">@${BC.wizUsername}</div>
+                        ${BC.wizDisplayName ? `<div style="font-size:14px; color:var(--bc-text-2); margin-top:4px;">${escapeHtml(BC.wizDisplayName)}</div>` : ''}
+                        ${BC.wizBio ? `<div style="font-size:13px; color:var(--bc-text-3); margin-top:8px;">${escapeHtml(BC.wizBio)}</div>` : ''}
+                        <div class="bc-fee-row" style="margin-top:20px;">
+                            <span class="bc-fee-label">Username Fee</span>
+                            <span class="bc-fee-val">${BC.wizFee || '0'} ETH</span>
+                        </div>
+                    </div>
+                `}
+            </div>
+
+            <div class="bc-wizard-nav">
+                ${step > 1 ? `<button class="bc-btn bc-btn-outline" onclick="BackchatPage.wizBack()"><i class="fa-solid fa-arrow-left"></i> Back</button>` : ''}
+                ${step < 3 ? `
+                    <button class="bc-btn bc-btn-primary" onclick="BackchatPage.wizNext()"
+                        ${step === 1 && !BC.wizUsernameOk ? 'disabled' : ''}>
+                        Next <i class="fa-solid fa-arrow-right"></i>
+                    </button>
+                ` : `
+                    <button id="bc-wizard-confirm-btn" class="bc-btn bc-btn-primary" onclick="BackchatPage.wizConfirm()">
+                        <i class="fa-solid fa-check"></i> Create Profile
+                    </button>
+                `}
+            </div>
+        </div>
+    `;
 }
 
 function renderModals() {
@@ -2045,6 +2726,46 @@ function renderModals() {
                 </div>
             </div>
         </div>
+
+        <!-- Repost Confirm Modal -->
+        <div class="bc-modal-overlay" id="modal-repost">
+            <div class="bc-modal-box">
+                <div class="bc-modal-top">
+                    <span class="bc-modal-title"><i class="fa-solid fa-retweet" style="color:var(--bc-green)"></i> Repost</span>
+                    <button class="bc-modal-x" onclick="BackchatPage.closeModal('repost')"><i class="fa-solid fa-xmark"></i></button>
+                </div>
+                <div class="bc-modal-inner">
+                    <p class="bc-modal-desc">Repost this to your followers? Fee: ${formatETH(BC.fees.repost)} ETH</p>
+                    <button id="bc-repost-confirm-btn" class="bc-btn bc-btn-primary" style="width:100%;justify-content:center;" onclick="BackchatPage.confirmRepost()">
+                        <i class="fa-solid fa-retweet"></i> Repost
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Edit Profile Modal -->
+        <div class="bc-modal-overlay" id="modal-edit-profile">
+            <div class="bc-modal-box">
+                <div class="bc-modal-top">
+                    <span class="bc-modal-title"><i class="fa-solid fa-pen" style="color:var(--bc-accent)"></i> Edit Profile</span>
+                    <button class="bc-modal-x" onclick="BackchatPage.closeModal('edit-profile')"><i class="fa-solid fa-xmark"></i></button>
+                </div>
+                <div class="bc-modal-inner">
+                    <div class="bc-field">
+                        <label class="bc-label">Display Name</label>
+                        <input type="text" id="edit-displayname" class="bc-input" value="${escapeHtml(BC.userProfile?.displayName || '')}" maxlength="30" placeholder="Your display name">
+                    </div>
+                    <div class="bc-field">
+                        <label class="bc-label">Bio</label>
+                        <textarea id="edit-bio" class="bc-input" maxlength="160" rows="3" placeholder="About you..." style="resize:none;">${escapeHtml(BC.userProfile?.bio || '')}</textarea>
+                    </div>
+                    <p style="font-size:12px;color:var(--bc-text-3);margin-bottom:16px;">Username cannot be changed. Only gas fee applies.</p>
+                    <button id="bc-edit-profile-btn" class="bc-btn bc-btn-primary" style="width:100%;justify-content:center;" onclick="BackchatPage.confirmEditProfile()">
+                        <i class="fa-solid fa-check"></i> Save Changes
+                    </button>
+                </div>
+            </div>
+        </div>
     `;
 }
 
@@ -2077,82 +2798,50 @@ let selectedPostForAction = null;
 
 function openSuperLike(postId) {
     selectedPostForAction = postId;
-    document.getElementById('modal-superlike').classList.add('active');
+    document.getElementById('modal-superlike')?.classList.add('active');
 }
 
 async function confirmSuperLike() {
     const amount = document.getElementById('superlike-amount')?.value || '0.001';
     closeModal('superlike');
-    await superLikePost(selectedPostForAction, amount);
+    await doSuperLike(selectedPostForAction, amount);
 }
 
 function openBadge() {
-    document.getElementById('modal-badge').classList.add('active');
+    document.getElementById('modal-badge')?.classList.add('active');
 }
 
 async function confirmBadge() {
     closeModal('badge');
-    
-    const contract = getSignedContract();
-    if (!contract) {
-        showToast('Please connect wallet', 'error');
-        return;
-    }
-    
-    try {
-        const tx = await contract.obtainBadge(
-            getOperatorAddress() || ethers.ZeroAddress,
-            { value: BC.fees.badge }
-        );
-        
-        showToast('Getting badge...', 'info');
-        await tx.wait();
-        
-        BC.hasBadge = true;
-        showToast('Badge obtained! ✅', 'success');
-        renderContent();
-        
-    } catch (e) {
-        console.error('Badge error:', e);
-        if (e.code !== 'ACTION_REJECTED') {
-            showToast('Failed: ' + (e.reason || e.message), 'error');
-        }
-    }
+    await doObtainBadge();
 }
 
 function openBoost() {
-    document.getElementById('modal-boost').classList.add('active');
+    document.getElementById('modal-boost')?.classList.add('active');
 }
 
 async function confirmBoost() {
     const amount = document.getElementById('boost-amount')?.value || '0.001';
     closeModal('boost');
-    
-    const contract = getSignedContract();
-    if (!contract) {
-        showToast('Please connect wallet', 'error');
-        return;
-    }
-    
-    try {
-        const tx = await contract.boostProfile(
-            getOperatorAddress() || ethers.ZeroAddress,
-            { value: ethers.parseEther(amount) }
-        );
-        
-        showToast('Boosting profile...', 'info');
-        await tx.wait();
-        
-        BC.isBoosted = true;
-        showToast('Profile boosted! 🚀', 'success');
-        renderContent();
-        
-    } catch (e) {
-        console.error('Boost error:', e);
-        if (e.code !== 'ACTION_REJECTED') {
-            showToast('Failed: ' + (e.reason || e.message), 'error');
-        }
-    }
+    await doBoostProfile(amount);
+}
+
+function openRepostConfirm(postId) {
+    selectedPostForAction = postId;
+    document.getElementById('modal-repost')?.classList.add('active');
+}
+
+async function confirmRepost() {
+    await doRepost(selectedPostForAction);
+}
+
+function openEditProfile() {
+    render(); // Re-render to update modal with current values
+    document.getElementById('modal-edit-profile')?.classList.add('active');
+}
+
+async function confirmEditProfile() {
+    await doUpdateProfile();
 }
 
 function closeModal(name) {
@@ -2167,10 +2856,10 @@ function _updateCharCount(textarea) {
     const counter = document.getElementById('bc-char-counter');
     if (!counter) return;
     const len = textarea.value.length;
-    counter.textContent = `${len}/500`;
+    counter.textContent = `${len}/${MAX_CONTENT}`;
     counter.className = 'bc-char-count';
-    if (len > 450) counter.classList.add('danger');
-    else if (len > 350) counter.classList.add('warn');
+    if (len > MAX_CONTENT - 50) counter.classList.add('danger');
+    else if (len > MAX_CONTENT - 150) counter.classList.add('warn');
 }
 
 // ============================================================================
@@ -2180,48 +2869,120 @@ function _updateCharCount(textarea) {
 export const BackchatPage = {
     async render(isActive) {
         if (!isActive) return;
-        
+
         render();
-        
+
         await Promise.all([
             loadFees(),
             loadUserStatus(),
-            loadPosts()
+            loadProfiles(),
+            loadPosts(),
+            loadSocialGraph()
         ]);
     },
-    
+
     async refresh() {
         await Promise.all([
             loadFees(),
             loadUserStatus(),
-            loadPosts()
+            loadProfiles(),
+            loadPosts(),
+            loadSocialGraph()
         ]);
     },
-    
+
     setTab(tab) {
         BC.activeTab = tab;
-        renderContent();
+        BC.view = tab;
+        render();
     },
-    
+
+    // Navigation
+    goBack,
+    viewPost(postId) {
+        navigateView('post-detail', { post: postId });
+    },
+    viewProfile(address) {
+        if (address?.toLowerCase() === State.userAddress?.toLowerCase()) {
+            BC.activeTab = 'profile';
+            BC.view = 'profile';
+            render();
+        } else {
+            navigateView('user-profile', { profile: address });
+        }
+    },
+    openReply(postId) {
+        navigateView('post-detail', { post: postId });
+    },
+    openProfileSetup() {
+        BC.wizStep = 1;
+        BC.wizUsername = '';
+        BC.wizDisplayName = '';
+        BC.wizBio = '';
+        BC.wizUsernameOk = null;
+        BC.wizFee = null;
+        navigateView('profile-setup');
+    },
+
     // Actions
-    createPost,
-    like: likePost,
+    createPost: doCreatePost,
+    submitReply: doCreateReply,
+    like: doLike,
+    follow: doFollow,
+    unfollow: doUnfollow,
+    withdraw: doWithdraw,
     openSuperLike,
     confirmSuperLike,
-    follow: followUser,
-    withdraw: withdrawEarnings,
-    
+    openRepostConfirm,
+    confirmRepost,
+
     // Modals
     openBadge,
     confirmBadge,
     openBoost,
     confirmBoost,
+    openEditProfile,
+    confirmEditProfile,
     closeModal,
-    openEarnings() { BC.activeTab = 'profile'; renderContent(); },
-    
+    openEarnings() { BC.activeTab = 'profile'; BC.view = 'profile'; render(); },
+
+    // Image upload
+    handleImageSelect,
+    removeImage,
+
+    // Profile wizard
+    onWizUsernameInput,
+    wizNext() {
+        if (BC.wizStep === 1 && !BC.wizUsernameOk) return;
+        if (BC.wizStep === 1) {
+            // Save username, move to step 2
+            BC.wizStep = 2;
+        } else if (BC.wizStep === 2) {
+            // Save display name + bio from inputs
+            BC.wizDisplayName = document.getElementById('wiz-displayname-input')?.value?.trim() || '';
+            BC.wizBio = document.getElementById('wiz-bio-input')?.value?.trim() || '';
+            BC.wizStep = 3;
+        }
+        renderContent();
+    },
+    wizBack() {
+        if (BC.wizStep > 1) {
+            if (BC.wizStep === 2) {
+                BC.wizDisplayName = document.getElementById('wiz-displayname-input')?.value?.trim() || '';
+                BC.wizBio = document.getElementById('wiz-bio-input')?.value?.trim() || '';
+            }
+            BC.wizStep--;
+            renderContent();
+        }
+    },
+    wizConfirm: doCreateProfile,
+    _wizSave() {
+        // Auto-save on input
+    },
+
     // Internal
     _updateCharCount,
-    
+
     // Referral (V8)
     copyReferralLink() {
         const link = `${window.location.origin}/#backchat?ref=${State.userAddress}`;
@@ -2241,20 +3002,6 @@ export const BackchatPage = {
                 () => showToast('Failed to copy', 'error')
             );
         }
-    },
-
-    // Navigation
-    viewProfile(address) {
-        showToast('Profile view coming soon!', 'info');
-    },
-    openReply(postId) {
-        showToast('Reply coming soon!', 'info');
-    },
-    repost(postId) {
-        showToast('Repost coming soon!', 'info');
-    },
-    openTip(address) {
-        showToast('BKC Tips coming soon!', 'info');
     }
 };
 
