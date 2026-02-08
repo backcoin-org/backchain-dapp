@@ -1400,11 +1400,14 @@ async function loadUserStatus() {
 async function loadProfiles() {
     try {
         const contract = getContract();
-        if (!contract) return;
+        if (!contract) {
+            BC.hasProfile = false;
+            return;
+        }
 
         const [createEvents, updateEvents] = await Promise.all([
-            contract.queryFilter(contract.filters.ProfileCreated(), -500000).catch(() => []),
-            contract.queryFilter(contract.filters.ProfileUpdated(), -500000).catch(() => [])
+            contract.queryFilter(contract.filters.ProfileCreated(), -100000).catch(() => []),
+            contract.queryFilter(contract.filters.ProfileUpdated(), -100000).catch(() => [])
         ]);
 
         // Build profiles map from creation events
@@ -1438,10 +1441,17 @@ async function loadProfiles() {
                 BC.hasProfile = false;
                 BC.userProfile = null;
             }
+        } else {
+            BC.hasProfile = false;
         }
+
+        console.log('[Backchat] Profiles loaded:', BC.profiles.size, '| hasProfile:', BC.hasProfile);
     } catch (e) {
         console.warn('Failed to load profiles:', e.message);
+        BC.hasProfile = false;
     }
+
+    renderContent();
 }
 
 async function loadSocialGraph() {
@@ -1452,8 +1462,8 @@ async function loadSocialGraph() {
         if (!contract) return;
 
         const [followEvents, unfollowEvents] = await Promise.all([
-            contract.queryFilter(contract.filters.Followed(), -500000).catch(() => []),
-            contract.queryFilter(contract.filters.Unfollowed(), -500000).catch(() => [])
+            contract.queryFilter(contract.filters.Followed(), -100000).catch(() => []),
+            contract.queryFilter(contract.filters.Unfollowed(), -100000).catch(() => [])
         ]);
 
         // Build follow maps
@@ -2090,7 +2100,7 @@ function renderCompose() {
     if (!State.isConnected) return '';
 
     const fee = formatETH(BC.fees.post);
-    const profileBanner = (BC.hasProfile === false) ? `
+    const profileBanner = (!BC.hasProfile && State.isConnected) ? `
         <div class="bc-profile-create-banner">
             <p>Create your profile to get a username and bio</p>
             <button class="bc-btn bc-btn-primary" onclick="BackchatPage.openProfileSetup()">
@@ -2435,7 +2445,7 @@ function renderContent() {
             content = renderTrending();
             break;
         case 'profile':
-            content = (BC.hasProfile === false && State.isConnected) ? renderProfileSetup() : renderProfile();
+            content = (!BC.hasProfile && State.isConnected) ? renderProfileSetup() : renderProfile();
             break;
         case 'post-detail':
             content = renderPostDetail();
