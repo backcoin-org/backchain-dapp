@@ -1116,33 +1116,12 @@ async function updateGlobalMetrics() {
             if (ecoData.economy?.fortunePoolBalance) fortunePoolBalance = BigInt(ecoData.economy.fortunePoolBalance);
             if (ecoData.stats?.notarizedDocuments) notaryCount = ecoData.stats.notarizedDocuments;
 
-            // Burned: try multiple paths (backend may store in different locations)
-            if (ecoData.burn?.totalBurned && BigInt(ecoData.burn.totalBurned) > 0n) {
-                totalBurned = BigInt(ecoData.burn.totalBurned);
-            } else if (ecoData.economy?.totalBurned && BigInt(ecoData.economy.totalBurned) > 0n) {
-                totalBurned = BigInt(ecoData.economy.totalBurned);
-            } else if (ecoData.burn?.sources) {
-                let sum = 0n;
-                for (const source of Object.values(ecoData.burn.sources)) {
-                    if (source?.total) sum += BigInt(source.total);
-                }
-                totalBurned = sum;
-            } else if (ecoData.rental?.totalBurned) {
-                totalBurned = BigInt(ecoData.rental.totalBurned);
-            }
-            // Last resort: sum burns from all known sources
-            if (totalBurned === 0n) {
-                let fallbackBurn = 0n;
-                if (ecoData.rental?.totalBurned) fallbackBurn += BigInt(ecoData.rental.totalBurned);
-                if (ecoData.charity?.totalBurned) fallbackBurn += BigInt(ecoData.charity.totalBurned);
-                if (ecoData.fortune?.totalBurned) fallbackBurn += BigInt(ecoData.fortune.totalBurned);
-                if (ecoData.staking?.totalBurned) fallbackBurn += BigInt(ecoData.staking.totalBurned);
-                if (fallbackBurn > 0n) totalBurned = fallbackBurn;
-            }
         }
 
+        // On-chain reads (primary source of truth for supply/burned/pstake)
         if (State.bkcTokenContractPublic) {
             if (totalSupply === 0n) totalSupply = await safeContractCall(State.bkcTokenContractPublic, 'totalSupply', [], 0n);
+            totalBurned = await safeContractCall(State.bkcTokenContractPublic, 'totalBurned', [], 0n);
             if (totalPStake === 0n && State.delegationManagerContractPublic) totalPStake = await safeContractCall(State.delegationManagerContractPublic, 'totalNetworkPStake', [], 0n);
             if (totalTVL === 0n) {
                 const contractAddresses = [

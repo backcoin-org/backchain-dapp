@@ -434,6 +434,7 @@ export const bkcTokenABI = [
     "function transferFrom(address from, address to, uint256 amount) returns (bool)",
     "function MAX_SUPPLY() view returns (uint256)",
     "function TGE_SUPPLY() view returns (uint256)",
+    "function totalBurned() view returns (uint256)",
     "function remainingMintableSupply() view returns (uint256)",
     "event Transfer(address indexed from, address indexed to, uint256 value)",
     "event Approval(address indexed owner, address indexed spender, uint256 value)"
