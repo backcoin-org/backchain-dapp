@@ -1675,37 +1675,55 @@ async function loadCertificates() {
     NT.certsLoading = true;
     renderContent();
 
+    // Strategy: try API first, then on-chain events as fallback
+    let loaded = false;
+
+    // Primary: Firebase API (getNotaryHistory is the actual endpoint in data.js)
     try {
-        // Primary: Firebase API
-        const baseUrl = API_ENDPOINTS.getNotarizedDocuments || 'https://getnotarizeddocuments-4wvdcuoouq-uc.a.run.app';
+        const baseUrl = API_ENDPOINTS.getNotaryHistory;
+        if (!baseUrl) throw new Error('No API endpoint configured');
+
+        console.log('[NotaryPage] Loading certificates from API:', `${baseUrl}/${State.userAddress}`);
         const response = await fetch(`${baseUrl}/${State.userAddress}`);
 
         if (!response.ok) throw new Error(`API ${response.status}`);
 
         const data = await response.json();
+        console.log('[NotaryPage] API response:', typeof data, Array.isArray(data) ? `array(${data.length})` : JSON.stringify(data).substring(0, 200));
 
-        if (Array.isArray(data) && data.length > 0) {
-            NT.certificates = data.map(doc => ({
+        // Handle multiple response formats: direct array, or wrapped in object
+        const docs = Array.isArray(data) ? data
+            : Array.isArray(data?.documents) ? data.documents
+            : Array.isArray(data?.data) ? data.data
+            : Array.isArray(data?.history) ? data.history
+            : null;
+
+        if (docs && docs.length > 0) {
+            NT.certificates = docs.map(doc => ({
                 id: doc.tokenId || doc.id || '?',
-                ipfs: doc.ipfsCid || '',
+                ipfs: doc.ipfsCid || doc.ipfsUri || '',
                 description: doc.description || '',
                 hash: doc.contentHash || '',
                 timestamp: doc.createdAt || doc.timestamp || '',
-                txHash: doc.txHash || '',
+                txHash: doc.txHash || doc.transactionHash || '',
                 owner: doc.owner || State.userAddress,
                 mimeType: doc.mimeType || '',
                 fileName: doc.fileName || ''
             })).sort((a, b) => parseInt(b.id) - parseInt(a.id));
-        } else {
-            NT.certificates = [];
+            loaded = true;
+            console.log('[NotaryPage] Loaded', NT.certificates.length, 'certificates from API');
         }
     } catch (apiErr) {
-        console.warn('[NotaryPage] API fallback, trying on-chain events:', apiErr.message);
+        console.warn('[NotaryPage] API failed:', apiErr.message);
+    }
 
-        // Fallback: On-chain events
+    // Fallback: On-chain events
+    if (!loaded) {
+        console.log('[NotaryPage] Trying on-chain event fallback...');
         try {
             const certs = await loadCertificatesFromChain();
             NT.certificates = certs;
+            console.log('[NotaryPage] Loaded', certs.length, 'certificates from chain events');
         } catch (chainErr) {
             console.error('[NotaryPage] Chain fallback also failed:', chainErr);
             NT.certificates = [];
@@ -1717,19 +1735,28 @@ async function loadCertificates() {
 }
 
 async function loadCertificatesFromChain() {
-    if (!ethers || !addresses?.decentralizedNotary) return [];
+    if (!ethers || !addresses?.decentralizedNotary) {
+        console.warn('[NotaryPage] Chain fallback: missing ethers or contract address');
+        return [];
+    }
 
     const { NetworkManager } = await import('../modules/core/index.js');
     const provider = NetworkManager.getProvider();
-    if (!provider) return [];
+    if (!provider) {
+        console.warn('[NotaryPage] Chain fallback: no provider available');
+        return [];
+    }
 
+    console.log('[NotaryPage] Querying DocumentNotarized events for:', State.userAddress);
     const contract = new ethers.Contract(addresses.decentralizedNotary, NOTARY_ABI_EVENTS, provider);
     const filter = contract.filters.DocumentNotarized(null, State.userAddress);
 
     const currentBlock = await provider.getBlockNumber();
     const fromBlock = Math.max(0, currentBlock - 500000);
+    console.log('[NotaryPage] Block range:', fromBlock, '->', currentBlock);
 
     const events = await contract.queryFilter(filter, fromBlock, currentBlock);
+    console.log('[NotaryPage] Found', events.length, 'events');
 
     return events.map(ev => ({
         id: Number(ev.args.tokenId),
