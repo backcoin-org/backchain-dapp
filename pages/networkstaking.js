@@ -1285,9 +1285,8 @@ async function handleStake() {
     isProcessing = true;
     const durationSec = BigInt(lockDays) * 86400n;
 
-    stakeBtn.disabled = true;
-    btnText.textContent = 'Processing...';
-    btnIcon.className = 'fa-solid fa-spinner fa-spin';
+    // V6.10: Don't manually set button state — txEngine handles it via setPhase()
+    // Setting innerHTML here corrupts txEngine's originalContent capture
 
     try {
         await StakingTx.delegate({
@@ -1314,9 +1313,6 @@ async function handleStake() {
         showToast('Delegation failed: ' + (e.reason || e.message || 'Unknown error'), 'error');
     } finally {
         isProcessing = false;
-        stakeBtn.disabled = false;
-        btnText.textContent = 'Delegate BKC';
-        btnIcon.className = 'fa-solid fa-lock';
         updatePreview();
     }
 }
@@ -1329,11 +1325,7 @@ async function handleUnstake(index, isForce) {
         : `.unstake-btn[data-index='${index}']`
     );
     
-    if (btn) {
-        btn.disabled = true;
-        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i>';
-    }
-    
+    // V6.10: Don't manually set button state — txEngine handles it
     isProcessing = true;
 
     try {
@@ -1370,9 +1362,7 @@ async function handleClaim(stakingRewards, minerRewards, btn) {
     if (isProcessing) return;
     isProcessing = true;
 
-    const originalHTML = btn.innerHTML;
-    btn.disabled = true;
-    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Processing...';
+    // V6.10: Don't manually set button state — txEngine handles it
 
     try {
         await StakingTx.claimRewards({
@@ -1396,8 +1386,6 @@ async function handleClaim(stakingRewards, minerRewards, btn) {
         showToast('Claim failed: ' + (e.reason || e.message || 'Unknown error'), 'error');
     } finally {
         isProcessing = false;
-        btn.disabled = false;
-        btn.innerHTML = originalHTML;
     }
 }
 
