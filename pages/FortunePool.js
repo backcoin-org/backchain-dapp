@@ -1440,18 +1440,19 @@ function startRevealCheck() {
     }, REVEAL_CHECK_MS);
 }
 
-// V6.8: Check if we can reveal from contract
+// V6.10: Check if we can reveal — trust contract, generous fallback
 async function checkCanReveal() {
     if (!State.fortunePoolContractPublic || !Game.gameId) return false;
-    
+
     try {
         const status = await State.fortunePoolContractPublic.getCommitmentStatus(Game.gameId);
         return status.canReveal === true;
     } catch (e) {
-        // Fallback: use time-based estimate
+        // Contract call failed (RPC lag, network issue, etc.)
+        // Use generous time-based fallback — only as last resort
+        // 30s is way more than 5 blocks (~1.25s) to ensure RPC has synced
         const elapsed = Date.now() - (Game.commitment.waitStartTime || Date.now());
-        const totalWaitMs = Game.commitment.revealDelay * ESTIMATED_BLOCK_TIME;
-        return elapsed >= totalWaitMs;
+        return elapsed >= 30000;
     }
 }
 

@@ -372,14 +372,19 @@ export async function revealPlay({
         // Validation
         validate: async (signer, userAddress) => {
             const readContract = await getFortuneContractReadOnly();
-            
-            // Check commitment status
-            const status = await readContract.getCommitmentStatus(gameId);
-            
+
+            // Check commitment status (may fail if RPC is lagging)
+            let status;
+            try {
+                status = await readContract.getCommitmentStatus(gameId);
+            } catch (e) {
+                throw new Error('Game not ready yet — please wait a few more seconds and try again.');
+            }
+
             if (status.isExpired) {
                 throw new Error('Game has expired. You can no longer reveal.');
             }
-            
+
             if (!status.canReveal) {
                 if (status.blocksUntilReveal > 0) {
                     throw new Error(`Must wait ${status.blocksUntilReveal} more blocks before reveal`);
