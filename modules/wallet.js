@@ -631,35 +631,46 @@ function startRpcHealthMonitoring() {
         clearInterval(rpcHealthMonitorInterval);
     }
     
-    // Verifica a cada 30 segundos
+    // Verifica a cada 60 segundos (reduced from 30s to lower MetaMask RPC load)
+    let lastMetaMaskUpdateAttempt = 0;
     rpcHealthMonitorInterval = setInterval(async () => {
         // Só verifica se a tab está visível e o usuário está conectado
         if (document.hidden || !State.isConnected) return;
-        
+
         const health = await checkRpcHealth();
-        
+
         if (!health.healthy) {
+            const now = Date.now();
+            // Only attempt MetaMask update every 5 minutes to avoid wallet_addEthereumChain spam
+            if (now - lastMetaMaskUpdateAttempt < 300000) {
+                return;
+            }
+            lastMetaMaskUpdateAttempt = now;
+
             console.log(`⚠️ RPC health check failed (${health.reason}), attempting fix...`);
-            
+
             // Tenta atualizar os RPCs no MetaMask
             const updated = await updateMetaMaskNetwork();
-            
+
             if (updated) {
                 console.log('✅ MetaMask RPCs updated via health monitor');
                 await recreatePublicProvider();
-                
+
                 // Reset contadores
                 balanceErrorCount = 0;
                 rpcRetryCount = 0;
             }
         }
-    }, 30000);
+    }, 60000);
     
-    // Também verifica quando a tab fica ativa
+    // Também verifica quando a tab fica ativa (with cooldown)
     document.addEventListener('visibilitychange', async () => {
         if (!document.hidden && State.isConnected) {
+            const now = Date.now();
+            if (now - lastMetaMaskUpdateAttempt < 300000) return;
             const health = await checkRpcHealth();
             if (!health.healthy) {
+                lastMetaMaskUpdateAttempt = now;
                 console.log('⚠️ RPC unhealthy on tab focus, fixing...');
                 await updateMetaMaskNetwork();
                 await recreatePublicProvider();

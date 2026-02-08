@@ -269,9 +269,11 @@ export async function loadUserData(forceRefresh = false) {
     if (!State.isConnected || !State.userAddress) return;
 
     try {
+        // Use public contracts (Alchemy) for reads — avoids MetaMask RPC rate limits
+        const publicProvider = State.bkcTokenContractPublic?.runner?.provider;
         const [balance, nativeBalance] = await Promise.allSettled([
-            safeBalanceOf(State.bkcTokenContract, State.userAddress, forceRefresh),
-            State.provider?.getBalance(State.userAddress)
+            safeBalanceOf(State.bkcTokenContractPublic || State.bkcTokenContract, State.userAddress, forceRefresh),
+            (publicProvider || State.provider)?.getBalance(State.userAddress)
         ]);
 
         if (balance.status === 'fulfilled') {
@@ -284,9 +286,11 @@ export async function loadUserData(forceRefresh = false) {
 
         await loadMyBoostersFromAPI(forceRefresh);
 
-        if (State.delegationManagerContract) {
+        // Use public contract (Alchemy) to avoid MetaMask RPC rate limits
+        const pStakeContract = State.delegationManagerContractPublic || State.delegationManagerContract;
+        if (pStakeContract) {
             const totalUserPStake = await safeContractCall(
-                State.delegationManagerContract,
+                pStakeContract,
                 'userTotalPStake',
                 [State.userAddress],
                 0n,
