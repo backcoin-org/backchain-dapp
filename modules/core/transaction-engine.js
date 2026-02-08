@@ -580,8 +580,18 @@ export class TransactionEngine {
         const approveAmount = amount * ENGINE_CONFIG.APPROVAL_MULTIPLIER;
 
         try {
+            // V1.7: Bump maxFeePerGas on approval too (same fix as main tx)
+            let approvalTxOptions = {};
+            try {
+                const feeData = await signer.provider.getFeeData();
+                if (feeData.maxFeePerGas) {
+                    approvalTxOptions.maxFeePerGas = feeData.maxFeePerGas * 120n / 100n;
+                    approvalTxOptions.maxPriorityFeePerGas = feeData.maxPriorityFeePerGas || 0n;
+                }
+            } catch {}
+
             // Send approval transaction (uses MetaMask to sign)
-            const tx = await tokenContract.approve(spender, approveAmount);
+            const tx = await tokenContract.approve(spender, approveAmount, approvalTxOptions);
             
             // Wait for confirmation using Alchemy provider instead of MetaMask
             const readProvider = NetworkManager.getProvider();
