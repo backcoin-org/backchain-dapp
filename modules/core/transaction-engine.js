@@ -346,8 +346,8 @@ export class TransactionEngine {
             // PHASE 4: TOKEN APPROVAL (if needed)
             // ═══════════════════════════════════════════════════════════════
             
-            // Re-resolve approval after validation (values may have changed)
-            const finalApproval = this._resolveApproval(approval);
+            // V1.8: Access config.approval directly to re-evaluate getter (same fix as config.value)
+            const finalApproval = this._resolveApproval(config.approval);
             
             if (finalApproval && finalApproval.amount > 0n) {
                 const needsApproval = await ValidationLayer.needsApproval(
