@@ -1,5 +1,5 @@
 // pages/StakingPage.js
-// ✅ PRODUCTION V10.0 — Unified Staking & Rewards Page
+// ✅ PRODUCTION V10.1 — V9 StakingPool Alignment
 // ═══════════════════════════════════════════════════════════════════════════════
 //                          BACKCHAIN PROTOCOL
 //                    Stake & Earn — Unified Hub
@@ -636,7 +636,12 @@ async function loadData(force = false) {
             loadUserDelegations()
         ]);
 
-        totalPStakeNetwork = State.totalPStake || State.totalNetworkPStake || 0n;
+        // V9: Read totalPStake directly from StakingPool contract
+        const stakingContract = State.stakingPoolContractPublic || State.stakingPoolContract;
+        if (stakingContract) {
+            totalPStakeNetwork = await safeContractCall(stakingContract, 'totalPStake', [], 0n);
+        }
+
         await loadClaimPreview();
 
         const { stakingRewards, minerRewards } = await calculateUserTotalRewards();
@@ -883,13 +888,13 @@ function renderDelegations() {
 
 function renderDelegationItem(d, originalIndex) {
     const amount = formatBigNumber(d.amount || 0n);
-    const lockDurationDays = Number(d.lockDuration || 0n) / 86400;
-    const unlockTimestamp = Number(d.unlockTime || 0n);
+    const lockDurationDays = d.lockDays || (Number(d.lockDuration || 0n) / 86400);
+    const unlockTimestamp = Number(d.unlockTime || d.lockEnd || 0n);
     const now = Math.floor(Date.now() / 1000);
     const isLocked = unlockTimestamp > now;
     const remaining = isLocked ? unlockTimestamp - now : 0;
-    const durationSec = d.lockDuration || 0n;
-    const pStake = calculatePStake(d.amount || 0n, durationSec);
+    const durationSec = d.lockDuration || (BigInt(d.lockDays || 0) * 86400n);
+    const pStake = d.pStake || calculatePStake(d.amount || 0n, durationSec);
 
     return `
         <div class="stk-deleg-item">
@@ -1040,8 +1045,8 @@ function updatePreview() {
         const feeBips = State.systemFees?.["DELEGATION_FEE_BIPS"] || 50n;
         const feeWei = (amountWei * BigInt(feeBips)) / 10000n;
         const netWei = amountWei - feeWei;
-        const durationSec = BigInt(lockDays) * 86400n;
-        const pStake = calculatePStake(netWei, durationSec);
+        const durationDays = BigInt(lockDays);
+        const pStake = (netWei * durationDays) / (10n ** 18n);
 
         const pEl = document.getElementById('stk-preview-pstake'); if (pEl) pEl.textContent = formatPStake(pStake);
         const nEl = document.getElementById('stk-preview-net'); if (nEl) nEl.textContent = `${formatBigNumber(netWei).toFixed(4)} BKC`;
@@ -1085,12 +1090,11 @@ async function handleStake() {
     } catch {}
 
     isProcessing = true;
-    const durationSec = BigInt(lockDays) * 86400n;
 
     try {
         await StakingTx.delegate({
             amount: amountWei,
-            lockDuration: durationSec,
+            lockDays: lockDays,
             button: stakeBtn,
             onSuccess: async () => {
                 amountInput.value = '';
