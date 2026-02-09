@@ -944,7 +944,7 @@ function renderDashboardLayout() {
                     <div id="dash-metric-burned" class="dash-metric-pill-value">--</div>
                 </div>
                 <div class="dash-metric-pill" title="Total ETH fees collected by ecosystem">
-                    <div class="dash-metric-pill-label"><i class="fa-solid fa-receipt" style="color:#fb923c"></i> Fees</div>
+                    <div class="dash-metric-pill-label"><i class="fa-brands fa-ethereum" style="color:#fb923c"></i> Fees</div>
                     <div id="dash-metric-fees" class="dash-metric-pill-value">--</div>
                 </div>
                 <div class="dash-metric-pill" title="BKC locked in protocol contracts (staking, pools, etc)">
