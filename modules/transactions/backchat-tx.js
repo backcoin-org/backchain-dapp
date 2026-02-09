@@ -1,79 +1,62 @@
 // modules/js/transactions/backchat-tx.js
-// ✅ PRODUCTION V3.0 - Updated for Backchat V8.0.0 (Viral Referral)
+// ✅ V9.0 - Updated for Agora V9 (Immutable Social Protocol, ETH-only)
 //
-// BACKCHAT V8 FEATURES:
-// - Decentralized Social Protocol (posts, replies, reposts)
-// - Like / Super Like (organic trending)
-// - Follow / Unfollow
-// - Profile (username registration, display name, bio)
-// - Premium (profile boost, trust badge)
-// - BKC Tips (90% creator, 10% mining ecosystem)
-// - Viral Referral System (setReferrer, getReferralStats)
-// - Graceful degradation (works even if ecosystem contracts fail)
+// CHANGES V9.0:
+// - Renamed: Backchat → Agora, backchat → agora, backchatABI → agoraABI
+// - All fees via ecosystem.calculateFee (ETH only, Tier 1)
+// - No BKC tips — all interactions are ETH
+// - createPost(content, tag uint8, contentType uint8, operator) — new tag system
+// - createReply(parentId, content, contentType, operator) — no tip, inherits parent tag
+// - createRepost(originalId, contentHash, operator) — quote repost
+// - createProfile(username, metadataURI, operator) — no displayName/bio, uses IPFS
+// - updateProfile(metadataURI) — no displayName/bio
+// - like(postId, operator) — no tip, 1 per user
+// - superLike(postId, operator) — 100 gwei per, unlimited
+// - downvote(postId, operator) — 100 gwei per, unlimited (NEW)
+// - deletePost(postId) — soft delete (NEW)
+// - pinPost(postId) — 1 per user (NEW)
+// - No referral system, no withdraw, no getPendingBalance
+// - getUserProfile returns 7-tuple
+// - getGlobalStats returns (totalPosts, totalProfiles, tagCounts[15])
+// - getPost returns 12 fields
+// - getUsernameFee → getUsernamePrice
 //
 // ============================================================================
-// FEE STRUCTURE (V8 Viral Model):
-// - All actions pay ETH fee (20% of gas cost)
-// - With operator + referrer: 50/30/20 (operator/referrer/protocol)
-// - With operator, no referrer: 80/20 (operator/protocol)
-// - Without operator: 100% protocol
-// - BKC tips: 90% creator, 10% MiningManager
+// V9 FEE STRUCTURE (ETH only, Tier 1):
+// - Posts/replies/reposts/likes: ecosystem.calculateFee(ACTION_*, 0)
+// - SuperLike/Downvote: 100 gwei per vote (unlimited)
+// - Username: length-based pricing
+// - Boost: 0.0005 ETH per day
+// - Badge: 0.001 ETH for 1 year
 // ============================================================================
 
 import { txEngine } from '../core/index.js';
 import { resolveOperator } from '../core/operator.js';
-import { addresses, contractAddresses, backchatABI } from '../../config.js';
+import { addresses, contractAddresses, agoraABI } from '../../config.js';
 
 // ============================================================================
 // 1. CONTRACT CONFIGURATION
 // ============================================================================
 
 function getContracts() {
-    const backchat = addresses?.backchat || contractAddresses?.backchat || window.contractAddresses?.backchat;
-    const bkcToken = addresses?.bkcToken || contractAddresses?.bkcToken || window.contractAddresses?.bkcToken;
-    
-    if (!backchat) throw new Error('Backchat contract address not loaded');
-    return { BACKCHAT: backchat, BKC_TOKEN: bkcToken };
+    const agora = addresses?.agora || contractAddresses?.agora || window.contractAddresses?.agora;
+    if (!agora) throw new Error('Agora contract address not loaded');
+    return { AGORA: agora };
 }
 
-/**
- * Backchat V8 ABI — imported from config.js (single source of truth)
- */
-const BACKCHAT_ABI = backchatABI;
+const AGORA_ABI = agoraABI;
 
 // ============================================================================
 // 2. HELPERS
 // ============================================================================
 
-function getBackchatContract(signer) {
-    return new window.ethers.Contract(getContracts().BACKCHAT, BACKCHAT_ABI, signer);
+function getAgoraContract(signer) {
+    return new window.ethers.Contract(getContracts().AGORA, AGORA_ABI, signer);
 }
 
-async function getBackchatContractReadOnly() {
+async function getAgoraContractReadOnly() {
     const { NetworkManager } = await import('../core/index.js');
-    return new window.ethers.Contract(getContracts().BACKCHAT, BACKCHAT_ABI, NetworkManager.getProvider());
-}
-
-/**
- * Gets actual fee by passing real gasPrice to calculateFee.
- * getCurrentFees() and calculateFee() return 0 in view calls because tx.gasprice=0.
- * Fix: pass gasPrice override so the contract sees a real gas price.
- */
-async function getActualFee(contract, gasEstimate) {
-    const ethers = window.ethers;
-    try {
-        const provider = contract.runner?.provider;
-        if (provider) {
-            const feeData = await provider.getFeeData();
-            const gasPrice = feeData.gasPrice || feeData.maxFeePerGas || 100000000n;
-            const fee = await contract.calculateFee(gasEstimate, { gasPrice });
-            if (fee && fee > 0n) return fee;
-        }
-    } catch (e) {
-        console.warn('[Backchat] Fee estimation fallback:', e.message);
-    }
-    // Last resort: hardcoded minimum
-    return ethers.parseEther('0.0001');
+    return new window.ethers.Contract(getContracts().AGORA, AGORA_ABI, NetworkManager.getProvider());
 }
 
 // ============================================================================
@@ -82,10 +65,10 @@ async function getActualFee(contract, gasEstimate) {
 
 /**
  * Creates a new user profile with username
- * Fee depends on username length (shorter = more expensive)
+ * V9: createProfile(username, metadataURI, operator) — no displayName/bio
  */
 export async function createProfile({
-    username, displayName, bio, operator,
+    username, metadataURI = '', operator,
     button = null, onSuccess = null, onError = null
 }) {
     const ethers = window.ethers;
@@ -95,32 +78,23 @@ export async function createProfile({
     return await txEngine.execute({
         name: 'CreateProfile', button,
         skipSimulation: true, fixedGasLimit: 300000n,
-        getContract: async (signer) => getBackchatContract(signer),
+        getContract: async (signer) => getAgoraContract(signer),
         method: 'createProfile',
-        args: () => [username, displayName || '', bio || '', resolveOperator(storedOperator)],
+        args: () => [username, metadataURI || '', resolveOperator(storedOperator)],
         get value() { return usernameFee; },
-        
+
         validate: async (signer, userAddress) => {
-            // Use read-only provider (Alchemy) to avoid MetaMask RPC rate limits
-            const contract = await getBackchatContractReadOnly();
+            const contract = await getAgoraContractReadOnly();
 
-            // Check username format (1-15 chars, a-z, 0-9, underscore)
-            if (!username || username.length < 1 || username.length > 15) {
-                throw new Error('Username must be 1-15 characters');
-            }
-            if (!/^[a-z0-9_]+$/.test(username)) {
-                throw new Error('Username can only contain lowercase letters, numbers, and underscores');
-            }
+            if (!username || username.length < 1 || username.length > 15) throw new Error('Username must be 1-15 characters');
+            if (!/^[a-z0-9_]+$/.test(username)) throw new Error('Username: lowercase letters, numbers, underscores only');
 
-            // Check username availability
             const available = await contract.isUsernameAvailable(username);
             if (!available) throw new Error('Username is already taken');
 
-            // Get username fee
-            usernameFee = await contract.getUsernameFee(username.length);
-            console.log('[Backchat] Username fee:', ethers.formatEther(usernameFee), 'ETH');
+            usernameFee = await contract.getUsernamePrice(username.length);
+            console.log('[Agora] Username fee:', ethers.formatEther(usernameFee), 'ETH');
 
-            // Check ETH balance
             const { NetworkManager } = await import('../core/index.js');
             const balance = await NetworkManager.getProvider().getBalance(userAddress);
             if (balance < usernameFee + ethers.parseEther('0.001')) {
@@ -132,23 +106,19 @@ export async function createProfile({
 }
 
 /**
- * Updates user profile (free, only gas)
+ * Updates user profile metadata
+ * V9: updateProfile(metadataURI) — free, only gas
  */
 export async function updateProfile({
-    displayName, bio,
+    metadataURI,
     button = null, onSuccess = null, onError = null
 }) {
     return await txEngine.execute({
         name: 'UpdateProfile', button,
         skipSimulation: true, fixedGasLimit: 200000n,
-        getContract: async (signer) => getBackchatContract(signer),
+        getContract: async (signer) => getAgoraContract(signer),
         method: 'updateProfile',
-        args: [displayName || '', bio || ''],
-        
-        validate: async () => {
-            if (displayName && displayName.length > 30) throw new Error('Display name max 30 chars');
-            if (bio && bio.length > 160) throw new Error('Bio max 160 chars');
-        },
+        args: [metadataURI || ''],
         onSuccess, onError
     });
 }
@@ -159,49 +129,35 @@ export async function updateProfile({
 
 /**
  * Creates a new post
+ * V9: createPost(contentHash, tag, contentType, operator)
  */
 export async function createPost({
-    content, mediaCID, operator,
+    content, tag = 0, contentType = 0, operator,
     button = null, onSuccess = null, onError = null
 }) {
     const ethers = window.ethers;
     let storedOperator = operator;
-    let postFee = 0n;
 
     return await txEngine.execute({
         name: 'CreatePost', button,
         skipSimulation: true, fixedGasLimit: 300000n,
-        getContract: async (signer) => getBackchatContract(signer),
+        getContract: async (signer) => getAgoraContract(signer),
         method: 'createPost',
-        args: () => [content, mediaCID || '', resolveOperator(storedOperator)],
-        get value() { return postFee; },
-        
+        args: () => [content, tag, contentType, resolveOperator(storedOperator)],
+
         validate: async (signer, userAddress) => {
             if (!content || content.length === 0) throw new Error('Content is required');
-            if (content.length > 500) throw new Error('Content max 500 chars');
-
-            // Use read-only provider (Alchemy) to avoid MetaMask RPC rate limits
-            const contract = await getBackchatContractReadOnly();
-            const fees = await contract.getCurrentFees();
-            postFee = fees.postFee;
-
-            // Fallback: getCurrentFees returns 0 in view calls (tx.gasprice=0)
-            if (!postFee || postFee === 0n) {
-                postFee = await getActualFee(contract, 100000);
-            }
-
-            const balance = await contract.runner.provider.getBalance(userAddress);
-            if (balance < postFee + ethers.parseEther('0.001')) throw new Error('Insufficient ETH');
+            if (tag < 0 || tag > 14) throw new Error('Tag must be 0-14');
         },
-        
+
         onSuccess: async (receipt) => {
             let postId = null;
             try {
-                const iface = new ethers.Interface(BACKCHAT_ABI);
+                const iface = new ethers.Interface(AGORA_ABI);
                 for (const log of receipt.logs) {
                     try {
                         const parsed = iface.parseLog(log);
-                        if (parsed?.name === 'PostCreated') { postId = Number(parsed.args.postId); break; }
+                        if (parsed?.name === 'PostCreated') { postId = Number(parsed.args[0]); break; }
                     } catch {}
                 }
             } catch {}
@@ -212,71 +168,35 @@ export async function createPost({
 }
 
 /**
- * Creates a reply to an existing post with optional BKC tip
+ * Creates a reply to an existing post
+ * V9: createReply(parentId, contentHash, contentType, operator)
  */
 export async function createReply({
-    parentId, content, mediaCID, tipBkc, operator,
+    parentId, content, contentType = 0, operator,
     button = null, onSuccess = null, onError = null
 }) {
     const ethers = window.ethers;
-    const contracts = getContracts();
     let storedOperator = operator;
-    let replyFee = 0n;
-    const tipAmount = tipBkc ? BigInt(tipBkc) : 0n;
 
     return await txEngine.execute({
         name: 'CreateReply', button,
         skipSimulation: true, fixedGasLimit: 350000n,
-        getContract: async (signer) => getBackchatContract(signer),
+        getContract: async (signer) => getAgoraContract(signer),
         method: 'createReply',
-        args: () => [parentId, content, mediaCID || '', resolveOperator(storedOperator), tipAmount],
-        get value() { return replyFee; },
-        
-        // BKC approval for tip
-        get approval() {
-            if (tipAmount > 0n) {
-                return { token: contracts.BKC_TOKEN, spender: contracts.BACKCHAT, amount: tipAmount };
-            }
-            return null;
-        },
-        
+        args: () => [parentId, content, contentType, resolveOperator(storedOperator)],
+
         validate: async (signer, userAddress) => {
             if (!content) throw new Error('Content is required');
-            if (content.length > 500) throw new Error('Content max 500 chars');
-
-            // Use read-only provider (Alchemy) to avoid MetaMask RPC rate limits
-            const contract = await getBackchatContractReadOnly();
-            const provider = contract.runner.provider;
-
-            // Check parent post exists
-            const author = await contract.postAuthor(parentId);
-            if (author === '0x0000000000000000000000000000000000000000') throw new Error('Post not found');
-
-            const fees = await contract.getCurrentFees();
-            replyFee = fees.replyFee;
-            if (!replyFee || replyFee === 0n) {
-                replyFee = await getActualFee(contract, 120000);
-            }
-
-            // Check balances
-            const ethBalance = await provider.getBalance(userAddress);
-            if (ethBalance < replyFee + ethers.parseEther('0.001')) throw new Error('Insufficient ETH');
-
-            if (tipAmount > 0n) {
-                const bkcContract = new ethers.Contract(contracts.BKC_TOKEN, ['function balanceOf(address) view returns (uint256)'], provider);
-                const bkcBalance = await bkcContract.balanceOf(userAddress);
-                if (bkcBalance < tipAmount) throw new Error('Insufficient BKC for tip');
-            }
         },
-        
+
         onSuccess: async (receipt) => {
             let postId = null;
             try {
-                const iface = new ethers.Interface(BACKCHAT_ABI);
+                const iface = new ethers.Interface(AGORA_ABI);
                 for (const log of receipt.logs) {
                     try {
                         const parsed = iface.parseLog(log);
-                        if (parsed?.name === 'ReplyCreated') { postId = Number(parsed.args.postId); break; }
+                        if (parsed?.name === 'ReplyCreated') { postId = Number(parsed.args[0]); break; }
                     } catch {}
                 }
             } catch {}
@@ -287,45 +207,21 @@ export async function createReply({
 }
 
 /**
- * Reposts an existing post with optional BKC tip
+ * Reposts an existing post (optionally with quote)
+ * V9: createRepost(originalId, contentHash, operator)
  */
 export async function createRepost({
-    originalPostId, tipBkc, operator,
+    originalPostId, quote = '', operator,
     button = null, onSuccess = null, onError = null
 }) {
-    const ethers = window.ethers;
-    const contracts = getContracts();
     let storedOperator = operator;
-    let repostFee = 0n;
-    const tipAmount = tipBkc ? BigInt(tipBkc) : 0n;
 
     return await txEngine.execute({
         name: 'CreateRepost', button,
         skipSimulation: true, fixedGasLimit: 250000n,
-        getContract: async (signer) => getBackchatContract(signer),
+        getContract: async (signer) => getAgoraContract(signer),
         method: 'createRepost',
-        args: () => [originalPostId, resolveOperator(storedOperator), tipAmount],
-        get value() { return repostFee; },
-        
-        get approval() {
-            if (tipAmount > 0n) {
-                return { token: contracts.BKC_TOKEN, spender: contracts.BACKCHAT, amount: tipAmount };
-            }
-            return null;
-        },
-        
-        validate: async (signer, userAddress) => {
-            // Use read-only provider (Alchemy) to avoid MetaMask RPC rate limits
-            const contract = await getBackchatContractReadOnly();
-            const author = await contract.postAuthor(originalPostId);
-            if (author === '0x0000000000000000000000000000000000000000') throw new Error('Post not found');
-
-            const fees = await contract.getCurrentFees();
-            repostFee = fees.repostFee;
-            if (!repostFee || repostFee === 0n) {
-                repostFee = await getActualFee(contract, 80000);
-            }
-        },
+        args: () => [originalPostId, quote || '', resolveOperator(storedOperator)],
         onSuccess, onError
     });
 }
@@ -335,148 +231,109 @@ export async function createRepost({
 // ============================================================================
 
 /**
- * Likes a post (limited to one per user per post)
+ * Like a post (1 per user per post)
+ * V9: like(postId, operator)
  */
 export async function like({
-    postId, tipBkc, operator,
+    postId, operator,
     button = null, onSuccess = null, onError = null
 }) {
-    const ethers = window.ethers;
-    const contracts = getContracts();
     let storedOperator = operator;
-    let likeFee = 0n;
-    const tipAmount = tipBkc ? BigInt(tipBkc) : 0n;
 
     return await txEngine.execute({
         name: 'Like', button,
         skipSimulation: true, fixedGasLimit: 200000n,
-        getContract: async (signer) => getBackchatContract(signer),
+        getContract: async (signer) => getAgoraContract(signer),
         method: 'like',
-        args: () => [postId, resolveOperator(storedOperator), tipAmount],
-        get value() { return likeFee; },
-        
-        get approval() {
-            if (tipAmount > 0n) {
-                return { token: contracts.BKC_TOKEN, spender: contracts.BACKCHAT, amount: tipAmount };
-            }
-            return null;
-        },
-        
+        args: () => [postId, resolveOperator(storedOperator)],
+
         validate: async (signer, userAddress) => {
-            // Use read-only provider (Alchemy) to avoid MetaMask RPC rate limits
-            const contract = await getBackchatContractReadOnly();
-
-            const author = await contract.postAuthor(postId);
-            if (author === '0x0000000000000000000000000000000000000000') throw new Error('Post not found');
-
-            const alreadyLiked = await contract.hasUserLiked(postId, userAddress);
+            const contract = await getAgoraContractReadOnly();
+            const alreadyLiked = await contract.hasLiked(postId, userAddress);
             if (alreadyLiked) throw new Error('Already liked this post');
-
-            const fees = await contract.getCurrentFees();
-            likeFee = fees.likeFee;
-            if (!likeFee || likeFee === 0n) {
-                likeFee = await getActualFee(contract, 55000);
-            }
         },
         onSuccess, onError
     });
 }
 
 /**
- * Super likes a post (unlimited, contributes to trending)
- * Minimum 0.0001 ETH, no maximum
+ * Super like a post (100 gwei per, unlimited)
+ * V9: superLike(postId, operator) payable — multiples of 100 gwei
  */
 export async function superLike({
-    postId, ethAmount, tipBkc, operator,
+    postId, ethAmount, operator,
     button = null, onSuccess = null, onError = null
 }) {
-    const ethers = window.ethers;
-    const contracts = getContracts();
     let storedOperator = operator;
-    const superLikeAmount = BigInt(ethAmount);
-    const tipAmount = tipBkc ? BigInt(tipBkc) : 0n;
+    const amount = BigInt(ethAmount);
 
     return await txEngine.execute({
         name: 'SuperLike', button,
         skipSimulation: true, fixedGasLimit: 250000n,
-        getContract: async (signer) => getBackchatContract(signer),
+        getContract: async (signer) => getAgoraContract(signer),
         method: 'superLike',
-        args: () => [postId, resolveOperator(storedOperator), tipAmount],
-        value: superLikeAmount,
-        
-        get approval() {
-            if (tipAmount > 0n) {
-                return { token: contracts.BKC_TOKEN, spender: contracts.BACKCHAT, amount: tipAmount };
-            }
-            return null;
-        },
-        
-        validate: async (signer, userAddress) => {
-            // Use read-only provider (Alchemy) to avoid MetaMask RPC rate limits
-            const contract = await getBackchatContractReadOnly();
+        args: () => [postId, resolveOperator(storedOperator)],
+        value: amount,
 
-            const author = await contract.postAuthor(postId);
-            if (author === '0x0000000000000000000000000000000000000000') throw new Error('Post not found');
-
-            const fees = await contract.getCurrentFees();
-            if (superLikeAmount < fees.superLikeMin) {
-                throw new Error(`Minimum super like is ${ethers.formatEther(fees.superLikeMin)} ETH`);
-            }
+        validate: async () => {
+            if (amount < 100000000n) throw new Error('Minimum super like is 100 gwei'); // 100 gwei
         },
         onSuccess, onError
     });
 }
 
 /**
- * Follows a user
+ * Downvote a post (100 gwei per, unlimited) — V9 NEW
  */
-export async function follow({
-    toFollow, tipBkc, operator,
+export async function downvote({
+    postId, ethAmount, operator,
     button = null, onSuccess = null, onError = null
 }) {
-    const ethers = window.ethers;
-    const contracts = getContracts();
     let storedOperator = operator;
-    let followFee = 0n;
-    const tipAmount = tipBkc ? BigInt(tipBkc) : 0n;
+    const amount = BigInt(ethAmount);
+
+    return await txEngine.execute({
+        name: 'Downvote', button,
+        skipSimulation: true, fixedGasLimit: 250000n,
+        getContract: async (signer) => getAgoraContract(signer),
+        method: 'downvote',
+        args: () => [postId, resolveOperator(storedOperator)],
+        value: amount,
+
+        validate: async () => {
+            if (amount < 100000000n) throw new Error('Minimum downvote is 100 gwei');
+        },
+        onSuccess, onError
+    });
+}
+
+/**
+ * Follow a user
+ * V9: follow(user, operator) payable
+ */
+export async function follow({
+    toFollow, operator,
+    button = null, onSuccess = null, onError = null
+}) {
+    let storedOperator = operator;
 
     return await txEngine.execute({
         name: 'Follow', button,
         skipSimulation: true, fixedGasLimit: 200000n,
-        getContract: async (signer) => getBackchatContract(signer),
+        getContract: async (signer) => getAgoraContract(signer),
         method: 'follow',
-        args: () => [toFollow, resolveOperator(storedOperator), tipAmount],
-        get value() { return followFee; },
-        
-        get approval() {
-            if (tipAmount > 0n) {
-                return { token: contracts.BKC_TOKEN, spender: contracts.BACKCHAT, amount: tipAmount };
-            }
-            return null;
-        },
-        
-        validate: async (signer, userAddress) => {
-            if (!toFollow || toFollow === '0x0000000000000000000000000000000000000000') {
-                throw new Error('Invalid address');
-            }
-            if (toFollow.toLowerCase() === userAddress.toLowerCase()) {
-                throw new Error('Cannot follow yourself');
-            }
+        args: () => [toFollow, resolveOperator(storedOperator)],
 
-            // Use read-only provider (Alchemy) to avoid MetaMask RPC rate limits
-            const contract = await getBackchatContractReadOnly();
-            const fees = await contract.getCurrentFees();
-            followFee = fees.followFee;
-            if (!followFee || followFee === 0n) {
-                followFee = await getActualFee(contract, 45000);
-            }
+        validate: async (signer, userAddress) => {
+            if (!toFollow || toFollow === '0x0000000000000000000000000000000000000000') throw new Error('Invalid address');
+            if (toFollow.toLowerCase() === userAddress.toLowerCase()) throw new Error('Cannot follow yourself');
         },
         onSuccess, onError
     });
 }
 
 /**
- * Unfollows a user (free, only gas)
+ * Unfollow a user (free, only gas)
  */
 export async function unfollow({
     toUnfollow,
@@ -485,9 +342,43 @@ export async function unfollow({
     return await txEngine.execute({
         name: 'Unfollow', button,
         skipSimulation: true, fixedGasLimit: 150000n,
-        getContract: async (signer) => getBackchatContract(signer),
+        getContract: async (signer) => getAgoraContract(signer),
         method: 'unfollow',
         args: [toUnfollow],
+        onSuccess, onError
+    });
+}
+
+/**
+ * Delete a post (soft delete, free) — V9 NEW
+ */
+export async function deletePost({
+    postId,
+    button = null, onSuccess = null, onError = null
+}) {
+    return await txEngine.execute({
+        name: 'DeletePost', button,
+        skipSimulation: true, fixedGasLimit: 150000n,
+        getContract: async (signer) => getAgoraContract(signer),
+        method: 'deletePost',
+        args: [postId],
+        onSuccess, onError
+    });
+}
+
+/**
+ * Pin a post to profile (1 per user, free) — V9 NEW
+ */
+export async function pinPost({
+    postId,
+    button = null, onSuccess = null, onError = null
+}) {
+    return await txEngine.execute({
+        name: 'PinPost', button,
+        skipSimulation: true, fixedGasLimit: 150000n,
+        getContract: async (signer) => getAgoraContract(signer),
+        method: 'pinPost',
+        args: [postId],
         onSuccess, onError
     });
 }
@@ -496,268 +387,165 @@ export async function unfollow({
 // 6. PREMIUM TRANSACTIONS
 // ============================================================================
 
-/**
- * Boosts profile visibility
- * Duration = (ETH / 0.0005) days
- */
 export async function boostProfile({
     ethAmount, operator,
     button = null, onSuccess = null, onError = null
 }) {
-    const ethers = window.ethers;
     let storedOperator = operator;
     const boostAmount = BigInt(ethAmount);
 
     return await txEngine.execute({
         name: 'BoostProfile', button,
         skipSimulation: true, fixedGasLimit: 200000n,
-        getContract: async (signer) => getBackchatContract(signer),
+        getContract: async (signer) => getAgoraContract(signer),
         method: 'boostProfile',
         args: () => [resolveOperator(storedOperator)],
         value: boostAmount,
-        
-        validate: async (signer) => {
-            // Use read-only provider (Alchemy) to avoid MetaMask RPC rate limits
-            const contract = await getBackchatContractReadOnly();
-            const fees = await contract.getCurrentFees();
-            if (boostAmount < fees.boostMin) {
-                throw new Error(`Minimum boost is ${ethers.formatEther(fees.boostMin)} ETH`);
-            }
+
+        validate: async () => {
+            const ethers = window.ethers;
+            if (boostAmount < ethers.parseEther('0.0005')) throw new Error('Minimum boost is 0.0005 ETH');
         },
         onSuccess, onError
     });
 }
 
-/**
- * Obtains a trust badge for 1 year
- */
 export async function obtainBadge({
     operator,
     button = null, onSuccess = null, onError = null
 }) {
     const ethers = window.ethers;
     let storedOperator = operator;
-    let badgeFee = 0n;
+    const badgeFee = ethers.parseEther('0.001');
 
     return await txEngine.execute({
         name: 'ObtainBadge', button,
         skipSimulation: true, fixedGasLimit: 250000n,
-        getContract: async (signer) => getBackchatContract(signer),
+        getContract: async (signer) => getAgoraContract(signer),
         method: 'obtainBadge',
         args: () => [resolveOperator(storedOperator)],
-        get value() { return badgeFee; },
-        
-        validate: async (signer) => {
-            // Use read-only provider (Alchemy) to avoid MetaMask RPC rate limits
-            const contract = await getBackchatContractReadOnly();
-            const fees = await contract.getCurrentFees();
-            badgeFee = fees.badgeFee_;
-            if (!badgeFee || badgeFee === 0n) {
-                badgeFee = await getActualFee(contract, 200000);
-            }
-        },
+        value: badgeFee,
         onSuccess, onError
     });
 }
 
 // ============================================================================
-// 7. WITHDRAWAL
+// 7. READ FUNCTIONS
 // ============================================================================
 
-/**
- * Withdraws accumulated ETH earnings
- */
-export async function withdraw({
-    button = null, onSuccess = null, onError = null
-}) {
+export async function getUsernamePrice(length) {
     const ethers = window.ethers;
-
-    return await txEngine.execute({
-        name: 'Withdraw', button,
-        skipSimulation: true, fixedGasLimit: 200000n,
-        getContract: async (signer) => getBackchatContract(signer),
-        method: 'withdraw',
-        args: [],
-        
-        validate: async (signer, userAddress) => {
-            // Use read-only provider (Alchemy) to avoid MetaMask RPC rate limits
-            const contract = await getBackchatContractReadOnly();
-            const pending = await contract.getPendingBalance(userAddress);
-            if (pending === 0n) throw new Error('Nothing to withdraw');
-            console.log('[Backchat] Withdrawing:', ethers.formatEther(pending), 'ETH');
-        },
-        onSuccess, onError
-    });
-}
-
-// ============================================================================
-// 8. REFERRAL FUNCTIONS (V8 NEW)
-// ============================================================================
-
-/**
- * Sets the referrer for the current user (ONE TIME ONLY — immutable)
- * Creates the viral loop: referrers earn 30% of fees from referred users
- */
-export async function setReferrer({
-    referrer,
-    button = null, onSuccess = null, onError = null
-}) {
-    return await txEngine.execute({
-        name: 'SetReferrer', button,
-        skipSimulation: true, fixedGasLimit: 150000n,
-        getContract: async (signer) => getBackchatContract(signer),
-        method: 'setReferrer',
-        args: [referrer],
-
-        validate: async (signer, userAddress) => {
-            if (!referrer || referrer === '0x0000000000000000000000000000000000000000') {
-                throw new Error('Invalid referrer address');
-            }
-            if (referrer.toLowerCase() === userAddress.toLowerCase()) {
-                throw new Error('Cannot refer yourself');
-            }
-
-            // Use read-only provider (Alchemy) to avoid MetaMask RPC rate limits
-            const contract = await getBackchatContractReadOnly();
-            const existing = await contract.referredBy(userAddress);
-            if (existing !== '0x0000000000000000000000000000000000000000') {
-                throw new Error('Referrer already set (immutable)');
-            }
-        },
-        onSuccess, onError
-    });
-}
-
-/**
- * Gets referral statistics for an address
- * @returns {{ totalReferred: number, totalEarned: BigInt, totalEarnedFormatted: string }}
- */
-export async function getReferralStats(referrerAddress) {
-    const ethers = window.ethers;
-    const contract = await getBackchatContractReadOnly();
-    const stats = await contract.getReferralStats(referrerAddress);
-    return {
-        totalReferred: Number(stats.totalReferred),
-        totalEarned: stats.totalEarned,
-        totalEarnedFormatted: ethers.formatEther(stats.totalEarned)
-    };
-}
-
-/**
- * Gets who referred a specific user (address(0) if none)
- */
-export async function getReferredBy(userAddress) {
-    const contract = await getBackchatContractReadOnly();
-    return await contract.referredBy(userAddress);
-}
-
-// ============================================================================
-// 9. READ FUNCTIONS
-// ============================================================================
-
-export async function getCurrentFees() {
-    const ethers = window.ethers;
-    const contract = await getBackchatContractReadOnly();
-    const fees = await contract.getCurrentFees();
-    return {
-        postFee: fees.postFee, postFeeFormatted: ethers.formatEther(fees.postFee),
-        replyFee: fees.replyFee, replyFeeFormatted: ethers.formatEther(fees.replyFee),
-        likeFee: fees.likeFee, likeFeeFormatted: ethers.formatEther(fees.likeFee),
-        followFee: fees.followFee, followFeeFormatted: ethers.formatEther(fees.followFee),
-        repostFee: fees.repostFee, repostFeeFormatted: ethers.formatEther(fees.repostFee),
-        superLikeMin: fees.superLikeMin, superLikeMinFormatted: ethers.formatEther(fees.superLikeMin),
-        boostMin: fees.boostMin, boostMinFormatted: ethers.formatEther(fees.boostMin),
-        badgeFee: fees.badgeFee_, badgeFeeFormatted: ethers.formatEther(fees.badgeFee_)
-    };
-}
-
-export async function getUsernameFee(length) {
-    const ethers = window.ethers;
-    const contract = await getBackchatContractReadOnly();
-    const fee = await contract.getUsernameFee(length);
+    const contract = await getAgoraContractReadOnly();
+    const fee = await contract.getUsernamePrice(length);
     return { fee, formatted: ethers.formatEther(fee) };
 }
 
-export async function getPostAuthor(postId) {
-    const contract = await getBackchatContractReadOnly();
-    return await contract.postAuthor(postId);
+// Backward-compatible alias
+export const getUsernameFee = getUsernamePrice;
+
+export async function getPost(postId) {
+    const contract = await getAgoraContractReadOnly();
+    const p = await contract.getPost(postId);
+    return {
+        author: p.author, tag: Number(p.tag), contentType: Number(p.contentType),
+        deleted: p.deleted, createdAt: Number(p.createdAt),
+        replyTo: Number(p._replyTo), repostOf: Number(p._repostOf),
+        likes: Number(p.likes), superLikes: Number(p.superLikes),
+        downvotes: Number(p.downvotes), replies: Number(p.replies), reposts: Number(p.reposts)
+    };
 }
 
 export async function getPostCount() {
-    const contract = await getBackchatContractReadOnly();
+    const contract = await getAgoraContractReadOnly();
     return Number(await contract.postCounter());
 }
 
-export async function getPendingBalance(userAddress) {
-    const ethers = window.ethers;
-    const contract = await getBackchatContractReadOnly();
-    const balance = await contract.getPendingBalance(userAddress);
-    return { balance, formatted: ethers.formatEther(balance) };
+export async function getUserProfile(userAddress) {
+    const contract = await getAgoraContractReadOnly();
+    const p = await contract.getUserProfile(userAddress);
+    return {
+        usernameHash: p.usernameHash, metadataURI: p.metadataURI,
+        pinnedPost: Number(p.pinned), boosted: p.boosted, hasBadge: p.hasBadge,
+        boostExpiry: Number(p.boostExp), badgeExpiry: Number(p.badgeExp)
+    };
 }
 
 export async function isUsernameAvailable(username) {
-    const contract = await getBackchatContractReadOnly();
+    const contract = await getAgoraContractReadOnly();
     return await contract.isUsernameAvailable(username);
 }
 
-export async function getUsernameOwner(username) {
-    const contract = await getBackchatContractReadOnly();
-    return await contract.getUsernameOwner(username);
-}
-
 export async function hasUserLiked(postId, userAddress) {
-    const contract = await getBackchatContractReadOnly();
-    return await contract.hasUserLiked(postId, userAddress);
+    const contract = await getAgoraContractReadOnly();
+    return await contract.hasLiked(postId, userAddress);
 }
 
 export async function isProfileBoosted(userAddress) {
-    const contract = await getBackchatContractReadOnly();
+    const contract = await getAgoraContractReadOnly();
     return await contract.isProfileBoosted(userAddress);
 }
 
 export async function hasTrustBadge(userAddress) {
-    const contract = await getBackchatContractReadOnly();
+    const contract = await getAgoraContractReadOnly();
     return await contract.hasTrustBadge(userAddress);
 }
 
 export async function getBoostExpiry(userAddress) {
-    const contract = await getBackchatContractReadOnly();
-    return Number(await contract.boostExpiry(userAddress));
+    const contract = await getAgoraContractReadOnly();
+    const profile = await contract.getUserProfile(userAddress);
+    return Number(profile.boostExp);
 }
 
 export async function getBadgeExpiry(userAddress) {
-    const contract = await getBackchatContractReadOnly();
-    return Number(await contract.badgeExpiry(userAddress));
+    const contract = await getAgoraContractReadOnly();
+    const profile = await contract.getUserProfile(userAddress);
+    return Number(profile.badgeExp);
+}
+
+export async function getGlobalStats() {
+    const contract = await getAgoraContractReadOnly();
+    const stats = await contract.getGlobalStats();
+    return {
+        totalPosts: Number(stats._totalPosts || stats[0]),
+        totalProfiles: Number(stats._totalProfiles || stats[1]),
+        tagCounts: (stats._tagCounts || stats[2]).map(c => Number(c))
+    };
+}
+
+export async function getOperatorStats(operatorAddress) {
+    const contract = await getAgoraContractReadOnly();
+    const stats = await contract.getOperatorStats(operatorAddress);
+    return {
+        posts: Number(stats.posts_ || stats[0]),
+        engagement: Number(stats.engagement || stats[1])
+    };
 }
 
 export async function getVersion() {
-    const contract = await getBackchatContractReadOnly();
+    const contract = await getAgoraContractReadOnly();
     return await contract.version();
 }
 
 // ============================================================================
-// 10. EXPORT
+// 8. EXPORT
 // ============================================================================
 
 export const BackchatTx = {
     // Profile
     createProfile, updateProfile,
     // Content
-    createPost, createReply, createRepost,
+    createPost, createReply, createRepost, deletePost, pinPost,
     // Engagement
-    like, superLike, follow, unfollow,
+    like, superLike, downvote, follow, unfollow,
     // Premium
     boostProfile, obtainBadge,
-    // Financial
-    withdraw,
-    // Referral (V8)
-    setReferrer, getReferralStats, getReferredBy,
     // Read
-    getCurrentFees, getUsernameFee,
-    getPostAuthor, getPostCount,
-    getPendingBalance, isUsernameAvailable, getUsernameOwner,
-    hasUserLiked, isProfileBoosted, hasTrustBadge,
-    getBoostExpiry, getBadgeExpiry, getVersion
+    getUsernamePrice, getUsernameFee,
+    getPost, getPostCount, getUserProfile,
+    isUsernameAvailable, hasUserLiked,
+    isProfileBoosted, hasTrustBadge,
+    getBoostExpiry, getBadgeExpiry,
+    getGlobalStats, getOperatorStats, getVersion
 };
 
 export default BackchatTx;

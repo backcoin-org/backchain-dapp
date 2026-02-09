@@ -1105,13 +1105,14 @@ async function updateGlobalMetrics() {
         if (State.bkcTokenContractPublic) {
             if (totalSupply === 0n) totalSupply = await safeContractCall(State.bkcTokenContractPublic, 'totalSupply', [], 0n);
             totalBurned = await safeContractCall(State.bkcTokenContractPublic, 'totalBurned', [], 0n);
-            if (totalPStake === 0n && State.delegationManagerContractPublic) totalPStake = await safeContractCall(State.delegationManagerContractPublic, 'totalNetworkPStake', [], 0n);
+            // V9: stakingPool replaces delegationManager, totalPStake replaces totalNetworkPStake
+            if (totalPStake === 0n && (State.stakingPoolContractPublic || State.stakingPoolContract)) totalPStake = await safeContractCall(State.stakingPoolContractPublic || State.stakingPoolContract, 'totalPStake', [], 0n);
             if (totalTVL === 0n) {
                 const contractAddresses = [
-                    addresses.delegationManager, addresses.fortunePool, addresses.rentalManager,
-                    addresses.miningManager, addresses.decentralizedNotary, addresses.nftLiquidityPoolFactory,
-                    addresses.pool_diamond, addresses.pool_platinum, addresses.pool_gold,
-                    addresses.pool_silver, addresses.pool_bronze, addresses.pool_iron, addresses.pool_crystal
+                    addresses.stakingPool, addresses.fortunePool, addresses.rentalManager,
+                    addresses.buybackMiner, addresses.notary, addresses.nftPoolFactory,
+                    addresses.pool_diamond, addresses.pool_gold,
+                    addresses.pool_silver, addresses.pool_bronze
                 ].filter(addr => addr && addr !== ethers.ZeroAddress);
                 const balances = await Promise.all(contractAddresses.map(addr => safeContractCall(State.bkcTokenContractPublic, 'balanceOf', [addr], 0n)));
                 balances.forEach(bal => { totalTVL += bal; });
@@ -1219,8 +1220,9 @@ async function updateUserHub(forceRefresh = false) {
         const pStakeEl = document.getElementById('dash-user-pstake');
         if (pStakeEl) {
             let userPStake = State.userData?.pStake || State.userData?.userTotalPStake || State.userTotalPStake || 0n;
-            if (userPStake === 0n && State.delegationManagerContractPublic && State.userAddress) {
-                try { userPStake = await safeContractCall(State.delegationManagerContractPublic, 'userTotalPStake', [State.userAddress], 0n); } catch (e) {}
+            // V9: stakingPool replaces delegationManager
+            if (userPStake === 0n && (State.stakingPoolContractPublic || State.stakingPoolContract) && State.userAddress) {
+                try { userPStake = await safeContractCall(State.stakingPoolContractPublic || State.stakingPoolContract, 'userTotalPStake', [State.userAddress], 0n); } catch (e) {}
             }
             pStakeEl.innerText = formatPStake(userPStake);
         }
@@ -1330,7 +1332,7 @@ function updateBoosterDisplay(data, claimDetails) {
     const borderCol = tierInfo?.borderColor?.replace('border-', '').replace('/50', '') || 'rgba(74,222,128,0.3)';
 
     container.innerHTML = `
-        <div class="nft-clickable-image" data-address="${addresses.rewardBoosterNFT}" data-tokenid="${data.tokenId}" style="display:flex;align-items:center;gap:12px;background:var(--dash-surface-2);border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:12px;cursor:pointer;transition:all 0.2s;width:100%">
+        <div class="nft-clickable-image" data-address="${addresses.rewardBooster}" data-tokenid="${data.tokenId}" style="display:flex;align-items:center;gap:12px;background:var(--dash-surface-2);border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:12px;cursor:pointer;transition:all 0.2s;width:100%">
             <div style="position:relative;width:56px;height:56px;flex-shrink:0">
                 <img src="${nftImageUrl}" style="width:56px;height:56px;border-radius:10px;object-fit:cover;border:2px solid rgba(255,255,255,0.1)" alt="${tierName}" onerror="this.src='./assets/bkc_logo_3d.png'">
                 <div style="position:absolute;top:-5px;left:-5px;background:var(--dash-green);color:#000;font-weight:800;font-size:9px;padding:2px 6px;border-radius:5px">${keepRate}%</div>

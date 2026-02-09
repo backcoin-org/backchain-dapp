@@ -1,5 +1,5 @@
 // js/modules/data.js
-// ✅ PRODUCTION V8.0 - Fixed claim fee calculation (proportional discount)
+// ✅ V9.0 - Updated for V9 contracts (StakingPool, FortunePool, RewardBooster)
 
 const ethers = window.ethers;
 
@@ -115,10 +115,11 @@ export const safeContractCall = async (
 
     const cacheableMethods = [
         'getPoolInfo', 'getBuyPrice', 'getSellPrice', 'getAvailableTokenIds',
-        'getAllListedTokenIds', 'tokenURI', 'boostBips', 'getListing',
-        'balanceOf', 'totalSupply', 'totalNetworkPStake', 'MAX_SUPPLY', 'TGE_SUPPLY',
+        'getAllListedTokenIds', 'tokenURI', 'tokenTier', 'getTokenInfo', 'getListing',
+        'balanceOf', 'totalSupply', 'totalPStake', 'MAX_SUPPLY', 'TGE_SUPPLY',
         'userTotalPStake', 'pendingRewards', 'isRented', 'getRental', 'ownerOf',
-        'getDelegationsOf', 'allowance', 'prizeTiers', 'activeTierCount', 'prizePoolBalance'
+        'getDelegationsOf', 'allowance', 'getPoolStats', 'getAllTiers', 'getUserSummary',
+        'getUserBestBoost'
     ];
 
     if (!forceRefresh && cacheableMethods.includes(method)) {
@@ -287,7 +288,7 @@ export async function loadUserData(forceRefresh = false) {
         await loadMyBoostersFromAPI(forceRefresh);
 
         // Use public contract (Alchemy) to avoid MetaMask RPC rate limits
-        const pStakeContract = State.delegationManagerContractPublic || State.delegationManagerContract;
+        const pStakeContract = State.stakingPoolContractPublic || State.stakingPoolContract;
         if (pStakeContract) {
             const totalUserPStake = await safeContractCall(
                 pStakeContract,
@@ -310,27 +311,35 @@ export async function loadUserData(forceRefresh = false) {
 // ====================================================================
 
 export async function loadUserDelegations(forceRefresh = false) {
-    if (!State.isConnected || !State.delegationManagerContract) return [];
+    // V9: stakingPoolContract replaces delegationManagerContract
+    const contract = State.stakingPoolContractPublic || State.stakingPoolContract;
+    if (!State.isConnected || !contract) return [];
 
     try {
         const delegationsRaw = await safeContractCall(
-            State.delegationManagerContract,
+            contract,
             'getDelegationsOf',
             [State.userAddress],
             [],
             2,
             forceRefresh
         );
-        
+
+        // V9 struct: {uint128 amount, uint128 pStake, uint64 lockEnd, uint64 lockDays, uint256 rewardDebt}
         State.userDelegations = delegationsRaw.map((d, index) => ({
-            amount: d[0] || d.amount || 0n,
-            unlockTime: BigInt(d[1] || d.unlockTime || 0),
-            lockDuration: BigInt(d[2] || d.lockDuration || 0),
+            amount: d.amount || d[0] || 0n,
+            pStake: d.pStake || d[1] || 0n,
+            lockEnd: Number(d.lockEnd || d[2] || 0),
+            lockDays: Number(d.lockDays || d[3] || 0),
+            rewardDebt: d.rewardDebt || d[4] || 0n,
+            // Backward-compatible aliases
+            unlockTime: BigInt(d.lockEnd || d[2] || 0),
+            lockDuration: BigInt(d.lockDays || d[3] || 0) * 86400n,
             index
         }));
-        
+
         return State.userDelegations;
-        
+
     } catch (e) {
         console.error("Error loading delegations:", e);
         return [];
@@ -408,7 +417,7 @@ export async function loadRentalListings(forceRefresh = false) {
                     true
                 );
                 
-                if (listing && listing.isActive) {
+                if (listing && listing.owner !== ethers.ZeroAddress) {
                     const rentalInfo = await safeContractCall(
                         rentalContract,
                         'getRental',
@@ -516,17 +525,17 @@ export async function loadUserRentals(forceRefresh = false) {
                     forceRefresh
                 );
                 
-                if (rental && 
+                // V9: getRental returns (tenant, endTime, isActive)
+                if (rental &&
                     rental.tenant?.toLowerCase() === State.userAddress.toLowerCase() &&
-                    BigInt(rental.endTime || 0) > BigInt(nowSec)) {
-                    
+                    (rental.isActive || BigInt(rental.endTime || 0) > BigInt(nowSec))) {
+
                     const boostInfo = await getBoosterInfo(tokenId);
                     myRentals.push({
                         tokenId: tokenId.toString(),
                         tenant: rental.tenant,
-                        startTime: rental.startTime?.toString() || '0',
                         endTime: rental.endTime?.toString() || '0',
-                        paidAmount: rental.paidAmount?.toString() || '0',
+                        isActive: rental.isActive,
                         boostBips: boostInfo.boostBips,
                         img: boostInfo.img,
                         name: boostInfo.name
@@ -606,9 +615,13 @@ export async function getHighestBoosterBoostFromAPI(forceRefresh = false) {
 }
 
 async function getBoosterInfo(tokenId) {
-    const minABI = ["function boostBips(uint256) view returns (uint256)"];
+    // V9: getTokenInfo returns (owner, tier, boostBips)
+    const minABI = [
+        "function getTokenInfo(uint256) view returns (address owner, uint8 tier, uint256 boostBips)",
+        "function tokenTier(uint256) view returns (uint8)"
+    ];
     const contractToUse = getContractInstance(
-        addresses.rewardBoosterNFT,
+        addresses.rewardBooster,
         minABI,
         State.rewardBoosterContractPublic
     );
@@ -618,22 +631,24 @@ async function getBoosterInfo(tokenId) {
     }
 
     try {
-        const boostBips = await safeContractCall(
+        const info = await safeContractCall(
             contractToUse,
-            'boostBips',
+            'getTokenInfo',
             [tokenId],
-            0n
+            null
         );
-        
-        const bipsNum = Number(boostBips);
-        const tier = boosterTiers.find(t => t.boostBips === bipsNum);
-        
-        return {
-            boostBips: bipsNum,
-            img: tier?.img || './assets/nft.png',
-            name: tier?.name || `Booster #${tokenId}`
-        };
-        
+
+        if (info) {
+            const bipsNum = Number(info.boostBips || info[2] || 0);
+            const tier = boosterTiers.find(t => t.boostBips === bipsNum);
+            return {
+                boostBips: bipsNum,
+                img: tier?.image || tier?.img || './assets/nft.png',
+                name: tier?.name || `Booster #${tokenId}`
+            };
+        }
+        return { boostBips: 0, img: 'assets/bkc_logo_3d.png', name: 'Unknown' };
+
     } catch {
         return { boostBips: 0, img: 'assets/bkc_logo_3d.png', name: 'Unknown' };
     }
@@ -644,75 +659,86 @@ async function getBoosterInfo(tokenId) {
 // ====================================================================
 
 export async function calculateUserTotalRewards() {
-    if (!State.isConnected || !State.delegationManagerContract) {
+    // V9: stakingPoolContract replaces delegationManagerContract
+    const contract = State.stakingPoolContractPublic || State.stakingPoolContract;
+    if (!State.isConnected || !contract) {
         return { stakingRewards: 0n, minerRewards: 0n, totalRewards: 0n };
     }
-    
+
     try {
         const stakingRewards = await safeContractCall(
-            State.delegationManagerContract,
+            contract,
             'pendingRewards',
             [State.userAddress],
             0n
         );
         return { stakingRewards, minerRewards: 0n, totalRewards: stakingRewards };
-        
+
     } catch (e) {
         return { stakingRewards: 0n, minerRewards: 0n, totalRewards: 0n };
     }
 }
 
 export async function calculateClaimDetails() {
-    if (!State.delegationManagerContract || !State.userAddress) {
-        return { netClaimAmount: 0n, feeAmount: 0n, discountPercent: 0, totalRewards: 0n, baseFeeBips: 0n, finalFeeBips: 0n };
+    // V9: Use previewClaim from StakingPool — returns exact on-chain calculation
+    const contract = State.stakingPoolContractPublic || State.stakingPoolContract;
+    if (!contract || !State.userAddress) {
+        return { netClaimAmount: 0n, feeAmount: 0n, discountPercent: 0, totalRewards: 0n, burnRateBps: 0, nftBoost: 0 };
     }
 
     const { totalRewards } = await calculateUserTotalRewards();
     if (totalRewards === 0n) {
-        return { netClaimAmount: 0n, feeAmount: 0n, discountPercent: 0, totalRewards: 0n, baseFeeBips: 0n, finalFeeBips: 0n };
+        return { netClaimAmount: 0n, feeAmount: 0n, discountPercent: 0, totalRewards: 0n, burnRateBps: 0, nftBoost: 0 };
     }
 
-    // Get base fee from system (e.g., 100 = 1%, 500 = 5%, 5000 = 50%)
-    let baseFeeBips = State.systemFees?.CLAIM_REWARD_FEE_BIPS || 100n;
-    
-    // Get booster data
-    const boosterData = await getHighestBoosterBoostFromAPI();
-    const boostBips = BigInt(boosterData.highestBoost || 0); // e.g., 2000 = 20%
-    
-    // Get discount percentage for this boost level
-    // discountBips represents the percentage reduction (e.g., 2000 = 20% reduction of the fee)
-    let discountBips = State.boosterDiscounts?.[boosterData.highestBoost] || boostBips;
+    try {
+        // V9 previewClaim returns (totalRewards, burnAmount, referrerCut, userReceives, burnRateBps, nftBoost)
+        const preview = await safeContractCall(
+            contract,
+            'previewClaim',
+            [State.userAddress],
+            null
+        );
 
-    // V8: Calculate PROPORTIONAL discount (matching contract logic)
-    // discountAmount = baseFeeBips × discountBips / 10000
-    // Example: baseFeeBips=100 (1%), discountBips=2000 (20%)
-    // discountAmount = 100 × 2000 / 10000 = 20
-    // finalFeeBips = 100 - 20 = 80 (0.8%)
-    const discountAmount = (baseFeeBips * discountBips) / 10000n;
-    const finalFeeBips = baseFeeBips > discountAmount ? baseFeeBips - discountAmount : 0n;
-    
-    // Calculate fee amount
-    const feeAmount = (totalRewards * finalFeeBips) / 10000n;
+        if (preview) {
+            const totalRew = preview.totalRewards || preview[0] || 0n;
+            const burnAmount = preview.burnAmount || preview[1] || 0n;
+            const referrerCut = preview.referrerCut || preview[2] || 0n;
+            const userReceives = preview.userReceives || preview[3] || 0n;
+            const burnRateBps = Number(preview.burnRateBps || preview[4] || 0);
+            const nftBoost = Number(preview.nftBoost || preview[5] || 0);
 
-    console.log('[Data] Claim calculation:', {
-        totalRewards: Number(totalRewards) / 1e18,
-        baseFeeBips: Number(baseFeeBips),
-        boostBips: Number(boostBips),
-        discountBips: Number(discountBips),
-        discountAmount: Number(discountAmount),
-        finalFeeBips: Number(finalFeeBips),
-        feeAmount: Number(feeAmount) / 1e18,
-        netAmount: Number(totalRewards - feeAmount) / 1e18
-    });
+            const feeAmount = burnAmount + referrerCut;
 
-    return {
-        netClaimAmount: totalRewards - feeAmount,
-        feeAmount,
-        discountPercent: Number(discountBips) / 100,
-        totalRewards,
-        baseFeeBips: Number(baseFeeBips),
-        finalFeeBips: Number(finalFeeBips)
-    };
+            console.log('[Data] V9 Claim preview:', {
+                totalRewards: Number(totalRew) / 1e18,
+                burnAmount: Number(burnAmount) / 1e18,
+                referrerCut: Number(referrerCut) / 1e18,
+                userReceives: Number(userReceives) / 1e18,
+                burnRateBps,
+                nftBoost
+            });
+
+            return {
+                netClaimAmount: userReceives,
+                feeAmount,
+                burnAmount,
+                referrerCut,
+                discountPercent: nftBoost / 100,
+                totalRewards: totalRew,
+                burnRateBps,
+                nftBoost,
+                // Backward-compatible aliases
+                baseFeeBips: 5000, // V9 base burn is 50%
+                finalFeeBips: burnRateBps
+            };
+        }
+    } catch (e) {
+        console.error('[Data] previewClaim error:', e);
+    }
+
+    // Fallback: return raw total with no fee info
+    return { netClaimAmount: totalRewards, feeAmount: 0n, discountPercent: 0, totalRewards, burnRateBps: 0, nftBoost: 0 };
 }
 
 // ====================================================================
@@ -759,12 +785,13 @@ export async function loadMyBoostersFromAPI(forceRefresh = false) {
 
         let ownedTokensAPI = await response.json();
 
+        // V9: rewardBooster replaces rewardBoosterNFT, getTokenInfo replaces boostBips
         const minABI = [
             "function ownerOf(uint256) view returns (address)",
-            "function boostBips(uint256) view returns (uint256)"
+            "function getTokenInfo(uint256) view returns (address owner, uint8 tier, uint256 boostBips)"
         ];
         const contract = getContractInstance(
-            addresses.rewardBoosterNFT,
+            addresses.rewardBooster,
             minABI,
             State.rewardBoosterContractPublic
         );
@@ -777,11 +804,12 @@ export async function loadMyBoostersFromAPI(forceRefresh = false) {
                     const nowTs = Date.now();
 
                     let tokenBoostBips = Number(token.boostBips || token.boost || 0);
-                    
+
+                    // V9: Use getTokenInfo to get boostBips if not in API data
                     if (tokenBoostBips === 0) {
                         try {
-                            const chainBoostBips = await contract.boostBips(id);
-                            tokenBoostBips = Number(chainBoostBips);
+                            const info = await contract.getTokenInfo(id);
+                            tokenBoostBips = Number(info.boostBips || info[2] || 0);
                         } catch (e) {}
                     }
 
@@ -873,27 +901,29 @@ export async function forceRefreshUserData() {
 }
 
 // ====================================================================
-// 9. FORTUNE POOL DATA (V2 - BackchainRandomness)
+// 9. FORTUNE POOL DATA (V9)
 // ====================================================================
 
 export async function loadFortunePoolData(forceRefresh = false) {
-    // V2: Prioriza fortunePoolContractPublic, fallback para actionsManager
-    const contract = State.fortunePoolContractPublic || State.fortunePoolContract || 
-                     State.actionsManagerContractPublic || State.actionsManagerContract;
-    
+    // V9: fortunePoolContract only — no actionsManager fallback
+    const contract = State.fortunePoolContractPublic || State.fortunePoolContract;
+
+    const emptyState = {
+        active: false,
+        activeTiers: 0,
+        prizePool: 0n,
+        tiers: [],
+        maxPayout: 0n,
+        totalGamesPlayed: 0,
+        fees: {}
+    };
+
     if (!contract) {
-        State.fortunePool = { 
-            active: false, 
-            activeTiers: 0, 
-            prizePool: 0n,
-            tiers: [],
-            serviceFee1x: 0n,
-            serviceFee5x: 0n
-        };
-        return State.fortunePool;
+        State.fortunePool = emptyState;
+        return emptyState;
     }
 
-    const cacheKey = 'fortunePool-status-v2';
+    const cacheKey = 'fortunePool-status-v9';
     const now = Date.now();
 
     if (!forceRefresh && contractReadCache.has(cacheKey)) {
@@ -905,88 +935,63 @@ export async function loadFortunePoolData(forceRefresh = false) {
     }
 
     try {
-        const [activeTierCount, prizePool, gameCounter] = await Promise.allSettled([
-            safeContractCall(contract, 'activeTierCount', [], 0n),
-            safeContractCall(contract, 'prizePoolBalance', [], 0n),
-            safeContractCall(contract, 'gameCounter', [], 0n)
+        // V9: getPoolStats returns 7-tuple, getAllTiers returns 3 fixed arrays
+        const [poolStats, allTiers] = await Promise.all([
+            safeContractCall(contract, 'getPoolStats', [], null),
+            safeContractCall(contract, 'getAllTiers', [], null)
         ]);
 
-        const tierCount = Number(activeTierCount.status === 'fulfilled' ? activeTierCount.value : 0n);
-        const pool = prizePool.status === 'fulfilled' ? BigInt(prizePool.value.toString()) : 0n;
-        const games = Number(gameCounter.status === 'fulfilled' ? gameCounter.value : 0n);
+        const pool = poolStats ? BigInt((poolStats.prizePool || poolStats[0] || 0).toString()) : 0n;
+        const totalGames = poolStats ? Number(poolStats.totalGamesPlayed || poolStats[1] || 0) : 0;
+        const maxPayout = poolStats ? BigInt((poolStats.maxPayoutNow || poolStats[6] || 0).toString()) : 0n;
 
-        // V2: Service fees instead of oracle fees
-        let serviceFee1x = 0n;
-        let serviceFee5x = 0n;
-        
-        try {
-            const [fee1x, fee5x] = await Promise.all([
-                contract.getRequiredServiceFee(false),
-                contract.getRequiredServiceFee(true)
-            ]);
-            serviceFee1x = BigInt(fee1x.toString());
-            serviceFee5x = BigInt(fee5x.toString());
-        } catch (e) {
-            // Fallback: try legacy oracle fee methods
-            try {
-                const [fee1x, fee5x] = await Promise.all([
-                    contract.getRequiredOracleFee(false),
-                    contract.getRequiredOracleFee(true)
-                ]);
-                serviceFee1x = BigInt(fee1x.toString());
-                serviceFee5x = BigInt(fee5x.toString());
-            } catch {
-                try {
-                    const baseFee = await contract.serviceFee();
-                    serviceFee1x = BigInt(baseFee.toString());
-                    serviceFee5x = serviceFee1x * 5n;
-                } catch {}
-            }
-        }
-
-        // V2: Get tiers using getAllTiers or prizeTiers
+        // V9: getAllTiers returns (uint256[3] ranges, uint256[3] multipliers, uint256[3] winChances)
         const tiers = [];
-        try {
-            // Try V2 getAllTiers first
-            const [ranges, multipliers] = await contract.getAllTiers();
-            for (let i = 0; i < ranges.length; i++) {
+        if (allTiers) {
+            const ranges = allTiers[0] || allTiers.ranges;
+            const multipliers = allTiers[1] || allTiers.multipliers;
+            const winChances = allTiers[2] || allTiers.winChances;
+            for (let i = 0; i < 3; i++) {
                 tiers.push({
-                    tierId: i + 1,
+                    tierId: i,
                     maxRange: Number(ranges[i]),
                     multiplierBips: Number(multipliers[i]),
                     multiplier: Number(multipliers[i]) / 10000,
+                    winChanceBps: Number(winChances[i]),
                     active: true
                 });
             }
-        } catch {
-            // Fallback to legacy prizeTiers
-            for (let i = 1; i <= Math.min(tierCount, 10); i++) {
-                try {
-                    const tier = await safeContractCall(contract, 'prizeTiers', [i], null);
-                    if (tier && tier.active !== false) {
-                        tiers.push({
-                            tierId: i,
-                            maxRange: Number(tier.maxRange || tier[0]),
-                            multiplierBips: Number(tier.multiplierBips || tier[1]),
-                            multiplier: Number(tier.multiplierBips || tier[1]) / 10000,
-                            active: tier.active ?? tier[2] ?? true
-                        });
-                    }
-                } catch {}
-            }
         }
 
+        // V9: getRequiredFee(tierMask) — get fee for each single tier + all tiers
+        const fees = {};
+        try {
+            const [fee0, fee1, fee2, feeAll] = await Promise.all([
+                safeContractCall(contract, 'getRequiredFee', [1], 0n),   // tier 0 only
+                safeContractCall(contract, 'getRequiredFee', [2], 0n),   // tier 1 only
+                safeContractCall(contract, 'getRequiredFee', [4], 0n),   // tier 2 only
+                safeContractCall(contract, 'getRequiredFee', [7], 0n)    // all 3 tiers
+            ]);
+            fees.tier0 = BigInt(fee0.toString());
+            fees.tier1 = BigInt(fee1.toString());
+            fees.tier2 = BigInt(fee2.toString());
+            fees.allTiers = BigInt(feeAll.toString());
+        } catch {}
+
         const fortuneData = {
-            active: tierCount > 0,
-            activeTiers: tierCount,
+            active: tiers.length > 0,
+            activeTiers: tiers.length,
             prizePool: pool,
-            gameCounter: games,
-            serviceFee1x,
-            serviceFee5x,
-            // Legacy aliases for backwards compatibility
-            oracleFee1x: serviceFee1x,
-            oracleFee5x: serviceFee5x,
-            tiers
+            totalGamesPlayed: totalGames,
+            maxPayout,
+            tiers,
+            fees,
+            // Backward-compatible aliases
+            serviceFee1x: fees.tier0 || 0n,
+            serviceFee5x: fees.allTiers || 0n,
+            oracleFee1x: fees.tier0 || 0n,
+            oracleFee5x: fees.allTiers || 0n,
+            gameCounter: totalGames
         };
 
         contractReadCache.set(cacheKey, { value: fortuneData, timestamp: now });
@@ -995,41 +1000,21 @@ export async function loadFortunePoolData(forceRefresh = false) {
         return fortuneData;
 
     } catch (e) {
-        State.fortunePool = { 
-            active: false, 
-            activeTiers: 0, 
-            prizePool: 0n,
-            tiers: [],
-            serviceFee1x: 0n,
-            serviceFee5x: 0n,
-            oracleFee1x: 0n,
-            oracleFee5x: 0n
-        };
-        return State.fortunePool;
+        State.fortunePool = emptyState;
+        return emptyState;
     }
 }
 
 export async function loadUserFortuneHistory(userAddress, limit = 20) {
     if (!userAddress) return [];
 
-    // V2: Prioriza fortunePoolContract
-    const contract = State.fortunePoolContractPublic || State.fortunePoolContract ||
-                     State.actionsManagerContractPublic || State.actionsManagerContract;
+    // V9: fortunePoolContract only — no actionsManager fallback
+    const contract = State.fortunePoolContractPublic || State.fortunePoolContract;
     if (!contract) return [];
 
     try {
-        // V2: Try GamePlayed event first (new), fallback to GameFulfilled (legacy)
-        let filter;
-        let eventName = 'GamePlayed';
-        
-        try {
-            filter = contract.filters.GamePlayed(null, userAddress);
-        } catch {
-            // Fallback to legacy event
-            filter = contract.filters.GameFulfilled(null, userAddress);
-            eventName = 'GameFulfilled';
-        }
-        
+        // V9: GameRevealed(gameId, player, grossWager, prizeWon, tierMask, matchCount, operator)
+        const filter = contract.filters.GameRevealed(null, userAddress);
         const events = await contract.queryFilter(filter, -10000);
 
         const games = events.slice(-limit).reverse().map(event => {
@@ -1037,11 +1022,11 @@ export async function loadUserFortuneHistory(userAddress, limit = 20) {
             return {
                 gameId: Number(args.gameId),
                 player: args.player,
+                grossWager: BigInt(args.grossWager?.toString() || '0'),
                 prizeWon: BigInt(args.prizeWon?.toString() || '0'),
-                rolls: args.rolls?.map(r => Number(r)) || [],
-                guesses: args.guesses?.map(g => Number(g)) || [],
-                isCumulative: args.isCumulative,
-                matchCount: args.matchCount ? Number(args.matchCount) : 0,
+                tierMask: Number(args.tierMask || 0),
+                matchCount: Number(args.matchCount || 0),
+                operator: args.operator,
                 txHash: event.transactionHash,
                 blockNumber: event.blockNumber,
                 won: BigInt(args.prizeWon?.toString() || '0') > 0n
@@ -1068,22 +1053,21 @@ export function calculateExpectedPayout(wagerAmount, tierIndex, isWin) {
     return (wager * multiplierBips) / 10000n;
 }
 
-export async function getExpectedGuessCount(isCumulative) {
-    // V2: Prioriza fortunePoolContract
-    const contract = State.fortunePoolContractPublic || State.fortunePoolContract ||
-                     State.actionsManagerContractPublic || State.actionsManagerContract;
-    
-    if (!contract) {
-        return isCumulative ? 3 : 1;
+/**
+ * V9: Guess count is determined by tierMask (number of set bits)
+ * tierMask 1 (0b001) = 1 tier, tierMask 3 (0b011) = 2 tiers, tierMask 7 (0b111) = 3 tiers
+ */
+export function getExpectedGuessCount(tierMask) {
+    if (typeof tierMask === 'boolean') {
+        // Backward compat: isCumulative=true → all 3 tiers, false → 1 tier
+        return tierMask ? 3 : 1;
     }
-
-    try {
-        const count = await contract.getExpectedGuessCount(isCumulative);
-        return Number(count);
-    } catch (e) {
-        if (isCumulative) {
-            return State.fortunePool?.activeTiers || 3;
-        }
-        return 1;
+    // Count set bits in tierMask
+    let count = 0;
+    let mask = tierMask;
+    while (mask > 0) {
+        count += mask & 1;
+        mask >>= 1;
     }
+    return count || 1;
 }

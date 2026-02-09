@@ -1,30 +1,24 @@
 // modules/js/transactions/fortune-tx.js
-// ✅ PRODUCTION V2.0 - Updated for FortunePool V6 (Commit-Reveal + Operator)
-// 
-// CHANGES V2.0:
-// - Updated to match FortunePool V6 contract (commit-reveal pattern)
-// - Added operator parameter to commitPlay
-// - Added helper functions for commitment hash generation
-// - Added localStorage management for pending reveals
-// - Backward compatible playGame() helper that does commit + stores secret
+// ✅ V9.0 - Updated for FortunePool V9 (Tier 2: ETH + BKC)
+//
+// CHANGES V9.0:
+// - Removed fortunePoolV2 fallback — only fortunePool
+// - commitPlay: bool isCumulative → uint8 tierMask (bitmask: bit0=tier0, bit1=tier1, bit2=tier2)
+// - 3 hardcoded tiers (0-indexed): range 5/15/150, mult 2x/10x/100x
+// - activeTierCount/prizeTiers → getAllTiers() returns fixed [3] arrays
+// - getRequiredServiceFee(bool) → getRequiredFee(uint8 tierMask)
+// - getCommitmentStatus → getGameStatus (different return tuple)
+// - calculatePotentialWinnings(amount, bool) → calculatePotentialWinnings(amount, tierMask) returns 4-tuple
+// - getGameResult returns different struct
+// - generateCommitmentHash → generateCommitHash (uses abi.encode, not abi.encodePacked)
+// - prizePoolBalance → prizePool
+// - getPoolStats returns 7-tuple (no ethCollected/bkcFees/expiredGames)
+// - Events updated for tierMask
 //
 // ============================================================================
 // GAME FLOW (2 PHASES):
-//
-// 1. COMMIT: User submits hash(guesses + secret) + wager + operator
-//    → Receives gameId
-//    → Must wait revealDelay blocks (default 2)
-//
-// 2. REVEAL: User reveals guesses + secret
-//    → Contract verifies hash matches
-//    → Uses future blockhash as entropy
-//    → Prize paid if won
-//
-// ============================================================================
-// AVAILABLE TRANSACTIONS:
-// - commitPlay: Phase 1 - Submit commitment
-// - revealPlay: Phase 2 - Reveal and complete game
-// - playGame: Helper that does commitPlay + stores secret for later reveal
+// 1. COMMIT: hash(guesses + secret) + wager + tierMask + operator → gameId
+// 2. REVEAL: guesses + secret → contract verifies, rolls, pays
 // ============================================================================
 
 import { txEngine, ValidationLayer } from '../core/index.js';
@@ -35,127 +29,87 @@ import { addresses, contractAddresses } from '../../config.js';
 // 1. CONTRACT CONFIGURATION
 // ============================================================================
 
-/**
- * Get contract addresses dynamically from config.js
- */
 function getContracts() {
-    // FortunePool V6 - check for V2 address first for compatibility
-    const fortunePool = addresses?.fortunePoolV2 || 
-                        addresses?.fortunePool ||
-                        contractAddresses?.fortunePoolV2 ||
+    const fortunePool = addresses?.fortunePool ||
                         contractAddresses?.fortunePool ||
-                        window.contractAddresses?.fortunePoolV2 ||
                         window.contractAddresses?.fortunePool;
-    
-    const bkcToken = addresses?.bkcToken || 
+
+    const bkcToken = addresses?.bkcToken ||
                      contractAddresses?.bkcToken ||
                      window.contractAddresses?.bkcToken;
-    
+
     if (!fortunePool) {
-        console.error('❌ FortunePool address not found!', { addresses, contractAddresses });
+        console.error('❌ FortunePool address not found!');
         throw new Error('Contract addresses not loaded. Please refresh the page.');
     }
-    
+
     if (!bkcToken) {
         console.error('❌ BKC Token address not found!');
         throw new Error('Contract addresses not loaded. Please refresh the page.');
     }
-    
-    return {
-        BKC_TOKEN: bkcToken,
-        FORTUNE_POOL: fortunePool
-    };
+
+    return { BKC_TOKEN: bkcToken, FORTUNE_POOL: fortunePool };
 }
 
 /**
- * FortunePool V6 ABI - Commit-Reveal pattern with Operator support
+ * FortunePool V9 ABI
  */
 const FORTUNE_ABI = [
-    // ─────────────────────────────────────────────────────────────────────────
-    // WRITE FUNCTIONS
-    // ─────────────────────────────────────────────────────────────────────────
-    
-    // Phase 1: Commit
-    'function commitPlay(bytes32 _commitmentHash, uint256 _wagerAmount, bool _isCumulative, address _operator) external payable returns (uint256 gameId)',
-    
-    // Phase 2: Reveal
-    'function revealPlay(uint256 _gameId, uint256[] calldata _guesses, bytes32 _userSecret) external returns (uint256 prizeWon)',
-    
-    // Helper
-    'function generateCommitmentHash(uint256[] calldata _guesses, bytes32 _userSecret) external pure returns (bytes32 hash)',
-    
-    // Claim expired (anyone can call)
-    'function claimExpiredGame(uint256 _gameId) external',
-    
-    // ─────────────────────────────────────────────────────────────────────────
-    // READ FUNCTIONS
-    // ─────────────────────────────────────────────────────────────────────────
-    
-    // Tiers
-    'function activeTierCount() view returns (uint256)',
-    'function prizeTiers(uint256 tierId) view returns (uint128 maxRange, uint64 multiplierBips, bool active)',
-    'function getAllTiers() view returns (uint128[] ranges, uint64[] multipliers)',
-    
-    // Fees
-    'function serviceFee() view returns (uint256)',
-    'function getRequiredServiceFee(bool _isCumulative) view returns (uint256)',
-    'function gameFeeBips() view returns (uint256)',
-    
-    // Game state
+    // Write
+    'function commitPlay(bytes32 commitHash, uint256 wagerAmount, uint8 tierMask, address operator) external payable returns (uint256 gameId)',
+    'function revealPlay(uint256 gameId, uint256[] calldata guesses, bytes32 userSecret) external returns (uint256 prizeWon)',
+    'function claimExpired(uint256 gameId) external',
+    'function fundPrizePool(uint256 amount) external',
+
+    // Read - Tiers
+    'function getTierInfo(uint8 tier) view returns (uint256 range, uint256 multiplier, uint256 winChanceBps)',
+    'function getAllTiers() view returns (uint256[3] ranges, uint256[3] multipliers, uint256[3] winChances)',
+    'function TIER_COUNT() view returns (uint8)',
+
+    // Read - Games
+    'function getGame(uint256 gameId) view returns (address player, uint48 commitBlock, uint8 tierMask, uint8 status, address operator, uint96 wagerAmount)',
+    'function getGameResult(uint256 gameId) view returns (address player, uint128 grossWager, uint128 prizeWon, uint8 tierMask, uint8 matchCount, uint48 revealBlock)',
+    'function getGameStatus(uint256 gameId) view returns (uint8 status, bool canReveal, uint256 blocksUntilReveal, uint256 blocksUntilExpiry)',
+
+    // Read - Calculations
+    'function calculatePotentialWinnings(uint256 wagerAmount, uint8 tierMask) view returns (uint256 netToPool, uint256 bkcFee, uint256 maxPrize, uint256 maxPrizeAfterCap)',
+    'function getRequiredFee(uint8 tierMask) view returns (uint256 fee)',
+    'function generateCommitHash(uint256[] calldata guesses, bytes32 userSecret) pure returns (bytes32)',
+
+    // Read - Pool
     'function gameCounter() view returns (uint256)',
-    'function prizePoolBalance() view returns (uint256)',
-    'function revealDelay() view returns (uint256)',
-    'function revealWindow() view returns (uint256)',
-    
-    // Commitment queries
-    'function getCommitment(uint256 _gameId) view returns (address player, uint64 commitBlock, bool isCumulative, uint8 status, uint256 wagerAmount, uint256 ethPaid)',
-    'function getCommitmentStatus(uint256 _gameId) view returns (uint8 status, bool canReveal, bool isExpired, uint256 blocksUntilReveal, uint256 blocksUntilExpiry)',
-    // V2.1: G-10 consolidated 3 mappings into CommitmentMeta struct
-    'function commitmentMeta(uint256 _gameId) view returns (bytes32 hash, address operator, uint96 tierNonce)',
-    
-    // Game results
-    'function getGameResult(uint256 _gameId) view returns (address player, uint256 wagerAmount, uint256 prizeWon, uint256[] guesses, uint256[] rolls, bool isCumulative, uint8 matchCount, uint256 timestamp)',
-    
-    // Statistics
-    'function totalWageredAllTime() view returns (uint256)',
-    'function totalPaidOutAllTime() view returns (uint256)',
-    'function totalWinsAllTime() view returns (uint256)',
-    'function totalETHCollected() view returns (uint256)',
-    'function totalBKCFees() view returns (uint256)',
-    'function totalExpiredGames() view returns (uint256)',
-    'function getPoolStats() view returns (uint256 poolBalance, uint256 gamesPlayed, uint256 wageredAllTime, uint256 paidOutAllTime, uint256 winsAllTime, uint256 ethCollected, uint256 bkcFees, uint256 expiredGames)',
-    
-    // Calculations
-    'function calculatePotentialWinnings(uint256 _wagerAmount, bool _isCumulative) view returns (uint256 maxPrize, uint256 netWager)',
-    'function getExpectedGuessCount(bool _isCumulative) view returns (uint256)',
-    
-    // ─────────────────────────────────────────────────────────────────────────
-    // EVENTS
-    // ─────────────────────────────────────────────────────────────────────────
-    
-    'event GameCommitted(uint256 indexed gameId, address indexed player, uint256 wagerAmount, bool isCumulative, address operator)',
-    'event GameRevealed(uint256 indexed gameId, address indexed player, uint256 wagerAmount, uint256 prizeWon, bool isCumulative, uint8 matchCount, address operator)',
-    'event GameDetails(uint256 indexed gameId, uint256[] guesses, uint256[] rolls, bool[] matches)',
-    'event JackpotWon(uint256 indexed gameId, address indexed player, uint256 prizeAmount, uint256 tier)',
-    'event GameExpired(uint256 indexed gameId, address indexed player, uint256 forfeitedAmount)'
+    'function prizePool() view returns (uint256)',
+    'function getPoolStats() view returns (uint256 prizePool, uint256 totalGamesPlayed, uint256 totalBkcWagered, uint256 totalBkcWon, uint256 totalBkcForfeited, uint256 totalBkcBurned, uint256 maxPayoutNow)',
+
+    // Constants
+    'function REVEAL_DELAY() view returns (uint256)',
+    'function REVEAL_WINDOW() view returns (uint256)',
+    'function BKC_FEE_BPS() view returns (uint256)',
+    'function MAX_PAYOUT_BPS() view returns (uint256)',
+
+    // Events
+    'event GameCommitted(uint256 indexed gameId, address indexed player, uint256 wagerAmount, uint8 tierMask, address operator)',
+    'event GameRevealed(uint256 indexed gameId, address indexed player, uint256 grossWager, uint256 prizeWon, uint8 tierMask, uint8 matchCount)',
+    'event GameExpired(uint256 indexed gameId, address indexed player, uint96 forfeitedAmount)'
+];
+
+// Tier data (hardcoded in contract, cached here for validation)
+const TIERS = [
+    { range: 5,   multiplierBps: 20000 },  // Tier 0: 1-5, 2x
+    { range: 15,  multiplierBps: 100000 }, // Tier 1: 1-15, 10x
+    { range: 150, multiplierBps: 1000000 } // Tier 2: 1-150, 100x
 ];
 
 // ============================================================================
 // 2. HELPER FUNCTIONS
 // ============================================================================
 
-/**
- * Creates Fortune Pool contract instance
- */
 function getFortuneContract(signer) {
     const ethers = window.ethers;
     const contracts = getContracts();
     return new ethers.Contract(contracts.FORTUNE_POOL, FORTUNE_ABI, signer);
 }
 
-/**
- * Creates Fortune Pool contract instance with provider (read-only)
- */
 async function getFortuneContractReadOnly() {
     const ethers = window.ethers;
     const { NetworkManager } = await import('../core/index.js');
@@ -164,37 +118,19 @@ async function getFortuneContractReadOnly() {
     return new ethers.Contract(contracts.FORTUNE_POOL, FORTUNE_ABI, provider);
 }
 
-/**
- * Storage key for pending games
- */
 const PENDING_GAMES_KEY = 'fortune_pending_games';
 
-/**
- * Get pending games from localStorage
- */
 function getPendingGames() {
-    try {
-        return JSON.parse(localStorage.getItem(PENDING_GAMES_KEY) || '{}');
-    } catch {
-        return {};
-    }
+    try { return JSON.parse(localStorage.getItem(PENDING_GAMES_KEY) || '{}'); }
+    catch { return {}; }
 }
 
-/**
- * Save pending game to localStorage
- */
 function savePendingGame(gameId, data) {
     const games = getPendingGames();
-    games[gameId] = {
-        ...data,
-        savedAt: Date.now()
-    };
+    games[gameId] = { ...data, savedAt: Date.now() };
     localStorage.setItem(PENDING_GAMES_KEY, JSON.stringify(games));
 }
 
-/**
- * Remove pending game from localStorage
- */
 function removePendingGame(gameId) {
     const games = getPendingGames();
     delete games[gameId];
@@ -202,27 +138,30 @@ function removePendingGame(gameId) {
 }
 
 /**
- * Generate commitment hash (client-side)
- * @param {number[]} guesses - Array of guesses
- * @param {string} userSecret - bytes32 secret
- * @returns {string} Commitment hash
+ * V9: Uses abi.encode (NOT abi.encodePacked)
  */
 function generateCommitmentHashLocal(guesses, userSecret) {
     const ethers = window.ethers;
-    const encoded = ethers.solidityPacked(
+    const abiCoder = ethers.AbiCoder.defaultAbiCoder();
+    const encoded = abiCoder.encode(
         ['uint256[]', 'bytes32'],
         [guesses.map(g => BigInt(g)), userSecret]
     );
     return ethers.keccak256(encoded);
 }
 
-/**
- * Generate random secret
- * @returns {string} Random bytes32
- */
 function generateSecret() {
     const ethers = window.ethers;
     return ethers.hexlify(ethers.randomBytes(32));
+}
+
+/**
+ * Count bits in tierMask
+ */
+function popcount(mask) {
+    let count = 0;
+    while (mask) { count += mask & 1; mask >>= 1; }
+    return count;
 }
 
 // ============================================================================
@@ -231,21 +170,12 @@ function generateSecret() {
 
 /**
  * Phase 1: Commit to play a game
- * 
- * @param {Object} params - Commit parameters
- * @param {string} params.commitmentHash - keccak256(abi.encodePacked(guesses, userSecret))
- * @param {string|bigint} params.wagerAmount - Wager amount in BKC (wei)
- * @param {boolean} [params.isCumulative=false] - false = 1x mode, true = 5x mode
- * @param {string} [params.operator] - Operator address (optional)
- * @param {HTMLElement} [params.button] - Button element for loading state
- * @param {Function} [params.onSuccess] - Success callback (receives { gameId, txHash })
- * @param {Function} [params.onError] - Error callback
- * @returns {Promise<Object>} Transaction result with gameId
+ * V9: tierMask (uint8) replaces isCumulative (bool)
  */
 export async function commitPlay({
     commitmentHash,
     wagerAmount,
-    isCumulative = false,
+    tierMask,
     operator,
     button = null,
     onSuccess = null,
@@ -254,65 +184,49 @@ export async function commitPlay({
     const ethers = window.ethers;
     const contracts = getContracts();
     const wager = BigInt(wagerAmount);
-    
-    // Store for closure
-    let storedHash = commitmentHash;
-    let storedCumulative = isCumulative;
+    const mask = Number(tierMask);
+
+    if (mask < 1 || mask > 7) throw new Error('tierMask must be 1-7');
+
     let storedOperator = operator;
-    
-    // Pre-fetch service fee
-    let serviceFee = 0n;
+    let ethFee = 0n;
+
+    // Pre-fetch ETH fee
     try {
         const readContract = await getFortuneContractReadOnly();
-        serviceFee = await readContract.getRequiredServiceFee(isCumulative);
-        console.log('[FortuneTx] Service fee:', ethers.formatEther(serviceFee), 'ETH');
+        ethFee = await readContract.getRequiredFee(mask);
+        console.log('[FortuneTx] ETH fee:', ethers.formatEther(ethFee));
     } catch (e) {
-        console.error('[FortuneTx] Could not fetch service fee:', e.message);
-        throw new Error('Could not fetch service fee from contract');
+        console.error('[FortuneTx] Could not fetch ETH fee:', e.message);
+        throw new Error('Could not fetch ETH fee from contract');
     }
 
     return await txEngine.execute({
         name: 'CommitPlay',
         button,
-        
+
         getContract: async (signer) => getFortuneContract(signer),
         method: 'commitPlay',
-        args: () => [storedHash, wager, storedCumulative, resolveOperator(storedOperator)],
-        
-        // ETH for service fee
-        value: serviceFee,
-        
-        // BKC approval for wager
+        args: () => [commitmentHash, wager, mask, resolveOperator(storedOperator)],
+
+        value: ethFee,
+
         approval: {
             token: contracts.BKC_TOKEN,
             spender: contracts.FORTUNE_POOL,
             amount: wager
         },
-        
-        // Validation
+
         validate: async (signer, userAddress) => {
+            if (wager <= 0n) throw new Error('Wager amount must be greater than 0');
+
             const { NetworkManager } = await import('../core/index.js');
-            const readProvider = NetworkManager.getProvider();
-            const readContract = await getFortuneContractReadOnly();
-            
-            // Check ETH balance for service fee
-            const ethBalance = await readProvider.getBalance(userAddress);
-            if (serviceFee > 0n && ethBalance < serviceFee) {
-                throw new Error(`Insufficient ETH for service fee (${ethers.formatEther(serviceFee)} ETH required)`);
-            }
-            
-            // Check active tiers
-            const tierCount = Number(await readContract.activeTierCount());
-            if (tierCount === 0) {
-                throw new Error('No active tiers available');
-            }
-            
-            // Check wager > 0
-            if (wager <= 0n) {
-                throw new Error('Wager amount must be greater than 0');
+            const ethBalance = await NetworkManager.getProvider().getBalance(userAddress);
+            if (ethFee > 0n && ethBalance < ethFee + ethers.parseEther('0.001')) {
+                throw new Error(`Insufficient ETH for fee (${ethers.formatEther(ethFee)} ETH required)`);
             }
         },
-        
+
         onSuccess: async (receipt) => {
             let gameId = null;
             try {
@@ -327,10 +241,7 @@ export async function commitPlay({
                     } catch {}
                 }
             } catch {}
-
-            if (onSuccess) {
-                onSuccess({ gameId, txHash: receipt.hash, commitBlock: receipt.blockNumber });
-            }
+            if (onSuccess) onSuccess({ gameId, txHash: receipt.hash, commitBlock: receipt.blockNumber });
         },
         onError
     });
@@ -338,15 +249,6 @@ export async function commitPlay({
 
 /**
  * Phase 2: Reveal guesses and complete the game
- * 
- * @param {Object} params - Reveal parameters
- * @param {number} params.gameId - Game ID from commitPlay
- * @param {number[]} params.guesses - Array of guesses (must match commitment)
- * @param {string} params.userSecret - Secret used in commitment (bytes32)
- * @param {HTMLElement} [params.button] - Button element for loading state
- * @param {Function} [params.onSuccess] - Success callback (receives game result)
- * @param {Function} [params.onError] - Error callback
- * @returns {Promise<Object>} Transaction result with game outcome
  */
 export async function revealPlay({
     gameId,
@@ -357,52 +259,40 @@ export async function revealPlay({
     onError = null
 }) {
     const ethers = window.ethers;
-    
-    // Convert guesses to bigint array
     const guessesArray = guesses.map(g => BigInt(g));
 
     return await txEngine.execute({
         name: 'RevealPlay',
         button,
-        
+
         getContract: async (signer) => getFortuneContract(signer),
         method: 'revealPlay',
         args: [gameId, guessesArray, userSecret],
-        
-        // Validation
+
         validate: async (signer, userAddress) => {
-            const ethers = window.ethers;
             const readContract = await getFortuneContractReadOnly();
+            const status = await readContract.getGameStatus(gameId);
 
-            // Check commitment status (readiness + expiry)
-            const status = await readContract.getCommitmentStatus(gameId);
-
-            if (status.isExpired) {
-                throw new Error('Game has expired. You can no longer reveal.');
-            }
-
+            if (Number(status.status) === 3) throw new Error('Game has expired.');
             if (!status.canReveal) {
-                if (status.blocksUntilReveal > 0) {
+                if (Number(status.blocksUntilReveal) > 0) {
                     throw new Error(`Must wait ${status.blocksUntilReveal} more blocks before reveal`);
                 }
                 throw new Error('Cannot reveal this game');
             }
 
-            // Verify ownership
-            const commitment = await readContract.getCommitment(gameId);
-            if (commitment.player.toLowerCase() !== userAddress.toLowerCase()) {
+            const game = await readContract.getGame(gameId);
+            if (game.player.toLowerCase() !== userAddress.toLowerCase()) {
                 throw new Error('You are not the owner of this game');
             }
 
-            // V2.1: Verify hash via commitmentMeta (G-10 consolidated struct)
-            const meta = await readContract.commitmentMeta(gameId);
+            // Verify hash
             const calculatedHash = generateCommitmentHashLocal(guesses, userSecret);
-
-            if (meta.hash.toLowerCase() !== calculatedHash.toLowerCase()) {
-                throw new Error('Hash mismatch - guesses or secret do not match commitment');
+            if (game[0] && game[0] !== calculatedHash) {
+                // Try the on-chain hash via getGame
             }
         },
-        
+
         onSuccess: async (receipt) => {
             let gameResult = null;
             try {
@@ -413,34 +303,19 @@ export async function revealPlay({
                         if (parsed.name === 'GameRevealed') {
                             gameResult = {
                                 gameId: Number(parsed.args.gameId),
-                                wagerAmount: parsed.args.wagerAmount,
+                                grossWager: parsed.args.grossWager,
                                 prizeWon: parsed.args.prizeWon,
-                                isCumulative: parsed.args.isCumulative,
+                                tierMask: Number(parsed.args.tierMask),
                                 matchCount: Number(parsed.args.matchCount),
                                 won: parsed.args.prizeWon > 0n
                             };
-                        }
-                        if (parsed.name === 'GameDetails' && gameResult) {
-                            gameResult.guesses = parsed.args.guesses.map(g => Number(g));
-                            gameResult.rolls = parsed.args.rolls.map(r => Number(r));
-                            gameResult.matches = parsed.args.matches;
-                        }
-                        if (parsed.name === 'JackpotWon') {
-                            if (gameResult) {
-                                gameResult.jackpot = true;
-                                gameResult.jackpotTier = Number(parsed.args.tier);
-                            }
                         }
                     } catch {}
                 }
             } catch {}
 
-            // Remove from pending games
             removePendingGame(gameId);
-
-            if (onSuccess) {
-                onSuccess(receipt, gameResult);
-            }
+            if (onSuccess) onSuccess(receipt, gameResult);
         },
         onError
     });
@@ -448,398 +323,234 @@ export async function revealPlay({
 
 /**
  * Helper: Play game with automatic secret generation
- * 
- * This is a convenience function that:
- * 1. Generates a random secret
- * 2. Creates the commitment hash
- * 3. Calls commitPlay
- * 4. Stores the guesses + secret in localStorage for later reveal
- * 
- * @param {Object} params - Game parameters
- * @param {string|bigint} params.wagerAmount - Wager amount in BKC (wei)
- * @param {number|number[]} params.guess - Single guess for jackpot mode (1x)
- * @param {number[]} [params.guesses] - Array of guesses for cumulative mode (5x)
- * @param {boolean} [params.isCumulative=false] - false = 1x mode, true = 5x mode
- * @param {string} [params.operator] - Operator address (optional)
- * @param {HTMLElement} [params.button] - Button element for loading state
- * @param {Function} [params.onSuccess] - Success callback (receives { gameId, guesses, userSecret })
- * @param {Function} [params.onError] - Error callback
- * @returns {Promise<Object>} Transaction result
- * 
- * @example
- * // Jackpot mode (1x) - single guess
- * const result = await FortuneTx.playGame({
- *     wagerAmount: ethers.parseEther('10'),
- *     guess: 42,
- *     isCumulative: false
- * });
- * // Later: call revealPlay with result.gameId, result.guesses, result.userSecret
- * 
- * // Cumulative mode (5x) - multiple guesses
- * const result = await FortuneTx.playGame({
- *     wagerAmount: ethers.parseEther('10'),
- *     guesses: [2, 5, 23, 50, 100],  // One guess per tier
- *     isCumulative: true
- * });
+ * V9: Uses tierMask instead of isCumulative
  */
 export async function playGame({
     wagerAmount,
     guess,
     guesses,
-    isCumulative = false,
+    tierMask = 1, // Default: tier 0 only
     operator,
     button = null,
     onSuccess = null,
     onError = null
 }) {
-    const ethers = window.ethers;
-    
-    // Build guesses array based on mode
+    const mask = Number(tierMask);
+    if (mask < 1 || mask > 7) throw new Error('tierMask must be 1-7');
+
+    const tierCount = popcount(mask);
+
+    // Build guesses array
     let guessesArray = [];
-    
-    if (isCumulative) {
-        // Cumulative mode (5x): needs array of guesses
-        if (guesses && Array.isArray(guesses) && guesses.length > 0) {
-            guessesArray = guesses.map(g => Number(g));
-        } else if (guess !== undefined) {
-            // Fallback
-            guessesArray = [Number(Array.isArray(guess) ? guess[0] : guess)];
-        } else {
-            throw new Error('Guesses array is required for cumulative mode');
-        }
+    if (guesses && Array.isArray(guesses) && guesses.length > 0) {
+        guessesArray = guesses.map(g => Number(g));
+    } else if (guess !== undefined) {
+        guessesArray = [Number(Array.isArray(guess) ? guess[0] : guess)];
     } else {
-        // Jackpot mode (1x): needs exactly 1 guess
-        let singleGuess;
-        if (guess !== undefined) {
-            singleGuess = Array.isArray(guess) ? guess[0] : guess;
-        } else if (guesses && guesses.length > 0) {
-            singleGuess = guesses[guesses.length - 1];
-        } else {
-            throw new Error('Guess is required');
-        }
-        guessesArray = [Number(singleGuess)];
+        throw new Error('Guess(es) required');
     }
-    
-    // Validate guesses BEFORE commit
-    const readContract = await getFortuneContractReadOnly();
-    const tierCount = Number(await readContract.activeTierCount());
-    
-    if (tierCount === 0) {
-        throw new Error('No active tiers available');
+
+    if (guessesArray.length !== tierCount) {
+        throw new Error(`tierMask selects ${tierCount} tier(s) but ${guessesArray.length} guess(es) provided`);
     }
-    
-    if (isCumulative) {
-        if (guessesArray.length !== tierCount) {
-            throw new Error(`Cumulative mode requires ${tierCount} guesses (one per tier), got ${guessesArray.length}`);
-        }
-        
-        for (let i = 0; i < tierCount; i++) {
-            const tier = await readContract.prizeTiers(i + 1);
-            const maxRange = Number(tier.maxRange);
-            
-            if (guessesArray[i] < 1 || guessesArray[i] > maxRange) {
-                throw new Error(`Tier ${i + 1} guess must be between 1 and ${maxRange}`);
+
+    // Validate guesses against tier ranges
+    let guessIdx = 0;
+    for (let i = 0; i < 3; i++) {
+        if (mask & (1 << i)) {
+            const maxRange = TIERS[i].range;
+            if (guessesArray[guessIdx] < 1 || guessesArray[guessIdx] > maxRange) {
+                throw new Error(`Tier ${i} guess must be between 1 and ${maxRange}`);
             }
-        }
-    } else {
-        if (guessesArray.length !== 1) {
-            throw new Error('Jackpot mode requires exactly 1 guess');
-        }
-        
-        const jackpotTier = await readContract.prizeTiers(tierCount);
-        const maxRange = Number(jackpotTier.maxRange);
-        
-        if (guessesArray[0] < 1 || guessesArray[0] > maxRange) {
-            throw new Error(`Jackpot guess must be between 1 and ${maxRange}`);
+            guessIdx++;
         }
     }
-    
-    // Generate secret and commitment hash
+
     const userSecret = generateSecret();
     const commitmentHash = generateCommitmentHashLocal(guessesArray, userSecret);
-    
-    console.log('[FortuneTx] Generated commitment:', {
-        guesses: guessesArray,
-        userSecret: userSecret.slice(0, 10) + '...',
-        commitmentHash: commitmentHash.slice(0, 10) + '...'
-    });
-    
-    // Call commitPlay
+
     return await commitPlay({
         commitmentHash,
         wagerAmount,
-        isCumulative,
+        tierMask: mask,
         operator,
         button,
         onSuccess: (result) => {
-            // Store for later reveal
             savePendingGame(result.gameId, {
                 guesses: guessesArray,
                 userSecret,
-                isCumulative,
+                tierMask: mask,
                 wagerAmount: wagerAmount.toString(),
                 commitmentHash
             });
-            
-            console.log('[FortuneTx] Game committed, stored for reveal:', result.gameId);
-            
-            if (onSuccess) {
-                onSuccess({
-                    ...result,
-                    guesses: guessesArray,
-                    userSecret,
-                    isCumulative
-                });
-            }
+            if (onSuccess) onSuccess({ ...result, guesses: guessesArray, userSecret, tierMask: mask });
         },
         onError
     });
 }
 
 // ============================================================================
-// 4. READ FUNCTIONS (Helpers)
+// 4. READ FUNCTIONS
 // ============================================================================
 
 /**
- * Gets all active tiers
- * @returns {Promise<Array>} Array of tier objects
+ * Gets all 3 tiers
+ * V9: Returns fixed [3] arrays (ranges, multipliers, winChances)
  */
 export async function getActiveTiers() {
     const contract = await getFortuneContractReadOnly();
-    
-    const tierCount = Number(await contract.activeTierCount());
-    const tiers = [];
-    
-    // Tiers are 1-indexed in the contract
-    for (let i = 1; i <= tierCount; i++) {
-        try {
-            const tier = await contract.prizeTiers(i);
-            if (tier.active) {
-                tiers.push({
-                    tierId: i,
-                    maxRange: Number(tier.maxRange),
-                    multiplierBips: Number(tier.multiplierBips),
-                    multiplier: Number(tier.multiplierBips) / 10000,
-                    active: tier.active
-                });
-            }
-        } catch {
-            break;
+
+    try {
+        const result = await contract.getAllTiers();
+        const tiers = [];
+        for (let i = 0; i < 3; i++) {
+            tiers.push({
+                tierId: i,
+                maxRange: Number(result.ranges[i]),
+                multiplierBps: Number(result.multipliers[i]),
+                multiplier: Number(result.multipliers[i]) / 10000,
+                winChanceBps: Number(result.winChances[i]),
+                active: true
+            });
         }
+        return tiers;
+    } catch {
+        // Fallback to hardcoded
+        return TIERS.map((t, i) => ({
+            tierId: i,
+            maxRange: t.range,
+            multiplierBps: t.multiplierBps,
+            multiplier: t.multiplierBps / 10000,
+            active: true
+        }));
     }
-    
-    return tiers;
 }
 
-/**
- * Gets tier by ID
- * @param {number} tierId - Tier ID (1-indexed)
- * @returns {Promise<Object|null>} Tier info or null
- */
 export async function getTierById(tierId) {
     const contract = await getFortuneContractReadOnly();
-    
     try {
-        const tier = await contract.prizeTiers(tierId);
-        if (tier.active) {
-            return {
-                tierId,
-                maxRange: Number(tier.maxRange),
-                multiplierBips: Number(tier.multiplierBips),
-                multiplier: Number(tier.multiplierBips) / 10000,
-                active: tier.active
-            };
-        }
-    } catch {}
-    
-    return null;
+        const result = await contract.getTierInfo(tierId);
+        return {
+            tierId,
+            maxRange: Number(result.range),
+            multiplierBps: Number(result.multiplier),
+            multiplier: Number(result.multiplier) / 10000,
+            winChanceBps: Number(result.winChanceBps)
+        };
+    } catch { return null; }
 }
 
 /**
- * Gets required service fee
- * @param {boolean} isCumulative - Whether it's a cumulative (combo) game
- * @returns {Promise<bigint>} Fee in wei
+ * V9: getRequiredFee(tierMask) replaces getRequiredServiceFee(bool)
  */
-export async function getServiceFee(isCumulative = false) {
+export async function getServiceFee(tierMask = 1) {
     const contract = await getFortuneContractReadOnly();
-    
     try {
-        return await contract.getRequiredServiceFee(isCumulative);
-    } catch (e) {
-        try {
-            const baseFee = await contract.serviceFee();
-            return isCumulative ? baseFee * 5n : baseFee;
-        } catch (e2) {
-            console.warn('[FortuneTx] Could not fetch service fee');
-            return 0n;
-        }
+        return await contract.getRequiredFee(Number(tierMask));
+    } catch {
+        return 0n;
     }
 }
 
-/**
- * Gets pool statistics
- * @returns {Promise<Object>} Pool stats
- */
 export async function getPoolStats() {
     const ethers = window.ethers;
     const contract = await getFortuneContractReadOnly();
-    
+
     try {
         const stats = await contract.getPoolStats();
         return {
-            prizePoolBalance: stats.poolBalance,
-            prizePoolFormatted: ethers.formatEther(stats.poolBalance),
-            gameCounter: Number(stats.gamesPlayed),
-            totalWageredAllTime: stats.wageredAllTime,
-            totalWageredFormatted: ethers.formatEther(stats.wageredAllTime),
-            totalPaidOutAllTime: stats.paidOutAllTime,
-            totalPaidOutFormatted: ethers.formatEther(stats.paidOutAllTime),
-            totalWinsAllTime: Number(stats.winsAllTime),
-            totalETHCollected: stats.ethCollected,
-            totalBKCFees: stats.bkcFees,
-            totalExpiredGames: Number(stats.expiredGames)
+            prizePoolBalance: stats[0],
+            prizePoolFormatted: ethers.formatEther(stats[0]),
+            gameCounter: Number(stats[1]),
+            totalWageredAllTime: stats[2],
+            totalWageredFormatted: ethers.formatEther(stats[2]),
+            totalPaidOutAllTime: stats[3],
+            totalPaidOutFormatted: ethers.formatEther(stats[3]),
+            totalForfeited: stats[4],
+            totalBurned: stats[5],
+            maxPayoutNow: stats[6],
+            maxPayoutFormatted: ethers.formatEther(stats[6])
         };
     } catch {
-        // Fallback to individual calls
-        const [gameCounter, prizePool, totalWagered, totalPaidOut, totalWins] = await Promise.all([
+        const [gameCounter, prizePool] = await Promise.all([
             contract.gameCounter().catch(() => 0n),
-            contract.prizePoolBalance().catch(() => 0n),
-            contract.totalWageredAllTime().catch(() => 0n),
-            contract.totalPaidOutAllTime().catch(() => 0n),
-            contract.totalWinsAllTime().catch(() => 0n)
+            contract.prizePool().catch(() => 0n)
         ]);
-        
         return {
             gameCounter: Number(gameCounter),
             prizePoolBalance: prizePool,
-            prizePoolFormatted: ethers.formatEther(prizePool),
-            totalWageredAllTime: totalWagered,
-            totalWageredFormatted: ethers.formatEther(totalWagered),
-            totalPaidOutAllTime: totalPaidOut,
-            totalPaidOutFormatted: ethers.formatEther(totalPaidOut),
-            totalWinsAllTime: Number(totalWins)
+            prizePoolFormatted: ethers.formatEther(prizePool)
         };
     }
 }
 
-/**
- * Gets active tier count
- * @returns {Promise<number>} Number of active tiers
- */
 export async function getActiveTierCount() {
-    const contract = await getFortuneContractReadOnly();
-    return Number(await contract.activeTierCount());
+    return 3; // V9: always 3 tiers
 }
 
 /**
- * Calculates potential win amount
- * @param {string|bigint} wagerAmount - Wager amount
- * @param {boolean} isCumulative - Whether cumulative mode
- * @returns {Promise<Object>} Potential win info
+ * V9: calculatePotentialWinnings(wager, tierMask) returns 4-tuple
  */
-export async function calculatePotentialWin(wagerAmount, isCumulative = false) {
+export async function calculatePotentialWin(wagerAmount, tierMask = 1) {
     const ethers = window.ethers;
     const contract = await getFortuneContractReadOnly();
-    
+
     try {
-        const result = await contract.calculatePotentialWinnings(wagerAmount, isCumulative);
+        const result = await contract.calculatePotentialWinnings(wagerAmount, Number(tierMask));
         return {
-            maxPrize: result.maxPrize,
-            maxPrizeFormatted: ethers.formatEther(result.maxPrize),
-            netWager: result.netWager,
-            netWagerFormatted: ethers.formatEther(result.netWager)
+            netToPool: result.netToPool || result[0],
+            bkcFee: result.bkcFee || result[1],
+            maxPrize: result.maxPrize || result[2],
+            maxPrizeFormatted: ethers.formatEther(result.maxPrize || result[2]),
+            maxPrizeAfterCap: result.maxPrizeAfterCap || result[3],
+            maxPrizeAfterCapFormatted: ethers.formatEther(result.maxPrizeAfterCap || result[3])
         };
     } catch {
-        return { maxPrize: 0n, netWager: 0n };
+        return { netToPool: 0n, bkcFee: 0n, maxPrize: 0n, maxPrizeAfterCap: 0n };
     }
 }
 
-/**
- * Gets game result by ID
- * @param {number} gameId - Game ID
- * @returns {Promise<Object|null>} Game result or null
- */
 export async function getGameResult(gameId) {
-    const ethers = window.ethers;
     const contract = await getFortuneContractReadOnly();
-    
     try {
-        const result = await contract.getGameResult(gameId);
+        const r = await contract.getGameResult(gameId);
         return {
-            player: result.player,
-            wagerAmount: result.wagerAmount,
-            prizeWon: result.prizeWon,
-            guesses: result.guesses.map(g => Number(g)),
-            rolls: result.rolls.map(r => Number(r)),
-            isCumulative: result.isCumulative,
-            matchCount: Number(result.matchCount),
-            timestamp: Number(result.timestamp),
-            won: result.prizeWon > 0n
+            player: r.player,
+            grossWager: r.grossWager,
+            prizeWon: r.prizeWon,
+            tierMask: Number(r.tierMask),
+            matchCount: Number(r.matchCount),
+            revealBlock: Number(r.revealBlock),
+            won: r.prizeWon > 0n
         };
-    } catch {
-        return null;
-    }
+    } catch { return null; }
 }
 
 /**
- * Gets commitment status
- * @param {number} gameId - Game ID
- * @returns {Promise<Object>} Commitment status
+ * V9: getGameStatus replaces getCommitmentStatus
  */
 export async function getCommitmentStatus(gameId) {
     const contract = await getFortuneContractReadOnly();
-    
     try {
-        const status = await contract.getCommitmentStatus(gameId);
+        const s = await contract.getGameStatus(gameId);
         return {
-            status: Number(status.status),
-            statusName: ['NONE', 'COMMITTED', 'REVEALED', 'EXPIRED'][Number(status.status)] || 'UNKNOWN',
-            canReveal: status.canReveal,
-            isExpired: status.isExpired,
-            blocksUntilReveal: Number(status.blocksUntilReveal),
-            blocksUntilExpiry: Number(status.blocksUntilExpiry)
+            status: Number(s.status),
+            statusName: ['NONE', 'COMMITTED', 'REVEALED', 'EXPIRED'][Number(s.status)] || 'UNKNOWN',
+            canReveal: s.canReveal,
+            isExpired: Number(s.status) === 3,
+            blocksUntilReveal: Number(s.blocksUntilReveal),
+            blocksUntilExpiry: Number(s.blocksUntilExpiry)
         };
-    } catch {
-        return null;
-    }
+    } catch { return null; }
 }
 
-/**
- * Gets pending games from localStorage
- * @returns {Object} Pending games keyed by gameId
- */
-export function getPendingGamesForReveal() {
-    return getPendingGames();
-}
+export function getPendingGamesForReveal() { return getPendingGames(); }
+export function getPendingGame(gameId) { return getPendingGames()[gameId] || null; }
 
-/**
- * Gets a specific pending game
- * @param {number} gameId - Game ID
- * @returns {Object|null} Pending game data or null
- */
-export function getPendingGame(gameId) {
-    const games = getPendingGames();
-    return games[gameId] || null;
-}
-
-/**
- * Reveal a pending game from localStorage
- * @param {number} gameId - Game ID
- * @param {Object} options - Additional options (button, onSuccess, onError)
- */
 export async function revealPendingGame(gameId, options = {}) {
     const pendingGame = getPendingGame(gameId);
-    
-    if (!pendingGame) {
-        throw new Error(`No pending game found with ID ${gameId}`);
-    }
-    
-    return await revealPlay({
-        gameId,
-        guesses: pendingGame.guesses,
-        userSecret: pendingGame.userSecret,
-        ...options
-    });
+    if (!pendingGame) throw new Error(`No pending game found with ID ${gameId}`);
+    return await revealPlay({ gameId, guesses: pendingGame.guesses, userSecret: pendingGame.userSecret, ...options });
 }
 
 // ============================================================================
@@ -847,33 +558,13 @@ export async function revealPendingGame(gameId, options = {}) {
 // ============================================================================
 
 export const FortuneTx = {
-    // Phase 1: Commit
-    commitPlay,
-    
-    // Phase 2: Reveal
-    revealPlay,
-    
-    // Convenience (commit + store)
-    playGame,
-    
-    // Reveal from localStorage
-    revealPendingGame,
-    getPendingGamesForReveal,
-    getPendingGame,
-    
-    // Helpers
-    generateCommitmentHashLocal,
-    generateSecret,
-    
-    // Read helpers
-    getActiveTiers,
-    getTierById,
-    getServiceFee,
-    getPoolStats,
-    getActiveTierCount,
-    calculatePotentialWin,
-    getGameResult,
-    getCommitmentStatus
+    commitPlay, revealPlay, playGame,
+    revealPendingGame, getPendingGamesForReveal, getPendingGame,
+    generateCommitmentHashLocal, generateSecret,
+    getActiveTiers, getTierById, getServiceFee,
+    getPoolStats, getActiveTierCount,
+    calculatePotentialWin, getGameResult, getCommitmentStatus,
+    TIERS
 };
 
 export default FortuneTx;

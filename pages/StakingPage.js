@@ -52,7 +52,7 @@ let lastFetch = 0;
 let lockDays = 3650;
 let isProcessing = false;
 let stakingHistory = [];
-let totalNetworkPStake = 0n;
+let totalPStakeNetwork = 0n;
 let countdownInterval = null;
 let currentHistoryFilter = 'ALL';
 
@@ -636,7 +636,7 @@ async function loadData(force = false) {
             loadUserDelegations()
         ]);
 
-        totalNetworkPStake = State.totalNetworkPStake || 0n;
+        totalPStakeNetwork = State.totalPStake || State.totalNetworkPStake || 0n;
         await loadClaimPreview();
 
         const { stakingRewards, minerRewards } = await calculateUserTotalRewards();
@@ -659,8 +659,10 @@ async function loadData(force = false) {
 async function loadNftBoostData() {
     if (!State.userAddress) return;
     try {
-        if (State.delegationManagerContractPublic) {
-            const boost = await safeContractCall(State.delegationManagerContractPublic, 'getUserBestBoost', [State.userAddress], 0n);
+        // V9: stakingPoolContract replaces delegationManagerContract
+        const stakingContract = State.stakingPoolContractPublic || State.stakingPoolContract;
+        if (stakingContract) {
+            const boost = await safeContractCall(stakingContract, 'getUserBestBoost', [State.userAddress], 0n);
             userNftBoost = Number(boost);
         }
         if (userNftBoost === 0) {
@@ -680,25 +682,29 @@ async function loadNftBoostData() {
 }
 
 async function loadClaimPreview() {
-    if (!State.userAddress || !State.delegationManagerContractPublic) return;
+    // V9: stakingPoolContract, previewClaim returns 6-tuple
+    const stakingContract = State.stakingPoolContractPublic || State.stakingPoolContract;
+    if (!State.userAddress || !stakingContract) return;
     try {
-        const preview = await safeContractCall(State.delegationManagerContractPublic, 'previewClaim', [State.userAddress], null);
+        const preview = await safeContractCall(stakingContract, 'previewClaim', [State.userAddress], null);
         if (preview) {
+            // V9: (totalRewards, burnAmount, referrerCut, userReceives, burnRateBps, nftBoost)
             claimPreview = {
                 totalRewards: preview.totalRewards || preview[0] || 0n,
                 burnAmount: preview.burnAmount || preview[1] || 0n,
-                userReceives: preview.userReceives || preview[2] || 0n,
-                burnRateBips: preview.burnRateBips || preview[3] || 0n,
-                nftBoost: preview.nftBoost || preview[4] || 0n
+                referrerCut: preview.referrerCut || preview[2] || 0n,
+                userReceives: preview.userReceives || preview[3] || 0n,
+                burnRateBips: preview.burnRateBps || preview[4] || 0n,
+                nftBoost: preview.nftBoost || preview[5] || 0n
             };
         }
-        claimEthFee = await safeContractCall(State.delegationManagerContractPublic, 'claimEthFee', [], 0n);
+        // V9: Claim ETH fee is optional (0 if not sent)
+        claimEthFee = 0n;
     } catch (e) {
         console.error('Claim preview error:', e);
-        // Fallback: manual calculation
         const total = stakingRewardsAmount + minerRewardsAmount;
         const burnAmount = (total * BigInt(userBurnRate)) / 100n;
-        claimPreview = { totalRewards: total, burnAmount, userReceives: total - burnAmount, burnRateBips: BigInt(userBurnRate * 100), nftBoost: BigInt(userNftBoost) };
+        claimPreview = { totalRewards: total, burnAmount, referrerCut: 0n, userReceives: total - burnAmount, burnRateBips: BigInt(userBurnRate * 100), nftBoost: BigInt(userNftBoost) };
     }
 }
 
@@ -797,10 +803,10 @@ function updateNftBoostPanel() {
 function updateStats() {
     const setEl = (id, html) => { const el = document.getElementById(id); if (el) el.innerHTML = html; };
 
-    setEl('stk-stat-network', formatPStake(totalNetworkPStake));
+    setEl('stk-stat-network', formatPStake(totalPStakeNetwork));
 
     const userPStake = State.userData?.pStake || State.userData?.userTotalPStake || State.userTotalPStake || 0n;
-    const pct = totalNetworkPStake > 0n ? Number((userPStake * 10000n) / totalNetworkPStake) / 100 : 0;
+    const pct = totalPStakeNetwork > 0n ? Number((userPStake * 10000n) / totalPStakeNetwork) / 100 : 0;
     setEl('stk-stat-power', `${formatPStake(userPStake)} <span style="font-size:10px;color:var(--stk-text-3)">(${pct.toFixed(2)}%)</span>`);
 
     const totalRewards = claimPreview?.userReceives || 0n;

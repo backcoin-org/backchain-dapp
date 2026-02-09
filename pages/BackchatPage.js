@@ -39,7 +39,7 @@ const ethers = window.ethers;
 
 import { State } from '../state.js';
 import { showToast } from '../ui-feedback.js';
-import { addresses, ipfsGateway, backchatABI } from '../config.js';
+import { addresses, ipfsGateway, agoraABI } from '../config.js';
 import { formatBigNumber } from '../utils.js';
 import { BackchatTx } from '../modules/transactions/index.js';
 
@@ -54,7 +54,8 @@ const MAX_CONTENT = 500;
 
 // Get addresses from config (loaded from deployment-addresses.json)
 function getBackchatAddress() {
-    return addresses.backchat || addresses.Backchat || null;
+    // V9: agora replaces backchat
+    return addresses.agora || addresses.backchat || addresses.Backchat || null;
 }
 
 // Operator address for fee distribution (your frontend earns 30-60% of fees!)
@@ -1320,19 +1321,20 @@ function goBack() {
 // ============================================================================
 
 function getContract() {
-    if (State.backchatContract) return State.backchatContract;
-    if (State.backchatContractPublic) return State.backchatContractPublic;
-    
+    // V9: agoraContract replaces backchatContract
+    if (State.agoraContract) return State.agoraContract;
+    if (State.agoraContractPublic) return State.agoraContractPublic;
+
     const backchatAddress = getBackchatAddress();
     if (!backchatAddress) {
-        console.warn('Backchat address not found in deployment-addresses.json');
+        console.warn('Agora/Backchat address not found in deployment-addresses.json');
         return null;
     }
-    
+
     if (State.publicProvider) {
-        return new ethers.Contract(backchatAddress, backchatABI, State.publicProvider);
+        return new ethers.Contract(backchatAddress, agoraABI, State.publicProvider);
     }
-    
+
     return null;
 }
 

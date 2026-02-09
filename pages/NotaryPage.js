@@ -39,8 +39,9 @@ const EXPLORER_TX = `${EXPLORER_BASE}/tx/`;
 const EXPLORER_ADDR = `${EXPLORER_BASE}/address/`;
 const EXPLORER_TOKEN = `${EXPLORER_BASE}/token/`;
 
+// V9: Certified event replaces DocumentNotarized
 const NOTARY_ABI_EVENTS = [
-    'event DocumentNotarized(uint256 indexed tokenId, address indexed owner, string ipfsCid, bytes32 indexed contentHash, uint256 bkcFeePaid, uint256 ethFeePaid, address operator)'
+    'event Certified(uint256 indexed certId, address indexed owner, bytes32 documentHash, uint8 docType, address operator)'
 ];
 
 const FILE_TYPES = {
@@ -1436,7 +1437,7 @@ function renderVerifyResult() {
                 ` : ''}
 
                 <div style="margin-top:12px;display:flex;gap:8px">
-                    <a href="${EXPLORER_TOKEN}${addresses?.decentralizedNotary}?a=${r.tokenId}" target="_blank" class="nt-btn-secondary" style="font-size:12px;padding:8px 14px;text-decoration:none;display:inline-flex;align-items:center;gap:6px">
+                    <a href="${EXPLORER_ADDR}${addresses?.notary}?a=${r.tokenId}" target="_blank" class="nt-btn-secondary" style="font-size:12px;padding:8px 14px;text-decoration:none;display:inline-flex;align-items:center;gap:6px">
                         <i class="fa-solid fa-arrow-up-right-from-square"></i>View on Arbiscan
                     </a>
                 </div>
@@ -1546,7 +1547,7 @@ function renderStats(el) {
             </div>
 
             <div style="text-align:center;margin-top:16px">
-                <a href="${EXPLORER_TOKEN}${addresses?.decentralizedNotary}" target="_blank" class="nt-btn-secondary" style="font-size:12px;padding:10px 20px;text-decoration:none;display:inline-flex;align-items:center;gap:6px">
+                <a href="${EXPLORER_ADDR}${addresses?.notary}" target="_blank" class="nt-btn-secondary" style="font-size:12px;padding:10px 20px;text-decoration:none;display:inline-flex;align-items:center;gap:6px">
                     <i class="fa-solid fa-arrow-up-right-from-square"></i>View Contract on Arbiscan
                 </a>
             </div>
@@ -1640,7 +1641,7 @@ function renderCertDetail(el) {
                         <i class="fa-solid fa-download"></i>Download from IPFS
                     </a>
                 ` : ''}
-                <a href="${EXPLORER_TOKEN}${addresses?.decentralizedNotary}?a=${cert.id}" target="_blank" class="nt-btn-secondary" style="text-decoration:none;display:inline-flex;align-items:center;gap:6px;font-size:12px">
+                <a href="${EXPLORER_ADDR}${addresses?.notary}?a=${cert.id}" target="_blank" class="nt-btn-secondary" style="text-decoration:none;display:inline-flex;align-items:center;gap:6px;font-size:12px">
                     <i class="fa-solid fa-arrow-up-right-from-square"></i>View on Arbiscan
                 </a>
                 ${cert.txHash ? `
@@ -1735,7 +1736,7 @@ async function loadCertificates() {
 }
 
 async function loadCertificatesFromChain() {
-    if (!ethers || !addresses?.decentralizedNotary) {
+    if (!ethers || !addresses?.notary) {
         console.warn('[NotaryPage] Chain fallback: missing ethers or contract address');
         return [];
     }
@@ -1747,9 +1748,10 @@ async function loadCertificatesFromChain() {
         return [];
     }
 
-    console.log('[NotaryPage] Querying DocumentNotarized events for:', State.userAddress);
-    const contract = new ethers.Contract(addresses.decentralizedNotary, NOTARY_ABI_EVENTS, provider);
-    const filter = contract.filters.DocumentNotarized(null, State.userAddress);
+    // V9: Certified event replaces DocumentNotarized
+    console.log('[NotaryPage] Querying Certified events for:', State.userAddress);
+    const contract = new ethers.Contract(addresses.notary, NOTARY_ABI_EVENTS, provider);
+    const filter = contract.filters.Certified(null, State.userAddress);
 
     const currentBlock = await provider.getBlockNumber();
     const fromBlock = Math.max(0, currentBlock - 500000);
@@ -1759,10 +1761,9 @@ async function loadCertificatesFromChain() {
     console.log('[NotaryPage] Found', events.length, 'events');
 
     return events.map(ev => ({
-        id: Number(ev.args.tokenId),
-        ipfs: ev.args.ipfsCid || '',
-        description: '',
-        hash: ev.args.contentHash || '',
+        id: Number(ev.args.certId),
+        hash: ev.args.documentHash || '',
+        docType: Number(ev.args.docType || 0),
         timestamp: null,
         txHash: ev.transactionHash,
         owner: ev.args.owner
@@ -1796,14 +1797,14 @@ async function loadStats() {
 }
 
 async function loadRecentNotarizations() {
-    if (!ethers || !addresses?.decentralizedNotary) return;
+    if (!ethers || !addresses?.notary) return;
 
     const { NetworkManager } = await import('../modules/core/index.js');
     const provider = NetworkManager.getProvider();
     if (!provider) return;
 
-    const contract = new ethers.Contract(addresses.decentralizedNotary, NOTARY_ABI_EVENTS, provider);
-    const filter = contract.filters.DocumentNotarized();
+    const contract = new ethers.Contract(addresses.notary, NOTARY_ABI_EVENTS, provider);
+    const filter = contract.filters.Certified();
 
     const currentBlock = await provider.getBlockNumber();
     const fromBlock = Math.max(0, currentBlock - 50000);
@@ -1813,10 +1814,12 @@ async function loadRecentNotarizations() {
     // Get 20 most recent
     const recent = events.slice(-20).reverse();
 
+    // V9: Certified event args: certId, owner, documentHash, docType, operator
     NT.recentNotarizations = recent.map(ev => ({
-        tokenId: Number(ev.args.tokenId),
+        tokenId: Number(ev.args.certId),
         owner: ev.args.owner,
-        hash: ev.args.contentHash,
+        hash: ev.args.documentHash,
+        docType: Number(ev.args.docType || 0),
         timestamp: null,
         blockNumber: ev.blockNumber
     }));
@@ -1854,9 +1857,9 @@ async function addToWallet(tokenId, imageUrl) {
         let finalImageUrl = toHttpsUrl(imageUrl || '');
 
         // Try to get image from token URI
-        if (State.decentralizedNotaryContract) {
+        if (State.notaryContract) {
             try {
-                const uri = await State.decentralizedNotaryContract.tokenURI(tokenId);
+                const uri = await State.notaryContract.tokenURI(tokenId);
                 if (uri?.startsWith('data:application/json;base64,')) {
                     const metadata = JSON.parse(atob(uri.replace('data:application/json;base64,', '')));
                     if (metadata.image) finalImageUrl = toHttpsUrl(metadata.image);
@@ -1864,9 +1867,9 @@ async function addToWallet(tokenId, imageUrl) {
             } catch {}
         }
 
-        const contractAddress = addresses?.decentralizedNotary ||
-            State.decentralizedNotaryContract?.target ||
-            (State.decentralizedNotaryContract?.getAddress ? await State.decentralizedNotaryContract.getAddress() : null);
+        const contractAddress = addresses?.notary ||
+            State.notaryContract?.target ||
+            (State.notaryContract?.getAddress ? await State.notaryContract.getAddress() : null);
 
         if (!contractAddress) {
             showToast('Contract address not found', 'error');

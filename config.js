@@ -238,91 +238,95 @@ export const addresses = {};
 
 export const contractAddresses = {
     bkcToken: null,
-    ecosystemManager: null,
-    delegationManager: null,
-    rewardBoosterNFT: null,
-    rentalManager: null,
-    nftLiquidityPoolFactory: null,
+    backchainEcosystem: null,
+    stakingPool: null,
+    buybackMiner: null,
+    rewardBooster: null,
+    nftPoolFactory: null,
     fortunePool: null,
-    fortunePoolV2: null,
-    backchainRandomness: null,
-    publicSale: null,
-    decentralizedNotary: null,
+    agora: null,
+    notary: null,
+    charityPool: null,
+    rentalManager: null,
+    liquidityPool: null,
     faucet: null,
-    miningManager: null,
-    charityPool: null,      // ✅ V29: Charity Pool
-    backchat: null,         // ✅ V6.9: Backchat Social Network
-    operator: null          // ✅ V6.9: Operator for fee distribution
+    backchainGovernance: null,
+    treasuryWallet: null
 };
 
 export async function loadAddresses() {
     try {
         const response = await fetch(`./deployment-addresses.json?t=${Date.now()}`);
-        
+
         if (!response.ok) {
             throw new Error(`Failed to fetch deployment-addresses.json: ${response.status}`);
         }
-        
-        const jsonAddresses = await response.json();
 
-        const requiredAddresses = ['bkcToken', 'delegationManager', 'ecosystemManager', 'miningManager'];
-        const missingAddresses = requiredAddresses.filter(key => !jsonAddresses[key]);
-        
-        if (missingAddresses.length > 0) {
-            throw new Error(`Missing required addresses: ${missingAddresses.join(', ')}`);
+        const json = await response.json();
+
+        // V9: Required contracts
+        const requiredAddresses = ['bkcToken', 'backchainEcosystem', 'stakingPool', 'buybackMiner'];
+        // Backward-compatible: check both old and new names
+        const resolvedRequired = requiredAddresses.every(key =>
+            json[key] || json[_legacyName(key)]
+        );
+
+        if (!resolvedRequired) {
+            const missing = requiredAddresses.filter(key => !json[key] && !json[_legacyName(key)]);
+            throw new Error(`Missing required addresses: ${missing.join(', ')}`);
         }
 
-        Object.assign(addresses, jsonAddresses);
+        // V9 name resolution with backward-compatible fallbacks
+        addresses.bkcToken = json.bkcToken;
+        addresses.backchainEcosystem = json.backchainEcosystem || json.ecosystemManager;
+        addresses.stakingPool = json.stakingPool || json.delegationManager;
+        addresses.buybackMiner = json.buybackMiner || json.miningManager;
+        addresses.rewardBooster = json.rewardBooster || json.rewardBoosterNFT;
+        addresses.nftPoolFactory = json.nftPoolFactory || json.nftLiquidityPoolFactory;
+        addresses.fortunePool = json.fortunePool || json.fortunePoolV2;
+        addresses.agora = json.agora || json.backchat;
+        addresses.notary = json.notary || json.decentralizedNotary;
+        addresses.charityPool = json.charityPool;
+        addresses.rentalManager = json.rentalManager;
+        addresses.liquidityPool = json.liquidityPool;
+        addresses.faucet = json.faucet || json.simpleBkcFaucet;
+        addresses.backchainGovernance = json.backchainGovernance;
+        addresses.treasuryWallet = json.treasuryWallet;
 
-        // Fortune Pool - V2 takes priority if available
-        addresses.fortunePoolV2 = jsonAddresses.fortunePoolV2 || jsonAddresses.fortunePool;
-        addresses.fortunePool = jsonAddresses.fortunePool;
-        addresses.actionsManager = jsonAddresses.fortunePool; // Legacy alias
-        
-        addresses.rentalManager = jsonAddresses.rentalManager || 
-                                   jsonAddresses.RentalManager ||
-                                   jsonAddresses.rental_manager ||
-                                   null;
-        
-        addresses.decentralizedNotary = jsonAddresses.decentralizedNotary ||
-                                         jsonAddresses.notary ||
-                                         jsonAddresses.Notary ||
-                                         null;
-        
-        addresses.bkcDexPoolAddress = jsonAddresses.bkcDexPoolAddress || "#";
-        
-        // BackchainRandomness Oracle
-        addresses.backchainRandomness = jsonAddresses.backchainRandomness || null;
-
-        // ✅ V29: Charity Pool
-        addresses.charityPool = jsonAddresses.charityPool || 
-                                jsonAddresses.CharityPool ||
-                                null;
-
-        // ✅ V6.9: Backchat Social Network
-        addresses.backchat = jsonAddresses.backchat || 
-                             jsonAddresses.Backchat ||
-                             null;
-        
-        // ✅ V6.9: Operator address (treasury receives operator fees)
-        addresses.operator = jsonAddresses.operator || 
-                             jsonAddresses.treasuryWallet ||
-                             null;
+        // Pool addresses (per-tier NFT liquidity pools)
+        addresses.pool_bronze = json.pool_bronze;
+        addresses.pool_silver = json.pool_silver;
+        addresses.pool_gold = json.pool_gold;
+        addresses.pool_diamond = json.pool_diamond;
 
         // Also update contractAddresses for compatibility
-        Object.assign(contractAddresses, jsonAddresses);
+        Object.assign(contractAddresses, addresses);
 
-        console.log("✅ Contract addresses loaded");
-        console.log("   FortunePool V2:", addresses.fortunePoolV2);
-        console.log("   CharityPool:", addresses.charityPool);
-        console.log("   Backchat:", addresses.backchat);
-        console.log("   Operator:", addresses.operator);
+        console.log("✅ V9 contract addresses loaded");
+        console.log("   Ecosystem:", addresses.backchainEcosystem);
+        console.log("   StakingPool:", addresses.stakingPool);
+        console.log("   Agora:", addresses.agora);
+        console.log("   FortunePool:", addresses.fortunePool);
         return true;
 
     } catch (error) {
         console.error("❌ Failed to load contract addresses:", error);
         return false;
     }
+}
+
+// Maps V9 names to legacy deployment-addresses.json key names
+function _legacyName(v9Name) {
+    const map = {
+        backchainEcosystem: 'ecosystemManager',
+        stakingPool: 'delegationManager',
+        buybackMiner: 'miningManager',
+        rewardBooster: 'rewardBoosterNFT',
+        nftPoolFactory: 'nftLiquidityPoolFactory',
+        agora: 'backchat',
+        notary: 'decentralizedNotary'
+    };
+    return map[v9Name] || v9Name;
 }
 
 // Alias for compatibility
@@ -435,258 +439,297 @@ export const bkcTokenABI = [
     "function MAX_SUPPLY() view returns (uint256)",
     "function TGE_SUPPLY() view returns (uint256)",
     "function totalBurned() view returns (uint256)",
-    "function remainingMintableSupply() view returns (uint256)",
+    "function mintableRemaining() view returns (uint256)",
+    "function totalMinted() view returns (uint256)",
     "event Transfer(address indexed from, address indexed to, uint256 value)",
     "event Approval(address indexed owner, address indexed spender, uint256 value)"
 ];
 
-// DelegationManager V6.8 ABI - NFT Burn Rate Reduction System
-export const delegationManagerABI = [
+// StakingPool V9 ABI — MasterChef-style rewards, NFT burn reduction
+export const stakingPoolABI = [
     // Core staking
-    "function totalNetworkPStake() view returns (uint256)",
+    "function totalPStake() view returns (uint256)",
+    "function totalBkcDelegated() view returns (uint256)",
     "function userTotalPStake(address _user) view returns (uint256)",
     "function pendingRewards(address _user) view returns (uint256)",
-    "function MIN_LOCK_DURATION() view returns (uint256)",
-    "function MAX_LOCK_DURATION() view returns (uint256)",
-    "function getDelegationsOf(address _user) view returns (tuple(uint256 amount, uint64 unlockTime, uint64 lockDuration)[])",
-    
-    // V6.8: New signature with operator parameter
-    "function delegate(uint256 _amount, uint256 _lockDuration, address _operator) external",
-    "function unstake(uint256 _delegationIndex, address _operator) external",
-    "function forceUnstake(uint256 _delegationIndex, address _operator) external",
-    "function claimReward(address _operator) external payable",
-    "function claimEthFee() view returns (uint256)",
+    "function savedRewards(address _user) view returns (uint256)",
+    "function MIN_LOCK_DAYS() view returns (uint256)",
+    "function MAX_LOCK_DAYS() view returns (uint256)",
+    "function REFERRER_CUT_BPS() view returns (uint256)",
+    "function forceUnstakePenaltyBps() view returns (uint256)",
+    "function getDelegationsOf(address _user) view returns (tuple(uint128 amount, uint128 pStake, uint64 lockEnd, uint64 lockDays, uint256 rewardDebt)[])",
+    "function getDelegation(address _user, uint256 _index) view returns (uint256 amount, uint256 pStake, uint256 lockEnd, uint256 lockDays, uint256 pendingReward)",
+    "function delegationCount(address _user) view returns (uint256)",
 
-    // V6.8: NFT Boost & Burn Rate functions
+    // Write — delegate/unstake/claim
+    "function delegate(uint256 _amount, uint256 _lockDays, address _operator) external payable",
+    "function unstake(uint256 _index) external",
+    "function forceUnstake(uint256 _index, address _operator) external payable",
+    "function claimRewards(address _operator) external payable",
+    "function claimRewards() external",
+
+    // NFT Boost & Burn Rate
     "function getUserBestBoost(address _user) view returns (uint256)",
-    "function getBurnRateForBoost(uint256 _boost) view returns (uint256)",
-    "function previewClaim(address _user) view returns (uint256 totalRewards, uint256 burnAmount, uint256 userReceives, uint256 burnRateBips, uint256 userBoost)",
-    
-    // Events V6.8
-    "event Delegated(address indexed user, address indexed operator, uint256 amount, uint256 lockDuration, uint256 pStake)",
-    "event Unstaked(address indexed user, address indexed operator, uint256 amount, uint256 pStakeReduced)",
-    "event ForceUnstaked(address indexed user, address indexed operator, uint256 amount, uint256 penaltyAmount)",
-    "event RewardClaimed(address indexed user, address indexed operator, uint256 grossAmount, uint256 burnedAmount, uint256 userReceived, uint256 boostUsed)"
+    "function getBurnRateForBoost(uint256 _boostBps) pure returns (uint256)",
+    "function getTierName(uint256 _boostBps) pure returns (string)",
+    "function previewClaim(address _user) view returns (uint256 totalRewards, uint256 burnAmount, uint256 referrerCut, uint256 userReceives, uint256 burnRateBps, uint256 nftBoost)",
+
+    // Stats
+    "function getStakingStats() view returns (uint256 totalPStake, uint256 totalBkcDelegated, uint256 totalRewardsDistributed, uint256 totalBurnedOnClaim, uint256 totalForceUnstakePenalties, uint256 totalEthFeesCollected, uint256 accRewardPerShare)",
+    "function getUserSummary(address _user) view returns (uint256 userTotalPStake, uint256 delegationCount, uint256 savedRewards, uint256 totalPending, uint256 nftBoost, uint256 burnRateBps)",
+
+    // Events
+    "event Delegated(address indexed user, uint256 indexed delegationIndex, uint256 amount, uint256 pStake, uint256 lockDays, address operator)",
+    "event Unstaked(address indexed user, uint256 indexed delegationIndex, uint256 amountReturned)",
+    "event ForceUnstaked(address indexed user, uint256 indexed delegationIndex, uint256 amountReturned, uint256 penaltyBurned, address operator)",
+    "event RewardsClaimed(address indexed user, uint256 totalRewards, uint256 burnedAmount, uint256 userReceived, uint256 cutAmount, address cutRecipient, uint256 nftBoostUsed, address operator)",
+    "event TokensBurnedOnClaim(address indexed user, uint256 burnedAmount, uint256 burnRateBps, uint256 totalBurnedAllTime)"
 ];
 
+// (Old rewardBoosterABI removed — V9 version is below, after fortunePoolABI)
+
+// RentalManager V9 ABI — NFT rental marketplace with pull-pattern earnings
+export const rentalManagerABI = [
+    // Write
+    "function listNFT(uint256 tokenId, uint96 pricePerHour, uint16 minHours, uint16 maxHours) external",
+    "function updateListing(uint256 tokenId, uint96 pricePerHour, uint16 minHours, uint16 maxHours) external",
+    "function withdrawNFT(uint256 tokenId) external",
+    "function rentNFT(uint256 tokenId, uint256 hours_, address operator) external payable",
+    "function withdrawEarnings() external",
+
+    // Read — Listings
+    "function getListing(uint256 tokenId) view returns (address owner, uint96 pricePerHour, uint16 minHours, uint16 maxHours, uint96 totalEarnings, uint32 rentalCount, bool currentlyRented, uint48 rentalEndTime)",
+    "function getRental(uint256 tokenId) view returns (address tenant, uint48 endTime, bool isActive)",
+    "function isRented(uint256 tokenId) view returns (bool)",
+    "function getRemainingTime(uint256 tokenId) view returns (uint256)",
+    "function hasActiveRental(address user) view returns (bool)",
+    "function getUserBestBoost(address user) view returns (uint256)",
+    "function pendingEarnings(address owner) view returns (uint256)",
+    "function userActiveRental(address user) view returns (uint256)",
+
+    // Read — Marketplace
+    "function getAllListedTokenIds() view returns (uint256[])",
+    "function getListingCount() view returns (uint256)",
+    "function getRentalCost(uint256 tokenId, uint256 hours_) view returns (uint256 rentalCost, uint256 ethFee, uint256 totalCost)",
+    "function getStats() view returns (uint256 activeListings, uint256 volume, uint256 rentals, uint256 ethFees, uint256 earningsWithdrawn)",
+
+    // Events
+    "event NFTListed(uint256 indexed tokenId, address indexed owner, uint96 pricePerHour, uint16 minHours, uint16 maxHours)",
+    "event ListingUpdated(uint256 indexed tokenId, uint96 pricePerHour, uint16 minHours, uint16 maxHours)",
+    "event NFTRented(uint256 indexed tokenId, address indexed tenant, address indexed owner, uint256 hours_, uint256 rentalCost, uint256 ethFee, uint48 endTime, address operator)",
+    "event NFTWithdrawn(uint256 indexed tokenId, address indexed owner)",
+    "event EarningsWithdrawn(address indexed owner, uint256 amount)"
+];
+
+// NFTPool V9 ABI — Constant-product bonding curve (XY=K), ETH fees per tier
+export const nftPoolABI = [
+    // Write
+    "function buyNFT(uint256 maxBkcPrice, address operator) external payable returns (uint256 tokenId)",
+    "function buySpecificNFT(uint256 tokenId, uint256 maxBkcPrice, address operator) external payable",
+    "function sellNFT(uint256 tokenId, uint256 minPayout, address operator) external payable",
+
+    // Read — Prices
+    "function getBuyPrice() view returns (uint256)",
+    "function getSellPrice() view returns (uint256)",
+    "function getTotalBuyCost() view returns (uint256 bkcCost, uint256 ethCost)",
+    "function getTotalSellInfo() view returns (uint256 bkcPayout, uint256 ethCost)",
+    "function getEthFees() view returns (uint256 buyFee, uint256 sellFee)",
+    "function getSpread() view returns (uint256 spread, uint256 spreadBips)",
+
+    // Read — Pool State
+    "function getPoolInfo() view returns (uint256 bkcBalance, uint256 nftCount, uint256 k, bool initialized, uint8 tier)",
+    "function getAvailableNFTs() view returns (uint256[])",
+    "function isNFTInPool(uint256 tokenId) view returns (bool)",
+    "function bkcBalance() view returns (uint256)",
+    "function nftCount() view returns (uint256)",
+    "function tier() view returns (uint8)",
+    "function initialized() view returns (bool)",
+    "function getTierName() view returns (string)",
+
+    // Read — Stats
+    "function getStats() view returns (uint256 volume, uint256 buys, uint256 sells, uint256 ethFees)",
+    "function totalVolume() view returns (uint256)",
+    "function totalBuys() view returns (uint256)",
+    "function totalSells() view returns (uint256)",
+    "function totalEthFees() view returns (uint256)",
+
+    // Events
+    "event NFTPurchased(address indexed buyer, uint256 indexed tokenId, uint256 price, uint256 ethFee, uint256 newNftCount, address operator)",
+    "event NFTSold(address indexed seller, uint256 indexed tokenId, uint256 payout, uint256 ethFee, uint256 newNftCount, address operator)"
+];
+
+// FortunePool V9 ABI — Commit-reveal game with 3 tier bitmask system
+export const fortunePoolABI = [
+    // Write
+    "function commitPlay(bytes32 _commitHash, uint256 _wagerAmount, uint8 _tierMask, address _operator) external payable returns (uint256 gameId)",
+    "function revealPlay(uint256 _gameId, uint256[] calldata _guesses, bytes32 _userSecret) external returns (uint256 prizeWon)",
+    "function claimExpired(uint256 _gameId) external",
+    "function fundPrizePool(uint256 _amount) external",
+
+    // Helpers
+    "function generateCommitHash(uint256[] calldata _guesses, bytes32 _userSecret) pure returns (bytes32)",
+
+    // Constants
+    "function TIER_COUNT() view returns (uint8)",
+    "function BKC_FEE_BPS() view returns (uint256)",
+    "function MAX_PAYOUT_BPS() view returns (uint256)",
+    "function REVEAL_DELAY() view returns (uint256)",
+    "function REVEAL_WINDOW() view returns (uint256)",
+    "function POOL_CAP() view returns (uint256)",
+
+    // Tier info
+    "function getTierInfo(uint8 _tier) pure returns (uint256 range, uint256 multiplier, uint256 winChanceBps)",
+    "function getAllTiers() pure returns (uint256[3] ranges, uint256[3] multipliers, uint256[3] winChances)",
+
+    // Game queries
+    "function getGame(uint256 _gameId) view returns (address player, uint48 commitBlock, uint8 tierMask, uint8 status, address operator, uint96 wagerAmount)",
+    "function getGameResult(uint256 _gameId) view returns (address player, uint128 grossWager, uint128 prizeWon, uint8 tierMask, uint8 matchCount, uint48 revealBlock)",
+    "function getGameStatus(uint256 _gameId) view returns (uint8 status, bool canReveal, uint256 blocksUntilReveal, uint256 blocksUntilExpiry)",
+    "function activeGame(address _player) view returns (uint256)",
+
+    // Fee & winnings calculation
+    "function getRequiredFee(uint8 _tierMask) view returns (uint256 fee)",
+    "function calculatePotentialWinnings(uint256 _wagerAmount, uint8 _tierMask) view returns (uint256 netToPool, uint256 bkcFee, uint256 maxPrize, uint256 maxPrizeAfterCap)",
+
+    // Stats
+    "function gameCounter() view returns (uint256)",
+    "function prizePool() view returns (uint256)",
+    "function getPoolStats() view returns (uint256 prizePool, uint256 totalGamesPlayed, uint256 totalBkcWagered, uint256 totalBkcWon, uint256 totalBkcForfeited, uint256 totalBkcBurned, uint256 maxPayoutNow)",
+
+    // Events
+    "event GameCommitted(uint256 indexed gameId, address indexed player, uint256 wagerAmount, uint8 tierMask, address operator)",
+    "event GameRevealed(uint256 indexed gameId, address indexed player, uint256 grossWager, uint256 prizeWon, uint8 tierMask, uint8 matchCount, address operator)",
+    "event GameDetails(uint256 indexed gameId, uint8 tierMask, uint256[] guesses, uint256[] rolls, bool[] matches)",
+    "event GameExpired(uint256 indexed gameId, address indexed player, uint256 forfeitedAmount)",
+    "event PrizePoolFunded(address indexed funder, uint256 amount)",
+    "event PoolExcessBurned(uint256 amount, uint256 newTotalBurned)"
+];
+
+// RewardBooster V9 ABI — Minimal ERC721, O(1) boost lookup
 export const rewardBoosterABI = [
-    "function balanceOf(address owner) view returns (uint256)",
-    "function tokenOfOwnerByIndex(address owner, uint256 index) view returns (uint256)",
-    "function ownerOf(uint256 tokenId) view returns (address)",
-    "function approve(address to, uint256 tokenId)",
-    "function setApprovalForAll(address operator, bool approved)",
-    "function safeTransferFrom(address from, address to, uint256 tokenId)",
-    "function boostBips(uint256 _tokenId) view returns (uint256)",
-    "function tokenURI(uint256 tokenId) view returns (string)",
+    // ERC721 standard
+    "function balanceOf(address _owner) view returns (uint256)",
+    "function ownerOf(uint256 _tokenId) view returns (address)",
+    "function approve(address _to, uint256 _tokenId) external",
+    "function setApprovalForAll(address _operator, bool _approved) external",
+    "function transferFrom(address _from, address _to, uint256 _tokenId) external",
+    "function safeTransferFrom(address _from, address _to, uint256 _tokenId) external",
     "function totalSupply() view returns (uint256)",
+
+    // Boost queries
+    "function getUserBestBoost(address _user) view returns (uint256)",
+    "function getTokenInfo(uint256 _tokenId) view returns (address owner, uint8 tier, uint256 boostBips)",
+    "function getUserTokens(address _user) view returns (uint256[] tokenIds, uint8[] tiers)",
+    "function getTierBoost(uint8 _tier) pure returns (uint256)",
+    "function getTierName(uint8 _tier) pure returns (string)",
+
+    // Events
     "event Transfer(address indexed from, address indexed to, uint256 indexed tokenId)",
     "event Approval(address indexed owner, address indexed approved, uint256 indexed tokenId)"
 ];
 
-export const rentalManagerABI = [
-    "function listNFT(uint256 _tokenId, uint256 _pricePerHour, uint256 _minHours, uint256 _maxHours) external",
-    "function updateListing(uint256 _tokenId, uint256 _newPricePerHour, uint256 _newMinHours, uint256 _newMaxHours) external",
-    "function withdrawNFT(uint256 _tokenId) external",
-    "function rentNFT(uint256 _tokenId, uint256 _hours) external",
-    "function getListing(uint256 _tokenId) view returns (tuple(address owner, uint256 pricePerHour, uint256 minHours, uint256 maxHours, bool isActive, uint256 totalEarnings, uint256 rentalCount))",
-    "function getRental(uint256 _tokenId) view returns (tuple(address tenant, uint256 startTime, uint256 endTime, uint256 paidAmount))",
-    "function isRented(uint256 _tokenId) view returns (bool)",
-    "function hasRentalRights(uint256 _tokenId, address _user) view returns (bool)",
-    "function getRemainingRentalTime(uint256 _tokenId) view returns (uint256)",
-    "function getAllListedTokenIds() view returns (uint256[])",
-    "function getListingCount() view returns (uint256)",
-    "function getRentalCost(uint256 _tokenId, uint256 _hours) view returns (uint256 totalCost, uint256 protocolFee, uint256 ownerPayout)",
-    "function getMarketplaceStats() view returns (uint256 activeListings, uint256 totalVol, uint256 totalFees, uint256 rentals)",
-    "event NFTListed(uint256 indexed tokenId, address indexed owner, uint256 pricePerHour, uint256 minHours, uint256 maxHours)",
-    "event NFTRented(uint256 indexed tokenId, address indexed tenant, address indexed owner, uint256 hours_, uint256 totalCost, uint256 protocolFee, uint256 ownerPayout, uint256 endTime)",
-    "event NFTWithdrawn(uint256 indexed tokenId, address indexed owner)",
-    "event RentalExpired(uint256 indexed tokenId, address indexed tenant)"
+// Notary V9 ABI — ETH-only, batch support, document types
+export const notaryABI = [
+    // Write
+    "function certify(bytes32 _documentHash, string _meta, uint8 _docType, address _operator) external payable returns (uint256 certId)",
+    "function batchCertify(bytes32[] _documentHashes, string[] _metas, uint8[] _docTypes, address _operator) external payable returns (uint256 startId)",
+    "function transferCertificate(bytes32 _documentHash, address _newOwner) external",
+
+    // Read
+    "function verify(bytes32 _documentHash) view returns (bool exists, address owner, uint48 timestamp, uint8 docType, string meta)",
+    "function getCertificate(uint256 _certId) view returns (bytes32 documentHash, address owner, uint48 timestamp, uint8 docType, string meta)",
+    "function getFee() view returns (uint256)",
+    "function getStats() view returns (uint256 certCount, uint256 totalEthCollected)",
+    "function certCount() view returns (uint256)",
+    "function totalEthCollected() view returns (uint256)",
+    "function MAX_BATCH_SIZE() view returns (uint8)",
+
+    // Events
+    "event Certified(uint256 indexed certId, address indexed owner, bytes32 indexed documentHash, uint8 docType, address operator)",
+    "event BatchCertified(address indexed owner, uint256 startId, uint256 count, address operator)",
+    "event CertificateTransferred(bytes32 indexed documentHash, address indexed from, address indexed to)"
 ];
 
-// NFT Liquidity Pool V6 ABI - With Operator + ETH Fees
-export const nftPoolABI = [
-    // WRITE - V6 with operator + payable + slippage protection
-    "function buyNFT(uint256 _maxPrice, address _operator) external payable returns (uint256 tokenId)",
-    "function buySpecificNFT(uint256 _tokenId, uint256 _maxPrice, address _operator) external payable",
-    "function buyNFTWithSlippage(uint256 _maxPrice, address _operator) external payable returns (uint256 tokenId)",
-    "function sellNFT(uint256 _tokenId, uint256 _minPayout, address _operator) external payable",
-    // READ - Prices
-    "function getBuyPrice() view returns (uint256)",
-    "function getBuyPriceWithTax() view returns (uint256)",
-    "function getSellPrice() view returns (uint256)",
-    "function getSellPriceAfterTax() view returns (uint256)",
-    "function getTotalBuyCost() view returns (uint256 bkcCost, uint256 ethCost)",
-    "function getTotalSellInfo() view returns (uint256 bkcPayout, uint256 ethCost)",
-    "function getSpread() view returns (uint256 spread, uint256 spreadBips)",
-    // READ - Pool State
-    "function getPoolInfo() view returns (uint256 bkcBalance, uint256 nftCount, uint256 k, bool initialized)",
-    "function getAvailableNFTs() view returns (uint256[])",
-    "function getNFTBalance() view returns (uint256)",
-    "function getBKCBalance() view returns (uint256)",
-    "function isNFTInPool(uint256 _tokenId) view returns (bool)",
-    // READ - Tier
-    "function boostBips() view returns (uint256)",
-    "function getTierName() view returns (string)",
-    // READ - ETH Fees
-    "function buyEthFee() view returns (uint256)",
-    "function sellEthFee() view returns (uint256)",
-    "function getEthFeeConfig() view returns (uint256 buyFee, uint256 sellFee, uint256 totalCollected)",
-    "function totalETHCollected() view returns (uint256)",
-    // READ - Stats
-    "function getTradingStats() view returns (uint256 volume, uint256 taxes, uint256 buys, uint256 sells)",
-    "function totalVolume() view returns (uint256)",
-    "function totalTaxesCollected() view returns (uint256)",
-    "function totalBuys() view returns (uint256)",
-    "function totalSells() view returns (uint256)",
-    // Events V6
-    "event NFTPurchased(address indexed buyer, uint256 indexed tokenId, uint256 price, uint256 tax, uint256 newBkcBalance, uint256 newNftCount, address operator)",
-    "event NFTSold(address indexed seller, uint256 indexed tokenId, uint256 payout, uint256 tax, uint256 newBkcBalance, uint256 newNftCount, address operator)"
-];
-
-export const actionsManagerABI = [
-    "function participate(uint256 _wagerAmount, uint256[] calldata _guesses, bool _isCumulative) external payable",
-    "function oracleFee() view returns (uint256)",
-    "function gameFeeBips() view returns (uint256)",
-    "function getRequiredOracleFee(bool _isCumulative) view returns (uint256)",
-    "function activeTierCount() view returns (uint256)",
-    "function gameCounter() view returns (uint256)",
-    "function prizePoolBalance() view returns (uint256)",
-    "function getExpectedGuessCount(bool _isCumulative) view returns (uint256)",
-    "function isGameFulfilled(uint256 _gameId) view returns (bool)",
-    "function getGameResults(uint256 _gameId) view returns (uint256[])",
-    "function getJackpotTierId() view returns (uint256)",
-    "function getJackpotTier() view returns (uint256 tierId, uint128 maxRange, uint64 multiplierBips, bool active)",
-    "function getAllTiers() view returns (uint128[] ranges, uint64[] multipliers)",
-    "function prizeTiers(uint256 tierId) view returns (uint128 maxRange, uint64 multiplierBips, bool active)",
-    "function calculatePotentialWinnings(uint256 _wagerAmount, bool _isCumulative) view returns (uint256 maxPrize, uint256 netWager)",
-    "event GameRequested(uint256 indexed gameId, address indexed player, uint256 wagerAmount, uint256[] guesses, bool isCumulative, uint256 targetTier)",
-    "event GameFulfilled(uint256 indexed gameId, address indexed player, uint256 prizeWon, uint256[] rolls, uint256[] guesses, bool isCumulative)"
-];
-
-// FortunePool V6.9 ABI - Commit-Reveal System (Aligned with fortune-tx.js)
-export const fortunePoolV2ABI = [
-    // ===== Write Functions =====
-    "function commitPlay(bytes32 _commitmentHash, uint256 _wagerAmount, bool _isCumulative, address _operator) external payable",
-    "function revealPlay(uint256 _gameId, uint256[] calldata _guesses, bytes32 _userSecret) external returns (uint256 prizeWon)",
-    "function generateCommitmentHash(uint256[] calldata _guesses, bytes32 _userSecret) external pure returns (bytes32 hash)",
-    "function claimExpiredGame(uint256 _gameId) external",
-
-    // ===== Commitment Queries =====
-    "function getCommitmentStatus(uint256 _gameId) view returns (uint8 status, bool canReveal, bool isExpired, uint256 blocksUntilReveal, uint256 blocksUntilExpiry)",
-    "function getCommitment(uint256 _gameId) view returns (address player, uint64 commitBlock, bool isCumulative, uint8 status, uint256 wagerAmount, uint256 ethPaid)",
-    "function commitmentMeta(uint256 _gameId) view returns (bytes32 hash, address operator, uint96 tierNonce)",
-    "function revealDelay() view returns (uint256)",
-    "function revealWindow() view returns (uint256)",
-
-    // ===== Fees =====
-    "function serviceFee() view returns (uint256)",
-    "function getRequiredServiceFee(bool _isCumulative) view returns (uint256)",
-    "function gameFeeBips() view returns (uint256)",
-
-    // ===== Tiers =====
-    "function activeTierCount() view returns (uint256)",
-    "function prizeTiers(uint256 tierId) view returns (uint128 maxRange, uint64 multiplierBips, bool active)",
-    "function getTier(uint256 _tierId) view returns (uint256 maxRange, uint256 multiplierBips, bool active)",
-    "function getAllTiers() view returns (uint128[] ranges, uint64[] multipliers)",
-    "function getExpectedGuessCount(bool _isCumulative) view returns (uint256)",
-    "function calculatePotentialWinnings(uint256 _wagerAmount, bool _isCumulative) view returns (uint256 maxPrize, uint256 netWager)",
-
-    // ===== Game State =====
-    "function gameCounter() view returns (uint256)",
-    "function prizePoolBalance() view returns (uint256)",
-
-    // ===== Game Results =====
-    "function getGameResult(uint256 _gameId) view returns (address player, uint256 wagerAmount, uint256 prizeWon, uint256[] guesses, uint256[] rolls, bool isCumulative, uint8 matchCount, uint256 timestamp)",
-    "function getPlayerStats(address _player) view returns (uint256 gamesPlayed, uint256 totalWagered, uint256 totalWon, int256 netProfit)",
-    "function getPoolStats() view returns (uint256 poolBalance, uint256 gamesPlayed, uint256 wageredAllTime, uint256 paidOutAllTime, uint256 winsAllTime, uint256 ethCollected, uint256 bkcFees, uint256 expiredGames)",
-
-    // ===== Statistics =====
-    "function totalWageredAllTime() view returns (uint256)",
-    "function totalPaidOutAllTime() view returns (uint256)",
-    "function totalWinsAllTime() view returns (uint256)",
-    "function totalETHCollected() view returns (uint256)",
-    "function totalBKCFees() view returns (uint256)",
-    "function totalExpiredGames() view returns (uint256)",
-
-    // ===== Events =====
-    "event GameCommitted(uint256 indexed gameId, address indexed player, uint256 wagerAmount, bool isCumulative, address operator)",
-    "event GameRevealed(uint256 indexed gameId, address indexed player, uint256 wagerAmount, uint256 prizeWon, bool isCumulative, uint8 matchCount, address operator)",
-    "event GameDetails(uint256 indexed gameId, uint256[] guesses, uint256[] rolls, bool[] matches)",
-    "event JackpotWon(uint256 indexed gameId, address indexed player, uint256 prizeAmount, uint256 tier)",
-    "event GameExpired(uint256 indexed gameId, address indexed player, uint256 forfeitedAmount)"
-];
-
-export const publicSaleABI = [
-    "function tiers(uint256 tierId) view returns (uint256 priceInWei, uint64 maxSupply, uint64 mintedCount, uint16 boostBips, bool isConfigured, bool isActive, string metadataFile, string name)",
-    "function buyNFT(uint256 _tierId) external payable",
-    "function buyMultipleNFTs(uint256 _tierId, uint256 _quantity) external payable",
-    "function getTierPrice(uint256 _tierId) view returns (uint256)",
-    "function getTierSupply(uint256 _tierId) view returns (uint64 maxSupply, uint64 mintedCount)",
-    "function isTierActive(uint256 _tierId) view returns (bool)",
-    "event NFTSold(address indexed buyer, uint256 indexed tierId, uint256 indexed tokenId, uint256 price)"
-];
-
-// Notary V6.8 ABI - ETH Service Fee + Operator
-export const decentralizedNotaryABI = [
-    // NFT functions
-    "function balanceOf(address owner) view returns (uint256)",
-    "function tokenURI(uint256 tokenId) view returns (string)",
-    "function ownerOf(uint256 tokenId) view returns (address)",
-    "function tokenOfOwnerByIndex(address owner, uint256 index) view returns (uint256)",
-    "function totalSupply() view returns (uint256)",
-    
-    // Document functions
-    "function getDocument(uint256 tokenId) view returns (tuple(string ipfsCid, string description, bytes32 contentHash, uint256 timestamp))",
-    "function documents(uint256 tokenId) view returns (string ipfsCid, string description, bytes32 contentHash, uint256 timestamp)",
-    
-    // V6.8: Fees - BKC + ETH
-    "function bkcFee() view returns (uint256)",
-    "function ethFee() view returns (uint256)",
-    
-    // V6.8: New notarize with operator (payable for ETH fee)
-    "function notarize(string _ipfsCid, string _description, bytes32 _contentHash, address _operator) external payable returns (uint256)",
-    
-    // Events V6.8
-    "event DocumentNotarized(uint256 indexed tokenId, address indexed owner, address indexed operator, string ipfsCid, bytes32 contentHash, uint256 bkcFeePaid, uint256 ethFeePaid)"
-];
-
+// SimpleBKCFaucet V9 ABI — Dual-mode testnet faucet (direct + relayer)
 export const faucetABI = [
-    "function canClaim(address _user) view returns (bool)",
-    "function getCooldownRemaining(address _user) view returns (uint256)",
-    "function getUserInfo(address _user) view returns (uint256 lastClaimTime, uint256 totalClaimed)",
-    "function getFaucetStatus() view returns (uint256 bkcBalance, uint256 ethBalance, bool isActive)",
-    "function COOLDOWN_PERIOD() view returns (uint256)",
-    "function TOKEN_AMOUNT() view returns (uint256)",
-    "function ETH_AMOUNT() view returns (uint256)",
-    "event TokensDistributed(address indexed recipient, uint256 tokenAmount, uint256 ethAmount, address indexed relayer)"
+    // Write
+    "function claim() external",
+
+    // Read — User
+    "function canClaim(address user) view returns (bool)",
+    "function getCooldownRemaining(address user) view returns (uint256)",
+    "function getUserInfo(address user) view returns (uint256 lastClaim, uint256 claims, bool eligible, uint256 cooldownLeft)",
+
+    // Read — Faucet
+    "function getFaucetStatus() view returns (uint256 ethBalance, uint256 tokenBalance, uint256 ethPerDrip, uint256 tokensPerDrip, uint256 estimatedEthClaims, uint256 estimatedTokenClaims)",
+    "function getStats() view returns (uint256 tokens, uint256 eth, uint256 claims, uint256 users)",
+    "function cooldown() view returns (uint256)",
+    "function tokensPerClaim() view returns (uint256)",
+    "function ethPerClaim() view returns (uint256)",
+    "function paused() view returns (bool)",
+
+    // Events
+    "event Claimed(address indexed recipient, uint256 tokens, uint256 eth, address indexed via)"
 ];
 
+// BackchainEcosystem V9 ABI — Central fee hub with module registration
 export const ecosystemManagerABI = [
-    "function getServiceRequirements(bytes32 _serviceKey) view returns (uint256 fee, uint256 pStake)",
-    "function getFee(bytes32 _serviceKey) view returns (uint256)",
-    "function getBoosterDiscount(uint256 _boostBips) view returns (uint256)",
-    "function getMiningDistributionBips() view returns (uint256 stakingBips, uint256 minerBips, uint256 treasuryBips)",
-    "function getFeeDistributionBips() view returns (uint256 burnBips, uint256 treasuryBips, uint256 poolBips)",
-    "function getTreasuryAddress() view returns (address)",
-    "function getDelegationManagerAddress() view returns (address)",
-    "function getBKCTokenAddress() view returns (address)",
-    "function getBoosterAddress() view returns (address)",
-    "function getNFTLiquidityPoolFactoryAddress() view returns (address)",
-    "function getMiningManagerAddress() view returns (address)",
-    "function getFortunePoolAddress() view returns (address)",
-    "function getNotaryAddress() view returns (address)",
-    "function getRentalManagerAddress() view returns (address)",
-    "function getPublicSaleAddress() view returns (address)",
-    "function isInitialized() view returns (bool)",
-    "function owner() view returns (address)"
+    // Fee calculation & collection
+    "function calculateFee(bytes32 _actionId, uint256 _txValue) view returns (uint256)",
+
+    // Immutable references
+    "function bkcToken() view returns (address)",
+    "function treasury() view returns (address)",
+    "function buybackAccumulated() view returns (uint256)",
+    "function referredBy(address _user) view returns (address)",
+
+    // Stats
+    "function totalEthCollected() view returns (uint256)",
+    "function totalBkcCollected() view returns (uint256)",
+    "function totalFeeEvents() view returns (uint256)",
+    "function getStats() view returns (uint256 ethCollected, uint256 bkcCollected, uint256 feeEvents, uint256 buybackEth, uint256 moduleCount)",
+
+    // Module queries
+    "function isAuthorized(address _contract) view returns (bool)",
+    "function moduleCount() view returns (uint256)",
+
+    // Events
+    "event FeeCollected(bytes32 indexed moduleId, address indexed user, address operator, address customRecipient, uint256 ethAmount, uint256 bkcAmount)"
 ];
 
-export const miningManagerABI = [
-    "function pendingMinerRewards(address _user) view returns (uint256)",
-    "function claimMinerRewards(uint256 _boosterTokenId) external",
-    "function getLastRewardBlock() view returns (uint256)",
-    "function getRewardPerBlock() view returns (uint256)",
-    "event MinerRewardsClaimed(address indexed user, uint256 amount)"
+// BuybackMiner V9 ABI — Permissionless buyback + mining scarcity curve
+export const buybackMinerABI = [
+    // Write
+    "function executeBuyback() external",
+    "function executeBuybackWithSlippage(uint256 _minTotalBkcOut) external",
+
+    // Constants
+    "function MAX_SUPPLY() view returns (uint256)",
+    "function MAX_MINTABLE() view returns (uint256)",
+    "function MIN_BUYBACK() view returns (uint256)",
+    "function CALLER_BPS() view returns (uint256)",
+    "function BURN_BPS() view returns (uint256)",
+
+    // Views
+    "function currentMiningRate() view returns (uint256 rateBps)",
+    "function pendingBuybackETH() view returns (uint256)",
+    "function getSupplyInfo() view returns (uint256 currentSupply, uint256 maxSupply, uint256 totalMintedViaMining, uint256 remainingMintable, uint256 miningRateBps, uint256 totalBurnedLifetime)",
+    "function previewBuyback() view returns (uint256 ethAvailable, uint256 estimatedBkcPurchased, uint256 estimatedBkcMined, uint256 estimatedBurn, uint256 estimatedToStakers, uint256 estimatedCallerReward, uint256 currentMiningRateBps, bool isReady)",
+    "function previewMiningAtSupply(uint256 _supplyLevel, uint256 _purchaseAmount) pure returns (uint256 miningAmount, uint256 rateBps)",
+    "function getBuybackStats() view returns (uint256 totalBuybacks, uint256 totalEthSpent, uint256 totalBkcPurchased, uint256 totalBkcMined, uint256 totalBkcBurned, uint256 totalBkcToStakers, uint256 totalCallerRewards, uint256 avgEthPerBuyback, uint256 avgBkcPerBuyback)",
+    "function getLastBuyback() view returns (uint256 timestamp, uint256 blockNumber, address caller, uint256 ethSpent, uint256 bkcTotal, uint256 timeSinceLast)",
+
+    // Stats
+    "function totalBuybacks() view returns (uint256)",
+    "function totalEthSpent() view returns (uint256)",
+    "function totalBkcPurchased() view returns (uint256)",
+    "function totalBkcMined() view returns (uint256)",
+    "function totalBkcBurned() view returns (uint256)",
+    "function totalBkcToStakers() view returns (uint256)",
+    "function totalCallerRewards() view returns (uint256)",
+
+    // Events
+    "event BuybackExecuted(address indexed caller, uint256 indexed buybackNumber, uint256 callerReward, uint256 ethSpent, uint256 bkcPurchased, uint256 bkcMined, uint256 bkcBurned, uint256 bkcToStakers, uint256 miningRateBps)"
 ];
 
 export const nftPoolFactoryABI = [
@@ -697,132 +740,98 @@ export const nftPoolFactoryABI = [
     "event PoolDeployed(uint256 indexed boostBips, address indexed poolAddress)"
 ];
 
-// ============================================================================
-// ✅ V29: CHARITY POOL ABI
-// ============================================================================
-
+// CharityPool V9 ABI — ETH-only permissionless fundraising
 export const charityPoolABI = [
-    // Read Functions
-    "function getCampaign(uint256 _campaignId) view returns (address creator, string title, string description, uint96 goalAmount, uint96 raisedAmount, uint32 donationCount, uint64 deadline, uint64 createdAt, uint96 boostAmount, uint64 boostTime, uint8 status, bool goalReached)",
-    "function campaigns(uint256 campaignId) view returns (address creator, uint96 goalAmount, uint96 raisedAmount, uint32 donationCount, uint64 deadline, uint64 createdAt, uint96 boostAmount, uint64 boostTime, uint8 status)",
-    "function campaignTitles(uint256 campaignId) view returns (string)",
-    "function campaignDescriptions(uint256 campaignId) view returns (string)",
-    "function donations(uint256 donationId) view returns (address donor, uint64 campaignId, uint96 grossAmount, uint96 netAmount, uint64 timestamp)",
-    "function campaignCounter() view returns (uint64)",
-    "function donationCounter() view returns (uint64)",
-    "function userActiveCampaigns(address user) view returns (uint8)",
-    "function maxActiveCampaigns() view returns (uint8)",
-    "function donationFeeBips() view returns (uint16)",
-    "function totalRaisedAllTime() view returns (uint256)",
-    "function totalFeesCollected() view returns (uint256)",
-    "function getCampaignDonations(uint256 _campaignId) view returns (uint256[])",
-    "function getUserCampaigns(address _user) view returns (uint256[])",
-    "function getUserDonations(address _user) view returns (uint256[])",
-    "function getStats() view returns (uint64 totalCampaigns, uint256 totalRaised, uint256 totalDonations, uint256 totalFees)",
-    "function previewDonation(uint256 _amount) view returns (uint256 netToCampaign, uint256 feeToProtocol)",
-    "function canWithdraw(uint256 _campaignId) view returns (bool allowed, string reason)",
-    "function getFeeConfig() view returns (uint96 createBkc, uint96 withdrawBkc, uint16 donationBips, uint96 boostBkc, uint96 boostEth)",
+    // Write
+    "function createCampaign(string title, string metadataUri, uint96 goal, uint256 durationDays, address operator) external payable returns (uint256)",
+    "function donate(uint256 campaignId, address operator) external payable",
+    "function boostCampaign(uint256 campaignId, address operator) external payable",
+    "function closeCampaign(uint256 campaignId) external",
+    "function withdraw(uint256 campaignId) external",
 
-    // Write Functions
-    "function createCampaign(string _title, string _description, uint96 _goalAmount, uint256 _durationDays, address _operator) external returns (uint256)",
-    "function donate(uint256 _campaignId, address _operator) external payable",
-    "function cancelCampaign(uint256 _campaignId) external",
-    "function withdraw(uint256 _campaignId, address _operator) external",
-    "function boostCampaign(uint256 _campaignId, address _operator) external payable",
+    // Read — Campaign
+    "function getCampaign(uint256 campaignId) view returns (address owner, uint48 deadline, uint8 status, uint96 raised, uint96 goal, uint32 donorCount, bool isBoosted, string title, string metadataUri)",
+    "function canWithdraw(uint256 campaignId) view returns (bool)",
+    "function titles(uint256 campaignId) view returns (string)",
+    "function metadataUris(uint256 campaignId) view returns (string)",
+    "function campaignCount() view returns (uint256)",
+
+    // Read — Fees & Stats
+    "function previewDonation(uint256 amount) view returns (uint256 fee, uint256 netToCampaign)",
+    "function getStats() view returns (uint256 campaignCount, uint256 totalDonated, uint256 totalWithdrawn, uint256 totalEthFees)",
 
     // Events
-    "event CampaignCreated(uint256 indexed campaignId, address indexed creator, uint96 goalAmount, uint64 deadline, address operator)",
-    "event DonationMade(uint256 indexed campaignId, uint256 indexed donationId, address indexed donor, uint96 grossAmount, uint96 netAmount, uint96 feeAmount, address operator)",
-    "event CampaignCancelled(uint256 indexed campaignId, address indexed creator, uint96 raisedAmount)",
-    "event FundsWithdrawn(uint256 indexed campaignId, address indexed creator, uint96 amount, address operator)"
+    "event CampaignCreated(uint256 indexed campaignId, address indexed owner, uint96 goal, uint48 deadline, address operator)",
+    "event DonationMade(uint256 indexed campaignId, address indexed donor, uint256 grossAmount, uint256 netAmount, address operator)",
+    "event CampaignBoosted(uint256 indexed campaignId, address indexed booster, uint48 boostExpiry, address operator)",
+    "event CampaignClosed(uint256 indexed campaignId, address indexed owner, uint96 raised)",
+    "event FundsWithdrawn(uint256 indexed campaignId, address indexed owner, uint96 amount)"
 ];
 
-// ============================================================================
-// ✅ V8.0.0: BACKCHAT ABI - Viral Referral Social Protocol
-// ============================================================================
-// CANONICAL ABI — All files should import from here, not define their own.
-// Fee model: 50/30/20 (operator/referrer/protocol) with viral referral system.
+// Agora V9 ABI — Decentralized social protocol (Tier 1: ETH only)
+export const agoraABI = [
+    // ── Posts ──
+    "function createPost(string contentHash, uint8 tag, uint8 contentType, address operator) external payable",
+    "function createReply(uint256 parentId, string contentHash, uint8 contentType, address operator) external payable",
+    "function createRepost(uint256 originalId, string contentHash, address operator) external payable",
+    "function deletePost(uint256 postId) external",
+    "function changeTag(uint256 postId, uint8 newTag) external",
 
-export const backchatABI = [
-    // ── Profile ──────────────────────────────────────────────────────────────
-    "function createProfile(string username, string displayName, string bio, address operator) external payable",
-    "function updateProfile(string displayName, string bio) external",
+    // ── Engagement ──
+    "function like(uint256 postId, address operator) external payable",
+    "function superLike(uint256 postId, address operator) external payable",
+    "function downvote(uint256 postId, address operator) external payable",
+    "function follow(address user, address operator) external payable",
+    "function unfollow(address user) external",
 
-    // ── Content ──────────────────────────────────────────────────────────────
-    "function createPost(string content, string mediaCID, address operator) external payable returns (uint256 postId)",
-    "function createReply(uint256 parentId, string content, string mediaCID, address operator, uint256 tipBkc) external payable returns (uint256 postId)",
-    "function createRepost(uint256 originalPostId, address operator, uint256 tipBkc) external payable returns (uint256 postId)",
+    // ── Profiles ──
+    "function createProfile(string username, string metadataURI, address operator) external payable",
+    "function updateProfile(string metadataURI) external",
+    "function pinPost(uint256 postId) external",
 
-    // ── Engagement ───────────────────────────────────────────────────────────
-    "function like(uint256 postId, address operator, uint256 tipBkc) external payable",
-    "function superLike(uint256 postId, address operator, uint256 tipBkc) external payable",
-    "function follow(address toFollow, address operator, uint256 tipBkc) external payable",
-    "function unfollow(address toUnfollow) external",
-
-    // ── Premium ──────────────────────────────────────────────────────────────
+    // ── Premium ──
     "function boostProfile(address operator) external payable",
     "function obtainBadge(address operator) external payable",
 
-    // ── Referral (V8 NEW) ────────────────────────────────────────────────────
-    "function setReferrer(address _referrer) external",
-    "function getReferralStats(address referrer) external view returns (uint256 totalReferred, uint256 totalEarned)",
-    "function referredBy(address user) external view returns (address)",
-    "function referralCount(address referrer) external view returns (uint256)",
-    "function referralEarnings(address referrer) external view returns (uint256)",
-
-    // ── Withdrawal ───────────────────────────────────────────────────────────
-    "function withdraw() external",
-
-    // ── View: Fees ───────────────────────────────────────────────────────────
-    "function calculateFee(uint256 gasEstimate) view returns (uint256)",
-    "function getCurrentFees() view returns (uint256 postFee, uint256 replyFee, uint256 likeFee, uint256 followFee, uint256 repostFee, uint256 superLikeMin, uint256 boostMin, uint256 badgeFee_)",
-    "function getUsernameFee(uint256 length) pure returns (uint256)",
-
-    // ── View: State ──────────────────────────────────────────────────────────
+    // ── Constants ──
+    "function VOTE_PRICE() view returns (uint256)",
+    "function TAG_COUNT() view returns (uint8)",
     "function postCounter() view returns (uint256)",
-    "function postAuthor(uint256 postId) view returns (address)",
-    "function pendingEth(address user) view returns (uint256)",
-    "function usernameOwner(bytes32 usernameHash) view returns (address)",
-    "function hasLiked(uint256 postId, address user) view returns (bool)",
-    "function boostExpiry(address user) view returns (uint256)",
-    "function badgeExpiry(address user) view returns (uint256)",
+    "function totalProfiles() view returns (uint256)",
 
-    // ── View: Helpers ────────────────────────────────────────────────────────
+    // ── Views ──
+    "function getPost(uint256 postId) view returns (address author, uint8 tag, uint8 contentType, bool deleted, uint32 createdAt, uint256 replyTo, uint256 repostOf, uint256 likes, uint256 superLikes, uint256 downvotes, uint256 replies, uint256 reposts)",
+    "function getUserProfile(address user) view returns (bytes32 usernameHash, string metadataURI, uint256 pinned, bool boosted, bool hasBadge, uint64 boostExp, uint64 badgeExp)",
     "function isProfileBoosted(address user) view returns (bool)",
     "function hasTrustBadge(address user) view returns (bool)",
-    "function hasUserLiked(uint256 postId, address user) view returns (bool)",
-    "function getPendingBalance(address user) view returns (uint256)",
     "function isUsernameAvailable(string username) view returns (bool)",
-    "function getUsernameOwner(string username) view returns (address)",
+    "function getUsernamePrice(uint256 length) pure returns (uint256)",
+    "function hasLiked(uint256 postId, address user) view returns (bool)",
+    "function getOperatorStats(address operator) view returns (uint256 posts_, uint256 engagement)",
+    "function getGlobalStats() view returns (uint256 totalPosts, uint256 totalProfiles, uint256[15] tagCounts)",
     "function version() pure returns (string)",
 
-    // ── Immutables ───────────────────────────────────────────────────────────
-    "function bkcToken() view returns (address)",
-    "function ecosystemManager() view returns (address)",
-
-    // ── Events ───────────────────────────────────────────────────────────────
-    "event ProfileCreated(address indexed user, bytes32 indexed usernameHash, string username, string displayName, string bio, uint256 ethPaid, address indexed operator)",
-    "event ProfileUpdated(address indexed user, string displayName, string bio)",
-    "event PostCreated(uint256 indexed postId, address indexed author, string content, string mediaCID, address indexed operator)",
-    "event ReplyCreated(uint256 indexed postId, uint256 indexed parentId, address indexed author, string content, string mediaCID, uint256 tipBkc, address operator)",
-    "event RepostCreated(uint256 indexed newPostId, uint256 indexed originalPostId, address indexed reposter, uint256 tipBkc, address operator)",
-    "event Liked(uint256 indexed postId, address indexed user, uint256 tipBkc, address indexed operator)",
-    "event SuperLiked(uint256 indexed postId, address indexed user, uint256 ethAmount, uint256 tipBkc, address indexed operator)",
-    "event Followed(address indexed follower, address indexed followed, uint256 tipBkc, address indexed operator)",
+    // ── Events ──
+    "event PostCreated(uint256 indexed postId, address indexed author, uint8 tag, uint8 contentType, string contentHash, address operator)",
+    "event ReplyCreated(uint256 indexed postId, uint256 indexed parentId, address indexed author, uint8 tag, uint8 contentType, string contentHash, address operator)",
+    "event RepostCreated(uint256 indexed postId, uint256 indexed originalId, address indexed author, uint8 tag, string contentHash, address operator)",
+    "event PostDeleted(uint256 indexed postId, address indexed author)",
+    "event Liked(uint256 indexed postId, address indexed liker, address indexed author, address operator)",
+    "event SuperLiked(uint256 indexed postId, address indexed voter, address indexed author, uint256 count, address operator)",
+    "event Downvoted(uint256 indexed postId, address indexed voter, address indexed author, uint256 count, address operator)",
+    "event Followed(address indexed follower, address indexed followed, address operator)",
     "event Unfollowed(address indexed follower, address indexed followed)",
-    "event ProfileBoosted(address indexed user, uint256 amount, uint256 expiresAt, address indexed operator)",
-    "event BadgeObtained(address indexed user, uint256 expiresAt, address indexed operator)",
-    "event Withdrawal(address indexed user, uint256 amount)",
-    "event TipProcessed(address indexed from, address indexed creator, uint256 totalBkc, uint256 creatorShare, uint256 miningShare, address indexed operator)",
-    "event ReferrerSet(address indexed user, address indexed referrer)"
+    "event ProfileCreated(address indexed user, string username, string metadataURI, address operator)",
+    "event ProfileUpdated(address indexed user, string metadataURI)",
+    "event ProfileBoosted(address indexed user, uint256 daysAdded, uint64 expiresAt, address operator)",
+    "event BadgeObtained(address indexed user, uint64 expiresAt, address operator)"
 ];
 
-// Campaign Status Enum
+// Campaign Status Enum (V9: ACTIVE → CLOSED → WITHDRAWN)
 export const CampaignStatus = {
     ACTIVE: 0,
-    COMPLETED: 1,
-    CANCELLED: 2,
-    WITHDRAWN: 3
+    CLOSED: 1,
+    WITHDRAWN: 2
 };
 
 // Campaign Categories

@@ -1,11 +1,11 @@
 // modules/js/transactions/index.js
-// ✅ PRODUCTION V2.0 - Added Operator Support
-// 
+// ✅ V9.0 - Updated exports for V9 contracts
+//
 // This file re-exports all transaction modules for simplified imports.
 //
 // ============================================================================
 // USAGE:
-// 
+//
 // Import specific modules:
 //   import { CharityTx, StakingTx, BackchatTx } from './transactions/index.js';
 //
@@ -20,20 +20,23 @@
 // ============================================================================
 
 // Charity Pool
-export { 
+export {
     CharityTx,
     createCampaign,
     donate,
-    cancelCampaign,
+    closeCampaign,
+    cancelCampaign, // backward-compat alias
     withdraw,
     boostCampaign,
     getCampaign,
     getCampaignCount,
-    getWithdrawalFee
+    canWithdraw,
+    previewDonation,
+    getStats as charityGetStats
 } from './charity-tx.js';
 
-// Staking / Delegation
-export { 
+// Staking (V9: StakingPool replaces DelegationManager)
+export {
     StakingTx,
     delegate,
     unstake,
@@ -44,75 +47,87 @@ export {
     getUserPStake,
     getTotalPStake,
     getEarlyUnstakePenalty,
-    getStakingConfig
+    getStakingConfig,
+    previewClaim,
+    getUserSummary
 } from './staking-tx.js';
 
 // NFT Pool
-export { 
+export {
     NftTx,
     buyNft,
+    buySpecificNft,
     sellNft,
     approveAllNfts,
     getBuyPrice,
     getSellPrice,
+    getTotalBuyCost,
+    getTotalSellInfo,
     getPoolInfo,
     getAvailableNfts,
-    getUserNfts,
+    getEthFees,
+    getStats as nftGetStats,
+    getTierName,
+    getSpread,
     isApprovedForAll
 } from './nft-tx.js';
 
 // Fortune Pool
-export { 
+export {
     FortuneTx,
     commitPlay,
     revealPlay,
     playGame,
     getActiveTiers,
-    getTierForWager,
     getServiceFee,
     calculatePotentialWin,
-    getUserGameHistory,
-    getLastWinningNumber
+    getPoolStats as fortuneGetPoolStats,
+    getCommitmentStatus,
+    getGameResult
 } from './fortune-tx.js';
 
 // Rental Marketplace
-export { 
+export {
     RentalTx,
     listNft,
     rentNft,
     withdrawNft,
+    withdrawEarnings,
     updateListing,
-    spotlightListing,
-    endRental,
     getListing,
     getRental,
-    getActiveListings,
-    getUserListings,
-    getUserRentals,
-    calculateRentalCost,
-    isMarketplacePaused
+    getAllListedTokenIds,
+    getListingCount,
+    getRentalCost,
+    isRented,
+    getRemainingRentalTime,
+    hasActiveRental,
+    getPendingEarnings,
+    getMarketplaceStats
 } from './rental-tx.js';
 
-// Notary
-export { 
+// Notary (V9: certify replaces notarize)
+export {
     NotaryTx,
-    notarize,
-    getDocument,
-    getDocumentByHash,
-    getUserDocuments,
-    getDocumentCount,
-    isHashNotarized,
-    verifyDocument,
+    certify,
+    notarize, // backward-compat alias
+    verify,
+    verifyByHash, // backward-compat alias
+    getCertificate,
+    getDocument, // backward-compat alias
+    getFee as notaryGetFee,
+    getTotalDocuments,
+    getStats as notaryGetStats,
     calculateFileHash
 } from './notary-tx.js';
 
 // Faucet (Testnet) - No operator needed
-export { 
+export {
     FaucetTx,
     executeFaucetClaim
 } from './faucet-tx.js';
 
-// Backchat (Social Network) - V8.0.0 Viral Referral
+// Backchat / Agora (V9: Agora replaces Backchat contract)
 export {
     BackchatTx,
     createProfile,
@@ -122,18 +137,21 @@ export {
     createRepost,
     like,
     superLike,
+    downvote,
     follow,
     unfollow,
+    deletePost,
+    pinPost,
     boostProfile,
     obtainBadge,
-    withdraw as backchatWithdraw,
-    setReferrer,
-    getReferralStats,
-    getReferredBy,
-    getCurrentFees as backchatGetCurrentFees,
+    getUsernamePrice,
+    getUsernameFee, // backward-compat alias
+    getPost,
     getPostCount,
-    getPendingBalance as backchatGetPendingBalance,
+    getUserProfile,
     isUsernameAvailable,
+    hasUserLiked,
+    getGlobalStats,
     getVersion as backchatGetVersion
 } from './backchat-tx.js';
 

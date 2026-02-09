@@ -928,8 +928,10 @@ async function loadDataForSelectedPool(forceRefresh = false) {
         const poolKey = `pool_${tier.name.toLowerCase()}`;
         let poolAddress = addresses[poolKey] || poolAddressCache.get(boostBips);
 
+        // V9: Pool addresses come from deployment-addresses.json (pool_diamond, pool_gold, etc.)
+        // Factory lookup is a fallback only
         if (!poolAddress) {
-            const factoryAddress = addresses.nftLiquidityPoolFactory;
+            const factoryAddress = addresses.nftPoolFactory || addresses.nftLiquidityPoolFactory;
             if (factoryAddress && State.publicProvider) {
                 try {
                     const factory = new ethers.Contract(factoryAddress, factoryABI, State.publicProvider);

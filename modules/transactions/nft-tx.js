@@ -1,27 +1,26 @@
 // modules/js/transactions/nft-tx.js
-// ✅ PRODUCTION V2.0 - Updated for NFTLiquidityPool V6 + Operator + ETH Fees
-// 
-// CHANGES V2.0:
-// - CRITICAL FIX: All buy/sell functions now include operator parameter
-// - CRITICAL FIX: All buy/sell functions now send ETH fees (msg.value)
-// - FIXED: getPoolNFTCount() → getNFTBalance() (correct V6 function)
-// - FIXED: poolTokenBalance() → getBKCBalance() (correct V6 function)
-// - FIXED: getNFTsInPool() → getAvailableNFTs() (correct V6 function)
-// - FIXED: tierIndex() → boostBips() (correct V6 function)
-// - ADDED: getTotalBuyCost() - returns BKC cost + ETH fee
-// - ADDED: getTotalSellInfo() - returns BKC payout + ETH fee
-// - ADDED: getEthFeeConfig() - ETH fee configuration
-// - ADDED: getTierName() - human readable tier
-// - ADDED: getTradingStats() - volume, taxes, buys, sells
-// - ADDED: getSpread() - buy/sell spread
-// - Uses resolveOperator() for hybrid operator system
-// - Backwards compatible (operator is optional)
+// ✅ V9.0 - Updated for NFTPool V9 (XY=K bonding curve, ETH fees, no BKC tax)
+//
+// CHANGES V9.0:
+// - rewardBoosterNFT → rewardBooster
+// - No BKC tax (5%/10% removed) — pure bonding curve price
+// - ETH fees via ecosystem.calculateFee (not buyEthFee/sellEthFee)
+// - buyNFT(maxBkcPrice, operator) payable — max BKC price + ETH fee
+// - buySpecificNFT(tokenId, maxBkcPrice, operator) payable
+// - sellNFT(tokenId, minPayout, operator) payable — ETH fee
+// - Removed: buyNFTWithSlippage, getBuyPriceWithTax, getSellPriceAfterTax
+// - getPoolInfo returns 5-tuple (bkcBalance, nftCount, k, initialized, tier)
+// - getStats returns 4-tuple (volume, buys, sells, ethFees)
+// - getEthFees(buyFee, sellFee) replaces getEthFeeConfig
+// - getTotalBuyCost/getTotalSellInfo still exist (bkcCost/bkcPayout + ethCost)
+// - getSpread still exists
+// - tier() returns uint8 (pool tier)
+// - Tier matching: pool.tier() vs booster.tokenTier(tokenId)
 //
 // ============================================================================
-// V6 FEE STRUCTURE (EQUAL FOR ALL - NO DISCOUNTS):
-// - Buy: 5% BKC tax + ETH fee (buyEthFee) → MiningManager
-// - Sell: 10% BKC tax + ETH fee (sellEthFee) → MiningManager
-// - Operator receives commission on all fees
+// V9 BONDING CURVE (XY=K):
+// - Buy: BKC price from curve, no BKC tax, ETH fee to ecosystem
+// - Sell: BKC payout from curve, no BKC tax, ETH fee to ecosystem
 // ============================================================================
 
 import { txEngine, ValidationLayer } from '../core/index.js';
@@ -36,14 +35,14 @@ const POOL_TIERS = ['diamond', 'gold', 'silver', 'bronze'];
 
 function getContracts(poolTier = null) {
     const bkcToken = addresses?.bkcToken || contractAddresses?.bkcToken || window.contractAddresses?.bkcToken;
-    const nftContract = addresses?.rewardBoosterNFT || contractAddresses?.rewardBoosterNFT || window.contractAddresses?.rewardBoosterNFT;
-    
+    const nftContract = addresses?.rewardBooster || contractAddresses?.rewardBooster || window.contractAddresses?.rewardBooster;
+
     let nftPool = null;
     if (poolTier) {
         const poolKey = `pool_${poolTier.toLowerCase()}`;
         nftPool = addresses?.[poolKey] || contractAddresses?.[poolKey] || window.contractAddresses?.[poolKey];
     }
-    
+
     if (!bkcToken || !nftContract) throw new Error('Contract addresses not loaded');
     return { BKC_TOKEN: bkcToken, NFT_CONTRACT: nftContract, NFT_POOL: nftPool };
 }
@@ -63,42 +62,32 @@ function getAllPools() {
 }
 
 const NFT_POOL_ABI = [
-    // WRITE - V6 with operator + payable + slippage protection
-    'function buyNFT(uint256 _maxPrice, address _operator) external payable returns (uint256 tokenId)',
-    'function buySpecificNFT(uint256 _tokenId, uint256 _maxPrice, address _operator) external payable',
-    'function buyNFTWithSlippage(uint256 _maxPrice, address _operator) external payable returns (uint256 tokenId)',
-    'function sellNFT(uint256 _tokenId, uint256 _minPayout, address _operator) external payable',
-    // READ - Prices
+    // Write
+    'function buyNFT(uint256 maxBkcPrice, address operator) external payable returns (uint256 tokenId)',
+    'function buySpecificNFT(uint256 tokenId, uint256 maxBkcPrice, address operator) external payable',
+    'function sellNFT(uint256 tokenId, uint256 minPayout, address operator) external payable',
+
+    // Read - Prices
     'function getBuyPrice() view returns (uint256)',
-    'function getBuyPriceWithTax() view returns (uint256)',
     'function getSellPrice() view returns (uint256)',
-    'function getSellPriceAfterTax() view returns (uint256)',
     'function getTotalBuyCost() view returns (uint256 bkcCost, uint256 ethCost)',
     'function getTotalSellInfo() view returns (uint256 bkcPayout, uint256 ethCost)',
+    'function getEthFees() view returns (uint256 buyFee, uint256 sellFee)',
     'function getSpread() view returns (uint256 spread, uint256 spreadBips)',
-    // READ - Pool State
-    'function getPoolInfo() view returns (uint256 bkcBalance, uint256 nftCount, uint256 k, bool initialized)',
+
+    // Read - Pool State
+    'function getPoolInfo() view returns (uint256 bkcBalance, uint256 nftCount, uint256 k, bool initialized, uint8 tier)',
     'function getAvailableNFTs() view returns (uint256[])',
-    'function getNFTBalance() view returns (uint256)',
-    'function getBKCBalance() view returns (uint256)',
-    'function isNFTInPool(uint256 _tokenId) view returns (bool)',
-    // READ - Tier
-    'function boostBips() view returns (uint256)',
+    'function isNFTInPool(uint256 tokenId) view returns (bool)',
+    'function tier() view returns (uint8)',
     'function getTierName() view returns (string)',
-    // READ - ETH Fees
-    'function buyEthFee() view returns (uint256)',
-    'function sellEthFee() view returns (uint256)',
-    'function getEthFeeConfig() view returns (uint256 buyFee, uint256 sellFee, uint256 totalCollected)',
-    'function totalETHCollected() view returns (uint256)',
-    // READ - Stats
-    'function getTradingStats() view returns (uint256 volume, uint256 taxes, uint256 buys, uint256 sells)',
-    'function totalVolume() view returns (uint256)',
-    'function totalTaxesCollected() view returns (uint256)',
-    'function totalBuys() view returns (uint256)',
-    'function totalSells() view returns (uint256)',
+
+    // Read - Stats
+    'function getStats() view returns (uint256 volume, uint256 buys, uint256 sells, uint256 ethFees)',
+
     // Events
-    'event NFTPurchased(address indexed buyer, uint256 indexed tokenId, uint256 price, uint256 tax, uint256 newBkcBalance, uint256 newNftCount, address operator)',
-    'event NFTSold(address indexed seller, uint256 indexed tokenId, uint256 payout, uint256 tax, uint256 newBkcBalance, uint256 newNftCount, address operator)'
+    'event NFTPurchased(address indexed buyer, uint256 indexed tokenId, uint256 price, uint256 ethFee, uint256 nftCount, address operator)',
+    'event NFTSold(address indexed seller, uint256 indexed tokenId, uint256 payout, uint256 ethFee, uint256 nftCount, address operator)'
 ];
 
 const NFT_ABI = [
@@ -106,7 +95,7 @@ const NFT_ABI = [
     'function isApprovedForAll(address owner, address operator) view returns (bool)',
     'function ownerOf(uint256 tokenId) view returns (address)',
     'function balanceOf(address owner) view returns (uint256)',
-    'function boostBips(uint256 tokenId) view returns (uint256)'
+    'function tokenTier(uint256 tokenId) view returns (uint8)'
 ];
 
 // ============================================================================
@@ -145,46 +134,44 @@ export async function buyNft({
     const contracts = getContracts();
     const targetPool = poolAddress || getPoolAddress(poolTier);
     if (!targetPool) throw new Error('Pool address or valid pool tier is required');
-    
+
     let storedOperator = operator;
-    let buyPriceWithTax = 0n;
+    let buyPrice = 0n;
     let ethFee = 0n;
 
     return await txEngine.execute({
         name: 'BuyNFT', button,
         getContract: async (signer) => getNftPoolContract(signer, targetPool),
         method: 'buyNFT',
-        args: () => [buyPriceWithTax, resolveOperator(storedOperator)],
+        args: () => [buyPrice, resolveOperator(storedOperator)],
         get value() { return ethFee; },
-        
+
         get approval() {
-            if (buyPriceWithTax > 0n) return { token: contracts.BKC_TOKEN, spender: targetPool, amount: buyPriceWithTax };
+            if (buyPrice > 0n) return { token: contracts.BKC_TOKEN, spender: targetPool, amount: buyPrice };
             return null;
         },
-        
+
         validate: async (signer, userAddress) => {
-            const contract = getNftPoolContract(signer, targetPool);
-            const nftCount = await contract.getNFTBalance();
-            if (nftCount === 0n) throw new Error('No NFTs available in pool');
-            
-            try {
-                const [bkcCost, ethCost] = await contract.getTotalBuyCost();
-                buyPriceWithTax = bkcCost; ethFee = ethCost;
-            } catch {
-                buyPriceWithTax = await contract.getBuyPriceWithTax();
-                ethFee = await contract.buyEthFee().catch(() => 0n);
-            }
-            
+            const contract = await getNftPoolContractReadOnly(targetPool);
+
+            // V9: Use getTotalBuyCost for BKC + ETH
+            const [bkcCost, ethCost] = await contract.getTotalBuyCost();
+            buyPrice = bkcCost;
+            ethFee = ethCost;
+
+            const poolInfo = await contract.getPoolInfo();
+            if (Number(poolInfo[1]) <= 1) throw new Error('No NFTs available in pool');
+
             const { NetworkManager } = await import('../core/index.js');
             const provider = NetworkManager.getProvider();
             const bkcContract = new ethers.Contract(contracts.BKC_TOKEN, ['function balanceOf(address) view returns (uint256)'], provider);
             const bkcBalance = await bkcContract.balanceOf(userAddress);
-            if (bkcBalance < buyPriceWithTax) throw new Error(`Insufficient BKC. Need ${ethers.formatEther(buyPriceWithTax)} BKC`);
-            
+            if (bkcBalance < buyPrice) throw new Error(`Insufficient BKC. Need ${ethers.formatEther(buyPrice)} BKC`);
+
             const ethBalance = await provider.getBalance(userAddress);
             if (ethBalance < ethFee + ethers.parseEther('0.001')) throw new Error('Insufficient ETH for fee + gas');
         },
-        
+
         onSuccess: async (receipt) => {
             let tokenId = null;
             try {
@@ -211,95 +198,38 @@ export async function buySpecificNft({
     const targetPool = poolAddress || getPoolAddress(poolTier);
     if (!targetPool) throw new Error('Pool address or valid pool tier is required');
     if (tokenId === undefined) throw new Error('Token ID is required');
-    
+
     let storedOperator = operator;
-    let buyPriceWithTax = 0n;
+    let buyPrice = 0n;
     let ethFee = 0n;
 
     return await txEngine.execute({
         name: 'BuySpecificNFT', button,
         getContract: async (signer) => getNftPoolContract(signer, targetPool),
         method: 'buySpecificNFT',
-        args: () => [tokenId, buyPriceWithTax, resolveOperator(storedOperator)],
+        args: () => [tokenId, buyPrice, resolveOperator(storedOperator)],
         get value() { return ethFee; },
-        
+
         get approval() {
-            if (buyPriceWithTax > 0n) return { token: contracts.BKC_TOKEN, spender: targetPool, amount: buyPriceWithTax };
+            if (buyPrice > 0n) return { token: contracts.BKC_TOKEN, spender: targetPool, amount: buyPrice };
             return null;
         },
-        
+
         validate: async (signer, userAddress) => {
-            const contract = getNftPoolContract(signer, targetPool);
+            const contract = await getNftPoolContractReadOnly(targetPool);
             if (!(await contract.isNFTInPool(tokenId))) throw new Error('NFT is not in pool');
-            
-            try {
-                const [bkcCost, ethCost] = await contract.getTotalBuyCost();
-                buyPriceWithTax = bkcCost; ethFee = ethCost;
-            } catch {
-                buyPriceWithTax = await contract.getBuyPriceWithTax();
-                ethFee = await contract.buyEthFee().catch(() => 0n);
-            }
-            
+
+            const [bkcCost, ethCost] = await contract.getTotalBuyCost();
+            buyPrice = bkcCost;
+            ethFee = ethCost;
+
             const { NetworkManager } = await import('../core/index.js');
             const provider = NetworkManager.getProvider();
             const bkcContract = new ethers.Contract(contracts.BKC_TOKEN, ['function balanceOf(address) view returns (uint256)'], provider);
-            if ((await bkcContract.balanceOf(userAddress)) < buyPriceWithTax) throw new Error('Insufficient BKC');
+            if ((await bkcContract.balanceOf(userAddress)) < buyPrice) throw new Error('Insufficient BKC');
             if ((await provider.getBalance(userAddress)) < ethFee + ethers.parseEther('0.001')) throw new Error('Insufficient ETH');
         },
         onSuccess, onError
-    });
-}
-
-export async function buyNftWithSlippage({
-    poolAddress, poolTier, maxPrice, operator,
-    button = null, onSuccess = null, onError = null
-}) {
-    const ethers = window.ethers;
-    const contracts = getContracts();
-    const targetPool = poolAddress || getPoolAddress(poolTier);
-    if (!targetPool) throw new Error('Pool address or valid pool tier is required');
-    
-    const maxPriceWei = BigInt(maxPrice);
-    let storedOperator = operator;
-    let ethFee = 0n;
-
-    return await txEngine.execute({
-        name: 'BuyNFTWithSlippage', button,
-        getContract: async (signer) => getNftPoolContract(signer, targetPool),
-        method: 'buyNFTWithSlippage',
-        args: () => [maxPriceWei, resolveOperator(storedOperator)],
-        get value() { return ethFee; },
-        approval: { token: contracts.BKC_TOKEN, spender: targetPool, amount: maxPriceWei },
-        
-        validate: async (signer, userAddress) => {
-            const contract = getNftPoolContract(signer, targetPool);
-            if ((await contract.getNFTBalance()) === 0n) throw new Error('No NFTs available');
-            
-            const currentPrice = await contract.getBuyPriceWithTax();
-            if (currentPrice > maxPriceWei) throw new Error(`Price exceeds max`);
-            ethFee = await contract.buyEthFee().catch(() => 0n);
-            
-            const { NetworkManager } = await import('../core/index.js');
-            const provider = NetworkManager.getProvider();
-            const bkcContract = new ethers.Contract(contracts.BKC_TOKEN, ['function balanceOf(address) view returns (uint256)'], provider);
-            if ((await bkcContract.balanceOf(userAddress)) < maxPriceWei) throw new Error('Insufficient BKC');
-            if ((await provider.getBalance(userAddress)) < ethFee + ethers.parseEther('0.001')) throw new Error('Insufficient ETH');
-        },
-        
-        onSuccess: async (receipt) => {
-            let tokenId = null;
-            try {
-                const iface = new ethers.Interface(NFT_POOL_ABI);
-                for (const log of receipt.logs) {
-                    try {
-                        const parsed = iface.parseLog(log);
-                        if (parsed?.name === 'NFTPurchased') { tokenId = Number(parsed.args.tokenId); break; }
-                    } catch {}
-                }
-            } catch {}
-            if (onSuccess) onSuccess(receipt, tokenId);
-        },
-        onError
     });
 }
 
@@ -311,7 +241,7 @@ export async function sellNft({
     const targetPool = poolAddress || getPoolAddress(poolTier);
     if (!targetPool) throw new Error('Pool address or valid pool tier is required');
     if (tokenId === undefined) throw new Error('Token ID is required');
-    
+
     let storedOperator = operator;
     let finalMinPayout = 0n;
     let ethFee = 0n;
@@ -322,32 +252,27 @@ export async function sellNft({
         method: 'sellNFT',
         args: () => [tokenId, finalMinPayout, resolveOperator(storedOperator)],
         get value() { return ethFee; },
-        
+
         validate: async (signer, userAddress) => {
-            const contract = getNftPoolContract(signer, targetPool);
+            const contract = await getNftPoolContractReadOnly(targetPool);
             const nftContract = getNftContract(signer);
-            
+
             const owner = await nftContract.ownerOf(tokenId);
             if (owner.toLowerCase() !== userAddress.toLowerCase()) throw new Error('You do not own this NFT');
-            
-            const poolBoost = await contract.boostBips();
-            const nftBoost = await nftContract.boostBips(tokenId);
-            if (poolBoost !== nftBoost) throw new Error('NFT tier does not match pool tier');
-            
-            try {
-                const [bkcPayout, ethCost] = await contract.getTotalSellInfo();
-                finalMinPayout = minPayout ? BigInt(minPayout) : (bkcPayout * 95n) / 100n;
-                ethFee = ethCost;
-            } catch {
-                const sellPriceAfterTax = await contract.getSellPriceAfterTax();
-                finalMinPayout = minPayout ? BigInt(minPayout) : (sellPriceAfterTax * 95n) / 100n;
-                ethFee = await contract.sellEthFee().catch(() => 0n);
-            }
-            
+
+            // V9: Tier matching via pool.tier() and nft.tokenTier()
+            const poolTierVal = await contract.tier();
+            const nftTierVal = await nftContract.tokenTier(tokenId);
+            if (poolTierVal !== nftTierVal) throw new Error('NFT tier does not match pool tier');
+
+            const [bkcPayout, ethCost] = await contract.getTotalSellInfo();
+            finalMinPayout = minPayout ? BigInt(minPayout) : (bkcPayout * 95n) / 100n;
+            ethFee = ethCost;
+
             const { NetworkManager } = await import('../core/index.js');
             const ethBalance = await NetworkManager.getProvider().getBalance(userAddress);
             if (ethBalance < ethFee + ethers.parseEther('0.001')) throw new Error('Insufficient ETH');
-            
+
             if (!(await nftContract.isApprovedForAll(userAddress, targetPool))) {
                 const approveTx = await nftContract.setApprovalForAll(targetPool, true);
                 await approveTx.wait();
@@ -386,54 +311,33 @@ export async function getBuyPrice(poolAddress) {
     return await (await getNftPoolContractReadOnly(poolAddress)).getBuyPrice();
 }
 
-export async function getBuyPriceWithTax(poolAddress) {
-    return await (await getNftPoolContractReadOnly(poolAddress)).getBuyPriceWithTax();
-}
-
 export async function getSellPrice(poolAddress) {
     return await (await getNftPoolContractReadOnly(poolAddress)).getSellPrice();
-}
-
-export async function getSellPriceAfterTax(poolAddress) {
-    return await (await getNftPoolContractReadOnly(poolAddress)).getSellPriceAfterTax();
 }
 
 export async function getTotalBuyCost(poolAddress) {
     const ethers = window.ethers;
     const contract = await getNftPoolContractReadOnly(poolAddress);
-    try {
-        const [bkcCost, ethCost] = await contract.getTotalBuyCost();
-        return { bkcCost, bkcFormatted: ethers.formatEther(bkcCost), ethCost, ethFormatted: ethers.formatEther(ethCost) };
-    } catch {
-        const bkcCost = await contract.getBuyPriceWithTax();
-        const ethCost = await contract.buyEthFee().catch(() => 0n);
-        return { bkcCost, bkcFormatted: ethers.formatEther(bkcCost), ethCost, ethFormatted: ethers.formatEther(ethCost) };
-    }
+    const [bkcCost, ethCost] = await contract.getTotalBuyCost();
+    return { bkcCost, bkcFormatted: ethers.formatEther(bkcCost), ethCost, ethFormatted: ethers.formatEther(ethCost) };
 }
 
 export async function getTotalSellInfo(poolAddress) {
     const ethers = window.ethers;
     const contract = await getNftPoolContractReadOnly(poolAddress);
-    try {
-        const [bkcPayout, ethCost] = await contract.getTotalSellInfo();
-        return { bkcPayout, bkcFormatted: ethers.formatEther(bkcPayout), ethCost, ethFormatted: ethers.formatEther(ethCost) };
-    } catch {
-        const bkcPayout = await contract.getSellPriceAfterTax();
-        const ethCost = await contract.sellEthFee().catch(() => 0n);
-        return { bkcPayout, bkcFormatted: ethers.formatEther(bkcPayout), ethCost, ethFormatted: ethers.formatEther(ethCost) };
-    }
+    const [bkcPayout, ethCost] = await contract.getTotalSellInfo();
+    return { bkcPayout, bkcFormatted: ethers.formatEther(bkcPayout), ethCost, ethFormatted: ethers.formatEther(ethCost) };
 }
 
 export async function getPoolInfo(poolAddress) {
     const ethers = window.ethers;
     const contract = await getNftPoolContractReadOnly(poolAddress);
-    const [poolInfo, buyPrice, sellPrice, boostBips] = await Promise.all([
-        contract.getPoolInfo(), contract.getBuyPrice().catch(() => 0n),
-        contract.getSellPrice().catch(() => 0n), contract.boostBips()
+    const [poolInfo, buyPrice, sellPrice] = await Promise.all([
+        contract.getPoolInfo(), contract.getBuyPrice().catch(() => 0n), contract.getSellPrice().catch(() => 0n)
     ]);
     return {
-        bkcBalance: poolInfo.bkcBalance, nftCount: Number(poolInfo.nftCount),
-        k: poolInfo.k, initialized: poolInfo.initialized, boostBips: Number(boostBips),
+        bkcBalance: poolInfo[0], nftCount: Number(poolInfo[1]),
+        k: poolInfo[2], initialized: poolInfo[3], tier: Number(poolInfo[4]),
         buyPrice, buyPriceFormatted: ethers.formatEther(buyPrice),
         sellPrice, sellPriceFormatted: ethers.formatEther(sellPrice)
     };
@@ -444,49 +348,36 @@ export async function getAvailableNfts(poolAddress) {
     return (await contract.getAvailableNFTs()).map(id => Number(id));
 }
 
-export async function getEthFeeConfig(poolAddress) {
+export async function getEthFees(poolAddress) {
     const ethers = window.ethers;
     const contract = await getNftPoolContractReadOnly(poolAddress);
-    try {
-        const config = await contract.getEthFeeConfig();
-        return {
-            buyFee: config.buyFee, buyFeeFormatted: ethers.formatEther(config.buyFee),
-            sellFee: config.sellFee, sellFeeFormatted: ethers.formatEther(config.sellFee),
-            totalCollected: config.totalCollected, totalCollectedFormatted: ethers.formatEther(config.totalCollected)
-        };
-    } catch {
-        const [buyFee, sellFee, totalCollected] = await Promise.all([
-            contract.buyEthFee().catch(() => 0n), contract.sellEthFee().catch(() => 0n), contract.totalETHCollected().catch(() => 0n)
-        ]);
-        return {
-            buyFee, buyFeeFormatted: ethers.formatEther(buyFee),
-            sellFee, sellFeeFormatted: ethers.formatEther(sellFee),
-            totalCollected, totalCollectedFormatted: ethers.formatEther(totalCollected)
-        };
-    }
+    const [buyFee, sellFee] = await contract.getEthFees();
+    return {
+        buyFee, buyFeeFormatted: ethers.formatEther(buyFee),
+        sellFee, sellFeeFormatted: ethers.formatEther(sellFee)
+    };
 }
 
-export async function getTradingStats(poolAddress) {
+// Backward-compatible alias
+export const getEthFeeConfig = getEthFees;
+
+export async function getStats(poolAddress) {
     const ethers = window.ethers;
     const contract = await getNftPoolContractReadOnly(poolAddress);
-    try {
-        const stats = await contract.getTradingStats();
-        return { volume: stats.volume, volumeFormatted: ethers.formatEther(stats.volume), taxes: stats.taxes, taxesFormatted: ethers.formatEther(stats.taxes), buys: Number(stats.buys), sells: Number(stats.sells) };
-    } catch {
-        const [volume, taxes, buys, sells] = await Promise.all([
-            contract.totalVolume().catch(() => 0n), contract.totalTaxesCollected().catch(() => 0n), contract.totalBuys().catch(() => 0n), contract.totalSells().catch(() => 0n)
-        ]);
-        return { volume, volumeFormatted: ethers.formatEther(volume), taxes, taxesFormatted: ethers.formatEther(taxes), buys: Number(buys), sells: Number(sells) };
-    }
+    const s = await contract.getStats();
+    return {
+        volume: s[0], volumeFormatted: ethers.formatEther(s[0]),
+        buys: Number(s[1]), sells: Number(s[2]),
+        ethFees: s[3], ethFeesFormatted: ethers.formatEther(s[3])
+    };
 }
+
+// Backward-compatible alias
+export const getTradingStats = getStats;
 
 export async function getTierName(poolAddress) {
     const contract = await getNftPoolContractReadOnly(poolAddress);
-    try { return await contract.getTierName(); }
-    catch {
-        const boostBips = await contract.boostBips();
-        return { 5000: 'Diamond', 4000: 'Gold', 2500: 'Silver', 1000: 'Bronze' }[Number(boostBips)] || 'Unknown';
-    }
+    return await contract.getTierName();
 }
 
 export async function getSpread(poolAddress) {
@@ -519,12 +410,12 @@ export const buyFromPool = buyNft;
 export const sellToPool = sellNft;
 
 export const NftTx = {
-    buyNft, buySpecificNft, buyNftWithSlippage, sellNft, approveAllNfts,
+    buyNft, buySpecificNft, sellNft, approveAllNfts,
     buyFromPool, sellToPool,
-    getBuyPrice, getBuyPriceWithTax, getSellPrice, getSellPriceAfterTax,
-    getTotalBuyCost, getTotalSellInfo, getEthFeeConfig,
+    getBuyPrice, getSellPrice,
+    getTotalBuyCost, getTotalSellInfo, getEthFees, getEthFeeConfig,
     getPoolInfo, getAvailableNfts, isNFTInPool, isApprovedForAll,
-    getTradingStats, getTierName, getSpread,
+    getStats, getTradingStats, getTierName, getSpread,
     getPoolAddress, getAllPools, POOL_TIERS
 };
 
