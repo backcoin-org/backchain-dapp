@@ -1,5 +1,5 @@
 // js/pages/DashboardPage.js
-// ✅ PRODUCTION V69.2 — V9 Contract Alignment
+// ✅ PRODUCTION V69.3 — Dashboard Redesign
 // ═══════════════════════════════════════════════════════════════════════════════
 //                          BACKCHAIN PROTOCOL
 //                    Dashboard — Command Center
@@ -612,6 +612,8 @@ function injectStyles() {
         }
         .dash-chip:hover { color: var(--dash-text-2); border-color: var(--dash-border-h); }
         .dash-chip.active { color: var(--dash-accent); background: rgba(245,158,11,0.1); border-color: rgba(245,158,11,0.3); }
+        .dash-chip i { opacity: 0.5; transition: opacity var(--dash-tr); }
+        .dash-chip.active i { opacity: 1; }
 
         /* ── Activity List ── */
         .dash-activity-list { display: flex; flex-direction: column; gap: 6px; min-height: 150px; max-height: 520px; overflow-y: auto; }
@@ -945,9 +947,9 @@ function renderDashboardLayout() {
                     <div class="dash-metric-pill-label"><i class="fa-solid fa-receipt" style="color:#fb923c"></i> Fees</div>
                     <div id="dash-metric-fees" class="dash-metric-pill-value">--</div>
                 </div>
-                <div class="dash-metric-pill" title="Percentage of supply locked in contracts">
-                    <div class="dash-metric-pill-label"><i class="fa-solid fa-lock" style="color:#60a5fa"></i> TVL</div>
-                    <div id="dash-metric-tvl" class="dash-metric-pill-value">--</div>
+                <div class="dash-metric-pill" title="BKC locked in protocol contracts (staking, pools, etc)">
+                    <div class="dash-metric-pill-label"><i class="fa-solid fa-vault" style="color:#60a5fa"></i> Locked</div>
+                    <div id="dash-metric-locked" class="dash-metric-pill-value">--</div>
                 </div>
                 <div class="dash-metric-pill" title="Your BKC balance" style="border-color: rgba(245,158,11,0.2);">
                     <div class="dash-metric-pill-label"><i class="fa-solid fa-wallet" style="color:#f59e0b"></i> Balance</div>
@@ -955,33 +957,34 @@ function renderDashboardLayout() {
                 </div>
             </div>
 
-            <!-- ACTIVITY FEED — Full Width -->
+            <!-- ACTIVITY FEED -->
             <div class="dash-activity-panel">
                 <div class="dash-activity-header">
                     <div class="dash-activity-title">
-                        <i class="fa-solid fa-clock-rotate-left"></i>
+                        <i class="fa-solid fa-bolt" style="color:var(--dash-accent)"></i>
                         <span id="activity-title">Activity</span>
+                        <span id="activity-count" style="font-size:9px;color:var(--dash-text-3);background:var(--dash-surface-2);padding:2px 6px;border-radius:10px;font-weight:600;display:none">0</span>
                     </div>
                     <div style="display:flex; gap:6px; align-items:center;">
-                        <button id="manual-refresh-btn" class="dash-sort-btn" title="Sync">
+                        <button id="manual-refresh-btn" class="dash-sort-btn" title="Refresh activity">
                             <i class="fa-solid fa-rotate"></i>
                         </button>
-                        <button id="activity-sort-toggle" class="dash-sort-btn" title="Sort">
+                        <button id="activity-sort-toggle" class="dash-sort-btn" title="Toggle sort order">
                             <i class="fa-solid fa-arrow-down-wide-short"></i>
                         </button>
                     </div>
                 </div>
 
                 <div class="dash-filter-chips">
-                    <button class="dash-chip active" data-filter="ALL">All</button>
-                    <button class="dash-chip" data-filter="STAKE">Staking</button>
-                    <button class="dash-chip" data-filter="CLAIM">Claims</button>
-                    <button class="dash-chip" data-filter="NFT">NFT</button>
-                    <button class="dash-chip" data-filter="GAME">Fortune</button>
-                    <button class="dash-chip" data-filter="CHARITY">Charity</button>
-                    <button class="dash-chip" data-filter="NOTARY">Notary</button>
-                    <button class="dash-chip" data-filter="BACKCHAT">Agora</button>
-                    <button class="dash-chip" data-filter="FAUCET">Faucet</button>
+                    <button class="dash-chip active" data-filter="ALL"><i class="fa-solid fa-layer-group" style="margin-right:3px;font-size:9px"></i>All</button>
+                    <button class="dash-chip" data-filter="STAKE"><i class="fa-solid fa-lock" style="margin-right:3px;font-size:9px"></i>Staking</button>
+                    <button class="dash-chip" data-filter="CLAIM"><i class="fa-solid fa-coins" style="margin-right:3px;font-size:9px"></i>Claims</button>
+                    <button class="dash-chip" data-filter="NFT"><i class="fa-solid fa-gem" style="margin-right:3px;font-size:9px"></i>NFT</button>
+                    <button class="dash-chip" data-filter="GAME"><i class="fa-solid fa-dice" style="margin-right:3px;font-size:9px"></i>Fortune</button>
+                    <button class="dash-chip" data-filter="CHARITY"><i class="fa-solid fa-heart" style="margin-right:3px;font-size:9px"></i>Charity</button>
+                    <button class="dash-chip" data-filter="NOTARY"><i class="fa-solid fa-stamp" style="margin-right:3px;font-size:9px"></i>Notary</button>
+                    <button class="dash-chip" data-filter="BACKCHAT"><i class="fa-solid fa-comments" style="margin-right:3px;font-size:9px"></i>Agora</button>
+                    <button class="dash-chip" data-filter="FAUCET"><i class="fa-solid fa-droplet" style="margin-right:3px;font-size:9px"></i>Faucet</button>
                 </div>
 
                 <div id="dash-activity-list" class="dash-activity-list">
@@ -992,9 +995,9 @@ function renderDashboardLayout() {
                 </div>
 
                 <div id="dash-pagination-controls" class="dash-pagination" style="display:none">
-                    <button class="dash-page-btn" id="page-prev"><i class="fa-solid fa-chevron-left"></i> Prev</button>
+                    <button class="dash-page-btn" id="page-prev"><i class="fa-solid fa-chevron-left" style="margin-right:4px"></i>Prev</button>
                     <span class="dash-page-indicator" id="page-indicator">1/1</span>
-                    <button class="dash-page-btn" id="page-next">Next <i class="fa-solid fa-chevron-right"></i></button>
+                    <button class="dash-page-btn" id="page-next">Next<i class="fa-solid fa-chevron-right" style="margin-left:4px"></i></button>
                 </div>
             </div>
         </div>
@@ -1119,10 +1122,7 @@ async function updateGlobalMetrics() {
         const fortunePrize = formatBigNumber(fortunePoolBalance);
 
         const formatFullNumber = (num) => num.toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
-
-        let tvlPercent = 0;
-        if (totalSupply > 0n) tvlPercent = Number((totalTVL * 10000n) / totalSupply) / 100;
-        if (tvlPercent > 100) tvlPercent = 100;
+        const lockedNum = formatBigNumber(totalTVL);
 
         const setEl = (id, html) => { const el = document.getElementById(id); if (el) el.innerHTML = html; };
 
@@ -1135,8 +1135,9 @@ async function updateGlobalMetrics() {
             ? `${formatCompact(ethFeesNum)} <span style="font-size:10px;color:var(--dash-text-3)">ETH</span>`
             : `<span style="color:var(--dash-text-3)">0 ETH</span>`);
 
-        const tvlColor = tvlPercent > 30 ? 'var(--dash-green)' : tvlPercent > 10 ? '#fbbf24' : '#60a5fa';
-        setEl('dash-metric-tvl', `<span style="color:${tvlColor}">${tvlPercent.toFixed(1)}%</span>`);
+        setEl('dash-metric-locked', lockedNum > 0
+            ? `<span style="color:#60a5fa">${formatCompact(lockedNum)}</span> <span style="font-size:10px;color:var(--dash-text-3)">BKC</span>`
+            : `<span style="color:var(--dash-text-3)">0 BKC</span>`);
 
         updateBalanceCard();
 
@@ -1256,66 +1257,96 @@ function updateBoosterDisplay(data, claimDetails) {
         }
         container.innerHTML = `
             <div style="text-align:center;width:100%">
-                <div style="position:relative;margin:0 auto 10px;width:64px;height:64px">
-                    <img src="${diamondImage}" style="width:64px;height:64px;border-radius:12px;object-fit:cover;border:2px solid rgba(6,182,212,0.3)" alt="Diamond NFT" onerror="this.src='./assets/bkc_logo_3d.png'">
+                <div style="position:relative;margin:0 auto 12px;width:60px;height:60px;border-radius:50%;background:rgba(239,68,68,0.08);border:2px dashed rgba(239,68,68,0.25);display:flex;align-items:center;justify-content:center">
+                    <i class="fa-solid fa-shield-halved" style="font-size:24px;color:rgba(239,68,68,0.35)"></i>
+                    <div style="position:absolute;bottom:-3px;right:-3px;width:20px;height:20px;border-radius:50%;background:#1c1c21;border:2px solid rgba(239,68,68,0.3);display:flex;align-items:center;justify-content:center">
+                        <i class="fa-solid fa-xmark" style="font-size:9px;color:#ef4444"></i>
+                    </div>
                 </div>
 
-                <p style="font-size:12px;font-weight:700;color:var(--dash-text);margin:0 0 4px">
-                    Keeping <span style="color:var(--dash-accent)">${keepRate}%</span> of rewards
-                </p>
-                <div style="width:100%;background:var(--dash-surface-2);border-radius:20px;height:6px;overflow:hidden;margin-bottom:8px">
-                    <div style="background:linear-gradient(90deg,#f59e0b,#22c55e);height:100%;border-radius:20px;width:${keepRate}%"></div>
+                <p style="font-size:11px;font-weight:700;color:var(--dash-text-3);margin:0 0 6px;text-transform:uppercase;letter-spacing:0.05em">No Booster NFT</p>
+
+                <div style="display:flex;align-items:center;justify-content:center;gap:6px;margin-bottom:8px">
+                    <span style="font-size:20px;font-weight:800;color:var(--dash-accent)">${keepRate}%</span>
+                    <span style="font-size:10px;color:var(--dash-text-3);text-align:left;line-height:1.2">reward<br>keep rate</span>
+                </div>
+
+                <div style="width:100%;background:var(--dash-surface-2);border-radius:20px;height:6px;overflow:hidden;margin-bottom:10px">
+                    <div style="background:linear-gradient(90deg,#ef4444,#f59e0b);height:100%;border-radius:20px;width:${keepRate}%"></div>
                 </div>
 
                 ${grossReward > 0n && potentialBonus > 0n ? `
-                <p style="font-size:11px;color:var(--dash-text-2);margin:0 0 10px">
-                    With Diamond NFT: <span style="color:var(--dash-green);font-weight:700">+${formatBigNumber(potentialBonus).toFixed(2)} BKC</span> more
+                <p style="font-size:10px;color:var(--dash-text-2);margin:0 0 10px">
+                    <i class="fa-solid fa-arrow-up" style="color:var(--dash-green);margin-right:3px"></i>Get up to <span style="color:var(--dash-green);font-weight:700">+${formatBigNumber(potentialBonus).toFixed(2)} BKC</span> with NFT
                 </p>` : `
-                <p style="font-size:11px;color:var(--dash-text-3);margin:0 0 10px">
-                    Diamond holders keep <span style="color:var(--dash-green);font-weight:700">100%</span>
+                <p style="font-size:10px;color:var(--dash-text-3);margin:0 0 10px">
+                    <i class="fa-solid fa-gem" style="color:var(--dash-accent);margin-right:3px"></i>Diamond holders keep <span style="color:var(--dash-green);font-weight:700">100%</span>
                 </p>`}
 
                 <div style="display:flex;gap:6px;justify-content:center">
-                    <button class="dash-btn-primary go-to-store" style="background:linear-gradient(135deg,#d97706,#b45309);font-size:11px;padding:8px 14px;flex:1">
+                    <button class="dash-btn-primary go-to-store" style="background:linear-gradient(135deg,#d97706,#b45309);font-size:11px;padding:7px 14px;flex:1">
                         <i class="fa-solid fa-gem" style="margin-right:3px"></i>Buy NFT
                     </button>
-                    <button class="dash-btn-primary go-to-rental" style="background:linear-gradient(135deg,#06b6d4,#0891b2);font-size:11px;padding:8px 14px;flex:1">
-                        <i class="fa-solid fa-clock" style="margin-right:3px"></i>Rent by Hour
+                    <button class="dash-btn-primary go-to-rental" style="background:linear-gradient(135deg,#06b6d4,#0891b2);font-size:11px;padding:7px 14px;flex:1">
+                        <i class="fa-solid fa-clock" style="margin-right:3px"></i>Rent NFT
                     </button>
                 </div>
-                <button id="open-booster-info" style="font-size:10px;color:var(--dash-text-3);background:none;border:none;cursor:pointer;margin-top:6px"><i class="fa-solid fa-circle-info" style="margin-right:3px"></i> How does it work?</button>
+                <button id="open-booster-info" style="font-size:10px;color:var(--dash-text-3);background:none;border:none;cursor:pointer;margin-top:6px"><i class="fa-solid fa-circle-info" style="margin-right:3px"></i>How it works</button>
             </div>
         `;
         return;
     }
 
-    // HAS NFT — show real image
+    // HAS NFT — clear owned vs rented state
     const isRented = data.source === 'rented';
-    const badgeColor = isRented ? 'background:rgba(6,182,212,0.15);color:#67e8f9' : 'background:rgba(74,222,128,0.15);color:#86efac';
-    const badgeText = isRented ? 'Rented' : 'Owned';
     const tierName = tierInfo?.name || data.boostName?.replace(' Booster', '').replace('Booster', '').trim() || 'Booster';
     const tierColor = tierInfo?.color || 'color:var(--dash-accent)';
     const withoutNftReward = (grossReward * 50n) / 100n;
     const bonusGained = netReward - withoutNftReward;
-    const borderCol = tierInfo?.borderColor?.replace('border-', '').replace('/50', '') || 'rgba(74,222,128,0.3)';
+
+    const statusIcon = isRented ? 'fa-clock' : 'fa-check-circle';
+    const statusColor = isRented ? '#22d3ee' : '#4ade80';
+    const statusBg = isRented ? 'rgba(6,182,212,0.12)' : 'rgba(74,222,128,0.12)';
+    const statusBorder = isRented ? 'rgba(6,182,212,0.3)' : 'rgba(74,222,128,0.3)';
+    const statusText = isRented ? 'RENTED' : 'OWNED';
+    const statusDesc = isRented ? 'Active rental' : 'In your wallet';
 
     container.innerHTML = `
-        <div class="nft-clickable-image" data-address="${addresses.rewardBooster}" data-tokenid="${data.tokenId}" style="display:flex;align-items:center;gap:12px;background:var(--dash-surface-2);border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:12px;cursor:pointer;transition:all 0.2s;width:100%">
-            <div style="position:relative;width:56px;height:56px;flex-shrink:0">
-                <img src="${nftImageUrl}" style="width:56px;height:56px;border-radius:10px;object-fit:cover;border:2px solid rgba(255,255,255,0.1)" alt="${tierName}" onerror="this.src='./assets/bkc_logo_3d.png'">
-                <div style="position:absolute;top:-5px;left:-5px;background:var(--dash-green);color:#000;font-weight:800;font-size:9px;padding:2px 6px;border-radius:5px">${keepRate}%</div>
-            </div>
-            <div style="flex:1;min-width:0">
-                <div style="display:flex;align-items:center;gap:6px;margin-bottom:2px">
-                    <span style="font-size:9px;font-weight:700;${badgeColor};padding:1px 6px;border-radius:4px;text-transform:uppercase">${badgeText}</span>
-                    <span style="font-size:9px;color:var(--dash-text-3)">#${data.tokenId}</span>
+        <div class="nft-clickable-image" data-address="${addresses.rewardBooster}" data-tokenid="${data.tokenId}" style="width:100%;cursor:pointer;transition:all 0.2s">
+            <div style="display:flex;align-items:center;gap:10px;background:var(--dash-surface-2);border:1px solid ${statusBorder};border-radius:12px;padding:10px 12px;margin-bottom:8px">
+                <div style="position:relative;width:48px;height:48px;flex-shrink:0">
+                    <img src="${nftImageUrl}" style="width:48px;height:48px;border-radius:10px;object-fit:cover;border:2px solid ${statusBorder}" alt="${tierName}" onerror="this.src='./assets/bkc_logo_3d.png'">
+                    <div style="position:absolute;bottom:-4px;right:-4px;width:18px;height:18px;border-radius:50%;background:${statusColor};display:flex;align-items:center;justify-content:center;border:2px solid var(--dash-surface-2)">
+                        <i class="fa-solid ${statusIcon}" style="font-size:8px;color:#000"></i>
+                    </div>
                 </div>
-                <h4 style="${tierColor};font-weight:700;font-size:13px;margin:0">${tierName} Booster</h4>
-                <p style="font-size:10px;color:var(--dash-green);margin:2px 0 0"><i class="fa-solid fa-shield-check" style="margin-right:3px"></i>Keeping ${keepRate}% of rewards</p>
-                ${grossReward > 0n ? `<p style="font-size:11px;color:var(--dash-text);margin:3px 0 0;font-weight:600">Net: <span style="color:var(--dash-green);font-weight:700">${formatBigNumber(netReward).toFixed(4)} BKC</span></p>` : ''}
-                ${bonusGained > 0n ? `<p style="font-size:9px;color:#34d399;margin:2px 0 0"><i class="fa-solid fa-arrow-trend-up" style="margin-right:2px"></i>+${formatBigNumber(bonusGained).toFixed(2)} BKC saved vs no NFT</p>` : ''}
-                ${keepRate < 100 ? `<p style="font-size:9px;color:var(--dash-accent);margin:2px 0 0"><i class="fa-solid fa-arrow-up" style="margin-right:2px"></i>Upgrade to Diamond for 100%!</p>` : ''}
+                <div style="flex:1;min-width:0">
+                    <div style="display:flex;align-items:center;gap:6px">
+                        <h4 style="${tierColor};font-weight:700;font-size:13px;margin:0">${tierName}</h4>
+                        <span style="font-size:8px;font-weight:800;color:${statusColor};background:${statusBg};padding:2px 6px;border-radius:4px;letter-spacing:0.05em">${statusText}</span>
+                        <span style="font-size:9px;color:var(--dash-text-3)">#${data.tokenId}</span>
+                    </div>
+                    <p style="font-size:10px;color:var(--dash-text-3);margin:2px 0 0"><i class="fa-solid ${statusIcon}" style="color:${statusColor};margin-right:3px;font-size:9px"></i>${statusDesc}</p>
+                </div>
+                <div style="text-align:right;flex-shrink:0">
+                    <div style="font-size:18px;font-weight:800;color:var(--dash-green)">${keepRate}%</div>
+                    <div style="font-size:8px;color:var(--dash-text-3);text-transform:uppercase;letter-spacing:0.05em">keep rate</div>
+                </div>
             </div>
+            ${grossReward > 0n ? `
+            <div style="display:flex;gap:6px">
+                <div style="flex:1;background:var(--dash-surface-2);border-radius:8px;padding:6px 8px;text-align:center">
+                    <div style="font-size:9px;color:var(--dash-text-3);text-transform:uppercase;margin-bottom:2px">Net Reward</div>
+                    <div style="font-size:12px;font-weight:700;color:var(--dash-green)">${formatBigNumber(netReward).toFixed(4)} <span style="font-size:9px;color:var(--dash-text-3)">BKC</span></div>
+                </div>
+                ${bonusGained > 0n ? `
+                <div style="flex:1;background:var(--dash-surface-2);border-radius:8px;padding:6px 8px;text-align:center">
+                    <div style="font-size:9px;color:var(--dash-text-3);text-transform:uppercase;margin-bottom:2px">NFT Bonus</div>
+                    <div style="font-size:12px;font-weight:700;color:#34d399">+${formatBigNumber(bonusGained).toFixed(2)} <span style="font-size:9px;color:var(--dash-text-3)">BKC</span></div>
+                </div>` : ''}
+            </div>` : ''}
+            ${keepRate < 100 ? `
+            <p style="font-size:9px;color:var(--dash-accent);margin:6px 0 0;text-align:center"><i class="fa-solid fa-arrow-up" style="margin-right:2px"></i>Upgrade to Diamond for 100%</p>` : ''}
         </div>
     `;
 }
@@ -1373,10 +1404,19 @@ function renderNetworkActivityList() {
     const controlsEl = document.getElementById('dash-pagination-controls');
     if (!listEl) return;
     if (DashboardState.networkActivities.length === 0) {
-        listEl.innerHTML = `<div class="dash-empty-text">No network activity yet. Be the first!</div>`;
+        listEl.innerHTML = `
+            <div style="text-align:center;padding:32px 16px">
+                <div style="width:48px;height:48px;border-radius:50%;background:rgba(245,158,11,0.08);border:1px dashed rgba(245,158,11,0.2);display:flex;align-items:center;justify-content:center;margin:0 auto 12px">
+                    <i class="fa-solid fa-bolt" style="font-size:18px;color:rgba(245,158,11,0.3)"></i>
+                </div>
+                <p style="font-size:12px;color:var(--dash-text-3);margin:0 0 4px">No network activity yet</p>
+                <p style="font-size:10px;color:var(--dash-text-3);margin:0">Be the first to stake, trade or play!</p>
+            </div>`;
         if (controlsEl) controlsEl.style.display = 'none';
         return;
     }
+    const countEl = document.getElementById('activity-count');
+    if (countEl) { countEl.style.display = 'inline'; countEl.textContent = DashboardState.networkActivities.length; }
     listEl.innerHTML = DashboardState.networkActivities.slice(0, 15).map(item => renderActivityItem(item, true)).join('');
     if (controlsEl) controlsEl.style.display = 'none';
 }
@@ -1422,10 +1462,22 @@ function renderActivityPage() {
     if (!listEl) return;
 
     if (DashboardState.filteredActivities.length === 0) {
-        listEl.innerHTML = `<div class="dash-empty-text">No activity yet. Start staking, trading or playing!</div>`;
+        const isFiltered = DashboardState.filters.type !== 'ALL';
+        listEl.innerHTML = `
+            <div style="text-align:center;padding:32px 16px">
+                <div style="width:48px;height:48px;border-radius:50%;background:rgba(167,139,250,0.08);border:1px dashed rgba(167,139,250,0.2);display:flex;align-items:center;justify-content:center;margin:0 auto 12px">
+                    <i class="fa-solid ${isFiltered ? 'fa-filter' : 'fa-rocket'}" style="font-size:18px;color:rgba(167,139,250,0.3)"></i>
+                </div>
+                <p style="font-size:12px;color:var(--dash-text-3);margin:0 0 4px">${isFiltered ? 'No matching activity' : 'No activity yet'}</p>
+                <p style="font-size:10px;color:var(--dash-text-3);margin:0">${isFiltered ? 'Try a different filter' : 'Start staking, trading or playing!'}</p>
+            </div>`;
         if (controlsEl) controlsEl.style.display = 'none';
+        const countEl = document.getElementById('activity-count');
+        if (countEl) countEl.style.display = 'none';
         return;
     }
+    const countEl = document.getElementById('activity-count');
+    if (countEl) { countEl.style.display = 'inline'; countEl.textContent = DashboardState.filteredActivities.length; }
 
     const start = (DashboardState.pagination.currentPage - 1) * DashboardState.pagination.itemsPerPage;
     const pageItems = DashboardState.filteredActivities.slice(start, start + DashboardState.pagination.itemsPerPage);
