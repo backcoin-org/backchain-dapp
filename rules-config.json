@@ -1,60 +1,22 @@
 {
-  "VERSION": "7.0.0",
-  "DESCRIPTION": "Backchain Ecosystem V7.0 - Backchat V8 (Viral Referral)",
+  "VERSION": "9.0.0",
+  "DESCRIPTION": "Backchain Ecosystem V9.0 - All Immutable Contracts",
   "NETWORK": "arbitrumSepolia",
-  "CREATED_AT": "2026-02-06T21:25:01.351Z",
-  "externalContracts": {
-    "BACKCOIN_ORACLE": "0x16346f5a45f9615f1c894414989f0891c54ef07b"
-  },
+  "CREATED_AT": "2026-02-09T19:08:05.720Z",
   "wallets": {
     "TREASURY": "0xc93030333E3a235c2605BcB7C7330650B600B6D0",
     "MULTISIG_ADMIN": "DEPLOYER"
   },
-  "security": {
-    "GOVERNANCE_DEPLOYED": true,
-    "OWNERSHIP_TRANSFERRED": "true",
-    "TIMELOCK_ENABLED": false,
-    "TIMELOCK_DELAY_SECONDS": "172800",
-    "GOVERNANCE_PHASE": 0,
-    "GOVERNANCE_ADDRESS": "0x0C3bfE0344175D792ab4bbB438BE98EB1297AE2B"
+  "feeConfigs": {
+    "totalActions": "24",
+    "gasBased": "14",
+    "valueBased": "2",
+    "nftActions": "8"
   },
-  "features": {
-    "METAADS_ENABLED": true,
-    "BACKCHAT_ENABLED": true,
-    "BACKCHAT_VERSION": "V8.0.0 (Non-Upgradeable, Viral Referral)"
-  },
-  "miningDistribution": {
-    "TREASURY": "3000",
-    "DELEGATOR_POOL": "7000"
-  },
-  "LAST_UPDATED": "2026-02-06T21:33:45.062Z",
-  "feeDistribution": {
-    "TREASURY": "3000",
-    "DELEGATOR_POOL": "7000"
-  },
-  "serviceFeesBIPS": {
-    "DELEGATION_FEE_BIPS": "50",
-    "UNSTAKE_FEE_BIPS": "100",
-    "FORCE_UNSTAKE_PENALTY_BIPS": "5000",
-    "CLAIM_REWARD_FEE_BIPS": "100",
-    "NFT_POOL_BUY_TAX_BIPS": "500",
-    "NFT_POOL_SELL_TAX_BIPS": "1000",
-    "FORTUNE_POOL_GAME_FEE": "1000",
-    "RENTAL_MARKET_TAX_BIPS": "1000"
-  },
-  "backchat": {
-    "SERVICE_KEY": "BACKCHAT_SERVICE",
-    "VERSION": "V8.0.0 (Non-Upgradeable, Viral Referral)",
-    "CONFIG_TYPE": "HARDCODED_CONSTANTS"
-  },
-  "charityPool": {
-    "DONATION_FEE_BIPS": "500",
-    "SERVICE_KEY": "CHARITY_POOL_SERVICE",
-    "VERSION": "V2"
-  },
-  "rentalManager": {
-    "ENABLED": "true",
-    "TREASURY": "0xc93030333E3a235c2605BcB7C7330650B600B6D0",
-    "VERSION": "V3.1"
+  "LAST_UPDATED": "2026-02-09T19:12:15.672Z",
+  "bkcDistribution": {
+    "burnBps": "500",
+    "stakerBps": "7500",
+    "treasuryBps": "2000"
   }
 }
