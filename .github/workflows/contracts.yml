@@ -1,0 +1,99 @@
+name: Smart Contracts CI
+
+on:
+  push:
+    branches: [main, v69-redesign]
+    paths:
+      - "contracts/**"
+      - "hardhat.config.cts"
+      - "test/**"
+      - "package.json"
+  pull_request:
+    branches: [main, v69-redesign]
+    paths:
+      - "contracts/**"
+      - "hardhat.config.cts"
+      - "test/**"
+      - "package.json"
+
+jobs:
+  compile-and-test:
+    name: Compile & Test Contracts
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20.x
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20.x"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Compile contracts
+        run: npx hardhat compile
+
+      - name: Run tests
+        run: npx hardhat test
+
+      - name: Check contract sizes
+        run: |
+          echo "============================================"
+          echo "  Contract Size Report (24KB Arbitrum limit)"
+          echo "============================================"
+          echo ""
+
+          LIMIT=24576  # 24KB in bytes
+          HAS_OVERSIZED=false
+
+          # Find all compiled contract JSON artifacts (skip dbg files and interfaces)
+          for artifact in $(find artifacts/contracts -name "*.json" ! -name "*.dbg.json" -type f); do
+            # Extract deployed bytecode and compute its size
+            BYTECODE=$(node -e "
+              const fs = require('fs');
+              const art = JSON.parse(fs.readFileSync('$artifact', 'utf8'));
+              const bc = art.deployedBytecode || '';
+              // Remove 0x prefix if present, each hex pair = 1 byte
+              const clean = bc.startsWith('0x') ? bc.slice(2) : bc;
+              console.log(clean);
+            " 2>/dev/null)
+
+            # Skip if no bytecode (interfaces, abstract contracts, libraries)
+            if [ -z "$BYTECODE" ] || [ "$BYTECODE" = "0x" ]; then
+              continue
+            fi
+
+            SIZE_BYTES=$((${#BYTECODE} / 2))
+
+            if [ "$SIZE_BYTES" -eq 0 ]; then
+              continue
+            fi
+
+            SIZE_KB=$(node -e "console.log((${SIZE_BYTES} / 1024).toFixed(2))")
+            CONTRACT_NAME=$(basename "$artifact" .json)
+
+            if [ "$SIZE_BYTES" -gt "$LIMIT" ]; then
+              echo "FAIL  $CONTRACT_NAME: ${SIZE_KB} KB (exceeds 24KB limit by $(node -e "console.log(((${SIZE_BYTES} - ${LIMIT}) / 1024).toFixed(2))") KB)"
+              HAS_OVERSIZED=true
+            else
+              USAGE=$(node -e "console.log(((${SIZE_BYTES} / ${LIMIT}) * 100).toFixed(1))")
+              echo "  OK  $CONTRACT_NAME: ${SIZE_KB} KB (${USAGE}% of limit)"
+            fi
+          done
+
+          echo ""
+          echo "============================================"
+
+          if [ "$HAS_OVERSIZED" = true ]; then
+            echo "WARNING: One or more contracts exceed the 24KB Arbitrum deployment limit."
+            echo "Consider splitting large contracts or using the proxy pattern."
+            # Exit with warning but don't fail the build — Arbitrum Stylus
+            # and proxy patterns can work around this limit
+            exit 1
+          else
+            echo "All contracts are within the 24KB Arbitrum deployment limit."
+          fi

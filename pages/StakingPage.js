@@ -1,4 +1,4 @@
-// pages/networkstaking.js
+// pages/StakingPage.js
 // ✅ PRODUCTION V10.0 — Unified Staking & Rewards Page
 // ═══════════════════════════════════════════════════════════════════════════════
 //                          BACKCHAIN PROTOCOL
@@ -6,7 +6,7 @@
 // ═══════════════════════════════════════════════════════════════════════════════
 //
 // V10.0 Changes:
-// - MERGED EarnPage + RewardsPage into single unified page
+// - MERGED into single unified StakingPage (was EarnPage + RewardsPage)
 // - Complete visual redesign with CSS injection (stk-styles-v10)
 // - Hero rewards card with animated amount + NFT boost panel
 // - Full-width layout, mobile-first responsive design
@@ -1220,4 +1220,4 @@ export function update(isConnected) {
     if (isConnected) { loadData(); } else { resetUI(); }
 }
 
-export const EarnPage = { render, update, cleanup };
+export const StakingPage = { render, update, cleanup };

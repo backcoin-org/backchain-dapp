@@ -71,9 +71,9 @@ const config: HardhatUserConfig = {
         },
       },
     ],
-    // Override específico para Backchat (contrato grande)
+    // Override específico para Agora (contrato grande — social protocol)
     overrides: {
-      "contracts/solidity/Backchat.sol": {
+      "contracts/Agora.sol": {
         version: "0.8.28",
         settings: {
           optimizer: {
@@ -164,7 +164,7 @@ const config: HardhatUserConfig = {
   // 📁 PATHS
   // ========================================
   paths: {
-    sources: "./contracts/solidity",
+    sources: "./contracts",
     tests: "./test",
     cache: "./cache",
     artifacts: "./artifacts",

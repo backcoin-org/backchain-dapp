@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Backchain is a full-stack Web3 DApp ecosystem deployed on Arbitrum (Sepolia testnet / One mainnet). It includes a Vanilla JS frontend (no framework), 16 Solidity smart contracts, a Rust/Stylus oracle, Firebase backend, and Vercel deployment. The BKC token (ERC-20) powers the ecosystem.
+Backchain is a full-stack Web3 DApp ecosystem deployed on Arbitrum (Sepolia testnet / One mainnet). It includes a Vanilla JS frontend (no framework), 15 Solidity smart contracts (V9), Firebase backend, and Vercel deployment. The BKC token (ERC-20) powers the ecosystem.
 
 **Philosophy:** Unstoppable, permissionless DeFi infrastructure. No admin keys, no pause functions, no blacklists. All contracts support the "Operator System" where third-party builders earn commissions by passing their wallet address as the `operator` parameter.
 
@@ -53,7 +53,7 @@ No React/Vue/Angular. The app is a single-page application with manual routing:
 // app.js — routes object maps hash-based navigation
 const routes = {
     'dashboard': DashboardPage,
-    'mine': EarnPage,
+    'mine': StakingPage,
     'store': StorePage,
     'actions': FortunePoolPage,
     // ...18 total routes
@@ -99,19 +99,23 @@ The app maintains two sets of contract instances in `state.js`:
 
 ### Smart Contracts (`contracts/solidity/`)
 
-Solidity 0.8.28 compiled with Hardhat. Optimizer: `runs: 1` + `viaIR: true` (aggressive size optimization for Arbitrum's contract size limits). Key contracts:
+Solidity 0.8.28 compiled with Hardhat. Optimizer: `runs: 1` + `viaIR: true` (aggressive size optimization for Arbitrum's contract size limits). V9 contracts (15 total):
 
-- **`EcosystemManager.sol`** — Master orchestrator, manages fees and pStake requirements
-- **`BKCToken.sol`** — ERC-20 with activity-based minting (80% distributed as rewards)
-- **`DelegationManager.sol`** / **`MiningManager.sol`** — Staking and reward distribution
-- **`FortunePool.sol`** — Commit-reveal gaming with oracle randomness
-- **`NFTLiquidityPool.sol`** + **`Factory`** — Bonding curve NFT trading (4 tiers: Diamond/Gold/Silver/Bronze)
-- **`Backchat.sol`** — On-chain social network (largest contract ~59KB)
-- **`CharityPool.sol`**, **`RentalManager.sol`**, **`DecentralizedNotary.sol`** — Feature contracts
-- **`BackchainGovernance.sol`** — DAO voting
-- **`IInterfaces.sol`** — All interface definitions shared across contracts
-
-**Rust/Stylus oracle** (`contracts/stylus/backcoin-oracle/`): Free randomness oracle for Arbitrum, built with Arbitrum Stylus (Rust→WASM).
+- **`IBackchain.sol`** — All shared interfaces
+- **`BKCToken.sol`** — ERC-20 with activity-based minting (200M cap)
+- **`BackchainEcosystem.sol`** — Master orchestrator, manages fees, operator system, referrals
+- **`LiquidityPool.sol`** — Constant-product AMM (ETH/BKC)
+- **`StakingPool.sol`** — Delegation with time-locks, MasterChef-style rewards
+- **`BuybackMiner.sol`** — Converts ETH fees → BKC rewards via scarcity curve mining
+- **`RewardBooster.sol`** — 4-tier ERC-721 NFTs that reduce staking burn rate
+- **`NFTPool.sol`** — Bonding curve NFT trading (one pool per tier)
+- **`RentalManager.sol`** — NFT rental marketplace
+- **`FortunePool.sol`** — Commit-reveal gaming (Tier 2: ETH + BKC fees)
+- **`Agora.sol`** — Decentralized social protocol (largest contract)
+- **`Notary.sol`** — On-chain document certification
+- **`CharityPool.sol`** — Charity campaigns with donation tracking
+- **`BackchainGovernance.sol`** — Progressive decentralization (Admin → Multisig → Timelock → DAO)
+- **`SimpleBKCFaucet.sol`** — Testnet faucet with relayer distribution
 
 ### Contract Addresses
 

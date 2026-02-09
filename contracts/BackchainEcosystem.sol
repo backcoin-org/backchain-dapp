@@ -1,0 +1,715 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.28;
+
+import "./IBackchain.sol";
+
+// ============================================================================
+// BACKCHAIN ECOSYSTEM — CENTRAL HUB
+// ============================================================================
+//
+// The ONLY configurable contract in the Backchain protocol.
+// All module contracts call collectFee() here to distribute fees.
+//
+// Responsibilities:
+//   - Fee calculation (gas-based or value-based, per action)
+//   - ETH distribution: custom recipient → operator → treasury → buyback
+//   - BKC distribution for Tier 2 modules: burn → stakers → treasury
+//   - Global referral registry (one-time, permanent, ecosystem-wide)
+//   - Module registry (authorize/deauthorize contracts)
+//   - ETH accumulation for the buyback mechanism
+//   - Withdrawal system for operators and treasury
+//
+// Owner can change:  fees, splits, addresses, BKC distribution params.
+// Owner CANNOT change: distribution logic, referral logic, fee math.
+//
+// Security:
+//   - Two-step ownership transfer (prevents accidental loss)
+//   - CEI pattern on all ETH transfers (effects before interactions)
+//   - Missing operator/customRecipient → share goes to buyback (nothing lost)
+//   - Rounding dust → goes to buyback (nothing lost)
+//   - Fee config validation with safe bounds
+//   - Emergency ERC20 recovery (not BKC, which has its own flows)
+//
+// ============================================================================
+
+contract BackchainEcosystem is IBackchainEcosystem {
+
+    // ════════════════════════════════════════════════════════════════════════
+    // CONSTANTS
+    // ════════════════════════════════════════════════════════════════════════
+
+    uint256 private constant BPS = 10_000;
+
+    // Safe bounds — prevent owner from setting unreasonable values
+    uint256 public constant MAX_GAS_MULTIPLIER = 10_000;   // 10000x max
+    uint256 public constant MAX_FEE_BPS        = 5_000;    // 50% max for value-based fees
+    uint256 public constant MAX_GAS_ESTIMATE   = 30_000_000; // 30M gas max
+
+    // ════════════════════════════════════════════════════════════════════════
+    // GOVERNANCE (two-step ownership)
+    // ════════════════════════════════════════════════════════════════════════
+
+    address public owner;
+    address public pendingOwner;
+
+    // ════════════════════════════════════════════════════════════════════════
+    // ADDRESSES (configurable by owner)
+    // ════════════════════════════════════════════════════════════════════════
+
+    IBKCToken public immutable bkcToken;
+    address public override treasury;
+    address public buybackMiner;
+    address public stakingPool;
+
+    // ════════════════════════════════════════════════════════════════════════
+    // REFERRAL REGISTRY (global, permanent, one-time per user)
+    // ════════════════════════════════════════════════════════════════════════
+
+    mapping(address => address) public override referredBy;
+    mapping(address => uint256) public override referralCount;
+
+    // ════════════════════════════════════════════════════════════════════════
+    // MODULE REGISTRY
+    // ════════════════════════════════════════════════════════════════════════
+
+    struct ModuleConfig {
+        bool   active;       // if false, collectFee reverts for this module
+        uint16 customBps;    // % for custom recipient (creator, pool, seller)
+        uint16 operatorBps;  // % for frontend operator
+        uint16 treasuryBps;  // % for dev fund
+        uint16 buybackBps;   // % for buyback accumulation
+        // customBps + operatorBps + treasuryBps + buybackBps MUST = 10000
+    }
+
+    mapping(bytes32 => ModuleConfig) public modules;
+    mapping(address => bytes32) public authorizedContracts;
+
+    // Module ID enumeration (for frontend discovery)
+    bytes32[] public moduleIds;
+    mapping(bytes32 => bool) private _moduleIdTracked;
+
+    // ════════════════════════════════════════════════════════════════════════
+    // FEE CONFIG (per action)
+    // ════════════════════════════════════════════════════════════════════════
+
+    /// @dev feeType: 0 = gas-based, 1 = value-based
+    ///      Gas-based: fee = gasEstimate × tx.gasprice × bps × multiplier / BPS
+    ///      Value-based: fee = txValue × bps / BPS
+    struct FeeConfig {
+        uint8  feeType;      // 0 = gas-based, 1 = value-based
+        uint16 bps;          // basis points (e.g., 100 = 1%)
+        uint16 multiplier;   // gas-based multiplier (1x, 10x, 100x, 1000x)
+        uint32 gasEstimate;  // gas-based: estimated gas units for this action
+    }
+
+    mapping(bytes32 => FeeConfig) public feeConfigs;
+
+    // ════════════════════════════════════════════════════════════════════════
+    // BKC FEE DISTRIBUTION PARAMS (Tier 2 modules)
+    // ════════════════════════════════════════════════════════════════════════
+
+    uint16 public bkcBurnBps     = 500;   // 5% burn
+    uint16 public bkcStakerBps   = 7500;  // 75% to stakers
+    uint16 public bkcTreasuryBps = 2000;  // 20% to treasury
+    // must sum to BPS (10000)
+
+    // ════════════════════════════════════════════════════════════════════════
+    // BALANCES & ACCOUNTING
+    // ════════════════════════════════════════════════════════════════════════
+
+    mapping(address => uint256) public override pendingEth;
+    uint256 public override buybackAccumulated;
+
+    // Global stats (for frontend dashboards)
+    uint256 public totalEthCollected;
+    uint256 public totalBkcCollected;
+    uint256 public totalBkcBurned;
+    uint256 public totalFeeEvents;
+
+    // ════════════════════════════════════════════════════════════════════════
+    // EVENTS
+    // ════════════════════════════════════════════════════════════════════════
+
+    // ── Core ──
+    event FeeCollected(
+        bytes32 indexed moduleId,
+        address indexed user,
+        address operator,
+        address customRecipient,
+        uint256 ethAmount,
+        uint256 bkcFee
+    );
+    event EthDistributed(
+        uint256 toCustom,
+        uint256 toOperator,
+        uint256 toTreasury,
+        uint256 toBuyback
+    );
+    event BkcFeeDistributed(uint256 burned, uint256 toStakers, uint256 toTreasury);
+
+    // ── Withdrawals ──
+    event EthWithdrawn(address indexed recipient, uint256 amount);
+    event BuybackETHWithdrawn(address indexed buyback, uint256 amount);
+
+    // ── Referral ──
+    event ReferrerSet(address indexed user, address indexed referrer);
+
+    // ── Module management ──
+    event ModuleRegistered(bytes32 indexed moduleId, address indexed contractAddr);
+    event ContractDeauthorized(bytes32 indexed moduleId, address indexed contractAddr);
+    event ModuleConfigUpdated(bytes32 indexed moduleId);
+    event ModuleActivated(bytes32 indexed moduleId);
+    event ModuleDeactivated(bytes32 indexed moduleId);
+
+    // ── Fee config ──
+    event FeeConfigUpdated(bytes32 indexed actionId);
+
+    // ── Admin changes (all configurable params emit events) ──
+    event TreasuryUpdated(address indexed oldAddr, address indexed newAddr);
+    event BuybackMinerUpdated(address indexed oldAddr, address indexed newAddr);
+    event StakingPoolUpdated(address indexed oldAddr, address indexed newAddr);
+    event BkcDistributionUpdated(uint16 burnBps, uint16 stakerBps, uint16 treasuryBps);
+
+    // ── Ownership ──
+    event OwnershipTransferStarted(address indexed currentOwner, address indexed pendingOwner);
+    event OwnershipTransferred(address indexed oldOwner, address indexed newOwner);
+
+    // ── Recovery ──
+    event TokenRecovered(address indexed token, address indexed to, uint256 amount);
+
+    // ════════════════════════════════════════════════════════════════════════
+    // ERRORS
+    // ════════════════════════════════════════════════════════════════════════
+
+    error NotOwner();
+    error NotPendingOwner();
+    error NotAuthorizedModule();
+    error NotBuybackMiner();
+    error ModuleNotActive();
+    error InvalidSplit();
+    error InvalidBkcSplit();
+    error InvalidAddress();
+    error ReferrerAlreadySet();
+    error CannotReferSelf();
+    error NothingToWithdraw();
+    error TransferFailed();
+    error ZeroAddress();
+    error ArrayLengthMismatch();
+    error InvalidFeeBps();
+    error CannotRecoverBKC();
+
+    // ════════════════════════════════════════════════════════════════════════
+    // MODIFIERS
+    // ════════════════════════════════════════════════════════════════════════
+
+    modifier onlyOwner() {
+        if (msg.sender != owner) revert NotOwner();
+        _;
+    }
+
+    modifier onlyRegisteredModule() {
+        bytes32 moduleId = authorizedContracts[msg.sender];
+        if (moduleId == bytes32(0)) revert NotAuthorizedModule();
+        if (!modules[moduleId].active) revert ModuleNotActive();
+        _;
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
+    // CONSTRUCTOR
+    // ════════════════════════════════════════════════════════════════════════
+
+    constructor(address _bkcToken, address _treasury) {
+        if (_bkcToken == address(0) || _treasury == address(0)) revert ZeroAddress();
+        bkcToken = IBKCToken(_bkcToken);
+        treasury = _treasury;
+        owner = msg.sender;
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
+    // CORE: CALCULATE FEE
+    // ════════════════════════════════════════════════════════════════════════
+
+    /// @notice Calculate the ETH fee for a given action.
+    /// @dev    Gas-based: fee = gasEstimate × tx.gasprice × bps × multiplier / BPS
+    ///         Value-based: fee = txValue × bps / BPS
+    ///
+    ///         IMPORTANT: tx.gasprice is 0 in static calls (eth_call).
+    ///         Frontend should pass { gasPrice } override from provider.getFeeData()
+    ///         when calling this as a view for fee preview.
+    ///
+    /// @param actionId keccak256 of the action name (e.g., "BACKCHAT_POST")
+    /// @param txValue  Transaction value (used only for value-based fees)
+    /// @return fee     The ETH fee amount in wei
+    function calculateFee(
+        bytes32 actionId,
+        uint256 txValue
+    ) external view override returns (uint256 fee) {
+        FeeConfig memory cfg = feeConfigs[actionId];
+
+        // If bps is 0 or fee config not set, fee is naturally 0
+        if (cfg.bps == 0) return 0;
+
+        if (cfg.feeType == 0) {
+            // Gas-based: gasEstimate × gasPrice × bps × multiplier / BPS
+            fee = uint256(cfg.gasEstimate)
+                * tx.gasprice
+                * uint256(cfg.bps)
+                * uint256(cfg.multiplier)
+                / BPS;
+        } else {
+            // Value-based: txValue × bps / BPS
+            fee = txValue * uint256(cfg.bps) / BPS;
+        }
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
+    // CORE: COLLECT FEE
+    // ════════════════════════════════════════════════════════════════════════
+
+    /// @notice Modules call this to deposit and distribute fees.
+    ///
+    ///         ETH: sent as msg.value, split per ModuleConfig percentages.
+    ///         BKC (Tier 2 only): pulled from msg.sender (the calling module),
+    ///              NOT from the end user. Module must have approved this contract.
+    ///
+    ///         When operator == address(0), operator share → buyback.
+    ///         When customRecipient == address(0), custom share → buyback.
+    ///         Rounding dust → buyback. Nothing is ever lost.
+    ///
+    /// @param user            End user performing the action
+    /// @param operator        Frontend builder earning operator share
+    /// @param customRecipient Module-specific recipient (creator, pool, seller)
+    /// @param moduleId        Registered module identifier
+    /// @param bkcFee          BKC fee amount (0 for Tier 1 modules)
+    function collectFee(
+        address user,
+        address operator,
+        address customRecipient,
+        bytes32 moduleId,
+        uint256 bkcFee
+    ) external payable override onlyRegisteredModule {
+        ModuleConfig memory cfg = modules[moduleId];
+
+        // ── ETH DISTRIBUTION ──
+        if (msg.value > 0) {
+            _distributeEth(msg.value, operator, customRecipient, cfg);
+            totalEthCollected += msg.value;
+        }
+
+        // ── BKC FEE (Tier 2 only) ──
+        // BKC is pulled from msg.sender (the calling module contract).
+        // The module must have already called bkcToken.approve(ecosystem, bkcFee).
+        if (bkcFee > 0) {
+            bkcToken.transferFrom(msg.sender, address(this), bkcFee);
+            _distributeBkc(bkcFee);
+            totalBkcCollected += bkcFee;
+        }
+
+        totalFeeEvents++;
+        emit FeeCollected(moduleId, user, operator, customRecipient, msg.value, bkcFee);
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
+    // INTERNAL: ETH DISTRIBUTION
+    // ════════════════════════════════════════════════════════════════════════
+
+    /// @dev Split ETH according to module config. Uses CEI pattern:
+    ///      all storage writes happen BEFORE the external call to customRecipient.
+    ///
+    ///      When an address is missing (address(0)), their share flows to buyback.
+    ///      Any rounding dust also flows to buyback. Nothing is ever lost.
+    function _distributeEth(
+        uint256 amount,
+        address operator,
+        address customRecipient,
+        ModuleConfig memory cfg
+    ) internal {
+        uint256 distributed;
+
+        // ── Calculate all amounts ──
+        uint256 customAmt   = amount * cfg.customBps / BPS;
+        uint256 operatorAmt = amount * cfg.operatorBps / BPS;
+        uint256 treasuryAmt = amount * cfg.treasuryBps / BPS;
+
+        // ── EFFECTS (storage writes first — CEI pattern) ──
+
+        // Operator (frontend builder) — accumulates, withdraws later
+        if (operator != address(0) && operatorAmt > 0) {
+            pendingEth[operator] += operatorAmt;
+            distributed += operatorAmt;
+        }
+
+        // Treasury (dev fund) — accumulates, withdraws later
+        if (treasuryAmt > 0) {
+            pendingEth[treasury] += treasuryAmt;
+            distributed += treasuryAmt;
+        }
+
+        // Buyback — everything not distributed to operator/treasury
+        // Includes: explicit buybackBps + unallocated custom + unallocated operator + dust
+        // If customRecipient is present, customAmt will be sent below and subtracted
+        uint256 toBuyback;
+        if (customRecipient != address(0) && customAmt > 0) {
+            // Custom recipient gets instant ETH — we subtract it from what stays
+            distributed += customAmt;
+            toBuyback = amount - distributed;
+        } else {
+            // No custom recipient: their share goes to buyback too
+            toBuyback = amount - distributed;
+        }
+
+        if (toBuyback > 0) {
+            buybackAccumulated += toBuyback;
+        }
+
+        // ── INTERACTION (external call last — CEI pattern) ──
+
+        // Custom recipient (creator, prize pool, seller) — instant ETH transfer
+        if (customRecipient != address(0) && customAmt > 0) {
+            _sendEth(customRecipient, customAmt);
+        }
+
+        emit EthDistributed(customAmt, operatorAmt, treasuryAmt, toBuyback);
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
+    // INTERNAL: BKC DISTRIBUTION (Tier 2)
+    // ════════════════════════════════════════════════════════════════════════
+
+    /// @dev Split BKC fee: burn portion → staking rewards → treasury.
+    ///      If staking pool is not yet set, staker share goes to treasury.
+    ///      Treasury absorbs rounding dust.
+    function _distributeBkc(uint256 amount) internal {
+        // Burn
+        uint256 burnAmt = amount * bkcBurnBps / BPS;
+        if (burnAmt > 0) {
+            bkcToken.burn(burnAmt);
+            totalBkcBurned += burnAmt;
+        }
+
+        // Staking rewards
+        uint256 stakerAmt = amount * bkcStakerBps / BPS;
+        if (stakerAmt > 0) {
+            if (stakingPool != address(0)) {
+                bkcToken.transfer(stakingPool, stakerAmt);
+                IStakingPool(stakingPool).notifyReward(stakerAmt);
+            } else {
+                // No staking pool set → treasury gets staker share
+                bkcToken.transfer(treasury, stakerAmt);
+            }
+        }
+
+        // Treasury (remainder absorbs rounding dust)
+        uint256 treasuryAmt = amount - burnAmt - stakerAmt;
+        if (treasuryAmt > 0) {
+            bkcToken.transfer(treasury, treasuryAmt);
+        }
+
+        emit BkcFeeDistributed(burnAmt, stakerAmt, treasuryAmt);
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
+    // REFERRAL (global, permanent, one-time)
+    // ════════════════════════════════════════════════════════════════════════
+
+    /// @notice Set your referrer. Can only be set once per user, permanently.
+    ///         The referrer earns 5% of the user's staking reward claims (in BKC).
+    ///         If no referrer, the 5% goes to treasury instead.
+    function setReferrer(address _referrer) external override {
+        if (_referrer == address(0)) revert InvalidAddress();
+        if (_referrer == msg.sender) revert CannotReferSelf();
+        if (referredBy[msg.sender] != address(0)) revert ReferrerAlreadySet();
+
+        referredBy[msg.sender] = _referrer;
+        referralCount[_referrer]++;
+
+        emit ReferrerSet(msg.sender, _referrer);
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
+    // WITHDRAWALS
+    // ════════════════════════════════════════════════════════════════════════
+
+    /// @notice Operators and treasury withdraw accumulated ETH.
+    ///         CEI: balance zeroed before sending.
+    function withdrawEth() external override {
+        uint256 amount = pendingEth[msg.sender];
+        if (amount == 0) revert NothingToWithdraw();
+
+        pendingEth[msg.sender] = 0; // Effect before interaction
+        _sendEth(msg.sender, amount);
+
+        emit EthWithdrawn(msg.sender, amount);
+    }
+
+    /// @notice BuybackMiner pulls accumulated buyback ETH.
+    ///         Only callable by the designated buybackMiner contract.
+    function withdrawBuybackETH() external override returns (uint256) {
+        if (msg.sender != buybackMiner) revert NotBuybackMiner();
+
+        uint256 amount = buybackAccumulated;
+        if (amount == 0) revert NothingToWithdraw();
+
+        buybackAccumulated = 0; // Effect before interaction
+        _sendEth(msg.sender, amount);
+
+        emit BuybackETHWithdrawn(msg.sender, amount);
+        return amount;
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
+    // ADMIN: MODULE MANAGEMENT
+    // ════════════════════════════════════════════════════════════════════════
+
+    /// @notice Register a module contract with its ETH distribution config.
+    ///         The 4 bps values must sum to exactly 10000 (100%).
+    /// @param _contract  The module contract address
+    /// @param _moduleId  keccak256 of the module name (e.g., "BACKCHAT")
+    /// @param _cfg       Distribution config (custom + operator + treasury + buyback = 10000)
+    function registerModule(
+        address _contract,
+        bytes32 _moduleId,
+        ModuleConfig calldata _cfg
+    ) external onlyOwner {
+        if (_contract == address(0)) revert ZeroAddress();
+        _validateModuleSplit(_cfg);
+
+        authorizedContracts[_contract] = _moduleId;
+        modules[_moduleId] = _cfg;
+
+        // Track moduleId for enumeration
+        if (!_moduleIdTracked[_moduleId]) {
+            moduleIds.push(_moduleId);
+            _moduleIdTracked[_moduleId] = true;
+        }
+
+        emit ModuleRegistered(_moduleId, _contract);
+    }
+
+    /// @notice Register multiple module contracts at once.
+    function registerModuleBatch(
+        address[] calldata _contracts,
+        bytes32[] calldata _moduleIds,
+        ModuleConfig[] calldata _cfgs
+    ) external onlyOwner {
+        uint256 len = _contracts.length;
+        if (len != _moduleIds.length || len != _cfgs.length) revert ArrayLengthMismatch();
+
+        for (uint256 i; i < len; ++i) {
+            if (_contracts[i] == address(0)) revert ZeroAddress();
+            _validateModuleSplit(_cfgs[i]);
+
+            authorizedContracts[_contracts[i]] = _moduleIds[i];
+            modules[_moduleIds[i]] = _cfgs[i];
+
+            if (!_moduleIdTracked[_moduleIds[i]]) {
+                moduleIds.push(_moduleIds[i]);
+                _moduleIdTracked[_moduleIds[i]] = true;
+            }
+
+            emit ModuleRegistered(_moduleIds[i], _contracts[i]);
+        }
+    }
+
+    /// @notice Deauthorize a contract (removes its module binding).
+    ///         The module config itself remains — only the contract loses access.
+    ///         Useful when migrating to a new contract for the same module.
+    function deauthorizeContract(address _contract) external onlyOwner {
+        bytes32 moduleId = authorizedContracts[_contract];
+        if (moduleId == bytes32(0)) revert NotAuthorizedModule();
+
+        delete authorizedContracts[_contract];
+        emit ContractDeauthorized(moduleId, _contract);
+    }
+
+    /// @notice Update the ETH distribution config for a module.
+    function updateModuleConfig(
+        bytes32 _moduleId,
+        ModuleConfig calldata _cfg
+    ) external onlyOwner {
+        _validateModuleSplit(_cfg);
+        modules[_moduleId] = _cfg;
+        emit ModuleConfigUpdated(_moduleId);
+    }
+
+    /// @notice Activate a previously deactivated module.
+    function activateModule(bytes32 _moduleId) external onlyOwner {
+        modules[_moduleId].active = true;
+        emit ModuleActivated(_moduleId);
+    }
+
+    /// @notice Deactivate a module. Transactions through this module will revert.
+    function deactivateModule(bytes32 _moduleId) external onlyOwner {
+        modules[_moduleId].active = false;
+        emit ModuleDeactivated(_moduleId);
+    }
+
+    function _validateModuleSplit(ModuleConfig calldata _cfg) internal pure {
+        uint256 total = uint256(_cfg.customBps) + _cfg.operatorBps + _cfg.treasuryBps + _cfg.buybackBps;
+        if (total != BPS) revert InvalidSplit();
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
+    // ADMIN: FEE CONFIGURATION
+    // ════════════════════════════════════════════════════════════════════════
+
+    /// @notice Set fee config for a specific action.
+    ///         Set bps = 0 to make an action free.
+    function setFeeConfig(bytes32 _actionId, FeeConfig calldata _cfg) external onlyOwner {
+        _validateFeeConfig(_cfg);
+        feeConfigs[_actionId] = _cfg;
+        emit FeeConfigUpdated(_actionId);
+    }
+
+    /// @notice Batch set fee configs for multiple actions.
+    function setFeeConfigBatch(
+        bytes32[] calldata _actionIds,
+        FeeConfig[] calldata _cfgs
+    ) external onlyOwner {
+        uint256 len = _actionIds.length;
+        if (len != _cfgs.length) revert ArrayLengthMismatch();
+
+        for (uint256 i; i < len; ++i) {
+            _validateFeeConfig(_cfgs[i]);
+            feeConfigs[_actionIds[i]] = _cfgs[i];
+            emit FeeConfigUpdated(_actionIds[i]);
+        }
+    }
+
+    function _validateFeeConfig(FeeConfig calldata _cfg) internal pure {
+        if (_cfg.bps > uint16(MAX_FEE_BPS)) revert InvalidFeeBps();
+        // Additional validation only matters when bps > 0 (fee is active)
+        // When bps = 0, fee is always 0 regardless of other params
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
+    // ADMIN: ADDRESSES
+    // ════════════════════════════════════════════════════════════════════════
+
+    function setTreasury(address _treasury) external onlyOwner {
+        if (_treasury == address(0)) revert ZeroAddress();
+        emit TreasuryUpdated(treasury, _treasury);
+        treasury = _treasury;
+    }
+
+    function setBuybackMiner(address _buyback) external onlyOwner {
+        if (_buyback == address(0)) revert ZeroAddress();
+        emit BuybackMinerUpdated(buybackMiner, _buyback);
+        buybackMiner = _buyback;
+    }
+
+    function setStakingPool(address _staking) external onlyOwner {
+        if (_staking == address(0)) revert ZeroAddress();
+        emit StakingPoolUpdated(stakingPool, _staking);
+        stakingPool = _staking;
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
+    // ADMIN: BKC DISTRIBUTION PARAMS
+    // ════════════════════════════════════════════════════════════════════════
+
+    /// @notice Update BKC fee split (Tier 2 modules). Must sum to 10000.
+    function setBkcDistribution(
+        uint16 _burnBps,
+        uint16 _stakerBps,
+        uint16 _treasuryBps
+    ) external onlyOwner {
+        if (uint256(_burnBps) + _stakerBps + _treasuryBps != BPS) revert InvalidBkcSplit();
+        bkcBurnBps = _burnBps;
+        bkcStakerBps = _stakerBps;
+        bkcTreasuryBps = _treasuryBps;
+        emit BkcDistributionUpdated(_burnBps, _stakerBps, _treasuryBps);
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
+    // ADMIN: TWO-STEP OWNERSHIP
+    // ════════════════════════════════════════════════════════════════════════
+
+    /// @notice Initiate ownership transfer. The new owner must call acceptOwnership().
+    ///         This prevents accidental transfer to a wrong address.
+    function transferOwnership(address _newOwner) external onlyOwner {
+        if (_newOwner == address(0)) revert ZeroAddress();
+        pendingOwner = _newOwner;
+        emit OwnershipTransferStarted(owner, _newOwner);
+    }
+
+    /// @notice Accept the pending ownership transfer.
+    function acceptOwnership() external {
+        if (msg.sender != pendingOwner) revert NotPendingOwner();
+        emit OwnershipTransferred(owner, msg.sender);
+        owner = msg.sender;
+        pendingOwner = address(0);
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
+    // ADMIN: EMERGENCY RECOVERY
+    // ════════════════════════════════════════════════════════════════════════
+
+    /// @notice Recover accidentally sent ERC20 tokens.
+    ///         Cannot recover BKC — it has its own distribution flows.
+    function recoverToken(address _token, address _to, uint256 _amount) external onlyOwner {
+        if (_token == address(bkcToken)) revert CannotRecoverBKC();
+        if (_to == address(0)) revert ZeroAddress();
+
+        (bool success, bytes memory data) = _token.call(
+            abi.encodeWithSelector(0xa9059cbb, _to, _amount) // transfer(address,uint256)
+        );
+        if (!success || (data.length > 0 && !abi.decode(data, (bool)))) revert TransferFailed();
+
+        emit TokenRecovered(_token, _to, _amount);
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
+    // INTERNAL HELPERS
+    // ════════════════════════════════════════════════════════════════════════
+
+    function _sendEth(address to, uint256 amount) internal {
+        if (amount == 0) return;
+        (bool ok, ) = payable(to).call{value: amount}("");
+        if (!ok) revert TransferFailed();
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
+    // VIEWS
+    // ════════════════════════════════════════════════════════════════════════
+
+    /// @notice Get full module config by module ID
+    function getModuleConfig(bytes32 _moduleId) external view returns (ModuleConfig memory) {
+        return modules[_moduleId];
+    }
+
+    /// @notice Get fee config by action ID
+    function getFeeConfig(bytes32 _actionId) external view returns (FeeConfig memory) {
+        return feeConfigs[_actionId];
+    }
+
+    /// @notice Check if a contract address is authorized and active
+    function isAuthorized(address _contract) external view returns (bool) {
+        bytes32 moduleId = authorizedContracts[_contract];
+        return moduleId != bytes32(0) && modules[moduleId].active;
+    }
+
+    /// @notice Get the module ID for a contract address
+    function getModuleIdByContract(address _contract) external view returns (bytes32) {
+        return authorizedContracts[_contract];
+    }
+
+    /// @notice Total number of registered module types
+    function moduleCount() external view returns (uint256) {
+        return moduleIds.length;
+    }
+
+    /// @notice Get ecosystem stats for frontend dashboards
+    function getStats() external view returns (
+        uint256 _totalEthCollected,
+        uint256 _totalBkcCollected,
+        uint256 _totalBkcBurned,
+        uint256 _totalFeeEvents,
+        uint256 _buybackAccumulated
+    ) {
+        return (totalEthCollected, totalBkcCollected, totalBkcBurned, totalFeeEvents, buybackAccumulated);
+    }
+
+    /// @notice Accept ETH directly (e.g., from buyback refunds)
+    receive() external payable {}
+}

@@ -20,9 +20,9 @@ import { executeFaucetClaim } from './modules/transactions/faucet-tx.js';
 
 // Page Imports (Presale Removido)
 import { DashboardPage } from './pages/DashboardPage.js';
-import { EarnPage } from './pages/networkstaking.js'; 
+import { StakingPage } from './pages/StakingPage.js';
 import { StorePage } from './pages/StorePage.js';
-// RewardsPage removed — merged into EarnPage (Stake & Earn)
+// RewardsPage removed — merged into StakingPage (Stake & Earn)
 import { FortunePoolPage } from './pages/FortunePool.js'; 
 import { AboutPage } from './pages/AboutPage.js';
 import { AirdropPage } from './pages/AirdropPage.js';
@@ -57,9 +57,9 @@ let uiUpdatePending = false;
 
 const routes = {
     'dashboard': DashboardPage,
-    'mine': EarnPage, 
+    'mine': StakingPage,
     'store': StorePage,
-    'rewards': EarnPage, // redirects old #rewards URLs to unified page
+    'rewards': StakingPage, // redirects old #rewards URLs to unified page
     'actions': FortunePoolPage, 
     'charity': CharityPage,
     'backchat': BackchatPage,
@@ -513,7 +513,7 @@ window.addEventListener('hashchange', () => {
     }
 });
 
-window.EarnPage = EarnPage; 
+window.StakingPage = StakingPage;
 window.openConnectModal = openConnectModal;
 window.disconnectWallet = disconnectWallet;
 window.updateUIState = updateUIState;
