@@ -35,29 +35,33 @@ export const formatAddress = (address) => {
 };
 
 // Formata pStake com sufixos (k, M, B, T) de forma segura
+// pStake do contrato é wei-scaled (18 decimais) — converte para human-readable antes de formatar
 export const formatPStake = (pStake) => {
     try {
         if (pStake === undefined || pStake === null) return '0';
-        
-        // Converte para BigInt se não for
+
         const bigPStake = typeof pStake === 'bigint' ? pStake : BigInt(pStake);
+        if (bigPStake === 0n) return '0';
 
-        if (bigPStake < 1000n) return bigPStake.toString();
+        // Converte de wei (18 decimais) para valor humano
+        const numValue = parseFloat(ethers.formatEther(bigPStake));
+        if (numValue === 0 || !isFinite(numValue)) return '0';
 
-        // Lógica de sufixo (Baseada em Number para simplificação visual)
-        const numValue = Number(bigPStake);
-        
-        // Se for infinito (maior que JS Number safe integer), retorna string pura
-        if (!isFinite(numValue)) return bigPStake.toLocaleString('en-US');
-
-        const suffixes = ["", "k", "M", "B", "T"];
-        const suffixNum = Math.floor(("" + Math.floor(numValue)).length / 3);
-        
-        let shortValue = parseFloat((suffixNum !== 0 ? (numValue / Math.pow(1000, suffixNum)) : numValue).toPrecision(3));
-        if (shortValue % 1 !== 0) {
-            shortValue = shortValue.toFixed(2);
+        // Valores pequenos: mostra com 2 casas decimais
+        if (numValue < 1000) {
+            if (numValue < 0.01) return '<0.01';
+            return numValue % 1 === 0 ? numValue.toString() : numValue.toFixed(2);
         }
-        return shortValue + suffixes[suffixNum];
+
+        // Valores grandes: usa sufixo
+        const suffixes = ["", "k", "M", "B", "T"];
+        const suffixNum = Math.min(
+            Math.floor(Math.log10(numValue) / 3),
+            suffixes.length - 1
+        );
+
+        const shortValue = numValue / Math.pow(1000, suffixNum);
+        return shortValue.toFixed(2) + suffixes[suffixNum];
 
     } catch (e) {
         return '0';

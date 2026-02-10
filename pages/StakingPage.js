@@ -94,7 +94,10 @@ function formatDuration(days) {
 function calculatePStake(amount, durationSec) {
     if (amount <= 0n || durationSec <= 0n) return 0n;
     const days = durationSec / 86400n;
-    return (amount * days) / (10n ** 18n);
+    // Match contract: pStake = amount * (10000 + lockDays * 5918 / 365) / 10000
+    const BPS = 10000n;
+    const multiplier = BPS + (days * 5918n / 365n);
+    return amount * multiplier / BPS;
 }
 
 function formatDate(timestamp) {
@@ -1046,7 +1049,10 @@ function updatePreview() {
         const feeWei = (amountWei * BigInt(feeBips)) / 10000n;
         const netWei = amountWei - feeWei;
         const durationDays = BigInt(lockDays);
-        const pStake = (netWei * durationDays) / (10n ** 18n);
+        // Match contract: pStake = amount * (10000 + lockDays * 5918 / 365) / 10000
+        const BPS = 10000n;
+        const multiplier = BPS + (durationDays * 5918n / 365n);
+        const pStake = netWei * multiplier / BPS;
 
         const pEl = document.getElementById('stk-preview-pstake'); if (pEl) pEl.textContent = formatPStake(pStake);
         const nEl = document.getElementById('stk-preview-net'); if (nEl) nEl.textContent = `${formatBigNumber(netWei).toFixed(4)} BKC`;
