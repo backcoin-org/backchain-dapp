@@ -21,7 +21,7 @@
 // 2. REVEAL: guesses + secret → contract verifies, rolls, pays
 // ============================================================================
 
-import { txEngine, ValidationLayer } from '../core/index.js';
+import { txEngine, ValidationLayer, getGasPriceOverrides } from '../core/index.js';
 import { resolveOperator } from '../core/operator.js';
 import { addresses, contractAddresses } from '../../config.js';
 
@@ -191,10 +191,11 @@ export async function commitPlay({
     let storedOperator = operator;
     let ethFee = 0n;
 
-    // Pre-fetch ETH fee
+    // Pre-fetch ETH fee (gasPrice override needed: calculateFee uses tx.gasprice, 0 in eth_call)
     try {
         const readContract = await getFortuneContractReadOnly();
-        ethFee = await readContract.getRequiredFee(mask);
+        const gasPriceOpts = await getGasPriceOverrides();
+        ethFee = await readContract.getRequiredFee(mask, gasPriceOpts);
         console.log('[FortuneTx] ETH fee:', ethers.formatEther(ethFee));
     } catch (e) {
         console.error('[FortuneTx] Could not fetch ETH fee:', e.message);
@@ -446,7 +447,8 @@ export async function getTierById(tierId) {
 export async function getServiceFee(tierMask = 1) {
     const contract = await getFortuneContractReadOnly();
     try {
-        return await contract.getRequiredFee(Number(tierMask));
+        const gasPriceOpts = await getGasPriceOverrides();
+        return await contract.getRequiredFee(Number(tierMask), gasPriceOpts);
     } catch {
         return 0n;
     }

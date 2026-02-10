@@ -23,7 +23,7 @@
 // - Sell: BKC payout from curve, no BKC tax, ETH fee to ecosystem
 // ============================================================================
 
-import { txEngine, ValidationLayer } from '../core/index.js';
+import { txEngine, ValidationLayer, getGasPriceOverrides } from '../core/index.js';
 import { resolveOperator } from '../core/operator.js';
 import { addresses, contractAddresses } from '../../config.js';
 
@@ -111,13 +111,8 @@ async function getNftPoolContractReadOnly(poolAddress) {
     return new window.ethers.Contract(poolAddress, NFT_POOL_ABI, NetworkManager.getProvider());
 }
 
-// Gas price helper — needed because ecosystem.calculateFee uses tx.gasprice,
-// which is 0 in eth_call. Passing { gasPrice } override fixes this.
-async function getGasPriceOverride() {
-    const { NetworkManager } = await import('../core/index.js');
-    const feeData = await NetworkManager.getProvider().getFeeData();
-    return { gasPrice: feeData.gasPrice || feeData.maxFeePerGas || 100000000n };
-}
+// Gas price alias for backward compat within this file
+const getGasPriceOverride = getGasPriceOverrides;
 
 function getNftContract(signer) {
     const contracts = getContracts();

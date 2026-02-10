@@ -79,6 +79,16 @@ export {
 } from './operator.js';
 
 // ============================================================================
+// GAS PRICE OVERRIDE — needed for any view call that uses ecosystem.calculateFee
+// (tx.gasprice is 0 in eth_call; this passes the real gasPrice as override)
+// ============================================================================
+
+export async function getGasPriceOverrides() {
+    const feeData = await NetworkManager.getProvider().getFeeData();
+    return { gasPrice: feeData.gasPrice || feeData.maxFeePerGas || 100000000n };
+}
+
+// ============================================================================
 // CONVENIENCE IMPORTS (Re-exports for easy access)
 // ============================================================================
 

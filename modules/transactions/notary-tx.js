@@ -20,7 +20,7 @@
 // - No BKC fee, no NFT discounts
 // ============================================================================
 
-import { txEngine } from '../core/index.js';
+import { txEngine, getGasPriceOverrides } from '../core/index.js';
 import { resolveOperator } from '../core/operator.js';
 import { addresses, contractAddresses } from '../../config.js';
 
@@ -162,8 +162,9 @@ export async function certify({
                 throw new Error('This document hash has already been certified');
             }
 
-            // Get ETH fee
-            ethFee = await contract.getFee();
+            // Get ETH fee (gasPrice override: calculateFee uses tx.gasprice, 0 in eth_call)
+            const gasPriceOpts = await getGasPriceOverrides();
+            ethFee = await contract.getFee(gasPriceOpts);
             console.log('[NotaryTx] Fee:', ethers.formatEther(ethFee), 'ETH');
 
             // Check ETH balance
@@ -270,7 +271,8 @@ export async function getFee() {
     const ethers = window.ethers;
     const contract = await getNotaryContractReadOnly();
 
-    const fee = await contract.getFee();
+    const gasPriceOpts = await getGasPriceOverrides();
+    const fee = await contract.getFee(gasPriceOpts);
     return {
         ethFee: fee,
         ethFormatted: ethers.formatEther(fee) + ' ETH'

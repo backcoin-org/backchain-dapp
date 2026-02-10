@@ -21,7 +21,7 @@
 // - Total msg.value = rentalCost + ecosystemFee
 // ============================================================================
 
-import { txEngine, ValidationLayer } from '../core/index.js';
+import { txEngine, ValidationLayer, getGasPriceOverrides } from '../core/index.js';
 import { resolveOperator } from '../core/operator.js';
 import { addresses, contractAddresses } from '../../config.js';
 
@@ -165,7 +165,9 @@ export async function rentNft({
             }
 
             // V9: getRentalCost returns 3-tuple (rentalCost, ethFee, totalCost)
-            const cost = await contract.getRentalCost(tokenId, hours);
+            // gasPrice override: calculateFee uses tx.gasprice, 0 in eth_call
+            const gasPriceOpts = await getGasPriceOverrides();
+            const cost = await contract.getRentalCost(tokenId, hours, gasPriceOpts);
             totalCost = cost.totalCost || cost[2];
 
             const { NetworkManager } = await import('../core/index.js');
@@ -326,7 +328,8 @@ export async function getListingCount() {
 export async function getRentalCost(tokenId, hours) {
     const ethers = window.ethers;
     const contract = await getRentalContractReadOnly();
-    const cost = await contract.getRentalCost(tokenId, hours);
+    const gasPriceOpts = await getGasPriceOverrides();
+    const cost = await contract.getRentalCost(tokenId, hours, gasPriceOpts);
     return {
         rentalCost: cost.rentalCost || cost[0],
         rentalCostFormatted: ethers.formatEther(cost.rentalCost || cost[0]),
