@@ -94,8 +94,9 @@ const STAKING_ABI = [
 
     // Events
     'event Delegated(address indexed user, uint256 indexed delegationIndex, uint256 amount, uint256 pStake, uint256 lockDays, address operator)',
-    'event Unstaked(address indexed user, uint256 indexed delegationIndex, uint256 amount)',
-    'event RewardsClaimed(address indexed user, uint256 totalRewards, uint256 burned, uint256 referrerCut, uint256 userReceived, uint256 nftBoost, address operator)'
+    'event Unstaked(address indexed user, uint256 indexed delegationIndex, uint256 amountReturned)',
+    'event ForceUnstaked(address indexed user, uint256 indexed delegationIndex, uint256 amountReturned, uint256 penaltyBurned, address operator)',
+    'event RewardsClaimed(address indexed user, uint256 totalRewards, uint256 burnedAmount, uint256 userReceived, uint256 cutAmount, address cutRecipient, uint256 nftBoostUsed, address operator)'
 ];
 
 // ============================================================================

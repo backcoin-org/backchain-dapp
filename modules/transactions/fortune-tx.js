@@ -89,8 +89,8 @@ const FORTUNE_ABI = [
 
     // Events
     'event GameCommitted(uint256 indexed gameId, address indexed player, uint256 wagerAmount, uint8 tierMask, address operator)',
-    'event GameRevealed(uint256 indexed gameId, address indexed player, uint256 grossWager, uint256 prizeWon, uint8 tierMask, uint8 matchCount)',
-    'event GameExpired(uint256 indexed gameId, address indexed player, uint96 forfeitedAmount)'
+    'event GameRevealed(uint256 indexed gameId, address indexed player, uint256 grossWager, uint256 prizeWon, uint8 tierMask, uint8 matchCount, address operator)',
+    'event GameExpired(uint256 indexed gameId, address indexed player, uint256 forfeitedAmount)'
 ];
 
 // Tier data (hardcoded in contract, cached here for validation)

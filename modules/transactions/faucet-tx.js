@@ -33,17 +33,19 @@ const FAUCET_ABI = [
 
     // Read - User
     'function canClaim(address user) view returns (bool)',
-    'function getUserInfo(address user) view returns (bool canClaimNow, uint256 lastClaim, uint256 nextClaim, uint256 tokensAvailable)',
+    'function getUserInfo(address user) view returns (uint256 lastClaim, uint256 claims, bool eligible, uint256 cooldownLeft)',
+    'function getCooldownRemaining(address user) view returns (uint256)',
 
     // Read - Config
     'function cooldown() view returns (uint256)',
     'function tokensPerClaim() view returns (uint256)',
     'function ethPerClaim() view returns (uint256)',
-    'function getFaucetStatus() view returns (uint256 _tokensPerClaim, uint256 _ethPerClaim, uint256 _cooldown, uint256 bkcBalance, uint256 ethBalance, bool isPaused)',
-    'function getStats() view returns (uint256 totalClaims, uint256 totalBkcDistributed, uint256 totalEthDistributed)',
+    'function paused() view returns (bool)',
+    'function getFaucetStatus() view returns (uint256 ethBalance, uint256 tokenBalance, uint256 ethPerDrip, uint256 tokensPerDrip, uint256 estimatedEthClaims, uint256 estimatedTokenClaims)',
+    'function getStats() view returns (uint256 tokens, uint256 eth, uint256 claims, uint256 users)',
 
     // Events
-    'event TokensClaimed(address indexed user, uint256 bkcAmount, uint256 ethAmount)'
+    'event Claimed(address indexed recipient, uint256 tokens, uint256 eth, address indexed via)'
 ];
 
 // ============================================================================
@@ -177,23 +179,24 @@ export async function claimOnChain({
             const provider = NetworkManager.getProvider();
             const contract = new ethers.Contract(faucetAddress, FAUCET_ABI, provider);
 
-            // V9: Use getUserInfo for richer check
+            // V9: getUserInfo returns (lastClaim, claims, eligible, cooldownLeft)
             try {
                 const info = await contract.getUserInfo(userAddress);
-                if (!info.canClaimNow) {
-                    const now = Math.floor(Date.now() / 1000);
-                    const waitSeconds = Number(info.nextClaim) - now;
-                    if (waitSeconds > 0) {
-                        const waitMinutes = Math.ceil(waitSeconds / 60);
-                        throw new Error(`Please wait ${waitMinutes} minutes before claiming again`);
+                const eligible = info[2];
+                const cooldownLeft = Number(info[3]);
+                if (!eligible) {
+                    if (cooldownLeft > 0) {
+                        const waitMinutes = Math.ceil(cooldownLeft / 60);
+                        throw new Error(`Aguarde ${waitMinutes} minutos para claimar novamente`);
                     }
+                    throw new Error('Faucet indisponível no momento');
                 }
             } catch (e) {
-                if (e.message.includes('wait')) throw e;
+                if (e.message.includes('Aguarde') || e.message.includes('indisponível')) throw e;
                 // Fallback to canClaim
                 const canClaimNow = await contract.canClaim(userAddress);
                 if (!canClaimNow) {
-                    throw new Error('Cannot claim yet. Please wait for cooldown.');
+                    throw new Error('Aguarde o cooldown para claimar novamente.');
                 }
             }
         },
@@ -225,16 +228,15 @@ export async function canClaim(userAddress) {
         const provider = NetworkManager.getProvider();
         const contract = new ethers.Contract(faucetAddress, FAUCET_ABI, provider);
 
-        // V9: Use getUserInfo
+        // V9: getUserInfo returns (lastClaim, claims, eligible, cooldownLeft)
         try {
             const info = await contract.getUserInfo(userAddress);
-            const now = Math.floor(Date.now() / 1000);
             return {
-                canClaim: info.canClaimNow,
-                lastClaimTime: Number(info.lastClaim),
-                nextClaimTime: Number(info.nextClaim),
-                tokensAvailable: info.tokensAvailable,
-                waitSeconds: info.canClaimNow ? 0 : Math.max(0, Number(info.nextClaim) - now)
+                canClaim: info[2],
+                lastClaimTime: Number(info[0]),
+                claimCount: Number(info[1]),
+                cooldownLeft: Number(info[3]),
+                waitSeconds: Number(info[3])
             };
         } catch {
             // Fallback
@@ -261,31 +263,39 @@ export async function getFaucetInfo() {
         const provider = NetworkManager.getProvider();
         const contract = new ethers.Contract(faucetAddress, FAUCET_ABI, provider);
 
-        // V9: Use getFaucetStatus
+        // V9: getFaucetStatus returns (ethBalance, tokenBalance, ethPerDrip, tokensPerDrip, estimatedEthClaims, estimatedTokenClaims)
         try {
             const status = await contract.getFaucetStatus();
+            const ethBal = status[0];
+            const tokenBal = status[1];
+            const ethPerDrip = status[2];
+            const tokensPerDrip = status[3];
             return {
-                bkcAmount: status._tokensPerClaim || status[0],
-                ethAmount: status._ethPerClaim || status[1],
-                cooldownSeconds: Number(status._cooldown || status[2]),
-                cooldownMinutes: Number(status._cooldown || status[2]) / 60,
-                bkcAmountFormatted: ethers.formatEther(status._tokensPerClaim || status[0]),
-                ethAmountFormatted: ethers.formatEther(status._ethPerClaim || status[1]),
-                bkcBalance: status.bkcBalance || status[3],
-                ethBalance: status.ethBalance || status[4],
-                isPaused: status.isPaused || status[5] || false
+                bkcAmount: tokensPerDrip,
+                ethAmount: ethPerDrip,
+                bkcAmountFormatted: ethers.formatEther(tokensPerDrip),
+                ethAmountFormatted: ethers.formatEther(ethPerDrip),
+                bkcBalance: tokenBal,
+                ethBalance: ethBal,
+                bkcBalanceFormatted: ethers.formatEther(tokenBal),
+                ethBalanceFormatted: ethers.formatEther(ethBal),
+                estimatedEthClaims: Number(status[4]),
+                estimatedTokenClaims: Number(status[5]),
+                cooldownSeconds: Number(await contract.cooldown()),
+                cooldownMinutes: Number(await contract.cooldown()) / 60,
+                isPaused: await contract.paused()
             };
         } catch {
             // Fallback to individual calls
-            const [bkcAmount, ethAmount, cooldown] = await Promise.all([
+            const [bkcAmount, ethAmount, cd] = await Promise.all([
                 contract.tokensPerClaim(),
                 contract.ethPerClaim(),
                 contract.cooldown()
             ]);
             return {
                 bkcAmount, ethAmount,
-                cooldownSeconds: Number(cooldown),
-                cooldownMinutes: Number(cooldown) / 60,
+                cooldownSeconds: Number(cd),
+                cooldownMinutes: Number(cd) / 60,
                 bkcAmountFormatted: ethers.formatEther(bkcAmount),
                 ethAmountFormatted: ethers.formatEther(ethAmount)
             };
