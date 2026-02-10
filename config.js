@@ -682,6 +682,9 @@ export const ecosystemManagerABI = [
     "function treasury() view returns (address)",
     "function buybackAccumulated() view returns (uint256)",
     "function referredBy(address _user) view returns (address)",
+    "function referralCount(address _referrer) view returns (uint256)",
+    "function setReferrer(address _referrer) external",
+    "event ReferrerSet(address indexed user, address indexed referrer)",
 
     // Stats
     "function totalEthCollected() view returns (uint256)",

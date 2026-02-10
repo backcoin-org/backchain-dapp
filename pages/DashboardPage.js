@@ -359,6 +359,148 @@ function updateFaucetWidget() {
     }
 }
 
+// ============================================================================
+// REFERRAL FUNCTIONS
+// ============================================================================
+function detectReferralFromURL() {
+    try {
+        const hash = window.location.hash || '';
+        const qIdx = hash.indexOf('?');
+        if (qIdx === -1) return;
+        const params = new URLSearchParams(hash.substring(qIdx));
+        const ref = params.get('ref');
+        if (ref && ethers.isAddress(ref)) {
+            const current = localStorage.getItem('backchain_referrer');
+            if (!current || current.toLowerCase() !== ref.toLowerCase()) {
+                localStorage.setItem('backchain_referrer', ref);
+                console.log('[Referral] Saved referrer from URL:', ref);
+            }
+        }
+    } catch (e) { /* ignore */ }
+}
+
+async function tryAutoSetReferrer() {
+    if (!State.isConnected || !State.userAddress) return;
+    const stored = localStorage.getItem('backchain_referrer');
+    if (!stored || !ethers.isAddress(stored)) return;
+    if (stored.toLowerCase() === State.userAddress.toLowerCase()) {
+        localStorage.removeItem('backchain_referrer');
+        return;
+    }
+    try {
+        const ecosystemAddr = addresses?.backchainEcosystem;
+        if (!ecosystemAddr) return;
+        const { ecosystemManagerABI } = await import('../config.js');
+        const { NetworkManager } = await import('../modules/core/index.js');
+        const provider = NetworkManager.getProvider();
+        const eco = new ethers.Contract(ecosystemAddr, ecosystemManagerABI, provider);
+        const existing = await eco.referredBy(State.userAddress);
+        if (existing && existing !== '0x0000000000000000000000000000000000000000') {
+            localStorage.removeItem('backchain_referrer');
+            return;
+        }
+        // Set referrer on-chain via signer
+        const signer = await State.provider.getSigner();
+        const ecoSigner = new ethers.Contract(ecosystemAddr, ecosystemManagerABI, signer);
+        console.log('[Referral] Auto-setting referrer:', stored);
+        const tx = await ecoSigner.setReferrer(stored);
+        await tx.wait();
+        localStorage.removeItem('backchain_referrer');
+        showToast('Referrer set! They will earn 5% of your staking rewards.', 'success');
+        updateReferralWidget();
+    } catch (e) {
+        console.warn('[Referral] Auto-set failed:', e.message);
+    }
+}
+
+async function loadReferralData() {
+    if (!State.isConnected || !State.userAddress) return { count: 0, referrer: null };
+    try {
+        const ecosystemAddr = addresses?.backchainEcosystem;
+        if (!ecosystemAddr) return { count: 0, referrer: null };
+        const { ecosystemManagerABI } = await import('../config.js');
+        const { NetworkManager } = await import('../modules/core/index.js');
+        const provider = NetworkManager.getProvider();
+        const eco = new ethers.Contract(ecosystemAddr, ecosystemManagerABI, provider);
+        const [count, referrer] = await Promise.all([
+            eco.referralCount(State.userAddress),
+            eco.referredBy(State.userAddress)
+        ]);
+        return {
+            count: Number(count),
+            referrer: referrer !== '0x0000000000000000000000000000000000000000' ? referrer : null
+        };
+    } catch (e) {
+        console.warn('[Referral] Load failed:', e.message);
+        return { count: 0, referrer: null };
+    }
+}
+
+async function updateReferralWidget() {
+    const widget = document.getElementById('dashboard-referral-widget');
+    if (!widget) return;
+
+    const titleEl = document.getElementById('referral-title');
+    const descEl = document.getElementById('referral-desc');
+    const statsEl = document.getElementById('referral-stats');
+    const linkContainer = document.getElementById('referral-link-container');
+    const linkText = document.getElementById('referral-link-text');
+    const shareBtn = document.getElementById('referral-share-btn');
+    const countEl = document.getElementById('referral-count');
+
+    if (!State.isConnected || !State.userAddress) {
+        widget.style.opacity = '0.5';
+        if (titleEl) titleEl.innerText = "Invite & Earn Forever";
+        if (descEl) descEl.innerText = "Connect your wallet to get your referral link";
+        if (statsEl) statsEl.style.display = 'none';
+        if (linkContainer) linkContainer.style.display = 'none';
+        if (shareBtn) shareBtn.style.display = 'none';
+        return;
+    }
+
+    widget.style.opacity = '1';
+    const refLink = `${window.location.origin}/#dashboard?ref=${State.userAddress}`;
+
+    if (linkText) linkText.textContent = refLink;
+    if (linkContainer) linkContainer.style.display = 'flex';
+    if (shareBtn) shareBtn.style.display = '';
+
+    // Load stats async
+    const data = await loadReferralData();
+    if (countEl) countEl.textContent = data.count;
+    if (statsEl) statsEl.style.display = 'flex';
+
+    if (data.count > 0) {
+        if (titleEl) titleEl.innerText = `${data.count} Referral${data.count > 1 ? 's' : ''} Earning for You`;
+        if (descEl) descEl.innerText = "You earn 5% of every staking reward they claim. Keep sharing!";
+    } else {
+        if (titleEl) titleEl.innerText = "Invite & Earn Forever";
+        if (descEl) descEl.innerText = "Share your link. Earn 5% of every staking reward your referrals claim — forever.";
+    }
+}
+
+function copyReferralLink() {
+    if (!State.userAddress) return;
+    const link = `${window.location.origin}/#dashboard?ref=${State.userAddress}`;
+    navigator.clipboard.writeText(link).then(() => {
+        showToast('Referral link copied!', 'success');
+        const btn = document.getElementById('referral-copy-btn');
+        if (btn) { btn.innerHTML = '<i class="fa-solid fa-check"></i>'; setTimeout(() => { btn.innerHTML = '<i class="fa-solid fa-copy"></i>'; }, 2000); }
+    }).catch(() => showToast('Failed to copy', 'error'));
+}
+
+function shareReferralLink() {
+    if (!State.userAddress) return;
+    const link = `${window.location.origin}/#dashboard?ref=${State.userAddress}`;
+    const text = `Join Backchain and earn crypto!\n\nStake BKC and earn daily rewards\nRefer friends and earn 5% of their rewards — FOREVER\n\n${link}\n\n#Backchain #DeFi #Arbitrum #Web3`;
+
+    if (navigator.share) {
+        navigator.share({ title: 'Backchain — Invite & Earn', text, url: link }).catch(() => {});
+    } else {
+        navigator.clipboard.writeText(text).then(() => showToast('Share text copied!', 'success')).catch(() => {});
+    }
+}
+
 async function checkGasAndWarn() {
     try {
         const nativeBalance = await State.provider.getBalance(State.userAddress);
@@ -544,6 +686,86 @@ function injectStyles() {
         }
         .dash-faucet-info .faucet-status-text { font-size: 12px; color: var(--dash-accent); font-family: 'SF Mono', monospace; margin-top: 6px; }
         .dash-faucet-actions { position: relative; z-index: 1; flex-shrink: 0; }
+
+        /* ── Referral Section ── */
+        .dash-referral-section {
+            position: relative;
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            padding: 18px 22px;
+            background: linear-gradient(135deg, rgba(167,139,250,0.06), rgba(139,92,246,0.04));
+            border: 1px solid rgba(167,139,250,0.15);
+            border-radius: var(--dash-radius);
+            overflow: hidden;
+            animation: dash-scaleIn 0.5s ease-out 0.15s both;
+            transition: opacity var(--dash-tr);
+        }
+        .dash-referral-section::before {
+            content: '';
+            position: absolute;
+            top: -60%; right: -15%;
+            width: 280px; height: 280px;
+            background: radial-gradient(circle, rgba(167,139,250,0.05) 0%, transparent 70%);
+            pointer-events: none;
+            animation: dash-glow 5s ease-in-out infinite 1s;
+        }
+        .dash-referral-icon {
+            width: 48px; height: 48px;
+            border-radius: 14px;
+            background: linear-gradient(135deg, rgba(167,139,250,0.15), rgba(139,92,246,0.1));
+            display: flex; align-items: center; justify-content: center;
+            font-size: 20px; color: #a78bfa;
+            flex-shrink: 0;
+            animation: dash-float 4s ease-in-out infinite 0.5s;
+            position: relative; z-index: 1;
+        }
+        .dash-referral-info { flex: 1; min-width: 0; position: relative; z-index: 1; }
+        .dash-referral-info h3 { font-size: 14px; font-weight: 800; color: var(--dash-text); margin: 0 0 2px; }
+        .dash-referral-info p { font-size: 11px; color: var(--dash-text-2); margin: 0; }
+        .dash-referral-stats {
+            display: flex; gap: 12px; margin-top: 8px;
+        }
+        .dash-referral-stat {
+            font-size: 11px; font-weight: 700;
+            padding: 3px 10px;
+            border-radius: 20px;
+            background: rgba(255,255,255,0.04);
+            border: 1px solid var(--dash-border);
+            display: inline-flex; align-items: center; gap: 4px;
+        }
+        .dash-referral-link-box {
+            display: flex; align-items: center; gap: 6px;
+            margin-top: 8px;
+            padding: 6px 10px;
+            background: var(--dash-surface-2);
+            border: 1px solid var(--dash-border);
+            border-radius: 8px;
+            font-size: 11px;
+            font-family: 'SF Mono', 'Fira Code', monospace;
+            color: var(--dash-text-3);
+            max-width: 380px;
+        }
+        .dash-referral-link-box span { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .dash-referral-link-box button {
+            background: none; border: none; color: #a78bfa; cursor: pointer;
+            padding: 2px 6px; font-size: 12px; border-radius: 4px;
+            transition: background var(--dash-tr);
+        }
+        .dash-referral-link-box button:hover { background: rgba(167,139,250,0.1); }
+        .dash-referral-actions { position: relative; z-index: 1; flex-shrink: 0; display: flex; gap: 8px; }
+        .dash-btn-purple {
+            background: linear-gradient(135deg, #a78bfa, #8b5cf6);
+            color: #fff;
+            box-shadow: 0 4px 20px rgba(139,92,246,0.25);
+        }
+        .dash-btn-purple:hover { box-shadow: 0 4px 28px rgba(139,92,246,0.4); transform: translateY(-1px); }
+        @media (max-width: 640px) {
+            .dash-referral-section { flex-direction: column; text-align: center; padding: 16px; }
+            .dash-referral-actions { width: 100%; justify-content: center; }
+            .dash-referral-link-box { max-width: 100%; }
+            .dash-referral-stats { justify-content: center; }
+        }
 
         /* ── Quick Actions Grid ── */
         .dash-actions-grid {
@@ -905,6 +1127,36 @@ function renderDashboardLayout() {
                 <div class="dash-faucet-actions">
                     <button id="faucet-action-btn" class="dash-btn-primary dash-btn-cyan">
                         <i class="fa-solid fa-faucet"></i> Claim Free Tokens
+                    </button>
+                </div>
+            </div>
+
+            <!-- REFERRAL SECTION -->
+            <div id="dashboard-referral-widget" class="dash-referral-section" style="margin-bottom: 14px;">
+                <div class="dash-referral-icon">
+                    <i class="fa-solid fa-user-plus"></i>
+                </div>
+                <div class="dash-referral-info">
+                    <h3 id="referral-title">Invite & Earn Forever</h3>
+                    <p id="referral-desc">Share your link. Earn 5% of every staking reward your referrals claim — forever.</p>
+                    <div id="referral-stats" class="dash-referral-stats" style="display:none">
+                        <span class="dash-referral-stat" style="color:#a78bfa">
+                            <i class="fa-solid fa-users" style="font-size:10px"></i>
+                            <span id="referral-count">0</span> referred
+                        </span>
+                        <span class="dash-referral-stat" style="color:#4ade80">
+                            <i class="fa-solid fa-coins" style="font-size:10px"></i>
+                            5% of their rewards
+                        </span>
+                    </div>
+                    <div id="referral-link-container" class="dash-referral-link-box" style="display:none">
+                        <span id="referral-link-text"></span>
+                        <button id="referral-copy-btn" title="Copy link"><i class="fa-solid fa-copy"></i></button>
+                    </div>
+                </div>
+                <div class="dash-referral-actions">
+                    <button id="referral-share-btn" class="dash-btn-primary dash-btn-purple" style="display:none">
+                        <i class="fa-solid fa-share-nodes"></i> Share
                     </button>
                 </div>
             </div>
@@ -1674,6 +1926,10 @@ function attachDashboardListeners() {
         if (target.closest('#faucet-action-btn')) { const btn = target.closest('#faucet-action-btn'); if (!btn.disabled) await requestSmartFaucet(btn); }
         if (target.closest('#emergency-faucet-btn')) await requestSmartFaucet(target.closest('#emergency-faucet-btn'));
 
+        // Referral
+        if (target.closest('#referral-copy-btn')) copyReferralLink();
+        if (target.closest('#referral-share-btn')) shareReferralLink();
+
         // Navigation
         if (target.closest('.delegate-link')) { e.preventDefault(); window.navigateTo('mine'); }
         if (target.closest('.go-to-store')) { e.preventDefault(); window.navigateTo('store'); }
@@ -1756,14 +2012,28 @@ function attachDashboardListeners() {
 export const DashboardPage = {
     async render(isNewPage) {
         renderDashboardLayout();
+        detectReferralFromURL();
         updateGlobalMetrics();
         fetchAndProcessActivities();
+        updateReferralWidget();
 
         if (State.isConnected) {
             await updateUserHub(false);
+            tryAutoSetReferrer();
         } else {
-            setTimeout(async () => { if (State.isConnected) await updateUserHub(false); }, 500);
-            setTimeout(async () => { if (State.isConnected) await updateUserHub(false); }, 1500);
+            setTimeout(async () => {
+                if (State.isConnected) {
+                    await updateUserHub(false);
+                    tryAutoSetReferrer();
+                    updateReferralWidget();
+                }
+            }, 500);
+            setTimeout(async () => {
+                if (State.isConnected) {
+                    await updateUserHub(false);
+                    updateReferralWidget();
+                }
+            }, 1500);
         }
     },
 
@@ -1772,7 +2042,10 @@ export const DashboardPage = {
         if (now - DashboardState.lastUpdate > 10000) {
             DashboardState.lastUpdate = now;
             updateGlobalMetrics();
-            if (isConnected) updateUserHub(false);
+            if (isConnected) {
+                updateUserHub(false);
+                updateReferralWidget();
+            }
             fetchAndProcessActivities();
         }
     }
