@@ -111,6 +111,14 @@ async function getNftPoolContractReadOnly(poolAddress) {
     return new window.ethers.Contract(poolAddress, NFT_POOL_ABI, NetworkManager.getProvider());
 }
 
+// Gas price helper — needed because ecosystem.calculateFee uses tx.gasprice,
+// which is 0 in eth_call. Passing { gasPrice } override fixes this.
+async function getGasPriceOverride() {
+    const { NetworkManager } = await import('../core/index.js');
+    const feeData = await NetworkManager.getProvider().getFeeData();
+    return { gasPrice: feeData.gasPrice || feeData.maxFeePerGas || 100000000n };
+}
+
 function getNftContract(signer) {
     const contracts = getContracts();
     return new window.ethers.Contract(contracts.NFT_CONTRACT, NFT_ABI, signer);
@@ -155,9 +163,13 @@ export async function buyNft({
             const contract = await getNftPoolContractReadOnly(targetPool);
 
             // V9: Use getTotalBuyCost for BKC + ETH
-            const [bkcCost, ethCost] = await contract.getTotalBuyCost();
+            // Pass gasPrice override because calculateFee uses tx.gasprice (0 in eth_call)
+            const gasPriceOpts = await getGasPriceOverride();
+            const [bkcCost, ethCost] = await contract.getTotalBuyCost(gasPriceOpts);
             buyPrice = bkcCost;
             ethFee = ethCost;
+
+            console.log(`[BuyNFT] Price: ${ethers.formatEther(buyPrice)} BKC, Fee: ${ethers.formatEther(ethFee)} ETH`);
 
             const poolInfo = await contract.getPoolInfo();
             if (Number(poolInfo[1]) <= 1) throw new Error('No NFTs available in pool');
@@ -219,7 +231,8 @@ export async function buySpecificNft({
             const contract = await getNftPoolContractReadOnly(targetPool);
             if (!(await contract.isNFTInPool(tokenId))) throw new Error('NFT is not in pool');
 
-            const [bkcCost, ethCost] = await contract.getTotalBuyCost();
+            const gasPriceOpts = await getGasPriceOverride();
+            const [bkcCost, ethCost] = await contract.getTotalBuyCost(gasPriceOpts);
             buyPrice = bkcCost;
             ethFee = ethCost;
 
@@ -265,7 +278,8 @@ export async function sellNft({
             const nftTierVal = await nftContract.tokenTier(tokenId);
             if (poolTierVal !== nftTierVal) throw new Error('NFT tier does not match pool tier');
 
-            const [bkcPayout, ethCost] = await contract.getTotalSellInfo();
+            const gasPriceOpts = await getGasPriceOverride();
+            const [bkcPayout, ethCost] = await contract.getTotalSellInfo(gasPriceOpts);
             finalMinPayout = minPayout ? BigInt(minPayout) : (bkcPayout * 95n) / 100n;
             ethFee = ethCost;
 
@@ -318,14 +332,16 @@ export async function getSellPrice(poolAddress) {
 export async function getTotalBuyCost(poolAddress) {
     const ethers = window.ethers;
     const contract = await getNftPoolContractReadOnly(poolAddress);
-    const [bkcCost, ethCost] = await contract.getTotalBuyCost();
+    const gasPriceOpts = await getGasPriceOverride();
+    const [bkcCost, ethCost] = await contract.getTotalBuyCost(gasPriceOpts);
     return { bkcCost, bkcFormatted: ethers.formatEther(bkcCost), ethCost, ethFormatted: ethers.formatEther(ethCost) };
 }
 
 export async function getTotalSellInfo(poolAddress) {
     const ethers = window.ethers;
     const contract = await getNftPoolContractReadOnly(poolAddress);
-    const [bkcPayout, ethCost] = await contract.getTotalSellInfo();
+    const gasPriceOpts = await getGasPriceOverride();
+    const [bkcPayout, ethCost] = await contract.getTotalSellInfo(gasPriceOpts);
     return { bkcPayout, bkcFormatted: ethers.formatEther(bkcPayout), ethCost, ethFormatted: ethers.formatEther(ethCost) };
 }
 
@@ -351,7 +367,8 @@ export async function getAvailableNfts(poolAddress) {
 export async function getEthFees(poolAddress) {
     const ethers = window.ethers;
     const contract = await getNftPoolContractReadOnly(poolAddress);
-    const [buyFee, sellFee] = await contract.getEthFees();
+    const gasPriceOpts = await getGasPriceOverride();
+    const [buyFee, sellFee] = await contract.getEthFees(gasPriceOpts);
     return {
         buyFee, buyFeeFormatted: ethers.formatEther(buyFee),
         sellFee, sellFeeFormatted: ethers.formatEther(sellFee)
