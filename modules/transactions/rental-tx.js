@@ -128,7 +128,15 @@ export async function listNft({
 
             const isApproved = await nftContract.isApprovedForAll(userAddress, contracts.RENTAL_MANAGER);
             if (!isApproved) {
-                const approveTx = await nftContract.setApprovalForAll(contracts.RENTAL_MANAGER, true);
+                // Get fresh fee data from Alchemy (not MetaMask) with 120% buffer
+                const { NetworkManager } = await import('../core/index.js');
+                const feeData = await NetworkManager.getProvider().getFeeData();
+                const approveOpts = { gasLimit: 100000n };
+                if (feeData.maxFeePerGas) {
+                    approveOpts.maxFeePerGas = feeData.maxFeePerGas * 120n / 100n;
+                    approveOpts.maxPriorityFeePerGas = feeData.maxPriorityFeePerGas || 0n;
+                }
+                const approveTx = await nftContract.setApprovalForAll(contracts.RENTAL_MANAGER, true, approveOpts);
                 await approveTx.wait();
             }
         },

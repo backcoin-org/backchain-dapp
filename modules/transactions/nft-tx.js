@@ -291,7 +291,15 @@ export async function sellNft({
             if (ethBalance < ethFee + ethers.parseEther('0.001')) throw new Error('Insufficient ETH');
 
             if (!(await nftContract.isApprovedForAll(userAddress, targetPool))) {
-                const approveTx = await nftContract.setApprovalForAll(targetPool, true);
+                // Get fresh fee data from Alchemy (not MetaMask) with 120% buffer
+                const { NetworkManager } = await import('../core/index.js');
+                const feeData = await NetworkManager.getProvider().getFeeData();
+                const approveOpts = { gasLimit: 100000n };
+                if (feeData.maxFeePerGas) {
+                    approveOpts.maxFeePerGas = feeData.maxFeePerGas * 120n / 100n;
+                    approveOpts.maxPriorityFeePerGas = feeData.maxPriorityFeePerGas || 0n;
+                }
+                const approveTx = await nftContract.setApprovalForAll(targetPool, true, approveOpts);
                 await approveTx.wait();
             }
         },
