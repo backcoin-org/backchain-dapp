@@ -1754,7 +1754,8 @@ async function loadCertificatesFromChain() {
     const filter = contract.filters.Certified(null, State.userAddress);
 
     const currentBlock = await provider.getBlockNumber();
-    const fromBlock = Math.max(0, currentBlock - 500000);
+    // V10: Reduzido de -500000 para -50000 blocos (~3.5h) para economizar RPC
+    const fromBlock = Math.max(0, currentBlock - 50000);
     console.log('[NotaryPage] Block range:', fromBlock, '->', currentBlock);
 
     const events = await contract.queryFilter(filter, fromBlock, currentBlock);
@@ -1807,7 +1808,8 @@ async function loadRecentNotarizations() {
     const filter = contract.filters.Certified();
 
     const currentBlock = await provider.getBlockNumber();
-    const fromBlock = Math.max(0, currentBlock - 50000);
+    // V10: Reduzido de -50000 para -5000 blocos (~20min) para economizar RPC
+    const fromBlock = Math.max(0, currentBlock - 5000);
 
     const events = await contract.queryFilter(filter, fromBlock, currentBlock);
 

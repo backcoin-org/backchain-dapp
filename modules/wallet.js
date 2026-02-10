@@ -51,7 +51,7 @@ let lastBalanceUpdate = 0;
 let balanceErrorCount = 0;
 const BALANCE_UPDATE_THROTTLE_MS = 5000;  // Mínimo 5s entre updates de UI
 const MAX_BALANCE_ERRORS = 3;              // Para de tentar após 3 erros
-const POLLING_INTERVAL_MS = 30000;         // 30s entre checks (reduced from 10s to lower RPC load)
+const POLLING_INTERVAL_MS = 60000;         // 60s entre checks (otimizado: 30s→60s para reduzir RPC Alchemy)
 
 // 🔥 V7.0: Variáveis para controle de RPC
 let rpcRetryCount = 0;
@@ -587,39 +587,12 @@ function startRpcHealthMonitoring() {
         clearInterval(rpcHealthMonitorInterval);
     }
     
-    // Verifica a cada 60 segundos (reduced from 30s to lower MetaMask RPC load)
+    // Otimização: removido setInterval de 60s que consumia ~60 RPC calls/hr
+    // Health check agora é APENAS reativo:
+    // 1. Em erros via executeWithRpcFallback()
+    // 2. Quando tab fica visível (com cooldown de 5min)
     let lastMetaMaskUpdateAttempt = 0;
-    rpcHealthMonitorInterval = setInterval(async () => {
-        // Só verifica se a tab está visível e o usuário está conectado
-        if (document.hidden || !State.isConnected) return;
 
-        const health = await checkRpcHealth();
-
-        if (!health.healthy) {
-            const now = Date.now();
-            // Only attempt MetaMask update every 5 minutes to avoid wallet_addEthereumChain spam
-            if (now - lastMetaMaskUpdateAttempt < 300000) {
-                return;
-            }
-            lastMetaMaskUpdateAttempt = now;
-
-            console.log(`⚠️ RPC health check failed (${health.reason}), attempting fix...`);
-
-            // Tenta atualizar os RPCs no MetaMask
-            const updated = await updateMetaMaskNetwork();
-
-            if (updated) {
-                console.log('✅ MetaMask RPCs updated via health monitor');
-                await recreatePublicProvider();
-
-                // Reset contadores
-                balanceErrorCount = 0;
-                rpcRetryCount = 0;
-            }
-        }
-    }, 60000);
-    
-    // Também verifica quando a tab fica ativa (with cooldown)
     document.addEventListener('visibilitychange', async () => {
         if (!document.hidden && State.isConnected) {
             const now = Date.now();
@@ -630,11 +603,13 @@ function startRpcHealthMonitoring() {
                 console.log('⚠️ RPC unhealthy on tab focus, fixing...');
                 await updateMetaMaskNetwork();
                 await recreatePublicProvider();
+                balanceErrorCount = 0;
+                rpcRetryCount = 0;
             }
         }
     });
-    
-    console.log('✅ RPC health monitoring started (30s interval)');
+
+    console.log('✅ RPC health monitoring started (event-driven, no polling)');
 }
 
 /**

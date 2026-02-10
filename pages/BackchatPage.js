@@ -1409,35 +1409,37 @@ async function loadProfiles() {
             return;
         }
 
-        const [createEvents, updateEvents] = await Promise.all([
-            contract.queryFilter(contract.filters.ProfileCreated(), -100000).catch(() => []),
-            contract.queryFilter(contract.filters.ProfileUpdated(), -100000).catch(() => [])
-        ]);
+        // V10: Reduzido de 2 queryFilter(-100000) para 1 queryFilter(-50000)
+        // ProfileUpdated removido (V9 só muda metadataURI, não username)
+        const createEvents = await contract.queryFilter(
+            contract.filters.ProfileCreated(), -50000
+        ).catch(() => []);
 
-        // Build profiles map from creation events
         for (const ev of createEvents) {
             const addr = ev.args.user.toLowerCase();
             BC.profiles.set(addr, {
                 username: ev.args.username,
-                displayName: ev.args.displayName || '',
-                bio: ev.args.bio || ''
+                metadataURI: ev.args.metadataURI || ''
             });
         }
 
-        // Apply updates (overwrite displayName/bio)
-        for (const ev of updateEvents) {
-            const addr = ev.args.user.toLowerCase();
-            const existing = BC.profiles.get(addr);
-            if (existing) {
-                existing.displayName = ev.args.displayName || existing.displayName;
-                existing.bio = ev.args.bio || existing.bio;
-            }
-        }
-
-        // Check if current user has a profile
+        // Check current user profile via getUserProfile() (view call, cached)
         if (State.isConnected && State.userAddress) {
             const myAddr = State.userAddress.toLowerCase();
-            const myProfile = BC.profiles.get(myAddr);
+            let myProfile = BC.profiles.get(myAddr);
+
+            // Se não encontrou nos eventos recentes, tenta via contrato
+            if (!myProfile) {
+                try {
+                    const profile = await contract.getUserProfile(State.userAddress);
+                    // usernameHash != 0 means profile exists
+                    if (profile && profile.usernameHash && profile.usernameHash !== ethers.ZeroHash) {
+                        myProfile = { username: null, metadataURI: profile.metadataURI || profile[1] || '' };
+                        BC.profiles.set(myAddr, myProfile);
+                    }
+                } catch(e) {}
+            }
+
             if (myProfile) {
                 BC.userProfile = { ...myProfile, address: State.userAddress };
                 BC.hasProfile = true;
@@ -1459,55 +1461,12 @@ async function loadProfiles() {
 }
 
 async function loadSocialGraph() {
-    if (!State.isConnected || !State.userAddress) return;
-
-    try {
-        const contract = getContract();
-        if (!contract) return;
-
-        const [followEvents, unfollowEvents] = await Promise.all([
-            contract.queryFilter(contract.filters.Followed(), -100000).catch(() => []),
-            contract.queryFilter(contract.filters.Unfollowed(), -100000).catch(() => [])
-        ]);
-
-        // Build follow maps
-        const followMap = new Map(); // follower → Set<followed>
-        for (const ev of followEvents) {
-            const follower = ev.args.follower.toLowerCase();
-            const followed = ev.args.followed.toLowerCase();
-            if (!followMap.has(follower)) followMap.set(follower, new Set());
-            followMap.get(follower).add(followed);
-        }
-        // Remove unfollows
-        for (const ev of unfollowEvents) {
-            const follower = ev.args.follower.toLowerCase();
-            const followed = ev.args.followed.toLowerCase();
-            followMap.get(follower)?.delete(followed);
-        }
-
-        // Current user's following set
-        const myAddr = State.userAddress.toLowerCase();
-        BC.following = followMap.get(myAddr) || new Set();
-
-        // Count followers for current user
-        BC.followers = new Set();
-        for (const [follower, followedSet] of followMap) {
-            if (followedSet.has(myAddr)) BC.followers.add(follower);
-        }
-
-        // Build follow counts for all addresses
-        BC.followCounts = new Map();
-        for (const [follower, followedSet] of followMap) {
-            for (const followed of followedSet) {
-                if (!BC.followCounts.has(followed)) BC.followCounts.set(followed, { followers: 0, following: 0 });
-                BC.followCounts.get(followed).followers++;
-            }
-            if (!BC.followCounts.has(follower)) BC.followCounts.set(follower, { followers: 0, following: 0 });
-            BC.followCounts.get(follower).following = followedSet.size;
-        }
-    } catch (e) {
-        console.warn('Failed to load social graph:', e.message);
-    }
+    // V10: Removido 2 queryFilter(-100000) para Followed/Unfollowed
+    // Grafo social não é necessário para o feed principal
+    // Follow status verificado sob demanda quando perfil é aberto
+    BC.following = new Set();
+    BC.followers = new Set();
+    BC.followCounts = new Map();
 }
 
 // V9: No referral system in Agora — tryAutoSetReferrer removed
@@ -1537,100 +1496,122 @@ async function loadPosts() {
 
         BC.contractAvailable = true;
 
-        // Query all content events in parallel
-        const [postEvents, replyEvents, repostEvents, likeEvents, superLikeEvents] = await Promise.all([
-            contract.queryFilter(contract.filters.PostCreated(), -100000).catch(() => []),
-            contract.queryFilter(contract.filters.ReplyCreated(), -100000).catch(() => []),
-            contract.queryFilter(contract.filters.RepostCreated(), -100000).catch(() => []),
-            contract.queryFilter(contract.filters.Liked(), -100000).catch(() => []),
-            contract.queryFilter(contract.filters.SuperLiked(), -100000).catch(() => [])
+        // V10: Otimizado — removido Liked + SuperLiked queryFilter (2 a menos)
+        // Reduzido range de -100000 para -50000 blocos
+        // getPost() fornece likes, superLikes, createdAt (sem getBlock())
+        const [postEvents, replyEvents, repostEvents] = await Promise.all([
+            contract.queryFilter(contract.filters.PostCreated(), -50000).catch(() => []),
+            contract.queryFilter(contract.filters.ReplyCreated(), -50000).catch(() => []),
+            contract.queryFilter(contract.filters.RepostCreated(), -50000).catch(() => [])
         ]);
 
-        // Build likes map: postId → Set<address>
-        BC.likesMap = new Map();
-        for (const ev of likeEvents) {
-            const pid = ev.args.postId.toString();
-            if (!BC.likesMap.has(pid)) BC.likesMap.set(pid, new Set());
-            BC.likesMap.get(pid).add(ev.args.user.toLowerCase());
+        // Collect all post IDs for batch getPost() calls
+        const allEventItems = [];
+        for (const ev of postEvents.slice(-80)) {
+            allEventItems.push({ ev, type: 'post' });
+        }
+        for (const ev of replyEvents.slice(-60)) {
+            allEventItems.push({ ev, type: 'reply' });
+        }
+        for (const ev of repostEvents.slice(-30)) {
+            allEventItems.push({ ev, type: 'repost' });
         }
 
-        // Build super likes map: postId → totalETH
-        const superLikesMap = new Map();
-        for (const ev of superLikeEvents) {
-            const pid = ev.args.postId.toString();
-            superLikesMap.set(pid, (superLikesMap.get(pid) || 0n) + ev.args.ethAmount);
-        }
-
-        // Process posts (top-level)
+        // Batch getPost() for metadata (likes, superLikes, createdAt)
+        // Process in groups of 10 to avoid RPC overload
         const allItems = [];
         const feedPosts = [];
         BC.postsById = new Map();
         BC.replies = new Map();
         BC.replyCountMap = new Map();
         BC.repostCountMap = new Map();
+        BC.likesMap = new Map();
 
-        for (const ev of postEvents.slice(-80)) {
-            const block = await ev.getBlock();
-            const post = {
-                id: ev.args.postId.toString(),
-                type: 'post',
-                author: ev.args.author,
-                content: ev.args.content,
-                mediaCID: ev.args.mediaCID,
-                timestamp: block.timestamp,
-                superLikes: superLikesMap.get(ev.args.postId.toString()) || 0n,
-                txHash: ev.transactionHash
-            };
-            allItems.push(post);
-            feedPosts.push(post);
-            BC.postsById.set(post.id, post);
+        for (let i = 0; i < allEventItems.length; i += 10) {
+            const batch = allEventItems.slice(i, i + 10);
+            const metadataBatch = await Promise.all(
+                batch.map(({ ev }) => {
+                    const pid = ev.args.postId || ev.args.newPostId;
+                    return contract.getPost(pid).catch(() => null);
+                })
+            );
+
+            for (let j = 0; j < batch.length; j++) {
+                const { ev, type } = batch[j];
+                const meta = metadataBatch[j];
+                const pid = (ev.args.postId || ev.args.newPostId).toString();
+
+                // Skip deleted posts
+                if (meta && meta.deleted) continue;
+
+                // Timestamp from getPost().createdAt (evita getBlock())
+                const timestamp = meta ? Number(meta.createdAt || meta[4] || 0) : 0;
+                // Likes/SuperLikes from getPost() (evita Liked/SuperLiked queryFilter)
+                const likesCount = meta ? Number(meta.likes || meta[7] || 0) : 0;
+                const superLikesCount = meta ? BigInt(meta.superLikes || meta[8] || 0) : 0n;
+                const repliesCount = meta ? Number(meta.replies || meta[10] || 0) : 0;
+                const repostsCount = meta ? Number(meta.reposts || meta[11] || 0) : 0;
+
+                if (type === 'post') {
+                    const post = {
+                        id: pid, type: 'post',
+                        author: ev.args.author,
+                        content: ev.args.contentHash || ev.args.content || '',
+                        tag: ev.args.tag != null ? Number(ev.args.tag) : 0,
+                        timestamp, superLikes: superLikesCount,
+                        likesCount, repliesCount, repostsCount,
+                        txHash: ev.transactionHash
+                    };
+                    allItems.push(post);
+                    feedPosts.push(post);
+                    BC.postsById.set(pid, post);
+                } else if (type === 'reply') {
+                    const parentId = ev.args.parentId.toString();
+                    const reply = {
+                        id: pid, type: 'reply', parentId,
+                        author: ev.args.author,
+                        content: ev.args.contentHash || ev.args.content || '',
+                        tag: ev.args.tag != null ? Number(ev.args.tag) : 0,
+                        timestamp, superLikes: superLikesCount,
+                        likesCount,
+                        txHash: ev.transactionHash
+                    };
+                    allItems.push(reply);
+                    BC.postsById.set(pid, reply);
+                    if (!BC.replies.has(parentId)) BC.replies.set(parentId, []);
+                    BC.replies.get(parentId).push(reply);
+                    BC.replyCountMap.set(parentId, (BC.replyCountMap.get(parentId) || 0) + 1);
+                } else if (type === 'repost') {
+                    const originalPostId = ev.args.originalId?.toString() || ev.args.originalPostId?.toString() || '0';
+                    const repost = {
+                        id: pid, type: 'repost', originalPostId,
+                        author: ev.args.author || ev.args.reposter,
+                        timestamp, superLikes: 0n,
+                        txHash: ev.transactionHash
+                    };
+                    allItems.push(repost);
+                    feedPosts.push(repost);
+                    BC.postsById.set(pid, repost);
+                    BC.repostCountMap.set(originalPostId, (BC.repostCountMap.get(originalPostId) || 0) + 1);
+                }
+            }
         }
 
-        // Process replies → build replies map
-        for (const ev of replyEvents.slice(-60)) {
-            const block = await ev.getBlock();
-            const reply = {
-                id: ev.args.postId.toString(),
-                type: 'reply',
-                parentId: ev.args.parentId.toString(),
-                author: ev.args.author,
-                content: ev.args.content,
-                mediaCID: ev.args.mediaCID,
-                tipBkc: ev.args.tipBkc,
-                timestamp: block.timestamp,
-                superLikes: superLikesMap.get(ev.args.postId.toString()) || 0n,
-                txHash: ev.transactionHash
-            };
-            allItems.push(reply);
-            BC.postsById.set(reply.id, reply);
-
-            // Add to replies map
-            const parentId = reply.parentId;
-            if (!BC.replies.has(parentId)) BC.replies.set(parentId, []);
-            BC.replies.get(parentId).push(reply);
-
-            // Count
-            BC.replyCountMap.set(parentId, (BC.replyCountMap.get(parentId) || 0) + 1);
-        }
-
-        // Process reposts
-        for (const ev of repostEvents.slice(-30)) {
-            const block = await ev.getBlock();
-            const repost = {
-                id: ev.args.newPostId.toString(),
-                type: 'repost',
-                originalPostId: ev.args.originalPostId.toString(),
-                author: ev.args.reposter,
-                timestamp: block.timestamp,
-                txHash: ev.transactionHash
-            };
-            allItems.push(repost);
-            feedPosts.push(repost);
-            BC.postsById.set(repost.id, repost);
-
-            // Count reposts on original
-            const oid = repost.originalPostId;
-            BC.repostCountMap.set(oid, (BC.repostCountMap.get(oid) || 0) + 1);
+        // Check which posts current user has liked (batch hasLiked)
+        if (State.isConnected && State.userAddress) {
+            const postIds = allItems.filter(p => p.type !== 'repost').map(p => p.id);
+            for (let i = 0; i < postIds.length; i += 10) {
+                const batch = postIds.slice(i, i + 10);
+                const results = await Promise.all(
+                    batch.map(pid => contract.hasLiked(pid, State.userAddress).catch(() => false))
+                );
+                for (let j = 0; j < batch.length; j++) {
+                    if (results[j]) {
+                        if (!BC.likesMap.has(batch[j])) BC.likesMap.set(batch[j], new Set());
+                        BC.likesMap.get(batch[j]).add(State.userAddress.toLowerCase());
+                    }
+                }
+            }
         }
 
         // Sort
@@ -1638,7 +1619,7 @@ async function loadPosts() {
         BC.posts = feedPosts;
         BC.allItems = allItems;
 
-        // Trending: posts with super likes, sorted by value
+        // Trending: posts with super likes, sorted by count
         BC.trendingPosts = [...allItems]
             .filter(p => p.type !== 'repost' && p.superLikes > 0n)
             .sort((a, b) => {
@@ -2146,7 +2127,8 @@ function renderPost(post, index = 0, options = {}) {
     const superLikesETH = formatETH(post.superLikes);
     const replyCount = BC.replyCountMap.get(post.id) || 0;
     const repostCount = BC.repostCountMap.get(post.id) || 0;
-    const likeCount = BC.likesMap.get(post.id)?.size || 0;
+    // V10: likeCount vem do getPost() (campo likesCount), isLiked do hasLiked batched
+    const likeCount = post.likesCount || BC.likesMap.get(post.id)?.size || 0;
     const isLiked = BC.likesMap.get(post.id)?.has(State.userAddress?.toLowerCase()) || false;
     const animStyle = options.noAnimation ? '' : `style="animation-delay:${Math.min(index * 0.04, 0.4)}s"`;
 

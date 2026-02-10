@@ -11,9 +11,9 @@ import { addresses, boosterTiers, rentalManagerABI, rewardBoosterABI } from '../
 // ====================================================================
 const API_TIMEOUT_MS = 5000;
 const CACHE_DURATION_MS = 60000;
-const CONTRACT_READ_CACHE_MS = 15000;
+const CONTRACT_READ_CACHE_MS = 30000;
 const OWNERSHIP_CACHE_MS = 30000;
-const BALANCE_CACHE_MS = 30000;
+const BALANCE_CACHE_MS = 60000;
 
 let systemDataCache = null;
 let systemDataCacheTime = 0;
