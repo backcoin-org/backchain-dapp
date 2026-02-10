@@ -175,7 +175,6 @@ export async function rentNft({
             // V9: Get rental cost from contract + calculate ETH fee client-side
             const cost = await contract.getRentalCost(tokenId, hours);
             const rentalCost = cost.rentalCost || cost[0];
-            const ethers = window.ethers;
             const ethFee = await calculateFeeClientSide(ethers.id('RENTAL_RENT'), rentalCost);
             totalCost = rentalCost + ethFee;
 

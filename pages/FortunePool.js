@@ -2063,8 +2063,8 @@ async function getFortunePoolStatus() {
             prizePool: prizePoolVal || 0n,
             gameCounter: Number(gameCount) || 0,
             serviceFee: baseFee,
-            serviceFee1x: fee1x,
-            serviceFee5x: fee5x,
+            serviceFee1x: feeSingle,
+            serviceFee5x: feeAll,
             tierCount: Number(tierCount) || 3
         };
     } catch (e) {
