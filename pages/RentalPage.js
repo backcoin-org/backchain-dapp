@@ -466,7 +466,7 @@ function render() {
                     <p class="text-[10px] text-zinc-500 uppercase mt-1">Total Rentals</p>
                 </div>
                 <div class="bm-card p-4 text-center">
-                    <p class="text-2xl font-bold text-purple-400 font-mono">${stats ? formatEthPrice(stats.totalVolume) : '—'}</p>
+                    <p class="text-2xl font-bold text-purple-400 font-mono"><i class="fa-brands fa-ethereum text-lg mr-1"></i>${stats ? formatEthPrice(stats.totalVolume) : '—'}</p>
                     <p class="text-[10px] text-zinc-500 uppercase mt-1">Volume (ETH)</p>
                 </div>
             </div>
@@ -634,7 +634,8 @@ function renderNFTCard(listing, idx, showOwnerActions = false) {
                 <div class="flex items-end justify-between">
                     <div>
                         <span class="text-[10px] text-zinc-500 uppercase block mb-1">Price/Hour</span>
-                        <div class="flex items-baseline gap-1">
+                        <div class="flex items-baseline gap-1.5">
+                            <i class="fa-brands fa-ethereum text-blue-400 text-sm"></i>
                             <span class="text-xl font-bold text-white">${price}</span>
                             <span class="text-xs text-zinc-500">ETH</span>
                         </div>
@@ -685,7 +686,7 @@ function renderMyListings() {
                         <div>
                             <p class="text-sm text-zinc-400">Total Lifetime Earnings</p>
                             <p class="text-3xl font-bold text-white">
-                                ${formatEthPrice(totalEarnings)} <span class="text-lg text-zinc-500">ETH</span>
+                                <i class="fa-brands fa-ethereum text-blue-400 text-2xl mr-1"></i>${formatEthPrice(totalEarnings)} <span class="text-lg text-zinc-500">ETH</span>
                             </p>
                         </div>
                     </div>
@@ -1068,7 +1069,7 @@ function openRentModal(tokenId) {
         <div class="space-y-4 mb-5">
             <div class="flex justify-between text-sm">
                 <span class="text-zinc-500">Base Price per hour</span>
-                <span class="text-white font-bold">${price} ETH</span>
+                <span class="text-white font-bold"><i class="fa-brands fa-ethereum text-blue-400 mr-1"></i>${price} ETH</span>
             </div>
             <div class="flex justify-between text-sm">
                 <span class="text-zinc-500">Duration range</span>
@@ -1083,7 +1084,7 @@ function openRentModal(tokenId) {
             <div id="bm-rent-cost" class="p-4 rounded-xl bg-zinc-800/50 space-y-2">
                 <div class="flex justify-between text-sm">
                     <span class="text-zinc-500">Rental Cost</span>
-                    <span class="text-white font-mono" id="bm-cost-rental">Calculating...</span>
+                    <span class="text-white font-mono" id="bm-cost-rental"><i class="fa-brands fa-ethereum text-blue-400 mr-1"></i>Calculating...</span>
                 </div>
                 <div class="flex justify-between text-sm">
                     <span class="text-zinc-500">Ecosystem Fee</span>
@@ -1095,6 +1096,10 @@ function openRentModal(tokenId) {
                     <span class="text-xl font-bold text-emerald-400 font-mono" id="bm-cost-total">—</span>
                 </div>
             </div>
+            <!-- Balance warning (hidden by default) -->
+            <div id="bm-balance-warn" class="hidden p-3 rounded-xl bg-red-500/10 border border-red-500/20 text-center">
+                <p class="text-xs text-red-400" id="bm-balance-warn-text"></p>
+            </div>
         </div>
 
         <div class="flex gap-3">
@@ -1105,21 +1110,57 @@ function openRentModal(tokenId) {
         </div>
     `;
 
-    // Calculate cost on load and on hours change
+    // Calculate cost on load and on hours change + check balance
     const hoursInput = document.getElementById('bm-rent-hours');
+    const rentBtn = document.getElementById('bm-confirm-rent');
+    const balanceWarn = document.getElementById('bm-balance-warn');
+    const balanceWarnText = document.getElementById('bm-balance-warn-text');
+
     const updateCost = async () => {
         const hours = parseInt(hoursInput.value) || 1;
+        let totalCost = 0n;
+
         try {
             const cost = await RentalTx.getRentalCost(tokenId, hours);
-            document.getElementById('bm-cost-rental').textContent = `${cost.rentalCostFormatted} ETH`;
-            document.getElementById('bm-cost-fee').textContent = `${cost.ethFeeFormatted} ETH`;
-            document.getElementById('bm-cost-total').textContent = `${cost.totalCostFormatted} ETH`;
+            totalCost = cost.totalCost;
+            document.getElementById('bm-cost-rental').innerHTML = `<i class="fa-brands fa-ethereum text-blue-400 mr-1"></i>${cost.rentalCostFormatted} ETH`;
+            document.getElementById('bm-cost-fee').innerHTML = `<i class="fa-brands fa-ethereum text-blue-400 mr-1"></i>${cost.ethFeeFormatted} ETH`;
+            document.getElementById('bm-cost-total').innerHTML = `<i class="fa-brands fa-ethereum text-blue-400 mr-1"></i>${cost.totalCostFormatted} ETH`;
         } catch (err) {
-            // Fallback: simple calculation
             const simple = BigInt(listing.pricePerHour || 0) * BigInt(hours);
-            document.getElementById('bm-cost-rental').textContent = `${formatEthPrice(simple)} ETH`;
+            totalCost = simple;
+            document.getElementById('bm-cost-rental').innerHTML = `<i class="fa-brands fa-ethereum text-blue-400 mr-1"></i>${formatEthPrice(simple)} ETH`;
             document.getElementById('bm-cost-fee').textContent = '~fee';
-            document.getElementById('bm-cost-total').textContent = `~${formatEthPrice(simple)} ETH`;
+            document.getElementById('bm-cost-total').innerHTML = `<i class="fa-brands fa-ethereum text-blue-400 mr-1"></i>~${formatEthPrice(simple)} ETH`;
+        }
+
+        // Check user balance and update button
+        if (State.isConnected && totalCost > 0n) {
+            try {
+                const { NetworkManager } = await import('../modules/core/index.js');
+                const ethBalance = await NetworkManager.getProvider().getBalance(State.userAddress);
+                const needed = totalCost + ethers.parseEther('0.001'); // + gas buffer
+
+                if (ethBalance < needed) {
+                    const deficit = formatEthPrice(needed - ethBalance);
+                    rentBtn.disabled = true;
+                    rentBtn.className = 'flex-1 py-3 rounded-xl font-bold text-sm border border-red-500/30 bg-red-500/10 text-red-400 cursor-not-allowed';
+                    rentBtn.innerHTML = `<i class="fa-brands fa-ethereum mr-1"></i>Need ${formatEthPrice(needed)} ETH`;
+                    balanceWarn.classList.remove('hidden');
+                    balanceWarnText.textContent = `Your balance: ${formatEthPrice(ethBalance)} ETH — need ${deficit} more ETH`;
+                } else {
+                    rentBtn.disabled = false;
+                    rentBtn.className = 'bm-btn-primary flex-1 py-3';
+                    rentBtn.innerHTML = '<i class="fa-solid fa-bolt mr-2"></i>Rent Now';
+                    balanceWarn.classList.add('hidden');
+                }
+            } catch {
+                // If balance check fails, keep button enabled
+                rentBtn.disabled = false;
+                rentBtn.className = 'bm-btn-primary flex-1 py-3';
+                rentBtn.innerHTML = '<i class="fa-solid fa-bolt mr-2"></i>Rent Now';
+                balanceWarn.classList.add('hidden');
+            }
         }
     };
 
