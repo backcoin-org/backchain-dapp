@@ -1097,19 +1097,24 @@ function setupWagerEvents(maxMulti, balanceNum) {
     });
     
     document.getElementById('btn-faucet')?.addEventListener('click', async () => {
-        showToast('Requesting tokens...', 'info');
+        showToast('Solicitando tokens...', 'info');
         try {
-            const res = await fetch(`https://faucet-4wvdcuoouq-uc.a.run.app?address=${State.userAddress}`);
-            const data = await res.json();
-            if (data.success) { 
-                showToast('🎉 Tokens received!', 'success'); 
-                await loadUserData(); 
-                renderPhase(); 
-            } else {
-                showToast(data.error || 'Error', 'error');
+            let success = false;
+            try {
+                const res = await fetch(`https://faucet-4wvdcuoouq-uc.a.run.app?address=${State.userAddress}`);
+                const data = await res.json();
+                if (res.ok && data.success) { success = true; }
+                else console.warn('[Faucet] API:', data.error);
+            } catch (e) { console.warn('[Faucet] API offline:', e.message); }
+            if (!success) {
+                const { FaucetTx } = await import('../modules/transactions/index.js');
+                await FaucetTx.claimOnChain({ onSuccess: () => { success = true; } });
             }
-        } catch { 
-            showToast('Faucet error', 'error'); 
+            if (success) { showToast('Tokens recebidos!', 'success'); await loadUserData(); renderPhase(); }
+        } catch (e) {
+            const msg = e.message || '';
+            if (msg.includes('Aguarde') || msg.includes('cooldown')) showToast(msg, 'warning');
+            else showToast('Faucet indisponível', 'error');
         }
     });
     

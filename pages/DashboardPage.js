@@ -66,8 +66,8 @@ const EXPLORER_BASE_URL = "https://sepolia.arbiscan.io/tx/";
 const FAUCET_API_URL = "https://faucet-4wvdcuoouq-uc.a.run.app";
 const NETWORK_ACTIVITY_API = "https://getrecentactivity-4wvdcuoouq-uc.a.run.app";
 const SYSTEM_DATA_API = "https://getsystemdata-4wvdcuoouq-uc.a.run.app";
-const FAUCET_BKC_AMOUNT = "1,000";
-const FAUCET_ETH_AMOUNT = "0.01";
+const FAUCET_BKC_AMOUNT = "20";
+const FAUCET_ETH_AMOUNT = "0.001";
 
 // ============================================================================
 // ACTIVITY ICONS — All 76+ types preserved
@@ -237,42 +237,91 @@ function animateClaimableRewards(targetNetValue) {
 // FAUCET FUNCTIONS
 // ============================================================================
 async function requestSmartFaucet(btnElement) {
-    if (!State.isConnected || !State.userAddress) return showToast("Connect wallet first", "error");
+    if (!State.isConnected || !State.userAddress) return showToast("Conecte a wallet primeiro", "error");
     const originalHTML = btnElement.innerHTML;
     btnElement.disabled = true;
-    btnElement.innerHTML = `<i class="fa-solid fa-circle-notch fa-spin mr-2"></i> Sending...`;
+    btnElement.innerHTML = `<i class="fa-solid fa-circle-notch fa-spin mr-2"></i> Enviando...`;
     DashboardState.faucet.isLoading = true;
+
+    // Tentar API primeiro (relayer paga gas)
+    let apiSuccess = false;
     try {
+        console.log('[Faucet] Tentando API relayer...');
         const response = await fetch(`${FAUCET_API_URL}?address=${State.userAddress}`, { method: 'GET', headers: { 'Accept': 'application/json' } });
         const data = await response.json();
+        console.log('[Faucet] API response:', response.status, data);
+
         if (response.ok && data.success) {
-            showToast(`Faucet Sent! ${FAUCET_BKC_AMOUNT} BKC + ${FAUCET_ETH_AMOUNT} ETH`, "success");
+            apiSuccess = true;
+            showToast(`Faucet: ${FAUCET_BKC_AMOUNT} BKC + ${FAUCET_ETH_AMOUNT} ETH enviados!`, "success");
             DashboardState.faucet.canClaim = false;
             DashboardState.faucet.cooldownEnd = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
             updateFaucetWidget();
             setTimeout(() => { DashboardPage.update(true); }, 4000);
         } else {
-            const msg = data.error || data.message || "Faucet unavailable";
+            const msg = data.error || data.message || "API indisponível";
+            console.warn('[Faucet] API falhou:', msg);
+
+            // Se for cooldown, não tenta on-chain
             if (msg.toLowerCase().includes("cooldown") || msg.toLowerCase().includes("wait") || msg.toLowerCase().includes("hour")) {
-                showToast(`${msg}`, "warning");
+                showToast(msg, "warning");
                 const hoursMatch = msg.match(/(\d+)\s*hour/i);
                 if (hoursMatch) {
                     DashboardState.faucet.canClaim = false;
                     DashboardState.faucet.cooldownEnd = new Date(Date.now() + parseInt(hoursMatch[1]) * 3600000).toISOString();
                     updateFaucetWidget();
                 }
-            } else {
-                showToast(`${msg}`, "error");
+                apiSuccess = true; // Não tentar fallback para cooldown
             }
         }
     } catch (e) {
-        console.error("Faucet error:", e);
-        showToast("Faucet Offline - Try again later", "error");
-    } finally {
-        DashboardState.faucet.isLoading = false;
-        btnElement.disabled = false;
-        btnElement.innerHTML = originalHTML;
+        console.warn('[Faucet] API offline:', e.message);
     }
+
+    // Fallback: claim on-chain direto (user paga gas)
+    if (!apiSuccess) {
+        try {
+            console.log('[Faucet] Fallback: claim on-chain direto...');
+            btnElement.innerHTML = `<i class="fa-solid fa-circle-notch fa-spin mr-2"></i> Claim on-chain...`;
+
+            const { FaucetTx } = await import('../modules/transactions/index.js');
+            const result = await FaucetTx.claimOnChain({
+                button: null,
+                onSuccess: () => {
+                    showToast(`Faucet: ${FAUCET_BKC_AMOUNT} BKC + ${FAUCET_ETH_AMOUNT} ETH recebidos!`, "success");
+                    DashboardState.faucet.canClaim = false;
+                    DashboardState.faucet.cooldownEnd = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+                    updateFaucetWidget();
+                    setTimeout(() => { DashboardPage.update(true); }, 4000);
+                },
+                onError: (err) => {
+                    console.error('[Faucet] On-chain falhou:', err);
+                    const msg = err.message || 'Erro no claim';
+                    if (msg.includes('Aguarde') || msg.includes('cooldown')) {
+                        showToast(msg, "warning");
+                    } else if (msg.includes('InsufficientTokens') || msg.includes('InsufficientETH')) {
+                        showToast("Faucet sem saldo. Contate o admin.", "error");
+                    } else if (msg.includes('user rejected') || msg.includes('denied')) {
+                        showToast("Transação cancelada", "warning");
+                    } else {
+                        showToast(`Faucet: ${msg}`, "error");
+                    }
+                }
+            });
+        } catch (e) {
+            console.error('[Faucet] On-chain erro:', e);
+            const msg = e.message || '';
+            if (msg.includes('Aguarde') || msg.includes('cooldown')) {
+                showToast(msg, "warning");
+            } else {
+                showToast("Faucet indisponível. Tente novamente.", "error");
+            }
+        }
+    }
+
+    DashboardState.faucet.isLoading = false;
+    btnElement.disabled = false;
+    btnElement.innerHTML = originalHTML;
 }
 
 function updateFaucetWidget() {
@@ -304,7 +353,7 @@ function updateFaucetWidget() {
         if (btn) { btn.className = 'dash-btn-secondary'; btn.innerHTML = '<i class="fa-solid fa-hourglass-half"></i> On Cooldown'; btn.disabled = true; }
     } else {
         if (titleEl) titleEl.innerText = "Get Free Testnet Tokens";
-        if (descEl) descEl.innerText = "Claim BKC tokens and ETH for gas — free every hour";
+        if (descEl) descEl.innerText = "Claim BKC tokens and ETH for gas — free every 24h";
         if (statusEl) statusEl.classList.add('hidden');
         if (btn) { btn.className = 'dash-btn-primary dash-btn-cyan'; btn.innerHTML = '<i class="fa-solid fa-faucet"></i> Claim Free Tokens'; btn.disabled = false; }
     }
