@@ -897,7 +897,9 @@ async function doLike(postId) {
         postId,
         operator: getOperatorAddress(),
         onSuccess: () => showToast('Liked!', 'success'),
-        onError: () => {
+        onError: (err) => {
+            console.error('[Agora] Like failed:', err);
+            showToast('Like failed — check console for details', 'error');
             BC.likesMap.get(postId)?.delete(myAddr);
             renderContent();
         }
