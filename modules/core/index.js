@@ -126,10 +126,14 @@ export async function calculateFeeClientSide(actionId, txValue = 0n) {
 
         if (Number(cfg.feeType) === 0) {
             // Gas-based: gasEstimate × gasPrice × bps × multiplier / BPS
+            // Use 150% of gasPrice to cover Arbitrum's L1 data cost component
+            // (tx.gasprice in Solidity = effective price including L1, but
+            //  provider.getFeeData() only returns the L2 base fee)
             const feeData = await provider.getFeeData();
-            const gasPrice = feeData.gasPrice || feeData.maxFeePerGas || 100000000n;
+            const rawGasPrice = feeData.gasPrice || feeData.maxFeePerGas || 100000000n;
+            const gasPrice = rawGasPrice * 150n / 100n;
             const fee = BigInt(cfg.gasEstimate) * gasPrice * bps * BigInt(cfg.multiplier) / FEE_BPS;
-            console.log(`[FeeCalc] Gas-based: ${ethers.formatEther(fee)} ETH (gasEst=${cfg.gasEstimate}, gasPrice=${gasPrice}, bps=${bps}, mult=${cfg.multiplier})`);
+            console.log(`[FeeCalc] Gas-based: ${ethers.formatEther(fee)} ETH (gasEst=${cfg.gasEstimate}, gasPrice=${rawGasPrice}→${gasPrice} +50%, bps=${bps}, mult=${cfg.multiplier})`);
             return fee;
         } else {
             // Value-based: txValue × bps / BPS

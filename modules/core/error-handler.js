@@ -422,11 +422,16 @@ export const ErrorHandler = {
             return ErrorTypes.RPC_RATE_LIMITED;
         }
         
-        // -32603 can be RPC error OR contract revert
-        // Check if it's a contract revert (CALL_EXCEPTION) first
+        // -32603 can be RPC error OR contract revert OR gas pricing issue
         if (code === -32603 || code === 'CALL_EXCEPTION') {
-            // If message contains revert indicators, it's a contract error, not RPC
-            if (message.includes('revert') || 
+            // Gas pricing errors — NOT an RPC issue, don't switch RPCs
+            if (message.includes('base fee') || message.includes('basefee') ||
+                message.includes('max fee per gas') || message.includes('maxfeepergas') ||
+                message.includes('underpriced') || message.includes('gas too low')) {
+                return ErrorTypes.TX_UNDERPRICED;
+            }
+            // Contract revert indicators
+            if (message.includes('revert') ||
                 message.includes('require') ||
                 message.includes('execution failed') ||
                 message.includes('call_exception') ||
