@@ -1,26 +1,23 @@
-// js/pages/CharityPage.js
-// ✅ PRODUCTION V6.9 - Complete Redesign
-// ═══════════════════════════════════════════════════════════════════════════════
-//                          BACKCHAIN PROTOCOL
-//                    Charity Pool - Support Causes with ETH
-// ═══════════════════════════════════════════════════════════════════════════════
+// pages/CharityPage.js
+// V9.0 - Complete V9 Contract Alignment + UX Improvements
+// ============================================================================
+//   BACKCHAIN PROTOCOL — Charity Pool
+//   Support causes with ETH • 95% goes directly to campaigns
+// ============================================================================
 //
-// V6.9 Changes:
-// - COMPLETE UI REDESIGN - Modern, clean, consistent with other pages
-// - Improved card layout and animations
-// - Better mobile responsiveness
-// - Enhanced visual hierarchy
-// - Smoother transitions and micro-interactions
-// - Consistent styling with NetworkStakingPage and RewardsPage
+// V9.0 Changes:
+// - Use CharityTx for ALL contract reads (no local ABI)
+// - CampaignStatus: ACTIVE=0, CLOSED=1, WITHDRAWN=2 (V9)
+// - getCampaign returns V9 9-tuple (owner, deadline, status, raised, goal, donorCount, isBoosted, title, metadataUri)
+// - campaignCount() replaces campaignCounter()
+// - getStats() returns (campaignCount, totalDonated, totalWithdrawn, totalEthFees)
+// - ETH-only fees (no BKC costs)
+// - closeCampaign replaces cancelCampaign
+// - Removed: description field (replaced by metadataUri), createdAt, boostAmount/boostTime
+// - Sort by deadline (not createdAt)
+// - Boosted campaigns badge support
 //
-// V6.8 Features (maintained):
-// - ETH donations (not BKC)
-// - 5% platform fee, 95% to campaign
-// - Campaign editing for creators
-// - Image upload support
-//
-// Website: https://backcoin.org
-// ═══════════════════════════════════════════════════════════════════════════════
+// ============================================================================
 
 import { State } from '../state.js';
 import { showToast } from '../ui-feedback.js';
@@ -30,28 +27,16 @@ import { CharityTx } from '../modules/transactions/index.js';
 const ethers = window.ethers;
 
 // ============================================================================
-// CONSTANTS
+// CONSTANTS (V9-aligned)
 // ============================================================================
 
-const CampaignStatus = { ACTIVE: 0, COMPLETED: 1, CANCELLED: 2, WITHDRAWN: 3 };
-const StatusMap = { 'ACTIVE': 0, 'COMPLETED': 1, 'CANCELLED': 2, 'WITHDRAWN': 3 };
+const CampaignStatus = { ACTIVE: 0, CLOSED: 1, WITHDRAWN: 2 };
 
-const normalizeStatus = (status) => {
-    if (typeof status === 'number') return status;
-    if (typeof status === 'string') {
-        if (!isNaN(parseInt(status))) return parseInt(status);
-        return StatusMap[status.toUpperCase()] ?? 0;
-    }
-    return 0;
+const STATUS_CONFIG = {
+    0: { label: 'Active', color: '#10b981', icon: 'fa-circle-play', bg: 'bg-emerald-500/15' },
+    1: { label: 'Closed', color: '#3b82f6', icon: 'fa-circle-check', bg: 'bg-blue-500/15' },
+    2: { label: 'Withdrawn', color: '#8b5cf6', icon: 'fa-circle-dollar-to-slot', bg: 'bg-purple-500/15' }
 };
-
-const isCampaignActive = (c) => normalizeStatus(c.status) === 0 && Number(c.deadline) > Math.floor(Date.now() / 1000);
-
-const charityPoolABI = [
-    "function getCampaign(uint256 _campaignId) view returns (address creator, string title, string description, uint96 goalAmount, uint96 raisedAmount, uint32 donationCount, uint64 deadline, uint64 createdAt, uint96 boostAmount, uint64 boostTime, uint8 status, bool goalReached)",
-    "function campaignCounter() view returns (uint64)",
-    "function getStats() view returns (uint64 totalCampaigns, uint256 totalRaised, uint256 totalDonations, uint256 totalFees)"
-];
 
 const CHARITY_API = {
     getCampaigns: 'https://getcharitycampaigns-4wvdcuoouq-uc.a.run.app',
@@ -62,22 +47,15 @@ const CHARITY_API = {
 const EXPLORER_ADDRESS = "https://sepolia.arbiscan.io/address/";
 const EXPLORER_TX = "https://sepolia.arbiscan.io/tx/";
 
-const PLACEHOLDER_IMAGES = { 
-    animal: 'https://images.unsplash.com/photo-1548199973-03cce0bbc87b?w=800&q=80', 
-    humanitarian: 'https://images.unsplash.com/photo-1469571486292-0ba58a3f068b?w=800&q=80', 
-    default: 'https://images.unsplash.com/photo-1532629345422-7515f3d16bb6?w=800&q=80' 
+const PLACEHOLDER_IMAGES = {
+    animal: 'https://images.unsplash.com/photo-1548199973-03cce0bbc87b?w=800&q=80',
+    humanitarian: 'https://images.unsplash.com/photo-1469571486292-0ba58a3f068b?w=800&q=80',
+    default: 'https://images.unsplash.com/photo-1532629345422-7515f3d16bb6?w=800&q=80'
 };
 
-const CATEGORIES = { 
-    animal: { name: 'Animal Welfare', emoji: '🐾', color: '#10b981', gradient: 'from-emerald-500/20 to-green-600/20' }, 
-    humanitarian: { name: 'Humanitarian Aid', emoji: '💗', color: '#ec4899', gradient: 'from-pink-500/20 to-rose-600/20' } 
-};
-
-const STATUS_CONFIG = { 
-    0: { label: 'Active', color: '#10b981', icon: 'fa-circle-play', bg: 'bg-emerald-500/15' }, 
-    1: { label: 'Ended', color: '#3b82f6', icon: 'fa-circle-check', bg: 'bg-blue-500/15' }, 
-    2: { label: 'Cancelled', color: '#ef4444', icon: 'fa-circle-xmark', bg: 'bg-red-500/15' }, 
-    3: { label: 'Completed', color: '#8b5cf6', icon: 'fa-circle-dollar-to-slot', bg: 'bg-purple-500/15' } 
+const CATEGORIES = {
+    animal: { name: 'Animal Welfare', emoji: '\u{1F43E}', color: '#10b981', gradient: 'from-emerald-500/20 to-green-600/20' },
+    humanitarian: { name: 'Humanitarian Aid', emoji: '\u{1F497}', color: '#ec4899', gradient: 'from-pink-500/20 to-rose-600/20' }
 };
 
 const MAX_IMAGE_SIZE = 5 * 1024 * 1024;
@@ -114,17 +92,13 @@ const CS = {
 // ============================================================================
 
 function injectStyles() {
-    if (document.getElementById('charity-styles-v6')) return;
+    if (document.getElementById('charity-styles-v9')) return;
     const s = document.createElement('style');
-    s.id = 'charity-styles-v6';
+    s.id = 'charity-styles-v9';
     s.textContent = `
-        /* ═══════════════════════════════════════════════════════════════════
-           V6.9 Charity Page Styles - Modern & Clean
-           ═══════════════════════════════════════════════════════════════════ */
-        
-        @keyframes float { 
-            0%, 100% { transform: translateY(0); } 
-            50% { transform: translateY(-6px); } 
+        @keyframes float {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-6px); }
         }
         @keyframes pulse-border {
             0%, 100% { border-color: rgba(245,158,11,0.3); }
@@ -134,16 +108,16 @@ function injectStyles() {
             0% { background-position: -200% 0; }
             100% { background-position: 200% 0; }
         }
-        
+
         .float-animation { animation: float 3s ease-in-out infinite; }
-        
+
         .charity-page {
             max-width: 1200px;
             margin: 0 auto;
             padding: 1.5rem 1rem;
             min-height: 400px;
         }
-        
+
         /* Cards */
         .cp-card-base {
             background: linear-gradient(145deg, rgba(39,39,42,0.9) 0%, rgba(24,24,27,0.95) 100%);
@@ -155,7 +129,7 @@ function injectStyles() {
             border-color: rgba(245,158,11,0.3);
             transform: translateY(-2px);
         }
-        
+
         /* Stats Cards */
         .cp-stat-card {
             background: linear-gradient(145deg, rgba(39,39,42,0.7) 0%, rgba(24,24,27,0.8) 100%);
@@ -164,7 +138,7 @@ function injectStyles() {
             padding: 1rem;
             text-align: center;
         }
-        
+
         /* Category Cards */
         .cp-category-card {
             background: linear-gradient(145deg, rgba(39,39,42,0.9) 0%, rgba(24,24,27,0.95) 100%);
@@ -182,7 +156,7 @@ function injectStyles() {
         .cp-category-card.animal:hover { border-color: #10b981; }
         .cp-category-card.humanitarian:hover { border-color: #ec4899; }
         .cp-category-card.selected { animation: pulse-border 2s ease-in-out infinite; }
-        
+
         /* Campaign Cards */
         .cp-campaign-card {
             background: linear-gradient(145deg, rgba(39,39,42,0.9) 0%, rgba(24,24,27,0.95) 100%);
@@ -203,7 +177,7 @@ function injectStyles() {
             object-fit: cover;
             background: rgba(63,63,70,0.5);
         }
-        
+
         /* Progress Bar */
         .cp-progress {
             height: 8px;
@@ -218,7 +192,7 @@ function injectStyles() {
         }
         .cp-progress-fill.animal { background: linear-gradient(90deg, #10b981, #059669); }
         .cp-progress-fill.humanitarian { background: linear-gradient(90deg, #ec4899, #db2777); }
-        
+
         /* Badges */
         .cp-badge {
             display: inline-flex;
@@ -230,7 +204,7 @@ function injectStyles() {
             font-weight: 600;
             text-transform: uppercase;
         }
-        
+
         /* Buttons */
         .cp-btn {
             display: inline-flex;
@@ -246,7 +220,7 @@ function injectStyles() {
             transition: all 0.2s ease;
         }
         .cp-btn:disabled { opacity: 0.5; cursor: not-allowed; }
-        
+
         .cp-btn-primary {
             background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
             color: #000;
@@ -255,7 +229,7 @@ function injectStyles() {
             transform: translateY(-2px);
             box-shadow: 0 8px 20px rgba(245,158,11,0.3);
         }
-        
+
         .cp-btn-secondary {
             background: rgba(63,63,70,0.8);
             color: #fafafa;
@@ -264,7 +238,7 @@ function injectStyles() {
         .cp-btn-secondary:hover:not(:disabled) {
             background: rgba(63,63,70,1);
         }
-        
+
         .cp-btn-success {
             background: linear-gradient(135deg, #10b981 0%, #059669 100%);
             color: #fff;
@@ -273,7 +247,7 @@ function injectStyles() {
             transform: translateY(-2px);
             box-shadow: 0 8px 20px rgba(16,185,129,0.3);
         }
-        
+
         .cp-btn-danger {
             background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
             color: #fff;
@@ -282,7 +256,7 @@ function injectStyles() {
             transform: translateY(-2px);
             box-shadow: 0 8px 20px rgba(239,68,68,0.3);
         }
-        
+
         /* Modal */
         .cp-modal {
             display: none;
@@ -342,7 +316,7 @@ function injectStyles() {
             padding: 1rem 1.25rem;
             border-top: 1px solid rgba(63,63,70,0.5);
         }
-        
+
         /* Form Elements */
         .cp-form-group { margin-bottom: 1rem; }
         .cp-form-label {
@@ -370,7 +344,7 @@ function injectStyles() {
         }
         .cp-form-textarea { min-height: 100px; resize: vertical; }
         .cp-form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
-        
+
         /* Category Selector */
         .cp-cat-selector { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
         .cp-cat-option {
@@ -392,7 +366,7 @@ function injectStyles() {
         .cp-cat-option input { display: none; }
         .cp-cat-option-icon { font-size: 1.5rem; margin-bottom: 6px; }
         .cp-cat-option-name { font-size: 12px; font-weight: 600; color: #fafafa; }
-        
+
         /* Donate Input */
         .cp-donate-input-wrap { position: relative; }
         .cp-donate-input {
@@ -430,7 +404,7 @@ function injectStyles() {
             transition: all 0.2s;
         }
         .cp-preset:hover { background: rgba(63,63,70,0.8); }
-        
+
         /* Image Upload */
         .cp-image-upload {
             border: 2px dashed rgba(63,63,70,0.8);
@@ -451,7 +425,7 @@ function injectStyles() {
         .cp-image-upload-text span { color: #f59e0b; font-weight: 600; }
         .cp-image-preview { width: 100%; max-height: 200px; object-fit: cover; border-radius: 8px; margin-bottom: 8px; }
         .cp-image-remove { background: #ef4444; color: #fff; border: none; padding: 4px 8px; border-radius: 4px; font-size: 11px; cursor: pointer; }
-        
+
         /* Tabs */
         .cp-tabs { display: flex; gap: 8px; margin-bottom: 1rem; }
         .cp-tab {
@@ -472,7 +446,7 @@ function injectStyles() {
             color: #f59e0b;
             font-weight: 600;
         }
-        
+
         /* Detail Page */
         .cp-detail { max-width: 900px; margin: 0 auto; }
         .cp-detail-img {
@@ -489,7 +463,7 @@ function injectStyles() {
             gap: 1.5rem;
         }
         .cp-detail-sidebar { display: flex; flex-direction: column; gap: 1rem; }
-        
+
         /* Share Box */
         .cp-share-box {
             background: rgba(63,63,70,0.3);
@@ -512,7 +486,7 @@ function injectStyles() {
         .cp-share-btn.telegram { background: #0088cc; color: #fff; }
         .cp-share-btn.whatsapp { background: #25d366; color: #fff; }
         .cp-share-btn.copy { background: rgba(63,63,70,0.8); color: #fafafa; }
-        
+
         /* Empty & Loading */
         .cp-empty { text-align: center; padding: 3rem 1rem; color: #a1a1aa; }
         .cp-empty i { font-size: 3rem; margin-bottom: 1rem; opacity: 0.4; }
@@ -520,12 +494,12 @@ function injectStyles() {
         .cp-loading { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 3rem; gap: 1rem; }
         .cp-spinner { width: 40px; height: 40px; border: 3px solid rgba(63,63,70,0.5); border-top-color: #f59e0b; border-radius: 50%; animation: spin 1s linear infinite; }
         @keyframes spin { to { transform: rotate(360deg); } }
-        
+
         /* Scrollbar */
         .cp-scrollbar::-webkit-scrollbar { width: 5px; }
         .cp-scrollbar::-webkit-scrollbar-track { background: rgba(39,39,42,0.5); border-radius: 3px; }
         .cp-scrollbar::-webkit-scrollbar-thumb { background: rgba(113,113,122,0.5); border-radius: 3px; }
-        
+
         /* Step Wizard */
         .cp-step-container {
             display: flex;
@@ -616,6 +590,14 @@ function injectStyles() {
         }
         .cp-wiz-summary-row + .cp-wiz-summary-row { border-top: 1px solid rgba(63,63,70,0.3); }
 
+        /* Boosted badge */
+        .cp-boosted-badge {
+            background: linear-gradient(135deg, rgba(245,158,11,0.2), rgba(251,191,36,0.2));
+            color: #fbbf24;
+            border: 1px solid rgba(245,158,11,0.3);
+            animation: pulse-border 2s ease-in-out infinite;
+        }
+
         /* Responsive */
         @media(max-width:768px) {
             .cp-stats-grid { grid-template-columns: repeat(2, 1fr) !important; }
@@ -633,16 +615,48 @@ function injectStyles() {
 // HELPERS
 // ============================================================================
 
-const fmt = (v) => { try { const n = Number(v) / 1e18; return n < 0.0001 ? '0' : n < 1 ? n.toFixed(4) : n < 1000 ? n.toFixed(2) : n.toLocaleString('en-US', { maximumFractionDigits: 2 }); } catch { return '0'; } };
+const fmt = (v) => {
+    try {
+        const n = typeof v === 'bigint' ? Number(v) / 1e18 : Number(v) / 1e18;
+        if (n < 0.0001) return '0';
+        if (n < 1) return n.toFixed(4);
+        if (n < 1000) return n.toFixed(2);
+        return n.toLocaleString('en-US', { maximumFractionDigits: 2 });
+    } catch { return '0'; }
+};
 const fmtAddr = (a) => a ? `${a.slice(0,6)}...${a.slice(-4)}` : '';
-const calcProg = (r, g) => { const rn = Number(r || 0), gn = Number(g || 1); return Math.min(100, Math.round((rn / gn) * 100)); };
-const fmtTime = (d) => { const now = Math.floor(Date.now() / 1000); const diff = Number(d) - now; if (diff <= 0) return { text: 'Ended', color: '#ef4444' }; const days = Math.floor(diff / 86400); if (days > 0) return { text: `${days}d left`, color: '#10b981' }; const hours = Math.floor(diff / 3600); return { text: `${hours}h left`, color: '#f59e0b' }; };
+const calcProg = (r, g) => {
+    const rn = typeof r === 'bigint' ? r : BigInt(r || 0);
+    const gn = typeof g === 'bigint' ? g : BigInt(g || 1);
+    if (gn === 0n) return 0;
+    return Math.min(100, Number((rn * 100n) / gn));
+};
+const fmtTime = (d) => {
+    const now = Math.floor(Date.now() / 1000);
+    const diff = Number(d) - now;
+    if (diff <= 0) return { text: 'Ended', color: '#ef4444' };
+    const days = Math.floor(diff / 86400);
+    if (days > 0) return { text: `${days}d left`, color: '#10b981' };
+    const hours = Math.floor(diff / 3600);
+    return { text: `${hours}h left`, color: '#f59e0b' };
+};
 const getCampImg = (c) => c?.imageUrl || PLACEHOLDER_IMAGES[c?.category] || PLACEHOLDER_IMAGES.default;
 const getShareUrl = (id) => `${window.location.origin}${window.location.pathname}#charity/${id}`;
 const getIdFromUrl = () => { const h = window.location.hash; const m = h.match(/#charity\/(\d+)/); return m ? m[1] : null; };
 const setUrl = (id) => { window.location.hash = `charity/${id}`; };
 const clearUrl = () => { if (window.location.hash.startsWith('#charity/')) window.location.hash = 'charity'; };
-const canWithdraw = (c) => { const status = normalizeStatus(c.status); const ended = Number(c.deadline) <= Math.floor(Date.now() / 1000); return (status === 0 || status === 1) && ended && !c.withdrawn && BigInt(c.raisedAmount || 0) > 0n; };
+
+// V9: Campaign is active if status=ACTIVE and deadline not passed
+const isCampaignActive = (c) => Number(c.status) === CampaignStatus.ACTIVE && Number(c.deadline) > Math.floor(Date.now() / 1000);
+
+// V9: Can withdraw if status is ACTIVE or CLOSED, deadline passed, not yet withdrawn, and has raised funds
+const canWithdrawCheck = (c) => {
+    const status = Number(c.status);
+    const ended = Number(c.deadline) <= Math.floor(Date.now() / 1000);
+    return (status === CampaignStatus.ACTIVE || status === CampaignStatus.CLOSED) &&
+           (ended || status === CampaignStatus.CLOSED) &&
+           BigInt(c.raisedAmount || c.raised || 0) > 0n;
+};
 
 // ============================================================================
 // LOCAL METADATA STORAGE (fallback for unreliable Firebase API)
@@ -659,7 +673,7 @@ function getLocalMeta(id) {
 }
 
 // ============================================================================
-// DATA LOADING
+// DATA LOADING — Uses CharityTx for all reads (V9-aligned)
 // ============================================================================
 
 async function loadData() {
@@ -671,46 +685,57 @@ async function loadData() {
         ]);
 
         const apiCampaigns = apiRes?.campaigns || [];
-        const provider = State?.publicProvider;
 
-        if (provider) {
-            const contract = new ethers.Contract(addresses.charityPool, charityPoolABI, provider);
-            const counter = await contract.campaignCounter();
-            const total = Number(counter);
+        // V9: Use CharityTx.getCampaignCount() instead of wrong campaignCounter()
+        let total = 0;
+        try {
+            total = await CharityTx.getCampaignCount();
+        } catch (e) {
+            console.error('[CharityPage] getCampaignCount failed:', e);
+        }
 
+        if (total > 0) {
             const onChainCampaigns = await Promise.all(
                 Array.from({ length: total }, (_, i) => i + 1).map(async (id) => {
                     try {
-                        const data = await contract.getCampaign(id);
+                        // V9: CharityTx.getCampaign() returns properly mapped fields
+                        const data = await CharityTx.getCampaign(id);
                         const apiData = apiCampaigns.find(c => String(c.id) === String(id));
                         const localMeta = getLocalMeta(id);
 
                         return {
                             id: String(id),
-                            creator: data.creator || data[0],
-                            title: apiData?.title || data.title || data[1] || `Campaign #${id}`,
-                            description: apiData?.description || data.description || data[2] || '',
-                            goalAmount: BigInt((data.goalAmount || data[3]).toString()),
-                            raisedAmount: BigInt((data.raisedAmount || data[4]).toString()),
-                            donationCount: Number(data.donationCount || data[5]),
-                            deadline: Number(data.deadline || data[6]),
-                            createdAt: Number(data.createdAt || data[7]),
-                            status: Number(data.status || data[10]),
+                            creator: data.creator,         // V9: owner
+                            title: apiData?.title || data.title || `Campaign #${id}`,
+                            description: apiData?.description || localMeta?.description || data.metadataUri || '',
+                            metadataUri: data.metadataUri,
+                            goalAmount: data.goalAmount,    // BigInt
+                            raisedAmount: data.raisedAmount, // BigInt
+                            raised: data.raisedAmount,
+                            donationCount: data.donationCount,
+                            deadline: data.deadline,
+                            status: data.status,
+                            isBoosted: data.isBoosted,
+                            isActive: data.isActive,
+                            progress: data.progress,
                             category: apiData?.category || localMeta?.category || 'humanitarian',
                             imageUrl: apiData?.imageUrl || localMeta?.imageUrl || null
                         };
                     } catch (e) {
+                        console.warn(`[CharityPage] getCampaign(${id}) failed:`, e.message);
                         return null;
                     }
                 })
             );
 
             CS.campaigns = onChainCampaigns.filter(Boolean);
+        } else {
+            CS.campaigns = [];
         }
 
         CS.stats = stats;
     } catch (e) {
-        console.error('Load data:', e);
+        console.error('[CharityPage] loadData error:', e);
     } finally {
         CS.isLoading = false;
     }
@@ -718,19 +743,16 @@ async function loadData() {
 
 async function loadStats() {
     try {
-        const provider = State?.publicProvider;
-        if (!provider) return null;
-
-        const contract = new ethers.Contract(addresses.charityPool, charityPoolABI, provider);
-        const stats = await contract.getStats();
-
+        // V9: Use CharityTx.getStats() — returns { totalCampaigns, totalDonated, totalDonatedFormatted, totalWithdrawn, totalEthFees, ... }
+        const stats = await CharityTx.getStats();
         return {
-            raised: stats.totalRaised ?? stats[1],
-            fees: stats.totalFees ?? stats[3],
-            created: Number(stats.totalCampaigns ?? stats[0]),
-            donations: Number(stats.totalDonations ?? stats[2])
+            raised: stats.totalDonated,           // BigInt
+            fees: stats.totalEthFees,              // BigInt
+            created: stats.totalCampaigns,         // Number
+            withdrawn: stats.totalWithdrawn         // BigInt
         };
     } catch (e) {
+        console.error('[CharityPage] loadStats error:', e);
         return null;
     }
 }
@@ -742,25 +764,25 @@ async function loadStats() {
 function handleImageSelect(event, inputType = 'create') {
     const file = event.target.files?.[0];
     if (!file) return;
-    
+
     if (!ALLOWED_IMAGE_TYPES.includes(file.type)) {
         showToast('Please select a valid image (JPG, PNG, GIF, WebP)', 'error');
         return;
     }
-    
+
     if (file.size > MAX_IMAGE_SIZE) {
         showToast('Image must be less than 5MB', 'error');
         return;
     }
-    
+
     CS.pendingImageFile = file;
-    
+
     const reader = new FileReader();
     reader.onload = (e) => {
         const previewId = inputType === 'edit' ? 'edit-image-preview' : 'create-image-preview';
         const uploadEl = document.getElementById(inputType === 'edit' ? 'edit-image-upload' : 'create-image-upload');
         const previewEl = document.getElementById(previewId);
-        
+
         if (previewEl) {
             previewEl.innerHTML = `
                 <img src="${e.target.result}" class="cp-image-preview">
@@ -777,14 +799,14 @@ function handleImageSelect(event, inputType = 'create') {
 function removeImage(inputType = 'create') {
     CS.pendingImageFile = null;
     CS.pendingImage = null;
-    
+
     const previewId = inputType === 'edit' ? 'edit-image-preview' : 'create-image-preview';
     const uploadEl = document.getElementById(inputType === 'edit' ? 'edit-image-upload' : 'create-image-upload');
     const previewEl = document.getElementById(previewId);
-    
+
     if (previewEl) previewEl.innerHTML = '';
     if (uploadEl) uploadEl.classList.remove('has-image');
-    
+
     const fileInput = document.getElementById(inputType === 'edit' ? 'edit-image-file' : 'create-image-file');
     if (fileInput) fileInput.value = '';
 }
@@ -792,10 +814,10 @@ function removeImage(inputType = 'create') {
 function switchImageTab(tab, context = 'create') {
     const tabs = document.querySelectorAll(`#${context}-image-tabs .cp-tab`);
     tabs.forEach(t => t.classList.toggle('active', t.dataset.tab === tab));
-    
+
     const uploadEl = document.getElementById(`${context}-image-upload`);
     const urlWrap = document.getElementById(`${context}-image-url-wrap`);
-    
+
     if (uploadEl) uploadEl.style.display = tab === 'upload' ? 'block' : 'none';
     if (urlWrap) urlWrap.style.display = tab === 'url' ? 'block' : 'none';
 }
@@ -823,9 +845,11 @@ async function uploadImageToServer(file) {
 // ============================================================================
 
 const renderBadge = (status) => {
-    const s = STATUS_CONFIG[normalizeStatus(status)] || STATUS_CONFIG[0];
+    const s = STATUS_CONFIG[Number(status)] || STATUS_CONFIG[0];
     return `<span class="cp-badge" style="background:${s.color}20;color:${s.color}"><i class="fa-solid ${s.icon}"></i> ${s.label}</span>`;
 };
+
+const renderBoostedBadge = () => `<span class="cp-badge cp-boosted-badge"><i class="fa-solid fa-rocket"></i> Boosted</span>`;
 
 const renderLoading = () => `<div class="cp-loading"><div class="cp-spinner"></div><span class="text-zinc-500">Loading campaigns...</span></div>`;
 const renderEmpty = (msg) => `<div class="cp-empty"><i class="fa-solid fa-inbox"></i><h3>${msg}</h3><p class="text-zinc-600 text-sm">Be the first to create a campaign!</p></div>`;
@@ -834,7 +858,7 @@ const renderCard = (c) => {
     const prog = calcProg(c.raisedAmount, c.goalAmount);
     const time = fmtTime(c.deadline);
     const cat = c.category || 'humanitarian';
-    
+
     return `
         <div class="cp-campaign-card" onclick="CharityPage.viewCampaign('${c.id}')">
             <img src="${getCampImg(c)}" alt="${c.title}" onerror="this.src='${PLACEHOLDER_IMAGES.default}'">
@@ -844,6 +868,7 @@ const renderCard = (c) => {
                     <span class="cp-badge" style="background:${CATEGORIES[cat]?.color}20;color:${CATEGORIES[cat]?.color}">
                         ${CATEGORIES[cat]?.emoji} ${CATEGORIES[cat]?.name}
                     </span>
+                    ${c.isBoosted ? renderBoostedBadge() : ''}
                 </div>
                 <h3 class="text-white font-bold text-sm mb-1 line-clamp-2">${c.title}</h3>
                 <p class="text-zinc-500 text-xs mb-3">by <a href="${EXPLORER_ADDRESS}${c.creator}" target="_blank" class="text-amber-500 hover:text-amber-400">${fmtAddr(c.creator)}</a></p>
@@ -871,13 +896,13 @@ const renderMain = () => {
     const active = CS.campaigns.filter(c => isCampaignActive(c));
     const animal = active.filter(c => c.category === 'animal');
     const humanitarian = active.filter(c => c.category === 'humanitarian');
-    
+
     return `
         <div class="charity-page">
             ${renderMyCampaignsModal()}
             ${renderEditModal()}
             ${renderDonateModal()}
-            
+
             <!-- Header -->
             <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
                 <div class="flex items-center gap-4">
@@ -886,7 +911,7 @@ const renderMain = () => {
                     </div>
                     <div>
                         <h1 class="text-2xl font-bold text-white">Charity Pool</h1>
-                        <p class="text-sm text-zinc-500">Support causes with ETH • 95% goes directly to campaigns</p>
+                        <p class="text-sm text-zinc-500">Support causes with ETH &bull; 95% goes directly to campaigns</p>
                     </div>
                 </div>
                 <div class="flex gap-2">
@@ -898,34 +923,38 @@ const renderMain = () => {
                     </button>
                 </div>
             </div>
-            
+
             <!-- Stats -->
             <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6 cp-stats-grid">
                 <div class="cp-stat-card">
                     <p class="text-2xl font-bold text-emerald-400 font-mono">
                         <i class="fa-brands fa-ethereum text-lg mr-1"></i>${CS.stats ? fmt(CS.stats.raised) : '--'}
                     </p>
-                    <p class="text-[10px] text-zinc-500 uppercase mt-1">Total Raised</p>
+                    <p class="text-[10px] text-zinc-500 uppercase mt-1">Total Donated</p>
                 </div>
                 <div class="cp-stat-card">
-                    <p class="text-2xl font-bold text-blue-400 font-mono">${CS.stats ? fmt(CS.stats.fees) : '--'}</p>
-                    <p class="text-[10px] text-zinc-500 uppercase mt-1">Platform Fees</p>
+                    <p class="text-2xl font-bold text-blue-400 font-mono">
+                        <i class="fa-brands fa-ethereum text-lg mr-1"></i>${CS.stats ? fmt(CS.stats.fees) : '--'}
+                    </p>
+                    <p class="text-[10px] text-zinc-500 uppercase mt-1">ETH Fees</p>
                 </div>
                 <div class="cp-stat-card">
                     <p class="text-2xl font-bold text-amber-400 font-mono">${CS.stats?.created ?? '--'}</p>
                     <p class="text-[10px] text-zinc-500 uppercase mt-1">Campaigns</p>
                 </div>
                 <div class="cp-stat-card">
-                    <p class="text-2xl font-bold text-purple-400 font-mono">${CS.stats?.donations ?? '--'}</p>
-                    <p class="text-[10px] text-zinc-500 uppercase mt-1">Donations</p>
+                    <p class="text-2xl font-bold text-purple-400 font-mono">
+                        <i class="fa-brands fa-ethereum text-lg mr-1"></i>${CS.stats ? fmt(CS.stats.withdrawn) : '--'}
+                    </p>
+                    <p class="text-[10px] text-zinc-500 uppercase mt-1">Withdrawn</p>
                 </div>
             </div>
-            
+
             <!-- Categories -->
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-8 cp-cats-grid">
                 <div class="cp-category-card animal ${CS.selectedCategory === 'animal' ? 'selected' : ''}" onclick="CharityPage.selectCat('animal')">
                     <div class="w-16 h-16 rounded-full bg-emerald-500/15 flex items-center justify-center mx-auto mb-3">
-                        <span class="text-3xl">🐾</span>
+                        <span class="text-3xl">${CATEGORIES.animal.emoji}</span>
                     </div>
                     <h3 class="text-lg font-bold text-white mb-2">Animal Welfare</h3>
                     <div class="flex justify-center gap-6 text-sm text-zinc-400 mb-3">
@@ -936,10 +965,10 @@ const renderMain = () => {
                         <i class="fa-solid fa-plus"></i> Create Campaign
                     </button>
                 </div>
-                
+
                 <div class="cp-category-card humanitarian ${CS.selectedCategory === 'humanitarian' ? 'selected' : ''}" onclick="CharityPage.selectCat('humanitarian')">
                     <div class="w-16 h-16 rounded-full bg-pink-500/15 flex items-center justify-center mx-auto mb-3">
-                        <span class="text-3xl">💗</span>
+                        <span class="text-3xl">${CATEGORIES.humanitarian.emoji}</span>
                     </div>
                     <h3 class="text-lg font-bold text-white mb-2">Humanitarian Aid</h3>
                     <div class="flex justify-center gap-6 text-sm text-zinc-400 mb-3">
@@ -951,7 +980,7 @@ const renderMain = () => {
                     </button>
                 </div>
             </div>
-            
+
             <!-- Campaigns Grid -->
             <div class="flex items-center justify-between mb-4">
                 <h2 class="text-lg font-bold text-white flex items-center gap-2">
@@ -966,13 +995,13 @@ const renderMain = () => {
                 </h2>
                 <span class="text-xs text-zinc-500">${active.filter(c => !CS.selectedCategory || c.category === CS.selectedCategory).length} campaigns</span>
             </div>
-            
+
             <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4" id="cp-grid">
-                ${active.length ? 
+                ${active.length ?
                     active
                         .filter(c => !CS.selectedCategory || c.category === CS.selectedCategory)
-                        .sort((a,b) => Number(b.createdAt||0) - Number(a.createdAt||0))
-                        .map(c => renderCard(c)).join('') 
+                        .sort((a,b) => Number(b.deadline||0) - Number(a.deadline||0))
+                        .map(c => renderCard(c)).join('')
                     : renderEmpty('No active campaigns')
                 }
             </div>
@@ -996,19 +1025,19 @@ const renderDetail = (c) => {
             </div>
         </div>
     `;
-    
+
     const prog = calcProg(c.raisedAmount, c.goalAmount);
     const time = fmtTime(c.deadline);
     const cat = c.category || 'humanitarian';
     const isActive = isCampaignActive(c);
     const isCreator = c.creator?.toLowerCase() === State?.userAddress?.toLowerCase();
-    const canWd = canWithdraw(c);
-    
+    const canWd = canWithdrawCheck(c);
+
     return `
         <div class="charity-page">
             ${renderDonateModal()}
             ${renderEditModal()}
-            
+
             <div class="cp-detail">
                 <!-- Header -->
                 <div class="flex flex-wrap items-center gap-2 mb-4">
@@ -1019,6 +1048,7 @@ const renderDetail = (c) => {
                     <span class="cp-badge" style="background:${CATEGORIES[cat]?.color}20;color:${CATEGORIES[cat]?.color}">
                         ${CATEGORIES[cat]?.emoji} ${CATEGORIES[cat]?.name}
                     </span>
+                    ${c.isBoosted ? renderBoostedBadge() : ''}
                     ${isCreator ? '<span class="cp-badge" style="background:rgba(245,158,11,0.2);color:#f59e0b"><i class="fa-solid fa-user"></i> Your Campaign</span>' : ''}
                     ${isCreator ? `
                         <button class="cp-btn cp-btn-secondary text-xs py-2 ml-auto" onclick="CharityPage.openEdit('${c.id}')">
@@ -1026,9 +1056,9 @@ const renderDetail = (c) => {
                         </button>
                     ` : ''}
                 </div>
-                
+
                 <img src="${getCampImg(c)}" class="cp-detail-img" onerror="this.src='${PLACEHOLDER_IMAGES.default}'">
-                
+
                 <div class="cp-detail-content">
                     <!-- Main Content -->
                     <div class="cp-card-base p-6">
@@ -1036,9 +1066,9 @@ const renderDetail = (c) => {
                         <p class="text-sm text-zinc-500 mb-4">
                             Created by <a href="${EXPLORER_ADDRESS}${c.creator}" target="_blank" class="text-amber-500 hover:text-amber-400">${fmtAddr(c.creator)}</a>
                         </p>
-                        <p class="text-zinc-400 leading-relaxed whitespace-pre-wrap">${c.description || 'No description provided.'}</p>
+                        <p class="text-zinc-400 leading-relaxed whitespace-pre-wrap">${c.description || c.metadataUri || 'No description provided.'}</p>
                     </div>
-                    
+
                     <!-- Sidebar -->
                     <div class="cp-detail-sidebar">
                         <!-- Progress Card -->
@@ -1050,11 +1080,11 @@ const renderDetail = (c) => {
                                 <i class="fa-brands fa-ethereum text-zinc-500"></i> ${fmt(c.raisedAmount)} ETH
                             </p>
                             <p class="text-sm text-zinc-500 mb-4">raised of ${fmt(c.goalAmount)} ETH goal (${prog}%)</p>
-                            
+
                             <div class="grid grid-cols-2 gap-3">
                                 <div class="text-center p-3 bg-zinc-800/50 rounded-xl">
                                     <p class="text-lg font-bold text-white">${c.donationCount || 0}</p>
-                                    <p class="text-[10px] text-zinc-500 uppercase">Donations</p>
+                                    <p class="text-[10px] text-zinc-500 uppercase">Donors</p>
                                 </div>
                                 <div class="text-center p-3 bg-zinc-800/50 rounded-xl">
                                     <p class="text-lg font-bold" style="color:${time.color}">${time.text}</p>
@@ -1062,7 +1092,7 @@ const renderDetail = (c) => {
                                 </div>
                             </div>
                         </div>
-                        
+
                         ${isActive ? `
                         <!-- Donate Card -->
                         <div class="cp-card-base p-5">
@@ -1081,23 +1111,29 @@ const renderDetail = (c) => {
                                 <i class="fa-solid fa-heart"></i> Donate Now
                             </button>
                             <p class="text-center text-[10px] text-zinc-500 mt-2">
-                                <strong>5%</strong> platform fee • <strong>95%</strong> to campaign
+                                <strong>5%</strong> platform fee &bull; <strong>95%</strong> to campaign
                             </p>
                         </div>
                         ` : ''}
-                        
+
                         ${isCreator && isActive ? `
-                        <button id="btn-cancel" class="cp-btn cp-btn-danger w-full" onclick="CharityPage.cancel('${c.id}')">
-                            <i class="fa-solid fa-xmark"></i> Cancel Campaign
+                        <button id="btn-close-campaign" class="cp-btn cp-btn-danger w-full" onclick="CharityPage.closeCampaign('${c.id}')">
+                            <i class="fa-solid fa-xmark"></i> Close Campaign
                         </button>
                         ` : ''}
-                        
+
                         ${isCreator && canWd ? `
                         <button id="btn-withdraw" class="cp-btn cp-btn-primary w-full" onclick="CharityPage.withdraw('${c.id}')">
                             <i class="fa-solid fa-wallet"></i> Withdraw Funds
                         </button>
                         ` : ''}
-                        
+
+                        ${isActive && !isCreator ? `
+                        <button class="cp-btn cp-btn-secondary w-full" onclick="CharityPage.boostCampaign('${c.id}')">
+                            <i class="fa-solid fa-rocket"></i> Boost Campaign
+                        </button>
+                        ` : ''}
+
                         <!-- Share -->
                         <div class="cp-share-box">
                             <p class="cp-share-title">Share this campaign</p>
@@ -1127,72 +1163,6 @@ const renderDetail = (c) => {
 // MODALS
 // ============================================================================
 
-const renderCreateModal = () => `
-    <div class="cp-modal" id="modal-create">
-        <div class="cp-modal-content">
-            <div class="cp-modal-header">
-                <h3 class="cp-modal-title"><i class="fa-solid fa-plus text-amber-500"></i> Create Campaign</h3>
-                <button class="cp-modal-close" onclick="CharityPage.closeModal('create')"><i class="fa-solid fa-xmark"></i></button>
-            </div>
-            <div class="cp-modal-body cp-scrollbar" style="max-height:60vh;overflow-y:auto">
-                <div class="cp-form-group">
-                    <label class="cp-form-label">Category *</label>
-                    <div class="cp-cat-selector">
-                        <label class="cp-cat-option" id="opt-animal" onclick="CharityPage.selCatOpt('animal')">
-                            <input type="radio" name="category" value="animal">
-                            <div class="cp-cat-option-icon">🐾</div>
-                            <div class="cp-cat-option-name">Animal</div>
-                        </label>
-                        <label class="cp-cat-option selected" id="opt-humanitarian" onclick="CharityPage.selCatOpt('humanitarian')">
-                            <input type="radio" name="category" value="humanitarian" checked>
-                            <div class="cp-cat-option-icon">💗</div>
-                            <div class="cp-cat-option-name">Humanitarian</div>
-                        </label>
-                    </div>
-                </div>
-                <div class="cp-form-group">
-                    <label class="cp-form-label">Campaign Image <span>(optional)</span></label>
-                    <div class="cp-tabs" id="create-image-tabs">
-                        <button type="button" class="cp-tab active" data-tab="upload" onclick="CharityPage.switchImageTab('upload','create')">Upload</button>
-                        <button type="button" class="cp-tab" data-tab="url" onclick="CharityPage.switchImageTab('url','create')">URL</button>
-                    </div>
-                    <div class="cp-image-upload" id="create-image-upload" onclick="document.getElementById('create-image-file').click()">
-                        <input type="file" id="create-image-file" accept="image/*" onchange="CharityPage.handleImageSelect(event,'create')">
-                        <div class="cp-image-upload-icon"><i class="fa-solid fa-cloud-arrow-up"></i></div>
-                        <div class="cp-image-upload-text"><span>Click to upload</span> or drag and drop<br><small>PNG, JPG, GIF up to 5MB</small></div>
-                        <div id="create-image-preview"></div>
-                    </div>
-                    <div id="create-image-url-wrap" style="display:none">
-                        <input type="url" id="campaign-image-url" class="cp-form-input" placeholder="https://example.com/image.jpg">
-                    </div>
-                </div>
-                <div class="cp-form-group">
-                    <label class="cp-form-label">Title *</label>
-                    <input type="text" id="campaign-title" class="cp-form-input" placeholder="Campaign title" maxlength="100">
-                </div>
-                <div class="cp-form-group">
-                    <label class="cp-form-label">Description *</label>
-                    <textarea id="campaign-desc" class="cp-form-input cp-form-textarea" placeholder="Tell your story..." maxlength="2000"></textarea>
-                </div>
-                <div class="cp-form-row">
-                    <div class="cp-form-group">
-                        <label class="cp-form-label">Goal (ETH) *</label>
-                        <input type="number" id="campaign-goal" class="cp-form-input" placeholder="1.0" min="0.01" step="0.01">
-                    </div>
-                    <div class="cp-form-group">
-                        <label class="cp-form-label">Duration (Days) *</label>
-                        <input type="number" id="campaign-duration" class="cp-form-input" placeholder="30" min="1" max="180">
-                    </div>
-                </div>
-            </div>
-            <div class="cp-modal-footer">
-                <button class="cp-btn cp-btn-secondary" onclick="CharityPage.closeModal('create')">Cancel</button>
-                <button id="btn-create" class="cp-btn cp-btn-primary" onclick="CharityPage.create()"><i class="fa-solid fa-rocket"></i> Launch</button>
-            </div>
-        </div>
-    </div>
-`;
-
 const renderDonateModal = () => `
     <div class="cp-modal" id="modal-donate">
         <div class="cp-modal-content">
@@ -1216,7 +1186,7 @@ const renderDonateModal = () => `
                     </div>
                 </div>
                 <div class="text-center text-xs text-zinc-500 p-3 bg-zinc-800/50 rounded-xl">
-                    <strong>5%</strong> platform fee • <strong>95%</strong> goes to campaign
+                    <strong>5%</strong> platform fee &bull; <strong>95%</strong> goes to campaign
                 </div>
             </div>
             <div class="cp-modal-footer">
@@ -1255,12 +1225,12 @@ const renderEditModal = () => `
                     <div class="cp-cat-selector">
                         <label class="cp-cat-option" id="edit-opt-animal" onclick="CharityPage.selCatOpt('animal','edit')">
                             <input type="radio" name="edit-category" value="animal">
-                            <div class="cp-cat-option-icon">🐾</div>
+                            <div class="cp-cat-option-icon">${CATEGORIES.animal.emoji}</div>
                             <div class="cp-cat-option-name">Animal</div>
                         </label>
                         <label class="cp-cat-option" id="edit-opt-humanitarian" onclick="CharityPage.selCatOpt('humanitarian','edit')">
                             <input type="radio" name="edit-category" value="humanitarian">
-                            <div class="cp-cat-option-icon">💗</div>
+                            <div class="cp-cat-option-icon">${CATEGORIES.humanitarian.emoji}</div>
                             <div class="cp-cat-option-name">Humanitarian</div>
                         </label>
                     </div>
@@ -1365,7 +1335,6 @@ function updateCreateStepIndicators() {
         const line = document.getElementById(`cp-ln-${i}`);
         if (line) line.className = `cp-step-line ln-${i} ${CS.createStep > i ? 'done' : CS.createStep === i ? 'active' : ''}`;
     });
-    // Update subtitle
     const subtitle = document.querySelector('.charity-page .text-sm.text-zinc-500');
     if (subtitle) subtitle.textContent = `Step ${CS.createStep} of 4`;
 }
@@ -1389,14 +1358,14 @@ function renderCreateStep1(panel) {
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 cp-wiz-cats-grid">
             <div class="cp-wiz-cat-card animal ${CS.createCategory === 'animal' ? 'selected' : ''}" onclick="CharityPage.wizardSelectCategory('animal')">
                 <div class="w-16 h-16 rounded-full bg-emerald-500/15 flex items-center justify-center mx-auto mb-3">
-                    <span class="text-3xl">🐾</span>
+                    <span class="text-3xl">${CATEGORIES.animal.emoji}</span>
                 </div>
                 <h3 class="text-lg font-bold text-white mb-1">Animal Welfare</h3>
                 <p class="text-xs text-zinc-500">Rescue, shelter, and protection of animals</p>
             </div>
             <div class="cp-wiz-cat-card humanitarian ${CS.createCategory === 'humanitarian' ? 'selected' : ''}" onclick="CharityPage.wizardSelectCategory('humanitarian')">
                 <div class="w-16 h-16 rounded-full bg-pink-500/15 flex items-center justify-center mx-auto mb-3">
-                    <span class="text-3xl">💗</span>
+                    <span class="text-3xl">${CATEGORIES.humanitarian.emoji}</span>
                 </div>
                 <h3 class="text-lg font-bold text-white mb-1">Humanitarian Aid</h3>
                 <p class="text-xs text-zinc-500">Help communities and people in need</p>
@@ -1416,7 +1385,7 @@ function renderCreateStep2(panel) {
     const descLen = CS.createDesc.length;
     panel.innerHTML = `
         <h2 class="text-lg font-bold text-white mb-2">Campaign Details</h2>
-        <p class="text-sm text-zinc-500 mb-6">Tell your story — what is this campaign about?</p>
+        <p class="text-sm text-zinc-500 mb-6">Tell your story &mdash; what is this campaign about?</p>
         <div class="cp-form-group">
             <label class="cp-form-label">Title *</label>
             <input type="text" id="wiz-title" class="cp-form-input" placeholder="Give your campaign a clear title" maxlength="100"
@@ -1441,7 +1410,6 @@ function renderCreateStep2(panel) {
 }
 
 function renderCreateStep3(panel) {
-    const hasImage = CS.createImagePreview || CS.createImageUrl;
     panel.innerHTML = `
         <h2 class="text-lg font-bold text-white mb-2">Campaign Image</h2>
         <p class="text-sm text-zinc-500 mb-6">Add a cover image to attract more donors <span class="text-zinc-600">(optional)</span></p>
@@ -1463,7 +1431,7 @@ function renderCreateStep3(panel) {
                     </button>
                 ` : `
                     <div class="cp-image-upload-icon"><i class="fa-solid fa-cloud-arrow-up"></i></div>
-                    <div class="cp-image-upload-text"><span>Click to upload</span> or drag and drop<br><small>PNG, JPG, GIF, WebP — max 5MB</small></div>
+                    <div class="cp-image-upload-text"><span>Click to upload</span> or drag and drop<br><small>PNG, JPG, GIF, WebP &mdash; max 5MB</small></div>
                 `}
             </div>
         </div>
@@ -1499,8 +1467,8 @@ function renderCreateStep4(panel) {
                        value="${CS.createGoal}">
             </div>
             <div class="cp-form-group">
-                <label class="cp-form-label">Duration (Days) * <span>1-180</span></label>
-                <input type="number" id="wiz-duration" class="cp-form-input" placeholder="30" min="1" max="180"
+                <label class="cp-form-label">Duration (Days) * <span>1-365</span></label>
+                <input type="number" id="wiz-duration" class="cp-form-input" placeholder="30" min="1" max="365"
                        value="${CS.createDuration}">
             </div>
         </div>
@@ -1514,11 +1482,11 @@ function renderCreateStep4(panel) {
             </div>
             <div class="cp-wiz-summary-row">
                 <span class="text-zinc-500">Title</span>
-                <span class="text-white truncate ml-4" style="max-width:200px">${CS.createTitle || '—'}</span>
+                <span class="text-white truncate ml-4" style="max-width:200px">${CS.createTitle || '\u2014'}</span>
             </div>
             <div class="cp-wiz-summary-row">
                 <span class="text-zinc-500">Description</span>
-                <span class="text-white">${CS.createDesc ? `${CS.createDesc.length} chars` : '—'}</span>
+                <span class="text-white">${CS.createDesc ? `${CS.createDesc.length} chars` : '\u2014'}</span>
             </div>
             <div class="cp-wiz-summary-row">
                 <span class="text-zinc-500">Image</span>
@@ -1526,10 +1494,10 @@ function renderCreateStep4(panel) {
             </div>
         </div>
 
-        <!-- Cost Info -->
+        <!-- Cost Info (V9: ETH fee, not BKC) -->
         <div class="text-center text-xs text-zinc-500 p-3 bg-zinc-800/50 rounded-xl mb-4">
-            <i class="fa-solid fa-coins text-amber-400 mr-1"></i>
-            Campaign creation costs <strong class="text-amber-400">1 BKC</strong> token
+            <i class="fa-brands fa-ethereum text-amber-400 mr-1"></i>
+            Campaign creation requires a small <strong class="text-amber-400">ETH fee</strong> (gas + ecosystem fee)
         </div>
 
         <div class="flex justify-between mt-6">
@@ -1550,7 +1518,6 @@ function wizardSelectCategory(cat) {
 }
 
 function wizardNext() {
-    // Save current step data before advancing
     switch (CS.createStep) {
         case 1:
             if (!CS.createCategory) return showToast('Select a category', 'error');
@@ -1575,7 +1542,6 @@ function wizardNext() {
 }
 
 function wizardBack() {
-    // Save current data
     saveWizardStepData();
     CS.createStep = Math.max(1, CS.createStep - 1);
     renderCreateStepContent();
@@ -1682,7 +1648,7 @@ function removeWizardImage() {
     if (preview) {
         preview.innerHTML = `
             <div class="cp-image-upload-icon"><i class="fa-solid fa-cloud-arrow-up"></i></div>
-            <div class="cp-image-upload-text"><span>Click to upload</span> or drag and drop<br><small>PNG, JPG, GIF, WebP — max 5MB</small></div>
+            <div class="cp-image-upload-text"><span>Click to upload</span> or drag and drop<br><small>PNG, JPG, GIF, WebP &mdash; max 5MB</small></div>
         `;
     }
     const fileInput = document.getElementById('wiz-image-file');
@@ -1692,22 +1658,19 @@ function removeWizardImage() {
 async function wizardLaunch() {
     if (!State?.isConnected) return showToast('Connect wallet', 'warning');
 
-    // Read final values from inputs
     const goal = document.getElementById('wiz-goal')?.value;
     const duration = document.getElementById('wiz-duration')?.value;
     CS.createGoal = goal || '';
     CS.createDuration = duration || '';
 
-    // Validate
     if (!CS.createCategory) return showToast('Select a category', 'error');
     if (!CS.createTitle) return showToast('Enter a title', 'error');
     if (!CS.createDesc) return showToast('Enter a description', 'error');
     if (!goal || parseFloat(goal) < 0.01) return showToast('Goal must be at least 0.01 ETH', 'error');
-    if (!duration || parseInt(duration) < 1 || parseInt(duration) > 180) return showToast('Duration must be 1-180 days', 'error');
+    if (!duration || parseInt(duration) < 1 || parseInt(duration) > 365) return showToast('Duration must be 1-365 days', 'error');
 
     let imageUrl = CS.createImageUrl || '';
 
-    // Upload image if file selected
     if (CS.createImageFile) {
         try {
             showToast('Uploading image to IPFS...', 'info');
@@ -1715,26 +1678,25 @@ async function wizardLaunch() {
             showToast('Image uploaded!', 'success');
         } catch (e) {
             console.error('Image upload failed:', e);
-            showToast('Image upload failed — campaign will be created without image', 'warning');
+            showToast('Image upload failed - campaign will be created without image', 'warning');
         }
     }
 
-    // Capture values locally before async operations can reset state
     const title = CS.createTitle;
     const desc = CS.createDesc;
     const category = CS.createCategory;
     const goalWei = ethers.parseEther(goal);
     const durationDays = parseInt(duration);
 
+    // V9: description goes as metadataUri param
     await CharityTx.createCampaign({
-        title, description: desc,
+        title, metadataUri: desc,
         goalAmount: goalWei,
         durationDays,
         button: document.getElementById('btn-wizard-launch'),
 
         onSuccess: async (receipt, campaignId) => {
             if (campaignId) {
-                // Save metadata locally (reliable) + Firebase API (backup)
                 saveLocalMeta(campaignId, { imageUrl, category, title, description: desc });
                 try {
                     await fetch(CHARITY_API.saveCampaign, {
@@ -1767,7 +1729,6 @@ function openModal(id) { document.getElementById(`modal-${id}`)?.classList.add('
 function closeModal(id) { document.getElementById(`modal-${id}`)?.classList.remove('active'); }
 
 function openCreate(category = null) {
-    // Reset wizard state
     CS.createStep = category ? 2 : 1;
     CS.createCategory = category;
     CS.createTitle = '';
@@ -1785,7 +1746,7 @@ function openCreate(category = null) {
 function openDonate(id) {
     const c = CS.campaigns.find(x => x.id === id || x.id === String(id));
     if (!c) return;
-    
+
     const infoEl = document.getElementById('donate-campaign-info');
     if (infoEl) {
         infoEl.innerHTML = `
@@ -1798,10 +1759,10 @@ function openDonate(id) {
             </div>
         `;
     }
-    
+
     const amountInput = document.getElementById('donate-amount');
     if (amountInput) amountInput.value = '';
-    
+
     CS.currentCampaign = c;
     openModal('donate');
 }
@@ -1809,10 +1770,10 @@ function openDonate(id) {
 function openMyCampaigns() {
     const userAddr = State?.userAddress?.toLowerCase();
     const myCampaigns = CS.campaigns.filter(c => c.creator?.toLowerCase() === userAddr);
-    
+
     const listEl = document.getElementById('my-campaigns-list');
     if (!listEl) return;
-    
+
     if (myCampaigns.length === 0) {
         listEl.innerHTML = `
             <div class="cp-empty">
@@ -1827,8 +1788,8 @@ function openMyCampaigns() {
     } else {
         listEl.innerHTML = myCampaigns.map(c => {
             const prog = calcProg(c.raisedAmount, c.goalAmount);
-            const canWd = canWithdraw(c);
-            
+            const canWd = canWithdrawCheck(c);
+
             return `
                 <div class="flex items-center gap-3 p-3 bg-zinc-800/30 rounded-xl mb-2 hover:bg-zinc-800/50 transition-colors">
                     <img src="${getCampImg(c)}" class="w-14 h-14 rounded-lg object-cover cursor-pointer" onclick="CharityPage.viewCampaign('${c.id}')">
@@ -1850,7 +1811,7 @@ function openMyCampaigns() {
             `;
         }).join('');
     }
-    
+
     openModal('my');
 }
 
@@ -1861,25 +1822,25 @@ function openEdit(id) {
         showToast('Not your campaign', 'error');
         return;
     }
-    
+
     CS.editingCampaign = c;
     CS.pendingImageFile = null;
-    
+
     document.getElementById('edit-campaign-id').value = c.id;
     document.getElementById('edit-title').value = c.title || '';
     document.getElementById('edit-desc').value = c.description || '';
     document.getElementById('edit-image-url').value = c.imageUrl || '';
-    
+
     document.querySelectorAll('#modal-edit .cp-cat-option').forEach(el => el.classList.remove('selected'));
     document.getElementById(`edit-opt-${c.category || 'humanitarian'}`)?.classList.add('selected');
-    
+
     const previewEl = document.getElementById('edit-image-preview');
     if (previewEl && c.imageUrl) {
         previewEl.innerHTML = `<img src="${c.imageUrl}" class="cp-image-preview">`;
     } else if (previewEl) {
         previewEl.innerHTML = '';
     }
-    
+
     openModal('edit');
 }
 
@@ -1896,90 +1857,31 @@ function setAmt(val) {
 }
 
 // ============================================================================
-// TRANSACTION HANDLERS
+// TRANSACTION HANDLERS (V9-aligned)
 // ============================================================================
-
-async function create() {
-    if (!State?.isConnected) return showToast('Connect wallet', 'warning');
-    
-    const catEl = document.querySelector('#modal-create .cp-cat-option.selected input');
-    const category = catEl?.value || 'humanitarian';
-    const title = document.getElementById('campaign-title')?.value?.trim();
-    const desc = document.getElementById('campaign-desc')?.value?.trim();
-    const goal = document.getElementById('campaign-goal')?.value;
-    const duration = document.getElementById('campaign-duration')?.value;
-    let imageUrl = document.getElementById('campaign-image-url')?.value?.trim();
-    
-    if (!title) return showToast('Enter a title', 'error');
-    if (!desc) return showToast('Enter a description', 'error');
-    if (!goal || parseFloat(goal) < 0.01) return showToast('Goal must be at least 0.01 ETH', 'error');
-    if (!duration || parseInt(duration) < 1) return showToast('Duration must be at least 1 day', 'error');
-    
-    // Upload image if file selected
-    if (CS.pendingImageFile) {
-        try {
-            showToast('Uploading image...', 'info');
-            imageUrl = await uploadImageToServer(CS.pendingImageFile);
-        } catch (e) {
-            console.error('Image upload failed:', e);
-        }
-    }
-    
-    const goalWei = ethers.parseEther(goal);
-
-    await CharityTx.createCampaign({
-        title, description: desc, goalAmount: goalWei, durationDays: parseInt(duration),
-        button: document.getElementById('btn-create'),
-        
-        onSuccess: async (receipt, campaignId) => {
-            if (campaignId) {
-                saveLocalMeta(campaignId, { imageUrl, category, title, description: desc });
-                try {
-                    await fetch(CHARITY_API.saveCampaign, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ id: campaignId, title, description: desc, category, imageUrl, creator: State.userAddress })
-                    });
-                } catch (e) {}
-            }
-
-            showToast('Campaign created!', 'success');
-            closeModal('create');
-            CS.pendingImageFile = null;
-            await loadData();
-            render();
-        },
-        
-        onError: (error) => {
-            if (!error.cancelled && error.type !== 'user_rejected') {
-                showToast(error.message?.slice(0, 80) || 'Failed', 'error');
-            }
-        }
-    });
-}
 
 async function donate() {
     if (!State?.isConnected) return showToast('Connect wallet', 'warning');
-    
+
     const c = CS.currentCampaign;
     if (!c) return;
-    
+
     const amount = document.getElementById('donate-amount')?.value;
     if (!amount || parseFloat(amount) < 0.001) return showToast('Minimum 0.001 ETH', 'error');
-    
+
     const amountWei = ethers.parseEther(amount);
-    
+
     await CharityTx.donate({
         campaignId: c.id, amount: amountWei,
         button: document.getElementById('btn-donate'),
-        
+
         onSuccess: async () => {
-            showToast('❤️ Thank you for your donation!', 'success');
+            showToast('Thank you for your donation!', 'success');
             closeModal('donate');
             await loadData();
             render();
         },
-        
+
         onError: (error) => {
             if (!error.cancelled && error.type !== 'user_rejected') {
                 showToast(error.message?.slice(0, 80) || 'Failed', 'error');
@@ -1990,22 +1892,22 @@ async function donate() {
 
 async function donateDetail(id) {
     if (!State?.isConnected) return showToast('Connect wallet', 'warning');
-    
+
     const amount = document.getElementById('detail-amount')?.value;
     if (!amount || parseFloat(amount) < 0.001) return showToast('Minimum 0.001 ETH', 'error');
-    
+
     const amountWei = ethers.parseEther(amount);
-    
+
     await CharityTx.donate({
         campaignId: id, amount: amountWei,
         button: document.getElementById('btn-donate-detail'),
-        
+
         onSuccess: async () => {
-            showToast('❤️ Thank you for your donation!', 'success');
+            showToast('Thank you for your donation!', 'success');
             await loadData();
             await loadDetail(id);
         },
-        
+
         onError: (error) => {
             if (!error.cancelled && error.type !== 'user_rejected') {
                 showToast(error.message?.slice(0, 80) || 'Failed', 'error');
@@ -2014,20 +1916,21 @@ async function donateDetail(id) {
     });
 }
 
-async function cancel(id) {
+// V9: closeCampaign replaces cancelCampaign
+async function closeCampaignAction(id) {
     if (!State?.isConnected) return showToast('Connect wallet', 'warning');
-    if (!confirm('Cancel this campaign? This cannot be undone.')) return;
-    
-    await CharityTx.cancelCampaign({
+    if (!confirm('Close this campaign? You can still withdraw raised funds.')) return;
+
+    await CharityTx.closeCampaign({
         campaignId: id,
-        button: document.getElementById('btn-cancel'),
-        
+        button: document.getElementById('btn-close-campaign'),
+
         onSuccess: async () => {
-            showToast('Campaign cancelled', 'success');
+            showToast('Campaign closed', 'success');
             await loadData();
             render();
         },
-        
+
         onError: (error) => {
             if (!error.cancelled && error.type !== 'user_rejected') {
                 showToast(error.message?.slice(0, 80) || 'Failed', 'error');
@@ -2036,29 +1939,54 @@ async function cancel(id) {
     });
 }
 
-async function withdraw(id) {
+async function withdrawAction(id) {
     if (!State?.isConnected) return showToast('Connect wallet', 'warning');
-    
+
     const c = CS.campaigns.find(x => x.id === id || x.id === String(id));
     if (!c) return;
-    
+
     const prog = calcProg(c.raisedAmount, c.goalAmount);
-    let msg = `Withdraw ${fmt(c.raisedAmount)} ETH?\n\n5% platform fee applies.`;
+    let msg = `Withdraw ${fmt(c.raisedAmount)} ETH?`;
     if (prog < 100) msg += `\nGoal not reached - partial withdrawal.`;
     if (!confirm(msg)) return;
-    
+
     await CharityTx.withdraw({
         campaignId: id,
         button: document.getElementById(`btn-withdraw-${id}`) || document.getElementById('btn-withdraw'),
-        
+
         onSuccess: async () => {
-            showToast('✅ Funds withdrawn successfully!', 'success');
+            showToast('Funds withdrawn successfully!', 'success');
             closeModal('my');
             await loadData();
             render();
             if (CS.currentCampaign?.id === id) await loadDetail(id);
         },
-        
+
+        onError: (error) => {
+            if (!error.cancelled && error.type !== 'user_rejected') {
+                showToast(error.message?.slice(0, 80) || 'Failed', 'error');
+            }
+        }
+    });
+}
+
+async function boostCampaignAction(id) {
+    if (!State?.isConnected) return showToast('Connect wallet', 'warning');
+    if (!confirm('Boost this campaign for visibility? A small ETH fee applies.')) return;
+
+    await CharityTx.boostCampaign({
+        campaignId: id,
+
+        onSuccess: async () => {
+            showToast('Campaign boosted!', 'success');
+            await loadData();
+            if (CS.currentCampaign?.id === String(id)) {
+                await loadDetail(id);
+            } else {
+                render();
+            }
+        },
+
         onError: (error) => {
             if (!error.cancelled && error.type !== 'user_rejected') {
                 showToast(error.message?.slice(0, 80) || 'Failed', 'error');
@@ -2069,17 +1997,16 @@ async function withdraw(id) {
 
 async function saveEdit() {
     if (!State?.isConnected) return showToast('Connect wallet', 'warning');
-    
+
     const id = document.getElementById('edit-campaign-id')?.value;
     const title = document.getElementById('edit-title')?.value?.trim();
     const desc = document.getElementById('edit-desc')?.value?.trim();
     let imageUrl = document.getElementById('edit-image-url')?.value?.trim();
     const catEl = document.querySelector('#modal-edit .cp-cat-option.selected input');
     const category = catEl?.value || 'humanitarian';
-    
+
     if (!title) return showToast('Enter title', 'error');
-    
-    // Upload new image if selected
+
     if (CS.pendingImageFile) {
         try {
             showToast('Uploading image...', 'info');
@@ -2088,10 +2015,10 @@ async function saveEdit() {
             console.error('Image upload failed:', e);
         }
     }
-    
+
     const btn = document.getElementById('btn-save-edit');
     if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Saving...'; }
-    
+
     try {
         saveLocalMeta(id, { imageUrl, category, title, description: desc });
         await fetch(CHARITY_API.saveCampaign, {
@@ -2104,7 +2031,7 @@ async function saveEdit() {
         closeModal('edit');
         CS.pendingImageFile = null;
         await loadData();
-        
+
         if (CS.currentCampaign?.id === id) {
             await loadDetail(id);
         } else {
@@ -2125,7 +2052,7 @@ function share(platform) {
     const c = CS.currentCampaign;
     if (!c) return;
     const url = getShareUrl(c.id);
-    const txt = `🙏 Support "${c.title}" on Backcoin Charity!\n\n${fmt(c.raisedAmount)} raised of ${fmt(c.goalAmount)} goal.\n\n`;
+    const txt = `Support "${c.title}" on Backcoin Charity!\n\n${fmt(c.raisedAmount)} raised of ${fmt(c.goalAmount)} goal.\n\n`;
     let shareUrl;
     if (platform === 'twitter') shareUrl = `https://twitter.com/intent/tweet?text=${encodeURIComponent(txt)}&url=${encodeURIComponent(url)}`;
     else if (platform === 'telegram') shareUrl = `https://t.me/share/url?url=${encodeURIComponent(url)}&text=${encodeURIComponent(txt)}`;
@@ -2151,7 +2078,7 @@ function updateGrid() {
     if (!grid) return;
     let active = CS.campaigns.filter(c => isCampaignActive(c));
     if (CS.selectedCategory) active = active.filter(c => c.category === CS.selectedCategory);
-    active.sort((a, b) => Number(b.createdAt || 0) - Number(a.createdAt || 0));
+    active.sort((a, b) => Number(b.deadline || 0) - Number(a.deadline || 0));
     grid.innerHTML = active.length ? active.map(c => renderCard(c)).join('') : renderEmpty('No campaigns');
 }
 
@@ -2160,29 +2087,34 @@ async function loadDetail(id) {
     CS.isLoading = true;
     const container = getContainer();
     if (container) container.innerHTML = renderLoading();
-    
+
     try {
         let c = CS.campaigns.find(x => x.id === id || x.id === String(id));
         if (!c) {
-            const provider = State?.publicProvider;
-            if (provider) {
-                const contract = new ethers.Contract(addresses.charityPool, charityPoolABI, provider);
-                const data = await contract.getCampaign(id);
+            // V9: Use CharityTx.getCampaign() instead of wrong local ABI
+            try {
+                const data = await CharityTx.getCampaign(id);
                 const localMeta = getLocalMeta(id);
                 c = {
                     id: String(id),
-                    creator: data.creator || data[0],
-                    title: data.title || data[1] || `Campaign #${id}`,
-                    description: data.description || data[2] || '',
-                    goalAmount: BigInt((data.goalAmount || data[3]).toString()),
-                    raisedAmount: BigInt((data.raisedAmount || data[4]).toString()),
-                    donationCount: Number(data.donationCount || data[5]),
-                    deadline: Number(data.deadline || data[6]),
-                    createdAt: Number(data.createdAt || data[7]),
-                    status: Number(data.status || data[10]),
+                    creator: data.creator,
+                    title: data.title || `Campaign #${id}`,
+                    description: localMeta?.description || data.metadataUri || '',
+                    metadataUri: data.metadataUri,
+                    goalAmount: data.goalAmount,
+                    raisedAmount: data.raisedAmount,
+                    raised: data.raisedAmount,
+                    donationCount: data.donationCount,
+                    deadline: data.deadline,
+                    status: data.status,
+                    isBoosted: data.isBoosted,
+                    isActive: data.isActive,
+                    progress: data.progress,
                     category: localMeta?.category || 'humanitarian',
                     imageUrl: localMeta?.imageUrl || null
                 };
+            } catch (e) {
+                console.error(`[CharityPage] loadDetail(${id}) failed:`, e);
             }
         }
         CS.currentCampaign = c;
@@ -2201,7 +2133,7 @@ async function loadDetail(id) {
 function getContainer() {
     let container = document.getElementById('charity-container');
     if (container) return container;
-    
+
     const charitySection = document.getElementById('charity');
     if (charitySection) {
         container = document.createElement('div');
@@ -2210,7 +2142,7 @@ function getContainer() {
         charitySection.appendChild(container);
         return container;
     }
-    
+
     return null;
 }
 
@@ -2272,12 +2204,15 @@ export const CharityPage = {
     render(isActive) { if (isActive) render(); },
     update() { if (CS.currentView === 'main') updateGrid(); },
     refresh, openModal, closeModal, openCreate, openDonate, openMyCampaigns, openEdit,
-    create, donate, donateDetail, cancel, withdraw, saveEdit,
+    donate, donateDetail,
+    closeCampaign: closeCampaignAction,
+    cancel: closeCampaignAction,     // backward-compat alias
+    withdraw: withdrawAction,
+    boostCampaign: boostCampaignAction,
+    saveEdit,
     selCatOpt, setAmt, goBack, viewCampaign, selectCat, clearCat, share, copyLink,
     handleImageSelect, removeImage, switchImageTab,
     // Wizard
     wizardSelectCategory, wizardNext, wizardBack, wizardSkipImage, cancelCreate,
     wizardUpdateCharCount, handleWizardImageSelect, removeWizardImage, wizardLaunch
 };
-
-window.CharityPage = CharityPage;
