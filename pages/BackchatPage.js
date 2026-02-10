@@ -29,6 +29,7 @@ import { showToast } from '../ui-feedback.js';
 import { addresses, ipfsGateway, agoraABI } from '../config.js';
 import { formatBigNumber } from '../utils.js';
 import { BackchatTx } from '../modules/transactions/index.js';
+import { calculateFeeClientSide } from '../modules/core/index.js';
 
 // ============================================================================
 // CONSTANTS
@@ -532,10 +533,26 @@ async function loadFees() {
         if (!contract) return;
         let votePrice = 100000000n;
         try { votePrice = await contract.VOTE_PRICE(); } catch {}
+
+        // Calculate real fees from ecosystem contract
         const defaultFee = ethers.parseEther('0.0001');
+        let postFee = defaultFee, replyFee = defaultFee, likeFee = defaultFee;
+        let followFee = defaultFee, repostFee = defaultFee;
+        try {
+            [postFee, replyFee, repostFee, likeFee, followFee] = await Promise.all([
+                calculateFeeClientSide(ethers.id('AGORA_POST'), 0n),
+                calculateFeeClientSide(ethers.id('AGORA_REPLY'), 0n),
+                calculateFeeClientSide(ethers.id('AGORA_REPOST'), 0n),
+                calculateFeeClientSide(ethers.id('AGORA_LIKE'), 0n),
+                calculateFeeClientSide(ethers.id('AGORA_FOLLOW'), 0n)
+            ]);
+        } catch (e) {
+            console.warn('[Agora] Fee calc fallback to default:', e.message);
+        }
+
         BC.fees = {
-            post: defaultFee, reply: defaultFee, like: defaultFee,
-            follow: defaultFee, repost: defaultFee,
+            post: postFee, reply: replyFee, like: likeFee,
+            follow: followFee, repost: repostFee,
             superLikeMin: votePrice, downvoteMin: votePrice,
             boostMin: ethers.parseEther('0.0005'),
             badge: ethers.parseEther('0.001')

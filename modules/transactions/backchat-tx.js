@@ -30,7 +30,7 @@
 // - Badge: 0.001 ETH for 1 year
 // ============================================================================
 
-import { txEngine } from '../core/index.js';
+import { txEngine, calculateFeeClientSide } from '../core/index.js';
 import { resolveOperator } from '../core/operator.js';
 import { addresses, contractAddresses, agoraABI } from '../../config.js';
 
@@ -137,6 +137,7 @@ export async function createPost({
 }) {
     const ethers = window.ethers;
     let storedOperator = operator;
+    let fee = 0n;
 
     return await txEngine.execute({
         name: 'CreatePost', button,
@@ -144,10 +145,13 @@ export async function createPost({
         getContract: async (signer) => getAgoraContract(signer),
         method: 'createPost',
         args: () => [content, tag, contentType, resolveOperator(storedOperator)],
+        get value() { return fee; },
 
         validate: async (signer, userAddress) => {
             if (!content || content.length === 0) throw new Error('Content is required');
             if (tag < 0 || tag > 14) throw new Error('Tag must be 0-14');
+            fee = await calculateFeeClientSide(ethers.id('AGORA_POST'), 0n);
+            console.log('[Agora] Post fee:', ethers.formatEther(fee), 'ETH');
         },
 
         onSuccess: async (receipt) => {
@@ -177,6 +181,7 @@ export async function createReply({
 }) {
     const ethers = window.ethers;
     let storedOperator = operator;
+    let fee = 0n;
 
     return await txEngine.execute({
         name: 'CreateReply', button,
@@ -184,9 +189,11 @@ export async function createReply({
         getContract: async (signer) => getAgoraContract(signer),
         method: 'createReply',
         args: () => [parentId, content, contentType, resolveOperator(storedOperator)],
+        get value() { return fee; },
 
         validate: async (signer, userAddress) => {
             if (!content) throw new Error('Content is required');
+            fee = await calculateFeeClientSide(ethers.id('AGORA_REPLY'), 0n);
         },
 
         onSuccess: async (receipt) => {
@@ -214,7 +221,9 @@ export async function createRepost({
     originalPostId, quote = '', operator,
     button = null, onSuccess = null, onError = null
 }) {
+    const ethers = window.ethers;
     let storedOperator = operator;
+    let fee = 0n;
 
     return await txEngine.execute({
         name: 'CreateRepost', button,
@@ -222,6 +231,11 @@ export async function createRepost({
         getContract: async (signer) => getAgoraContract(signer),
         method: 'createRepost',
         args: () => [originalPostId, quote || '', resolveOperator(storedOperator)],
+        get value() { return fee; },
+
+        validate: async () => {
+            fee = await calculateFeeClientSide(ethers.id('AGORA_REPOST'), 0n);
+        },
         onSuccess, onError
     });
 }
@@ -238,7 +252,9 @@ export async function like({
     postId, operator,
     button = null, onSuccess = null, onError = null
 }) {
+    const ethers = window.ethers;
     let storedOperator = operator;
+    let fee = 0n;
 
     return await txEngine.execute({
         name: 'Like', button,
@@ -246,11 +262,13 @@ export async function like({
         getContract: async (signer) => getAgoraContract(signer),
         method: 'like',
         args: () => [postId, resolveOperator(storedOperator)],
+        get value() { return fee; },
 
         validate: async (signer, userAddress) => {
             const contract = await getAgoraContractReadOnly();
             const alreadyLiked = await contract.hasLiked(postId, userAddress);
             if (alreadyLiked) throw new Error('Already liked this post');
+            fee = await calculateFeeClientSide(ethers.id('AGORA_LIKE'), 0n);
         },
         onSuccess, onError
     });
@@ -315,7 +333,9 @@ export async function follow({
     toFollow, operator,
     button = null, onSuccess = null, onError = null
 }) {
+    const ethers = window.ethers;
     let storedOperator = operator;
+    let fee = 0n;
 
     return await txEngine.execute({
         name: 'Follow', button,
@@ -323,10 +343,12 @@ export async function follow({
         getContract: async (signer) => getAgoraContract(signer),
         method: 'follow',
         args: () => [toFollow, resolveOperator(storedOperator)],
+        get value() { return fee; },
 
         validate: async (signer, userAddress) => {
             if (!toFollow || toFollow === '0x0000000000000000000000000000000000000000') throw new Error('Invalid address');
             if (toFollow.toLowerCase() === userAddress.toLowerCase()) throw new Error('Cannot follow yourself');
+            fee = await calculateFeeClientSide(ethers.id('AGORA_FOLLOW'), 0n);
         },
         onSuccess, onError
     });
