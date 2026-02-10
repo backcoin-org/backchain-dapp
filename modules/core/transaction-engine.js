@@ -1,22 +1,12 @@
 // modules/js/core/transaction-engine.js
-// ✅ PRODUCTION V1.5 - Fixed contract method validation
-// 
-// CHANGES V1.5:
-// - Added contract method validation before estimateGas
-// - Better error messages when contract[method] is undefined
-// - Added debug logging for contract instantiation
-// - Clearer error when ABI doesn't match contract
+// ✅ PRODUCTION V2.0 - Zero MetaMask RPC reads
 //
-// CHANGES V1.4:
-// - Fixed: value getter was being evaluated at destructuring time
-// - Now accesses config.value directly to preserve getter pattern
-// - This fixes InsufficientServiceFee errors when value is set in validate()
-//
-// CHANGES V1.3:
-// - _executeApproval now uses Alchemy to wait for confirmation
-// - _waitForConfirmation uses Alchemy instead of MetaMask RPC
-// - This fixes rate-limit issues when MetaMask has a slow/blocked RPC
-// - MetaMask is ONLY used for signing transactions
+// CHANGES V2.0:
+// - ALL read calls (estimateGas, getFeeData, waitForConfirmation) use Alchemy
+// - MetaMask is ONLY used for signing transactions (approve + execute)
+// - Approval uses fixed gasLimit (100k) to avoid estimateGas through MetaMask
+// - Main tx estimateGas uses public provider with from: userAddress
+// - _waitForConfirmation polls Alchemy directly (no tx.wait())
 //
 // ============================================================================
 // TRANSACTION FLOW:
@@ -405,14 +395,18 @@ export class TransactionEngine {
             } else {
                 ui.setPhase('simulating');
                 console.log(`[TX] Simulating transaction...`);
-                
+
                 try {
-                    // V1.5: Extra check before calling estimateGas
-                    if (!contract[method] || typeof contract[method].estimateGas !== 'function') {
+                    // V2.0: Use public provider for estimateGas (avoid MetaMask RPC rate limits)
+                    const readProvider = NetworkManager.getProvider();
+                    const contractAddress = await contract.getAddress();
+                    const readContract = new ethers.Contract(contractAddress, contract.interface, readProvider);
+
+                    if (!readContract[method] || typeof readContract[method].estimateGas !== 'function') {
                         throw new Error(`estimateGas not available for method "${method}"`);
                     }
-                    
-                    gasEstimate = await contract[method].estimateGas(...resolvedArgs, txOptions);
+
+                    gasEstimate = await readContract[method].estimateGas(...resolvedArgs, { ...txOptions, from: userAddress });
                     console.log(`[TX] Gas estimate: ${gasEstimate.toString()}`);
                 } catch (simError) {
                     console.error(`[TX] Simulation failed:`, simError.message);
@@ -583,7 +577,9 @@ export class TransactionEngine {
         try {
             // V1.7: Bump maxFeePerGas on approval too (same fix as main tx)
             // V1.9: Use public provider for fee data (avoid MetaMask RPC rate limits)
-            let approvalTxOptions = {};
+            let approvalTxOptions = {
+                gasLimit: 100000n  // ERC-20 approve always < 50k gas; avoids estimateGas through MetaMask
+            };
             try {
                 const readProvider = NetworkManager.getProvider();
                 const feeData = await readProvider.getFeeData();
@@ -593,7 +589,7 @@ export class TransactionEngine {
                 }
             } catch {}
 
-            // Send approval transaction (uses MetaMask to sign)
+            // Send approval transaction (uses MetaMask to sign, gas pre-set to avoid MetaMask RPC)
             const tx = await tokenContract.approve(spender, approveAmount, approvalTxOptions);
             
             // Wait for confirmation using Alchemy provider instead of MetaMask
@@ -695,36 +691,14 @@ export class TransactionEngine {
      * @private
      */
     async _waitForConfirmation(tx, provider) {
-        // Always use Alchemy for confirmation checks
+        // V2.0: Always use Alchemy for confirmation (avoid MetaMask RPC rate limits)
         const readProvider = NetworkManager.getProvider();
-        
-        try {
-            // Try standard wait first
-            const receipt = await Promise.race([
-                tx.wait(),
-                new Promise((_, reject) => 
-                    setTimeout(() => reject(new Error('wait_timeout')), 10000)
-                )
-            ]);
-            
-            if (receipt.status === 1) {
-                return receipt;
-            }
-            
-            if (receipt.status === 0) {
-                throw new Error('Transaction reverted on-chain');
-            }
 
-            return receipt;
+        // Poll for receipt using Alchemy directly (skip tx.wait() which uses MetaMask)
+        for (let i = 0; i < 30; i++) { // Max 30 attempts (45 seconds)
+            await new Promise(r => setTimeout(r, 1500));
 
-        } catch (waitError) {
-            // Handle wait errors - use Alchemy provider instead
-            console.warn('[TX] tx.wait() issue, using Alchemy to check:', waitError.message);
-
-            // Poll for receipt using Alchemy
-            for (let i = 0; i < 20; i++) { // Max 20 attempts (30 seconds)
-                await new Promise(r => setTimeout(r, 1500));
-                
+            try {
                 const receipt = await readProvider.getTransactionReceipt(tx.hash);
 
                 if (receipt && receipt.status === 1) {
@@ -735,16 +709,19 @@ export class TransactionEngine {
                 if (receipt && receipt.status === 0) {
                     throw new Error('Transaction reverted on-chain');
                 }
+            } catch (pollError) {
+                // Ignore individual poll errors, keep trying
+                if (pollError.message === 'Transaction reverted on-chain') throw pollError;
             }
-
-            // If we have a hash, assume success (optimistic)
-            console.warn('[TX] Could not verify receipt, assuming success');
-            return { 
-                hash: tx.hash, 
-                status: 1,
-                blockNumber: 0 
-            };
         }
+
+        // If we have a hash, assume success (optimistic)
+        console.warn('[TX] Could not verify receipt after 45s, assuming success');
+        return {
+            hash: tx.hash,
+            status: 1,
+            blockNumber: 0
+        };
     }
 
     /**
