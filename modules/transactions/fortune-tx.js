@@ -90,6 +90,7 @@ const FORTUNE_ABI = [
     // Events
     'event GameCommitted(uint256 indexed gameId, address indexed player, uint256 wagerAmount, uint8 tierMask, address operator)',
     'event GameRevealed(uint256 indexed gameId, address indexed player, uint256 grossWager, uint256 prizeWon, uint8 tierMask, uint8 matchCount, address operator)',
+    'event GameDetails(uint256 indexed gameId, uint8 tierMask, uint256[] guesses, uint256[] rolls, bool[] matches)',
     'event GameExpired(uint256 indexed gameId, address indexed player, uint256 forfeitedAmount)'
 ];
 
@@ -299,6 +300,7 @@ export async function revealPlay({
 
         onSuccess: async (receipt) => {
             let gameResult = null;
+            let details = null;
             try {
                 const iface = new ethers.Interface(FORTUNE_ABI);
                 for (const log of receipt.logs) {
@@ -313,10 +315,23 @@ export async function revealPlay({
                                 matchCount: Number(parsed.args.matchCount),
                                 won: parsed.args.prizeWon > 0n
                             };
+                        } else if (parsed.name === 'GameDetails') {
+                            details = {
+                                guesses: parsed.args.guesses.map(g => Number(g)),
+                                rolls: parsed.args.rolls.map(r => Number(r)),
+                                matches: [...parsed.args.matches]
+                            };
                         }
                     } catch {}
                 }
             } catch {}
+
+            // Merge GameDetails into gameResult
+            if (gameResult && details) {
+                gameResult.rolls = details.rolls;
+                gameResult.guesses = details.guesses;
+                gameResult.matches = details.matches;
+            }
 
             removePendingGame(gameId);
             if (onSuccess) onSuccess(receipt, gameResult);
