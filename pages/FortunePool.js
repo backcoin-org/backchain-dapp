@@ -1101,7 +1101,7 @@ function setupWagerEvents(maxMulti, balanceNum) {
         try {
             let success = false;
             try {
-                const res = await fetch(`https://faucet-4wvdcuoouq-uc.a.run.app?address=${State.userAddress}`);
+                const res = await fetch(`/api/faucet?address=${State.userAddress}`);
                 const data = await res.json();
                 if (res.ok && data.success) { success = true; }
                 else console.warn('[Faucet] API:', data.error);

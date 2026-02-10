@@ -15,7 +15,7 @@ import { addresses, contractAddresses } from '../../config.js';
 // CONFIGURATION
 // ============================================================================
 
-const FAUCET_API_URL = "https://faucet-4wvdcuoouq-uc.a.run.app";
+const FAUCET_API_URL = "/api/faucet";
 
 function getFaucetAddress() {
     return addresses?.faucet ||

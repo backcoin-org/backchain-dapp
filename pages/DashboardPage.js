@@ -63,11 +63,11 @@ const DashboardState = {
 // CONFIG
 // ============================================================================
 const EXPLORER_BASE_URL = "https://sepolia.arbiscan.io/tx/";
-const FAUCET_API_URL = "https://faucet-4wvdcuoouq-uc.a.run.app";
+const FAUCET_API_URL = "/api/faucet";
 const NETWORK_ACTIVITY_API = "https://getrecentactivity-4wvdcuoouq-uc.a.run.app";
 const SYSTEM_DATA_API = "https://getsystemdata-4wvdcuoouq-uc.a.run.app";
-const FAUCET_BKC_AMOUNT = "20";
-const FAUCET_ETH_AMOUNT = "0.001";
+const FAUCET_BKC_AMOUNT = "1,000";
+const FAUCET_ETH_AMOUNT = "0.01";
 
 // ============================================================================
 // ACTIVITY ICONS — All 76+ types preserved
@@ -891,7 +891,7 @@ function renderDashboardLayout() {
                 </div>
                 <div class="dash-faucet-info">
                     <h3 id="faucet-title">Get Free Testnet Tokens</h3>
-                    <p id="faucet-desc">Claim BKC tokens and ETH for gas — free every hour</p>
+                    <p id="faucet-desc">Claim BKC tokens and ETH for gas — free every 24h</p>
                     <div class="dash-faucet-amounts">
                         <span class="dash-faucet-badge" style="color:#22d3ee">
                             <i class="fa-solid fa-coins" style="font-size:10px"></i>${FAUCET_BKC_AMOUNT} BKC
