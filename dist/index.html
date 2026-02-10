@@ -5,9 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     
     <title>Backcoin.org | Dashboard</title>
+
 
-    <script src="https://cdn.tailwindcss.com"></script>
-    
     <meta http-equiv="Content-Security-Policy" content="
         default-src * 'unsafe-inline' 'unsafe-eval' data: blob:;
         script-src * 'unsafe-inline' 'unsafe-eval';
@@ -24,31 +23,6 @@
     <script src="https://pay.coinbase.com/pay-sdk.js" defer></script>
     <script src="https://static.moonpay.com/web-sdk/v1/moonpay-web-sdk.min.js" defer></script>
     
-    <script>
-        tailwind.config = {
-            darkMode: 'class',
-            theme: {
-                extend: {
-                    animation: {
-                        'gradient-x': 'gradient-x 15s ease infinite',
-                        'bounce-slow': 'bounce-slow 3s infinite ease-in-out',
-                        'pulse-slow': 'pulse 4s cubic-bezier(0.4, 0, 0.6, 1) infinite',
-                        'construct-hammer': 'construct-hammer 2s ease-in-out infinite',
-                        'construct-gear': 'spin 10s linear infinite',
-                        'construct-gear-rev': 'spin 10s linear infinite reverse',
-                        'fadeIn': 'fadeIn 0.5s ease-out',
-                    },
-                    keyframes: {
-                        'gradient-x': { '0%, 100%': { 'background-size': '200% 200%', 'background-position': 'left center' }, '50%': { 'background-size': '200% 200%', 'background-position': 'right center' } },
-                        'bounce-slow': { '0%, 100%': { transform: 'translateY(-5%)' }, '50%': { transform: 'translateY(5%)' } },
-                        'construct-hammer': { '0%, 100%': { transform: 'rotate(-10deg)' }, '50%': { transform: 'rotate(30deg)' } },
-                        'fadeIn': { '0%': { opacity: 0 }, '100%': { opacity: 1 } }
-                    }
-                }
-            }
-        }
-    </script>
-
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
         :root {
@@ -123,7 +97,8 @@
         .partner-logo {
             height: 40px;
             width: auto;
-            object-fit: contain;
+            -o-object-fit: contain;
+               object-fit: contain;
             margin-bottom: 10px;
             filter: grayscale(100%);
             transition: filter 0.3s ease;
@@ -208,8 +183,8 @@
             .wallet-btn { padding: 8px 12px; font-size: 12px; }
         }
     </style>
-  <script type="module" crossorigin src="/assets/index-DUUYnjf_.js"></script>
-  <link rel="stylesheet" crossorigin href="/assets/index-CJlgJZca.css">
+  <script type="module" crossorigin src="/assets/index-mwqVVuQG.js"></script>
+  <link rel="stylesheet" crossorigin href="/assets/index-DRgwemgw.css">
 </head>
 <body class="antialiased">
 
