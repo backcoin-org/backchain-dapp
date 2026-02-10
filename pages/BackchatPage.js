@@ -1911,3 +1911,6 @@ export const BackchatPage = {
 
     _updateCharCount
 };
+
+// Expose globally for inline onclick handlers
+window.BackchatPage = BackchatPage;
