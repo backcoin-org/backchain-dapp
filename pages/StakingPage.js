@@ -1084,8 +1084,7 @@ async function handleStake() {
     } catch { return showToast('Invalid amount', 'error'); }
 
     try {
-        const provider = new ethers.BrowserProvider(window.ethereum);
-        const ethBalance = await provider.getBalance(State.userAddress);
+        const ethBalance = await State.publicProvider.getBalance(State.userAddress);
         if (ethBalance < ethers.parseEther("0.001")) return showToast('Insufficient ETH for gas', 'error');
     } catch {}
 

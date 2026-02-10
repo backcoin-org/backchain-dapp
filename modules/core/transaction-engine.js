@@ -443,15 +443,16 @@ export class TransactionEngine {
             const finalTxOptions = { ...txOptions, gasLimit };
 
             // V1.6: Bump maxFeePerGas to avoid "baseFee exceeds maxFeePerGas" on Arbitrum
+            // V1.9: Use public provider for fee data (avoid MetaMask RPC rate limits)
             try {
-                const feeData = await signer.provider.getFeeData();
+                const readProvider = NetworkManager.getProvider();
+                const feeData = await readProvider.getFeeData();
                 if (feeData.maxFeePerGas) {
                     finalTxOptions.maxFeePerGas = feeData.maxFeePerGas * 120n / 100n;
                     finalTxOptions.maxPriorityFeePerGas = feeData.maxPriorityFeePerGas || 0n;
                 }
             } catch {}
 
-            
             // Re-resolve args for execution (values may have been updated)
             const executionArgs = this._resolveArgs(args);
 
@@ -581,9 +582,11 @@ export class TransactionEngine {
 
         try {
             // V1.7: Bump maxFeePerGas on approval too (same fix as main tx)
+            // V1.9: Use public provider for fee data (avoid MetaMask RPC rate limits)
             let approvalTxOptions = {};
             try {
-                const feeData = await signer.provider.getFeeData();
+                const readProvider = NetworkManager.getProvider();
+                const feeData = await readProvider.getFeeData();
                 if (feeData.maxFeePerGas) {
                     approvalTxOptions.maxFeePerGas = feeData.maxFeePerGas * 120n / 100n;
                     approvalTxOptions.maxPriorityFeePerGas = feeData.maxPriorityFeePerGas || 0n;
