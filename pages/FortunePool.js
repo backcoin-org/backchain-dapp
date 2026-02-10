@@ -1054,7 +1054,8 @@ function renderWaiting(container) {
     const tiersToShow = isJackpot ? [TIERS[2]] : TIERS;
 
     const elapsed = Date.now() - (Game.commitment.waitStartTime || Date.now());
-    const totalWaitMs = Game.commitment.revealDelay * ESTIMATED_BLOCK_TIME;
+    // Realistic estimate: block delay + propagation + auto-reveal wait (~10s total)
+    const totalWaitMs = (Game.commitment.revealDelay * ESTIMATED_BLOCK_TIME) + 8000;
     const remainingMs = Math.max(0, totalWaitMs - elapsed);
     const remainingSecs = Math.ceil(remainingMs / 1000);
 
@@ -1155,16 +1156,16 @@ function updateWaitingCountdown() {
     if (!timerEl) return;
 
     const elapsed = Date.now() - (Game.commitment.waitStartTime || Date.now());
-    const totalWaitMs = Game.commitment.revealDelay * ESTIMATED_BLOCK_TIME;
+    const totalWaitMs = (Game.commitment.revealDelay * ESTIMATED_BLOCK_TIME) + 8000;
     const remainingMs = Math.max(0, totalWaitMs - elapsed);
     const remainingSecs = Math.ceil(remainingMs / 1000);
 
     if (remainingSecs > 0) {
         timerEl.textContent = `~${remainingSecs}s`;
     } else if (!Game.commitment.canReveal) {
-        timerEl.textContent = 'Verifying on chain...';
+        timerEl.textContent = 'Confirming blocks...';
     } else {
-        timerEl.textContent = 'Ready!';
+        timerEl.textContent = 'Revealing...';
     }
 
     if (progressEl) {
@@ -1230,7 +1231,9 @@ async function checkCanReveal() {
     }
 }
 
-// Auto-reveal with pre-simulation
+// Auto-reveal — skip pre-simulation (staticCall fails on Arbitrum L2 due to
+// blockhash not being available in eth_call context). The actual TX is mined in
+// a future block where the blockhash IS available, so we go directly to reveal.
 async function autoRevealWithPreSim() {
     if (Game.phase !== 'waiting') return;
 
@@ -1246,47 +1249,13 @@ async function autoRevealWithPreSim() {
     }
     if (btnTextEl) btnTextEl.textContent = 'Auto-revealing...';
 
-    const guesses = Game.mode === 'jackpot' ? [Game.guess] : Game.guesses;
-    const maxRetries = 5;
-    const retryDelay = 2000;
+    // Wait for blockhash propagation on Arbitrum L2 (~5s is safe for 5-block delay)
+    await new Promise(r => setTimeout(r, 5000));
 
-    // Initial wait for block propagation
-    await new Promise(r => setTimeout(r, 3000));
+    if (Game.phase !== 'waiting') return;
 
-    for (let attempt = 1; attempt <= maxRetries; attempt++) {
-        if (Game.phase !== 'waiting') return;
-
-        try {
-            const readContract = State.fortunePoolContractPublic;
-            if (readContract) {
-                await readContract.revealPlay.staticCall(
-                    Game.gameId, guesses, Game.commitment.userSecret,
-                    { from: State.userAddress }
-                );
-            }
-
-            console.log(`[FortunePool] Pre-simulation passed (attempt ${attempt})`);
-            executeReveal();
-            return;
-        } catch (e) {
-            const msg = e.message || '';
-            const isBlockhash = msg.includes('0x92555c0e') || msg.includes('BlockhashUnavailable');
-
-            if (isBlockhash && attempt < maxRetries) {
-                console.log(`[FortunePool] BlockhashUnavailable, retry in ${retryDelay}ms (${attempt}/${maxRetries})`);
-                if (timerEl) timerEl.textContent = 'Syncing block data...';
-                await new Promise(r => setTimeout(r, retryDelay));
-            } else if (isBlockhash) {
-                console.warn('[FortunePool] Pre-sim retries exhausted, enabling manual button');
-                enableManualRevealButton();
-                return;
-            } else {
-                console.log('[FortunePool] Pre-sim error (non-blockhash), trying direct reveal:', msg);
-                executeReveal();
-                return;
-            }
-        }
-    }
+    console.log('[FortunePool] Starting direct reveal (skipping pre-sim for Arbitrum L2)');
+    executeReveal();
 }
 
 function enableManualRevealButton() {

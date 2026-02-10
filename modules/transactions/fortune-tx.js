@@ -267,6 +267,7 @@ export async function revealPlay({
     return await txEngine.execute({
         name: 'RevealPlay',
         button,
+        skipSimulation: true, fixedGasLimit: 500000n,
 
         getContract: async (signer) => getFortuneContract(signer),
         method: 'revealPlay',
