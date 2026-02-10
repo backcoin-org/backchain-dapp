@@ -23,7 +23,7 @@
 // - Sell: BKC payout from curve, no BKC tax, ETH fee to ecosystem
 // ============================================================================
 
-import { txEngine, ValidationLayer, getGasPriceOverrides } from '../core/index.js';
+import { txEngine, ValidationLayer, calculateFeeClientSide } from '../core/index.js';
 import { resolveOperator } from '../core/operator.js';
 import { addresses, contractAddresses } from '../../config.js';
 
@@ -111,8 +111,15 @@ async function getNftPoolContractReadOnly(poolAddress) {
     return new window.ethers.Contract(poolAddress, NFT_POOL_ABI, NetworkManager.getProvider());
 }
 
-// Gas price alias for backward compat within this file
-const getGasPriceOverride = getGasPriceOverrides;
+/**
+ * Compute NFT action ID matching Solidity: keccak256(abi.encode("NFT_BUY_T"|"NFT_SELL_T", tier))
+ */
+function nftActionId(prefix, tier) {
+    const ethers = window.ethers;
+    return ethers.keccak256(
+        ethers.AbiCoder.defaultAbiCoder().encode(["string", "uint8"], [prefix, Number(tier)])
+    );
+}
 
 function getNftContract(signer) {
     const contracts = getContracts();
@@ -157,12 +164,13 @@ export async function buyNft({
         validate: async (signer, userAddress) => {
             const contract = await getNftPoolContractReadOnly(targetPool);
 
-            // V9: Use getTotalBuyCost for BKC + ETH
-            // Pass gasPrice override because calculateFee uses tx.gasprice (0 in eth_call)
-            const gasPriceOpts = await getGasPriceOverride();
-            const [bkcCost, ethCost] = await contract.getTotalBuyCost(gasPriceOpts);
+            // V9: BKC price from bonding curve, ETH fee calculated client-side
+            const [bkcCost] = await contract.getTotalBuyCost();
             buyPrice = bkcCost;
-            ethFee = ethCost;
+
+            // Client-side fee: ecosystem.getFeeConfig(ACTION_BUY) + gasPrice
+            const tier = await contract.tier();
+            ethFee = await calculateFeeClientSide(nftActionId("NFT_BUY_T", tier));
 
             console.log(`[BuyNFT] Price: ${ethers.formatEther(buyPrice)} BKC, Fee: ${ethers.formatEther(ethFee)} ETH`);
 
@@ -226,10 +234,10 @@ export async function buySpecificNft({
             const contract = await getNftPoolContractReadOnly(targetPool);
             if (!(await contract.isNFTInPool(tokenId))) throw new Error('NFT is not in pool');
 
-            const gasPriceOpts = await getGasPriceOverride();
-            const [bkcCost, ethCost] = await contract.getTotalBuyCost(gasPriceOpts);
+            const [bkcCost] = await contract.getTotalBuyCost();
             buyPrice = bkcCost;
-            ethFee = ethCost;
+            const tier = await contract.tier();
+            ethFee = await calculateFeeClientSide(nftActionId("NFT_BUY_T", tier));
 
             const { NetworkManager } = await import('../core/index.js');
             const provider = NetworkManager.getProvider();
@@ -273,10 +281,10 @@ export async function sellNft({
             const nftTierVal = await nftContract.tokenTier(tokenId);
             if (poolTierVal !== nftTierVal) throw new Error('NFT tier does not match pool tier');
 
-            const gasPriceOpts = await getGasPriceOverride();
-            const [bkcPayout, ethCost] = await contract.getTotalSellInfo(gasPriceOpts);
+            const [bkcPayout] = await contract.getTotalSellInfo();
             finalMinPayout = minPayout ? BigInt(minPayout) : (bkcPayout * 95n) / 100n;
-            ethFee = ethCost;
+            const tier = await contract.tier();
+            ethFee = await calculateFeeClientSide(nftActionId("NFT_SELL_T", tier));
 
             const { NetworkManager } = await import('../core/index.js');
             const ethBalance = await NetworkManager.getProvider().getBalance(userAddress);
@@ -327,16 +335,18 @@ export async function getSellPrice(poolAddress) {
 export async function getTotalBuyCost(poolAddress) {
     const ethers = window.ethers;
     const contract = await getNftPoolContractReadOnly(poolAddress);
-    const gasPriceOpts = await getGasPriceOverride();
-    const [bkcCost, ethCost] = await contract.getTotalBuyCost(gasPriceOpts);
+    const [bkcCost] = await contract.getTotalBuyCost();
+    const tier = await contract.tier();
+    const ethCost = await calculateFeeClientSide(nftActionId("NFT_BUY_T", tier));
     return { bkcCost, bkcFormatted: ethers.formatEther(bkcCost), ethCost, ethFormatted: ethers.formatEther(ethCost) };
 }
 
 export async function getTotalSellInfo(poolAddress) {
     const ethers = window.ethers;
     const contract = await getNftPoolContractReadOnly(poolAddress);
-    const gasPriceOpts = await getGasPriceOverride();
-    const [bkcPayout, ethCost] = await contract.getTotalSellInfo(gasPriceOpts);
+    const [bkcPayout] = await contract.getTotalSellInfo();
+    const tier = await contract.tier();
+    const ethCost = await calculateFeeClientSide(nftActionId("NFT_SELL_T", tier));
     return { bkcPayout, bkcFormatted: ethers.formatEther(bkcPayout), ethCost, ethFormatted: ethers.formatEther(ethCost) };
 }
 
@@ -362,8 +372,9 @@ export async function getAvailableNfts(poolAddress) {
 export async function getEthFees(poolAddress) {
     const ethers = window.ethers;
     const contract = await getNftPoolContractReadOnly(poolAddress);
-    const gasPriceOpts = await getGasPriceOverride();
-    const [buyFee, sellFee] = await contract.getEthFees(gasPriceOpts);
+    const tier = await contract.tier();
+    const buyFee = await calculateFeeClientSide(nftActionId("NFT_BUY_T", tier));
+    const sellFee = await calculateFeeClientSide(nftActionId("NFT_SELL_T", tier));
     return {
         buyFee, buyFeeFormatted: ethers.formatEther(buyFee),
         sellFee, sellFeeFormatted: ethers.formatEther(sellFee)

@@ -21,7 +21,7 @@
 // 2. REVEAL: guesses + secret → contract verifies, rolls, pays
 // ============================================================================
 
-import { txEngine, ValidationLayer, getGasPriceOverrides } from '../core/index.js';
+import { txEngine, ValidationLayer, calculateFeeClientSide } from '../core/index.js';
 import { resolveOperator } from '../core/operator.js';
 import { addresses, contractAddresses } from '../../config.js';
 
@@ -191,15 +191,17 @@ export async function commitPlay({
     let storedOperator = operator;
     let ethFee = 0n;
 
-    // Pre-fetch ETH fee (gasPrice override needed: calculateFee uses tx.gasprice, 0 in eth_call)
+    // Calculate ETH fee client-side (sum fees for each selected tier)
     try {
-        const readContract = await getFortuneContractReadOnly();
-        const gasPriceOpts = await getGasPriceOverrides();
-        ethFee = await readContract.getRequiredFee(mask, gasPriceOpts);
+        for (let i = 0; i < 3; i++) {
+            if (mask & (1 << i)) {
+                ethFee += await calculateFeeClientSide(ethers.id(`FORTUNE_TIER${i}`));
+            }
+        }
         console.log('[FortuneTx] ETH fee:', ethers.formatEther(ethFee));
     } catch (e) {
-        console.error('[FortuneTx] Could not fetch ETH fee:', e.message);
-        throw new Error('Could not fetch ETH fee from contract');
+        console.error('[FortuneTx] Could not calculate ETH fee:', e.message);
+        throw new Error('Could not calculate ETH fee');
     }
 
     return await txEngine.execute({
@@ -445,10 +447,16 @@ export async function getTierById(tierId) {
  * V9: getRequiredFee(tierMask) replaces getRequiredServiceFee(bool)
  */
 export async function getServiceFee(tierMask = 1) {
-    const contract = await getFortuneContractReadOnly();
+    const ethers = window.ethers;
+    const mask = Number(tierMask);
     try {
-        const gasPriceOpts = await getGasPriceOverrides();
-        return await contract.getRequiredFee(Number(tierMask), gasPriceOpts);
+        let totalFee = 0n;
+        for (let i = 0; i < 3; i++) {
+            if (mask & (1 << i)) {
+                totalFee += await calculateFeeClientSide(ethers.id(`FORTUNE_TIER${i}`));
+            }
+        }
+        return totalFee;
     } catch {
         return 0n;
     }

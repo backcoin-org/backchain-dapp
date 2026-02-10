@@ -21,7 +21,7 @@
 // - Total msg.value = rentalCost + ecosystemFee
 // ============================================================================
 
-import { txEngine, ValidationLayer, getGasPriceOverrides } from '../core/index.js';
+import { txEngine, ValidationLayer, calculateFeeClientSide } from '../core/index.js';
 import { resolveOperator } from '../core/operator.js';
 import { addresses, contractAddresses } from '../../config.js';
 
@@ -164,11 +164,12 @@ export async function rentNft({
                 throw new Error(`Hours must be between ${listing.minHours} and ${listing.maxHours}`);
             }
 
-            // V9: getRentalCost returns 3-tuple (rentalCost, ethFee, totalCost)
-            // gasPrice override: calculateFee uses tx.gasprice, 0 in eth_call
-            const gasPriceOpts = await getGasPriceOverrides();
-            const cost = await contract.getRentalCost(tokenId, hours, gasPriceOpts);
-            totalCost = cost.totalCost || cost[2];
+            // V9: Get rental cost from contract + calculate ETH fee client-side
+            const cost = await contract.getRentalCost(tokenId, hours);
+            const rentalCost = cost.rentalCost || cost[0];
+            const ethers = window.ethers;
+            const ethFee = await calculateFeeClientSide(ethers.id('RENTAL_RENT'), rentalCost);
+            totalCost = rentalCost + ethFee;
 
             const { NetworkManager } = await import('../core/index.js');
             const ethBalance = await NetworkManager.getProvider().getBalance(userAddress);
@@ -328,15 +329,17 @@ export async function getListingCount() {
 export async function getRentalCost(tokenId, hours) {
     const ethers = window.ethers;
     const contract = await getRentalContractReadOnly();
-    const gasPriceOpts = await getGasPriceOverrides();
-    const cost = await contract.getRentalCost(tokenId, hours, gasPriceOpts);
+    const cost = await contract.getRentalCost(tokenId, hours);
+    const rentalCost = cost.rentalCost || cost[0];
+    const ethFee = await calculateFeeClientSide(ethers.id('RENTAL_RENT'), rentalCost);
+    const totalCost = rentalCost + ethFee;
     return {
-        rentalCost: cost.rentalCost || cost[0],
-        rentalCostFormatted: ethers.formatEther(cost.rentalCost || cost[0]),
-        ethFee: cost.ethFee || cost[1],
-        ethFeeFormatted: ethers.formatEther(cost.ethFee || cost[1]),
-        totalCost: cost.totalCost || cost[2],
-        totalCostFormatted: ethers.formatEther(cost.totalCost || cost[2])
+        rentalCost,
+        rentalCostFormatted: ethers.formatEther(rentalCost),
+        ethFee,
+        ethFeeFormatted: ethers.formatEther(ethFee),
+        totalCost,
+        totalCostFormatted: ethers.formatEther(totalCost)
     };
 }
 

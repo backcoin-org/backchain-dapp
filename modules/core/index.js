@@ -79,10 +79,71 @@ export {
 } from './operator.js';
 
 // ============================================================================
-// GAS PRICE OVERRIDE — needed for any view call that uses ecosystem.calculateFee
-// (tx.gasprice is 0 in eth_call; this passes the real gasPrice as override)
+// CLIENT-SIDE FEE CALCULATION
+// Arbitrum doesn't support gasPrice override in eth_call, so we replicate
+// the Solidity fee formula in JavaScript using ecosystem.getFeeConfig().
+//
+// Solidity formula (BackchainEcosystem.calculateFee):
+//   Gas-based (feeType 0): gasEstimate × tx.gasprice × bps × multiplier / BPS
+//   Value-based (feeType 1): txValue × bps / BPS
 // ============================================================================
 
+import { addresses, contractAddresses } from '../../config.js';
+
+const ECOSYSTEM_FEE_ABI = [
+    'function getFeeConfig(bytes32 _actionId) view returns (uint8 feeType, uint16 bps, uint16 multiplier, uint32 gasEstimate)'
+];
+
+const FEE_BPS = 10000n;
+
+/**
+ * Calculate ecosystem fee client-side.
+ * Reads FeeConfig from the ecosystem contract and applies the fee formula
+ * using the current network gasPrice.
+ *
+ * @param {string} actionId - bytes32 keccak256 action identifier
+ * @param {bigint} [txValue=0n] - transaction value (for value-based fees)
+ * @returns {Promise<bigint>} fee in wei
+ */
+export async function calculateFeeClientSide(actionId, txValue = 0n) {
+    try {
+        const ethers = window.ethers;
+        const provider = NetworkManager.getProvider();
+
+        const ecosystemAddr = addresses?.backchainEcosystem ||
+                              contractAddresses?.backchainEcosystem;
+
+        if (!ecosystemAddr) {
+            console.warn('[FeeCalc] Ecosystem address not available');
+            return 0n;
+        }
+
+        const ecosystem = new ethers.Contract(ecosystemAddr, ECOSYSTEM_FEE_ABI, provider);
+        const cfg = await ecosystem.getFeeConfig(actionId);
+
+        const bps = BigInt(cfg.bps);
+        if (bps === 0n) return 0n;
+
+        if (Number(cfg.feeType) === 0) {
+            // Gas-based: gasEstimate × gasPrice × bps × multiplier / BPS
+            const feeData = await provider.getFeeData();
+            const gasPrice = feeData.gasPrice || feeData.maxFeePerGas || 100000000n;
+            const fee = BigInt(cfg.gasEstimate) * gasPrice * bps * BigInt(cfg.multiplier) / FEE_BPS;
+            console.log(`[FeeCalc] Gas-based: ${ethers.formatEther(fee)} ETH (gasEst=${cfg.gasEstimate}, gasPrice=${gasPrice}, bps=${bps}, mult=${cfg.multiplier})`);
+            return fee;
+        } else {
+            // Value-based: txValue × bps / BPS
+            const fee = txValue * bps / FEE_BPS;
+            console.log(`[FeeCalc] Value-based: ${ethers.formatEther(fee)} ETH`);
+            return fee;
+        }
+    } catch (e) {
+        console.error('[FeeCalc] Error:', e.message);
+        return 0n;
+    }
+}
+
+// Deprecated: gasPrice override doesn't work on Arbitrum. Use calculateFeeClientSide instead.
 export async function getGasPriceOverrides() {
     const feeData = await NetworkManager.getProvider().getFeeData();
     return { gasPrice: feeData.gasPrice || feeData.maxFeePerGas || 100000000n };
