@@ -1,5 +1,5 @@
 // js/pages/BackchatPage.js
-// ✅ PRODUCTION V9.0 — Full Social Network Redesign (Profiles, Threads, Reposts, Images)
+// ✅ PRODUCTION V10.0 — V9 Agora Contract Alignment (fees, profile, no referrals)
 // ═══════════════════════════════════════════════════════════════════════════════
 //                          BACKCHAIN PROTOCOL
 //                    BACKCHAT - Unstoppable Social Network
@@ -1342,31 +1342,26 @@ async function loadFees() {
     try {
         const contract = getContract();
         if (!contract) return;
-        
-        const fees = await contract.getCurrentFees();
-        // getCurrentFees returns 0 in view calls (tx.gasprice=0).
-        // Pass real gasPrice override to calculateFee for accurate display.
-        const calcFee = async (gas) => {
-            try {
-                const provider = contract.runner?.provider;
-                if (provider) {
-                    const feeData = await provider.getFeeData();
-                    const gasPrice = feeData.gasPrice || feeData.maxFeePerGas || 100000000n;
-                    const fee = await contract.calculateFee(gas, { gasPrice });
-                    if (fee && fee > 0n) return fee;
-                }
-            } catch(e) {}
-            return window.ethers.parseEther('0.0001');
-        };
+
+        // V9: No getCurrentFees(). Fees are gas-based via ecosystem.
+        // SuperLike/Downvote have fixed VOTE_PRICE (100 gwei per vote).
+        // Other fees are estimated at tx time by txEngine.
+        let votePrice = 100000000n; // 100 gwei default
+        try {
+            votePrice = await contract.VOTE_PRICE();
+        } catch(e) {}
+
+        // Gas-based fee estimates (ecosystem calculates actual fee at tx time)
+        const defaultFee = window.ethers.parseEther('0.0001');
         BC.fees = {
-            post: fees.postFee || await calcFee(100000),
-            reply: fees.replyFee || await calcFee(120000),
-            like: fees.likeFee || await calcFee(55000),
-            follow: fees.followFee || await calcFee(45000),
-            repost: fees.repostFee || await calcFee(80000),
-            superLikeMin: fees.superLikeMin || await calcFee(60000),
-            boostMin: fees.boostMin || await calcFee(50000),
-            badge: fees.badgeFee_ || await calcFee(200000)
+            post: defaultFee,
+            reply: defaultFee,
+            like: defaultFee,
+            follow: defaultFee,
+            repost: defaultFee,
+            superLikeMin: votePrice,
+            boostMin: window.ethers.parseEther('0.0005'), // 0.0005 ETH per day
+            badge: window.ethers.parseEther('0.001')       // 0.001 ETH for 1 year
         };
     } catch (e) {
         console.warn('Failed to load fees:', e.message);
@@ -1380,33 +1375,26 @@ async function loadUserStatus() {
         const contract = getContract();
         if (!contract) return;
 
-        const [pending, hasBadge, isBoosted, boostExp, badgeExp, referredBy, referralStats] = await Promise.all([
-            contract.getPendingBalance(State.userAddress).catch(() => 0n),
+        // V9: Use getUserProfile() 7-tuple for boost/badge info
+        // No getPendingBalance, no referral system in V9 Agora
+        const [profile, hasBadge, isBoosted] = await Promise.all([
+            contract.getUserProfile(State.userAddress).catch(() => null),
             contract.hasTrustBadge(State.userAddress).catch(() => false),
-            contract.isProfileBoosted(State.userAddress).catch(() => false),
-            contract.boostExpiry(State.userAddress).catch(() => 0),
-            contract.badgeExpiry(State.userAddress).catch(() => 0),
-            contract.referredBy(State.userAddress).catch(() => ethers.ZeroAddress),
-            contract.getReferralStats(State.userAddress).catch(() => ({ totalReferred: 0n, totalEarned: 0n }))
+            contract.isProfileBoosted(State.userAddress).catch(() => false)
         ]);
 
-        BC.pendingEth = pending;
+        BC.pendingEth = 0n; // V9: No earnings/withdraw in Agora
         BC.hasBadge = hasBadge;
         BC.isBoosted = isBoosted;
-        BC.boostExpiry = Number(boostExp);
-        BC.badgeExpiry = Number(badgeExp);
-        BC.referredBy = (referredBy && referredBy !== ethers.ZeroAddress) ? referredBy : null;
-        BC.referralStats = {
-            totalReferred: Number(referralStats.totalReferred),
-            totalEarned: referralStats.totalEarned,
-            totalEarnedFormatted: ethers.formatEther(referralStats.totalEarned)
-        };
+        BC.boostExpiry = profile ? Number(profile.boostExp || profile[5] || 0) : 0;
+        BC.badgeExpiry = profile ? Number(profile.badgeExp || profile[6] || 0) : 0;
+        BC.referredBy = null;  // V9: No referral system
+        BC.referralStats = { totalReferred: 0, totalEarned: 0n, totalEarnedFormatted: '0.0' };
     } catch (e) {
         console.warn('Failed to load user status:', e.message);
     }
 
-    // V8: Auto-set referrer from URL param (stored in localStorage by app.js)
-    await tryAutoSetReferrer();
+    // V9: No referral system in Agora
 }
 
 // ============================================================================
@@ -1522,43 +1510,10 @@ async function loadSocialGraph() {
     }
 }
 
-/**
- * V8: If the user arrived via a referral link, auto-register the referrer on-chain.
- * Only runs once per user (contract enforces immutability).
- */
+// V9: No referral system in Agora — tryAutoSetReferrer removed
 async function tryAutoSetReferrer() {
-    try {
-        if (!State.isConnected || !State.userAddress) return;
-        if (BC.referredBy) return; // already has a referrer on-chain
-
-        const storedRef = localStorage.getItem('backchain_referrer');
-        if (!storedRef) return;
-
-        // Don't self-refer
-        if (storedRef.toLowerCase() === State.userAddress.toLowerCase()) {
-            localStorage.removeItem('backchain_referrer');
-            return;
-        }
-
-        const contract = getSignedContract();
-        if (!contract) return;
-
-        console.log('[Referral] Auto-setting referrer:', storedRef);
-        const tx = await contract.setReferrer(storedRef);
-        showToast('Setting your referrer...', 'info');
-        await tx.wait();
-
-        BC.referredBy = storedRef;
-        localStorage.removeItem('backchain_referrer');
-        showToast('Referrer registered! They earn 30% of your fees.', 'success');
-        renderContent();
-    } catch (e) {
-        console.warn('[Referral] Auto-set failed:', e.message);
-        // If it reverted (already set), clean up localStorage
-        if (e.message?.includes('ReferrerAlreadySet') || e.message?.includes('already set')) {
-            localStorage.removeItem('backchain_referrer');
-        }
-    }
+    // V9: No-op, referral system removed from Agora contract
+    localStorage.removeItem('backchain_referrer');
 }
 
 async function loadPosts() {
@@ -1863,15 +1818,8 @@ async function doUnfollow(address) {
 }
 
 async function doWithdraw() {
-    if (BC.pendingEth === 0n) { showToast('No earnings to withdraw', 'warning'); return; }
-
-    await BackchatTx.withdraw({
-        onSuccess: () => {
-            showToast(`Withdrawn ${formatETH(BC.pendingEth)} ETH!`, 'success');
-            BC.pendingEth = 0n;
-            renderContent();
-        }
-    });
+    // V9: No withdraw/earnings system in Agora
+    showToast('Withdraw not available in V9', 'warning');
 }
 
 async function doCreateProfile() {

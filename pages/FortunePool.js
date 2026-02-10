@@ -1,22 +1,15 @@
 // js/pages/FortunePool.js
-// ✅ PRODUCTION V6.9 - Commit-Reveal System (Fixed getRequiredServiceFee)
+// ✅ PRODUCTION V10.0 - V9 Contract Alignment
 // ═══════════════════════════════════════════════════════════════════════════════
 //                          BACKCHAIN PROTOCOL
 //                    Fortune Pool - Decentralized Lottery
 // ═══════════════════════════════════════════════════════════════════════════════
-// 
-// V6.9 Changes:
-// - CRITICAL FIX: getRequiredServiceFee now correctly passes boolean (not wagerAmount)
-// - Contract V6 signature: getRequiredServiceFee(bool _isCumulative)
-// - false = 1x mode (serviceFee), true = 5x mode (serviceFee * 5)
 //
-// V6.8 Changes:
-// - NEW: Commit-Reveal system for fairness (5-block reveal delay)
-// - Step 1: commitPlay() - Submit commitment hash, wager locked
-// - Step 2: Wait 5 blocks (~1.25 seconds on Arbitrum)
-// - Step 3: revealPlay() - Reveal guesses, get result
-// - Added 'waiting' phase with visual countdown
-// - Game cannot be manipulated - guesses hidden until reveal
+// V10.0 Changes:
+// - V9 ABI alignment: prizePool(), TIER_COUNT(), REVEAL_DELAY(), getRequiredFee(tierMask)
+// - tierMask (uint8 bitmask) replaces isCumulative (bool)
+// - getAllTiers() returns 3-tuple (ranges, multipliers, winChances)
+// - Updated tier defaults to match V9 contract (5/15/150 ranges, 2x/10x/100x multipliers)
 //
 // Website: https://backcoin.org
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -72,20 +65,20 @@ const FLAG_IMAGES = {
 let currentLang = 'en';
 
 const TIERS = [
-    { 
-        id: 1, name: "Easy", emoji: "🍀", range: 3, multiplier: 2, chance: "33%",
+    {
+        id: 1, name: "Easy", emoji: "🍀", range: 5, multiplier: 2, chance: "20%",
         color: "emerald", hex: "#10b981",
         bgFrom: "from-emerald-500/20", bgTo: "to-green-600/10",
         borderColor: "border-emerald-500/50", textColor: "text-emerald-400"
     },
-    { 
-        id: 2, name: "Medium", emoji: "⚡", range: 10, multiplier: 5, chance: "10%",
+    {
+        id: 2, name: "Medium", emoji: "⚡", range: 15, multiplier: 10, chance: "6.7%",
         color: "violet", hex: "#8b5cf6",
         bgFrom: "from-violet-500/20", bgTo: "to-purple-600/10",
         borderColor: "border-violet-500/50", textColor: "text-violet-400"
     },
-    { 
-        id: 3, name: "Hard", emoji: "👑", range: 100, multiplier: 50, chance: "1%",
+    {
+        id: 3, name: "Hard", emoji: "👑", range: 150, multiplier: 100, chance: "0.67%",
         color: "amber", hex: "#f59e0b",
         bgFrom: "from-amber-500/20", bgTo: "to-orange-600/10",
         borderColor: "border-amber-500/50", textColor: "text-amber-400"
@@ -1136,14 +1129,15 @@ function setupWagerEvents(maxMulti, balanceNum) {
         
         try {
             const guesses = Game.mode === 'jackpot' ? [Game.guess] : Game.guesses;
-            const isCumulative = Game.mode === 'combo';
+            // V9: tierMask bitmask — jackpot = tier 2 only (4), combo = all tiers (7)
+            const tierMask = Game.mode === 'combo' ? 7 : 4;
             const wagerWei = window.ethers.parseEther(Game.wager.toString());
-            
-            // V6.9: Use FortuneTx.playGame — handles secret generation + commitment hash + localStorage
+
+            // V9: Use FortuneTx.playGame — handles secret generation + commitment hash + localStorage
             await FortuneTx.playGame({
                 wagerAmount: wagerWei,
                 guesses: guesses,
-                isCumulative: isCumulative,
+                tierMask: tierMask,
                 button: document.getElementById('btn-play'),
 
                 onSuccess: (commitData) => {
@@ -2015,54 +2009,45 @@ async function getFortunePoolStatus() {
     }
 
     try {
-        const [prizePool, gameCount, tierCount] = await Promise.all([
-            contract.prizePoolBalance().catch(() => 0n),
+        const [prizePoolVal, gameCount, tierCount] = await Promise.all([
+            contract.prizePool().catch(() => 0n),
             contract.gameCounter().catch(() => 0),
-            contract.activeTierCount().catch(() => 3)
+            contract.TIER_COUNT().catch(() => 3)
         ]);
-        
-        // V6.9 FIX: getRequiredServiceFee takes boolean, NOT wagerAmount!
-        // Contract V6 signature: getRequiredServiceFee(bool _isCumulative)
-        // - false = 1x mode (serviceFee)
-        // - true = 5x mode (serviceFee * CUMULATIVE_FEE_MULTIPLIER)
-        let fee1x = 0n, fee5x = 0n, baseFee = 0n;
+
+        // V9: getRequiredFee(uint8 tierMask) — bitmask selects tiers
+        // tierMask=1 (tier 0 only), tierMask=3 (tier 0+1), tierMask=7 (all 3)
+        let feeSingle = 0n, feeAll = 0n, baseFee = 0n;
         try {
-            fee1x = await contract.getRequiredServiceFee(false);  // Jackpot mode (1x)
-            fee5x = await contract.getRequiredServiceFee(true);   // Combo mode (5x)
-            baseFee = fee1x;
-            console.log(`Service fees: 1x=${Number(fee1x)/1e18} ETH, 5x=${Number(fee5x)/1e18} ETH`);
+            feeSingle = await contract.getRequiredFee(1);   // Single tier (Jackpot)
+            feeAll = await contract.getRequiredFee(7);      // All tiers (Combo)
+            baseFee = feeSingle;
+            console.log(`Service fees: single=${Number(feeSingle)/1e18} ETH, all=${Number(feeAll)/1e18} ETH`);
         } catch (e) {
-            // Fallback: try direct serviceFee read
-            console.log("getRequiredServiceFee failed, using fallback:", e.message);
-            try {
-                baseFee = await contract.serviceFee();
-                fee1x = baseFee;
-                fee5x = baseFee * 5n; // CUMULATIVE_FEE_MULTIPLIER = 5
-            } catch (e2) {
-                console.log("Could not fetch service fee");
-            }
+            console.log("getRequiredFee failed:", e.message);
         }
-        
+
         // Store service fees in Game state
         Game.serviceFee = baseFee;
-        Game.serviceFee1x = fee1x;
-        Game.serviceFee5x = fee5x;
-        
+        Game.serviceFee1x = feeSingle;
+        Game.serviceFee5x = feeAll;
+
         // Fetch revealDelay from contract (default 2 blocks)
         try {
-            const delay = await contract.revealDelay();
+            const delay = await contract.REVEAL_DELAY();
             Game.commitment.revealDelay = Number(delay) || 2;
-            console.log("revealDelay from contract:", Game.commitment.revealDelay);
+            console.log("REVEAL_DELAY from contract:", Game.commitment.revealDelay);
         } catch (e) {
             console.log("Using default revealDelay:", Game.commitment.revealDelay);
         }
 
-        // Try to get tier data
+        // Try to get tier data (V9: returns 3-tuple with winChances)
         try {
-            const [ranges, multipliers] = await contract.getAllTiers();
+            const [ranges, multipliers, winChances] = await contract.getAllTiers();
             Game.tiersData = ranges.map((range, i) => ({
                 range: Number(range),
-                multiplier: Number(multipliers[i]) / 10000 // Convert from bips
+                multiplier: Number(multipliers[i]) / 10000, // Convert from bips
+                winChance: Number(winChances[i]) / 10000
             }));
             console.log("Tiers from contract:", Game.tiersData);
         } catch (e) {
@@ -2070,7 +2055,7 @@ async function getFortunePoolStatus() {
         }
         
         return {
-            prizePool: prizePool || 0n,
+            prizePool: prizePoolVal || 0n,
             gameCounter: Number(gameCount) || 0,
             serviceFee: baseFee,
             serviceFee1x: fee1x,
