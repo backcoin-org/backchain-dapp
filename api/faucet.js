@@ -41,16 +41,17 @@ export default async function handler(req, res) {
     }
 
     // --- Check env vars ---
-    const relayerKey = process.env.FAUCET_RELAYER_KEY;
-    const alchemyKey = process.env.VITE_ALCHEMY_API_KEY;
+    const relayerKey = (process.env.FAUCET_RELAYER_KEY || '').trim();
 
     if (!relayerKey) {
         console.error('[Faucet API] FAUCET_RELAYER_KEY not configured');
         return res.status(500).json({ success: false, error: 'Server configuration error' });
     }
 
-    const rpcUrl = alchemyKey
-        ? `https://arb-sepolia.g.alchemy.com/v2/${alchemyKey}`
+    // Use server-side Alchemy key (no origin restrictions) or public RPC
+    const serverAlchemyKey = (process.env.ALCHEMY_API_KEY || '').trim();
+    const rpcUrl = serverAlchemyKey
+        ? `https://arb-sepolia.g.alchemy.com/v2/${serverAlchemyKey}`
         : 'https://sepolia-rollup.arbitrum.io/rpc';
 
     try {
