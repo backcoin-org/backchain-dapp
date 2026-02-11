@@ -1,5 +1,5 @@
 // js/app.js
-// ✅ VERSÃO FINAL V8.0: Added Backchat page
+// ✅ VERSÃO FINAL V8.0: Added Agora page
 
 const inject = window.inject || (() => { console.warn("Dev Mode: Analytics disabled."); });
 if (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {

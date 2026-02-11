@@ -945,7 +945,7 @@ contract Agora {
 
     /// @notice Contract version
     function version() external pure returns (string memory) {
-        return "2.0.0";
+        return "2.1.0";
     }
 
     // ════════════════════════════════════════════════════════════════════════
@@ -972,8 +972,8 @@ contract Agora {
     ///      Standard = 0.001 ETH/day (basic visibility boost)
     ///      Featured = 0.005 ETH/day (top of feed + cross-tag)
     function _getBoostPrice(uint8 tier) internal pure returns (uint256) {
-        if (tier == BOOST_STANDARD) return 0.001 ether;
-        return 0.005 ether; // BOOST_FEATURED
+        if (tier == BOOST_STANDARD) return 0.002 ether;   // ~$6/day
+        return 0.01 ether; // BOOST_FEATURED               // ~$30/day
     }
 
     /// @dev Badge pricing per tier (1 year).
@@ -981,9 +981,9 @@ contract Agora {
     ///      Premium  = 0.05 ETH (gold checkmark)
     ///      Elite    = 0.1 ETH  (diamond animated)
     function _getBadgePrice(uint8 tier) internal pure returns (uint256) {
-        if (tier == BADGE_VERIFIED) return 0.01 ether;
-        if (tier == BADGE_PREMIUM)  return 0.05 ether;
-        return 0.1 ether; // BADGE_ELITE
+        if (tier == BADGE_VERIFIED) return 0.02 ether;    // ~$60/year
+        if (tier == BADGE_PREMIUM)  return 0.1 ether;     // ~$300/year
+        return 0.25 ether; // BADGE_ELITE                  // ~$750/year
     }
 
     /// @dev Username pricing: shorter names are more expensive (vanity pricing).

@@ -14,9 +14,9 @@
 // V2 FEE STRUCTURE (ETH only):
 // - Posts: ecosystem.calculateFee (varies by contentType)
 // - SuperLike/Downvote: 100 gwei per vote
-// - Post Boost: Standard 0.001 ETH/day, Featured 0.005 ETH/day
+// - Post Boost: Standard 0.002 ETH/day, Featured 0.01 ETH/day
 // - Profile Boost: 0.0005 ETH/day
-// - Badge: Verified 0.01, Premium 0.05, Elite 0.1 ETH/year
+// - Badge: Verified 0.02, Premium 0.1, Elite 0.25 ETH/year
 // - Report: 0.0001 ETH (anti-spam)
 // - Tip: min 0.0001 ETH (free value)
 // ============================================================================
@@ -445,9 +445,9 @@ export async function boostProfile({
 
 /**
  * Obtain a badge — V2: tiered badges
- * Tier 0 (Verified): 0.01 ETH/year — blue checkmark
- * Tier 1 (Premium):  0.05 ETH/year — gold checkmark
- * Tier 2 (Elite):    0.1 ETH/year  — diamond animated checkmark
+ * Tier 0 (Verified): 0.02 ETH/year — blue checkmark
+ * Tier 1 (Premium):  0.1 ETH/year  — gold checkmark
+ * Tier 2 (Elite):    0.25 ETH/year — diamond animated checkmark
  */
 export async function obtainBadge({
     tier = 0, operator,
@@ -455,7 +455,7 @@ export async function obtainBadge({
 }) {
     const ethers = window.ethers;
     let storedOperator = operator;
-    const badgePrices = [ethers.parseEther('0.01'), ethers.parseEther('0.05'), ethers.parseEther('0.1')];
+    const badgePrices = [ethers.parseEther('0.02'), ethers.parseEther('0.1'), ethers.parseEther('0.25')];
     const badgeFee = badgePrices[tier] || badgePrices[0];
 
     return await txEngine.execute({
@@ -503,8 +503,8 @@ export async function reportPost({
 
 /**
  * Boost a post — V2: tiered visibility boost
- * Tier 0 (Standard): 0.001 ETH/day — "Boosted" badge
- * Tier 1 (Featured): 0.005 ETH/day — top of feed + cross-tag
+ * Tier 0 (Standard): 0.002 ETH/day — "Boosted" badge
+ * Tier 1 (Featured): 0.01 ETH/day  — top of feed + cross-tag
  */
 export async function boostPost({
     postId, tier = 0, ethAmount, operator,
@@ -523,7 +523,7 @@ export async function boostPost({
 
         validate: async () => {
             const ethers = window.ethers;
-            const minPrice = tier === 1 ? ethers.parseEther('0.005') : ethers.parseEther('0.001');
+            const minPrice = tier === 1 ? ethers.parseEther('0.01') : ethers.parseEther('0.002');
             if (amount < minPrice) throw new Error(`Minimum boost is ${ethers.formatEther(minPrice)} ETH/day`);
         },
         onSuccess, onError

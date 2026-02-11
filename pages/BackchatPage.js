@@ -2220,13 +2220,13 @@ function renderModals() {
                     <p class="bc-modal-desc">Get a verified badge for 1 year. Higher tiers = more prestige.</p>
                     <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:16px;">
                         <button class="bc-btn bc-btn-outline" style="width:100%;justify-content:space-between;padding:12px 16px;" onclick="BackchatPage.confirmBadge(0)">
-                            <span><i class="fa-solid fa-circle-check" style="color:#3b82f6"></i> Verified</span><span style="color:var(--bc-text-3)">0.01 ETH/year</span>
+                            <span><i class="fa-solid fa-circle-check" style="color:#3b82f6"></i> Verified</span><span style="color:var(--bc-text-3)">0.02 ETH/year</span>
                         </button>
                         <button class="bc-btn bc-btn-outline" style="width:100%;justify-content:space-between;padding:12px 16px;border-color:#eab308;" onclick="BackchatPage.confirmBadge(1)">
-                            <span><i class="fa-solid fa-circle-check" style="color:#eab308"></i> Premium</span><span style="color:var(--bc-text-3)">0.05 ETH/year</span>
+                            <span><i class="fa-solid fa-circle-check" style="color:#eab308"></i> Premium</span><span style="color:var(--bc-text-3)">0.1 ETH/year</span>
                         </button>
                         <button class="bc-btn bc-btn-outline" style="width:100%;justify-content:space-between;padding:12px 16px;border-color:#a855f7;" onclick="BackchatPage.confirmBadge(2)">
-                            <span><i class="fa-solid fa-gem" style="color:#a855f7"></i> Elite</span><span style="color:var(--bc-text-3)">0.1 ETH/year</span>
+                            <span><i class="fa-solid fa-gem" style="color:#a855f7"></i> Elite</span><span style="color:var(--bc-text-3)">0.25 ETH/year</span>
                         </button>
                     </div>
                 </div>
@@ -2337,13 +2337,13 @@ function renderModals() {
                 </div>
                 <div class="bc-modal-inner">
                     <p class="bc-modal-desc">Boost this post for more visibility.</p>
-                    <div class="bc-field"><label class="bc-label">Amount (ETH)</label><input type="number" id="boost-post-amount" class="bc-input" value="0.005" min="0.001" step="0.001"></div>
+                    <div class="bc-field"><label class="bc-label">Amount (ETH)</label><input type="number" id="boost-post-amount" class="bc-input" value="0.01" min="0.002" step="0.001"></div>
                     <div style="display:flex;flex-direction:column;gap:8px;margin-top:12px;">
                         <button class="bc-btn bc-btn-outline" style="width:100%;justify-content:space-between;" onclick="BackchatPage.confirmBoostPost(0)">
-                            <span><i class="fa-solid fa-rocket"></i> Standard</span><span style="color:var(--bc-text-3)">0.001 ETH/day</span>
+                            <span><i class="fa-solid fa-rocket"></i> Standard</span><span style="color:var(--bc-text-3)">0.002 ETH/day</span>
                         </button>
                         <button class="bc-btn bc-btn-primary" style="width:100%;justify-content:space-between;" onclick="BackchatPage.confirmBoostPost(1)">
-                            <span><i class="fa-solid fa-star"></i> Featured</span><span>0.005 ETH/day</span>
+                            <span><i class="fa-solid fa-star"></i> Featured</span><span>0.01 ETH/day</span>
                         </button>
                     </div>
                 </div>

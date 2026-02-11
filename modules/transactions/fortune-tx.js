@@ -192,13 +192,10 @@ export async function commitPlay({
     let storedOperator = operator;
     let ethFee = 0n;
 
-    // Calculate ETH fee client-side (sum fees for each selected tier)
+    // Read fee from contract (includes fixed minimum per tier)
     try {
-        for (let i = 0; i < 3; i++) {
-            if (mask & (1 << i)) {
-                ethFee += await calculateFeeClientSide(ethers.id(`FORTUNE_TIER${i}`));
-            }
-        }
+        const readContract = await getFortuneContractReadOnly();
+        ethFee = await readContract.getRequiredFee(mask);
         console.log('[FortuneTx] ETH fee:', ethers.formatEther(ethFee));
     } catch (e) {
         console.error('[FortuneTx] Could not calculate ETH fee:', e.message);
@@ -454,16 +451,10 @@ export async function getTierById(tierId) {
  * V9: getRequiredFee(tierMask) replaces getRequiredServiceFee(bool)
  */
 export async function getServiceFee(tierMask = 1) {
-    const ethers = window.ethers;
     const mask = Number(tierMask);
     try {
-        let totalFee = 0n;
-        for (let i = 0; i < 3; i++) {
-            if (mask & (1 << i)) {
-                totalFee += await calculateFeeClientSide(ethers.id(`FORTUNE_TIER${i}`));
-            }
-        }
-        return totalFee;
+        const contract = await getFortuneContractReadOnly();
+        return await contract.getRequiredFee(mask);
     } catch {
         return 0n;
     }

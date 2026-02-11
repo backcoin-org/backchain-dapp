@@ -36,6 +36,10 @@ contract Notary {
     bytes32 public constant MODULE_ID       = keccak256("NOTARY");
     bytes32 public constant ACTION_CERTIFY  = keccak256("NOTARY_CERTIFY");
 
+    /// @notice Fixed minimum certification fee (~$1.50 at ETH=$3k)
+    ///         Ensures meaningful revenue even on L2s with near-zero gas
+    uint256 public constant CERT_FEE = 0.0005 ether;
+
     /// @notice Maximum documents per batch transaction
     uint8 public constant MAX_BATCH_SIZE = 20;
 
@@ -158,7 +162,8 @@ contract Notary {
         if (certs[documentHash].timestamp != 0) revert AlreadyCertified();
         if (docType > MAX_DOC_TYPE) revert InvalidDocType();
 
-        uint256 fee = ecosystem.calculateFee(ACTION_CERTIFY, 0);
+        uint256 ecosystemFee = ecosystem.calculateFee(ACTION_CERTIFY, 0);
+        uint256 fee = ecosystemFee > CERT_FEE ? ecosystemFee : CERT_FEE;
         if (msg.value < fee) revert InsufficientFee();
 
         // Store certificate (1 slot)
@@ -210,8 +215,9 @@ contract Notary {
         if (count > MAX_BATCH_SIZE) revert BatchTooLarge();
         if (metas.length != count || docTypes.length != count) revert EmptyBatch();
 
-        // Total fee = per-doc fee × count
-        uint256 feePerDoc = ecosystem.calculateFee(ACTION_CERTIFY, 0);
+        // Total fee = per-doc fee × count (minimum CERT_FEE per doc)
+        uint256 ecosystemFee = ecosystem.calculateFee(ACTION_CERTIFY, 0);
+        uint256 feePerDoc = ecosystemFee > CERT_FEE ? ecosystemFee : CERT_FEE;
         if (msg.value < feePerDoc * count) revert InsufficientFee();
 
         startId = certCount + 1;
@@ -306,7 +312,8 @@ contract Notary {
 
     /// @notice Get the ETH fee for certifying a document
     function getFee() external view returns (uint256) {
-        return ecosystem.calculateFee(ACTION_CERTIFY, 0);
+        uint256 ecosystemFee = ecosystem.calculateFee(ACTION_CERTIFY, 0);
+        return ecosystemFee > CERT_FEE ? ecosystemFee : CERT_FEE;
     }
 
     /// @notice Protocol statistics
@@ -319,6 +326,6 @@ contract Notary {
 
     /// @notice Contract version
     function version() external pure returns (string memory) {
-        return "1.0.0";
+        return "2.0.0";
     }
 }

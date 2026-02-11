@@ -162,8 +162,8 @@ export async function certify({
                 throw new Error('This document hash has already been certified');
             }
 
-            // Calculate ETH fee client-side
-            ethFee = await calculateFeeClientSide(ethers.id('NOTARY_CERTIFY'));
+            // Read fee from contract (includes fixed minimum CERT_FEE)
+            ethFee = await contract.getFee();
             console.log('[NotaryTx] Fee:', ethers.formatEther(ethFee), 'ETH');
 
             // Check ETH balance
@@ -268,7 +268,8 @@ export const getDocument = getCertificate;
  */
 export async function getFee() {
     const ethers = window.ethers;
-    const fee = await calculateFeeClientSide(ethers.id('NOTARY_CERTIFY'));
+    const contract = await getNotaryContractReadOnly();
+    const fee = await contract.getFee();
     return {
         ethFee: fee,
         ethFormatted: ethers.formatEther(fee) + ' ETH'
