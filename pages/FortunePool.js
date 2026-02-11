@@ -471,9 +471,7 @@ async function tryRecoverActiveGame() {
         Game.commitment.canReveal = true;
         Game.phase = 'waiting';
         renderQuickReveal();
-        setTimeout(() => {
-            if (Game.phase === 'waiting') executeReveal();
-        }, 3000);
+        pollCanRevealThenReveal();
         return;
     }
 
@@ -1205,12 +1203,10 @@ async function commitGame() {
 
                 console.log('[FortunePool] Game committed:', Game.gameId, 'Block:', Game.commitment.commitBlock);
 
-                // Quick flow: brief animation then reveal (8s + MetaMask time covers block delay)
+                // Quick flow: show animation, poll canReveal, then reveal when ready
                 Game.phase = 'waiting';
                 renderQuickReveal();
-                setTimeout(() => {
-                    if (Game.phase === 'waiting') executeReveal();
-                }, 8000);
+                pollCanRevealThenReveal();
             },
 
             onError: (error) => {
@@ -1636,6 +1632,64 @@ function enableManualRevealButton() {
         btnEl.classList.add('bg-gradient-to-r', 'from-emerald-500', 'to-green-500', 'text-white');
     }
     if (btnTextEl) btnTextEl.textContent = 'Reveal & Get Result!';
+}
+
+// Poll canReveal on-chain every 2s, then reveal as soon as ready (no blind timeout)
+function pollCanRevealThenReveal() {
+    let pollCount = 0;
+    const maxPolls = 30; // 30 × 2s = 60s max wait
+
+    const poll = async () => {
+        if (Game.phase !== 'waiting') return;
+        pollCount++;
+
+        try {
+            const result = await checkCanReveal();
+            if (result === 'expired') { clearStuckGame(); return; }
+
+            if (result === true) {
+                console.log(`[FortunePool] canReveal=true after ${pollCount} polls (~${pollCount * 2}s)`);
+
+                // Hash verification (diagnostic)
+                try {
+                    const guesses = getModeConfig(Game.mode).isSingle ? [Game.guess] : Game.guesses;
+                    const ethers = window.ethers;
+                    const abiCoder = ethers.AbiCoder.defaultAbiCoder();
+                    const encoded = abiCoder.encode(
+                        ['uint256[]', 'bytes32'],
+                        [guesses.map(g => BigInt(g)), Game.commitment.userSecret]
+                    );
+                    const computedHash = ethers.keccak256(encoded);
+                    const gameData = await State.fortunePoolContractPublic.games(Game.gameId);
+                    const storedHash = gameData[0]; // hash is first field in struct
+                    console.log('[FortunePool] Hash check:', { computed: computedHash, stored: storedHash, match: computedHash === storedHash, guesses, secret: Game.commitment.userSecret });
+                    if (computedHash !== storedHash) {
+                        console.error('[FortunePool] HASH MISMATCH — reveal will fail');
+                        showToast('Data mismatch — cannot reveal this game', 'error');
+                        enableManualRevealButton();
+                        return;
+                    }
+                } catch (e) {
+                    console.warn('[FortunePool] Hash verify failed:', e);
+                }
+
+                executeReveal();
+                return;
+            }
+        } catch (e) {
+            console.warn('[FortunePool] canReveal poll error:', e);
+        }
+
+        if (pollCount < maxPolls) {
+            setTimeout(poll, 2000);
+        } else {
+            console.warn('[FortunePool] canReveal poll timeout, enabling manual reveal');
+            enableManualRevealButton();
+        }
+    };
+
+    // Start polling after 3s initial delay (blocks need time to propagate)
+    setTimeout(poll, 3000);
 }
 
 async function executeReveal() {
