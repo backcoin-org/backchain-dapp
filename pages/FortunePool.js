@@ -554,6 +554,25 @@ function renderPlay(container) {
     const isCombo = Game.mode === 'combo';
     const tier = isCombo ? null : cfg.tiers[0];
 
+    // Default wager to 50% of balance (induce bigger bets)
+    if (!Game._wagerInit && balanceNum >= 2) {
+        Game.wager = Math.max(10, Math.floor(balanceNum / 2));
+        Game._wagerInit = true;
+    }
+    if (Game.wager > balanceNum && balanceNum > 0) Game.wager = Math.floor(balanceNum);
+
+    // Cumulative win probabilities
+    const winRate = isCombo ? COMBO_WIN_CHANCE : (1 / cfg.tiers[0].range);
+    const pct1 = (winRate * 100).toFixed(0);
+    const pct3 = ((1 - Math.pow(1 - winRate, 3)) * 100).toFixed(0);
+    const pct5 = ((1 - Math.pow(1 - winRate, 5)) * 100).toFixed(0);
+
+    // Wager presets — % of balance
+    const half = Math.max(1, Math.floor(balanceNum / 2));
+    const quarter = Math.max(1, Math.floor(balanceNum / 4));
+    const tenth = Math.max(1, Math.floor(balanceNum / 10));
+    const maxBal = Math.max(1, Math.floor(balanceNum));
+
     container.innerHTML = `
         <div class="space-y-4">
             <!-- Difficulty Tabs -->
@@ -619,28 +638,58 @@ function renderPlay(container) {
                 </div>
 
                 <div class="flex items-center justify-center gap-2 mb-2">
-                    <button id="wager-minus" class="w-9 h-9 rounded-lg bg-zinc-800 hover:bg-red-500/20 border border-zinc-700 text-zinc-400 hover:text-red-400 font-bold text-lg transition-all">−</button>
-                    <input type="number" id="custom-wager" value="${Game.wager}" min="1" max="${Math.floor(balanceNum)}"
-                        class="w-20 h-10 text-center text-xl font-black rounded-lg bg-zinc-900/80 border-2 border-amber-500/50 text-amber-400 focus:outline-none focus:border-amber-400 appearance-none"
+                    <button id="wager-minus" class="w-9 h-9 rounded-lg bg-zinc-800 hover:bg-red-500/20 border border-zinc-700 text-zinc-400 hover:text-red-400 font-bold text-lg transition-all">&minus;</button>
+                    <input type="number" id="custom-wager" value="${Game.wager}" min="1" max="${maxBal}"
+                        class="w-24 h-12 text-center text-2xl font-black rounded-lg bg-zinc-900/80 border-2 border-amber-500/50 text-amber-400 focus:outline-none focus:border-amber-400 appearance-none"
                         style="-moz-appearance: textfield;">
                     <button id="wager-plus" class="w-9 h-9 rounded-lg bg-zinc-800 hover:bg-emerald-500/20 border border-zinc-700 text-zinc-400 hover:text-emerald-400 font-bold text-lg transition-all">+</button>
                 </div>
 
-                <div class="grid grid-cols-5 gap-1 mb-3">
-                    ${[10, 25, 50, 100, Math.floor(balanceNum)].map(val => `
-                        <button class="wager-btn py-1.5 text-xs font-bold rounded-lg transition-all ${Game.wager === val ? 'bg-amber-500/25 border border-amber-500/60 text-amber-400' : 'bg-zinc-800/60 border border-zinc-700/50 text-zinc-400 hover:border-amber-500/30'}" data-value="${val}">
-                            ${val === Math.floor(balanceNum) ? 'MAX' : val}
+                <div class="grid grid-cols-4 gap-1.5 mb-3">
+                    ${[
+                        { val: tenth, label: '10%' },
+                        { val: quarter, label: '25%' },
+                        { val: half, label: '50%' },
+                        { val: maxBal, label: 'MAX' }
+                    ].map(({val, label}) => `
+                        <button class="wager-btn py-2 text-xs font-bold rounded-lg transition-all ${Game.wager === val ?
+                            'bg-amber-500/25 border border-amber-500/60 text-amber-400' :
+                            'bg-zinc-800/60 border border-zinc-700/50 text-zinc-400 hover:border-amber-500/30'}" data-value="${val}">
+                            <span class="block text-[10px] opacity-70">${val.toLocaleString()}</span>
+                            <span class="block font-black">${label}</span>
                         </button>
                     `).join('')}
                 </div>
 
-                <div class="flex items-center justify-between mb-3 px-1">
-                    <p class="text-emerald-400 font-black" id="potential-win">${(Game.wager * cfg.multi).toLocaleString()} BKC</p>
+                <div class="flex items-center justify-between mb-2 px-1">
+                    <p class="text-emerald-400 font-black text-lg" id="potential-win">${(Game.wager * cfg.multi).toLocaleString()} BKC</p>
                     <p class="text-[10px] text-zinc-500">potential win</p>
                 </div>
 
+                <!-- Win Probability Stats -->
+                <div class="bg-emerald-500/5 rounded-xl p-3 mb-3 border border-emerald-500/10">
+                    <div class="grid grid-cols-3 gap-2 text-center">
+                        <div>
+                            <p class="text-emerald-400 font-black text-lg">${pct1}%</p>
+                            <p class="text-[9px] text-zinc-500">1 game</p>
+                        </div>
+                        <div class="border-x border-zinc-800">
+                            <p class="text-emerald-400 font-black text-lg">${pct3}%</p>
+                            <p class="text-[9px] text-zinc-500">in 3 games</p>
+                        </div>
+                        <div>
+                            <p class="text-emerald-400 font-black text-lg">${pct5}%</p>
+                            <p class="text-[9px] text-zinc-500">in 5 games</p>
+                        </div>
+                    </div>
+                    <p class="text-[10px] text-emerald-400/60 text-center mt-1.5">
+                        <i class="fa-solid fa-chart-line mr-1"></i>
+                        Chance of winning at least once
+                    </p>
+                </div>
+
                 <button id="btn-play" class="w-full py-3.5 bg-gradient-to-r from-emerald-500 to-green-500 hover:from-emerald-400 hover:to-green-400 text-white font-bold rounded-xl transition-all text-lg ${!canPlay ? 'opacity-40 cursor-not-allowed' : ''}" ${!canPlay ? 'disabled' : ''}>
-                    <i class="fa-solid fa-play mr-2"></i>Play
+                    <i class="fa-solid fa-play mr-2"></i>Play &mdash; ${Game.wager.toLocaleString()} BKC
                 </button>
 
                 ${!State.isConnected ? '<p class="text-center text-zinc-500 text-xs mt-2">Connect wallet to play</p>' : ''}
@@ -1004,12 +1053,18 @@ function setupPlayEvents(maxMulti, balanceNum) {
 
         const customInput = document.getElementById('custom-wager');
         const potentialWin = document.getElementById('potential-win');
+        const playBtn = document.getElementById('btn-play');
         if (customInput) customInput.value = Game.wager;
         if (potentialWin) potentialWin.textContent = (Game.wager * multi).toLocaleString() + ' BKC';
+        if (playBtn) {
+            const btnText = playBtn.querySelector('i') ? '' : '';
+            playBtn.innerHTML = `<i class="fa-solid fa-play mr-2"></i>Play — ${Game.wager.toLocaleString()} BKC`;
+        }
 
         document.querySelectorAll('.wager-btn').forEach(btn => {
             const val = parseInt(btn.dataset.value);
-            btn.className = `wager-btn py-2 text-xs font-bold rounded-lg transition-all ${Game.wager === val ? 'bg-amber-500/25 border border-amber-500/60 text-amber-400' : 'bg-zinc-800/60 border border-zinc-700/50 text-zinc-400 hover:border-amber-500/30'}`;
+            const isActive = Game.wager === val;
+            btn.className = `wager-btn py-2 text-xs font-bold rounded-lg transition-all ${isActive ? 'bg-amber-500/25 border border-amber-500/60 text-amber-400' : 'bg-zinc-800/60 border border-zinc-700/50 text-zinc-400 hover:border-amber-500/30'}`;
         });
     };
 
