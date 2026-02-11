@@ -259,10 +259,11 @@ async function requestSmartFaucet(btnElement) {
             updateFaucetWidget();
             setTimeout(() => { DashboardPage.update(true); }, 4000);
         } else {
-            const msg = data.error || data.message || "API indisponível";
-            console.warn('[Faucet] API falhou:', msg);
+            const msg = data.error || data.message || "Faucet unavailable";
+            console.warn('[Faucet] API error:', msg);
+            apiSuccess = true; // API responded — don't show generic error
 
-            // Se for cooldown, não tenta on-chain
+            // Cooldown: update widget state
             if (msg.toLowerCase().includes("cooldown") || msg.toLowerCase().includes("wait") || msg.toLowerCase().includes("hour")) {
                 showToast(msg, "warning");
                 const hoursMatch = msg.match(/(\d+)\s*hour/i);
@@ -271,14 +272,15 @@ async function requestSmartFaucet(btnElement) {
                     DashboardState.faucet.cooldownEnd = new Date(Date.now() + parseInt(hoursMatch[1]) * 3600000).toISOString();
                     updateFaucetWidget();
                 }
-                apiSuccess = true; // Não tentar fallback para cooldown
+            } else {
+                showToast(msg, "error");
             }
         }
     } catch (e) {
         console.warn('[Faucet] API offline:', e.message);
     }
 
-    // API failed — show error (no on-chain fallback, faucet is 100% gasless)
+    // Only show generic error if API was completely unreachable (network error)
     if (!apiSuccess) {
         showToast("Faucet temporarily unavailable. Try again later.", "error");
     }
