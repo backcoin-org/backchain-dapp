@@ -245,7 +245,7 @@ export async function commitPlay({
                     } catch {}
                 }
             } catch {}
-            if (onSuccess) onSuccess({ gameId, txHash: receipt.hash, commitBlock: receipt.blockNumber });
+            if (onSuccess) onSuccess({ gameId, txHash: receipt.hash, commitBlock: receipt.blockNumber, player: receipt.from });
         },
         onError
     });
@@ -389,7 +389,9 @@ export async function playGame({
                 userSecret,
                 tierMask: mask,
                 wagerAmount: wagerAmount.toString(),
-                commitmentHash
+                commitmentHash,
+                player: result.player,
+                commitTimestamp: Date.now()
             });
             if (onSuccess) onSuccess({ ...result, guesses: guessesArray, userSecret, tierMask: mask });
         },

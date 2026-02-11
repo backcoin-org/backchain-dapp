@@ -414,6 +414,44 @@ function cleanup() {
 // ============================================================================
 // PENDING GAME RECOVERY
 // ============================================================================
+
+/**
+ * Try to find and recover an active game when contract rejects new commit.
+ * Searches localStorage first, then queries contract for recent games.
+ */
+async function tryRecoverActiveGame() {
+    if (!State.userAddress) return;
+
+    // First try localStorage
+    const stored = JSON.parse(localStorage.getItem('fortune_pending_games') || '{}');
+    const pending = Object.entries(stored).find(([, g]) =>
+        g.player?.toLowerCase() === State.userAddress?.toLowerCase() && !g.revealed
+    );
+
+    if (pending) {
+        const [gameId, data] = pending;
+        console.log('[FortunePool] Recovering active game from localStorage:', gameId);
+        Game.gameId = Number(gameId);
+        Game.commitment.userSecret = data.userSecret;
+        Game.mode = data.tierMask === 4 ? 'jackpot' : 'combo';
+        Game.guesses = data.guesses || [2, 5, 50];
+        Game.guess = Game.mode === 'jackpot' ? (data.guesses?.[0] || 50) : 50;
+        Game.commitment.waitStartTime = data.commitTimestamp || Date.now();
+        Game.commitment.canReveal = true;
+        Game.phase = 'waiting';
+        renderQuickReveal();
+        setTimeout(() => {
+            if (Game.phase === 'waiting') executeReveal();
+        }, 3000);
+        return;
+    }
+
+    // No localStorage data — inform user
+    showToast('You have an active game but recovery data was lost. Wait ~50s for it to expire, then try again.', 'error');
+    Game.phase = 'play';
+    renderPhase();
+}
+
 function checkPendingGame() {
     if (!State.userAddress) return;
 
@@ -970,17 +1008,25 @@ async function commitGame() {
 
                 console.log('[FortunePool] Game committed:', Game.gameId, 'Block:', Game.commitment.commitBlock);
 
-                // Quick flow: brief animation then immediate reveal (MetaMask time IS the wait)
+                // Quick flow: brief animation then reveal (5s + MetaMask time covers block delay)
                 Game.phase = 'waiting';
                 renderQuickReveal();
                 setTimeout(() => {
                     if (Game.phase === 'waiting') executeReveal();
-                }, 2000);
+                }, 5000);
             },
 
             onError: (error) => {
                 if (!error.cancelled) {
-                    showToast(error.message || 'Commit failed', 'error');
+                    const msg = error.message || '';
+                    const errData = error.original?.data || error.data || msg;
+                    // 0xbfec5558 = PlayerHasActiveGame — try to recover pending game
+                    if (String(errData).includes('0xbfec5558') || msg.includes('active game')) {
+                        showToast('You have a pending game. Attempting to recover...', 'warning');
+                        tryRecoverActiveGame();
+                        return;
+                    }
+                    showToast(msg || 'Commit failed', 'error');
                 }
                 Game.phase = 'play';
                 renderPhase();
@@ -988,7 +1034,13 @@ async function commitGame() {
         });
     } catch (e) {
         console.error('Commit error:', e);
-        showToast('Error: ' + (e.message || 'Transaction failed'), 'error');
+        const msg = e.message || '';
+        if (String(e.data || msg).includes('0xbfec5558') || msg.includes('active game')) {
+            showToast('You have a pending game. Attempting to recover...', 'warning');
+            tryRecoverActiveGame();
+            return;
+        }
+        showToast('Error: ' + (msg || 'Transaction failed'), 'error');
         Game.phase = 'play';
         renderPhase();
     }
@@ -1390,13 +1442,14 @@ async function executeReveal() {
                 if (error.cancelled) return;
 
                 const msg = error.message || '';
-                const isRevert = msg.includes('revert') || msg.includes('0x92555c0e') ||
+                const isRevert = error.type === 'tx_reverted' || msg.includes('revert') ||
+                                 msg.includes('failed') || msg.includes('0x92555c0e') ||
                                  msg.includes('BlockhashUnavailable') || msg.includes('CALL_EXCEPTION');
 
                 if (isRevert && autoRevealAttempt < AUTO_REVEAL_DELAYS.length - 1) {
                     autoRevealAttempt++;
                     console.warn(`[FortunePool] Reveal reverted (attempt ${autoRevealAttempt}), auto-retrying...`);
-                    showToast(`Blockhash not ready, retrying (${autoRevealAttempt + 1}/${AUTO_REVEAL_DELAYS.length})...`, 'warning');
+                    showToast(`Block data not ready, retrying (${autoRevealAttempt + 1}/${AUTO_REVEAL_DELAYS.length})...`, 'warning');
                     autoRevealWithPreSim();
                 } else {
                     showToast(msg || 'Reveal failed', 'error');
@@ -1408,7 +1461,7 @@ async function executeReveal() {
     } catch (e) {
         console.error('Reveal error:', e);
         const msg = e.message || '';
-        const isRevert = msg.includes('revert') || msg.includes('BlockhashUnavailable');
+        const isRevert = msg.includes('revert') || msg.includes('failed') || msg.includes('BlockhashUnavailable');
 
         if (isRevert && autoRevealAttempt < AUTO_REVEAL_DELAYS.length - 1) {
             autoRevealAttempt++;
