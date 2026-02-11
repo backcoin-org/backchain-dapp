@@ -31,6 +31,8 @@
         }
         body { font-family: 'Inter', sans-serif; background-color: var(--bg-main); color: var(--text-primary); }
         .sidebar-link.active { background-color: var(--accent); color: var(--bg-main); font-weight: 600; }
+        .bottom-tab.active { color: #f59e0b; }
+        .bottom-tab.active i { color: #f59e0b; }
         .btn-disabled { background-color: #3f3f46 !important; color: #71717a !important; cursor: not-allowed !important; }
         .loader { border: 2px solid var(--border-color); border-radius: 50%; border-top: 2px solid var(--accent); width: 20px; height: 20px; animation: spin 1s linear infinite; }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
@@ -183,12 +185,12 @@
             .wallet-btn { padding: 8px 12px; font-size: 12px; }
         }
     </style>
-  <script type="module" crossorigin src="/assets/index-DgyCpPMj.js"></script>
-  <link rel="stylesheet" crossorigin href="/assets/index-DHpJa8T6.css">
+  <script type="module" crossorigin src="/assets/index-DWZy6PQS.js"></script>
+  <link rel="stylesheet" crossorigin href="/assets/index-CuUl1hAw.css">
 </head>
 <body class="antialiased">
 
-    <div id="toast-container" class="fixed bottom-4 right-4 z-[60] flex flex-col gap-2"></div>
+    <div id="toast-container" class="fixed bottom-20 lg:bottom-4 right-4 z-[60] flex flex-col gap-2"></div>
 
     <div class="relative min-h-screen lg:flex">
         <div id="sidebar-backdrop" class="fixed inset-0 bg-black/90 z-30 hidden lg:hidden"></div>
@@ -201,43 +203,57 @@
             </div>
 
             <nav id="nav-links" class="flex flex-col flex-1">
-                 <div class="space-y-2">
-                    <a data-target="dashboard" class="sidebar-link flex items-center gap-4 py-2.5 px-4 rounded-lg transition-colors active">
-                        <i class="fa-solid fa-chart-pie w-5 text-center"></i>
-                        <span>Dashboard</span>
+                 <div class="space-y-1">
+                    <!-- Main -->
+                    <p class="text-[10px] uppercase tracking-widest text-zinc-600 font-bold px-4 pt-1 pb-1">Main</p>
+                    <a data-target="dashboard" class="sidebar-link flex items-center gap-4 py-2 px-4 rounded-lg transition-colors active">
+                        <i class="fa-solid fa-house w-5 text-center"></i><span>Dashboard</span>
                     </a>
-                    <a data-target="mine" class="sidebar-link flex items-center gap-4 py-2.5 px-4 rounded-lg transition-colors text-zinc-400 hover:text-white hover:bg-zinc-700">
-                        <i class="fa-solid fa-layer-group w-5 text-center"></i>
-                        <span>Stake & Earn</span>
+                    <a data-target="airdrop" class="sidebar-link flex items-center gap-4 py-2 px-4 rounded-lg transition-colors text-zinc-400 hover:text-white hover:bg-zinc-700">
+                        <i class="fa-solid fa-parachute-box w-5 text-center"></i><span>Airdrop</span>
                     </a>
-                    <a data-target="store" class="sidebar-link flex items-center gap-4 py-2.5 px-4 rounded-lg transition-colors text-zinc-400 hover:text-white hover:bg-zinc-700">
-                        <i class="fa-solid fa-store w-5 text-center"></i>
-                        <span>NFT Market</span>
+
+                    <!-- Earn -->
+                    <p class="text-[10px] uppercase tracking-widest text-zinc-600 font-bold px-4 pt-3 pb-1">Earn</p>
+                    <a data-target="mine" class="sidebar-link flex items-center gap-4 py-2 px-4 rounded-lg transition-colors text-zinc-400 hover:text-white hover:bg-zinc-700">
+                        <i class="fa-solid fa-layer-group w-5 text-center"></i><span>Stake & Earn</span>
                     </a>
-                    <a data-target="rental" class="sidebar-link flex items-center gap-4 py-2.5 px-4 rounded-lg transition-colors text-zinc-400 hover:text-white hover:bg-zinc-700">
-                        <i class="fa-solid fa-rocket w-5 text-center"></i>
-                        <span>Boost Market</span>
+                    <a data-target="store" class="sidebar-link flex items-center gap-4 py-2 px-4 rounded-lg transition-colors text-zinc-400 hover:text-white hover:bg-zinc-700">
+                        <i class="fa-solid fa-store w-5 text-center"></i><span>NFT Market</span>
                     </a>
-                    
-                    <a data-target="actions" class="sidebar-link flex items-center gap-4 py-2.5 px-4 rounded-lg transition-colors text-zinc-400 hover:text-white hover:bg-zinc-700">
-                        <i class="fa-solid fa-dice w-5 text-center"></i>
-                        <span>Fortune Pool</span>
+                    <a data-target="rental" class="sidebar-link flex items-center gap-4 py-2 px-4 rounded-lg transition-colors text-zinc-400 hover:text-white hover:bg-zinc-700">
+                        <i class="fa-solid fa-rocket w-5 text-center"></i><span>Boost Market</span>
                     </a>
-                    <a data-target="charity" class="sidebar-link flex items-center gap-4 py-2.5 px-4 rounded-lg transition-colors text-zinc-400 hover:text-white hover:bg-zinc-700">
-                        <i class="fa-solid fa-hand-holding-heart w-5 text-center"></i>
-                        <span>Charity Pool</span>
+                    <a data-target="actions" class="sidebar-link flex items-center gap-4 py-2 px-4 rounded-lg transition-colors text-zinc-400 hover:text-white hover:bg-zinc-700">
+                        <i class="fa-solid fa-dice w-5 text-center"></i><span>Fortune Pool</span>
                     </a>
-                    <a data-target="backchat" class="sidebar-link flex items-center gap-4 py-2.5 px-4 rounded-lg transition-colors text-zinc-400 hover:text-white hover:bg-zinc-700">
+
+                    <!-- Community -->
+                    <p class="text-[10px] uppercase tracking-widest text-zinc-600 font-bold px-4 pt-3 pb-1">Community</p>
+                    <a data-target="backchat" class="sidebar-link flex items-center gap-4 py-2 px-4 rounded-lg transition-colors text-zinc-400 hover:text-white hover:bg-zinc-700">
                         <i class="fa-solid fa-landmark w-5 text-center"></i><span>Agora</span>
                     </a>
-                    <a data-target="notary" class="sidebar-link flex items-center gap-4 py-2.5 px-4 rounded-lg transition-colors text-zinc-400 hover:text-white hover:bg-zinc-700">
-                        <i class="fa-solid fa-stamp w-5 text-center"></i><span>Decentralized Notary</span>
+                    <a data-target="charity" class="sidebar-link flex items-center gap-4 py-2 px-4 rounded-lg transition-colors text-zinc-400 hover:text-white hover:bg-zinc-700">
+                        <i class="fa-solid fa-hand-holding-heart w-5 text-center"></i><span>Charity Pool</span>
                     </a>
-                    <a data-target="airdrop" class="sidebar-link flex items-center gap-4 py-2.5 px-4 rounded-lg transition-colors text-zinc-400 hover:text-white hover:bg-zinc-700"><i class="fa-solid fa-parachute-box w-5 text-center"></i><span>Airdrop</span></a>
-                    <a data-target="tokenomics" class="sidebar-link flex items-center gap-4 py-2.5 px-4 rounded-lg transition-colors text-zinc-400 hover:text-white hover:bg-zinc-700">
+
+                    <!-- Services -->
+                    <p class="text-[10px] uppercase tracking-widest text-zinc-600 font-bold px-4 pt-3 pb-1">Services</p>
+                    <a data-target="notary" class="sidebar-link flex items-center gap-4 py-2 px-4 rounded-lg transition-colors text-zinc-400 hover:text-white hover:bg-zinc-700">
+                        <i class="fa-solid fa-stamp w-5 text-center"></i><span>Notary</span>
+                    </a>
+                    <a data-target="tokenomics" class="sidebar-link flex items-center gap-4 py-2 px-4 rounded-lg transition-colors text-zinc-400 hover:text-white hover:bg-zinc-700">
                         <i class="fa-solid fa-chart-line w-5 text-center"></i><span>Tokenomics</span>
                     </a>
-                    
+
+                    <!-- Grow -->
+                    <p class="text-[10px] uppercase tracking-widest text-zinc-600 font-bold px-4 pt-3 pb-1">Grow</p>
+                    <a data-target="referral" class="sidebar-link flex items-center gap-4 py-2 px-4 rounded-lg transition-colors text-amber-400/80 hover:text-amber-300 hover:bg-amber-500/10">
+                        <i class="fa-solid fa-user-plus w-5 text-center"></i><span>Invite Friends</span>
+                    </a>
+                    <a data-target="operator" class="sidebar-link flex items-center gap-4 py-2 px-4 rounded-lg transition-colors text-emerald-400/80 hover:text-emerald-300 hover:bg-emerald-500/10">
+                        <i class="fa-solid fa-code w-5 text-center"></i><span>Become Operator</span>
+                    </a>
                 </div>
 
                 <div id="admin-link-container" class="mt-4 pt-4 border-t border-zinc-700" style="display: none;"><a data-target="admin" id="admin-link" class="sidebar-link flex items-center gap-4 py-2.5 px-4 rounded-lg transition-colors text-red-400 hover:text-white hover:bg-red-500/50"><i class="fa-solid fa-user-shield w-5 text-center"></i><span>Admin Panel</span></a></div>
@@ -299,7 +315,7 @@
                 </div>
             </header>
             
-            <main class="flex-1 overflow-y-auto bg-main p-4 sm:p-6 lg:p-8">
+            <main class="flex-1 overflow-y-auto bg-main p-4 sm:p-6 lg:p-8 pb-24 lg:pb-8">
                 <div class="container mx-auto max-w-7xl">
 
                     <section id="dashboard" class=""> 
@@ -392,9 +408,79 @@
                     <section id="admin" class="hidden"></section>
                     <section id="socials" class="hidden"></section>
                     <section id="tutorials" class="hidden"></section>
-                    
+                    <section id="referral" class="hidden"></section>
+                    <section id="operator" class="hidden"></section>
+
                 </div>
             </main>
+        </div>
+    </div>
+
+    <!-- Mobile Bottom Tab Bar -->
+    <nav id="bottom-tabs" class="fixed bottom-0 left-0 right-0 z-50 lg:hidden bg-zinc-900/95 backdrop-blur-md border-t border-zinc-700/50">
+        <div class="flex justify-around items-center h-16 max-w-lg mx-auto px-2">
+            <button data-target="dashboard" class="bottom-tab flex flex-col items-center justify-center gap-0.5 py-1 px-3 rounded-lg transition-colors text-zinc-500 active">
+                <i class="fa-solid fa-house text-lg"></i>
+                <span class="text-[10px] font-medium">Home</span>
+            </button>
+            <button data-target="mine" class="bottom-tab flex flex-col items-center justify-center gap-0.5 py-1 px-3 rounded-lg transition-colors text-zinc-500">
+                <i class="fa-solid fa-layer-group text-lg"></i>
+                <span class="text-[10px] font-medium">Earn</span>
+            </button>
+            <button data-target="airdrop" class="bottom-tab flex flex-col items-center justify-center gap-0.5 py-1 px-3 rounded-lg transition-colors text-zinc-500">
+                <i class="fa-solid fa-parachute-box text-lg"></i>
+                <span class="text-[10px] font-medium">Airdrop</span>
+            </button>
+            <button data-target="backchat" class="bottom-tab flex flex-col items-center justify-center gap-0.5 py-1 px-3 rounded-lg transition-colors text-zinc-500">
+                <i class="fa-solid fa-landmark text-lg"></i>
+                <span class="text-[10px] font-medium">Social</span>
+            </button>
+            <button id="more-tab-btn" class="bottom-tab flex flex-col items-center justify-center gap-0.5 py-1 px-3 rounded-lg transition-colors text-zinc-500">
+                <i class="fa-solid fa-grip text-lg"></i>
+                <span class="text-[10px] font-medium">More</span>
+            </button>
+        </div>
+    </nav>
+
+    <!-- More Drawer (slides up from bottom on mobile) -->
+    <div id="more-drawer-backdrop" class="fixed inset-0 bg-black/70 z-[55] hidden lg:hidden"></div>
+    <div id="more-drawer" class="fixed bottom-0 left-0 right-0 z-[56] lg:hidden bg-zinc-900 border-t border-zinc-700/50 rounded-t-2xl transform translate-y-full transition-transform duration-300 ease-in-out max-h-[75vh] overflow-y-auto">
+        <div class="flex justify-center pt-3 pb-2">
+            <div class="w-10 h-1 bg-zinc-600 rounded-full"></div>
+        </div>
+        <div class="grid grid-cols-4 gap-3 p-4 pb-8">
+            <button data-target="store" class="more-drawer-item flex flex-col items-center gap-1.5 p-3 rounded-xl bg-zinc-800/50 hover:bg-zinc-700/50 transition-colors">
+                <i class="fa-solid fa-store text-xl text-amber-400"></i>
+                <span class="text-[11px] text-zinc-300">NFT Market</span>
+            </button>
+            <button data-target="rental" class="more-drawer-item flex flex-col items-center gap-1.5 p-3 rounded-xl bg-zinc-800/50 hover:bg-zinc-700/50 transition-colors">
+                <i class="fa-solid fa-rocket text-xl text-purple-400"></i>
+                <span class="text-[11px] text-zinc-300">Boost</span>
+            </button>
+            <button data-target="actions" class="more-drawer-item flex flex-col items-center gap-1.5 p-3 rounded-xl bg-zinc-800/50 hover:bg-zinc-700/50 transition-colors">
+                <i class="fa-solid fa-dice text-xl text-green-400"></i>
+                <span class="text-[11px] text-zinc-300">Fortune</span>
+            </button>
+            <button data-target="charity" class="more-drawer-item flex flex-col items-center gap-1.5 p-3 rounded-xl bg-zinc-800/50 hover:bg-zinc-700/50 transition-colors">
+                <i class="fa-solid fa-hand-holding-heart text-xl text-red-400"></i>
+                <span class="text-[11px] text-zinc-300">Charity</span>
+            </button>
+            <button data-target="notary" class="more-drawer-item flex flex-col items-center gap-1.5 p-3 rounded-xl bg-zinc-800/50 hover:bg-zinc-700/50 transition-colors">
+                <i class="fa-solid fa-stamp text-xl text-slate-400"></i>
+                <span class="text-[11px] text-zinc-300">Notary</span>
+            </button>
+            <button data-target="tokenomics" class="more-drawer-item flex flex-col items-center gap-1.5 p-3 rounded-xl bg-zinc-800/50 hover:bg-zinc-700/50 transition-colors">
+                <i class="fa-solid fa-chart-line text-xl text-blue-400"></i>
+                <span class="text-[11px] text-zinc-300">Tokenomics</span>
+            </button>
+            <button data-target="referral" class="more-drawer-item flex flex-col items-center gap-1.5 p-3 rounded-xl bg-zinc-800/50 hover:bg-zinc-700/50 transition-colors">
+                <i class="fa-solid fa-user-plus text-xl text-cyan-400"></i>
+                <span class="text-[11px] text-zinc-300">Invite</span>
+            </button>
+            <button data-target="operator" class="more-drawer-item flex flex-col items-center gap-1.5 p-3 rounded-xl bg-zinc-800/50 hover:bg-zinc-700/50 transition-colors">
+                <i class="fa-solid fa-code text-xl text-emerald-400"></i>
+                <span class="text-[11px] text-zinc-300">Operator</span>
+            </button>
         </div>
     </div>
     <div id="modal-container"></div>

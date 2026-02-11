@@ -35,6 +35,8 @@ import { SocialMediaPage } from './pages/SocialMedia.js';
 import { TutorialsPage } from './pages/TutorialsPage.js';
 import { CharityPage } from './pages/CharityPage.js';
 import { BackchatPage } from './pages/BackchatPage.js';
+import { ReferralPage } from './pages/ReferralPage.js';
+import { OperatorPage } from './pages/OperatorPage.js';
 
 // ============================================================================
 // 2. CONFIGURATION & STATE
@@ -68,7 +70,9 @@ const routes = {
     'admin': AdminPage,
     'rental': RentalPage,
     'socials': SocialMediaPage,
-    'tutorials': TutorialsPage
+    'tutorials': TutorialsPage,
+    'referral': ReferralPage,
+    'operator': OperatorPage
 };
 
 // ============================================================================
@@ -142,10 +146,10 @@ function navigateTo(pageId, forceUpdate = false) {
         charityContainer.innerHTML = '';
     }
 
-    // Reset nav items
+    // Reset nav items — only remove active, don't add generic colors
+    // (Grow section links have custom amber/emerald colors)
     navItems.forEach(item => {
         item.classList.remove('active');
-        item.classList.add('text-zinc-400', 'hover:text-white', 'hover:bg-zinc-700');
     });
 
     const targetPage = document.getElementById(pageId);
@@ -157,12 +161,17 @@ function navigateTo(pageId, forceUpdate = false) {
         const wasNewPage = activePageId !== pageId;
         activePageId = pageId;
 
-        // Highlight nav item
+        // Highlight nav item (sidebar)
         const activeNavItem = document.querySelector(`.sidebar-link[data-target="${pageId}"]`);
         if (activeNavItem) {
             activeNavItem.classList.remove('text-zinc-400', 'hover:text-white', 'hover:bg-zinc-700');
             activeNavItem.classList.add('active');
         }
+
+        // Highlight bottom tab (mobile)
+        document.querySelectorAll('.bottom-tab').forEach(t => t.classList.remove('active'));
+        const activeTab = document.querySelector(`.bottom-tab[data-target="${pageId}"]`);
+        if (activeTab) activeTab.classList.add('active');
 
         // Render page
         if (routes[pageId] && typeof routes[pageId].render === 'function') {
@@ -395,6 +404,50 @@ function setupGlobalListeners() {
             sidebarBackdrop.classList.add('hidden');
         });
     }
+
+    // ✅ Mobile Bottom Tab Bar
+    const bottomTabs = document.querySelectorAll('.bottom-tab[data-target]');
+    bottomTabs.forEach(tab => {
+        tab.addEventListener('click', () => {
+            const pageId = tab.dataset.target;
+            window.location.hash = pageId;
+            navigateTo(pageId, true);
+        });
+    });
+
+    // ✅ "More" Drawer
+    const moreTabBtn = document.getElementById('more-tab-btn');
+    const moreDrawer = document.getElementById('more-drawer');
+    const moreDrawerBackdrop = document.getElementById('more-drawer-backdrop');
+
+    if (moreTabBtn && moreDrawer && moreDrawerBackdrop) {
+        moreTabBtn.addEventListener('click', () => {
+            const isOpen = !moreDrawer.classList.contains('translate-y-full');
+            if (isOpen) {
+                moreDrawer.classList.add('translate-y-full');
+                moreDrawerBackdrop.classList.add('hidden');
+            } else {
+                moreDrawer.classList.remove('translate-y-full');
+                moreDrawerBackdrop.classList.remove('hidden');
+            }
+        });
+        moreDrawerBackdrop.addEventListener('click', () => {
+            moreDrawer.classList.add('translate-y-full');
+            moreDrawerBackdrop.classList.add('hidden');
+        });
+    }
+
+    const moreDrawerItems = document.querySelectorAll('.more-drawer-item[data-target]');
+    moreDrawerItems.forEach(item => {
+        item.addEventListener('click', () => {
+            const pageId = item.dataset.target;
+            window.location.hash = pageId;
+            navigateTo(pageId, true);
+            // Close drawer
+            if (moreDrawer) moreDrawer.classList.add('translate-y-full');
+            if (moreDrawerBackdrop) moreDrawerBackdrop.classList.add('hidden');
+        });
+    });
 }
 
 // ============================================================================

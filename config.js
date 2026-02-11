@@ -696,8 +696,16 @@ export const ecosystemManagerABI = [
     "function isAuthorized(address _contract) view returns (bool)",
     "function moduleCount() view returns (uint256)",
 
+    // Operator & Treasury earnings
+    "function pendingEth(address account) view returns (uint256)",
+    "function withdrawEth() external",
+
+    // Module config (for operator commission rates)
+    "function getModuleConfig(bytes32 _moduleId) view returns (bool active, uint16 customBps, uint16 operatorBps, uint16 treasuryBps, uint16 buybackBps)",
+
     // Events
-    "event FeeCollected(bytes32 indexed moduleId, address indexed user, address operator, address customRecipient, uint256 ethAmount, uint256 bkcAmount)"
+    "event FeeCollected(bytes32 indexed moduleId, address indexed user, address operator, address customRecipient, uint256 ethAmount, uint256 bkcAmount)",
+    "event EthWithdrawn(address indexed recipient, uint256 amount)"
 ];
 
 // BuybackMiner V9 ABI — Permissionless buyback + mining scarcity curve
