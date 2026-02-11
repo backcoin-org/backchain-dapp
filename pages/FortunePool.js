@@ -1156,12 +1156,12 @@ async function commitGame() {
 
                 console.log('[FortunePool] Game committed:', Game.gameId, 'Block:', Game.commitment.commitBlock);
 
-                // Quick flow: brief animation then reveal (5s + MetaMask time covers block delay)
+                // Quick flow: brief animation then reveal (8s + MetaMask time covers block delay)
                 Game.phase = 'waiting';
                 renderQuickReveal();
                 setTimeout(() => {
                     if (Game.phase === 'waiting') executeReveal();
-                }, 5000);
+                }, 8000);
             },
 
             onError: (error) => {
@@ -1268,8 +1268,8 @@ function renderQuickReveal() {
                 <div class="w-16 h-16 mx-auto mb-4 rounded-full bg-gradient-to-br from-amber-500/20 to-orange-600/20 border border-amber-500/30 flex items-center justify-center">
                     <i class="fa-solid fa-dice text-3xl text-amber-400 animate-bounce"></i>
                 </div>
-                <h2 class="text-2xl font-bold text-white mb-1">Preparing Reveal<span class="waiting-dots"></span></h2>
-                <p class="text-violet-300 text-sm">Sign the reveal in MetaMask to see your result</p>
+                <h2 id="quick-reveal-title" class="text-2xl font-bold text-white mb-1">Preparing Reveal<span class="waiting-dots"></span></h2>
+                <p id="quick-reveal-subtitle" class="text-violet-300 text-sm">Sign the reveal in MetaMask to see your result</p>
             </div>
 
             <!-- Spinning Reels -->
@@ -1516,37 +1516,59 @@ const AUTO_REVEAL_DELAYS = [8000, 15000, 20000]; // 8s, 15s, 20s (increasing)
 async function autoRevealWithPreSim() {
     if (Game.phase !== 'waiting') return;
 
-    // On retry, show the full waiting UI with countdown
-    if (autoRevealAttempt > 0) {
-        Game.commitment.waitStartTime = Date.now();
-        renderPhase(); // Shows full countdown UI
-    }
-
+    const titleEl = document.getElementById('quick-reveal-title');
+    const subtitleEl = document.getElementById('quick-reveal-subtitle');
     const btnEl = document.getElementById('btn-reveal');
     const btnTextEl = document.getElementById('reveal-btn-text');
+
+    // On retry, stay on Quick Reveal UI — just update text
+    if (autoRevealAttempt > 0) {
+        if (titleEl) titleEl.innerHTML = 'Almost Ready<span class="waiting-dots"></span>';
+        if (subtitleEl) subtitleEl.textContent = 'Blockchain is confirming your play...';
+    }
 
     if (btnEl) {
         btnEl.disabled = true;
         btnEl.classList.remove('bg-zinc-800', 'text-zinc-500', 'cursor-not-allowed');
         btnEl.classList.add('bg-gradient-to-r', 'from-amber-500', 'to-yellow-500', 'text-white');
     }
-    if (btnTextEl) btnTextEl.textContent = 'Auto-retrying...';
 
     const delay = AUTO_REVEAL_DELAYS[Math.min(autoRevealAttempt, AUTO_REVEAL_DELAYS.length - 1)];
     console.log(`[FortunePool] Waiting ${delay / 1000}s before reveal attempt ${autoRevealAttempt + 1}...`);
+
+    // Countdown on button
+    const startMs = Date.now();
+    const countdownId = setInterval(() => {
+        if (Game.phase !== 'waiting') { clearInterval(countdownId); return; }
+        const remaining = Math.ceil((delay - (Date.now() - startMs)) / 1000);
+        if (remaining > 0 && btnTextEl) {
+            btnTextEl.textContent = `Retrying in ${remaining}s...`;
+        }
+    }, 500);
+
     await new Promise(r => setTimeout(r, delay));
+    clearInterval(countdownId);
 
     if (Game.phase !== 'waiting') return;
+
+    // Update UI right before MetaMask popup
+    if (titleEl) titleEl.innerHTML = 'Confirming Result<span class="waiting-dots"></span>';
+    if (subtitleEl) subtitleEl.textContent = 'Please confirm in MetaMask';
+    if (btnTextEl) btnTextEl.textContent = 'Confirm in MetaMask...';
 
     console.log('[FortunePool] Starting direct reveal (skipping pre-sim for Arbitrum L2)');
     executeReveal();
 }
 
 function enableManualRevealButton() {
+    const titleEl = document.getElementById('quick-reveal-title');
+    const subtitleEl = document.getElementById('quick-reveal-subtitle');
     const btnEl = document.getElementById('btn-reveal');
     const btnTextEl = document.getElementById('reveal-btn-text');
     const timerEl = document.getElementById('countdown-timer');
 
+    if (titleEl) titleEl.textContent = 'Ready to Reveal!';
+    if (subtitleEl) subtitleEl.textContent = 'Tap the button to see your result';
     if (timerEl) timerEl.textContent = 'Ready!';
     if (btnEl) {
         btnEl.disabled = false;
@@ -1587,7 +1609,14 @@ async function executeReveal() {
             },
 
             onError: (error) => {
-                if (error.cancelled) return;
+                if (error.cancelled) {
+                    // User rejected MetaMask — show manual reveal button, don't auto-retry
+                    console.log('[FortunePool] User rejected reveal, showing manual button');
+                    showToast('You can reveal your result when ready', 'info');
+                    autoRevealAttempt = 0;
+                    enableManualRevealButton();
+                    return;
+                }
 
                 const msg = error.message || '';
                 const isRevert = error.type === 'tx_reverted' || msg.includes('revert') ||
@@ -1597,10 +1626,9 @@ async function executeReveal() {
                 if (isRevert && autoRevealAttempt < AUTO_REVEAL_DELAYS.length - 1) {
                     autoRevealAttempt++;
                     console.warn(`[FortunePool] Reveal reverted (attempt ${autoRevealAttempt}), auto-retrying...`);
-                    showToast(`Block data not ready, retrying (${autoRevealAttempt + 1}/${AUTO_REVEAL_DELAYS.length})...`, 'warning');
                     autoRevealWithPreSim();
                 } else {
-                    showToast(msg || 'Reveal failed', 'error');
+                    showToast('Reveal failed — tap the button to try again', 'error');
                     autoRevealAttempt = 0;
                     enableManualRevealButton();
                 }
