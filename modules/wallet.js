@@ -301,7 +301,7 @@ function startBalancePolling() {
     // Inicia polling com intervalo de 10s
     balancePollingInterval = setInterval(checkBalance, POLLING_INTERVAL_MS);
     
-    console.log("✅ Balance polling started (30s interval)");
+    console.log("✅ Balance polling started (60s interval)");
 }
 
 // 🔥 V7.0: Check balance com suporte a multi-RPC

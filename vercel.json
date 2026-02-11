@@ -1,15 +1,5 @@
 {
   "version": 2,
-  "rewrites": [
-    {
-      "source": "/presale",
-      "destination": "https://backchain-dapp-u3tu.vercel.app/index.html"
-    },
-    {
-      "source": "/presale/(.*)",
-      "destination": "https://backchain-dapp-u3tu.vercel.app/$1"
-    }
-  ],
   "headers": [
     {
       "source": "/(.*)",

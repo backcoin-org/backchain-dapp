@@ -358,7 +358,7 @@ function setupGlobalListeners() {
                 
                 if (pageId === 'faucet') {
                     showToast("Accessing Testnet Faucet...", "info");
-                    const success = await executeFaucetClaim('BKC', null);
+                    const success = await executeFaucetClaim(null);
                     if (success) updateUIState(true);
                     return; 
                 }

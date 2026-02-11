@@ -223,12 +223,15 @@ export async function addNftToWallet(tokenId, tierName) {
     }
 
     try {
+        const { addresses } = await import('./config.js');
+        const nftAddress = addresses?.rewardBooster || '0xb56FAa53205C2793474Cf5cEE74a630BBDF7d14c';
+
         const wasAdded = await window.ethereum.request({
             method: 'wallet_watchAsset',
             params: {
                 type: 'ERC721',
                 options: {
-                    address: '0xf2EA307686267dC674859da28C58CBb7a5866BCf', // RewardBoosterNFT V6
+                    address: nftAddress,
                     tokenId: tokenId.toString(),
                 },
             },

@@ -14,8 +14,8 @@
 // - Reduces spam of wallet_addEthereumChain requests
 //
 // CHANGES V1.1:
-// - Added 3 more RPC endpoints (7 total)
-// - Added StackUp, Chainstack, and Tenderly RPCs
+// - Added alternative RPC endpoints (4 total)
+// - Added fallback public RPCs
 // - Better rate limit detection and handling
 // - Faster RPC switching on rate limit errors
 //

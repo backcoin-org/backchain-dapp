@@ -1385,6 +1385,10 @@ async function updateGlobalMetrics() {
             }
         }
 
+        // Persist in State for other pages (e.g. TokenomicsPage)
+        State.totalSupply = totalSupply;
+        State.totalBurned = totalBurned;
+
         const supplyNum = formatBigNumber(totalSupply);
         const burnedNum = formatBigNumber(totalBurned);
         const ethFeesNum = formatBigNumber(totalEthFees);
