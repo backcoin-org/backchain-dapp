@@ -98,7 +98,7 @@ const COMBO_BOOST_VS_EASY = Math.round(((COMBO_WIN_CHANCE - 1 / TIERS[0].range) 
 // GAME STATE
 // ============================================================================
 const Game = {
-    mode: 'easy',         // 'easy' | 'medium' | 'hard' | 'combo'
+    mode: 'combo',        // 'easy' | 'medium' | 'hard' | 'combo'
     phase: 'play',        // 'play' | 'processing' | 'waiting' | 'result'
     guess: 2,             // Single guess (easy/jackpot)
     guesses: [2, 5, 50],  // Combo guesses
@@ -907,8 +907,8 @@ function renderComboPickerInline(container) {
             <button id="combo-prev" class="flex-1 py-2.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-bold rounded-xl transition-colors text-sm">
                 <i class="fa-solid fa-arrow-left mr-1"></i>${Game.comboStep > 0 ? 'Prev' : ''}
             </button>
-            <button id="combo-next" class="flex-1 py-2.5 bg-gradient-to-r ${tier.bgFrom.replace('/20', '/40')} ${tier.bgTo.replace('/10', '/30')} border ${tier.borderColor} ${tier.textColor} font-bold rounded-xl transition-all text-sm">
-                ${Game.comboStep < 2 ? 'Next' : 'Done'}<i class="fa-solid fa-arrow-right ml-1"></i>
+            <button id="combo-next" class="flex-1 py-2.5 ${Game.comboStep < 2 ? `bg-gradient-to-r ${tier.bgFrom.replace('/20', '/40')} ${tier.bgTo.replace('/10', '/30')} border ${tier.borderColor} ${tier.textColor}` : 'bg-gradient-to-r from-emerald-500 to-green-600 border border-emerald-400 text-white'} font-bold rounded-xl transition-all text-sm">
+                ${Game.comboStep < 2 ? 'Next <i class="fa-solid fa-arrow-right ml-1"></i>' : `<i class="fa-solid fa-play mr-1"></i>Play — ${Game.wager.toLocaleString()} BKC`}
             </button>
         </div>
     `;
@@ -1014,6 +1014,8 @@ function renderComboPickerInline(container) {
         if (Game.comboStep < 2) {
             Game.comboStep++;
             renderPickerInline();
+        } else {
+            commitGame();
         }
     });
 }
