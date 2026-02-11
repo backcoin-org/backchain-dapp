@@ -369,7 +369,7 @@ function render() {
             <div class="bg-gradient-to-r from-amber-900/30 via-orange-900/20 to-amber-900/30 border border-amber-500/30 rounded-2xl p-4 mb-5 prize-glow text-center">
                 <p class="text-xs text-amber-400/70 uppercase tracking-wider mb-1">Prize Pool</p>
                 <p id="prize-pool" class="text-3xl font-black text-amber-400">--</p>
-                <div class="flex items-center justify-center gap-4 mt-2">
+                <div class="flex items-center justify-center gap-6 mt-2">
                     <div class="text-center">
                         <p class="text-[10px] text-zinc-500">Your Balance</p>
                         <p id="user-balance" class="text-sm font-bold text-white">--</p>
@@ -378,11 +378,6 @@ function render() {
                     <div class="text-center">
                         <p class="text-[10px] text-zinc-500">Total Games</p>
                         <p id="total-games" class="text-sm font-bold text-zinc-300">--</p>
-                    </div>
-                    <div class="w-px h-6 bg-zinc-700"></div>
-                    <div class="text-center">
-                        <p class="text-[10px] text-zinc-500">Max Payout</p>
-                        <p id="max-payout" class="text-sm font-bold text-emerald-400">--</p>
                     </div>
                 </div>
             </div>
@@ -448,6 +443,25 @@ async function tryRecoverActiveGame() {
     if (pending) {
         const [gameId, data] = pending;
         console.log('[FortunePool] Recovering active game from localStorage:', gameId);
+
+        // Check if game is still active on-chain before recovering
+        try {
+            if (State.fortunePoolContractPublic) {
+                const status = await State.fortunePoolContractPublic.getGameStatus(Number(gameId));
+                const gameStatus = Number(status.status);
+                if (gameStatus === 0 || gameStatus === 3) {
+                    // Game expired or doesn't exist — clean up
+                    console.log('[FortunePool] Game', gameId, 'is expired on-chain, clearing');
+                    delete stored[gameId];
+                    localStorage.setItem('fortune_pending_games', JSON.stringify(stored));
+                    showToast('Previous game expired. Start a new one!', 'info');
+                    Game.phase = 'play';
+                    renderPhase();
+                    return;
+                }
+            }
+        } catch {}
+
         Game.gameId = Number(gameId);
         Game.commitment.userSecret = data.userSecret;
         Game.mode = data.tierMask === 1 ? 'easy' : data.tierMask === 2 ? 'medium' : data.tierMask === 4 ? 'hard' : 'combo';
@@ -469,23 +483,40 @@ async function tryRecoverActiveGame() {
     renderPhase();
 }
 
-function checkPendingGame() {
+async function checkPendingGame() {
     if (!State.userAddress) return;
 
     try {
         const stored = JSON.parse(localStorage.getItem('fortune_pending_games') || '{}');
-        const pending = Object.values(stored).find(g =>
+        const pending = Object.entries(stored).find(([, g]) =>
             g.player?.toLowerCase() === State.userAddress?.toLowerCase() && !g.revealed
         );
         if (pending) {
-            console.log('[FortunePool] Recovering pending game:', pending.gameId);
-            Game.gameId = pending.gameId;
-            Game.commitment.userSecret = pending.userSecret;
-            Game.mode = pending.tierMask === 1 ? 'easy' : pending.tierMask === 2 ? 'medium' : pending.tierMask === 4 ? 'hard' : 'combo';
-            Game.guesses = pending.guesses || [2, 5, 50];
-            Game.guess = pending.guesses?.[0] || (Game.mode === 'hard' ? 50 : Game.mode === 'medium' ? 5 : 2);
-            Game.wager = pending.wagerAmount ? Number(window.ethers?.formatEther(BigInt(pending.wagerAmount)) || 10) : 10;
-            Game.commitment.waitStartTime = pending.commitTimestamp || Date.now();
+            const [gameId, data] = pending;
+            console.log('[FortunePool] Recovering pending game:', gameId);
+
+            // Check if game is still active on-chain
+            try {
+                if (State.fortunePoolContractPublic) {
+                    const status = await State.fortunePoolContractPublic.getGameStatus(Number(gameId));
+                    const gameStatus = Number(status.status);
+                    if (gameStatus === 0 || gameStatus === 3) {
+                        console.log('[FortunePool] Pending game', gameId, 'is expired, clearing');
+                        delete stored[gameId];
+                        localStorage.setItem('fortune_pending_games', JSON.stringify(stored));
+                        showToast('Previous game expired. Start a new one!', 'info');
+                        return; // Stay on play phase
+                    }
+                }
+            } catch {}
+
+            Game.gameId = data.gameId || Number(gameId);
+            Game.commitment.userSecret = data.userSecret;
+            Game.mode = data.tierMask === 1 ? 'easy' : data.tierMask === 2 ? 'medium' : data.tierMask === 4 ? 'hard' : 'combo';
+            Game.guesses = data.guesses || [2, 5, 50];
+            Game.guess = data.guesses?.[0] || (Game.mode === 'hard' ? 50 : Game.mode === 'medium' ? 5 : 2);
+            Game.wager = data.wagerAmount ? Number(window.ethers?.formatEther(BigInt(data.wagerAmount)) || 10) : 10;
+            Game.commitment.waitStartTime = data.commitTimestamp || Date.now();
             Game.commitment.canReveal = false;
             Game.phase = 'waiting';
             renderPhase();
@@ -494,6 +525,24 @@ function checkPendingGame() {
     } catch (e) {
         console.warn('[FortunePool] Pending game recovery failed:', e);
     }
+}
+
+function clearStuckGame() {
+    // Remove from localStorage
+    try {
+        const stored = JSON.parse(localStorage.getItem('fortune_pending_games') || '{}');
+        if (Game.gameId && stored[Game.gameId]) {
+            delete stored[Game.gameId];
+            localStorage.setItem('fortune_pending_games', JSON.stringify(stored));
+        }
+    } catch {}
+    // Reset game state
+    Game.phase = 'play';
+    Game.gameId = null;
+    Game.commitment = { hash: null, userSecret: null, commitBlock: null, commitTxHash: null, revealDelay: 5, waitStartTime: null, canReveal: false };
+    autoRevealAttempt = 0;
+    showToast('Previous game expired. Start a new one!', 'info');
+    renderPhase();
 }
 
 // ============================================================================
@@ -716,7 +765,7 @@ function renderPlay(container) {
                         </div>
                         <div class="text-right flex-shrink-0">
                             <p class="text-violet-400 font-black text-xl">${COMBO_MAX_MULTIPLIER}x</p>
-                            <p class="text-violet-400/50 text-[9px]">max prize</p>
+                            <p class="text-violet-400/50 text-[9px]">multiplier</p>
                         </div>
                     </div>
                     <div class="flex items-center gap-2 mt-1">
@@ -1470,6 +1519,13 @@ function startRevealCheck() {
 
         try {
             const canReveal = await checkCanReveal();
+            if (canReveal === 'expired') {
+                clearInterval(revealCheckInterval);
+                revealCheckInterval = null;
+                console.log('[FortunePool] Game expired, clearing stuck game');
+                clearStuckGame();
+                return;
+            }
             if (canReveal && !Game.commitment.canReveal) {
                 Game.commitment.canReveal = true;
                 clearInterval(revealCheckInterval);
@@ -1490,6 +1546,10 @@ async function checkCanReveal() {
     try {
         // V9: getGameStatus returns (status, canReveal, blocksUntilReveal, blocksUntilExpiry)
         const status = await State.fortunePoolContractPublic.getGameStatus(Game.gameId);
+
+        // Detect expired or non-existent games (status: 0=none, 3=expired)
+        const gameStatus = Number(status.status);
+        if (gameStatus === 0 || gameStatus === 3) return 'expired';
 
         // Also get commitBlock from getGame if missing
         if (!Game.commitment.commitBlock) {
@@ -2107,12 +2167,8 @@ async function loadPoolData() {
         if (status) {
             const poolEl = document.getElementById('prize-pool');
             const gamesEl = document.getElementById('total-games');
-            const maxPayoutEl = document.getElementById('max-payout');
             if (poolEl) poolEl.textContent = formatBigNumber(status.prizePool || 0n).toFixed(2) + ' BKC';
             if (gamesEl) gamesEl.textContent = (status.gameCounter || 0).toLocaleString();
-            if (maxPayoutEl && status.maxPayout) {
-                maxPayoutEl.textContent = formatBigNumber(status.maxPayout).toFixed(2) + ' BKC';
-            }
         }
 
         const balanceEl = document.getElementById('user-balance');
