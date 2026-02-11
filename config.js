@@ -787,28 +787,46 @@ export const agoraABI = [
     "function follow(address user, address operator) external payable",
     "function unfollow(address user) external",
 
+    // ── Reports (V2) ──
+    "function reportPost(uint256 postId, uint8 category) external payable",
+    "function hasReported(uint256 postId, address user) view returns (bool)",
+    "function reportCount(uint256 postId) view returns (uint256)",
+
+    // ── Post Boost & Tips (V2) ──
+    "function boostPost(uint256 postId, uint8 tier, address operator) external payable",
+    "function tipPost(uint256 postId, address operator) external payable",
+
     // ── Profiles ──
     "function createProfile(string username, string metadataURI, address operator) external payable",
     "function updateProfile(string metadataURI) external",
     "function pinPost(uint256 postId) external",
 
-    // ── Premium ──
+    // ── Premium (V2: tiers) ──
     "function boostProfile(address operator) external payable",
-    "function obtainBadge(address operator) external payable",
+    "function obtainBadge(uint8 tier, address operator) external payable",
 
     // ── Constants ──
     "function VOTE_PRICE() view returns (uint256)",
     "function TAG_COUNT() view returns (uint8)",
+    "function REPORT_PRICE() view returns (uint256)",
+    "function MIN_TIP() view returns (uint256)",
+    "function PROFILE_BOOST_PRICE() view returns (uint256)",
+    "function BOOST_TIER_COUNT() view returns (uint8)",
+    "function BADGE_TIER_COUNT() view returns (uint8)",
     "function postCounter() view returns (uint256)",
     "function totalProfiles() view returns (uint256)",
 
     // ── Views ──
     "function getPost(uint256 postId) view returns (address author, uint8 tag, uint8 contentType, bool deleted, uint32 createdAt, uint256 replyTo, uint256 repostOf, uint256 likes, uint256 superLikes, uint256 downvotes, uint256 replies, uint256 reposts)",
-    "function getUserProfile(address user) view returns (bytes32 usernameHash, string metadataURI, uint256 pinned, bool boosted, bool hasBadge, uint64 boostExp, uint64 badgeExp)",
+    "function getPostMeta(uint256 postId) view returns (uint256 reports, uint256 illegalReports, uint8 boostTier, uint64 boostExp, bool isBoosted, uint256 boostSpent, uint256 tips)",
+    "function getUserProfile(address user) view returns (bytes32 usernameHash, string metadataURI, uint256 pinned, bool boosted, bool hasBadge, uint8 badgeTier, uint64 boostExp, uint64 badgeExp)",
     "function isProfileBoosted(address user) view returns (bool)",
     "function hasTrustBadge(address user) view returns (bool)",
+    "function isPostBoosted(uint256 postId) view returns (bool)",
     "function isUsernameAvailable(string username) view returns (bool)",
     "function getUsernamePrice(uint256 length) pure returns (uint256)",
+    "function getBoostPrice(uint8 tier) pure returns (uint256)",
+    "function getBadgePrice(uint8 tier) pure returns (uint256)",
     "function hasLiked(uint256 postId, address user) view returns (bool)",
     "function getOperatorStats(address operator) view returns (uint256 posts_, uint256 engagement)",
     "function getGlobalStats() view returns (uint256 totalPosts, uint256 totalProfiles, uint256[15] tagCounts)",
@@ -819,15 +837,19 @@ export const agoraABI = [
     "event ReplyCreated(uint256 indexed postId, uint256 indexed parentId, address indexed author, uint8 tag, uint8 contentType, string contentHash, address operator)",
     "event RepostCreated(uint256 indexed postId, uint256 indexed originalId, address indexed author, uint8 tag, string contentHash, address operator)",
     "event PostDeleted(uint256 indexed postId, address indexed author)",
+    "event TagChanged(uint256 indexed postId, uint8 oldTag, uint8 newTag)",
     "event Liked(uint256 indexed postId, address indexed liker, address indexed author, address operator)",
     "event SuperLiked(uint256 indexed postId, address indexed voter, address indexed author, uint256 count, address operator)",
     "event Downvoted(uint256 indexed postId, address indexed voter, address indexed author, uint256 count, address operator)",
     "event Followed(address indexed follower, address indexed followed, address operator)",
     "event Unfollowed(address indexed follower, address indexed followed)",
+    "event PostReported(uint256 indexed postId, address indexed reporter, address indexed author, uint8 category, uint256 totalReports)",
+    "event PostBoosted(uint256 indexed postId, address indexed booster, uint8 tier, uint256 amount, uint64 newExpiry, address operator)",
+    "event PostTipped(uint256 indexed postId, address indexed tipper, address indexed author, uint256 amount, address operator)",
     "event ProfileCreated(address indexed user, string username, string metadataURI, address operator)",
     "event ProfileUpdated(address indexed user, string metadataURI)",
     "event ProfileBoosted(address indexed user, uint256 daysAdded, uint64 expiresAt, address operator)",
-    "event BadgeObtained(address indexed user, uint64 expiresAt, address operator)"
+    "event BadgeObtained(address indexed user, uint8 tier, uint64 expiresAt, address operator)"
 ];
 
 // Campaign Status Enum (V9: ACTIVE → CLOSED → WITHDRAWN)

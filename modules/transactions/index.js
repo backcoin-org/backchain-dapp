@@ -127,7 +127,7 @@ export {
     executeFaucetClaim
 } from './faucet-tx.js';
 
-// Backchat / Agora (V9: Agora replaces Backchat contract)
+// Backchat / Agora V2 (tiered badges/boosts, reports, tips)
 export {
     BackchatTx,
     createProfile,
@@ -143,11 +143,15 @@ export {
     deletePost,
     pinPost,
     changeTag,
+    reportPost,
+    boostPost,
+    tipPost,
     boostProfile,
     obtainBadge,
     getUsernamePrice,
     getUsernameFee, // backward-compat alias
     getPost,
+    getPostMeta,
     getPostCount,
     getUserProfile,
     isUsernameAvailable,

@@ -1,33 +1,24 @@
 // modules/js/transactions/backchat-tx.js
-// ✅ V9.0 - Updated for Agora V9 (Immutable Social Protocol, ETH-only)
+// ✅ V2.0 - Agora V2 Social Protocol (ETH-only, tiered badges/boosts, reports, tips)
 //
-// CHANGES V9.0:
-// - Renamed: Backchat → Agora, backchat → agora, backchatABI → agoraABI
-// - All fees via ecosystem.calculateFee (ETH only, Tier 1)
-// - No BKC tips — all interactions are ETH
-// - createPost(content, tag uint8, contentType uint8, operator) — new tag system
-// - createReply(parentId, content, contentType, operator) — no tip, inherits parent tag
-// - createRepost(originalId, contentHash, operator) — quote repost
-// - createProfile(username, metadataURI, operator) — no displayName/bio, uses IPFS
-// - updateProfile(metadataURI) — no displayName/bio
-// - like(postId, operator) — no tip, 1 per user
-// - superLike(postId, operator) — 100 gwei per, unlimited
-// - downvote(postId, operator) — 100 gwei per, unlimited (NEW)
-// - deletePost(postId) — soft delete (NEW)
-// - pinPost(postId) — 1 per user (NEW)
-// - No referral system, no withdraw, no getPendingBalance
-// - getUserProfile returns 7-tuple
-// - getGlobalStats returns (totalPosts, totalProfiles, tagCounts[15])
-// - getPost returns 12 fields
-// - getUsernameFee → getUsernamePrice
+// V2.0 CHANGES:
+// - reportPost(postId, category) payable — 0.0001 ETH, community moderation
+// - boostPost(postId, tier, operator) payable — Standard(0.001/day) or Featured(0.005/day)
+// - tipPost(postId, operator) payable — free-value ETH tip to post author
+// - obtainBadge(tier, operator) payable — Verified(0.01), Premium(0.05), Elite(0.1) per year
+// - createPost fee varies by contentType (text/image/video/live)
+// - getPostMeta(postId) — reports, boost, tips data
+// - getUserProfile returns 8-tuple (added badgeTier)
 //
 // ============================================================================
-// V9 FEE STRUCTURE (ETH only, Tier 1):
-// - Posts/replies/reposts/likes: ecosystem.calculateFee(ACTION_*, 0)
-// - SuperLike/Downvote: 100 gwei per vote (unlimited)
-// - Username: length-based pricing
-// - Boost: 0.0005 ETH per day
-// - Badge: 0.001 ETH for 1 year
+// V2 FEE STRUCTURE (ETH only):
+// - Posts: ecosystem.calculateFee (varies by contentType)
+// - SuperLike/Downvote: 100 gwei per vote
+// - Post Boost: Standard 0.001 ETH/day, Featured 0.005 ETH/day
+// - Profile Boost: 0.0005 ETH/day
+// - Badge: Verified 0.01, Premium 0.05, Elite 0.1 ETH/year
+// - Report: 0.0001 ETH (anti-spam)
+// - Tip: min 0.0001 ETH (free value)
 // ============================================================================
 
 import { txEngine, calculateFeeClientSide } from '../core/index.js';
@@ -150,8 +141,11 @@ export async function createPost({
         validate: async (signer, userAddress) => {
             if (!content || content.length === 0) throw new Error('Content is required');
             if (tag < 0 || tag > 14) throw new Error('Tag must be 0-14');
-            fee = await calculateFeeClientSide(ethers.id('AGORA_POST'), 0n);
-            console.log('[Agora] Post fee:', ethers.formatEther(fee), 'ETH');
+            // V2: differentiated fees by content type
+            const actionIds = { 0: 'AGORA_POST', 1: 'AGORA_POST_IMAGE', 2: 'AGORA_POST_VIDEO', 3: 'AGORA_POST', 4: 'AGORA_LIVE' };
+            const actionId = actionIds[contentType] || 'AGORA_POST';
+            fee = await calculateFeeClientSide(ethers.id(actionId), 0n);
+            console.log(`[Agora] Post fee (${actionId}):`, ethers.formatEther(fee), 'ETH');
         },
 
         onSuccess: async (receipt) => {
@@ -449,21 +443,116 @@ export async function boostProfile({
     });
 }
 
+/**
+ * Obtain a badge — V2: tiered badges
+ * Tier 0 (Verified): 0.01 ETH/year — blue checkmark
+ * Tier 1 (Premium):  0.05 ETH/year — gold checkmark
+ * Tier 2 (Elite):    0.1 ETH/year  — diamond animated checkmark
+ */
 export async function obtainBadge({
-    operator,
+    tier = 0, operator,
     button = null, onSuccess = null, onError = null
 }) {
     const ethers = window.ethers;
     let storedOperator = operator;
-    const badgeFee = ethers.parseEther('0.001');
+    const badgePrices = [ethers.parseEther('0.01'), ethers.parseEther('0.05'), ethers.parseEther('0.1')];
+    const badgeFee = badgePrices[tier] || badgePrices[0];
 
     return await txEngine.execute({
         name: 'ObtainBadge', button,
         skipSimulation: true, fixedGasLimit: 250000n,
         getContract: async (signer) => getAgoraContract(signer),
         method: 'obtainBadge',
-        args: () => [resolveOperator(storedOperator)],
+        args: () => [tier, resolveOperator(storedOperator)],
         value: badgeFee,
+        onSuccess, onError
+    });
+}
+
+// ============================================================================
+// V2: REPORT, BOOST POST, TIP
+// ============================================================================
+
+/**
+ * Report a post — V2: 0.0001 ETH, auto-blocks author for reporter
+ * Categories: 0=Spam, 1=Harassment, 2=Illegal, 3=Scam, 4=Other
+ */
+export async function reportPost({
+    postId, category = 0,
+    button = null, onSuccess = null, onError = null
+}) {
+    const ethers = window.ethers;
+    const reportFee = ethers.parseEther('0.0001');
+
+    return await txEngine.execute({
+        name: 'ReportPost', button,
+        skipSimulation: true, fixedGasLimit: 200000n,
+        getContract: async (signer) => getAgoraContract(signer),
+        method: 'reportPost',
+        args: [postId, category],
+        value: reportFee,
+
+        validate: async (signer, userAddress) => {
+            const contract = await getAgoraContractReadOnly();
+            const alreadyReported = await contract.hasReported(postId, userAddress);
+            if (alreadyReported) throw new Error('You already reported this post');
+        },
+        onSuccess, onError
+    });
+}
+
+/**
+ * Boost a post — V2: tiered visibility boost
+ * Tier 0 (Standard): 0.001 ETH/day — "Boosted" badge
+ * Tier 1 (Featured): 0.005 ETH/day — top of feed + cross-tag
+ */
+export async function boostPost({
+    postId, tier = 0, ethAmount, operator,
+    button = null, onSuccess = null, onError = null
+}) {
+    let storedOperator = operator;
+    const amount = BigInt(ethAmount);
+
+    return await txEngine.execute({
+        name: 'BoostPost', button,
+        skipSimulation: true, fixedGasLimit: 250000n,
+        getContract: async (signer) => getAgoraContract(signer),
+        method: 'boostPost',
+        args: () => [postId, tier, resolveOperator(storedOperator)],
+        value: amount,
+
+        validate: async () => {
+            const ethers = window.ethers;
+            const minPrice = tier === 1 ? ethers.parseEther('0.005') : ethers.parseEther('0.001');
+            if (amount < minPrice) throw new Error(`Minimum boost is ${ethers.formatEther(minPrice)} ETH/day`);
+        },
+        onSuccess, onError
+    });
+}
+
+/**
+ * Tip a post's author — V2: free-value ETH transfer
+ * Min 0.0001 ETH, author earns via ecosystem distribution
+ */
+export async function tipPost({
+    postId, ethAmount, operator,
+    button = null, onSuccess = null, onError = null
+}) {
+    let storedOperator = operator;
+    const amount = BigInt(ethAmount);
+
+    return await txEngine.execute({
+        name: 'TipPost', button,
+        skipSimulation: true, fixedGasLimit: 250000n,
+        getContract: async (signer) => getAgoraContract(signer),
+        method: 'tipPost',
+        args: () => [postId, resolveOperator(storedOperator)],
+        value: amount,
+
+        validate: async () => {
+            const ethers = window.ethers;
+            if (amount < ethers.parseEther('0.0001')) throw new Error('Minimum tip is 0.0001 ETH');
+        },
         onSuccess, onError
     });
 }
@@ -505,7 +594,18 @@ export async function getUserProfile(userAddress) {
     return {
         usernameHash: p.usernameHash, metadataURI: p.metadataURI,
         pinnedPost: Number(p.pinned), boosted: p.boosted, hasBadge: p.hasBadge,
+        badgeTier: Number(p.badgeTier || p._badgeTier || 0),
         boostExpiry: Number(p.boostExp), badgeExpiry: Number(p.badgeExp)
+    };
+}
+
+export async function getPostMeta(postId) {
+    const contract = await getAgoraContractReadOnly();
+    const m = await contract.getPostMeta(postId);
+    return {
+        reports: Number(m.reports), illegalReports: Number(m.illegalReports),
+        boostTier: Number(m.boostTier), boostExpiry: Number(m.boostExp),
+        isBoosted: m.isBoosted, boostSpent: m.boostSpent, tips: m.tips
     };
 }
 
@@ -576,11 +676,13 @@ export const BackchatTx = {
     createPost, createReply, createRepost, deletePost, pinPost, changeTag,
     // Engagement
     like, superLike, downvote, follow, unfollow,
-    // Premium
+    // V2: Reports, Boosts, Tips
+    reportPost, boostPost, tipPost,
+    // Premium (V2: tiered)
     boostProfile, obtainBadge,
     // Read
     getUsernamePrice, getUsernameFee,
-    getPost, getPostCount, getUserProfile,
+    getPost, getPostMeta, getPostCount, getUserProfile,
     isUsernameAvailable, hasUserLiked,
     isProfileBoosted, hasTrustBadge,
     getBoostExpiry, getBadgeExpiry,

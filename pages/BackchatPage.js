@@ -144,9 +144,11 @@ const BC = {
     wizChecking: false,
     fees: { post: 0n, reply: 0n, like: 0n, follow: 0n, repost: 0n, superLikeMin: 0n, downvoteMin: 0n, boostMin: 0n, badge: 0n },
     hasBadge: false,
+    badgeTier: 0,
     isBoosted: false,
     boostExpiry: 0,
     badgeExpiry: 0,
+    blockedAuthors: new Set(),
     selectedTag: -1,
     composeTag: 0,
     globalStats: null,
@@ -488,6 +490,13 @@ function formatETH(wei) {
     return eth.toFixed(2);
 }
 
+function getIPFSUrl(uri) {
+    if (!uri) return '';
+    if (uri.startsWith('ipfs://')) return `https://gateway.lighthouse.storage/ipfs/${uri.slice(7)}`;
+    if (uri.startsWith('Qm') || uri.startsWith('bafy')) return `https://gateway.lighthouse.storage/ipfs/${uri}`;
+    return uri;
+}
+
 function getInitials(address) {
     if (!address) return '?';
     return address.slice(2, 4).toUpperCase();
@@ -500,13 +509,27 @@ function escapeHtml(text) {
 }
 
 function parseMetadata(metadataURI) {
-    if (!metadataURI) return { displayName: '', bio: '' };
+    if (!metadataURI) return { displayName: '', bio: '', avatar: '' };
     try {
         const data = JSON.parse(metadataURI);
-        return { displayName: data.displayName || '', bio: data.bio || '' };
+        return { displayName: data.displayName || '', bio: data.bio || '', avatar: data.avatar || '' };
     } catch {
-        return { displayName: '', bio: '' };
+        return { displayName: '', bio: '', avatar: '' };
     }
+}
+
+function getProfileAvatar(address) {
+    if (!address) return '';
+    const profile = BC.profiles.get(address.toLowerCase());
+    return profile?.avatar ? getIPFSUrl(profile.avatar) : '';
+}
+
+function renderAvatar(address, size = '') {
+    const url = getProfileAvatar(address);
+    const username = getProfileUsername(address);
+    const fallback = username ? username.charAt(0).toUpperCase() : getInitials(address);
+    if (url) return `<img src="${url}" alt="" style="width:100%;height:100%;border-radius:50%;object-fit:cover;" onerror="this.outerHTML='${fallback}'">`;
+    return fallback;
 }
 
 function getProfileName(address) {
@@ -633,6 +656,7 @@ async function loadUserStatus() {
         BC.isBoosted = isBoosted;
         BC.boostExpiry = profile ? Number(profile.boostExp || profile[5] || 0) : 0;
         BC.badgeExpiry = profile ? Number(profile.badgeExp || profile[6] || 0) : 0;
+        BC.badgeTier = profile ? Number(profile.badgeTier || profile[7] || 0) : 0;
     } catch (e) {
         console.warn('[Agora] Failed to load user status:', e.message);
     }
@@ -660,7 +684,8 @@ async function loadProfiles() {
                 username: ev.args.username,
                 metadataURI: ev.args.metadataURI || '',
                 displayName: meta.displayName,
-                bio: meta.bio
+                bio: meta.bio,
+                avatar: meta.avatar
             });
         }
 
@@ -672,7 +697,7 @@ async function loadProfiles() {
                     const profile = await contract.getUserProfile(State.userAddress);
                     if (profile && profile.usernameHash && profile.usernameHash !== ethers.ZeroHash) {
                         const meta = parseMetadata(profile.metadataURI || profile[1] || '');
-                        myProfile = { username: null, metadataURI: profile.metadataURI || profile[1] || '', displayName: meta.displayName, bio: meta.bio };
+                        myProfile = { username: null, metadataURI: profile.metadataURI || profile[1] || '', displayName: meta.displayName, bio: meta.bio, avatar: meta.avatar };
                         BC.profiles.set(myAddr, myProfile);
                     }
                 } catch {}
@@ -699,6 +724,26 @@ async function loadSocialGraph() {
     BC.following = new Set();
     BC.followers = new Set();
     BC.followCounts = new Map();
+}
+
+async function loadBlockedAuthors() {
+    if (!State.isConnected || !State.userAddress) return;
+    try {
+        const contract = getContract();
+        if (!contract) return;
+        const reportEvents = await contract.queryFilter(contract.filters.PostReported(), -50000).catch(() => []);
+        const myAddr = State.userAddress.toLowerCase();
+        for (const ev of reportEvents) {
+            if (ev.args.reporter?.toLowerCase() === myAddr) {
+                const postId = ev.args.postId.toString();
+                const post = BC.postsById.get(postId);
+                if (post?.author) BC.blockedAuthors.add(post.author.toLowerCase());
+            }
+        }
+        console.log(`[Agora] Blocked authors: ${BC.blockedAuthors.size}`);
+    } catch (e) {
+        console.warn('[Agora] Failed to load blocked authors:', e.message);
+    }
 }
 
 async function loadPosts() {
@@ -828,10 +873,17 @@ async function loadPosts() {
         }
 
         feedPosts.sort((a, b) => b.timestamp - a.timestamp);
-        BC.posts = feedPosts;
+
+        // Filter out blocked authors
+        const filterBlocked = (posts) => {
+            if (BC.blockedAuthors.size === 0) return posts;
+            return posts.filter(p => !BC.blockedAuthors.has(p.author?.toLowerCase()));
+        };
+
+        BC.posts = filterBlocked(feedPosts);
         BC.allItems = allItems;
-        BC.trendingPosts = [...allItems]
-            .filter(p => p.type !== 'repost' && p.superLikes > 0n)
+        BC.trendingPosts = filterBlocked([...allItems]
+            .filter(p => p.type !== 'repost' && p.superLikes > 0n))
             .sort((a, b) => {
                 const aVal = BigInt(a.superLikes || 0);
                 const bVal = BigInt(b.superLikes || 0);
@@ -1093,8 +1145,36 @@ async function doCreateProfile() {
 async function doUpdateProfile() {
     const displayName = document.getElementById('edit-displayname')?.value?.trim() || '';
     const bio = document.getElementById('edit-bio')?.value?.trim() || '';
-    const metadataURI = JSON.stringify({ displayName, bio });
     const btn = document.getElementById('bc-edit-profile-btn');
+
+    // Upload avatar if pending
+    let avatar = BC.userProfile?.avatar || '';
+    const avatarFile = document.getElementById('edit-avatar-file')?.files?.[0];
+    if (avatarFile) {
+        try {
+            btn && (btn.disabled = true);
+            btn && (btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Uploading avatar...');
+            const formData = new FormData();
+            formData.append('image', avatarFile);
+            const resp = await fetch('/api/upload-image', { method: 'POST', body: formData });
+            const data = await resp.json();
+            if (data.success && data.ipfsHash) {
+                avatar = `ipfs://${data.ipfsHash}`;
+            } else {
+                showToast('Avatar upload failed', 'error');
+                btn && (btn.disabled = false);
+                btn && (btn.innerHTML = '<i class="fa-solid fa-check"></i> Save Changes');
+                return;
+            }
+        } catch (e) {
+            showToast('Avatar upload error: ' + e.message, 'error');
+            btn && (btn.disabled = false);
+            btn && (btn.innerHTML = '<i class="fa-solid fa-check"></i> Save Changes');
+            return;
+        }
+    }
+
+    const metadataURI = JSON.stringify({ displayName, bio, avatar });
 
     await BackchatTx.updateProfile({
         metadataURI,
@@ -1102,7 +1182,8 @@ async function doUpdateProfile() {
         onSuccess: () => {
             BC.userProfile.displayName = displayName;
             BC.userProfile.bio = bio;
-            BC.profiles.set(State.userAddress.toLowerCase(), { ...BC.profiles.get(State.userAddress.toLowerCase()), displayName, bio });
+            BC.userProfile.avatar = avatar;
+            BC.profiles.set(State.userAddress.toLowerCase(), { ...BC.profiles.get(State.userAddress.toLowerCase()), displayName, bio, avatar });
             closeModal('edit-profile');
             showToast('Profile updated!', 'success');
             renderContent();
@@ -1110,15 +1191,64 @@ async function doUpdateProfile() {
     });
 }
 
-async function doObtainBadge() {
+async function doObtainBadge(tier = 0) {
     await BackchatTx.obtainBadge({
+        tier,
         operator: getOperatorAddress(),
         onSuccess: () => {
             BC.hasBadge = true;
+            BC.badgeTier = Math.max(BC.badgeTier, tier);
             closeModal('badge');
-            showToast('Badge obtained!', 'success');
+            const names = ['Verified', 'Premium', 'Elite'];
+            showToast(`${names[tier]} badge obtained!`, 'success');
             renderContent();
         }
+    });
+}
+
+async function doReportPost(postId, category = 0) {
+    await BackchatTx.reportPost({
+        postId, category,
+        onSuccess: () => {
+            // Auto-block: find the author and add to blocked set
+            const post = BC.postsById.get(Number(postId));
+            if (post) BC.blockedAuthors.add(post.author.toLowerCase());
+            closeModal('report');
+            showToast('Post reported. Author blocked from your feed.', 'success');
+            renderContent();
+        },
+        onError: (err) => { showToast(err?.shortMessage || err?.message || 'Report failed', 'error'); }
+    });
+}
+
+async function doBoostPost(postId, tier = 0) {
+    const amount = document.getElementById('boost-post-amount')?.value || '0.001';
+    const ethers = window.ethers;
+    await BackchatTx.boostPost({
+        postId, tier, ethAmount: ethers.parseEther(amount),
+        operator: getOperatorAddress(),
+        onSuccess: () => {
+            closeModal('boost-post');
+            const names = ['Standard', 'Featured'];
+            showToast(`Post boosted (${names[tier]})!`, 'success');
+            renderContent();
+        },
+        onError: (err) => { showToast(err?.shortMessage || err?.message || 'Boost failed', 'error'); }
+    });
+}
+
+async function doTipPost(postId) {
+    const amount = document.getElementById('tip-amount')?.value || '0.001';
+    const ethers = window.ethers;
+    await BackchatTx.tipPost({
+        postId, ethAmount: ethers.parseEther(amount),
+        operator: getOperatorAddress(),
+        onSuccess: () => {
+            closeModal('tip');
+            showToast(`Tipped ${amount} ETH!`, 'success');
+            renderContent();
+        },
+        onError: (err) => { showToast(err?.shortMessage || err?.message || 'Tip failed', 'error'); }
     });
 }
 
@@ -1610,23 +1740,34 @@ function renderCompose() {
 }
 
 function renderPostMenu(post) {
+    if (!State.isConnected) return '';
     const isOwn = post.author?.toLowerCase() === State.userAddress?.toLowerCase();
-    if (!isOwn || !State.isConnected) return '';
     return `
         <div class="bc-post-menu-wrap">
             <button class="bc-post-menu-btn" onclick="event.stopPropagation(); BackchatPage.togglePostMenu('${post.id}')" title="Options">
                 <i class="fa-solid fa-ellipsis"></i>
             </button>
             <div class="bc-post-dropdown" id="post-menu-${post.id}" style="display:none;">
+                ${isOwn ? `
                 <button class="bc-post-dropdown-item" onclick="event.stopPropagation(); BackchatPage.pinPost('${post.id}')">
                     <i class="fa-solid fa-thumbtack"></i> Pin to profile
                 </button>
                 <button class="bc-post-dropdown-item" onclick="event.stopPropagation(); BackchatPage.openChangeTag('${post.id}')">
                     <i class="fa-solid fa-tag"></i> Change Tag
+                </button>` : `
+                <button class="bc-post-dropdown-item" onclick="event.stopPropagation(); BackchatPage.openTip('${post.id}')">
+                    <i class="fa-solid fa-hand-holding-dollar"></i> Tip Author
                 </button>
+                <button class="bc-post-dropdown-item danger" onclick="event.stopPropagation(); BackchatPage.openReport('${post.id}')">
+                    <i class="fa-solid fa-flag"></i> Report
+                </button>`}
+                <button class="bc-post-dropdown-item" onclick="event.stopPropagation(); BackchatPage.openBoostPost('${post.id}')">
+                    <i class="fa-solid fa-rocket"></i> Boost Post
+                </button>
+                ${isOwn ? `
                 <button class="bc-post-dropdown-item danger" onclick="event.stopPropagation(); BackchatPage.deletePost('${post.id}')">
                     <i class="fa-solid fa-trash"></i> Delete
-                </button>
+                </button>` : ''}
             </div>
         </div>`;
 }
@@ -1658,12 +1799,12 @@ function renderPost(post, index = 0, options = {}) {
         <div class="bc-post" data-post-id="${post.id}" ${animStyle} onclick="BackchatPage.viewPost('${post.id}')">
             <div class="bc-post-top">
                 <div class="bc-avatar ${boosted ? 'boosted' : ''}" onclick="event.stopPropagation(); BackchatPage.viewProfile('${post.author}')">
-                    ${username ? username.charAt(0).toUpperCase() : getInitials(post.author)}
+                    ${renderAvatar(post.author)}
                 </div>
                 <div class="bc-post-head">
                     <div class="bc-post-author-row">
                         <span class="bc-author-name" onclick="event.stopPropagation(); BackchatPage.viewProfile('${post.author}')">${authorName}</span>
-                        ${badged ? '<i class="fa-solid fa-circle-check bc-verified-icon" title="Verified"></i>' : ''}
+                        ${badged ? `<i class="fa-solid fa-circle-check bc-verified-icon" title="${['Verified','Premium','Elite'][BC.badgeTier] || 'Verified'}" style="${BC.badgeTier === 2 ? 'color:#a855f7' : BC.badgeTier === 1 ? 'color:#f59e0b' : ''}"></i>` : ''}
                         ${username ? `<span class="bc-post-time">@${username}</span>` : ''}
                         <span class="bc-post-time">&middot; ${formatTimeAgo(post.timestamp)}</span>
                         ${post.tag > 0 ? `<span class="bc-tag-badge" style="color:${tagInfo.color};border-color:${tagInfo.color}30"><i class="fa-solid ${tagInfo.icon}"></i> ${tagInfo.name}</span>` : ''}
@@ -1811,14 +1952,14 @@ function renderProfile() {
     const followersCount = BC.followers.size;
     const followingCount = BC.following.size;
     const displayName = BC.userProfile?.displayName || BC.userProfile?.username || shortenAddress(State.userAddress);
-    const avatarChar = BC.userProfile?.username ? BC.userProfile.username.charAt(0).toUpperCase() : getInitials(State.userAddress);
+    const avatarUrl = BC.userProfile?.avatar ? getIPFSUrl(BC.userProfile.avatar) : '';
 
     return `
         <div class="bc-profile-section">
             <div class="bc-profile-banner"></div>
             <div class="bc-profile-main">
                 <div class="bc-profile-top-row">
-                    <div class="bc-profile-pic ${BC.isBoosted ? 'boosted' : ''}">${avatarChar}</div>
+                    <div class="bc-profile-pic ${BC.isBoosted ? 'boosted' : ''}">${avatarUrl ? `<img src="${avatarUrl}" style="width:100%;height:100%;border-radius:50%;object-fit:cover;" onerror="this.outerHTML='${BC.userProfile?.username ? BC.userProfile.username.charAt(0).toUpperCase() : getInitials(State.userAddress)}'">` : (BC.userProfile?.username ? BC.userProfile.username.charAt(0).toUpperCase() : getInitials(State.userAddress))}</div>
                     <div class="bc-profile-actions">
                         ${BC.hasProfile ? `<button class="bc-btn bc-btn-outline" onclick="BackchatPage.openEditProfile()"><i class="fa-solid fa-pen"></i> Edit</button>` : `<button class="bc-btn bc-btn-primary" onclick="BackchatPage.openProfileSetup()"><i class="fa-solid fa-user-plus"></i> Create Profile</button>`}
                         ${!BC.hasBadge ? `<button class="bc-btn bc-btn-outline" onclick="BackchatPage.openBadge()"><i class="fa-solid fa-circle-check"></i> Badge</button>` : ''}
@@ -1925,7 +2066,8 @@ function renderUserProfile() {
     const displayName = profile?.displayName || profile?.username || shortenAddress(addr);
     const username = profile?.username;
     const bio = profile?.bio;
-    const avatarChar = username ? username.charAt(0).toUpperCase() : getInitials(addr);
+    const avatarUrl = getProfileAvatar(addr);
+    const avatarFallback = username ? username.charAt(0).toUpperCase() : getInitials(addr);
     const isMe = addrLower === State.userAddress?.toLowerCase();
     const isFollowing = BC.following.has(addrLower);
     const counts = BC.followCounts.get(addrLower) || { followers: 0, following: 0 };
@@ -1936,7 +2078,7 @@ function renderUserProfile() {
             <div class="bc-profile-banner"></div>
             <div class="bc-profile-main">
                 <div class="bc-profile-top-row">
-                    <div class="bc-profile-pic">${avatarChar}</div>
+                    <div class="bc-profile-pic">${avatarUrl ? `<img src="${avatarUrl}" style="width:100%;height:100%;border-radius:50%;object-fit:cover;" onerror="this.outerHTML='${avatarFallback}'">` : avatarFallback}</div>
                     <div class="bc-profile-actions">
                         ${!isMe && State.isConnected ? `
                             <button class="bc-follow-toggle ${isFollowing ? 'do-unfollow' : 'do-follow'}"
@@ -2067,7 +2209,7 @@ function renderModals() {
             </div>
         </div>
 
-        <!-- Badge Modal -->
+        <!-- Badge Modal (V2: Tiers) -->
         <div class="bc-modal-overlay" id="modal-badge">
             <div class="bc-modal-box">
                 <div class="bc-modal-top">
@@ -2075,9 +2217,18 @@ function renderModals() {
                     <button class="bc-modal-x" onclick="BackchatPage.closeModal('badge')"><i class="fa-solid fa-xmark"></i></button>
                 </div>
                 <div class="bc-modal-inner">
-                    <p class="bc-modal-desc">Get a verified trust badge for 1 year. Show the community you're committed.</p>
-                    <div class="bc-fee-row"><span class="bc-fee-label">Badge Fee</span><span class="bc-fee-val">${formatETH(BC.fees.badge)} ETH</span></div>
-                    <button class="bc-btn bc-btn-primary" style="width:100%;margin-top:20px;justify-content:center;" onclick="BackchatPage.confirmBadge()"><i class="fa-solid fa-circle-check"></i> Get Badge (1 Year)</button>
+                    <p class="bc-modal-desc">Get a verified badge for 1 year. Higher tiers = more prestige.</p>
+                    <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:16px;">
+                        <button class="bc-btn bc-btn-outline" style="width:100%;justify-content:space-between;padding:12px 16px;" onclick="BackchatPage.confirmBadge(0)">
+                            <span><i class="fa-solid fa-circle-check" style="color:#3b82f6"></i> Verified</span><span style="color:var(--bc-text-3)">0.01 ETH/year</span>
+                        </button>
+                        <button class="bc-btn bc-btn-outline" style="width:100%;justify-content:space-between;padding:12px 16px;border-color:#eab308;" onclick="BackchatPage.confirmBadge(1)">
+                            <span><i class="fa-solid fa-circle-check" style="color:#eab308"></i> Premium</span><span style="color:var(--bc-text-3)">0.05 ETH/year</span>
+                        </button>
+                        <button class="bc-btn bc-btn-outline" style="width:100%;justify-content:space-between;padding:12px 16px;border-color:#a855f7;" onclick="BackchatPage.confirmBadge(2)">
+                            <span><i class="fa-solid fa-gem" style="color:#a855f7"></i> Elite</span><span style="color:var(--bc-text-3)">0.1 ETH/year</span>
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>
@@ -2137,10 +2288,80 @@ function renderModals() {
                     <button class="bc-modal-x" onclick="BackchatPage.closeModal('edit-profile')"><i class="fa-solid fa-xmark"></i></button>
                 </div>
                 <div class="bc-modal-inner">
+                    <div class="bc-field">
+                        <label class="bc-label">Profile Picture</label>
+                        <div style="display:flex;align-items:center;gap:12px;margin-bottom:8px;">
+                            <div class="bc-avatar" style="width:56px;height:56px;font-size:20px;" id="edit-avatar-preview">
+                                ${BC.userProfile?.avatar ? `<img src="${getIPFSUrl(BC.userProfile.avatar)}" style="width:100%;height:100%;border-radius:50%;object-fit:cover;">` : (BC.userProfile?.username ? BC.userProfile.username.charAt(0).toUpperCase() : '?')}
+                            </div>
+                            <label class="bc-btn bc-btn-outline" style="cursor:pointer;font-size:13px;">
+                                <i class="fa-solid fa-camera"></i> Change Photo
+                                <input type="file" id="edit-avatar-file" accept="image/jpeg,image/png,image/gif,image/webp" style="display:none;" onchange="BackchatPage.previewAvatar(this)">
+                            </label>
+                        </div>
+                    </div>
                     <div class="bc-field"><label class="bc-label">Display Name</label><input type="text" id="edit-displayname" class="bc-input" value="${escapeHtml(BC.userProfile?.displayName || '')}" maxlength="30" placeholder="Your display name"></div>
                     <div class="bc-field"><label class="bc-label">Bio</label><textarea id="edit-bio" class="bc-input" maxlength="160" rows="3" placeholder="About you..." style="resize:none;">${escapeHtml(BC.userProfile?.bio || '')}</textarea></div>
                     <p style="font-size:12px;color:var(--bc-text-3);margin-bottom:16px;">Username cannot be changed. Only gas fee applies.</p>
                     <button id="bc-edit-profile-btn" class="bc-btn bc-btn-primary" style="width:100%;justify-content:center;" onclick="BackchatPage.confirmEditProfile()"><i class="fa-solid fa-check"></i> Save Changes</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Report Modal (V2) -->
+        <div class="bc-modal-overlay" id="modal-report">
+            <div class="bc-modal-box">
+                <div class="bc-modal-top">
+                    <span class="bc-modal-title"><i class="fa-solid fa-flag" style="color:#ef4444"></i> Report Post</span>
+                    <button class="bc-modal-x" onclick="BackchatPage.closeModal('report')"><i class="fa-solid fa-xmark"></i></button>
+                </div>
+                <div class="bc-modal-inner">
+                    <p class="bc-modal-desc">Report this post and block the author from your feed. Cost: 0.0001 ETH</p>
+                    <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:16px;">
+                        <button class="bc-btn bc-btn-outline" style="width:100%;justify-content:flex-start;gap:8px;" onclick="BackchatPage.confirmReport(0)"><i class="fa-solid fa-robot"></i> Spam</button>
+                        <button class="bc-btn bc-btn-outline" style="width:100%;justify-content:flex-start;gap:8px;" onclick="BackchatPage.confirmReport(1)"><i class="fa-solid fa-hand"></i> Harassment</button>
+                        <button class="bc-btn bc-btn-outline" style="width:100%;justify-content:flex-start;gap:8px;border-color:#ef4444;color:#ef4444;" onclick="BackchatPage.confirmReport(2)"><i class="fa-solid fa-gavel"></i> Illegal Content</button>
+                        <button class="bc-btn bc-btn-outline" style="width:100%;justify-content:flex-start;gap:8px;" onclick="BackchatPage.confirmReport(3)"><i class="fa-solid fa-mask"></i> Scam</button>
+                        <button class="bc-btn bc-btn-outline" style="width:100%;justify-content:flex-start;gap:8px;" onclick="BackchatPage.confirmReport(4)"><i class="fa-solid fa-circle-exclamation"></i> Other</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Boost Post Modal (V2) -->
+        <div class="bc-modal-overlay" id="modal-boost-post">
+            <div class="bc-modal-box">
+                <div class="bc-modal-top">
+                    <span class="bc-modal-title"><i class="fa-solid fa-rocket" style="color:var(--bc-accent)"></i> Boost Post</span>
+                    <button class="bc-modal-x" onclick="BackchatPage.closeModal('boost-post')"><i class="fa-solid fa-xmark"></i></button>
+                </div>
+                <div class="bc-modal-inner">
+                    <p class="bc-modal-desc">Boost this post for more visibility.</p>
+                    <div class="bc-field"><label class="bc-label">Amount (ETH)</label><input type="number" id="boost-post-amount" class="bc-input" value="0.005" min="0.001" step="0.001"></div>
+                    <div style="display:flex;flex-direction:column;gap:8px;margin-top:12px;">
+                        <button class="bc-btn bc-btn-outline" style="width:100%;justify-content:space-between;" onclick="BackchatPage.confirmBoostPost(0)">
+                            <span><i class="fa-solid fa-rocket"></i> Standard</span><span style="color:var(--bc-text-3)">0.001 ETH/day</span>
+                        </button>
+                        <button class="bc-btn bc-btn-primary" style="width:100%;justify-content:space-between;" onclick="BackchatPage.confirmBoostPost(1)">
+                            <span><i class="fa-solid fa-star"></i> Featured</span><span>0.005 ETH/day</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tip Modal (V2) -->
+        <div class="bc-modal-overlay" id="modal-tip">
+            <div class="bc-modal-box">
+                <div class="bc-modal-top">
+                    <span class="bc-modal-title"><i class="fa-solid fa-hand-holding-dollar" style="color:var(--bc-green)"></i> Tip Author</span>
+                    <button class="bc-modal-x" onclick="BackchatPage.closeModal('tip')"><i class="fa-solid fa-xmark"></i></button>
+                </div>
+                <div class="bc-modal-inner">
+                    <p class="bc-modal-desc">Send ETH directly to the post author as a tip.</p>
+                    <div class="bc-field"><label class="bc-label">Amount (ETH)</label><input type="number" id="tip-amount" class="bc-input" value="0.001" min="0.0001" step="0.0001"></div>
+                    <div class="bc-fee-row"><span class="bc-fee-label">Minimum</span><span class="bc-fee-val">0.0001 ETH</span></div>
+                    <button class="bc-btn bc-btn-primary" style="width:100%;margin-top:16px;justify-content:center;background:var(--bc-green);" onclick="BackchatPage.confirmTip()"><i class="fa-solid fa-hand-holding-dollar"></i> Send Tip</button>
                 </div>
             </div>
         </div>`;
@@ -2192,12 +2413,32 @@ async function confirmDownvote() {
 }
 
 function openBadge() { document.getElementById('modal-badge')?.classList.add('active'); }
-async function confirmBadge() { closeModal('badge'); await doObtainBadge(); }
+async function confirmBadge(tier = 0) { await doObtainBadge(tier); }
 function openBoost() { document.getElementById('modal-boost')?.classList.add('active'); }
 async function confirmBoost() {
     const amount = document.getElementById('boost-amount')?.value || '0.001';
     closeModal('boost');
     await doBoostProfile(amount);
+}
+
+// V2: Report, Boost Post, Tip
+function openReport(postId) { selectedPostForAction = postId; document.getElementById('modal-report')?.classList.add('active'); }
+async function confirmReport(category) { await doReportPost(selectedPostForAction, category); }
+function openBoostPost(postId) { selectedPostForAction = postId; document.getElementById('modal-boost-post')?.classList.add('active'); }
+async function confirmBoostPost(tier) { await doBoostPost(selectedPostForAction, tier); }
+function openTip(postId) { selectedPostForAction = postId; document.getElementById('modal-tip')?.classList.add('active'); }
+async function confirmTip() { await doTipPost(selectedPostForAction); }
+
+function previewAvatar(input) {
+    const file = input?.files?.[0];
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) { showToast('Image too large. Maximum 5MB.', 'error'); return; }
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+        const preview = document.getElementById('edit-avatar-preview');
+        if (preview) preview.innerHTML = `<img src="${ev.target.result}" style="width:100%;height:100%;border-radius:50%;object-fit:cover;">`;
+    };
+    reader.readAsDataURL(file);
 }
 
 function openRepostConfirm(postId) {
@@ -2258,6 +2499,7 @@ export const BackchatPage = {
             loadSocialGraph(),
             loadActiveRooms()
         ]);
+        await loadBlockedAuthors();
     },
 
     async refresh() {
@@ -2270,6 +2512,7 @@ export const BackchatPage = {
             loadSocialGraph(),
             loadActiveRooms()
         ]);
+        await loadBlockedAuthors();
     },
 
     setTab(tab) {
@@ -2337,6 +2580,14 @@ export const BackchatPage = {
     confirmEditProfile,
     closeModal,
     togglePostMenu,
+
+    openReport,
+    confirmReport,
+    openBoostPost,
+    confirmBoostPost,
+    openTip,
+    confirmTip,
+    previewAvatar,
 
     goLive,
     endLive,
