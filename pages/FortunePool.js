@@ -88,6 +88,12 @@ const COMBO_MAX_MULTIPLIER = TIERS.reduce((sum, t) => sum + t.multiplier, 0); //
 const JACKPOT_MULTIPLIER = TIERS[2].multiplier; // 100
 const JACKPOT_RANGE = TIERS[2].range; // 150
 
+// Combo win probability: chance of matching at least 1 tier
+// = 1 - (1-0.20) × (1-0.067) × (1-0.0067) ≈ 25.9%
+const COMBO_WIN_CHANCE = 1 - TIERS.reduce((miss, t) => miss * (1 - 1 / t.range), 1);
+const COMBO_WIN_PCT = (COMBO_WIN_CHANCE * 100).toFixed(0); // "26"
+const COMBO_BOOST_VS_EASY = Math.round(((COMBO_WIN_CHANCE - 1 / TIERS[0].range) / (1 / TIERS[0].range)) * 100); // ~30
+
 // ============================================================================
 // GAME STATE
 // ============================================================================
@@ -585,11 +591,20 @@ function renderPlay(container) {
                     <div class="text-center mb-3">
                         <p class="text-violet-400 font-bold text-lg mb-1">Combo &mdash; All 3 Tiers</p>
                         <p class="text-zinc-400 text-xs">Pick one number per tier &bull; up to <span class="text-violet-400 font-black">${COMBO_MAX_MULTIPLIER}x</span></p>
-                        <div class="mt-2 p-2 bg-violet-500/10 rounded-lg border border-violet-500/20">
-                            <p class="text-[10px] text-violet-300">
-                                Easy 20% &bull; Medium 6.7% &bull; Hard 0.67%<br>
-                                All 3: ~0.009% (1 in 11,194)
+                        <div class="mt-2 p-2 bg-emerald-500/10 rounded-lg border border-emerald-500/20">
+                            <p class="text-sm text-emerald-400 font-bold mb-1">~${COMBO_WIN_PCT}% chance of winning</p>
+                            <p class="text-[10px] text-emerald-300/70">
+                                ${COMBO_BOOST_VS_EASY}% more chance than Easy &bull; Match any tier to win!
                             </p>
+                        </div>
+                        <div class="mt-2 flex justify-center gap-3">
+                            ${TIERS.map(t => `
+                                <div class="text-center">
+                                    <span class="text-xs">${t.emoji}</span>
+                                    <p class="text-[9px] ${t.textColor}">${t.multiplier}x</p>
+                                    <p class="text-[8px] text-zinc-500">${t.chance}</p>
+                                </div>
+                            `).join('')}
                         </div>
                     </div>
                     <div id="picker-area"></div>
@@ -636,11 +651,40 @@ function renderPlay(container) {
                 ` : ''}
             </div>
 
-            <!-- Combo Toggle -->
-            <button id="toggle-combo" class="w-full flex items-center justify-between px-4 py-3 bg-zinc-900/40 border border-zinc-800/40 rounded-xl text-zinc-500 hover:text-zinc-300 transition-colors text-sm">
-                <span>${isCombo ? 'Single tier mode' : 'Combo &mdash; Play all 3 at once'}</span>
-                <span class="text-xs">${isCombo ? 'Pick one difficulty' : `Up to ${COMBO_MAX_MULTIPLIER}x`}</span>
-            </button>
+            <!-- Combo Banner -->
+            ${!isCombo ? `
+                <div id="toggle-combo" class="cursor-pointer w-full bg-gradient-to-r from-violet-900/30 via-purple-900/20 to-violet-900/30 border border-violet-500/40 rounded-2xl p-4 hover:border-violet-400/60 hover:shadow-lg hover:shadow-violet-500/10 transition-all glow-pulse" style="--glow-color: rgba(139,92,246,0.15)">
+                    <div class="flex items-center gap-3 mb-2">
+                        <div class="w-11 h-11 rounded-xl bg-gradient-to-br from-violet-500/30 to-purple-600/20 border border-violet-500/40 flex items-center justify-center flex-shrink-0">
+                            <span class="text-2xl">🎰</span>
+                        </div>
+                        <div class="flex-1">
+                            <div class="flex items-center gap-2">
+                                <p class="text-violet-300 font-bold text-sm">Combo Mode</p>
+                                <span class="px-1.5 py-0.5 bg-emerald-500/20 border border-emerald-500/40 rounded text-[9px] text-emerald-400 font-bold">+${COMBO_BOOST_VS_EASY}% CHANCE</span>
+                            </div>
+                            <p class="text-violet-400/60 text-xs mt-0.5">Play all 3 tiers at once &bull; ~${COMBO_WIN_PCT}% win chance</p>
+                        </div>
+                        <div class="text-right flex-shrink-0">
+                            <p class="text-violet-400 font-black text-xl">${COMBO_MAX_MULTIPLIER}x</p>
+                            <p class="text-violet-400/50 text-[9px]">max prize</p>
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-2 mt-1">
+                        <div class="flex-1 h-px bg-gradient-to-r from-transparent via-violet-500/30 to-transparent"></div>
+                        <p class="text-[10px] text-violet-400/70 flex-shrink-0">
+                            <i class="fa-solid fa-arrow-up text-emerald-400 mr-1"></i>
+                            ${COMBO_BOOST_VS_EASY}% more chance than Easy alone
+                        </p>
+                        <div class="flex-1 h-px bg-gradient-to-r from-transparent via-violet-500/30 to-transparent"></div>
+                    </div>
+                </div>
+            ` : `
+                <button id="toggle-combo" class="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-zinc-900/40 border border-zinc-800/40 rounded-xl text-zinc-500 hover:text-zinc-300 transition-colors text-sm">
+                    <i class="fa-solid fa-arrow-left text-xs"></i>
+                    <span>Back to single tier</span>
+                </button>
+            `}
         </div>
     `;
 
