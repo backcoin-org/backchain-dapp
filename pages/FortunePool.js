@@ -24,7 +24,6 @@ import { FortuneTx } from '../modules/transactions/index.js';
 // ============================================================================
 const EXPLORER_TX = "https://sepolia.arbiscan.io/tx/";
 const EXPLORER_ADDRESS = "https://sepolia.arbiscan.io/address/";
-const ORACLE_ADDRESS = "0x16346f5a45f9615f1c894414989f0891c54ef07b";
 const FORTUNE_POOL_ADDRESS = addresses?.fortunePool || "0x277dB00d533Bbc0fc267bbD954640aDA38ee6B37";
 const TIGER_IMAGE = "./assets/fortune.png";
 const SHARE_POINTS = 1000;
@@ -41,15 +40,15 @@ const MODAL_UI = {
 const SHARE_TEXTS = {
     pt: {
         win: (prize) => `🎉 Ganhei ${prize.toLocaleString()} BKC no Fortune Pool!\n\n🐯 Loteria on-chain com resultados instantâneos!\n\n👉 https://backcoin.org\n\n@backcoin #Backcoin #Web3 #Arbitrum`,
-        lose: `🐯 Jogando Fortune Pool no @backcoin!\n\nLoteria on-chain verificável com Oracle seguro!\n\n👉 https://backcoin.org\n\n#Backcoin #Web3 #Arbitrum`
+        lose: `🐯 Jogando Fortune Pool no @backcoin!\n\nLoteria on-chain verificável!\n\n👉 https://backcoin.org\n\n#Backcoin #Web3 #Arbitrum`
     },
     en: {
         win: (prize) => `🎉 Just won ${prize.toLocaleString()} BKC on Fortune Pool!\n\n🐯 On-chain lottery with instant results!\n\n👉 https://backcoin.org\n\n@backcoin #Backcoin #Web3 #Arbitrum`,
-        lose: `🐯 Playing Fortune Pool on @backcoin!\n\nVerifiable on-chain lottery with secure Oracle!\n\n👉 https://backcoin.org\n\n#Backcoin #Web3 #Arbitrum`
+        lose: `🐯 Playing Fortune Pool on @backcoin!\n\nVerifiable on-chain lottery!\n\n👉 https://backcoin.org\n\n#Backcoin #Web3 #Arbitrum`
     },
     es: {
         win: (prize) => `🎉 ¡Gané ${prize.toLocaleString()} BKC en Fortune Pool!\n\n🐯 ¡Lotería on-chain con resultados instantáneos!\n\n👉 https://backcoin.org\n\n@backcoin #Backcoin #Web3 #Arbitrum`,
-        lose: `🐯 ¡Jugando Fortune Pool en @backcoin!\n\nLotería on-chain verificable con Oracle seguro!\n\n👉 https://backcoin.org\n\n#Backcoin #Web3 #Arbitrum`
+        lose: `🐯 ¡Jugando Fortune Pool en @backcoin!\n\nLotería on-chain verificable!\n\n👉 https://backcoin.org\n\n#Backcoin #Web3 #Arbitrum`
     }
 };
 
@@ -219,6 +218,21 @@ function injectStyles() {
         }
         .glow-pulse { animation: glow-pulse 1s ease-in-out infinite; }
 
+        /* Progress bar shimmer */
+        @keyframes progress-shimmer {
+            0% { background-position: -200% center; }
+            100% { background-position: 200% center; }
+        }
+        @keyframes progress-pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.75; }
+        }
+        .progress-animate {
+            background: linear-gradient(90deg, #10b981, #f59e0b, #ea580c, #f59e0b, #10b981) !important;
+            background-size: 200% 100% !important;
+            animation: progress-shimmer 2s linear infinite, progress-pulse 1.5s ease-in-out infinite;
+        }
+
         /* Confetti */
         @keyframes confetti-fall {
             0% { transform: translateY(-100vh) rotate(0deg); opacity: 1; }
@@ -348,14 +362,8 @@ function render() {
                 <h1 class="text-2xl font-bold text-white mt-2">Fortune Pool</h1>
                 <p class="text-zinc-500 text-sm mt-1">On-chain Lottery &bull; Verifiable Randomness</p>
 
-                <!-- Contract links -->
-                <div class="flex items-center justify-center gap-2 mt-3 flex-wrap">
-                    <a href="${EXPLORER_ADDRESS}${ORACLE_ADDRESS}" target="_blank" rel="noopener"
-                       class="inline-flex items-center gap-1.5 px-2.5 py-1.5 bg-emerald-500/10 border border-emerald-500/30 rounded-full hover:bg-emerald-500/20 transition-colors">
-                        <i class="fa-solid fa-shield-halved text-emerald-400 text-[10px]"></i>
-                        <span class="text-emerald-400 text-[10px] font-medium">Oracle</span>
-                        <i class="fa-solid fa-external-link text-emerald-400/50 text-[8px]"></i>
-                    </a>
+                <!-- Contract link -->
+                <div class="flex items-center justify-center mt-3">
                     <a href="${EXPLORER_ADDRESS}${FORTUNE_POOL_ADDRESS}" target="_blank" rel="noopener"
                        class="inline-flex items-center gap-1.5 px-2.5 py-1.5 bg-amber-500/10 border border-amber-500/30 rounded-full hover:bg-amber-500/20 transition-colors">
                         <i class="fa-solid fa-file-contract text-amber-400 text-[10px]"></i>
@@ -1335,7 +1343,7 @@ function renderQuickReveal() {
                 </div>
                 <!-- Progress bar -->
                 <div class="w-full bg-zinc-800 rounded-full h-2 overflow-hidden">
-                    <div id="reveal-progress" class="h-full bg-gradient-to-r from-emerald-500 via-amber-500 to-orange-500 rounded-full transition-all duration-1000" style="width: 33%"></div>
+                    <div id="reveal-progress" class="h-full bg-gradient-to-r from-emerald-500 via-amber-500 to-orange-500 rounded-full transition-all duration-1000 progress-animate" style="width: 33%"></div>
                 </div>
                 <p id="reveal-status-text" class="text-center text-xs text-zinc-400 mt-2">
                     <i class="fa-solid fa-cube mr-1"></i>Waiting for block confirmations...
