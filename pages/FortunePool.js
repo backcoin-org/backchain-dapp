@@ -941,6 +941,7 @@ function setupPlayEvents(maxMulti, balanceNum) {
 // ============================================================================
 async function commitGame() {
     Game.phase = 'processing';
+    autoRevealAttempt = 0;
     renderPhase();
 
     try {
@@ -1055,7 +1056,7 @@ function renderWaiting(container) {
 
     const elapsed = Date.now() - (Game.commitment.waitStartTime || Date.now());
     // Realistic estimate: block delay + propagation + auto-reveal wait (~10s total)
-    const totalWaitMs = (Game.commitment.revealDelay * ESTIMATED_BLOCK_TIME) + 8000;
+    const totalWaitMs = (Game.commitment.revealDelay * ESTIMATED_BLOCK_TIME) + 13000;
     const remainingMs = Math.max(0, totalWaitMs - elapsed);
     const remainingSecs = Math.ceil(remainingMs / 1000);
 
@@ -1156,7 +1157,7 @@ function updateWaitingCountdown() {
     if (!timerEl) return;
 
     const elapsed = Date.now() - (Game.commitment.waitStartTime || Date.now());
-    const totalWaitMs = (Game.commitment.revealDelay * ESTIMATED_BLOCK_TIME) + 8000;
+    const totalWaitMs = (Game.commitment.revealDelay * ESTIMATED_BLOCK_TIME) + 13000;
     const remainingMs = Math.max(0, totalWaitMs - elapsed);
     const remainingSecs = Math.ceil(remainingMs / 1000);
 
@@ -1234,6 +1235,10 @@ async function checkCanReveal() {
 // Auto-reveal — skip pre-simulation (staticCall fails on Arbitrum L2 due to
 // blockhash not being available in eth_call context). The actual TX is mined in
 // a future block where the blockhash IS available, so we go directly to reveal.
+// Uses increasing delays and auto-retry to avoid wasted gas from premature attempts.
+let autoRevealAttempt = 0;
+const AUTO_REVEAL_DELAYS = [10000, 15000, 20000]; // 10s, 15s, 20s (increasing)
+
 async function autoRevealWithPreSim() {
     if (Game.phase !== 'waiting') return;
 
@@ -1249,8 +1254,9 @@ async function autoRevealWithPreSim() {
     }
     if (btnTextEl) btnTextEl.textContent = 'Auto-revealing...';
 
-    // Wait for blockhash propagation on Arbitrum L2 (~5s is safe for 5-block delay)
-    await new Promise(r => setTimeout(r, 5000));
+    const delay = AUTO_REVEAL_DELAYS[Math.min(autoRevealAttempt, AUTO_REVEAL_DELAYS.length - 1)];
+    console.log(`[FortunePool] Waiting ${delay / 1000}s before reveal attempt ${autoRevealAttempt + 1}...`);
+    await new Promise(r => setTimeout(r, delay));
 
     if (Game.phase !== 'waiting') return;
 
@@ -1291,6 +1297,7 @@ async function executeReveal() {
 
             onSuccess: (receipt, gameResult) => {
                 if (revealCheckInterval) clearInterval(revealCheckInterval);
+                autoRevealAttempt = 0;
 
                 Game.txHash = receipt.hash;
                 Game.result = {
@@ -1307,26 +1314,37 @@ async function executeReveal() {
             },
 
             onError: (error) => {
-                if (!error.cancelled) {
-                    const msg = error.message || '';
-                    if (msg.includes('0x92555c0e') || msg.includes('BlockhashUnavailable')) {
-                        showToast('Block data not available yet. Will retry automatically.', 'warning');
-                    } else {
-                        showToast(msg || 'Reveal failed', 'error');
-                    }
-                }
-                if (btn) {
-                    btn.disabled = false;
-                    btn.innerHTML = '<i class="fa-solid fa-dice mr-2"></i>Try Again';
+                if (error.cancelled) return;
+
+                const msg = error.message || '';
+                const isRevert = msg.includes('revert') || msg.includes('0x92555c0e') ||
+                                 msg.includes('BlockhashUnavailable') || msg.includes('CALL_EXCEPTION');
+
+                if (isRevert && autoRevealAttempt < AUTO_REVEAL_DELAYS.length - 1) {
+                    autoRevealAttempt++;
+                    console.warn(`[FortunePool] Reveal reverted (attempt ${autoRevealAttempt}), auto-retrying...`);
+                    showToast(`Blockhash not ready, retrying (${autoRevealAttempt + 1}/${AUTO_REVEAL_DELAYS.length})...`, 'warning');
+                    autoRevealWithPreSim();
+                } else {
+                    showToast(msg || 'Reveal failed', 'error');
+                    autoRevealAttempt = 0;
+                    enableManualRevealButton();
                 }
             }
         });
     } catch (e) {
         console.error('Reveal error:', e);
-        showToast('Reveal failed: ' + (e.message || 'Unknown error'), 'error');
-        if (btn) {
-            btn.disabled = false;
-            btn.innerHTML = '<i class="fa-solid fa-dice mr-2"></i>Try Again';
+        const msg = e.message || '';
+        const isRevert = msg.includes('revert') || msg.includes('BlockhashUnavailable');
+
+        if (isRevert && autoRevealAttempt < AUTO_REVEAL_DELAYS.length - 1) {
+            autoRevealAttempt++;
+            console.warn(`[FortunePool] Reveal exception (attempt ${autoRevealAttempt}), auto-retrying...`);
+            autoRevealWithPreSim();
+        } else {
+            showToast('Reveal failed: ' + (msg || 'Unknown error'), 'error');
+            autoRevealAttempt = 0;
+            enableManualRevealButton();
         }
     }
 }
