@@ -92,9 +92,9 @@ const JACKPOT_RANGE = TIERS[2].range; // 150
 // GAME STATE
 // ============================================================================
 const Game = {
-    mode: 'jackpot',      // 'jackpot' or 'combo'
+    mode: 'easy',         // 'easy' | 'medium' | 'hard' | 'combo'
     phase: 'play',        // 'play' | 'processing' | 'waiting' | 'result'
-    guess: 50,            // Jackpot guess
+    guess: 2,             // Single guess (easy/jackpot)
     guesses: [2, 5, 50],  // Combo guesses
     comboStep: 0,         // Current combo picker step (0-2)
     wager: 10,
@@ -119,6 +119,17 @@ const Game = {
 };
 
 let revealCheckInterval = null;
+
+// Helper: get mode configuration (tiers, tierMask, multiplier)
+function getModeConfig(mode) {
+    switch(mode) {
+        case 'easy':   return { tiers: [TIERS[0]], tierMask: 1, multi: TIERS[0].multiplier, isSingle: true };
+        case 'medium': return { tiers: [TIERS[1]], tierMask: 2, multi: TIERS[1].multiplier, isSingle: true };
+        case 'hard':   return { tiers: [TIERS[2]], tierMask: 4, multi: TIERS[2].multiplier, isSingle: true };
+        case 'combo':  return { tiers: TIERS, tierMask: 7, multi: COMBO_MAX_MULTIPLIER, isSingle: false };
+        default:       return { tiers: [TIERS[0]], tierMask: 1, multi: TIERS[0].multiplier, isSingle: true };
+    }
+}
 
 // ============================================================================
 // STYLES
@@ -433,9 +444,9 @@ async function tryRecoverActiveGame() {
         console.log('[FortunePool] Recovering active game from localStorage:', gameId);
         Game.gameId = Number(gameId);
         Game.commitment.userSecret = data.userSecret;
-        Game.mode = data.tierMask === 4 ? 'jackpot' : 'combo';
+        Game.mode = data.tierMask === 1 ? 'easy' : data.tierMask === 2 ? 'medium' : data.tierMask === 4 ? 'hard' : 'combo';
         Game.guesses = data.guesses || [2, 5, 50];
-        Game.guess = Game.mode === 'jackpot' ? (data.guesses?.[0] || 50) : 50;
+        Game.guess = data.guesses?.[0] || (Game.mode === 'hard' ? 50 : Game.mode === 'medium' ? 5 : 2);
         Game.commitment.waitStartTime = data.commitTimestamp || Date.now();
         Game.commitment.canReveal = true;
         Game.phase = 'waiting';
@@ -464,9 +475,9 @@ function checkPendingGame() {
             console.log('[FortunePool] Recovering pending game:', pending.gameId);
             Game.gameId = pending.gameId;
             Game.commitment.userSecret = pending.userSecret;
-            Game.mode = pending.tierMask === 4 ? 'jackpot' : 'combo';
+            Game.mode = pending.tierMask === 1 ? 'easy' : pending.tierMask === 2 ? 'medium' : pending.tierMask === 4 ? 'hard' : 'combo';
             Game.guesses = pending.guesses || [2, 5, 50];
-            Game.guess = Game.mode === 'jackpot' ? (pending.guesses?.[0] || 50) : 50;
+            Game.guess = pending.guesses?.[0] || (Game.mode === 'hard' ? 50 : Game.mode === 'medium' ? 5 : 2);
             Game.wager = pending.wagerAmount ? Number(window.ethers?.formatEther(BigInt(pending.wagerAmount)) || 10) : 10;
             Game.commitment.waitStartTime = pending.commitTimestamp || Date.now();
             Game.commitment.canReveal = false;
@@ -527,221 +538,247 @@ function updateTigerAnimation(phase) {
 }
 
 // ============================================================================
-// PLAY PHASE — Unified screen: mode tabs + picker + wager + buttons
+// PLAY PHASE — Difficulty tabs + number picker + wager
 // ============================================================================
 function renderPlay(container) {
-    const isJackpot = Game.mode === 'jackpot';
-    const maxMulti = isJackpot ? JACKPOT_MULTIPLIER : COMBO_MAX_MULTIPLIER;
     const balanceNum = formatBigNumber(State.currentUserBalance || 0n);
     const hasBalance = balanceNum >= 1;
-
-    const serviceFeeWei = isJackpot ? Game.serviceFee1x : Game.serviceFee5x;
-    const serviceFeeEth = serviceFeeWei > 0n ? Number(serviceFeeWei) / 1e18 : 0;
-    const hasFee = serviceFeeWei > 0n;
+    const canPlay = hasBalance && State.isConnected;
+    const cfg = getModeConfig(Game.mode);
+    const isCombo = Game.mode === 'combo';
+    const tier = isCombo ? null : cfg.tiers[0];
 
     container.innerHTML = `
         <div class="space-y-4">
-            <!-- Mode Tabs -->
-            <div class="flex bg-zinc-900/60 border border-zinc-800/50 rounded-xl overflow-hidden">
-                <button id="tab-jackpot" class="flex-1 py-3 text-center font-bold text-sm transition-all ${isJackpot ? 'bg-amber-500/15 text-amber-400 border-b-2 border-amber-500' : 'text-zinc-500 hover:text-zinc-300'}">
-                    <span class="text-lg mr-1">🎰</span> Jackpot
-                    <span class="ml-1 px-1.5 py-0.5 rounded text-[10px] font-black ${isJackpot ? 'bg-amber-500/30 text-amber-400' : 'bg-zinc-800 text-zinc-500'}">${JACKPOT_MULTIPLIER}x</span>
-                </button>
-                <button id="tab-combo" class="flex-1 py-3 text-center font-bold text-sm transition-all ${!isJackpot ? 'bg-violet-500/15 text-violet-400 border-b-2 border-violet-500' : 'text-zinc-500 hover:text-zinc-300'}">
-                    <span class="text-lg mr-1">🚀</span> Combo
-                    <span class="ml-1 px-1.5 py-0.5 rounded text-[10px] font-black ${!isJackpot ? 'bg-violet-500/30 text-violet-400' : 'bg-zinc-800 text-zinc-500'}">${COMBO_MAX_MULTIPLIER}x</span>
-                </button>
+            <!-- Difficulty Tabs -->
+            <div class="grid grid-cols-3 gap-1 bg-zinc-900/60 border border-zinc-800/50 rounded-2xl p-1.5">
+                ${['easy', 'medium', 'hard'].map(mode => {
+                    const t = TIERS[mode === 'easy' ? 0 : mode === 'medium' ? 1 : 2];
+                    const active = Game.mode === mode;
+                    return `
+                        <button class="mode-tab py-2.5 rounded-xl text-center transition-all ${active ?
+                            `bg-gradient-to-br ${t.bgFrom} ${t.bgTo} border ${t.borderColor} shadow-lg` :
+                            'hover:bg-zinc-800/50 border border-transparent'}" data-mode="${mode}">
+                            <p class="text-sm font-bold ${active ? t.textColor : 'text-zinc-500'}">${t.emoji} ${t.name}</p>
+                            <p class="text-[10px] ${active ? t.textColor + ' opacity-80' : 'text-zinc-600'}">${t.multiplier}x &bull; ${t.chance}</p>
+                        </button>
+                    `;
+                }).join('')}
             </div>
 
-            <!-- Mode Info Banner -->
-            <div class="bg-zinc-900/40 border border-zinc-800/40 rounded-xl px-4 py-2.5 text-center">
-                ${isJackpot ? `
-                    <p class="text-zinc-400 text-xs">Pick <span class="text-white font-bold">1 number</span> from <span class="text-amber-400 font-bold">1-${JACKPOT_RANGE}</span> &bull; <span class="text-emerald-400">${TIERS[2].chance}</span> chance &bull; Win <span class="text-amber-400 font-bold">${JACKPOT_MULTIPLIER}x</span></p>
-                ` : `
-                    <p class="text-zinc-400 text-xs">Pick <span class="text-white font-bold">3 numbers</span> across 3 tiers &bull; Max <span class="text-violet-400 font-bold">${COMBO_MAX_MULTIPLIER}x</span> if all match</p>
-                `}
-            </div>
+            ${!isCombo ? `
+                <!-- Number Picker -->
+                <div class="bg-gradient-to-br ${tier.bgFrom} ${tier.bgTo} border ${tier.borderColor} rounded-2xl p-5">
+                    <div class="text-center mb-4">
+                        <p class="${tier.textColor} font-bold text-lg mb-1">Pick a Number <span class="text-sm opacity-70">(1-${tier.range})</span></p>
+                        <div class="inline-flex items-center gap-2 px-3 py-1.5 bg-black/20 rounded-full">
+                            <span class="text-sm ${tier.textColor} font-black">${tier.multiplier}x</span>
+                            <span class="text-zinc-500 text-xs">&bull;</span>
+                            <span class="text-sm ${tier.textColor}">${tier.chance} chance</span>
+                        </div>
+                    </div>
+                    <div id="number-picker"></div>
+                </div>
+            ` : `
+                <!-- Combo Mode -->
+                <div class="bg-gradient-to-br from-violet-900/20 to-zinc-900 border border-violet-500/30 rounded-2xl p-5">
+                    <div class="text-center mb-3">
+                        <p class="text-violet-400 font-bold text-lg mb-1">Combo &mdash; All 3 Tiers</p>
+                        <p class="text-zinc-400 text-xs">Pick one number per tier &bull; up to <span class="text-violet-400 font-black">${COMBO_MAX_MULTIPLIER}x</span></p>
+                        <div class="mt-2 p-2 bg-violet-500/10 rounded-lg border border-violet-500/20">
+                            <p class="text-[10px] text-violet-300">
+                                Easy 20% &bull; Medium 6.7% &bull; Hard 0.67%<br>
+                                All 3: ~0.009% (1 in 11,194)
+                            </p>
+                        </div>
+                    </div>
+                    <div id="picker-area"></div>
+                </div>
+            `}
 
-            <!-- Number Picker -->
-            <div class="bg-gradient-to-br from-zinc-900 to-zinc-800/50 border border-zinc-700/50 rounded-2xl p-4">
-                <div id="picker-area"></div>
-            </div>
-
-            <!-- Wager Section -->
-            <div class="bg-gradient-to-br from-zinc-900 to-zinc-800/50 border border-zinc-700/50 rounded-2xl p-4">
-                <div class="flex items-center justify-between mb-3">
-                    <label class="text-sm text-zinc-400 flex items-center gap-2">
-                        <i class="fa-solid fa-coins text-amber-400"></i>
-                        Wager
-                    </label>
-                    <span class="text-xs text-zinc-500">Balance: <span class="text-amber-400 font-bold">${balanceNum.toFixed(2)}</span> BKC</span>
+            <!-- Wager + Play -->
+            <div class="bg-zinc-900/60 border border-zinc-800/50 rounded-2xl p-4">
+                <div class="flex items-center justify-between mb-2">
+                    <label class="text-sm text-zinc-400"><i class="fa-solid fa-coins text-amber-400 mr-1.5"></i>Wager</label>
+                    <span class="text-xs text-zinc-500">Bal: <span class="text-amber-400 font-bold">${balanceNum.toFixed(0)}</span> BKC</span>
                 </div>
 
-                <!-- Wager Input Row -->
-                <div class="flex items-center justify-center gap-2 mb-3">
-                    <button id="wager-minus" class="w-10 h-10 rounded-xl bg-zinc-800 hover:bg-red-500/20 border border-zinc-700 hover:border-red-500/50 text-zinc-400 hover:text-red-400 font-bold text-xl transition-all active:scale-95">−</button>
+                <div class="flex items-center justify-center gap-2 mb-2">
+                    <button id="wager-minus" class="w-9 h-9 rounded-lg bg-zinc-800 hover:bg-red-500/20 border border-zinc-700 text-zinc-400 hover:text-red-400 font-bold text-lg transition-all">−</button>
                     <input type="number" id="custom-wager" value="${Game.wager}" min="1" max="${Math.floor(balanceNum)}"
-                        class="w-24 h-12 text-center text-2xl font-black rounded-xl bg-zinc-900/80 border-2 border-amber-500/50 text-amber-400 focus:outline-none focus:border-amber-400 focus:ring-2 focus:ring-amber-400/30 transition-all appearance-none"
+                        class="w-20 h-10 text-center text-xl font-black rounded-lg bg-zinc-900/80 border-2 border-amber-500/50 text-amber-400 focus:outline-none focus:border-amber-400 appearance-none"
                         style="-moz-appearance: textfield;">
-                    <button id="wager-plus" class="w-10 h-10 rounded-xl bg-zinc-800 hover:bg-emerald-500/20 border border-zinc-700 hover:border-emerald-500/50 text-zinc-400 hover:text-emerald-400 font-bold text-xl transition-all active:scale-95">+</button>
+                    <button id="wager-plus" class="w-9 h-9 rounded-lg bg-zinc-800 hover:bg-emerald-500/20 border border-zinc-700 text-zinc-400 hover:text-emerald-400 font-bold text-lg transition-all">+</button>
                 </div>
 
-                <!-- Quick Amounts -->
-                <div class="grid grid-cols-5 gap-1.5 mb-3">
+                <div class="grid grid-cols-5 gap-1 mb-3">
                     ${[10, 25, 50, 100, Math.floor(balanceNum)].map(val => `
-                        <button class="wager-btn py-2 text-xs font-bold rounded-lg transition-all ${Game.wager === val ? 'bg-amber-500/25 border border-amber-500/60 text-amber-400' : 'bg-zinc-800/60 border border-zinc-700/50 text-zinc-400 hover:border-amber-500/30'}" data-value="${val}">
+                        <button class="wager-btn py-1.5 text-xs font-bold rounded-lg transition-all ${Game.wager === val ? 'bg-amber-500/25 border border-amber-500/60 text-amber-400' : 'bg-zinc-800/60 border border-zinc-700/50 text-zinc-400 hover:border-amber-500/30'}" data-value="${val}">
                             ${val === Math.floor(balanceNum) ? 'MAX' : val}
                         </button>
                     `).join('')}
                 </div>
 
-                <!-- Potential Win + Fee -->
-                <div class="flex items-center justify-between px-1">
-                    <div>
-                        <p class="text-[10px] text-zinc-500 uppercase">Max Win</p>
-                        <p class="text-lg font-black text-emerald-400" id="potential-win">${(Game.wager * maxMulti).toLocaleString()} BKC</p>
-                    </div>
-                    ${hasFee ? `
-                        <div class="text-right">
-                            <p class="text-[10px] text-zinc-500 uppercase">Game Fee</p>
-                            <p class="text-sm font-bold text-blue-400"><i class="fa-brands fa-ethereum text-[10px] mr-0.5"></i>${serviceFeeEth.toFixed(6)} ETH</p>
-                        </div>
-                    ` : ''}
+                <div class="flex items-center justify-between mb-3 px-1">
+                    <p class="text-emerald-400 font-black" id="potential-win">${(Game.wager * cfg.multi).toLocaleString()} BKC</p>
+                    <p class="text-[10px] text-zinc-500">potential win</p>
                 </div>
-            </div>
 
-            ${!hasBalance ? `
-                <div class="p-3 bg-red-500/10 border border-red-500/30 rounded-xl text-center">
-                    <p class="text-red-400 text-sm mb-2">Insufficient BKC balance</p>
-                    <button id="btn-faucet" class="px-4 py-2 bg-amber-500/20 border border-amber-500/50 rounded-lg text-amber-400 text-sm font-bold hover:bg-amber-500/30 transition-colors">
-                        <i class="fa-solid fa-faucet mr-2"></i>Get Test Tokens
+                <button id="btn-play" class="w-full py-3.5 bg-gradient-to-r from-emerald-500 to-green-500 hover:from-emerald-400 hover:to-green-400 text-white font-bold rounded-xl transition-all text-lg ${!canPlay ? 'opacity-40 cursor-not-allowed' : ''}" ${!canPlay ? 'disabled' : ''}>
+                    <i class="fa-solid fa-play mr-2"></i>Play
+                </button>
+
+                ${!State.isConnected ? '<p class="text-center text-zinc-500 text-xs mt-2">Connect wallet to play</p>' : ''}
+                ${State.isConnected && !hasBalance ? `
+                    <button id="btn-faucet" class="w-full mt-2 py-2 bg-amber-500/10 border border-amber-500/30 rounded-lg text-amber-400 text-sm font-bold hover:bg-amber-500/20 transition-colors">
+                        <i class="fa-solid fa-faucet mr-1"></i>Get Test Tokens
                     </button>
-                </div>
-            ` : ''}
-
-            ${!State.isConnected ? `
-                <div class="p-4 bg-zinc-800/30 rounded-xl border border-zinc-700/50 text-center">
-                    <i class="fa-solid fa-wallet text-zinc-600 text-xl mb-2"></i>
-                    <p class="text-zinc-500 text-sm">Connect wallet to play</p>
-                </div>
-            ` : ''}
-
-            <!-- Action Buttons -->
-            <div class="flex gap-3">
-                <button id="btn-quick-play" class="flex-1 py-3.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-bold rounded-xl transition-colors border border-zinc-700 ${!hasBalance || !State.isConnected ? 'opacity-40 cursor-not-allowed' : ''}" ${!hasBalance || !State.isConnected ? 'disabled' : ''}>
-                    <i class="fa-solid fa-bolt text-amber-400 mr-2"></i>Lucky Pick
-                </button>
-                <button id="btn-play" class="flex-1 py-3.5 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-black font-bold rounded-xl transition-all ${!hasBalance || !State.isConnected ? 'opacity-40 cursor-not-allowed' : ''}" ${!hasBalance || !State.isConnected ? 'disabled' : ''}>
-                    <i class="fa-solid fa-paw mr-2"></i>Play Now
-                </button>
+                ` : ''}
             </div>
 
-            <!-- Provably Fair -->
-            <div class="p-3 bg-emerald-500/10 border border-emerald-500/30 rounded-xl">
-                <div class="flex items-center gap-2 mb-1">
-                    <i class="fa-solid fa-shield-halved text-emerald-400"></i>
-                    <span class="text-emerald-400 text-sm font-medium">Provably Fair Gaming</span>
-                </div>
-                <p class="text-zinc-400 text-xs">Results generated by on-chain Oracle. 100% verifiable and tamper-proof. Commit-reveal prevents manipulation.</p>
-            </div>
-        </div>
-    `;
-
-    // Render the appropriate number picker
-    renderPickerInline();
-
-    // Setup events
-    setupPlayEvents(maxMulti, balanceNum);
-}
-
-// ============================================================================
-// INLINE NUMBER PICKER
-// ============================================================================
-function renderPickerInline() {
-    const area = document.getElementById('picker-area');
-    if (!area) return;
-
-    if (Game.mode === 'jackpot') {
-        renderJackpotPickerInline(area);
-    } else {
-        renderComboPickerInline(area);
-    }
-}
-
-function renderJackpotPickerInline(container) {
-    const tier = TIERS[2];
-    const current = Game.guess;
-
-    container.innerHTML = `
-        <div class="text-center mb-3">
-            <div class="inline-flex items-center gap-2 px-3 py-1.5 bg-gradient-to-r ${tier.bgFrom} ${tier.bgTo} border ${tier.borderColor} rounded-full">
-                <span class="text-xl">${tier.emoji}</span>
-                <span class="${tier.textColor} font-bold text-sm">Pick Your Lucky Number</span>
-            </div>
-        </div>
-
-        <!-- Number Input -->
-        <div class="flex items-center justify-center gap-3 mb-3">
-            <button class="jp-minus-10 w-9 h-9 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white font-bold text-xs transition-all border border-zinc-700">-10</button>
-            <button class="jp-minus w-9 h-9 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white font-bold text-lg transition-all border border-zinc-700">−</button>
-            <input type="number" id="jp-number" min="1" max="${JACKPOT_RANGE}" value="${current}"
-                class="w-20 h-20 text-center text-3xl font-black rounded-2xl bg-amber-500 border-2 border-amber-400 text-zinc-900 focus:outline-none focus:ring-2 focus:ring-amber-300 appearance-none shadow-lg shadow-amber-500/30"
-                style="-moz-appearance: textfield;">
-            <button class="jp-plus w-9 h-9 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white font-bold text-lg transition-all border border-zinc-700">+</button>
-            <button class="jp-plus-10 w-9 h-9 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white font-bold text-xs transition-all border border-zinc-700">+10</button>
-        </div>
-
-        <!-- Slider -->
-        <div class="mb-3 px-1">
-            <input type="range" id="jp-slider" min="1" max="${JACKPOT_RANGE}" value="${current}"
-                class="fortune-slider w-full h-3 rounded-full appearance-none cursor-pointer"
-                style="background: linear-gradient(to right, ${tier.hex} 0%, ${tier.hex} ${(current / JACKPOT_RANGE) * 100}%, #27272a ${(current / JACKPOT_RANGE) * 100}%, #27272a 100%)">
-            <div class="flex justify-between text-[10px] text-zinc-600 mt-1 px-1">
-                <span>1</span><span>${Math.round(JACKPOT_RANGE / 4)}</span><span>${Math.round(JACKPOT_RANGE / 2)}</span><span>${Math.round(JACKPOT_RANGE * 3 / 4)}</span><span>${JACKPOT_RANGE}</span>
-            </div>
-        </div>
-
-        <!-- Quick Picks -->
-        <div class="flex justify-center gap-1.5 flex-wrap">
-            ${[7, 13, 21, 50, 77, 99, 137].map(n => `
-                <button class="jp-quick px-2 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white text-xs rounded-lg transition-all" data-num="${n}">${n}</button>
-            `).join('')}
-            <button id="jp-random" class="px-2 py-1.5 bg-amber-500/20 hover:bg-amber-500/30 text-amber-400 text-xs rounded-lg border border-amber-500/30 transition-all">
-                <i class="fa-solid fa-dice mr-1"></i>Random
+            <!-- Combo Toggle -->
+            <button id="toggle-combo" class="w-full flex items-center justify-between px-4 py-3 bg-zinc-900/40 border border-zinc-800/40 rounded-xl text-zinc-500 hover:text-zinc-300 transition-colors text-sm">
+                <span>${isCombo ? 'Single tier mode' : 'Combo &mdash; Play all 3 at once'}</span>
+                <span class="text-xs">${isCombo ? 'Pick one difficulty' : `Up to ${COMBO_MAX_MULTIPLIER}x`}</span>
             </button>
         </div>
     `;
 
-    const input = document.getElementById('jp-number');
-    const slider = document.getElementById('jp-slider');
+    // Render mode-specific pickers
+    if (isCombo) {
+        renderPickerInline();
+    } else {
+        renderNumberPicker(tier);
+    }
 
-    const updateValue = (val) => {
-        val = Math.max(1, Math.min(JACKPOT_RANGE, val));
-        Game.guess = val;
-        if (input) input.value = val;
-        if (slider) {
-            slider.value = val;
-            const pct = (val / JACKPOT_RANGE) * 100;
-            slider.style.background = `linear-gradient(to right, ${TIERS[2].hex} 0%, ${TIERS[2].hex} ${pct}%, #27272a ${pct}%, #27272a 100%)`;
-        }
-    };
+    setupPlayEvents(cfg.multi, balanceNum);
+}
 
-    input?.addEventListener('input', (e) => updateValue(parseInt(e.target.value) || 1));
-    input?.addEventListener('blur', (e) => updateValue(parseInt(e.target.value) || 1));
-    slider?.addEventListener('input', (e) => updateValue(parseInt(e.target.value)));
+// ============================================================================
+// NUMBER PICKER (for single-tier modes: easy, medium, hard)
+// ============================================================================
+function renderNumberPicker(tier) {
+    const area = document.getElementById('number-picker');
+    if (!area) return;
 
-    container.querySelector('.jp-minus')?.addEventListener('click', () => updateValue(Game.guess - 1));
-    container.querySelector('.jp-plus')?.addEventListener('click', () => updateValue(Game.guess + 1));
-    container.querySelector('.jp-minus-10')?.addEventListener('click', () => updateValue(Game.guess - 10));
-    container.querySelector('.jp-plus-10')?.addEventListener('click', () => updateValue(Game.guess + 10));
+    const current = Game.guess;
 
-    container.querySelectorAll('.jp-quick').forEach(btn => {
-        btn.addEventListener('click', () => updateValue(parseInt(btn.dataset.num)));
+    if (tier.range <= 5) {
+        // Easy: 5 big buttons
+        area.innerHTML = `
+            <div class="flex justify-center gap-3">
+                ${Array.from({length: tier.range}, (_, i) => i + 1).map(n => `
+                    <button class="num-pick w-14 h-14 rounded-2xl font-black text-2xl transition-all active:scale-95 ${n === current ?
+                        '' : 'bg-zinc-800 border border-zinc-700 text-zinc-300 hover:bg-zinc-700'}"
+                        data-num="${n}"
+                        style="${n === current ? `background: ${tier.hex}; color: white; box-shadow: 0 0 15px ${tier.hex}60; transform: scale(1.1)` : ''}">
+                        ${n}
+                    </button>
+                `).join('')}
+            </div>
+        `;
+    } else if (tier.range <= 15) {
+        // Medium: grid of 15 buttons
+        area.innerHTML = `
+            <div class="grid grid-cols-5 gap-2 justify-items-center">
+                ${Array.from({length: tier.range}, (_, i) => i + 1).map(n => `
+                    <button class="num-pick w-12 h-12 rounded-xl font-bold text-lg transition-all active:scale-95 ${n === current ?
+                        '' : 'bg-zinc-800 border border-zinc-700 text-zinc-300 hover:bg-zinc-700'}"
+                        data-num="${n}"
+                        style="${n === current ? `background: ${tier.hex}; color: white; box-shadow: 0 0 12px ${tier.hex}60; transform: scale(1.05)` : ''}">
+                        ${n}
+                    </button>
+                `).join('')}
+            </div>
+        `;
+    } else {
+        // Hard: slider + input + quick picks
+        area.innerHTML = `
+            <div class="flex items-center justify-center gap-3 mb-3">
+                <button class="np-minus-10 w-9 h-9 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white font-bold text-xs transition-all border border-zinc-700">-10</button>
+                <button class="np-minus w-9 h-9 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white font-bold text-lg transition-all border border-zinc-700">&minus;</button>
+                <input type="number" id="np-number" min="1" max="${tier.range}" value="${current}"
+                    class="w-20 h-20 text-center text-3xl font-black rounded-2xl border-2 text-zinc-900 focus:outline-none appearance-none shadow-lg"
+                    style="background: ${tier.hex}; border-color: ${tier.hex}; box-shadow: 0 0 20px ${tier.hex}50; -moz-appearance: textfield;">
+                <button class="np-plus w-9 h-9 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white font-bold text-lg transition-all border border-zinc-700">+</button>
+                <button class="np-plus-10 w-9 h-9 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white font-bold text-xs transition-all border border-zinc-700">+10</button>
+            </div>
+            <div class="mb-3 px-1">
+                <input type="range" id="np-slider" min="1" max="${tier.range}" value="${current}"
+                    class="fortune-slider w-full h-3 rounded-full appearance-none cursor-pointer"
+                    style="background: linear-gradient(to right, ${tier.hex} 0%, ${tier.hex} ${(current / tier.range) * 100}%, #27272a ${(current / tier.range) * 100}%, #27272a 100%)">
+                <div class="flex justify-between text-[10px] text-zinc-600 mt-1 px-1">
+                    <span>1</span><span>${Math.round(tier.range / 4)}</span><span>${Math.round(tier.range / 2)}</span><span>${Math.round(tier.range * 3 / 4)}</span><span>${tier.range}</span>
+                </div>
+            </div>
+            <div class="flex justify-center gap-1.5 flex-wrap">
+                ${[7, 13, 21, 50, 77, 99, 137].map(n => `
+                    <button class="np-quick px-2 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white text-xs rounded-lg transition-all" data-num="${n}">${n}</button>
+                `).join('')}
+                <button id="np-random" class="px-2 py-1.5 text-xs rounded-lg border transition-all"
+                    style="background: ${tier.hex}20; border-color: ${tier.hex}50; color: ${tier.hex}">
+                    <i class="fa-solid fa-dice mr-1"></i>Random
+                </button>
+            </div>
+        `;
+
+        const input = document.getElementById('np-number');
+        const slider = document.getElementById('np-slider');
+
+        const updateValue = (val) => {
+            val = Math.max(1, Math.min(tier.range, val));
+            Game.guess = val;
+            if (input) input.value = val;
+            if (slider) {
+                slider.value = val;
+                const pct = (val / tier.range) * 100;
+                slider.style.background = `linear-gradient(to right, ${tier.hex} 0%, ${tier.hex} ${pct}%, #27272a ${pct}%, #27272a 100%)`;
+            }
+        };
+
+        input?.addEventListener('input', (e) => updateValue(parseInt(e.target.value) || 1));
+        input?.addEventListener('blur', (e) => updateValue(parseInt(e.target.value) || 1));
+        slider?.addEventListener('input', (e) => updateValue(parseInt(e.target.value)));
+        area.querySelector('.np-minus')?.addEventListener('click', () => updateValue(Game.guess - 1));
+        area.querySelector('.np-plus')?.addEventListener('click', () => updateValue(Game.guess + 1));
+        area.querySelector('.np-minus-10')?.addEventListener('click', () => updateValue(Game.guess - 10));
+        area.querySelector('.np-plus-10')?.addEventListener('click', () => updateValue(Game.guess + 10));
+        area.querySelectorAll('.np-quick').forEach(btn => {
+            btn.addEventListener('click', () => updateValue(parseInt(btn.dataset.num)));
+        });
+        document.getElementById('np-random')?.addEventListener('click', () => {
+            updateValue(Math.floor(Math.random() * tier.range) + 1);
+        });
+        return;
+    }
+
+    // Wire button click events (for easy/medium grid buttons)
+    area.querySelectorAll('.num-pick').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const num = parseInt(btn.dataset.num);
+            Game.guess = num;
+            const scale = tier.range <= 5 ? 1.1 : 1.05;
+            area.querySelectorAll('.num-pick').forEach(b => {
+                const n = parseInt(b.dataset.num);
+                if (n === num) {
+                    b.style.cssText = `background: ${tier.hex}; color: white; box-shadow: 0 0 15px ${tier.hex}60; transform: scale(${scale})`;
+                    b.classList.remove('bg-zinc-800', 'border', 'border-zinc-700', 'text-zinc-300');
+                } else {
+                    b.style.cssText = '';
+                    if (!b.classList.contains('bg-zinc-800')) {
+                        b.classList.add('bg-zinc-800', 'border', 'border-zinc-700', 'text-zinc-300');
+                    }
+                }
+            });
+        });
     });
+}
 
-    document.getElementById('jp-random')?.addEventListener('click', () => {
-        updateValue(Math.floor(Math.random() * JACKPOT_RANGE) + 1);
-    });
+// Re-render combo picker (called by step navigation)
+function renderPickerInline() {
+    const area = document.getElementById('picker-area');
+    if (!area) return;
+    renderComboPickerInline(area);
 }
 
 function renderComboPickerInline(container) {
@@ -892,25 +929,33 @@ function renderComboPickerInline(container) {
 // PLAY EVENTS
 // ============================================================================
 function setupPlayEvents(maxMulti, balanceNum) {
-    // Tab switching
-    document.getElementById('tab-jackpot')?.addEventListener('click', () => {
-        if (Game.mode !== 'jackpot') {
-            Game.mode = 'jackpot';
-            renderPhase();
-        }
+    // Difficulty tab switching
+    document.querySelectorAll('.mode-tab').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const newMode = btn.dataset.mode;
+            if (Game.mode !== newMode) {
+                Game.mode = newMode;
+                const newCfg = getModeConfig(newMode);
+                Game.guess = Math.min(Game.guess, newCfg.tiers[0].range);
+                renderPhase();
+            }
+        });
     });
-    document.getElementById('tab-combo')?.addEventListener('click', () => {
-        if (Game.mode !== 'combo') {
+
+    // Combo toggle
+    document.getElementById('toggle-combo')?.addEventListener('click', () => {
+        if (Game.mode === 'combo') {
+            Game.mode = 'easy';
+        } else {
             Game.mode = 'combo';
             Game.comboStep = 0;
-            renderPhase();
         }
+        renderPhase();
     });
 
     // Wager controls
     const updateWager = (amount) => {
-        const isJP = Game.mode === 'jackpot';
-        const multi = isJP ? JACKPOT_MULTIPLIER : COMBO_MAX_MULTIPLIER;
+        const multi = getModeConfig(Game.mode).multi;
         Game.wager = Math.max(1, Math.min(Math.floor(amount), Math.floor(balanceNum)));
 
         const customInput = document.getElementById('custom-wager');
@@ -956,11 +1001,12 @@ function setupPlayEvents(maxMulti, balanceNum) {
         if (!State.isConnected) return showToast('Connect wallet first', 'warning');
         if (Game.wager < 1) return showToast('Min: 1 BKC', 'warning');
 
-        // Randomize numbers
-        if (Game.mode === 'jackpot') {
-            Game.guess = Math.floor(Math.random() * JACKPOT_RANGE) + 1;
-        } else {
+        // Randomize numbers based on mode
+        if (Game.mode === 'combo') {
             Game.guesses = TIERS.map(t => Math.floor(Math.random() * t.range) + 1);
+        } else {
+            const cfg = getModeConfig(Game.mode);
+            Game.guess = Math.floor(Math.random() * cfg.tiers[0].range) + 1;
         }
 
         commitGame();
@@ -983,8 +1029,9 @@ async function commitGame() {
     renderPhase();
 
     try {
-        const guesses = Game.mode === 'jackpot' ? [Game.guess] : Game.guesses;
-        const tierMask = Game.mode === 'combo' ? 7 : 4;
+        const cfg = getModeConfig(Game.mode);
+        const guesses = cfg.isSingle ? [Game.guess] : Game.guesses;
+        const tierMask = cfg.tierMask;
         const wagerWei = window.ethers.parseEther(Game.wager.toString());
 
         await FortuneTx.playGame({
@@ -1050,9 +1097,9 @@ async function commitGame() {
 // PROCESSING PHASE
 // ============================================================================
 function renderProcessing(container) {
-    const isJackpot = Game.mode === 'jackpot';
-    const picks = isJackpot ? [Game.guess] : Game.guesses;
-    const tiersToShow = isJackpot ? [TIERS[2]] : TIERS;
+    const cfg = getModeConfig(Game.mode);
+    const picks = cfg.isSingle ? [Game.guess] : Game.guesses;
+    const tiersToShow = cfg.tiers;
 
     container.innerHTML = `
         <div class="bg-gradient-to-br from-zinc-900 to-zinc-800/50 border border-zinc-700/50 rounded-2xl p-6 processing-pulse">
@@ -1081,7 +1128,7 @@ function renderProcessing(container) {
                 <p class="text-center text-xs text-zinc-500 uppercase mb-3">Your Numbers</p>
                 <div class="flex justify-center gap-4">
                     ${tiersToShow.map((tier, idx) => {
-                        const pick = isJackpot ? picks[0] : picks[idx];
+                        const pick = picks[idx];
                         return `
                             <div class="w-14 h-14 rounded-xl bg-gradient-to-br ${tier.bgFrom} ${tier.bgTo} border-2 ${tier.borderColor} flex items-center justify-center">
                                 <span class="text-xl font-black ${tier.textColor}">${pick}</span>
@@ -1110,9 +1157,9 @@ function renderQuickReveal() {
 
     updateTigerAnimation('waiting');
 
-    const isJackpot = Game.mode === 'jackpot';
-    const picks = isJackpot ? [Game.guess] : Game.guesses;
-    const tiersToShow = isJackpot ? [TIERS[2]] : TIERS;
+    const cfg = getModeConfig(Game.mode);
+    const picks = cfg.isSingle ? [Game.guess] : Game.guesses;
+    const tiersToShow = cfg.tiers;
 
     area.innerHTML = `
         <div class="bg-gradient-to-br from-violet-900/30 to-purple-900/20 border border-violet-500/30 rounded-2xl p-6 waiting-glow">
@@ -1141,7 +1188,7 @@ function renderQuickReveal() {
                 <p class="text-center text-xs text-zinc-500 uppercase mb-3">Your Numbers</p>
                 <div class="flex justify-center gap-4">
                     ${tiersToShow.map((tier, idx) => {
-                        const pick = isJackpot ? picks[0] : picks[idx];
+                        const pick = picks[idx];
                         return `
                             <div class="w-14 h-14 rounded-xl bg-gradient-to-br ${tier.bgFrom} ${tier.bgTo} border-2 ${tier.borderColor} flex items-center justify-center relative">
                                 <span class="text-xl font-black ${tier.textColor}">${pick}</span>
@@ -1181,9 +1228,9 @@ function renderQuickReveal() {
 // WAITING PHASE — Full countdown (used for pending game recovery + retries)
 // ============================================================================
 function renderWaiting(container) {
-    const isJackpot = Game.mode === 'jackpot';
-    const picks = isJackpot ? [Game.guess] : Game.guesses;
-    const tiersToShow = isJackpot ? [TIERS[2]] : TIERS;
+    const cfg = getModeConfig(Game.mode);
+    const picks = cfg.isSingle ? [Game.guess] : Game.guesses;
+    const tiersToShow = cfg.tiers;
 
     const elapsed = Date.now() - (Game.commitment.waitStartTime || Date.now());
     const currentDelay = AUTO_REVEAL_DELAYS[Math.min(autoRevealAttempt, AUTO_REVEAL_DELAYS.length - 1)];
@@ -1230,7 +1277,7 @@ function renderWaiting(container) {
                 <p class="text-center text-xs text-zinc-500 uppercase mb-3">Your Locked Numbers</p>
                 <div class="flex justify-center gap-4">
                     ${tiersToShow.map((tier, idx) => {
-                        const pick = isJackpot ? picks[0] : picks[idx];
+                        const pick = picks[idx];
                         return `
                             <div class="text-center">
                                 <div class="w-14 h-14 rounded-xl bg-gradient-to-br ${tier.bgFrom} ${tier.bgTo} border-2 ${tier.borderColor} flex items-center justify-center relative">
@@ -1412,7 +1459,7 @@ async function executeReveal() {
     const btn = document.getElementById('btn-reveal');
 
     try {
-        const guesses = Game.mode === 'jackpot' ? [Game.guess] : Game.guesses;
+        const guesses = getModeConfig(Game.mode).isSingle ? [Game.guess] : Game.guesses;
 
         await FortuneTx.revealPlay({
             gameId: Game.gameId,
@@ -1482,10 +1529,10 @@ function renderResult(container) {
     const result = Game.result;
     if (!result) return renderPhase();
 
-    const isJackpot = Game.mode === 'jackpot';
-    const picks = isJackpot ? [Game.guess] : Game.guesses;
+    const cfg = getModeConfig(Game.mode);
+    const picks = cfg.isSingle ? [Game.guess] : Game.guesses;
     const rolls = result.rolls || [];
-    const tiersToShow = isJackpot ? [TIERS[2]] : TIERS;
+    const tiersToShow = cfg.tiers;
 
     const matches = picks.map((pick, i) => {
         const roll = rolls[i] !== undefined ? Number(rolls[i]) : null;
@@ -1500,7 +1547,7 @@ function renderResult(container) {
     } else if (matchCount > 0) {
         matches.forEach((hit, i) => {
             if (hit) {
-                const tier = isJackpot ? TIERS[2] : TIERS[i];
+                const tier = cfg.tiers[i] || TIERS[i];
                 displayPrize += Game.wager * tier.multiplier;
             }
         });
@@ -1527,9 +1574,9 @@ function renderResult(container) {
             </div>
 
             <!-- Animated Result Grid -->
-            <div class="grid ${isJackpot ? 'grid-cols-1 max-w-[220px] mx-auto' : 'grid-cols-3'} gap-3 mb-4">
+            <div class="grid ${cfg.isSingle ? 'grid-cols-1 max-w-[220px] mx-auto' : 'grid-cols-3'} gap-3 mb-4">
                 ${tiersToShow.map((tier, idx) => {
-                    const pick = isJackpot ? picks[0] : picks[idx];
+                    const pick = picks[idx];
                     const roll = rolls[idx];
                     const isMatch = matches[idx];
 
@@ -2000,7 +2047,7 @@ function renderHistoryList(games) {
                     <div class="flex items-center gap-2">
                         <span class="text-lg">${isWin ? '🏆' : '🎲'}</span>
                         <span class="text-xs ${isMe ? 'text-amber-400 font-bold' : 'text-zinc-500'}">${isMe ? 'You' : shortAddr}</span>
-                        <span class="text-[10px] px-2 py-0.5 rounded-full ${isCumulative ? 'bg-violet-500/20 text-violet-400' : 'bg-amber-500/20 text-amber-400'}">${isCumulative ? 'Combo' : 'Jackpot'}</span>
+                        <span class="text-[10px] px-2 py-0.5 rounded-full ${isCumulative ? 'bg-violet-500/20 text-violet-400' : 'bg-emerald-500/20 text-emerald-400'}">${isCumulative ? 'Combo' : 'Single'}</span>
                     </div>
                     <div class="flex items-center gap-1.5">
                         <span class="text-[10px] text-zinc-600">${timeAgo}</span>
