@@ -11,7 +11,7 @@ const ethers = window.ethers;
 import { DOMElements } from './dom-elements.js';
 import { State } from './state.js';
 import { initPublicProvider, initWalletSubscriptions, disconnectWallet, openConnectModal } from './modules/wallet.js';
-import { showToast, showShareModal, showWelcomeModal } from './ui-feedback.js';
+import { showToast, showShareModal, showWelcomeModal, openModal, closeModal } from './ui-feedback.js';
 import { formatBigNumber } from './utils.js'; 
 import { loadAddresses } from './config.js'; 
 
@@ -307,7 +307,13 @@ function onWalletStateChange(changes) {
 
     updateUIState(shouldForceUpdate); 
     
-    if (isConnected && isNewConnection) showToast(`Connected: ${formatAddress(address)}`, "success");
+    if (isConnected && isNewConnection) {
+        showToast(`Connected: ${formatAddress(address)}`, "success");
+        // Gasless referral onboarding: auto-set referrer + faucet bonus via API
+        if (localStorage.getItem('backchain_referrer')) {
+            processReferralAfterConnect();
+        }
+    }
     else if (!isConnected && wasConnected) showToast("Wallet disconnected.", "info");
 }
 
@@ -503,6 +509,126 @@ function captureReferralParam() {
     }
 }
 
+// ============================================================================
+// REFERRAL WELCOME OVERLAY — Gasless onboarding
+// ============================================================================
+
+function showReferralWelcomeOverlay(referrerAddress) {
+    const shortAddr = `${referrerAddress.slice(0, 6)}...${referrerAddress.slice(-4)}`;
+
+    const content = `
+        <div class="text-center py-4">
+            <div style="width:64px;height:64px;border-radius:16px;background:rgba(245,158,11,0.1);border:1px solid rgba(245,158,11,0.3);display:flex;align-items:center;justify-content:center;margin:0 auto 16px;">
+                <i class="fa-solid fa-gift text-3xl" style="color:#f59e0b;"></i>
+            </div>
+            <h2 class="text-2xl font-extrabold text-white mb-2">Welcome to Backchain!</h2>
+            <p class="text-zinc-400 mb-2">You've been invited by</p>
+            <div class="inline-flex items-center gap-2 rounded-full px-4 py-1.5 mb-4" style="background:rgba(39,39,42,0.8);border:1px solid rgba(63,63,70,0.5);">
+                <span class="font-mono text-sm" style="color:#f59e0b;">${shortAddr}</span>
+            </div>
+            <p class="text-zinc-400 text-sm mb-6">Connect your wallet to receive <strong style="color:#f59e0b;">free BKC tokens</strong> and start earning!</p>
+
+            <div id="referral-overlay-state">
+                <button id="referral-overlay-connect" class="w-full font-bold py-3 px-6 rounded-xl transition-colors text-lg" style="background:#f59e0b;color:#000;">
+                    <i class="fa-solid fa-wallet mr-2"></i> Get Started
+                </button>
+            </div>
+
+            <button id="referral-overlay-skip" class="mt-3 text-zinc-500 hover:text-zinc-300 text-sm transition-colors cursor-pointer">
+                Skip for now
+            </button>
+        </div>
+    `;
+
+    openModal(content, 'max-w-md', false);
+
+    setTimeout(() => {
+        document.getElementById('referral-overlay-connect')?.addEventListener('click', () => {
+            openConnectModal();
+        });
+        document.getElementById('referral-overlay-skip')?.addEventListener('click', () => {
+            closeModal();
+        });
+    }, 100);
+}
+
+async function processReferralAfterConnect() {
+    const referrer = localStorage.getItem('backchain_referrer');
+    if (!referrer || !State.isConnected || !State.userAddress) return;
+    if (referrer.toLowerCase() === State.userAddress.toLowerCase()) {
+        localStorage.removeItem('backchain_referrer');
+        return;
+    }
+
+    const stateEl = document.getElementById('referral-overlay-state');
+    if (stateEl) {
+        stateEl.innerHTML = `
+            <div class="flex flex-col items-center gap-3 py-2">
+                <div class="loader"></div>
+                <p class="text-zinc-400 text-sm">Setting up your account...</p>
+            </div>
+        `;
+        const skipBtn = document.getElementById('referral-overlay-skip');
+        if (skipBtn) skipBtn.style.display = 'none';
+    }
+
+    try {
+        const response = await fetch('/api/referral', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                userAddress: State.userAddress,
+                referrerAddress: referrer
+            })
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+            localStorage.removeItem('backchain_referrer');
+
+            if (stateEl) {
+                let successMsg = '';
+                if (data.faucetClaimed && data.bonusBkc !== '0') {
+                    successMsg = `<p class="text-lg font-bold mb-1" style="color:#f59e0b;">You received ${data.bonusBkc} BKC!</p>`;
+                }
+                if (data.referrerSet) {
+                    successMsg += `<p class="text-sm text-zinc-400">Your referrer has been set on-chain.</p>`;
+                } else {
+                    successMsg += `<p class="text-sm text-zinc-400">Welcome to Backchain!</p>`;
+                }
+                stateEl.innerHTML = `
+                    <div class="flex flex-col items-center gap-3">
+                        <div class="w-12 h-12 rounded-full flex items-center justify-center" style="background:rgba(34,197,94,0.2);">
+                            <i class="fa-solid fa-check text-2xl" style="color:#22c55e;"></i>
+                        </div>
+                        ${successMsg}
+                        <button id="referral-overlay-done" class="w-full font-bold py-3 px-6 rounded-xl transition-colors" style="background:#f59e0b;color:#000;">
+                            Start Exploring
+                        </button>
+                    </div>
+                `;
+                document.getElementById('referral-overlay-done')?.addEventListener('click', () => {
+                    closeModal();
+                    updateUIState(true);
+                });
+            }
+
+            if (data.faucetClaimed) {
+                showToast(`Welcome bonus: ${data.bonusBkc} BKC sent to your wallet!`, 'success');
+            }
+        } else {
+            localStorage.removeItem('backchain_referrer');
+            closeModal();
+            if (data.error) showToast(data.error, 'warning');
+        }
+    } catch (e) {
+        console.warn('[Referral] API call failed:', e.message);
+        closeModal();
+        showToast('Referral setup failed. You can set it manually on the Invite page.', 'warning');
+    }
+}
+
 window.addEventListener('load', async () => {
     console.log("🚀 App Initializing...");
 
@@ -521,16 +647,22 @@ window.addEventListener('load', async () => {
     
     setupGlobalListeners();
 
-    await initPublicProvider(); 
+    await initPublicProvider();
     initWalletSubscriptions(onWalletStateChange);
-    
-    showWelcomeModal();
-    
-    const preloader = document.getElementById('preloader');
-    if(preloader) preloader.style.display = 'none';
-    
+
     // ✅ V8: Capture referral param before navigation
     captureReferralParam();
+
+    // Show referral welcome overlay if pending referrer, otherwise generic welcome
+    const pendingReferrer = localStorage.getItem('backchain_referrer');
+    if (pendingReferrer && !State.isConnected) {
+        showReferralWelcomeOverlay(pendingReferrer);
+    } else {
+        showWelcomeModal();
+    }
+
+    const preloader = document.getElementById('preloader');
+    if(preloader) preloader.style.display = 'none';
 
     // ✅ FIX: Navigate to the page specified in URL hash, or dashboard if none
     const initialPage = getInitialPageFromHash();

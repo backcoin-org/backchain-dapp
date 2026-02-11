@@ -798,6 +798,12 @@ async function main() {
             "Ecosystem.setStakingPool()"
         );
 
+        // 9a-bis. Set referral relayer (deployer = relayer, same key as FAUCET_RELAYER_KEY on Vercel)
+        await sendTxWithRetry(
+            async () => await eco.setReferralRelayer(deployerAddr),
+            "Ecosystem.setReferralRelayer(deployer)"
+        );
+
         // 9b. registerModuleBatch — registrar todos os 7 módulos
         const moduleContracts = [
             stakingAddr, poolAddresses[0], fortuneAddr, agoraAddr,

@@ -684,7 +684,10 @@ export const ecosystemManagerABI = [
     "function referredBy(address _user) view returns (address)",
     "function referralCount(address _referrer) view returns (uint256)",
     "function setReferrer(address _referrer) external",
+    "function setReferrerFor(address _user, address _referrer) external",
+    "function referralRelayer() view returns (address)",
     "event ReferrerSet(address indexed user, address indexed referrer)",
+    "event ReferralRelayerUpdated(address indexed oldRelayer, address indexed newRelayer)",
 
     // Stats
     "function totalEthCollected() view returns (uint256)",

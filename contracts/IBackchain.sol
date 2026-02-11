@@ -57,6 +57,12 @@ interface IBackchainEcosystem {
     /// @notice Set referrer (once, global, permanent)
     function setReferrer(address _referrer) external;
 
+    /// @notice Relayer sets referrer on behalf of user (gasless)
+    function setReferrerFor(address _user, address _referrer) external;
+
+    /// @notice Get the referral relayer address
+    function referralRelayer() external view returns (address);
+
     /// @notice Get a user's referrer
     function referredBy(address user) external view returns (address);
 

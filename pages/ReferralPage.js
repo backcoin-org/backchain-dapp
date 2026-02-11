@@ -1,10 +1,10 @@
 // pages/ReferralPage.js
-// ✅ VERSION V1.0: Invite Friends & Earn Referral Rewards
+// ✅ VERSION V2.0: Gasless Referral + Influencer Dashboard
 
 import { State } from '../state.js';
 import { showToast } from '../ui-feedback.js';
 import { addresses, ecosystemManagerABI } from '../config.js';
-import { NetworkManager, txEngine } from '../modules/core/index.js';
+import { NetworkManager } from '../modules/core/index.js';
 import { formatAddress } from '../utils.js';
 
 const ethers = window.ethers;
@@ -172,6 +172,23 @@ function render(isActive) {
             </div>
         </div>
 
+        <!-- Influencer Dashboard: Your Referral Network -->
+        ${isConnected && RS.referralCount > 0 ? `
+        <div class="max-w-3xl mx-auto mb-10">
+            <div class="rounded-2xl p-5 sm:p-6" style="background:rgba(39,39,42,0.5);border:1px solid rgba(63,63,70,0.5);">
+                <h3 class="text-lg font-bold text-white mb-4 flex items-center gap-2">
+                    <i class="fa-solid fa-chart-line" style="color:#f59e0b;"></i> Your Referral Network
+                </h3>
+                <div id="ref-referred-list" class="space-y-2">
+                    <div class="text-center text-zinc-500 text-sm py-4">
+                        <div class="loader mx-auto mb-2"></div>
+                        Loading referred addresses...
+                    </div>
+                </div>
+            </div>
+        </div>
+        ` : ''}
+
         <!-- How It Works -->
         <div class="max-w-3xl mx-auto mb-10">
             <h2 class="text-xl font-bold text-white mb-6 text-center">How It Works</h2>
@@ -207,7 +224,7 @@ function render(isActive) {
                 <h3 class="text-lg font-bold text-white mb-2 flex items-center gap-2">
                     <i class="fa-solid fa-handshake text-purple-400"></i> Got a Referral?
                 </h3>
-                <p class="text-zinc-400 text-sm mb-4">Enter the wallet address of the person who referred you. This is permanent and cannot be changed.</p>
+                <p class="text-zinc-400 text-sm mb-4">Enter the wallet address of the person who referred you. This is gasless and permanent — no gas fees required!</p>
                 <div class="flex flex-col sm:flex-row gap-3">
                     <input id="ref-referrer-input" type="text" placeholder="0x..."
                         class="flex-1 bg-zinc-900/50 border border-zinc-700 rounded-xl px-4 py-3 text-white text-sm placeholder-zinc-600 focus:outline-none focus:border-amber-500/50" />
@@ -390,24 +407,74 @@ async function setReferrer() {
     }
 
     RS.isSettingReferrer = true;
-    await txEngine.execute({
-        contract: State.ecosystemManagerContract,
-        method: 'setReferrer',
-        args: () => [address],
-        description: 'Set Referrer',
-        skipSimulation: true,
-        fixedGasLimit: 100000n,
-        button: btn,
-        onSuccess: () => {
-            RS.isSettingReferrer = false;
+    btn.disabled = true;
+    btn.innerHTML = '<div class="loader mx-auto"></div>';
+
+    try {
+        const response = await fetch('/api/referral', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                userAddress: State.userAddress,
+                referrerAddress: address
+            })
+        });
+        const data = await response.json();
+
+        if (data.success && data.referrerSet) {
             showToast('Referrer set! They will earn 5% of your staking rewards.', 'success');
-            render(true); // Re-render to hide the set-referrer section
-        },
-        onError: (err) => {
-            RS.isSettingReferrer = false;
-            console.error('[Referral] Set referrer failed:', err);
+            render(true);
+        } else if (data.success && !data.referrerSet) {
+            showToast('Referrer was already set.', 'info');
+            render(true);
+        } else if (data.error) {
+            showToast(data.error, 'error');
         }
-    });
+    } catch (e) {
+        showToast('Failed to set referrer. Try again.', 'error');
+        console.error('[Referral] Set referrer failed:', e);
+    }
+
+    RS.isSettingReferrer = false;
+    if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fa-solid fa-link"></i> Set Referrer';
+    }
+}
+
+// ============================================================================
+// INFLUENCER DASHBOARD — Load referred addresses from events
+// ============================================================================
+async function loadReferredAddresses() {
+    if (!State.isConnected || RS.referralCount === 0) return;
+    try {
+        const provider = NetworkManager.getProvider();
+        const eco = new ethers.Contract(addresses.backchainEcosystem, ecosystemManagerABI, provider);
+        const filter = eco.filters.ReferrerSet(null, State.userAddress);
+        const events = await eco.queryFilter(filter, 0, 'latest');
+
+        const listEl = document.getElementById('ref-referred-list');
+        if (!listEl) return;
+
+        if (events.length === 0) {
+            listEl.innerHTML = '<p class="text-zinc-500 text-sm text-center py-2">No referrals yet</p>';
+            return;
+        }
+
+        listEl.innerHTML = events.map((e, i) => `
+            <div class="flex items-center justify-between rounded-xl px-4 py-3" style="background:rgba(24,24,27,0.5);">
+                <div class="flex items-center gap-3">
+                    <span class="font-bold text-sm" style="color:#f59e0b;">#${i + 1}</span>
+                    <span class="text-zinc-300 font-mono text-sm">${formatAddress(e.args[0])}</span>
+                </div>
+                <a href="https://sepolia.arbiscan.io/address/${e.args[0]}" target="_blank" rel="noopener" class="text-zinc-500 hover:text-zinc-300 text-xs">
+                    <i class="fa-solid fa-external-link"></i>
+                </a>
+            </div>
+        `).join('');
+    } catch (e) {
+        console.warn('[Referral] Failed to load referred list:', e.message);
+    }
 }
 
 // ============================================================================
@@ -415,7 +482,10 @@ async function setReferrer() {
 // ============================================================================
 function update(isConnected) {
     if (isConnected) {
-        loadReferralData().then(updateStats);
+        loadReferralData().then(data => {
+            updateStats(data);
+            loadReferredAddresses();
+        });
     }
 }
 

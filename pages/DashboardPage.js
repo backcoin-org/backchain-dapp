@@ -379,39 +379,7 @@ function detectReferralFromURL() {
     } catch (e) { /* ignore */ }
 }
 
-async function tryAutoSetReferrer() {
-    if (!State.isConnected || !State.userAddress) return;
-    const stored = localStorage.getItem('backchain_referrer');
-    if (!stored || !ethers.isAddress(stored)) return;
-    if (stored.toLowerCase() === State.userAddress.toLowerCase()) {
-        localStorage.removeItem('backchain_referrer');
-        return;
-    }
-    try {
-        const ecosystemAddr = addresses?.backchainEcosystem;
-        if (!ecosystemAddr) return;
-        const { ecosystemManagerABI } = await import('../config.js');
-        const { NetworkManager } = await import('../modules/core/index.js');
-        const provider = NetworkManager.getProvider();
-        const eco = new ethers.Contract(ecosystemAddr, ecosystemManagerABI, provider);
-        const existing = await eco.referredBy(State.userAddress);
-        if (existing && existing !== '0x0000000000000000000000000000000000000000') {
-            localStorage.removeItem('backchain_referrer');
-            return;
-        }
-        // Set referrer on-chain via signer
-        const signer = await State.provider.getSigner();
-        const ecoSigner = new ethers.Contract(ecosystemAddr, ecosystemManagerABI, signer);
-        console.log('[Referral] Auto-setting referrer:', stored);
-        const tx = await ecoSigner.setReferrer(stored);
-        await tx.wait();
-        localStorage.removeItem('backchain_referrer');
-        showToast('Referrer set! They will earn 5% of your staking rewards.', 'success');
-        updateReferralWidget();
-    } catch (e) {
-        console.warn('[Referral] Auto-set failed:', e.message);
-    }
-}
+// tryAutoSetReferrer removed — now handled gaslessly by api/referral.js + app.js processReferralAfterConnect()
 
 async function loadReferralData() {
     if (!State.isConnected || !State.userAddress) return { count: 0, referrer: null };
@@ -2019,12 +1987,10 @@ export const DashboardPage = {
 
         if (State.isConnected) {
             await updateUserHub(false);
-            tryAutoSetReferrer();
         } else {
             setTimeout(async () => {
                 if (State.isConnected) {
                     await updateUserHub(false);
-                    tryAutoSetReferrer();
                     updateReferralWidget();
                 }
             }, 500);

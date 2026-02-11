@@ -576,6 +576,52 @@ describe("Backchain V9 — Integration Tests", function () {
       ).to.be.revertedWithCustomError(f.ecosystem, "ReferrerAlreadySet");
     });
 
+    // ── setReferrerFor (relayer-based gasless onboarding) ──
+
+    it("setReferrerFor: relayer sets referrer on behalf of user", async function () {
+      const f = await loadFixture(deployAllFixture);
+      // deployer is owner, set deployer as relayer
+      await f.ecosystem.setReferralRelayer(f.deployer.address);
+      expect(await f.ecosystem.referralRelayer()).to.equal(f.deployer.address);
+
+      // deployer (relayer) sets Bob as Alice's referrer
+      await f.ecosystem.setReferrerFor(f.alice.address, f.bob.address);
+      expect(await f.ecosystem.referredBy(f.alice.address)).to.equal(f.bob.address);
+      expect(await f.ecosystem.referralCount(f.bob.address)).to.equal(1);
+    });
+
+    it("setReferrerFor: reverts if not relayer", async function () {
+      const f = await loadFixture(deployAllFixture);
+      await f.ecosystem.setReferralRelayer(f.deployer.address);
+      await expect(
+        f.ecosystem.connect(f.alice).setReferrerFor(f.bob.address, f.charlie.address)
+      ).to.be.revertedWithCustomError(f.ecosystem, "NotReferralRelayer");
+    });
+
+    it("setReferrerFor: reverts if already set", async function () {
+      const f = await loadFixture(deployAllFixture);
+      await f.ecosystem.setReferralRelayer(f.deployer.address);
+      await f.ecosystem.setReferrerFor(f.alice.address, f.bob.address);
+      await expect(
+        f.ecosystem.setReferrerFor(f.alice.address, f.charlie.address)
+      ).to.be.revertedWithCustomError(f.ecosystem, "ReferrerAlreadySet");
+    });
+
+    it("setReferrerFor: reverts if user == referrer", async function () {
+      const f = await loadFixture(deployAllFixture);
+      await f.ecosystem.setReferralRelayer(f.deployer.address);
+      await expect(
+        f.ecosystem.setReferrerFor(f.alice.address, f.alice.address)
+      ).to.be.revertedWithCustomError(f.ecosystem, "CannotReferSelf");
+    });
+
+    it("setReferralRelayer: only owner can call", async function () {
+      const f = await loadFixture(deployAllFixture);
+      await expect(
+        f.ecosystem.connect(f.alice).setReferralRelayer(f.alice.address)
+      ).to.be.revertedWithCustomError(f.ecosystem, "NotOwner");
+    });
+
     it("non-authorized module cannot call collectFee", async function () {
       const f = await loadFixture(deployAllFixture);
       await expect(

@@ -67,6 +67,7 @@ contract BackchainEcosystem is IBackchainEcosystem {
 
     mapping(address => address) public override referredBy;
     mapping(address => uint256) public override referralCount;
+    address public referralRelayer;
 
     // ════════════════════════════════════════════════════════════════════════
     // MODULE REGISTRY
@@ -153,6 +154,7 @@ contract BackchainEcosystem is IBackchainEcosystem {
 
     // ── Referral ──
     event ReferrerSet(address indexed user, address indexed referrer);
+    event ReferralRelayerUpdated(address indexed oldRelayer, address indexed newRelayer);
 
     // ── Module management ──
     event ModuleRegistered(bytes32 indexed moduleId, address indexed contractAddr);
@@ -197,6 +199,7 @@ contract BackchainEcosystem is IBackchainEcosystem {
     error ArrayLengthMismatch();
     error InvalidFeeBps();
     error CannotRecoverBKC();
+    error NotReferralRelayer();
 
     // ════════════════════════════════════════════════════════════════════════
     // MODIFIERS
@@ -424,6 +427,27 @@ contract BackchainEcosystem is IBackchainEcosystem {
         referralCount[_referrer]++;
 
         emit ReferrerSet(msg.sender, _referrer);
+    }
+
+    /// @notice Owner sets the authorized relayer for gasless referral onboarding.
+    function setReferralRelayer(address _relayer) external onlyOwner {
+        if (_relayer == address(0)) revert ZeroAddress();
+        emit ReferralRelayerUpdated(referralRelayer, _relayer);
+        referralRelayer = _relayer;
+    }
+
+    /// @notice Relayer sets a referrer on behalf of a user (gasless onboarding).
+    ///         Same validation as setReferrer() but msg.sender is the relayer, not the user.
+    function setReferrerFor(address _user, address _referrer) external {
+        if (msg.sender != referralRelayer) revert NotReferralRelayer();
+        if (_user == address(0) || _referrer == address(0)) revert InvalidAddress();
+        if (_referrer == _user) revert CannotReferSelf();
+        if (referredBy[_user] != address(0)) revert ReferrerAlreadySet();
+
+        referredBy[_user] = _referrer;
+        referralCount[_referrer]++;
+
+        emit ReferrerSet(_user, _referrer);
     }
 
     // ════════════════════════════════════════════════════════════════════════
