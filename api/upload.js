@@ -1,7 +1,8 @@
 // api/upload.js
-// ✅ VERSION V2.2: 5MB limit (Pinata Free), any file type support
+// ✅ VERSION V3.0: Migrated from Pinata to Lighthouse (IPFS+Filecoin permanent storage)
+// Used by: Notary document upload with signature verification
 
-import pinataSDK from '@pinata/sdk';
+import lighthouse from '@lighthouse-web3/sdk';
 import { Formidable } from 'formidable';
 import fs from 'fs';
 import { ethers } from 'ethers';
@@ -14,7 +15,6 @@ export const config = {
     },
 };
 
-// --- CORS Headers ---
 const setCorsHeaders = (res) => {
     res.setHeader('Access-Control-Allow-Credentials', true);
     res.setHeader('Access-Control-Allow-Origin', '*');
@@ -26,36 +26,28 @@ const setCorsHeaders = (res) => {
 };
 
 export default async function handler(req, res) {
-    // 1. CORS
     setCorsHeaders(res);
 
-    if (req.method === 'OPTIONS') {
-        return res.status(200).end();
-    }
-
-    if (req.method !== 'POST') {
-        return res.status(405).json({ error: 'Method Not Allowed' });
-    }
+    if (req.method === 'OPTIONS') return res.status(200).end();
+    if (req.method !== 'POST') return res.status(405).json({ error: 'Method Not Allowed' });
 
     console.log(`[${new Date().toISOString()}] Upload request received`);
 
-    const PINATA_JWT = process.env.PINATA_JWT;
-    if (!PINATA_JWT) {
-        console.error('❌ PINATA_JWT not configured');
+    const API_KEY = process.env.LIGHTHOUSE_API_KEY;
+    if (!API_KEY) {
+        console.error('LIGHTHOUSE_API_KEY not configured');
         return res.status(500).json({ error: 'Server configuration error.' });
     }
 
-    const pinata = new pinataSDK({ pinataJWTKey: PINATA_JWT });
     let file = null;
 
     try {
-        // 2. Parse form with 5MB limit (Pinata Free limit)
         const form = new Formidable({
-            maxFileSize: 5 * 1024 * 1024, // 5MB - Pinata Free limit
+            maxFileSize: 20 * 1024 * 1024, // 20MB (Lighthouse allows much more)
             uploadDir: '/tmp',
             keepExtensions: true,
             multiples: false,
-            filter: () => true, // Accept ALL file types
+            filter: () => true, // Accept ALL file types (notary can certify anything)
         });
 
         const [fields, files] = await new Promise((resolve, reject) => {
@@ -72,7 +64,7 @@ export default async function handler(req, res) {
         });
 
         file = (files.file && Array.isArray(files.file)) ? files.file[0] : files.file;
-        
+
         if (!file) {
             return res.status(400).json({ error: 'No file received.' });
         }
@@ -80,14 +72,14 @@ export default async function handler(req, res) {
         const fileName = file.originalFilename || 'unknown';
         const fileSize = file.size;
         const fileMime = file.mimetype || 'application/octet-stream';
-        
-        console.log(`📄 File: ${fileName} | Size: ${(fileSize / 1024).toFixed(1)} KB | Type: ${fileMime}`);
 
-        // 3. Validate signature
+        console.log(`File: ${fileName} | Size: ${(fileSize / 1024).toFixed(1)} KB | Type: ${fileMime}`);
+
+        // Validate signature
         const signature = (Array.isArray(fields.signature)) ? fields.signature[0] : fields.signature;
         const address = (Array.isArray(fields.address)) ? fields.address[0] : fields.address;
-        
-        const message = "I am signing to authenticate my file for notarization on Backchain."; 
+
+        const message = "I am signing to authenticate my file for notarization on Backchain.";
 
         if (!signature || !address) {
             return res.status(401).json({ error: 'Unauthorized', details: 'Missing signature/address.' });
@@ -108,72 +100,54 @@ export default async function handler(req, res) {
             return res.status(401).json({ error: 'Unauthorized', details: 'Signature mismatch.' });
         }
 
-        console.log('✅ Signature verified for:', address.slice(0, 10) + '...');
+        console.log('Signature verified for:', address.slice(0, 10) + '...');
 
-        // 4. Calculate SHA-256 hash
-        console.log('🔒 Calculating SHA-256...');
+        // Calculate SHA-256 hash
         const fileBuffer = fs.readFileSync(file.filepath);
         const hashSum = crypto.createHash('sha256');
         hashSum.update(fileBuffer);
         const contentHash = '0x' + hashSum.digest('hex');
-        console.log('🔹 Hash:', contentHash.slice(0, 20) + '...');
 
-        // 5. Upload to IPFS via Pinata
-        console.log('☁️ Uploading to Pinata IPFS...');
-        
-        const stream = fs.createReadStream(file.filepath);
-        const fileOptions = {
-            pinataMetadata: {
-                name: `Notary_${fileName}`,
-                keyvalues: {
-                    owner: address,
-                    timestamp: new Date().toISOString(),
-                    originalName: fileName,
-                    mimeType: fileMime
-                }
-            },
-            pinataOptions: { cidVersion: 1 }
-        };
+        // Upload to IPFS+Filecoin via Lighthouse (permanent storage)
+        const result = await lighthouse.upload(file.filepath, API_KEY);
 
-        const fileResult = await pinata.pinFileToIPFS(stream, fileOptions);
-        const ipfsUri = `ipfs://${fileResult.IpfsHash}`;
-        
-        console.log('✅ Uploaded:', ipfsUri);
+        if (!result?.data?.Hash) {
+            throw new Error('Lighthouse upload returned no hash');
+        }
 
-        // 6. Return success with all data
-        return res.status(200).json({ 
+        const ipfsHash = result.data.Hash;
+        const ipfsUri = `ipfs://${ipfsHash}`;
+
+        console.log('Uploaded (Lighthouse):', ipfsUri);
+
+        return res.status(200).json({
             success: true,
-            ipfsUri: ipfsUri,
-            contentHash: contentHash,
-            fileName: fileName,
-            fileSize: fileSize,
+            ipfsUri,
+            contentHash,
+            fileName,
+            fileSize,
             mimeType: fileMime,
-            ipfsHash: fileResult.IpfsHash
+            ipfsHash
         });
 
     } catch (error) {
-        console.error('❌ Upload Error:', error.message);
-        
+        console.error('Upload Error:', error.message);
+
         if (error.message === 'FILE_TOO_LARGE') {
             return res.status(413).json({
                 error: 'File too large',
-                details: 'Maximum file size is 5MB.'
+                details: 'Maximum file size is 20MB.'
             });
         }
-        
+
         return res.status(500).json({
             error: 'Upload failed',
             details: error.message
         });
 
     } finally {
-        // Cleanup temp file
         if (file && file.filepath && fs.existsSync(file.filepath)) {
-            try {
-                fs.unlinkSync(file.filepath);
-            } catch (e) {
-                console.warn('Could not delete temp file:', e.message);
-            }
+            try { fs.unlinkSync(file.filepath); } catch (e) {}
         }
     }
 }

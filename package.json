@@ -44,6 +44,7 @@
     "node": "20.x"
   },
   "dependencies": {
+    "@lighthouse-web3/sdk": "^0.4.4",
     "@openzeppelin/contracts": "^4.9.3",
     "@openzeppelin/contracts-upgradeable": "4.9.3",
     "@pinata/sdk": "^2.1.0",

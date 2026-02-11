@@ -1,6 +1,6 @@
-// api/upload-image.js
-// ✅ V2.0: Image upload via Lighthouse (decentralized, permanent IPFS+Filecoin)
-// Migrated from Pinata to Lighthouse for cheaper permanent storage
+// api/upload-media.js
+// ✅ V1.0: Video/media upload via Lighthouse (IPFS+Filecoin permanent storage)
+// Used by: Agora live recordings (VOD), video posts
 
 import lighthouse from '@lighthouse-web3/sdk';
 import { Formidable } from 'formidable';
@@ -14,8 +14,12 @@ export const config = {
 };
 
 const IPFS_GATEWAY = 'https://gateway.lighthouse.storage/ipfs/';
-const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB (Lighthouse allows larger)
-const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100MB for video
+const ALLOWED_TYPES = [
+    'video/webm', 'video/mp4', 'video/ogg',
+    'audio/webm', 'audio/ogg', 'audio/mpeg',
+    'image/jpeg', 'image/png', 'image/gif', 'image/webp'
+];
 
 const setCorsHeaders = (res) => {
     res.setHeader('Access-Control-Allow-Credentials', true);
@@ -63,23 +67,27 @@ export default async function handler(req, res) {
             });
         });
 
-        file = (files.image && Array.isArray(files.image)) ? files.image[0] : files.image;
+        file = (files.file && Array.isArray(files.file)) ? files.file[0] : files.file;
         if (!file) {
-            file = (files.file && Array.isArray(files.file)) ? files.file[0] : files.file;
+            file = (files.video && Array.isArray(files.video)) ? files.video[0] : files.video;
+        }
+        if (!file) {
+            file = (files.media && Array.isArray(files.media)) ? files.media[0] : files.media;
         }
 
         if (!file) {
-            return res.status(400).json({ error: 'No image received.' });
+            return res.status(400).json({ error: 'No file received.' });
         }
 
         const fileMime = file.mimetype || '';
         if (!ALLOWED_TYPES.includes(fileMime)) {
-            return res.status(400).json({ error: 'Invalid file type. Only JPG, PNG, GIF, WebP allowed.' });
+            return res.status(400).json({ error: `Invalid file type: ${fileMime}` });
         }
 
-        const fileName = file.originalFilename || 'image';
+        const fileName = file.originalFilename || 'media';
         const fileSize = file.size;
-        console.log(`Image: ${fileName} | Size: ${(fileSize / 1024).toFixed(1)} KB | Type: ${fileMime}`);
+        const sizeMB = (fileSize / (1024 * 1024)).toFixed(1);
+        console.log(`Media: ${fileName} | Size: ${sizeMB} MB | Type: ${fileMime}`);
 
         // Upload to IPFS+Filecoin via Lighthouse (permanent storage)
         const result = await lighthouse.upload(file.filepath, API_KEY);
@@ -89,23 +97,24 @@ export default async function handler(req, res) {
         }
 
         const ipfsHash = result.data.Hash;
-        const imageUrl = `${IPFS_GATEWAY}${ipfsHash}`;
+        const mediaUrl = `${IPFS_GATEWAY}${ipfsHash}`;
 
-        console.log('Image uploaded (Lighthouse):', imageUrl);
+        console.log('Media uploaded (Lighthouse):', mediaUrl);
 
         return res.status(200).json({
             success: true,
-            imageUrl,
+            mediaUrl,
             ipfsHash,
             fileName,
-            fileSize
+            fileSize,
+            mimeType: fileMime
         });
 
     } catch (error) {
-        console.error('Image Upload Error:', error.message);
+        console.error('Media Upload Error:', error.message);
 
         if (error.message === 'FILE_TOO_LARGE') {
-            return res.status(413).json({ error: 'Image too large. Maximum 10MB.' });
+            return res.status(413).json({ error: 'File too large. Maximum 100MB for media.' });
         }
 
         return res.status(500).json({ error: 'Upload failed', details: error.message });

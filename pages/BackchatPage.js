@@ -721,10 +721,11 @@ async function loadPosts() {
         BC.contractAvailable = true;
 
         const [postEvents, replyEvents, repostEvents] = await Promise.all([
-            contract.queryFilter(contract.filters.PostCreated(), -50000).catch(() => []),
-            contract.queryFilter(contract.filters.ReplyCreated(), -50000).catch(() => []),
-            contract.queryFilter(contract.filters.RepostCreated(), -50000).catch(() => [])
+            contract.queryFilter(contract.filters.PostCreated(), -50000).catch(e => { console.warn('[Agora] PostCreated query failed:', e.message); return []; }),
+            contract.queryFilter(contract.filters.ReplyCreated(), -50000).catch(e => { console.warn('[Agora] ReplyCreated query failed:', e.message); return []; }),
+            contract.queryFilter(contract.filters.RepostCreated(), -50000).catch(e => { console.warn('[Agora] RepostCreated query failed:', e.message); return []; })
         ]);
+        console.log(`[Agora] Events found: ${postEvents.length} posts, ${replyEvents.length} replies, ${repostEvents.length} reposts`);
 
         const allEventItems = [];
         for (const ev of postEvents.slice(-80)) allEventItems.push({ ev, type: 'post' });
@@ -837,6 +838,7 @@ async function loadPosts() {
                 return bVal > aVal ? 1 : bVal < aVal ? -1 : 0;
             });
 
+        console.log(`[Agora] Loaded: ${BC.posts.length} feed posts, ${BC.allItems.length} total items, ${BC.trendingPosts.length} trending`);
     } catch (e) {
         console.error('[Agora] Failed to load posts:', e);
         BC.error = e.message;
@@ -1139,12 +1141,26 @@ async function doBoostProfile(amount) {
 // ============================================================================
 
 async function goLive() {
-    if (BC.isLive || !State.isConnected) return;
+    if (BC.isLive) {
+        showToast('You are already live!', 'info');
+        return;
+    }
+    if (!State.isConnected) {
+        showToast('Connect your wallet to go live', 'error');
+        return;
+    }
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        showToast('Your browser does not support live streaming (HTTPS required)', 'error');
+        return;
+    }
+
     try {
+        showToast('Requesting camera access...', 'info');
         // First get camera+mic permission before creating the on-chain post
         const testStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
         testStream.getTracks().forEach(t => t.stop()); // release immediately
 
+        showToast('Creating live post on-chain...', 'info');
         // Create on-chain post for this live
         const content = 'LIVE NOW';
         await BackchatTx.createPost({
@@ -1155,7 +1171,7 @@ async function goLive() {
             onSuccess: async (receipt) => {
                 try {
                     // Extract postId from receipt logs
-                    let postId = String(BC.posts.length + 1); // fallback
+                    let postId = null;
                     if (receipt?.logs) {
                         for (const log of receipt.logs) {
                             try {
@@ -1168,12 +1184,26 @@ async function goLive() {
                             } catch (_) { /* not our event */ }
                         }
                     }
+                    // Fallback: get total post count
+                    if (!postId) {
+                        try {
+                            const count = await BackchatTx.getPostCount();
+                            postId = String(count);
+                        } catch (_) {
+                            postId = String(Date.now());
+                        }
+                    }
 
+                    console.log('[Agora] Starting live stream for post:', postId);
                     const ls = new LiveStream();
                     const { roomId, stream } = await ls.startStream(postId, State.userAddress);
                     BC.liveStream = ls;
                     BC.isLive = true;
                     BC.liveViewerCount = 0;
+
+                    // Start recording the stream
+                    _startRecording(stream);
+
                     ls.onViewerCountChange = (count) => {
                         BC.liveViewerCount = count;
                         const el = document.querySelector('[data-live-viewers]');
@@ -1185,15 +1215,24 @@ async function goLive() {
                     setTimeout(() => {
                         const video = document.getElementById('bc-local-video');
                         if (video) video.srcObject = stream;
-                    }, 100);
+                    }, 150);
                 } catch (e) {
+                    console.error('[Agora] LiveStream start error:', e);
                     showToast('Failed to start stream: ' + e.message, 'error');
                 }
+            },
+            onError: (e) => {
+                showToast('Failed to create live post: ' + (e?.message || 'Transaction rejected'), 'error');
             }
         });
     } catch (e) {
-        if (e.name === 'NotAllowedError') {
-            showToast('Camera/mic permission denied', 'error');
+        console.error('[Agora] goLive error:', e);
+        if (e.name === 'NotAllowedError' || e.name === 'PermissionDeniedError') {
+            showToast('Camera/mic permission denied. Please allow access and try again.', 'error');
+        } else if (e.name === 'NotFoundError') {
+            showToast('No camera or microphone found on this device', 'error');
+        } else if (e.name === 'NotReadableError') {
+            showToast('Camera is in use by another application', 'error');
         } else {
             showToast('Failed to go live: ' + e.message, 'error');
         }
@@ -1202,12 +1241,25 @@ async function goLive() {
 
 async function endLive() {
     if (!BC.liveStream) return;
+
+    // Stop recording first
+    _stopRecording();
+
+    // End the WebRTC stream
     await BC.liveStream.endStream();
     BC.liveStream = null;
     BC.isLive = false;
     BC.liveViewerCount = 0;
-    showToast('Stream ended', 'success');
+    showToast('Stream ended. Saving recording...', 'success');
     renderContent();
+
+    // Upload VOD in background
+    const vodCID = await _uploadVOD();
+    if (vodCID) {
+        console.log('[Agora] VOD saved with CID:', vodCID);
+        // Reload posts to show the recording
+        await loadPosts();
+    }
 }
 
 async function watchLive(postId) {
@@ -1254,6 +1306,92 @@ function leaveLive() {
     BC.liveStream = null;
     BC.watchingStreamId = null;
     renderContent();
+}
+
+// ── Live Recording (MediaRecorder → VOD upload) ────────────────────────
+let _mediaRecorder = null;
+let _recordedChunks = [];
+
+function _startRecording(stream) {
+    if (!MediaRecorder || !stream) return;
+    _recordedChunks = [];
+    try {
+        const mimeType = MediaRecorder.isTypeSupported('video/webm;codecs=vp9,opus')
+            ? 'video/webm;codecs=vp9,opus'
+            : MediaRecorder.isTypeSupported('video/webm;codecs=vp8,opus')
+                ? 'video/webm;codecs=vp8,opus'
+                : 'video/webm';
+
+        _mediaRecorder = new MediaRecorder(stream, {
+            mimeType,
+            videoBitsPerSecond: 1500000 // 1.5 Mbps for good quality/size ratio
+        });
+
+        _mediaRecorder.ondataavailable = (e) => {
+            if (e.data && e.data.size > 0) _recordedChunks.push(e.data);
+        };
+
+        _mediaRecorder.onstop = () => {
+            console.log(`[Agora] Recording stopped: ${_recordedChunks.length} chunks`);
+        };
+
+        _mediaRecorder.start(5000); // collect data every 5 seconds
+        console.log('[Agora] Recording started:', mimeType);
+    } catch (e) {
+        console.warn('[Agora] MediaRecorder not available:', e.message);
+    }
+}
+
+function _stopRecording() {
+    if (_mediaRecorder && _mediaRecorder.state !== 'inactive') {
+        _mediaRecorder.stop();
+    }
+}
+
+async function _uploadVOD() {
+    if (_recordedChunks.length === 0) {
+        console.log('[Agora] No recorded data to upload');
+        return null;
+    }
+
+    const blob = new Blob(_recordedChunks, { type: 'video/webm' });
+    const sizeMB = (blob.size / (1024 * 1024)).toFixed(1);
+    console.log(`[Agora] VOD size: ${sizeMB} MB`);
+
+    // Max 50MB for VOD
+    if (blob.size > 50 * 1024 * 1024) {
+        showToast(`Recording too large (${sizeMB}MB). Max 50MB.`, 'error');
+        return null;
+    }
+
+    showToast(`Saving recording (${sizeMB}MB)...`, 'info');
+
+    try {
+        const formData = new FormData();
+        formData.append('file', blob, `agora-live-${Date.now()}.webm`);
+
+        const resp = await fetch('/api/upload-media', {
+            method: 'POST',
+            body: formData
+        });
+
+        if (!resp.ok) {
+            const data = await resp.json().catch(() => ({}));
+            throw new Error(data.error || `Upload failed (${resp.status})`);
+        }
+
+        const data = await resp.json();
+        showToast('Live recording saved!', 'success');
+        console.log('[Agora] VOD uploaded:', data.ipfsHash);
+        return data.ipfsHash;
+    } catch (e) {
+        console.error('[Agora] VOD upload failed:', e);
+        showToast('Failed to save recording: ' + e.message, 'error');
+        return null;
+    } finally {
+        _recordedChunks = [];
+        _mediaRecorder = null;
+    }
 }
 
 async function loadActiveRooms() {

@@ -203,7 +203,7 @@ export function getRpcStats() {
 // 4. IPFS GATEWAY
 // ============================================================================
 
-export const ipfsGateway = "https://white-defensive-eel-240.mypinata.cloud/ipfs/";
+export const ipfsGateway = "https://gateway.lighthouse.storage/ipfs/";
 
 export const IPFS_GATEWAYS = [
     "https://dweb.link/ipfs/",
