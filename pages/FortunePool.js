@@ -1132,23 +1132,22 @@ function setupPlayEvents(maxMulti, balanceNum) {
     document.getElementById('wager-minus')?.addEventListener('click', () => updateWager(Game.wager - 1));
     document.getElementById('wager-plus')?.addEventListener('click', () => updateWager(Game.wager + 1));
 
-    // Faucet
+    // Faucet (100% gasless via API)
     document.getElementById('btn-faucet')?.addEventListener('click', async () => {
         showToast('Requesting tokens...', 'info');
         try {
-            let success = false;
-            try {
-                const res = await fetch(`/api/faucet?address=${State.userAddress}`);
-                const data = await res.json();
-                if (res.ok && data.success) success = true;
-            } catch {}
-            if (!success) {
-                const { FaucetTx } = await import('../modules/transactions/index.js');
-                await FaucetTx.claimOnChain({ onSuccess: () => { success = true; } });
+            const res = await fetch(`/api/faucet?address=${State.userAddress}`);
+            const data = await res.json();
+            if (res.ok && data.success) {
+                showToast('Tokens received!', 'success');
+                await loadUserData();
+                renderPhase();
+            } else {
+                const msg = data.error || 'Faucet unavailable';
+                showToast(msg, msg.toLowerCase().includes('cooldown') ? 'warning' : 'error');
             }
-            if (success) { showToast('Tokens received!', 'success'); await loadUserData(); renderPhase(); }
         } catch (e) {
-            showToast(e.message?.includes('cooldown') ? e.message : 'Faucet unavailable', 'error');
+            showToast('Faucet temporarily unavailable', 'error');
         }
     });
 

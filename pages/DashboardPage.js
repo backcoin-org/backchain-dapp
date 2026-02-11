@@ -278,45 +278,9 @@ async function requestSmartFaucet(btnElement) {
         console.warn('[Faucet] API offline:', e.message);
     }
 
-    // Fallback: claim on-chain direto (user paga gas)
+    // API failed — show error (no on-chain fallback, faucet is 100% gasless)
     if (!apiSuccess) {
-        try {
-            console.log('[Faucet] Fallback: claim on-chain direto...');
-            btnElement.innerHTML = `<i class="fa-solid fa-circle-notch fa-spin mr-2"></i> Claim on-chain...`;
-
-            const { FaucetTx } = await import('../modules/transactions/index.js');
-            const result = await FaucetTx.claimOnChain({
-                button: null,
-                onSuccess: () => {
-                    showToast(`Faucet: ${FAUCET_BKC_AMOUNT} BKC + ${FAUCET_ETH_AMOUNT} ETH recebidos!`, "success");
-                    DashboardState.faucet.canClaim = false;
-                    DashboardState.faucet.cooldownEnd = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
-                    updateFaucetWidget();
-                    setTimeout(() => { DashboardPage.update(true); }, 4000);
-                },
-                onError: (err) => {
-                    console.error('[Faucet] On-chain falhou:', err);
-                    const msg = err.message || 'Erro no claim';
-                    if (msg.includes('Aguarde') || msg.includes('cooldown')) {
-                        showToast(msg, "warning");
-                    } else if (msg.includes('InsufficientTokens') || msg.includes('InsufficientETH')) {
-                        showToast("Faucet sem saldo. Contate o admin.", "error");
-                    } else if (msg.includes('user rejected') || msg.includes('denied')) {
-                        showToast("Transação cancelada", "warning");
-                    } else {
-                        showToast(`Faucet: ${msg}`, "error");
-                    }
-                }
-            });
-        } catch (e) {
-            console.error('[Faucet] On-chain erro:', e);
-            const msg = e.message || '';
-            if (msg.includes('Aguarde') || msg.includes('cooldown')) {
-                showToast(msg, "warning");
-            } else {
-                showToast("Faucet indisponível. Tente novamente.", "error");
-            }
-        }
+        showToast("Faucet temporarily unavailable. Try again later.", "error");
     }
 
     DashboardState.faucet.isLoading = false;
