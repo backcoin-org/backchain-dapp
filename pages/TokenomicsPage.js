@@ -1,5 +1,5 @@
 // pages/TokenomicsPage.js
-// ✅ V9.0 — Updated for V9 contracts (15 contracts, real fee structure)
+// ✅ V9.1 — Fixed Tailwind classes + TGE split + Referral/Operator CTAs
 
 import { State } from '../state.js';
 import { formatBigNumber } from '../utils.js';
@@ -8,36 +8,12 @@ import { formatBigNumber } from '../utils.js';
 //  1. CONSTANTS
 // ==========================================================
 const MAX_SUPPLY = 200_000_000;
-const TGE_AMOUNT = 40_000_000; // 40M to treasury at launch
+const TGE_AMOUNT = 40_000_000;
+const AIRDROP_AMOUNT = 14_000_000; // 35% of TGE
+const LIQUIDITY_AMOUNT = 26_000_000; // 65% of TGE
 
-// Tier 2 BKC fee distribution (from BackchainEcosystem)
+// Tier 2 BKC fee distribution
 const BKC_FEE_SPLIT = { burn: 5, stakers: 75, treasury: 20 };
-
-// NFT Booster tiers (from RewardBooster.sol)
-const BOOSTERS = [
-    { tier: 'Diamond', boost: 5000, burnRate: 0,  color: 'cyan',   icon: 'fa-gem' },
-    { tier: 'Gold',    boost: 4000, burnRate: 10, color: 'yellow', icon: 'fa-gem' },
-    { tier: 'Silver',  boost: 2500, burnRate: 25, color: 'gray',   icon: 'fa-gem' },
-    { tier: 'Bronze',  boost: 1000, burnRate: 40, color: 'orange', icon: 'fa-gem' }
-];
-
-// V9 Contracts
-const CONTRACTS = [
-    { name: 'BKCToken',            icon: 'fa-coins',         color: 'amber'  },
-    { name: 'BackchainEcosystem',  icon: 'fa-network-wired', color: 'blue'   },
-    { name: 'LiquidityPool',      icon: 'fa-water',         color: 'indigo'  },
-    { name: 'StakingPool',        icon: 'fa-lock',          color: 'purple'  },
-    { name: 'BuybackMiner',       icon: 'fa-hammer',        color: 'emerald' },
-    { name: 'RewardBooster',      icon: 'fa-gem',           color: 'violet'  },
-    { name: 'NFTPool (×4)',       icon: 'fa-store',         color: 'pink'    },
-    { name: 'FortunePool',        icon: 'fa-clover',        color: 'green'   },
-    { name: 'Agora',              icon: 'fa-landmark',      color: 'cyan'    },
-    { name: 'Notary',             icon: 'fa-stamp',         color: 'slate'   },
-    { name: 'CharityPool',        icon: 'fa-heart',         color: 'red'     },
-    { name: 'RentalManager',      icon: 'fa-house',         color: 'teal'    },
-    { name: 'Governance',         icon: 'fa-scale-balanced', color: 'amber'  },
-    { name: 'SimpleBKCFaucet',    icon: 'fa-faucet-drip',   color: 'sky'     }
-];
 
 // ==========================================================
 //  2. STYLES
@@ -107,7 +83,7 @@ function renderSupply() {
     return `
         <div class="tk-section tk-fade" style="animation-delay:0.1s">
             <div class="flex items-center gap-2 mb-4">
-                <div class="tk-icon-box bg-amber-500/20"><i class="fa-solid fa-coins text-amber-400"></i></div>
+                <div class="tk-icon-box" style="background:rgba(245,158,11,0.2)"><i class="fa-solid fa-coins text-amber-400"></i></div>
                 <div><h2 class="text-white font-bold">Token Supply</h2><p class="text-zinc-500 text-xs">BKC — ERC-20 on Arbitrum</p></div>
             </div>
             <div class="grid grid-cols-3 gap-3 mb-4">
@@ -133,11 +109,11 @@ function renderTGE() {
     return `
         <div class="tk-section tk-fade" style="animation-delay:0.15s">
             <div class="flex items-center gap-2 mb-4">
-                <div class="tk-icon-box bg-purple-500/20"><i class="fa-solid fa-rocket text-purple-400"></i></div>
+                <div class="tk-icon-box" style="background:rgba(168,85,247,0.2)"><i class="fa-solid fa-rocket text-purple-400"></i></div>
                 <div><h2 class="text-white font-bold">TGE — Token Launch</h2><p class="text-zinc-500 text-xs">40M BKC minted at genesis</p></div>
             </div>
             <div class="flex items-center justify-center gap-6 mb-4">
-                <div class="tk-pie-ring" style="background: conic-gradient(#10b981 0% 100%);">
+                <div class="tk-pie-ring" style="background: conic-gradient(#f59e0b 0% 35%, #10b981 35% 100%);">
                     <div class="tk-pie-center">
                         <p class="text-2xl font-black text-white">40M</p>
                         <p class="text-[10px] text-zinc-500">BKC</p>
@@ -145,20 +121,35 @@ function renderTGE() {
                 </div>
                 <div class="space-y-3">
                     <div class="flex items-center gap-2">
+                        <div class="w-3 h-3 rounded-full bg-amber-500"></div>
+                        <div>
+                            <p class="text-white font-bold text-sm">35% Airdrop</p>
+                            <p class="text-zinc-500 text-[10px]">${fmt(AIRDROP_AMOUNT)} BKC to community</p>
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-2">
                         <div class="w-3 h-3 rounded-full bg-emerald-500"></div>
                         <div>
-                            <p class="text-white font-bold text-sm">100% Treasury</p>
-                            <p class="text-zinc-500 text-[10px]">Seeded to LiquidityPool + Airdrop</p>
+                            <p class="text-white font-bold text-sm">65% Liquidity</p>
+                            <p class="text-zinc-500 text-[10px]">${fmt(LIQUIDITY_AMOUNT)} BKC to LiquidityPool</p>
                         </div>
                     </div>
                 </div>
             </div>
-            <div class="tk-card bg-gradient-to-r from-amber-500/10 to-orange-500/10 border-amber-500/30">
+            <div class="tk-card" style="background:linear-gradient(135deg,rgba(245,158,11,0.08),rgba(234,88,12,0.08));border-color:rgba(245,158,11,0.3)">
                 <div class="flex items-center gap-2 mb-2">
                     <span class="text-lg"><i class="fa-solid fa-parachute-box text-amber-400"></i></span>
-                    <p class="text-amber-400 font-bold text-sm">Community Airdrop</p>
+                    <p class="text-amber-400 font-bold text-sm">Airdrop — Phase 1 Active</p>
                 </div>
-                <p class="text-zinc-400 text-xs">Earn points by using the protocol: staking, notarizing documents, playing Fortune Pool, posting on Agora, donating to Charity campaigns, and more.</p>
+                <p class="text-zinc-400 text-xs">Earn points by using the protocol: staking, notarizing, playing Fortune, posting on Agora, donating to Charity. Share your referral link to earn 5% of your referrals' staking rewards — forever.</p>
+                <div class="flex gap-2 mt-3">
+                    <a href="#airdrop" class="inline-flex items-center gap-1.5 text-xs font-bold text-amber-400 hover:text-amber-300 transition-colors">
+                        <i class="fa-solid fa-arrow-right"></i> Join Airdrop
+                    </a>
+                    <a href="#referral" class="inline-flex items-center gap-1.5 text-xs font-bold text-cyan-400 hover:text-cyan-300 transition-colors ml-4">
+                        <i class="fa-solid fa-user-plus"></i> Invite Friends
+                    </a>
+                </div>
             </div>
         </div>`;
 }
@@ -167,17 +158,17 @@ function renderFeeFlow() {
     return `
         <div class="tk-section tk-fade" style="animation-delay:0.2s">
             <div class="flex items-center gap-2 mb-4">
-                <div class="tk-icon-box bg-cyan-500/20"><i class="fa-solid fa-arrows-split-up-and-left text-cyan-400"></i></div>
+                <div class="tk-icon-box" style="background:rgba(6,182,212,0.2)"><i class="fa-solid fa-arrows-split-up-and-left text-cyan-400"></i></div>
                 <div><h2 class="text-white font-bold">Fee Flow</h2><p class="text-zinc-500 text-xs">How protocol revenue is distributed</p></div>
             </div>
 
             <div class="tk-card mb-3">
                 <p class="text-white font-bold text-sm mb-2"><i class="fa-solid fa-layer-group text-blue-400 mr-2"></i>Tier 1 — ETH Fees</p>
-                <p class="text-zinc-500 text-xs mb-3">Every on-chain action (post, certify, play, swap, stake) pays an ETH fee split among:</p>
+                <p class="text-zinc-500 text-xs mb-3">Every on-chain action pays an ETH fee split among:</p>
                 <div class="grid grid-cols-3 gap-2 text-center text-[10px]">
-                    <div class="bg-zinc-800/50 rounded-lg p-2"><p class="text-emerald-400 font-bold text-base">Buyback</p><p class="text-zinc-500">ETH accumulates</p></div>
-                    <div class="bg-zinc-800/50 rounded-lg p-2"><p class="text-blue-400 font-bold text-base">Treasury</p><p class="text-zinc-500">Protocol fund</p></div>
-                    <div class="bg-zinc-800/50 rounded-lg p-2"><p class="text-amber-400 font-bold text-base">Operator</p><p class="text-zinc-500">Frontend builder</p></div>
+                    <div class="rounded-lg p-2" style="background:rgba(39,39,42,0.5)"><p class="text-emerald-400 font-bold text-base">Buyback</p><p class="text-zinc-500">ETH accumulates</p></div>
+                    <div class="rounded-lg p-2" style="background:rgba(39,39,42,0.5)"><p class="text-blue-400 font-bold text-base">Treasury</p><p class="text-zinc-500">Protocol fund</p></div>
+                    <div class="rounded-lg p-2" style="background:rgba(39,39,42,0.5)"><p class="text-amber-400 font-bold text-base">Operator</p><p class="text-zinc-500">Frontend builder</p></div>
                 </div>
             </div>
 
@@ -187,59 +178,111 @@ function renderFeeFlow() {
                 <p class="text-white font-bold text-sm mb-2"><i class="fa-solid fa-layer-group text-purple-400 mr-2"></i>Tier 2 — BKC Fees</p>
                 <p class="text-zinc-500 text-xs mb-3">Staking claims and Fortune wagers pay BKC fees:</p>
                 <div class="grid grid-cols-3 gap-2 text-center text-[10px]">
-                    <div class="bg-zinc-800/50 rounded-lg p-2"><p class="text-red-400 font-bold text-base">${BKC_FEE_SPLIT.burn}%</p><p class="text-zinc-500">Burn</p></div>
-                    <div class="bg-zinc-800/50 rounded-lg p-2"><p class="text-purple-400 font-bold text-base">${BKC_FEE_SPLIT.stakers}%</p><p class="text-zinc-500">Stakers</p></div>
-                    <div class="bg-zinc-800/50 rounded-lg p-2"><p class="text-blue-400 font-bold text-base">${BKC_FEE_SPLIT.treasury}%</p><p class="text-zinc-500">Treasury</p></div>
+                    <div class="rounded-lg p-2" style="background:rgba(39,39,42,0.5)"><p class="text-red-400 font-bold text-base">${BKC_FEE_SPLIT.burn}%</p><p class="text-zinc-500">Burn</p></div>
+                    <div class="rounded-lg p-2" style="background:rgba(39,39,42,0.5)"><p class="text-purple-400 font-bold text-base">${BKC_FEE_SPLIT.stakers}%</p><p class="text-zinc-500">Stakers</p></div>
+                    <div class="rounded-lg p-2" style="background:rgba(39,39,42,0.5)"><p class="text-blue-400 font-bold text-base">${BKC_FEE_SPLIT.treasury}%</p><p class="text-zinc-500">Treasury</p></div>
                 </div>
             </div>
 
             <div class="tk-flow-line my-3"></div>
 
-            <div class="tk-card bg-gradient-to-r from-emerald-500/10 to-cyan-500/10 border-emerald-500/30">
+            <div class="tk-card" style="background:linear-gradient(135deg,rgba(16,185,129,0.08),rgba(6,182,212,0.08));border-color:rgba(16,185,129,0.3)">
                 <p class="text-white font-bold text-sm mb-2"><i class="fa-solid fa-recycle text-emerald-400 mr-2"></i>BuybackMiner — The Engine</p>
                 <p class="text-zinc-500 text-xs mb-2">When ETH fees accumulate, anyone can trigger a buyback:</p>
                 <div class="space-y-1 text-[10px] text-zinc-400">
                     <p><span class="text-emerald-400">1.</span> Withdraw ETH from Ecosystem</p>
-                    <p><span class="text-emerald-400">2.</span> 1% → caller incentive (permissionless MEV)</p>
-                    <p><span class="text-emerald-400">3.</span> 99% → swap ETH→BKC via LiquidityPool</p>
+                    <p><span class="text-emerald-400">2.</span> 1% to caller incentive (permissionless MEV)</p>
+                    <p><span class="text-emerald-400">3.</span> 99% swaps ETH to BKC via LiquidityPool</p>
                     <p><span class="text-emerald-400">4.</span> Mint new BKC (scarcity curve decreases over time)</p>
-                    <p><span class="text-emerald-400">5.</span> 5% burned + 95% → StakingPool rewards</p>
+                    <p><span class="text-emerald-400">5.</span> 5% burned + 95% to StakingPool rewards</p>
                 </div>
             </div>
         </div>`;
 }
 
 function renderPricing() {
-    const fees = [
-        { name: 'Notary — Certify', fee: '0.0005 ETH', note: '~$1.50/doc', icon: 'fa-stamp', color: 'violet' },
-        { name: 'Fortune — Tier 0 (2x)', fee: '0.0003 ETH', note: '~$0.90', icon: 'fa-dice-one', color: 'green' },
-        { name: 'Fortune — Tier 1 (10x)', fee: '0.0005 ETH', note: '~$1.50', icon: 'fa-dice-three', color: 'emerald' },
-        { name: 'Fortune — Tier 2 (100x)', fee: '0.001 ETH', note: '~$3.00', icon: 'fa-dice-six', color: 'teal' },
-        { name: 'Agora — Verified Badge', fee: '0.02 ETH/yr', note: '~$60', icon: 'fa-circle-check', color: 'blue' },
-        { name: 'Agora — Premium Badge', fee: '0.1 ETH/yr', note: '~$300', icon: 'fa-circle-check', color: 'amber' },
-        { name: 'Agora — Elite Badge', fee: '0.25 ETH/yr', note: '~$750', icon: 'fa-gem', color: 'purple' },
-        { name: 'Agora — Post Boost', fee: '0.002 ETH/day', note: 'Standard', icon: 'fa-rocket', color: 'cyan' }
-    ];
     return `
         <div class="tk-section tk-fade" style="animation-delay:0.3s">
             <div class="flex items-center gap-2 mb-4">
-                <div class="tk-icon-box bg-amber-500/20"><i class="fa-solid fa-receipt text-amber-400"></i></div>
+                <div class="tk-icon-box" style="background:rgba(245,158,11,0.2)"><i class="fa-solid fa-receipt text-amber-400"></i></div>
                 <div><h2 class="text-white font-bold">Fixed Pricing</h2><p class="text-zinc-500 text-xs">Minimum fees ensure ecosystem sustainability</p></div>
             </div>
             <div class="grid grid-cols-2 gap-2">
-                ${fees.map(f => `
-                    <div class="tk-card flex items-center gap-2 p-2">
-                        <div class="w-8 h-8 rounded-lg bg-${f.color}-500/20 flex items-center justify-center flex-shrink-0">
-                            <i class="fa-solid ${f.icon} text-${f.color}-400 text-xs"></i>
-                        </div>
-                        <div class="min-w-0">
-                            <p class="text-white text-xs font-medium truncate">${f.name}</p>
-                            <p class="text-${f.color}-400 text-[10px] font-bold">${f.fee} <span class="text-zinc-600">${f.note}</span></p>
-                        </div>
-                    </div>`).join('')}
+                <div class="tk-card flex items-center gap-2 p-2">
+                    <div class="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0" style="background:rgba(139,92,246,0.2)">
+                        <i class="fa-solid fa-stamp text-violet-400 text-xs"></i>
+                    </div>
+                    <div class="min-w-0">
+                        <p class="text-white text-xs font-medium truncate">Notary — Certify</p>
+                        <p class="text-violet-400 text-[10px] font-bold">0.0005 ETH</p>
+                    </div>
+                </div>
+                <div class="tk-card flex items-center gap-2 p-2">
+                    <div class="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0" style="background:rgba(34,197,94,0.2)">
+                        <i class="fa-solid fa-dice-one text-green-400 text-xs"></i>
+                    </div>
+                    <div class="min-w-0">
+                        <p class="text-white text-xs font-medium truncate">Fortune — Tier 0 (2x)</p>
+                        <p class="text-green-400 text-[10px] font-bold">0.0003 ETH</p>
+                    </div>
+                </div>
+                <div class="tk-card flex items-center gap-2 p-2">
+                    <div class="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0" style="background:rgba(16,185,129,0.2)">
+                        <i class="fa-solid fa-dice-three text-emerald-400 text-xs"></i>
+                    </div>
+                    <div class="min-w-0">
+                        <p class="text-white text-xs font-medium truncate">Fortune — Tier 1 (10x)</p>
+                        <p class="text-emerald-400 text-[10px] font-bold">0.0005 ETH</p>
+                    </div>
+                </div>
+                <div class="tk-card flex items-center gap-2 p-2">
+                    <div class="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0" style="background:rgba(20,184,166,0.2)">
+                        <i class="fa-solid fa-dice-six text-teal-400 text-xs"></i>
+                    </div>
+                    <div class="min-w-0">
+                        <p class="text-white text-xs font-medium truncate">Fortune — Tier 2 (100x)</p>
+                        <p class="text-teal-400 text-[10px] font-bold">0.001 ETH</p>
+                    </div>
+                </div>
+                <div class="tk-card flex items-center gap-2 p-2">
+                    <div class="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0" style="background:rgba(59,130,246,0.2)">
+                        <i class="fa-solid fa-circle-check text-blue-400 text-xs"></i>
+                    </div>
+                    <div class="min-w-0">
+                        <p class="text-white text-xs font-medium truncate">Agora — Verified Badge</p>
+                        <p class="text-blue-400 text-[10px] font-bold">0.02 ETH/yr</p>
+                    </div>
+                </div>
+                <div class="tk-card flex items-center gap-2 p-2">
+                    <div class="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0" style="background:rgba(245,158,11,0.2)">
+                        <i class="fa-solid fa-circle-check text-amber-400 text-xs"></i>
+                    </div>
+                    <div class="min-w-0">
+                        <p class="text-white text-xs font-medium truncate">Agora — Premium Badge</p>
+                        <p class="text-amber-400 text-[10px] font-bold">0.1 ETH/yr</p>
+                    </div>
+                </div>
+                <div class="tk-card flex items-center gap-2 p-2">
+                    <div class="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0" style="background:rgba(168,85,247,0.2)">
+                        <i class="fa-solid fa-gem text-purple-400 text-xs"></i>
+                    </div>
+                    <div class="min-w-0">
+                        <p class="text-white text-xs font-medium truncate">Agora — Elite Badge</p>
+                        <p class="text-purple-400 text-[10px] font-bold">0.25 ETH/yr</p>
+                    </div>
+                </div>
+                <div class="tk-card flex items-center gap-2 p-2">
+                    <div class="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0" style="background:rgba(6,182,212,0.2)">
+                        <i class="fa-solid fa-rocket text-cyan-400 text-xs"></i>
+                    </div>
+                    <div class="min-w-0">
+                        <p class="text-white text-xs font-medium truncate">Agora — Post Boost</p>
+                        <p class="text-cyan-400 text-[10px] font-bold">0.002 ETH/day</p>
+                    </div>
+                </div>
             </div>
-            <div class="mt-3 p-3 bg-zinc-800/50 border border-zinc-700 rounded-lg text-center">
-                <p class="text-zinc-500 text-[10px]"><i class="fa-solid fa-users mr-1"></i>Operators earn commission on every action through their frontend</p>
+            <div class="mt-3 p-3 rounded-lg text-center" style="background:rgba(39,39,42,0.5);border:1px solid rgba(63,63,70,0.5)">
+                <p class="text-zinc-500 text-[10px]"><i class="fa-solid fa-users mr-1"></i>Operators earn 10-20% commission on every action — <a href="#operator" class="text-emerald-400 hover:underline">become an operator</a></p>
             </div>
         </div>`;
 }
@@ -248,26 +291,70 @@ function renderBoosters() {
     return `
         <div class="tk-section tk-fade" style="animation-delay:0.35s">
             <div class="flex items-center gap-2 mb-4">
-                <div class="tk-icon-box bg-violet-500/20"><i class="fa-solid fa-gem text-violet-400"></i></div>
+                <div class="tk-icon-box" style="background:rgba(139,92,246,0.2)"><i class="fa-solid fa-gem text-violet-400"></i></div>
                 <div><h2 class="text-white font-bold">NFT Boosters</h2><p class="text-zinc-500 text-xs">Reduce burn rate on staking claim rewards</p></div>
             </div>
             <div class="grid grid-cols-2 gap-2">
-                ${BOOSTERS.map(b => `
-                    <div class="tk-card p-3">
-                        <div class="flex items-center gap-2 mb-2">
-                            <div class="w-8 h-8 rounded-lg bg-${b.color}-500/20 flex items-center justify-center">
-                                <i class="fa-solid ${b.icon} text-${b.color}-400 text-xs"></i>
-                            </div>
-                            <div>
-                                <p class="text-white text-xs font-bold">${b.tier}</p>
-                                <p class="text-${b.color}-400 text-[10px]">+${b.boost / 100}% boost</p>
-                            </div>
+                <div class="tk-card p-3">
+                    <div class="flex items-center gap-2 mb-2">
+                        <div class="w-8 h-8 rounded-lg flex items-center justify-center" style="background:rgba(6,182,212,0.2)">
+                            <i class="fa-solid fa-gem text-cyan-400 text-xs"></i>
                         </div>
-                        <div class="flex justify-between text-[10px]">
-                            <span class="text-emerald-400">Burn: ${b.burnRate}%</span>
-                            <span class="text-zinc-500">Keep: ${100 - b.burnRate}%</span>
+                        <div>
+                            <p class="text-white text-xs font-bold">Diamond</p>
+                            <p class="text-cyan-400 text-[10px]">+50% boost</p>
                         </div>
-                    </div>`).join('')}
+                    </div>
+                    <div class="flex justify-between text-[10px]">
+                        <span class="text-emerald-400">Burn: 0%</span>
+                        <span class="text-zinc-500">Keep: 100%</span>
+                    </div>
+                </div>
+                <div class="tk-card p-3">
+                    <div class="flex items-center gap-2 mb-2">
+                        <div class="w-8 h-8 rounded-lg flex items-center justify-center" style="background:rgba(234,179,8,0.2)">
+                            <i class="fa-solid fa-gem text-yellow-400 text-xs"></i>
+                        </div>
+                        <div>
+                            <p class="text-white text-xs font-bold">Gold</p>
+                            <p class="text-yellow-400 text-[10px]">+40% boost</p>
+                        </div>
+                    </div>
+                    <div class="flex justify-between text-[10px]">
+                        <span class="text-emerald-400">Burn: 10%</span>
+                        <span class="text-zinc-500">Keep: 90%</span>
+                    </div>
+                </div>
+                <div class="tk-card p-3">
+                    <div class="flex items-center gap-2 mb-2">
+                        <div class="w-8 h-8 rounded-lg flex items-center justify-center" style="background:rgba(161,161,170,0.2)">
+                            <i class="fa-solid fa-gem text-zinc-400 text-xs"></i>
+                        </div>
+                        <div>
+                            <p class="text-white text-xs font-bold">Silver</p>
+                            <p class="text-zinc-400 text-[10px]">+25% boost</p>
+                        </div>
+                    </div>
+                    <div class="flex justify-between text-[10px]">
+                        <span class="text-emerald-400">Burn: 25%</span>
+                        <span class="text-zinc-500">Keep: 75%</span>
+                    </div>
+                </div>
+                <div class="tk-card p-3">
+                    <div class="flex items-center gap-2 mb-2">
+                        <div class="w-8 h-8 rounded-lg flex items-center justify-center" style="background:rgba(245,158,11,0.2)">
+                            <i class="fa-solid fa-gem text-amber-500 text-xs"></i>
+                        </div>
+                        <div>
+                            <p class="text-white text-xs font-bold">Bronze</p>
+                            <p class="text-amber-500 text-[10px]">+10% boost</p>
+                        </div>
+                    </div>
+                    <div class="flex justify-between text-[10px]">
+                        <span class="text-emerald-400">Burn: 40%</span>
+                        <span class="text-zinc-500">Keep: 60%</span>
+                    </div>
+                </div>
             </div>
             <p class="text-center text-zinc-600 text-[10px] mt-3">
                 <i class="fa-solid fa-info-circle mr-1"></i>Without NFT: 50% of claimed rewards are burned. Diamond holders keep 100%.
@@ -276,33 +363,79 @@ function renderBoosters() {
 }
 
 function renderEarnings() {
-    const ways = [
-        { title: 'Stake BKC', desc: 'Delegate to earn share of BuybackMiner output + Tier 2 fees. Longer locks = higher pStake = bigger share.', icon: 'fa-lock', color: 'purple', badge: 'Real Yield' },
-        { title: 'Agora Social', desc: 'Earn from followers, replies, SuperLikes, and tips. Build an audience and monetize your content.', icon: 'fa-landmark', color: 'cyan', badge: 'ETH Tips' },
-        { title: 'Rent NFTs', desc: 'List your Booster NFT for rent. Other stakers pay per-hour for temporary boost access.', icon: 'fa-house', color: 'teal', badge: 'Passive' },
-        { title: 'Fortune Pool', desc: 'Commit-reveal game with 3 tiers: 2x, 10x, or 100x. Provably fair on-chain randomness.', icon: 'fa-clover', color: 'green', badge: 'Up to 100x' },
-        { title: 'Operate a Frontend', desc: 'Build a UI for any module and earn operator commissions on all user activity. Permissionless.', icon: 'fa-code', color: 'amber', badge: 'Builder' },
-        { title: 'Trigger Buybacks', desc: 'Call executeBuyback() when ETH accumulates. Earn 1% caller incentive. Permissionless MEV.', icon: 'fa-bolt', color: 'yellow', badge: '1% Reward' }
-    ];
     return `
         <div class="tk-section tk-fade" style="animation-delay:0.4s">
             <div class="flex items-center gap-2 mb-4">
-                <div class="tk-icon-box bg-amber-500/20"><i class="fa-solid fa-sack-dollar text-amber-400"></i></div>
+                <div class="tk-icon-box" style="background:rgba(245,158,11,0.2)"><i class="fa-solid fa-sack-dollar text-amber-400"></i></div>
                 <div><h2 class="text-white font-bold">How to Earn</h2><p class="text-zinc-500 text-xs">6 ways to generate income</p></div>
             </div>
             <div class="space-y-2">
-                ${ways.map(w => `
-                    <div class="tk-card">
-                        <div class="flex items-center gap-3">
-                            <div class="w-10 h-10 rounded-xl bg-${w.color}-500/20 flex items-center justify-center flex-shrink-0">
-                                <i class="fa-solid ${w.icon} text-${w.color}-400"></i>
-                            </div>
-                            <div class="flex-1 min-w-0">
-                                <div class="flex items-center gap-2"><p class="text-white font-bold text-sm">${w.title}</p><span class="tk-badge bg-${w.color}-500/20 text-${w.color}-400">${w.badge}</span></div>
-                                <p class="text-zinc-500 text-xs">${w.desc}</p>
-                            </div>
+                <div class="tk-card">
+                    <div class="flex items-center gap-3">
+                        <div class="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style="background:rgba(168,85,247,0.2)">
+                            <i class="fa-solid fa-lock text-purple-400"></i>
                         </div>
-                    </div>`).join('')}
+                        <div class="flex-1 min-w-0">
+                            <div class="flex items-center gap-2"><p class="text-white font-bold text-sm">Stake BKC</p><span class="tk-badge" style="background:rgba(168,85,247,0.2);color:#c084fc">Real Yield</span></div>
+                            <p class="text-zinc-500 text-xs">Delegate to earn share of BuybackMiner output + Tier 2 fees. Longer locks = higher pStake = bigger share.</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="tk-card">
+                    <div class="flex items-center gap-3">
+                        <div class="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style="background:rgba(6,182,212,0.2)">
+                            <i class="fa-solid fa-landmark text-cyan-400"></i>
+                        </div>
+                        <div class="flex-1 min-w-0">
+                            <div class="flex items-center gap-2"><p class="text-white font-bold text-sm">Agora Social</p><span class="tk-badge" style="background:rgba(6,182,212,0.2);color:#22d3ee">ETH Tips</span></div>
+                            <p class="text-zinc-500 text-xs">Earn from followers, replies, SuperLikes, and tips. Build an audience and monetize your content.</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="tk-card">
+                    <div class="flex items-center gap-3">
+                        <div class="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style="background:rgba(20,184,166,0.2)">
+                            <i class="fa-solid fa-house text-teal-400"></i>
+                        </div>
+                        <div class="flex-1 min-w-0">
+                            <div class="flex items-center gap-2"><p class="text-white font-bold text-sm">Rent NFTs</p><span class="tk-badge" style="background:rgba(20,184,166,0.2);color:#2dd4bf">Passive</span></div>
+                            <p class="text-zinc-500 text-xs">List your Booster NFT for rent. Other stakers pay per-hour for temporary boost access.</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="tk-card">
+                    <div class="flex items-center gap-3">
+                        <div class="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style="background:rgba(34,197,94,0.2)">
+                            <i class="fa-solid fa-clover text-green-400"></i>
+                        </div>
+                        <div class="flex-1 min-w-0">
+                            <div class="flex items-center gap-2"><p class="text-white font-bold text-sm">Fortune Pool</p><span class="tk-badge" style="background:rgba(34,197,94,0.2);color:#4ade80">Up to 100x</span></div>
+                            <p class="text-zinc-500 text-xs">Commit-reveal game with 3 tiers: 2x, 10x, or 100x. Provably fair on-chain randomness.</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="tk-card">
+                    <div class="flex items-center gap-3">
+                        <div class="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style="background:rgba(245,158,11,0.2)">
+                            <i class="fa-solid fa-code text-amber-400"></i>
+                        </div>
+                        <div class="flex-1 min-w-0">
+                            <div class="flex items-center gap-2"><p class="text-white font-bold text-sm">Operate a Frontend</p><span class="tk-badge" style="background:rgba(245,158,11,0.2);color:#fbbf24">10-20%</span></div>
+                            <p class="text-zinc-500 text-xs">Build a UI for any module and earn operator commissions on all user activity. <a href="#operator" class="text-emerald-400 hover:underline">Learn more</a></p>
+                        </div>
+                    </div>
+                </div>
+                <div class="tk-card">
+                    <div class="flex items-center gap-3">
+                        <div class="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style="background:rgba(234,179,8,0.2)">
+                            <i class="fa-solid fa-bolt text-yellow-400"></i>
+                        </div>
+                        <div class="flex-1 min-w-0">
+                            <div class="flex items-center gap-2"><p class="text-white font-bold text-sm">Trigger Buybacks</p><span class="tk-badge" style="background:rgba(234,179,8,0.2);color:#facc15">1% Reward</span></div>
+                            <p class="text-zinc-500 text-xs">Call executeBuyback() when ETH accumulates. Earn 1% caller incentive. Permissionless MEV.</p>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>`;
 }
@@ -311,17 +444,26 @@ function renderContracts() {
     return `
         <div class="tk-section tk-fade" style="animation-delay:0.5s">
             <div class="flex items-center gap-2 mb-4">
-                <div class="tk-icon-box bg-zinc-500/20"><i class="fa-solid fa-file-contract text-zinc-400"></i></div>
+                <div class="tk-icon-box" style="background:rgba(161,161,170,0.2)"><i class="fa-solid fa-file-contract text-zinc-400"></i></div>
                 <div><h2 class="text-white font-bold">15 Smart Contracts</h2><p class="text-zinc-500 text-xs">All immutable — no admin, no pause, no blacklist</p></div>
             </div>
             <div class="grid grid-cols-2 gap-2 text-[10px]">
-                ${CONTRACTS.map(c => `
-                    <div class="tk-card p-2 flex items-center gap-2">
-                        <i class="fa-solid ${c.icon} text-${c.color}-400"></i>
-                        <span class="text-zinc-400">${c.name}</span>
-                    </div>`).join('')}
+                <div class="tk-card p-2 flex items-center gap-2"><i class="fa-solid fa-coins text-amber-400"></i><span class="text-zinc-400">BKCToken</span></div>
+                <div class="tk-card p-2 flex items-center gap-2"><i class="fa-solid fa-network-wired text-blue-400"></i><span class="text-zinc-400">BackchainEcosystem</span></div>
+                <div class="tk-card p-2 flex items-center gap-2"><i class="fa-solid fa-water text-indigo-400"></i><span class="text-zinc-400">LiquidityPool</span></div>
+                <div class="tk-card p-2 flex items-center gap-2"><i class="fa-solid fa-lock text-purple-400"></i><span class="text-zinc-400">StakingPool</span></div>
+                <div class="tk-card p-2 flex items-center gap-2"><i class="fa-solid fa-hammer text-emerald-400"></i><span class="text-zinc-400">BuybackMiner</span></div>
+                <div class="tk-card p-2 flex items-center gap-2"><i class="fa-solid fa-gem text-violet-400"></i><span class="text-zinc-400">RewardBooster</span></div>
+                <div class="tk-card p-2 flex items-center gap-2"><i class="fa-solid fa-store text-pink-400"></i><span class="text-zinc-400">NFTPool (x4)</span></div>
+                <div class="tk-card p-2 flex items-center gap-2"><i class="fa-solid fa-clover text-green-400"></i><span class="text-zinc-400">FortunePool</span></div>
+                <div class="tk-card p-2 flex items-center gap-2"><i class="fa-solid fa-landmark text-cyan-400"></i><span class="text-zinc-400">Agora</span></div>
+                <div class="tk-card p-2 flex items-center gap-2"><i class="fa-solid fa-stamp text-slate-400"></i><span class="text-zinc-400">Notary</span></div>
+                <div class="tk-card p-2 flex items-center gap-2"><i class="fa-solid fa-heart text-red-400"></i><span class="text-zinc-400">CharityPool</span></div>
+                <div class="tk-card p-2 flex items-center gap-2"><i class="fa-solid fa-rocket text-teal-400"></i><span class="text-zinc-400">RentalManager</span></div>
+                <div class="tk-card p-2 flex items-center gap-2"><i class="fa-solid fa-scale-balanced text-amber-400"></i><span class="text-zinc-400">Governance</span></div>
+                <div class="tk-card p-2 flex items-center gap-2"><i class="fa-solid fa-faucet-drip text-sky-400"></i><span class="text-zinc-400">SimpleBKCFaucet</span></div>
             </div>
-            <div class="mt-3 p-3 bg-emerald-500/10 border border-emerald-500/30 rounded-lg">
+            <div class="mt-3 p-3 rounded-lg" style="background:rgba(16,185,129,0.1);border:1px solid rgba(16,185,129,0.3)">
                 <p class="text-emerald-400 text-xs font-medium text-center"><i class="fa-solid fa-shield-halved mr-1"></i>Progressive decentralization: Admin → Multisig → Timelock → DAO</p>
             </div>
             <div class="mt-3 text-center">
