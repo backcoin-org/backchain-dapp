@@ -1,6 +1,6 @@
 // scripts/verify_contracts.ts
 // ════════════════════════════════════════════════════════════════════════════
-// VERIFICAÇÃO DE CONTRATOS V4.1 - Backchat v2.1 MetaAds
+// VERIFICAÇÃO DE CONTRATOS V9.0 — Todos imutáveis (sem proxy)
 // ════════════════════════════════════════════════════════════════════════════
 
 import { HardhatRuntimeEnvironment } from "hardhat/types";
@@ -9,101 +9,21 @@ import path from "path";
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-async function verifyImplementation(
-  hre: HardhatRuntimeEnvironment,
-  contractName: string,
-  proxyAddress: string,
-  contractPath: string
-): Promise<{ name: string; status: string; implAddress?: string }> {
-  try {
-    if (!proxyAddress || proxyAddress === "0x0000000000000000000000000000000000000000") {
-      console.log(`   Pulando ${contractName}: Endereco invalido.`);
-      return { name: contractName, status: "skipped" };
-    }
+// Delay entre verificações para evitar rate limit do Arbiscan
+const VERIFY_DELAY_MS = 5000;
 
-    console.log(`\nVerificando ${contractName}...`);
-    console.log(`   Proxy: ${proxyAddress}`);
-    
-    const implSlot = "0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc";
-    const implStorageValue = await hre.ethers.provider.getStorage(proxyAddress, implSlot);
-    const implAddress = "0x" + implStorageValue.slice(26);
-    
-    if (implAddress === "0x0000000000000000000000000000000000000000") {
-      console.log(`   ${contractName}: Implementation nao encontrada`);
-      return { name: contractName, status: "not_proxy" };
-    }
-    
-    console.log(`   Implementation: ${implAddress}`);
-    
-    await hre.run("verify:verify", {
-      address: implAddress,
-      constructorArguments: [],
-      contract: contractPath,
-    });
-    
-    console.log(`   ${contractName} implementation verificada!`);
-    return { name: contractName, status: "verified", implAddress };
-    
-  } catch (error: any) {
-    const msg = error.message.toLowerCase();
-    
-    if (msg.includes("already verified")) {
-      console.log(`   ${contractName} ja estava verificado.`);
-      return { name: contractName, status: "already_verified" };
-    } else if (msg.includes("does not have bytecode")) {
-      console.log(`   ${contractName}: Bytecode nao encontrado.`);
-      return { name: contractName, status: "no_bytecode" };
-    } else if (msg.includes("rate limit")) {
-      console.log(`   Rate limit. Aguardando 15s...`);
-      await sleep(15000);
-      return verifyImplementation(hre, contractName, proxyAddress, contractPath);
-    } else {
-      console.log(`   Erro: ${error.message.substring(0, 100)}`);
-      return { name: contractName, status: "failed" };
-    }
-  }
-}
+// Treasury address usado no deploy
+const TREASURY_ADDRESS = "0xc93030333E3a235c2605BcB7C7330650B600B6D0";
 
-async function verifyDirectImplementation(
-  hre: HardhatRuntimeEnvironment,
-  contractName: string,
-  implAddress: string,
-  contractPath: string
-): Promise<{ name: string; status: string }> {
-  try {
-    if (!implAddress || implAddress === "0x0000000000000000000000000000000000000000") {
-      console.log(`   Pulando ${contractName}: Endereco invalido.`);
-      return { name: contractName, status: "skipped" };
-    }
+// Faucet config usada no deploy
+const FAUCET_CONFIG = {
+  TOKENS_PER_REQUEST: BigInt("20000000000000000000"),   // 20e18
+  ETH_PER_REQUEST: BigInt("1000000000000000"),           // 1e15
+  COOLDOWN_SECONDS: 86400,
+};
 
-    console.log(`\nVerificando ${contractName} (Implementation Direta)...`);
-    console.log(`   Implementation: ${implAddress}`);
-    
-    await hre.run("verify:verify", {
-      address: implAddress,
-      constructorArguments: [],
-      contract: contractPath,
-    });
-    
-    console.log(`   ${contractName} verificado!`);
-    return { name: contractName, status: "verified" };
-    
-  } catch (error: any) {
-    const msg = error.message.toLowerCase();
-    
-    if (msg.includes("already verified")) {
-      console.log(`   ${contractName} ja estava verificado.`);
-      return { name: contractName, status: "already_verified" };
-    } else if (msg.includes("rate limit")) {
-      console.log(`   Rate limit. Aguardando 15s...`);
-      await sleep(15000);
-      return verifyDirectImplementation(hre, contractName, implAddress, contractPath);
-    } else {
-      console.log(`   Erro: ${error.message.substring(0, 100)}`);
-      return { name: contractName, status: "failed" };
-    }
-  }
-}
+// Governance config
+const TIMELOCK_DELAY_SECONDS = 3600;
 
 async function verifyContract(
   hre: HardhatRuntimeEnvironment,
@@ -118,30 +38,36 @@ async function verifyContract(
       return { name: contractName, status: "skipped" };
     }
 
-    console.log(`\nVerificando ${contractName}...`);
+    console.log(`\n   Verificando ${contractName}...`);
     console.log(`   Endereco: ${contractAddress}`);
-    
+    if (constructorArgs.length > 0) {
+      console.log(`   Constructor args: [${constructorArgs.map(a => String(a)).join(", ")}]`);
+    }
+
     await hre.run("verify:verify", {
       address: contractAddress,
       constructorArguments: constructorArgs,
       contract: contractPath,
     });
-    
+
     console.log(`   ${contractName} verificado!`);
     return { name: contractName, status: "verified" };
-    
+
   } catch (error: any) {
     const msg = error.message.toLowerCase();
-    
+
     if (msg.includes("already verified")) {
       console.log(`   ${contractName} ja estava verificado.`);
       return { name: contractName, status: "already_verified" };
+    } else if (msg.includes("does not have bytecode")) {
+      console.log(`   ${contractName}: Bytecode nao encontrado no endereco.`);
+      return { name: contractName, status: "no_bytecode" };
     } else if (msg.includes("rate limit")) {
       console.log(`   Rate limit. Aguardando 15s...`);
       await sleep(15000);
       return verifyContract(hre, contractName, contractAddress, contractPath, constructorArgs);
     } else {
-      console.log(`   Erro: ${error.message.substring(0, 100)}`);
+      console.log(`   Erro: ${error.message.substring(0, 150)}`);
       return { name: contractName, status: "failed" };
     }
   }
@@ -150,12 +76,14 @@ async function verifyContract(
 export async function runScript(hre: HardhatRuntimeEnvironment) {
   const [deployer] = await hre.ethers.getSigners();
   const networkName = hre.network.name;
+  const deployerAddr = deployer.address;
 
   console.log(`\n${"=".repeat(70)}`);
-  console.log(`VERIFICAÇÃO DE CONTRATOS V4.1 - ${networkName.toUpperCase()}`);
-  console.log(`Backchat v2.1 MetaAds + RentalManager V2`);
+  console.log(`VERIFICAÇÃO DE CONTRATOS V9.0 — ${networkName.toUpperCase()}`);
+  console.log(`Todos os contratos são IMUTÁVEIS (sem proxy)`);
   console.log(`${"=".repeat(70)}`);
-  console.log(`Conta: ${deployer.address}`);
+  console.log(`Deployer: ${deployerAddr}`);
+  console.log(`Treasury: ${TREASURY_ADDRESS}`);
 
   if (networkName === "localhost" || networkName === "hardhat") {
     console.log("\nVerificacao so funciona em redes publicas.");
@@ -166,196 +94,237 @@ export async function runScript(hre: HardhatRuntimeEnvironment) {
   if (!fs.existsSync(addressesPath)) {
     throw new Error(`deployment-addresses.json nao encontrado!`);
   }
-  
-  const addresses = JSON.parse(fs.readFileSync(addressesPath, "utf8"));
+
+  const addr = JSON.parse(fs.readFileSync(addressesPath, "utf8"));
   console.log("\nEnderecos carregados.\n");
 
   const results: { name: string; status: string }[] = [];
 
-  // CONTRATOS CORE
+  // ══════════════════════════════════════════════════════════════════════
+  // CORE: BKCToken + BackchainEcosystem
+  // ══════════════════════════════════════════════════════════════════════
   console.log("=".repeat(70));
-  console.log("CONTRATOS CORE (UUPS Proxies)");
+  console.log("CORE: BKCToken + BackchainEcosystem");
   console.log("=".repeat(70));
 
-  const coreContracts = [
-    { name: "EcosystemManager", proxy: addresses.ecosystemManager, path: "contracts/solidity/EcosystemManager.sol:EcosystemManager" },
-    { name: "BKCToken", proxy: addresses.bkcToken, path: "contracts/solidity/BKCToken.sol:BKCToken" },
-    { name: "MiningManager", proxy: addresses.miningManager, path: "contracts/solidity/MiningManager.sol:MiningManager" },
-    { name: "DelegationManager", proxy: addresses.delegationManager, path: "contracts/solidity/DelegationManager.sol:DelegationManager" },
-    { name: "RewardBoosterNFT", proxy: addresses.rewardBoosterNFT, path: "contracts/solidity/RewardBoosterNFT.sol:RewardBoosterNFT" },
-  ];
+  // BKCToken constructor(address _treasury) — deployed with deployer as treasury for TGE
+  if (addr.bkcToken) {
+    const r = await verifyContract(hre, "BKCToken", addr.bkcToken,
+      "contracts/BKCToken.sol:BKCToken", [deployerAddr]);
+    results.push(r);
+    await sleep(VERIFY_DELAY_MS);
+  }
 
-  for (const c of coreContracts) {
-    if (c.proxy) {
-      const result = await verifyImplementation(hre, c.name, c.proxy, c.path);
-      results.push(result);
-      await sleep(3000);
+  // BackchainEcosystem constructor(address _bkcToken, address _treasury)
+  if (addr.backchainEcosystem) {
+    const r = await verifyContract(hre, "BackchainEcosystem", addr.backchainEcosystem,
+      "contracts/BackchainEcosystem.sol:BackchainEcosystem", [addr.bkcToken, TREASURY_ADDRESS]);
+    results.push(r);
+    await sleep(VERIFY_DELAY_MS);
+  }
+
+  // ══════════════════════════════════════════════════════════════════════
+  // DeFi: LiquidityPool + StakingPool + BuybackMiner
+  // ══════════════════════════════════════════════════════════════════════
+  console.log("\n" + "=".repeat(70));
+  console.log("DeFi: LiquidityPool + StakingPool + BuybackMiner");
+  console.log("=".repeat(70));
+
+  // LiquidityPool constructor(address _bkcToken)
+  if (addr.liquidityPool) {
+    const r = await verifyContract(hre, "LiquidityPool", addr.liquidityPool,
+      "contracts/LiquidityPool.sol:LiquidityPool", [addr.bkcToken]);
+    results.push(r);
+    await sleep(VERIFY_DELAY_MS);
+  }
+
+  // StakingPool constructor(address _ecosystem, address _bkcToken)
+  if (addr.stakingPool) {
+    const r = await verifyContract(hre, "StakingPool", addr.stakingPool,
+      "contracts/StakingPool.sol:StakingPool", [addr.backchainEcosystem, addr.bkcToken]);
+    results.push(r);
+    await sleep(VERIFY_DELAY_MS);
+  }
+
+  // BuybackMiner constructor(address _ecosystem, address _bkcToken, address _liquidityPool, address _stakingPool)
+  if (addr.buybackMiner) {
+    const r = await verifyContract(hre, "BuybackMiner", addr.buybackMiner,
+      "contracts/BuybackMiner.sol:BuybackMiner",
+      [addr.backchainEcosystem, addr.bkcToken, addr.liquidityPool, addr.stakingPool]);
+    results.push(r);
+    await sleep(VERIFY_DELAY_MS);
+  }
+
+  // ══════════════════════════════════════════════════════════════════════
+  // NFT: RewardBooster + 4 NFTPools
+  // ══════════════════════════════════════════════════════════════════════
+  console.log("\n" + "=".repeat(70));
+  console.log("NFT: RewardBooster + 4 NFTPools");
+  console.log("=".repeat(70));
+
+  // RewardBooster constructor(address _deployer)
+  if (addr.rewardBooster) {
+    const r = await verifyContract(hre, "RewardBooster", addr.rewardBooster,
+      "contracts/RewardBooster.sol:RewardBooster", [deployerAddr]);
+    results.push(r);
+    await sleep(VERIFY_DELAY_MS);
+  }
+
+  // NFTPool constructor(address _ecosystem, address _bkcToken, address _rewardBooster, uint8 _tier)
+  const tierNames = ["bronze", "silver", "gold", "diamond"];
+  for (let tier = 0; tier < 4; tier++) {
+    const poolKey = `pool_${tierNames[tier]}`;
+    if (addr[poolKey]) {
+      const r = await verifyContract(hre, `NFTPool_${tierNames[tier]}`, addr[poolKey],
+        "contracts/NFTPool.sol:NFTPool",
+        [addr.backchainEcosystem, addr.bkcToken, addr.rewardBooster, tier]);
+      results.push(r);
+      await sleep(VERIFY_DELAY_MS);
     }
   }
 
-  // CONTRATOS DE SERVICO
+  // ══════════════════════════════════════════════════════════════════════
+  // MÓDULOS: Fortune, Agora, Notary, Charity, Rental
+  // ══════════════════════════════════════════════════════════════════════
   console.log("\n" + "=".repeat(70));
-  console.log("CONTRATOS DE SERVICO (UUPS Proxies)");
+  console.log("MÓDULOS: Fortune, Agora, Notary, Charity, Rental");
   console.log("=".repeat(70));
 
-  const serviceContracts = [
-    { name: "FortunePool", proxy: addresses.fortunePool, path: "contracts/solidity/FortunePool.sol:FortunePool" },
-    { name: "DecentralizedNotary", proxy: addresses.decentralizedNotary, path: "contracts/solidity/DecentralizedNotary.sol:DecentralizedNotary" },
-    { name: "RentalManager", proxy: addresses.rentalManager, path: "contracts/solidity/RentalManager.sol:RentalManager" },
-    { name: "PublicSale", proxy: addresses.publicSale, path: "contracts/solidity/PublicSale.sol:PublicSale" },
-    { name: "NFTLiquidityPoolFactory", proxy: addresses.nftLiquidityPoolFactory, path: "contracts/solidity/NFTLiquidityPoolFactory.sol:NFTLiquidityPoolFactory" },
-    { name: "CharityPool", proxy: addresses.charityPool, path: "contracts/solidity/CharityPool.sol:CharityPool" },
-  ];
-
-  // Backchat V8 is NON-UPGRADEABLE (deployed directly, no proxy)
-  // Constructor: constructor(address _bkcToken, address _ecosystemManager)
-  if (addresses.backchat) {
-    const result = await verifyContract(
-      hre,
-      "Backchat (Non-Upgradeable)",
-      addresses.backchat,
-      "contracts/solidity/Backchat.sol:Backchat",
-      [addresses.bkcToken, addresses.ecosystemManager]
-    );
-    results.push(result);
-    await sleep(3000);
+  // FortunePool constructor(address _ecosystem, address _bkcToken)
+  if (addr.fortunePool) {
+    const r = await verifyContract(hre, "FortunePool", addr.fortunePool,
+      "contracts/FortunePool.sol:FortunePool", [addr.backchainEcosystem, addr.bkcToken]);
+    results.push(r);
+    await sleep(VERIFY_DELAY_MS);
   }
 
-  for (const c of serviceContracts) {
-    if (c.proxy) {
-      const result = await verifyImplementation(hre, c.name, c.proxy, c.path);
-      results.push(result);
-      await sleep(3000);
-    }
+  // Agora constructor(address _ecosystem)
+  if (addr.agora) {
+    const r = await verifyContract(hre, "Agora", addr.agora,
+      "contracts/Agora.sol:Agora", [addr.backchainEcosystem]);
+    results.push(r);
+    await sleep(VERIFY_DELAY_MS);
   }
 
-  // BACKCOIN ORACLE
+  // Notary constructor(address _ecosystem)
+  if (addr.notary) {
+    const r = await verifyContract(hre, "Notary", addr.notary,
+      "contracts/Notary.sol:Notary", [addr.backchainEcosystem]);
+    results.push(r);
+    await sleep(VERIFY_DELAY_MS);
+  }
+
+  // CharityPool constructor(address _ecosystem)
+  if (addr.charityPool) {
+    const r = await verifyContract(hre, "CharityPool", addr.charityPool,
+      "contracts/CharityPool.sol:CharityPool", [addr.backchainEcosystem]);
+    results.push(r);
+    await sleep(VERIFY_DELAY_MS);
+  }
+
+  // RentalManager constructor(address _ecosystem, address _rewardBooster)
+  if (addr.rentalManager) {
+    const r = await verifyContract(hre, "RentalManager", addr.rentalManager,
+      "contracts/RentalManager.sol:RentalManager", [addr.backchainEcosystem, addr.rewardBooster]);
+    results.push(r);
+    await sleep(VERIFY_DELAY_MS);
+  }
+
+  // ══════════════════════════════════════════════════════════════════════
+  // AUXILIARES: Faucet + Governance
+  // ══════════════════════════════════════════════════════════════════════
   console.log("\n" + "=".repeat(70));
-  console.log("BACKCOIN ORACLE (Stylus/Rust)");
+  console.log("AUXILIARES: Faucet + Governance");
   console.log("=".repeat(70));
 
-  if (addresses.backcoinOracle) {
-    console.log(`\n   Backcoin Oracle: ${addresses.backcoinOracle}`);
-    console.log(`\n   Contratos Stylus nao sao verificados pelo Hardhat.`);
-    console.log(`   Use: cargo stylus verify --deployment-tx TX_HASH`);
-    results.push({ name: "BackcoinOracle", status: "stylus_manual" });
+  // SimpleBKCFaucet constructor(address _bkcToken, address _relayer, uint256 _tokensPerClaim, uint256 _ethPerClaim, uint256 _cooldown)
+  if (addr.simpleBkcFaucet) {
+    const r = await verifyContract(hre, "SimpleBKCFaucet", addr.simpleBkcFaucet,
+      "contracts/SimpleBKCFaucet.sol:SimpleBKCFaucet",
+      [addr.bkcToken, deployerAddr, FAUCET_CONFIG.TOKENS_PER_REQUEST, FAUCET_CONFIG.ETH_PER_REQUEST, FAUCET_CONFIG.COOLDOWN_SECONDS]);
+    results.push(r);
+    await sleep(VERIFY_DELAY_MS);
   }
 
-  // NFT POOLS
-  console.log("\n" + "=".repeat(70));
-  console.log("NFT LIQUIDITY POOLS (Minimal Proxy Clones)");
-  console.log("=".repeat(70));
-  console.log("\n   NFT Pools sao Minimal Proxy Clones (EIP-1167).");
-  console.log("   A implementation ja foi verificada: NFTLiquidityPool_Implementation\n");
-
-  const nftPools = [
-    { name: "Pool_Diamond", address: addresses.pool_diamond },
-    { name: "Pool_Platinum", address: addresses.pool_platinum },
-    { name: "Pool_Gold", address: addresses.pool_gold },
-    { name: "Pool_Silver", address: addresses.pool_silver },
-    { name: "Pool_Bronze", address: addresses.pool_bronze },
-    { name: "Pool_Iron", address: addresses.pool_iron },
-    { name: "Pool_Crystal", address: addresses.pool_crystal },
-  ];
-
-  for (const pool of nftPools) {
-    if (pool.address) {
-      console.log(`   ${pool.name}: ${pool.address}`);
-      results.push({ name: pool.name, status: "clone_ok" });
-    }
+  // BackchainGovernance constructor(uint256 _timelockDelay)
+  if (addr.backchainGovernance) {
+    const r = await verifyContract(hre, "BackchainGovernance", addr.backchainGovernance,
+      "contracts/BackchainGovernance.sol:BackchainGovernance", [TIMELOCK_DELAY_SECONDS]);
+    results.push(r);
+    await sleep(VERIFY_DELAY_MS);
   }
 
-  // AUXILIARES
-  console.log("\n" + "=".repeat(70));
-  console.log("CONTRATOS AUXILIARES");
-  console.log("=".repeat(70));
-
-  if (addresses.nftLiquidityPool_Implementation) {
-    const result = await verifyContract(
-      hre,
-      "NFTLiquidityPool_Implementation",
-      addresses.nftLiquidityPool_Implementation,
-      "contracts/solidity/NFTLiquidityPool.sol:NFTLiquidityPool"
-    );
-    results.push(result);
-    await sleep(3000);
-  }
-
-  if (addresses.faucet) {
-    const result = await verifyImplementation(
-      hre,
-      "SimpleBKCFaucet",
-      addresses.faucet,
-      "contracts/solidity/SimpleBKCFaucet.sol:SimpleBKCFaucet"
-    );
-    results.push(result);
-    await sleep(3000);
-  }
-
+  // ══════════════════════════════════════════════════════════════════════
   // RESUMO
+  // ══════════════════════════════════════════════════════════════════════
   console.log("\n" + "=".repeat(70));
-  console.log("RESUMO DA VERIFICACAO");
+  console.log("RESUMO DA VERIFICAÇÃO");
   console.log("=".repeat(70));
 
   const verified = results.filter(r => r.status === "verified" || r.status === "already_verified");
-  const clones = results.filter(r => r.status === "clone_ok");
   const failed = results.filter(r => r.status === "failed");
   const skipped = results.filter(r => r.status === "skipped");
+  const noBytecode = results.filter(r => r.status === "no_bytecode");
 
-  console.log(`\nVerificados: ${verified.length}`);
-  verified.forEach(r => console.log(`   ✅ ${r.name}`));
-
-  if (clones.length > 0) {
-    console.log(`\nClones OK: ${clones.length}`);
-    clones.forEach(r => console.log(`   📦 ${r.name}`));
-  }
+  console.log(`\nVerificados: ${verified.length}/${results.length}`);
+  verified.forEach(r => console.log(`   OK  ${r.name}`));
 
   if (skipped.length > 0) {
     console.log(`\nPulados: ${skipped.length}`);
-    skipped.forEach(r => console.log(`   ⏩ ${r.name}`));
+    skipped.forEach(r => console.log(`   --  ${r.name}`));
+  }
+
+  if (noBytecode.length > 0) {
+    console.log(`\nSem bytecode: ${noBytecode.length}`);
+    noBytecode.forEach(r => console.log(`   ??  ${r.name}`));
   }
 
   if (failed.length > 0) {
     console.log(`\nFalhas: ${failed.length}`);
-    failed.forEach(r => console.log(`   ❌ ${r.name}`));
+    failed.forEach(r => console.log(`   XX  ${r.name}`));
   }
 
-  const explorerBase = networkName === "arbitrumOne" 
-    ? "https://arbiscan.io/address" 
+  const explorerBase = networkName === "arbitrumOne"
+    ? "https://arbiscan.io/address"
     : "https://sepolia.arbiscan.io/address";
 
   console.log("\n" + "=".repeat(70));
-  console.log("LINKAR PROXIES NO ARBISCAN");
+  console.log("LINKS ARBISCAN");
   console.log("=".repeat(70));
 
-  const mainProxies = [
-    { name: "EcosystemManager", address: addresses.ecosystemManager },
-    { name: "BKCToken", address: addresses.bkcToken },
-    { name: "MiningManager", address: addresses.miningManager },
-    { name: "DelegationManager", address: addresses.delegationManager },
-    { name: "RewardBoosterNFT", address: addresses.rewardBoosterNFT },
-    { name: "FortunePool", address: addresses.fortunePool },
-    { name: "DecentralizedNotary", address: addresses.decentralizedNotary },
-    { name: "RentalManager", address: addresses.rentalManager },
-    { name: "CharityPool", address: addresses.charityPool },
-    { name: "Backchat", address: addresses.backchat },
+  const allContracts = [
+    { name: "BKCToken", address: addr.bkcToken },
+    { name: "BackchainEcosystem", address: addr.backchainEcosystem },
+    { name: "LiquidityPool", address: addr.liquidityPool },
+    { name: "StakingPool", address: addr.stakingPool },
+    { name: "BuybackMiner", address: addr.buybackMiner },
+    { name: "RewardBooster", address: addr.rewardBooster },
+    { name: "NFTPool_Bronze", address: addr.pool_bronze },
+    { name: "NFTPool_Silver", address: addr.pool_silver },
+    { name: "NFTPool_Gold", address: addr.pool_gold },
+    { name: "NFTPool_Diamond", address: addr.pool_diamond },
+    { name: "FortunePool", address: addr.fortunePool },
+    { name: "Agora", address: addr.agora },
+    { name: "Notary", address: addr.notary },
+    { name: "CharityPool", address: addr.charityPool },
+    { name: "RentalManager", address: addr.rentalManager },
+    { name: "SimpleBKCFaucet", address: addr.simpleBkcFaucet },
+    { name: "BackchainGovernance", address: addr.backchainGovernance },
   ];
 
-  mainProxies.forEach(p => {
-    if (p.address) {
-      console.log(`\n   ${p.name}:`);
-      console.log(`   ${explorerBase}/${p.address}#code`);
+  allContracts.forEach(c => {
+    if (c.address) {
+      console.log(`   ${c.name}: ${explorerBase}/${c.address}#code`);
     }
   });
 
   console.log("\n" + "=".repeat(70));
-  console.log("VERIFICACAO CONCLUIDA!");
+  console.log("VERIFICAÇÃO CONCLUÍDA!");
   console.log("=".repeat(70));
   console.log(`
-   Proxies linkados automaticamente pelo OpenZeppelin Upgrades.
-   
-   Para verificar um contrato manualmente:
-   npx hardhat verify --network ${networkName} <IMPLEMENTATION_ADDRESS>
+   V9.0: Todos os contratos são imutáveis (sem proxy).
+   Para re-verificar um contrato manualmente:
+   npx hardhat verify --network ${networkName} <ADDRESS> [constructor args...]
 `);
 }
 

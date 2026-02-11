@@ -23,8 +23,8 @@ const setCorsHeaders = (res) => {
 
 // --- Contract config ---
 // NOTE: Update these addresses after every full redeploy
-const ECOSYSTEM_ADDRESS = '0x551108FA8dB8d6E66030f65a79082FD33AbdB65d';
-const FAUCET_ADDRESS = '0x9aa0Fbae7d54F6c73c1Bf020a634f8d1710b22d8';
+const ECOSYSTEM_ADDRESS = '0x24bBa5d2Cb2dd25436a57D07b178EE4FA9BbCEBD';
+const FAUCET_ADDRESS = '0x781c12aF9Bc4047eC10419288877746eD4977E30';
 
 const ECOSYSTEM_ABI = [
     'function setReferrerFor(address _user, address _referrer) external',
