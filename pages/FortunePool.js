@@ -1295,7 +1295,7 @@ function renderProcessing(container) {
 }
 
 // ============================================================================
-// QUICK REVEAL — Compact animation before immediate reveal (no countdown)
+// QUICK REVEAL — Step-based progress UI with live block countdown
 // ============================================================================
 function renderQuickReveal() {
     const area = document.getElementById('game-area');
@@ -1309,12 +1309,37 @@ function renderQuickReveal() {
 
     area.innerHTML = `
         <div class="bg-gradient-to-br from-violet-900/30 to-purple-900/20 border border-violet-500/30 rounded-2xl p-6 waiting-glow">
-            <div class="text-center mb-5">
-                <div class="w-16 h-16 mx-auto mb-4 rounded-full bg-gradient-to-br from-amber-500/20 to-orange-600/20 border border-amber-500/30 flex items-center justify-center">
-                    <i class="fa-solid fa-dice text-3xl text-amber-400 animate-bounce"></i>
+            <!-- Steps Progress -->
+            <div class="mb-5">
+                <div class="flex items-center justify-between mb-4">
+                    <div id="step-1" class="flex items-center gap-2">
+                        <div class="w-7 h-7 rounded-full bg-emerald-500 flex items-center justify-center">
+                            <i class="fa-solid fa-check text-white text-xs"></i>
+                        </div>
+                        <span class="text-emerald-400 text-sm font-medium">Play Recorded</span>
+                    </div>
+                    <div class="flex-1 h-px bg-zinc-700 mx-2"></div>
+                    <div id="step-2" class="flex items-center gap-2">
+                        <div id="step-2-icon" class="w-7 h-7 rounded-full bg-amber-500 flex items-center justify-center">
+                            <i class="fa-solid fa-spinner fa-spin text-white text-xs"></i>
+                        </div>
+                        <span id="step-2-text" class="text-amber-400 text-sm font-medium">Confirming...</span>
+                    </div>
+                    <div class="flex-1 h-px bg-zinc-700 mx-2"></div>
+                    <div id="step-3" class="flex items-center gap-2">
+                        <div id="step-3-icon" class="w-7 h-7 rounded-full bg-zinc-700 flex items-center justify-center">
+                            <span class="text-zinc-500 text-xs font-bold">3</span>
+                        </div>
+                        <span id="step-3-text" class="text-zinc-500 text-sm font-medium">Result</span>
+                    </div>
                 </div>
-                <h2 id="quick-reveal-title" class="text-2xl font-bold text-white mb-1">Preparing Reveal<span class="waiting-dots"></span></h2>
-                <p id="quick-reveal-subtitle" class="text-violet-300 text-sm">Sign the reveal in MetaMask to see your result</p>
+                <!-- Progress bar -->
+                <div class="w-full bg-zinc-800 rounded-full h-2 overflow-hidden">
+                    <div id="reveal-progress" class="h-full bg-gradient-to-r from-emerald-500 via-amber-500 to-orange-500 rounded-full transition-all duration-1000" style="width: 33%"></div>
+                </div>
+                <p id="reveal-status-text" class="text-center text-xs text-zinc-400 mt-2">
+                    <i class="fa-solid fa-cube mr-1"></i>Waiting for block confirmations...
+                </p>
             </div>
 
             <!-- Spinning Reels -->
@@ -1350,15 +1375,8 @@ function renderQuickReveal() {
             <button id="btn-reveal" disabled
                 class="w-full py-3 rounded-xl font-bold bg-gradient-to-r from-amber-500 to-yellow-500 text-white opacity-80">
                 <i class="fa-solid fa-spinner fa-spin mr-2"></i>
-                <span id="reveal-btn-text">Auto-revealing...</span>
+                <span id="reveal-btn-text">Waiting for blockchain...</span>
             </button>
-
-            <div class="mt-3 p-2.5 bg-violet-500/10 rounded-lg border border-violet-500/20">
-                <p class="text-[10px] text-violet-300 text-center">
-                    <i class="fa-solid fa-bolt mr-1"></i>
-                    Confirm the reveal transaction to see your result instantly!
-                </p>
-            </div>
         </div>
     `;
 
@@ -1368,6 +1386,27 @@ function renderQuickReveal() {
         if (!el) return;
         setInterval(() => { el.textContent = Math.floor(Math.random() * tier.range) + 1; }, 80);
     });
+}
+
+// Update the Quick Reveal UI to show step 2 complete and step 3 active
+function updateQuickRevealToStep3() {
+    const step2Icon = document.getElementById('step-2-icon');
+    const step2Text = document.getElementById('step-2-text');
+    const step3Icon = document.getElementById('step-3-icon');
+    const step3Text = document.getElementById('step-3-text');
+    const progress = document.getElementById('reveal-progress');
+    const statusText = document.getElementById('reveal-status-text');
+    const btnText = document.getElementById('reveal-btn-text');
+
+    if (step2Icon) step2Icon.innerHTML = '<i class="fa-solid fa-check text-white text-xs"></i>';
+    if (step2Icon) step2Icon.className = 'w-7 h-7 rounded-full bg-emerald-500 flex items-center justify-center';
+    if (step2Text) { step2Text.textContent = 'Confirmed'; step2Text.className = 'text-emerald-400 text-sm font-medium'; }
+    if (step3Icon) step3Icon.innerHTML = '<i class="fa-solid fa-spinner fa-spin text-white text-xs"></i>';
+    if (step3Icon) step3Icon.className = 'w-7 h-7 rounded-full bg-amber-500 flex items-center justify-center';
+    if (step3Text) { step3Text.textContent = 'Revealing...'; step3Text.className = 'text-amber-400 text-sm font-medium'; }
+    if (progress) progress.style.width = '80%';
+    if (statusText) statusText.innerHTML = '<i class="fa-solid fa-wand-magic-sparkles mr-1"></i>Confirm in MetaMask to see your result!';
+    if (btnText) btnText.textContent = 'Confirm in MetaMask...';
 }
 
 // ============================================================================
@@ -1572,16 +1611,9 @@ const AUTO_REVEAL_DELAYS = [8000, 15000, 20000]; // 8s, 15s, 20s (increasing)
 async function autoRevealWithPreSim() {
     if (Game.phase !== 'waiting') return;
 
-    const titleEl = document.getElementById('quick-reveal-title');
-    const subtitleEl = document.getElementById('quick-reveal-subtitle');
+    const statusText = document.getElementById('reveal-status-text');
     const btnEl = document.getElementById('btn-reveal');
     const btnTextEl = document.getElementById('reveal-btn-text');
-
-    // On retry, stay on Quick Reveal UI — just update text
-    if (autoRevealAttempt > 0) {
-        if (titleEl) titleEl.innerHTML = 'Almost Ready<span class="waiting-dots"></span>';
-        if (subtitleEl) subtitleEl.textContent = 'Blockchain is confirming your play...';
-    }
 
     if (btnEl) {
         btnEl.disabled = true;
@@ -1592,7 +1624,8 @@ async function autoRevealWithPreSim() {
     const delay = AUTO_REVEAL_DELAYS[Math.min(autoRevealAttempt, AUTO_REVEAL_DELAYS.length - 1)];
     console.log(`[FortunePool] Waiting ${delay / 1000}s before reveal attempt ${autoRevealAttempt + 1}...`);
 
-    // Countdown on button
+    // Countdown on button + status
+    if (statusText) statusText.innerHTML = '<i class="fa-solid fa-rotate mr-1"></i>Retrying automatically...';
     const startMs = Date.now();
     const countdownId = setInterval(() => {
         if (Game.phase !== 'waiting') { clearInterval(countdownId); return; }
@@ -1607,71 +1640,78 @@ async function autoRevealWithPreSim() {
 
     if (Game.phase !== 'waiting') return;
 
-    // Update UI right before MetaMask popup
-    if (titleEl) titleEl.innerHTML = 'Confirming Result<span class="waiting-dots"></span>';
-    if (subtitleEl) subtitleEl.textContent = 'Please confirm in MetaMask';
-    if (btnTextEl) btnTextEl.textContent = 'Confirm in MetaMask...';
+    // Update UI before MetaMask popup
+    updateQuickRevealToStep3();
 
     console.log('[FortunePool] Starting direct reveal (skipping pre-sim for Arbitrum L2)');
     executeReveal();
 }
 
 function enableManualRevealButton() {
-    const titleEl = document.getElementById('quick-reveal-title');
-    const subtitleEl = document.getElementById('quick-reveal-subtitle');
+    const statusText = document.getElementById('reveal-status-text');
     const btnEl = document.getElementById('btn-reveal');
     const btnTextEl = document.getElementById('reveal-btn-text');
     const timerEl = document.getElementById('countdown-timer');
+    const progress = document.getElementById('reveal-progress');
 
-    if (titleEl) titleEl.textContent = 'Ready to Reveal!';
-    if (subtitleEl) subtitleEl.textContent = 'Tap the button to see your result';
+    if (statusText) statusText.innerHTML = '<i class="fa-solid fa-hand-pointer mr-1"></i>Tap the button to see your result';
     if (timerEl) timerEl.textContent = 'Ready!';
+    if (progress) progress.style.width = '67%';
     if (btnEl) {
         btnEl.disabled = false;
-        btnEl.classList.remove('bg-zinc-800', 'text-zinc-500', 'cursor-not-allowed', 'from-amber-500', 'to-yellow-500');
+        btnEl.classList.remove('bg-zinc-800', 'text-zinc-500', 'cursor-not-allowed', 'from-amber-500', 'to-yellow-500', 'opacity-80');
         btnEl.classList.add('bg-gradient-to-r', 'from-emerald-500', 'to-green-500', 'text-white');
     }
     if (btnTextEl) btnTextEl.textContent = 'Reveal & Get Result!';
+
+    // Also update step 2 to complete
+    const step2Icon = document.getElementById('step-2-icon');
+    const step2Text = document.getElementById('step-2-text');
+    if (step2Icon) { step2Icon.innerHTML = '<i class="fa-solid fa-check text-white text-xs"></i>'; step2Icon.className = 'w-7 h-7 rounded-full bg-emerald-500 flex items-center justify-center'; }
+    if (step2Text) { step2Text.textContent = 'Confirmed'; step2Text.className = 'text-emerald-400 text-sm font-medium'; }
 }
 
-// Poll canReveal on-chain every 2s, then reveal as soon as ready (no blind timeout)
+// Poll canReveal on-chain every 2s, update progress UI, reveal immediately when ready
 function pollCanRevealThenReveal() {
     let pollCount = 0;
-    const maxPolls = 30; // 30 × 2s = 60s max wait
+    const maxPolls = 60; // 60 × 2s = 120s max wait
+    let lastBlocksUntil = 999;
 
     const poll = async () => {
         if (Game.phase !== 'waiting') return;
         pollCount++;
 
         try {
-            const result = await checkCanReveal();
-            if (result === 'expired') { clearStuckGame(); return; }
+            // Get detailed game status including blocks remaining
+            const status = await State.fortunePoolContractPublic.getGameStatus(Game.gameId);
+            const gameStatus = Number(status.status);
+            if (gameStatus === 0 || gameStatus === 3) { clearStuckGame(); return; }
 
-            if (result === true) {
+            const blocksUntilReveal = Number(status.blocksUntilReveal);
+            const canReveal = status.canReveal === true;
+
+            // Update progress UI
+            const progressEl = document.getElementById('reveal-progress');
+            const statusText = document.getElementById('reveal-status-text');
+
+            if (blocksUntilReveal > 0 && statusText) {
+                // Calculate progress (5 blocks total for REVEAL_DELAY)
+                const totalBlocks = 5; // REVEAL_DELAY
+                const done = Math.max(0, totalBlocks - blocksUntilReveal);
+                const pct = 33 + (done / totalBlocks) * 34; // 33% → 67%
+                if (progressEl) progressEl.style.width = `${pct}%`;
+                statusText.innerHTML = `<i class="fa-solid fa-cube mr-1"></i>${blocksUntilReveal} block${blocksUntilReveal > 1 ? 's' : ''} remaining...`;
+                lastBlocksUntil = blocksUntilReveal;
+            }
+
+            if (canReveal) {
                 console.log(`[FortunePool] canReveal=true after ${pollCount} polls (~${pollCount * 2}s)`);
 
-                // Hash verification (diagnostic)
-                try {
-                    const guesses = getModeConfig(Game.mode).isSingle ? [Game.guess] : Game.guesses;
-                    const ethers = window.ethers;
-                    const abiCoder = ethers.AbiCoder.defaultAbiCoder();
-                    const encoded = abiCoder.encode(
-                        ['uint256[]', 'bytes32'],
-                        [guesses.map(g => BigInt(g)), Game.commitment.userSecret]
-                    );
-                    const computedHash = ethers.keccak256(encoded);
-                    const gameData = await State.fortunePoolContractPublic.games(Game.gameId);
-                    const storedHash = gameData[0]; // hash is first field in struct
-                    console.log('[FortunePool] Hash check:', { computed: computedHash, stored: storedHash, match: computedHash === storedHash, guesses, secret: Game.commitment.userSecret });
-                    if (computedHash !== storedHash) {
-                        console.error('[FortunePool] HASH MISMATCH — reveal will fail');
-                        showToast('Data mismatch — cannot reveal this game', 'error');
-                        enableManualRevealButton();
-                        return;
-                    }
-                } catch (e) {
-                    console.warn('[FortunePool] Hash verify failed:', e);
-                }
+                // Update UI to step 3 and reveal IMMEDIATELY (no delay to avoid BlockhashUnavailable)
+                updateQuickRevealToStep3();
+
+                // Log diagnostic hash info (async, don't wait for it)
+                logHashDiagnostic();
 
                 executeReveal();
                 return;
@@ -1688,8 +1728,28 @@ function pollCanRevealThenReveal() {
         }
     };
 
-    // Start polling after 3s initial delay (blocks need time to propagate)
-    setTimeout(poll, 3000);
+    // Start polling after 2s (give commit TX time to propagate)
+    setTimeout(poll, 2000);
+}
+
+// Async diagnostic: log hash comparison (non-blocking)
+async function logHashDiagnostic() {
+    try {
+        const guesses = getModeConfig(Game.mode).isSingle ? [Game.guess] : Game.guesses;
+        const ethers = window.ethers;
+        // Use contract's generateCommitHash (pure function, always in ABI)
+        const computedHash = await State.fortunePoolContractPublic.generateCommitHash(
+            guesses.map(g => BigInt(g)),
+            Game.commitment.userSecret
+        );
+        console.log('[FortunePool] Hash diagnostic:', {
+            computedHash,
+            guesses: guesses.map(g => Number(g)),
+            secret: Game.commitment.userSecret?.slice(0, 18) + '...'
+        });
+    } catch (e) {
+        console.warn('[FortunePool] Hash diagnostic failed:', e);
+    }
 }
 
 async function executeReveal() {
