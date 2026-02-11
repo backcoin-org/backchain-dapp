@@ -964,15 +964,18 @@ async function commitGame() {
                     commitTxHash: commitData?.txHash || null,
                     revealDelay: Game.commitment.revealDelay || 5,
                     waitStartTime: Date.now(),
-                    canReveal: false
+                    canReveal: true  // Skip waiting — go straight to reveal
                 };
                 Game.txHash = commitData?.txHash || null;
 
                 console.log('[FortunePool] Game committed:', Game.gameId, 'Block:', Game.commitment.commitBlock);
 
+                // Quick flow: brief animation then immediate reveal (MetaMask time IS the wait)
                 Game.phase = 'waiting';
-                renderPhase();
-                startRevealCheck();
+                renderQuickReveal();
+                setTimeout(() => {
+                    if (Game.phase === 'waiting') executeReveal();
+                }, 2000);
             },
 
             onError: (error) => {
@@ -1047,7 +1050,83 @@ function renderProcessing(container) {
 }
 
 // ============================================================================
-// WAITING PHASE (with auto-reveal)
+// QUICK REVEAL — Compact animation before immediate reveal (no countdown)
+// ============================================================================
+function renderQuickReveal() {
+    const area = document.getElementById('game-area');
+    if (!area) return;
+
+    updateTigerAnimation('waiting');
+
+    const isJackpot = Game.mode === 'jackpot';
+    const picks = isJackpot ? [Game.guess] : Game.guesses;
+    const tiersToShow = isJackpot ? [TIERS[2]] : TIERS;
+
+    area.innerHTML = `
+        <div class="bg-gradient-to-br from-violet-900/30 to-purple-900/20 border border-violet-500/30 rounded-2xl p-6 waiting-glow">
+            <div class="text-center mb-5">
+                <div class="w-16 h-16 mx-auto mb-4 rounded-full bg-gradient-to-br from-amber-500/20 to-orange-600/20 border border-amber-500/30 flex items-center justify-center">
+                    <i class="fa-solid fa-dice text-3xl text-amber-400 animate-bounce"></i>
+                </div>
+                <h2 class="text-2xl font-bold text-white mb-1">Preparing Reveal<span class="waiting-dots"></span></h2>
+                <p class="text-violet-300 text-sm">Sign the reveal in MetaMask to see your result</p>
+            </div>
+
+            <!-- Spinning Reels -->
+            <div class="flex justify-center gap-4 mb-5">
+                ${tiersToShow.map((tier, idx) => `
+                    <div class="text-center">
+                        <p class="text-xs text-zinc-500 mb-2">${tier.emoji} ${tier.name}</p>
+                        <div class="w-20 h-24 rounded-2xl bg-gradient-to-br ${tier.bgFrom} ${tier.bgTo} border-2 ${tier.borderColor} flex items-center justify-center overflow-hidden glow-pulse" style="--glow-color: ${tier.hex}50">
+                            <span class="text-4xl font-black ${tier.textColor} slot-spin" id="quick-spin-${idx}">?</span>
+                        </div>
+                    </div>
+                `).join('')}
+            </div>
+
+            <!-- Locked Picks -->
+            <div class="border-t border-violet-500/20 pt-4 mb-4">
+                <p class="text-center text-xs text-zinc-500 uppercase mb-3">Your Numbers</p>
+                <div class="flex justify-center gap-4">
+                    ${tiersToShow.map((tier, idx) => {
+                        const pick = isJackpot ? picks[0] : picks[idx];
+                        return `
+                            <div class="w-14 h-14 rounded-xl bg-gradient-to-br ${tier.bgFrom} ${tier.bgTo} border-2 ${tier.borderColor} flex items-center justify-center relative">
+                                <span class="text-xl font-black ${tier.textColor}">${pick}</span>
+                                <div class="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-violet-500 flex items-center justify-center">
+                                    <i class="fa-solid fa-lock text-[8px] text-white"></i>
+                                </div>
+                            </div>
+                        `;
+                    }).join('')}
+                </div>
+            </div>
+
+            <button id="btn-reveal" disabled
+                class="w-full py-3 rounded-xl font-bold bg-gradient-to-r from-amber-500 to-yellow-500 text-white opacity-80">
+                <i class="fa-solid fa-spinner fa-spin mr-2"></i>
+                <span id="reveal-btn-text">Auto-revealing...</span>
+            </button>
+
+            <div class="mt-3 p-2.5 bg-violet-500/10 rounded-lg border border-violet-500/20">
+                <p class="text-[10px] text-violet-300 text-center">
+                    <i class="fa-solid fa-bolt mr-1"></i>
+                    Confirm the reveal transaction to see your result instantly!
+                </p>
+            </div>
+        </div>
+    `;
+
+    // Animate spinning numbers
+    tiersToShow.forEach((tier, idx) => {
+        const el = document.getElementById(`quick-spin-${idx}`);
+        if (!el) return;
+        setInterval(() => { el.textContent = Math.floor(Math.random() * tier.range) + 1; }, 80);
+    });
+}
+
+// ============================================================================
+// WAITING PHASE — Full countdown (used for pending game recovery + retries)
 // ============================================================================
 function renderWaiting(container) {
     const isJackpot = Game.mode === 'jackpot';
@@ -1055,8 +1134,8 @@ function renderWaiting(container) {
     const tiersToShow = isJackpot ? [TIERS[2]] : TIERS;
 
     const elapsed = Date.now() - (Game.commitment.waitStartTime || Date.now());
-    // Realistic estimate: block delay + propagation + auto-reveal wait (~10s total)
-    const totalWaitMs = (Game.commitment.revealDelay * ESTIMATED_BLOCK_TIME) + 13000;
+    const currentDelay = AUTO_REVEAL_DELAYS[Math.min(autoRevealAttempt, AUTO_REVEAL_DELAYS.length - 1)];
+    const totalWaitMs = currentDelay + 2000;
     const remainingMs = Math.max(0, totalWaitMs - elapsed);
     const remainingSecs = Math.ceil(remainingMs / 1000);
 
@@ -1142,9 +1221,7 @@ function renderWaiting(container) {
         </div>
     `;
 
-    document.getElementById('btn-reveal')?.addEventListener('click', () => {
-        if (Game.commitment.canReveal) executeReveal();
-    });
+    document.getElementById('btn-reveal')?.addEventListener('click', () => executeReveal());
 
     updateWaitingCountdown();
 }
@@ -1157,14 +1234,13 @@ function updateWaitingCountdown() {
     if (!timerEl) return;
 
     const elapsed = Date.now() - (Game.commitment.waitStartTime || Date.now());
-    const totalWaitMs = (Game.commitment.revealDelay * ESTIMATED_BLOCK_TIME) + 13000;
+    const currentDelay = AUTO_REVEAL_DELAYS[Math.min(autoRevealAttempt, AUTO_REVEAL_DELAYS.length - 1)];
+    const totalWaitMs = currentDelay + 2000; // delay + TX time
     const remainingMs = Math.max(0, totalWaitMs - elapsed);
     const remainingSecs = Math.ceil(remainingMs / 1000);
 
     if (remainingSecs > 0) {
         timerEl.textContent = `~${remainingSecs}s`;
-    } else if (!Game.commitment.canReveal) {
-        timerEl.textContent = 'Confirming blocks...';
     } else {
         timerEl.textContent = 'Revealing...';
     }
@@ -1232,27 +1308,29 @@ async function checkCanReveal() {
     }
 }
 
-// Auto-reveal — skip pre-simulation (staticCall fails on Arbitrum L2 due to
-// blockhash not being available in eth_call context). The actual TX is mined in
-// a future block where the blockhash IS available, so we go directly to reveal.
-// Uses increasing delays and auto-retry to avoid wasted gas from premature attempts.
+// Auto-reveal retry — uses increasing delays for blockhash propagation on Arbitrum L2.
+// First attempt is immediate (from commitGame onSuccess). Retries show countdown UI.
 let autoRevealAttempt = 0;
-const AUTO_REVEAL_DELAYS = [10000, 15000, 20000]; // 10s, 15s, 20s (increasing)
+const AUTO_REVEAL_DELAYS = [8000, 15000, 20000]; // 8s, 15s, 20s (increasing)
 
 async function autoRevealWithPreSim() {
     if (Game.phase !== 'waiting') return;
 
-    const timerEl = document.getElementById('countdown-timer');
+    // On retry, show the full waiting UI with countdown
+    if (autoRevealAttempt > 0) {
+        Game.commitment.waitStartTime = Date.now();
+        renderPhase(); // Shows full countdown UI
+    }
+
     const btnEl = document.getElementById('btn-reveal');
     const btnTextEl = document.getElementById('reveal-btn-text');
 
-    if (timerEl) timerEl.textContent = 'Revealing...';
     if (btnEl) {
         btnEl.disabled = true;
         btnEl.classList.remove('bg-zinc-800', 'text-zinc-500', 'cursor-not-allowed');
         btnEl.classList.add('bg-gradient-to-r', 'from-amber-500', 'to-yellow-500', 'text-white');
     }
-    if (btnTextEl) btnTextEl.textContent = 'Auto-revealing...';
+    if (btnTextEl) btnTextEl.textContent = 'Auto-retrying...';
 
     const delay = AUTO_REVEAL_DELAYS[Math.min(autoRevealAttempt, AUTO_REVEAL_DELAYS.length - 1)];
     console.log(`[FortunePool] Waiting ${delay / 1000}s before reveal attempt ${autoRevealAttempt + 1}...`);
@@ -1279,11 +1357,6 @@ function enableManualRevealButton() {
 }
 
 async function executeReveal() {
-    if (!Game.commitment.canReveal) {
-        showToast('Not ready to reveal yet!', 'warning');
-        return;
-    }
-
     const btn = document.getElementById('btn-reveal');
 
     try {

@@ -278,23 +278,12 @@ export async function revealPlay({
             const readContract = await getFortuneContractReadOnly();
             const status = await readContract.getGameStatus(gameId);
 
+            // Only block on fatal conditions — timing is handled by on-chain revert + auto-retry
             if (Number(status.status) === 3) throw new Error('Game has expired.');
-            if (!status.canReveal) {
-                if (Number(status.blocksUntilReveal) > 0) {
-                    throw new Error(`Must wait ${status.blocksUntilReveal} more blocks before reveal`);
-                }
-                throw new Error('Cannot reveal this game');
-            }
 
             const game = await readContract.getGame(gameId);
             if (game.player.toLowerCase() !== userAddress.toLowerCase()) {
                 throw new Error('You are not the owner of this game');
-            }
-
-            // Verify hash
-            const calculatedHash = generateCommitmentHashLocal(guesses, userSecret);
-            if (game[0] && game[0] !== calculatedHash) {
-                // Try the on-chain hash via getGame
             }
         },
 
