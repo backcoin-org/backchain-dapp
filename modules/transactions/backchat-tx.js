@@ -405,6 +405,23 @@ export async function pinPost({
     });
 }
 
+/**
+ * Change a post's tag (free, only gas) — V9
+ */
+export async function changeTag({
+    postId, newTag,
+    button = null, onSuccess = null, onError = null
+}) {
+    return await txEngine.execute({
+        name: 'ChangeTag', button,
+        skipSimulation: true, fixedGasLimit: 100000n,
+        getContract: async (signer) => getAgoraContract(signer),
+        method: 'changeTag',
+        args: [postId, newTag],
+        onSuccess, onError
+    });
+}
+
 // ============================================================================
 // 6. PREMIUM TRANSACTIONS
 // ============================================================================
@@ -556,7 +573,7 @@ export const BackchatTx = {
     // Profile
     createProfile, updateProfile,
     // Content
-    createPost, createReply, createRepost, deletePost, pinPost,
+    createPost, createReply, createRepost, deletePost, pinPost, changeTag,
     // Engagement
     like, superLike, downvote, follow, unfollow,
     // Premium

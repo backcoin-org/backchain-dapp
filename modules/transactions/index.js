@@ -142,6 +142,7 @@ export {
     unfollow,
     deletePost,
     pinPost,
+    changeTag,
     boostProfile,
     obtainBadge,
     getUsernamePrice,

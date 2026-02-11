@@ -30,6 +30,7 @@ import { addresses, ipfsGateway, agoraABI } from '../config.js';
 import { formatBigNumber } from '../utils.js';
 import { BackchatTx } from '../modules/transactions/index.js';
 import { calculateFeeClientSide } from '../modules/core/index.js';
+import { LiveStream } from '../modules/webrtc-live.js';
 
 // ============================================================================
 // CONSTANTS
@@ -41,22 +42,57 @@ const IPFS_GATEWAY = ipfsGateway || "https://gateway.pinata.cloud/ipfs/";
 const MAX_CONTENT = 500;
 
 const TAGS = [
-    { id: 0, name: 'General', icon: 'fa-globe', color: '#8b8b9e' },
-    { id: 1, name: 'DeFi', icon: 'fa-chart-line', color: '#22c55e' },
-    { id: 2, name: 'NFT', icon: 'fa-gem', color: '#8b5cf6' },
-    { id: 3, name: 'Gaming', icon: 'fa-gamepad', color: '#ec4899' },
-    { id: 4, name: 'Tech', icon: 'fa-microchip', color: '#3b82f6' },
-    { id: 5, name: 'News', icon: 'fa-newspaper', color: '#f59e0b' },
-    { id: 6, name: 'Meme', icon: 'fa-face-laugh-squint', color: '#facc15' },
-    { id: 7, name: 'Alpha', icon: 'fa-fire', color: '#ef4444' },
-    { id: 8, name: 'DAO', icon: 'fa-landmark', color: '#06b6d4' },
-    { id: 9, name: 'Learn', icon: 'fa-graduation-cap', color: '#14b8a6' },
-    { id: 10, name: 'Art', icon: 'fa-palette', color: '#f472b6' },
-    { id: 11, name: 'Music', icon: 'fa-music', color: '#a78bfa' },
-    { id: 12, name: 'Sports', icon: 'fa-futbol', color: '#fb923c' },
-    { id: 13, name: 'Food', icon: 'fa-utensils', color: '#fbbf24' },
-    { id: 14, name: 'Other', icon: 'fa-hashtag', color: '#6b7280' }
+    { id: 0,  name: 'General',   icon: 'fa-globe',             color: '#8b8b9e' },
+    { id: 1,  name: 'News',      icon: 'fa-newspaper',         color: '#f59e0b' },
+    { id: 2,  name: 'Politics',  icon: 'fa-landmark-dome',     color: '#6366f1' },
+    { id: 3,  name: 'Comedy',    icon: 'fa-face-laugh-squint', color: '#facc15' },
+    { id: 4,  name: 'Sports',    icon: 'fa-futbol',            color: '#fb923c' },
+    { id: 5,  name: 'Crypto',    icon: 'fa-bitcoin-sign',      color: '#f7931a' },
+    { id: 6,  name: 'Tech',      icon: 'fa-microchip',         color: '#3b82f6' },
+    { id: 7,  name: 'Art',       icon: 'fa-palette',           color: '#f472b6' },
+    { id: 8,  name: 'Music',     icon: 'fa-music',             color: '#a78bfa' },
+    { id: 9,  name: 'Gaming',    icon: 'fa-gamepad',           color: '#ec4899' },
+    { id: 10, name: 'Business',  icon: 'fa-briefcase',         color: '#10b981' },
+    { id: 11, name: 'Education', icon: 'fa-graduation-cap',    color: '#14b8a6' },
+    { id: 12, name: 'Lifestyle', icon: 'fa-heart',             color: '#e879f9' },
+    { id: 13, name: 'Adult',     icon: 'fa-fire',              color: '#ef4444' },
+    { id: 14, name: 'Random',    icon: 'fa-shuffle',           color: '#6b7280' }
 ];
+
+function formatExpiry(timestampSec) {
+    if (!timestampSec || timestampSec === 0) return '';
+    const now = Math.floor(Date.now() / 1000);
+    const remaining = timestampSec - now;
+    if (remaining <= 0) return '(expired)';
+    const days = Math.floor(remaining / 86400);
+    if (days > 0) return `(${days}d left)`;
+    const hours = Math.floor(remaining / 3600);
+    return `(${hours}h left)`;
+}
+
+function renderExpiryWarnings() {
+    const now = Math.floor(Date.now() / 1000);
+    let html = '';
+    if (BC.isBoosted && BC.boostExpiry > 0) {
+        const daysLeft = Math.floor((BC.boostExpiry - now) / 86400);
+        if (daysLeft <= 7 && daysLeft > 0) {
+            html += `<div style="padding:8px 16px;background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.15);border-radius:8px;margin-top:8px;font-size:12px;color:var(--bc-accent);display:flex;align-items:center;gap:6px;">
+                <i class="fa-solid fa-clock"></i> Boost expires in ${daysLeft} day${daysLeft !== 1 ? 's' : ''} —
+                <button class="bc-btn bc-btn-primary" style="padding:4px 12px;font-size:11px;" onclick="BackchatPage.openBoost()">Renew</button>
+            </div>`;
+        }
+    }
+    if (BC.hasBadge && BC.badgeExpiry > 0) {
+        const daysLeft = Math.floor((BC.badgeExpiry - now) / 86400);
+        if (daysLeft <= 30 && daysLeft > 0) {
+            html += `<div style="padding:8px 16px;background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.15);border-radius:8px;margin-top:8px;font-size:12px;color:var(--bc-accent);display:flex;align-items:center;gap:6px;">
+                <i class="fa-solid fa-clock"></i> Badge expires in ${daysLeft} day${daysLeft !== 1 ? 's' : ''} —
+                <button class="bc-btn bc-btn-primary" style="padding:4px 12px;font-size:11px;" onclick="BackchatPage.openBadge()">Renew</button>
+            </div>`;
+        }
+    }
+    return html;
+}
 
 function getBackchatAddress() {
     return addresses.agora || addresses.backchat || addresses.Backchat || null;
@@ -117,7 +153,13 @@ const BC = {
     isLoading: false,
     isPosting: false,
     contractAvailable: true,
-    error: null
+    error: null,
+    // Live Streaming
+    liveStream: null,
+    isLive: false,
+    liveViewerCount: 0,
+    activeRooms: new Map(),
+    watchingStreamId: null
 };
 
 // ============================================================================
@@ -389,6 +431,21 @@ function injectStyles() {
         /* Profile Create Banner */
         .bc-profile-create-banner { margin:16px 20px; padding:16px; background:var(--bc-accent-glow); border:1px solid rgba(245,158,11,0.2); border-radius:var(--bc-radius); text-align:center; animation:bc-fadeIn 0.4s ease-out; }
         .bc-profile-create-banner p { font-size:13px; color:var(--bc-text-2); margin-bottom:12px; }
+
+        /* Live Streaming */
+        .bc-live-bar { padding:16px 20px; background:linear-gradient(135deg, rgba(239,68,68,0.08), rgba(0,0,0,0.4)); border-bottom:1px solid rgba(239,68,68,0.2); }
+        .bc-live-bar-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; }
+        .bc-live-indicator { display:flex; align-items:center; gap:8px; }
+        .bc-live-dot { width:10px; height:10px; border-radius:50%; background:#ef4444; animation:bc-pulse-ring 1.5s infinite; }
+        .bc-live-label { font-weight:700; color:#ef4444; font-size:14px; }
+        .bc-live-viewers { font-size:12px; color:var(--bc-text-3); }
+        .bc-live-video { width:100%; border-radius:var(--bc-radius); background:#000; max-height:400px; object-fit:cover; }
+        .bc-live-badge { display:inline-flex; align-items:center; gap:3px; padding:2px 8px; background:rgba(239,68,68,0.15); border:1px solid rgba(239,68,68,0.3); border-radius:12px; color:#ef4444; font-size:10px; font-weight:700; margin-left:6px; }
+        .bc-live-badge-dot { width:6px; height:6px; border-radius:50%; background:#ef4444; animation:bc-pulse-ring 1.5s infinite; }
+        .bc-live-join { padding:16px 20px; background:rgba(239,68,68,0.05); border-bottom:1px solid rgba(239,68,68,0.2); text-align:center; }
+        .bc-go-live-btn { background:linear-gradient(135deg, #ef4444, #dc2626); color:#fff; border:none; padding:8px 16px; border-radius:var(--bc-radius-sm); cursor:pointer; font-size:13px; font-weight:600; display:inline-flex; align-items:center; gap:6px; transition:all 0.15s; }
+        .bc-go-live-btn:hover { filter:brightness(1.1); transform:scale(1.02); }
+        .bc-go-live-btn:disabled { opacity:0.5; cursor:not-allowed; transform:none; }
 
         /* Responsive */
         @media (max-width: 640px) {
@@ -952,6 +1009,40 @@ async function doPinPost(postId) {
     });
 }
 
+// ── Change Tag ──────────────────────────────────────────────────────────
+let _changeTagPostId = null;
+let _changeTagNewTag = null;
+
+function openChangeTag(postId) {
+    _changeTagPostId = postId;
+    _changeTagNewTag = null;
+    document.querySelectorAll('[id^="change-tag-opt-"]').forEach(el => el.classList.remove('active'));
+    const btn = document.getElementById('bc-change-tag-btn');
+    if (btn) btn.disabled = true;
+    document.getElementById('modal-change-tag')?.classList.add('active');
+}
+
+function selectNewTag(tagId) {
+    _changeTagNewTag = tagId;
+    document.querySelectorAll('[id^="change-tag-opt-"]').forEach(el => el.classList.remove('active'));
+    document.getElementById(`change-tag-opt-${tagId}`)?.classList.add('active');
+    const btn = document.getElementById('bc-change-tag-btn');
+    if (btn) btn.disabled = false;
+}
+
+async function confirmChangeTag() {
+    if (_changeTagNewTag === null || !_changeTagPostId) return;
+    closeModal('change-tag');
+    await BackchatTx.changeTag({
+        postId: _changeTagPostId,
+        newTag: _changeTagNewTag,
+        onSuccess: async () => {
+            showToast('Tag changed!', 'success');
+            await loadPosts();
+        }
+    });
+}
+
 async function doFollow(address) {
     await BackchatTx.follow({
         toFollow: address,
@@ -1041,6 +1132,138 @@ async function doBoostProfile(amount) {
             renderContent();
         }
     });
+}
+
+// ============================================================================
+// LIVE STREAMING
+// ============================================================================
+
+async function goLive() {
+    if (BC.isLive || !State.isConnected) return;
+    try {
+        // First get camera+mic permission before creating the on-chain post
+        const testStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+        testStream.getTracks().forEach(t => t.stop()); // release immediately
+
+        // Create on-chain post for this live
+        const content = 'LIVE NOW';
+        await BackchatTx.createPost({
+            content,
+            tag: BC.composeTag,
+            contentType: 2, // video
+            operator: getOperatorAddress(),
+            onSuccess: async (receipt) => {
+                try {
+                    // Extract postId from receipt logs
+                    let postId = String(BC.posts.length + 1); // fallback
+                    if (receipt?.logs) {
+                        for (const log of receipt.logs) {
+                            try {
+                                const iface = new ethers.Interface(agoraABI);
+                                const parsed = iface.parseLog({ topics: log.topics, data: log.data });
+                                if (parsed?.name === 'PostCreated' && parsed.args?.postId != null) {
+                                    postId = String(parsed.args.postId);
+                                    break;
+                                }
+                            } catch (_) { /* not our event */ }
+                        }
+                    }
+
+                    const ls = new LiveStream();
+                    const { roomId, stream } = await ls.startStream(postId, State.userAddress);
+                    BC.liveStream = ls;
+                    BC.isLive = true;
+                    BC.liveViewerCount = 0;
+                    ls.onViewerCountChange = (count) => {
+                        BC.liveViewerCount = count;
+                        const el = document.querySelector('[data-live-viewers]');
+                        if (el) el.textContent = `${count} viewer${count !== 1 ? 's' : ''}`;
+                    };
+                    showToast('You are now LIVE!', 'success');
+                    renderContent();
+                    // Attach local stream after DOM update
+                    setTimeout(() => {
+                        const video = document.getElementById('bc-local-video');
+                        if (video) video.srcObject = stream;
+                    }, 100);
+                } catch (e) {
+                    showToast('Failed to start stream: ' + e.message, 'error');
+                }
+            }
+        });
+    } catch (e) {
+        if (e.name === 'NotAllowedError') {
+            showToast('Camera/mic permission denied', 'error');
+        } else {
+            showToast('Failed to go live: ' + e.message, 'error');
+        }
+    }
+}
+
+async function endLive() {
+    if (!BC.liveStream) return;
+    await BC.liveStream.endStream();
+    BC.liveStream = null;
+    BC.isLive = false;
+    BC.liveViewerCount = 0;
+    showToast('Stream ended', 'success');
+    renderContent();
+}
+
+async function watchLive(postId) {
+    if (!State.isConnected) return;
+    const room = await LiveStream.getRoomByPostId(postId);
+    if (!room) {
+        showToast('Stream has ended', 'info');
+        return;
+    }
+
+    const ls = new LiveStream();
+    ls.onRemoteStream = (stream) => {
+        const video = document.getElementById('bc-remote-video');
+        if (video) video.srcObject = stream;
+    };
+    ls.onStreamEnd = () => {
+        showToast('Stream ended', 'info');
+        BC.liveStream = null;
+        BC.watchingStreamId = null;
+        renderContent();
+    };
+    ls.onError = (msg) => {
+        showToast('Stream error: ' + msg, 'error');
+    };
+
+    await ls.joinStream(room.id, State.userAddress);
+    BC.liveStream = ls;
+    BC.watchingStreamId = String(postId);
+    renderContent();
+
+    // Attach remote stream after DOM update
+    setTimeout(() => {
+        if (ls.remoteStream) {
+            const video = document.getElementById('bc-remote-video');
+            if (video) video.srcObject = ls.remoteStream;
+        }
+    }, 200);
+}
+
+function leaveLive() {
+    if (BC.liveStream && !BC.isLive) {
+        BC.liveStream.leaveStream();
+    }
+    BC.liveStream = null;
+    BC.watchingStreamId = null;
+    renderContent();
+}
+
+async function loadActiveRooms() {
+    try {
+        const rooms = await LiveStream.getActiveRooms();
+        BC.activeRooms = new Map();
+        rooms.forEach(r => BC.activeRooms.set(String(r.postId), r));
+    } catch (e) {
+        console.warn('[Agora] Failed to load live rooms:', e);
+    }
 }
 
 // ============================================================================
@@ -1156,7 +1379,7 @@ function renderHeader() {
         <div class="bc-header">
             <div class="bc-header-bar">
                 <div class="bc-brand">
-                    <img src="assets/backchat.png" alt="Agora" class="bc-brand-icon" onerror="this.style.display='none'">
+                    <img src="assets/Agora.png" alt="Agora" class="bc-brand-icon" onerror="this.style.display='none'">
                     <span class="bc-brand-name">Agora</span>
                 </div>
                 <div class="bc-header-right">
@@ -1233,6 +1456,9 @@ function renderCompose() {
                 <div class="bc-compose-tools">
                     <button class="bc-compose-tool" title="Add image" onclick="document.getElementById('bc-image-input').click()"><i class="fa-solid fa-image"></i></button>
                     <input type="file" id="bc-image-input" hidden accept="image/jpeg,image/png,image/gif,image/webp" onchange="BackchatPage.handleImageSelect(event)">
+                    <button class="bc-go-live-btn" title="Go Live" onclick="BackchatPage.goLive()" ${BC.isLive ? 'disabled' : ''}>
+                        <i class="fa-solid fa-video"></i> ${BC.isLive ? 'LIVE' : 'Go Live'}
+                    </button>
                 </div>
                 <div class="bc-compose-right">
                     <span class="bc-char-count" id="bc-char-counter">0/${MAX_CONTENT}</span>
@@ -1256,6 +1482,9 @@ function renderPostMenu(post) {
             <div class="bc-post-dropdown" id="post-menu-${post.id}" style="display:none;">
                 <button class="bc-post-dropdown-item" onclick="event.stopPropagation(); BackchatPage.pinPost('${post.id}')">
                     <i class="fa-solid fa-thumbtack"></i> Pin to profile
+                </button>
+                <button class="bc-post-dropdown-item" onclick="event.stopPropagation(); BackchatPage.openChangeTag('${post.id}')">
+                    <i class="fa-solid fa-tag"></i> Change Tag
                 </button>
                 <button class="bc-post-dropdown-item danger" onclick="event.stopPropagation(); BackchatPage.deletePost('${post.id}')">
                     <i class="fa-solid fa-trash"></i> Delete
@@ -1301,6 +1530,7 @@ function renderPost(post, index = 0, options = {}) {
                         <span class="bc-post-time">&middot; ${formatTimeAgo(post.timestamp)}</span>
                         ${post.tag > 0 ? `<span class="bc-tag-badge" style="color:${tagInfo.color};border-color:${tagInfo.color}30"><i class="fa-solid ${tagInfo.icon}"></i> ${tagInfo.name}</span>` : ''}
                         ${post.superLikes > 0n ? `<span class="bc-trending-tag"><i class="fa-solid fa-bolt"></i> ${superLikesETH}</span>` : ''}
+                        ${BC.activeRooms.has(String(post.id)) ? '<span class="bc-live-badge"><span class="bc-live-badge-dot"></span> LIVE</span>' : ''}
                     </div>
                     ${post.type === 'reply' ? `<div class="bc-post-context">Replying to ${getProfileName(BC.postsById.get(post.parentId)?.author)}</div>` : ''}
                 </div>
@@ -1323,6 +1553,41 @@ function renderPost(post, index = 0, options = {}) {
                 </button>
                 <button class="bc-action act-super" onclick="BackchatPage.openSuperLike('${post.id}')" title="Super Like">
                     <i class="fa-solid fa-star"></i>
+                </button>
+            </div>
+        </div>`;
+}
+
+function renderLiveStreamBar() {
+    if (!BC.isLive) return '';
+    return `
+        <div class="bc-live-bar">
+            <div class="bc-live-bar-header">
+                <div class="bc-live-indicator">
+                    <span class="bc-live-dot"></span>
+                    <span class="bc-live-label">LIVE</span>
+                    <span class="bc-live-viewers" data-live-viewers>${BC.liveViewerCount} viewer${BC.liveViewerCount !== 1 ? 's' : ''}</span>
+                </div>
+                <button class="bc-btn bc-btn-outline" style="border-color:#ef4444;color:#ef4444;padding:6px 14px;font-size:12px;" onclick="BackchatPage.endLive()">
+                    <i class="fa-solid fa-stop"></i> End Stream
+                </button>
+            </div>
+            <video id="bc-local-video" class="bc-live-video" autoplay muted playsinline></video>
+        </div>`;
+}
+
+function renderLiveViewer() {
+    if (!BC.watchingStreamId) return '';
+    return `
+        <div class="bc-live-bar">
+            <video id="bc-remote-video" class="bc-live-video" autoplay playsinline style="max-height:400px;object-fit:contain;"></video>
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-top:12px;">
+                <div class="bc-live-indicator">
+                    <span class="bc-live-dot"></span>
+                    <span class="bc-live-label">LIVE</span>
+                </div>
+                <button class="bc-btn bc-btn-outline" onclick="BackchatPage.leaveLive()">
+                    <i class="fa-solid fa-xmark"></i> Leave
                 </button>
             </div>
         </div>`;
@@ -1424,8 +1689,8 @@ function renderProfile() {
                 </div>
                 <div class="bc-profile-name-row">
                     <span class="bc-profile-name">${escapeHtml(displayName)}</span>
-                    ${BC.hasBadge ? '<i class="fa-solid fa-circle-check bc-profile-badge"></i>' : ''}
-                    ${BC.isBoosted ? '<span class="bc-boosted-tag"><i class="fa-solid fa-rocket"></i> Boosted</span>' : ''}
+                    ${BC.hasBadge ? `<i class="fa-solid fa-circle-check bc-profile-badge"></i> <span style="font-size:11px;color:var(--bc-text-3);">${formatExpiry(BC.badgeExpiry)}</span>` : ''}
+                    ${BC.isBoosted ? `<span class="bc-boosted-tag"><i class="fa-solid fa-rocket"></i> Boosted ${formatExpiry(BC.boostExpiry)}</span>` : ''}
                 </div>
                 ${BC.userProfile?.username ? `<div class="bc-profile-username">@${BC.userProfile.username}</div>` : ''}
                 ${BC.userProfile?.bio ? `<div class="bc-profile-bio">${escapeHtml(BC.userProfile.bio)}</div>` : ''}
@@ -1437,6 +1702,7 @@ function renderProfile() {
                     <div class="bc-stat-cell"><div class="bc-stat-value">${followersCount}</div><div class="bc-stat-label">Followers</div></div>
                     <div class="bc-stat-cell"><div class="bc-stat-value">${followingCount}</div><div class="bc-stat-label">Following</div></div>
                 </div>
+                ${renderExpiryWarnings()}
             </div>
             <div class="bc-section-head">
                 <span class="bc-section-title"><i class="fa-solid fa-clock-rotate-left"></i> Your Posts</span>
@@ -1454,7 +1720,7 @@ function renderContent() {
     let content = '';
     switch (BC.view) {
         case 'feed':
-            content = renderCompose() + renderTagBar() + renderFeed();
+            content = renderLiveStreamBar() + renderCompose() + renderTagBar() + renderFeed();
             break;
         case 'discover':
             content = renderDiscover();
@@ -1485,7 +1751,17 @@ function renderPostDetail() {
     replies.sort((a, b) => a.timestamp - b.timestamp);
     const parentAuthor = getProfileName(post.author);
 
+    const hasLiveRoom = BC.activeRooms.has(String(post.id));
+    const isWatching = BC.watchingStreamId === String(post.id);
+
     return `
+        ${isWatching ? renderLiveViewer() : ''}
+        ${hasLiveRoom && !isWatching ? `
+            <div class="bc-live-join">
+                <button class="bc-go-live-btn" onclick="BackchatPage.watchLive('${post.id}')">
+                    <i class="fa-solid fa-play"></i> Join Live Stream
+                </button>
+            </div>` : ''}
         <div class="bc-thread-parent">${renderPost(post, 0, { noAnimation: true })}</div>
         <div class="bc-thread-divider">Replies ${replies.length > 0 ? `(${replies.length})` : ''}</div>
         ${replies.length === 0
@@ -1698,6 +1974,23 @@ function renderModals() {
             </div>
         </div>
 
+        <!-- Change Tag Modal -->
+        <div class="bc-modal-overlay" id="modal-change-tag">
+            <div class="bc-modal-box">
+                <div class="bc-modal-top">
+                    <span class="bc-modal-title"><i class="fa-solid fa-tag" style="color:var(--bc-accent)"></i> Change Tag</span>
+                    <button class="bc-modal-x" onclick="BackchatPage.closeModal('change-tag')"><i class="fa-solid fa-xmark"></i></button>
+                </div>
+                <div class="bc-modal-inner">
+                    <p class="bc-modal-desc">Select a new category for your post. Only gas fee applies.</p>
+                    <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:16px;">
+                        ${TAGS.map(tag => `<button class="bc-compose-tag" onclick="BackchatPage.selectNewTag(${tag.id})" id="change-tag-opt-${tag.id}" style="color:${tag.color}"><i class="fa-solid ${tag.icon}"></i> ${tag.name}</button>`).join('')}
+                    </div>
+                    <button id="bc-change-tag-btn" class="bc-btn bc-btn-primary" style="width:100%;justify-content:center;" onclick="BackchatPage.confirmChangeTag()" disabled><i class="fa-solid fa-check"></i> Change Tag</button>
+                </div>
+            </div>
+        </div>
+
         <!-- Edit Profile Modal -->
         <div class="bc-modal-overlay" id="modal-edit-profile">
             <div class="bc-modal-box">
@@ -1824,7 +2117,8 @@ export const BackchatPage = {
             loadGlobalStats(),
             loadProfiles(),
             loadPosts(),
-            loadSocialGraph()
+            loadSocialGraph(),
+            loadActiveRooms()
         ]);
     },
 
@@ -1835,7 +2129,8 @@ export const BackchatPage = {
             loadGlobalStats(),
             loadProfiles(),
             loadPosts(),
-            loadSocialGraph()
+            loadSocialGraph(),
+            loadActiveRooms()
         ]);
     },
 
@@ -1892,6 +2187,10 @@ export const BackchatPage = {
     openRepostConfirm,
     confirmRepost,
 
+    openChangeTag,
+    selectNewTag,
+    confirmChangeTag,
+
     openBadge,
     confirmBadge,
     openBoost,
@@ -1900,6 +2199,11 @@ export const BackchatPage = {
     confirmEditProfile,
     closeModal,
     togglePostMenu,
+
+    goLive,
+    endLive,
+    watchLive,
+    leaveLive,
 
     handleImageSelect,
     removeImage,

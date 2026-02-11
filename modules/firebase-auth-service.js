@@ -4,7 +4,7 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/9.15.0/firebase-app.js";
 import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/9.15.0/firebase-auth.js";
 // Importações necessárias do Firestore
-import { getFirestore, doc, getDoc, setDoc, addDoc, collection, getDocs, updateDoc, deleteDoc, query, where, increment, orderBy, limit, serverTimestamp, Timestamp, writeBatch } from "https://www.gstatic.com/firebasejs/9.15.0/firebase-firestore.js";
+import { getFirestore, doc, getDoc, setDoc, addDoc, collection, getDocs, updateDoc, deleteDoc, query, where, increment, orderBy, limit, serverTimestamp, Timestamp, writeBatch, onSnapshot } from "https://www.gstatic.com/firebasejs/9.15.0/firebase-firestore.js";
 
 // --- Configuração Firebase ---
 // Substitua pelas suas credenciais reais
@@ -1603,3 +1603,13 @@ export async function savePlatformUsageConfig(config) {
     
     console.log("✅ Platform usage config saved:", config);
 }
+
+// ============================================================================
+// FIRESTORE EXPORTS (for WebRTC Live Streaming signaling)
+// ============================================================================
+export {
+    db as firestoreDb,
+    onSnapshot,
+    collection, doc, setDoc, addDoc, updateDoc, deleteDoc, getDocs,
+    query, where, increment, serverTimestamp
+};
