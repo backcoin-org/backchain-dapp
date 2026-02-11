@@ -31,9 +31,7 @@ import { TokenomicsPage } from './pages/TokenomicsPage.js';
 import { NotaryPage } from './pages/NotaryPage.js';
 import { RentalPage } from './pages/RentalPage.js';
 import { SocialMediaPage } from './pages/SocialMedia.js';
-import { CreditCardPage } from './pages/CreditCardPage.js';
-import { DexPage } from './pages/DexPage.js';
-import { DaoPage } from './pages/DaoPage.js';
+// CreditCardPage, DexPage, DaoPage removed (were demo placeholders)
 import { TutorialsPage } from './pages/TutorialsPage.js';
 import { CharityPage } from './pages/CharityPage.js';
 import { BackchatPage } from './pages/BackchatPage.js';
@@ -70,9 +68,6 @@ const routes = {
     'admin': AdminPage,
     'rental': RentalPage,
     'socials': SocialMediaPage,
-    'creditcard': CreditCardPage,
-    'dex': DexPage,
-    'dao': DaoPage,
     'tutorials': TutorialsPage
 };
 
