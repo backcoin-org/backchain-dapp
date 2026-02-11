@@ -1,5 +1,5 @@
 // pages/ReferralPage.js
-// ✅ VERSION V2.0: Gasless Referral + Influencer Dashboard
+// ✅ VERSION V3.0: Fully Gasless Referral — Auto-onboarding via link
 
 import { State } from '../state.js';
 import { showToast } from '../ui-feedback.js';
@@ -17,7 +17,6 @@ const RS = {
     referrer: null,
     referralLink: '',
     isLoading: false,
-    isSettingReferrer: false,
 };
 
 // ============================================================================
@@ -34,15 +33,6 @@ function injectStyles() {
         @keyframes ref-pulse {
             0%, 100% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.4); }
             50% { box-shadow: 0 0 0 12px rgba(245, 158, 11, 0); }
-        }
-        .ref-step-line::after {
-            content: '';
-            position: absolute;
-            top: 50%;
-            right: -50%;
-            width: 100%;
-            height: 2px;
-            background: linear-gradient(90deg, rgba(245,158,11,0.3), transparent);
         }
         .ref-share-btn {
             transition: all 0.2s ease;
@@ -66,6 +56,15 @@ function injectStyles() {
             0% { transform: scale(0.8); }
             50% { transform: scale(1.2); }
             100% { transform: scale(1); }
+        }
+        .ref-step-num {
+            width: 36px; height: 36px;
+            border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            font-weight: 800; font-size: 14px;
+        }
+        .ref-flow-arrow {
+            color: rgba(113,113,122,0.4);
         }
     `;
     document.head.appendChild(style);
@@ -102,20 +101,20 @@ function render(isActive) {
     if (!container) return;
 
     const isConnected = State.isConnected && State.userAddress;
-    const shortAddr = isConnected ? formatAddress(State.userAddress) : '...';
 
     container.innerHTML = `
         <!-- Hero -->
         <div class="text-center py-8 sm:py-12">
             <div class="ref-hero-badge inline-flex items-center gap-2 bg-amber-500/10 border border-amber-500/30 rounded-full px-5 py-2 mb-5">
-                <i class="fa-solid fa-fire text-amber-400 text-sm"></i>
-                <span class="text-amber-400 text-sm font-bold">Airdrop Phase 1 Active</span>
+                <i class="fa-solid fa-bolt text-amber-400 text-sm"></i>
+                <span class="text-amber-400 text-sm font-bold">100% Gasless Referral System</span>
             </div>
             <h1 class="text-3xl sm:text-4xl lg:text-5xl font-extrabold text-white mb-4 leading-tight">
                 Invite Friends,<br class="sm:hidden"> <span class="text-amber-400">Earn 5% Forever</span>
             </h1>
             <p class="text-zinc-400 text-base sm:text-lg max-w-xl mx-auto leading-relaxed">
-                Share your referral link. When your friends stake BKC, you earn <strong class="text-white">5% of every reward</strong> they claim — for life.
+                Share your link. When your friends connect, they're <strong class="text-white">automatically onboarded</strong> —
+                zero gas, zero popups. You earn <strong class="text-white">5% of every reward</strong> they claim.
             </p>
         </div>
 
@@ -198,41 +197,35 @@ function render(isActive) {
                         <i class="fa-solid fa-share-nodes text-2xl text-amber-400"></i>
                     </div>
                     <h3 class="text-white font-bold mb-2">1. Share Your Link</h3>
-                    <p class="text-zinc-400 text-sm">Send your unique referral link to friends via social media or direct message</p>
+                    <p class="text-zinc-400 text-sm">Send your unique referral link via social media, DMs, or anywhere</p>
                 </div>
                 <div class="text-center relative">
                     <div class="w-16 h-16 rounded-2xl bg-purple-500/10 border border-purple-500/30 flex items-center justify-center mx-auto mb-4">
-                        <i class="fa-solid fa-layer-group text-2xl text-purple-400"></i>
+                        <i class="fa-solid fa-wand-magic-sparkles text-2xl text-purple-400"></i>
                     </div>
-                    <h3 class="text-white font-bold mb-2">2. Friend Stakes BKC</h3>
-                    <p class="text-zinc-400 text-sm">When they connect via your link and delegate BKC to the staking pool</p>
+                    <h3 class="text-white font-bold mb-2">2. Auto-Onboarding</h3>
+                    <p class="text-zinc-400 text-sm">Friend clicks your link, connects wallet — referral is set automatically + they receive free BKC. Zero gas!</p>
                 </div>
                 <div class="text-center">
                     <div class="w-16 h-16 rounded-2xl bg-green-500/10 border border-green-500/30 flex items-center justify-center mx-auto mb-4">
                         <i class="fa-solid fa-coins text-2xl text-green-400"></i>
                     </div>
                     <h3 class="text-white font-bold mb-2">3. Earn 5% Forever</h3>
-                    <p class="text-zinc-400 text-sm">Every time they claim staking rewards, 5% is sent directly to your wallet</p>
+                    <p class="text-zinc-400 text-sm">Every time they claim staking rewards, 5% is sent directly to your wallet — for life</p>
                 </div>
             </div>
         </div>
 
-        <!-- Set Referrer -->
+        <!-- Referrer Status (only if no referrer yet) -->
         ${isConnected && !RS.referrer ? `
         <div class="max-w-2xl mx-auto mb-10">
-            <div class="bg-zinc-800/50 border border-zinc-700/50 rounded-2xl p-5 sm:p-6">
-                <h3 class="text-lg font-bold text-white mb-2 flex items-center gap-2">
-                    <i class="fa-solid fa-handshake text-purple-400"></i> Got a Referral?
-                </h3>
-                <p class="text-zinc-400 text-sm mb-4">Enter the wallet address of the person who referred you. This is gasless and permanent — no gas fees required!</p>
-                <div class="flex flex-col sm:flex-row gap-3">
-                    <input id="ref-referrer-input" type="text" placeholder="0x..."
-                        class="flex-1 bg-zinc-900/50 border border-zinc-700 rounded-xl px-4 py-3 text-white text-sm placeholder-zinc-600 focus:outline-none focus:border-amber-500/50" />
-                    <button id="ref-set-referrer-btn"
-                        class="shrink-0 bg-purple-600 hover:bg-purple-500 text-white font-bold rounded-xl px-6 py-3 text-sm transition-colors flex items-center justify-center gap-2">
-                        <i class="fa-solid fa-link"></i> Set Referrer
-                    </button>
-                </div>
+            <div class="bg-zinc-800/30 border border-zinc-700/30 border-dashed rounded-2xl p-5 sm:p-6 text-center">
+                <i class="fa-solid fa-user-plus text-3xl text-zinc-600 mb-3"></i>
+                <h3 class="text-white font-semibold mb-2">No Referrer Set Yet</h3>
+                <p class="text-zinc-400 text-sm max-w-md mx-auto">
+                    Ask a friend for their referral link and visit it while connected.
+                    Your referrer is set <strong class="text-white">automatically</strong> — no forms, no gas, no popups.
+                </p>
             </div>
         </div>
         ` : ''}
@@ -246,12 +239,20 @@ function render(isActive) {
                     <p class="text-zinc-400 text-sm">You earn 5% of every staking reward your referrals claim. There's no limit — the more active referrals you have, the more you earn. Rewards are paid in BKC tokens.</p>
                 </div>
                 <div class="bg-zinc-800/30 border border-zinc-700/30 rounded-xl p-4">
+                    <h4 class="text-white font-semibold mb-1">How do I get referred?</h4>
+                    <p class="text-zinc-400 text-sm">Just click a friend's referral link and connect your wallet. Everything is automatic — the system sets your referrer and sends you free BKC tokens as a welcome bonus. No manual input needed.</p>
+                </div>
+                <div class="bg-zinc-800/30 border border-zinc-700/30 rounded-xl p-4">
                     <h4 class="text-white font-semibold mb-1">Is this on-chain?</h4>
                     <p class="text-zinc-400 text-sm">Yes. Referral relationships are stored permanently on the Arbitrum blockchain. The 5% cut is enforced by the StakingPool smart contract — no one can change or revoke it.</p>
                 </div>
                 <div class="bg-zinc-800/30 border border-zinc-700/30 rounded-xl p-4">
                     <h4 class="text-white font-semibold mb-1">Can I change my referrer?</h4>
-                    <p class="text-zinc-400 text-sm">No. Once set, your referrer is permanent. Choose wisely. If no referrer is set, the 5% goes to the project treasury.</p>
+                    <p class="text-zinc-400 text-sm">No. Once set, your referrer is permanent and enforced by the smart contract. Choose wisely. If no referrer is set, the 5% goes to the project treasury.</p>
+                </div>
+                <div class="bg-zinc-800/30 border border-zinc-700/30 rounded-xl p-4">
+                    <h4 class="text-white font-semibold mb-1">Does my friend need ETH for gas?</h4>
+                    <p class="text-zinc-400 text-sm">No! The referral system is 100% gasless. A server-side relayer pays all gas fees. Your friend just clicks, connects, and receives free BKC — zero cost.</p>
                 </div>
                 <div class="bg-zinc-800/30 border border-zinc-700/30 rounded-xl p-4">
                     <h4 class="text-white font-semibold mb-1">What if no one uses my link?</h4>
@@ -293,36 +294,11 @@ function setupEventListeners() {
     container.addEventListener('click', (e) => {
         const target = e.target;
 
-        // Copy link
-        if (target.closest('#ref-copy-btn')) {
-            copyLink();
-            return;
-        }
-        // Twitter/X share
-        if (target.closest('#ref-share-twitter')) {
-            shareTwitter();
-            return;
-        }
-        // Telegram share
-        if (target.closest('#ref-share-telegram')) {
-            shareTelegram();
-            return;
-        }
-        // WhatsApp share
-        if (target.closest('#ref-share-whatsapp')) {
-            shareWhatsApp();
-            return;
-        }
-        // Native share
-        if (target.closest('#ref-share-native')) {
-            shareNative();
-            return;
-        }
-        // Set referrer
-        if (target.closest('#ref-set-referrer-btn')) {
-            setReferrer();
-            return;
-        }
+        if (target.closest('#ref-copy-btn')) { copyLink(); return; }
+        if (target.closest('#ref-share-twitter')) { shareTwitter(); return; }
+        if (target.closest('#ref-share-telegram')) { shareTelegram(); return; }
+        if (target.closest('#ref-share-whatsapp')) { shareWhatsApp(); return; }
+        if (target.closest('#ref-share-native')) { shareNative(); return; }
     });
 }
 
@@ -388,61 +364,6 @@ function shareNative() {
 }
 
 // ============================================================================
-// SET REFERRER
-// ============================================================================
-async function setReferrer() {
-    if (RS.isSettingReferrer) return;
-    const input = document.getElementById('ref-referrer-input');
-    const btn = document.getElementById('ref-set-referrer-btn');
-    if (!input || !btn) return;
-
-    const address = input.value.trim();
-    if (!address || !ethers.isAddress(address)) {
-        showToast('Enter a valid wallet address', 'error');
-        return;
-    }
-    if (address.toLowerCase() === State.userAddress.toLowerCase()) {
-        showToast('You cannot refer yourself', 'error');
-        return;
-    }
-
-    RS.isSettingReferrer = true;
-    btn.disabled = true;
-    btn.innerHTML = '<div class="loader mx-auto"></div>';
-
-    try {
-        const response = await fetch('/api/referral', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                userAddress: State.userAddress,
-                referrerAddress: address
-            })
-        });
-        const data = await response.json();
-
-        if (data.success && data.referrerSet) {
-            showToast('Referrer set! They will earn 5% of your staking rewards.', 'success');
-            render(true);
-        } else if (data.success && !data.referrerSet) {
-            showToast('Referrer was already set.', 'info');
-            render(true);
-        } else if (data.error) {
-            showToast(data.error, 'error');
-        }
-    } catch (e) {
-        showToast('Failed to set referrer. Try again.', 'error');
-        console.error('[Referral] Set referrer failed:', e);
-    }
-
-    RS.isSettingReferrer = false;
-    if (btn) {
-        btn.disabled = false;
-        btn.innerHTML = '<i class="fa-solid fa-link"></i> Set Referrer';
-    }
-}
-
-// ============================================================================
 // INFLUENCER DASHBOARD — Load referred addresses from events
 // ============================================================================
 async function loadReferredAddresses() {
@@ -482,8 +403,8 @@ async function loadReferredAddresses() {
 // ============================================================================
 function update(isConnected) {
     if (isConnected) {
-        loadReferralData().then(data => {
-            updateStats(data);
+        loadReferralData().then(() => {
+            updateStats();
             loadReferredAddresses();
         });
     }
