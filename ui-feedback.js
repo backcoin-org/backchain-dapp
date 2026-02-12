@@ -224,7 +224,7 @@ export async function addNftToWallet(tokenId, tierName) {
 
     try {
         const { addresses } = await import('./config.js');
-        const nftAddress = addresses?.rewardBooster || '0xEBD1EFDDC7F316f90734ce816b83CC76F0c460A7';
+        const nftAddress = addresses?.rewardBooster || '0x5507F70c71b8e1C694841E214fe8F9Dd7c899448';
 
         const wasAdded = await window.ethereum.request({
             method: 'wallet_watchAsset',

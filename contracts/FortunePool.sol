@@ -15,9 +15,9 @@ import "./IBackchain.sol";
 //   3. REVEAL: Player reveals guesses + secret, contract rolls & pays
 //
 // Tiers (hardcoded, immutable):
-//   Tier 0 — range 1-5,   pays  2x   (20% chance)
-//   Tier 1 — range 1-15,  pays  10x  (6.67% chance)
-//   Tier 2 — range 1-150, pays  100x (0.67% chance)
+//   Tier 0 — range 1-4,   pays  3x   (25% chance)
+//   Tier 1 — range 1-20,  pays  15x  (5% chance)
+//   Tier 2 — range 1-100, pays  75x  (1% chance)
 //
 // The player chooses which tiers to play (any combination).
 // Each winning tier pays: grossWager × multiplier.
@@ -32,7 +32,7 @@ import "./IBackchain.sol";
 //   - Expired games forfeit wager to pool
 //
 // Burn flywheel:
-//   Sub-fair multipliers cause the pool to grow ~13% per game.
+//   Uniform EV 0.75 across all tiers → pool retains ~5% per wager.
 //   Growth above 1M BKC is burned permanently.
 //   The more people play, the more BKC gets burned.
 //
@@ -531,13 +531,13 @@ contract FortunePool {
     // ════════════════════════════════════════════════════════════════════════
 
     /// @dev Tier data — hardcoded, immutable, compiled into bytecode.
-    ///      Tier 0: range 5,   2x   (20% chance)    — pool growth ~40%
-    ///      Tier 1: range 15,  10x  (6.67% chance)   — pool growth ~13%
-    ///      Tier 2: range 150, 100x (0.67% chance)   — pool growth ~13%
+    ///      Tier 0: range 4,   3x   (25% chance)    — EV 0.75, pool +5%
+    ///      Tier 1: range 20,  15x  (5% chance)     — EV 0.75, pool +5%
+    ///      Tier 2: range 100, 75x  (1% chance)     — EV 0.75, pool +5%
     function _tierData(uint8 tier) internal pure returns (uint256 range, uint256 multiplierBps) {
-        if (tier == 0) return (5,   20_000);       // 2x
-        if (tier == 1) return (15,  100_000);      // 10x
-        if (tier == 2) return (150, 1_000_000);    // 100x
+        if (tier == 0) return (4,   30_000);       // 3x
+        if (tier == 1) return (20,  150_000);      // 15x
+        if (tier == 2) return (100, 750_000);      // 75x
         revert InvalidTier();
     }
 

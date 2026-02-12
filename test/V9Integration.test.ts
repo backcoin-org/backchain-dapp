@@ -1266,7 +1266,7 @@ describe("Backchain V10 — Integration Tests", function () {
 
       // Commit a game (tier 0 only, mask=1)
       const wager = ethers.parseEther("100");
-      const guesses = [3n]; // guess 3 for tier 0 (range 1-5)
+      const guesses = [3n]; // guess 3 for tier 0 (range 1-4)
       const secret = ethers.keccak256(ethers.toUtf8Bytes("my_secret"));
 
       const commitHash = await f.fortunePool.generateCommitHash(guesses, secret);

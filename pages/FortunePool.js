@@ -6,7 +6,7 @@
 // - Consolidated 6 phases → 4 (play, processing, waiting, result)
 // - Fixed getCommitmentStatus → getGameStatus (V9)
 // - Fixed getCommitment → getGame (V9)
-// - Correct tier data: Jackpot 100x/1-150, Combo 112x max
+// - Correct tier data: Jackpot 75x/1-100, Combo 93x max
 // - Quick Play (one-tap random game)
 // - Pending game recovery from localStorage
 // - Animated result reveal (numbers land one-by-one)
@@ -64,19 +64,19 @@ let currentLang = 'en';
 // Tier definitions — match V9 contract exactly
 const TIERS = [
     {
-        id: 0, name: "Easy", emoji: "🍀", range: 5, multiplier: 2, chance: "20%",
+        id: 0, name: "Easy", emoji: "🍀", range: 4, multiplier: 3, chance: "25%",
         color: "emerald", hex: "#10b981",
         bgFrom: "from-emerald-500/20", bgTo: "to-green-600/10",
         borderColor: "border-emerald-500/50", textColor: "text-emerald-400"
     },
     {
-        id: 1, name: "Medium", emoji: "⚡", range: 15, multiplier: 10, chance: "6.7%",
+        id: 1, name: "Medium", emoji: "⚡", range: 20, multiplier: 15, chance: "5%",
         color: "violet", hex: "#8b5cf6",
         bgFrom: "from-violet-500/20", bgTo: "to-purple-600/10",
         borderColor: "border-violet-500/50", textColor: "text-violet-400"
     },
     {
-        id: 2, name: "Hard", emoji: "👑", range: 150, multiplier: 100, chance: "0.67%",
+        id: 2, name: "Hard", emoji: "👑", range: 100, multiplier: 75, chance: "1%",
         color: "amber", hex: "#f59e0b",
         bgFrom: "from-amber-500/20", bgTo: "to-orange-600/10",
         borderColor: "border-amber-500/50", textColor: "text-amber-400"
@@ -84,15 +84,15 @@ const TIERS = [
 ];
 
 // Derived constants from TIERS (not hardcoded)
-const COMBO_MAX_MULTIPLIER = TIERS.reduce((sum, t) => sum + t.multiplier, 0); // 112
-const JACKPOT_MULTIPLIER = TIERS[2].multiplier; // 100
-const JACKPOT_RANGE = TIERS[2].range; // 150
+const COMBO_MAX_MULTIPLIER = TIERS.reduce((sum, t) => sum + t.multiplier, 0); // 93
+const JACKPOT_MULTIPLIER = TIERS[2].multiplier; // 75
+const JACKPOT_RANGE = TIERS[2].range; // 100
 
 // Combo win probability: chance of matching at least 1 tier
-// = 1 - (1-0.20) × (1-0.067) × (1-0.0067) ≈ 25.9%
+// = 1 - (1-0.25) × (1-0.05) × (1-0.01) ≈ 29.5%
 const COMBO_WIN_CHANCE = 1 - TIERS.reduce((miss, t) => miss * (1 - 1 / t.range), 1);
-const COMBO_WIN_PCT = (COMBO_WIN_CHANCE * 100).toFixed(0); // "26"
-const COMBO_BOOST_VS_EASY = Math.round(((COMBO_WIN_CHANCE - 1 / TIERS[0].range) / (1 / TIERS[0].range)) * 100); // ~30
+const COMBO_WIN_PCT = (COMBO_WIN_CHANCE * 100).toFixed(0); // "29"
+const COMBO_BOOST_VS_EASY = Math.round(((COMBO_WIN_CHANCE - 1 / TIERS[0].range) / (1 / TIERS[0].range)) * 100); // ~18
 
 // ============================================================================
 // GAME STATE
