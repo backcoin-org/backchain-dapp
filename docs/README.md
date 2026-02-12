@@ -1,74 +1,91 @@
-# Backcoin — Unstoppable DeFi for Everyone
+# Backcoin — DeFi Imparavel para Todos
 
-Backcoin is a complete decentralized finance ecosystem built on Arbitrum. No admin keys, no pause buttons, no blacklists. Once deployed, nobody can stop it — not even us.
+Backcoin e um ecossistema completo de financas descentralizadas na Arbitrum. Sem chaves de admin, sem botao de pausa, sem blacklists. Uma vez no ar, ninguem consegue parar — nem nos mesmos.
 
-Everyone participates. Everyone earns. Users trade, stake, and play. Operators build frontends and collect commissions. The protocol rewards all participants automatically.
+Todo mundo participa. Todo mundo ganha. Usuarios negociam, delegam e jogam. Operadores constroem frontends e ganham comissoes. Referenciadores trazem novos usuarios e recebem recompensas automaticas. O protocolo distribui valor para todos os participantes.
 
-## What Makes Backcoin Different
+Leia o guia completo de como ganhar: [Como Ganhar](./How-to-Earn_Three-Income-Streams.md)
 
-**Truly unstoppable.** Most DeFi protocols have admin keys that can freeze your funds, change rules, or shut things down. Backcoin contracts are immutable. The code is the law, and it works for everyone equally.
+---
 
-**Everyone earns.** Whether you're a casual user claiming from the faucet, a builder running your own interface, or a whale providing liquidity — the system is designed so every participant benefits.
+## O Que Torna Backcoin Diferente
 
-**The Operator System.** Any developer can build their own Backcoin frontend and earn commissions on every transaction their users make. No permission needed. No approval process. Just pass your wallet address and start earning. This means the ecosystem grows organically — more builders means more users means more value for everyone.
+Imparavel de verdade. A maioria dos protocolos DeFi tem chaves de admin que podem congelar seus fundos, mudar regras ou desligar tudo. Os contratos do Backcoin sao imutaveis. O codigo e a lei, e funciona igual para todo mundo.
 
-**Fair from day one.** Zero tokens for the team. Zero for VCs or private investors. 80% of all BKC tokens go directly to active users through mining rewards. The remaining 20% funds initial liquidity and ecosystem growth.
+Todo mundo ganha. Seja voce um usuario casual pegando tokens no faucet, um builder rodando sua propria interface, ou um investidor provendo liquidez — o sistema foi desenhado para que cada participante se beneficie.
 
-## The Ecosystem
+Sistema de Operadores. Qualquer desenvolvedor pode construir seu proprio frontend Backcoin e ganhar comissoes em cada transacao dos seus usuarios. Sem permissao necessaria. Sem processo de aprovacao. So passa seu endereco de carteira e comeca a ganhar.
 
-| Service | What It Does | Who Earns |
-|---------|-------------|-----------|
-| **BKC Token** | ERC-20 with 200M hard cap | Holders, stakers, miners |
-| **Liquidity Pool** | ETH/BKC automated market maker | Liquidity providers |
-| **Staking** | Lock BKC, earn mining rewards | Stakers, referrers |
-| **Buyback Miner** | Converts protocol fees to rewards | Stakers, callers (5% incentive) |
-| **NFT Boosters** | 4-tier NFTs that reduce burn on rewards | NFT holders, traders |
-| **NFT Pools** | Bonding curve trading for Booster NFTs | Traders, operators |
-| **Fortune Pool** | Provably fair commit-reveal game | Players, operators |
-| **Agora** | Decentralized social network | Content creators, operators |
-| **Notary** | On-chain document certification | Users, operators |
-| **Charity Pool** | Permissionless fundraising | Campaign creators, donors |
-| **Rental Market** | Rent NFT Boosters without buying | Owners, renters, operators |
-| **Governance** | Progressive decentralization | Community, token holders |
+Sistema de Referral. Indique novos usuarios e ganhe 5% das recompensas de staking deles — automaticamente, para sempre. Um link, renda passiva permanente.
 
-## How Value Flows
+Justo desde o dia um. Zero tokens para o time. Zero para VCs ou investidores privados. 80% de todos os tokens BKC vao direto para usuarios ativos atraves de recompensas de mineracao.
 
-Every action in Backcoin generates fees. Those fees flow through the ecosystem:
+---
 
-1. **ETH fees** split between operators, referrers, treasury, and buyback
-2. **Buyback** buys BKC from the liquidity pool + mints new BKC (scarcity curve)
-3. **Mining rewards** distributed to stakers proportional to their power
-4. **BKC fees** partially burned (reducing supply), partially to stakers and treasury
+## O Ecossistema
 
-The result: the more people use Backcoin, the more rewards flow to participants, and the scarcer BKC becomes over time.
+| Servico | O Que Faz |
+|---------|----------|
+| BKC Token | ERC-20 com cap de 200M |
+| Liquidity Pool | Market maker automatico ETH/BKC |
+| Staking | Delegue BKC, ganhe recompensas de mineracao |
+| Buyback Miner | Converte taxas do protocolo em recompensas |
+| NFT Boosters | 4 tiers de NFTs que reduzem burn nas recompensas |
+| NFT Pools | Trading por bonding curve para Booster NFTs |
+| Fortune Pool | Jogo provadamente justo (commit-reveal) |
+| Agora | Rede social descentralizada |
+| Notary | Certificacao de documentos on-chain |
+| Charity Pool | Arrecadacao de fundos sem intermediarios |
+| Rental Market | Alugue NFT Boosters sem comprar |
+| Governance | Descentralizacao progressiva |
 
-## Contributing to the Network
+---
 
-Every Backcoin transaction strengthens the Arbitrum network. Our smart contracts generate consistent on-chain activity — swaps, staking, gaming, social posts, document certification — all contributing to network security and growth.
+## Como o Valor Flui
 
-We're not just building for ourselves. We're building infrastructure that anyone can use, fork, or build on top of. The protocol is open, permissionless, and designed to outlive its creators.
+Cada acao no Backcoin gera taxas. Essas taxas fluem pelo ecossistema:
 
-## Quick Links
+1. Taxas ETH sao divididas entre operadores, referenciadores, tesouro e buyback
+2. O Buyback compra BKC do pool de liquidez + minta novos BKC (curva de escassez)
+3. Recompensas de mineracao sao distribuidas aos delegadores proporcional ao seu poder
+4. Taxas BKC sao parcialmente queimadas (reduzindo supply) e parcialmente para delegadores e tesouro
 
-- [Quick Start Guide](./QUICK_START.md) — Get running in 5 minutes
-- [BKC Token](./BKC_TOKEN.md) — Token specifications
-- [Tokenomics](./TOKENOMICS.md) — Full economic model
-- [Staking](./STAKING.md) — Earn rewards by delegating
-- [Mining](./MINING.md) — How the buyback miner works
-- [Fortune Pool](./FORTUNE_POOL.md) — Provably fair gaming
-- [NFT Boosters](./REWARD_BOOSTER_NFT.md) — 4-tier utility NFTs
-- [NFT Pools](./NFT_LIQUIDITY_POOLS.md) — Bonding curve trading
-- [Rental Market](./RENTAL.md) — Rent NFTs for staking boosts
-- [Agora (Social)](./BACKCHAT.md) — Decentralized social network
-- [Notary](./NOTARY.md) — Document certification
-- [Charity](./CHARITY.md) — Fundraising campaigns
-- [Governance](./GOVERNANCE.md) — Progressive decentralization
-- [Fee Schedule](./FEES.md) — Transparent fee structure
-- [Operator Guide](./BE_YOUR_OWN_CEO.md) — Build and earn
-- [Contract Addresses](./CONTRACTS.md) — All deployed contracts
+Resultado: quanto mais gente usa o Backcoin, mais recompensas fluem para os participantes, e mais escasso o BKC fica com o tempo.
 
-## Community
+---
 
-- Telegram: [t.me/BackCoinorg](https://t.me/BackCoinorg)
-- Website: [backcoin.org](https://backcoin.org)
-- Network: Arbitrum Sepolia (testnet) → Arbitrum One (mainnet)
+## Contribuicao para a Rede
+
+Cada transacao Backcoin fortalece a rede Arbitrum. Nossos contratos geram atividade on-chain consistente — swaps, staking, jogos, posts sociais, certificacao de documentos — tudo contribuindo para a seguranca e crescimento da rede.
+
+Nao estamos construindo so para nos. Estamos construindo infraestrutura que qualquer um pode usar, copiar ou construir em cima. O protocolo e aberto, sem permissao, e desenhado para sobreviver aos seus criadores.
+
+---
+
+## Documentacao
+
+- [Como Ganhar com Backcoin](./How-to-Earn_Three-Income-Streams.md) — Guia completo de ganhos
+- [Comece Aqui](./Get-Started_5-Minutes.md) — Seus primeiros 5 minutos
+- [Token BKC](./BKC-Token_Ecosystem-Fuel.md) — Especificacoes do token
+- [Economia](./Economy_How-It-Works.md) — Modelo economico completo
+- [Staking](./Staking_Lock-and-Earn.md) — Ganhe delegando seus tokens
+- [Mineracao](./Mining_From-Fees-to-Rewards.md) — O motor de recompensas
+- [Fortune Pool](./Fortune-Pool_Fair-Betting.md) — Jogo provadamente justo
+- [NFT Boosters](./NFT-Boosters_Earn-More.md) — Maximize suas recompensas
+- [Trading de NFT](./NFT-Trading_Instant-Buy-Sell.md) — Compra e venda por bonding curve
+- [Aluguel de NFT](./NFT-Rental_Affordable-Boost.md) — Boost sem precisar comprar
+- [Agora](./Agora_Unstoppable-Social.md) — Rede social descentralizada
+- [Cartorio Digital](./Notary_Certify-Forever.md) — Certificacao on-chain
+- [Arrecadacao](./Fundraising_No-Middlemen.md) — Campanhas sem intermediarios
+- [Governanca](./Governance_Community-Power.md) — Descentralizacao progressiva
+- [Taxas](./Fees_Complete-Table.md) — Tabela completa de taxas
+- [Guia do Operador](./Operators_Build-and-Earn.md) — Construa e ganhe
+- [Enderecos](./Addresses_All-Contracts.md) — Todos os contratos
+
+---
+
+## Comunidade
+
+- Telegram: https://t.me/BackCoinorg
+- Website: https://backcoin.org
+- Rede: Arbitrum Sepolia (testnet) → Arbitrum One (mainnet)
