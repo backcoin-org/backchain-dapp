@@ -1,16 +1,16 @@
 // js/pages/FortunePool.js
-// V11.0 — Fortune Pool Complete Redesign
-// Unified play screen, V9 contract alignment, pending game recovery
+// V12.0 — Step-by-Step Wizard (Mobile-First)
+// Each step is a clean full-screen view: intro → tier → numbers → wager → play
 //
-// V11.0 Changes:
-// - Consolidated 6 phases → 4 (play, processing, waiting, result)
-// - Fixed getCommitmentStatus → getGameStatus (V9)
-// - Fixed getCommitment → getGame (V9)
-// - Correct tier data: Jackpot 75x/1-100, Combo 93x max
-// - Quick Play (one-tap random game)
-// - Pending game recovery from localStorage
-// - Animated result reveal (numbers land one-by-one)
-// - Inline wager on play screen (no separate wager phase)
+// V12.0 Changes:
+// - Step wizard: intro splash → tier select → number pick → wager → processing → result
+// - Each step changes the full screen — zero visual clutter
+// - Intro shows prize pool with tiger icon, auto-advances in 2.5s
+// - Tier select shows all options with clear win % and multipliers
+// - Number picker reused from V11 per-tier (grid/slider)
+// - Combo mode: step through 3 tiers with progress dots
+// - Play Again → quick replay (same settings), Change Game → tier select
+// - History only shown in result phase (not during steps)
 
 import { State } from '../state.js';
 import { loadUserData, API_ENDPOINTS } from '../modules/data.js';
@@ -99,7 +99,7 @@ const COMBO_BOOST_VS_EASY = Math.round(((COMBO_WIN_CHANCE - 1 / TIERS[0].range) 
 // ============================================================================
 const Game = {
     mode: 'combo',        // 'easy' | 'medium' | 'hard' | 'combo'
-    phase: 'play',        // 'play' | 'processing' | 'waiting' | 'result'
+    phase: 'intro',       // 'intro' | 'tier' | 'numbers' | 'wager' | 'processing' | 'waiting' | 'result'
     guess: 2,             // Single guess (easy/jackpot)
     guesses: [2, 5, 50],  // Combo guesses
     comboStep: 0,         // Current combo picker step (0-2)
@@ -107,7 +107,7 @@ const Game = {
     gameId: null,
     result: null,
     txHash: null,
-    poolStatus: null,
+    poolData: null,       // Cached pool status for phase renderers
     history: [],
     serviceFee: 0n,
     serviceFee1x: 0n,
@@ -147,6 +147,14 @@ function injectStyles() {
     style.id = 'fortune-styles-v11';
     style.textContent = `
         /* (tiger animations removed for mobile optimization) */
+
+        /* Step wizard intro */
+        @keyframes intro-pop { 0% { transform: scale(0); } 70% { transform: scale(1.15); } 100% { transform: scale(1); } }
+        .intro-pop { animation: intro-pop 0.6s ease-out; }
+        @keyframes intro-fade { 0% { opacity: 0; transform: translateY(10px); } 100% { opacity: 1; transform: translateY(0); } }
+        .intro-fade { animation: intro-fade 0.5s ease-out 0.3s both; }
+        @keyframes intro-pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.05); } }
+        .intro-pulse { animation: intro-pulse 2s ease-in-out infinite 1s; }
 
         /* Hide number input arrows */
         input[type="number"]::-webkit-outer-spin-button,
@@ -327,69 +335,13 @@ function render() {
 
     app.innerHTML = `
         <div class="max-w-md mx-auto px-4 py-3">
-            <!-- Header -->
-            <div class="flex items-center justify-between mb-3">
-                <div class="flex items-center gap-2.5">
-                    <span class="text-2xl">🎰</span>
-                    <div>
-                        <h1 class="text-lg font-bold text-white leading-tight">Fortune Pool</h1>
-                        <p class="text-zinc-500 text-[11px]">On-chain Lottery &bull; Verifiable</p>
-                    </div>
-                </div>
-                <a href="${EXPLORER_ADDRESS}${FORTUNE_POOL_ADDRESS}" target="_blank" rel="noopener"
-                   class="inline-flex items-center gap-1.5 px-2.5 py-1.5 bg-amber-500/10 border border-amber-500/30 rounded-full hover:bg-amber-500/20 transition-colors">
-                    <i class="fa-solid fa-file-contract text-amber-400 text-[10px]"></i>
-                    <span class="text-amber-400 text-[10px] font-medium">Contract</span>
-                    <i class="fa-solid fa-external-link text-amber-400/50 text-[8px]"></i>
-                </a>
-            </div>
-
-            <!-- Prize Pool Banner -->
-            <div class="bg-gradient-to-r from-amber-900/30 via-orange-900/20 to-amber-900/30 border border-amber-500/30 rounded-2xl p-3 mb-3 prize-glow">
-                <div class="flex items-center justify-between">
-                    <div>
-                        <p class="text-[10px] text-amber-400/70 uppercase tracking-wider">Prize Pool</p>
-                        <p id="prize-pool" class="text-2xl font-black text-amber-400">--</p>
-                    </div>
-                    <div class="flex items-center gap-4">
-                        <div class="text-right">
-                            <p class="text-[10px] text-zinc-500">Balance</p>
-                            <p id="user-balance" class="text-sm font-bold text-white">--</p>
-                        </div>
-                        <div class="w-px h-8 bg-zinc-700"></div>
-                        <div class="text-right">
-                            <p class="text-[10px] text-zinc-500">Games</p>
-                            <p id="total-games" class="text-sm font-bold text-zinc-300">--</p>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Game Area -->
-            <div id="game-area" class="mb-3"></div>
-
-            <!-- History -->
-            <div class="bg-zinc-900/50 border border-zinc-800/50 rounded-2xl overflow-hidden">
-                <div class="flex items-center justify-between p-3 border-b border-zinc-800/50">
-                    <span class="text-sm font-bold text-white flex items-center gap-2">
-                        <i class="fa-solid fa-clock-rotate-left text-orange-500 text-xs"></i>
-                        Recent Games
-                    </span>
-                    <span id="win-rate" class="text-xs text-zinc-500"></span>
-                </div>
-                <div id="history-list" class="max-h-[250px] overflow-y-auto p-2">
-                    <div class="p-4 text-center text-zinc-600 text-sm">
-                        <i class="fa-solid fa-spinner fa-spin text-zinc-600 text-lg mb-2"></i>
-                        <p>Loading...</p>
-                    </div>
-                </div>
-            </div>
+            <div id="game-area"></div>
         </div>
     `;
 
+    renderPhase();
     loadPoolData();
     checkPendingGame();
-    if (Game.phase === 'play') renderPhase();
 }
 
 function cleanup() {
@@ -397,9 +349,10 @@ function cleanup() {
         clearInterval(revealCheckInterval);
         revealCheckInterval = null;
     }
-    Game.phase = 'play';
+    Game.phase = 'intro';
     Game.result = null;
     Game._balanceLoaded = false;
+    Game._wagerInit = false;
     Game.commitment = {
         hash: null, userSecret: null, commitBlock: null, commitTxHash: null,
         revealDelay: Game.commitment.revealDelay || 5,
@@ -439,7 +392,7 @@ async function tryRecoverActiveGame() {
                     delete stored[gameId];
                     localStorage.setItem('fortune_pending_games', JSON.stringify(stored));
                     showToast('Previous game expired. Start a new one!', 'info');
-                    Game.phase = 'play';
+                    Game.phase = 'tier';
                     renderPhase();
                     return;
                 }
@@ -461,7 +414,7 @@ async function tryRecoverActiveGame() {
 
     // No localStorage data — inform user
     showToast('You have an active game but recovery data was lost. Wait ~50s for it to expire, then try again.', 'error');
-    Game.phase = 'play';
+    Game.phase = 'tier';
     renderPhase();
 }
 
@@ -519,7 +472,7 @@ function clearStuckGame() {
         }
     } catch {}
     // Reset game state
-    Game.phase = 'play';
+    Game.phase = 'tier';
     Game.gameId = null;
     Game.commitment = { hash: null, userSecret: null, commitBlock: null, commitTxHash: null, revealDelay: 5, waitStartTime: null, canReveal: false };
     autoRevealAttempt = 0;
@@ -535,116 +488,271 @@ function renderPhase() {
     if (!area) return;
 
     switch (Game.phase) {
-        case 'play': renderPlay(area); break;
+        case 'intro': renderIntro(area); break;
+        case 'tier': renderTierSelect(area); break;
+        case 'numbers': renderNumberStep(area); break;
+        case 'wager': renderWagerStep(area); break;
         case 'processing': renderProcessing(area); break;
         case 'waiting': renderWaiting(area); break;
         case 'result': renderResult(area); break;
-        default: renderPlay(area);
+        default: renderIntro(area);
     }
 }
 
-// updateTigerAnimation removed — no tiger image in mobile-optimized layout
+// ============================================================================
+// INTRO PHASE — Quick prize pool splash
+// ============================================================================
+function renderIntro(container) {
+    const prizeText = Game.poolData
+        ? formatBigNumber(Game.poolData.prizePool || 0n).toFixed(0) + ' BKC'
+        : '...';
+
+    container.innerHTML = `
+        <div id="intro-splash" class="flex flex-col items-center justify-center min-h-[65vh] text-center cursor-pointer">
+            <div class="text-7xl mb-5 intro-pop">🐯</div>
+            <p class="text-zinc-500 text-xs uppercase tracking-[0.3em] mb-2 intro-fade">Accumulated Prize</p>
+            <p class="text-4xl font-black text-amber-400 intro-fade intro-pulse" id="intro-prize">${prizeText}</p>
+            <p class="text-zinc-400 text-sm mt-3 intro-fade">Win up to <span class="text-amber-400 font-bold">${JACKPOT_MULTIPLIER}x</span> your bet</p>
+            <div class="mt-8 text-zinc-600 text-xs animate-pulse intro-fade">Tap to play</div>
+        </div>
+    `;
+
+    const advance = () => {
+        if (Game.phase !== 'intro') return;
+        Game.phase = 'tier';
+        renderPhase();
+    };
+
+    document.getElementById('intro-splash')?.addEventListener('click', advance);
+    setTimeout(advance, 2500);
+}
 
 // ============================================================================
-// PLAY PHASE — Difficulty tabs + number picker + wager
+// TIER SELECT PHASE — Step 1: Choose game mode
 // ============================================================================
-function renderPlay(container) {
+function renderTierSelect(container) {
+    container.innerHTML = `
+        <div class="space-y-3">
+            <div class="flex items-center justify-between px-1 mb-1">
+                <p class="text-white font-bold text-lg">Choose Your Game</p>
+                <span class="text-xs text-zinc-500">Step 1 of 3</span>
+            </div>
+
+            <div class="space-y-2.5">
+                ${TIERS.map(t => `
+                    <button class="tier-card w-full flex items-center gap-4 p-4 bg-gradient-to-r ${t.bgFrom} ${t.bgTo} border ${t.borderColor} rounded-2xl hover:scale-[1.02] active:scale-[0.98] transition-all text-left" data-mode="${t.name.toLowerCase()}">
+                        <div class="text-3xl flex-shrink-0">${t.emoji}</div>
+                        <div class="flex-1 min-w-0">
+                            <p class="${t.textColor} font-bold">${t.name}</p>
+                            <p class="text-zinc-400 text-xs">Pick 1–${t.range} &bull; ${t.chance} chance</p>
+                        </div>
+                        <div class="text-right flex-shrink-0">
+                            <p class="${t.textColor} font-black text-2xl">${t.multiplier}x</p>
+                        </div>
+                    </button>
+                `).join('')}
+
+                <button class="tier-card w-full flex items-center gap-4 p-4 bg-gradient-to-r from-violet-900/30 via-purple-900/20 to-violet-900/30 border border-violet-500/40 rounded-2xl hover:scale-[1.02] active:scale-[0.98] transition-all text-left" data-mode="combo">
+                    <div class="text-3xl flex-shrink-0">🎰</div>
+                    <div class="flex-1 min-w-0">
+                        <div class="flex items-center gap-2">
+                            <p class="text-violet-300 font-bold">Combo</p>
+                            <span class="px-1.5 py-0.5 bg-emerald-500/20 border border-emerald-500/40 rounded text-[9px] text-emerald-400 font-bold">BEST ODDS</span>
+                        </div>
+                        <p class="text-zinc-400 text-xs">All 3 tiers &bull; ~${COMBO_WIN_PCT}% chance</p>
+                    </div>
+                    <div class="text-right flex-shrink-0">
+                        <p class="text-violet-400 font-black text-2xl">${COMBO_MAX_MULTIPLIER}x</p>
+                    </div>
+                </button>
+            </div>
+
+            <div class="text-center pt-1">
+                <a href="${EXPLORER_ADDRESS}${FORTUNE_POOL_ADDRESS}" target="_blank" rel="noopener"
+                   class="inline-flex items-center gap-1.5 text-zinc-600 text-xs hover:text-zinc-400 transition-colors">
+                    <i class="fa-solid fa-file-contract text-[10px]"></i> Verify Contract
+                </a>
+            </div>
+        </div>
+    `;
+
+    container.querySelectorAll('.tier-card').forEach(card => {
+        card.addEventListener('click', () => {
+            const mode = card.dataset.mode;
+            Game.mode = mode;
+            if (mode === 'combo') {
+                Game.comboStep = 0;
+                Game.guess = Game.guesses[0];
+            } else {
+                const cfg = getModeConfig(mode);
+                Game.guess = Math.min(Game.guess, cfg.tiers[0].range);
+            }
+            Game.phase = 'numbers';
+            renderPhase();
+        });
+    });
+}
+
+// ============================================================================
+// NUMBER STEP PHASE — Step 2: Pick your number(s)
+// ============================================================================
+function renderNumberStep(container) {
+    const isCombo = Game.mode === 'combo';
+    const tier = isCombo ? TIERS[Game.comboStep] : getModeConfig(Game.mode).tiers[0];
+
+    // Sync guess for combo mode
+    if (isCombo) Game.guess = Game.guesses[Game.comboStep];
+
+    container.innerHTML = `
+        <div class="space-y-3">
+            <div class="flex items-center justify-between px-1">
+                <button id="btn-back-tier" class="flex items-center gap-1.5 text-zinc-400 hover:text-white transition-colors text-sm">
+                    <i class="fa-solid fa-arrow-left text-xs"></i> Back
+                </button>
+                <span class="text-xs text-zinc-500">Step 2 of 3</span>
+            </div>
+
+            <div class="text-center">
+                <p class="text-white font-bold text-lg">${isCombo ? 'Pick Numbers' : 'Pick a Number'}</p>
+                <p class="text-zinc-400 text-xs">${isCombo
+                    ? `${tier.emoji} ${tier.name} (1–${tier.range}) &bull; ${tier.chance} &bull; ${tier.multiplier}x`
+                    : `${tier.emoji} ${tier.name}: 1–${tier.range} &bull; ${tier.chance} chance &bull; ${tier.multiplier}x`}</p>
+            </div>
+
+            ${isCombo ? `
+                <div class="flex items-center justify-center gap-2">
+                    ${TIERS.map((t, i) => `
+                        <div class="w-9 h-9 rounded-full flex items-center justify-center text-sm ${i === Game.comboStep
+                            ? `bg-gradient-to-br ${t.bgFrom} ${t.bgTo} border-2 ${t.borderColor}`
+                            : i < Game.comboStep
+                                ? 'bg-emerald-500/20 border-2 border-emerald-500/50'
+                                : 'bg-zinc-800 border-2 border-zinc-700'}">
+                            ${i < Game.comboStep
+                                ? '<i class="fa-solid fa-check text-emerald-400 text-xs"></i>'
+                                : `<span class="${i === Game.comboStep ? t.textColor : 'text-zinc-500'} font-bold">${t.emoji}</span>`}
+                        </div>
+                    `).join('<div class="w-4 h-px bg-zinc-700"></div>')}
+                </div>
+            ` : ''}
+
+            <div class="bg-gradient-to-br ${tier.bgFrom} ${tier.bgTo} border ${tier.borderColor} rounded-2xl p-5">
+                <div id="number-picker"></div>
+            </div>
+
+            ${isCombo ? `
+                <div class="flex gap-2">
+                    <button id="btn-combo-prev" class="flex-1 py-3 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-bold rounded-xl transition-colors text-sm ${Game.comboStep === 0 ? 'opacity-30 pointer-events-none' : ''}">
+                        <i class="fa-solid fa-arrow-left mr-1"></i>Prev
+                    </button>
+                    <button id="btn-combo-next" class="flex-1 py-3 bg-gradient-to-r from-amber-500 to-orange-500 text-black font-bold rounded-xl transition-all text-sm">
+                        ${Game.comboStep < 2 ? 'Next <i class="fa-solid fa-arrow-right ml-1"></i>' : 'Set Wager <i class="fa-solid fa-arrow-right ml-1"></i>'}
+                    </button>
+                </div>
+            ` : `
+                <button id="btn-next-wager" class="w-full py-3.5 bg-gradient-to-r from-amber-500 to-orange-500 text-black font-bold rounded-xl transition-all text-base">
+                    Next — Set Wager <i class="fa-solid fa-arrow-right ml-1"></i>
+                </button>
+            `}
+        </div>
+    `;
+
+    renderNumberPicker(tier);
+
+    // Events
+    document.getElementById('btn-back-tier')?.addEventListener('click', () => {
+        if (isCombo) Game.guesses[Game.comboStep] = Game.guess;
+        Game.phase = 'tier';
+        renderPhase();
+    });
+
+    document.getElementById('btn-next-wager')?.addEventListener('click', () => {
+        Game.phase = 'wager';
+        renderPhase();
+    });
+
+    document.getElementById('btn-combo-prev')?.addEventListener('click', () => {
+        if (Game.comboStep > 0) {
+            Game.guesses[Game.comboStep] = Game.guess;
+            Game.comboStep--;
+            Game.guess = Game.guesses[Game.comboStep];
+            renderPhase();
+        }
+    });
+
+    document.getElementById('btn-combo-next')?.addEventListener('click', () => {
+        Game.guesses[Game.comboStep] = Game.guess;
+        if (Game.comboStep < 2) {
+            Game.comboStep++;
+            Game.guess = Game.guesses[Game.comboStep];
+            renderPhase();
+        } else {
+            Game.phase = 'wager';
+            renderPhase();
+        }
+    });
+}
+
+// ============================================================================
+// WAGER STEP PHASE — Step 3: Set wager + play
+// ============================================================================
+function renderWagerStep(container) {
+    const cfg = getModeConfig(Game.mode);
+    const isCombo = Game.mode === 'combo';
     const balanceNum = formatBigNumber(State.currentUserBalance || 0n);
     const hasBalance = balanceNum >= 1;
     const canPlay = hasBalance && State.isConnected;
-    const cfg = getModeConfig(Game.mode);
-    const isCombo = Game.mode === 'combo';
-    const tier = isCombo ? null : cfg.tiers[0];
 
-    // Default wager to 50% of balance (induce bigger bets)
+    // Save last combo guess
+    if (isCombo) Game.guesses[Game.comboStep] = Game.guess;
+
+    // Default wager to 50% of balance
     if (!Game._wagerInit && balanceNum >= 2) {
         Game.wager = Math.max(10, Math.floor(balanceNum / 2));
         Game._wagerInit = true;
     }
     if (Game.wager > balanceNum && balanceNum > 0) Game.wager = Math.floor(balanceNum);
 
-    // Cumulative win probabilities
-    const winRate = isCombo ? COMBO_WIN_CHANCE : (1 / cfg.tiers[0].range);
-    const pct1 = (winRate * 100).toFixed(0);
-    const pct3 = ((1 - Math.pow(1 - winRate, 3)) * 100).toFixed(0);
-    const pct5 = ((1 - Math.pow(1 - winRate, 5)) * 100).toFixed(0);
-
-    // Wager presets — % of balance
     const half = Math.max(1, Math.floor(balanceNum / 2));
     const quarter = Math.max(1, Math.floor(balanceNum / 4));
     const tenth = Math.max(1, Math.floor(balanceNum / 10));
     const maxBal = Math.max(1, Math.floor(balanceNum));
+    const picks = isCombo ? Game.guesses : [Game.guess];
+    const tiersToShow = cfg.tiers;
 
     container.innerHTML = `
         <div class="space-y-3">
-            <!-- Difficulty Tabs -->
-            <div class="grid grid-cols-3 gap-1 bg-zinc-900/60 border border-zinc-800/50 rounded-xl p-1">
-                ${['easy', 'medium', 'hard'].map(mode => {
-                    const t = TIERS[mode === 'easy' ? 0 : mode === 'medium' ? 1 : 2];
-                    const active = Game.mode === mode;
-                    return `
-                        <button class="mode-tab py-2 rounded-lg text-center transition-all ${active ?
-                            `bg-gradient-to-br ${t.bgFrom} ${t.bgTo} border ${t.borderColor} shadow-lg` :
-                            'hover:bg-zinc-800/50 border border-transparent'}" data-mode="${mode}">
-                            <p class="text-sm font-bold ${active ? t.textColor : 'text-zinc-500'}">${t.emoji} ${t.name}</p>
-                            <p class="text-[10px] ${active ? t.textColor + ' opacity-80' : 'text-zinc-600'}">${t.multiplier}x &bull; ${t.chance}</p>
-                        </button>
-                    `;
-                }).join('')}
+            <div class="flex items-center justify-between px-1">
+                <button id="btn-back-numbers" class="flex items-center gap-1.5 text-zinc-400 hover:text-white transition-colors text-sm">
+                    <i class="fa-solid fa-arrow-left text-xs"></i> Back
+                </button>
+                <span class="text-xs text-zinc-500">Step 3 of 3</span>
             </div>
 
-            ${!isCombo ? `
-                <!-- Number Picker -->
-                <div class="bg-gradient-to-br ${tier.bgFrom} ${tier.bgTo} border ${tier.borderColor} rounded-2xl p-5">
-                    <div class="text-center mb-4">
-                        <p class="${tier.textColor} font-bold text-lg mb-1">Pick a Number <span class="text-sm opacity-70">(1-${tier.range})</span></p>
-                        <div class="inline-flex items-center gap-2 px-3 py-1.5 bg-black/20 rounded-full">
-                            <span class="text-sm ${tier.textColor} font-black">${tier.multiplier}x</span>
-                            <span class="text-zinc-500 text-xs">&bull;</span>
-                            <span class="text-sm ${tier.textColor}">${tier.chance} chance</span>
+            <!-- Summary of picks -->
+            <div class="flex items-center justify-center gap-3 py-2">
+                ${tiersToShow.map((t, i) => `
+                    <div class="text-center">
+                        <p class="text-[10px] ${t.textColor} mb-1">${t.emoji}</p>
+                        <div class="w-10 h-10 rounded-lg bg-gradient-to-br ${t.bgFrom} ${t.bgTo} border ${t.borderColor} flex items-center justify-center">
+                            <span class="text-base font-black ${t.textColor}">${picks[i]}</span>
                         </div>
                     </div>
-                    <div id="number-picker"></div>
-                </div>
-            ` : `
-                <!-- Combo Mode -->
-                <div class="bg-gradient-to-br from-violet-900/20 to-zinc-900 border border-violet-500/30 rounded-2xl p-5">
-                    <div class="text-center mb-3">
-                        <p class="text-violet-400 font-bold text-lg mb-1">Combo &mdash; All 3 Tiers</p>
-                        <p class="text-zinc-400 text-xs">Pick one number per tier &bull; up to <span class="text-violet-400 font-black">${COMBO_MAX_MULTIPLIER}x</span></p>
-                        <div class="mt-2 p-2 bg-emerald-500/10 rounded-lg border border-emerald-500/20">
-                            <p class="text-sm text-emerald-400 font-bold mb-1">~${COMBO_WIN_PCT}% chance of winning</p>
-                            <p class="text-[10px] text-emerald-300/70">
-                                ${COMBO_BOOST_VS_EASY}% more chance than Easy &bull; Match any tier to win!
-                            </p>
-                        </div>
-                        <div class="mt-2 flex justify-center gap-3">
-                            ${TIERS.map(t => `
-                                <div class="text-center">
-                                    <span class="text-xs">${t.emoji}</span>
-                                    <p class="text-[9px] ${t.textColor}">${t.multiplier}x</p>
-                                    <p class="text-[8px] text-zinc-500">${t.chance}</p>
-                                </div>
-                            `).join('')}
-                        </div>
-                    </div>
-                    <div id="picker-area"></div>
-                </div>
-            `}
+                `).join('')}
+            </div>
 
-            <!-- Wager + Play -->
-            <div class="bg-zinc-900/60 border border-zinc-800/50 rounded-2xl p-3">
+            <!-- Wager controls -->
+            <div class="bg-zinc-900/60 border border-zinc-800/50 rounded-2xl p-4">
                 <div class="flex items-center justify-between mb-2">
-                    <label class="text-sm text-zinc-400"><i class="fa-solid fa-coins text-amber-400 mr-1.5"></i>Wager</label>
-                    <span class="text-xs text-zinc-500">Bal: <span id="wager-balance" class="text-amber-400 font-bold">${balanceNum.toFixed(0)}</span> BKC</span>
+                    <label class="text-sm text-zinc-400 font-bold"><i class="fa-solid fa-coins text-amber-400 mr-1.5"></i>Wager</label>
+                    <span class="text-xs text-zinc-500">Bal: <span class="text-amber-400 font-bold">${balanceNum.toFixed(0)}</span> BKC</span>
                 </div>
 
-                <div class="flex items-center justify-center gap-2 mb-2">
-                    <button id="wager-minus" class="w-9 h-9 rounded-lg bg-zinc-800 hover:bg-red-500/20 border border-zinc-700 text-zinc-400 hover:text-red-400 font-bold text-lg transition-all">&minus;</button>
+                <div class="flex items-center justify-center gap-2 mb-3">
+                    <button id="wager-minus" class="w-10 h-10 rounded-lg bg-zinc-800 hover:bg-red-500/20 border border-zinc-700 text-zinc-400 hover:text-red-400 font-bold text-lg transition-all">&minus;</button>
                     <input type="number" id="custom-wager" value="${Game.wager}" min="1" max="${maxBal}"
-                        class="w-24 h-12 text-center text-2xl font-black rounded-lg bg-zinc-900/80 border-2 border-amber-500/50 text-amber-400 focus:outline-none focus:border-amber-400 appearance-none"
+                        class="w-28 h-14 text-center text-3xl font-black rounded-xl bg-zinc-900/80 border-2 border-amber-500/50 text-amber-400 focus:outline-none focus:border-amber-400 appearance-none"
                         style="-moz-appearance: textfield;">
-                    <button id="wager-plus" class="w-9 h-9 rounded-lg bg-zinc-800 hover:bg-emerald-500/20 border border-zinc-700 text-zinc-400 hover:text-emerald-400 font-bold text-lg transition-all">+</button>
+                    <button id="wager-plus" class="w-10 h-10 rounded-lg bg-zinc-800 hover:bg-emerald-500/20 border border-zinc-700 text-zinc-400 hover:text-emerald-400 font-bold text-lg transition-all">+</button>
                 </div>
 
                 <div class="grid grid-cols-4 gap-1.5 mb-3">
@@ -663,90 +771,26 @@ function renderPlay(container) {
                     `).join('')}
                 </div>
 
-                <div class="flex items-center justify-between mb-2 px-1">
-                    <p class="text-emerald-400 font-black text-lg" id="potential-win">${(Game.wager * cfg.multi).toLocaleString()} BKC</p>
-                    <p class="text-[10px] text-zinc-500">potential win</p>
+                <div class="bg-emerald-500/10 rounded-xl p-3 mb-3 border border-emerald-500/20 text-center">
+                    <p class="text-zinc-500 text-[10px] uppercase mb-1">Potential Win</p>
+                    <p class="text-emerald-400 font-black text-2xl" id="potential-win">${(Game.wager * cfg.multi).toLocaleString()} BKC</p>
                 </div>
 
-                <!-- Win Probability Stats -->
-                <div class="bg-emerald-500/5 rounded-xl p-3 mb-3 border border-emerald-500/10">
-                    <div class="grid grid-cols-3 gap-2 text-center">
-                        <div>
-                            <p class="text-emerald-400 font-black text-lg">${pct1}%</p>
-                            <p class="text-[9px] text-zinc-500">1 game</p>
-                        </div>
-                        <div class="border-x border-zinc-800">
-                            <p class="text-emerald-400 font-black text-lg">${pct3}%</p>
-                            <p class="text-[9px] text-zinc-500">in 3 games</p>
-                        </div>
-                        <div>
-                            <p class="text-emerald-400 font-black text-lg">${pct5}%</p>
-                            <p class="text-[9px] text-zinc-500">in 5 games</p>
-                        </div>
-                    </div>
-                    <p class="text-[10px] text-emerald-400/60 text-center mt-1.5">
-                        <i class="fa-solid fa-chart-line mr-1"></i>
-                        Chance of winning at least once
-                    </p>
-                </div>
-
-                <button id="btn-play" class="w-full py-3.5 bg-gradient-to-r from-emerald-500 to-green-500 hover:from-emerald-400 hover:to-green-400 text-white font-bold rounded-xl transition-all text-lg ${!canPlay ? 'opacity-40 cursor-not-allowed' : ''}" ${!canPlay ? 'disabled' : ''}>
+                <button id="btn-play" class="w-full py-4 bg-gradient-to-r from-emerald-500 to-green-500 hover:from-emerald-400 hover:to-green-400 text-white font-bold rounded-xl transition-all text-lg ${!canPlay ? 'opacity-40 cursor-not-allowed' : ''}" ${!canPlay ? 'disabled' : ''}>
                     <i class="fa-solid fa-play mr-2"></i>Play &mdash; ${Game.wager.toLocaleString()} BKC
                 </button>
 
                 ${!State.isConnected ? '<p class="text-center text-zinc-500 text-xs mt-2">Connect wallet to play</p>' : ''}
                 ${State.isConnected && !hasBalance ? `
-                    <button id="btn-faucet" class="w-full mt-2 py-2 bg-amber-500/10 border border-amber-500/30 rounded-lg text-amber-400 text-sm font-bold hover:bg-amber-500/20 transition-colors">
+                    <button id="btn-faucet" class="w-full mt-2 py-2.5 bg-amber-500/10 border border-amber-500/30 rounded-lg text-amber-400 text-sm font-bold hover:bg-amber-500/20 transition-colors">
                         <i class="fa-solid fa-faucet mr-1"></i>Get Test Tokens
                     </button>
                 ` : ''}
             </div>
-
-            <!-- Combo Banner -->
-            ${!isCombo ? `
-                <div id="toggle-combo" class="cursor-pointer w-full bg-gradient-to-r from-violet-900/30 via-purple-900/20 to-violet-900/30 border border-violet-500/40 rounded-2xl p-4 hover:border-violet-400/60 hover:shadow-lg hover:shadow-violet-500/10 transition-all glow-pulse" style="--glow-color: rgba(139,92,246,0.15)">
-                    <div class="flex items-center gap-3 mb-2">
-                        <div class="w-11 h-11 rounded-xl bg-gradient-to-br from-violet-500/30 to-purple-600/20 border border-violet-500/40 flex items-center justify-center flex-shrink-0">
-                            <span class="text-2xl">🎰</span>
-                        </div>
-                        <div class="flex-1">
-                            <div class="flex items-center gap-2">
-                                <p class="text-violet-300 font-bold text-sm">Combo Mode</p>
-                                <span class="px-1.5 py-0.5 bg-emerald-500/20 border border-emerald-500/40 rounded text-[9px] text-emerald-400 font-bold">+${COMBO_BOOST_VS_EASY}% CHANCE</span>
-                            </div>
-                            <p class="text-violet-400/60 text-xs mt-0.5">Play all 3 tiers at once &bull; ~${COMBO_WIN_PCT}% win chance</p>
-                        </div>
-                        <div class="text-right flex-shrink-0">
-                            <p class="text-violet-400 font-black text-xl">${COMBO_MAX_MULTIPLIER}x</p>
-                            <p class="text-violet-400/50 text-[9px]">multiplier</p>
-                        </div>
-                    </div>
-                    <div class="flex items-center gap-2 mt-1">
-                        <div class="flex-1 h-px bg-gradient-to-r from-transparent via-violet-500/30 to-transparent"></div>
-                        <p class="text-[10px] text-violet-400/70 flex-shrink-0">
-                            <i class="fa-solid fa-arrow-up text-emerald-400 mr-1"></i>
-                            ${COMBO_BOOST_VS_EASY}% more chance than Easy alone
-                        </p>
-                        <div class="flex-1 h-px bg-gradient-to-r from-transparent via-violet-500/30 to-transparent"></div>
-                    </div>
-                </div>
-            ` : `
-                <button id="toggle-combo" class="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-zinc-900/40 border border-zinc-800/40 rounded-xl text-zinc-500 hover:text-zinc-300 transition-colors text-sm">
-                    <i class="fa-solid fa-arrow-left text-xs"></i>
-                    <span>Back to single tier</span>
-                </button>
-            `}
         </div>
     `;
 
-    // Render mode-specific pickers
-    if (isCombo) {
-        renderPickerInline();
-    } else {
-        renderNumberPicker(tier);
-    }
-
-    setupPlayEvents(cfg.multi, balanceNum);
+    setupWagerEvents(cfg.multi, balanceNum);
 }
 
 // ============================================================================
@@ -869,201 +913,19 @@ function renderNumberPicker(tier) {
     });
 }
 
-// Re-render combo picker (called by step navigation)
-function renderPickerInline() {
-    const area = document.getElementById('picker-area');
-    if (!area) return;
-    renderComboPickerInline(area);
-}
-
-function renderComboPickerInline(container) {
-    const tier = TIERS[Game.comboStep];
-    const current = Game.guesses[Game.comboStep];
-
-    container.innerHTML = `
-        <!-- Step Progress -->
-        <div class="flex justify-center gap-2 mb-4">
-            ${TIERS.map((t, i) => {
-                const isActive = i === Game.comboStep;
-                const isDone = i < Game.comboStep;
-                return `
-                    <button class="combo-step-btn flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border transition-all ${isActive ? `bg-gradient-to-br ${t.bgFrom} ${t.bgTo} ${t.borderColor}` : isDone ? 'bg-emerald-500/10 border-emerald-500/50 cursor-pointer hover:bg-emerald-500/20' : 'bg-zinc-800/50 border-zinc-700/50'}" data-step="${i}">
-                        <span class="text-lg">${isDone ? '✓' : t.emoji}</span>
-                        <div class="text-left">
-                            <p class="text-[10px] font-bold ${isActive ? t.textColor : isDone ? 'text-emerald-400' : 'text-zinc-500'}">${t.name}</p>
-                            <p class="text-[8px] ${isDone ? 'text-emerald-400 font-bold' : 'text-zinc-600'}">${isDone ? Game.guesses[i] : t.multiplier + 'x'}</p>
-                        </div>
-                    </button>
-                `;
-            }).join('')}
-        </div>
-
-        <div class="text-center mb-3">
-            <p class="text-zinc-400 text-xs">Pick <span class="text-white font-bold">1-${tier.range}</span> &bull; <span class="text-emerald-400">${tier.chance}</span> &bull; <span class="${tier.textColor} font-bold">${tier.multiplier}x</span></p>
-        </div>
-
-        <div id="combo-picker-content"></div>
-
-        <!-- Navigation -->
-        <div class="flex gap-2 mt-3">
-            <button id="combo-prev" class="flex-1 py-2.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-bold rounded-xl transition-colors text-sm">
-                <i class="fa-solid fa-arrow-left mr-1"></i>${Game.comboStep > 0 ? 'Prev' : ''}
-            </button>
-            <button id="combo-next" class="flex-1 py-2.5 ${Game.comboStep < 2 ? `bg-gradient-to-r ${tier.bgFrom.replace('/20', '/40')} ${tier.bgTo.replace('/10', '/30')} border ${tier.borderColor} ${tier.textColor}` : 'bg-gradient-to-r from-emerald-500 to-green-600 border border-emerald-400 text-white'} font-bold rounded-xl transition-all text-sm">
-                ${Game.comboStep < 2 ? 'Next <i class="fa-solid fa-arrow-right ml-1"></i>' : `<i class="fa-solid fa-play mr-1"></i>Play — ${Game.wager.toLocaleString()} BKC`}
-            </button>
-        </div>
-    `;
-
-    // Render the picker content for this tier
-    const pickerContent = document.getElementById('combo-picker-content');
-    if (!pickerContent) return;
-
-    if (tier.range <= 15) {
-        // Grid buttons for Easy/Medium
-        pickerContent.innerHTML = `
-            <div class="flex justify-center gap-2 flex-wrap">
-                ${Array.from({length: tier.range}, (_, i) => i + 1).map(n => `
-                    <button class="num-btn w-11 h-11 rounded-xl font-bold text-base transition-all ${n === current ? `bg-gradient-to-br ${tier.bgFrom} ${tier.bgTo} border-2 ${tier.borderColor} ${tier.textColor}` : 'bg-zinc-800/60 border border-zinc-700/50 text-zinc-400 hover:border-zinc-600'}" data-num="${n}">
-                        ${n}
-                    </button>
-                `).join('')}
-            </div>
-        `;
-
-        pickerContent.querySelectorAll('.num-btn').forEach(btn => {
-            btn.addEventListener('click', () => {
-                const num = parseInt(btn.dataset.num);
-                Game.guesses[Game.comboStep] = num;
-                pickerContent.querySelectorAll('.num-btn').forEach(b => {
-                    const n = parseInt(b.dataset.num);
-                    b.className = `num-btn w-11 h-11 rounded-xl font-bold text-base transition-all ${n === num ? `bg-gradient-to-br ${tier.bgFrom} ${tier.bgTo} border-2 ${tier.borderColor} ${tier.textColor}` : 'bg-zinc-800/60 border border-zinc-700/50 text-zinc-400 hover:border-zinc-600'}`;
-                });
-            });
-        });
-    } else {
-        // Slider for Hard tier
-        pickerContent.innerHTML = `
-            <div class="flex items-center justify-center gap-3 mb-3">
-                <button class="ch-minus w-9 h-9 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white font-bold text-lg transition-all border border-zinc-700">−</button>
-                <input type="number" id="combo-input" min="1" max="${tier.range}" value="${current}"
-                    class="w-20 h-20 text-center text-3xl font-black rounded-2xl bg-amber-500 border-2 border-amber-400 text-zinc-900 focus:outline-none focus:ring-2 focus:ring-amber-300 appearance-none shadow-lg shadow-amber-500/30"
-                    style="-moz-appearance: textfield;">
-                <button class="ch-plus w-9 h-9 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white font-bold text-lg transition-all border border-zinc-700">+</button>
-            </div>
-            <div class="mb-2 px-1">
-                <input type="range" id="combo-slider" min="1" max="${tier.range}" value="${current}"
-                    class="fortune-slider w-full h-3 rounded-full appearance-none cursor-pointer"
-                    style="background: linear-gradient(to right, ${tier.hex} 0%, ${tier.hex} ${(current / tier.range) * 100}%, #27272a ${(current / tier.range) * 100}%, #27272a 100%)">
-            </div>
-            <div class="flex justify-center gap-1.5 flex-wrap">
-                ${[7, 50, 99, 137].map(n => `
-                    <button class="ch-quick px-2 py-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white text-xs rounded-lg transition-all" data-num="${n}">${n}</button>
-                `).join('')}
-                <button class="ch-random px-2 py-1 bg-amber-500/20 hover:bg-amber-500/30 text-amber-400 text-xs rounded-lg border border-amber-500/30 transition-all">
-                    <i class="fa-solid fa-dice mr-1"></i>Random
-                </button>
-            </div>
-        `;
-
-        const input = document.getElementById('combo-input');
-        const slider = document.getElementById('combo-slider');
-
-        const updateVal = (val) => {
-            val = Math.max(1, Math.min(tier.range, val));
-            Game.guesses[Game.comboStep] = val;
-            if (input) input.value = val;
-            if (slider) {
-                slider.value = val;
-                const pct = (val / tier.range) * 100;
-                slider.style.background = `linear-gradient(to right, ${tier.hex} 0%, ${tier.hex} ${pct}%, #27272a ${pct}%, #27272a 100%)`;
-            }
-        };
-
-        input?.addEventListener('input', (e) => updateVal(parseInt(e.target.value) || 1));
-        input?.addEventListener('blur', (e) => updateVal(parseInt(e.target.value) || 1));
-        slider?.addEventListener('input', (e) => updateVal(parseInt(e.target.value)));
-        pickerContent.querySelector('.ch-minus')?.addEventListener('click', () => updateVal(Game.guesses[Game.comboStep] - 1));
-        pickerContent.querySelector('.ch-plus')?.addEventListener('click', () => updateVal(Game.guesses[Game.comboStep] + 1));
-        pickerContent.querySelectorAll('.ch-quick').forEach(btn => {
-            btn.addEventListener('click', () => updateVal(parseInt(btn.dataset.num)));
-        });
-        pickerContent.querySelector('.ch-random')?.addEventListener('click', () => {
-            updateVal(Math.floor(Math.random() * tier.range) + 1);
-        });
-    }
-
-    // Step navigation (click on step pills to go back)
-    container.querySelectorAll('.combo-step-btn').forEach(btn => {
-        btn.addEventListener('click', () => {
-            const step = parseInt(btn.dataset.step);
-            if (step < Game.comboStep) {
-                Game.comboStep = step;
-                renderPickerInline();
-            }
-        });
-    });
-
-    // Prev/Next buttons
-    document.getElementById('combo-prev')?.addEventListener('click', () => {
-        if (Game.comboStep > 0) {
-            Game.comboStep--;
-            renderPickerInline();
-        }
-    });
-
-    document.getElementById('combo-next')?.addEventListener('click', () => {
-        if (Game.comboStep < 2) {
-            Game.comboStep++;
-            renderPickerInline();
-        } else {
-            commitGame();
-        }
-    });
-}
-
 // ============================================================================
-// PLAY EVENTS
+// WAGER EVENTS
 // ============================================================================
-function setupPlayEvents(maxMulti, balanceNum) {
-    // Difficulty tab switching
-    document.querySelectorAll('.mode-tab').forEach(btn => {
-        btn.addEventListener('click', () => {
-            const newMode = btn.dataset.mode;
-            if (Game.mode !== newMode) {
-                Game.mode = newMode;
-                const newCfg = getModeConfig(newMode);
-                Game.guess = Math.min(Game.guess, newCfg.tiers[0].range);
-                renderPhase();
-            }
-        });
-    });
-
-    // Combo toggle
-    document.getElementById('toggle-combo')?.addEventListener('click', () => {
-        if (Game.mode === 'combo') {
-            Game.mode = 'easy';
-        } else {
-            Game.mode = 'combo';
-            Game.comboStep = 0;
-        }
-        renderPhase();
-    });
-
-    // Wager controls
+function setupWagerEvents(maxMulti, balanceNum) {
     const updateWager = (amount) => {
-        const multi = getModeConfig(Game.mode).multi;
         Game.wager = Math.max(1, Math.min(Math.floor(amount), Math.floor(balanceNum)));
 
         const customInput = document.getElementById('custom-wager');
         const potentialWin = document.getElementById('potential-win');
         const playBtn = document.getElementById('btn-play');
         if (customInput) customInput.value = Game.wager;
-        if (potentialWin) potentialWin.textContent = (Game.wager * multi).toLocaleString() + ' BKC';
-        if (playBtn) {
-            const btnText = playBtn.querySelector('i') ? '' : '';
-            playBtn.innerHTML = `<i class="fa-solid fa-play mr-2"></i>Play — ${Game.wager.toLocaleString()} BKC`;
-        }
+        if (potentialWin) potentialWin.textContent = (Game.wager * maxMulti).toLocaleString() + ' BKC';
+        if (playBtn) playBtn.innerHTML = `<i class="fa-solid fa-play mr-2"></i>Play &mdash; ${Game.wager.toLocaleString()} BKC`;
 
         document.querySelectorAll('.wager-btn').forEach(btn => {
             const val = parseInt(btn.dataset.value);
@@ -1078,6 +940,13 @@ function setupPlayEvents(maxMulti, balanceNum) {
     document.getElementById('custom-wager')?.addEventListener('input', (e) => updateWager(parseInt(e.target.value) || 1));
     document.getElementById('wager-minus')?.addEventListener('click', () => updateWager(Game.wager - 1));
     document.getElementById('wager-plus')?.addEventListener('click', () => updateWager(Game.wager + 1));
+
+    // Back to numbers
+    document.getElementById('btn-back-numbers')?.addEventListener('click', () => {
+        if (Game.mode === 'combo') Game.comboStep = 2;
+        Game.phase = 'numbers';
+        renderPhase();
+    });
 
     // Faucet (100% gasless via API)
     document.getElementById('btn-faucet')?.addEventListener('click', async () => {
@@ -1098,23 +967,7 @@ function setupPlayEvents(maxMulti, balanceNum) {
         }
     });
 
-    // Quick Play — random numbers + commit immediately
-    document.getElementById('btn-quick-play')?.addEventListener('click', () => {
-        if (!State.isConnected) return showToast('Connect wallet first', 'warning');
-        if (Game.wager < 1) return showToast('Min: 1 BKC', 'warning');
-
-        // Randomize numbers based on mode
-        if (Game.mode === 'combo') {
-            Game.guesses = TIERS.map(t => Math.floor(Math.random() * t.range) + 1);
-        } else {
-            const cfg = getModeConfig(Game.mode);
-            Game.guess = Math.floor(Math.random() * cfg.tiers[0].range) + 1;
-        }
-
-        commitGame();
-    });
-
-    // Play Now
+    // Play
     document.getElementById('btn-play')?.addEventListener('click', () => {
         if (!State.isConnected) return showToast('Connect wallet first', 'warning');
         if (Game.wager < 1) return showToast('Min: 1 BKC', 'warning');
@@ -1175,7 +1028,7 @@ async function commitGame() {
                     }
                     showToast(msg || 'Commit failed', 'error');
                 }
-                Game.phase = 'play';
+                Game.phase = 'wager';
                 renderPhase();
             }
         });
@@ -1188,7 +1041,7 @@ async function commitGame() {
             return;
         }
         showToast('Error: ' + (msg || 'Transaction failed'), 'error');
-        Game.phase = 'play';
+        Game.phase = 'wager';
         renderPhase();
     }
 }
@@ -1889,6 +1742,26 @@ function renderResult(container) {
             <button id="btn-new-game" class="w-full py-3 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-black font-bold rounded-xl transition-all">
                 <i class="fa-solid fa-paw mr-2"></i>Play Again
             </button>
+            <button id="btn-change-game" class="w-full mt-2 py-2 text-zinc-500 hover:text-zinc-300 text-sm transition-colors">
+                <i class="fa-solid fa-shuffle mr-1"></i>Change Game Mode
+            </button>
+        </div>
+
+        <!-- History -->
+        <div class="mt-3 bg-zinc-900/50 border border-zinc-800/50 rounded-2xl overflow-hidden">
+            <div class="flex items-center justify-between p-3 border-b border-zinc-800/50">
+                <span class="text-sm font-bold text-white flex items-center gap-2">
+                    <i class="fa-solid fa-clock-rotate-left text-orange-500 text-xs"></i>
+                    Recent Games
+                </span>
+                <span id="win-rate" class="text-xs text-zinc-500"></span>
+            </div>
+            <div id="history-list" class="max-h-[200px] overflow-y-auto p-2">
+                <div class="p-3 text-center text-zinc-600 text-sm">
+                    <i class="fa-solid fa-spinner fa-spin text-zinc-600 mb-1"></i>
+                    <p class="text-xs">Loading...</p>
+                </div>
+            </div>
         </div>
     `;
 
@@ -1932,7 +1805,16 @@ function renderResult(container) {
 
     // Event listeners
     document.getElementById('btn-new-game')?.addEventListener('click', () => {
-        Game.phase = 'play';
+        Game.phase = 'wager';
+        Game.result = null;
+        Game.txHash = null;
+        Game.gameId = null;
+        renderPhase();
+        loadPoolData();
+    });
+
+    document.getElementById('btn-change-game')?.addEventListener('click', () => {
+        Game.phase = 'tier';
         Game.result = null;
         Game.txHash = null;
         Game.gameId = null;
@@ -2240,22 +2122,19 @@ async function loadPoolData() {
     try {
         const status = await getFortunePoolStatus();
         if (status) {
-            const poolEl = document.getElementById('prize-pool');
-            const gamesEl = document.getElementById('total-games');
-            if (poolEl) poolEl.textContent = formatBigNumber(status.prizePool || 0n).toFixed(2) + ' BKC';
-            if (gamesEl) gamesEl.textContent = (status.gameCounter || 0).toLocaleString();
+            Game.poolData = status;
+
+            // Update intro prize if still showing
+            const introEl = document.getElementById('intro-prize');
+            if (introEl && Game.phase === 'intro') {
+                introEl.textContent = formatBigNumber(status.prizePool || 0n).toFixed(0) + ' BKC';
+            }
         }
 
-        const balanceEl = document.getElementById('user-balance');
         const balNum = formatBigNumber(State.currentUserBalance || 0n);
-        if (balanceEl) balanceEl.textContent = balNum.toFixed(2) + ' BKC';
 
-        // Update wager section balance
-        const wagerBalEl = document.getElementById('wager-balance');
-        if (wagerBalEl) wagerBalEl.textContent = balNum.toFixed(0);
-
-        // Re-render play phase if balance was 0 and now loaded
-        if (balNum > 0 && Game.phase === 'play' && !Game._balanceLoaded) {
+        // Re-render wager phase if balance was 0 and now loaded
+        if (balNum > 0 && Game.phase === 'wager' && !Game._balanceLoaded) {
             Game._balanceLoaded = true;
             renderPhase();
         }
