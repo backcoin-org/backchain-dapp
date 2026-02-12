@@ -18,6 +18,7 @@ import { formatBigNumber } from '../utils.js';
 import { showToast, openModal, closeModal } from '../ui-feedback.js';
 import { addresses } from '../config.js';
 import { FortuneTx } from '../modules/transactions/index.js';
+import { calculateFeeClientSide } from '../modules/core/index.js';
 
 // ============================================================================
 // CONSTANTS
@@ -2229,15 +2230,24 @@ async function getFortunePoolStatus() {
             contract.TIER_COUNT().catch(() => 3)
         ]);
 
-        // V9: getRequiredFee(uint8 tierMask)
+        // V10: Calculate fees client-side (eth_call returns 0 because tx.gasprice=0)
+        const ethers = window.ethers;
         let feeSingle = 0n, feeAll = 0n, baseFee = 0n;
         try {
-            feeSingle = await contract.getRequiredFee(1);
-            feeAll = await contract.getRequiredFee(7);
+            const ACTION_IDS = [
+                ethers.id("FORTUNE_TIER0"),
+                ethers.id("FORTUNE_TIER1"),
+                ethers.id("FORTUNE_TIER2")
+            ];
+            feeSingle = await calculateFeeClientSide(ACTION_IDS[0]);
+            feeAll = 0n;
+            for (const id of ACTION_IDS) {
+                feeAll += await calculateFeeClientSide(id);
+            }
             baseFee = feeSingle;
             console.log(`Service fees: single=${Number(feeSingle)/1e18} ETH, all=${Number(feeAll)/1e18} ETH`);
         } catch (e) {
-            console.log("getRequiredFee failed:", e.message);
+            console.log("calculateFeeClientSide failed:", e.message);
         }
 
         Game.serviceFee = baseFee;

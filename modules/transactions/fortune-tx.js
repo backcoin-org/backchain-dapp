@@ -192,10 +192,18 @@ export async function commitPlay({
     let storedOperator = operator;
     let ethFee = 0n;
 
-    // Read fee from contract (includes fixed minimum per tier)
+    // Calculate fee client-side (eth_call returns 0 because tx.gasprice=0)
     try {
-        const readContract = await getFortuneContractReadOnly();
-        ethFee = await readContract.getRequiredFee(mask);
+        const ACTION_IDS = [
+            ethers.id("FORTUNE_TIER0"),
+            ethers.id("FORTUNE_TIER1"),
+            ethers.id("FORTUNE_TIER2")
+        ];
+        for (let i = 0; i < 3; i++) {
+            if (mask & (1 << i)) {
+                ethFee += await calculateFeeClientSide(ACTION_IDS[i]);
+            }
+        }
         console.log('[FortuneTx] ETH fee:', ethers.formatEther(ethFee));
     } catch (e) {
         console.error('[FortuneTx] Could not calculate ETH fee:', e.message);
@@ -451,10 +459,21 @@ export async function getTierById(tierId) {
  * V9: getRequiredFee(tierMask) replaces getRequiredServiceFee(bool)
  */
 export async function getServiceFee(tierMask = 1) {
+    const ethers = window.ethers;
     const mask = Number(tierMask);
     try {
-        const contract = await getFortuneContractReadOnly();
-        return await contract.getRequiredFee(mask);
+        const ACTION_IDS = [
+            ethers.id("FORTUNE_TIER0"),
+            ethers.id("FORTUNE_TIER1"),
+            ethers.id("FORTUNE_TIER2")
+        ];
+        let fee = 0n;
+        for (let i = 0; i < 3; i++) {
+            if (mask & (1 << i)) {
+                fee += await calculateFeeClientSide(ACTION_IDS[i]);
+            }
+        }
+        return fee;
     } catch {
         return 0n;
     }
