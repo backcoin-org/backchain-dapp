@@ -425,6 +425,7 @@ function cleanup() {
     }
     Game.phase = 'play';
     Game.result = null;
+    Game._balanceLoaded = false;
     Game.commitment = {
         hash: null, userSecret: null, commitBlock: null, commitTxHash: null,
         revealDelay: Game.commitment.revealDelay || 5,
@@ -690,7 +691,7 @@ function renderPlay(container) {
             <div class="bg-zinc-900/60 border border-zinc-800/50 rounded-2xl p-4">
                 <div class="flex items-center justify-between mb-2">
                     <label class="text-sm text-zinc-400"><i class="fa-solid fa-coins text-amber-400 mr-1.5"></i>Wager</label>
-                    <span class="text-xs text-zinc-500">Bal: <span class="text-amber-400 font-bold">${balanceNum.toFixed(0)}</span> BKC</span>
+                    <span class="text-xs text-zinc-500">Bal: <span id="wager-balance" class="text-amber-400 font-bold">${balanceNum.toFixed(0)}</span> BKC</span>
                 </div>
 
                 <div class="flex items-center justify-center gap-2 mb-2">
@@ -2303,7 +2304,18 @@ async function loadPoolData() {
         }
 
         const balanceEl = document.getElementById('user-balance');
-        if (balanceEl) balanceEl.textContent = formatBigNumber(State.currentUserBalance || 0n).toFixed(2) + ' BKC';
+        const balNum = formatBigNumber(State.currentUserBalance || 0n);
+        if (balanceEl) balanceEl.textContent = balNum.toFixed(2) + ' BKC';
+
+        // Update wager section balance
+        const wagerBalEl = document.getElementById('wager-balance');
+        if (wagerBalEl) wagerBalEl.textContent = balNum.toFixed(0);
+
+        // Re-render play phase if balance was 0 and now loaded
+        if (balNum > 0 && Game.phase === 'play' && !Game._balanceLoaded) {
+            Game._balanceLoaded = true;
+            renderPhase();
+        }
 
         loadHistory();
     } catch (e) {
