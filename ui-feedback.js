@@ -330,180 +330,73 @@ export function showWelcomeModal() {
     if (hasShownWelcomeModal) return;
     hasShownWelcomeModal = true;
 
-    const TELEGRAM_URL = "https://t.me/BackCoinorg";
-    const DOCS_URL = "https://github.com/backcoin-org/backchain-dapp";
+    // Inject splash-specific keyframes
+    if (!document.getElementById('splash-styles')) {
+        const s = document.createElement('style');
+        s.id = 'splash-styles';
+        s.textContent = `
+            @keyframes splash-in { 0% { opacity:0; transform:scale(0.92) translateY(12px); } 100% { opacity:1; transform:scale(1) translateY(0); } }
+            @keyframes splash-out { 0% { opacity:1; transform:scale(1); } 100% { opacity:0; transform:scale(0.95) translateY(-8px); } }
+            @keyframes quote-line { 0% { width:0; } 100% { width:100%; } }
+            @keyframes letter-in { 0% { opacity:0; transform:translateY(6px); } 100% { opacity:1; transform:translateY(0); } }
+            .splash-enter { animation: splash-in 0.6s cubic-bezier(0.16,1,0.3,1) forwards; }
+            .splash-exit  { animation: splash-out 0.4s ease-in forwards; }
+            .quote-line   { animation: quote-line 2s ease-out 0.4s both; }
+            .letter-stagger span { display:inline-block; opacity:0; animation: letter-in 0.3s ease-out both; }
+        `;
+        document.head.appendChild(s);
+    }
 
-    const content = `
-        <div class="text-center pt-2 pb-4">
-            
-            <!-- Voltaire Quote Banner -->
-            <div class="relative bg-gradient-to-r from-zinc-800/80 via-zinc-900 to-zinc-800/80 border border-zinc-700/50 rounded-xl p-3 mb-5 overflow-hidden">
-                <div class="absolute inset-0 animate-shimmer"></div>
-                <p class="text-[11px] text-zinc-400 italic relative z-10">
+    // Build staggered title letters
+    const title = 'Backchain';
+    const letters = [...title].map((ch, i) =>
+        `<span style="animation-delay:${0.6 + i * 0.05}s">${ch}</span>`
+    ).join('');
+
+    // Create full-screen overlay (not using openModal — custom lighter overlay)
+    const overlay = document.createElement('div');
+    overlay.id = 'welcome-splash';
+    overlay.className = 'fixed inset-0 z-[9999] flex items-center justify-center bg-black/90 backdrop-blur-sm cursor-pointer';
+    overlay.style.opacity = '0';
+    overlay.style.transition = 'opacity 0.3s ease';
+
+    overlay.innerHTML = `
+        <div class="splash-enter text-center px-8 max-w-sm">
+            <img src="/assets/bkc_logo_3d.png" alt="" class="h-16 w-16 mx-auto rounded-full mb-5 ring-1 ring-amber-500/30 shadow-lg shadow-amber-500/20">
+
+            <p class="text-3xl font-black text-white tracking-wide letter-stagger mb-1">${letters}</p>
+            <p class="text-zinc-500 text-[11px] uppercase tracking-[0.25em] mb-6">Unstoppable DeFi</p>
+
+            <div class="relative mb-6">
+                <div class="h-px bg-gradient-to-r from-transparent via-amber-500/40 to-transparent quote-line"></div>
+                <p class="text-zinc-400 text-sm italic mt-4 leading-relaxed">
                     "I may not agree with what you say, but I will defend to the death your right to say it."
                 </p>
-                <p class="text-[10px] text-amber-500/80 font-semibold mt-1 relative z-10">— Voltaire</p>
+                <p class="text-amber-500/70 text-xs font-semibold mt-2">— Voltaire</p>
+                <div class="h-px bg-gradient-to-r from-transparent via-amber-500/40 to-transparent mt-4 quote-line"></div>
             </div>
 
-            <!-- Network Badge -->
-            <div class="inline-flex items-center gap-2 bg-zinc-800 border border-zinc-700 rounded-full px-4 py-1.5 mb-5 shadow-sm">
-                <span class="relative flex h-3 w-3">
-                  <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                  <span class="relative inline-flex rounded-full h-3 w-3 bg-emerald-500"></span>
-                </span>
-                <span class="text-xs font-mono text-zinc-400 uppercase tracking-wider">NETWORK: <span class="text-emerald-400 font-bold">ARBITRUM SEPOLIA</span></span>
-            </div>
-
-            <!-- Logo with Glow -->
-            <div class="mb-4 relative inline-block animate-float">
-                <div class="absolute inset-0 bg-amber-500/30 rounded-full blur-2xl animate-glow"></div>
-                <img src="/assets/bkc_logo_3d.png" alt="Backcoin Logo" class="h-24 w-24 mx-auto rounded-full relative z-10 shadow-2xl ring-2 ring-amber-500/30">
-            </div>
-            
-            <!-- Title -->
-            <h2 class="text-3xl font-black text-white mb-1 uppercase tracking-wide">
-                Backchain Protocol
-            </h2>
-            
-            <!-- Unstoppable Badge -->
-            <div class="inline-flex items-center gap-2 bg-gradient-to-r from-red-600/20 via-amber-600/20 to-red-600/20 border border-amber-500/30 rounded-full px-4 py-1.5 mb-4">
-                <i class="fa-solid fa-shield-halved text-amber-400 text-sm"></i>
-                <span class="text-[11px] font-black text-transparent bg-clip-text bg-gradient-to-r from-amber-400 to-orange-400 uppercase tracking-wider">UNSTOPPABLE • PERMISSIONLESS • IMMUTABLE</span>
-            </div>
-
-            <!-- Main Description -->
-            <p class="text-zinc-300 mb-4 text-sm leading-relaxed px-2">
-                DeFi infrastructure that <strong class="text-amber-400">no one can stop</strong>. 
-                No admin keys. No pause functions. No blacklists.
+            <p class="text-zinc-600 text-[10px] uppercase tracking-widest">
+                No admin keys &bull; No pause &bull; No blacklists
             </p>
-
-            <!-- CEO Box -->
-            <div class="bg-gradient-to-br from-amber-600/10 via-zinc-800/50 to-orange-600/10 border border-amber-500/20 rounded-xl p-4 mb-5">
-                <div class="flex items-center justify-center gap-2 mb-2">
-                    <i class="fa-solid fa-crown text-amber-400"></i>
-                    <span class="text-base font-black text-white uppercase tracking-wide">Be Your Own CEO</span>
-                </div>
-                <p class="text-xs text-zinc-400 leading-relaxed mb-3">
-                    Build an interface to Backchain and <strong class="text-amber-400">earn commissions</strong> from every transaction. 
-                    No permission needed. No registration. <strong class="text-white">You are the CEO.</strong>
-                </p>
-                <div class="grid grid-cols-3 gap-2 text-center">
-                    <div class="bg-black/30 rounded-lg p-2">
-                        <i class="fa-solid fa-code text-purple-400 text-lg mb-1"></i>
-                        <p class="text-[10px] text-zinc-500">Build</p>
-                    </div>
-                    <div class="bg-black/30 rounded-lg p-2">
-                        <i class="fa-solid fa-users text-blue-400 text-lg mb-1"></i>
-                        <p class="text-[10px] text-zinc-500">Attract Users</p>
-                    </div>
-                    <div class="bg-black/30 rounded-lg p-2">
-                        <i class="fa-solid fa-coins text-amber-400 text-lg mb-1"></i>
-                        <p class="text-[10px] text-zinc-500">Earn BKC+ETH</p>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Community Badge -->
-            <div class="inline-flex items-center gap-2 bg-zinc-800/70 border border-zinc-700 rounded-full px-4 py-2 mb-5">
-                <i class="fa-solid fa-users text-zinc-500"></i>
-                <span class="text-[10px] font-semibold text-zinc-500 uppercase tracking-wider">100% Community • 0% VCs • 0% Team Allocation</span>
-            </div>
-
-            <div class="flex flex-col gap-3">
-                
-                <!-- Airdrop Button (Principal) -->
-                <button id="btnAirdrop" class="group relative w-full bg-gradient-to-r from-amber-600 via-orange-500 to-amber-600 bg-[length:200%_auto] hover:bg-right transition-all duration-500 text-white font-black py-4 px-5 rounded-xl text-lg shadow-xl shadow-amber-500/20 pulse-gold border border-amber-400/50 flex items-center justify-center gap-3 overflow-hidden transform hover:scale-[1.02]">
-                    <div class="absolute inset-0 bg-white/10 group-hover:bg-transparent transition-colors"></div>
-                    <i class="fa-solid fa-gift text-2xl"></i> 
-                    <div class="flex flex-col items-start leading-none z-10">
-                        <span class="text-[10px] font-bold opacity-80 uppercase tracking-wider mb-0.5">Phase 1 Active</span>
-                        <span class="text-lg">CLAIM FREE AIRDROP</span>
-                    </div>
-                    <div class="ml-auto flex items-center gap-1 bg-black/20 px-2 py-1 rounded-lg">
-                        <span class="text-xs font-bold">7M BKC</span>
-                    </div>
-                </button>
-
-                <!-- Two columns: Explore & Be CEO -->
-                <div class="grid grid-cols-2 gap-3">
-                    <!-- Explore dApp Button -->
-                    <button id="btnExplore" class="bg-zinc-800 hover:bg-zinc-700 border border-zinc-600 hover:border-emerald-500 text-white font-bold py-3 px-4 rounded-xl text-sm transition-all duration-300 flex items-center justify-center gap-2 group">
-                        <i class="fa-solid fa-compass text-emerald-400 group-hover:rotate-12 transition-transform"></i>
-                        <span>Explore dApp</span>
-                    </button>
-
-                    <!-- Be a CEO Button -->
-                    <button id="btnCEO" class="bg-zinc-800 hover:bg-zinc-700 border border-zinc-600 hover:border-amber-500 text-white font-bold py-3 px-4 rounded-xl text-sm transition-all duration-300 flex items-center justify-center gap-2 group">
-                        <i class="fa-solid fa-crown text-amber-400 group-hover:scale-110 transition-transform"></i>
-                        <span>Be a CEO</span>
-                    </button>
-                </div>
-
-                <!-- Two columns: Docs & Telegram -->
-                <div class="grid grid-cols-2 gap-3">
-                    <!-- Docs Button -->
-                    <button id="btnDocs" class="bg-zinc-800/70 hover:bg-zinc-700 border border-zinc-700 hover:border-purple-500 text-white font-semibold py-3 px-4 rounded-xl text-sm transition-all duration-300 flex items-center justify-center gap-2 group">
-                        <i class="fa-solid fa-book text-purple-400 group-hover:scale-110 transition-transform"></i>
-                        <span>Docs</span>
-                    </button>
-
-                    <!-- Telegram Button -->
-                    <button id="btnTelegram" class="bg-zinc-800/70 hover:bg-zinc-700 border border-zinc-700 hover:border-blue-500 text-white font-semibold py-3 px-4 rounded-xl text-sm transition-all duration-300 flex items-center justify-center gap-2 group">
-                        <i class="fa-brands fa-telegram text-blue-400 group-hover:scale-110 transition-transform"></i>
-                        <span>Telegram</span>
-                    </button>
-                </div>
-
-                <!-- Community Button -->
-                <button id="btnSocials" class="w-full bg-zinc-800/50 hover:bg-zinc-700 border border-zinc-700 hover:border-zinc-500 text-white font-semibold py-3 px-4 rounded-xl text-sm transition-all duration-300 flex items-center justify-center gap-2 group">
-                    <i class="fa-solid fa-share-nodes text-zinc-400 group-hover:text-amber-400 group-hover:scale-110 transition-all"></i>
-                    <span>Community & Socials</span>
-                </button>
-            </div>
-            
-            <!-- Footer with Unstoppable Message -->
-            <div class="mt-5 pt-4 border-t border-zinc-800">
-                <div class="flex items-center justify-center gap-2 mb-2">
-                    <div class="h-px flex-1 bg-gradient-to-r from-transparent to-amber-500/30"></div>
-                    <i class="fa-solid fa-infinity text-amber-500/50 text-xs"></i>
-                    <div class="h-px flex-1 bg-gradient-to-l from-transparent to-amber-500/30"></div>
-                </div>
-                <p class="text-[10px] text-zinc-600 uppercase tracking-widest mb-1">
-                    No one can freeze it • No one can censor it • No one can stop it
-                </p>
-                <p class="text-[9px] text-zinc-700 font-mono">
-                    THE PROTOCOL IS UNSTOPPABLE
-                </p>
-            </div>
         </div>
     `;
 
-    openModal(content, 'max-w-sm', false); 
-    
-    const modalContent = document.getElementById('modal-content');
-    if (!modalContent) return;
+    document.body.appendChild(overlay);
 
-    modalContent.querySelector('#btnAirdrop')?.addEventListener('click', () => {
-        navigateAndClose('airdrop');
-    });
+    // Fade in
+    requestAnimationFrame(() => { overlay.style.opacity = '1'; });
 
-    modalContent.querySelector('#btnExplore')?.addEventListener('click', () => {
-        closeModal();
-    });
+    // Auto-close after 4s or on tap
+    const dismiss = () => {
+        if (overlay._dismissed) return;
+        overlay._dismissed = true;
+        const inner = overlay.querySelector('.splash-enter');
+        if (inner) { inner.classList.remove('splash-enter'); inner.classList.add('splash-exit'); }
+        overlay.style.opacity = '0';
+        setTimeout(() => overlay.remove(), 500);
+    };
 
-    modalContent.querySelector('#btnCEO')?.addEventListener('click', () => {
-        window.open(DOCS_URL + '/blob/main/docs/BE_YOUR_OWN_CEO.md', '_blank');
-    });
-
-    modalContent.querySelector('#btnDocs')?.addEventListener('click', () => {
-        window.open(DOCS_URL, '_blank');
-    });
-
-    modalContent.querySelector('#btnSocials')?.addEventListener('click', () => {
-        navigateAndClose('socials'); 
-    });
-
-    modalContent.querySelector('#btnTelegram')?.addEventListener('click', () => {
-        window.open(TELEGRAM_URL, '_blank');
-    });
+    overlay.addEventListener('click', dismiss);
+    setTimeout(dismiss, 4000);
 }
