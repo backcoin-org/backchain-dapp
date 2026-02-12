@@ -26,7 +26,7 @@ import { calculateFeeClientSide } from '../modules/core/index.js';
 const EXPLORER_TX = "https://sepolia.arbiscan.io/tx/";
 const EXPLORER_ADDRESS = "https://sepolia.arbiscan.io/address/";
 const FORTUNE_POOL_ADDRESS = addresses?.fortunePool || "0x277dB00d533Bbc0fc267bbD954640aDA38ee6B37";
-const TIGER_IMAGE = "./assets/fortune.png";
+// Tiger image removed — cleaner mobile layout
 const SHARE_POINTS = 1000;
 const ESTIMATED_BLOCK_TIME = 250; // ~250ms per Arbitrum block
 const REVEAL_CHECK_MS = 3000;
@@ -146,29 +146,7 @@ function injectStyles() {
     const style = document.createElement('style');
     style.id = 'fortune-styles-v11';
     style.textContent = `
-        /* Tiger Animations */
-        @keyframes tiger-float {
-            0%, 100% { transform: translateY(0) rotate(-2deg); }
-            50% { transform: translateY(-12px) rotate(2deg); }
-        }
-        @keyframes tiger-pulse {
-            0%, 100% { filter: drop-shadow(0 0 20px rgba(249,115,22,0.3)); }
-            50% { filter: drop-shadow(0 0 40px rgba(249,115,22,0.6)); }
-        }
-        @keyframes tiger-spin {
-            0% { transform: rotateY(0deg); }
-            100% { transform: rotateY(360deg); }
-        }
-        @keyframes tiger-celebrate {
-            0%, 100% { transform: scale(1) rotate(0deg); }
-            25% { transform: scale(1.2) rotate(-10deg); }
-            50% { transform: scale(1.1) rotate(10deg); }
-            75% { transform: scale(1.15) rotate(-5deg); }
-        }
-        .tiger-float { animation: tiger-float 4s ease-in-out infinite; }
-        .tiger-pulse { animation: tiger-pulse 2s ease-in-out infinite; }
-        .tiger-spin { animation: tiger-spin 1s linear infinite; }
-        .tiger-celebrate { animation: tiger-celebrate 0.8s ease-out infinite; }
+        /* (tiger animations removed for mobile optimization) */
 
         /* Hide number input arrows */
         input[type="number"]::-webkit-outer-spin-button,
@@ -348,65 +326,61 @@ function render() {
     }
 
     app.innerHTML = `
-        <div class="max-w-md mx-auto px-4 py-6">
+        <div class="max-w-md mx-auto px-4 py-3">
             <!-- Header -->
-            <div class="text-center mb-5">
-                <div class="relative inline-block">
-                    <img id="tiger-mascot" src="${TIGER_IMAGE}"
-                         class="w-24 h-24 object-contain mx-auto tiger-float tiger-pulse"
-                         alt="Fortune Tiger"
-                         onerror="this.style.display='none'; document.getElementById('tiger-fallback').style.display='flex';">
-                    <div id="tiger-fallback" class="hidden items-center justify-center w-20 h-20 rounded-2xl bg-gradient-to-br from-orange-500/20 to-amber-600/10 border border-orange-500/30 mx-auto">
-                        <span class="text-5xl">🐯</span>
+            <div class="flex items-center justify-between mb-3">
+                <div class="flex items-center gap-2.5">
+                    <span class="text-2xl">🎰</span>
+                    <div>
+                        <h1 class="text-lg font-bold text-white leading-tight">Fortune Pool</h1>
+                        <p class="text-zinc-500 text-[11px]">On-chain Lottery &bull; Verifiable</p>
                     </div>
                 </div>
-                <h1 class="text-2xl font-bold text-white mt-2">Fortune Pool</h1>
-                <p class="text-zinc-500 text-sm mt-1">On-chain Lottery &bull; Verifiable Randomness</p>
-
-                <!-- Contract link -->
-                <div class="flex items-center justify-center mt-3">
-                    <a href="${EXPLORER_ADDRESS}${FORTUNE_POOL_ADDRESS}" target="_blank" rel="noopener"
-                       class="inline-flex items-center gap-1.5 px-2.5 py-1.5 bg-amber-500/10 border border-amber-500/30 rounded-full hover:bg-amber-500/20 transition-colors">
-                        <i class="fa-solid fa-file-contract text-amber-400 text-[10px]"></i>
-                        <span class="text-amber-400 text-[10px] font-medium">Game Contract</span>
-                        <i class="fa-solid fa-external-link text-amber-400/50 text-[8px]"></i>
-                    </a>
-                </div>
+                <a href="${EXPLORER_ADDRESS}${FORTUNE_POOL_ADDRESS}" target="_blank" rel="noopener"
+                   class="inline-flex items-center gap-1.5 px-2.5 py-1.5 bg-amber-500/10 border border-amber-500/30 rounded-full hover:bg-amber-500/20 transition-colors">
+                    <i class="fa-solid fa-file-contract text-amber-400 text-[10px]"></i>
+                    <span class="text-amber-400 text-[10px] font-medium">Contract</span>
+                    <i class="fa-solid fa-external-link text-amber-400/50 text-[8px]"></i>
+                </a>
             </div>
 
             <!-- Prize Pool Banner -->
-            <div class="bg-gradient-to-r from-amber-900/30 via-orange-900/20 to-amber-900/30 border border-amber-500/30 rounded-2xl p-4 mb-5 prize-glow text-center">
-                <p class="text-xs text-amber-400/70 uppercase tracking-wider mb-1">Prize Pool</p>
-                <p id="prize-pool" class="text-3xl font-black text-amber-400">--</p>
-                <div class="flex items-center justify-center gap-6 mt-2">
-                    <div class="text-center">
-                        <p class="text-[10px] text-zinc-500">Your Balance</p>
-                        <p id="user-balance" class="text-sm font-bold text-white">--</p>
+            <div class="bg-gradient-to-r from-amber-900/30 via-orange-900/20 to-amber-900/30 border border-amber-500/30 rounded-2xl p-3 mb-3 prize-glow">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-[10px] text-amber-400/70 uppercase tracking-wider">Prize Pool</p>
+                        <p id="prize-pool" class="text-2xl font-black text-amber-400">--</p>
                     </div>
-                    <div class="w-px h-6 bg-zinc-700"></div>
-                    <div class="text-center">
-                        <p class="text-[10px] text-zinc-500">Total Games</p>
-                        <p id="total-games" class="text-sm font-bold text-zinc-300">--</p>
+                    <div class="flex items-center gap-4">
+                        <div class="text-right">
+                            <p class="text-[10px] text-zinc-500">Balance</p>
+                            <p id="user-balance" class="text-sm font-bold text-white">--</p>
+                        </div>
+                        <div class="w-px h-8 bg-zinc-700"></div>
+                        <div class="text-right">
+                            <p class="text-[10px] text-zinc-500">Games</p>
+                            <p id="total-games" class="text-sm font-bold text-zinc-300">--</p>
+                        </div>
                     </div>
                 </div>
             </div>
 
             <!-- Game Area -->
-            <div id="game-area" class="mb-5"></div>
+            <div id="game-area" class="mb-3"></div>
 
             <!-- History -->
             <div class="bg-zinc-900/50 border border-zinc-800/50 rounded-2xl overflow-hidden">
                 <div class="flex items-center justify-between p-3 border-b border-zinc-800/50">
                     <span class="text-sm font-bold text-white flex items-center gap-2">
-                        <i class="fa-solid fa-paw text-orange-500 text-xs"></i>
+                        <i class="fa-solid fa-clock-rotate-left text-orange-500 text-xs"></i>
                         Recent Games
                     </span>
                     <span id="win-rate" class="text-xs text-zinc-500"></span>
                 </div>
-                <div id="history-list" class="max-h-[300px] overflow-y-auto p-2">
-                    <div class="p-6 text-center text-zinc-600 text-sm">
-                        <img src="${TIGER_IMAGE}" class="w-12 h-12 mx-auto opacity-30 animate-pulse mb-2" onerror="this.style.display='none'">
-                        Loading...
+                <div id="history-list" class="max-h-[250px] overflow-y-auto p-2">
+                    <div class="p-4 text-center text-zinc-600 text-sm">
+                        <i class="fa-solid fa-spinner fa-spin text-zinc-600 text-lg mb-2"></i>
+                        <p>Loading...</p>
                     </div>
                 </div>
             </div>
@@ -560,8 +534,6 @@ function renderPhase() {
     const area = document.getElementById('game-area');
     if (!area) return;
 
-    updateTigerAnimation(Game.phase);
-
     switch (Game.phase) {
         case 'play': renderPlay(area); break;
         case 'processing': renderProcessing(area); break;
@@ -571,34 +543,7 @@ function renderPhase() {
     }
 }
 
-function updateTigerAnimation(phase) {
-    const tiger = document.getElementById('tiger-mascot');
-    if (!tiger) return;
-
-    tiger.className = 'w-24 h-24 object-contain mx-auto';
-    tiger.style.filter = '';
-
-    switch (phase) {
-        case 'play':
-            tiger.classList.add('tiger-float', 'tiger-pulse');
-            break;
-        case 'processing':
-            tiger.classList.add('tiger-spin');
-            break;
-        case 'waiting':
-            tiger.classList.add('tiger-float');
-            tiger.style.filter = 'hue-rotate(270deg)';
-            break;
-        case 'result':
-            if (Game.result?.prizeWon > 0) {
-                tiger.classList.add('tiger-celebrate');
-            } else {
-                tiger.style.filter = 'grayscale(0.5)';
-                tiger.classList.add('tiger-float');
-            }
-            break;
-    }
-}
+// updateTigerAnimation removed — no tiger image in mobile-optimized layout
 
 // ============================================================================
 // PLAY PHASE — Difficulty tabs + number picker + wager
@@ -631,14 +576,14 @@ function renderPlay(container) {
     const maxBal = Math.max(1, Math.floor(balanceNum));
 
     container.innerHTML = `
-        <div class="space-y-4">
+        <div class="space-y-3">
             <!-- Difficulty Tabs -->
-            <div class="grid grid-cols-3 gap-1 bg-zinc-900/60 border border-zinc-800/50 rounded-2xl p-1.5">
+            <div class="grid grid-cols-3 gap-1 bg-zinc-900/60 border border-zinc-800/50 rounded-xl p-1">
                 ${['easy', 'medium', 'hard'].map(mode => {
                     const t = TIERS[mode === 'easy' ? 0 : mode === 'medium' ? 1 : 2];
                     const active = Game.mode === mode;
                     return `
-                        <button class="mode-tab py-2.5 rounded-xl text-center transition-all ${active ?
+                        <button class="mode-tab py-2 rounded-lg text-center transition-all ${active ?
                             `bg-gradient-to-br ${t.bgFrom} ${t.bgTo} border ${t.borderColor} shadow-lg` :
                             'hover:bg-zinc-800/50 border border-transparent'}" data-mode="${mode}">
                             <p class="text-sm font-bold ${active ? t.textColor : 'text-zinc-500'}">${t.emoji} ${t.name}</p>
@@ -688,7 +633,7 @@ function renderPlay(container) {
             `}
 
             <!-- Wager + Play -->
-            <div class="bg-zinc-900/60 border border-zinc-800/50 rounded-2xl p-4">
+            <div class="bg-zinc-900/60 border border-zinc-800/50 rounded-2xl p-3">
                 <div class="flex items-center justify-between mb-2">
                     <label class="text-sm text-zinc-400"><i class="fa-solid fa-coins text-amber-400 mr-1.5"></i>Wager</label>
                     <span class="text-xs text-zinc-500">Bal: <span id="wager-balance" class="text-amber-400 font-bold">${balanceNum.toFixed(0)}</span> BKC</span>
@@ -1309,8 +1254,6 @@ function renderProcessing(container) {
 function renderQuickReveal() {
     const area = document.getElementById('game-area');
     if (!area) return;
-
-    updateTigerAnimation('waiting');
 
     const cfg = getModeConfig(Game.mode);
     const picks = cfg.isSingle ? [Game.guess] : Game.guesses;
@@ -2059,7 +2002,7 @@ function showShareModal(isWin, prize) {
 
     const modalContent = `
         <div class="text-center">
-            <img src="${TIGER_IMAGE}" class="w-16 h-16 mx-auto mb-2" alt="Fortune Pool" onerror="this.style.display='none'">
+            <span class="text-4xl block mb-2">🎰</span>
             <h3 id="share-modal-title" class="text-lg font-bold text-white">${ui.title}</h3>
             <p id="share-modal-subtitle" class="text-amber-400 text-sm font-medium mb-3">${ui.subtitle}</p>
 
@@ -2338,8 +2281,8 @@ async function loadHistory() {
         } else {
             const list = document.getElementById('history-list');
             if (list) list.innerHTML = `
-                <div class="p-8 text-center">
-                    <img src="${TIGER_IMAGE}" class="w-16 h-16 mx-auto opacity-20 mb-3" onerror="this.style.display='none'">
+                <div class="p-6 text-center">
+                    <span class="text-3xl block mb-2 opacity-30">🎰</span>
                     <p class="text-zinc-500 text-sm">No games yet</p>
                     <p class="text-zinc-600 text-xs mt-1">Be the first to play!</p>
                 </div>
