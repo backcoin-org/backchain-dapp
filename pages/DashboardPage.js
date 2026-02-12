@@ -110,6 +110,18 @@ const ACTIVITY_ICONS = {
     CHARITY_WITHDRAW: { icon: 'fa-hand-holding-dollar', color: '#8b5cf6', bg: 'rgba(139,92,246,0.15)', label: '💰 Funds Withdrawn', emoji: '💰' },
     CHARITY_GOAL_REACHED: { icon: 'fa-trophy', color: '#fbbf24', bg: 'rgba(251,191,36,0.15)', label: '🏆 Goal Reached!', emoji: '🏆' },
     FAUCET: { icon: 'fa-droplet', color: '#22d3ee', bg: 'rgba(6,182,212,0.15)', label: '💧 Faucet Claim', emoji: '💧' },
+    FEE_COLLECTED: { icon: 'fa-receipt', color: '#f59e0b', bg: 'rgba(245,158,11,0.15)', label: '🧾 Fee Collected', emoji: '🧾' },
+    REFERRER_SET: { icon: 'fa-link', color: '#8b5cf6', bg: 'rgba(139,92,246,0.15)', label: '🔗 Referral Set', emoji: '🔗' },
+    BUYBACK: { icon: 'fa-hammer', color: '#f97316', bg: 'rgba(249,115,22,0.15)', label: '⛏️ Buyback', emoji: '⛏️' },
+    SWAP: { icon: 'fa-arrow-right-arrow-left', color: '#22d3ee', bg: 'rgba(6,182,212,0.15)', label: '🔄 Swap', emoji: '🔄' },
+    LIQUIDITY_ADD: { icon: 'fa-droplet', color: '#4ade80', bg: 'rgba(34,197,94,0.15)', label: '💧 Liquidity Added', emoji: '💧' },
+    LIQUIDITY_REMOVE: { icon: 'fa-droplet-slash', color: '#fb923c', bg: 'rgba(249,115,22,0.15)', label: '💧 Liquidity Removed', emoji: '💧' },
+    RENTAL_EARNINGS: { icon: 'fa-money-bill-wave', color: '#4ade80', bg: 'rgba(34,197,94,0.15)', label: '💰 Earnings Withdrawn', emoji: '💰' },
+    FORTUNE_EXPIRED: { icon: 'fa-hourglass-end', color: '#ef4444', bg: 'rgba(239,68,68,0.15)', label: '⏰ Game Expired', emoji: '⏰' },
+    CHARITY_BOOST: { icon: 'fa-rocket', color: '#ec4899', bg: 'rgba(236,72,153,0.15)', label: '🚀 Campaign Boosted', emoji: '🚀' },
+    CHARITY_CLOSED: { icon: 'fa-lock', color: '#71717a', bg: 'rgba(39,39,42,0.5)', label: '🔒 Campaign Closed', emoji: '🔒' },
+    AGORA_DOWNVOTE: { icon: 'fa-thumbs-down', color: '#ef4444', bg: 'rgba(239,68,68,0.15)', label: '👎 Downvoted', emoji: '👎' },
+    AGORA_UNFOLLOW: { icon: 'fa-user-minus', color: '#ef4444', bg: 'rgba(239,68,68,0.15)', label: '👤 Unfollowed', emoji: '👤' },
     DEFAULT: { icon: 'fa-circle', color: '#71717a', bg: 'rgba(39,39,42,0.5)', label: 'Activity', emoji: '📋' }
 };
 
@@ -171,17 +183,18 @@ function getActivityStyle(type, details = {}) {
     if (t === 'STAKING' || t === 'STAKED' || t === 'STAKE' || t === 'DELEGATED' || t === 'DELEGATION' || t.includes('DELEGAT')) return ACTIVITY_ICONS.STAKING;
     if (t === 'UNSTAKING' || t === 'UNSTAKED' || t === 'UNSTAKE' || t === 'UNDELEGATED') return ACTIVITY_ICONS.UNSTAKING;
     if (t === 'FORCE_UNSTAKE' || t === 'FORCEUNSTAKE' || t === 'FORCE_UNSTAKED') return ACTIVITY_ICONS.FORCE_UNSTAKE;
-    if (t === 'CLAIM' || t === 'CLAIMED' || t === 'REWARD' || t === 'REWARDS' || t === 'REWARD_CLAIMED' || t === 'REWARDCLAIMED') return ACTIVITY_ICONS.CLAIM;
-    if (t === 'NFT_BUY' || t === 'NFTBUY' || t === 'BOOSTER_BUY' || t === 'BOOSTERBUY' || t === 'BOOSTERBOUGHT' || (t.includes('BUY') && (t.includes('NFT') || t.includes('BOOSTER')))) return ACTIVITY_ICONS.NFT_BUY;
-    if (t === 'NFT_SELL' || t === 'NFTSELL' || t === 'BOOSTER_SELL' || t === 'BOOSTERSELL' || t === 'BOOSTERSOLD' || (t.includes('SELL') && (t.includes('NFT') || t.includes('BOOSTER')))) return ACTIVITY_ICONS.NFT_SELL;
+    if (t === 'CLAIM' || t === 'CLAIMED' || t === 'REWARD' || t === 'REWARDS' || t === 'REWARD_CLAIMED' || t === 'REWARDCLAIMED' || t === 'CLAIMREWARD' || t === 'CLAIM_REWARD') return ACTIVITY_ICONS.CLAIM;
+    if (t === 'NFT_BUY' || t === 'NFTBUY' || t === 'NFTBOUGHT' || t === 'BOOSTER_BUY' || t === 'BOOSTERBUY' || t === 'BOOSTERBOUGHT' || (t.includes('BUY') && (t.includes('NFT') || t.includes('BOOSTER'))) || (t.includes('BOUGHT') && t.includes('NFT'))) return ACTIVITY_ICONS.NFT_BUY;
+    if (t === 'NFT_SELL' || t === 'NFTSELL' || t === 'NFTSOLD' || t === 'BOOSTER_SELL' || t === 'BOOSTERSELL' || t === 'BOOSTERSOLD' || (t.includes('SELL') && (t.includes('NFT') || t.includes('BOOSTER'))) || (t.includes('SOLD') && t.includes('NFT'))) return ACTIVITY_ICONS.NFT_SELL;
     if (t === 'NFT_MINT' || t === 'NFTMINT' || t === 'BOOSTER_MINT' || t === 'BOOSTERMINT' || t === 'MINTED' || t === 'BOOSTERMINTED') return ACTIVITY_ICONS.NFT_MINT;
     if (t === 'NFT_TRANSFER' || t === 'NFTTRANSFER' || t === 'BOOSTER_TRANSFER' || t === 'BOOSTERTRANSFER' || t === 'TRANSFER') return ACTIVITY_ICONS.NFT_TRANSFER;
     if (t === 'RENTAL_LIST' || t === 'RENTALLISTED' || t === 'RENTAL_LISTED' || t === 'LISTED' || (t.includes('LIST') && t.includes('RENTAL'))) return ACTIVITY_ICONS.RENTAL_LIST;
     if (t === 'RENTAL_RENT' || t === 'RENTALRENTED' || t === 'RENTAL_RENTED' || t === 'RENTED' || (t.includes('RENT') && !t.includes('LIST'))) return ACTIVITY_ICONS.RENTAL_RENT;
     if (t === 'RENTAL_WITHDRAW' || t === 'RENTALWITHDRAWN' || t === 'RENTAL_WITHDRAWN') return ACTIVITY_ICONS.RENTAL_WITHDRAW;
     if (t === 'RENTAL_PROMOTE' || t === 'RENTALPROMOTED' || t === 'RENTAL_PROMOTED' || t.includes('PROMOT') || t.includes('ADS') || t.includes('ADVERTIS')) return ACTIVITY_ICONS.RENTAL_PROMOTE;
-    if (t === 'FORTUNE_COMMIT' || t === 'GAMECOMMITTED' || t === 'GAME_COMMITTED' || t === 'COMMITTED') return ACTIVITY_ICONS.FORTUNE_COMMIT;
-    if (t === 'FORTUNE_REVEAL' || t === 'GAMEREVEALED' || t === 'GAME_REVEALED' || t === 'REVEALED') return ACTIVITY_ICONS.FORTUNE_REVEAL;
+    if (t === 'FORTUNE_COMMIT' || t === 'FORTUNECOMMIT' || t === 'GAMECOMMITTED' || t === 'GAME_COMMITTED' || t === 'COMMITTED') return ACTIVITY_ICONS.FORTUNE_COMMIT;
+    if (t === 'FORTUNE_REVEAL' || t === 'FORTUNEREVEAL' || t === 'GAMEREVEALED' || t === 'GAME_REVEALED' || t === 'REVEALED') return ACTIVITY_ICONS.FORTUNE_REVEAL;
+    if (t === 'FORTUNE_EXPIRED' || t === 'FORTUNEEXPIRED' || t === 'GAMEEXPIRED' || t === 'GAME_EXPIRED' || t === 'EXPIRED') return ACTIVITY_ICONS.FORTUNE_EXPIRED;
     const isFortune = t.includes('GAME') || t.includes('FORTUNE') || t.includes('REQUEST') || t.includes('FULFILLED') || t.includes('RESULT');
     if (isFortune) {
         const isWin = details?.isWin || (details?.prizeWon && BigInt(details.prizeWon || 0) > 0n);
@@ -195,19 +208,30 @@ function getActivityStyle(type, details = {}) {
     if (t === 'LIKED' || t === 'POSTLIKED' || t === 'POST_LIKED' || (t.includes('LIKE') && !t.includes('SUPER'))) return ACTIVITY_ICONS.BACKCHAT_LIKE;
     if (t === 'REPLYCREATED' || t === 'REPLY_CREATED' || t.includes('REPLY')) return ACTIVITY_ICONS.BACKCHAT_REPLY;
     if (t === 'REPOSTCREATED' || t === 'REPOST_CREATED' || t.includes('REPOST')) return ACTIVITY_ICONS.BACKCHAT_REPOST;
-    if (t === 'FOLLOWED' || t === 'USER_FOLLOWED' || t.includes('FOLLOW')) return ACTIVITY_ICONS.BACKCHAT_FOLLOW;
+    if (t === 'AGORAUNFOLLOWED' || t === 'UNFOLLOWED' || t.includes('UNFOLLOW')) return ACTIVITY_ICONS.AGORA_UNFOLLOW;
+    if (t === 'AGORADOWNVOTED' || t === 'DOWNVOTED' || t.includes('DOWNVOT')) return ACTIVITY_ICONS.AGORA_DOWNVOTE;
+    if (t === 'FOLLOWED' || t === 'USER_FOLLOWED' || t === 'AGORAFOLLOWED' || t.includes('FOLLOW')) return ACTIVITY_ICONS.BACKCHAT_FOLLOW;
     if (t === 'PROFILECREATED' || t === 'PROFILE_CREATED' || t.includes('PROFILE') && t.includes('CREAT')) return ACTIVITY_ICONS.BACKCHAT_PROFILE;
-    if (t === 'PROFILEBOOSTED' || t === 'PROFILE_BOOSTED' || t === 'BOOSTED' || (t.includes('BOOST') && !t.includes('NFT'))) return ACTIVITY_ICONS.BACKCHAT_BOOST;
+    if (t === 'CHARITYCAMPAIGNBOOSTED' || t === 'CAMPAIGN_BOOSTED') return ACTIVITY_ICONS.CHARITY_BOOST;
+    if (t === 'PROFILEBOOSTED' || t === 'PROFILE_BOOSTED' || t === 'AGORAPROFILEBOOSTED' || t === 'BOOSTED' || (t.includes('BOOST') && !t.includes('NFT') && !t.includes('CAMPAIGN') && !t.includes('CHARITY'))) return ACTIVITY_ICONS.BACKCHAT_BOOST;
     if (t === 'BADGEACTIVATED' || t === 'BADGE_ACTIVATED' || t.includes('BADGE')) return ACTIVITY_ICONS.BACKCHAT_BADGE;
     if (t === 'TIPPROCESSED' || t === 'TIP_PROCESSED' || t === 'TIPPED' || t.includes('TIP')) return ACTIVITY_ICONS.BACKCHAT_TIP;
     if (t === 'ETHWITHDRAWN' || t === 'ETH_WITHDRAWN' || t === 'BACKCHAT_WITHDRAW') return ACTIVITY_ICONS.BACKCHAT_WITHDRAW;
     if (t === 'CHARITYDONATION' || t === 'DONATIONMADE' || t === 'CHARITY_DONATE' || t === 'DONATED' || t === 'DONATION' || t.includes('DONATION')) return ACTIVITY_ICONS.CHARITY_DONATE;
     if (t === 'CHARITYCAMPAIGNCREATED' || t === 'CAMPAIGNCREATED' || t === 'CHARITY_CREATE' || t === 'CAMPAIGN_CREATED' || t.includes('CAMPAIGNCREATED')) return ACTIVITY_ICONS.CHARITY_CREATE;
     if (t === 'CHARITYCAMPAIGNCANCELLED' || t === 'CAMPAIGNCANCELLED' || t === 'CHARITY_CANCEL' || t === 'CAMPAIGN_CANCELLED' || t.includes('CANCELLED')) return ACTIVITY_ICONS.CHARITY_CANCEL;
+    if (t === 'CHARITYCAMPAIGNCLOSED' || t === 'CAMPAIGNCLOSED' || t === 'CHARITY_CLOSED' || t === 'CAMPAIGN_CLOSED') return ACTIVITY_ICONS.CHARITY_CLOSED;
+    if (t === 'RENTALEARNINGSWITHDRAWN' || t === 'RENTAL_EARNINGS_WITHDRAWN') return ACTIVITY_ICONS.RENTAL_EARNINGS;
     if (t === 'CHARITYFUNDSWITHDRAWN' || t === 'FUNDSWITHDRAWN' || t === 'CHARITY_WITHDRAW' || t === 'CAMPAIGN_WITHDRAW' || t.includes('WITHDRAWN')) return ACTIVITY_ICONS.CHARITY_WITHDRAW;
     if (t === 'CHARITYGOALREACHED' || t === 'GOALREACHED' || t === 'CHARITY_GOAL' || t === 'CAMPAIGN_COMPLETED') return ACTIVITY_ICONS.CHARITY_GOAL_REACHED;
     if (t === 'NOTARYREGISTER' || t === 'NOTARIZED' || t.includes('NOTARY') || t.includes('DOCUMENT')) return ACTIVITY_ICONS.NOTARY;
     if (t === 'FAUCETCLAIM' || t.includes('FAUCET') || t.includes('DISTRIBUTED')) return ACTIVITY_ICONS.FAUCET;
+    if (t === 'FEECOLLECTED' || t === 'FEE_COLLECTED') return ACTIVITY_ICONS.FEE_COLLECTED;
+    if (t === 'REFERRERSET' || t === 'REFERRER_SET') return ACTIVITY_ICONS.REFERRER_SET;
+    if (t === 'BUYBACKEXECUTED' || t === 'BUYBACK_EXECUTED' || t.includes('BUYBACK')) return ACTIVITY_ICONS.BUYBACK;
+    if (t === 'SWAPETHFORBKC' || t === 'SWAPBKCFORETH' || t.includes('SWAP')) return ACTIVITY_ICONS.SWAP;
+    if (t === 'LIQUIDITYADDED' || t === 'LIQUIDITY_ADDED') return ACTIVITY_ICONS.LIQUIDITY_ADD;
+    if (t === 'LIQUIDITYREMOVED' || t === 'LIQUIDITY_REMOVED') return ACTIVITY_ICONS.LIQUIDITY_REMOVE;
     return ACTIVITY_ICONS.DEFAULT;
 }
 
@@ -255,7 +279,7 @@ async function requestSmartFaucet(btnElement) {
             apiSuccess = true;
             showToast(`Faucet: ${FAUCET_BKC_AMOUNT} BKC + ${FAUCET_ETH_AMOUNT} ETH enviados!`, "success");
             DashboardState.faucet.canClaim = false;
-            DashboardState.faucet.cooldownEnd = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+            try { localStorage.setItem('bkc_faucet_' + State.userAddress.toLowerCase(), '1'); } catch(e) {}
             updateFaucetWidget();
             setTimeout(() => { DashboardPage.update(true); }, 4000);
         } else {
@@ -263,15 +287,12 @@ async function requestSmartFaucet(btnElement) {
             console.warn('[Faucet] API error:', msg);
             apiSuccess = true; // API responded — don't show generic error
 
-            // Cooldown: update widget state
-            if (msg.toLowerCase().includes("cooldown") || msg.toLowerCase().includes("wait") || msg.toLowerCase().includes("hour")) {
-                showToast(msg, "warning");
-                const hoursMatch = msg.match(/(\d+)\s*hour/i);
-                if (hoursMatch) {
-                    DashboardState.faucet.canClaim = false;
-                    DashboardState.faucet.cooldownEnd = new Date(Date.now() + parseInt(hoursMatch[1]) * 3600000).toISOString();
-                    updateFaucetWidget();
-                }
+            // Already claimed (one-time per wallet)
+            if (data.alreadyClaimed || msg.toLowerCase().includes("already claimed") || msg.toLowerCase().includes("one-time")) {
+                showToast("You already claimed your one-time faucet tokens.", "warning");
+                DashboardState.faucet.canClaim = false;
+                try { localStorage.setItem('bkc_faucet_' + State.userAddress.toLowerCase(), '1'); } catch(e) {}
+                updateFaucetWidget();
             } else {
                 showToast(msg, "error");
             }
@@ -309,17 +330,15 @@ function updateFaucetWidget() {
     }
     widget.style.opacity = '1';
 
-    const cooldownTime = formatCooldownTime(DashboardState.faucet.cooldownEnd);
-    const canClaim = DashboardState.faucet.canClaim && !cooldownTime;
-
-    if (!canClaim && cooldownTime) {
-        if (titleEl) titleEl.innerText = "Faucet Cooldown";
-        if (descEl) descEl.innerText = "Come back when the timer ends";
-        if (statusEl) { statusEl.classList.remove('hidden'); statusEl.innerHTML = `<i class="fa-solid fa-clock" style="margin-right:4px"></i>${cooldownTime} remaining`; }
-        if (btn) { btn.className = 'dash-btn-secondary'; btn.innerHTML = '<i class="fa-solid fa-hourglass-half"></i> On Cooldown'; btn.disabled = true; }
+    if (!DashboardState.faucet.canClaim) {
+        // Already claimed (one-time per wallet)
+        if (titleEl) titleEl.innerText = "Testnet Tokens Received";
+        if (descEl) descEl.innerText = `Already received ${FAUCET_BKC_AMOUNT} BKC + ${FAUCET_ETH_AMOUNT} ETH for testing on this wallet`;
+        if (statusEl) { statusEl.classList.remove('hidden'); statusEl.innerHTML = `<i class="fa-solid fa-circle-check" style="margin-right:4px;color:#4ade80"></i>One-time claim used`; }
+        if (btn) { btn.className = 'dash-btn-secondary'; btn.innerHTML = '<i class="fa-solid fa-check"></i> Already Claimed'; btn.disabled = true; }
     } else {
         if (titleEl) titleEl.innerText = "Get Free Testnet Tokens";
-        if (descEl) descEl.innerText = "Claim BKC tokens and ETH for gas — free every 24h";
+        if (descEl) descEl.innerText = "Claim BKC tokens and ETH for gas — one-time per wallet";
         if (statusEl) statusEl.classList.add('hidden');
         if (btn) { btn.className = 'dash-btn-primary dash-btn-cyan'; btn.innerHTML = '<i class="fa-solid fa-faucet"></i> Claim Free Tokens'; btn.disabled = false; }
     }
@@ -1047,7 +1066,7 @@ function renderDashboardLayout() {
                 </div>
                 <div class="dash-faucet-info">
                     <h3 id="faucet-title">Get Free Testnet Tokens</h3>
-                    <p id="faucet-desc">Claim BKC tokens and ETH for gas — free every 24h</p>
+                    <p id="faucet-desc">Claim BKC tokens and ETH for gas — one-time per wallet</p>
                     <div class="dash-faucet-amounts">
                         <span class="dash-faucet-badge" style="color:#22d3ee">
                             <i class="fa-solid fa-coins" style="font-size:10px"></i>${FAUCET_BKC_AMOUNT} BKC
@@ -1954,6 +1973,16 @@ export const DashboardPage = {
         updateGlobalMetrics();
         fetchAndProcessActivities();
         updateReferralWidget();
+
+        // Restore faucet claimed state from localStorage
+        if (State.isConnected && State.userAddress) {
+            try {
+                if (localStorage.getItem('bkc_faucet_' + State.userAddress.toLowerCase())) {
+                    DashboardState.faucet.canClaim = false;
+                }
+            } catch(e) {}
+            updateFaucetWidget();
+        }
 
         if (State.isConnected) {
             await updateUserHub(false);

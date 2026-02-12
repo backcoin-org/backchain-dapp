@@ -68,11 +68,20 @@ export default async function handler(req, res) {
         const canClaimNow = await faucet.canClaim(address);
         if (!canClaimNow) {
             const cooldownLeft = await faucet.getCooldownRemaining(address);
-            const hoursLeft = Math.ceil(Number(cooldownLeft) / 3600);
+            const cooldownSecs = Number(cooldownLeft);
+            // One-time per wallet (100yr cooldown) → show "already claimed"
+            if (cooldownSecs > 31536000) {
+                return res.status(429).json({
+                    success: false,
+                    error: 'Already claimed. This faucet is one-time per wallet.',
+                    alreadyClaimed: true
+                });
+            }
+            const hoursLeft = Math.ceil(cooldownSecs / 3600);
             return res.status(429).json({
                 success: false,
                 error: `Cooldown active. Try again in ${hoursLeft} hours.`,
-                cooldownSeconds: Number(cooldownLeft)
+                cooldownSeconds: cooldownSecs
             });
         }
 
