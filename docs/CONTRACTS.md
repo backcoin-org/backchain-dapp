@@ -1,426 +1,78 @@
-# Backchain Protocol
+# Contract Addresses
 
-```
-╔═══════════════════════════════════════════════════════════════════════════════════╗
-║                                                                                   ║
-║   "I may not agree with what you say, but I will defend to the death            ║
-║    your right to say it."                                                         ║
-║                                                                     — Voltaire    ║
-║                                                                                   ║
-╚═══════════════════════════════════════════════════════════════════════════════════╝
-```
+All Backcoin contracts are deployed on **Arbitrum Sepolia** (Chain ID: `421614`).
 
-| | |
-|---|---|
-| **Project** | Backchain Protocol |
-| **Philosophy** | Unstoppable & Permissionless DeFi Infrastructure |
-| **Network** | Arbitrum One |
-| **Status** | Testnet Live (Arbitrum Sepolia) |
-| **Website** | [backcoin.org](https://backcoin.org) |
-| **Documentation** | [github.com/backcoin-org/backchain-dapp/docs](https://github.com/backcoin-org/backchain-dapp/tree/main/docs) |
-| **X (Twitter)** | [x.com/backcoin](https://x.com/backcoin) |
-| **GitHub** | [github.com/backcoin-org/backchain-dapp](https://github.com/backcoin-org/backchain-dapp) |
-| **YouTube** | [youtube.com/@Backcoin](https://www.youtube.com/@Backcoin) |
-| **Contact** | dev@backcoin.org |
+Every contract listed below (except the Faucet) is fully immutable — no admin can pause, upgrade, or modify them. The only configurable contract is BackchainEcosystem, which controls fee parameters and is subject to progressive decentralization through governance.
 
----
+## Core Contracts
 
-**Document:** Smart Contracts — The Unstoppable Infrastructure  
-**Version:** 2.0.0  
-**Last Updated:** February 2026  
-**Full Documentation:** [https://github.com/backcoin-org/backchain-dapp/tree/main/docs](https://github.com/backcoin-org/backchain-dapp/tree/main/docs)
+| Contract | Address | Operator Support |
+|----------|---------|:---:|
+| BKC Token | `0x1c8B7951ae769871470e9a8951d01dB39AA34123` | — |
+| BackchainEcosystem | `0xDC88493D0979AF22e2C387A2fFd5230c62551997` | — |
+| Liquidity Pool | `0x32c80323dD73E2d30c0389Ea9fc6a0ad998770bF` | — |
+| Staking Pool | `0xeA5D34520783564a736258a9fd29775c9c1C8E78` | Yes |
+| Buyback Miner | `0xD0B684Be70213dFbdeFaecaFECB50232897EC843` | Yes |
 
----
+## NFT Contracts
 
-# Smart Contracts
+| Contract | Address | Operator Support |
+|----------|---------|:---:|
+| RewardBooster (ERC-721) | `0x5507F70c71b8e1C694841E214fe8F9Dd7c899448` | — |
+| NFT Pool — Bronze | `0xeE0953171514608f8b8F7B5A343c8123b2BfE8bD` | Yes |
+| NFT Pool — Silver | `0xA8e76C5E21235fC2889A25Dff0769fFf5C784639` | Yes |
+| NFT Pool — Gold | `0xbcDc78a2C985722C170153015957Acb73df08F89` | Yes |
+| NFT Pool — Diamond | `0x2d9fb50A5d147598fBb1151F75B8C3E261fb1Dea` | Yes |
 
-## The Code That Cannot Be Stopped
+## Service Contracts
 
-```
-╔═══════════════════════════════════════════════════════════════════════════════════╗
-║                                                                                   ║
-║                    DEPLOYED. VERIFIED. UNSTOPPABLE.                               ║
-║                                                                                   ║
-║   These contracts run on Arbitrum.                                               ║
-║   They have no admin keys.                                                        ║
-║   They have no pause buttons.                                                     ║
-║   They have no kill switches.                                                     ║
-║                                                                                   ║
-║   As long as Ethereum exists, these contracts will execute.                      ║
-║   No government. No corporation. No authority can stop them.                     ║
-║                                                                                   ║
-║   Code is law. Math is truth. The protocol is unstoppable.                       ║
-║                                                                                   ║
-╚═══════════════════════════════════════════════════════════════════════════════════╝
-```
+| Contract | Address | Operator Support |
+|----------|---------|:---:|
+| Fortune Pool | `0x319bfC89f4d9F2364E7e454e4950ca6e440211ED` | Yes |
+| Agora (Social) | `0x60088001DB6Ae83Bc9513426e415895802DBA39a` | Yes |
+| Notary | `0x89DE7ea670CeEeEFA21e4dAC499313D3E0cfbB0e` | Yes |
+| Charity Pool | `0x31E8B7F825610aFd3d5d25C11e9C062D27289BB2` | Yes |
+| Rental Manager | `0xa2303db7e2D63398a68Ea326a3566bC92f129D44` | Yes |
 
-All Backchain Protocol smart contracts are deployed on Arbitrum Sepolia. Every contract is verified on Arbiscan — **trust the code, not the words**.
+## Governance & Utility
 
----
+| Contract | Address | Operator Support |
+|----------|---------|:---:|
+| Governance | `0xA82F69f079566958c16F601A9625E40AeEeFbFf8` | — |
+| BKC Faucet | `0xb80e5389b16693CAEe4655b535cc7Bceb4770255` | — |
 
-## 🌍 Become an Operator
-
-```
-╔═══════════════════════════════════════════════════════════════════════════════════╗
-║                                                                                   ║
-║                         BUILD. INTEGRATE. EARN.                                   ║
-║                                                                                   ║
-║   Every contract marked with ⚡ supports the OPERATOR SYSTEM.                     ║
-║                                                                                   ║
-║   This means:                                                                     ║
-║   1. Build your own frontend, app, bot, or tool                                  ║
-║   2. Pass your wallet address as the "operator" parameter                        ║
-║   3. Earn a percentage of ALL fees generated through your interface              ║
-║                                                                                   ║
-║   No registration. No approval. No KYC. Just build and earn.                     ║
-║                                                                                   ║
-╚═══════════════════════════════════════════════════════════════════════════════════╝
-```
-
----
-
-## 🔗 Network Information
-
-| Property | Value |
-|----------|-------|
-| **Network** | Arbitrum Sepolia (Testnet) |
-| **Chain ID** | 421614 |
-| **RPC URL** | https://sepolia-rollup.arbitrum.io/rpc |
-| **Explorer** | https://sepolia.arbiscan.io |
-| **Currency** | ETH |
-
----
-
-## 📋 Core Contracts
-
-### Token & Management
-
-| Contract | Address | Operator | Description |
-|----------|---------|----------|-------------|
-| **BKC Token** | `0x38DD1898b7B11f07C03e7dBd957fCC8021fB1396` | — | Native ERC-20 token |
-| **EcosystemManager** | `0xF5741c125Db4034640CeEA8f3DDb0C4a8d96E407` | — | Central configuration hub |
-| **MiningManager** | `0x7755982411244791d2DA96cBa04d08df72Be43C1` | ⚡ Yes | Activity rewards distribution |
-| **Treasury** | `0xc93030333E3a235c2605BcB7C7330650B600B6D0` | — | Protocol treasury |
-| **Governance** | `0x157e08d5F5a776A530227f548d0f0C47682b7A3E` | — | On-chain governance |
-
-### DeFi Services
-
-| Contract | Address | Operator | Description |
-|----------|---------|----------|-------------|
-| **DelegationManager** | `0x41B1B7940E06318e9b161fc64524FaE7261e8739` | ⚡ Yes | Staking system |
-| **FortunePool** | `0x5B3c7A322eB49805c594Fd948c137b62a09BBfFF` | ⚡ Yes | Gaming / prediction |
-| **CharityPool** | `0x259271F3558bCa03Ddc8D7494CCF833751483Fb1` | ⚡ Yes | Decentralized crowdfunding |
-
-### Utility Services
-
-| Contract | Address | Operator | Description |
-|----------|---------|----------|-------------|
-| **DecentralizedNotary** | `0x2E56650a4f05D0f98787694c6C61603616716b48` | ⚡ Yes | Document certification |
-| **RentalManager** | `0x593A842d214516F216EB6E6E9A97cC84F42f6821` | ⚡ Yes | NFT rentals |
-| **Backchat** | `0x0D8c2862df03F5be4b569C5ffF4D3aaAEE44BDDb` | ⚡ Yes | Decentralized social network |
-
-### NFT System
-
-| Contract | Address | Operator | Description |
-|----------|---------|----------|-------------|
-| **RewardBoosterNFT** | `0xf2EA307686267dC674859da28C58CBb7a5866BCf` | — | Utility NFT collection |
-| **NFT Pool Factory** | `0x2f63000539AAE2019Cc3d6E357295d903c1fF120` | — | Creates liquidity pools |
-| **NFT Pool Implementation** | `0x9E857BE855C8397B188131Be6B85456C7b9d8dB7` | ⚡ Yes | Pool logic |
-
-### Randomness (Stylus - Rust/WASM)
-
-| Contract | Address | Operator | Description |
-|----------|---------|----------|-------------|
-| **Backcoin Oracle** | `0x16346f5a45f9615f1c894414989f0891c54ef07b` | — | Free randomness oracle |
-
-### Utilities
-
-| Contract | Address | Operator | Description |
-|----------|---------|----------|-------------|
-| **Faucet** | `0x954acE43508AC8Ee1C5509F0ee1Fe65b81C3fc90` | — | Testnet BKC distribution |
-
----
-
-## 💎 NFT Liquidity Pools
-
-Each Reward Booster tier has its own AMM pool. **All pools support the operator system!**
-
-| Tier | Burn Reduction | Pool Address | Operator |
-|------|----------------|--------------|----------|
-| **Diamond** | 0% (no burn) | `0x5C5590458689a11731c8bAD8BDf5D8f1D7Ffe020` | ⚡ Yes |
-| **Gold** | 25% | `0x9390e12c910C4d2E0796FA754e5C450969F09886` | ⚡ Yes |
-| **Silver** | 35% | `0x016549ee056442eC30a916335f66ad5183E3fF5b` | ⚡ Yes |
-| **Bronze** | 50% | `0x74eB5CF86B43517cd27f48A06abb8A521aDA63b8` | ⚡ Yes |
-
----
-
-## 📦 Quick Copy Reference
-
-### All Addresses (Plain Text)
-
-```
-# ═══════════════════════════════════════════════════════════════════════════════
-# BACKCHAIN PROTOCOL - SMART CONTRACTS
-# Network: Arbitrum Sepolia (Chain ID: 421614)
-# ═══════════════════════════════════════════════════════════════════════════════
-
-# Core
-BKC Token:           0x38DD1898b7B11f07C03e7dBd957fCC8021fB1396
-EcosystemManager:    0xF5741c125Db4034640CeEA8f3DDb0C4a8d96E407
-MiningManager:       0x7755982411244791d2DA96cBa04d08df72Be43C1
-Treasury:            0xc93030333E3a235c2605BcB7C7330650B600B6D0
-Governance:          0x157e08d5F5a776A530227f548d0f0C47682b7A3E
-
-# DeFi (⚡ All support Operator System)
-DelegationManager:   0x41B1B7940E06318e9b161fc64524FaE7261e8739
-FortunePool:         0x5B3c7A322eB49805c594Fd948c137b62a09BBfFF
-CharityPool:         0x259271F3558bCa03Ddc8D7494CCF833751483Fb1
-
-# Utility (⚡ All support Operator System)
-DecentralizedNotary: 0x2E56650a4f05D0f98787694c6C61603616716b48
-RentalManager:       0x593A842d214516F216EB6E6E9A97cC84F42f6821
-Backchat:            0x0D8c2862df03F5be4b569C5ffF4D3aaAEE44BDDb
-
-# NFT
-RewardBoosterNFT:    0xf2EA307686267dC674859da28C58CBb7a5866BCf
-NFT Pool Factory:    0x2f63000539AAE2019Cc3d6E357295d903c1fF120
-NFT Pool Impl:       0x9E857BE855C8397B188131Be6B85456C7b9d8dB7
-
-# Randomness (Free!)
-Backcoin Oracle:     0x16346f5a45f9615f1c894414989f0891c54ef07b
-
-# Utilities
-Faucet:              0x954acE43508AC8Ee1C5509F0ee1Fe65b81C3fc90
-
-# NFT Pools (⚡ All support Operator System)
-Diamond Pool:        0x5C5590458689a11731c8bAD8BDf5D8f1D7Ffe020
-Gold Pool:           0x9390e12c910C4d2E0796FA754e5C450969F09886
-Silver Pool:         0x016549ee056442eC30a916335f66ad5183E3fF5b
-Bronze Pool:         0x74eB5CF86B43517cd27f48A06abb8A521aDA63b8
-```
-
-### JavaScript Constants
+## For Developers
 
 ```javascript
-/**
- * BACKCHAIN PROTOCOL - Smart Contract Addresses
- * Network: Arbitrum Sepolia (Chain ID: 421614)
- * 
- * Contracts marked with "operator: true" support the Operator System.
- * Build interfaces, pass your address, earn commissions!
- */
-export const CONTRACTS = {
-    // Core
-    BKC_TOKEN: '0x38DD1898b7B11f07C03e7dBd957fCC8021fB1396',
-    ECOSYSTEM_MANAGER: '0xF5741c125Db4034640CeEA8f3DDb0C4a8d96E407',
-    MINING_MANAGER: '0x7755982411244791d2DA96cBa04d08df72Be43C1',  // operator: true
-    TREASURY: '0xc93030333E3a235c2605BcB7C7330650B600B6D0',
-    GOVERNANCE: '0x157e08d5F5a776A530227f548d0f0C47682b7A3E',
-    
-    // DeFi (all support operator)
-    DELEGATION_MANAGER: '0x41B1B7940E06318e9b161fc64524FaE7261e8739',  // operator: true
-    FORTUNE_POOL: '0x5B3c7A322eB49805c594Fd948c137b62a09BBfFF',        // operator: true
-    CHARITY_POOL: '0x259271F3558bCa03Ddc8D7494CCF833751483Fb1',        // operator: true
-    
-    // Utility (all support operator)
-    NOTARY: '0x2E56650a4f05D0f98787694c6C61603616716b48',              // operator: true
-    RENTAL_MANAGER: '0x593A842d214516F216EB6E6E9A97cC84F42f6821',      // operator: true
-    BACKCHAT: '0x0D8c2862df03F5be4b569C5ffF4D3aaAEE44BDDb',            // operator: true
-    
-    // NFT
-    REWARD_BOOSTER_NFT: '0xf2EA307686267dC674859da28C58CBb7a5866BCf',
-    NFT_POOL_FACTORY: '0x2f63000539AAE2019Cc3d6E357295d903c1fF120',
-    NFT_POOL_IMPL: '0x9E857BE855C8397B188131Be6B85456C7b9d8dB7',       // operator: true
-    
-    // Randomness (FREE!)
-    BACKCOIN_ORACLE: '0x16346f5a45f9615f1c894414989f0891c54ef07b',
-    
-    // Utilities
-    FAUCET: '0x954acE43508AC8Ee1C5509F0ee1Fe65b81C3fc90',
-    
-    // NFT Pools (all support operator)
-    POOLS: {
-        DIAMOND: '0x5C5590458689a11731c8bAD8BDf5D8f1D7Ffe020',         // operator: true
-        GOLD: '0x9390e12c910C4d2E0796FA754e5C450969F09886',            // operator: true
-        SILVER: '0x016549ee056442eC30a916335f66ad5183E3fF5b',          // operator: true
-        BRONZE: '0x74eB5CF86B43517cd27f48A06abb8A521aDA63b8'           // operator: true
-    }
-};
-
-// Default operator (used when none specified)
-export const DEFAULT_OPERATOR = '0x0000000000000000000000000000000000000000';
-
-// Network config
-export const NETWORK = {
-    name: 'Arbitrum Sepolia',
-    chainId: 421614,
-    rpc: 'https://sepolia-rollup.arbitrum.io/rpc',
-    explorer: 'https://sepolia.arbiscan.io'
+const CONTRACTS = {
+    bkcToken:             "0x1c8B7951ae769871470e9a8951d01dB39AA34123",
+    backchainEcosystem:   "0xDC88493D0979AF22e2C387A2fFd5230c62551997",
+    liquidityPool:        "0x32c80323dD73E2d30c0389Ea9fc6a0ad998770bF",
+    stakingPool:          "0xeA5D34520783564a736258a9fd29775c9c1C8E78",
+    buybackMiner:         "0xD0B684Be70213dFbdeFaecaFECB50232897EC843",
+    rewardBooster:        "0x5507F70c71b8e1C694841E214fe8F9Dd7c899448",
+    pool_bronze:          "0xeE0953171514608f8b8F7B5A343c8123b2BfE8bD",
+    pool_silver:          "0xA8e76C5E21235fC2889A25Dff0769fFf5C784639",
+    pool_gold:            "0xbcDc78a2C985722C170153015957Acb73df08F89",
+    pool_diamond:         "0x2d9fb50A5d147598fBb1151F75B8C3E261fb1Dea",
+    fortunePool:          "0x319bfC89f4d9F2364E7e454e4950ca6e440211ED",
+    agora:                "0x60088001DB6Ae83Bc9513426e415895802DBA39a",
+    notary:               "0x89DE7ea670CeEeEFA21e4dAC499313D3E0cfbB0e",
+    charityPool:          "0x31E8B7F825610aFd3d5d25C11e9C062D27289BB2",
+    rentalManager:        "0xa2303db7e2D63398a68Ea326a3566bC92f129D44",
+    simpleBkcFaucet:      "0xb80e5389b16693CAEe4655b535cc7Bceb4770255",
+    backchainGovernance:  "0xA82F69f079566958c16F601A9625E40AeEeFbFf8",
 };
 ```
 
----
+## Operator Support
 
-## 🔗 Arbiscan Links
+Contracts marked with **Yes** in the Operator Support column accept an `operator` parameter. When users interact through your frontend, pass your wallet address as the operator to earn a commission on every transaction.
 
-### Verified Contracts (Click to Verify the Code)
+Read the [Operator Guide](./BE_YOUR_OWN_CEO.md) to learn how to build and earn.
 
-| Contract | Arbiscan Link |
-|----------|---------------|
-| BKC Token | [View Code](https://sepolia.arbiscan.io/address/0x38DD1898b7B11f07C03e7dBd957fCC8021fB1396#code) |
-| EcosystemManager | [View Code](https://sepolia.arbiscan.io/address/0xF5741c125Db4034640CeEA8f3DDb0C4a8d96E407#code) |
-| MiningManager | [View Code](https://sepolia.arbiscan.io/address/0x7755982411244791d2DA96cBa04d08df72Be43C1#code) |
-| DelegationManager | [View Code](https://sepolia.arbiscan.io/address/0x41B1B7940E06318e9b161fc64524FaE7261e8739#code) |
-| FortunePool | [View Code](https://sepolia.arbiscan.io/address/0x5B3c7A322eB49805c594Fd948c137b62a09BBfFF#code) |
-| CharityPool | [View Code](https://sepolia.arbiscan.io/address/0x259271F3558bCa03Ddc8D7494CCF833751483Fb1#code) |
-| DecentralizedNotary | [View Code](https://sepolia.arbiscan.io/address/0x2E56650a4f05D0f98787694c6C61603616716b48#code) |
-| RentalManager | [View Code](https://sepolia.arbiscan.io/address/0x593A842d214516F216EB6E6E9A97cC84F42f6821#code) |
-| Backchat | [View Code](https://sepolia.arbiscan.io/address/0x0D8c2862df03F5be4b569C5ffF4D3aaAEE44BDDb#code) |
-| RewardBoosterNFT | [View Code](https://sepolia.arbiscan.io/address/0xf2EA307686267dC674859da28C58CBb7a5866BCf#code) |
-| Backcoin Oracle | [View Code](https://sepolia.arbiscan.io/address/0x16346f5a45f9615f1c894414989f0891c54ef07b#code) |
-| Governance | [View Code](https://sepolia.arbiscan.io/address/0x157e08d5F5a776A530227f548d0f0C47682b7A3E#code) |
+## Verification
 
----
+All contracts are verified on [Arbiscan Sepolia](https://sepolia.arbiscan.io). You can read the source code, interact directly, and verify everything on-chain.
 
-## 🏗️ Contract Architecture
-
-```
-╔═══════════════════════════════════════════════════════════════════════════════════╗
-║                                                                                   ║
-║                          BACKCHAIN PROTOCOL ARCHITECTURE                          ║
-║                                                                                   ║
-║   ┌─────────────────────────────────────────────────────────────────────────┐    ║
-║   │                                                                         │    ║
-║   │                        ┌─────────────────────┐                         │    ║
-║   │                        │  EcosystemManager   │                         │    ║
-║   │                        │   (Central Hub)     │                         │    ║
-║   │                        └──────────┬──────────┘                         │    ║
-║   │                                   │                                     │    ║
-║   │         ┌─────────────────────────┼─────────────────────┐              │    ║
-║   │         │                         │                     │              │    ║
-║   │         ▼                         ▼                     ▼              │    ║
-║   │  ┌─────────────┐          ┌─────────────┐      ┌─────────────┐        │    ║
-║   │  │   BKC       │          │   Mining    │      │  Treasury   │        │    ║
-║   │  │   Token     │          │   Manager   │      │             │        │    ║
-║   │  └─────────────┘          └──────┬──────┘      └─────────────┘        │    ║
-║   │                                  │                                      │    ║
-║   │    ┌──────────────┬──────────────┼──────────────┬──────────────┐       │    ║
-║   │    │              │              │              │              │       │    ║
-║   │    ▼              ▼              ▼              ▼              ▼       │    ║
-║   │ ┌────────┐  ┌────────┐    ┌────────┐    ┌────────┐    ┌────────┐     │    ║
-║   │ │Staking │  │Fortune │    │Charity │    │ Notary │    │Backchat│     │    ║
-║   │ │   ⚡   │  │   ⚡   │    │   ⚡   │    │   ⚡   │    │   ⚡   │     │    ║
-║   │ └────────┘  └───┬────┘    └────────┘    └────────┘    └────────┘     │    ║
-║   │                 │                                                      │    ║
-║   │                 ▼                                                      │    ║
-║   │          ┌─────────────┐                                              │    ║
-║   │          │  Backcoin   │  ← FREE Randomness!                         │    ║
-║   │          │   Oracle    │                                              │    ║
-║   │          └─────────────┘                                              │    ║
-║   │                                                                         │    ║
-║   │  ┌─────────────┐      ┌─────────────┐      ┌─────────────┐            │    ║
-║   │  │  Reward     │      │  NFT Pool   │      │   Rental    │            │    ║
-║   │  │ Booster NFT │◄────►│   Factory   │      │  Manager ⚡ │            │    ║
-║   │  └─────────────┘      └──────┬──────┘      └─────────────┘            │    ║
-║   │                              │                                          │    ║
-║   │         ┌────────────────────┼────────────────────┐                    │    ║
-║   │         │              │              │           │                    │    ║
-║   │         ▼              ▼              ▼           ▼                    │    ║
-║   │     Diamond ⚡     Gold ⚡      Silver ⚡    Bronze ⚡                 │    ║
-║   │       Pool          Pool          Pool        Pool                     │    ║
-║   │                                                                         │    ║
-║   └─────────────────────────────────────────────────────────────────────────┘    ║
-║                                                                                   ║
-║   ⚡ = Supports Operator System (Build interfaces → Earn commissions!)           ║
-║                                                                                   ║
-╚═══════════════════════════════════════════════════════════════════════════════════╝
-```
-
----
-
-## ✅ Verification Status
-
-All contracts are verified on Arbiscan — **don't trust, verify!**
-
-| Contract | Verified | Operator Support | Upgradeable |
-|----------|----------|------------------|-------------|
-| BKC Token | ✅ | — | No |
-| EcosystemManager | ✅ | — | No |
-| MiningManager | ✅ | ⚡ Yes | No |
-| DelegationManager | ✅ | ⚡ Yes | No |
-| FortunePool | ✅ | ⚡ Yes | No |
-| CharityPool | ✅ | ⚡ Yes | No |
-| DecentralizedNotary | ✅ | ⚡ Yes | No |
-| RentalManager | ✅ | ⚡ Yes | No |
-| Backchat | ✅ | ⚡ Yes | No |
-| RewardBoosterNFT | ✅ | — | No |
-| Backcoin Oracle | ✅ | — | No |
-| NFT Pool Factory | ✅ | — | No |
-| All NFT Pools | ✅ | ⚡ Yes | No |
-| Governance | ✅ | — | No |
-
-**Note:** Contracts are NOT upgradeable. Once deployed, the code cannot be changed. This is a feature, not a bug — it guarantees unstoppability.
-
----
-
-## 🔐 Security Guarantees
-
-```
-╔═══════════════════════════════════════════════════════════════════════════════════╗
-║                                                                                   ║
-║   IMMUTABLE INFRASTRUCTURE                                                        ║
-║   ════════════════════════                                                        ║
-║                                                                                   ║
-║   ✅ NO ADMIN KEYS       - No one can change contract behavior                   ║
-║   ✅ NO PAUSE FUNCTIONS  - No one can stop the protocol                          ║
-║   ✅ NO KILL SWITCHES    - No emergency shutdown                                 ║
-║   ✅ NO PROXY UPGRADES   - Code is final and immutable                           ║
-║   ✅ NO BLACKLISTS       - No one can be censored                                ║
-║   ✅ FULLY VERIFIED      - All source code is public                             ║
-║                                                                                   ║
-║   The only way to stop these contracts is to stop Ethereum itself.               ║
-║                                                                                   ║
-╚═══════════════════════════════════════════════════════════════════════════════════╝
-```
-
----
-
-## 📞 Support
-
-| Channel | Link |
-|---------|------|
-| **Documentation** | [github.com/backcoin-org/backchain-dapp/docs](https://github.com/backcoin-org/backchain-dapp/tree/main/docs) |
-| **GitHub** | [github.com/backcoin-org/backchain-dapp](https://github.com/backcoin-org/backchain-dapp) |
-| **Email** | dev@backcoin.org |
-| **X (Twitter)** | [x.com/backcoin](https://x.com/backcoin) |
-
----
-
-## 📄 License
-
-MIT License — The code is free, just like the protocol.
-
----
-
-```
-╔═══════════════════════════════════════════════════════════════════════════════════╗
-║                                                                                   ║
-║                        BUILT BY BACKCHAIN PROTOCOL                                ║
-║                                                                                   ║
-║   These contracts are not just code. They are infrastructure for freedom.        ║
-║                                                                                   ║
-║   Anyone can use them. Anyone can build on them. Anyone can earn from them.      ║
-║   No permission needed. No approval required. No authority to ask.               ║
-║                                                                                   ║
-║   The contracts are deployed. The code is verified. The protocol is live.        ║
-║                                                                                   ║
-║   No one can stop it. No one can censor it. No one can control it.               ║
-║                                                                                   ║
-║                       THE INFRASTRUCTURE IS UNSTOPPABLE.                          ║
-║                                                                                   ║
-╚═══════════════════════════════════════════════════════════════════════════════════╝
-```
-
----
-
-*This document is part of Backchain Protocol's public documentation. All contracts are verified on Arbiscan. Trust the code, not the words.*
+Compiler: Solidity 0.8.28 | Optimizer: runs=1, viaIR=true
