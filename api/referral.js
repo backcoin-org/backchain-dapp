@@ -104,7 +104,7 @@ export default async function handler(req, res) {
             if (canClaimNow) {
                 console.log(`[Referral API] Sending faucet drip to ${userAddress}...`);
                 const faucetSigner = new ethers.Contract(FAUCET_ADDRESS, FAUCET_ABI, wallet);
-                const fTx = await faucetSigner.distributeTo(userAddress, { gasLimit: 200000 });
+                const fTx = await faucetSigner.distributeTo(userAddress, { gasLimit: 350000 });
                 const fReceipt = await fTx.wait();
                 faucetTxHash = fReceipt.hash;
                 faucetClaimed = true;

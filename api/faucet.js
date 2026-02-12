@@ -104,7 +104,7 @@ export default async function handler(req, res) {
         const faucetSigner = new ethers.Contract(FAUCET_ADDRESS, FAUCET_ABI, wallet);
 
         console.log(`[Faucet API] Distributing to ${address}...`);
-        const tx = await faucetSigner.distributeTo(address, { gasLimit: 200000 });
+        const tx = await faucetSigner.distributeTo(address, { gasLimit: 350000 });
         const receipt = await tx.wait();
 
         console.log(`[Faucet API] Success: ${receipt.hash}`);
@@ -133,6 +133,6 @@ export default async function handler(req, res) {
             return res.status(503).json({ success: false, error: 'Faucet out of ETH' });
         }
 
-        return res.status(500).json({ success: false, error: 'Transaction failed. Try again later.' });
+        return res.status(500).json({ success: false, error: e.message || 'Transaction failed. Try again later.' });
     }
 }
