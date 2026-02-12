@@ -59,11 +59,6 @@ contract FortunePool {
     bytes32 public constant ACTION_TIER1 = keccak256("FORTUNE_TIER1");
     bytes32 public constant ACTION_TIER2 = keccak256("FORTUNE_TIER2");
 
-    /// @notice Fixed minimum ETH fees per tier (ensures revenue on L2)
-    uint256 public constant FEE_TIER0 = 0.0003 ether;  // ~$0.90
-    uint256 public constant FEE_TIER1 = 0.0005 ether;  // ~$1.50
-    uint256 public constant FEE_TIER2 = 0.001 ether;   // ~$3.00
-
     uint8   public constant TIER_COUNT     = 3;
     uint256 public constant BKC_FEE_BPS    = 2000;       // 20% BKC fee
     uint256 public constant MAX_PAYOUT_BPS = 1000;        // 10% of pool max
@@ -553,15 +548,11 @@ contract FortunePool {
         return (uint256(keccak256(abi.encodePacked(entropy, gameId, tierIndex))) % maxRange) + 1;
     }
 
-    /// @dev Sum ETH fees for selected tiers (max of ecosystem fee and fixed minimum)
+    /// @dev Sum ETH fees for selected tiers (fully gas-based via ecosystem)
     function _calculateEthFee(uint8 tierMask) internal view returns (uint256 fee) {
-        if (tierMask & 1 != 0) fee += _maxFee(ecosystem.calculateFee(ACTION_TIER0, 0), FEE_TIER0);
-        if (tierMask & 2 != 0) fee += _maxFee(ecosystem.calculateFee(ACTION_TIER1, 0), FEE_TIER1);
-        if (tierMask & 4 != 0) fee += _maxFee(ecosystem.calculateFee(ACTION_TIER2, 0), FEE_TIER2);
-    }
-
-    function _maxFee(uint256 a, uint256 b) internal pure returns (uint256) {
-        return a > b ? a : b;
+        if (tierMask & 1 != 0) fee += ecosystem.calculateFee(ACTION_TIER0, 0);
+        if (tierMask & 2 != 0) fee += ecosystem.calculateFee(ACTION_TIER1, 0);
+        if (tierMask & 4 != 0) fee += ecosystem.calculateFee(ACTION_TIER2, 0);
     }
 
     /// @dev Count set bits in tier mask (max 3 bits)

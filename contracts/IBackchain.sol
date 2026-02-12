@@ -83,6 +83,9 @@ interface IBackchainEcosystem {
 
     /// @notice Referral count for a given address
     function referralCount(address referrer) external view returns (uint256);
+
+    /// @notice Global referral share in basis points (e.g., 1000 = 10%)
+    function referralBps() external view returns (uint16);
 }
 
 // ─── Staking Pool ──────────────────────────────────────────────────────────
@@ -161,7 +164,7 @@ interface IRewardBooster {
 // ─── Buyback Miner ─────────────────────────────────────────────────────────
 
 interface IBuybackMiner {
-    /// @notice Execute buyback + mining (permissionless, caller earns 1%)
+    /// @notice Execute buyback + mining (permissionless, caller earns 5%)
     function executeBuyback() external;
 
     /// @notice Current mining rate in bps (10000 = 100%, 0 = no mining)

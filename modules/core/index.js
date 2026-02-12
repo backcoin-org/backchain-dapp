@@ -91,7 +91,7 @@ export {
 import { addresses, contractAddresses } from '../../config.js';
 
 const ECOSYSTEM_FEE_ABI = [
-    'function getFeeConfig(bytes32 _actionId) view returns (uint8 feeType, uint16 bps, uint16 multiplier, uint32 gasEstimate)'
+    'function getFeeConfig(bytes32 _actionId) view returns (uint8 feeType, uint16 bps, uint32 multiplier, uint32 gasEstimate)'
 ];
 
 const FEE_BPS = 10000n;

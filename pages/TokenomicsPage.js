@@ -141,7 +141,7 @@ function renderTGE() {
                     <span class="text-lg"><i class="fa-solid fa-parachute-box text-amber-400"></i></span>
                     <p class="text-amber-400 font-bold text-sm">Airdrop — Phase 1 Active</p>
                 </div>
-                <p class="text-zinc-400 text-xs">Earn points by using the protocol: staking, notarizing, playing Fortune, posting on Agora, donating to Charity. Share your referral link to earn 5% of your referrals' staking rewards — forever.</p>
+                <p class="text-zinc-400 text-xs">Earn points by using the protocol: staking, notarizing, playing Fortune, posting on Agora, donating to Charity. Share your referral link to earn 10% ETH on all fees + 5% BKC on staking rewards — forever.</p>
                 <div class="flex gap-2 mt-3">
                     <a href="#airdrop" class="inline-flex items-center gap-1.5 text-xs font-bold text-amber-400 hover:text-amber-300 transition-colors">
                         <i class="fa-solid fa-arrow-right"></i> Join Airdrop

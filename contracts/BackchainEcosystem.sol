@@ -12,7 +12,7 @@ import "./IBackchain.sol";
 //
 // Responsibilities:
 //   - Fee calculation (gas-based or value-based, per action)
-//   - ETH distribution: custom recipient → operator → treasury → buyback
+//   - ETH distribution: referrer → custom recipient → operator → treasury → buyback
 //   - BKC distribution for Tier 2 modules: burn → stakers → treasury
 //   - Global referral registry (one-time, permanent, ecosystem-wide)
 //   - Module registry (authorize/deauthorize contracts)
@@ -41,7 +41,7 @@ contract BackchainEcosystem is IBackchainEcosystem {
     uint256 private constant BPS = 10_000;
 
     // Safe bounds — prevent owner from setting unreasonable values
-    uint256 public constant MAX_GAS_MULTIPLIER = 10_000;   // 10000x max
+    uint256 public constant MAX_GAS_MULTIPLIER = 2_000_000; // 2Mx max (for premium badge pricing on cheap L2 gas)
     uint256 public constant MAX_FEE_BPS        = 5_000;    // 50% max for value-based fees
     uint256 public constant MAX_GAS_ESTIMATE   = 30_000_000; // 30M gas max
 
@@ -68,6 +68,7 @@ contract BackchainEcosystem is IBackchainEcosystem {
     mapping(address => address) public override referredBy;
     mapping(address => uint256) public override referralCount;
     address public referralRelayer;
+    uint16  public override referralBps;  // global referral share (e.g., 1000 = 10% of ETH fees)
 
     // ════════════════════════════════════════════════════════════════════════
     // MODULE REGISTRY
@@ -99,7 +100,7 @@ contract BackchainEcosystem is IBackchainEcosystem {
     struct FeeConfig {
         uint8  feeType;      // 0 = gas-based, 1 = value-based
         uint16 bps;          // basis points (e.g., 100 = 1%)
-        uint16 multiplier;   // gas-based multiplier (1x, 10x, 100x, 1000x)
+        uint32 multiplier;   // gas-based multiplier (uint32 for premium pricing on cheap L2)
         uint32 gasEstimate;  // gas-based: estimated gas units for this action
     }
 
@@ -141,6 +142,7 @@ contract BackchainEcosystem is IBackchainEcosystem {
         uint256 bkcFee
     );
     event EthDistributed(
+        uint256 toReferrer,
         uint256 toCustom,
         uint256 toOperator,
         uint256 toTreasury,
@@ -155,6 +157,7 @@ contract BackchainEcosystem is IBackchainEcosystem {
     // ── Referral ──
     event ReferrerSet(address indexed user, address indexed referrer);
     event ReferralRelayerUpdated(address indexed oldRelayer, address indexed newRelayer);
+    event ReferralBpsUpdated(uint16 newBps);
 
     // ── Module management ──
     event ModuleRegistered(bytes32 indexed moduleId, address indexed contractAddr);
@@ -295,7 +298,7 @@ contract BackchainEcosystem is IBackchainEcosystem {
 
         // ── ETH DISTRIBUTION ──
         if (msg.value > 0) {
-            _distributeEth(msg.value, operator, customRecipient, cfg);
+            _distributeEth(msg.value, user, operator, customRecipient, cfg);
             totalEthCollected += msg.value;
         }
 
@@ -316,23 +319,35 @@ contract BackchainEcosystem is IBackchainEcosystem {
     // INTERNAL: ETH DISTRIBUTION
     // ════════════════════════════════════════════════════════════════════════
 
-    /// @dev Split ETH according to module config. Uses CEI pattern:
-    ///      all storage writes happen BEFORE the external call to customRecipient.
+    /// @dev Split ETH: referral off-the-top, then module config split on remaining.
+    ///      Uses CEI pattern: all storage writes BEFORE external calls.
     ///
     ///      When an address is missing (address(0)), their share flows to buyback.
     ///      Any rounding dust also flows to buyback. Nothing is ever lost.
     function _distributeEth(
         uint256 amount,
+        address user,
         address operator,
         address customRecipient,
         ModuleConfig memory cfg
     ) internal {
         uint256 distributed;
 
-        // ── Calculate all amounts ──
-        uint256 customAmt   = amount * cfg.customBps / BPS;
-        uint256 operatorAmt = amount * cfg.operatorBps / BPS;
-        uint256 treasuryAmt = amount * cfg.treasuryBps / BPS;
+        // ── REFERRAL CUT (off-the-top, before module split) ──
+        uint256 referralAmt;
+        address ref = referredBy[user];
+        if (ref != address(0) && referralBps > 0) {
+            referralAmt = amount * referralBps / BPS;
+            pendingEth[ref] += referralAmt;
+            distributed += referralAmt;
+        }
+
+        // ── Module split operates on remaining amount ──
+        uint256 remaining = amount - referralAmt;
+
+        uint256 customAmt   = remaining * cfg.customBps / BPS;
+        uint256 operatorAmt = remaining * cfg.operatorBps / BPS;
+        uint256 treasuryAmt = remaining * cfg.treasuryBps / BPS;
 
         // ── EFFECTS (storage writes first — CEI pattern) ──
 
@@ -348,16 +363,14 @@ contract BackchainEcosystem is IBackchainEcosystem {
             distributed += treasuryAmt;
         }
 
-        // Buyback — everything not distributed to operator/treasury
+        // Buyback — everything not distributed to referrer/operator/treasury
         // Includes: explicit buybackBps + unallocated custom + unallocated operator + dust
         // If customRecipient is present, customAmt will be sent below and subtracted
         uint256 toBuyback;
         if (customRecipient != address(0) && customAmt > 0) {
-            // Custom recipient gets instant ETH — we subtract it from what stays
             distributed += customAmt;
             toBuyback = amount - distributed;
         } else {
-            // No custom recipient: their share goes to buyback too
             toBuyback = amount - distributed;
         }
 
@@ -372,7 +385,7 @@ contract BackchainEcosystem is IBackchainEcosystem {
             _sendEth(customRecipient, customAmt);
         }
 
-        emit EthDistributed(customAmt, operatorAmt, treasuryAmt, toBuyback);
+        emit EthDistributed(referralAmt, customAmt, operatorAmt, treasuryAmt, toBuyback);
     }
 
     // ════════════════════════════════════════════════════════════════════════
@@ -416,8 +429,9 @@ contract BackchainEcosystem is IBackchainEcosystem {
     // ════════════════════════════════════════════════════════════════════════
 
     /// @notice Set your referrer. Can only be set once per user, permanently.
-    ///         The referrer earns 5% of the user's staking reward claims (in BKC).
-    ///         If no referrer, the 5% goes to treasury instead.
+    ///         The referrer earns: (1) referralBps% of ALL ETH fees across the ecosystem,
+    ///         and (2) 5% of the user's staking reward claims (in BKC via StakingPool).
+    ///         Dual earning — ETH and BKC, forever.
     function setReferrer(address _referrer) external override {
         if (_referrer == address(0)) revert InvalidAddress();
         if (_referrer == msg.sender) revert CannotReferSelf();
@@ -434,6 +448,14 @@ contract BackchainEcosystem is IBackchainEcosystem {
         if (_relayer == address(0)) revert ZeroAddress();
         emit ReferralRelayerUpdated(referralRelayer, _relayer);
         referralRelayer = _relayer;
+    }
+
+    /// @notice Owner sets the global referral share (% of ETH fees to referrers).
+    ///         Max 3000 (30%). Set to 0 to disable referral rewards.
+    function setReferralBps(uint16 _bps) external onlyOwner {
+        if (_bps > 3000) revert InvalidFeeBps();
+        referralBps = _bps;
+        emit ReferralBpsUpdated(_bps);
     }
 
     /// @notice Relayer sets a referrer on behalf of a user (gasless onboarding).
@@ -602,8 +624,7 @@ contract BackchainEcosystem is IBackchainEcosystem {
 
     function _validateFeeConfig(FeeConfig calldata _cfg) internal pure {
         if (_cfg.bps > uint16(MAX_FEE_BPS)) revert InvalidFeeBps();
-        // Additional validation only matters when bps > 0 (fee is active)
-        // When bps = 0, fee is always 0 regardless of other params
+        if (_cfg.feeType == 0 && _cfg.multiplier > MAX_GAS_MULTIPLIER) revert InvalidFeeBps();
     }
 
     // ════════════════════════════════════════════════════════════════════════

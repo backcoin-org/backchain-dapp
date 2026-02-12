@@ -37,7 +37,7 @@ import "./IBackchain.sol";
 //   Net score = superLikes - downvotes (frontends calculate, operators decide threshold)
 //
 // COMMUNITY MODERATION:
-//   Report → 0.0001 ETH → reportCount per post incremented
+//   Report → gas-based fee → reportCount per post incremented
 //   Each frontend decides threshold: e.g. 5 reports = hidden, 3 "illegal" = hidden
 //   Reporter auto-blocks author: frontend filters ALL posts from reported authors
 //   Contract stores raw data. Frontends interpret policy.
@@ -86,17 +86,15 @@ contract Agora {
     bytes32 public constant ACTION_LIKE       = keccak256("AGORA_LIKE");
     bytes32 public constant ACTION_FOLLOW     = keccak256("AGORA_FOLLOW");
 
+    // V10: New gas-based action IDs (replace fixed ETH prices)
+    bytes32 public constant ACTION_REPORT          = keccak256("AGORA_REPORT");
+    bytes32 public constant ACTION_PROFILE_BOOST   = keccak256("AGORA_PROFILE_BOOST");
+    bytes32 public constant ACTION_BADGE_VERIFIED  = keccak256("AGORA_BADGE_VERIFIED");
+    bytes32 public constant ACTION_BADGE_PREMIUM   = keccak256("AGORA_BADGE_PREMIUM");
+    bytes32 public constant ACTION_BADGE_ELITE     = keccak256("AGORA_BADGE_ELITE");
+
     /// @notice Price per SuperLike or Downvote (100 gwei)
     uint256 public constant VOTE_PRICE = 100 gwei;
-
-    /// @notice Profile boost price per day (0.0005 ETH)
-    uint256 public constant PROFILE_BOOST_PRICE = 0.0005 ether;
-
-    /// @notice Minimum tip amount
-    uint256 public constant MIN_TIP = 0.0001 ether;
-
-    /// @notice Report cost (prevents spam reports, goes to ecosystem)
-    uint256 public constant REPORT_PRICE = 0.0001 ether;
 
     /// @notice Number of predefined tag categories
     uint8 public constant TAG_COUNT = 15;
@@ -608,9 +606,10 @@ contract Agora {
     ///
     /// @param postId   Post to report
     /// @param category Report reason: 0=Spam, 1=Harassment, 2=Illegal, 3=Scam, 4=Other
-    function reportPost(uint256 postId, uint8 category) external payable {
+    function reportPost(uint256 postId, uint8 category, address operator) external payable {
         if (category >= REPORT_CATEGORY_COUNT) revert InvalidCategory();
-        if (msg.value < REPORT_PRICE) revert InsufficientFee();
+        uint256 fee = ecosystem.calculateFee(ACTION_REPORT, 0);
+        if (msg.value < fee) revert InsufficientFee();
 
         Post storage p = _requireActivePost(postId);
         if (p.author == msg.sender) revert SelfAction();
@@ -622,7 +621,7 @@ contract Agora {
 
         // Report fee goes to ecosystem (author earns nothing)
         ecosystem.collectFee{value: msg.value}(
-            msg.sender, address(0), address(0), MODULE_ID, 0
+            msg.sender, operator, address(0), MODULE_ID, 0
         );
 
         emit PostReported(postId, msg.sender, p.author, category, reportCount[postId]);
@@ -668,7 +667,7 @@ contract Agora {
     }
 
     /// @notice Tip a post's author directly with ETH.
-    ///         Free-value transfer — send any amount >= 0.0001 ETH.
+    ///         Free-value transfer — send any amount > 0.
     ///         Author earns via ecosystem's custom recipient share.
     ///         Operator earns commission on tips through their frontend.
     /// @param postId   Post to tip
@@ -676,7 +675,7 @@ contract Agora {
     function tipPost(uint256 postId, address operator) external payable {
         Post storage p = _requireActivePost(postId);
         if (p.author == msg.sender) revert SelfAction();
-        if (msg.value < MIN_TIP) revert InvalidAmount();
+        if (msg.value == 0) revert InvalidAmount();
 
         tipTotal[postId] += msg.value;
         if (operator != address(0)) operatorEngagement[operator]++;
@@ -761,13 +760,14 @@ contract Agora {
     // ════════════════════════════════════════════════════════════════════════
 
     /// @notice Boost your profile visibility.
-    ///         1 day of boost per 0.0005 ETH. Stackable — send more = longer boost.
+    ///         Gas-based pricing per day. Stackable — send more = longer boost.
     ///         Extends current boost if already active.
     /// @param operator Frontend operator
     function boostProfile(address operator) external payable {
-        if (msg.value < PROFILE_BOOST_PRICE) revert InsufficientFee();
+        uint256 pricePerDay = ecosystem.calculateFee(ACTION_PROFILE_BOOST, 0);
+        if (msg.value < pricePerDay) revert InsufficientFee();
 
-        uint256 daysToAdd = msg.value / PROFILE_BOOST_PRICE;
+        uint256 daysToAdd = msg.value / pricePerDay;
         uint64 current = boostExpiry[msg.sender];
         uint64 startFrom = current > uint64(block.timestamp) ? current : uint64(block.timestamp);
         uint64 newExpiry = startFrom + uint64(daysToAdd * 1 days);
@@ -781,16 +781,16 @@ contract Agora {
     }
 
     /// @notice Obtain a trust badge. 3 tiers with increasing price and prestige.
-    ///         Tier 0 (Verified): 0.01 ETH/year — blue checkmark
-    ///         Tier 1 (Premium):  0.05 ETH/year — gold checkmark
-    ///         Tier 2 (Elite):    0.1 ETH/year  — diamond animated checkmark
-    ///         Renews from current timestamp. Always upgrades to highest tier paid.
+    ///         Gas-based pricing per year. Always upgrades to highest tier paid.
+    ///         Tier 0 (Verified) — blue checkmark
+    ///         Tier 1 (Premium)  — gold checkmark
+    ///         Tier 2 (Elite)    — diamond animated checkmark
     /// @param tier     Badge tier (0=Verified, 1=Premium, 2=Elite)
     /// @param operator Frontend operator
     function obtainBadge(uint8 tier, address operator) external payable {
         if (tier >= BADGE_TIER_COUNT) revert InvalidTier();
 
-        uint256 price = _getBadgePrice(tier);
+        uint256 price = ecosystem.calculateFee(_getBadgeActionId(tier), 0);
         if (msg.value < price) revert InsufficientFee();
 
         uint64 newExpiry = uint64(block.timestamp + 365 days);
@@ -916,8 +916,8 @@ contract Agora {
     }
 
     /// @notice Get the price for a badge tier (1 year)
-    function getBadgePrice(uint8 tier) external pure returns (uint256) {
-        return _getBadgePrice(tier);
+    function getBadgePrice(uint8 tier) external view returns (uint256) {
+        return ecosystem.calculateFee(_getBadgeActionId(tier), 0);
     }
 
     /// @notice Operator network metrics
@@ -976,14 +976,11 @@ contract Agora {
         return 0.01 ether; // BOOST_FEATURED               // ~$30/day
     }
 
-    /// @dev Badge pricing per tier (1 year).
-    ///      Verified = 0.01 ETH (blue checkmark)
-    ///      Premium  = 0.05 ETH (gold checkmark)
-    ///      Elite    = 0.1 ETH  (diamond animated)
-    function _getBadgePrice(uint8 tier) internal pure returns (uint256) {
-        if (tier == BADGE_VERIFIED) return 0.02 ether;    // ~$60/year
-        if (tier == BADGE_PREMIUM)  return 0.1 ether;     // ~$300/year
-        return 0.25 ether; // BADGE_ELITE                  // ~$750/year
+    /// @dev Map badge tier → fee action ID for ecosystem.calculateFee().
+    function _getBadgeActionId(uint8 tier) internal pure returns (bytes32) {
+        if (tier == BADGE_VERIFIED) return ACTION_BADGE_VERIFIED;
+        if (tier == BADGE_PREMIUM)  return ACTION_BADGE_PREMIUM;
+        return ACTION_BADGE_ELITE;
     }
 
     /// @dev Username pricing: shorter names are more expensive (vanity pricing).

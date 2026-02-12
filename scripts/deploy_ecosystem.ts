@@ -1,9 +1,9 @@
 // scripts/deploy_ecosystem.ts
 // ════════════════════════════════════════════════════════════════════════════
-// 🚀 BACKCHAIN ECOSYSTEM - DEPLOY COMPLETO V9.0 (IMUTÁVEL)
+// 🚀 BACKCHAIN ECOSYSTEM - DEPLOY COMPLETO V10.0 (IMUTÁVEL)
 // ════════════════════════════════════════════════════════════════════════════
 //
-// V9.0: TODOS os contratos são imutáveis (sem UUPS proxy).
+// V10.0: TODOS os contratos são imutáveis (sem UUPS proxy).
 // - BKCToken: deployer-controlled minter, TGE mint no constructor
 // - BackchainEcosystem: registerModule() / registerModuleBatch()
 // - LiquidityPool: AMM constant-product (novo)
@@ -66,7 +66,7 @@ let currentPhase = "INIT";
 
 function initTransactionLog(network: string, chainId: number, deployer: string) {
     txLog = {
-        version: "9.0.0",
+        version: "10.0.0",
         network,
         chainId,
         deployer,
@@ -217,62 +217,82 @@ const FAUCET_CONFIG = {
 };
 
 // ════════════════════════════════════════════════════════════════════════════
-//                    📊 MODULE FEE CONFIGS (V9: ModuleConfig)
+//                    📊 MODULE FEE CONFIGS (V10: ModuleConfig)
 // ════════════════════════════════════════════════════════════════════════════
 // ModuleConfig: { active, customBps, operatorBps, treasuryBps, buybackBps }
 // customBps + operatorBps + treasuryBps + buybackBps MUST = 10000
+// V10: referral 10% is taken off-the-top BEFORE module split.
+//      These BPS operate on the remaining 90%.
+//      Effective split: Referrer 10% | Operator 15% | Treasury 25% | Buyback 50%
 
 const MODULE_CONFIGS = {
-    STAKING:  { active: true, customBps: 0,    operatorBps: 1000, treasuryBps: 3000, buybackBps: 6000 },
-    NFT_POOL: { active: true, customBps: 0,    operatorBps: 1000, treasuryBps: 3000, buybackBps: 6000 },
-    FORTUNE:  { active: true, customBps: 0,    operatorBps: 1000, treasuryBps: 3000, buybackBps: 6000 },
-    AGORA:    { active: true, customBps: 5000, operatorBps: 2000, treasuryBps: 1000, buybackBps: 2000 },
-    NOTARY:   { active: true, customBps: 0,    operatorBps: 1000, treasuryBps: 3000, buybackBps: 6000 },
-    CHARITY:  { active: true, customBps: 7000, operatorBps: 1000, treasuryBps: 1000, buybackBps: 1000 },
-    RENTAL:   { active: true, customBps: 7000, operatorBps: 1000, treasuryBps: 1000, buybackBps: 1000 },
+    STAKING:  { active: true, customBps: 0,    operatorBps: 1667, treasuryBps: 2778, buybackBps: 5555 },
+    NFT_POOL: { active: true, customBps: 0,    operatorBps: 1667, treasuryBps: 2778, buybackBps: 5555 },
+    FORTUNE:  { active: true, customBps: 0,    operatorBps: 1667, treasuryBps: 2778, buybackBps: 5555 },
+    AGORA:    { active: true, customBps: 5000, operatorBps: 833,  treasuryBps: 1389, buybackBps: 2778 },
+    NOTARY:   { active: true, customBps: 0,    operatorBps: 1667, treasuryBps: 2778, buybackBps: 5555 },
+    CHARITY:  { active: true, customBps: 7000, operatorBps: 500,  treasuryBps: 833,  buybackBps: 1667 },
+    RENTAL:   { active: true, customBps: 7000, operatorBps: 500,  treasuryBps: 833,  buybackBps: 1667 },
 };
 
 // ════════════════════════════════════════════════════════════════════════════
-//                    💰 ACTION FEE CONFIGS (V9: FeeConfig per action)
+//                    💰 ACTION FEE CONFIGS (V10: FeeConfig per action)
 // ════════════════════════════════════════════════════════════════════════════
-// FeeConfig: { feeType: uint8, bps: uint16, multiplier: uint16, gasEstimate: uint32 }
+// FeeConfig: { feeType: uint8, bps: uint16, multiplier: uint32, gasEstimate: uint32 }
 // feeType: 0 = gas-based (gasEstimate × gasPrice × bps × multiplier / 10000)
 // feeType: 1 = value-based (txValue × bps / 10000)
 //
-// Gas-based fees: O multiplicador controla a escala da taxa.
-// Com gasEstimate=200000, multiplier=10, bps=100 → fee ≈ 200k × gasPrice × 0.01 × 10
-// Ajuste multiplier para calibrar as taxas à rede desejada.
+// V10 Fee Tiers (calibrated for Arbitrum L2, ~0.01-0.1 gwei gas):
+//   SOCIAL    (~$0.025): low-friction actions (like, follow, reply, claim)
+//   CONTENT   (~$0.10):  content creation (post, certify, report)
+//   FINANCIAL (~$1.00):  financial actions (delegate, NFT buy/sell, fortune tier1/2)
+//   PREMIUM   (~$2.00):  premium services (profile boost)
+//   BADGE_*:  annual subscriptions via high multipliers ($60-$750/year)
 
 const FEE_TYPE_GAS = 0;
 const FEE_TYPE_VALUE = 1;
 
-// Ações gas-based padrão (mesmos params para maioria das ações)
-const GAS_FEE_DEFAULT = { feeType: FEE_TYPE_GAS, bps: 100, multiplier: 10, gasEstimate: 200000 };
-const GAS_FEE_HEAVY   = { feeType: FEE_TYPE_GAS, bps: 100, multiplier: 20, gasEstimate: 300000 };
-const GAS_FEE_LIGHT   = { feeType: FEE_TYPE_GAS, bps: 100, multiplier: 5,  gasEstimate: 150000 };
+// V10 fee tiers
+const GAS_FEE_SOCIAL    = { feeType: FEE_TYPE_GAS, bps: 100, multiplier: 50,        gasEstimate: 150000 };
+const GAS_FEE_CONTENT   = { feeType: FEE_TYPE_GAS, bps: 100, multiplier: 200,       gasEstimate: 200000 };
+const GAS_FEE_FINANCIAL = { feeType: FEE_TYPE_GAS, bps: 100, multiplier: 2000,      gasEstimate: 200000 };
+const GAS_FEE_PREMIUM   = { feeType: FEE_TYPE_GAS, bps: 100, multiplier: 2700,      gasEstimate: 300000 };
+
+// Badge tiers (annual pricing via high multipliers — uint32 required)
+const GAS_FEE_BADGE_VERIFIED = { feeType: FEE_TYPE_GAS, bps: 100, multiplier: 120000,   gasEstimate: 200000 }; // ~$60/year
+const GAS_FEE_BADGE_PREMIUM  = { feeType: FEE_TYPE_GAS, bps: 100, multiplier: 600000,   gasEstimate: 200000 }; // ~$300/year
+const GAS_FEE_BADGE_ELITE    = { feeType: FEE_TYPE_GAS, bps: 100, multiplier: 1500000,  gasEstimate: 200000 }; // ~$750/year
 
 // Todas as ações do ecossistema e suas taxas
 // Nota: ações com string usam ethers.id(), ações NFT usam abi.encode(string, uint8)
 const ACTION_FEE_CONFIGS: Record<string, { feeType: number; bps: number; multiplier: number; gasEstimate: number }> = {
     // StakingPool
-    "STAKING_DELEGATE":       GAS_FEE_DEFAULT,
-    "STAKING_CLAIM":          GAS_FEE_LIGHT,
-    "STAKING_FORCE_UNSTAKE":  GAS_FEE_HEAVY,
+    "STAKING_DELEGATE":       GAS_FEE_FINANCIAL,
+    "STAKING_CLAIM":          GAS_FEE_SOCIAL,
+    "STAKING_FORCE_UNSTAKE":  GAS_FEE_FINANCIAL,
     // Agora (social)
-    "AGORA_POST":             GAS_FEE_DEFAULT,
-    "AGORA_REPLY":            GAS_FEE_LIGHT,
-    "AGORA_REPOST":           GAS_FEE_LIGHT,
-    "AGORA_LIKE":             GAS_FEE_LIGHT,
-    "AGORA_FOLLOW":           GAS_FEE_LIGHT,
+    "AGORA_POST":             GAS_FEE_CONTENT,
+    "AGORA_POST_IMAGE":       GAS_FEE_CONTENT,
+    "AGORA_POST_VIDEO":       GAS_FEE_CONTENT,
+    "AGORA_LIVE":             GAS_FEE_CONTENT,
+    "AGORA_REPLY":            GAS_FEE_SOCIAL,
+    "AGORA_REPOST":           GAS_FEE_SOCIAL,
+    "AGORA_LIKE":             GAS_FEE_SOCIAL,
+    "AGORA_FOLLOW":           GAS_FEE_SOCIAL,
+    "AGORA_REPORT":           GAS_FEE_CONTENT,
+    "AGORA_PROFILE_BOOST":    GAS_FEE_PREMIUM,
+    "AGORA_BADGE_VERIFIED":   GAS_FEE_BADGE_VERIFIED,
+    "AGORA_BADGE_PREMIUM":    GAS_FEE_BADGE_PREMIUM,
+    "AGORA_BADGE_ELITE":      GAS_FEE_BADGE_ELITE,
     // FortunePool (per tier)
-    "FORTUNE_TIER0":          GAS_FEE_LIGHT,
-    "FORTUNE_TIER1":          GAS_FEE_DEFAULT,
-    "FORTUNE_TIER2":          GAS_FEE_HEAVY,
+    "FORTUNE_TIER0":          GAS_FEE_SOCIAL,
+    "FORTUNE_TIER1":          GAS_FEE_FINANCIAL,
+    "FORTUNE_TIER2":          GAS_FEE_FINANCIAL,
     // Notary
-    "NOTARY_CERTIFY":         GAS_FEE_DEFAULT,
+    "NOTARY_CERTIFY":         GAS_FEE_CONTENT,
     // CharityPool
-    "CHARITY_CREATE":         GAS_FEE_HEAVY,
-    "CHARITY_BOOST":          GAS_FEE_DEFAULT,
+    "CHARITY_CREATE":         GAS_FEE_FINANCIAL,
+    "CHARITY_BOOST":          GAS_FEE_CONTENT,
     // RentalManager
     // (RENTAL_RENT e CHARITY_DONATE são value-based, definidos separadamente)
 };
@@ -286,8 +306,8 @@ const VALUE_FEE_CONFIGS: Record<string, { bps: number }> = {
 // NFTPool actions (usam abi.encode, não keccak256 de string simples)
 // Serão calculadas dinamicamente no script com ethers.AbiCoder
 const NFT_FEE_CONFIG = {
-    BUY:  GAS_FEE_DEFAULT,
-    SELL: GAS_FEE_DEFAULT,
+    BUY:  GAS_FEE_FINANCIAL,
+    SELL: GAS_FEE_FINANCIAL,
 };
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -340,8 +360,8 @@ function clearConfigFiles(networkName: string) {
     fs.writeFileSync(addressesFilePath, JSON.stringify({}, null, 2));
 
     const defaultRules = {
-        VERSION: "9.0.0",
-        DESCRIPTION: "Backchain Ecosystem V9.0 - All Immutable Contracts",
+        VERSION: "10.0.0",
+        DESCRIPTION: "Backchain Ecosystem V10.0 - All Immutable Contracts + Ecosystem-wide Referral",
         NETWORK: networkName,
         CREATED_AT: new Date().toISOString(),
         wallets: {
@@ -500,7 +520,7 @@ async function deployContractWithRetry(
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-//                    🚀 SCRIPT PRINCIPAL V9.0
+//                    🚀 SCRIPT PRINCIPAL V10.0
 // ════════════════════════════════════════════════════════════════════════════
 
 async function main() {
@@ -517,7 +537,7 @@ async function main() {
     initTransactionLog(networkName, chainId, deployer.address);
 
     console.log("\n\n════════════════════════════════════════════════════════════════════════════");
-    console.log("               🚀 BACKCHAIN ECOSYSTEM DEPLOY V9.0 (IMUTÁVEL)");
+    console.log("               🚀 BACKCHAIN ECOSYSTEM DEPLOY V10.0 (IMUTÁVEL)");
     console.log("════════════════════════════════════════════════════════════════════════════");
     console.log(`   Network:     ${networkName} (chainId: ${chainId})`);
     console.log(`   Deployer:    ${deployer.address}`);
@@ -525,7 +545,7 @@ async function main() {
     console.log(`   Treasury:    ${SYSTEM_WALLETS.TREASURY}`);
     console.log(`   Mode:        ${isMainnet ? '🔴 MAINNET' : '🟢 TESTNET'}`);
     console.log("════════════════════════════════════════════════════════════════════════════");
-    console.log("   ⚠️  V9.0: TODOS os contratos são IMUTÁVEIS (sem proxy)");
+    console.log("   ⚠️  V10.0: TODOS os contratos são IMUTÁVEIS (sem proxy)");
     console.log("════════════════════════════════════════════════════════════════════════════\n");
 
     try {
@@ -804,6 +824,12 @@ async function main() {
             "Ecosystem.setReferralRelayer(deployer)"
         );
 
+        // V10: Enable ecosystem-wide referral rewards (10% ETH off-the-top)
+        await sendTxWithRetry(
+            async () => await eco.setReferralBps(1000),
+            "Ecosystem.setReferralBps(1000 = 10%)"
+        );
+
         // 9b. registerModuleBatch — registrar todos os 7 módulos
         const moduleContracts = [
             stakingAddr, poolAddresses[0], fortuneAddr, agoraAddr,
@@ -1069,7 +1095,7 @@ async function main() {
         // RESUMO FINAL
         // ══════════════════════════════════════════════════════════════════════
         console.log("\n════════════════════════════════════════════════════════════════════════════");
-        console.log("                         📊 DEPLOY V9.0 CONCLUÍDO!");
+        console.log("                         📊 DEPLOY V10.0 CONCLUÍDO!");
         console.log("════════════════════════════════════════════════════════════════════════════");
 
         console.log("\n📋 CONTRATOS IMPLANTADOS:");
@@ -1115,11 +1141,12 @@ async function main() {
         console.log(`   4 NFT pools registrados individualmente`);
         console.log(`   ${actionIds.length} action fees configuradas (gas-based + value-based)`);
         console.log(`   BKC Distribution: ${BKC_DISTRIBUTION.burnBps/100}% burn / ${BKC_DISTRIBUTION.stakerBps/100}% stakers / ${BKC_DISTRIBUTION.treasuryBps/100}% treasury`);
+        console.log(`   Referral: 10% ETH off-the-top (ecosystem-wide)`);
 
         printTransactionSummary();
 
         console.log("\n────────────────────────────────────────────────────────────────");
-        console.log(`   🎉 BACKCHAIN V9.0 IMPLANTADO COM SUCESSO!`);
+        console.log(`   🎉 BACKCHAIN V10.0 IMPLANTADO COM SUCESSO!`);
         console.log(`   📡 Rede: ${networkName} ${isMainnet ? '(MAINNET)' : '(TESTNET)'}`);
         console.log(`   🔒 Todos os contratos são IMUTÁVEIS (sem proxy)`);
         if (governanceAddr) {

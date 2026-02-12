@@ -672,7 +672,7 @@ export const faucetABI = [
     "event Claimed(address indexed recipient, uint256 tokens, uint256 eth, address indexed via)"
 ];
 
-// BackchainEcosystem V9 ABI — Central fee hub with module registration
+// BackchainEcosystem V10 ABI — Central fee hub with module registration + ecosystem-wide referral
 export const ecosystemManagerABI = [
     // Fee calculation & collection
     "function calculateFee(bytes32 _actionId, uint256 _txValue) view returns (uint256)",
@@ -686,8 +686,10 @@ export const ecosystemManagerABI = [
     "function setReferrer(address _referrer) external",
     "function setReferrerFor(address _user, address _referrer) external",
     "function referralRelayer() view returns (address)",
+    "function referralBps() view returns (uint16)",
     "event ReferrerSet(address indexed user, address indexed referrer)",
     "event ReferralRelayerUpdated(address indexed oldRelayer, address indexed newRelayer)",
+    "event ReferralBpsUpdated(uint16 newBps)",
 
     // Stats
     "function totalEthCollected() view returns (uint256)",
@@ -706,12 +708,13 @@ export const ecosystemManagerABI = [
     // Module config (for operator commission rates)
     "function getModuleConfig(bytes32 _moduleId) view returns (bool active, uint16 customBps, uint16 operatorBps, uint16 treasuryBps, uint16 buybackBps)",
 
-    // Events
+    // Events (V10: EthDistributed includes toReferrer)
     "event FeeCollected(bytes32 indexed moduleId, address indexed user, address operator, address customRecipient, uint256 ethAmount, uint256 bkcAmount)",
+    "event EthDistributed(bytes32 indexed moduleId, uint256 toReferrer, uint256 toCustom, uint256 toOperator, uint256 toTreasury, uint256 toBuyback)",
     "event EthWithdrawn(address indexed recipient, uint256 amount)"
 ];
 
-// BuybackMiner V9 ABI — Permissionless buyback + mining scarcity curve
+// BuybackMiner V10 ABI — Permissionless buyback + mining scarcity curve (no minimum, 5% caller, configurable pool)
 export const buybackMinerABI = [
     // Write
     "function executeBuyback() external",
@@ -720,9 +723,10 @@ export const buybackMinerABI = [
     // Constants
     "function MAX_SUPPLY() view returns (uint256)",
     "function MAX_MINTABLE() view returns (uint256)",
-    "function MIN_BUYBACK() view returns (uint256)",
     "function CALLER_BPS() view returns (uint256)",
     "function BURN_BPS() view returns (uint256)",
+    "function liquidityPool() view returns (address)",
+    "function owner() view returns (address)",
 
     // Views
     "function currentMiningRate() view returns (uint256 rateBps)",

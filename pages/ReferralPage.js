@@ -110,11 +110,11 @@ function render(isActive) {
                 <span class="text-amber-400 text-sm font-bold">100% Gasless Referral System</span>
             </div>
             <h1 class="text-3xl sm:text-4xl lg:text-5xl font-extrabold text-white mb-4 leading-tight">
-                Invite Friends,<br class="sm:hidden"> <span class="text-amber-400">Earn 5% Forever</span>
+                Invite Friends,<br class="sm:hidden"> <span class="text-amber-400">Earn Dual Rewards</span>
             </h1>
             <p class="text-zinc-400 text-base sm:text-lg max-w-xl mx-auto leading-relaxed">
                 Share your link. When your friends connect, they're <strong class="text-white">automatically onboarded</strong> —
-                zero gas, zero popups. You earn <strong class="text-white">5% of every reward</strong> they claim.
+                zero gas, zero popups. You earn <strong class="text-white">10% ETH on all fees</strong> + <strong class="text-white">5% BKC on staking rewards</strong>.
             </p>
         </div>
 
@@ -210,8 +210,8 @@ function render(isActive) {
                     <div class="w-16 h-16 rounded-2xl bg-green-500/10 border border-green-500/30 flex items-center justify-center mx-auto mb-4">
                         <i class="fa-solid fa-coins text-2xl text-green-400"></i>
                     </div>
-                    <h3 class="text-white font-bold mb-2">3. Earn 5% Forever</h3>
-                    <p class="text-zinc-400 text-sm">Every time they claim staking rewards, 5% is sent directly to your wallet — for life</p>
+                    <h3 class="text-white font-bold mb-2">3. Earn Dual Rewards</h3>
+                    <p class="text-zinc-400 text-sm">Earn 10% ETH on every fee they pay + 5% BKC on staking claims — for life</p>
                 </div>
             </div>
         </div>
@@ -236,7 +236,7 @@ function render(isActive) {
             <div class="space-y-3">
                 <div class="bg-zinc-800/30 border border-zinc-700/30 rounded-xl p-4">
                     <h4 class="text-white font-semibold mb-1">How much can I earn?</h4>
-                    <p class="text-zinc-400 text-sm">You earn 5% of every staking reward your referrals claim. There's no limit — the more active referrals you have, the more you earn. Rewards are paid in BKC tokens.</p>
+                    <p class="text-zinc-400 text-sm">You earn 10% ETH on every fee your referrals pay (posts, certifications, badges, etc.) plus 5% BKC on staking reward claims. No limit — the more active referrals, the more you earn.</p>
                 </div>
                 <div class="bg-zinc-800/30 border border-zinc-700/30 rounded-xl p-4">
                     <h4 class="text-white font-semibold mb-1">How do I get referred?</h4>
@@ -244,7 +244,7 @@ function render(isActive) {
                 </div>
                 <div class="bg-zinc-800/30 border border-zinc-700/30 rounded-xl p-4">
                     <h4 class="text-white font-semibold mb-1">Is this on-chain?</h4>
-                    <p class="text-zinc-400 text-sm">Yes. Referral relationships are stored permanently on the Arbitrum blockchain. The 5% cut is enforced by the StakingPool smart contract — no one can change or revoke it.</p>
+                    <p class="text-zinc-400 text-sm">Yes. Referral relationships are stored permanently on the Arbitrum blockchain. The 10% ETH cut is enforced by the Ecosystem contract and the 5% BKC by the StakingPool — no one can revoke it.</p>
                 </div>
                 <div class="bg-zinc-800/30 border border-zinc-700/30 rounded-xl p-4">
                     <h4 class="text-white font-semibold mb-1">Can I change my referrer?</h4>

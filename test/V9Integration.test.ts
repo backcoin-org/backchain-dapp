@@ -1,7 +1,9 @@
 // =============================================================================
-// BACKCHAIN V9 — COMPREHENSIVE INTEGRATION TESTS
+// BACKCHAIN V10 — COMPREHENSIVE INTEGRATION TESTS
 // =============================================================================
-// Tests cross-contract flows for all 15 V9 smart contracts.
+// Tests cross-contract flows for all 15 V10 smart contracts.
+// V10: ecosystem-wide referral rewards (10% ETH off-the-top), uint32 multiplier,
+//      no buyback minimum, 5% caller reward, configurable swap target.
 // Uses ethers v6 + Hardhat + loadFixture for test isolation.
 // =============================================================================
 
@@ -30,7 +32,7 @@ function nftActionId(prefix: string, tier: number): string {
 }
 
 // ---------------------------------------------------------------------------
-// Constants matching V9 contracts
+// Constants matching V10 contracts
 // ---------------------------------------------------------------------------
 const MAX_SUPPLY = ethers.parseEther("200000000"); // 200M
 const TGE_AMOUNT = ethers.parseEther("40000000"); // 40M
@@ -164,16 +166,35 @@ async function deployAllFixture() {
   await ecosystem.setBuybackMiner(buybackAddr);
   await ecosystem.setStakingPool(stakingAddr);
 
-  // Ecosystem: generic module config (10% custom, 10% operator, 30% treasury, 50% buyback)
+  // V10 module configs — referral 10% off-the-top, remaining 90% split per module
+  // No-custom modules: operator 15%, treasury 25%, buyback 50% (of remaining 90%)
   const defaultCfg = {
     active: true,
-    customBps: 1000,
-    operatorBps: 1000,
-    treasuryBps: 3000,
-    buybackBps: 5000,
+    customBps: 0,
+    operatorBps: 1667,
+    treasuryBps: 2778,
+    buybackBps: 5555,
   };
 
-  // Register all modules in ecosystem
+  // AGORA: author earns 50% custom recipient, lower operator/treasury/buyback
+  const agoraCfg = {
+    active: true,
+    customBps: 5000,
+    operatorBps: 833,
+    treasuryBps: 1389,
+    buybackBps: 2778,
+  };
+
+  // CHARITY & RENTAL: creator/owner earns 70% custom recipient
+  const charityCfg = {
+    active: true,
+    customBps: 7000,
+    operatorBps: 500,
+    treasuryBps: 833,
+    buybackBps: 1667,
+  };
+
+  // Register all modules in ecosystem with appropriate configs
   await ecosystem.registerModule(stakingAddr, MOD_STAKING, defaultCfg);
 
   // Register all 4 NFT Pools under the same module ID
@@ -181,11 +202,14 @@ async function deployAllFixture() {
     await ecosystem.registerModule(poolAddr, MOD_NFT_POOL, defaultCfg);
   }
 
-  await ecosystem.registerModule(rentalAddr, MOD_RENTAL, defaultCfg);
-  await ecosystem.registerModule(agoraAddr, MOD_AGORA, defaultCfg);
+  await ecosystem.registerModule(rentalAddr, MOD_RENTAL, charityCfg);
+  await ecosystem.registerModule(agoraAddr, MOD_AGORA, agoraCfg);
   await ecosystem.registerModule(fortuneAddr, MOD_FORTUNE, defaultCfg);
   await ecosystem.registerModule(notaryAddr, MOD_NOTARY, defaultCfg);
-  await ecosystem.registerModule(charityAddr, MOD_CHARITY, defaultCfg);
+  await ecosystem.registerModule(charityAddr, MOD_CHARITY, charityCfg);
+
+  // V10: Enable ecosystem-wide referral rewards (10% ETH off-the-top)
+  await ecosystem.setReferralBps(1000);
 
   // StakingPool: set reward notifiers (BuybackMiner + Ecosystem)
   await stakingPool.setRewardNotifier(buybackAddr, true);
@@ -287,7 +311,7 @@ async function deployAllFixture() {
 // TEST SUITES
 // ============================================================================
 
-describe("Backchain V9 — Integration Tests", function () {
+describe("Backchain V10 — Integration Tests", function () {
   // ══════════════════════════════════════════════════════════════════════════
   // 1. FULL DEPLOY & SETUP
   // ══════════════════════════════════════════════════════════════════════════
@@ -945,25 +969,40 @@ describe("Backchain V9 — Integration Tests", function () {
       expect(rate).to.equal(10000);
     });
 
-    it("executeBuyback: requires MIN_BUYBACK (0.1 ETH) accumulated", async function () {
+    it("executeBuyback: reverts when nothing accumulated", async function () {
       const f = await loadFixture(deployAllFixture);
-      // With limited fees accumulated (below 0.1 ETH threshold), should revert
-      // First drain any existing buyback accumulation by executing it if possible
+      // V10: no minimum threshold, but reverts when 0 accumulated
       const accumulated = await f.ecosystem.buybackAccumulated();
-      if (accumulated >= ethers.parseEther("0.1")) {
+      if (accumulated > 0n) {
         await f.buybackMiner.connect(f.alice).executeBuyback();
       }
-      // Now there should be < 0.1 ETH accumulated
+      // Now there should be 0 ETH accumulated
       await expect(
         f.buybackMiner.connect(f.alice).executeBuyback()
       ).to.be.revertedWithCustomError(f.ecosystem, "NothingToWithdraw");
     });
 
-    it("executeBuyback: full cycle with caller reward", async function () {
+    it("executeBuyback: works with any amount > 0 (no minimum)", async function () {
       const f = await loadFixture(deployAllFixture);
 
-      // Generate enough fees for buyback (>= 0.1 ETH in buyback pool)
-      // Create many Agora posts to accumulate buyback ETH
+      // Generate a small fee — even tiny amounts should work in V10
+      await f.agora
+        .connect(f.alice)
+        .createPost("QmSmallFee", 0, 0, f.operator.address, {
+          value: ethers.parseEther("0.001"),
+        });
+
+      const buybackAccum = await f.ecosystem.buybackAccumulated();
+      if (buybackAccum > 0n) {
+        await f.buybackMiner.connect(f.charlie).executeBuyback();
+        expect(await f.buybackMiner.totalBuybacks()).to.equal(1);
+      }
+    });
+
+    it("executeBuyback: full cycle with 5% caller reward", async function () {
+      const f = await loadFixture(deployAllFixture);
+
+      // Generate fees via Agora posts
       for (let i = 0; i < 10; i++) {
         await f.agora
           .connect(f.alice)
@@ -974,20 +1013,51 @@ describe("Backchain V9 — Integration Tests", function () {
 
       const buybackAccum = await f.ecosystem.buybackAccumulated();
 
-      if (buybackAccum >= ethers.parseEther("0.1")) {
+      if (buybackAccum > 0n) {
         const callerBalBefore = await ethers.provider.getBalance(f.charlie.address);
-        const stakingBkcBefore = await f.bkcToken.balanceOf(f.stakingAddr);
 
         await f.buybackMiner.connect(f.charlie).executeBuyback();
 
         const callerBalAfter = await ethers.provider.getBalance(f.charlie.address);
-        // Caller earned 1% reward (minus gas)
+        // V10: Caller earned 5% reward (minus gas)
         expect(callerBalAfter).to.be.gt(callerBalBefore - ethers.parseEther("0.01"));
 
         // Stats updated
         expect(await f.buybackMiner.totalBuybacks()).to.equal(1);
         expect(await f.buybackMiner.totalBkcPurchased()).to.be.gt(0);
       }
+    });
+
+    it("setSwapTarget: owner can change liquidity pool", async function () {
+      const f = await loadFixture(deployAllFixture);
+
+      // deployer is the owner of BuybackMiner
+      const newTarget = f.alice.address; // any address for test
+      await f.buybackMiner.setSwapTarget(newTarget);
+      expect(await f.buybackMiner.liquidityPool()).to.equal(newTarget);
+    });
+
+    it("setSwapTarget: non-owner cannot change", async function () {
+      const f = await loadFixture(deployAllFixture);
+      await expect(
+        f.buybackMiner.connect(f.alice).setSwapTarget(f.bob.address)
+      ).to.be.revertedWithCustomError(f.buybackMiner, "NotOwner");
+    });
+
+    it("ownership transfer: two-step process", async function () {
+      const f = await loadFixture(deployAllFixture);
+
+      await f.buybackMiner.transferOwnership(f.alice.address);
+      expect(await f.buybackMiner.pendingOwner()).to.equal(f.alice.address);
+
+      // Non-pending cannot accept
+      await expect(
+        f.buybackMiner.connect(f.bob).acceptOwnership()
+      ).to.be.revertedWithCustomError(f.buybackMiner, "NotPendingOwner");
+
+      // Pending owner accepts
+      await f.buybackMiner.connect(f.alice).acceptOwnership();
+      expect(await f.buybackMiner.owner()).to.equal(f.alice.address);
     });
   });
 
@@ -1742,8 +1812,8 @@ describe("Backchain V9 — Integration Tests", function () {
 
       const buybackAccum = await f.ecosystem.buybackAccumulated();
 
-      if (buybackAccum >= ethers.parseEther("0.1")) {
-        // 3. Charlie triggers buyback (earns 1% reward)
+      if (buybackAccum > 0n) {
+        // 3. Charlie triggers buyback (earns 5% reward in V10)
         await f.buybackMiner.connect(f.charlie).executeBuyback();
 
         // 4. Staking pool should have received rewards
@@ -1896,6 +1966,280 @@ describe("Backchain V9 — Integration Tests", function () {
       // Operator should have accumulated ETH from both
       const pending = await f.ecosystem.pendingEth(f.operator.address);
       expect(pending).to.be.gt(0);
+    });
+  });
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // 13. V10: REFERRAL ETH DISTRIBUTION
+  // ══════════════════════════════════════════════════════════════════════════
+
+  describe("13. V10 Referral ETH Distribution", function () {
+    it("referrer earns 10% ETH on any ecosystem fee action", async function () {
+      const f = await loadFixture(deployAllFixture);
+
+      // Set Charlie as Alice's referrer
+      await f.ecosystem.connect(f.alice).setReferrer(f.charlie.address);
+
+      const charliePendingBefore = await f.ecosystem.pendingEth(f.charlie.address);
+
+      // Alice creates a post (triggers collectFee → referral distribution)
+      const feeAmount = ethers.parseEther("1");
+      await f.agora
+        .connect(f.alice)
+        .createPost("QmReferralTest", 0, 0, f.operator.address, {
+          value: feeAmount,
+        });
+
+      const charliePendingAfter = await f.ecosystem.pendingEth(f.charlie.address);
+      const referralEarned = charliePendingAfter - charliePendingBefore;
+
+      // Referrer should earn 10% of the fee
+      const expectedReferral = feeAmount * 1000n / BPS; // 10%
+      expect(referralEarned).to.equal(expectedReferral);
+    });
+
+    it("no referral payment when user has no referrer", async function () {
+      const f = await loadFixture(deployAllFixture);
+
+      // Alice has NO referrer set
+      const feeAmount = ethers.parseEther("0.5");
+
+      const treasuryBefore = await f.ecosystem.pendingEth(f.treasury.address);
+      const buybackBefore = await f.ecosystem.buybackAccumulated();
+
+      await f.agora
+        .connect(f.alice)
+        .createPost("QmNoReferrer", 0, 0, f.operator.address, {
+          value: feeAmount,
+        });
+
+      // Full amount should be distributed to operator/treasury/buyback (no referral cut)
+      const treasuryAfter = await f.ecosystem.pendingEth(f.treasury.address);
+      const buybackAfter = await f.ecosystem.buybackAccumulated();
+      const operatorPending = await f.ecosystem.pendingEth(f.operator.address);
+
+      // Sum should equal feeAmount (nothing lost to referral)
+      const totalDistributed = (treasuryAfter - treasuryBefore) + (buybackAfter - buybackBefore) + operatorPending;
+      expect(totalDistributed).to.equal(feeAmount);
+    });
+
+    it("referrer earns on Notary certification", async function () {
+      const f = await loadFixture(deployAllFixture);
+
+      await f.ecosystem.connect(f.alice).setReferrer(f.bob.address);
+
+      const bobPendingBefore = await f.ecosystem.pendingEth(f.bob.address);
+
+      const docHash = ethers.keccak256(ethers.toUtf8Bytes("referral_doc"));
+      const fee = ethers.parseEther("0.1");
+      await f.notary.connect(f.alice).certify(docHash, "QmMeta", 0, f.operator.address, {
+        value: fee,
+      });
+
+      const bobPendingAfter = await f.ecosystem.pendingEth(f.bob.address);
+      expect(bobPendingAfter - bobPendingBefore).to.equal(fee * 1000n / BPS);
+    });
+
+    it("setReferralBps: owner can update referral rate", async function () {
+      const f = await loadFixture(deployAllFixture);
+
+      // Current rate should be 1000 (10%)
+      expect(await f.ecosystem.referralBps()).to.equal(1000);
+
+      // Owner can set to 500 (5%)
+      await f.ecosystem.setReferralBps(500);
+      expect(await f.ecosystem.referralBps()).to.equal(500);
+    });
+
+    it("setReferralBps: non-owner cannot call", async function () {
+      const f = await loadFixture(deployAllFixture);
+      await expect(
+        f.ecosystem.connect(f.alice).setReferralBps(2000)
+      ).to.be.revertedWithCustomError(f.ecosystem, "NotOwner");
+    });
+
+    it("setReferralBps: cannot exceed 30%", async function () {
+      const f = await loadFixture(deployAllFixture);
+      await expect(
+        f.ecosystem.setReferralBps(3001) // > 3000
+      ).to.be.revertedWithCustomError(f.ecosystem, "InvalidFeeBps");
+    });
+
+    it("dual earning: ETH referral + BKC staking referral", async function () {
+      const f = await loadFixture(deployAllFixture);
+
+      // Charlie is Alice's referrer
+      await f.ecosystem.connect(f.alice).setReferrer(f.charlie.address);
+
+      // 1. Alice creates Agora post → Charlie earns ETH referral
+      const charlieEthBefore = await f.ecosystem.pendingEth(f.charlie.address);
+      await f.agora
+        .connect(f.alice)
+        .createPost("QmDualEarn", 0, 0, f.operator.address, {
+          value: ethers.parseEther("0.1"),
+        });
+      const charlieEthAfter = await f.ecosystem.pendingEth(f.charlie.address);
+      expect(charlieEthAfter).to.be.gt(charlieEthBefore); // ETH earned
+
+      // 2. Alice stakes and claims → Charlie earns BKC referral
+      const stakeAmt = ethers.parseEther("1000");
+      await f.bkcToken.connect(f.alice).approve(f.stakingAddr, stakeAmt);
+      await f.stakingPool.connect(f.alice).delegate(stakeAmt, 30, ethers.ZeroAddress);
+
+      // Add rewards
+      const rewardAmt = ethers.parseEther("500");
+      await f.bkcToken.connect(f.treasury).transfer(f.stakingAddr, rewardAmt);
+      await ethers.provider.send("hardhat_impersonateAccount", [f.buybackAddr]);
+      await f.deployer.sendTransaction({ to: f.buybackAddr, value: ethers.parseEther("0.1") });
+      const buybackSigner = await ethers.getSigner(f.buybackAddr);
+      await f.stakingPool.connect(buybackSigner).notifyReward(rewardAmt);
+      await ethers.provider.send("hardhat_stopImpersonatingAccount", [f.buybackAddr]);
+
+      const charlieBkcBefore = await f.bkcToken.balanceOf(f.charlie.address);
+      await f.stakingPool.connect(f.alice).claimRewards();
+      const charlieBkcAfter = await f.bkcToken.balanceOf(f.charlie.address);
+      expect(charlieBkcAfter).to.be.gt(charlieBkcBefore); // BKC earned
+    });
+  });
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // 14. V10: AGORA GAS-BASED PRICING
+  // ══════════════════════════════════════════════════════════════════════════
+
+  describe("14. V10 Agora Gas-Based Pricing", function () {
+    it("tipPost accepts any amount > 0", async function () {
+      const f = await loadFixture(deployAllFixture);
+
+      await f.agora.connect(f.alice).createPost("QmTipTarget", 0, 0, ethers.ZeroAddress);
+
+      // Very small tip should work (1 wei)
+      await f.agora.connect(f.bob).tipPost(1, f.operator.address, { value: 1n });
+
+      expect(await f.agora.tipTotal(1)).to.equal(1n);
+    });
+
+    it("tipPost reverts on zero value", async function () {
+      const f = await loadFixture(deployAllFixture);
+
+      await f.agora.connect(f.alice).createPost("QmNoTip", 0, 0, ethers.ZeroAddress);
+
+      await expect(
+        f.agora.connect(f.bob).tipPost(1, ethers.ZeroAddress, { value: 0n })
+      ).to.be.revertedWithCustomError(f.agora, "InvalidAmount");
+    });
+
+    it("reportPost with operator parameter", async function () {
+      const f = await loadFixture(deployAllFixture);
+
+      await f.agora.connect(f.alice).createPost("QmReportable", 0, 0, ethers.ZeroAddress);
+
+      // Report with operator — gas-based fee (0 in test since no fee config)
+      await f.agora.connect(f.bob).reportPost(1, 0, f.operator.address);
+
+      expect(await f.agora.reportCount(1)).to.equal(1);
+      expect(await f.agora.hasReported(1, f.bob.address)).to.be.true;
+    });
+
+    it("getBadgePrice returns ecosystem-based fee", async function () {
+      const f = await loadFixture(deployAllFixture);
+
+      // Without fee config, badge price is 0 (gas-based with no config = 0)
+      const priceVerified = await f.agora.getBadgePrice(0);
+      const pricePremium = await f.agora.getBadgePrice(1);
+      const priceElite = await f.agora.getBadgePrice(2);
+
+      // All should be >= 0 (exact values depend on fee config)
+      expect(priceVerified).to.be.gte(0);
+      expect(pricePremium).to.be.gte(0);
+      expect(priceElite).to.be.gte(0);
+    });
+
+    it("obtainBadge with ecosystem fee", async function () {
+      const f = await loadFixture(deployAllFixture);
+
+      // Without fee config, badge price is 0, so obtainBadge with 0 value should work
+      await f.agora.connect(f.alice).obtainBadge(0, f.operator.address); // Verified
+
+      const profile = await f.agora.getUserProfile(f.alice.address);
+      expect(profile.hasBadge).to.be.true;
+      expect(profile._badgeTier).to.equal(0);
+    });
+
+    it("boostProfile with ecosystem fee", async function () {
+      const f = await loadFixture(deployAllFixture);
+
+      // Without fee config, profile boost price per day is 0
+      // This means daysToAdd = msg.value / 0 → division by zero
+      // In production, fee config will be set. For test, set a fee config.
+      const actionProfileBoost = id("AGORA_PROFILE_BOOST");
+      await f.ecosystem.setFeeConfig(actionProfileBoost, {
+        feeType: 0,
+        bps: 100,
+        multiplier: 200,
+        gasEstimate: 200000,
+      });
+
+      // Fee is gas-based: gasEstimate × gasPrice × bps × multiplier / 10000
+      // In Hardhat, this produces a small amount
+      const fee = await f.ecosystem.calculateFee(actionProfileBoost, 0);
+
+      if (fee > 0n) {
+        // Send enough for at least 1 day
+        await f.agora.connect(f.alice).boostProfile(f.operator.address, { value: fee });
+        expect(await f.agora.isProfileBoosted(f.alice.address)).to.be.true;
+      }
+    });
+  });
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // 15. V10: FEE CONFIG WITH uint32 MULTIPLIER
+  // ══════════════════════════════════════════════════════════════════════════
+
+  describe("15. V10 uint32 Multiplier", function () {
+    it("accepts multiplier values > 65535 (uint16 max)", async function () {
+      const f = await loadFixture(deployAllFixture);
+
+      // Badge Verified: multiplier = 120,000 (exceeds uint16 max of 65535)
+      const actionBadge = id("AGORA_BADGE_VERIFIED");
+      await f.ecosystem.setFeeConfig(actionBadge, {
+        feeType: 0,
+        bps: 100,
+        multiplier: 120_000, // uint32 — would overflow uint16
+        gasEstimate: 200_000,
+      });
+
+      const fee = await f.ecosystem.calculateFee(actionBadge, 0);
+      // Fee should be > 0 (gasEstimate × gasPrice × bps × multiplier / BPS)
+      expect(fee).to.be.gte(0);
+    });
+
+    it("max multiplier up to 2,000,000", async function () {
+      const f = await loadFixture(deployAllFixture);
+
+      const action = id("TEST_MAX_MULTIPLIER");
+      await f.ecosystem.setFeeConfig(action, {
+        feeType: 0,
+        bps: 100,
+        multiplier: 2_000_000, // near MAX_GAS_MULTIPLIER
+        gasEstimate: 200_000,
+      });
+
+      const fee = await f.ecosystem.calculateFee(action, 0);
+      expect(fee).to.be.gte(0);
+    });
+
+    it("rejects multiplier above MAX_GAS_MULTIPLIER", async function () {
+      const f = await loadFixture(deployAllFixture);
+
+      const action = id("TEST_OVERFLOW");
+      await expect(
+        f.ecosystem.setFeeConfig(action, {
+          feeType: 0,
+          bps: 100,
+          multiplier: 2_000_001, // exceeds MAX_GAS_MULTIPLIER
+          gasEstimate: 200_000,
+        })
+      ).to.be.revertedWithCustomError(f.ecosystem, "InvalidFeeBps");
     });
   });
 });

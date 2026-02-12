@@ -425,10 +425,10 @@ async function updateReferralWidget() {
 
     if (data.count > 0) {
         if (titleEl) titleEl.innerText = `${data.count} Referral${data.count > 1 ? 's' : ''} Earning for You`;
-        if (descEl) descEl.innerText = "You earn 5% of every staking reward they claim. Keep sharing!";
+        if (descEl) descEl.innerText = "You earn 10% ETH on all fees + 5% BKC on staking claims. Keep sharing!";
     } else {
-        if (titleEl) titleEl.innerText = "Invite & Earn Forever";
-        if (descEl) descEl.innerText = "Share your link. Earn 5% of every staking reward your referrals claim — forever.";
+        if (titleEl) titleEl.innerText = "Invite & Earn Dual Rewards";
+        if (descEl) descEl.innerText = "Share your link. Earn 10% ETH + 5% BKC from your referrals — forever.";
     }
 }
 
@@ -445,7 +445,7 @@ function copyReferralLink() {
 function shareReferralLink() {
     if (!State.userAddress) return;
     const link = `${window.location.origin}/#dashboard?ref=${State.userAddress}`;
-    const text = `Join Backchain and earn crypto!\n\nStake BKC and earn daily rewards\nRefer friends and earn 5% of their rewards — FOREVER\n\n${link}\n\n#Backchain #DeFi #Arbitrum #Web3`;
+    const text = `Join Backchain and earn crypto!\n\nStake BKC and earn daily rewards\nRefer friends — earn 10% ETH + 5% BKC FOREVER\n\n${link}\n\n#Backchain #DeFi #Arbitrum #Web3`;
 
     if (navigator.share) {
         navigator.share({ title: 'Backchain — Invite & Earn', text, url: link }).catch(() => {});
@@ -1090,8 +1090,8 @@ function renderDashboardLayout() {
                     <i class="fa-solid fa-user-plus"></i>
                 </div>
                 <div class="dash-referral-info">
-                    <h3 id="referral-title">Invite & Earn Forever</h3>
-                    <p id="referral-desc">Share your link. Earn 5% of every staking reward your referrals claim — forever.</p>
+                    <h3 id="referral-title">Invite & Earn Dual Rewards</h3>
+                    <p id="referral-desc">Share your link. Earn 10% ETH + 5% BKC from your referrals — forever.</p>
                     <div id="referral-stats" class="dash-referral-stats" style="display:none">
                         <span class="dash-referral-stat" style="color:#a78bfa">
                             <i class="fa-solid fa-users" style="font-size:10px"></i>
@@ -1099,7 +1099,7 @@ function renderDashboardLayout() {
                         </span>
                         <span class="dash-referral-stat" style="color:#4ade80">
                             <i class="fa-solid fa-coins" style="font-size:10px"></i>
-                            5% of their rewards
+                            10% ETH + 5% BKC
                         </span>
                     </div>
                     <div id="referral-link-container" class="dash-referral-link-box" style="display:none">

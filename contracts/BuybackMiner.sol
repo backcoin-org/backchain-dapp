@@ -10,12 +10,12 @@ import "./IBackchain.sol";
 // The economic engine of Backchain. Converts accumulated ETH protocol fees
 // into BKC rewards for stakers via a buy-and-mint mechanism.
 //
-// When enough ETH accumulates in the BackchainEcosystem (≥ 0.1 ETH),
+// When ANY ETH accumulates in the BackchainEcosystem,
 // ANYONE can call executeBuyback() to trigger the cycle:
 //
 //   1. Pull ETH from BackchainEcosystem
-//   2. Caller earns 1% of ETH as incentive (permissionless MEV)
-//   3. Buy BKC from LiquidityPool with remaining 99%
+//   2. Caller earns 5% of ETH as incentive (permissionless MEV)
+//   3. Buy BKC from LiquidityPool with remaining 95%
 //   4. Mint NEW BKC proportional to scarcity (linear curve → 200M cap)
 //   5. Burn 5% of total BKC (purchased + mined)
 //   6. Send 95% to StakingPool as rewards for delegators
@@ -35,7 +35,8 @@ import "./IBackchain.sol";
 //   - BKC burn on every buyback creates permanent deflation
 //   - Caller incentive ensures buybacks happen regularly without centralization
 //
-// No admin functions. No pause. Fully immutable and permissionless.
+// Owner can change: swap target (liquidity pool).
+// Owner CANNOT change: caller reward, mining curve, burn rate.
 //
 // ============================================================================
 
@@ -51,11 +52,8 @@ contract BuybackMiner is IBuybackMiner {
     /// @notice Maximum BKC that can ever be minted via mining (200M - 40M TGE)
     uint256 public constant MAX_MINTABLE = 160_000_000 ether; // 160M
 
-    /// @notice Minimum ETH threshold to trigger a buyback
-    uint256 public constant MIN_BUYBACK = 0.1 ether;
-
-    /// @notice Caller incentive: 1% of ETH goes to whoever calls executeBuyback()
-    uint256 public constant CALLER_BPS = 100; // 1%
+    /// @notice Caller incentive: 5% of ETH goes to whoever calls executeBuyback()
+    uint256 public constant CALLER_BPS = 500; // 5%
 
     /// @notice Burn rate: 5% of total BKC (purchased + mined) is burned
     uint256 public constant BURN_BPS = 500; // 5%
@@ -68,8 +66,15 @@ contract BuybackMiner is IBuybackMiner {
 
     IBackchainEcosystem public immutable ecosystem;
     IBKCToken public immutable bkcToken;
-    ILiquidityPool public immutable liquidityPool;
+    ILiquidityPool public liquidityPool;        // configurable — owner can redirect to new pool
     IStakingPool public immutable stakingPool;
+
+    // ════════════════════════════════════════════════════════════════════════
+    // GOVERNANCE (two-step ownership — for swap target management)
+    // ════════════════════════════════════════════════════════════════════════
+
+    address public owner;
+    address public pendingOwner;
 
     // ════════════════════════════════════════════════════════════════════════
     // STATS (lifetime counters — packed into 2 structs for fewer SSTOREs)
@@ -116,10 +121,12 @@ contract BuybackMiner is IBuybackMiner {
     // ERRORS
     // ════════════════════════════════════════════════════════════════════════
 
-    error BelowMinimum();
     error NoPurchase();
     error SlippageExceeded();
     error TransferFailed();
+    error NotOwner();
+    error NotPendingOwner();
+    error ZeroAddress();
 
     // ════════════════════════════════════════════════════════════════════════
     // CONSTRUCTOR
@@ -135,6 +142,7 @@ contract BuybackMiner is IBuybackMiner {
         bkcToken = IBKCToken(_bkcToken);
         liquidityPool = ILiquidityPool(_liquidityPool);
         stakingPool = IStakingPool(_stakingPool);
+        owner = msg.sender;
     }
 
     // ════════════════════════════════════════════════════════════════════════
@@ -142,13 +150,13 @@ contract BuybackMiner is IBuybackMiner {
     // ════════════════════════════════════════════════════════════════════════
 
     /// @notice Execute the buyback cycle. Permissionless — anyone can call.
-    ///         Caller earns 1% of the ETH as incentive.
-    ///         Reverts if accumulated ETH is below MIN_BUYBACK (0.1 ETH).
+    ///         Caller earns 5% of the ETH as incentive.
+    ///         No minimum — self-regulating (callers only execute when profitable).
     ///
     ///         Flow:
     ///         1. Pull accumulated ETH from BackchainEcosystem
-    ///         2. Send 1% to msg.sender (caller incentive)
-    ///         3. Swap 99% ETH → BKC via LiquidityPool
+    ///         2. Send 5% to msg.sender (caller incentive)
+    ///         3. Swap 95% ETH → BKC via LiquidityPool
     ///         4. Mint new BKC proportional to scarcity curve
     ///         5. Burn 5% of (purchased + mined)
     ///         6. Send 95% to StakingPool → notifyReward
@@ -168,11 +176,11 @@ contract BuybackMiner is IBuybackMiner {
     }
 
     function _executeBuyback(uint256 minTotalBkcOut) internal {
-        // 1. Pull ETH from ecosystem
+        // 1. Pull ETH from ecosystem (no minimum — self-regulating)
         uint256 ethAmount = ecosystem.withdrawBuybackETH();
-        if (ethAmount < MIN_BUYBACK) revert BelowMinimum();
+        if (ethAmount == 0) revert NoPurchase();
 
-        // 2. Caller incentive (1% of ETH)
+        // 2. Caller incentive (5% of ETH)
         uint256 callerReward = ethAmount * CALLER_BPS / BPS;
         uint256 ethForBuyback = ethAmount - callerReward;
 
@@ -352,7 +360,7 @@ contract BuybackMiner is IBuybackMiner {
         bool    isReady
     ) {
         ethAvailable = ecosystem.buybackAccumulated();
-        isReady = ethAvailable >= MIN_BUYBACK;
+        isReady = ethAvailable > 0;
 
         if (!isReady) return (ethAvailable, 0, 0, 0, 0, 0, currentMiningRate(), false);
 
@@ -412,6 +420,42 @@ contract BuybackMiner is IBuybackMiner {
         timeSinceLast = lb.timestamp > 0
             ? block.timestamp - uint256(lb.timestamp)
             : 0;
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
+    // ADMIN: SWAP TARGET (configurable — follow liquidity across DEXs)
+    // ════════════════════════════════════════════════════════════════════════
+
+    event SwapTargetUpdated(address indexed oldPool, address indexed newPool);
+    event OwnershipTransferStarted(address indexed currentOwner, address indexed newOwner);
+    event OwnershipTransferred(address indexed oldOwner, address indexed newOwner);
+
+    modifier onlyOwner() {
+        if (msg.sender != owner) revert NotOwner();
+        _;
+    }
+
+    /// @notice Change the liquidity pool used for buyback swaps.
+    ///         Allows DAO to redirect buybacks to wherever liquidity is deepest.
+    function setSwapTarget(address _pool) external onlyOwner {
+        if (_pool == address(0)) revert ZeroAddress();
+        emit SwapTargetUpdated(address(liquidityPool), _pool);
+        liquidityPool = ILiquidityPool(_pool);
+    }
+
+    /// @notice Initiate ownership transfer. New owner must call acceptOwnership().
+    function transferOwnership(address _newOwner) external onlyOwner {
+        if (_newOwner == address(0)) revert ZeroAddress();
+        pendingOwner = _newOwner;
+        emit OwnershipTransferStarted(owner, _newOwner);
+    }
+
+    /// @notice Accept the pending ownership transfer.
+    function acceptOwnership() external {
+        if (msg.sender != pendingOwner) revert NotPendingOwner();
+        emit OwnershipTransferred(owner, msg.sender);
+        owner = msg.sender;
+        pendingOwner = address(0);
     }
 
     /// @notice Accept ETH from ecosystem (via withdrawBuybackETH)

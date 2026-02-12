@@ -421,11 +421,14 @@ export async function changeTag({
 // ============================================================================
 
 export async function boostProfile({
-    ethAmount, operator,
+    days = 1, operator,
     button = null, onSuccess = null, onError = null
 }) {
+    const ethers = window.ethers;
     let storedOperator = operator;
-    const boostAmount = BigInt(ethAmount);
+    const actionId = ethers.id('AGORA_PROFILE_BOOST');
+    const pricePerDay = await calculateFeeClientSide(actionId);
+    const boostAmount = pricePerDay * BigInt(days);
 
     return await txEngine.execute({
         name: 'BoostProfile', button,
@@ -434,20 +437,15 @@ export async function boostProfile({
         method: 'boostProfile',
         args: () => [resolveOperator(storedOperator)],
         value: boostAmount,
-
-        validate: async () => {
-            const ethers = window.ethers;
-            if (boostAmount < ethers.parseEther('0.0005')) throw new Error('Minimum boost is 0.0005 ETH');
-        },
         onSuccess, onError
     });
 }
 
 /**
- * Obtain a badge — V2: tiered badges
- * Tier 0 (Verified): 0.02 ETH/year — blue checkmark
- * Tier 1 (Premium):  0.1 ETH/year  — gold checkmark
- * Tier 2 (Elite):    0.25 ETH/year — diamond animated checkmark
+ * Obtain a badge — V10: gas-based pricing per year
+ * Tier 0 (Verified) — blue checkmark
+ * Tier 1 (Premium)  — gold checkmark
+ * Tier 2 (Elite)    — diamond animated checkmark
  */
 export async function obtainBadge({
     tier = 0, operator,
@@ -455,8 +453,9 @@ export async function obtainBadge({
 }) {
     const ethers = window.ethers;
     let storedOperator = operator;
-    const badgePrices = [ethers.parseEther('0.02'), ethers.parseEther('0.1'), ethers.parseEther('0.25')];
-    const badgeFee = badgePrices[tier] || badgePrices[0];
+    const badgeActions = ['AGORA_BADGE_VERIFIED', 'AGORA_BADGE_PREMIUM', 'AGORA_BADGE_ELITE'];
+    const actionId = ethers.id(badgeActions[tier] || badgeActions[0]);
+    const badgeFee = await calculateFeeClientSide(actionId);
 
     return await txEngine.execute({
         name: 'ObtainBadge', button,
@@ -474,22 +473,24 @@ export async function obtainBadge({
 // ============================================================================
 
 /**
- * Report a post — V2: 0.0001 ETH, auto-blocks author for reporter
+ * Report a post — V10: gas-based fee, auto-blocks author for reporter
  * Categories: 0=Spam, 1=Harassment, 2=Illegal, 3=Scam, 4=Other
  */
 export async function reportPost({
-    postId, category = 0,
+    postId, category = 0, operator,
     button = null, onSuccess = null, onError = null
 }) {
     const ethers = window.ethers;
-    const reportFee = ethers.parseEther('0.0001');
+    let storedOperator = operator;
+    const actionId = ethers.id('AGORA_REPORT');
+    const reportFee = await calculateFeeClientSide(actionId);
 
     return await txEngine.execute({
         name: 'ReportPost', button,
         skipSimulation: true, fixedGasLimit: 200000n,
         getContract: async (signer) => getAgoraContract(signer),
         method: 'reportPost',
-        args: [postId, category],
+        args: () => [postId, category, resolveOperator(storedOperator)],
         value: reportFee,
 
         validate: async (signer, userAddress) => {
