@@ -77,7 +77,7 @@ function renderHero() {
 }
 
 function renderSupply() {
-    const currentSupply = State.totalSupply ? Number(formatBigNumber(State.totalSupply).replace(/,/g, '')) : TGE_AMOUNT;
+    const currentSupply = State.totalSupply ? formatBigNumber(State.totalSupply) : TGE_AMOUNT;
     const pct = (currentSupply / MAX_SUPPLY * 100).toFixed(1);
     const remaining = MAX_SUPPLY - currentSupply;
     return `
