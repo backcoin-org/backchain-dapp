@@ -1,5 +1,5 @@
 // pages/StakingPage.js
-// ✅ PRODUCTION V10.1 — V9 StakingPool Alignment
+// ✅ PRODUCTION V10.2 — NFT Tier Comparison + Tutor System
 // ═══════════════════════════════════════════════════════════════════════════════
 //                          BACKCHAIN PROTOCOL
 //                    Stake & Earn — Unified Hub
@@ -62,6 +62,10 @@ let userRecycleRate = 60;
 let nftSource = 'none';
 let claimPreview = null;
 let claimEthFee = 0n;
+
+// Tutor State
+let userTutor = null; // address or null
+let hasTutor = false;
 
 // Rewards split
 let stakingRewardsAmount = 0n;
@@ -461,7 +465,7 @@ function render() {
                     <div class="stk-header-icon"><i class="fa-solid fa-layer-group"></i></div>
                     <div>
                         <div class="stk-header-title">Stake & Earn</div>
-                        <div class="stk-header-sub">Delegate BKC, earn rewards, reduce recycle</div>
+                        <div class="stk-header-sub">Delegate BKC, earn rewards. NFT + Tutor = keep more</div>
                     </div>
                 </div>
                 <button id="stk-refresh-btn" class="stk-refresh-btn"><i class="fa-solid fa-rotate"></i></button>
@@ -486,6 +490,10 @@ function render() {
                             <div class="stk-breakdown-row">
                                 <span class="stk-breakdown-label"><i class="fa-solid fa-recycle" style="color:#22d3ee"></i> Recycled</span>
                                 <span id="stk-break-recycled" class="stk-breakdown-val" style="color:#22d3ee">0</span>
+                            </div>
+                            <div id="stk-break-tutor-row" class="stk-breakdown-row">
+                                <span class="stk-breakdown-label"><i class="fa-solid fa-graduation-cap" style="color:var(--stk-accent)"></i> <span id="stk-break-tutor-label">Tutor</span></span>
+                                <span id="stk-break-tutor" class="stk-breakdown-val" style="color:var(--stk-accent)">0</span>
                             </div>
                             <div class="stk-breakdown-row">
                                 <span class="stk-breakdown-label"><i class="fa-solid fa-fire" style="color:var(--stk-red)"></i> Burned</span>
@@ -635,7 +643,7 @@ async function loadData(force = false) {
     lastFetch = now;
 
     try {
-        await loadNftBoostData();
+        await Promise.all([loadNftBoostData(), loadTutorData()]);
 
         const [, , delegations] = await Promise.all([
             loadUserData(),
@@ -693,6 +701,20 @@ async function loadNftBoostData() {
     }
 }
 
+async function loadTutorData() {
+    if (!State.userAddress) return;
+    try {
+        const eco = State.ecosystemContractPublic || State.ecosystemContract;
+        if (eco) {
+            const tutor = await safeContractCall(eco, 'tutorOf', [State.userAddress], ethers.ZeroAddress);
+            userTutor = (tutor && tutor !== ethers.ZeroAddress) ? tutor : null;
+            hasTutor = !!userTutor;
+        }
+    } catch (e) {
+        console.error('Tutor data load error:', e);
+    }
+}
+
 async function loadClaimPreview() {
     // V9: stakingPoolContract, previewClaim returns 6-tuple
     const stakingContract = State.stakingPoolContractPublic || State.stakingPoolContract;
@@ -733,6 +755,7 @@ function updateHeroRewards() {
     const totalAmount = claimPreview?.totalRewards || 0n;
     const recycleAmount = claimPreview?.recycleAmount || 0n;
     const burnAmount = claimPreview?.burnAmount || 0n;
+    const tutorCut = claimPreview?.tutorCut || 0n;
     const hasRewards = receiveAmount > 0n;
 
     if (rewardEl) {
@@ -751,12 +774,29 @@ function updateHeroRewards() {
         const minNum = formatBigNumber(minerRewardsAmount).toFixed(4);
         const recycleNum = formatBigNumber(recycleAmount).toFixed(4);
         const burnNum = formatBigNumber(burnAmount).toFixed(4);
+        const tutorNum = formatBigNumber(tutorCut).toFixed(4);
         document.getElementById('stk-break-staking').textContent = `${stakNum} BKC`;
         document.getElementById('stk-break-mining').textContent = `${minNum} BKC`;
         const recycledEl = document.getElementById('stk-break-recycled');
         if (recycledEl) {
             recycledEl.textContent = recycleAmount > 0n ? `-${recycleNum} BKC` : 'None';
             recycledEl.style.color = recycleAmount > 0n ? '#22d3ee' : 'var(--stk-green)';
+        }
+        // Tutor cut row
+        const tutorRow = document.getElementById('stk-break-tutor-row');
+        const tutorEl = document.getElementById('stk-break-tutor');
+        const tutorLabel = document.getElementById('stk-break-tutor-label');
+        if (tutorRow) {
+            if (hasTutor && tutorCut > 0n) {
+                tutorRow.style.display = '';
+                if (tutorLabel) tutorLabel.textContent = 'Tutor (5%)';
+                if (tutorEl) { tutorEl.textContent = `-${tutorNum} BKC`; tutorEl.style.color = 'var(--stk-accent)'; }
+            } else if (!hasTutor && burnAmount > 0n) {
+                // No tutor: 10% burned instead of 5% tutor
+                tutorRow.style.display = 'none';
+            } else {
+                tutorRow.style.display = 'none';
+            }
         }
         document.getElementById('stk-break-burned').textContent = burnAmount > 0n ? `-${burnNum} BKC` : 'None';
         document.getElementById('stk-break-burned').style.color = burnAmount > 0n ? 'var(--stk-red)' : 'var(--stk-green)';
@@ -781,6 +821,35 @@ function updateNftBoostPanel() {
     const tier = getTierFromBoost(userNftBoost);
     const hasNft = userNftBoost > 0;
 
+    // Build tier comparison rows
+    const tiers = [RECYCLE_TIERS.NONE, RECYCLE_TIERS.BRONZE, RECYCLE_TIERS.SILVER, RECYCLE_TIERS.GOLD, RECYCLE_TIERS.DIAMOND];
+    const tierRows = tiers.map(t => {
+        const isCurrent = t.name === tier.name;
+        return `<div style="display:flex;align-items:center;justify-content:space-between;padding:3px 0;${isCurrent ? 'font-weight:700' : 'opacity:0.6'}">
+            <span style="font-size:10px;color:${t.color}">${t.icon} ${t.name}${isCurrent ? ' ←' : ''}</span>
+            <span style="font-size:10px;color:${t.keepRate === 100 ? 'var(--stk-green)' : 'var(--stk-text-2)'}">Keep ${t.keepRate}%</span>
+        </div>`;
+    }).join('');
+
+    // Tutor info
+    const tutorShort = userTutor ? `${userTutor.slice(0,6)}...${userTutor.slice(-4)}` : '';
+    const tutorSection = hasTutor
+        ? `<div style="display:flex;align-items:center;gap:6px;margin-top:10px;padding:6px 8px;background:rgba(245,158,11,0.06);border:1px solid rgba(245,158,11,0.15);border-radius:6px">
+            <i class="fa-solid fa-graduation-cap" style="color:var(--stk-accent);font-size:10px"></i>
+            <span style="font-size:10px;color:var(--stk-accent);font-weight:600">Tutor: ${tutorShort}</span>
+            <span style="font-size:9px;color:var(--stk-text-3);margin-left:auto">5% rewards</span>
+        </div>`
+        : `<div style="margin-top:10px;padding:6px 8px;background:rgba(239,68,68,0.06);border:1px solid rgba(239,68,68,0.15);border-radius:6px">
+            <div style="display:flex;align-items:center;gap:6px">
+                <i class="fa-solid fa-graduation-cap" style="color:var(--stk-red);font-size:10px"></i>
+                <span style="font-size:10px;color:var(--stk-red);font-weight:600">No tutor — 10% burned</span>
+            </div>
+            <p style="font-size:9px;color:var(--stk-text-3);margin:3px 0 0">Set a tutor to reduce burn to 5% (sent to tutor instead)</p>
+            <a href="#referral" class="go-to-tutor" style="display:inline-flex;align-items:center;gap:4px;margin-top:4px;font-size:10px;font-weight:700;color:var(--stk-accent);text-decoration:none;cursor:pointer">
+                <i class="fa-solid fa-arrow-right" style="font-size:8px"></i> Set a Tutor
+            </a>
+        </div>`;
+
     panel.innerHTML = `
         <div class="stk-boost-panel">
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
@@ -802,19 +871,26 @@ function updateNftBoostPanel() {
                 <span style="color:rgba(74,222,128,0.7)"><i class="fa-solid fa-check" style="margin-right:3px"></i>Keep ${tier.keepRate}%</span>
             </div>
 
-            ${!hasNft ? `
-                <div style="margin-top:12px;padding:8px 10px;background:rgba(6,182,212,0.06);border:1px solid rgba(6,182,212,0.15);border-radius:8px">
-                    <p style="font-size:11px;color:#22d3ee;font-weight:600;margin:0">${tier.recycleRate}% of rewards recycled to stakers</p>
-                    <p style="font-size:10px;color:var(--stk-text-3);margin:4px 0 0">Diamond holders keep 100%</p>
+            <!-- Tier Comparison -->
+            <div style="margin-top:10px;padding:8px;background:var(--stk-surface-3);border-radius:6px">
+                <div style="font-size:9px;color:var(--stk-text-3);text-transform:uppercase;letter-spacing:0.05em;font-weight:700;margin-bottom:4px">
+                    <i class="fa-solid fa-gem" style="margin-right:3px"></i>NFT Tier Benefits
                 </div>
+                ${tierRows}
+            </div>
+
+            ${!hasNft ? `
                 <button class="stk-boost-cta go-to-store"><i class="fa-solid fa-gem" style="font-size:10px"></i> Get an NFT</button>
             ` : userNftBoost < 5000 ? `
-                <p style="font-size:10px;color:var(--stk-text-3);margin-top:10px">
+                <p style="font-size:10px;color:var(--stk-text-3);margin-top:8px">
                     <i class="fa-solid fa-arrow-up" style="color:var(--stk-cyan);margin-right:3px"></i>
                     Upgrade to ${RECYCLE_TIERS.DIAMOND.icon} Diamond to keep 100%
                     <span class="go-to-store" style="color:var(--stk-accent);cursor:pointer;margin-left:4px">Upgrade</span>
                 </p>
             ` : ''}
+
+            <!-- Tutor Info -->
+            ${tutorSection}
         </div>
     `;
 }
@@ -847,6 +923,8 @@ function updateStats() {
 }
 
 function resetUI() {
+    userTutor = null;
+    hasTutor = false;
     const setEl = (id, html) => { const el = document.getElementById(id); if (el) el.innerHTML = html; };
     setEl('stk-reward-value', `-- <span class="stk-reward-suffix">BKC</span>`);
     setEl('stk-stat-network', '--');
@@ -926,7 +1004,7 @@ function renderDelegationItem(d, originalIndex) {
             <div style="display:flex;align-items:center;gap:8px">
                 ${isLocked ? `
                     <span class="stk-countdown" data-unlock-time="${unlockTimestamp}">${formatTimeRemaining(remaining)}</span>
-                    <button class="stk-unstake-btn stk-unstake-force" data-index="${d.index !== undefined ? d.index : originalIndex}" title="Force unstake (50% penalty)">
+                    <button class="stk-unstake-btn stk-unstake-force" data-index="${d.index !== undefined ? d.index : originalIndex}" title="Force unstake (60% base penalty, reduced by NFT)">
                         <i class="fa-solid fa-bolt" style="font-size:10px"></i>
                     </button>
                 ` : `
@@ -1009,7 +1087,8 @@ function renderStakingHistory() {
         } else if (t.includes('CLAIM') || t.includes('REWARD')) {
             icon = 'fa-coins'; iconBg = 'rgba(251,191,36,0.12)'; iconColor = '#fbbf24'; label = 'Claimed';
             if (details.amountReceived && BigInt(details.amountReceived) > 0n) extraInfo = `<span style="color:var(--stk-green)">+${formatBigNumber(BigInt(details.amountReceived)).toFixed(2)}</span>`;
-            if (details.burnedAmount && BigInt(details.burnedAmount) > 0n) extraInfo += ` <span style="font-size:9px;color:rgba(239,68,68,0.6)">🔥-${formatBigNumber(BigInt(details.burnedAmount)).toFixed(2)}</span>`;
+            if (details.recycledAmount && BigInt(details.recycledAmount) > 0n) extraInfo += ` <span style="font-size:9px;color:rgba(6,182,212,0.6)">♻-${formatBigNumber(BigInt(details.recycledAmount)).toFixed(2)}</span>`;
+            else if (details.burnedAmount && BigInt(details.burnedAmount) > 0n) extraInfo += ` <span style="font-size:9px;color:rgba(239,68,68,0.6)">🔥-${formatBigNumber(BigInt(details.burnedAmount)).toFixed(2)}</span>`;
         } else {
             icon = 'fa-circle'; iconBg = 'rgba(113,113,122,0.12)'; iconColor = '#71717a'; label = item.type || 'Activity';
         }
@@ -1131,7 +1210,40 @@ async function handleStake() {
 async function handleUnstake(index, isForce) {
     if (isProcessing) return;
 
-    if (isForce && !confirm('Force unstake will incur a 50% penalty. Continue?')) return;
+    if (isForce) {
+        // Load force unstake preview for detailed info
+        let previewMsg = `Force unstake has a 60% base penalty.\n`;
+        try {
+            const stakingContract = State.stakingPoolContractPublic || State.stakingPoolContract;
+            if (stakingContract && State.userAddress) {
+                const preview = await safeContractCall(stakingContract, 'previewForceUnstake', [State.userAddress, BigInt(index)], null);
+                if (preview) {
+                    const stakedAmt = formatBigNumber(preview[0] || 0n).toFixed(2);
+                    const totalPenalty = formatBigNumber(preview[1] || 0n).toFixed(2);
+                    const recycleAmt = formatBigNumber(preview[2] || 0n).toFixed(2);
+                    const burnAmt = formatBigNumber(preview[3] || 0n).toFixed(2);
+                    const tutorAmt = formatBigNumber(preview[4] || 0n).toFixed(2);
+                    const userGets = formatBigNumber(preview[5] || 0n).toFixed(2);
+                    const ethFee = parseFloat(ethers.formatEther(preview[8] || 0n)).toFixed(4);
+                    const tier = getTierFromBoost(Number(preview[7] || 0n));
+                    previewMsg = `Force Unstake Preview (${tier.icon} ${tier.name})\n\n`;
+                    previewMsg += `Staked: ${stakedAmt} BKC\n`;
+                    previewMsg += `Penalty: -${totalPenalty} BKC\n`;
+                    previewMsg += `  Recycled: ${recycleAmt} BKC (to all stakers)\n`;
+                    if (parseFloat(tutorAmt) > 0) previewMsg += `  Tutor: ${tutorAmt} BKC (5%)\n`;
+                    if (parseFloat(burnAmt) > 0) previewMsg += `  Burned: ${burnAmt} BKC${!hasTutor ? ' (no tutor = 10% burn)' : ''}\n`;
+                    previewMsg += `  ETH Fee: ${ethFee} ETH\n`;
+                    previewMsg += `\nYou receive: ${userGets} BKC\n`;
+                    previewMsg += `\nContinue?`;
+                }
+            }
+        } catch (e) {
+            console.warn('Force unstake preview error:', e);
+            previewMsg += `Your NFT tier: ${getTierFromBoost(userNftBoost).icon} ${getTierFromBoost(userNftBoost).name}\n`;
+            previewMsg += `${hasTutor ? '5% to tutor' : '10% burned (no tutor)'}\nContinue?`;
+        }
+        if (!confirm(previewMsg)) return;
+    }
 
     const btn = document.querySelector(`.stk-unstake-btn[data-index='${index}']`);
     isProcessing = true;
@@ -1142,7 +1254,7 @@ async function handleUnstake(index, isForce) {
             delegationIndex: BigInt(index),
             button: btn,
             onSuccess: async () => {
-                showToast(isForce ? 'Force unstaked (50% penalty)' : 'Unstaked successfully!', isForce ? 'warning' : 'success');
+                showToast(isForce ? 'Force unstaked (penalty applied)' : 'Unstaked successfully!', isForce ? 'warning' : 'success');
                 isLoading = false; lastFetch = 0;
                 await loadData(true);
             },
@@ -1232,6 +1344,7 @@ function setupListeners() {
     container.addEventListener('click', (e) => {
         if (e.target.closest('.go-to-store')) { e.preventDefault(); window.navigateTo('store'); }
         if (e.target.closest('.go-to-rental')) { e.preventDefault(); window.navigateTo('rental'); }
+        if (e.target.closest('.go-to-tutor')) { e.preventDefault(); window.navigateTo('referral'); }
     });
 }
 
