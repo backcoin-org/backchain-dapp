@@ -4,67 +4,64 @@ pragma solidity ^0.8.28;
 import "./IBackchain.sol";
 
 // ============================================================================
-// AGORA v2.0 — IMMUTABLE SOCIAL PROTOCOL (Tier 1: ETH only)
+// AGORA v3.0 — THE FOREVER PROTOCOL (Tier 1: ETH only)
 // ============================================================================
 //
-// Decentralized social protocol where ANYONE can build their own social
-// network. Each operator runs a frontend = their own network. All networks
-// share the same on-chain social graph, but filter by tags (categories).
+// Decentralized social protocol built for permanence. No admin, no pause,
+// no censorship. ALL pricing is dynamic via ecosystem governance — the
+// protocol adapts to any ETH price without redeployment.
 //
 //   "Your protocol. Their networks. One truth."
+//
+// V3 CHANGES FROM V2:
+//   - ALL pricing via ecosystem fees (zero hardcoded ETH values)
+//   - On-chain social graph (followerCount, followingCount, isFollowing)
+//   - Free text/link posts (gas only — maximizes adoption)
+//   - Post editing within 15-minute window
+//   - SuperLike with free value (real micro-tipping, any amount)
+//   - Downvote: 1 per user per post, ecosystem fee (meaningful signal)
+//   - On-chain block list (queryable by any frontend)
+//   - Batch read via PostView struct (1 call for N posts)
 //
 // FEATURES:
 //   - Posts with 15 predefined tags (categories = virtual networks)
 //   - Threaded replies, reposts with optional quote
-//   - Like (1x per user per post), SuperLike (100 gwei each, unlimited)
-//   - Downvote (100 gwei each, unlimited) — community scoring
-//   - Follow / Unfollow
-//   - Username registration (length-based pricing, vanity names)
+//   - Like (1x per user per post), SuperLike (any value, unlimited)
+//   - Downvote (1x per user per post, ecosystem fee)
+//   - Follow / Unfollow with on-chain state + counts
+//   - Username registration (tiered pricing via ecosystem governance)
 //   - Profile metadata via IPFS URI (avatar, bio, links)
 //   - Profile boost & trust badge (premium features)
-//   - Pin post (1 per user), delete post (soft delete)
-//   - Operator stats (posts, engagement per operator network)
-//   V2 NEW:
+//   - Pin post (1 per user), delete post (soft delete), edit post
 //   - Post boost (paid visibility, anyone can boost any post)
-//   - Tip post (send ETH directly to post author, free value)
+//   - Tip post (send ETH directly to post author)
 //   - Report post (community flagging, 1 per user per post)
-//   - Differentiated fees by content type (text/image/video/live)
-//   - TYPE_LIVE content type for live streams
+//   - Block user (on-chain, any frontend can query)
+//   - Operator stats (posts, engagement per operator network)
 //
 // COMMUNITY SCORING:
-//   SuperLike (+) → 100 gwei each → author earns via collectFee
-//   Downvote  (-) → 100 gwei each → ecosystem earns (author gets nothing)
-//   Net score = superLikes - downvotes (frontends calculate, operators decide threshold)
-//
-// COMMUNITY MODERATION:
-//   Report → gas-based fee → reportCount per post incremented
-//   Each frontend decides threshold: e.g. 5 reports = hidden, 3 "illegal" = hidden
-//   Reporter auto-blocks author: frontend filters ALL posts from reported authors
-//   Contract stores raw data. Frontends interpret policy.
-//
-// TAGS (predefined categories):
-//   0=General, 1=News, 2=Politics, 3=Comedy, 4=Sports, 5=Crypto,
-//   6=Tech, 7=Art, 8=Music, 9=Gaming, 10=Business, 11=Education,
-//   12=Lifestyle, 13=Adult, 14=Random
-//   Each operator filters by tags they support = their own curated network.
+//   SuperLike (+) → free value → author earns via collectFee
+//   Downvote  (-) → ecosystem fee → 1 per user (meaningful signal)
+//   Score = superLikeCount - downvoteCount (frontends interpret)
 //
 // FEE FLOW:
-//   Posts/profiles    → collectFee(customRecipient = address(0))
-//   Replies/likes     → collectFee(customRecipient = parent/post author)
-//   SuperLikes        → collectFee(customRecipient = post author)
-//   Downvotes         → collectFee(customRecipient = address(0))
-//   Follow            → collectFee(customRecipient = followed user)
-//   Tips              → collectFee(customRecipient = post author)
-//   Boosts/Premium    → collectFee(customRecipient = address(0))
+//   Text/link posts    → FREE (gas only)
+//   Media posts        → collectFee(customRecipient = address(0))
+//   Replies (media)    → collectFee(customRecipient = parent author)
+//   Likes              → collectFee(customRecipient = post author)
+//   SuperLikes         → collectFee(customRecipient = post author)
+//   Downvotes          → collectFee(customRecipient = address(0))
+//   Follow             → collectFee(customRecipient = followed user)
+//   Tips               → collectFee(customRecipient = post author)
+//   Boosts/Premium     → collectFee(customRecipient = address(0))
 //
 // WHITE-LABEL MODEL:
 //   Any developer deploys a frontend with { startBlock, operator, branding }.
-//   Indexer reads events from startBlock onward → fresh network.
 //   Operator earns commissions on all activity through their frontend.
 //   Same contract, infinite networks.
 //
-// 18+ ONLY — This is a permissionless protocol for adults.
-// No admin functions. No pause. No censorship. Fully immutable.
+// 18+ ONLY — Permissionless protocol for adults.
+// No admin. No pause. No censorship. Fully immutable.
 //
 // ============================================================================
 
@@ -74,9 +71,9 @@ contract Agora {
     // CONSTANTS
     // ════════════════════════════════════════════════════════════════════════
 
-    bytes32 public constant MODULE_ID     = keccak256("AGORA");
+    bytes32 public constant MODULE_ID = keccak256("AGORA");
 
-    // Action IDs for ecosystem fee calculation
+    // Action IDs — all pricing via ecosystem.calculateFee()
     bytes32 public constant ACTION_POST       = keccak256("AGORA_POST");
     bytes32 public constant ACTION_POST_IMAGE = keccak256("AGORA_POST_IMAGE");
     bytes32 public constant ACTION_POST_VIDEO = keccak256("AGORA_POST_VIDEO");
@@ -85,21 +82,23 @@ contract Agora {
     bytes32 public constant ACTION_REPOST     = keccak256("AGORA_REPOST");
     bytes32 public constant ACTION_LIKE       = keccak256("AGORA_LIKE");
     bytes32 public constant ACTION_FOLLOW     = keccak256("AGORA_FOLLOW");
+    bytes32 public constant ACTION_DOWNVOTE   = keccak256("AGORA_DOWNVOTE");
+    bytes32 public constant ACTION_REPORT     = keccak256("AGORA_REPORT");
 
-    // V10: New gas-based action IDs (replace fixed ETH prices)
-    bytes32 public constant ACTION_REPORT          = keccak256("AGORA_REPORT");
-    bytes32 public constant ACTION_PROFILE_BOOST   = keccak256("AGORA_PROFILE_BOOST");
-    bytes32 public constant ACTION_BADGE_VERIFIED  = keccak256("AGORA_BADGE_VERIFIED");
-    bytes32 public constant ACTION_BADGE_PREMIUM   = keccak256("AGORA_BADGE_PREMIUM");
-    bytes32 public constant ACTION_BADGE_ELITE     = keccak256("AGORA_BADGE_ELITE");
+    // Boost action IDs (dynamic pricing via ecosystem)
+    bytes32 public constant ACTION_BOOST_STANDARD = keccak256("AGORA_BOOST_STD");
+    bytes32 public constant ACTION_BOOST_FEATURED = keccak256("AGORA_BOOST_FEAT");
 
-    /// @notice Price per SuperLike or Downvote (100 gwei)
-    uint256 public constant VOTE_PRICE = 100 gwei;
+    // Profile premium action IDs
+    bytes32 public constant ACTION_PROFILE_BOOST  = keccak256("AGORA_PROFILE_BOOST");
+    bytes32 public constant ACTION_BADGE_VERIFIED = keccak256("AGORA_BADGE_VERIFIED");
+    bytes32 public constant ACTION_BADGE_PREMIUM  = keccak256("AGORA_BADGE_PREMIUM");
+    bytes32 public constant ACTION_BADGE_ELITE    = keccak256("AGORA_BADGE_ELITE");
 
     /// @notice Number of predefined tag categories
     uint8 public constant TAG_COUNT = 15;
 
-    /// @notice Content type flags (metadata for frontend filtering)
+    /// @notice Content type flags
     uint8 public constant TYPE_TEXT  = 0;
     uint8 public constant TYPE_IMAGE = 1;
     uint8 public constant TYPE_VIDEO = 2;
@@ -125,6 +124,9 @@ contract Agora {
     uint8 public constant BADGE_ELITE    = 2;
     uint8 public constant BADGE_TIER_COUNT = 3;
 
+    /// @notice Edit window (15 minutes after creation)
+    uint256 public constant EDIT_WINDOW = 15 minutes;
+
     // ════════════════════════════════════════════════════════════════════════
     // IMMUTABLE
     // ════════════════════════════════════════════════════════════════════════
@@ -135,74 +137,83 @@ contract Agora {
     // STATE: POSTS
     // ════════════════════════════════════════════════════════════════════════
 
-    /// @notice Global post counter (incremented for every post, reply, repost)
+    /// @notice Global post counter
     uint256 public postCounter;
 
-    /// @dev Packed post data — 27 bytes = 1 storage slot
-    ///      author(20) + tag(1) + contentType(1) + deleted(1) + createdAt(4)
+    /// @dev Packed post data — 31 bytes = 1 storage slot
+    ///      author(20) + tag(1) + contentType(1) + deleted(1) + createdAt(4) + editedAt(4)
     struct Post {
         address author;
         uint8   tag;
         uint8   contentType;
         bool    deleted;
         uint32  createdAt;
+        uint32  editedAt;
     }
 
     mapping(uint256 => Post)    public posts;
-    mapping(uint256 => uint256) public replyTo;       // 0 = not a reply
-    mapping(uint256 => uint256) public repostOf;      // 0 = not a repost
+    mapping(uint256 => uint256) public replyTo;
+    mapping(uint256 => uint256) public repostOf;
 
-    // Engagement counters (per post)
+    // ════════════════════════════════════════════════════════════════════════
+    // STATE: ENGAGEMENT
+    // ════════════════════════════════════════════════════════════════════════
+
     mapping(uint256 => uint256) public likeCount;
     mapping(uint256 => uint256) public superLikeCount;
+    mapping(uint256 => uint256) public superLikeTotal;   // cumulative ETH
     mapping(uint256 => uint256) public downvoteCount;
     mapping(uint256 => uint256) public replyCount;
     mapping(uint256 => uint256) public repostCount;
 
-    // Like deduplication (1 per user per post)
+    // Deduplication
     mapping(uint256 => mapping(address => bool)) public hasLiked;
+    mapping(uint256 => mapping(address => bool)) public hasDownvoted;
+
+    // ════════════════════════════════════════════════════════════════════════
+    // STATE: SOCIAL GRAPH
+    // ════════════════════════════════════════════════════════════════════════
+
+    mapping(address => mapping(address => bool)) public isFollowing;
+    mapping(address => uint256) public followerCount;
+    mapping(address => uint256) public followingCount;
+
+    // ════════════════════════════════════════════════════════════════════════
+    // STATE: BLOCK LIST
+    // ════════════════════════════════════════════════════════════════════════
+
+    mapping(address => mapping(address => bool)) public hasBlocked;
 
     // ════════════════════════════════════════════════════════════════════════
     // STATE: REPORTS
     // ════════════════════════════════════════════════════════════════════════
 
-    /// @notice Total reports per post
     mapping(uint256 => uint256) public reportCount;
-
-    /// @notice Reports per category per post (for category-specific thresholds)
     mapping(uint256 => mapping(uint8 => uint256)) public reportsByCategory;
-
-    /// @notice Deduplication: 1 report per user per post
     mapping(uint256 => mapping(address => bool)) public hasReported;
 
     // ════════════════════════════════════════════════════════════════════════
     // STATE: POST BOOSTS
     // ════════════════════════════════════════════════════════════════════════
 
-    /// @notice Boost expiry timestamp per post
-    mapping(uint256 => uint64) public postBoostExpiry;
-
-    /// @notice Highest boost tier for each post (0=Standard, 1=Featured)
-    mapping(uint256 => uint8) public postBoostTier;
-
-    /// @notice Total ETH spent on boosting each post (lifetime)
+    mapping(uint256 => uint64)  public postBoostExpiry;
+    mapping(uint256 => uint8)   public postBoostTier;
     mapping(uint256 => uint256) public postBoostTotal;
 
     // ════════════════════════════════════════════════════════════════════════
     // STATE: TIPS
     // ════════════════════════════════════════════════════════════════════════
 
-    /// @notice Total ETH tipped to each post (lifetime)
     mapping(uint256 => uint256) public tipTotal;
 
     // ════════════════════════════════════════════════════════════════════════
     // STATE: PROFILES
     // ════════════════════════════════════════════════════════════════════════
 
-    mapping(bytes32 => address) public usernameOwner;   // nameHash → address
-    mapping(address => bytes32) public userUsername;     // address → nameHash
-    mapping(address => string)  public profileURI;      // IPFS metadata URI
-    mapping(address => uint256) public pinnedPost;      // 1 pinned post per user
+    mapping(bytes32 => address) public usernameOwner;
+    mapping(address => bytes32) public userUsername;
+    mapping(address => string)  public profileURI;
+    mapping(address => uint256) public pinnedPost;
 
     // Premium features
     mapping(address => uint64)  public boostExpiry;
@@ -213,17 +224,36 @@ contract Agora {
     // STATE: STATS
     // ════════════════════════════════════════════════════════════════════════
 
-    /// @notice Posts per tag category (for discovery dashboards)
     mapping(uint8 => uint256)   public tagPostCount;
-
-    /// @notice Posts created through each operator (measures network size)
     mapping(address => uint256) public operatorPostCount;
-
-    /// @notice Engagement actions through each operator (likes, superLikes, etc.)
     mapping(address => uint256) public operatorEngagement;
-
-    /// @notice Total registered profiles
     uint256 public totalProfiles;
+
+    // ════════════════════════════════════════════════════════════════════════
+    // STRUCTS: VIEWS
+    // ════════════════════════════════════════════════════════════════════════
+
+    /// @notice Combined post data for efficient reads (replaces getPost + getPostMeta)
+    struct PostView {
+        address author;
+        uint8   tag;
+        uint8   contentType;
+        bool    deleted;
+        uint32  createdAt;
+        uint32  editedAt_;
+        uint256 replyTo_;
+        uint256 repostOf_;
+        uint256 likes;
+        uint256 superLikes;
+        uint256 superLikeETH;
+        uint256 downvotes;
+        uint256 replies;
+        uint256 reposts;
+        uint256 reports;
+        uint256 tips;
+        uint8   boostTier;
+        uint64  boostExpiry;
+    }
 
     // ════════════════════════════════════════════════════════════════════════
     // EVENTS
@@ -242,6 +272,7 @@ contract Agora {
         uint256 indexed postId, uint256 indexed originalId, address indexed author,
         uint8 tag, string contentHash, address operator
     );
+    event PostEdited(uint256 indexed postId, address indexed author, string newContentHash);
     event PostDeleted(uint256 indexed postId, address indexed author);
     event TagChanged(uint256 indexed postId, uint8 oldTag, uint8 newTag);
 
@@ -252,11 +283,11 @@ contract Agora {
     );
     event SuperLiked(
         uint256 indexed postId, address indexed voter,
-        address indexed author, uint256 count, address operator
+        address indexed author, uint256 amount, address operator
     );
     event Downvoted(
         uint256 indexed postId, address indexed voter,
-        address indexed author, uint256 count, address operator
+        address indexed author, address operator
     );
     event Followed(address indexed follower, address indexed followed, address operator);
     event Unfollowed(address indexed follower, address indexed followed);
@@ -276,6 +307,10 @@ contract Agora {
         uint256 indexed postId, address indexed tipper,
         address indexed author, uint256 amount, address operator
     );
+
+    // ── Social ──
+    event UserBlocked(address indexed blocker, address indexed blocked);
+    event UserUnblocked(address indexed blocker, address indexed unblocked);
 
     // ── Profiles ──
     event ProfileCreated(
@@ -299,7 +334,10 @@ contract Agora {
     error PostNotFound();
     error PostIsDeleted();
     error AlreadyLiked();
+    error AlreadyDownvoted();
     error AlreadyReported();
+    error AlreadyFollowing();
+    error NotFollowing();
     error SelfAction();
     error UsernameTaken();
     error InvalidUsername();
@@ -309,6 +347,7 @@ contract Agora {
     error InvalidCategory();
     error InvalidTier();
     error NotAuthor();
+    error EditWindowClosed();
 
     // ════════════════════════════════════════════════════════════════════════
     // CONSTRUCTOR
@@ -322,12 +361,8 @@ contract Agora {
     // POSTS
     // ════════════════════════════════════════════════════════════════════════
 
-    /// @notice Create a new post in a tag category.
-    ///         Fee varies by content type (text/image/video/live).
-    /// @param contentHash  IPFS CID or content hash (emitted in event, not stored)
-    /// @param tag          Category (0-14). See TAG constants.
-    /// @param contentType  0=text, 1=image, 2=video, 3=link, 4=live
-    /// @param operator     Frontend operator earning commissions (address(0) if none)
+    /// @notice Create a new post. Text/link posts are FREE (gas only).
+    ///         Image/video/live posts pay ecosystem fees.
     function createPost(
         string calldata contentHash,
         uint8 tag,
@@ -337,7 +372,10 @@ contract Agora {
         if (bytes(contentHash).length == 0) revert EmptyContent();
         if (tag >= TAG_COUNT) revert InvalidTag();
 
-        uint256 fee = ecosystem.calculateFee(_getPostActionId(contentType), 0);
+        // Text & link posts are FREE — only media costs fees
+        uint256 fee = _isMediaType(contentType)
+            ? ecosystem.calculateFee(_getPostActionId(contentType), 0)
+            : 0;
         if (msg.value < fee) revert InsufficientFee();
 
         uint256 postId = ++postCounter;
@@ -346,7 +384,8 @@ contract Agora {
             tag: tag,
             contentType: contentType,
             deleted: false,
-            createdAt: uint32(block.timestamp)
+            createdAt: uint32(block.timestamp),
+            editedAt: 0
         });
 
         tagPostCount[tag]++;
@@ -362,10 +401,8 @@ contract Agora {
     }
 
     /// @notice Reply to an existing post. Inherits parent's tag.
-    /// @param parentId     Post being replied to (must exist and not be deleted)
-    /// @param contentHash  Reply content hash
-    /// @param contentType  0=text, 1=image, 2=video, 3=link
-    /// @param operator     Frontend operator
+    ///         Text replies are FREE. Media replies pay fees.
+    ///         Parent author earns custom recipient share on paid replies.
     function createReply(
         uint256 parentId,
         string calldata contentHash,
@@ -376,7 +413,9 @@ contract Agora {
 
         Post storage parent = _requireActivePost(parentId);
 
-        uint256 fee = ecosystem.calculateFee(ACTION_REPLY, 0);
+        uint256 fee = _isMediaType(contentType)
+            ? ecosystem.calculateFee(ACTION_REPLY, 0)
+            : 0;
         if (msg.value < fee) revert InsufficientFee();
 
         uint8 tag = parent.tag;
@@ -388,7 +427,8 @@ contract Agora {
             tag: tag,
             contentType: contentType,
             deleted: false,
-            createdAt: uint32(block.timestamp)
+            createdAt: uint32(block.timestamp),
+            editedAt: 0
         });
         replyTo[postId] = parentId;
 
@@ -396,7 +436,6 @@ contract Agora {
         tagPostCount[tag]++;
         if (operator != address(0)) operatorPostCount[operator]++;
 
-        // Parent author earns custom recipient share
         if (msg.value > 0) {
             ecosystem.collectFee{value: msg.value}(
                 msg.sender, operator, parentAuthor, MODULE_ID, 0
@@ -406,12 +445,8 @@ contract Agora {
         emit ReplyCreated(postId, parentId, msg.sender, tag, contentType, contentHash, operator);
     }
 
-    /// @notice Repost existing content, optionally with a quote (contentHash).
-    ///         Empty contentHash = simple repost. Non-empty = quote repost.
-    ///         Inherits original post's tag.
-    /// @param originalId   Post being reposted
-    /// @param contentHash  Quote text hash (empty for simple repost)
-    /// @param operator     Frontend operator
+    /// @notice Repost existing content, optionally with a quote.
+    ///         FREE (gas only). Original author earns nothing from reposts.
     function createRepost(
         uint256 originalId,
         string calldata contentHash,
@@ -419,11 +454,7 @@ contract Agora {
     ) external payable {
         Post storage original = _requireActivePost(originalId);
 
-        uint256 fee = ecosystem.calculateFee(ACTION_REPOST, 0);
-        if (msg.value < fee) revert InsufficientFee();
-
         uint8 tag = original.tag;
-        address originalAuthor = original.author;
 
         uint256 postId = ++postCounter;
         posts[postId] = Post({
@@ -431,7 +462,8 @@ contract Agora {
             tag: tag,
             contentType: TYPE_TEXT,
             deleted: false,
-            createdAt: uint32(block.timestamp)
+            createdAt: uint32(block.timestamp),
+            editedAt: 0
         });
         repostOf[postId] = originalId;
 
@@ -439,20 +471,29 @@ contract Agora {
         tagPostCount[tag]++;
         if (operator != address(0)) operatorPostCount[operator]++;
 
-        // Original author earns custom recipient share
         if (msg.value > 0) {
             ecosystem.collectFee{value: msg.value}(
-                msg.sender, operator, originalAuthor, MODULE_ID, 0
+                msg.sender, operator, original.author, MODULE_ID, 0
             );
         }
 
         emit RepostCreated(postId, originalId, msg.sender, tag, contentHash, operator);
     }
 
-    /// @notice Soft-delete a post. Content remains in events but post is
-    ///         marked as deleted. Engagement on deleted posts is blocked.
-    ///         Only the author can delete their own post.
-    /// @param postId  Post to delete
+    /// @notice Edit a post's content within 15 minutes of creation.
+    ///         FREE (gas only). Only the author can edit.
+    function editPost(uint256 postId, string calldata newContentHash) external {
+        if (bytes(newContentHash).length == 0) revert EmptyContent();
+
+        Post storage p = _requireActivePost(postId);
+        if (p.author != msg.sender) revert NotAuthor();
+        if (block.timestamp > uint256(p.createdAt) + EDIT_WINDOW) revert EditWindowClosed();
+
+        p.editedAt = uint32(block.timestamp);
+        emit PostEdited(postId, msg.sender, newContentHash);
+    }
+
+    /// @notice Soft-delete a post. Only the author can delete.
     function deletePost(uint256 postId) external {
         Post storage p = posts[postId];
         if (p.author == address(0)) revert PostNotFound();
@@ -465,11 +506,7 @@ contract Agora {
         emit PostDeleted(postId, msg.sender);
     }
 
-    /// @notice Change a post's tag (category). Free, only gas.
-    ///         Useful for self-correction or after community feedback.
-    ///         Only the author can change their post's tag.
-    /// @param postId  Post to re-tag
-    /// @param newTag  New category (0-14)
+    /// @notice Change a post's tag. FREE (gas only). Author only.
     function changeTag(uint256 postId, uint8 newTag) external {
         if (newTag >= TAG_COUNT) revert InvalidTag();
 
@@ -479,7 +516,7 @@ contract Agora {
         if (p.deleted) revert PostIsDeleted();
 
         uint8 oldTag = p.tag;
-        if (oldTag == newTag) return; // no-op
+        if (oldTag == newTag) return;
 
         p.tag = newTag;
         tagPostCount[oldTag]--;
@@ -494,8 +531,6 @@ contract Agora {
 
     /// @notice Like a post. 1 per user per post. Standard ecosystem fee.
     ///         Post author earns custom recipient share.
-    /// @param postId   Post to like
-    /// @param operator Frontend operator
     function like(uint256 postId, address operator) external payable {
         Post storage p = _requireActivePost(postId);
         if (p.author == msg.sender) revert SelfAction();
@@ -517,65 +552,65 @@ contract Agora {
         emit Liked(postId, msg.sender, p.author, operator);
     }
 
-    /// @notice SuperLike a post. 100 gwei per SuperLike, unlimited.
+    /// @notice SuperLike a post. Send any amount of ETH > 0.
     ///         Acts as a micro-tip + positive signal. Author earns via collectFee.
-    ///         Send msg.value as multiples of 100 gwei.
-    ///
-    ///         Example: 1000 gwei = 10 SuperLikes.
-    ///
-    /// @param postId   Post to superLike
-    /// @param operator Frontend operator
+    ///         Each call = 1 superLike. Unlimited calls per user per post.
+    ///         Total ETH tracked in superLikeTotal[postId].
     function superLike(uint256 postId, address operator) external payable {
         Post storage p = _requireActivePost(postId);
         if (p.author == msg.sender) revert SelfAction();
-        if (msg.value == 0 || msg.value % VOTE_PRICE != 0) revert InvalidAmount();
+        if (msg.value == 0) revert InvalidAmount();
 
-        uint256 count = msg.value / VOTE_PRICE;
-        superLikeCount[postId] += count;
+        superLikeCount[postId]++;
+        superLikeTotal[postId] += msg.value;
         if (operator != address(0)) operatorEngagement[operator]++;
 
-        // Author earns from superLikes
         ecosystem.collectFee{value: msg.value}(
             msg.sender, operator, p.author, MODULE_ID, 0
         );
 
-        emit SuperLiked(postId, msg.sender, p.author, count, operator);
+        emit SuperLiked(postId, msg.sender, p.author, msg.value, operator);
     }
 
-    /// @notice Downvote a post. 100 gwei per downvote, unlimited.
-    ///         Negative community signal. Author earns NOTHING — ETH goes
-    ///         to ecosystem (buyback/treasury/operator).
-    ///         Send msg.value as multiples of 100 gwei.
-    ///
-    /// @param postId   Post to downvote
-    /// @param operator Frontend operator
+    /// @notice Downvote a post. 1 per user per post. Ecosystem fee.
+    ///         Negative community signal. Author earns NOTHING.
     function downvote(uint256 postId, address operator) external payable {
         Post storage p = _requireActivePost(postId);
         if (p.author == msg.sender) revert SelfAction();
-        if (msg.value == 0 || msg.value % VOTE_PRICE != 0) revert InvalidAmount();
+        if (hasDownvoted[postId][msg.sender]) revert AlreadyDownvoted();
 
-        uint256 count = msg.value / VOTE_PRICE;
-        downvoteCount[postId] += count;
+        uint256 fee = ecosystem.calculateFee(ACTION_DOWNVOTE, 0);
+        if (msg.value < fee) revert InsufficientFee();
+
+        hasDownvoted[postId][msg.sender] = true;
+        downvoteCount[postId]++;
         if (operator != address(0)) operatorEngagement[operator]++;
 
-        // customRecipient = address(0) → author earns NOTHING
-        ecosystem.collectFee{value: msg.value}(
-            msg.sender, operator, address(0), MODULE_ID, 0
-        );
+        if (msg.value > 0) {
+            ecosystem.collectFee{value: msg.value}(
+                msg.sender, operator, address(0), MODULE_ID, 0
+            );
+        }
 
-        emit Downvoted(postId, msg.sender, p.author, count, operator);
+        emit Downvoted(postId, msg.sender, p.author, operator);
     }
 
-    /// @notice Follow a user. Standard ecosystem fee.
+    // ════════════════════════════════════════════════════════════════════════
+    // SOCIAL GRAPH
+    // ════════════════════════════════════════════════════════════════════════
+
+    /// @notice Follow a user. On-chain state + counts.
     ///         Followed user earns custom recipient share.
-    ///         Follow state is tracked off-chain via events.
-    /// @param user     User to follow
-    /// @param operator Frontend operator
     function follow(address user, address operator) external payable {
         if (user == msg.sender) revert SelfAction();
+        if (isFollowing[msg.sender][user]) revert AlreadyFollowing();
 
         uint256 fee = ecosystem.calculateFee(ACTION_FOLLOW, 0);
         if (msg.value < fee) revert InsufficientFee();
+
+        isFollowing[msg.sender][user] = true;
+        followerCount[user]++;
+        followingCount[msg.sender]++;
 
         if (operator != address(0)) operatorEngagement[operator]++;
 
@@ -588,24 +623,35 @@ contract Agora {
         emit Followed(msg.sender, user, operator);
     }
 
-    /// @notice Unfollow a user. Free (gas only). Tracked via events.
-    /// @param user User to unfollow
+    /// @notice Unfollow a user. FREE (gas only).
     function unfollow(address user) external {
+        if (!isFollowing[msg.sender][user]) revert NotFollowing();
+
+        isFollowing[msg.sender][user] = false;
+        followerCount[user]--;
+        followingCount[msg.sender]--;
+
         emit Unfollowed(msg.sender, user);
     }
 
+    /// @notice Block a user. FREE (gas only). On-chain, queryable by any frontend.
+    function blockUser(address user) external {
+        hasBlocked[msg.sender][user] = true;
+        emit UserBlocked(msg.sender, user);
+    }
+
+    /// @notice Unblock a user. FREE (gas only).
+    function unblockUser(address user) external {
+        hasBlocked[msg.sender][user] = false;
+        emit UserUnblocked(msg.sender, user);
+    }
+
     // ════════════════════════════════════════════════════════════════════════
-    // REPORTS (Community Moderation)
+    // REPORTS
     // ════════════════════════════════════════════════════════════════════════
 
-    /// @notice Report a post for community moderation. Costs 0.0001 ETH.
-    ///         Small fee prevents spam reports. 1 report per wallet per post.
-    ///         Cannot report own posts.
-    ///         Contract stores raw data — each frontend decides its threshold.
-    ///         Reporter's frontend auto-hides ALL posts from the reported author.
-    ///
-    /// @param postId   Post to report
-    /// @param category Report reason: 0=Spam, 1=Harassment, 2=Illegal, 3=Scam, 4=Other
+    /// @notice Report a post. 1 per user per post. Ecosystem fee (anti-spam).
+    ///         Contract stores raw data — each frontend decides threshold.
     function reportPost(uint256 postId, uint8 category, address operator) external payable {
         if (category >= REPORT_CATEGORY_COUNT) revert InvalidCategory();
         uint256 fee = ecosystem.calculateFee(ACTION_REPORT, 0);
@@ -619,7 +665,6 @@ contract Agora {
         reportCount[postId]++;
         reportsByCategory[postId][category]++;
 
-        // Report fee goes to ecosystem (author earns nothing)
         ecosystem.collectFee{value: msg.value}(
             msg.sender, operator, address(0), MODULE_ID, 0
         );
@@ -632,12 +677,7 @@ contract Agora {
     // ════════════════════════════════════════════════════════════════════════
 
     /// @notice Boost a post's visibility. Anyone can boost any post.
-    ///         Two tiers: Standard (0.001 ETH/day) and Featured (0.005 ETH/day).
-    ///         Featured posts appear at top of feed + cross-tag visibility.
-    ///         Stackable — send more ETH = longer boost duration.
-    /// @param postId   Post to boost
-    /// @param tier     0=Standard, 1=Featured
-    /// @param operator Frontend operator
+    ///         Pricing: ecosystem.calculateFee per day per tier. Stackable.
     function boostPost(uint256 postId, uint8 tier, address operator) external payable {
         _requireActivePost(postId);
         if (tier >= BOOST_TIER_COUNT) revert InvalidTier();
@@ -652,7 +692,6 @@ contract Agora {
         postBoostExpiry[postId] = newExpiry;
         postBoostTotal[postId] += msg.value;
 
-        // Upgrade tier if higher (never downgrade)
         if (tier > postBoostTier[postId]) {
             postBoostTier[postId] = tier;
         }
@@ -666,12 +705,8 @@ contract Agora {
         emit PostBoosted(postId, msg.sender, tier, msg.value, newExpiry, operator);
     }
 
-    /// @notice Tip a post's author directly with ETH.
-    ///         Free-value transfer — send any amount > 0.
+    /// @notice Tip a post's author with ETH. Any amount > 0.
     ///         Author earns via ecosystem's custom recipient share.
-    ///         Operator earns commission on tips through their frontend.
-    /// @param postId   Post to tip
-    /// @param operator Frontend operator
     function tipPost(uint256 postId, address operator) external payable {
         Post storage p = _requireActivePost(postId);
         if (p.author == msg.sender) revert SelfAction();
@@ -680,7 +715,6 @@ contract Agora {
         tipTotal[postId] += msg.value;
         if (operator != address(0)) operatorEngagement[operator]++;
 
-        // Author earns the tip via ecosystem fee distribution
         ecosystem.collectFee{value: msg.value}(
             msg.sender, operator, p.author, MODULE_ID, 0
         );
@@ -692,14 +726,8 @@ contract Agora {
     // PROFILES
     // ════════════════════════════════════════════════════════════════════════
 
-    /// @notice Register a unique username and profile metadata.
-    ///         Username pricing by length: 1 char = 1 ETH ... 7+ chars = FREE.
-    ///         Username is permanent — once claimed, it's yours forever.
-    ///         One profile per address.
-    ///
-    /// @param username     Desired username (1-15 chars, a-z 0-9 _ only)
-    /// @param metadataURI  IPFS CID pointing to JSON: {name, bio, avatar, links}
-    /// @param operator     Frontend operator
+    /// @notice Register username + profile. Pricing via ecosystem governance.
+    ///         1-2 chars = rare (expensive), 3-4 = short, 5-6 = common, 7+ = FREE.
     function createProfile(
         string calldata username,
         string calldata metadataURI,
@@ -707,16 +735,13 @@ contract Agora {
     ) external payable {
         if (userUsername[msg.sender] != bytes32(0)) revert AlreadyHasProfile();
 
-        // Validate and normalize username
         string memory normalized = _validateAndLower(username);
         bytes32 nameHash = keccak256(bytes(normalized));
         if (usernameOwner[nameHash] != address(0)) revert UsernameTaken();
 
-        // Username pricing by length
         uint256 price = _getUsernamePrice(bytes(normalized).length);
         if (msg.value < price) revert InsufficientFee();
 
-        // Store profile
         usernameOwner[nameHash] = msg.sender;
         userUsername[msg.sender] = nameHash;
         if (bytes(metadataURI).length > 0) {
@@ -733,17 +758,13 @@ contract Agora {
         emit ProfileCreated(msg.sender, normalized, metadataURI, operator);
     }
 
-    /// @notice Update profile metadata (avatar, bio, links).
-    ///         Free — only gas cost.
-    /// @param metadataURI  New IPFS CID pointing to profile JSON
+    /// @notice Update profile metadata. FREE (gas only).
     function updateProfile(string calldata metadataURI) external {
         profileURI[msg.sender] = metadataURI;
         emit ProfileUpdated(msg.sender, metadataURI);
     }
 
-    /// @notice Pin a post to your profile (1 per user).
-    ///         Pass postId = 0 to unpin.
-    /// @param postId  Post to pin (must be your own post, or 0 to unpin)
+    /// @notice Pin a post to your profile. Pass 0 to unpin. FREE.
     function pinPost(uint256 postId) external {
         if (postId > 0) {
             Post storage p = posts[postId];
@@ -759,10 +780,7 @@ contract Agora {
     // PREMIUM FEATURES
     // ════════════════════════════════════════════════════════════════════════
 
-    /// @notice Boost your profile visibility.
-    ///         Gas-based pricing per day. Stackable — send more = longer boost.
-    ///         Extends current boost if already active.
-    /// @param operator Frontend operator
+    /// @notice Boost your profile visibility. Dynamic pricing via ecosystem.
     function boostProfile(address operator) external payable {
         uint256 pricePerDay = ecosystem.calculateFee(ACTION_PROFILE_BOOST, 0);
         if (msg.value < pricePerDay) revert InsufficientFee();
@@ -780,13 +798,8 @@ contract Agora {
         emit ProfileBoosted(msg.sender, daysToAdd, newExpiry, operator);
     }
 
-    /// @notice Obtain a trust badge. 3 tiers with increasing price and prestige.
-    ///         Gas-based pricing per year. Always upgrades to highest tier paid.
-    ///         Tier 0 (Verified) — blue checkmark
-    ///         Tier 1 (Premium)  — gold checkmark
-    ///         Tier 2 (Elite)    — diamond animated checkmark
-    /// @param tier     Badge tier (0=Verified, 1=Premium, 2=Elite)
-    /// @param operator Frontend operator
+    /// @notice Obtain a trust badge. Dynamic pricing via ecosystem per tier.
+    ///         Always upgrades to highest tier paid.
     function obtainBadge(uint8 tier, address operator) external payable {
         if (tier >= BADGE_TIER_COUNT) revert InvalidTier();
 
@@ -796,7 +809,6 @@ contract Agora {
         uint64 newExpiry = uint64(block.timestamp + 365 days);
         badgeExpiry[msg.sender] = newExpiry;
 
-        // Upgrade tier if higher (never downgrade)
         if (tier > badgeTier[msg.sender]) {
             badgeTier[msg.sender] = tier;
         }
@@ -812,53 +824,59 @@ contract Agora {
     // VIEWS
     // ════════════════════════════════════════════════════════════════════════
 
-    /// @notice Get all data about a post in a single call.
-    function getPost(uint256 postId) external view returns (
-        address author,
-        uint8   tag,
-        uint8   contentType,
-        bool    deleted,
-        uint32  createdAt,
-        uint256 _replyTo,
-        uint256 _repostOf,
-        uint256 likes,
-        uint256 superLikes,
-        uint256 downvotes,
-        uint256 replies,
-        uint256 reposts
-    ) {
+    /// @notice Get all data about a post in a single call (replaces getPost + getPostMeta).
+    function getPost(uint256 postId) external view returns (PostView memory v) {
         Post storage p = posts[postId];
-        author      = p.author;
-        tag         = p.tag;
-        contentType = p.contentType;
-        deleted     = p.deleted;
-        createdAt   = p.createdAt;
-        _replyTo    = replyTo[postId];
-        _repostOf   = repostOf[postId];
-        likes       = likeCount[postId];
-        superLikes  = superLikeCount[postId];
-        downvotes   = downvoteCount[postId];
-        replies     = replyCount[postId];
-        reposts     = repostCount[postId];
+        v.author       = p.author;
+        v.tag          = p.tag;
+        v.contentType  = p.contentType;
+        v.deleted      = p.deleted;
+        v.createdAt    = p.createdAt;
+        v.editedAt_    = p.editedAt;
+        v.replyTo_     = replyTo[postId];
+        v.repostOf_    = repostOf[postId];
+        v.likes        = likeCount[postId];
+        v.superLikes   = superLikeCount[postId];
+        v.superLikeETH = superLikeTotal[postId];
+        v.downvotes    = downvoteCount[postId];
+        v.replies      = replyCount[postId];
+        v.reposts      = repostCount[postId];
+        v.reports      = reportCount[postId];
+        v.tips         = tipTotal[postId];
+        v.boostTier    = postBoostTier[postId];
+        v.boostExpiry  = postBoostExpiry[postId];
     }
 
-    /// @notice Get V2 extended data for a post (reports, boost, tips).
-    function getPostMeta(uint256 postId) external view returns (
-        uint256 reports,
-        uint256 illegalReports,
-        uint8   boostTier,
-        uint64  boostExp,
-        bool    isBoosted,
-        uint256 boostSpent,
-        uint256 tips
-    ) {
-        reports        = reportCount[postId];
-        illegalReports = reportsByCategory[postId][REPORT_ILLEGAL];
-        boostTier      = postBoostTier[postId];
-        boostExp       = postBoostExpiry[postId];
-        isBoosted      = postBoostExpiry[postId] > block.timestamp;
-        boostSpent     = postBoostTotal[postId];
-        tips           = tipTotal[postId];
+    /// @notice Batch read — get multiple posts in a single RPC call.
+    function getPostsBatch(uint256[] calldata postIds) external view returns (PostView[] memory) {
+        uint256 len = postIds.length;
+        PostView[] memory result = new PostView[](len);
+        for (uint256 i; i < len;) {
+            uint256 id = postIds[i];
+            Post storage p = posts[id];
+            result[i] = PostView({
+                author:       p.author,
+                tag:          p.tag,
+                contentType:  p.contentType,
+                deleted:      p.deleted,
+                createdAt:    p.createdAt,
+                editedAt_:    p.editedAt,
+                replyTo_:     replyTo[id],
+                repostOf_:    repostOf[id],
+                likes:        likeCount[id],
+                superLikes:   superLikeCount[id],
+                superLikeETH: superLikeTotal[id],
+                downvotes:    downvoteCount[id],
+                replies:      replyCount[id],
+                reposts:      repostCount[id],
+                reports:      reportCount[id],
+                tips:         tipTotal[id],
+                boostTier:    postBoostTier[id],
+                boostExpiry:  postBoostExpiry[id]
+            });
+            unchecked { ++i; }
+        }
+        return result;
     }
 
     /// @notice Get a user's profile data in a single call.
@@ -870,7 +888,9 @@ contract Agora {
         bool    hasBadge,
         uint8   _badgeTier,
         uint64  boostExp,
-        uint64  badgeExp
+        uint64  badgeExp,
+        uint256 followers,
+        uint256 following
     ) {
         usernameHash = userUsername[user];
         metadataURI  = profileURI[user];
@@ -880,6 +900,18 @@ contract Agora {
         _badgeTier   = badgeTier[user];
         boostExp     = boostExpiry[user];
         badgeExp     = badgeExpiry[user];
+        followers    = followerCount[user];
+        following    = followingCount[user];
+    }
+
+    /// @notice Check if user A is following user B
+    function checkFollowing(address a, address b) external view returns (bool) {
+        return isFollowing[a][b];
+    }
+
+    /// @notice Check if user A has blocked user B
+    function checkBlocked(address a, address b) external view returns (bool) {
+        return hasBlocked[a][b];
     }
 
     /// @notice Check if a profile is currently boosted
@@ -901,21 +933,22 @@ contract Agora {
     function isUsernameAvailable(string calldata username) external view returns (bool) {
         if (bytes(username).length == 0 || bytes(username).length > 15) return false;
         string memory normalized = _validateAndLowerView(username);
+        if (bytes(normalized).length == 0) return false;
         bytes32 nameHash = keccak256(bytes(normalized));
         return usernameOwner[nameHash] == address(0);
     }
 
-    /// @notice Get the price for a username by character count
-    function getUsernamePrice(uint256 length) external pure returns (uint256) {
+    /// @notice Get username price by length (via ecosystem governance)
+    function getUsernamePrice(uint256 length) external view returns (uint256) {
         return _getUsernamePrice(length);
     }
 
-    /// @notice Get the price per day for a post boost tier
-    function getBoostPrice(uint8 tier) external pure returns (uint256) {
+    /// @notice Get boost price per day per tier (via ecosystem governance)
+    function getBoostPrice(uint8 tier) external view returns (uint256) {
         return _getBoostPrice(tier);
     }
 
-    /// @notice Get the price for a badge tier (1 year)
+    /// @notice Get badge price per tier (via ecosystem governance)
     function getBadgePrice(uint8 tier) external view returns (uint256) {
         return ecosystem.calculateFee(_getBadgeActionId(tier), 0);
     }
@@ -945,59 +978,58 @@ contract Agora {
 
     /// @notice Contract version
     function version() external pure returns (string memory) {
-        return "2.1.0";
+        return "3.0.0";
     }
 
     // ════════════════════════════════════════════════════════════════════════
     // INTERNAL
     // ════════════════════════════════════════════════════════════════════════
 
-    /// @dev Validate post exists and is not deleted. Returns storage pointer.
     function _requireActivePost(uint256 postId) internal view returns (Post storage p) {
         p = posts[postId];
         if (p.author == address(0)) revert PostNotFound();
         if (p.deleted) revert PostIsDeleted();
     }
 
-    /// @dev Map content type → fee action ID. Allows different fees for text/image/video/live.
-    ///      If a fee config is not registered for a specific type, ecosystem returns 0 fee.
+    /// @dev Check if content type requires a fee (image, video, live)
+    function _isMediaType(uint8 contentType) internal pure returns (bool) {
+        return contentType == TYPE_IMAGE || contentType == TYPE_VIDEO || contentType == TYPE_LIVE;
+    }
+
+    /// @dev Map content type → fee action ID
     function _getPostActionId(uint8 contentType) internal pure returns (bytes32) {
         if (contentType == TYPE_IMAGE) return ACTION_POST_IMAGE;
         if (contentType == TYPE_VIDEO) return ACTION_POST_VIDEO;
         if (contentType == TYPE_LIVE)  return ACTION_LIVE;
-        return ACTION_POST; // text, link, or unknown
+        return ACTION_POST;
     }
 
-    /// @dev Post boost pricing per tier (per day).
-    ///      Standard = 0.001 ETH/day (basic visibility boost)
-    ///      Featured = 0.005 ETH/day (top of feed + cross-tag)
-    function _getBoostPrice(uint8 tier) internal pure returns (uint256) {
-        if (tier == BOOST_STANDARD) return 0.002 ether;   // ~$6/day
-        return 0.01 ether; // BOOST_FEATURED               // ~$30/day
+    /// @dev Post boost pricing per tier via ecosystem governance (dynamic, never hardcoded)
+    function _getBoostPrice(uint8 tier) internal view returns (uint256) {
+        if (tier == BOOST_STANDARD) return ecosystem.calculateFee(ACTION_BOOST_STANDARD, 0);
+        return ecosystem.calculateFee(ACTION_BOOST_FEATURED, 0);
     }
 
-    /// @dev Map badge tier → fee action ID for ecosystem.calculateFee().
+    /// @dev Map badge tier → fee action ID
     function _getBadgeActionId(uint8 tier) internal pure returns (bytes32) {
         if (tier == BADGE_VERIFIED) return ACTION_BADGE_VERIFIED;
         if (tier == BADGE_PREMIUM)  return ACTION_BADGE_PREMIUM;
         return ACTION_BADGE_ELITE;
     }
 
-    /// @dev Username pricing: shorter names are more expensive (vanity pricing).
-    ///      1 char = 1 ETH, 2 = 0.2, 3 = 0.03, 4 = 0.004, 5 = 0.0005, 6 = 0.0001, 7+ = free
-    function _getUsernamePrice(uint256 length) internal pure returns (uint256) {
+    /// @dev Username pricing via ecosystem governance (dynamic, never hardcoded).
+    ///      Each length tier gets its own action ID: keccak256(abi.encode("AGORA_USERNAME", length)).
+    ///      7+ characters = FREE. If a tier has no fee config, price = 0 (free).
+    function _getUsernamePrice(uint256 length) internal view returns (uint256) {
         if (length == 0) return type(uint256).max; // invalid
-        if (length == 1) return 1 ether;
-        if (length == 2) return 0.2 ether;
-        if (length == 3) return 0.03 ether;
-        if (length == 4) return 0.004 ether;
-        if (length == 5) return 0.0005 ether;
-        if (length == 6) return 0.0001 ether;
-        return 0; // 7+ chars = free
+        if (length >= 7) return 0; // free
+        return ecosystem.calculateFee(
+            keccak256(abi.encode("AGORA_USERNAME", length)),
+            0
+        );
     }
 
     /// @dev Validate username (1-15 chars, a-z 0-9 _ only) and convert to lowercase.
-    ///      Used in state-changing functions (memory allocation allowed).
     function _validateAndLower(string calldata str) internal pure returns (string memory) {
         bytes calldata raw = bytes(str);
         uint256 len = raw.length;
@@ -1006,21 +1038,14 @@ contract Agora {
         bytes memory result = new bytes(len);
         for (uint256 i; i < len;) {
             uint8 c = uint8(raw[i]);
-
-            // Convert A-Z → a-z
-            if (c >= 65 && c <= 90) {
-                c += 32;
-            }
-
-            // Must be a-z (97-122), 0-9 (48-57), or _ (95)
+            if (c >= 65 && c <= 90) c += 32; // A-Z → a-z
             if (
-                !(c >= 97 && c <= 122) &&
-                !(c >= 48 && c <= 57) &&
-                c != 95
+                !(c >= 97 && c <= 122) && // a-z
+                !(c >= 48 && c <= 57)  && // 0-9
+                c != 95                    // _
             ) {
                 revert InvalidUsername();
             }
-
             result[i] = bytes1(c);
             unchecked { ++i; }
         }
@@ -1028,8 +1053,7 @@ contract Agora {
         return string(result);
     }
 
-    /// @dev View-safe version of username validation (doesn't revert on invalid, returns empty).
-    ///      Used by isUsernameAvailable().
+    /// @dev View-safe username validation (returns empty on invalid).
     function _validateAndLowerView(string calldata str) internal pure returns (string memory) {
         bytes calldata raw = bytes(str);
         uint256 len = raw.length;

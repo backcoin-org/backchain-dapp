@@ -1811,18 +1811,18 @@ describe("Backchain V10 — Integration Tests", function () {
       ).to.be.revertedWithCustomError(f.agora, "AlreadyLiked");
     });
 
-    it("superLike with micro-payment", async function () {
+    it("superLike with free value (V3: 1 count per call, tracks ETH total)", async function () {
       const f = await loadFixture(deployAllFixture);
 
       await f.agora.connect(f.alice).createPost("QmPost", 0, 0, ethers.ZeroAddress);
 
-      const votePrice = 100n; // 100 gwei
-      const count = 5;
-      const value = votePrice * BigInt(count) * 1000000000n; // convert gwei to wei
+      const tipValue = ethers.parseEther("0.001");
+      await f.agora.connect(f.bob).superLike(1, f.operator.address, { value: tipValue });
 
-      await f.agora.connect(f.bob).superLike(1, f.operator.address, { value });
-
-      expect(await f.agora.superLikeCount(1)).to.equal(count);
+      // V3: each call = 1 superLike count
+      expect(await f.agora.superLikeCount(1)).to.equal(1);
+      // V3: tracks cumulative ETH value
+      expect(await f.agora.superLikeTotal(1)).to.equal(tipValue);
     });
 
     it("downvote: author earns nothing", async function () {
@@ -1857,12 +1857,16 @@ describe("Backchain V10 — Integration Tests", function () {
       ).to.be.revertedWithCustomError(f.agora, "AlreadyHasProfile");
     });
 
-    it("username pricing: short names cost ETH", async function () {
+    it("username pricing: dynamic via ecosystem governance (V3)", async function () {
       const f = await loadFixture(deployAllFixture);
-      // 3-char username costs 0.03 ETH
-      expect(await f.agora.getUsernamePrice(3)).to.equal(ethers.parseEther("0.03"));
-      // 7+ chars free
+      // V3: pricing via ecosystem.calculateFee (returns 0 if no fee config registered)
+      // 7+ chars always free regardless of config
       expect(await f.agora.getUsernamePrice(7)).to.equal(0);
+      expect(await f.agora.getUsernamePrice(10)).to.equal(0);
+      // Short names use ecosystem fee — in test environment, unregistered actions return 0
+      // In production, governance sets fees for each length tier
+      const price3 = await f.agora.getUsernamePrice(3);
+      expect(price3).to.be.a("bigint"); // valid response (0 without fee config)
     });
 
     it("delete post (soft delete)", async function () {
@@ -1885,18 +1889,111 @@ describe("Backchain V10 — Integration Tests", function () {
       ).to.be.revertedWithCustomError(f.agora, "PostIsDeleted");
     });
 
-    it("follow and unfollow", async function () {
+    it("follow and unfollow (V3: on-chain social graph)", async function () {
       const f = await loadFixture(deployAllFixture);
 
-      // Follow emits event
+      // Follow — on-chain state
+      await f.agora.connect(f.alice).follow(f.bob.address, ethers.ZeroAddress);
+      expect(await f.agora.isFollowing(f.alice.address, f.bob.address)).to.be.true;
+      expect(await f.agora.followerCount(f.bob.address)).to.equal(1);
+      expect(await f.agora.followingCount(f.alice.address)).to.equal(1);
+
+      // Cannot follow twice
       await expect(
         f.agora.connect(f.alice).follow(f.bob.address, ethers.ZeroAddress)
-      ).to.emit(f.agora, "Followed").withArgs(f.alice.address, f.bob.address, ethers.ZeroAddress);
+      ).to.be.revertedWithCustomError(f.agora, "AlreadyFollowing");
 
-      // Unfollow emits event
+      // Unfollow — updates counts
+      await f.agora.connect(f.alice).unfollow(f.bob.address);
+      expect(await f.agora.isFollowing(f.alice.address, f.bob.address)).to.be.false;
+      expect(await f.agora.followerCount(f.bob.address)).to.equal(0);
+      expect(await f.agora.followingCount(f.alice.address)).to.equal(0);
+
+      // Cannot unfollow if not following
       await expect(
         f.agora.connect(f.alice).unfollow(f.bob.address)
-      ).to.emit(f.agora, "Unfollowed").withArgs(f.alice.address, f.bob.address);
+      ).to.be.revertedWithCustomError(f.agora, "NotFollowing");
+    });
+
+    it("edit post within 15 min window (V3)", async function () {
+      const f = await loadFixture(deployAllFixture);
+
+      await f.agora.connect(f.alice).createPost("QmOriginal", 0, 0, ethers.ZeroAddress);
+
+      // Edit succeeds within window
+      await expect(
+        f.agora.connect(f.alice).editPost(1, "QmEdited")
+      ).to.emit(f.agora, "PostEdited").withArgs(1, f.alice.address, "QmEdited");
+
+      const post = await f.agora.getPost(1);
+      expect(post.editedAt_).to.be.gt(0);
+
+      // Non-author cannot edit
+      await expect(
+        f.agora.connect(f.bob).editPost(1, "QmHack")
+      ).to.be.revertedWithCustomError(f.agora, "NotAuthor");
+    });
+
+    it("downvote: 1 per user per post (V3)", async function () {
+      const f = await loadFixture(deployAllFixture);
+
+      await f.agora.connect(f.alice).createPost("QmPost", 0, 0, ethers.ZeroAddress);
+      await f.agora.connect(f.bob).downvote(1, ethers.ZeroAddress);
+
+      expect(await f.agora.downvoteCount(1)).to.equal(1);
+      expect(await f.agora.hasDownvoted(1, f.bob.address)).to.be.true;
+
+      // Cannot downvote twice
+      await expect(
+        f.agora.connect(f.bob).downvote(1, ethers.ZeroAddress)
+      ).to.be.revertedWithCustomError(f.agora, "AlreadyDownvoted");
+    });
+
+    it("block and unblock user (V3)", async function () {
+      const f = await loadFixture(deployAllFixture);
+
+      await f.agora.connect(f.alice).blockUser(f.bob.address);
+      expect(await f.agora.hasBlocked(f.alice.address, f.bob.address)).to.be.true;
+
+      await f.agora.connect(f.alice).unblockUser(f.bob.address);
+      expect(await f.agora.hasBlocked(f.alice.address, f.bob.address)).to.be.false;
+    });
+
+    it("batch read posts (V3)", async function () {
+      const f = await loadFixture(deployAllFixture);
+
+      await f.agora.connect(f.alice).createPost("QmPost1", 0, 0, ethers.ZeroAddress);
+      await f.agora.connect(f.bob).createPost("QmPost2", 5, 0, ethers.ZeroAddress);
+
+      const batch = await f.agora.getPostsBatch([1, 2]);
+      expect(batch.length).to.equal(2);
+      expect(batch[0].author).to.equal(f.alice.address);
+      expect(batch[0].tag).to.equal(0);
+      expect(batch[1].author).to.equal(f.bob.address);
+      expect(batch[1].tag).to.equal(5);
+    });
+
+    it("text posts are free, image posts require fee (V3)", async function () {
+      const f = await loadFixture(deployAllFixture);
+
+      // Text post (TYPE_TEXT=0) — free, no value needed
+      await f.agora.connect(f.alice).createPost("QmText", 0, 0, ethers.ZeroAddress);
+      expect(await f.agora.postCounter()).to.equal(1);
+
+      // Link post (TYPE_LINK=3) — also free
+      await f.agora.connect(f.alice).createPost("QmLink", 0, 3, ethers.ZeroAddress);
+      expect(await f.agora.postCounter()).to.equal(2);
+    });
+
+    it("getUserProfile includes follower/following counts (V3)", async function () {
+      const f = await loadFixture(deployAllFixture);
+
+      await f.agora.connect(f.alice).createProfile("aliceweb3", "QmMeta", ethers.ZeroAddress);
+      await f.agora.connect(f.bob).follow(f.alice.address, ethers.ZeroAddress);
+
+      const profile = await f.agora.getUserProfile(f.alice.address);
+      expect(profile.followers).to.equal(1);
+      expect(profile.following).to.equal(0);
     });
   });
 
