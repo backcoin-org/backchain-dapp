@@ -1,5 +1,5 @@
 // js/pages/RentalPage.js
-// ✅ PRODUCTION V9.0 - Boost Market (Complete Rewrite)
+// ✅ PRODUCTION V2.0 - Boost Market (V2: Daily pricing + Boost promotion)
 // ═══════════════════════════════════════════════════════════════════════════════
 //                          BACKCHAIN PROTOCOL
 //                    Boost Market — NFT Rental Marketplace
@@ -46,7 +46,7 @@ const TIER_CONFIG = {
 const RS = {
     activeTab: 'marketplace',
     filterTier: 'ALL',
-    sortBy: 'boost-high',
+    sortBy: 'boosted',
     selectedListing: null,
     isLoading: false,
     isTransactionPending: false,
@@ -353,6 +353,32 @@ function injectStyles() {
             flex-shrink: 0;
         }
 
+        /* Boost badge */
+        .bm-boost-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 4px 10px;
+            border-radius: 8px;
+            font-size: 10px;
+            font-weight: 700;
+            background: rgba(251,146,60,0.15);
+            color: #fb923c;
+            border: 1px solid rgba(251,146,60,0.3);
+        }
+        .bm-nft-card.boosted {
+            border-color: rgba(251,146,60,0.4);
+            box-shadow: 0 0 20px -5px rgba(251,146,60,0.15);
+        }
+
+        /* Boost inline panel */
+        .bm-boost-panel {
+            background: rgba(251,146,60,0.06);
+            border: 1px solid rgba(251,146,60,0.2);
+            border-radius: 12px;
+            padding: 12px;
+        }
+
         /* Rented overlay */
         .bm-rented-overlay {
             position: absolute;
@@ -431,7 +457,7 @@ function render() {
                         <div class="bm-step-num bg-emerald-500/15 text-emerald-400 border border-emerald-500/25">1</div>
                         <div>
                             <p class="text-sm font-bold text-white">List</p>
-                            <p class="text-xs text-zinc-500">Owners list NFTs and set ETH price per hour</p>
+                            <p class="text-xs text-zinc-500">Owners list NFTs with daily ETH price</p>
                         </div>
                     </div>
                     <div class="bm-step">
@@ -493,6 +519,7 @@ function render() {
         <!-- Modals -->
         ${renderListModal()}
         ${renderRentModal()}
+        ${renderBoostModal()}
     `;
 
     attachEventListeners();
@@ -529,7 +556,14 @@ function renderMarketplace() {
 
     // Sort
     available.sort((a, b) => {
-        const pa = BigInt(a.pricePerHour || 0), pb = BigInt(b.pricePerHour || 0);
+        if (RS.sortBy === 'boosted') {
+            // Boosted listings first, then by boost expiry (longest remaining first), then by tier
+            if (a.isBoosted && !b.isBoosted) return -1;
+            if (!a.isBoosted && b.isBoosted) return 1;
+            if (a.isBoosted && b.isBoosted) return (b.boostExpiry || 0) - (a.boostExpiry || 0);
+            return (b.boostBips || 0) - (a.boostBips || 0);
+        }
+        const pa = BigInt(a.pricePerDay || 0), pb = BigInt(b.pricePerDay || 0);
         if (RS.sortBy === 'price-low') return pa < pb ? -1 : pa > pb ? 1 : 0;
         if (RS.sortBy === 'price-high') return pa > pb ? -1 : pa < pb ? 1 : 0;
         // Default: boost-high (best tier first)
@@ -550,6 +584,7 @@ function renderMarketplace() {
                 </div>
                 <div class="flex items-center gap-3">
                     <select id="bm-sort" class="bg-zinc-800/80 border border-zinc-700 rounded-xl px-4 py-2.5 text-sm text-white outline-none cursor-pointer">
+                        <option value="boosted" ${RS.sortBy === 'boosted' ? 'selected' : ''}>Promoted First</option>
                         <option value="boost-high" ${RS.sortBy === 'boost-high' ? 'selected' : ''}>Best Boost First</option>
                         <option value="price-low" ${RS.sortBy === 'price-low' ? 'selected' : ''}>Price: Low to High</option>
                         <option value="price-high" ${RS.sortBy === 'price-high' ? 'selected' : ''}>Price: High to Low</option>
@@ -575,14 +610,16 @@ function renderMarketplace() {
 function renderNFTCard(listing, idx, showOwnerActions = false) {
     const tier = getTierInfo(listing.boostBips);
     const config = getTierConfig(tier.name);
-    const price = formatEthPrice(listing.pricePerHour);
+    const price = formatEthPrice(listing.pricePerDay);
     const tokenId = normalizeTokenId(listing.tokenId);
     const isOwner = State.isConnected && addressesMatch(listing.owner, State.userAddress);
     const isRented = listing.isRented || listing.currentlyRented;
     const keepRate = getKeepRateFromBoost(listing.boostBips || 0);
+    const isBoosted = listing.isBoosted;
+    const boostDaysLeft = isBoosted ? Math.max(0, Math.ceil((listing.boostExpiry - Math.floor(Date.now() / 1000)) / 86400)) : 0;
 
     return `
-        <div class="bm-nft-card ${isOwner ? 'owned' : ''} ${isRented ? 'rented-out' : ''}"
+        <div class="bm-nft-card ${isOwner ? 'owned' : ''} ${isRented ? 'rented-out' : ''} ${isBoosted ? 'boosted' : ''}"
              style="animation-delay:${idx * 60}ms">
 
             <!-- Header -->
@@ -590,9 +627,12 @@ function renderNFTCard(listing, idx, showOwnerActions = false) {
                 <div class="bm-tier-badge" style="background:${config.bg};color:${config.color};border:1px solid ${config.border}">
                     ${config.emoji} ${tier.name}
                 </div>
-                <span class="text-sm font-bold font-mono" style="color:${config.color}">
-                    Keep ${keepRate}%
-                </span>
+                <div class="flex items-center gap-2">
+                    ${isBoosted ? `<span class="bm-boost-badge"><i class="fa-solid fa-fire"></i> ${boostDaysLeft}d</span>` : ''}
+                    <span class="text-sm font-bold font-mono" style="color:${config.color}">
+                        Keep ${keepRate}%
+                    </span>
+                </div>
             </div>
 
             <!-- NFT Display -->
@@ -633,7 +673,7 @@ function renderNFTCard(listing, idx, showOwnerActions = false) {
                 <!-- Price & Actions -->
                 <div class="flex items-end justify-between">
                     <div>
-                        <span class="text-[10px] text-zinc-500 uppercase block mb-1">Price/Hour</span>
+                        <span class="text-[10px] text-zinc-500 uppercase block mb-1">Price/Day</span>
                         <div class="flex items-baseline gap-1.5">
                             <i class="fa-brands fa-ethereum text-blue-400 text-sm"></i>
                             <span class="text-xl font-bold text-white">${price}</span>
@@ -643,15 +683,18 @@ function renderNFTCard(listing, idx, showOwnerActions = false) {
 
                     <div class="flex gap-2">
                         ${isOwner ? `
+                            <button class="bm-boost-btn bm-btn-amber px-3 py-2 text-xs" data-id="${tokenId}" title="Boost listing">
+                                <i class="fa-solid fa-fire mr-1"></i>${isBoosted ? 'Extend' : 'Boost'}
+                            </button>
                             <button class="bm-share-btn bm-btn-secondary px-3 py-2 text-xs" data-id="${tokenId}" title="Share listing">
                                 <i class="fa-solid fa-share-nodes"></i>
                             </button>
-                            <button class="bm-withdraw-btn bm-btn-danger px-4 py-2 text-xs" data-id="${tokenId}" ${isRented ? 'disabled' : ''}>
-                                <i class="fa-solid fa-arrow-right-from-bracket mr-1"></i>Withdraw
+                            <button class="bm-withdraw-btn bm-btn-danger px-3 py-2 text-xs" data-id="${tokenId}" ${isRented ? 'disabled' : ''}>
+                                <i class="fa-solid fa-arrow-right-from-bracket"></i>
                             </button>
                         ` : `
                             <button class="bm-rent-btn bm-btn-primary px-5 py-2.5 text-sm" data-id="${tokenId}" ${isRented ? 'disabled' : ''}>
-                                <i class="fa-solid fa-bolt mr-1"></i>Rent
+                                <i class="fa-solid fa-bolt mr-1"></i>Rent 1 Day
                             </button>
                         `}
                     </div>
@@ -840,22 +883,10 @@ function renderListModal() {
                         </select>
                     </div>
                     <div>
-                        <label class="text-xs font-bold text-zinc-400 uppercase block mb-2">Price per Hour (ETH)</label>
-                        <input type="number" id="bm-list-price" min="0.0001" step="0.0001" placeholder="0.001"
+                        <label class="text-xs font-bold text-zinc-400 uppercase block mb-2">Price per Day (ETH)</label>
+                        <input type="number" id="bm-list-price" min="0.0001" step="0.0001" placeholder="0.005"
                             class="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-3 text-white outline-none text-lg font-mono">
-                        <p class="text-[10px] text-zinc-600 mt-2">Recommended: 0.0005-0.01 ETH/hour depending on tier</p>
-                    </div>
-                    <div class="grid grid-cols-2 gap-3">
-                        <div>
-                            <label class="text-xs font-bold text-zinc-400 uppercase block mb-2">Min Hours</label>
-                            <input type="number" id="bm-list-min" min="1" max="168" value="1"
-                                class="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-3 text-white outline-none font-mono">
-                        </div>
-                        <div>
-                            <label class="text-xs font-bold text-zinc-400 uppercase block mb-2">Max Hours</label>
-                            <input type="number" id="bm-list-max" min="1" max="168" value="168"
-                                class="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-3 text-white outline-none font-mono">
-                        </div>
+                        <p class="text-[10px] text-zinc-600 mt-2">Fixed 1-day rental. NFT auto re-lists after each rental.</p>
                     </div>
                 </div>
                 <div class="flex gap-3 p-5 pt-0">
@@ -887,6 +918,151 @@ function renderRentModal() {
             </div>
         </div>
     `;
+}
+
+function renderBoostModal() {
+    return `
+        <div class="bm-modal" id="bm-modal-boost">
+            <div class="bm-modal-content">
+                <div class="flex items-center justify-between p-5 border-b border-zinc-800">
+                    <h3 class="text-lg font-bold text-white flex items-center gap-2">
+                        <i class="fa-solid fa-fire text-amber-400"></i>Boost Listing
+                    </h3>
+                    <button class="bm-close-boost text-zinc-500 hover:text-white text-xl">
+                        <i class="fa-solid fa-xmark"></i>
+                    </button>
+                </div>
+                <div id="bm-boost-modal-body" class="p-5">
+                    <!-- Populated dynamically -->
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+function openBoostModal(tokenId) {
+    const listing = (State.rentalListings || []).find(l => tokenIdsMatch(l.tokenId, tokenId));
+    if (!listing) return;
+
+    RS.selectedListing = listing;
+    const tier = getTierInfo(listing.boostBips);
+    const config = getTierConfig(tier.name);
+    const isBoosted = listing.isBoosted;
+    const boostDaysLeft = isBoosted ? Math.max(0, Math.ceil((listing.boostExpiry - Math.floor(Date.now() / 1000)) / 86400)) : 0;
+
+    const body = document.getElementById('bm-boost-modal-body');
+    if (!body) return;
+
+    body.innerHTML = `
+        <div class="flex items-center gap-4 mb-5 p-4 rounded-xl" style="background:${config.bg}">
+            <img src="${config.image}" alt="${tier.name}" class="w-14 h-14 object-contain rounded-lg"
+                 onerror="this.outerHTML='<div class=\\'text-4xl\\'>${config.emoji}</div>'">
+            <div>
+                <h3 class="text-base font-bold text-white">${tier.name} Booster #${tokenId}</h3>
+                ${isBoosted
+                    ? `<p class="text-xs text-amber-400"><i class="fa-solid fa-fire mr-1"></i>Boosted — ${boostDaysLeft} days remaining</p>`
+                    : `<p class="text-xs text-zinc-500">Not boosted</p>`
+                }
+            </div>
+        </div>
+
+        <div class="mb-5">
+            <p class="text-sm text-zinc-400 mb-4">
+                Boosted listings appear first in the marketplace. Choose how many days to boost.
+                ${isBoosted ? 'New days will extend from current expiry.' : ''}
+            </p>
+            <label class="text-xs font-bold text-zinc-400 uppercase block mb-2">Boost Duration (days)</label>
+            <input type="range" id="bm-boost-days" min="1" max="30" value="7"
+                class="w-full accent-amber-500 cursor-pointer">
+            <div class="flex justify-between text-xs text-zinc-500 mt-1">
+                <span>1 day</span>
+                <span id="bm-boost-days-label" class="text-amber-400 font-bold">7 days</span>
+                <span>30 days</span>
+            </div>
+        </div>
+
+        <div id="bm-boost-cost" class="bm-boost-panel mb-5">
+            <div class="flex justify-between text-sm mb-2">
+                <span class="text-zinc-500">Cost per day</span>
+                <span class="text-zinc-300 font-mono" id="bm-boost-cost-day">Calculating...</span>
+            </div>
+            <div class="h-px bg-amber-500/20 my-2"></div>
+            <div class="flex justify-between text-sm">
+                <span class="text-amber-400 font-bold">Total Cost</span>
+                <span class="text-lg font-bold text-amber-400 font-mono" id="bm-boost-cost-total">—</span>
+            </div>
+        </div>
+
+        <div class="flex gap-3">
+            <button class="bm-close-boost bm-btn-secondary flex-1 py-3">Cancel</button>
+            <button id="bm-confirm-boost" class="bm-btn-amber flex-1 py-3" data-id="${tokenId}">
+                <i class="fa-solid fa-fire mr-2"></i>${isBoosted ? 'Extend Boost' : 'Boost Now'}
+            </button>
+        </div>
+    `;
+
+    const slider = document.getElementById('bm-boost-days');
+    const daysLabel = document.getElementById('bm-boost-days-label');
+
+    const updateBoostCost = async () => {
+        const days = parseInt(slider.value) || 1;
+        daysLabel.textContent = `${days} day${days > 1 ? 's' : ''}`;
+
+        try {
+            const cost = await RentalTx.getBoostCost(days);
+            document.getElementById('bm-boost-cost-day').innerHTML = `<i class="fa-brands fa-ethereum text-blue-400 mr-1"></i>${cost.feePerDayFormatted} ETH`;
+            document.getElementById('bm-boost-cost-total').innerHTML = `<i class="fa-brands fa-ethereum text-blue-400 mr-1"></i>${cost.totalFeeFormatted} ETH`;
+        } catch {
+            document.getElementById('bm-boost-cost-day').textContent = 'Error';
+            document.getElementById('bm-boost-cost-total').textContent = 'Error';
+        }
+    };
+
+    updateBoostCost();
+    slider.addEventListener('input', updateBoostCost);
+
+    document.getElementById('bm-modal-boost').classList.add('active');
+}
+
+function closeBoostModal() {
+    const modal = document.getElementById('bm-modal-boost');
+    if (modal) modal.classList.remove('active');
+    RS.selectedListing = null;
+}
+
+async function handleBoost() {
+    if (RS.isTransactionPending || !RS.selectedListing) return;
+
+    const tokenId = normalizeTokenId(RS.selectedListing.tokenId);
+    const days = parseInt(document.getElementById('bm-boost-days').value) || 1;
+    const btn = document.getElementById('bm-confirm-boost');
+
+    RS.isTransactionPending = true;
+
+    try {
+        await RentalTx.boostListing({
+            tokenId,
+            days,
+            button: btn,
+            onSuccess: async () => {
+                RS.isTransactionPending = false;
+                closeBoostModal();
+                showToast(`Listing boosted for ${days} days!`, 'success');
+                await refreshData();
+            },
+            onError: (e) => {
+                RS.isTransactionPending = false;
+                if (!e.cancelled && e.type !== 'user_rejected') {
+                    showToast('Boost failed: ' + (e.message || 'Error'), 'error');
+                }
+            }
+        });
+    } catch (err) {
+        RS.isTransactionPending = false;
+        if (!err.cancelled && err.type !== 'user_rejected') {
+            showToast('Boost failed: ' + (err.message || 'Error'), 'error');
+        }
+    }
 }
 
 // ============================================================================
@@ -983,6 +1159,25 @@ function attachEventListeners() {
             return;
         }
 
+        // Confirm boost
+        if (target.closest('#bm-confirm-boost')) {
+            handleBoost();
+            return;
+        }
+
+        // Close boost modal
+        if (target.closest('.bm-close-boost')) {
+            closeBoostModal();
+            return;
+        }
+
+        // Boost button on card
+        const boostBtn = target.closest('.bm-boost-btn');
+        if (boostBtn) {
+            openBoostModal(boostBtn.dataset.id);
+            return;
+        }
+
         // Rent button
         const rentBtn = target.closest('.bm-rent-btn');
         if (rentBtn && !rentBtn.disabled) {
@@ -1050,7 +1245,7 @@ function openRentModal(tokenId) {
     RS.selectedListing = listing;
     const tier = getTierInfo(listing.boostBips);
     const config = getTierConfig(tier.name);
-    const price = formatEthPrice(listing.pricePerHour);
+    const price = formatEthPrice(listing.pricePerDay);
     const keepRate = getKeepRateFromBoost(listing.boostBips || 0);
 
     const body = document.getElementById('bm-rent-modal-body');
@@ -1068,18 +1263,8 @@ function openRentModal(tokenId) {
 
         <div class="space-y-4 mb-5">
             <div class="flex justify-between text-sm">
-                <span class="text-zinc-500">Base Price per hour</span>
-                <span class="text-white font-bold"><i class="fa-brands fa-ethereum text-blue-400 mr-1"></i>${price} ETH</span>
-            </div>
-            <div class="flex justify-between text-sm">
-                <span class="text-zinc-500">Duration range</span>
-                <span class="text-white font-bold">${listing.minHours || 1}h — ${listing.maxHours || 168}h</span>
-            </div>
-            <div>
-                <label class="text-xs font-bold text-zinc-400 uppercase block mb-2">Rental Duration (hours)</label>
-                <input type="number" id="bm-rent-hours"
-                       min="${listing.minHours || 1}" max="${listing.maxHours || 168}" value="${listing.minHours || 1}"
-                       class="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-3 text-white outline-none text-lg font-mono">
+                <span class="text-zinc-500">Duration</span>
+                <span class="text-white font-bold">1 Day (24 hours)</span>
             </div>
             <div id="bm-rent-cost" class="p-4 rounded-xl bg-zinc-800/50 space-y-2">
                 <div class="flex justify-between text-sm">
@@ -1087,7 +1272,7 @@ function openRentModal(tokenId) {
                     <span class="text-white font-mono" id="bm-cost-rental"><i class="fa-brands fa-ethereum text-blue-400 mr-1"></i>Calculating...</span>
                 </div>
                 <div class="flex justify-between text-sm">
-                    <span class="text-zinc-500">Ecosystem Fee</span>
+                    <span class="text-zinc-500">Ecosystem Fee (20%)</span>
                     <span class="text-zinc-400 font-mono" id="bm-cost-fee">—</span>
                 </div>
                 <div class="h-px bg-zinc-700 my-1"></div>
@@ -1096,7 +1281,6 @@ function openRentModal(tokenId) {
                     <span class="text-xl font-bold text-emerald-400 font-mono" id="bm-cost-total">—</span>
                 </div>
             </div>
-            <!-- Balance warning (hidden by default) -->
             <div id="bm-balance-warn" class="hidden p-3 rounded-xl bg-red-500/10 border border-red-500/20 text-center">
                 <p class="text-xs text-red-400" id="bm-balance-warn-text"></p>
             </div>
@@ -1105,41 +1289,38 @@ function openRentModal(tokenId) {
         <div class="flex gap-3">
             <button class="bm-close-rent bm-btn-secondary flex-1 py-3">Cancel</button>
             <button id="bm-confirm-rent" class="bm-btn-primary flex-1 py-3">
-                <i class="fa-solid fa-bolt mr-2"></i>Rent Now
+                <i class="fa-solid fa-bolt mr-2"></i>Rent 1 Day
             </button>
         </div>
     `;
 
-    // Calculate cost on load and on hours change + check balance
-    const hoursInput = document.getElementById('bm-rent-hours');
+    // Calculate cost on load + check balance (fixed 1-day, no hours input)
     const rentBtn = document.getElementById('bm-confirm-rent');
     const balanceWarn = document.getElementById('bm-balance-warn');
     const balanceWarnText = document.getElementById('bm-balance-warn-text');
 
     const updateCost = async () => {
-        const hours = parseInt(hoursInput.value) || 1;
         let totalCost = 0n;
 
         try {
-            const cost = await RentalTx.getRentalCost(tokenId, hours);
+            const cost = await RentalTx.getRentalCost(tokenId);
             totalCost = cost.totalCost;
             document.getElementById('bm-cost-rental').innerHTML = `<i class="fa-brands fa-ethereum text-blue-400 mr-1"></i>${cost.rentalCostFormatted} ETH`;
             document.getElementById('bm-cost-fee').innerHTML = `<i class="fa-brands fa-ethereum text-blue-400 mr-1"></i>${cost.ethFeeFormatted} ETH`;
             document.getElementById('bm-cost-total').innerHTML = `<i class="fa-brands fa-ethereum text-blue-400 mr-1"></i>${cost.totalCostFormatted} ETH`;
         } catch (err) {
-            const simple = BigInt(listing.pricePerHour || 0) * BigInt(hours);
+            const simple = BigInt(listing.pricePerDay || 0);
             totalCost = simple;
             document.getElementById('bm-cost-rental').innerHTML = `<i class="fa-brands fa-ethereum text-blue-400 mr-1"></i>${formatEthPrice(simple)} ETH`;
             document.getElementById('bm-cost-fee').textContent = '~fee';
             document.getElementById('bm-cost-total').innerHTML = `<i class="fa-brands fa-ethereum text-blue-400 mr-1"></i>~${formatEthPrice(simple)} ETH`;
         }
 
-        // Check user balance and update button
         if (State.isConnected && totalCost > 0n) {
             try {
                 const { NetworkManager } = await import('../modules/core/index.js');
                 const ethBalance = await NetworkManager.getProvider().getBalance(State.userAddress);
-                const needed = totalCost + ethers.parseEther('0.001'); // + gas buffer
+                const needed = totalCost + ethers.parseEther('0.001');
 
                 if (ethBalance < needed) {
                     const deficit = formatEthPrice(needed - ethBalance);
@@ -1151,21 +1332,19 @@ function openRentModal(tokenId) {
                 } else {
                     rentBtn.disabled = false;
                     rentBtn.className = 'bm-btn-primary flex-1 py-3';
-                    rentBtn.innerHTML = '<i class="fa-solid fa-bolt mr-2"></i>Rent Now';
+                    rentBtn.innerHTML = '<i class="fa-solid fa-bolt mr-2"></i>Rent 1 Day';
                     balanceWarn.classList.add('hidden');
                 }
             } catch {
-                // If balance check fails, keep button enabled
                 rentBtn.disabled = false;
                 rentBtn.className = 'bm-btn-primary flex-1 py-3';
-                rentBtn.innerHTML = '<i class="fa-solid fa-bolt mr-2"></i>Rent Now';
+                rentBtn.innerHTML = '<i class="fa-solid fa-bolt mr-2"></i>Rent 1 Day';
                 balanceWarn.classList.add('hidden');
             }
         }
     };
 
     updateCost();
-    hoursInput.addEventListener('input', updateCost);
 
     document.getElementById('bm-modal-rent').classList.add('active');
 }
@@ -1183,7 +1362,6 @@ function closeRentModal() {
 async function handleRent() {
     if (RS.isTransactionPending || !RS.selectedListing) return;
 
-    const hours = parseInt(document.getElementById('bm-rent-hours').value) || 1;
     const tokenId = normalizeTokenId(RS.selectedListing.tokenId);
     const btn = document.getElementById('bm-confirm-rent');
 
@@ -1192,7 +1370,6 @@ async function handleRent() {
     try {
         await RentalTx.rent({
             tokenId,
-            hours,
             button: btn,
             onSuccess: async () => {
                 RS.isTransactionPending = false;
@@ -1220,12 +1397,9 @@ async function handleList() {
 
     const tokenId = document.getElementById('bm-list-select').value;
     const price = document.getElementById('bm-list-price').value;
-    const minHours = parseInt(document.getElementById('bm-list-min').value) || 1;
-    const maxHours = parseInt(document.getElementById('bm-list-max').value) || 168;
 
     if (!tokenId) { showToast('Select an NFT', 'error'); return; }
     if (!price || parseFloat(price) <= 0) { showToast('Enter valid price', 'error'); return; }
-    if (minHours > maxHours) { showToast('Min hours must be <= max hours', 'error'); return; }
 
     const btn = document.getElementById('bm-confirm-list');
     RS.isTransactionPending = true;
@@ -1233,9 +1407,7 @@ async function handleList() {
     try {
         await RentalTx.list({
             tokenId,
-            pricePerHour: ethers.parseEther(price),
-            minHours,
-            maxHours,
+            pricePerDay: ethers.parseEther(price),
             button: btn,
             onSuccess: async () => {
                 RS.isTransactionPending = false;

@@ -1,27 +1,17 @@
 // modules/js/transactions/rental-tx.js
-// ✅ V9.0 - Updated for RentalManager V9 (ETH-only, immutable)
+// ✅ V2.0 - RentalManager V2: Fixed 1-day rentals + Boost (paid visibility)
 //
-// CHANGES V9.0:
-// - rewardBoosterNFT → rewardBooster
-// - rentNFT now payable (ETH covers rental + ecosystem fee)
-// - No BKC payments — all ETH
-// - Pull-pattern earnings: withdrawEarnings() replaces direct payouts
-// - Removed: rentNFTSimple, spotlight system, paused(), getFeeConfig
-// - getListing returns different tuple (currentlyRented + rentalEndTime instead of isActive)
-// - getRental returns (tenant, endTime, isActive) — V9 simplified struct
-// - getRentalCost returns 3-tuple (rentalCost, ethFee, totalCost)
-// - getStats replaces getMarketplaceStats (5-tuple)
-// - getRemainingRentalTime → getRemainingTime
-// - Removed: hasRentalRights
+// V2 Changes:
+//   - pricePerHour → pricePerDay (fixed 24-hour rental, no variable duration)
+//   - boostListing() — pay ETH for listing visibility (stacks with existing boost)
+//   - getAvailableListings() — returns tokenIds + boosted flags
+//   - getListing returns (owner, pricePerDay, totalEarnings, rentalCount, currentlyRented, rentalEndTime, isBoosted, boostExpiry)
+//   - getStats returns 6-tuple (added totalBoostRevenue)
+//   - Removed: minHours, maxHours parameters
 //
-// ============================================================================
-// V9 FEE STRUCTURE (ETH only):
-// - Rental cost: ETH per hour × hours → goes to NFT owner
-// - Ecosystem fee: ecosystem.calculateFee(ACTION_RENT, rentalCost) → ecosystem
-// - Total msg.value = rentalCost + ecosystemFee
 // ============================================================================
 
-import { txEngine, ValidationLayer, calculateFeeClientSide } from '../core/index.js';
+import { txEngine, calculateFeeClientSide } from '../core/index.js';
 import { resolveOperator } from '../core/operator.js';
 import { addresses, contractAddresses } from '../../config.js';
 
@@ -47,33 +37,37 @@ function getContracts() {
 
 const RENTAL_ABI = [
     // Write
-    'function listNFT(uint256 tokenId, uint96 pricePerHour, uint16 minHours, uint16 maxHours) external',
-    'function updateListing(uint256 tokenId, uint96 pricePerHour, uint16 minHours, uint16 maxHours) external',
+    'function listNFT(uint256 tokenId, uint96 pricePerDay) external',
+    'function updateListing(uint256 tokenId, uint96 pricePerDay) external',
     'function withdrawNFT(uint256 tokenId) external',
-    'function rentNFT(uint256 tokenId, uint256 hours_, address operator) external payable',
+    'function rentNFT(uint256 tokenId, address operator) external payable',
     'function withdrawEarnings() external',
+    'function boostListing(uint256 tokenId, uint256 days_, address operator) external payable',
 
     // Read - Listings
-    'function getListing(uint256 tokenId) view returns (address owner, uint96 pricePerHour, uint16 minHours, uint16 maxHours, uint96 totalEarnings, uint32 rentalCount, bool currentlyRented, uint48 rentalEndTime)',
+    'function getListing(uint256 tokenId) view returns (address owner, uint96 pricePerDay, uint96 totalEarnings, uint32 rentalCount, bool currentlyRented, uint48 rentalEndTime, bool isBoosted, uint32 boostExpiry)',
     'function getAllListedTokenIds() view returns (uint256[])',
     'function getListingCount() view returns (uint256)',
+    'function getAvailableListings() view returns (uint256[] tokenIds, bool[] boosted)',
+    'function isAvailable(uint256 tokenId) view returns (bool)',
 
     // Read - Rentals
     'function getRental(uint256 tokenId) view returns (address tenant, uint48 endTime, bool isActive)',
     'function isRented(uint256 tokenId) view returns (bool)',
     'function getRemainingTime(uint256 tokenId) view returns (uint256)',
     'function hasActiveRental(address user) view returns (bool)',
-    'function getRentalCost(uint256 tokenId, uint256 hours_) view returns (uint256 rentalCost, uint256 ethFee, uint256 totalCost)',
+    'function getRentalCost(uint256 tokenId) view returns (uint256 rentalCost, uint256 ethFee, uint256 totalCost)',
 
     // Read - Earnings
     'function pendingEarnings(address user) view returns (uint256)',
 
     // Read - Stats
-    'function getStats() view returns (uint256 activeListings, uint256 volume, uint256 rentals, uint256 ethFees, uint256 earningsWithdrawn)',
+    'function getStats() view returns (uint256 activeListings, uint256 volume, uint256 rentals, uint256 ethFees, uint256 earningsWithdrawn, uint256 boostRevenue)',
 
     // Events
-    'event NFTListed(uint256 indexed tokenId, address indexed owner, uint96 pricePerHour, uint16 minHours, uint16 maxHours)',
-    'event NFTRented(uint256 indexed tokenId, address indexed tenant, address indexed owner, uint256 hours_, uint256 rentalCost, uint256 ethFee, uint48 endTime, address operator)',
+    'event NFTListed(uint256 indexed tokenId, address indexed owner, uint96 pricePerDay)',
+    'event NFTRented(uint256 indexed tokenId, address indexed tenant, address indexed owner, uint256 rentalCost, uint256 ethFee, uint48 endTime, address operator)',
+    'event ListingBoosted(uint256 indexed tokenId, address indexed owner, uint256 days_, uint256 boostCost, uint32 newBoostExpiry)',
     'event NFTWithdrawn(uint256 indexed tokenId, address indexed owner)',
     'event EarningsWithdrawn(address indexed owner, uint256 amount)'
 ];
@@ -105,21 +99,25 @@ function getNftContract(signer) {
 }
 
 // ============================================================================
-// 3. TRANSACTION FUNCTIONS
+// 3. WRITE FUNCTIONS
 // ============================================================================
 
+/**
+ * List an NFT for rent with daily price. NFT is escrowed.
+ * Auto re-lists after each rental (passive income).
+ */
 export async function listNft({
-    tokenId, pricePerHour, minHours, maxHours,
+    tokenId, pricePerDay,
     button = null, onSuccess = null, onError = null
 }) {
     const contracts = getContracts();
-    const price = BigInt(pricePerHour);
+    const price = BigInt(pricePerDay);
 
     return await txEngine.execute({
         name: 'ListNFT', button,
         getContract: async (signer) => getRentalContract(signer),
         method: 'listNFT',
-        args: [tokenId, price, minHours, maxHours],
+        args: [tokenId, price],
 
         validate: async (signer, userAddress) => {
             const nftContract = getNftContract(signer);
@@ -128,7 +126,6 @@ export async function listNft({
 
             const isApproved = await nftContract.isApprovedForAll(userAddress, contracts.RENTAL_MANAGER);
             if (!isApproved) {
-                // Get fresh fee data from Alchemy (not MetaMask) with 120% buffer
                 const { NetworkManager } = await import('../core/index.js');
                 const feeData = await NetworkManager.getProvider().getFeeData();
                 const approveOpts = { gasLimit: 100000n };
@@ -145,10 +142,10 @@ export async function listNft({
 }
 
 /**
- * Rent an NFT — V9: Payable (ETH)
+ * Rent an NFT for 1 day (fixed 24 hours). Pays ETH (rental + ecosystem fee).
  */
 export async function rentNft({
-    tokenId, hours, operator,
+    tokenId, operator,
     button = null, onSuccess = null, onError = null
 }) {
     const ethers = window.ethers;
@@ -159,7 +156,7 @@ export async function rentNft({
         name: 'RentNFT', button,
         getContract: async (signer) => getRentalContract(signer),
         method: 'rentNFT',
-        args: () => [tokenId, hours, resolveOperator(storedOperator)],
+        args: () => [tokenId, resolveOperator(storedOperator)],
         get value() { return totalCost; },
 
         validate: async (signer, userAddress) => {
@@ -168,12 +165,9 @@ export async function rentNft({
 
             if (listing.owner === ethers.ZeroAddress) throw new Error('NFT is not listed for rent');
             if (listing.currentlyRented) throw new Error('NFT is currently rented');
-            if (hours < Number(listing.minHours) || hours > Number(listing.maxHours)) {
-                throw new Error(`Hours must be between ${listing.minHours} and ${listing.maxHours}`);
-            }
 
-            // V9: Get rental cost from contract + calculate ETH fee client-side
-            const cost = await contract.getRentalCost(tokenId, hours);
+            // V2: Fixed 1-day rental — get cost from contract + calculate fee client-side
+            const cost = await contract.getRentalCost(tokenId);
             const rentalCost = cost.rentalCost || cost[0];
             const ethFee = await calculateFeeClientSide(ethers.id('RENTAL_RENT'), rentalCost);
             totalCost = rentalCost + ethFee;
@@ -209,6 +203,9 @@ export async function rentNft({
     });
 }
 
+/**
+ * Withdraw NFT from escrow. Only when not currently rented.
+ */
 export async function withdrawNft({
     tokenId, button = null, onSuccess = null, onError = null
 }) {
@@ -232,7 +229,7 @@ export async function withdrawNft({
 }
 
 /**
- * V9 NEW: Withdraw accumulated ETH earnings (pull pattern)
+ * Withdraw accumulated ETH earnings (pull pattern).
  */
 export async function withdrawEarnings({
     button = null, onSuccess = null, onError = null
@@ -255,17 +252,20 @@ export async function withdrawEarnings({
     });
 }
 
+/**
+ * Update listing price (daily rate). Only listing owner can call.
+ */
 export async function updateListing({
-    tokenId, pricePerHour, minHours, maxHours,
+    tokenId, pricePerDay,
     button = null, onSuccess = null, onError = null
 }) {
-    const price = BigInt(pricePerHour);
+    const price = BigInt(pricePerDay);
 
     return await txEngine.execute({
         name: 'UpdateListing', button,
         getContract: async (signer) => getRentalContract(signer),
         method: 'updateListing',
-        args: [tokenId, price, minHours, maxHours],
+        args: [tokenId, price],
 
         validate: async (signer, userAddress) => {
             const contract = await getRentalContractReadOnly();
@@ -277,12 +277,74 @@ export async function updateListing({
     });
 }
 
+/**
+ * Boost a listing's visibility for X days. Pays ETH gas-based fee.
+ * Stacks with existing boost (extends from current expiry if still active).
+ */
+export async function boostListing({
+    tokenId, days, operator,
+    button = null, onSuccess = null, onError = null
+}) {
+    const ethers = window.ethers;
+    let storedOperator = operator;
+    let totalFee = 0n;
+
+    return await txEngine.execute({
+        name: 'BoostListing', button,
+        getContract: async (signer) => getRentalContract(signer),
+        method: 'boostListing',
+        args: () => [tokenId, days, resolveOperator(storedOperator)],
+        get value() { return totalFee; },
+
+        validate: async (signer, userAddress) => {
+            const contract = await getRentalContractReadOnly();
+            const listing = await contract.getListing(tokenId);
+            if (listing.owner === ethers.ZeroAddress) throw new Error('NFT is not listed');
+            if (listing.owner.toLowerCase() !== userAddress.toLowerCase()) throw new Error('Only the listing owner can boost');
+
+            // Calculate boost cost client-side (gas-based fee × days)
+            const feePerDay = await calculateFeeClientSide(ethers.id('RENTAL_BOOST'));
+            totalFee = feePerDay * BigInt(days);
+
+            if (totalFee === 0n) throw new Error('Could not calculate boost fee');
+
+            const { NetworkManager } = await import('../core/index.js');
+            const ethBalance = await NetworkManager.getProvider().getBalance(userAddress);
+            if (ethBalance < totalFee + ethers.parseEther('0.001')) {
+                throw new Error(`Insufficient ETH. Need ${ethers.formatEther(totalFee)} ETH + gas`);
+            }
+        },
+
+        onSuccess: async (receipt) => {
+            let boostInfo = null;
+            try {
+                const iface = new ethers.Interface(RENTAL_ABI);
+                for (const log of receipt.logs) {
+                    try {
+                        const parsed = iface.parseLog(log);
+                        if (parsed?.name === 'ListingBoosted') {
+                            boostInfo = {
+                                days: Number(parsed.args.days_),
+                                boostCost: parsed.args.boostCost,
+                                newBoostExpiry: Number(parsed.args.newBoostExpiry)
+                            };
+                            break;
+                        }
+                    } catch {}
+                }
+            } catch {}
+            if (onSuccess) onSuccess(receipt, boostInfo);
+        },
+        onError
+    });
+}
+
 // ============================================================================
 // 4. READ FUNCTIONS
 // ============================================================================
 
 /**
- * V9: getListing returns (owner, pricePerHour, minHours, maxHours, totalEarnings, rentalCount, currentlyRented, rentalEndTime)
+ * V2: getListing returns (owner, pricePerDay, totalEarnings, rentalCount, currentlyRented, rentalEndTime, isBoosted, boostExpiry)
  */
 export async function getListing(tokenId) {
     const ethers = window.ethers;
@@ -290,21 +352,21 @@ export async function getListing(tokenId) {
     const l = await contract.getListing(tokenId);
     return {
         owner: l.owner,
-        pricePerHour: l.pricePerHour,
-        pricePerHourFormatted: ethers.formatEther(l.pricePerHour),
-        minHours: Number(l.minHours),
-        maxHours: Number(l.maxHours),
+        pricePerDay: l.pricePerDay,
+        pricePerDayFormatted: ethers.formatEther(l.pricePerDay),
         totalEarnings: l.totalEarnings,
         totalEarningsFormatted: ethers.formatEther(l.totalEarnings),
         rentalCount: Number(l.rentalCount),
         isActive: l.owner !== ethers.ZeroAddress,
         currentlyRented: l.currentlyRented,
-        rentalEndTime: Number(l.rentalEndTime)
+        rentalEndTime: Number(l.rentalEndTime),
+        isBoosted: l.isBoosted,
+        boostExpiry: Number(l.boostExpiry)
     };
 }
 
 /**
- * V9: getRental returns (tenant, endTime, isActive)
+ * V2: getRental returns (tenant, endTime, isActive)
  */
 export async function getRental(tokenId) {
     const contract = await getRentalContractReadOnly();
@@ -331,12 +393,23 @@ export async function getListingCount() {
 }
 
 /**
- * V9: getRentalCost returns 3-tuple (rentalCost, ethFee, totalCost)
+ * V2: getAvailableListings — returns available (not rented) listings with boost flag
  */
-export async function getRentalCost(tokenId, hours) {
+export async function getAvailableListings() {
+    const contract = await getRentalContractReadOnly();
+    const result = await contract.getAvailableListings();
+    const tokenIds = (result.tokenIds || result[0]).map(id => Number(id));
+    const boosted = result.boosted || result[1];
+    return tokenIds.map((id, i) => ({ tokenId: id, isBoosted: boosted[i] }));
+}
+
+/**
+ * V2: getRentalCost — fixed 1-day cost (no hours param)
+ */
+export async function getRentalCost(tokenId) {
     const ethers = window.ethers;
     const contract = await getRentalContractReadOnly();
-    const cost = await contract.getRentalCost(tokenId, hours);
+    const cost = await contract.getRentalCost(tokenId);
     const rentalCost = cost.rentalCost || cost[0];
     const ethFee = await calculateFeeClientSide(ethers.id('RENTAL_RENT'), rentalCost);
     const totalCost = rentalCost + ethFee;
@@ -347,6 +420,21 @@ export async function getRentalCost(tokenId, hours) {
         ethFeeFormatted: ethers.formatEther(ethFee),
         totalCost,
         totalCostFormatted: ethers.formatEther(totalCost)
+    };
+}
+
+/**
+ * Estimate boost cost for X days (gas-based fee × days)
+ */
+export async function getBoostCost(days) {
+    const ethers = window.ethers;
+    const feePerDay = await calculateFeeClientSide(ethers.id('RENTAL_BOOST'));
+    const totalFee = feePerDay * BigInt(days);
+    return {
+        feePerDay,
+        feePerDayFormatted: ethers.formatEther(feePerDay),
+        totalFee,
+        totalFeeFormatted: ethers.formatEther(totalFee)
     };
 }
 
@@ -373,7 +461,7 @@ export async function getPendingEarnings(userAddress) {
 }
 
 /**
- * V9: getStats returns 5-tuple (activeListings, volume, rentals, ethFees, earningsWithdrawn)
+ * V2: getStats returns 6-tuple (added totalBoostRevenue)
  */
 export async function getMarketplaceStats() {
     const ethers = window.ethers;
@@ -388,10 +476,12 @@ export async function getMarketplaceStats() {
             totalEthFees: s.ethFees || s[3],
             totalEthFeesFormatted: ethers.formatEther(s.ethFees || s[3]),
             totalEarningsWithdrawn: s.earningsWithdrawn || s[4],
-            totalEarningsWithdrawnFormatted: ethers.formatEther(s.earningsWithdrawn || s[4])
+            totalEarningsWithdrawnFormatted: ethers.formatEther(s.earningsWithdrawn || s[4]),
+            totalBoostRevenue: s.boostRevenue || s[5],
+            totalBoostRevenueFormatted: ethers.formatEther(s.boostRevenue || s[5])
         };
     } catch {
-        return { activeListings: 0, totalVolume: 0n, totalVolumeFormatted: '0', totalRentals: 0, totalEthFees: 0n, totalEthFeesFormatted: '0' };
+        return { activeListings: 0, totalVolume: 0n, totalVolumeFormatted: '0', totalRentals: 0, totalEthFees: 0n, totalEthFeesFormatted: '0', totalBoostRevenue: 0n, totalBoostRevenueFormatted: '0' };
     }
 }
 
@@ -405,9 +495,10 @@ export const withdraw = withdrawNft;
 
 export const RentalTx = {
     listNft, rentNft, withdrawNft, withdrawEarnings, updateListing,
+    boostListing, getBoostCost,
     list, rent, withdraw,
-    getListing, getAllListedTokenIds, getListingCount, getRentalCost,
-    getRental, isRented, getRemainingRentalTime,
+    getListing, getAllListedTokenIds, getListingCount, getAvailableListings,
+    getRentalCost, getRental, isRented, getRemainingRentalTime,
     hasActiveRental, getPendingEarnings,
     getMarketplaceStats
 };

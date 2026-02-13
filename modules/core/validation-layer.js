@@ -420,23 +420,20 @@ export const ValidationLayer = {
         /**
          * Validates list NFT inputs
          */
-        validateList({ tokenId, pricePerHour, minHours, maxHours }) {
+        validateList({ tokenId, pricePerDay }) {
             if (tokenId === undefined || tokenId === null) {
                 throw new Error('Token ID is required');
             }
-            ValidationLayer.validatePositive(pricePerHour, 'Price per hour');
-            ValidationLayer.validateRange(minHours, 1, 720, 'Minimum hours'); // Up to 30 days
-            ValidationLayer.validateRange(maxHours, minHours, 720, 'Maximum hours');
+            ValidationLayer.validatePositive(pricePerDay, 'Price per day');
         },
 
         /**
-         * Validates rent NFT inputs
+         * Validates rent NFT inputs (V2: fixed 1-day, no hours)
          */
-        validateRent({ tokenId, hours }) {
+        validateRent({ tokenId }) {
             if (tokenId === undefined || tokenId === null) {
                 throw new Error('Token ID is required');
             }
-            ValidationLayer.validatePositive(hours, 'Rental hours');
         }
     },
 

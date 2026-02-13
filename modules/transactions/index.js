@@ -86,7 +86,7 @@ export {
     getGameResult
 } from './fortune-tx.js';
 
-// Rental Marketplace
+// Rental Marketplace V2 (daily pricing + boost)
 export {
     RentalTx,
     listNft,
@@ -94,10 +94,13 @@ export {
     withdrawNft,
     withdrawEarnings,
     updateListing,
+    boostListing,
+    getBoostCost,
     getListing,
     getRental,
     getAllListedTokenIds,
     getListingCount,
+    getAvailableListings,
     getRentalCost,
     isRented,
     getRemainingRentalTime,

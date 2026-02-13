@@ -366,7 +366,7 @@ export async function loadRentalListings(forceRefresh = false) {
             return {
                 ...item,
                 tokenId: item.tokenId?.toString() || item.id?.toString(),
-                pricePerHour: item.pricePerHour?.toString() || item.price?.toString() || '0',
+                pricePerDay: item.pricePerDay?.toString() || item.pricePerHour?.toString() || item.price?.toString() || '0',
                 totalEarnings: item.totalEarnings?.toString() || '0',
                 rentalCount: Number(item.rentalCount || 0),
                 img: tier?.img || './assets/nft.png',
@@ -431,12 +431,13 @@ export async function loadRentalListings(forceRefresh = false) {
                     const nowSec = Math.floor(Date.now() / 1000);
                     const isCurrentlyRented = rentalInfo && BigInt(rentalInfo.endTime || 0) > BigInt(nowSec);
                     
+                    const nowSec2 = Math.floor(Date.now() / 1000);
+                    const boostExp = Number(listing.boostExpiry || 0);
+
                     return {
                         tokenId: tokenId.toString(),
                         owner: listing.owner,
-                        pricePerHour: listing.pricePerHour?.toString() || listing.price?.toString() || '0',
-                        minHours: listing.minHours?.toString() || '1',
-                        maxHours: listing.maxHours?.toString() || '1',
+                        pricePerDay: listing.pricePerDay?.toString() || '0',
                         totalEarnings: listing.totalEarnings?.toString() || '0',
                         rentalCount: Number(listing.rentalCount || 0),
                         boostBips: boostInfo.boostBips,
@@ -444,7 +445,9 @@ export async function loadRentalListings(forceRefresh = false) {
                         name: boostInfo.name,
                         isRented: isCurrentlyRented,
                         currentTenant: isCurrentlyRented ? rentalInfo.tenant : null,
-                        rentalEndTime: isCurrentlyRented ? rentalInfo.endTime?.toString() : null
+                        rentalEndTime: isCurrentlyRented ? rentalInfo.endTime?.toString() : null,
+                        isBoosted: listing.isBoosted || boostExp > nowSec2,
+                        boostExpiry: boostExp
                     };
                 }
             } catch (e) {}

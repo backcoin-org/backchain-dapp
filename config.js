@@ -499,14 +499,15 @@ export const stakingPoolABI = [
 // RentalManager V9 ABI — NFT rental marketplace with pull-pattern earnings
 export const rentalManagerABI = [
     // Write
-    "function listNFT(uint256 tokenId, uint96 pricePerHour, uint16 minHours, uint16 maxHours) external",
-    "function updateListing(uint256 tokenId, uint96 pricePerHour, uint16 minHours, uint16 maxHours) external",
+    "function listNFT(uint256 tokenId, uint96 pricePerDay) external",
+    "function updateListing(uint256 tokenId, uint96 pricePerDay) external",
     "function withdrawNFT(uint256 tokenId) external",
-    "function rentNFT(uint256 tokenId, uint256 hours_, address operator) external payable",
+    "function rentNFT(uint256 tokenId, address operator) external payable",
     "function withdrawEarnings() external",
+    "function boostListing(uint256 tokenId, uint256 days_, address operator) external payable",
 
     // Read — Listings
-    "function getListing(uint256 tokenId) view returns (address owner, uint96 pricePerHour, uint16 minHours, uint16 maxHours, uint96 totalEarnings, uint32 rentalCount, bool currentlyRented, uint48 rentalEndTime)",
+    "function getListing(uint256 tokenId) view returns (address owner, uint96 pricePerDay, uint96 totalEarnings, uint32 rentalCount, bool currentlyRented, uint48 rentalEndTime, bool isBoosted, uint32 boostExpiry)",
     "function getRental(uint256 tokenId) view returns (address tenant, uint48 endTime, bool isActive)",
     "function isRented(uint256 tokenId) view returns (bool)",
     "function getRemainingTime(uint256 tokenId) view returns (uint256)",
@@ -514,17 +515,20 @@ export const rentalManagerABI = [
     "function getUserBestBoost(address user) view returns (uint256)",
     "function pendingEarnings(address owner) view returns (uint256)",
     "function userActiveRental(address user) view returns (uint256)",
+    "function isAvailable(uint256 tokenId) view returns (bool)",
 
     // Read — Marketplace
     "function getAllListedTokenIds() view returns (uint256[])",
     "function getListingCount() view returns (uint256)",
-    "function getRentalCost(uint256 tokenId, uint256 hours_) view returns (uint256 rentalCost, uint256 ethFee, uint256 totalCost)",
-    "function getStats() view returns (uint256 activeListings, uint256 volume, uint256 rentals, uint256 ethFees, uint256 earningsWithdrawn)",
+    "function getAvailableListings() view returns (uint256[] tokenIds, bool[] boosted)",
+    "function getRentalCost(uint256 tokenId) view returns (uint256 rentalCost, uint256 ethFee, uint256 totalCost)",
+    "function getStats() view returns (uint256 activeListings, uint256 volume, uint256 rentals, uint256 ethFees, uint256 earningsWithdrawn, uint256 boostRevenue)",
 
     // Events
-    "event NFTListed(uint256 indexed tokenId, address indexed owner, uint96 pricePerHour, uint16 minHours, uint16 maxHours)",
-    "event ListingUpdated(uint256 indexed tokenId, uint96 pricePerHour, uint16 minHours, uint16 maxHours)",
-    "event NFTRented(uint256 indexed tokenId, address indexed tenant, address indexed owner, uint256 hours_, uint256 rentalCost, uint256 ethFee, uint48 endTime, address operator)",
+    "event NFTListed(uint256 indexed tokenId, address indexed owner, uint96 pricePerDay)",
+    "event ListingUpdated(uint256 indexed tokenId, uint96 pricePerDay)",
+    "event NFTRented(uint256 indexed tokenId, address indexed tenant, address indexed owner, uint256 rentalCost, uint256 ethFee, uint48 endTime, address operator)",
+    "event ListingBoosted(uint256 indexed tokenId, address indexed owner, uint256 days_, uint256 boostCost, uint32 newBoostExpiry)",
     "event NFTWithdrawn(uint256 indexed tokenId, address indexed owner)",
     "event EarningsWithdrawn(address indexed owner, uint256 amount)"
 ];
