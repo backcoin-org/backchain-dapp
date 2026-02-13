@@ -3023,7 +3023,7 @@ Lotería on-chain verificable!
                     </button>
                 `).join("")}
             </div>
-        `;else if(e.range<=15)t.innerHTML=`
+        `;else if(e.range<=20)t.innerHTML=`
             <div class="grid grid-cols-5 gap-2 justify-items-center">
                 ${Array.from({length:e.range},(c,l)=>l+1).map(c=>`
                     <button class="num-pick w-12 h-12 rounded-xl font-bold text-lg transition-all active:scale-95 ${c===a?"":"bg-zinc-800 border border-zinc-700 text-zinc-300 hover:bg-zinc-700"}"
@@ -3052,7 +3052,7 @@ Lotería on-chain verificable!
                 </div>
             </div>
             <div class="flex justify-center gap-1.5 flex-wrap">
-                ${[7,13,21,50,77,99,137].map(p=>`
+                ${[Math.round(e.range*.07),Math.round(e.range*.13),Math.round(e.range*.25),Math.round(e.range*.5),Math.round(e.range*.75),e.range].filter((p,f,g)=>p>=1&&g.indexOf(p)===f).map(p=>`
                     <button class="np-quick px-2 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white text-xs rounded-lg transition-all" data-num="${p}">${p}</button>
                 `).join("")}
                 <button id="np-random" class="px-2 py-1.5 text-xs rounded-lg border transition-all"

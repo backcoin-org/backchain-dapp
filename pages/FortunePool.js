@@ -820,8 +820,8 @@ function renderNumberPicker(tier) {
                 `).join('')}
             </div>
         `;
-    } else if (tier.range <= 15) {
-        // Medium: grid of 15 buttons
+    } else if (tier.range <= 20) {
+        // Medium: grid of up to 20 buttons
         area.innerHTML = `
             <div class="grid grid-cols-5 gap-2 justify-items-center">
                 ${Array.from({length: tier.range}, (_, i) => i + 1).map(n => `
@@ -855,7 +855,7 @@ function renderNumberPicker(tier) {
                 </div>
             </div>
             <div class="flex justify-center gap-1.5 flex-wrap">
-                ${[7, 13, 21, 50, 77, 99, 137].map(n => `
+                ${[Math.round(tier.range*0.07), Math.round(tier.range*0.13), Math.round(tier.range*0.25), Math.round(tier.range*0.5), Math.round(tier.range*0.75), tier.range].filter((v,i,a) => v >= 1 && a.indexOf(v) === i).map(n => `
                     <button class="np-quick px-2 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white text-xs rounded-lg transition-all" data-num="${n}">${n}</button>
                 `).join('')}
                 <button id="np-random" class="px-2 py-1.5 text-xs rounded-lg border transition-all"
