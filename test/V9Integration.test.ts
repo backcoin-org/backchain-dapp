@@ -885,9 +885,10 @@ describe("Backchain V10 — Integration Tests", function () {
       expect(await f.stakingPool.delegationCount(f.alice.address)).to.equal(0);
     });
 
-    it("force unstake with penalty burns BKC (default 10%)", async function () {
+    it("force unstake: 60% penalty (no NFT, no tutor) — recycled + burned", async function () {
       const f = await loadFixture(deployAllFixture);
       const stakeAmt = ethers.parseEther("1000");
+      const ethFee = ethers.parseEther("0.0004");
 
       await f.bkcToken.connect(f.alice).approve(f.stakingAddr, stakeAmt);
       await f.stakingPool.connect(f.alice).delegate(stakeAmt, 365, ethers.ZeroAddress);
@@ -895,21 +896,25 @@ describe("Backchain V10 — Integration Tests", function () {
       const burnBefore = await f.bkcToken.totalBurned();
       const balBefore = await f.bkcToken.balanceOf(f.alice.address);
 
-      await f.stakingPool.connect(f.alice).forceUnstake(0, ethers.ZeroAddress);
+      await f.stakingPool.connect(f.alice).forceUnstake(0, ethers.ZeroAddress, { value: ethFee });
 
       const balAfter = await f.bkcToken.balanceOf(f.alice.address);
       const burnAfter = await f.bkcToken.totalBurned();
 
-      // Penalty should be 10% (default 1000 bps, no Diamond NFT)
-      const expectedPenalty = stakeAmt * 1000n / 10000n; // 100 BKC
-      expect(burnAfter - burnBefore).to.equal(expectedPenalty);
+      // No NFT = 60% penalty = 600 BKC
+      const expectedPenalty = stakeAmt * 6000n / 10000n; // 600 BKC
+      // No tutor: 10% of penalty burned = 60 BKC
+      const expectedBurn = expectedPenalty * 1000n / 10000n; // 60 BKC
+      // Rest recycled: 600 - 60 = 540 BKC
 
-      // Alice receives stakeAmt - penalty
+      expect(burnAfter - burnBefore).to.equal(expectedBurn);
+      // Alice receives stakeAmt - penalty = 400 BKC
       expect(balAfter - balBefore).to.equal(stakeAmt - expectedPenalty);
     });
 
-    it("force unstake with Diamond NFT: only 5% penalty", async function () {
+    it("force unstake: Diamond NFT = 0% penalty", async function () {
       const f = await loadFixture(deployAllFixture);
+      const ethFee = ethers.parseEther("0.0004");
 
       // Alice buys a Diamond NFT (tier 3)
       const pool3 = f.nftPools[3];
@@ -917,7 +922,6 @@ describe("Backchain V10 — Integration Tests", function () {
       await f.bkcToken.connect(f.alice).approve(f.nftPoolAddrs[3], buyPrice);
       await pool3.connect(f.alice).buyNFT(0, ethers.ZeroAddress);
 
-      // Verify Diamond boost
       const boost = await f.rewardBooster.getUserBestBoost(f.alice.address);
       expect(boost).to.equal(5000); // BOOST_DIAMOND
 
@@ -928,15 +932,76 @@ describe("Backchain V10 — Integration Tests", function () {
       const burnBefore = await f.bkcToken.totalBurned();
       const balBefore = await f.bkcToken.balanceOf(f.alice.address);
 
-      await f.stakingPool.connect(f.alice).forceUnstake(0, ethers.ZeroAddress);
+      await f.stakingPool.connect(f.alice).forceUnstake(0, ethers.ZeroAddress, { value: ethFee });
 
       const balAfter = await f.bkcToken.balanceOf(f.alice.address);
       const burnAfter = await f.bkcToken.totalBurned();
 
-      // Diamond holders get 5% penalty (500 bps) instead of 10%
-      const expectedPenalty = stakeAmt * 500n / 10000n; // 50 BKC
-      expect(burnAfter - burnBefore).to.equal(expectedPenalty);
-      expect(balAfter - balBefore).to.equal(stakeAmt - expectedPenalty);
+      // Diamond = 0% penalty → full amount returned, nothing burned
+      expect(burnAfter - burnBefore).to.equal(0n);
+      expect(balAfter - balBefore).to.equal(stakeAmt);
+    });
+
+    it("force unstake: Gold NFT + tutor → 20% penalty, tutor gets 5% of penalty", async function () {
+      const f = await loadFixture(deployAllFixture);
+      const ethFee = ethers.parseEther("0.0004");
+
+      // Alice buys Gold NFT
+      const pool2 = f.nftPools[2];
+      const buyPrice = await pool2.getBuyPrice();
+      await f.bkcToken.connect(f.alice).approve(f.nftPoolAddrs[2], buyPrice);
+      await pool2.connect(f.alice).buyNFT(0, ethers.ZeroAddress);
+
+      // Set Bob as tutor
+      await f.ecosystem.connect(f.alice).setTutor(f.bob.address, { value: ethers.parseEther("0.00002") });
+
+      const stakeAmt = ethers.parseEther("1000");
+      await f.bkcToken.connect(f.alice).approve(f.stakingAddr, stakeAmt);
+      await f.stakingPool.connect(f.alice).delegate(stakeAmt, 365, ethers.ZeroAddress);
+
+      const bobBefore = await f.bkcToken.balanceOf(f.bob.address);
+      const burnBefore = await f.bkcToken.totalBurned();
+
+      await f.stakingPool.connect(f.alice).forceUnstake(0, ethers.ZeroAddress, { value: ethFee });
+
+      const bobAfter = await f.bkcToken.balanceOf(f.bob.address);
+      const burnAfter = await f.bkcToken.totalBurned();
+
+      // Gold = 20% penalty = 200 BKC
+      // With tutor: 5% of penalty → Bob = 10 BKC, 0% burned, rest recycled = 190
+      const expectedPenalty = stakeAmt * 2000n / 10000n;
+      const expectedTutor = expectedPenalty * 500n / 10000n; // 10 BKC
+
+      expect(bobAfter - bobBefore).to.equal(expectedTutor);
+      expect(burnAfter - burnBefore).to.equal(0n); // No burn with tutor
+    });
+
+    it("force unstake: reverts without ETH fee", async function () {
+      const f = await loadFixture(deployAllFixture);
+      const stakeAmt = ethers.parseEther("1000");
+
+      await f.bkcToken.connect(f.alice).approve(f.stakingAddr, stakeAmt);
+      await f.stakingPool.connect(f.alice).delegate(stakeAmt, 365, ethers.ZeroAddress);
+
+      // No ETH sent — should revert
+      await expect(
+        f.stakingPool.connect(f.alice).forceUnstake(0, ethers.ZeroAddress)
+      ).to.be.revertedWithCustomError(f.stakingPool, "InsufficientFee");
+    });
+
+    it("previewForceUnstake: returns correct breakdown", async function () {
+      const f = await loadFixture(deployAllFixture);
+      const stakeAmt = ethers.parseEther("1000");
+
+      await f.bkcToken.connect(f.alice).approve(f.stakingAddr, stakeAmt);
+      await f.stakingPool.connect(f.alice).delegate(stakeAmt, 365, ethers.ZeroAddress);
+
+      const preview = await f.stakingPool.previewForceUnstake(f.alice.address, 0);
+      expect(preview.stakedAmount).to.equal(stakeAmt);
+      expect(preview.penaltyRateBps).to.equal(6000); // No NFT = 60%
+      expect(preview.totalPenalty).to.equal(stakeAmt * 6000n / 10000n);
+      expect(preview.userReceives).to.equal(stakeAmt - preview.totalPenalty);
+      expect(preview.ethFeeRequired).to.equal(ethers.parseEther("0.0004"));
     });
 
     it("claim with Diamond NFT: 0% recycle, 10% burn (no tutor)", async function () {

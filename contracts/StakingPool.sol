@@ -75,8 +75,9 @@ contract StakingPool is IStakingPool {
     uint256 public constant RECYCLE_RATE_GOLD    = 2000; // 20%
     uint256 public constant RECYCLE_RATE_DIAMOND = 0;    // 0% (keeps everything)
 
-    // ── Diamond Force Unstake Discount ──
-    uint256 public constant DIAMOND_FORCE_PENALTY_BPS = 500; // 5% (vs 10% default)
+    // ── Tutor & Burn on Penalties ──
+    uint256 public constant TUTOR_PENALTY_BPS = 500;     // 5% of penalty → tutor
+    uint256 public constant NO_TUTOR_BURN_PENALTY_BPS = 1000; // 10% of penalty → burned
 
     // ════════════════════════════════════════════════════════════════════════
     // IMMUTABLE ADDRESSES
@@ -93,9 +94,9 @@ contract StakingPool is IStakingPool {
     /// @notice NFT boost contract. If address(0), no boost is available.
     IRewardBooster public rewardBooster;
 
-    /// @notice BKC penalty on force unstake (basis points of staked amount).
-    ///         Default 1000 = 10%. Diamond NFT holders get DIAMOND_FORCE_PENALTY_BPS instead.
-    uint256 public forceUnstakePenaltyBps = 1000;
+    /// @notice Minimum ETH fee required for force unstake (~$1 USD).
+    ///         Routed through ecosystem.collectFee for standard distribution.
+    uint256 public forceUnstakeEthFee = 0.0004 ether;
 
     /// @notice Authorized contracts that can call delegateFor (AirdropVesting)
     mapping(address => bool) public isDelegateForAuthorized;
@@ -180,7 +181,11 @@ contract StakingPool is IStakingPool {
         address indexed user,
         uint256 indexed delegationIndex,
         uint256 amountReturned,
-        uint256 penaltyBurned,
+        uint256 totalPenalty,
+        uint256 recycledAmount,
+        uint256 burnedAmount,
+        uint256 tutorAmount,
+        address tutor,
         address operator
     );
     event RewardsClaimed(
@@ -200,7 +205,7 @@ contract StakingPool is IStakingPool {
     );
     event RewardNotifierSet(address indexed notifier, bool authorized);
     event RewardBoosterUpdated(address indexed oldBooster, address indexed newBooster);
-    event ForceUnstakePenaltyUpdated(uint256 oldBps, uint256 newBps);
+    event ForceUnstakeEthFeeUpdated(uint256 oldFee, uint256 newFee);
     event DelegateForAuthorizationSet(address indexed contractAddr, bool authorized);
 
     // ════════════════════════════════════════════════════════════════════════
@@ -247,12 +252,12 @@ contract StakingPool is IStakingPool {
         rewardBooster = IRewardBooster(_booster);
     }
 
-    /// @notice Set force unstake penalty (max 5000 = 50%)
-    function setForceUnstakePenalty(uint256 _penaltyBps) external {
+    /// @notice Set the ETH fee for force unstake
+    function setForceUnstakeEthFee(uint256 _fee) external {
         if (msg.sender != deployer) revert NotAuthorized();
-        if (_penaltyBps > 5000) revert InvalidPenalty();
-        emit ForceUnstakePenaltyUpdated(forceUnstakePenaltyBps, _penaltyBps);
-        forceUnstakePenaltyBps = _penaltyBps;
+        if (_fee > 0.01 ether) revert InvalidPenalty(); // max ~$20
+        emit ForceUnstakeEthFeeUpdated(forceUnstakeEthFee, _fee);
+        forceUnstakeEthFee = _fee;
     }
 
     /// @notice Authorize a contract to call delegateFor (e.g., AirdropVesting)
@@ -408,6 +413,7 @@ contract StakingPool is IStakingPool {
     /// @param operator Frontend operator address
     function forceUnstake(uint256 index, address operator) external payable {
         if (index >= _delegations[msg.sender].length) revert InvalidIndex();
+        if (msg.value < forceUnstakeEthFee) revert InsufficientFee();
 
         Delegation storage d = _delegations[msg.sender][index];
         if (block.timestamp >= d.lockEnd) revert NotYetLocked(); // use regular unstake
@@ -421,14 +427,50 @@ contract StakingPool is IStakingPool {
             savedRewards[msg.sender] += pending;
         }
 
-        // Calculate penalty — Diamond NFT gets reduced penalty
-        uint256 penaltyBps = forceUnstakePenaltyBps;
+        // ── Penalty follows same NFT-tier logic as claims ──
         uint256 nftBoost = _getUserBestBoost(msg.sender);
-        if (nftBoost >= BOOST_DIAMOND && penaltyBps > DIAMOND_FORCE_PENALTY_BPS) {
-            penaltyBps = DIAMOND_FORCE_PENALTY_BPS;
+        uint256 penaltyRateBps = _getRecycleRateForBoost(nftBoost);
+        // Same rates: No NFT=60%, Bronze=40%, Silver=30%, Gold=20%, Diamond=0%
+
+        uint256 penalty = amount * penaltyRateBps / BPS;
+
+        // ── Penalty distribution: recycle + tutor/burn (same as claims) ──
+        uint256 recycleAmount;
+        uint256 burnAmount;
+        uint256 tutorAmount;
+        address tutor;
+
+        if (penalty > 0) {
+            tutor = ecosystem.tutorOf(msg.sender);
+            if (tutor != address(0)) {
+                tutorAmount = penalty * TUTOR_PENALTY_BPS / BPS;
+            } else {
+                burnAmount = penalty * NO_TUTOR_BURN_PENALTY_BPS / BPS;
+            }
+            recycleAmount = penalty - tutorAmount - burnAmount;
+
+            // Burn
+            if (burnAmount > 0) {
+                bkcToken.burn(burnAmount);
+                totalBurnedOnClaim += burnAmount;
+            }
+
+            // Recycle to stakers (before removing this user's pStake)
+            if (recycleAmount > 0 && totalPStake > 0) {
+                accRewardPerShare += recycleAmount * PRECISION / totalPStake;
+                totalRewardsDistributed += recycleAmount;
+                totalRecycledOnClaim += recycleAmount;
+            }
+
+            // Tutor cut
+            if (tutorAmount > 0) {
+                bkcToken.transfer(tutor, tutorAmount);
+                totalTutorPayments += tutorAmount;
+            }
+
+            totalForceUnstakePenalties += penalty;
         }
 
-        uint256 penalty = amount * penaltyBps / BPS;
         uint256 amountAfterPenalty = amount - penalty;
 
         // Update totals
@@ -439,30 +481,25 @@ contract StakingPool is IStakingPool {
         // Remove delegation
         _removeDelegation(msg.sender, index);
 
-        // Burn penalty BKC
-        if (penalty > 0) {
-            bkcToken.burn(penalty);
-            totalForceUnstakePenalties += penalty;
-        }
-
         // Return remaining BKC
         if (amountAfterPenalty > 0) {
             bkcToken.transfer(msg.sender, amountAfterPenalty);
         }
 
-        // ETH fee → ecosystem
-        if (msg.value > 0) {
-            ecosystem.collectFee{value: msg.value}(
-                msg.sender,
-                operator,
-                address(0),
-                MODULE_ID,
-                0
-            );
-            totalEthFeesCollected += msg.value;
-        }
+        // ETH fee → ecosystem (mandatory)
+        ecosystem.collectFee{value: msg.value}(
+            msg.sender,
+            operator,
+            address(0),
+            MODULE_ID,
+            0
+        );
+        totalEthFeesCollected += msg.value;
 
-        emit ForceUnstaked(msg.sender, index, amountAfterPenalty, penalty, operator);
+        emit ForceUnstaked(
+            msg.sender, index, amountAfterPenalty, penalty,
+            recycleAmount, burnAmount, tutorAmount, tutor, operator
+        );
     }
 
     // ════════════════════════════════════════════════════════════════════════
@@ -623,6 +660,40 @@ contract StakingPool is IStakingPool {
         }
 
         userReceives = totalRewards - recycleAmount - tutorCut - burnAmount;
+    }
+
+    /// @notice Preview exactly what a force unstake would produce.
+    function previewForceUnstake(address user, uint256 index) external view returns (
+        uint256 stakedAmount,
+        uint256 totalPenalty,
+        uint256 recycleAmount,
+        uint256 burnAmount,
+        uint256 tutorCut,
+        uint256 userReceives,
+        uint256 penaltyRateBps,
+        uint256 nftBoost,
+        uint256 ethFeeRequired
+    ) {
+        if (index >= _delegations[user].length) revert InvalidIndex();
+        Delegation memory d = _delegations[user][index];
+        stakedAmount = d.amount;
+        ethFeeRequired = forceUnstakeEthFee;
+
+        nftBoost = _getUserBestBoost(user);
+        penaltyRateBps = _getRecycleRateForBoost(nftBoost);
+        totalPenalty = stakedAmount * penaltyRateBps / BPS;
+
+        if (totalPenalty > 0) {
+            address tutor = ecosystem.tutorOf(user);
+            if (tutor != address(0)) {
+                tutorCut = totalPenalty * TUTOR_PENALTY_BPS / BPS;
+            } else {
+                burnAmount = totalPenalty * NO_TUTOR_BURN_PENALTY_BPS / BPS;
+            }
+            recycleAmount = totalPenalty - tutorCut - burnAmount;
+        }
+
+        userReceives = stakedAmount - totalPenalty;
     }
 
     // ════════════════════════════════════════════════════════════════════════
